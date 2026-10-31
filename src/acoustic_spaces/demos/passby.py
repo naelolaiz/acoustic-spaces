@@ -83,6 +83,9 @@ class Vehicle:
     name, demo_name = CAR, "passby"
     #: How it goes: "drive", "drives" and "driving past", along "the road".
     go, goes, going, way = "drive", "drives", "driving past", "the road"
+    #: The vehicle in a word or two, for the demo's words ("car", "police car"; its
+    #: source's name may join them with an underscore).
+    noun = "car"
     #: What it is, in a few words, for the demo's choice of vehicle.
     title = "a car"
     #: Why its keyframes must keep one speed.
@@ -388,7 +391,7 @@ def walk_speed(car, vehicle: Vehicle = THE_CAR) -> float:
     slow, fast = float(speeds.min()), float(speeds.max())
     if slow <= 0.0 or fast > slow * (1.0 + STEADY):
         raise ValueError(
-            f"the {vehicle.name}'s keyframes go at {3.6 * slow:.1f} to {3.6 * fast:.1f} km/h, "
+            f"the {vehicle.noun}'s keyframes go at {3.6 * slow:.1f} to {3.6 * fast:.1f} km/h, "
             f"but {vehicle.steady}: time them for one speed (or give its walk points at a "
             f"speed), or {vehicle.go} it through their places at one speed with --speed"
         )
@@ -616,7 +619,7 @@ def feed(
         if isinstance(x, Emission):
             if x.length < n:
                 raise SystemExit(
-                    f"error: the {vehicle.name}'s sound is shorter than its pass; run: "
+                    f"error: the {vehicle.noun}'s sound is shorter than its pass; run: "
                     f"{demo.command(vehicle.sound_step, args)}"
                 )
             return Faded(x, fade, n)
@@ -625,7 +628,7 @@ def feed(
         x = resampled(mono(x), r, rate)
         if len(x) < n:
             raise SystemExit(
-                f"error: {file.name} is {len(x) / rate:.1f} s long; the {vehicle.name} takes "
+                f"error: {file.name} is {len(x) / rate:.1f} s long; the {vehicle.noun} takes "
                 f"{duration_s:.1f} s along its walk"
             )
         gain = vehicle.input_gain(part, x[:n], rate)
@@ -635,7 +638,7 @@ def feed(
     x = np.array(x[:n], dtype=float)
     if len(x) < n:
         raise SystemExit(
-            f"error: the {vehicle.name}'s sound is shorter than its pass; run: "
+            f"error: the {vehicle.noun}'s sound is shorter than its pass; run: "
             f"{demo.command(vehicle.sound_step, args)}"
         )
     ramp = np.sin(np.linspace(0.0, np.pi / 2, fade)) ** 2
@@ -654,8 +657,7 @@ def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     (:meth:`Vehicle.edit`), every other source left out."""
     info = car_info(args, vehicle)
     data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
-    noun = vehicle.name.replace("_", " ")
-    data["name"] = f"{data.get('name', 'scene')}: a {noun} passing"
+    data["name"] = f"{data.get('name', 'scene')}: a {vehicle.noun} passing"
     own = {s.name: s for s in source_scene(args).sources}
     parts = vehicle.parts(args)
     for source in data["sources"]:
@@ -673,7 +675,7 @@ def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
             source["enabled"] = False
     pipeline.write_scene(args.scene, data, vehicle.texts()["header"], args.source.parent)
     print(
-        f"wrote {args.scene}: the {vehicle.name} at {kmh(info['speed_kmh'])} km/h, "
+        f"wrote {args.scene}: the {vehicle.noun} at {kmh(info['speed_kmh'])} km/h, "
         f"{info['sound_power_db']:.1f} dB of sound power"
     )
 
@@ -904,7 +906,9 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             "listeners": heard,
         },
     )
-    print(f"wrote {out}: {len(names)} listeners, the {noun} {duration:.1f} s along its walk")
+    print(
+        f"wrote {out}: {len(names)} listeners, the {vehicle.noun} {duration:.1f} s along its walk"
+    )
 
 
 def walk_done(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> bool:
@@ -990,7 +994,7 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     room = room_of(demo, args)
     data = room.scene.to_data()
     tool = pictures.settings_lines(demo, args, data)
-    tool[0] += f"; the {vehicle.name} simulated every {facts['step_m']:g} m, with Doppler"
+    tool[0] += f"; the {vehicle.noun} simulated every {facts['step_m']:g} m, with Doppler"
     drawing = passby_pictures.Pictures(
         data,
         outline_edges(room)[0],
@@ -1067,7 +1071,7 @@ def summary(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> str | None:
         return None
     speed = path.length_m / path.duration_s
     whose = "--speed" if args.speed is not None else "as its walk in the scene goes"
-    noun, way = vehicle.name, vehicle.way.removeprefix("the ").removeprefix("its ")
+    noun, way = vehicle.noun, vehicle.way.removeprefix("the ").removeprefix("its ")
     return (
         f"The {noun} {vehicle.goes} {path.length_m:.1f} m along its walk at "
         f"{3.6 * speed:.1f} km/h ({speed:.2f} m/s, {whose}): the pass, and the {noun}'s "

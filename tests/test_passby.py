@@ -568,6 +568,8 @@ def test_the_passby_demo_drives_the_police_car_with_its_siren(tmp_path: Path) ->
         "police_car": "a police car at 50 km/h, made to CNOSSOS-EU's sound power",
         "police_car_siren": "its siren on its roof, two-tone",
     }
+    # The demo says the vehicle in words, not as its source's name.
+    assert demo.summary(resolved).startswith("The police car drives 40.0 m along its walk")
     run = ["all", "--vehicle", "police_car", "--siren", "two_tone", "--step", "4", "--no-mp4"]
     assert demo.main(run) == 0
     work = folder / "demo"
