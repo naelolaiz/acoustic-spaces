@@ -57,8 +57,10 @@ pass-by already carries it, as an emission may.
 from __future__ import annotations
 
 import dataclasses
+import functools
 import math
 from collections import OrderedDict
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -243,16 +245,20 @@ def _reach(cutoff: float) -> int:
     return int(math.ceil(_ZEROS / cutoff))
 
 
+@functools.lru_cache(maxsize=8)
 def _table(cutoff: float) -> tuple[np.ndarray, int]:
     """The reading sinc's taps (phases, taps) for ``cutoff`` (share of Nyquist), and how
-    far it reaches back from the sample before the position."""
+    far it reaches back from the sample before the position: kept for the last few
+    cutoffs, as a path's signals are read one after another with its own."""
     reach = _reach(cutoff)
     offsets = np.arange(-reach + 1, reach + 1)
     frac = np.arange(_PHASES) / _PHASES
     t = offsets[None, :] - frac[:, None]
     half = _ZEROS / cutoff
     window = np.i0(_BETA * np.sqrt(np.clip(1.0 - (t / half) ** 2, 0.0, 1.0))) / np.i0(_BETA)
-    return cutoff * np.sinc(cutoff * t) * window, reach
+    taps = cutoff * np.sinc(cutoff * t) * window
+    taps.flags.writeable = False
+    return taps, reach
 
 
 def read(dry: np.ndarray, positions: np.ndarray, cutoff: float) -> np.ndarray:
@@ -510,6 +516,7 @@ def render(
     axes: np.ndarray | None = None,
     directivity=None,
     span: tuple[int, int] | None = None,
+    followers: Sequence[tuple[int, np.ndarray]] = (),
 ) -> np.ndarray:
     """(length, channels) the early paths of ``responses`` (the responses at the places
     of a walk, in order, the walker there at ``times``) heard as it goes, the mono
@@ -520,12 +527,26 @@ def render(
     way, at ``sample_rate``: then ``axes`` (N, 3, 3) has the source's forward, left and
     up axes as columns at each place, and ``directivity`` (the source's, if it has one)
     is taken out of the paths' filters. With ``span`` (begin, end), samples begin to end
-    alone: (end - begin, channels)."""
+    alone: (end - begin, channels).
+
+    ``followers`` are more mono signals going along the walk after the walker, each
+    (lag, signal) ``lag`` samples behind it, as the wheels and the cars of a train
+    follow its front: each goes through the same paths, places and filters, all of it
+    ``lag`` samples later (``length`` counts them). They share what the paths cost
+    to follow and filter, so each costs less than a rendering of its own."""
     from acoustic_spaces.spatial.render import Binaural
 
     rate = int(sample_rate)
     emission = dry if isinstance(dry, Emission) else None
     plain = dry if not isinstance(dry, Emission) else np.zeros(0)
+    if followers and (emission is not None or span is not None):
+        raise ValueError("signals follow the walker only as plain signals, rendered whole")
+    signals = [(0, np.asarray(plain, dtype=float))]
+    for lag, signal in followers:
+        if int(lag) < 0:
+            raise ValueError(f"a signal follows the walker, {lag} samples behind it is ahead")
+        signals.append((int(lag), np.asarray(signal, dtype=float)))
+    most = max(lag for lag, _ in signals)
     frames = np.zeros((0, 3, 3))
     if emission is not None:
         if emission.sample_rate != rate:
@@ -602,9 +623,11 @@ def render(
     j_lo = max((begin + half - n_fft) // hop + 1, 0)
     j_hi = min(-(-(end + half) // hop) + 1, blocks)
     base = (j_lo - 1) * hop
-    out = np.zeros((max(j_hi - j_lo + 2, 0) * hop + n_fft, fmt.channels))
-    for c0 in range(j_lo, j_hi, _BLOCKS):
-        c1 = min(c0 + _BLOCKS, j_hi)
+    out = np.zeros((max(j_hi - j_lo + 2, 0) * hop + n_fft + most, fmt.channels))
+    # Fewer blocks at once with more signals, which each read every path's delays.
+    chunk = max(_BLOCKS // len(signals), 1)
+    for c0 in range(j_lo, j_hi, chunk):
+        c1 = min(c0 + chunk, j_hi)
         n0, n1 = (c0 - 1) * hop, (c1 + 1) * hop
         t = np.arange(n0, n1) / rate
         active = []
@@ -618,38 +641,43 @@ def render(
             ears = (
                 [delay] if reading.onsets is None else [delay + reading.onset(t, e) for e in (0, 1)]
             )
-            reads = []
-            for each in ears:
-                positions = np.arange(n0, n1) - each * rate
-                if emission is not None:
-                    reads.append(reading.sent(emission, positions, rate))
-                else:
-                    reads.append(read(plain, positions, reading.cutoff))
-            active.append((reading, np.column_stack(reads)))
+            heard = []
+            for _, signal in signals:
+                reads = []
+                for each in ears:
+                    positions = np.arange(n0, n1) - each * rate
+                    if emission is not None:
+                        reads.append(reading.sent(emission, positions, rate))
+                    else:
+                        reads.append(read(signal, positions, reading.cutoff))
+                heard.append(np.column_stack(reads))
+            active.append((reading, heard))
         if not active:
             continue
         for j in range(c0, c1):
             start = (j - 1) * hop
             centre = j * hop / rate
-            total = None
-            for reading, signal in active:
+            totals: list = [None] * len(signals)
+            for reading, heard in active:
                 if j < reading.first or j > reading.last:
                     continue
                 spectrum = _filter_at(filters, reading.track, centre, gusts)
                 if spectrum is None:
                     continue
-                piece = signal[start - n0 : start - n0 + 2 * hop] * window[:, None]
-                if not np.any(piece):
+                for i, signal in enumerate(heard):
+                    piece = signal[start - n0 : start - n0 + 2 * hop] * window[:, None]
+                    if not np.any(piece):
+                        continue
+                    part = np.fft.rfft(piece, n_fft, axis=0).T * spectrum
+                    totals[i] = part if totals[i] is None else totals[i] + part
+            for (lag, _), total in zip(signals, totals, strict=True):
+                if total is None:
                     continue
-                part = np.fft.rfft(piece, n_fft, axis=0).T * spectrum
-                total = part if total is None else total + part
-            if total is None:
-                continue
-            wet = np.fft.irfft(total, n_fft, axis=-1).T
-            at = start - base
-            if at < 0:
-                wet, at = wet[-at:], 0
-            out[at : at + len(wet)] += wet[: len(out) - at]
+                wet = np.fft.irfft(total, n_fft, axis=-1).T
+                at = start - base + lag
+                if at < 0:
+                    wet, at = wet[-at:], 0
+                out[at : at + len(wet)] += wet[: len(out) - at]
     lo = begin + half - base
     return out[lo : lo + max(end - begin, 0)]
 
