@@ -1069,6 +1069,12 @@ msgstr "Superficie {name}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
+msgid "Cannot keep whether the Scene YAML panel shows: {reason}"
+msgstr ""
+"No se puede guardar si el panel «YAML de la escena» se muestra: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
 msgid "Moved {name} to ({point})"
 msgstr "Se movió {name} a ({point})"
 

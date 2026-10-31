@@ -237,8 +237,10 @@ which frequencies each octave band holds.
   one source, listener or material (the list holds those that messages name, with how
   many do), and the filter keeps only those holding some words. **Clear** removes the
   messages on show and keeps those hidden.
-- **Scene YAML**, a tab beside **Messages**, shows the scene as YAML text, coloured
-  (keys, text, numbers, true, false and null, comments) and with line numbers: the data
+- **View > Scene YAML** opens a tab beside **Messages**, hidden on a new installation
+  and from then on shown or hidden at each start as it was last left. It shows the scene
+  as YAML text, coloured (keys, text, numbers, true, false and null, comments) and with
+  line numbers: the data
   **Save** writes, with each list of numbers or names on one line as the example scene
   files have them (Save writes an item a line), and the files under the scene's folder
   relative to it. It follows every change made in the forms, the 3D view or the plan, and

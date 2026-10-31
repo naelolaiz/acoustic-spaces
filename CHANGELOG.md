@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-- Editor: the **Scene YAML** panel, a tab beside **Messages**, shows the scene as
-  coloured YAML with line numbers, the data Save writes with each list on one line, and
-  follows every edit; selecting an item brings its entry to the top. Edited text becomes
+- Editor: the **Scene YAML** panel, a tab beside **Messages** that **View > Scene YAML**
+  opens (hidden on a new installation, then shown or hidden at each start as last left,
+  in the user's settings), shows the scene as coloured YAML with line numbers, the data
+  Save writes with each list on one line, and follows every edit; selecting an item
+  brings its entry to the top. Edited text becomes
   the scene with **Apply** (Ctrl+Return), checked as every edit is and undone in one
   step; text that does not read or that the checks refuse stays, with the lines the
   reason points at marked in red. `Scene.file_text(folder, readable=True)` gives that

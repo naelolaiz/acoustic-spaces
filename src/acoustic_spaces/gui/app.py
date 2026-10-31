@@ -83,6 +83,9 @@ from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
 TITLE = N_("Acoustic Spaces editor")
+#: The user's setting that keeps whether the Scene YAML panel is shown: hidden until it
+#: is shown once, then as it was left.
+YAML_PANEL_SETTING = "editor_yaml_panel"
 SCENE_FILTER = N_("Scenes (*.yaml *.yml)")
 #: What the messages say of a part drawn in the plan, by the plan view's purpose;
 #: {count} its corners or points and the rest its sizes (:data:`NEW_PART_SIZES`).
@@ -214,6 +217,8 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.docks["movement"], self.docks["yaml"])
         self.docks["results"].raise_()
         self.docks["movement"].hide()  # until Edit movement… opens it
+        if i18n.setting(YAML_PANEL_SETTING) is not True:
+            self.docks["yaml"].hide()  # until View > Scene YAML shows it
         # The forms take the whole height on the right, the panels below only the
         # width the views leave, so that a long form shows its buttons.
         self.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
@@ -283,6 +288,7 @@ class MainWindow(QMainWindow):
         self.viewport.keyframe_moved.connect(self._move_keyframe)
         self.docks["movement"].visibilityChanged.connect(self._movement_visible)
         self.docks["yaml"].visibilityChanged.connect(self.yaml_panel.set_shown)
+        self.docks["yaml"].toggleViewAction().toggled.connect(self._yaml_panel_toggled)
         self.results.pair_changed.connect(lambda *_: self._draw())
         self.results.paths_toggled.connect(self._paths_toggled)
         self.results.export_requested.connect(self.export_results)
@@ -961,6 +967,20 @@ class MainWindow(QMainWindow):
         if not self.docks["movement"].isVisible():
             return None, None
         return self.movement.key, self.movement.time
+
+    def _yaml_panel_toggled(self, shown: bool) -> None:
+        """The Scene YAML panel shown (in front) or hidden: kept for the next start."""
+        if not self.isVisible():
+            return  # the window closing hides it too: that is no choice
+        if shown:  # in front, once the dock shows (it hears of the change after this)
+            QTimer.singleShot(0, self.docks["yaml"].raise_)
+        try:
+            i18n.save_setting(YAML_PANEL_SETTING, shown)
+        except OSError as exc:
+            self.log(
+                _("Cannot keep whether the Scene YAML panel shows: {reason}").format(reason=exc),
+                "warning",
+            )
 
     def _movement_visible(self, visible: bool) -> None:
         if not visible:

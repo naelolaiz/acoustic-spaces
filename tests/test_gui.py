@@ -621,7 +621,7 @@ def test_scene_yaml_panel(window, qapp, tmp_path: Path) -> None:
     panel = window.yaml_panel
     window.open_example(example_path("studio"))
     assert not panel.on_show and panel.view.toPlainText() == ""  # not made until shown
-    window.docks["yaml"].raise_()
+    window.docks["yaml"].toggleViewAction().trigger()  # View > Scene YAML
     qapp.processEvents()
     document = window.document
     assert panel.on_show
@@ -729,6 +729,36 @@ def test_scene_yaml_panel(window, qapp, tmp_path: Path) -> None:
     window.save()
     model = (EXAMPLES / "shoebox" / "shoebox.obj").resolve().as_posix()
     assert f"file: {model}\n" in panel.view.toPlainText() and not panel.edited()
+
+
+def test_scene_yaml_panel_starts_hidden_then_as_left(window, qapp, english) -> None:
+    """A new installation's editor hides the Scene YAML panel; once shown, it shows at
+    the next start, and hidden again it stays hidden."""
+    from acoustic_spaces import i18n
+    from acoustic_spaces.gui.app import YAML_PANEL_SETTING, MainWindow
+
+    dock = window.docks["yaml"]
+    assert dock.isHidden() and not dock.toggleViewAction().isChecked()
+    assert not english.exists()  # nothing kept until the user chooses
+    dock.toggleViewAction().trigger()
+    qapp.processEvents()
+    assert not dock.isHidden() and window.yaml_panel.on_show  # shown, and in front
+    assert i18n.setting(YAML_PANEL_SETTING) is True
+    window.close()  # closing the window is no choice
+    assert i18n.setting(YAML_PANEL_SETTING) is True
+    again = MainWindow()
+    again.show()
+    try:
+        assert not again.docks["yaml"].isHidden()
+        again.docks["yaml"].close()  # its title bar's close button
+        assert i18n.setting(YAML_PANEL_SETTING) is False
+    finally:
+        again.close()
+    third = MainWindow()
+    try:
+        assert third.docks["yaml"].isHidden()
+    finally:
+        third.close()
 
 
 def test_background_task_says_what_runs(window, qapp) -> None:
