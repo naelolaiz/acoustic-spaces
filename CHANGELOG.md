@@ -66,6 +66,11 @@
   walk with Doppler (`acoustic_spaces.doppler.render` takes a `span` of samples for
   it), in about the same time. The same test, standing still: the largest difference
   was 19 % of the tone's amplitude and is now 0.05 %.
+- Fixed: the pass-by demos' captions, stills and printouts gave a walk's speed as it
+  came out of its length and time, such as 50.004 km/h for a walk of 13.89 m/s; they
+  now give it to a tenth of a km/h without a trailing zero (50 km/h, 72.5 km/h).
+  Tours made again from an earlier walk keep its old wording under the heading until
+  the walk is made again.
 
 - A scene can name the `recording` its sound system plays in a demo of it
   (`acoustic-spaces demo`, the editor's *This scene*), and each source the `channel` of

@@ -233,6 +233,16 @@ def _roadside(tmp_path: Path) -> Path:
     return folder
 
 
+def test_the_demos_give_a_walks_speed_to_a_tenth_of_a_km_h() -> None:
+    """The examples' walks go at 13.89 and 19.44 m/s, 50.004 and 69.984 km/h: the
+    captions, the stills and the printouts say 50 and 70, and keep a tenth that is
+    there."""
+    from acoustic_spaces.demos.passby import kmh
+
+    assert kmh(13.89 * 3.6) == "50" and kmh(19.44 * 3.6) == "70"
+    assert kmh(72.5) == "72.5" and kmh(54) == "54" and kmh(0.36) == "0.4"
+
+
 def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) -> None:
     """No car, a car with no walk, one whose walk is off or whose keyframes go at more
     than one speed (unless --speed gives one), and a speed that is not positive are

@@ -43,7 +43,7 @@ import numpy as np
 
 from acoustic_spaces.demos import Option
 from acoustic_spaces.demos.audio import write as write_wav
-from acoustic_spaces.demos.passby import FADE_S, Vehicle, car_of, pass_s, speed_of
+from acoustic_spaces.demos.passby import FADE_S, Vehicle, car_of, kmh, pass_s, speed_of
 
 #: The source of the street example that drives past with its siren on.
 POLICE_CAR = "police_car"
@@ -258,7 +258,7 @@ class SirenVehicle(Vehicle):
         return {
             "siren": info["siren"],
             "sound_power_a_db": info["sound_power_a_db"],
-            "about": f"A police car at {info['speed_kmh']:g} km/h, its siren on "
+            "about": f"A police car at {kmh(info['speed_kmh'])} km/h, its siren on "
             f"{info['siren'].replace('_', '-')}, {info['sound_power_a_db']:.1f} dB(A) of "
             "sound power",
         }

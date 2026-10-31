@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from acoustic_spaces.demos import scene_pictures
-from acoustic_spaces.demos.passby import CAR
+from acoustic_spaces.demos.passby import CAR, kmh
 from acoustic_spaces.demos.pictures import (
     FAINT,
     LINE,
@@ -140,7 +140,7 @@ class Pictures(scene_pictures.Pictures):
         if stop.gain_db > 0.5:
             lines.append(f"Turned up {stop.gain_db:.0f} dB here so you can hear it")
         about = self.facts.get("about") or (
-            f"A car at {self.facts['speed_kmh']:g} km/h, "
+            f"A car at {kmh(self.facts['speed_kmh'])} km/h, "
             f"{self.facts['sound_power_a_db']:.1f} dB(A) of sound power (CNOSSOS-EU)"
         )
         lines.append((about, MUTED))
@@ -213,10 +213,11 @@ class Pictures(scene_pictures.Pictures):
         img = canvas()
         draw = ImageDraw.Draw(img)
         name = self.scene.get("name", "scene")
+        speed = kmh(self.facts["speed_kmh"])
         heading(
             draw,
             f"{name}, simulated",
-            f"At {self.facts['speed_kmh']:g} km/h, heard at {counted(len(self.stops), 'place')}, "
+            f"At {speed} km/h, heard at {counted(len(self.stops), 'place')}, "
             "its pitch falling as it goes by (Doppler)",
         )
         self.draw_scene(img, self.plan(*PLAN_BOX), stop.key, t)
@@ -248,7 +249,7 @@ class Pictures(scene_pictures.Pictures):
         if self.fmt == "binaural":
             thumbnail_badge(draw, 50, y)
             y += 90
-        speed = f"{self.facts['speed_kmh']:g} km/h, Doppler"
+        speed = f"{kmh(self.facts['speed_kmh'])} km/h, Doppler"
         text(draw, (50, y), speed, font("SemiBold", 32), LISTENER)
         text(draw, (50, 655), "made with acoustic-spaces", font("Medium", 24), TEXT)
         return img

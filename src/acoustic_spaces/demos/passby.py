@@ -239,7 +239,7 @@ class RoadVehicle(Vehicle):
         )
         write_wav(folder / self.sound_file, x, info["rate"])
         return (
-            f"{info['duration_s']:.1f} s of a {self.noun} at {info['speed_kmh']:g} km/h, "
+            f"{info['duration_s']:.1f} s of a {self.noun} at {kmh(info['speed_kmh'])} km/h, "
             f"{info['sound_power_a_db']:.1f} dB(A) of sound power"
         )
 
@@ -256,7 +256,7 @@ class RoadVehicle(Vehicle):
             "cylinders": self.cylinders,
             "category": self.category,
             "sound_power_a_db": info["sound_power_a_db"],
-            "about": f"A {self.noun} at {info['speed_kmh']:g} km/h, "
+            "about": f"A {self.noun} at {kmh(info['speed_kmh'])} km/h, "
             f"{info['sound_power_a_db']:.1f} dB(A) of sound power (CNOSSOS-EU)",
         }
 
@@ -267,7 +267,7 @@ class RoadVehicle(Vehicle):
         return (
             f"{self.noun.capitalize()}'s sound made up: {tyres} {cylinders}-cylinder engine at "
             f"{facts['rpm']:g} rpm, {parts} with the octave spectrum of CNOSSOS-EU's "
-            f"{self.kind.name} (category {self.category}) at {facts['speed_kmh']:g} km/h "
+            f"{self.kind.name} (category {self.category}) at {kmh(facts['speed_kmh'])} km/h "
             f"(Directive 2002/49/EC as amended in 2021); faded in and out over {FADE_S:g} s"
         )
 
@@ -338,6 +338,12 @@ def walk_speed(car, vehicle: Vehicle = THE_CAR) -> float:
             f"speed), or {vehicle.go} it through their places at one speed with --speed"
         )
     return path.length_m / path.duration_s
+
+
+def kmh(speed: float) -> str:
+    """A speed (km/h) as the demos' words and stills give it: to a tenth, without a
+    trailing zero, so a walk of 13.89 m/s (50.004 km/h) reads 50."""
+    return f"{round(float(speed), 1):g}"
 
 
 def speed_of(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> float:
@@ -565,7 +571,7 @@ def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
             source["enabled"] = False
     pipeline.write_scene(args.scene, data, vehicle.texts()["header"], args.source.parent)
     print(
-        f"wrote {args.scene}: the {vehicle.name} at {info['speed_kmh']:g} km/h, "
+        f"wrote {args.scene}: the {vehicle.name} at {kmh(info['speed_kmh'])} km/h, "
         f"{info['sound_power_db']:.1f} dB of sound power"
     )
 
