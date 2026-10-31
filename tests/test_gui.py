@@ -2737,11 +2737,11 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     from acoustic_spaces.demos import list_demos
     from acoustic_spaces.gui.demo_dialog import ALL, DemoDialog, InputsField, PathField
 
-    # The examples as a source checkout keeps them, where each demo runs in its own
-    # folder and starts at the plain command. The Editor jobs on CI install the package,
-    # whose examples run under the home folder instead, the scene they read named in the
+    # The examples taken as a source checkout's, where each demo runs in its own folder
+    # and starts at the plain command. The Editor jobs on CI install the package, whose
+    # examples run under the home folder instead, the scene they read named in the
     # command (test_a_demo_of_an_installed_example_runs_under_the_home_folder).
-    monkeypatch.setattr(examples, "_installed_dir", lambda: tmp_path / "no examples here")
+    monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
 
     listed = DemoDialog(list_demos())  # every demo, as given
     names = [listed.picker.itemData(k) for k in range(listed.picker.count())]
