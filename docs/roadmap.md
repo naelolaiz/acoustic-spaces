@@ -119,7 +119,7 @@ Edge diffraction:
   part of its Fresnel zone that the edge covers, as BTM's integral over a finite edge
   has it, and kept where its path appears round the edge's end. Past a thin screen's
   corner the edge diffraction steps by 2.8 dB at 63 Hz, and along the `street` the
-  level by up to 1.42 dB in a band (0.52 dB(A)).
+  level by up to 1.42 dB in a band (0.55 dB(A)).
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
@@ -364,6 +364,19 @@ Movement:
   song, or 330 m as the rules of the air ask over a crowd without leave. The helicopter
   and its walk are in the stadium's scene, left out of the concert's simulations, to
   see and change in the editor.
+- [x] Trucks, buses, motorcycles and a police car with its siren on, in the pass-by
+  demos as the car is (`--vehicle`): CNOSSOS-EU's sound power of their category, and the
+  siren's level and directivity as measured, checked against California's and the
+  Swiss rules for sirens; the police car's own sound (CNOSSOS-EU's car) along with its
+  siren, or the siren alone.
+- [ ] Trains and trams: Schall 03 by default, CNOSSOS-EU's railway noise to choose, in a
+  `railway` example and a tram in the street.
+- [ ] Construction plant (breakers, excavators, generators), car horns and reversing
+  alarms; a fire engine, a heavy vehicle (CNOSSOS-EU's category 3) with its siren and
+  air horns, from measured levels.
+- [ ] Aircraft taking off, landing and flying over.
+- [ ] Ground-borne vibration from trains and construction plant, and the noise it makes
+  in the rooms of a building.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:
@@ -527,3 +540,7 @@ Next version:
 - [ ] A microphone's measured on-axis response and measured patterns (files), as
   sources have.
 - [ ] Spaced pairs whose late parts correlate as real capsules' do at low frequencies.
+- [x] Heavy vehicles, buses and motorcycles in the pass-by demos with CNOSSOS-EU's sound
+  power of their category (a truck in the roadside, a bus and a motorcycle in the
+  street), and a police car with its siren on; the car's sound power by the 2021
+  amendment of CNOSSOS-EU's table, 2.5 dB(A) more at 50 km/h.

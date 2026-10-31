@@ -341,7 +341,7 @@ def video(args) -> None:
     crossing = pipeline.read_json(feeds)["helicopter"]
     facts = pipeline.read_json(args.work / "walk" / passby.WALK)
     file = passby.car_input(args, VEHICLE)
-    plays = f"an {facts['helicopter']} at {facts['speed_kmh']:g} km/h (its rotors' model)"
+    plays = f"an {facts['helicopter']} at {passby.kmh(facts['speed_kmh'])} km/h (its rotors' model)"
     also = (
         f" · Helicopter: {file.name if file else plays}, {crossing['height_m']:g} m up, "
         f"overhead at {mmss(crossing['at_s'])}"

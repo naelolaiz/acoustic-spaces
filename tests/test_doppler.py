@@ -15,9 +15,11 @@ from acoustic_spaces import doppler as dp
 from acoustic_spaces.cli import main
 from acoustic_spaces.directivity import _grid
 from acoustic_spaces.emission import Mixture
-from acoustic_spaces.render import convolve
+from acoustic_spaces.render import convolve, gusts_for
 from acoustic_spaces.scene.model import Walk
 from acoustic_spaces.spatial import Binaural, Mono
+from acoustic_spaces.spatial.directions import fibonacci_sphere
+from acoustic_spaces.spatial.hrtf import HRTF
 from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
@@ -180,6 +182,47 @@ def test_a_walker_that_stands_still_is_a_convolution_at_the_ears() -> None:
         assert _error_db(wet[:, ear], ref[:, ear]) < -45.0
 
 
+def _delays_hrtf(onsets: np.ndarray, taps: int = 64) -> HRTF:
+    """Ears that only delay: each measured direction of a Fibonacci lattice a unit pulse
+    at its ``onsets`` (directions, 2) samples."""
+    directions = fibonacci_sphere(len(onsets))
+    hrir = np.zeros((len(onsets), 2, taps))
+    for m, ear in np.ndindex(len(onsets), 2):
+        hrir[m, ear, int(onsets[m, ear])] = 1.0
+    return HRTF(directions, hrir, RATE)
+
+
+def test_ears_whose_onsets_jump_keep_the_treble_between_places(short) -> None:
+    """Measured ears can start a few samples apart from one direction to the next
+    (KEMAR's far ear does, by up to 11 samples between places 1 m apart along a road
+    25 m away). Each ear's onset is read in its delay, not mixed in its filter: the
+    treble does not cancel between places whose ears start apart. Through ears that only
+    delay, over a ground that takes all the sound (the direct sound alone), it is the
+    treble of ears that all start together; mixing the filters as they were lost up to
+    5.4 dB of it."""
+    data = short.scene("source", 30.0, "hard").model_dump(mode="json", exclude_none=True)
+    data["materials"]["ground"] = {"absorption": [1.0] * 8, "scattering": 0.0}
+    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=1.0, late_step_m=None)
+    dry = _noise(1.5)
+    count = 300
+    jumping = 20.0 + 4.0 * (np.arange(count) % 2)[:, None] * np.ones(2)
+    together = np.full((count, 2), 20.0)
+    wet, flat = (
+        render_walk(walk, {"s": dry}, Binaural(hrtf=_delays_hrtf(onsets)))
+        for onsets in (jumping, together)
+    )
+    frame = 960
+    f = np.fft.rfftfreq(frame, 1.0 / RATE)
+    band = (f >= 6000.0) & (f <= 16000.0)
+
+    def treble_db(x: np.ndarray) -> np.ndarray:
+        frames = x[: len(x) // frame * frame].reshape(-1, frame, 2)
+        return 10.0 * np.log10(np.sum(np.abs(np.fft.rfft(frames, axis=1)[:, band]) ** 2, axis=1))
+
+    heard = treble_db(flat) > treble_db(flat).max() - 30.0
+    assert np.abs(treble_db(wet) - treble_db(flat))[heard].max() < 0.3
+
+
 def test_a_passing_source_and_listener_sound_as_the_exact_field(short) -> None:
     speed, tone = 30.0, 1000.0
     walked = (short.X1 - short.X0) / speed
@@ -250,6 +293,28 @@ def test_the_late_part_and_the_eddies_go_along(short) -> None:
     assert not np.allclose(wet, still)
     # Rendered again, the same: the eddies and the late part are drawn the same way.
     assert np.array_equal(wet, render_walk(walk, {"s": dry}, Mono()))
+
+
+def test_a_walker_standing_in_the_eddies_hears_each_path_half_way_between_moments() -> None:
+    """With Doppler too, each path's delay goes from one moment of the eddies to the
+    next's, its top band's in the delay and the rest in the filter: half-way, a tone
+    at 8 kHz has the response whose paths are delayed half-way. The filter alone held
+    only how the other bands lag behind the top one, so the eddies did not move the
+    top band at all: the largest difference here was 43 % of the tone's rms amplitude
+    (now 0.009 %)."""
+    from test_turbulence import half_way_errors
+
+    data = _standing("hard").model_dump(mode="json", exclude_none=True)
+    data["atmosphere"] = {"turbulence": {"preset": "strong", "outer_scale_m": 2.0}}
+    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), late_step_m=None)
+    response = next(iter(walk.result.responses.values()))
+    rate, f = RATE, 8000.0
+    dry = np.sin(2 * np.pi * f * np.arange(3 * rate) / rate)
+    wet = render_walk(walk, {"s": dry}, Mono())[:, 0]
+    seed = walk.result.settings.seed
+    gusts = gusts_for(response, len(wet) / rate, seed)
+    moments = range(4, int(2.5 / gusts.step_s))
+    assert half_way_errors(response, wet, f, rate, gusts, seed, moments) < -40.0
 
 
 def test_a_walking_listener_hears_a_moving_and_a_standing_source(short) -> None:

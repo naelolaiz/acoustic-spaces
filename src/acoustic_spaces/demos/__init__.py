@@ -20,10 +20,12 @@ there already (a scene file, a simulation's results).
   the demo of any scene (``acoustic-spaces demo``), each source playing the WAV file its
   ``signal`` names.
 - :mod:`acoustic_spaces.demos.passby` and :mod:`~acoustic_spaces.demos.passby_pictures`:
-  the pass-by demos of the roadside and the street, a car driving past with Doppler,
-  and the flyover demo; :mod:`acoustic_spaces.demos.car`, the car's sound power
-  (CNOSSOS-EU) and a sound made to it; :mod:`acoustic_spaces.demos.helicopter`, the
-  helicopter that flies over and its rotors' sound.
+  the pass-by demos of the roadside and the street, a car, a truck, a bus, a motorcycle
+  or a police car with its siren driving past with Doppler, and the flyover demo;
+  :mod:`acoustic_spaces.demos.road`, the road vehicles' sound power (CNOSSOS-EU) and a
+  sound made to it; :mod:`acoustic_spaces.demos.siren`, the siren's sound, level and
+  directivity; :mod:`acoustic_spaces.demos.helicopter`, the helicopter that flies over
+  and its rotors' sound.
 - :mod:`acoustic_spaces.fetch`: downloads, whole or one member of a remote zip archive.
 """
 

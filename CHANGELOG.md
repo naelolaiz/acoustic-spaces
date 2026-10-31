@@ -2,6 +2,84 @@
 
 ## Unreleased
 
+- The pass-by demos drive more than the car past their listeners, each picked with
+  `passby_demo.py --vehicle` and each the example's source of its name, left out of
+  the example's simulations until ticked, with a walk with Doppler: in `roadside` the
+  car or an articulated truck at 70 km/h the other way, in `street` the car, a city bus,
+  a motorcycle or a police car with its siren on, all at 50 km/h. The truck, the bus and
+  the motorcycle have CNOSSOS-EU's sound power of their category (3, heavy vehicles; 2,
+  medium heavy vehicles; 4b, motorcycles, which have propulsion noise alone;
+  `acoustic_spaces.demos.road`) and a sound made to it from their tyres and an engine of
+  their own (`--rpm`: six cylinders at 1200 rpm, six at 1500, two at 4000). The police
+  car is two sources along one walk: the car itself (`police_car`), CNOSSOS-EU's
+  passenger car 0.05 m above the road, and its siren (`police_car_siren`), 1.5 m up on
+  its roof, facing the way it drives, each simulated alone and the two heard together
+  (`--police-car siren` plays the siren alone). The car is 32 dB(A) under the siren,
+  but the siren sends next to nothing under its pitch: in the octaves of 63 to 250 Hz
+  the police car's sound is the car's, the rumble of it going by. The siren plays wail,
+  yelp or two
+  tones (`--siren`), a square wave at the sweep rates California's rule for sirens asks
+  and at the two tones and the cycle the Swiss rule for priority vehicles asks, with the
+  level and the directivity (`siren.csv`) of a 100 W electronic siren the National
+  Bureau of Standards measured in 1978 (`acoustic_spaces.demos.siren`): 130.6 dB(A) of
+  sound power for the wail and the yelp, 128.6 dB(A) for the two tones. The new
+  `validation/urban_sources.py` holds it against California's classes of siren (above
+  class B everywhere from 0 to 50 degrees off its axis, 1 to 2 dB under class A),
+  the octave band the rule wants it loudest in and the Swiss rule's levels on the test
+  bench and 7 m in front of the vehicle. In the editor's Run demo window the vehicle,
+  the engine's speed, the siren and what the police car plays are options with their
+  tips.
+- The road vehicles' sound power is CNOSSOS-EU's Table F-1 as amended in 2021
+  (Commission Delegated Directive (EU) 2021/1226), which has a vehicle's point radiate
+  alike every way instead of into the half space above the road, with coefficients A
+  higher than Directive (EU) 2015/996's. The car's sound power at 50 km/h is 98.4 dB(A)
+  instead of 96.0 (2.1 to 2.7 dB(A) more from 30 to 130 km/h), its `level_db` in the
+  `roadside` and `street` scenes with it, and its passes are louder by about as much:
+  76.3 dB(A) at the roadside's verge instead of 73.7, 79.4 dB(A) on the street's
+  pavement instead of 76.9.
+- Upgrading: `acoustic_spaces.demos.car` is now `acoustic_spaces.demos.road`, for every
+  category: `light_vehicle_power(speed, temperature)` is `vehicle_power("1", speed,
+  temperature)`, `car_sound` is `vehicle_sound`, and the table's coefficients are in
+  `CATEGORIES` instead of `ROLLING_A` and the like; `VehiclePower` has the category
+  first. The pass-by demos' step that makes the vehicle's sound is `sound` instead of
+  `car` (`passby_demo.py sound`), and writes `demo/NAME/NAME.wav` for the vehicle NAME
+  (`demo/police_car/police_car.wav` and `siren.wav` for the police car's car and its
+  siren).
+- Fixed: a walk with Doppler in binaural through measured ears (a SOFA file, such as
+  `kemar`) lost the treble for a moment between each two places, audible as a vehicle
+  passes. Where each ear's response starts was in its filter, and
+  measured ears start a few samples apart from one direction to the next (KEMAR's far
+  ear by up to 11 samples between places 1 m apart along a road 25 m away), so two
+  places' filters mixed, or two windows overlapping, cancelled each other: for the truck
+  heard 25 m from the road (the `roadside` example's `yard_25m`), up to 6.8 dB lost at
+  8 to 16 kHz for 40 ms at a time. Each ear's
+  onset now goes into that ear's delay, read through the same cubic and sinc as the
+  path's. The spherical head's onsets move at most half a sample from place to place,
+  and lost up to 0.8 dB there.
+- Fixed: in turbulence, a walk with Doppler left out the delay the eddies give each
+  path's top band: the path's filter held only how its other bands lag behind the top
+  one, and its delay none of the eddies', so they did not move the top band at all
+  and moved the others by their difference from it. The `helicopter_flyover` example's
+  flyovers had it. The top band's delay at each moment now goes into the path's delay,
+  taken between the moments on either side. A test plays a tone at 8 kHz and compares
+  it, half-way between two moments, with the tone through the response whose paths are
+  delayed half-way: the largest difference was 43 % of the tone's amplitude and is now
+  0.009 %.
+- Fixed: listening in turbulence (`auralize`, the editor's **Listen**, walks without
+  Doppler) crossfaded each moment of the eddies into the next (every 125 ms in
+  `open_air_stage`), which mixed each early path at two delays a few microseconds apart
+  and cancelled the treble half-way between moments: up to 8.9 dB at 8 to 16 kHz for
+  20 ms at a time at `open_air_stage`'s listener 300 m downwind. Each early path now
+  plays through its own delay, which goes from one moment's to the next's, as along a
+  walk with Doppler (`acoustic_spaces.doppler.render` takes a `span` of samples for
+  it), in about the same time. The same test, standing still: the largest difference
+  was 19 % of the tone's amplitude and is now 0.05 %.
+- Fixed: the pass-by demos' captions, stills and printouts gave a walk's speed as it
+  came out of its length and time, such as 50.004 km/h for a walk of 13.89 m/s; they
+  now give it to a tenth of a km/h without a trailing zero (50 km/h, 72.5 km/h).
+  Tours made again from an earlier walk keep its old wording under the heading until
+  the walk is made again.
+
 - A scene can name the `recording` its sound system plays in a demo of it
   (`acoustic-spaces demo`, the editor's *This scene*), and each source the `channel` of
   it that it plays (`left`, `right`, or `mono`, both mixed down), so that a stage's

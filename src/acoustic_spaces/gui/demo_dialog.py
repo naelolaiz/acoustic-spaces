@@ -14,7 +14,7 @@ to run again or to put in a script. A demo whose sources can play files of the u
 instead. A number
 shows its unit, and one whose default the scene gives (the pass-by demos' ``--speed``)
 says so at zero; the line under the form says what the options make of the run, where
-the demo says (how far, how fast and how long the car drives), under the Movement box.
+the demo says (how far, how fast and how long the vehicle drives), under the Movement box.
 Above Run, a line says what the run downloads and how much: the recordings of a demo
 whose steps fetch them (:attr:`~acoustic_spaces.demos.Step.downloads`), until they are
 there.
@@ -420,7 +420,7 @@ def walk_text(item) -> str:
 class MovementBox(QGroupBox):
     """What moves in a run: a row for each source and listener of the scene with a walk,
     ticked when it moves; one left out of the scene's simulations shows only when it is
-    ticked (the pass-by demos' car, which they put in the scenes they write). With
+    ticked (the pass-by demos' vehicle, which they put in the scenes they write). With
     :meth:`set_mode` ``editable`` (a demo with a ``movers`` option, ``--moving``) the
     ticks are the run's, starting as the scene's Moves sets them; otherwise they show
     what the demo moves. Edit movement… asks for the Movement panel on the selected
@@ -954,6 +954,8 @@ class DemoDialog(QDialog):
                 widget.set_sources(self._plays(demo, args))
                 args = self.arguments()
         self.command.setText(demo.command(step, args))
+        if demo.moving is not None and all(o.kind != "movers" for o in demo.options):
+            self._show_movement(demo, args)  # what it moves may follow an option (--vehicle)
         self.folder.setText(_("Runs in {folder}").format(folder=demo.folder))
         self.summary.setText(self._summary(demo, args) or "")
         self.summary.setVisible(bool(self.summary.text()))

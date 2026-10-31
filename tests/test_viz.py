@@ -462,9 +462,13 @@ def test_screenshot_with_a_map(tmp_path: Path) -> None:
 
 
 def _windy(tmp_path: Path, example: str, atmosphere: str) -> Room:
-    """An example scene with its ``atmosphere`` (YAML) in place of its own."""
+    """An example scene with its ``atmosphere`` (YAML) in place of its own, beside a copy
+    of the files the example keeps beside its scene (a directivity table, say)."""
+    import shutil
+
     from acoustic_spaces.examples import example_path
 
+    shutil.copytree(example_path(example).parent, tmp_path, dirs_exist_ok=True)
     text = example_path(example).read_text(encoding="utf-8")
     start = text.find("atmosphere:")
     if start >= 0:  # the example's own, up to the next top-level key

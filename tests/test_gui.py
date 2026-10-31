@@ -727,7 +727,9 @@ def test_scene_yaml_panel(window, qapp, tmp_path: Path) -> None:
     window.from_example = False
     window.document.path = tmp_path / "shoebox.yaml"
     window.save()
-    model = (EXAMPLES / "shoebox" / "shoebox.obj").resolve().as_posix()
+    # The example's own folder: a source checkout's, or an installed package's (as on CI),
+    # written as the scene holds it, with the system's separators.
+    model = Path(example_path("shoebox")).resolve().parent / "shoebox.obj"
     assert f"file: {model}\n" in panel.view.toPlainText() and not panel.edited()
 
 
@@ -3183,12 +3185,14 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert walk.edit_request == ("listeners", "visitor")
     assert walk.result() == int(QDialog.DialogCode.Rejected)
     walk.deleteLater()
-    # The roadside's car is left out of its simulations: the pass-by demo, which puts it
-    # in the scene it writes, shows that it moves it; This scene does not list it.
+    # The roadside's car and truck are left out of its simulations: the pass-by demo,
+    # which puts the one it drives in the scene it writes, shows that it moves it; This
+    # scene does not list them.
     road = DemoDialog(scene=example_path("roadside"))
     assert road.picker.currentData() == "passby"
     box = road.movement
-    assert box.walkers == [("sources", "car", True)] and box.used == [False]
+    assert box.walkers == [("sources", "car", True), ("sources", "truck", True)]
+    assert box.used == [False, False]
     assert box.ticked() == ["car"] and not box.table.isHidden()
     assert "a demo that moves it puts it in" in box.table.item(0, box.NAME).toolTip()
     # Its speed: the walk's by default, in km/h, and the line under the form says how
@@ -3206,6 +3210,18 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert "last 5.4 s" in road.summary.text()
     assert road.command.text() == "python passby_demo.py all --speed 100.0"
     speed.setValue(0.0)
+    assert road.command.text() == "python passby_demo.py all"
+    # The truck instead: its walk, its speed and its engine's tip.
+    vehicle = road.fields["vehicle"]
+    vehicle.setCurrentText("truck")
+    assert road.command.text() == "python passby_demo.py all --vehicle truck"
+    assert box.ticked() == ["truck"]
+    assert road.summary.text().startswith(
+        "The truck drives 150.0 m along its walk at 70.0 km/h (19.44 m/s, as its walk in "
+        "the scene goes): the pass, and the truck's sound, last 7.7 s."
+    )
+    assert "car 2000 (4 cylinders), truck 1200 (6 cylinders)" in road.fields["rpm"].toolTip()
+    vehicle.setCurrentText("car")
     assert road.command.text() == "python passby_demo.py all"
     road.picker.setCurrentIndex(road.picker.findData("scene"))
     assert box.note.text().startswith("Nothing in this scene moves.")

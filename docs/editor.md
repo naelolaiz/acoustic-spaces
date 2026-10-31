@@ -157,8 +157,8 @@ which frequencies each octave band holds.
   `--moving`, a walker left out of the scene showing only when the demo moves it, and
   **Edit movement…** opens the Movement panel on the selected one; a number shows its
   unit, and the pass-by demos' **Speed** reads *as in the scene* at zero, the speed of
-  the car's walk, with the line under the Movement box saying how far, how fast (km/h
-  and m/s) and so for how long the car drives, as the options stand), and
+  the vehicle's walk, with the line under the Movement box saying how far, how fast
+  (km/h and m/s) and so for how long the vehicle drives, as the options stand), and
   it runs in its own process in the background, with what it prints in the **Messages**
   panel and **Cancel** to stop it. **Advanced**, closed until opened, holds the step
   (*all* runs the demo from nothing to its video, leaving out what is done already),
@@ -168,7 +168,7 @@ which frequencies each octave band holds.
   scene with changes to be saved first, as the demo reads the file. An example's demo
   plays recordings it downloads, which the line above **Run** names with their size
   until they are there (the orchestra's three movements are 2.0 GB), or a sound it
-  makes (the pass-by demos' car), and can take a while. A demo writes beside the scene
+  makes (the pass-by demos' vehicles), and can take a while. A demo writes beside the scene
   (*This scene* into `demo/`), or under your home folder when that folder cannot be
   written.
 - The scene tree's **Outputs** entry chooses what a run writes: mono, binaural,

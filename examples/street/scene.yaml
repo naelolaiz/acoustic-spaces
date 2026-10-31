@@ -4,9 +4,10 @@
 # over it: sound that reaches the sky leaves, and the ground reaches 30 m past the
 # buildings, then goes on as if it never ended. One listener stands on the pavement, one
 # on a balcony of the office block, one in the garden, where the traffic comes over the
-# top of the barrier and round its ends: `first_order` diffraction follows it. A car
-# drives along the street at 50 km/h, its pitch falling as it passes (Doppler): it is
-# left out of simulations until ticked, and passby_demo.py plays it.
+# top of the barrier and round its ends: `first_order` diffraction follows it. A car, a
+# bus, a motorcycle and a police car with its siren on drive along the street at 50
+# km/h, their pitch falling as they pass (Doppler): they are left out of simulations
+# until ticked, and passby_demo.py plays one.
 name: Street with a noise barrier
 geometry:
   ground: {margin: 30}
@@ -44,15 +45,62 @@ sources:
     spacing_m: 3
     level_db: 100
   # A passenger car in the lane on the offices' side, its sound power per octave band
-  # CNOSSOS-EU's at 50 km/h (Directive (EU) 2015/996, Appendix F, Table F-1); its sound
-  # comes from 0.05 m above the road, where the method places it.
+  # CNOSSOS-EU's at 50 km/h (Directive 2002/49/EC, Annex II, Appendix F, Table F-1, as
+  # amended in 2021); its sound comes from 0.05 m above the road, where the method
+  # places it.
   - name: car
     enabled: false
     position: [-55, -2, 0.05]
-    level_db: [94.9, 87.9, 86.6, 88.3, 92.9, 90.0, 82.9, 74.9]
+    level_db: [98.3, 91.2, 89.4, 90.7, 95.6, 92.3, 84.6, 76.1]
     walk:
       to: [[70, -2, 0.05]]
       speed_m_s: 13.89
+      doppler: true
+  # A city bus with two axles (CNOSSOS-EU's category 2) in the lane on the houses' side,
+  # the other way, at 50 km/h.
+  - name: bus
+    enabled: false
+    position: [70, 2, 0.05]
+    level_db: [106.1, 99.2, 99.3, 100.2, 101.3, 96.9, 90.1, 84.2]
+    walk:
+      to: [[-55, 2, 0.05]]
+      speed_m_s: 13.89
+      doppler: true
+  # A motorcycle (category 4b, propulsion noise alone) behind where the car goes, at 50
+  # km/h.
+  - name: motorcycle
+    enabled: false
+    position: [-55, -2, 0.05]
+    level_db: [99.0, 100.2, 93.3, 91.1, 91.9, 91.1, 88.9, 85.2]
+    walk:
+      to: [[70, -2, 0.05]]
+      speed_m_s: 13.89
+      doppler: true
+  # A police car with its siren on, in the lane on the houses' side, the other way, at
+  # 50 km/h: the car itself, a passenger car, its tyres and engine heard from 0.05 m
+  # above the road with CNOSSOS-EU's sound power (as the car's); and its siren, wailing:
+  # a 100 W electronic siren on its roof, 1.5 m up, along the same walk, facing the way
+  # it drives, at the level and with the directivity the National Bureau of Standards
+  # measured (siren.csv; passby_demo.py --siren picks the pattern, --police-car siren
+  # plays the siren alone). The car is some 32 dB(A) under the siren, but under the
+  # siren's pitch, in the octaves of 63 to 250 Hz, it is all the police car's sound.
+  - name: police_car
+    enabled: false
+    position: [70, 2, 0.05]
+    level_db: [98.3, 91.2, 89.4, 90.7, 95.6, 92.3, 84.6, 76.1]
+    walk:
+      to: [[-55, 2, 0.05]]
+      speed_m_s: 13.89
+      doppler: true
+  - name: police_car_siren
+    enabled: false
+    position: [70, 2, 1.5]
+    level_db: [76.1, 76.1, 81.4, 123.3, 128.6, 120.5, 120.0, 118.8]
+    directivity: {file: siren.csv}
+    walk:
+      to: [[-55, 2, 1.5]]
+      speed_m_s: 13.89
+      face_forward: true
       doppler: true
 listeners:
   - name: pavement
