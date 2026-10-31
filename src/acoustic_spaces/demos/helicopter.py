@@ -28,7 +28,7 @@ import numpy as np
 
 from acoustic_spaces.demos import Option
 from acoustic_spaces.demos.audio import write as write_wav
-from acoustic_spaces.demos.passby import FADE_S, Vehicle, car_of, pass_s
+from acoustic_spaces.demos.passby import FADE_S, Vehicle, car_of, kmh, pass_s
 
 #: The source of the example that flies over.
 HELICOPTER = "helicopter"
@@ -105,6 +105,8 @@ class Helicopter(Vehicle):
     steady = "its rotors are trimmed for one steady speed"
     step_m = STEP_M
     sound_file, info_file = BELOW_FILE, INFO_FILE
+    sound_step = HELICOPTER
+    title = "an Airbus Helicopters AS350 B3"
 
     def options(self) -> list[Option]:
         from acoustic_spaces import rotorcraft
@@ -191,7 +193,7 @@ class Helicopter(Vehicle):
         peak = float(np.abs(below).max(initial=0.0))
         write_wav(folder / self.sound_file, below * (0.5 / peak if peak > 0 else 1.0), info["rate"])
         return (
-            f"{info['duration_s']:.1f} s of an {info['helicopter']} at {info['speed_kmh']:g} "
+            f"{info['duration_s']:.1f} s of an {info['helicopter']} at {kmh(info['speed_kmh'])} "
             f"km/h ({info['airspeed_m_s']:.1f} m/s through the air), sent straight down; "
             f"{info['sound_power_a_db']:.1f} dB(A) of sound power"
         )
@@ -214,7 +216,7 @@ class Helicopter(Vehicle):
         source["directivity"] = {"file": named}
         source.setdefault("walk", {})["face_forward"] = True
 
-    def made(self, args: argparse.Namespace, rate: int, duration_s: float):
+    def made(self, args: argparse.Namespace, rate: int, duration_s: float, part: str = ""):
         """What its rotors send along its pass, at ``rate``."""
         from acoustic_spaces.demos.passby import car_info
 
@@ -240,7 +242,7 @@ class Helicopter(Vehicle):
             "airspeed_m_s": info["airspeed_m_s"],
             "sound_power_a_db": info["sound_power_a_db"],
             "broadband": info["broadband"],
-            "about": f"An {info['helicopter']} at {info['speed_kmh']:g} km/h, "
+            "about": f"An {info['helicopter']} at {kmh(info['speed_kmh'])} km/h, "
             f"{info['sound_power_a_db']:.1f} dB(A) of sound power (its rotors' model)",
         }
 

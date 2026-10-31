@@ -1232,8 +1232,9 @@ nowhere at that order:
 
 ### Along a street
 
-The `street` example's car (see [A car passing by](demos.md#a-car-passing-by)) passes
-the pavement, a balcony of the office block and the garden behind the noise barrier.
+The `street` example's car (see [Vehicles passing by](demos.md#vehicles-passing-by))
+passes the pavement, a balcony of the office block and the garden behind the noise
+barrier.
 No exact solution covers a street either, so the check is again that the level does not
 jump: the early level, A-weighted with the car's sound power, every 10 cm of the car's
 125 m, and again 1 cm apart round each step of 10 cm that is among the four largest for
@@ -1243,14 +1244,16 @@ and out of step: at 8 kHz, where a centimetre is a quarter of a wavelength, the
 garden's level changes by up to 0.76 dB from one centimetre to the next. The late part
 is left out, as its rays are drawn at random (the early level repeats to the last
 bit): with the scene's rays few of them reach the garden, and in a one-off check two
-runs of the same pass without a `seed` put the garden's level up to 2.3 dB(A) apart at
-one place (x = -47 m; 0.45 dB(A) rms over the pass), the pavement's and the balcony's
-up to 0.8 and 0.5 dB(A), each L_Amax within 0.02 dB.
+runs of the same pass without a `seed` (the car's levels of 4.1.0, every metre, as
+`passby_demo.py walk` simulates it) put the garden's level up to 2.1 dB(A) apart at one
+place (x = -35 m; 0.37 dB(A) rms over the pass), the pavement's and the balcony's up to
+0.6 and 0.8 dB(A); their L_Amax came within 0.04 dB on the pavement and in the garden
+and 0.17 dB apart on the balcony.
 
-On the pavement and the balcony the early level changes by at most 0.24 and 0.15 dB(A)
-from one 10 cm to the next, and in the garden by at most 1.33 dB(A), where 1 kHz swings
+On the pavement and the balcony the early level changes by at most 0.25 and 0.16 dB(A)
+from one 10 cm to the next, and in the garden by at most 1.38 dB(A), where 1 kHz swings
 by 2.5 dB at x = 28.8 m and does so smoothly 1 cm apart; without the fade the garden's
-level steps by up to 12.3 dB(A) from one 10 cm to the next. The steps of 0.90 to 1.90
+level steps by up to 12.2 dB(A) from one 10 cm to the next. The steps of 0.90 to 1.90
 dB that two events stopping a path made in the garden, at x = -41.60, 30.41, 32.00 and
 34.00 m (see the next paragraph), are gone: 1 cm apart, the level there stood out from
 its neighbours' by at most 0.11 dB in any band when they were fixed. The steps left
@@ -1264,22 +1267,22 @@ fade (`validation/walks.py`):
 
 | car at x (m) | listener | stands out (dB) | in | dB(A) | without the fade (dB) |
 |---:|---|---:|---|---:|---:|
-| -41.39 | garden | 1.13 | 1 kHz | 0.52 | 0.00 |
-| -14.04 | garden | 1.41 | 63 Hz | 0.27 | 0.33 |
-| -0.75 | garden | 1.29 | 63 Hz | 0.15 | 0.42 |
-| -0.69 | garden | 1.37 | 63 Hz | 0.27 | 0.47 |
+| -41.39 | garden | 1.13 | 1 kHz | 0.55 | 0.00 |
+| -14.04 | garden | 1.41 | 63 Hz | 0.28 | 0.33 |
+| -0.75 | garden | 1.29 | 63 Hz | 0.16 | 0.42 |
+| -0.69 | garden | 1.37 | 63 Hz | 0.29 | 0.47 |
 | 9.99 | garden | 0.82 | 63 Hz | 0.03 | 0.96 |
 | 37.80 | pavement | 0.55 | 63 Hz | 0.03 | 1.09 |
 | 58.79 | garden | 0.82 | 250 Hz | 0.09 | 0.93 |
 | 59.09 | balcony | 0.29 | 63 Hz | 0.05 | 0.04 |
-| 59.37 | balcony | 0.29 | 63 Hz | 0.07 | 0.15 |
+| 59.37 | balcony | 0.29 | 63 Hz | 0.08 | 0.15 |
 | 60.03 | balcony | 0.40 | 63 Hz | 0.04 | 0.00 |
 | 60.70 | pavement | 0.40 | 250 Hz | 0.00 | 0.00 |
-| 60.80 | garden | 1.42 | 500 Hz | 0.32 | 0.29 |
-| 60.87 | garden | 1.31 | 500 Hz | 0.19 | 0.26 |
+| 60.80 | garden | 1.42 | 500 Hz | 0.34 | 0.29 |
+| 60.87 | garden | 1.31 | 500 Hz | 0.21 | 0.26 |
 | 61.02 | pavement | 0.10 | 63 Hz | 0.03 | 0.00 |
-| 62.90 | pavement | 1.02 | 250 Hz | 0.23 | 0.61 |
-| 63.10 | pavement | 1.18 | 250 Hz | 0.27 | 0.60 |
+| 62.90 | pavement | 1.02 | 250 Hz | 0.24 | 0.61 |
+| 63.10 | pavement | 1.18 | 250 Hz | 0.28 | 0.60 |
 | 63.53 | balcony | 0.32 | 63 Hz | 0.00 | 0.18 |
 | 66.53 | balcony | 0.16 | 1 kHz | 0.10 | 0.05 |
 | 69.51 | balcony | 0.75 | 63 Hz | 0.09 | 0.70 |
@@ -1334,7 +1337,7 @@ would also be the better one here is not checked.
   the plane (for a leg that stops a path, the image's term is found on the leg on the
   other side of the reflection); the edge diffraction's own paths stop there alike.
   Along the street the paths over the barrier's top make steps of up to 1.42 dB in one
-  band and 0.52 dB(A) where they reach its ends (see above), the edge diffraction's own
+  band and 0.55 dB(A) where they reach its ends (see above), the edge diffraction's own
   up to 1.09 dB without the fade. Past the corner of a thin screen the edge diffraction
   alone steps by 2.8 dB at 63 Hz (see
   [Edge diffraction against the exact solution](#edge-diffraction-against-the-exact-solution)).
@@ -3017,7 +3020,11 @@ up to 0.8 dB louder ahead of it at 30 m/s and 2.0 dB at 70 m/s, 0.7 and 1.6 dB
 quieter behind), and so is the
 Doppler shift of the late part, which is crossfaded. Binaural walks are checked
 against the convolution with a response when the walker stands still (to within 45 dB
-at each ear in the tests), not against a moving head's exact field.
+at each ear in the tests), not against a moving head's exact field. A test drives a
+source past a listener whose ears' responses start 4 samples apart from one direction
+to the next, as a measured set's may, and holds its treble (6 to 16 kHz, frame by
+frame) within 0.3 dB of the same walk with ears that start together; before each ear's
+onset went into its delay, it lost 5.4 dB between places.
 
 ## Helicopter rotors against theory and a certified level
 
@@ -3170,6 +3177,65 @@ change round the turn, which make a rotor's lower harmonics in forward flight lo
 than steady loads do. Some of the AS350 B3's inputs are assumed (the main blades' chord
 and twist, the tail rotor's speed, chord and thickness, V_H); `AS350_B3`'s source code
 says which.
+
+## Sirens and road vehicles against their rules
+
+`validation/urban_sources.py` holds the pass-by demos' police car's siren
+(`acoustic_spaces.demos.siren`, see [Vehicles passing by](demos.md#vehicles-passing-by))
+against what the rules for sirens ask, with the siren's directivity table in the
+engine, and compares the car's sound power by the two versions of CNOSSOS-EU's table.
+The siren's level and directivity are those the National Bureau of Standards measured
+on a commercial 100 W electronic siren (SP 480-28, 1978): 118 dB(A) 3 m away on its
+axis, its yelp averaged over 20 s, 112 dB(A) 50 degrees off it and 107 at 90.
+
+**California's rule** (California Code of Regulations, title 13, section 1028): the
+least A-weighted levels of its two classes of siren 3.0 m away from 0 to 50 degrees
+off the axis (table I), the wail and the yelp as the engine gives them there over a
+ground that takes all the sound:
+
+| degrees off the axis | 0 | 10 | 20 | 30 | 40 | 50 |
+|---|---:|---:|---:|---:|---:|---:|
+| class A, least (dB(A)) | 120 | 119 | 118 | 117 | 115 | 113 |
+| class B, least (dB(A)) | 115 | 114 | 113 | 112 | 110 | 108 |
+| wail and yelp (dB(A)) | 118.0 | 116.8 | 115.6 | 114.4 | 113.2 | 112.0 |
+
+The siren is above class B at every angle and 1 to 2 dB under class A: a class B
+siren by the rule. The rule takes the average of five peaks of the sweep, NBS the
+energy over 20 s, so the rule's reading of the same siren would be at least as high.
+Its level on the axis is highest in the 1 kHz octave band, as the rule asks (1 or 2
+kHz), and the wail's level in 125 ms falls 2.2 dB(A) within its cycle, where the rule
+allows 10 dB(A) under the table. That fall comes from the A-weighting of a sweep from
+500 to 1500 Hz through a loudspeaker taken to be flat: the loudspeaker's response is
+not in NBS's report.
+
+**The Swiss rule** for priority vehicles' two-tone horns (SR 741.41, annex 11, the
+values of DIN 14610): the two tones, 440 and 586.7 Hz, lie within the base frequencies
+of 360 to 630 Hz, a fourth apart (the rule: 3:4, -3 to +7 %), with a cycle of 3 s (2.5
+to 3.5 s) and no pause. On the axis 2 m away in a free field they give 119.4 dB(A),
+where the rule asks 116 to 129 dB(A) on the test bench; 7.00 m in front of the police
+car, its siren 1.5 m up, over the street's asphalt, the engine gives 108.1, 108.7 and
+110.8 dB(A) 0.5, 1.0 and 1.5 m up, where the rule asks 100 to 115 dB(A) on the vehicle.
+The level of the two tones follows from the yelp's sound power, the same in all, as
+the loudspeaker is taken to send each pattern with one drive: 128.6 dB(A) against the
+yelp's 130.6.
+
+**The car's table.** CNOSSOS-EU's Table F-1 as amended in 2021, which the road
+vehicles take (`acoustic_spaces.demos.road`), against Directive (EU) 2015/996's, which
+the car had before acoustic-spaces 4.1.0, at 20 °C:
+
+| speed (km/h) | 30 | 50 | 70 | 90 | 110 | 130 |
+|---|---:|---:|---:|---:|---:|---:|
+| 2021: sound power (dB(A)) | 92.5 | 98.4 | 103.0 | 106.6 | 109.6 | 112.1 |
+| 2015/996 (dB(A)) | 90.4 | 96.0 | 100.4 | 104.0 | 106.9 | 109.4 |
+| more by 2021's | +2.1 | +2.5 | +2.6 | +2.7 | +2.7 | +2.7 |
+
+The amendment has the vehicle's point radiate alike every way, where 2015/996 had it
+radiate into the half space above the road, and raises the coefficients A. The table
+is used as published, in the two copies of it checked against each other (the
+consolidated directive and Germany's BUB-D 2021): no measured pass-by is compared with
+it here. Measured pass-bys of 75 medium heavy vehicles in France found the 2015
+table's levels 3 to 6 dB(A) low (Euronoise 2018, paper 210, which gives its measured
+levels in figures only).
 
 ## Edge diffraction in whole cities
 
@@ -3565,6 +3631,10 @@ Files and runs:
   rigid ground, not against measured pass-bys, and leave out the convective
   amplification of a moving source (see
   [Moving sources](#moving-sources-against-the-exact-field)).
+  The road vehicles' sound power is CNOSSOS-EU's table as published, and the siren's
+  level and directivity one measured siren's, checked against the rules for sirens, not
+  against measured pass-bys (see
+  [Sirens and road vehicles](#sirens-and-road-vehicles-against-their-rules)).
   A helicopter's tones are checked against theory, its broadband noise against Pegg's
   worked example, and the whole against one certified level, which it is 3.4 dB over
   (see [Helicopter rotors](#helicopter-rotors-against-theory-and-a-certified-level));
@@ -3577,6 +3647,9 @@ Files and runs:
   Turbulence is checked against a parabolic equation through random eddies in two
   dimensions, with the source and the listener near the ground, not against
   measurements; how much the sound flickers over time is not checked against either.
+  Between two moments of the eddies, a tone played through them, standing and along a
+  walk with Doppler, is checked to have the response whose paths are delayed half-way
+  (in the tests, to within 1 % of the tone's amplitude).
   The wave solver in wind and temperature is checked against the parabolic equation
   over open ground up to 200 m, not against measurements, nor round buildings; its
   moving air against the exact field in a uniform wind and a façade's echo against
@@ -3623,6 +3696,7 @@ python validation/weather_zones.py --json weather_zones.json   # --only pe or me
 python validation/long_term.py --json long_term.json
 python validation/doppler.py --json doppler.json
 python validation/rotorcraft.py --json rotorcraft.json
+python validation/urban_sources.py --json urban_sources.json
 python validation/city_speed.py --json city_speed.json   # --sizes 10 20 30 40 60
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
@@ -3648,12 +3722,12 @@ the vegetation's 5.2, the leaves' 2.6, the wave solver's outdoors 11, the moving
 9.3, the insertion loss's 1.8, the terrain's 2.7, the fast field program's 5.7, the
 benchmark's 55 (much longer with `--far`), the weather zones' 7.2 (46 s of them the
 parabolic equation's, 6.4 minutes the mean profile's), the long term's 16 seconds, the
-moving sources' 5.6 minutes, the rotors' 3.3, the cities' 22 seconds (1.3 minutes with
-`--sizes 10 20 30 40 60`), each BRAS run of the coupled rooms, the seminar room or the
-auditorium 2 to 4 minutes (4 to 9 calibrated, 5 to 11 in third-octave bands) and of
-the hall about 1.5 hours (5.2 calibrated, 3.4 in third-octave bands), the binaural
-comparison 10 minutes in the seminar room, 6 in the auditorium and an hour in the
-hall, a loudspeaker of the hall in parts about 10 minutes, the coupled rooms against
+moving sources' 5.6 minutes, the rotors' 3.3, the sirens' 4 seconds, the cities' 22 (1.3
+minutes with `--sizes 10 20 30 40 60`), each BRAS run of the coupled rooms, the seminar
+room or the auditorium 2 to 4 minutes (4 to 9 calibrated, 5 to 11 in third-octave bands)
+and of the hall about 1.5 hours (5.2 calibrated, 3.4 in third-octave bands), the
+binaural comparison 10 minutes in the seminar room, 6 in the auditorium and an hour in
+the hall, a loudspeaker of the hall in parts about 10 minutes, the coupled rooms against
 theory under a second, and the rooms' own decay 5.8 minutes. The cross-check's numbers
 come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the

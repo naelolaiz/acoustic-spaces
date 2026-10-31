@@ -1,13 +1,13 @@
 # Demos
 
 Five demos run recordings through example scenes, mix them at the scenes' listeners and
-make a video of the result, a sixth drives a car past the listeners of two outdoor
-examples, a seventh flies a helicopter over those of a third and an eighth flies it over
+make a video of the result, a sixth drives a car, a truck, a bus, a motorcycle or a
+police car with its siren on past the listeners of two outdoor examples, a seventh flies a helicopter over those of a third and an eighth flies it over
 the stadium's concert. Each shows one space and one kind of sound: a symphony orchestra
 on the stage of a shoebox concert hall, a choir and an organ in a reverberant stone
 church, a band with its sound system and stage monitors in a stadium, the same band's
 song carried across a lake on a summer evening, a guide talking to a visitor who walks
-away from them through a gallery and then turns their head, a car passing on a road
+away from them through a gallery and then turns their head, a vehicle passing on a road
 across a meadow and along a street, its pitch falling as it goes by, and a helicopter
 flying over a meadow and low over the stadium during the song. None of them
 stands for what the simulator does elsewhere; the [examples](examples.md) cover far
@@ -679,87 +679,177 @@ College London), **CC BY 4.0**: an anechoic talk, a man describing his way to wo
 through Delft; `speech` reads the corpus's 148 MB archive as it comes, up to the
 talk: 16 MB for that talker, up to 145 MB for another (`--talker`).
 
-## A car passing by
+## Vehicles passing by
 
-`passby_demo.py` comes with two outdoor examples, `roadside` and `street`: a passenger
-car drives past at 50 km/h and each listener hears one pass in turn, its pitch falling
-as the car goes by. The video follows the car on the plan, with the level heard over the
-pass drawn under it.
+`passby_demo.py` comes with two outdoor examples, `roadside` and `street`: a vehicle
+drives past and each listener hears one pass in turn, its pitch falling as it goes by.
+The video follows the vehicle on the plan, with the level heard over the pass drawn
+under it. `--vehicle` picks what goes past: in the roadside a passenger car (`car`) or
+an articulated truck (`truck`), in the street the car, a city bus (`bus`), a motorcycle
+(`motorcycle`) or a police car with its siren on (`police_car`, the car itself, and
+`police_car_siren`).
 
 ```sh
 acoustic-spaces examples --copy . roadside && cd roadside   # or street
-python passby_demo.py all   # or car, scene, walk, video one at a time
+python passby_demo.py all --vehicle truck   # or sound, scene, walk, video one at a time
 ```
 
-Options: `--speed 70` how fast the car drives (km/h; without it, the speed of its walk
-in the example's scene, 50 km/h in both), `--rpm 2000` how fast its engine turns, for its
-made sound, `--step 1` how far apart the car is simulated along its walk (m), `--hrtf
-me.sofa` a measured head, `--input car=WAV` a dry recording of yours. The car drives the
-length of its walk at that speed, so the pass lasts the length divided by the speed: the
-150 m of the roadside take 10.8 s at 50 km/h, 7.7 s at 70 km/h. The **Run demo** window
-gives the three under its options as they change.
+Options: `--vehicle car` what goes past (the car by default), `--speed 70` how fast it
+drives (km/h; without it, the speed of its walk in the example's scene: 70 km/h for the
+truck, 50 km/h for the others), `--rpm 2000` how fast its engine turns, for its made
+sound (by default its own: the car's four cylinders at 2000 rpm, the truck's six at
+1200, the bus's six at 1500 and the motorcycle's two at 4000), `--siren wail` the police
+car's siren (`wail`, `yelp` or `two_tone`), `--police-car car_and_siren` what the police
+car plays (the car itself and its siren, or `siren` alone), `--step 1` how far apart the
+vehicle is simulated along its walk (m), `--hrtf me.sofa` a measured head, `--input
+NAME=WAV` a dry recording of yours for the vehicle NAME (`police_car_siren=WAV` for the
+police car's siren). The vehicle drives the length of its walk at
+that speed, so the pass lasts the length divided by the speed: the 150 m of the roadside
+take 10.8 s at 50 km/h, 7.7 s at 70 km/h. The **Run demo** window gives the three under
+its options as they change, and ticks the vehicle (the police car's two sources) in its
+Movement box.
 
-- **The car** is the example's source `car`: a point source 0.05 m above the road, where
-  CNOSSOS-EU puts a vehicle's sound, with a walk along the road with Doppler, left out of
-  the example's own simulations until ticked (there the traffic stays a still line
-  source). Its walk goes through points at a speed, or through keyframes timed for one
-  steady speed, since CNOSSOS-EU gives a car's sound at a steady speed: keyframes that
-  speed up or slow down by more than 1 % are refused, unless `--speed` drives the car
-  through their places at one speed. The demo's scene (`scene_demo.yaml`) has the car
-  alone along its walk at that speed, with CNOSSOS-EU's sound power of a passenger car
-  (category 1) at that speed
-  on the method's reference road surface, in the scene's air temperature: rolling noise
-  A_R + B_R lg(v/70) and propulsion noise A_P + B_P (v - 70)/70 per octave band, with
-  the coefficients of Table F-1 of Commission Directive (EU) 2015/996
-  (`acoustic_spaces.demos.car`). At 50 km/h and 20 °C that is 99.0 dB, 96.0 dB(A).
-- **Its sound** is made to that power. A recording of a car going past would not do: it
-  holds its own Doppler shift, the road and the distance, and the simulation would add
-  them again. Tyre noise is noise with the rolling noise's octave spectrum; the engine is
-  a pulse each time one of its four cylinders fires (every 15 ms at 2000 rpm, the
-  cylinders a little unequal and the firing a little uneven) with the propulsion noise's
-  spectrum; the two are at the ratio of their sound powers in each band, so the octave
-  levels are CNOSSOS-EU's and the time structure is made up, as the stills say. It fades
-  in and out over its first and last second, where the car is farthest. `--input
+- **The road vehicles** are the example's sources of their names: point sources 0.05 m
+  above the road, where CNOSSOS-EU puts a vehicle's sound, each with a walk along its
+  lane with Doppler, left out of the example's own simulations until ticked (there the
+  traffic stays a still line source). A walk goes through points at a speed, or through
+  keyframes timed for one steady speed, since CNOSSOS-EU gives a vehicle's sound at a
+  steady speed: keyframes that speed up or slow down by more than 1 % are refused,
+  unless `--speed` drives the vehicle through their places at one speed. The demo's
+  scene (`scene_demo.yaml`) has the vehicle alone along its walk at that speed, with
+  CNOSSOS-EU's sound power of its category at that speed on the method's reference road
+  surface, in the scene's air temperature: rolling noise A_R + B_R lg(v/70) + K (20 - t)
+  and propulsion noise A_P + B_P (v - 70)/70 per octave band, with the coefficients of
+  Table F-1 of Directive 2002/49/EC, Annex II, as amended by Commission Delegated
+  Directive (EU) 2021/1226 (`acoustic_spaces.demos.road`). At their speeds and 20 °C:
+
+  | vehicle | CNOSSOS-EU category | speed | sound power | A-weighted |
+  |---|---|---:|---:|---:|
+  | `car` | 1, light motor vehicles | 50 km/h | 102.0 dB | 98.4 dB(A) |
+  | `bus` | 2, medium heavy vehicles (two axles) | 50 km/h | 109.4 dB | 104.5 dB(A) |
+  | `truck` | 3, heavy vehicles (three axles or more) | 70 km/h | 114.1 dB | 110.2 dB(A) |
+  | `motorcycle` | 4b, motorcycles (propulsion noise alone) | 50 km/h | 104.1 dB | 97.5 dB(A) |
+
+  The amendment has the vehicle's point radiate alike every way, where Directive (EU)
+  2015/996 had it radiate into the half space above the road, and its coefficients A
+  are higher: the car's sound power is 2.1 to 2.7 dB(A) higher than by 2015/996's table
+  from 30 to 130 km/h, 2.5 dB(A) at 50 km/h (96.0 dB(A) before acoustic-spaces 4.1.0;
+  `validation/urban_sources.py`). The table is used as published: no measured pass-by
+  is compared with it here. Measured pass-bys of medium heavy vehicles in France found
+  the 2015 table's levels 3 to 6 dB(A) low (Euronoise 2018, paper 210).
+- **Their sound** is made to that power. A recording of a vehicle going past would not
+  do: it holds its own Doppler shift, the road and the distance, and the simulation
+  would add them again. Tyre noise is noise with the rolling noise's octave spectrum;
+  the engine is a pulse each time one of its cylinders fires (every 15 ms for the car's
+  four at 2000 rpm, 17 ms for the truck's six at 1200, 13 ms for the bus's six at 1500
+  and 15 ms for the motorcycle's two at 4000, the cylinders a little unequal and the
+  firing a little uneven) with the propulsion noise's spectrum; the two are at the
+  ratio of their sound powers in each band, so the octave levels are CNOSSOS-EU's and
+  the time structure is made up, as the stills say. The motorcycle has the engine
+  alone, as the method gives two-wheelers no rolling noise. The sound fades in and out
+  over its first and last second, where the vehicle is farthest. `--input
   car=engine.wav` plays a dry recording instead (on board, or at the wheel), mixed down
-  to mono and at least as long as the pass; the captions still give CNOSSOS-EU's car.
-- **The pass**: the car every metre along its walk (`--step`), simulated at each
-  listener in turn (`acoustic-spaces walkthrough`), its sound played through those places
-  with each early path through its own delay as it changes
+  to mono and at least as long as the pass; the captions still give CNOSSOS-EU's
+  vehicle.
+- **The police car** (in the street) is two sources along one walk: the car itself
+  (`police_car`), a passenger car 0.05 m above the road with CNOSSOS-EU's sound power
+  and a sound made as the car's (its engine four cylinders at 2000 rpm, `--rpm`), and
+  its siren (`police_car_siren`), the walk's points at the height of its roof, 1.5 m up,
+  facing the way it drives (its walk's `face_forward`). Each is simulated along the walk
+  alone, and the two are heard together: their sounds added, and the energies of their
+  levels band by band. The demo refuses a siren whose walk goes elsewhere in plan or at
+  other times than the car's. `--police-car siren` plays the siren alone. The siren
+  has the level and the directivity of a commercial 100 W electronic siren the National Bureau of Standards
+  measured in an anechoic room (NBS Special Publication 480-28, 1978): 3 m away, its
+  yelp averaged over 20 s, 118 dB(A) on its axis, 112 dB(A) 50 degrees off it and 107
+  dB(A) at 90 degrees. The scene's `siren.csv` goes through those three, in dB linearly
+  with the angle off the axis, alike round the axis and behind as at 90 degrees: NBS
+  measured neither the vertical nor behind, so both are assumptions
+  (`acoustic_spaces.demos.siren`). Its sound is a square wave at the siren's
+  fundamental, as the siren's Class D amplifier drives its loudspeaker: the wail and
+  the yelp sweep it from 500 to 1500 Hz and back 12 and 180 times a minute (California's
+  rule for sirens asks 10 to 30 and 150 to 250), the two tones are 440 and 586.7 Hz, a
+  fourth apart, 1.5 s each (the Swiss rule for priority vehicles asks base frequencies
+  of 360 to 630 Hz in the ratio 3:4 and a cycle of 2.5 to 3.5 s). The loudspeaker is
+  taken to send every harmonic alike and the same power in every pattern, the yelp's:
+  130.9 dB in all, 130.6 dB(A) for the wail and the yelp and 128.6 dB(A) for the two
+  tones, which sit lower where the ear weighs less. At 50 km/h the car's sound power is
+  32 dB(A) under the wail's and 30 under the two tones', but a square wave sends its odd
+  harmonics alone, nothing under its fundamental: in the octaves of 63 to 250 Hz the
+  police car's sound is the car's, the rumble of it going by (the siren's `level_db`
+  gives those octaves 44 to 55 dB under its whole power).
+  Against the rules (`validation/urban_sources.py`): 3.0 m away the wail and the yelp
+  give 118.0 dB(A) on the axis and 112.0 dB(A) 50 degrees off it, above the least
+  levels of California's class B siren at every angle of its table and 1 to 2 dB under
+  those of class A (the rule takes the average of five peaks of the sweep, NBS the
+  energy over 20 s), loudest in the 1 kHz octave band, as the rule asks (1 or 2 kHz),
+  and the wail's level in 125 ms falls 2.2 dB(A) within its cycle, where the rule
+  allows 10. The two tones give 119.4 dB(A) 2 m away on the axis in a free field (the
+  Swiss rule's test bench: 116 to 129 dB(A)) and 108.1 to 110.8 dB(A) 7 m in front of
+  the car over the street's asphalt, 0.5 to 1.5 m up (on the vehicle: 100 to 115
+  dB(A)).
+- **The pass**: the vehicle every metre along its walk (`--step`), simulated at each
+  listener in turn (`acoustic-spaces walkthrough`), its sound played through those
+  places with each early path through its own delay as it changes
   ([moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)), the late
   sound crossfaded from place to place without a shift of its own. Through places 1 m
   apart a car's sound at 1 kHz follows the exact field's waveform to within -54 dB
   (-57 dB a quarter of a metre apart;
   [validation](validation.md#moving-sources-against-the-exact-field)). The level at
   each moment, the loudest (L_Amax) and the sound exposure level (SEL) come from the
-  same simulation, each place's as if the car stood there; the stills give them, with
-  how close the car comes and how far the pitch of its direct sound falls from where it
-  starts to where it ends. One gain makes every pass, and each is turned up to the
-  loudness of the loudest, by as much as the still says.
-- **The roadside**: 150 m of road, the car in the lane on the meadow's side, heard at
-  the verge (5.7 m from the car as it passes), 23 and 48 m away over the grass and 27 m
-  away over the paved yard. The pass peaks at 73.7 dB(A) at the verge (SEL 73.7 dB(A)),
-  51.7 and 40.8 dB(A) over the grass and 60.7 dB(A) over the yard: over the grass the
-  ground takes away much of the middle and the treble, the more the farther away, while
-  over the yard its reflection adds to the direct sound. At the verge the engine's tone
-  falls 1.4 semitones as the car passes, as the geometry says.
-- **The street**: 125 m of street, the car in the lane on the offices' side, heard on
-  the pavement (6.2 m from the car as it passes), on a balcony of the office block and
-  in the garden behind the noise barrier. The pass peaks at 76.9 dB(A) on the pavement
-  and 71.7 dB(A) on the balcony. The garden hears it loudest, 60.3 dB(A), where the car
-  sees it straight through the 4 m gap between the houses and the barrier (14 m short
-  of the gap), less while the barrier stands between them, and more again once the car
-  comes out past the barrier's far end.
+  same simulation, each place's as if the vehicle stood there; the stills give them,
+  with how close the vehicle comes and how far the pitch of its direct sound falls from
+  where it starts to where it ends. One gain makes every pass, and each is turned up to
+  the loudness of the loudest, by as much as the still says.
+- **The roadside**: 150 m of road, the car in the lane on the meadow's side at 50 km/h,
+  the truck in the lane on the yard's side the other way at 70 km/h, heard at the verge,
+  23 and 48 m away over the grass and 27 m away over the paved yard (from the car as it
+  passes; the truck passes 4 m farther from the meadow's listeners and nearer the
+  yard's). The car's pass peaks at 76.3 dB(A) at the verge, 5.7 m away (SEL 76.2
+  dB(A)), 54.3 and 43.5 dB(A) over the grass and 63.2 dB(A) over the yard; the truck's
+  at 84.4 dB(A) at the verge, 9.6 m away (SEL 85.3 dB(A)), 67.5 and 56.5 dB(A) over the
+  grass and 76.7 dB(A) over the yard, 23.0 m away. Over the grass the ground takes away
+  much of the middle and the treble, the more the farther away, while over the yard its
+  reflection adds to the direct sound. At the verge the engine's tone falls 1.4
+  semitones as the car passes and 1.9 as the truck does, as the geometry says.
+- **The street**: 125 m of street, the car in the lane on the offices' side and the
+  motorcycle behind where it goes, the bus and the police car in the lane on the
+  houses' side the other way, all at 50 km/h, heard on the pavement (6.2 m from the car
+  and the motorcycle as they pass, 2.5 m from the bus and 2.0 m from the police car's
+  siren), on a balcony of the office block and in the garden behind the noise barrier.
+  The passes peak at (L_Amax, dB(A)):
+
+  | | car | bus | motorcycle | police car (wail) |
+  |---|---:|---:|---:|---:|
+  | pavement | 79.4 | 90.3 | 78.1 | 114.8 |
+  | balcony | 74.0 | 80.3 | 73.4 | 104.5 |
+  | garden | 62.7 | 71.3 | 61.5 | 95.1 |
+
+  The police car's column is its siren's, which the car itself does not change at this
+  precision: the car goes where the bus does, with a sound power at least 4.6 dB under
+  the bus's in every octave band, so its passes peak at least 28 dB(A) under the
+  siren's at every listener and add 0.01 dB at most. It is heard under the siren's
+  pitch, which dB(A) weighs little.
+
+  The garden hears the car loudest where the car sees it straight through the 4 m gap
+  between the houses and the barrier (14 m short of the gap), less while the barrier
+  stands between them, and more again once the car comes out past the barrier's far
+  end. The police car, coming the other way, the garden hears loudest 16 m before the
+  barrier's far end, before the barrier stands between them, the garden some 20 degrees
+  off the siren's axis; the pavement hears it loudest 2 m before it passes, 45 degrees
+  off the axis, rather than as it passes, 90 degrees off.
   Where a reflection through the gap comes or goes, it fades in or out over a few
   metres, as in a real field: every path, also the copy of a reflection off the road
   (which the car, so close to it, makes nearly as strong and in step with it) and the
   second-order reflections, fades at the edges that cut it off. From one metre of road
-  to the next the garden's early sound changes by at most 3.2 dB(A), smoothly where
-  paths go in and out of step, where it stepped by up to 11.4 dB(A) before 4.0.0; five
-  small steps are left, the largest 0.63 dB(A) within a centimetre (see
-  [Validation](validation.md#along-a-street)). The late sound comes from rays drawn at
-  random, few of which reach the garden, so two runs of the pass put its level up to
-  2.3 dB(A) apart at one place (its L_Amax within 0.02 dB) unless the scene has a
-  `seed` (see [Scenes](scenes.md#air-response-length-and-seed)).
+  to the next the garden's early sound from the car changes by at most 3.1 dB(A),
+  smoothly where paths go in and out of step, where without the fade (as before 4.0.0)
+  it steps by up to 11.3 dB(A); 1 cm apart, the steps left stand out by 0.55 dB(A) at
+  most (see [Validation](validation.md#along-a-street)). The late sound comes from rays
+  drawn at random, few of which reach the garden, so two runs of the car's pass put its
+  level up to 2.1 dB(A) apart at one place (its L_Amax within 0.01 dB, the balcony's
+  0.17 dB apart) unless the scene has a `seed` (see
+  [Scenes](scenes.md#air-response-length-and-seed)); the levels above are one run's.
   Reflections off the road, the facades and the barrier and the sound diffracted round
   their edges each shift in pitch their own way. Between the buildings the late sound,
   which keeps the engine's pitch, is strong in the bass, so the engine's tone falls less
@@ -771,9 +861,9 @@ gives the three under its options as they change.
 Helicopters AS350 B3 flies over a meadow 150 m up at 63 m/s, against a light wind, and
 each listener hears one pass in turn: right under its track, 1.2 m above the grass,
 where the microphone of its noise certification stands, and 150 m to its left and to
-its right. It is the [car's demo](#a-car-passing-by) with the helicopter in the car's
-place (`acoustic_spaces.demos.helicopter`): the same steps, options and video, but for
-the car's sound.
+its right. It is the [road vehicles' demo](#vehicles-passing-by) with the helicopter in
+the car's place (`acoustic_spaces.demos.helicopter`): the same steps, options and video,
+but for the car's sound.
 
 ```sh
 acoustic-spaces examples --copy . helicopter_flyover && cd helicopter_flyover

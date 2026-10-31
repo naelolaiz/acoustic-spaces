@@ -119,7 +119,7 @@ Edge diffraction:
   part of its Fresnel zone that the edge covers, as BTM's integral over a finite edge
   has it, and kept where its path appears round the edge's end. Past a thin screen's
   corner the edge diffraction steps by 2.8 dB at 63 Hz, and along the `street` the
-  level by up to 1.42 dB in a band (0.52 dB(A)).
+  level by up to 1.42 dB in a band (0.55 dB(A)).
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
@@ -364,6 +364,19 @@ Movement:
   song, or 330 m as the rules of the air ask over a crowd without leave. The helicopter
   and its walk are in the stadium's scene, left out of the concert's simulations, to
   see and change in the editor.
+- [x] Trucks, buses, motorcycles and a police car with its siren on, in the pass-by
+  demos as the car is (`--vehicle`): CNOSSOS-EU's sound power of their category, and the
+  siren's level and directivity as measured, checked against California's and the
+  Swiss rules for sirens; the police car's own sound (CNOSSOS-EU's car) along with its
+  siren, or the siren alone.
+- [ ] Trains and trams: Schall 03 by default, CNOSSOS-EU's railway noise to choose, in a
+  `railway` example and a tram in the street.
+- [ ] Construction plant (breakers, excavators, generators), car horns and reversing
+  alarms; a fire engine, a heavy vehicle (CNOSSOS-EU's category 3) with its siren and
+  air horns, from measured levels.
+- [ ] Aircraft taking off, landing and flying over.
+- [ ] Ground-borne vibration from trains and construction plant, and the noise it makes
+  in the rooms of a building.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:
@@ -489,10 +502,10 @@ Known issues found by the review of 25 October 2026 (see
   part carries the first orders' specular share as the exact paths do, checked against
   the BRAS rooms' decay.
 
-Version 4.1.0 (and, in the sections above, the helicopters and the faster walks
-outdoors under Movement, the demos' elements in their scenes and a recording for a
-scene's sound system under Examples, and the Run demo window and the Scene YAML panel
-under Editor):
+Version 4.1.0 (and, in the sections above, the helicopters, the road vehicles and the
+faster walks outdoors under Movement, the demos' elements in their scenes and a
+recording for a scene's sound system under Examples, and the Run demo window and the
+Scene YAML panel under Editor):
 
 - [x] Uncertainty: each parameter's standard error, how much it would change between
   runs with other seeds, from the late rays traced in batches (a jackknife over them),
@@ -524,6 +537,10 @@ under Editor):
   view.
 - [x] Microphone patterns that change with frequency: one per octave or third-octave
   band, for a capsule or a pair's capsules, rendered exactly from the same paths.
+- [x] Heavy vehicles, buses and motorcycles in the pass-by demos with CNOSSOS-EU's sound
+  power of their category (a truck in the roadside, a bus and a motorcycle in the
+  street), and a police car with its siren on; the car's sound power by the 2021
+  amendment of CNOSSOS-EU's table, 2.5 dB(A) more at 50 km/h.
 
 Next:
 
