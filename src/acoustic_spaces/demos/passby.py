@@ -1,22 +1,25 @@
 """A vehicle going past, heard at each listener of an outdoor example, its pitch falling
 as it goes by (Doppler): the pass-by demos of the roadside and the street examples
-(``passby_demo.py`` beside each scene), where a car drives past, and of the
-helicopter_flyover example (``flyover_demo.py``), where a helicopter flies over; one
-module for all of them, each with its :class:`Vehicle`.
+(``passby_demo.py`` beside each scene), where a car, a truck, a bus, a motorcycle or a
+police car with its siren on drives past (``--vehicle``), and of the helicopter_flyover
+example (``flyover_demo.py``), where a helicopter flies over; one module for all of them,
+each with its :class:`Vehicle`.
 
-The car is the example's source ``car``: a point source 0.05 m above the road, where
-CNOSSOS-EU places a vehicle's sound, with a walk along the road with Doppler, left out of
-the example's own simulations (``enabled: false``), which keep the traffic as a still
-line source. Its walk goes through points at a speed (``to``, ``speed_m_s``) or through
-keyframes at one steady speed, as CNOSSOS-EU gives a car's sound at a steady speed. The
-demo writes ``scene_demo.yaml`` beside its script: the car in use, along its walk at the
-walk's own speed or at ``--speed`` (through the keyframes' places, for keyframes), with
-CNOSSOS-EU's sound power of a passenger car at that speed and the scene's air
-temperature (:mod:`acoustic_spaces.demos.car`), and every other source left out, so that
-the car is heard alone. It plays a sound made to that power
-(``demo/car/car.wav``: tyre noise and a four-cylinder engine at ``--rpm``), or the dry
-recording ``--input car=WAV`` gives. A helicopter goes the same way, with the sound its
-rotors send each way (:mod:`acoustic_spaces.demos.helicopter`).
+A road vehicle is the example's source of its name (``car``, ``truck``, ``bus``,
+``motorcycle``): a point source 0.05 m above the road, where CNOSSOS-EU places a
+vehicle's sound, with a walk along the road with Doppler, left out of the example's own
+simulations (``enabled: false``), which keep the traffic as a still line source. Its walk
+goes through points at a speed (``to``, ``speed_m_s``) or through keyframes at one
+steady speed, as CNOSSOS-EU gives a vehicle's sound at a steady speed. The demo writes
+``scene_demo.yaml`` beside its script: the vehicle in use, along its walk at the walk's
+own speed or at ``--speed`` (through the keyframes' places, for keyframes), with
+CNOSSOS-EU's sound power of its category at that speed and the scene's air temperature
+(:mod:`acoustic_spaces.demos.road`), and every other source left out, so that the
+vehicle is heard alone. It plays a sound made to that power (``demo/car/car.wav`` for
+the car: tyre noise and an engine at ``--rpm``), or the dry recording ``--input
+car=WAV`` gives. The police car plays its siren, with the level and the directivity of a
+measured one (:mod:`acoustic_spaces.demos.siren`); a helicopter, the sound its rotors
+send each way (:mod:`acoustic_spaces.demos.helicopter`).
 
 Each listener in use is simulated with the vehicle every ``--step`` along its walk
 (:func:`acoustic_spaces.walkthrough.simulate_walk`) and hears it through those places,
@@ -33,6 +36,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import math
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -68,73 +72,47 @@ WALK = "walk.json"
 
 class Vehicle:
     """What a pass-by demo plays past the listeners: the example's source of that name,
-    the words the demo says it with, and how its sound and its sound power are made.
-    This one is the car of the roadside and the street examples."""
+    the words the demo says it with, and how its sound and its sound power are made
+    (:class:`RoadVehicle`, :class:`~acoustic_spaces.demos.siren.SirenVehicle`,
+    :class:`~acoustic_spaces.demos.helicopter.Helicopter`)."""
 
     #: The example's source, which goes past, and the demo's short name.
     name, demo_name = CAR, "passby"
     #: How it goes: "drive", "drives" and "driving past", along "the road".
     go, goes, going, way = "drive", "drives", "driving past", "the road"
+    #: What it is, in a few words, for the demo's choice of vehicle.
+    title = "a car"
     #: Why its keyframes must keep one speed.
     steady = "CNOSSOS-EU gives a car's sound power at one steady speed"
     #: How far apart its places are simulated by default (m).
     step_m = STEP_M
     #: Its sound's file in the work folder's folder of its name, and what that is made of.
     sound_file, info_file = CAR_FILE, CAR_INFO
+    #: The demo's step that makes its sound.
+    sound_step = "sound"
 
     def options(self) -> list[Option]:
         """The options of its own, for the step that makes its sound."""
-        return [
-            Option(
-                "rpm",
-                "how fast the car's engine turns (revolutions per minute), for its made sound",
-                2000.0,
-                "float",
-                steps=(self.name,),
-                unit="rpm",
-            )
-        ]
+        return []
 
     def check(self, args: argparse.Namespace) -> None:
         """Stop with an error when its own options cannot make its sound."""
-        if float(args.rpm) <= 0.0:
-            raise SystemExit(f"error: --rpm is a positive number, not {args.rpm!r}")
+        return None
 
     def problem(self, source) -> str | None:
         """What else keeps ``source`` (its scene source, with a walk that is on) from
-        going past: nothing, for a car."""
+        going past: nothing, unless the vehicle needs more."""
         return None
 
     def info(self, args: argparse.Namespace, scene, speed_kmh: float) -> dict:
-        """What its sound is made of, at ``speed_kmh`` in ``scene``: the speed, the
-        engine, the air's temperature, the length and CNOSSOS-EU's sound power."""
-        from acoustic_spaces.demos.car import light_vehicle_power
-
-        power = light_vehicle_power(speed_kmh, scene.air.temperature_c)
-        return {
-            "speed_kmh": round(speed_kmh, 6),
-            "rpm": float(args.rpm),
-            "temperature_c": scene.air.temperature_c,
-            "rate": int(scene.simulation.sample_rate),
-            "duration_s": round(pass_s(car_of(scene, self), args.speed), 6),
-            "level_db": [round(float(v), 1) for v in power.total_db],
-            "rolling_db": [round(float(v), 2) for v in power.rolling_db],
-            "propulsion_db": [round(float(v), 2) for v in power.propulsion_db],
-            "sound_power_db": round(power.sound_power_db, 2),
-            "sound_power_a_db": round(power.sound_power_a_db, 2),
-        }
+        """What its sound is made of, at ``speed_kmh`` in ``scene``, with the sound power
+        it gives the scene (``level_db``, ``sound_power_db``, ``sound_power_a_db``) and
+        the pass's ``duration_s`` and ``rate``."""
+        raise NotImplementedError
 
     def make(self, args: argparse.Namespace, info: dict, folder: Path) -> str:
         """Write its sound, dry, into ``folder``, made to ``info``; what to print."""
-        from acoustic_spaces.demos.car import car_sound, light_vehicle_power
-
-        power = light_vehicle_power(info["speed_kmh"], info["temperature_c"])
-        x = car_sound(power, info["rate"], info["duration_s"], rpm=info["rpm"])
-        write_wav(folder / self.sound_file, x, info["rate"])
-        return (
-            f"{info['duration_s']:.1f} s of a car at {info['speed_kmh']:g} km/h, "
-            f"{info['sound_power_a_db']:.1f} dB(A) of sound power"
-        )
+        raise NotImplementedError
 
     def edit(self, source: dict, info: dict, args: argparse.Namespace) -> None:
         """Give ``source`` (its entry of the demo's scene, as data) its sound power."""
@@ -142,8 +120,8 @@ class Vehicle:
         source.pop("spectrum", None)
 
     def made(self, args: argparse.Namespace, rate: int, duration_s: float):
-        """What it plays along its pass at ``rate``: its made sound, read back, and
-        faded in and out over FADE_S."""
+        """What it plays along its pass at ``rate``: its made sound, read back (None
+        before it is made)."""
         path = args.work / self.name / self.sound_file
         if not path.exists():
             return None
@@ -152,50 +130,194 @@ class Vehicle:
 
     def plays(self, args: argparse.Namespace, speed: str) -> str:
         """What it plays unless ``--input`` gives it a file, ``speed`` its speed in words."""
-        return f"a car {speed}made to CNOSSOS-EU's sound power"
+        raise NotImplementedError
 
     def played_by(self, args: argparse.Namespace) -> str:
         """Its made sound, as walk.json keeps it."""
-        return f"car {round(speed_of(args, self), 4):g} km/h {args.rpm:g} rpm"
+        raise NotImplementedError
+
+    def facts(self, args: argparse.Namespace, info: dict) -> dict:
+        """What walk.json says of it, with the stills' line ``about``."""
+        raise NotImplementedError
+
+    def credit(self, facts: dict) -> str:
+        """The stills' credit line for its made sound."""
+        raise NotImplementedError
+
+    def texts(self) -> dict[str, str]:
+        """The help of the demo's options and steps that speak of it: ``speed``,
+        ``input``, ``sound`` and the demo scene's ``header``."""
+        raise NotImplementedError
+
+
+#: Engines with their cylinders in words, for the stills.
+CYLINDER_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 8: "eight"}
+
+
+class RoadVehicle(Vehicle):
+    """A road vehicle of a CNOSSOS-EU category (:mod:`acoustic_spaces.demos.road`) going
+    past at one steady speed: its sound power that category's at that speed, and its sound
+    made to it by tyres and an engine of ``cylinders`` turning at ``rpm`` (unless
+    ``--rpm`` says)."""
+
+    def __init__(
+        self, name: str, category: str, title: str, rpm: float, cylinders: int, noun: str = ""
+    ) -> None:
+        from acoustic_spaces.demos.road import CATEGORIES
+
+        if category not in CATEGORIES:
+            raise ValueError(f"CNOSSOS-EU has no vehicle category {category!r}")
+        self.name, self.category, self.title = name, category, title
+        self.rpm, self.cylinders = float(rpm), int(cylinders)
+        #: The vehicle in a word, for the demo's words ("car", "bus").
+        self.noun = noun or name.replace("_", " ")
+        self.sound_file, self.info_file = f"{name}.wav", f"{name}.json"
+        self.steady = f"CNOSSOS-EU gives a {self.noun}'s sound power at one steady speed"
+
+    @property
+    def kind(self):
+        """Its CNOSSOS-EU category (:class:`~acoustic_spaces.demos.road.Category`)."""
+        from acoustic_spaces.demos.road import CATEGORIES
+
+        return CATEGORIES[self.category]
+
+    def options(self) -> list[Option]:
+        return [
+            Option(
+                "rpm",
+                rpm_help((self,)),
+                None,
+                "float",
+                steps=(self.sound_step,),
+                unit="rpm",
+                unset="the vehicle's own",
+            )
+        ]
+
+    def rpm_of(self, args: argparse.Namespace) -> float:
+        """How fast its engine turns: ``--rpm``, or its own."""
+        rpm = getattr(args, "rpm", None)
+        return self.rpm if rpm is None else float(rpm)
+
+    def check(self, args: argparse.Namespace) -> None:
+        rpm = getattr(args, "rpm", None)
+        if rpm is not None and not (math.isfinite(float(rpm)) and float(rpm) > 0.0):
+            raise SystemExit(f"error: --rpm is a positive number, not {rpm!r}")
+
+    def power(self, speed_kmh: float, temperature_c: float):
+        """Its sound power at ``speed_kmh`` in air at ``temperature_c``."""
+        from acoustic_spaces.demos.road import vehicle_power
+
+        return vehicle_power(self.category, speed_kmh, temperature_c)
+
+    def info(self, args: argparse.Namespace, scene, speed_kmh: float) -> dict:
+        """What its sound is made of, at ``speed_kmh`` in ``scene``: the speed, the
+        engine, the air's temperature, the length and CNOSSOS-EU's sound power."""
+        power = self.power(speed_kmh, scene.air.temperature_c)
+        rolling = power.rolling_db
+        return {
+            "category": self.category,
+            "speed_kmh": round(speed_kmh, 6),
+            "rpm": self.rpm_of(args),
+            "cylinders": self.cylinders,
+            "temperature_c": scene.air.temperature_c,
+            "rate": int(scene.simulation.sample_rate),
+            "duration_s": round(pass_s(car_of(scene, self), args.speed), 6),
+            "level_db": [round(float(v), 1) for v in power.total_db],
+            "rolling_db": None if rolling is None else [round(float(v), 2) for v in rolling],
+            "propulsion_db": [round(float(v), 2) for v in power.propulsion_db],
+            "sound_power_db": round(power.sound_power_db, 2),
+            "sound_power_a_db": round(power.sound_power_a_db, 2),
+        }
+
+    def make(self, args: argparse.Namespace, info: dict, folder: Path) -> str:
+        from acoustic_spaces.demos.road import vehicle_sound
+
+        power = self.power(info["speed_kmh"], info["temperature_c"])
+        x = vehicle_sound(
+            power, info["rate"], info["duration_s"], rpm=info["rpm"], cylinders=self.cylinders
+        )
+        write_wav(folder / self.sound_file, x, info["rate"])
+        return (
+            f"{info['duration_s']:.1f} s of a {self.noun} at {info['speed_kmh']:g} km/h, "
+            f"{info['sound_power_a_db']:.1f} dB(A) of sound power"
+        )
+
+    def plays(self, args: argparse.Namespace, speed: str) -> str:
+        return f"a {self.noun} {speed}made to CNOSSOS-EU's sound power"
+
+    def played_by(self, args: argparse.Namespace) -> str:
+        return f"{self.name} {round(speed_of(args, self), 4):g} km/h {self.rpm_of(args):g} rpm"
 
     def facts(self, args: argparse.Namespace, info: dict) -> dict:
         """What walk.json says of it: its engine, its sound power and the stills' line."""
         return {
-            "rpm": float(args.rpm),
+            "rpm": self.rpm_of(args),
+            "cylinders": self.cylinders,
+            "category": self.category,
             "sound_power_a_db": info["sound_power_a_db"],
-            "about": f"A car at {info['speed_kmh']:g} km/h, "
+            "about": f"A {self.noun} at {info['speed_kmh']:g} km/h, "
             f"{info['sound_power_a_db']:.1f} dB(A) of sound power (CNOSSOS-EU)",
         }
 
     def credit(self, facts: dict) -> str:
-        """The stills' credit line for its made sound."""
+        cylinders = CYLINDER_WORDS.get(facts["cylinders"], str(facts["cylinders"]))
+        tyres = "tyre noise and a" if self.kind.rolling_a is not None else "a"
+        parts = "each" if self.kind.rolling_a is not None else "its sound"
         return (
-            f"Car's sound made up: tyre noise and a four-cylinder engine at "
-            f"{facts['rpm']:g} rpm, each with the octave spectrum of CNOSSOS-EU's passenger "
-            f"car at {facts['speed_kmh']:g} km/h (Directive (EU) 2015/996); faded in and out "
-            f"over {FADE_S:g} s"
+            f"{self.noun.capitalize()}'s sound made up: {tyres} {cylinders}-cylinder engine at "
+            f"{facts['rpm']:g} rpm, {parts} with the octave spectrum of CNOSSOS-EU's "
+            f"{self.kind.name} (category {self.category}) at {facts['speed_kmh']:g} km/h "
+            f"(Directive 2002/49/EC as amended in 2021); faded in and out over {FADE_S:g} s"
         )
 
     def texts(self) -> dict[str, str]:
-        """The help of the demo's options and steps that speak of it."""
-        return {
-            "speed": "how fast the car drives along its walk (km/h; m/s times 3.6), which sets "
-            "how long its pass and its sound last (the walk's length over the speed) and "
-            "its sound power; by default as its walk in the scene goes: its speed along "
-            "points, or the one steady speed of its keyframes (whose places it goes "
-            "through at --speed when given)",
-            "input": "a WAV file the car plays instead of its made sound, as car=WAV: a dry "
-            "recording (on board or at the wheel; one of a car passing has its Doppler, "
-            "the road and the distance in it already), mixed down to mono, at least as "
-            "long as the pass; the captions' levels are CNOSSOS-EU's car at --speed",
-            "sound": "demo/car/car.wav: the car's sound, made to CNOSSOS-EU",
-            "header": "# The example with its car driving past alone, at the speed and with "
-            "the sound\n# power of the pass-by demo (CNOSSOS-EU), written by passby_demo.py.\n",
-        }
+        return road_texts(self.noun, self.name, f"demo/{self.name}/{self.sound_file}")
 
 
-#: The car of the roadside and the street examples.
-THE_CAR = Vehicle()
+def rpm_help(fleet: Sequence[RoadVehicle]) -> str:
+    """The help of ``--rpm`` for a demo of the road vehicles ``fleet``."""
+    return (
+        "how fast the engine of the vehicle's made sound turns (revolutions per minute); "
+        "by default the vehicle's own: "
+        + ", ".join(f"{v.noun} {v.rpm:g} ({v.cylinders} cylinders)" for v in fleet)
+    )
+
+
+def road_texts(noun: str, name: str, sound: str) -> dict[str, str]:
+    """The help of a road vehicle's pass-by demo, for ``noun`` (the vehicle in a word)
+    whose source is ``name`` and whose made sound is ``sound``."""
+    return {
+        "speed": f"how fast the {noun} drives along its walk (km/h; m/s times 3.6), which "
+        f"sets how long its pass and its sound last (the walk's length over the speed) and "
+        "its sound power; by default as its walk in the scene goes: its speed along "
+        "points, or the one steady speed of its keyframes (whose places it goes "
+        "through at --speed when given)",
+        "input": f"a WAV file the {noun} plays instead of its made sound, as {name}=WAV: a "
+        "dry recording (on board, or close to the vehicle; one of it passing has its "
+        "Doppler, the road and the distance in it already), mixed down to mono, at least "
+        f"as long as the pass; the captions' levels are CNOSSOS-EU's {noun} at --speed",
+        "sound": f"{sound}: the {noun}'s sound, made to CNOSSOS-EU",
+        "header": f"# The example with its {noun} driving past alone, at the speed and with "
+        "the sound\n# power of the pass-by demo (CNOSSOS-EU), written by passby_demo.py.\n",
+    }
+
+
+#: The car of the roadside and the street examples: a passenger car (CNOSSOS-EU category
+#: 1), its made sound's engine four cylinders at 2000 rpm.
+THE_CAR = RoadVehicle(CAR, "1", "a passenger car", rpm=2000.0, cylinders=4)
+#: The roadside's truck: an articulated truck with three axles or more (category 3), a
+#: six-cylinder diesel at 1200 rpm.
+TRUCK = RoadVehicle(
+    "truck", "3", "an articulated truck, three axles or more", rpm=1200.0, cylinders=6
+)
+#: The street's bus: a city bus with two axles (category 2), a six-cylinder diesel at
+#: 1500 rpm.
+BUS = RoadVehicle("bus", "2", "a city bus with two axles", rpm=1500.0, cylinders=6)
+#: The street's motorcycle (category 4b): a two-cylinder engine at 4000 rpm.
+MOTORCYCLE = RoadVehicle("motorcycle", "4b", "a motorcycle", rpm=4000.0, cylinders=2)
+#: Every road vehicle of the examples.
+ROAD_VEHICLES = (THE_CAR, TRUCK, BUS, MOTORCYCLE)
 
 
 def walk_speed(car, vehicle: Vehicle = THE_CAR) -> float:
@@ -327,7 +449,7 @@ def car_info(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> dict:
 def car(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> None:
     """The vehicle's sound, dry, as long as its pass (for the car ``car/car.wav``: tyres
     and engine made to CNOSSOS-EU's sound power at ``--speed``,
-    :func:`acoustic_spaces.demos.car.car_sound`), and what it is made of."""
+    :func:`acoustic_spaces.demos.road.vehicle_sound`), and what it is made of."""
     vehicle.check(args)
     info = car_info(args, vehicle)
     folder = args.work / vehicle.name
@@ -372,7 +494,7 @@ def feed(demo: Demo, args: argparse.Namespace, rate: int, duration_s: float, veh
     """What the vehicle plays along its pass, at ``rate``: its made sound
     (:meth:`Vehicle.made`), or the file ``--input NAME=WAV`` gives it (mixed down to
     mono, cut to the pass, at the made car's RMS), faded in and out over FADE_S."""
-    from acoustic_spaces.demos.car import SOUND_RMS
+    from acoustic_spaces.demos.road import SOUND_RMS
     from acoustic_spaces.emission import Emission, Faded
 
     n = int(round(duration_s * rate))
@@ -382,12 +504,14 @@ def feed(demo: Demo, args: argparse.Namespace, rate: int, duration_s: float, veh
         x = vehicle.made(args, rate, duration_s)
         if x is None:
             path = args.work / vehicle.name / vehicle.sound_file
-            raise SystemExit(f"error: no {path}; run first: {demo.command(vehicle.name, args)}")
+            raise SystemExit(
+                f"error: no {path}; run first: {demo.command(vehicle.sound_step, args)}"
+            )
         if isinstance(x, Emission):
             if x.length < n:
                 raise SystemExit(
                     f"error: the {vehicle.name}'s sound is shorter than its pass; run: "
-                    f"{demo.command(vehicle.name, args)}"
+                    f"{demo.command(vehicle.sound_step, args)}"
                 )
             return Faded(x, fade, n)
     else:
@@ -406,7 +530,7 @@ def feed(demo: Demo, args: argparse.Namespace, rate: int, duration_s: float, veh
     if len(x) < n:
         raise SystemExit(
             f"error: the {vehicle.name}'s sound is shorter than its pass; run: "
-            f"{demo.command(vehicle.name, args)}"
+            f"{demo.command(vehicle.sound_step, args)}"
         )
     ramp = np.sin(np.linspace(0.0, np.pi / 2, fade)) ** 2
     x[:fade] *= ramp
@@ -448,7 +572,8 @@ def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
 
 def scene_done(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> bool:
     """Whether scene_demo.yaml is there, newer than the example's scene, and for this
-    speed."""
+    vehicle at this speed with the sound power it gives (the police car's in the
+    pattern of ``--siren``)."""
     from acoustic_spaces.scene import Scene
 
     if not args.scene.exists():
@@ -458,9 +583,15 @@ def scene_done(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> bool:
     try:
         car = car_of(Scene.from_yaml(args.scene), vehicle)
         made = 3.6 * walk_speed(car, vehicle)
+        power = car_info(args, vehicle)["level_db"]
     except (Exception, SystemExit):  # a scene of another kind: written again
         return False
-    return car.walk.doppler and abs(made - speed_of(args, vehicle)) < 1e-4 * made
+    return (
+        car.in_use
+        and car.walk.doppler
+        and abs(made - speed_of(args, vehicle)) < 1e-4 * made
+        and np.allclose(np.asarray(car.level_db, dtype=float), power, atol=0.05)
+    )
 
 
 def room_of(demo: Demo, args: argparse.Namespace):
@@ -769,33 +900,80 @@ def problems_of_speed(args: argparse.Namespace, scene, vehicle: Vehicle = THE_CA
 
 
 def demo(
-    script: Path, example: str, title: str, description: str, vehicle: Vehicle = THE_CAR
+    script: Path,
+    example: str,
+    title: str,
+    description: str,
+    vehicle: Vehicle | Sequence[Vehicle] = THE_CAR,
 ) -> Demo:
     """The pass-by demo of ``example``, run by ``script`` (its ``passby_demo.py``), with
-    ``vehicle`` going past (the car by default)."""
-    noun, texts = vehicle.name, vehicle.texts()
+    ``vehicle`` going past (the car by default), or one of several (``--vehicle``, the
+    first by default), each the example's source of its name."""
+    vehicles = (vehicle,) if isinstance(vehicle, Vehicle) else tuple(vehicle)
+    if not vehicles or len({v.sound_step for v in vehicles}) > 1:
+        raise ValueError("a pass-by demo has a vehicle at least, all with one sound step")
+    by_name = {v.name: v for v in vehicles}
+
+    def pick(args: argparse.Namespace) -> Vehicle:
+        name = getattr(args, "vehicle", None) or vehicles[0].name
+        if name not in by_name:
+            raise SystemExit(f"error: --vehicle is one of {', '.join(by_name)}, not {name!r}")
+        return by_name[name]
+
+    first = vehicles[0]
+    several = len(vehicles) > 1
+    noun = "vehicle" if several else first.name
+    texts = (
+        road_texts("vehicle", "NAME", f"demo/NAME/NAME.wav (the {first.name}'s, …)")
+        if several
+        else first.texts()
+    )
+    if several:
+        texts["input"] = texts["input"].replace(
+            "as NAME=WAV", f"as NAME=WAV for the vehicle of --vehicle ({first.name}=WAV, …)"
+        )
+    own: list[Option] = []
+    for each in vehicles:
+        for option in each.options():
+            if all(o.name != option.name for o in own):
+                own.append(option)
+    fleet = [v for v in vehicles if isinstance(v, RoadVehicle)]
+    own = [dataclasses.replace(o, help=rpm_help(fleet)) if o.name == "rpm" else o for o in own]
+    choice = [
+        Option(
+            "vehicle",
+            "what goes past: "
+            + "; ".join(f"{v.name}, {v.title}" for v in vehicles)
+            + " (each the example's source of its name, with its walk)",
+            first.name,
+            "choice",
+            tuple(by_name),
+            steps=(first.sound_step, "scene", "walk"),
+        )
+    ]
     made = Demo(
-        name=vehicle.demo_name,
+        name=first.demo_name,
         example=example,
         title=title,
         description=description,
         script=Path(script),
         steps=[],
         options=[
+            *(choice if several else []),
             Option(
                 "speed",
                 texts["speed"],
                 None,
                 "float",
-                steps=(noun, "scene", "walk"),
+                steps=(first.sound_step, "scene", "walk"),
                 unit="km/h",
                 unset="as in the scene",
             ),
-            *vehicle.options(),
+            *own,
             Option(
                 "step_m",
                 f"how far apart the {noun} is simulated along its walk (m)",
-                vehicle.step_m,
+                first.step_m,
                 "float",
                 steps=("walk",),
                 flag="--step",
@@ -806,13 +984,13 @@ def demo(
                 "the example's scene",
                 Path("scene.yaml"),
                 "file",
-                steps=(noun, "scene"),
+                steps=(first.sound_step, "scene"),
                 flag="--from",
                 filter="Scene files (*.yaml *.yml)",
             ),
             Option(
                 "scene",
-                f"the scene with the {noun} {vehicle.going} alone",
+                f"the scene with the {noun} {first.going} alone",
                 Path("scene_demo.yaml"),
                 "path",
             ),
@@ -820,33 +998,33 @@ def demo(
             dataclasses.replace(input_option(("walk", "video")), help=texts["input"]),
         ],
         scene_from="scene",
-        problems=lambda shown, args: problems(shown, args, vehicle),
-        plays=lambda args: plays(args, vehicle),
-        moving=lambda args: moving(args, vehicle),
-        summary=lambda args: summary(args, vehicle),
+        problems=lambda shown, args: problems(shown, args, pick(args)),
+        plays=lambda args: plays(args, pick(args)),
+        moving=lambda args: moving(args, pick(args)),
+        summary=lambda args: summary(args, pick(args)),
     )
     made.steps = [
         Step(
-            noun,
-            lambda args: car(made, args, vehicle),
+            first.sound_step,
+            lambda args: car(made, args, pick(args)),
             texts["sound"],
-            lambda args: car_done(args, vehicle),
+            lambda args: car_done(args, pick(args)),
         ),
         Step(
             "scene",
-            lambda args: scene(made, args, vehicle),
+            lambda args: scene(made, args, pick(args)),
             f"scene_demo.yaml: the {noun} alone, at --speed, with Doppler",
-            lambda args: scene_done(args, vehicle),
+            lambda args: scene_done(args, pick(args)),
         ),
         Step(
             "walk",
-            lambda args: walk(made, args, vehicle),
+            lambda args: walk(made, args, pick(args)),
             f"simulate the {noun} along its walk at every listener and play it with Doppler",
-            lambda args: walk_done(args, vehicle),
+            lambda args: walk_done(args, pick(args)),
         ),
         Step(
             "video",
-            lambda args: video(made, args, vehicle),
+            lambda args: video(made, args, pick(args)),
             "tour.wav, tour.mp4 and the stills in the work folder",
         ),
     ]
@@ -854,17 +1032,24 @@ def demo(
 
 
 __all__ = [
+    "BUS",
     "CAR",
     "FADE_S",
     "GAP_S",
+    "MOTORCYCLE",
+    "ROAD_VEHICLES",
     "SPEED_KMH",
     "STEADY",
     "STEP_M",
     "THE_CAR",
+    "TRUCK",
+    "RoadVehicle",
     "Vehicle",
     "car_problem",
     "demo",
     "driving",
     "pitch_change",
+    "road_texts",
+    "rpm_help",
     "walk_speed",
 ]

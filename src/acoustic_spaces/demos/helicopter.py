@@ -105,6 +105,8 @@ class Helicopter(Vehicle):
     steady = "its rotors are trimmed for one steady speed"
     step_m = STEP_M
     sound_file, info_file = BELOW_FILE, INFO_FILE
+    sound_step = HELICOPTER
+    title = "an Airbus Helicopters AS350 B3"
 
     def options(self) -> list[Option]:
         from acoustic_spaces import rotorcraft

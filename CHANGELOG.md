@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+- The pass-by demos drive more than the car past their listeners, each picked with
+  `passby_demo.py --vehicle` and each the example's source of its name, left out of
+  the example's simulations until ticked, with a walk with Doppler: in `roadside` the
+  car or an articulated truck at 70 km/h the other way, in `street` the car, a city bus,
+  a motorcycle or a police car with its siren on, all at 50 km/h. The truck, the bus and
+  the motorcycle have CNOSSOS-EU's sound power of their category (3, heavy vehicles; 2,
+  medium heavy vehicles; 4b, motorcycles, which have propulsion noise alone;
+  `acoustic_spaces.demos.road`) and a sound made to it from their tyres and an engine of
+  their own (`--rpm`: six cylinders at 1200 rpm, six at 1500, two at 4000). The police
+  car plays its siren 1.5 m up on its roof, facing the way it drives: wail, yelp or two
+  tones (`--siren`), a square wave at the sweep rates California's rule for sirens asks
+  and at the two tones and the cycle the Swiss rule for priority vehicles asks, with the
+  level and the directivity (`siren.csv`) of a 100 W electronic siren the National
+  Bureau of Standards measured in 1978 (`acoustic_spaces.demos.siren`): 130.6 dB(A) of
+  sound power for the wail and the yelp, 128.6 dB(A) for the two tones. The new
+  `validation/urban_sources.py` holds it against California's classes of siren (above
+  class B everywhere from 0 to 50 degrees off its axis, 1 to 2 dB under class A),
+  the octave band the rule wants it loudest in and the Swiss rule's levels on the test
+  bench and 7 m in front of the vehicle. In the editor's Run demo window the vehicle,
+  the engine's speed and the siren are options with their tips.
+- The road vehicles' sound power is CNOSSOS-EU's Table F-1 as amended in 2021
+  (Commission Delegated Directive (EU) 2021/1226), which has a vehicle's point radiate
+  alike every way instead of into the half space above the road, with coefficients A
+  higher than Directive (EU) 2015/996's. The car's sound power at 50 km/h is 98.4 dB(A)
+  instead of 96.0 (2.1 to 2.7 dB(A) more from 30 to 130 km/h), its `level_db` in the
+  `roadside` and `street` scenes with it, and its passes are louder by about as much:
+  76.3 dB(A) at the roadside's verge instead of 73.7, 79.4 dB(A) on the street's
+  pavement instead of 76.9.
+- Upgrading: `acoustic_spaces.demos.car` is now `acoustic_spaces.demos.road`, for every
+  category: `light_vehicle_power(speed, temperature)` is `vehicle_power("1", speed,
+  temperature)`, `car_sound` is `vehicle_sound`, and the table's coefficients are in
+  `CATEGORIES` instead of `ROLLING_A` and the like; `VehiclePower` has the category
+  first. The pass-by demos' step that makes the vehicle's sound is `sound` instead of
+  `car` (`passby_demo.py sound`), and writes `demo/NAME/NAME.wav` for the vehicle NAME
+  (`demo/police_car/siren.wav` for the police car).
+
 - A scene can name the `recording` its sound system plays in a demo of it
   (`acoustic-spaces demo`, the editor's *This scene*), and each source the `channel` of
   it that it plays (`left`, `right`, or `mono`, both mixed down), so that a stage's
