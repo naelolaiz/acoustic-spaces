@@ -565,6 +565,202 @@ def test_messages_show_hide_filter_and_clear(window) -> None:
     assert window.messages.toPlainText().endswith(f"message {LIMIT + 200}")
 
 
+def test_yaml_spans_and_indents() -> None:
+    """The YAML panel's colours: keys, strings, numbers, true, false and null,
+    comments, punctuation, and quoted text running on to the next line."""
+    from acoustic_spaces.gui.yaml_panel import line_of, next_indent, yaml_spans
+
+    def kinds(line: str, state: int = 0):
+        spans, after = yaml_spans(line, state)
+        return [(line[start : start + length], kind) for start, length, kind in spans], after
+
+    assert kinds("- name: left-speaker") == (
+        [("-", "punctuation"), ("name", "key"), (":", "punctuation"), ("left-speaker", "string")],
+        0,
+    )
+    shown, _state = kinds("  position: [0.67, -1.2e-3, .inf]  # a comment")
+    assert [k for t, k in shown if t not in "[],:"] == [
+        "key",
+        "number",
+        "number",
+        "number",
+        "comment",
+    ]
+    assert kinds("  enabled: off")[0][-1] == ("off", "constant")  # PyYAML reads false
+    assert kinds("  limit: null")[0][-1] == ("null", "constant")
+    assert kinds('key: "a # b" # c')[0][-2:] == [('"a # b"', "string"), ("# c", "comment")]
+    assert kinds("url: http://x/y#z")[0][-1] == ("http://x/y#z", "string")
+    assert kinds("a:b: c")[0][0] == ("a:b", "key")
+    first, state = kinds("  source: 'database: floor (63 Hz copied from")
+    assert first[-1][1] == "string" and state == 1
+    assert kinds("    the nearest band)'  # c", state) == (
+        [("    the nearest band)'", "string"), ("# c", "comment")],
+        0,
+    )
+    # A new line starts where the one before did, further in after a list item's dash
+    # with a key or after a key that opens a mapping.
+    assert [next_indent(line) for line in ("geometry:", "- name: x", "- 1.0", "  a: b")] == [
+        2,
+        2,
+        0,
+        2,
+    ]
+    assert next_indent("- geometry:  # c") == 4
+    # The line of an entry the schema's error names, passing over the schema's own names.
+    text = "sources:\n- name: a\n  position: [1, 2, 3]\n  directivity:\n    pattern: x\n"
+    assert line_of(text, ("sources", 0, "position", 1)) == 2
+    assert line_of(text, ("sources", 0, "directivity", "DirectivitySpec", "pattern")) == 4
+    assert line_of(text, ("sources", 0, "level_db")) == 1  # missing: its source
+    assert line_of(text, ()) is None and line_of("a: [", ("a",)) is None
+
+
+def test_scene_yaml_panel(window, qapp, tmp_path: Path) -> None:
+    """The Scene YAML panel shows the scene's data as Save writes them, follows edits in
+    the forms, makes edited text the scene with Apply in one undoable step, and keeps a
+    refused text with its lines marked in red."""
+    panel = window.yaml_panel
+    window.open_example(example_path("studio"))
+    assert not panel.on_show and panel.view.toPlainText() == ""  # not made until shown
+    window.docks["yaml"].toggleViewAction().trigger()  # View > Scene YAML
+    qapp.processEvents()
+    document = window.document
+    assert panel.on_show
+    text = panel.view.toPlainText()
+    assert text == document.scene.file_text(document.base_dir, readable=True)
+    assert "position: [0.67, 1.25, 1.2]" in text and "file:" not in text
+    assert "In step with the scene" in panel.status.text()
+    assert not panel.apply_button.isEnabled() and not panel.revert_button.isEnabled()
+    # A form's edit shows in the text at once.
+    document.move_point("sources", 0, (1.0, 1.25, 1.2))
+    assert "position: [1.0, 1.25, 1.2]" in panel.view.toPlainText() and not panel.edited()
+    # Edited text becomes the scene with Ctrl+Return, in one step of the history.
+    panel.view.setPlainText(panel.view.toPlainText().replace("level_db: 94.0", "level_db: 90.0", 1))
+    assert panel.edited() and panel.apply_button.isEnabled()
+    assert "Edited: Apply makes the text the scene" in panel.status.text()
+    # A shortcut works in the active window (under Xvfb it starts inactive).
+    window.activateWindow()
+    panel.view.setFocus()
+    assert QTest.qWaitForWindowActive(window, 2000)
+    QTest.keyClick(panel.view, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+    assert document.scene.sources[0].level_db == 90.0 and not panel.edited()
+    assert window.undo_action.text() == "&Undo edit scene YAML"
+    document.undo()
+    assert document.scene.sources[0].level_db == 94.0
+    assert "level_db: 94.0" in panel.view.toPlainText()
+    # Only the layout changed: nothing to undo.
+    steps = len(document._undo)
+    panel.view.setPlainText(panel.view.toPlainText().replace("[1.0, 1.25, 1.2]", "[1, 1.25, 1.2]"))
+    assert panel.apply() and len(document._undo) == steps and not panel.edited()
+
+    error = level_colour(panel.status, "error").name()
+
+    def refused(old: str, new: str) -> list[int]:
+        scene = document.scene
+        panel.view.setPlainText(panel.view.toPlainText().replace(old, new, 1))
+        lines = panel.view.toPlainText().splitlines()
+        assert not panel.apply() and document.scene is scene and panel.edited()
+        assert error in panel.status.text() and "Not applied" in panel.status.text()
+        assert panel.view.textCursor().blockNumber() == min(panel.view.marked)
+        marked = [lines[line] for line in panel.view.marked]
+        panel.revert()
+        assert panel.view.marked == [] and not panel.edited()
+        return marked
+
+    # The schema's refusal: the lines it names are marked, the reason goes to Messages.
+    assert refused("level_db: 94.0", "level_db: loud") == ["  level_db: loud"]
+    assert "Not changed: sources.0.level_db" in window.messages.toPlainText().splitlines()[-1]
+    assert refused("  spacing_m: 0.5", "  spacing_m: 0.5\n  colour: red") == ["  colour: red"]
+    # YAML that does not read, and a key written twice.
+    assert refused("geometry:", "geometry: [") == ["geometry: [", "materials:"]
+    assert (
+        window.messages.toPlainText()
+        .splitlines()[-1]
+        .endswith("(while parsing a flow sequence from line 2)")
+    )
+    marked = refused("level_db: 94.0", "level_db: 94.0\n  level_db: 90.0")
+    assert marked == ["- name: left-speaker", "  level_db: 90.0"]
+    assert "found the key 'level_db' twice" in window.messages.toPlainText().splitlines()[-1]
+    # A mark follows its line as the text is edited above it, and the text back as it
+    # was clears it.
+    panel.view.setPlainText(panel.view.toPlainText().replace("level_db: 94.0", "level_db: x", 1))
+    assert not panel.apply()
+    line = panel.view.marked[0]
+    cursor = panel.view.textCursor()
+    cursor.movePosition(cursor.MoveOperation.Start)
+    cursor.insertText("# a note\n")
+    assert panel.view.marked == [line + 1]
+    panel.view.setPlainText(panel._shown)
+    assert panel.view.marked == [] and "Not applied" not in panel.status.text()
+
+    # Edits not applied stay when the scene changes; the panel says so in amber.
+    panel.view.setPlainText(panel.view.toPlainText().replace("level_db: 94.0", "level_db: 91.0", 1))
+    edited = panel.view.toPlainText()
+    document.move_point("sources", 0, (1.5, 1.25, 1.2))
+    assert panel.view.toPlainText() == edited
+    assert level_colour(panel.status, "warning").name() in panel.status.text()
+    window.save_as = lambda: window._save_to(tmp_path / "studio.yaml")
+    window.from_example = False
+    document.path = tmp_path / "studio.yaml"
+    window.save()
+    assert "Saved without the edits to the Scene YAML panel" in window.messages.toPlainText()
+    panel.revert()
+    assert "position: [1.5, 1.25, 1.2]" in panel.view.toPlainText()
+
+    # Selecting an item shows its entry at the top; Find finds words, round again.
+    window.select("material", "diffuser")
+    assert panel.view.textCursor().block().text() == "  diffuser:"
+    window.select("sources", 1)
+    assert panel.view.textCursor().block().text() == "- name: right-speaker"
+    panel.search.setText("right-speaker")
+    assert panel.view.textCursor().selectedText() == "right-speaker"
+    assert panel.find_next() and panel.view.textCursor().selectedText() == "right-speaker"
+    # Tab writes spaces, and Enter keeps the indent.
+    panel.view.setPlainText("geometry:")
+    panel.view.moveCursor(panel.view.textCursor().MoveOperation.End)
+    QTest.keyClick(panel.view, Qt.Key.Key_Return)
+    QTest.keyClick(panel.view, Qt.Key.Key_Tab)
+    assert panel.view.toPlainText() == "geometry:\n    "
+    # Another scene: the text shows it, the edits dropped.
+    window.open_example(example_path("shoebox"))
+    assert not panel.edited() and "file: shoebox.obj\n" in panel.view.toPlainText()
+    # Saved in another folder: the files it names are written from there.
+    window.from_example = False
+    window.document.path = tmp_path / "shoebox.yaml"
+    window.save()
+    model = (EXAMPLES / "shoebox" / "shoebox.obj").resolve().as_posix()
+    assert f"file: {model}\n" in panel.view.toPlainText() and not panel.edited()
+
+
+def test_scene_yaml_panel_starts_hidden_then_as_left(window, qapp, english) -> None:
+    """A new installation's editor hides the Scene YAML panel; once shown, it shows at
+    the next start, and hidden again it stays hidden."""
+    from acoustic_spaces import i18n
+    from acoustic_spaces.gui.app import YAML_PANEL_SETTING, MainWindow
+
+    dock = window.docks["yaml"]
+    assert dock.isHidden() and not dock.toggleViewAction().isChecked()
+    assert not english.exists()  # nothing kept until the user chooses
+    dock.toggleViewAction().trigger()
+    qapp.processEvents()
+    assert not dock.isHidden() and window.yaml_panel.on_show  # shown, and in front
+    assert i18n.setting(YAML_PANEL_SETTING) is True
+    window.close()  # closing the window is no choice
+    assert i18n.setting(YAML_PANEL_SETTING) is True
+    again = MainWindow()
+    again.show()
+    try:
+        assert not again.docks["yaml"].isHidden()
+        again.docks["yaml"].close()  # its title bar's close button
+        assert i18n.setting(YAML_PANEL_SETTING) is False
+    finally:
+        again.close()
+    third = MainWindow()
+    try:
+        assert third.docks["yaml"].isHidden()
+    finally:
+        third.close()
+
+
 def test_background_task_says_what_runs(window, qapp) -> None:
     """While a run goes on, the status bar says what runs, its step and its time, with
     Cancel beside it; resting on the moving bar says so at length."""
@@ -752,6 +948,7 @@ def test_every_control_explains_itself(window) -> None:
         window.plan,
         window.message_panel,
         window.movement,
+        window.yaml_panel,
     ]
     fields = (QAbstractSpinBox, QCheckBox, QComboBox, QListWidget, QPushButton, QSlider)
     missing = []

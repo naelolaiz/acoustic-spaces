@@ -57,6 +57,22 @@ def test_round_trip(tmp_path: Path) -> None:
     assert again.model_dump() == scene.model_dump()
 
 
+def test_readable_text_holds_the_same_data(tmp_path: Path) -> None:
+    """The editor's YAML panel writes lists on one line and letters as they are; the
+    data are what Save writes."""
+    scene = Scene.from_yaml(EXAMPLES / "studio" / "scene.yaml")
+    scene = scene.model_copy(update={"name": "Sala de control (6 × 4,5 m)"})
+    folder = EXAMPLES / "studio"
+    saved, readable = scene.file_text(folder), scene.file_text(folder, readable=True)
+    assert load_yaml(readable) == load_yaml(saved)
+    assert "  box: [6.0, 4.5, 3.0]\n" in readable and "  box:\n  - 6.0\n" in saved
+    assert "name: Sala de control (6 × 4,5 m)\n" in readable and "\\xD7" in saved
+    # Save writes PyYAML's safe layout, as before.
+    scene.to_yaml(tmp_path / "scene.yaml")
+    text = (tmp_path / "scene.yaml").read_text(encoding="utf-8")
+    assert text == yaml.safe_dump(load_yaml(text), sort_keys=False)
+
+
 def test_round_trip_keeps_a_null_that_is_not_the_default(tmp_path: Path) -> None:
     scene = Scene.from_yaml(EXAMPLES / "shoebox" / "scene.yaml")
     scene.simulation.early.coherent_max_band_hz = None  # the default is 125

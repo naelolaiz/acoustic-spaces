@@ -292,11 +292,22 @@ def save_language(code: str | None) -> None:
     start on."""
     if code is not None and code not in LANGUAGES:
         raise ValueError(f"no catalog for the language {code!r}")
+    save_setting("language", code)
+
+
+def setting(name: str, default: object = None) -> object:
+    """A choice kept in the user's settings (:func:`settings_file`), or ``default``."""
+    return _settings().get(name, default)
+
+
+def save_setting(name: str, value: object) -> None:
+    """Keep ``value`` (JSON data) as the choice ``name`` in the user's settings, from the
+    next start on; None forgets it."""
     settings = _settings()
-    if code is None:
-        settings.pop("language", None)
+    if value is None:
+        settings.pop(name, None)
     else:
-        settings["language"] = code
+        settings[name] = value
     path = settings_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
@@ -370,8 +381,10 @@ __all__ = [
     "pgettext",
     "read_po",
     "save_language",
+    "save_setting",
     "saved_language",
     "set_language",
+    "setting",
     "settings_file",
     "system_language",
 ]

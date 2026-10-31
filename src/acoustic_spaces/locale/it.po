@@ -514,6 +514,10 @@ msgid "Movement"
 msgstr "Movimento"
 
 #: acoustic_spaces/gui/app.py
+msgid "Scene YAML"
+msgstr "YAML della scena"
+
+#: acoustic_spaces/gui/app.py
 msgid ""
 "What plays through the room: the recording, and the source and listener of "
 "the response it plays through"
@@ -1059,6 +1063,12 @@ msgstr "Superficie {name}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
+msgid "Cannot keep whether the Scene YAML panel shows: {reason}"
+msgstr ""
+"Impossibile conservare se il pannello YAML della scena è mostrato: {reason}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
 msgid "Moved {name} to ({point})"
 msgstr "Spostato {name} in ({point})"
 
@@ -1323,6 +1333,12 @@ msgstr "Impossibile salvare"
 #, python-brace-format
 msgid "Saved {path}"
 msgstr "Salvato {path}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Saved without the edits to the Scene YAML panel's text, not applied"
+msgstr ""
+"Salvato senza le modifiche al testo del pannello YAML della scena, non "
+"applicate"
 
 #: acoustic_spaces/gui/app.py
 msgid "Save screenshot"
@@ -3195,12 +3211,12 @@ msgstr ""
 "Tempo di riverberazione a {band}: {eyring:.2f} s (Eyring), {sabine:.2f} s "
 "(Sabine)"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format
 msgid "Problem: {problem}"
 msgstr "Problema: {problem}"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format
 msgid "Warning: {warning}"
 msgstr "Avviso: {warning}"
@@ -7411,6 +7427,98 @@ msgstr "La vista 3D non è disponibile qui: {reason}"
 #: acoustic_spaces/gui/viewport.py
 msgid "The 3D view needs a display with OpenGL."
 msgstr "La vista 3D richiede uno schermo con OpenGL."
+
+#: acoustic_spaces/gui/yaml_panel.py
+#, python-brace-format
+msgid "not valid YAML: {problem}"
+msgstr "YAML non valido: {problem}"
+
+#: acoustic_spaces/gui/yaml_panel.py
+#, python-brace-format
+msgid "not valid YAML at line {line}, column {column}: {problem}"
+msgstr "YAML non valido alla riga {line}, colonna {column}: {problem}"
+
+#. Translators: {context} is PyYAML's, such as "while parsing a flow sequence".
+#: acoustic_spaces/gui/yaml_panel.py
+#, python-brace-format
+msgid "({context} from line {line})"
+msgstr "({context} dalla riga {line})"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid ""
+"The scene's settings as YAML, the data Save writes: change them here and "
+"Apply (Ctrl+Return), or in the forms, and the text follows. Comments are not "
+"kept."
+msgstr ""
+"Le impostazioni della scena in YAML, i dati che Salva scrive: modificale qui "
+"e applicale (Ctrl+Invio), o nei moduli, e il testo le segue. I commenti non "
+"vengono conservati."
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "Apply"
+msgstr "Applica"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid ""
+"Make the text the scene, checked as every edit is, in one step that Undo "
+"takes back (Ctrl+Return); a refused text stays, with its lines marked in red"
+msgstr ""
+"Rende il testo la scena, verificato come ogni modifica, in un solo passo che "
+"Annulla revoca (Ctrl+Invio); un testo rifiutato resta, con le sue righe "
+"segnate in rosso"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "Revert"
+msgstr "Ripristina"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "Drop the edits to the text and show the scene as it is"
+msgstr "Scarta le modifiche al testo e mostra la scena com'è"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "Find"
+msgstr "Trova"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid ""
+"Find words in the text (Ctrl+F): typing finds the first, Enter the next, "
+"from the top again after the last"
+msgstr ""
+"Cerca parole nel testo (Ctrl+F): digitando trova la prima, Invio la "
+"successiva, e dopo l'ultima ricomincia dall'alto"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid ""
+"the text holds no settings: write them as key: value lines, as a scene file "
+"does"
+msgstr ""
+"il testo non contiene impostazioni: scrivile in righe chiave: valore, come "
+"un file di scena"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "edit scene YAML"
+msgstr "modifica YAML della scena"
+
+#: acoustic_spaces/gui/yaml_panel.py
+#, python-brace-format
+msgid "Not applied: {reason}"
+msgstr "Non applicato: {reason}"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid ""
+"Edited, and the scene has changed since: Apply makes the text the scene, "
+"dropping those changes; Revert shows them"
+msgstr ""
+"Modificato, e la scena è cambiata nel frattempo: Applica rende il testo la "
+"scena e scarta quelle modifiche; Ripristina le mostra"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "Edited: Apply makes the text the scene"
+msgstr "Modificato: Applica rende il testo la scena"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "In step with the scene"
+msgstr "Allineato alla scena"
 
 #: acoustic_spaces/recordings.py
 msgid "\"Spicy Funk Cake\", Rhythmussportgruppe"
