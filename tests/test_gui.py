@@ -2719,7 +2719,7 @@ def _waiting_demo(tmp_path: Path, seconds: float):
     return demo, demo.resolved(args)
 
 
-def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
+def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> None:
     """The Run demo window offers the demos of the open scene: This scene, and the demo
     of the example the scene belongs to, on which it starts. It builds its form from the
     demo's own options, at the defaults the command line uses, and shows that command."""
@@ -2733,8 +2733,15 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path) -> None:
         QWidget,
     )
 
+    from acoustic_spaces import examples
     from acoustic_spaces.demos import list_demos
     from acoustic_spaces.gui.demo_dialog import ALL, DemoDialog, InputsField, PathField
+
+    # The examples as a source checkout keeps them, where each demo runs in its own
+    # folder and starts at the plain command. The Editor jobs on CI install the package,
+    # whose examples run under the home folder instead, the scene they read named in the
+    # command (test_a_demo_of_an_installed_example_runs_under_the_home_folder).
+    monkeypatch.setattr(examples, "_installed_dir", lambda: tmp_path / "no examples here")
 
     listed = DemoDialog(list_demos())  # every demo, as given
     names = [listed.picker.itemData(k) for k in range(listed.picker.count())]
@@ -3257,9 +3264,11 @@ def test_a_demo_of_an_installed_example_runs_under_the_home_folder(
     has its demos run in ~/acoustic-spaces/<example>, not among the package's files that
     an upgrade replaces; a scene of the user's own runs beside it, in demo/."""
     from acoustic_spaces import examples
+    from acoustic_spaces.demos import shell_line
     from acoustic_spaces.demos.scene_demo import work_of
     from acoustic_spaces.gui.demo_dialog import HOME_FOLDER, demos_for, writable
 
+    stadium = example_path("stadium_concert")  # before the examples move
     installed = tmp_path / "site-packages" / "acoustic_spaces" / "example_scenes"
     scene = installed / "shoebox" / "scene.yaml"
     scene.parent.mkdir(parents=True)
@@ -3279,6 +3288,14 @@ def test_a_demo_of_an_installed_example_runs_under_the_home_folder(
     (demo, args), *_ = demos_for(mine)
     assert demo.folder == mine.parent.resolve()
     assert work_of(args) == mine.parent.resolve() / "demo"
+    # An example with a demo of its own: it runs under the home folder too, reading the
+    # installed copy's scene, which its command names.
+    monkeypatch.setattr(examples, "_installed_dir", lambda: stadium.parent.parent)
+    demo, args = next((d, a) for d, a in demos_for(stadium) if d.name == "stadium")
+    assert demo.folder == home / HOME_FOLDER / "stadium_concert"
+    assert demo.command("all", args) == "python stadium_demo.py all " + shell_line(
+        ["--from", str(stadium.resolve())]
+    )
 
 
 def test_demo_dialog_offers_the_hrtf_sets(qapp, tmp_path: Path, monkeypatch) -> None:
