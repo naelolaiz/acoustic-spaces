@@ -756,9 +756,9 @@ Movement box.
   and a sound made as the car's (its engine four cylinders at 2000 rpm, `--rpm`), and
   its siren (`police_car_siren`), the walk's points at the height of its roof, 1.5 m up,
   facing the way it drives (its walk's `face_forward`). Each is simulated along the walk
-  alone, and the two are heard together: their sounds added, and the energies of their
-  levels band by band. The demo refuses a siren whose walk goes elsewhere in plan or at
-  other times than the car's. `--police-car siren` plays the siren alone. The siren
+  alone, and the two are heard together: their sounds added, each at its own sound
+  power, and the energies of their levels band by band. The demo refuses a siren whose
+  walk goes elsewhere in plan or at other times than the car's. `--police-car siren` plays the siren alone. The siren
   has the level and the directivity of a commercial 100 W electronic siren the National Bureau of Standards
   measured in an anechoic room (NBS Special Publication 480-28, 1978): 3 m away, its
   yelp averaged over 20 s, 118 dB(A) on its axis, 112 dB(A) 50 degrees off it and 107
