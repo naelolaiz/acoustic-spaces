@@ -1701,6 +1701,16 @@ class Source(_Model):
         return power_levels(levels, bands) + self.feed_db(bands)
 
 
+#: A microphone capsule's pattern: a name, or a name or value of ``a`` per octave band
+#: (or third-octave band), for a capsule whose pattern changes with frequency.
+CapsulePattern = PatternName | list[PatternName | Coefficient]
+
+
+def _capsule_pattern(value):
+    """A pattern per band holds one for each octave band or third-octave band."""
+    return _per_band_or_third("pattern", value) if isinstance(value, list) else value
+
+
 class XYPair(_Model):
     """Two capsules of one pattern in one place, aimed apart in the horizontal plane."""
 
@@ -1711,7 +1721,15 @@ class XYPair(_Model):
         le=180.0,
         description="the angle between the capsules' aims (degrees), the left one to the left",
     )
-    capsule: PatternName = Field(default="cardioid", description="the two capsules' pattern")
+    capsule: CapsulePattern = Field(
+        default="cardioid",
+        description="the two capsules' pattern, or one per band (names or values of a)",
+    )
+
+    @field_validator("capsule")
+    @classmethod
+    def _capsule(cls, value):
+        return _capsule_pattern(value)
 
 
 class BlumleinPair(_Model):
@@ -1725,13 +1743,21 @@ class MSPair(_Model):
     right."""
 
     pair: Literal["ms"]
-    mid: PatternName = Field(default="cardioid", description="the mid capsule's pattern")
+    mid: CapsulePattern = Field(
+        default="cardioid",
+        description="the mid capsule's pattern, or one per band (names or values of a)",
+    )
     side_db: float = Field(
         default=0.0,
         ge=-40.0,
         le=20.0,
         description="the figure-eight's gain against the mid (dB): more is wider",
     )
+
+    @field_validator("mid")
+    @classmethod
+    def _mid(cls, value):
+        return _capsule_pattern(value)
 
 
 #: A coincident pair of capsules, which gives two channels, left and right.
@@ -1745,15 +1771,21 @@ class Listener(_Model):
     position: Vector3
     orientation: Orientation = Field(default_factory=Orientation)
     walk: Walk | None = Field(default=None, description="a path to walk, for a walkthrough")
-    pattern: PatternName | MicrophonePair | None = Field(
+    pattern: CapsulePattern | MicrophonePair | None = Field(
         default=None,
         description=(
             "the microphone its mono output picks up through, aimed where it faces: a "
-            "first-order pattern, or a coincident pair (two channels, left and right); "
-            "omni when left out. The parameters and the other outputs stay an omni "
-            "listener's"
+            "first-order pattern, or one per octave band (or third-octave band) for a "
+            "capsule whose pattern changes with frequency, given as names or values of a, "
+            "or a coincident pair (two channels, left and right); omni when left out. The "
+            "parameters and the other outputs stay an omni listener's"
         ),
     )
+
+    @field_validator("pattern")
+    @classmethod
+    def _pattern(cls, value):
+        return _capsule_pattern(value)
 
     @field_validator("group")
     @classmethod

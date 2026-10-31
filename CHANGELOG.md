@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- A listener's microphone can have a pattern that changes with frequency, as a real
+  capsule's does: `pattern` takes one per octave band (8) or third-octave band (24), as
+  names or values of `a`, for a single capsule, an XY pair's `capsule` or an MS pair's
+  `mid`. Its `a` goes from band to band across the crossovers of the synthesis's band
+  filters; the response is rendered in two parts (what the capsule picks up whatever
+  `a` is, and what `a` scales, through a filter of gain `a` in each band), exact as
+  both take the same paths and impulses, so in a band whose neighbours agree it picks
+  up as that band's pattern does (within 0.01 dB in the shoebox example's room). Walks
+  with Doppler take it path by path; the feedback scripts of the stadium and the
+  concert stage take the voice into the microphone band by band. The editor's listener form shows such a
+  pattern as *per band: …* and keeps it until another is picked; its balloon shows 1
+  kHz. A pattern that is the same in every band is rendered once, as before.
+- Editor: sources and listeners left out of simulations (`enabled: false`) start
+  hidden in the 3D view and the plan, as the stadium's helicopter, band and singer's
+  microphone, and an eye follows its tick when that changes (a click, undo or redo);
+  shown again by its eye, an item left out is drawn faded as before.
+- Editor: the markers of sources and listeners are all one size, in the 3D view, the
+  plan and `acoustic-spaces view`: where two would overlap, all of them shrink alike
+  (down to a fifth of their size) instead of only those two, so that one kind of item
+  always looks the same. Sources and listeners left out, drawn faded, do not shrink
+  the others in `view`.
+- Editor: **Run demo…** runs the demos of an installed copy's examples in
+  `~/acoustic-spaces/<example>` even where the package's folder can be written (a
+  virtual environment), so that nothing is written among the package's files, which an
+  upgrade or an uninstall replaces or removes; before, only a folder that could not be
+  written went there (`examples.is_installed_example`).
+- Docs: [Where the results go](docs/getting-started.md#where-the-results-go): the
+  files of `simulate`, the editor's runs and exports, `auralize`, walkthroughs and
+  demos, for scenes with many listeners such as the stadium.
+
 - Random scattering (`simulation.scattering.method: random`) traces each band with rays
   of its own where the bands' scattering coefficients differ, as vector-based scattering
   does: `by_band` applies to both now, and so does the editor's **Trace each band with

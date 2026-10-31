@@ -91,13 +91,30 @@ def examples_dir() -> Path:
     Installed packages carry it as ``acoustic_spaces/example_scenes``; a source checkout
     (an editable install) uses the repository's ``examples`` folder.
     """
-    installed = Path(str(resources.files("acoustic_spaces"))) / "example_scenes"
+    installed = _installed_dir()
     if installed.is_dir():
         return installed
     checkout = Path(__file__).resolve().parents[2] / "examples"
     if checkout.is_dir():
         return checkout
     raise FileNotFoundError("the example scenes are missing from this installation")
+
+
+def _installed_dir() -> Path:
+    """Where an installed package keeps its examples (``acoustic_spaces/example_scenes``),
+    whether or not it is there."""
+    return Path(str(resources.files("acoustic_spaces"))) / "example_scenes"
+
+
+def is_installed_example(path: str | Path) -> bool:
+    """Whether ``path`` lies among the examples of an installed package, which an upgrade
+    or an uninstall replaces or removes: nothing is to be written there, even where the
+    folder can be written (a virtual environment). A source checkout's ``examples``
+    folder is not."""
+    installed = _installed_dir()
+    if not installed.is_dir():
+        return False
+    return Path(path).resolve().is_relative_to(installed.resolve())
 
 
 def _description(scene_file: Path) -> str:
@@ -208,5 +225,6 @@ __all__ = [
     "example_of",
     "example_path",
     "examples_dir",
+    "is_installed_example",
     "list_examples",
 ]

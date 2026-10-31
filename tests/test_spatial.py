@@ -466,6 +466,50 @@ def test_a_listeners_microphone_is_its_first_order_field(response) -> None:
         np.testing.assert_allclose(channel, expected, atol=1e-9 * scale)
 
 
+def test_a_microphone_whose_pattern_changes_with_frequency(response) -> None:
+    """A pattern per band picks up as that band's pattern does wherever its neighbours
+    agree: omni in the bass and a figure-eight in the treble here, crossing over in
+    between; the same pattern in every band is the named one, rendered once."""
+    from acoustic_spaces.synthesis import split_bands
+
+    per_band = ["omni", "omni", "omni", 0.5, 0.5, "figure8", "figure8", "figure8"]
+    microphone = first_order(per_band)
+    assert microphone.a == (1.0, 1.0, 1.0, 0.5, 0.5, 0.0, 0.0, 0.0)
+    assert microphone.label == "per band: omni, omni, omni, 0.5, 0.5, figure8, figure8, figure8"
+    assert microphone.weights == (0.5,)  # its balloon is drawn at 1 kHz
+
+    def bands(fmt) -> np.ndarray:
+        ir = response.spatial_impulse_response(fmt, FS)[:, 0]
+        return 10.0 * np.log10(np.sum(split_bands(ir, FS) ** 2, axis=1))
+
+    heard, omni, eight = bands(microphone), bands(Mono()), bands(first_order("figure8"))
+    np.testing.assert_allclose(heard[:2], omni[:2], atol=0.01)  # 63 and 125 Hz
+    np.testing.assert_allclose(heard[-2:], eight[-2:], atol=0.01)  # 4 and 8 kHz
+    assert all(abs(heard[k] - omni[k]) > 3.0 for k in (5, 6, 7))
+    # Rendered in two parts, which add up exactly where the bands agree.
+    steady, scaled = first_order("cardioid"), microphone.parts()[1]
+    assert scaled.weights == (1.0,) and scaled.axes == ((-1.0, 0.0, 0.0),)
+    forced = dataclasses.replace(
+        steady, a=(0.5,) * 8, aims=((1.0, 0.0, 0.0),), sides=((0.0, 0.0, 0.0),)
+    )
+    whole = response.spatial_impulse_response(steady, FS)
+    np.testing.assert_allclose(
+        response.spatial_impulse_response(forced, FS), whole, atol=1e-12 * abs(whole).max()
+    )
+    # The same in every band, as names or values: the named pattern itself.
+    assert first_order(["cardioid"] * 8) == first_order(["cardioid"] * 24) == steady
+    assert first_order(0.5).a is None and first_order(0.5).axes == steady.axes
+    # Third octaves given, octaves simulated: each octave the mean of its three.
+    thirds = first_order([1.0] * 12 + [0.0] * 12)
+    assert thirds.a_in(8).tolist() == pytest.approx([1, 1, 1, 1, 0, 0, 0, 0])
+    with pytest.raises(ValueError, match="parts"):
+        microphone.gains([[1.0, 0.0, 0.0]])
+    # In each band, from straight ahead and from behind.
+    gains = microphone.band_gains(np.array([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]]), 8)
+    np.testing.assert_allclose(gains[0, 0], 1.0)
+    np.testing.assert_allclose(gains[1, 0], [1, 1, 1, 0, 0, -1, -1, -1])
+
+
 def test_a_microphone_hears_the_direct_sound_through_its_pattern(response) -> None:
     mono = response.impulse_response(FS)
     k = _direct(response)
@@ -518,12 +562,25 @@ def test_a_listeners_pattern_picks_its_mono_output() -> None:
         heard = for_listener(Mono(), listener)
         assert heard == expected
         assert heard.channel_names == ["L", "R"]
+    # A pattern per band, for one capsule or a pair's; all omni is none.
+    wide = ["omni", "omni", "subcardioid", "cardioid", "cardioid", 0.4, 0.37, 0.37]
+    for spec, expected in (
+        (wide, first_order(wide)),
+        (["omni"] * 8, Mono()),
+        ({"pair": "xy", "capsule": wide}, xy(90.0, wide)),
+        ({"pair": "ms", "mid": wide, "side_db": 2}, ms(wide, 2)),
+    ):
+        listener = Listener.model_validate({"name": "m", "position": [0, 0, 0], "pattern": spec})
+        assert for_listener(Mono(), listener) == expected
     for bad in (
         "lambert",
         {"pair": "ab"},
         {"pair": "blumlein", "angle_deg": 90},
         {"pair": "xy", "angle_deg": 0},
         {"pair": "xy", "mid": "cardioid"},
+        ["cardioid"] * 5,
+        ["cardioid"] * 7 + [1.5],
+        {"pair": "ms", "mid": ["lambert"] * 8},
     ):
         with pytest.raises(ValueError):
             Listener.model_validate({"name": "m", "position": [0, 0, 0], "pattern": bad})

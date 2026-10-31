@@ -317,6 +317,7 @@ class Filters:
 
     def _spectra(self, k: int, moment: int) -> np.ndarray:
         from acoustic_spaces.spatial.directions import to_head
+        from acoustic_spaces.spatial.microphone import Microphone
         from acoustic_spaces.spatial.render import Binaural
 
         response = self.responses[k]
@@ -347,6 +348,8 @@ class Filters:
             hrtf = self.fmt.at(self.rate)
             ears = np.fft.rfft(hrtf.interpolate(heads), self.n_fft, axis=-1)
             spectra = shaping[:, None, :] * ears
+        elif isinstance(self.fmt, Microphone):  # its pattern may change with frequency
+            spectra = shaping[:, None, :] * self.fmt.spectral_gains(heads, gains)
         else:
             spectra = shaping[:, None, :] * self.fmt.gains(heads)[:, :, None]
         return spectra.astype(np.complex64)

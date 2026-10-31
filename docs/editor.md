@@ -41,16 +41,20 @@ which frequencies each octave band holds.
   label.
 - Sources and listeners sit in their **groups** (the form's **Group** field; groups
   nest with `/`, as PA/Delays). Each source, listener and group has a tick: unticked,
-  it is left out of simulations, maps and checks, stays in the scene drawn faded, and
-  is saved as `enabled: false` (the form's **Use in simulations** does the same). The
-  eye beside it hides it in the 3D view and the plan, or shows it again, without
-  changing the scene. See
+  it is left out of simulations, maps and checks, and is saved as `enabled: false` (the
+  form's **Use in simulations** does the same). The eye beside it hides it in the 3D
+  view and the plan, or shows it again, without changing the scene. What a scene leaves
+  out starts hidden (the stadium's helicopter, band and singer's microphone), and an
+  eye follows its tick when that changes, by a click, undo or redo; shown again by its
+  eye, an item left out is drawn faded. See
   [Groups, and sources left out](scenes.md#groups-and-sources-left-out).
 - The markers of sources and listeners in the 3D view take their size from the
   scene: a fifth of the usual spacing between them, from 1.2 % to 2.5 % of the model's
-  size. Where they crowd, such as the players and monitors on a stadium's stage, they
-  get smaller rather than overlap, in the plan too, and an arrow stops short of a
-  marker ahead of it; hiding a group gives the rest their size back.
+  size, all of them alike. Where two crowd, such as the singer and the vocal wedges on
+  a stadium's stage, every marker gets smaller alike so that those two do not overlap
+  (down to a fifth of that size, to stay clearly visible), in the plan too, and an
+  arrow stops short of a marker ahead of it; hiding what crowds gives the rest their
+  size back.
 - **Place source** and **Place listener**, then click a surface: on a floor the new
   point stands at ear or mouth height, on a wall or ceiling it goes half a metre into
   the room. In the plan, the click places it above the floor there. Sources and
@@ -218,8 +222,10 @@ which frequencies each octave band holds.
   aimed where it faces: omni, a first-order pattern, or an XY pair (with its **Angle**
   and **Capsules**), a Blumlein pair or an MS pair (with its **Mid** capsule and its
   **Side**'s gain), which write two channels ([microphones](spatial-audio.md#microphones)).
-  The selected listener shows its microphone's balloon in the 3D view, one for each
-  capsule of a pair.
+  A pattern per band, set in the scene file, shows as *per band: …* in the list (and in
+  **Capsules** or **Mid** for a pair's) and stays until another is picked. The selected
+  listener shows its microphone's balloon in the 3D view (at 1 kHz), one for each capsule
+  of a pair.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
   as you edit, with the number of problems in red.
 - **Messages** shows warnings (leaks, results from before the latest changes, dropouts

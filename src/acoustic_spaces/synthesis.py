@@ -92,6 +92,21 @@ def combine_bands(
     return out[:n]
 
 
+def equalized(signal: np.ndarray, sample_rate: float, gains) -> np.ndarray:
+    """``signal`` (n, ...) along its first axis through a zero-phase filter whose gain
+    in each band is ``gains`` (8 octave bands or 24 third-octave bands), going from one
+    to the next across the bands' crossovers (:func:`band_gains`); the same gain in
+    every band is that gain at every frequency."""
+    signal = np.asarray(signal, dtype=float)
+    n = len(signal)
+    n_fft = fft_size(n, sample_rate)
+    gains = np.asarray(gains, dtype=float)
+    curve = gains @ _band_gains(n_fft, float(sample_rate), len(gains))
+    spectrum = np.fft.rfft(signal, n_fft, axis=0)
+    curve = curve.reshape((-1,) + (1,) * (signal.ndim - 1))
+    return np.fft.irfft(spectrum * curve, n_fft, axis=0)[:n]
+
+
 def split_bands(
     signal: np.ndarray, sample_rate: float, bands: int = len(OCTAVE_BANDS_HZ)
 ) -> np.ndarray:

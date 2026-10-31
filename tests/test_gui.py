@@ -278,22 +278,35 @@ def test_saving_an_example_copies_its_terrain_and_map(qapp, tmp_path: Path) -> N
 
 def test_using_and_hiding_sources_and_listeners(qapp) -> None:
     """Ticks leave sources and listeners out in one step of the history; eyes hide them
-    in the views without changing the scene."""
+    in the views without changing the scene. An eye follows its tick when that changes,
+    by an edit, undo or redo, and can be changed on its own after."""
     document = Document(box_scene())
     document.add_point("sources", (2.0, 2.0, 1.5))
     document.add_point("sources", (3.0, 2.0, 1.5))
     document.set_enabled("sources", [1, 2], False)
     assert [s.in_use for s in document.scene.sources] == [True, False, False]
     assert document.undo_text() == "leave out 2 sources"
+    assert document.hidden == {("sources", "source-2"), ("sources", "source-3")}
+    document.set_hidden("sources", [1], False)  # shown, faded, while left out
+    assert document.hidden == {("sources", "source-3")}
     document.set_enabled("sources", [0, 1], False)  # only the one in use changes
     assert document.undo_text() == "leave out source"
+    assert document.hidden == {("sources", "source"), ("sources", "source-3")}
     document.undo()
+    assert document.hidden == {("sources", "source-3")}
     document.set_enabled("sources", [1, 2], True)
     assert document.undo_text() == "use 2 sources"
     assert all("enabled" not in s for s in document.scene.to_data()["sources"])
+    assert not document.hidden
+    document.undo()
+    assert document.hidden == {("sources", "source-2"), ("sources", "source-3")}
+    document.redo()
+    assert not document.hidden
     document.set_enabled("listeners", [0], False)
     assert document.undo_text() == "leave out listener"
     assert document.scene.to_data()["listeners"][0]["enabled"] is False
+    assert document.hidden == {("listeners", "listener")}
+    document.set_hidden("listeners", [0], False)
     saved = document.scene
     document.set_hidden("sources", [1], True)
     assert document.hidden == {("sources", "source-2")} and document.scene is saved
@@ -301,6 +314,20 @@ def test_using_and_hiding_sources_and_listeners(qapp) -> None:
     assert document.hidden == {("sources", "spare")}
     document.set_hidden("sources", [0, 1], False)
     assert not document.hidden
+
+
+def test_items_left_out_start_hidden(qapp) -> None:
+    """A scene opens with the sources and listeners it leaves out of simulations hidden
+    in the 3D view and the plan: the stadium's helicopter, band and singer's
+    microphone."""
+    document = Document.open(example_path("stadium_concert"))
+    assert document.hidden == {
+        ("sources", "helicopter"),
+        ("sources", "drum_kit"),
+        ("sources", "singer_voice"),
+        ("sources", "guitar_amp"),
+        ("listeners", "singer_mic"),
+    }
 
 
 def test_model_scene_puts_points_inside(qapp) -> None:
@@ -2210,6 +2237,8 @@ def test_source_directivity(window, monkeypatch, tmp_path: Path) -> None:
 
 
 def test_listener_microphone(window) -> None:
+    from acoustic_spaces.gui.inspector import CAPSULES, MICROPHONES
+
     window.open_example(example_path("studio"))
     window.select("listeners", 0)
     page = window.inspector.pages["listeners"]
@@ -2250,6 +2279,20 @@ def test_listener_microphone(window) -> None:
     assert pattern() is None and "pattern" not in document.scene.to_data()["listeners"][0]
     window.undo()
     assert pattern().pair == "blumlein" and box.currentData() == "blumlein"
+    # A pattern per band, from the scene file, shows as one entry of its own and stays
+    # until another is picked; so does an XY pair's.
+    wide = ["omni", "omni", "subcardioid", "cardioid", "cardioid", 0.4, 0.37, 0.37]
+    document.update_point("listeners", 0, pattern=wide)
+    assert box.currentText() == "per band: " + ", ".join(map(str, wide))
+    assert box.currentData() == "" and box.count() == len(MICROPHONES) + 1
+    box.activated.emit(box.currentIndex())
+    assert pattern() == wide
+    document.update_point("listeners", 0, pattern={"pair": "xy", "capsule": wide})
+    assert box.currentData() == "xy" and page.capsule.currentData() == ""
+    page.capsule.activated.emit(page.capsule.currentIndex())
+    assert pattern().capsule == wide
+    page.capsule.activated.emit(page.capsule.findData("cardioid"))
+    assert pattern().capsule == "cardioid" and page.capsule.count() == len(CAPSULES)
 
 
 @pytest.mark.render
@@ -3205,6 +3248,37 @@ def test_a_copy_of_an_example_saved_anywhere_keeps_its_demo(qapp, tmp_path: Path
     plain = DemoDialog(scene=copy)
     assert [plain.picker.itemData(k) for k in range(plain.picker.count())] == ["scene"]
     plain.deleteLater()
+
+
+def test_a_demo_of_an_installed_example_runs_under_the_home_folder(
+    qapp, tmp_path: Path, monkeypatch
+) -> None:
+    """An example of an installed copy that can be written (a virtual environment) still
+    has its demos run in ~/acoustic-spaces/<example>, not among the package's files that
+    an upgrade replaces; a scene of the user's own runs beside it, in demo/."""
+    from acoustic_spaces import examples
+    from acoustic_spaces.demos.scene_demo import work_of
+    from acoustic_spaces.gui.demo_dialog import HOME_FOLDER, demos_for, writable
+
+    installed = tmp_path / "site-packages" / "acoustic_spaces" / "example_scenes"
+    scene = installed / "shoebox" / "scene.yaml"
+    scene.parent.mkdir(parents=True)
+    scene.write_text(example_path("shoebox").read_text(encoding="utf-8"), encoding="utf-8")
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(examples, "_installed_dir", lambda: installed)
+    assert os.access(scene.parent, os.W_OK)
+    assert writable(scene.parent, "shoebox") == home / HOME_FOLDER / "shoebox"
+    (demo, args), *_ = demos_for(scene)
+    assert demo.folder == home / HOME_FOLDER / "shoebox"
+    assert work_of(args) == home / HOME_FOLDER / "shoebox" / "demo"
+    mine = tmp_path / "mine" / "scene.yaml"
+    mine.parent.mkdir()
+    mine.write_text(scene.read_text(encoding="utf-8"), encoding="utf-8")
+    assert writable(mine.parent, "mine") == mine.parent
+    (demo, args), *_ = demos_for(mine)
+    assert demo.folder == mine.parent.resolve()
+    assert work_of(args) == mine.parent.resolve() / "demo"
 
 
 def test_demo_dialog_offers_the_hrtf_sets(qapp, tmp_path: Path, monkeypatch) -> None:

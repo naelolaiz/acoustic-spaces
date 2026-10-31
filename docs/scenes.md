@@ -636,7 +636,8 @@ listeners:
 - In the editor's scene tree each source, listener and group has a tick (in
   simulations or left out, saved as `enabled: false`) and an eye that shows or hides
   it in the 3D view and the plan. Hiding is how the editor shows the scene, not part
-  of it: it is not saved and changes no result. Sources and listeners left out are
+  of it: it is not saved and changes no result. Sources and listeners left out start
+  hidden, and an eye follows its tick when that changes; shown by their eye, they are
   drawn faded.
 
 ## Walks

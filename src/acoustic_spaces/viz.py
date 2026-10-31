@@ -375,17 +375,32 @@ def marker_radius(positions, size: float) -> float:
     return max(float(np.clip(0.2 * usual, 0.012 * size, 0.025 * size)), 0.05)
 
 
-def marker_sizes(positions, size: float, directions=None) -> tuple[np.ndarray, np.ndarray]:
+def common_radius(nearest, full: float, lowest: float = 0.2) -> float:
+    """One radius for every marker, so that markers of one kind look alike: ``full``
+    where no two of them would touch, else as small as the closest two need (0.45 of
+    their distance, ``nearest`` holding each one's distance to its nearest), down to
+    ``lowest`` times ``full`` to stay clearly visible."""
+    nearest = np.asarray(nearest, dtype=float)
+    closest = float(nearest.min()) if nearest.size else np.inf
+    return float(np.clip(0.45 * closest, lowest * full, full))
+
+
+def marker_sizes(
+    positions, size: float, directions=None, *, apart=None
+) -> tuple[np.ndarray, np.ndarray]:
     """The radius of the marker of each source or listener at ``positions`` and the
     length of its arrow along its unit row of ``directions``, in a model ``size`` metres
     across, from how far apart the points are: a fifth of their usual spacing (the
     median distance to the nearest one), from 1.2 % to 2.5 % of the model's size, and an
-    arrow six times that. Where points crowd, their markers shrink so as not to overlap,
-    down to a fifth, and an arrow stops short of a marker ahead of it."""
+    arrow six times that. Where points crowd, every marker shrinks alike so that the
+    closest two do not overlap (:func:`common_radius`), down to a fifth, and an arrow
+    stops short of a marker ahead of it. ``apart`` (a boolean per point, default all)
+    picks the points that are not to overlap: those in use, say, where the others are
+    drawn faded."""
     points = np.asarray(positions, dtype=float).reshape(-1, 3)
-    nearest = nearest_spacing(points)
-    full = marker_radius(points, size)
-    radius = np.clip(0.45 * nearest, 0.2 * full, full)
+    keep = np.ones(len(points), bool) if apart is None else np.asarray(apart, bool)
+    full = marker_radius(points[keep], size)
+    radius = np.full(len(points), common_radius(nearest_spacing(points[keep]), full))
     if directions is None:
         return radius, 6 * radius
     return radius, clear_lengths(points, np.reshape(directions, (-1, 3)), radius, 6 * radius)
@@ -831,6 +846,7 @@ def plot_room(
         [item.position for item in everything],
         size,
         [item.orientation.forward() for item in everything],
+        apart=[item.in_use for item in everything],  # those left out are drawn faded
     )
 
     points, names = [], []

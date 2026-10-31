@@ -194,6 +194,43 @@ surround = response.spatial_impulse_response(Loudspeakers.layout("5.0"), 48_000)
 plot_directions(response, "talker__seat-a.directions.png")
 ```
 
+## Where the results go
+
+A simulation gives one response for each source and listener in use, all side by side:
+none of them is *the* result until a mix or the editor's results panel picks a
+listener. Sources and listeners left out of simulations (`enabled: false`) get none.
+
+- `acoustic-spaces simulate scene.yaml --out DIR` (`--out` has no default) writes every
+  pair into `DIR`, as above: `SOURCE__LISTENER.wav` for the mono output,
+  `SOURCE__LISTENER.binaural.wav`, `.ambix3.wav`, `.5.0.wav`... for the others, and
+  `parameters.json` with the parameters of every pair. The stadium concert, with 19
+  sources and 12 listeners in use and a mono output, gives 228 WAV files;
+  `ls DIR/*__mix_position.wav` lists one listener's. A listener with a microphone
+  (`pattern`) has its mono files picked up through it, which `parameters.json` names
+  (`microphone`).
+- The editor's **Simulation > Run** (F5) keeps the results in memory: the results panel
+  shows one source and one listener at a time, picked above it or by selecting them in
+  the scene. **Export…** there, or **File > Export results…**, writes them all into a
+  folder you pick, as `simulate` does.
+- `acoustic-spaces auralize DIR SOURCE=WAV... --out mix.wav` mixes the sources as heard
+  at one listener, which `--listener` names when the results have more than one;
+  `acoustic-spaces walkthrough --all --out walk.wav` writes one file per listener,
+  `walk_LISTENER.wav`.
+- `acoustic-spaces demo scene.yaml` (*This scene* in the editor's **Simulation > Run
+  demo…**) writes into `demo/` beside the scene (`--work` elsewhere): the simulation in
+  `results/`, one mix per listener in `seats/` (`moving/` when something walks), named
+  `LISTENER.binaural.wav`, and `tour.wav`, the stills in `stills/`, `thumbnail.png` and
+  `tour.mp4`, which visits every listener in use in the scene's order (`--tour` picks
+  them). An example's own demo writes its scene and simulation beside its script (the
+  stadium's `scene_band.yaml` and `results_band/`) and the rest into `demo/` there
+  ([Demos](demos.md)).
+- The editor runs a demo in the open scene's folder, where the command line runs it,
+  but for the examples of an installed copy (opened from **File > Open example**) and a
+  folder it cannot write: those run in a folder of the same name in
+  `~/acoustic-spaces/` (*This scene* in its `demo/`), so that nothing goes among the
+  package's files, which an upgrade replaces. The **Run demo** window says where (*Runs
+  in …*).
+
 ## Language
 
 The editor and the command line show their text in English, Spanish, Catalan, Italian,

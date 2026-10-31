@@ -278,6 +278,15 @@ def spatial_impulse_response(
     Levels match the mono response: an arrival from straight ahead has the same height
     in W, in a speaker it is panned to, and (below the head's influence) at both ears.
     """
+    from acoustic_spaces.spatial.microphone import Microphone
+
+    if isinstance(fmt, Microphone) and fmt.a is not None:
+        # A pattern that changes with frequency: the part that does not, and the part
+        # its a scales through a filter of gain a in each band, from the same paths.
+        steady, scaled = fmt.parts()
+        out = spatial_impulse_response(response, steady, sample_rate, seed)
+        rest = spatial_impulse_response(response, scaled, sample_rate, seed)
+        return out + synthesis.equalized(rest, sample_rate, fmt.a_in(response.bands))
     n = int(math.ceil(response.length_s * sample_rate))
     if isinstance(fmt, Mono):
         return response.impulse_response(sample_rate, seed)[:, None]
