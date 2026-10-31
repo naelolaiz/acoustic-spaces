@@ -77,11 +77,15 @@ from acoustic_spaces.gui.worker import (
     SimulationJob,
     TuneJob,
 )
+from acoustic_spaces.gui.yaml_panel import YamlPanel
 from acoustic_spaces.i18n import N_, _, ngettext, pgettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.room import Room
 
 TITLE = N_("Acoustic Spaces editor")
+#: The user's setting that keeps whether the Scene YAML panel is shown: hidden until it
+#: is shown once, then as it was left.
+YAML_PANEL_SETTING = "editor_yaml_panel"
 SCENE_FILTER = N_("Scenes (*.yaml *.yml)")
 #: What the messages say of a part drawn in the plan, by the plan view's purpose;
 #: {count} its corners or points and the rest its sizes (:data:`NEW_PART_SIZES`).
@@ -179,6 +183,7 @@ class MainWindow(QMainWindow):
         self.map_panel = MapPanel()
         self.message_panel = MessagesPanel()
         self.movement = MovementPanel(lambda: self.document)
+        self.yaml_panel = YamlPanel(lambda: self.document)
         #: The messages' text, as shown.
         self.messages = self.message_panel.view
         # Forms scroll rather than make the window as tall as the longest one.
@@ -199,6 +204,7 @@ class MainWindow(QMainWindow):
                 Qt.DockWidgetArea.BottomDockWidgetArea,
             ),
             ("movement", _("Movement"), self.movement, Qt.DockWidgetArea.BottomDockWidgetArea),
+            ("yaml", _("Scene YAML"), self.yaml_panel, Qt.DockWidgetArea.BottomDockWidgetArea),
         ):
             dock = QDockWidget(title, self)
             dock.setObjectName(name)
@@ -208,8 +214,11 @@ class MainWindow(QMainWindow):
         self.tabifyDockWidget(self.docks["results"], self.docks["map"])
         self.tabifyDockWidget(self.docks["map"], self.docks["messages"])
         self.tabifyDockWidget(self.docks["messages"], self.docks["movement"])
+        self.tabifyDockWidget(self.docks["movement"], self.docks["yaml"])
         self.docks["results"].raise_()
         self.docks["movement"].hide()  # until Edit movement… opens it
+        if i18n.setting(YAML_PANEL_SETTING) is not True:
+            self.docks["yaml"].hide()  # until View > Scene YAML shows it
         # The forms take the whole height on the right, the panels below only the
         # width the views leave, so that a long form shows its buttons.
         self.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
@@ -274,9 +283,12 @@ class MainWindow(QMainWindow):
         self.movement.selected.connect(self.select)
         self.movement.failed.connect(self._refused)
         self.movement.message.connect(self.log)
+        self.yaml_panel.failed.connect(self._refused)
         self.plan.keyframe_moved.connect(self._move_keyframe)
         self.viewport.keyframe_moved.connect(self._move_keyframe)
         self.docks["movement"].visibilityChanged.connect(self._movement_visible)
+        self.docks["yaml"].visibilityChanged.connect(self.yaml_panel.set_shown)
+        self.docks["yaml"].toggleViewAction().toggled.connect(self._yaml_panel_toggled)
         self.results.pair_changed.connect(lambda *_: self._draw())
         self.results.paths_toggled.connect(self._paths_toggled)
         self.results.export_requested.connect(self.export_results)
@@ -711,6 +723,7 @@ class MainWindow(QMainWindow):
         document.changed.connect(self._changed)
         document.state_changed.connect(self._state)
         self.movement.reset()
+        self.yaml_panel.reset()
         self.result = self._result_scene = self._traced = None
         self.results.set_result(None)
         self.coverage = self._coverage_scene = None
@@ -733,6 +746,7 @@ class MainWindow(QMainWindow):
         self.results.mark_stale(self._stale(), reweighted=self._reweighted())
         self.map_panel.mark_stale(self._map_stale())
         self.movement.reload()
+        self.yaml_panel.scene_changed()
         self._draw()
         self._summary()
         self._show_playing()
@@ -868,6 +882,7 @@ class MainWindow(QMainWindow):
         self.inspector.show_item(*selection)
         self._hold_forms()
         self.movement.show_item(*selection)
+        self.yaml_panel.show_item(*selection)
         self._follow(selection)
         self._draw()
 
@@ -952,6 +967,20 @@ class MainWindow(QMainWindow):
         if not self.docks["movement"].isVisible():
             return None, None
         return self.movement.key, self.movement.time
+
+    def _yaml_panel_toggled(self, shown: bool) -> None:
+        """The Scene YAML panel shown (in front) or hidden: kept for the next start."""
+        if not self.isVisible():
+            return  # the window closing hides it too: that is no choice
+        if shown:  # in front, once the dock shows (it hears of the change after this)
+            QTimer.singleShot(0, self.docks["yaml"].raise_)
+        try:
+            i18n.save_setting(YAML_PANEL_SETTING, shown)
+        except OSError as exc:
+            self.log(
+                _("Cannot keep whether the Scene YAML panel shows: {reason}").format(reason=exc),
+                "warning",
+            )
 
     def _movement_visible(self, visible: bool) -> None:
         if not visible:
@@ -1501,6 +1530,13 @@ class MainWindow(QMainWindow):
             self._files_moved(scene, self.document.scene)
         self.from_example = False
         self.log(_("Saved {path}").format(path=path))
+        if self.yaml_panel.edited():
+            self.log(
+                _("Saved without the edits to the Scene YAML panel's text, not applied"),
+                "warning",
+            )
+        # Files the scene names are written relative to its new folder.
+        self.yaml_panel.scene_changed()
         return True
 
     def _files_moved(self, old, new) -> None:

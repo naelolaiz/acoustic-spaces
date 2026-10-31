@@ -392,6 +392,8 @@ Editor:
   plays instead in that run (`--input`).
 - [x] Download HRTFs…: the free sets with their licences, fetched into the user's data
   folder and put in the scene's binaural output.
+- [x] The Scene YAML panel: the scene as coloured YAML text that follows every edit, and
+  edited text applied with the checks every edit goes through.
 
 Running on other computers, in steps:
 

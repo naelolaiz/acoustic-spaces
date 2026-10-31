@@ -124,6 +124,22 @@ def load_yaml(stream):
     return yaml.load(stream, Loader=_UniqueKeyLoader)
 
 
+class _ReadableDumper(yaml.SafeDumper):
+    """PyYAML's safe dumper, writing each list of plain values (numbers, names, true or
+    false) on one line in brackets, as the example scenes do, instead of an item a
+    line."""
+
+
+def _represent_list(dumper: yaml.SafeDumper, data: list) -> yaml.SequenceNode:
+    plain = bool(data) and all(
+        item is None or isinstance(item, (str, int, float, bool)) for item in data
+    )
+    return dumper.represent_sequence("tag:yaml.org,2002:seq", data, flow_style=plain)
+
+
+_ReadableDumper.add_representer(list, _represent_list)
+
+
 class _Model(BaseModel):
     # Unknown keys are typing mistakes; NaN and infinity (YAML's .nan and .inf) are
     # no positions, angles or coefficients.
@@ -2963,18 +2979,28 @@ class Scene(_Model):
             key.casefold() == SKY for key in self.assignments
         )
 
-    def yaml_text(self, file_name: Callable[[str], str]) -> str:
-        """The scene file's text, with each file it names written as ``file_name(file)``."""
+    def yaml_text(self, file_name: Callable[[str], str], *, readable: bool = False) -> str:
+        """The scene file's text, with each file it names written as ``file_name(file)``.
+        ``readable`` writes each list of numbers or names on one line in brackets and
+        letters outside ASCII as they are, as the example scenes do; the data are the
+        same."""
         data = self.to_data()
         _map_files(data, file_name)
+        if readable:
+            return yaml.dump(data, Dumper=_ReadableDumper, sort_keys=False, allow_unicode=True)
         return yaml.safe_dump(data, sort_keys=False)
 
+    def file_text(self, folder: str | Path, *, readable: bool = False) -> str:
+        """The text of the scene's file in ``folder``: paths to files under it relative
+        to it, so the folder can move, others absolute (``readable`` as in
+        :meth:`yaml_text`)."""
+        base = Path(folder).resolve()
+        return self.yaml_text(lambda file: _portable(file, base), readable=readable)
+
     def to_yaml(self, path: str | Path) -> None:
-        """Write the scene file. Paths to files under its folder are written relative to
-        it, so the folder can move; others stay absolute."""
+        """Write the scene file (:meth:`file_text` for its folder)."""
         path = Path(path)
-        base = path.resolve().parent
-        text = self.yaml_text(lambda file: _portable(file, base))
+        text = self.file_text(path.resolve().parent)
         with path.open("w", encoding="utf-8") as fh:
             fh.write(text)
 

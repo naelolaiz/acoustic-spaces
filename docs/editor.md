@@ -243,6 +243,25 @@ which frequencies each octave band holds.
   one source, listener or material (the list holds those that messages name, with how
   many do), and the filter keeps only those holding some words. **Clear** removes the
   messages on show and keeps those hidden.
+- **View > Scene YAML** opens a tab beside **Messages**, hidden on a new installation
+  and from then on shown or hidden at each start as it was last left. It shows the scene
+  as YAML text, coloured (keys, text, numbers, true, false and null, comments) and with
+  line numbers: the data
+  **Save** writes, with each list of numbers or names on one line as the example scene
+  files have them (Save writes an item a line), and the files under the scene's folder
+  relative to it. It follows every change made in the forms, the 3D view or the plan, and
+  selecting a source, listener, material or settings entry brings its entry to the top.
+  Edit the text and press **Apply** (Ctrl+Return) to make it the scene: it is checked as
+  every other change is (the scene schema, then the geometry), in one step that
+  **Undo** takes back. Text that is not valid YAML, or that the checks refuse, stays as
+  typed, with the lines the reason points at marked in red and the reason below it and
+  under **Messages**; **Revert** drops the edits. Edits not applied stay when the scene
+  changes meanwhile, the panel saying so in amber, and **Save** says under **Messages**
+  that it saved without them. Below the text are the scene's problems in red and its
+  warnings in amber, as its form shows them. The text is made from the scene, not read
+  from its file, so comments in the file do not show (Save does not keep them either).
+  **Find** (Ctrl+F) finds words in it; Tab writes two spaces and Enter keeps the
+  indent.
 - While a run, a coverage map, a tuning or an export goes on, the status bar says what
   runs, what it does now and for how long, beside a moving bar and a **Cancel**
   button; resting the mouse on the bar says so at length.
