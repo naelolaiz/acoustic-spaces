@@ -516,6 +516,10 @@ msgid "Movement"
 msgstr "Movimiento"
 
 #: acoustic_spaces/gui/app.py
+msgid "Scene YAML"
+msgstr "YAML de la escena"
+
+#: acoustic_spaces/gui/app.py
 msgid ""
 "What plays through the room: the recording, and the source and listener of "
 "the response it plays through"
@@ -1328,6 +1332,12 @@ msgstr "No se pudo guardar"
 #, python-brace-format
 msgid "Saved {path}"
 msgstr "Se guardó {path}"
+
+#: acoustic_spaces/gui/app.py
+msgid "Saved without the edits to the Scene YAML panel's text, not applied"
+msgstr ""
+"Guardado sin los cambios al texto del panel «YAML de la escena», que no se "
+"han aplicado"
 
 #: acoustic_spaces/gui/app.py
 msgid "Save screenshot"
@@ -3132,12 +3142,12 @@ msgstr ""
 "Tiempo de reverberación a {band}: {eyring:.2f} s (Eyring), {sabine:.2f} s "
 "(Sabine)"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format
 msgid "Problem: {problem}"
 msgstr "Problema: {problem}"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format
 msgid "Warning: {warning}"
 msgstr "Aviso: {warning}"
@@ -7328,6 +7338,98 @@ msgstr "La vista 3D no está disponible aquí: {reason}"
 #: acoustic_spaces/gui/viewport.py
 msgid "The 3D view needs a display with OpenGL."
 msgstr "La vista 3D necesita una pantalla con OpenGL."
+
+#: acoustic_spaces/gui/yaml_panel.py
+#, python-brace-format
+msgid "not valid YAML: {problem}"
+msgstr "YAML no válido: {problem}"
+
+#: acoustic_spaces/gui/yaml_panel.py
+#, python-brace-format
+msgid "not valid YAML at line {line}, column {column}: {problem}"
+msgstr "YAML no válido en la línea {line}, columna {column}: {problem}"
+
+#. Translators: {context} is PyYAML's, such as "while parsing a flow sequence".
+#: acoustic_spaces/gui/yaml_panel.py
+#, python-brace-format
+msgid "({context} from line {line})"
+msgstr "({context} desde la línea {line})"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid ""
+"The scene's settings as YAML, the data Save writes: change them here and "
+"Apply (Ctrl+Return), or in the forms, and the text follows. Comments are not "
+"kept."
+msgstr ""
+"Los ajustes de la escena en YAML, los datos que escribe Guardar: cámbielos "
+"aquí y aplíquelos (Ctrl+Intro), o en los formularios, y el texto los sigue. "
+"Los comentarios no se conservan."
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "Apply"
+msgstr "Aplicar"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid ""
+"Make the text the scene, checked as every edit is, in one step that Undo "
+"takes back (Ctrl+Return); a refused text stays, with its lines marked in red"
+msgstr ""
+"Hace del texto la escena, comprobado como cualquier cambio, en un solo paso "
+"que Deshacer revierte (Ctrl+Intro); un texto rechazado se queda, con sus "
+"líneas marcadas en rojo"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "Revert"
+msgstr "Revertir"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "Drop the edits to the text and show the scene as it is"
+msgstr "Descarta los cambios al texto y muestra la escena tal como es"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "Find"
+msgstr "Buscar"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid ""
+"Find words in the text (Ctrl+F): typing finds the first, Enter the next, "
+"from the top again after the last"
+msgstr ""
+"Busca palabras en el texto (Ctrl+F): al escribir encuentra la primera, Intro "
+"la siguiente, y vuelve a empezar por arriba tras la última"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid ""
+"the text holds no settings: write them as key: value lines, as a scene file "
+"does"
+msgstr ""
+"el texto no contiene ajustes: escríbalos en líneas clave: valor, como un "
+"archivo de escena"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "edit scene YAML"
+msgstr "editar el YAML de la escena"
+
+#: acoustic_spaces/gui/yaml_panel.py
+#, python-brace-format
+msgid "Not applied: {reason}"
+msgstr "No aplicado: {reason}"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid ""
+"Edited, and the scene has changed since: Apply makes the text the scene, "
+"dropping those changes; Revert shows them"
+msgstr ""
+"Editado, y la escena ha cambiado desde entonces: Aplicar hace del texto la "
+"escena y descarta esos cambios; Revertir los muestra"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "Edited: Apply makes the text the scene"
+msgstr "Editado: Aplicar hace del texto la escena"
+
+#: acoustic_spaces/gui/yaml_panel.py
+msgid "In step with the scene"
+msgstr "Al día con la escena"
 
 #. Translators: the wind over an outdoor scene, as the 3D view's legend shows it.
 #: acoustic_spaces/viz.py

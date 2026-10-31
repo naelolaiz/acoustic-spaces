@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Editor: the **Scene YAML** panel, a tab beside **Messages**, shows the scene as
+  coloured YAML with line numbers, the data Save writes with each list on one line, and
+  follows every edit; selecting an item brings its entry to the top. Edited text becomes
+  the scene with **Apply** (Ctrl+Return), checked as every edit is and undone in one
+  step; text that does not read or that the checks refuse stays, with the lines the
+  reason points at marked in red. `Scene.file_text(folder, readable=True)` gives that
+  layout (`Scene.yaml_text` takes `readable` too); Save writes as before.
 - A listener's microphone can have a pattern that changes with frequency, as a real
   capsule's does: `pattern` takes one per octave band (8) or third-octave band (24), as
   names or values of `a`, for a single capsule, an XY pair's `capsule` or an MS pair's
