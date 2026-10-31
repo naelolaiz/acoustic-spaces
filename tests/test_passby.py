@@ -436,10 +436,12 @@ def test_the_passby_demo_drives_the_police_car_with_its_siren(tmp_path: Path) ->
     the siren's in the pattern of --siren, the scene with the police car's two sources
     alone, at their sound powers, the siren's directivity table beside the scene and
     facing the way it drives, and its pass, the two heard together: their levels'
-    energies added, the car's rumble below the siren's pitch, the siren the same as
-    alone (--police-car siren); the motorcycle's sound has no tyres in it."""
+    energies added, the car's rumble below the siren's pitch and its sound as far under
+    the siren's as its level, the siren the same as alone (--police-car siren); the
+    motorcycle's sound has no tyres in it."""
     pytest.importorskip("PIL")
     from acoustic_spaces.demos import load
+    from acoustic_spaces.parameters import A_WEIGHTING_DB
     from acoustic_spaces.synthesis import split_bands
 
     folder = _street(tmp_path)
@@ -512,8 +514,22 @@ def test_the_passby_demo_drives_the_police_car_with_its_siren(tmp_path: Path) ->
         bands = split_bands(x[:n, 0], 16_000)
         low[key] = [float(np.sum(bands[k] ** 2)) for k in (0, 1)]
     more = [10.0 * math.log10(b / a) for b, a in zip(low["both"], low["siren"], strict=True)]
-    # At 63 and 125 Hz the siren sends nothing: the police car's sound is the car's.
-    assert more[0] > 40.0 and more[1] > 40.0
+    # At 63 and 125 Hz the siren sends next to nothing: more than 95 % of the police
+    # car's sound there is the car's (the rest is the octave filters' leak).
+    assert all(1.0 - 10.0 ** (-m / 10.0) > 0.95 for m in more)
+    # Each part plays at its own sound power: the car's sound is as far under the
+    # siren's as its level is (some 29 dB(A)), not as loud as the siren.
+    weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)
+
+    def a_energy(x: np.ndarray) -> float:
+        return sum(
+            float(weights @ np.sum(split_bands(x[:, k], 16_000) ** 2, axis=1))
+            for k in range(x.shape[1])
+        )
+
+    under = 10.0 * math.log10(a_energy(siren_only[:n]) / a_energy(mixed[:n] - siren_only[:n]))
+    told = parts["police_car_siren"]["sel_a_db"] - parts["police_car"]["sel_a_db"]
+    assert told > 20.0 and under == pytest.approx(told, abs=1.5)
     # Another pattern makes the sound and the scene again, with the wail's sound power.
     args = demo.resolved(demo.parser().parse_args(["all", "--vehicle", "police_car"]))
     assert not demo.is_done(demo.step("sound"), args)

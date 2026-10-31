@@ -774,8 +774,10 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
     gain for every listener (the loudest peak at -1 dBFS), into ``walk/``: a WAV per
     listener, seats.json and walk.json. A vehicle of several sources (the police car and
     its siren, :meth:`Vehicle.parts`) has each simulated and played alone, and heard
-    together: their sounds and their levels' energies added."""
+    together: their sounds added, each at its own sound power, and their levels'
+    energies added."""
     from acoustic_spaces.demos.scene_demo import format_of
+    from acoustic_spaces.render import power_gains
     from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
 
     noun = vehicle.name
@@ -803,10 +805,15 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
         raise SystemExit(f"error: {args.scene.name}: {exc}") from None
     rate = int(room.scene.simulation.sample_rate)
     duration = pass_s(car)
+    # Each part is played alone below, where the rendering scales it against itself
+    # alone: here each gets its sound power against the loudest part's, as one
+    # rendering of them all would give it.
+    gains = power_gains({part: sources[part].sound_power_db for part in parts}, parts)
     sent = {}
     for part in parts:
         x = feed(demo, args, rate, duration, vehicle, part)
-        sent[part] = x if not isinstance(x, np.ndarray) else (x, rate)
+        gain = gains[part]
+        sent[part] = x.scaled(gain) if not isinstance(x, np.ndarray) else (x * gain, rate)
     rooms = {part: alone(room, part) for part in parts} if len(parts) > 1 else {parts[0]: room}
     fmt = format_of(args, room.scene)
     names = listeners_of(room)
