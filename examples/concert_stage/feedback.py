@@ -123,7 +123,12 @@ def loop(
     distance = float(np.linalg.norm(gap))
     aim = np.array(voice.orientation.rotation())[:, 0]
     toward = np.array(mic.orientation.rotation()).T @ (-gap / distance)
-    pickup = through.gains(toward)[0, 0] if isinstance(through, Microphone) else 1.0
+    # In each band, as the microphone's pattern may change with frequency.
+    pickup = (
+        through.band_gains(toward, len(OCTAVE_BANDS_HZ))[0, 0]
+        if isinstance(through, Microphone)
+        else 1.0
+    )
     at_mouth = _voice_energy(distance, float(aim @ gap) / distance, a) * pickup**2
     lag = int(round(LATENCY_S * RATE))
     parts, system = [], {"mix": 0.0, "ears": 0.0}

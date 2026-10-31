@@ -515,4 +515,8 @@ Next version:
   Blumlein, MS) in two channels, that the mono output picks up through, aimed where the
   listener faces; chosen in the editor's listener form and drawn as balloons in the 3D
   view.
+- [x] Microphone patterns that change with frequency: one per octave or third-octave
+  band, for a capsule or a pair's capsules, rendered exactly from the same paths.
+- [ ] A microphone's measured on-axis response and measured patterns (files), as
+  sources have.
 - [ ] Spaced pairs whose late parts correlate as real capsules' do at low frequencies.

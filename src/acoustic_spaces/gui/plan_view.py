@@ -74,6 +74,7 @@ from acoustic_spaces.viz import (
     WIND_KEY,
     WindMap,
     clear_lengths,
+    common_radius,
     nearest_spacing,
 )
 
@@ -1051,10 +1052,10 @@ class PlanCanvas(QWidget):
             if drag == (group, k) and self._preview is not None:
                 position = self._preview
             shown.append((group, k, item, position, self.to_screen(position)))
-        # Smaller markers where they would overlap on the screen, and arrows that stop
-        # short of a marker ahead.
+        # Markers all alike, smaller where two would overlap on the screen, and arrows
+        # that stop short of a marker ahead.
         screen = np.array([(p.x(), p.y()) for *_, p in shown]).reshape(-1, 2)
-        radii = np.clip(0.45 * nearest_spacing(screen), 3.5, 5.5)
+        radii = np.full(len(screen), common_radius(nearest_spacing(screen), 5.5, 3.5 / 5.5))
         aims = np.zeros_like(screen)
         for row, entry in enumerate(shown):
             forward = np.asarray(entry[2].orientation.forward()[:2], dtype=float) * [1.0, -1.0]

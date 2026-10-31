@@ -2834,8 +2834,25 @@ def _directivity_label(spec) -> str:
         return ngettext("array of {count} element", "array of {count} elements", count).format(
             count=count
         )
+    return _per_band_label(spec.pattern)
+
+
+def _per_band_label(patterns) -> str:
+    """How a list shows a pattern (a name or a value of a) per band."""
     # Translators: {patterns} lists a pattern name per band, such as omni, cardioid.
-    return _("per band: {patterns}").format(patterns=", ".join(str(v) for v in spec.pattern))
+    return _("per band: {patterns}").format(patterns=", ".join(str(v) for v in patterns))
+
+
+def _choose_pattern(combo: QComboBox, choices, value) -> None:
+    """Fill ``combo`` with ``choices`` and show ``value``: one of them, or a pattern per
+    band (a list, set in the scene file), shown as an entry of its own."""
+    combo.clear()
+    _fill(combo, choices)
+    if isinstance(value, list):
+        combo.addItem(_per_band_label(value), "")
+        combo.setCurrentIndex(len(choices))
+    else:
+        _choose(combo, value)
 
 
 class PointPage(Page):
@@ -3224,15 +3241,15 @@ class PointPage(Page):
         if self.kind == "listeners":
             pattern = item.pattern
             pair = getattr(pattern, "pair", None)
-            _choose(self.microphone, pair or pattern or "omni")
+            _choose_pattern(self.microphone, MICROPHONES, pair or pattern or "omni")
             self._form.setRowVisible(self.pair_angle, pair == "xy")
             self._form.setRowVisible(self.capsule, pair in ("xy", "ms"))
             self._form.setRowVisible(self.side, pair == "ms")
             if pair == "xy":
                 self.pair_angle.setValue(pattern.angle_deg)
-                _choose(self.capsule, pattern.capsule)
+                _choose_pattern(self.capsule, CAPSULES, pattern.capsule)
             elif pair == "ms":
-                _choose(self.capsule, pattern.mid)
+                _choose_pattern(self.capsule, CAPSULES, pattern.mid)
                 self.side.setValue(pattern.side_db)
             # One list for an XY pair's capsules and an MS pair's mid one.
             label = self._form.labelForField(self.capsule)
@@ -3382,8 +3399,8 @@ class PointPage(Page):
     def _microphone(self, index: int) -> None:
         value = self.microphone.itemData(index)
         pattern = self._item().pattern
-        if value == getattr(pattern, "pair", pattern or "omni"):
-            return  # the same choice: a pair keeps its settings
+        if value == "" or value == getattr(pattern, "pair", pattern or "omni"):
+            return  # the same choice: a pair, or a pattern per band, keeps its settings
         if value in PAIRS:
             self._update(pattern={"pair": value})
         else:
@@ -3395,8 +3412,11 @@ class PointPage(Page):
             self._update(pattern={**self._item().pattern.model_dump(), **fields})
 
     def _capsule(self, index: int) -> None:
+        value = self.capsule.itemData(index)
+        if value == "":  # the pattern per band it has
+            return
         name = "mid" if self._item().pattern.pair == "ms" else "capsule"
-        self._pair(**{name: self.capsule.itemData(index)})
+        self._pair(**{name: value})
 
     def _near_field(self, on: bool) -> None:
         if self._loading:

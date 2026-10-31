@@ -100,6 +100,23 @@ def test_a_copy_of_an_example_is_known_by_its_folder_or_its_scene(tmp_path: Path
     assert example_of(tmp_path / "anywhere" / "missing.yaml") is None
 
 
+def test_the_examples_of_an_installed_copy_are_known(tmp_path: Path, monkeypatch) -> None:
+    """A path among an installed package's examples is one of them, writable or not; a
+    copy elsewhere is not, nor is a source checkout's examples folder, which a package
+    without installed examples uses."""
+    from acoustic_spaces import examples
+
+    installed = tmp_path / "site-packages" / "acoustic_spaces" / "example_scenes"
+    (installed / "shoebox").mkdir(parents=True)
+    monkeypatch.setattr(examples, "_installed_dir", lambda: installed)
+    assert os.access(installed / "shoebox", os.W_OK)  # as in a virtual environment
+    assert examples.is_installed_example(installed / "shoebox")
+    assert examples.is_installed_example(installed / "shoebox" / "scene.yaml")
+    assert not examples.is_installed_example(tmp_path / "shoebox")
+    monkeypatch.setattr(examples, "_installed_dir", lambda: tmp_path / "no examples here")
+    assert not examples.is_installed_example(EXAMPLES / "shoebox")
+
+
 @pytest.mark.parametrize("name", NAMES)
 def test_examples_simulate(name: str) -> None:
     skip_without_extra(name)

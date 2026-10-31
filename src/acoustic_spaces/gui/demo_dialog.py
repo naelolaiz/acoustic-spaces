@@ -59,26 +59,30 @@ from acoustic_spaces.gui.inspector import int_spin, spin
 from acoustic_spaces.gui.sizing import body_size, fit, reading_width, scroll_bar_width, scrolled
 from acoustic_spaces.i18n import _, ngettext
 
-#: The folder under the user's home the editor runs a demo in when the example itself
-#: cannot be written.
+#: The folder under the user's home the editor runs a demo in when the scene's own folder
+#: is not to be written: the examples of an installed copy, or a folder that cannot be.
 HOME_FOLDER = "acoustic-spaces"
 #: The step the window starts on: every step, leaving out what is done already.
 ALL = "all"
 
 
 def writable(folder: Path, name: str) -> Path:
-    """``folder`` when it can be written, else one called ``name`` under the user's home
-    (``~/acoustic-spaces/<name>``): where a demo writes when the scene lies among the
-    examples of an installed copy."""
-    if os.access(folder, os.W_OK):
+    """``folder`` when it can be written and is not among the examples of an installed
+    copy (:func:`~acoustic_spaces.examples.is_installed_example`), else one called
+    ``name`` under the user's home (``~/acoustic-spaces/<name>``). An installed copy's
+    examples are left alone even where they can be written (a virtual environment), as
+    an upgrade or an uninstall would take what a demo wrote there with them."""
+    from acoustic_spaces.examples import is_installed_example
+
+    if not is_installed_example(folder) and os.access(folder, os.W_OK):
         return folder
     return Path.home() / HOME_FOLDER / name
 
 
 def work_base(demo: Demo) -> Path:
     """The folder the editor runs ``demo`` in: the example's own folder, where the
-    command line runs it, or one of the same name under the user's home when the
-    example cannot be written (the examples of an installed copy)."""
+    command line runs it, or one of the same name under the user's home for the
+    examples of an installed copy or a folder that cannot be written."""
     return writable(demo.script.parent, demo.example)
 
 

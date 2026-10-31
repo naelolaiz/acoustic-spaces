@@ -47,15 +47,22 @@ def test_every_example_is_drawn(example) -> None:
     plotter.close()
 
 
-def test_markers_shrink_where_points_crowd() -> None:
+def test_markers_shrink_alike_where_points_crowd() -> None:
     # In a model 100 m across, markers are at least 1.2 m in radius and arrows 7.2 m
-    # long, unless they crowd.
+    # long, unless they crowd; then all of them shrink alike, so that one kind of item
+    # always looks the same.
     radius, arrow = marker_sizes([[0, 0, 0], [1, 0, 0], [60, 0, 0]], 100.0)
-    assert radius.tolist() == pytest.approx([0.45, 0.45, 1.2])  # a metre apart: not touching
-    assert arrow.tolist() == pytest.approx([2.7, 2.7, 7.2])
-    # On top of each other: a fifth of the size.
-    radius, _arrow = marker_sizes([[0, 0, 0], [0, 0, 0]], 100.0)
-    assert radius.tolist() == pytest.approx([0.24, 0.24])
+    assert radius.tolist() == pytest.approx([0.45, 0.45, 0.45])  # a metre apart: not touching
+    assert arrow.tolist() == pytest.approx([2.7, 2.7, 2.7])
+    # On top of each other: a fifth of the size, which stays clearly visible.
+    radius, _arrow = marker_sizes([[0, 0, 0], [0, 0, 0], [60, 0, 0]], 100.0)
+    assert radius.tolist() == pytest.approx([0.24, 0.24, 0.24])
+    # Points that need not stay apart (left out, drawn faded) shrink none: the two
+    # others, 60 m apart, give the most, 2.5 % of the model's size.
+    radius, _arrow = marker_sizes(
+        [[0, 0, 0], [0.05, 0, 0], [60, 0, 0]], 100.0, apart=[True, False, True]
+    )
+    assert radius.tolist() == pytest.approx([2.5, 2.5, 2.5])
     # Points 3 m and more apart are not shrunk; an arrow stops short of a marker ahead
     # of it, not of one beside it.
     points = [[0, 0, 0], [5, 0, 0], [0, 3, 0]]

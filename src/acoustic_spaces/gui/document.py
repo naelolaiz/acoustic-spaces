@@ -270,6 +270,20 @@ def _in_units(item: dict, scale: float) -> dict:
     return out
 
 
+def in_use(scene: Scene) -> dict[tuple[str, str], bool]:
+    """Whether each source and listener, as (kind, name), is used in simulations."""
+    return {
+        (kind, item.name): item.in_use
+        for kind in ("sources", "listeners")
+        for item in getattr(scene, kind)
+    }
+
+
+def left_out(scene: Scene) -> set[tuple[str, str]]:
+    """The sources and listeners, as (kind, name), left out of simulations."""
+    return {key for key, used in in_use(scene).items() if not used}
+
+
 def unique_name(stem: str, taken: set[str]) -> str:
     """``stem``, or ``stem-2``, ``stem-3``... whichever is free."""
     if stem not in taken:
@@ -297,8 +311,10 @@ class Document(QObject):
         self._redo: list[tuple[str, Scene]] = []
         self._saved = scene
         #: The sources and listeners hidden in the 3D view and the plan, as (kind, name):
-        #: how the editor shows the scene, not part of it.
-        self.hidden: set[tuple[str, str]] = set()
+        #: how the editor shows the scene, not part of it. Those left out of simulations
+        #: (``enabled: false``) start hidden, and an item's eye follows its tick when that
+        #: changes (:meth:`_set`); either can be changed on its own after.
+        self.hidden: set[tuple[str, str]] = left_out(scene)
 
     @classmethod
     def open(cls, path: str | Path) -> Document:
@@ -363,6 +379,14 @@ class Document(QObject):
         self._set(scene, Room.from_scene(scene, reuse=self.room))
 
     def _set(self, scene: Scene, room: Room) -> None:
+        # Shown or hidden as used or left out, where an edit, undo or redo changed that.
+        was, now = in_use(self.scene), in_use(scene)
+        for key, used in now.items():
+            if key in was and was[key] != used:
+                if used:
+                    self.hidden.discard(key)
+                else:
+                    self.hidden.add(key)
         self.scene, self.room = scene, room
         self.changed.emit()
         self.state_changed.emit()

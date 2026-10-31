@@ -316,6 +316,34 @@ def test_a_walk_with_doppler_moves_alone_on_the_clock() -> None:
         simulate_movement(Room.from_scene(_scene(sources=[supersonic], listeners=[seat])))
 
 
+def test_doppler_through_a_microphone_whose_pattern_changes_with_frequency() -> None:
+    """With Doppler, each early path goes through the microphone's pattern band by
+    band, as without: omni in the bass and a figure-eight in the treble hear the car
+    as those patterns do in their bands."""
+    from acoustic_spaces.synthesis import split_bands
+
+    car = {
+        "name": "car",
+        "position": [1.0, 4.0, 1.0],
+        "walk": {"to": [[7.0, 4.0, 1.0]], "speed_m_s": 20.0, "doppler": True},
+    }
+    seat = {"name": "seat", "position": [4.0, 1.0, 1.2], "orientation": {"yaw": 90.0}}
+    room = Room.from_scene(_scene(sources=[car], listeners=[seat]))
+    movement = simulate_movement(room, step_m=0.5)
+    rate = room.scene.simulation.sample_rate
+    signal = np.random.default_rng(4).standard_normal(int(0.3 * rate))
+
+    def bands(fmt) -> np.ndarray:
+        heard = render_movement(movement, {"car": signal}, fmt)["seat"][:, 0]
+        return 10.0 * np.log10(np.sum(split_bands(heard, rate) ** 2, axis=1))
+
+    heard = bands(first_order(["omni"] * 4 + ["figure8"] * 4))
+    omni, eight = bands(Mono()), bands(first_order("figure8"))
+    np.testing.assert_allclose(heard[:2], omni[:2], atol=0.1)
+    np.testing.assert_allclose(heard[-2:], eight[-2:], atol=0.1)
+    assert abs(heard[-1] - omni[-1]) > 1.0
+
+
 def test_pass_by_of_a_place_a_band_gets_no_sound_in() -> None:
     """As at a far place the few rays reach: in a band without sound, the place's level
     is -inf, and in one whose decay cannot be read, that of the energy it holds."""

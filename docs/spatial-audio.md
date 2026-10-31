@@ -74,11 +74,30 @@ listeners:
     position: [10.0, 0.0, 3.0]
     orientation: {yaw: 180}
     pattern: {pair: ms, mid: cardioid, side_db: 0}
+  - name: handheld
+    position: [0.0, 0.5, 1.6]
+    orientation: {yaw: 180}
+    # A pattern or a value of a per octave band (63 Hz to 8 kHz), or 24 per third octave.
+    pattern: [subcardioid, subcardioid, cardioid, cardioid, supercardioid, supercardioid, 0.3, 0.3]
 ```
 
 - A first-order pattern picks up a + (1 - a) cos θ of sound arriving θ off its aim,
   with the `a` the sources' patterns take (0.7, 0.5, 0.37, 0.25 and 0 from subcardioid
   to figure8): 1 straight ahead, the same at every frequency, as an ideal capsule.
+- A real capsule's pattern changes with frequency: a list gives one per octave band (8)
+  or third-octave band (24), as names or values of `a`, for a single capsule, an XY
+  pair's `capsule` or an MS pair's `mid` (a Blumlein pair's figure8s stay as they are).
+  Its `a` goes from one band to the next across the crossovers of the bands the
+  responses are synthesised in, so in the middle of a band whose neighbours agree the
+  microphone picks up as that band's pattern. The response is rendered in two parts,
+  what the capsule picks up whatever `a` is (cos θ) and what `a` scales (1 - cos θ),
+  the second through a filter of gain `a` in each band; both take the same paths and
+  impulses, so the sum is exact, and the same pattern in every band is rendered once,
+  as a single name. Third octaves given to an octave simulation are averaged three by
+  three, as a source's are. The report names it (`"microphone": "per band: ..."`), and
+  the editor draws its balloon at 1 kHz. The on-axis response
+  stays flat (1 straight ahead in every band), and measured patterns (files) are for
+  sources only.
 - A coincident pair writes two channels, left and right, in the mono output's file:
   `xy`, two capsules of one pattern (cardioids by default) aimed `angle_deg` apart (90
   by default), the left one to the left of the front; `blumlein`, two figure8s aimed 45
