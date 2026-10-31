@@ -727,7 +727,9 @@ def test_scene_yaml_panel(window, qapp, tmp_path: Path) -> None:
     window.from_example = False
     window.document.path = tmp_path / "shoebox.yaml"
     window.save()
-    model = (EXAMPLES / "shoebox" / "shoebox.obj").resolve().as_posix()
+    # The example's own folder: a source checkout's, or an installed package's (as on CI),
+    # written as the scene holds it, with the system's separators.
+    model = Path(example_path("shoebox")).resolve().parent / "shoebox.obj"
     assert f"file: {model}\n" in panel.view.toPlainText() and not panel.edited()
 
 
