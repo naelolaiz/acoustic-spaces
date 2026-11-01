@@ -175,15 +175,18 @@ def test_the_credit_of_a_vehicle_with_a_siren_fits_its_stills(vehicle) -> None:
 @pytest.mark.parametrize("example", ["roadside", "street"])
 def test_a_vehicles_own_options_matter_with_it_alone(example: str) -> None:
     """The options of some of the vehicles alone (the police car's siren, what the fire
-    engine plays) say they matter only with --vehicle at one of them; those every
-    vehicle has (the engine's speed) always matter."""
+    engine plays, the road vehicles' engine speed) say they matter only with --vehicle
+    at one of them; those every vehicle has (the speed) always matter."""
     from acoustic_spaces.demos import load
 
     demo = load(Path(example_path(example)).parent / "passby_demo.py")
-    assert demo.option("rpm").only is None and demo.option("speed").only is None
+    assert demo.option("speed").only is None
     if example == "roadside":
         assert all(o.only is None for o in demo.options)
         return
+    # The tram has no engine of a road vehicle.
+    road = ("car", "bus", "motorcycle", "police_car", "fire_engine")
+    assert demo.option("rpm").only == ("vehicle", road)
     assert demo.option("siren").only == ("vehicle", ("police_car",))
     assert demo.option("police_car").only == ("vehicle", ("police_car",))
     assert demo.option("fire_engine").only == ("vehicle", ("fire_engine",))

@@ -6,9 +6,9 @@
 # on a balcony of the office block, one in the garden, where the traffic comes over the
 # top of the barrier and round its ends: `first_order` diffraction follows it. A car, a
 # bus, a motorcycle, a police car with its siren on and a fire engine with its siren
-# and its air horn drive along the street at 50 km/h, their pitch falling as they pass
-# (Doppler): they are left out of simulations until ticked, and passby_demo.py plays
-# one.
+# and its air horn drive along the street at 50 km/h, and a tram runs down its middle
+# at 50 km/h, their pitch falling as they pass (Doppler): they are left out of
+# simulations until ticked, and passby_demo.py plays one.
 name: Street with a noise barrier
 geometry:
   ground: {margin: 30}
@@ -136,6 +136,32 @@ sources:
     directivity: {file: siren.csv}
     walk:
       to: [[70, -2, 1.2]]
+      speed_m_s: 13.89
+      face_forward: true
+      doppler: true
+  # A low-floor tram with air conditioning (30 m long, eight axles) on its track down
+  # the middle of the street, at 50 km/h: the sound power of its front points, at the
+  # rail top (its first bogie) and on its roof (4 m up), Schall 03's (Germany's method
+  # for the noise of railways and tramways, 2014) for a track set in the street, with
+  # its directivity round the track (tram.csv); the pass-by demo plays its other bogies
+  # and its roof behind them.
+  - name: tram
+    enabled: false
+    position: [-55, 0, 0.05]
+    level_db: [101.5, 101.4, 99.4, 104.0, 107.2, 98.5, 91.7, 83.3]
+    directivity: {file: tram.csv}
+    walk:
+      to: [[70, 0, 0.05]]
+      speed_m_s: 13.89
+      face_forward: true
+      doppler: true
+  - name: tram_roof
+    enabled: false
+    position: [-55, 0, 4.05]
+    level_db: [94.5, 95.4, 91.9, 89.5, 89.3, 87.1, 83.3, 84.4]
+    directivity: {file: tram.csv}
+    walk:
+      to: [[70, 0, 4.05]]
       speed_m_s: 13.89
       face_forward: true
       doppler: true

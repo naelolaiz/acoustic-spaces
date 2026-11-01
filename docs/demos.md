@@ -3,13 +3,15 @@
 Five demos run recordings through example scenes, mix them at the scenes' listeners and
 make a video of the result, a sixth drives a car, a truck, a bus, a motorcycle, a
 police car with its siren on or a fire engine with its siren and its air horn past the
-listeners of two outdoor examples, a seventh flies a helicopter over those of a third and an eighth flies it over
-the stadium's concert. Each shows one space and one kind of sound: a symphony orchestra
+listeners of two outdoor examples, a tram down the street of one of them and a train
+past those of a third, a seventh flies a helicopter over those of a fourth and an
+eighth flies it over the stadium's concert. Each shows one space and one kind of sound: a symphony orchestra
 on the stage of a shoebox concert hall, a choir and an organ in a reverberant stone
 church, a band with its sound system and stage monitors in a stadium, the same band's
 song carried across a lake on a summer evening, a guide talking to a visitor who walks
 away from them through a gallery and then turns their head, a vehicle passing on a road
-across a meadow and along a street, its pitch falling as it goes by, and a helicopter
+across a meadow and along a street and a train on a railway across a meadow, its pitch
+falling as it goes by, and a helicopter
 flying over a meadow and low over the stadium during the song. None of them
 stands for what the simulator does elsewhere; the [examples](examples.md) cover far
 more, and any scene makes a demo of its own with the recordings its sources are given
@@ -682,8 +684,9 @@ The video follows the vehicle on the plan, with the level heard over the pass dr
 under it. `--vehicle` picks what goes past: in the roadside a passenger car (`car`) or
 an articulated truck (`truck`), in the street the car, a city bus (`bus`), a motorcycle
 (`motorcycle`), a police car with its siren on (`police_car`, the car itself, and
-`police_car_siren`) or a fire engine with its siren on and its air horn in blasts
-(`fire_engine`, the vehicle itself, `fire_engine_siren` and `fire_engine_horn`).
+`police_car_siren`), a fire engine with its siren on and its air horn in blasts
+(`fire_engine`, the vehicle itself, `fire_engine_siren` and `fire_engine_horn`) or a
+tram (`tram`, see [trains passing by](#trains-passing-by)).
 
 ```sh
 acoustic-spaces examples --copy . roadside && cd roadside   # or street
@@ -847,16 +850,17 @@ fire engine's three) in its Movement box.
   semitones as the car passes and 1.9 as the truck does, as the geometry says.
 - **The street**: 125 m of street, the car, the motorcycle and the fire engine in the
   lane on the offices' side, the bus and the police car in the lane on the houses' side
-  the other way, all at 50 km/h, heard on the pavement (6.2 m from the car, the
+  the other way, the tram down the middle of the street (see
+  [trains passing by](#trains-passing-by)), all at 50 km/h, heard on the pavement (6.2 m from the car, the
   motorcycle and the fire engine's siren as they pass, 2.5 m from the bus and 2.0 m from
   the police car's siren), on a balcony of the office block and in the garden behind the
   noise barrier. The passes peak at (L_Amax, dB(A)):
 
-  | | car | bus | motorcycle | police car (wail) | fire engine |
-  |---|---:|---:|---:|---:|---:|
-  | pavement | 79.4 | 90.3 | 78.1 | 114.8 | 113.0 |
-  | balcony | 74.0 | 80.3 | 73.4 | 104.5 | 111.1 |
-  | garden | 62.7 | 71.3 | 61.5 | 95.1 | 97.2 |
+  | | car | bus | motorcycle | police car (wail) | fire engine | tram |
+  |---|---:|---:|---:|---:|---:|---:|
+  | pavement | 79.4 | 90.3 | 78.1 | 114.8 | 113.0 | 95.6 |
+  | balcony | 74.0 | 80.3 | 73.4 | 104.5 | 111.1 | 91.1 |
+  | garden | 62.7 | 71.3 | 61.5 | 95.1 | 97.2 | 73.7 |
 
   The police car's column is its siren's, which the car itself does not change at this
   precision: the car goes where the bus does, with a sound power at least 4.6 dB under
@@ -893,6 +897,105 @@ fire engine's three) in its Movement box.
   their edges each shift in pitch their own way. Between the buildings the late sound,
   which keeps the engine's pitch, is strong in the bass, so the engine's tone falls less
   plainly than by the open road.
+
+## Trains passing by
+
+`passby_demo.py` comes with the `railway` example too, and runs a train past its
+listeners; in the street it runs a tram down the middle of the street (`--vehicle
+tram`). Each listener hears one pass in turn, its pitch falling as it goes by, and the
+video follows the train on the plan, with the level heard over the pass drawn under it.
+
+```sh
+acoustic-spaces examples --copy . railway && cd railway
+python passby_demo.py all --train freight   # or sound, scene, walk, video one at a time
+```
+
+Options: `--train regional` the train (`regional`, an electric locomotive and five
+coaches, 151 m long, at 160 km/h; `s_bahn`, a four-car electric multiple unit, 67 m, at
+120 km/h; `intercity`, the locomotive and twelve coaches, 336 m, at 200 km/h;
+`freight`, the locomotive and 24 wagons with composite brake blocks, 446 m, at 100
+km/h), `--speed` how fast it runs (km/h; by default the train's own above, whatever
+the speed of the example's walk: the Run demo window's **Speed** reads *the train's
+own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in ballast;
+`slab`, slab track; `slab_absorber`, slab track with absorbers; `level_crossing`),
+`--step 1` how far apart the train is simulated along its
+walk (m), `--hrtf me.sofa` a measured head, `--input train=WAV` a dry recording of
+yours (`train_roof=WAV` and `train_pantograph=WAV` for the sources up on the train).
+The tram has no options of its own: a low-floor tram with air conditioning, 30 m long,
+on its track set in the street, at the speed of its walk (50 km/h) unless `--speed`
+says. In the **Run demo** window an option of one vehicle alone shows only while that
+vehicle is picked.
+
+- **Their sound power** is that of Schall 03 (Germany's method for the noise of
+  railways and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`):
+  for each vehicle unit, from its data sheet (Beiblatt 1 for trains, 2 for trams), each
+  of its sources' A-weighted sound power per metre of track for one unit an hour, per
+  octave band, at its speed and on its track (equation 1), with the speed factors of
+  Tabelle 6 and 14 and the track's corrections of Tabelle 7 and 15. A unit going by at
+  v km/h once an hour has the sound power of that level plus 10 lg(1000 v) dB. The
+  sources sit at the rail top (rolling noise, the bogies' aerodynamic noise, the fans
+  under the floor, the motors), on the roof, 4 m up (its aerodynamic noise and its
+  fans), and at the pantograph, 5 m up, each radiating louder across the track than
+  along it, by 10 lg(0.22 + 1.27 sin² δ) dB with δ the angle to the track (equation 8;
+  the example's `train.csv`, the street's `tram.csv`). At their speeds on ballast (the
+  tram on its street track):
+
+  | train | units | length | speed | sound power |
+  |---|---|---:|---:|---:|
+  | `regional` | locomotive (Fz 7) + 5 coaches (Fz 9) | 151 m | 160 km/h | 130.6 dB(A) |
+  | `s_bahn` | electric multiple unit (Fz 5) | 67 m | 120 km/h | 121.7 dB(A) |
+  | `intercity` | locomotive + 12 coaches | 336 m | 200 km/h | 136.8 dB(A) |
+  | `freight` | locomotive + 24 wagons (Fz 10) | 446 m | 100 km/h | 131.8 dB(A) |
+  | `tram` | low-floor tram (Fz 21) | 30 m | 50 km/h | 115.0 dB(A) |
+
+  The tram's sound power is 16.6 dB(A) over the car's at 50 km/h (CNOSSOS-EU's, 98.4
+  dB(A)): Schall 03's tram, with air conditioning on its roof (+8 dB on that source),
+  on a track set in the street, whose rolling noise Tabelle 15 makes 1 to 8 dB louder
+  per octave band than on ballast.
+- **A train as long as it is.** Scene sources walk as points, so the example has three:
+  `train` at the rail top, `train_roof` and `train_pantograph`, each with a walk along
+  the track (the street's `tram` and `tram_roof`). The demo shares each unit's sources
+  at a height out between points along it: at the rail top its bogies, from 15 to 85 %
+  of its length (a coach's two bogies 18.5 m apart, as a UIC coach's pivots are), on the
+  roof one over each car, and the pantograph in the locomotive's middle. Each source
+  plays the train's front point at its height along its walk, and every other point
+  there along the same walk as far behind as it is: the same places, that much later, so
+  the regional train passes for 151 m. Each point has its own sound (noise with the
+  octave spectrum of its sources there) at its own sound power, each heard through the
+  same simulated places with its own Doppler, and the levels add each point's energy
+  that much later. The units' lengths and the points' places are assumptions; Schall 03
+  gives only each unit's sound power per metre of track. Its sound's time structure
+  (steady noise) is made up too; its spectrum per octave band is Schall 03's.
+- **Against Schall 03's own sum** (`validation/rail_sources.py`): in a free field, the
+  engine's pass of the S-Bahn at 80 km/h and of the regional train at 160 km/h, 7.5 m
+  from the track 1.2 m above the rail top and 25 m away 3.5 m above it, gives the same
+  SEL as Schall 03 summing the same stretch of track in pieces of 0.1 m, within 0.01 dB
+  in every octave band. Over the railway example's ground the engine gives 2.9 to 4.0 dB(A) less than Schall 03
+  with its own terms for the ground, which reckon the ground's reflection otherwise (see
+  [Validation](validation.md#trains-against-schall-03-and-the-eus-limits), which also
+  sets Schall 03's units beside the EU's limits for new trains).
+- **The railway**: 300 m of track, each train at its own speed on ballast, heard 7.5 m from the
+  track 1.2 m above the rail top (`tsi_7m5`), 25 m away over the meadow (`meadow_25m`)
+  and 25 m away on the other side, behind the barrier (`behind_barrier_25m`). The
+  passes peak at (L_Amax, with the SEL after it, dB(A)):
+
+  | | regional, 160 km/h | S-Bahn, 120 km/h | intercity, 200 km/h | freight, 100 km/h |
+  |---|---:|---:|---:|---:|
+  | 7.5 m | 95.3 (99.5) | 89.6 (91.8) | 98.2 (104.7) | 91.3 (102.7) |
+  | meadow, 25 m | 87.7 (93.2) | 82.1 (85.4) | 90.7 (98.4) | 84.2 (96.2) |
+  | behind the barrier, 25 m | 78.2 (79.1) | 66.2 (69.6) | 82.3 (83.2) | 74.7 (79.3) |
+
+  The longer a train, the more its SEL is over its L_Amax: the freight train, 446 m
+  long, takes 16 s to pass at 100 km/h, the S-Bahn, 67 m, 2 s at 120 km/h. The barrier,
+  3 m high and 4 m from the track, hides the rail top from the listener behind it, but
+  not the roof (4 m up) or the pantograph (5 m up): behind it the regional train peaks
+  9.5 dB(A) under its level on the meadow's side, the S-Bahn, whose rail top is 20 dB
+  over its roof in sound power (the regional train's 16 dB), 15.9 dB(A) under.
+- **The tram in the street**: the tram runs down the middle of the street at 50 km/h, 4.0 m from the
+  pavement's listener, and peaks at 95.6 dB(A) on the pavement (SEL 99.3), 91.1 on the
+  balcony (95.4) and 73.7 in the garden (80.3): louder than the bus, which passes 2.5 m
+  from the pavement's listener at 90.3 dB(A), as Schall 03's tram, on its track set in
+  the street, has 10.5 dB(A) more sound power than CNOSSOS-EU's bus at 50 km/h.
 
 ## A helicopter flying over
 

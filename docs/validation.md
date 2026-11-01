@@ -3181,6 +3181,76 @@ it here. Measured pass-bys of 75 medium heavy vehicles in France found the 2015
 table's levels 3 to 6 dB(A) low (Euronoise 2018, paper 210, which gives its measured
 levels in figures only).
 
+## Trains against Schall 03 and the EU's limits
+
+`validation/rail_sources.py` holds the pass-by demos' trains (`acoustic_spaces.demos.rail`,
+see [Trains passing by](demos.md#trains-passing-by)) against Schall 03's own way of
+reckoning their level, and beside the limits the EU sets for new trains. The engine's
+pass is the demo's: each source's front point walked along the track every 1 m with
+Schall 03's directivity, its other points that much later and louder or quieter, the
+three heights' energies added; the air at Schall 03's 10 °C and 70 %. Schall 03's sum
+takes each unit's sound power per metre of track (equation 1) along the same 200 m of
+track in pieces of 0.1 m, each a point with its directivity (equation 8) heard over a
+sphere (equation 11) through the air of its Tabelle 17 (equation 12), one train an hour,
+the SEL 10 lg 3600 dB over its hourly level. It needs none of what the demo assumes:
+not where a unit's sources are along it, nor how its points share them. Both read the
+data sheets through the same code (equation 1, checked against the gazette by
+`tests/test_rail.py`); the directivity Schall 03's sum writes out itself.
+
+**In a free field** (a ground that takes all the sound), where EN ISO 3095 measures a
+pass-by:
+
+| train | speed | 7.5 m, 1.2 m up: engine | Schall 03 | 25 m, 3.5 m up: engine | Schall 03 |
+|---|---:|---:|---:|---:|---:|
+| S-Bahn | 80 km/h | 88.3 | 88.3 | 82.9 | 82.8 |
+| regional train | 160 km/h | 98.2 | 98.2 | 92.6 | 92.6 |
+
+(SEL, dB(A)); every octave band within 0.01 dB. The pass in the engine holds the sound
+power Schall 03 gives, wherever along the train the demo puts it.
+
+**Over the railway example's ground** (its ballast bed 4 m wide, `gravel`, and the
+meadow's `grass` beyond, without its barrier), against Schall 03 with its ground: the
+solid angle of the reflection near the source (D_Ω, equation 9, about +3 dB) and the
+ground's attenuation (A_gr,B, equation 14, 0 dB this near):
+
+| train | speed | 7.5 m: engine | Schall 03 | 25 m: engine | Schall 03 |
+|---|---:|---:|---:|---:|---:|
+| S-Bahn | 80 km/h | 87.2 | 91.1 | 80.7 | 84.7 |
+| regional train | 160 km/h | 97.1 | 100.9 | 91.5 | 94.5 |
+
+The engine gives 2.9 to 4.0 dB(A) less; by octave band, 7.5 m from the S-Bahn, +2.7,
++2.0, +0.7, -2.1, -5.8, -4.1, -1.0 and -2.3 dB from 63 Hz to 8 kHz. The two reckon the
+ground in different ways. Schall 03 adds the reflection's energy, about as much again
+as the direct sound's at every frequency. The engine adds the reflection with its phase
+(+6 dB where the two arrive together, at 63 and 125 Hz, a dip where they cancel), off
+a ground whose impedance it weighs over the reflection's Fresnel zone. Traced at 7.5 m
+from the S-Bahn: of the 3.9 dB, 0.7 dB is the ballast taking sound where a hard bed
+would not (87.9 dB(A) with the bed hard), 1.2 dB is the dip of a point at the rail top
+and its reflection in step with each other at 1 to 2 kHz (89.1 dB(A) with the bed hard
+and the reflection's energy added, `coherent_max_band_hz: 63`), and the last 2.0 dB is
+the meadow: up to 2 kHz most of the reflection's Fresnel zone lies on the grass beyond
+the 4 m bed. Schall 03 puts a train's rolling noise at one point at the rail top; it
+comes from its wheels, rails and sleepers, at heights apart, where one point's dip
+would not be as deep.
+
+**The TSI's limits.** Each unit of the demo's trains alone at 80 km/h over the
+example's ground, its level over the time it takes to pass (L_pAeq,Tp, Tp its length
+over its speed) 7.5 m from the track 1.2 m above the rail top, beside the limits of
+Commission Regulation (EU) No 1304/2014 (the TSI Noise, table 4) for new units there:
+
+| unit | Tp | engine | Schall 03 | limit |
+|---|---:|---:|---:|---:|
+| electric multiple unit (the S-Bahn, 67.4 m) | 3.03 s | 82.3 | 86.2 | 80 |
+| electric locomotive (19.0 m) | 0.86 s | 87.7 | 90.4 | 84 |
+| coach (26.4 m) | 1.19 s | 84.0 | 88.0 | 79 |
+| freight wagon with composite blocks (17.8 m) | 0.80 s | 85.9 | 89.9 | 83 |
+
+(dB(A)). Schall 03's units are 6.2 to 9.0 dB over the limits by its own reckoning, and
+2.3 to 5.0 dB over them in the engine. The limits are for new units on a track of low
+roughness (EN ISO 3095:2013, 6.2); Schall 03's levels are for units of the German fleet
+on rails in average condition, rougher than the TSI's track. That Schall 03 is over the limits says that, not that
+either is wrong; no measured pass-by is compared here.
+
 ## Edge diffraction in whole cities
 
 Edge diffraction looks, for the source and for each listener, at every pair of an edge
@@ -3576,6 +3646,10 @@ Files and runs:
   level and directivity one measured siren's, checked against the rules for sirens, not
   against measured pass-bys (see
   [Sirens and road vehicles](#sirens-and-road-vehicles-against-their-rules)).
+  The trains' sound power is Schall 03's as published: a pass in the engine is checked
+  against Schall 03's own sum, exact in a free field and 2.9 to 4.0 dB(A) under it over
+  the railway example's ground, which the two reckon otherwise, not against measured
+  pass-bys (see [Trains](#trains-against-schall-03-and-the-eus-limits)).
   A helicopter's tones are checked against theory, its broadband noise against Pegg's
   worked example, and the whole against one certified level, which it is 3.4 dB over
   (see [Helicopter rotors](#helicopter-rotors-against-theory-and-a-certified-level));
@@ -3638,6 +3712,7 @@ python validation/long_term.py --json long_term.json
 python validation/doppler.py --json doppler.json
 python validation/rotorcraft.py --json rotorcraft.json
 python validation/urban_sources.py --json urban_sources.json
+python validation/rail_sources.py --json rail_sources.json
 python validation/city_speed.py --json city_speed.json   # --sizes 10 20 30 40 60
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters

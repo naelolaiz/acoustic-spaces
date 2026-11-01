@@ -45,6 +45,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "street",
             "roadside",
+            "railway",
             "tree_belt",
             "hillside",
             "open_air_stage",

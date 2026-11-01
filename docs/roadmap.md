@@ -374,8 +374,10 @@ Movement:
   horn in blasts as loud as the rule for vehicles' horns allows on its bench, both
   checked against those rules; the vehicle, the siren and the horn heard together, or
   without the horn or the vehicle.
-- [ ] Trains and trams: Schall 03 by default, CNOSSOS-EU's railway noise to choose, in a
-  `railway` example and a tram in the street.
+- [x] Trains and trams by Schall 03: the `railway` example, its demo running a regional
+  train, an S-Bahn, an intercity or a freight train past as long as each is, and a tram
+  in the street; the engine's pass checked against Schall 03's own sum.
+- [ ] CNOSSOS-EU's railway noise for the trains, to choose instead of Schall 03.
 - [ ] Construction plant (breakers, excavators, generators), car horns and reversing
   alarms.
 - [ ] Aircraft taking off, landing and flying over.
