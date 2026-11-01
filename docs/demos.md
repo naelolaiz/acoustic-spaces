@@ -5,7 +5,8 @@ make a video of the result, a sixth drives a car, a truck, a bus, a motorcycle, 
 police car with its siren on or a fire engine with its siren and its air horn past the
 listeners of two outdoor examples, a tram down the street of one of them and a train
 past those of a third, a seventh flies a helicopter over those of a fourth, an
-eighth flies it over the stadium's concert and a ninth plays road works in the street.
+eighth flies it over the stadium's concert, a ninth plays road works in the street and
+a tenth flies a jet taking off from an aerodrome and landing on it.
 Each shows one space and one kind of sound: a symphony orchestra
 on the stage of a shoebox concert hall, a choir and an organ in a reverberant stone
 church, a band with its sound system and stage monitors in a stadium, the same band's
@@ -13,9 +14,9 @@ song carried across a lake on a summer evening, a guide talking to a visitor who
 away from them through a gallery and then turns their head, a vehicle passing on a road
 across a meadow and along a street and a train on a railway across a meadow, its pitch
 falling as it goes by, a helicopter
-flying over a meadow and low over the stadium during the song, and a breaker, a
-generator and a dumper reversing with its alarm on at road works in the street. None of
-them
+flying over a meadow and low over the stadium during the song, a breaker, a
+generator and a dumper reversing with its alarm on at road works in the street, and a
+twin jet climbing away from a runway and coming down to it. None of them
 stands for what the simulator does elsewhere; the [examples](examples.md) cover far
 more, and any scene makes a demo of its own with the recordings its sources are given
 ([a demo of any scene](#a-demo-of-any-scene)).
@@ -945,13 +946,14 @@ km/h), `--speed` how fast it runs (km/h; by default the train's own above, whate
 the speed of the example's walk: the Run demo window's **Speed** reads *the train's
 own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in ballast;
 `slab`, slab track; `slab_absorber`, slab track with absorbers; `level_crossing`),
-`--horn off` the train's warning horn (`blasts` sounds it, see below), `--step 1` how
+`--horn off` the train's warning horn (`blasts` sounds it, see below), `--indoors off`
+where it is heard (see below), `--step 1` how
 far apart the train is simulated along its walk (m), `--hrtf me.sofa` a measured head,
 `--input train=WAV` a dry recording of yours (`train_roof=WAV` and
 `train_pantograph=WAV` for the sources up on the train, `train_horn=WAV` for its horn).
-The tram has no options of its own: a low-floor tram with air conditioning, 30 m long,
-on its track set in the street, at the speed of its walk (50 km/h) unless `--speed`
-says.
+The tram has no options of its own but `--indoors`: a low-floor tram with air
+conditioning, 30 m long, on its track set in the street, at the speed of its walk (50
+km/h) unless `--speed` says.
 
 - **Their sound power** is that of Schall 03 (Germany's method for the noise of
   railways and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`):
@@ -1005,6 +1007,24 @@ says.
   over the regional train's. Its blasts, its height on the train, the measuring site's
   ground and microphone height, and its directivity (the measured siren's) are
   assumptions; see [Validation](validation.md#sirens-and-road-vehicles-against-their-rules).
+- **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors`): a house stands at each
+  listener, as far from the track, and the pass is heard in its living room:
+  `train_and_rumble` the train through the room's closed window and the rumble the
+  ground's vibration makes in it, `train` the train alone, `rumble` the rumble alone
+  (`tram_and_rumble` and `tram` for the tram). The window is AGC's 4-16-4 double glazing
+  as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82 m² of it into a room
+  of 50 m³; by EN ISO 12354-3 each octave band in the room is the free field's plus 3 dB
+  (the façade's reflection) less the window's sound reduction index less 10 lg(V / (6
+  T0 S)) = 9.6 dB (`acoustic_spaces.facade`). That takes the S-Bahn at 80 km/h, 7.5 m
+  away, 32 to 35 dB(A) down, near the 31.6 dB that Rw + Ctr gives for traffic's
+  spectrum. The rumble is the FTA's general method (see [Vibration through the
+  ground](outdoor.md#vibration-through-the-ground)) at each moment of the pass: the
+  train's curve at the distance of its nearest wheels, the house's floor 3 dB over the
+  ground, its rooms' rumble 50 dB under that in dB(A), played as noise in the third
+  octave at 25 Hz, the same in both ears. As the train runs past the house it is the
+  rumble the table there gives 25 m away; 7.5 m away it is 34.0 dB(A) for the S-Bahn
+  and 48.9 for the regional train. The room's own reverberation is not added, and the
+  sound keeps the direction it comes from outdoors.
 - **Against Schall 03's own sum** (`validation/rail_sources.py`): in a free field, the
   engine's pass of the S-Bahn at 80 km/h and of the regional train at 160 km/h, 7.5 m
   from the track 1.2 m above the rail top and 25 m away 3.5 m above it, gives the same
@@ -1244,3 +1264,72 @@ the spot; the machines' bodies are not in the scene, so nothing of the dumper sh
 the alarm, and Defra's levels are taken as coming from one point at each machine's
 height. See [Validation](validation.md#road-works-against-defras-rows-and-the-eus-limits)
 for the rows against their own levels and the EU's limits for outdoor machines.
+
+## Aircraft taking off and landing
+
+`flight_demo.py` comes with the outdoor example `airport`: Doc 29's hypothetical
+wing-engined twin jet JETW (ECAC Doc 29 Volume 3) takes off from a runway across a
+meadow, or lands on it, and each listener hears its pass in turn, binaurally: under the
+departure 4 km from its start of roll, beside the runway 450 m from its centre line
+(2.5 km from the start of roll) and under the approach 2 km before the threshold, all
+1.2 m above the grass. It is the [road vehicles' demo](#vehicles-passing-by) with the
+jet in the car's place (`acoustic_spaces.demos.aircraft`): the same steps (the first
+one `aircraft`), options and video, but no `--speed`, since Doc 29 times the flight.
+
+```sh
+acoustic-spaces examples --copy . airport && cd airport
+python flight_demo.py all                     # the departure
+python flight_demo.py all --vehicle arrival   # the arrival
+```
+
+Options: `--vehicle arrival` the landing instead of the take-off, `--step 4` how far
+apart the jet is simulated along its flight (m), `--hrtf me.sofa` a measured head,
+`--input departure=WAV` a dry recording of yours, `--listeners lateral_450m` the
+listeners it is simulated and heard at.
+
+- **The flight.** The example's sources `departure` and `arrival` are points whose
+  walks give the ground track, along the runway's centre line in the example. The demo
+  flies JETW along it as Doc 29's Appendix B does, at Volume 3's default weights in the
+  scene's air (15 °C at sea level, ANP's reference headwind of 8 kt), and writes the
+  flight into the demo's scene as the walk's keyframes, its pitch falling as it passes
+  (Doppler). The departure flies the ICAO-A noise abatement procedure: from standing at
+  its start of roll, it lifts off 1493 m down the runway at 301 km/h, climbs at
+  take-off thrust to 1500 ft (457 m, 4.0 km from the start of roll), cuts back to
+  climb thrust by 4.3 km and is 740 m up at the end of its walk, 6.5 km out, after 95.0
+  s. The arrival comes down a 3° approach from 225 m up at 253 km/h, 120 m up over the
+  approach's listener, touches down 290 m past the threshold, puts on reverse thrust
+  and rolls out to 50 km/h 1.6 km down the runway, after 92.7 s. A walk of your own
+  gives another ground track (Edit movement…); the departure's starts where its walk
+  does, and the arrival touches down where its walk first comes down to the runway, at
+  most 1 m up.
+- **Its sound** is noise with the octave spectrum of its sound power, which comes from
+  its NPD curves and spectral class ([an aircraft in a
+  scene](outdoor.md#aircraft-by-ecac-doc-29)): 155.7 dB(A) at the departure's highest
+  thrust (25,000 lb, at its start of roll) and 145.4 dB(A) at the arrival's (its reverse
+  thrust, 10,000 lb), louder and softer as the thrust changes along the flight: the
+  departure's climb thrust 8.0 dB under its start of roll, the arrival's approach 2.3
+  dB under its reverse thrust and the end of its roll-out 3.5 dB under. Its directivity is its engines' installation
+  correction (under the wings), in a table beside the demo's scene
+  (`scene_demo_departure.csv`). `demo/departure/engines.wav` is the made sound, dry, as
+  long as the flight. `--input departure=WAV` plays a dry recording instead, at least as
+  long as the flight, its level following the recording's.
+- **The pass**: the jet every 4 m along its flight at each listener in turn, through
+  the direct sound and its reflection off the ground; the late sound is crossfaded from
+  place to place. Places 4 m apart follow the exact field of a flyover closely from 100
+  m away and more ([validation](validation.md#moving-sources-against-the-exact-field)).
+  A flight of 6.5 km is some 1600 places at each listener, which takes a while.
+
+While the jet is in the air, what each listener hears is within 0.9 dB of Doc 29's own
+sum over the same flight path's segments, but for the arrival's SEL at
+approach_2000m, 1.7 dB under. While it rolls on the runway they part by up to 11.4 dB,
+as the engine reckons the sound running along the ground in still air over the scene's
+runway and meadow, where Doc 29 takes off an attenuation it has from measurements
+([the check](validation.md#an-aircraft-in-the-engine-against-doc-29)).
+
+What it leaves out: one aircraft, Volume 3's hypothetical JETW, and no houses. Its
+sound is noise with one spectrum all along, with none of a jet's tones (its fan's, its
+buzz-saw noise), and the NPD curves give no directivity along the flight path but
+behind the take-off roll, so the source has none either. The captions' L_Amax is the
+highest level of the jet's places, each as heard with the jet standing there, with no
+time weighting; Doc 29's is measured with slow time weighting, which would lower a
+point source's loudest moment 200 ft away at 160 kt by 1.8 dB, 0.2 dB at 1000 ft.

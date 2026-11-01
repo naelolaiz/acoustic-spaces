@@ -3328,6 +3328,213 @@ No measured site is compared here: Defra's levels are averages over the machines
 measured, and the made sounds' time structure (the blows, the firing, the beeps' rate)
 is assumed.
 
+## Aircraft noise against Doc 29 Volume 3
+
+`validation/doc29_reference.py` holds `acoustic_spaces.doc29` (see [Aircraft by ECAC
+Doc 29](outdoor.md#aircraft-by-ecac-doc-29)) against the reference cases of Doc 29
+Volume 3 Part 1 (5th edition, 2026), which ECAC publishes for checking a new
+implementation of Volume 2's method: three hypothetical aircraft (a jet with its
+engines on the rear fuselage, one with them under the wings, a turboprop), each
+arriving and departing on a straight and a curved route, twelve cases. Volume 3 gives
+their levels at 18 receptors (its table B-1, which the package holds), every term of
+every segment at those receptors and the levels on a grid (the worksheets B-2 and B-3
+of its Part 1 workbook, which `--workbook` reads).
+
+**The levels at the receptors.** All 99 within 0.006 dB of table B-1, which gives them
+to 0.01 dB; the largest difference of a case is 0.004 to 0.006 dB.
+
+**The grids.** The rms difference δRMS that Volume 3 aims at 0.01 dB or less:
+
+| case | points | δRMS | largest | case | points | δRMS | largest |
+|---|---:|---:|---:|---|---:|---:|---:|
+| JETFAC | 2732 | 0.0029 | 0.0054 | JETWDC | 3868 | 0.0029 | 0.0061 |
+| JETFAS | 2750 | 0.0028 | 0.0053 | JETWDS | 3876 | 0.0029 | 0.0057 |
+| JETFDC | 3269 | 0.0030 | 0.0065 | PROPAC | 3042 | 0.0028 | 0.0056 |
+| JETFDS | 3273 | 0.0029 | 0.0060 | PROPAS | 3042 | 0.0028 | 0.0055 |
+| JETWAC | 2929 | 0.0030 | 0.0097 | PROPDC | 2875 | 0.0030 | 0.0061 |
+| JETWAS | 2932 | 0.0030 | 0.0098 | PROPDS | 2870 | 0.0029 | 0.0059 |
+
+(dB.) The grid's levels are given to 0.01 dB, whose rounding alone is 0.0029 dB rms.
+
+**Every segment.** Each case has as many segments as Volume 3's, and each term of its
+3516 rows matches to within 0.0014 dB for the baseline level, 0.0008 dB for the speed,
+0.0003 dB for the engines' installation, 0.0013 dB for the lateral attenuation and
+0.0014 dB for the start-of-roll directivity; the finite segment correction differs by
+up to 0.052 dB on a few segments, and their segment levels with it. Two things of
+Volume 3's own make those differences, both traced:
+
+- Its ground tracks are 0.0019 % short: the routes in metres were converted to feet
+  through nautical miles of 6076 ft (a nautical mile is 6076.1 ft), so a track's end
+  100 km out is 1.9 m nearer, and the nodes of a short segment by a turn move by a few
+  tenths of a metre.
+- It lays the lengths into which eq. 3-3i cuts a climbing or descending segment by
+  speed, which are lengths along the segment, along the ground track instead: its
+  cuts lie up to 7.3 m farther on than the cuts here.
+
+Cut its way, the segments' places agree within 1.9 m, the finite segment correction
+within 0.021 dB, and the levels at the receptors change by at most 0.0005 dB.
+
+Two choices follow Volume 3 where Volume 2 leaves room: the heights that cut the
+initial climb and the final approach are Volume 2's in feet (its heights in metres are
+rounded: 304.8 m scaled by them gives 37.72 m where Volume 2's example says 37.8 m), and
+an arrival's landing threshold is its approach's lowest node above the runway (290.2 m
+before touchdown for the jets, 328.1 m for the turboprop). The azimuth of the
+start-of-roll directivity is taken in the plane of the runway, as Volume 3 takes it
+(straight behind a source 1 m up it is 180 degrees).
+
+What is not checked: the maximum levels (Volume 3 gives none) and banked turns (the
+cases fly them level).
+
+## Flight profiles against Doc 29 Volume 3
+
+The same script holds `acoustic_spaces.doc29.performance`, the flight performance of
+Volume 2 Appendix B (see [Aircraft by ECAC Doc 29](outdoor.md#aircraft-by-ecac-doc-29)),
+against the reference profiles of Volume 3 Part 2: JETW and PROP flying departure and
+approach procedures, nine arrivals and seventeen departures (its tables C-7 and C-8),
+and the fixed-point profiles Volume 3 gives for them (D-1 and D-2, which the package
+holds, to 0.1 ft, kt and lb). The cases fly from sea level and from 2000 and 5000 ft,
+at 15 and 40 °C, at sea-level pressures of 29.92 and 30.71 inHg, into headwinds of -5,
+0 and 8 kt; the departures climb at constant speed, accelerate at a rate of climb or
+with a share of the thrust, cut back to climb thrust or deeply to the minimum reduced
+thrust, and fly level at constant speed or accelerating; the arrivals descend at
+constant speed or decelerating, fly level at constant speed, decelerating or at idle,
+and descend at idle.
+
+**The profiles.** Every case has as many points as Volume 3's, 314 in all, and every
+point's height, true airspeed and corrected net thrust per engine agree to Volume 3's
+rounding (within 0.05 ft, kt and lb). The distances along the track agree within
+0.15 ft; Volume 3's own distances for the same step differ by as much between cases
+(ICAO_A's acceleration from 3787.5 ft is 4678.3 ft long in case 6, 4678.5 ft in case
+74, with the same start).
+
+Volume 3's profiles differ from Volume 2's printed equations in three places, and the
+package follows Volume 3's:
+
+- A propeller aircraft's thrust at the middle of a climb (eq. B-12 in B6.1.2) takes the
+  true airspeed there of the climb's calibrated airspeed, as the jets' thrust takes the
+  middle's altitude, not the rms of the two ends' true airspeeds that Volume 2 prints:
+  that puts PROP's climbs up to 545 ft farther along at 10,000 ft.
+- The deceleration of a Descend-Decel step (eq. B-41) takes the speeds along the path
+  over the ground, the true airspeeds less w/cos γ, where Volume 2 prints the true
+  airspeeds less w, divided by cos γ: that moves the thrust by up to 9.3 lb.
+- An arrival flies at 90 % of the greatest landing weight, as Volume 2 B7 says
+  (143,299.8 lb), not at the 143,300 lb of the default weights table (C-5): 0.12 lb.
+
+Volume 3's approach procedures are taken as its table C-6.2 prints them, to 0.1 ft,
+kt and degree, which its profiles are computed from: its workbook's steps have more
+digits (49.868766 ft where the table prints 49.9), which move the profiles by up to
+0.62 ft and 0.86 lb. Its table gives the lengths of the Level-Idle steps in the column
+of the descent angle; they are the steps' distances.
+
+What is not checked: the idle steps of an approach away from sea level in the
+standard atmosphere, which Appendix B7.1.2 and B7.1.4 adjust so that the aircraft
+slows as it does there (all of Volume 3's arrivals are at sea level in the standard
+atmosphere; the tests check that the deceleration holds), a runway's gradient (all
+of its runways are level), the noise of these profiles (Volume 3 gives none) and
+turns (the calculation flies them straight).
+
+## An aircraft in the engine against Doc 29
+
+`validation/aircraft_noise.py` holds the airport example's flight demo
+(`acoustic_spaces.demos.aircraft`, see [Aircraft taking off and
+landing](demos.md#aircraft-taking-off-and-landing)) against Doc 29's own levels: JETW's
+source (`doc29.source`), simulated in the engine, against its NPD curves in the
+scene's air, and the example's flights against Doc 29's sum over the same flight
+path's segments. The late rays are seeded, so a run gives these numbers.
+
+**The source against its NPD curves.** JETW flies straight and level at 160 kt, the
+NPD curves' speed, over a microphone 1.2 m above grass, at 15,000 lb of thrust an
+engine departing and 5,000 lb arriving:
+
+| distance | departure: L_Amax | SEL | arrival: L_Amax | SEL |
+|---|---:|---:|---:|---:|
+| 200 ft (61 m) | 101.5 (102.5) | 104.1 (104.0) | 97.5 (98.4) | 100.0 (101.8) |
+| 400 ft (122 m) | 95.0 (95.4) | 100.3 (100.2) | 90.9 (91.2) | 96.2 (98.0) |
+| 630 ft (192 m) | 90.6 (90.6) | 97.6 (97.4) | 86.5 (86.5) | 93.5 (95.2) |
+| 1000 ft (305 m) | 86.0 (85.8) | 94.6 (94.4) | 81.9 (81.6) | 90.6 (92.1) |
+| 2000 ft (610 m) | 78.7 (78.2) | 89.6 (89.3) | 74.8 (74.0) | 85.7 (87.0) |
+| 4000 ft (1219 m) | 70.1 (70.0) | 83.8 (83.6) | 66.4 (65.9) | 80.1 (81.4) |
+
+(dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The source
+is made to the NPD curves' L_Amax 1000 ft away, which the engine gives back within 0.3
+dB. Nearer, the NPD curves' L_Amax grows faster than one point source's with one
+spectrum: at 200 ft it is 0.9 dB (departure) and 0.8 dB (arrival) over it, so the
+engine reads 1.0 and 0.9 dB under there. The arrival's SEL is 1.3 to 1.8 dB under its
+NPD curves, the departure's within 0.3 dB: JETW's arrival curves have SEL - L_Amax =
+10 lg(πd/V) within 0.1 dB out to 1000 ft, a point source's with no air absorption,
+where the departure's are 2.0 to 2.2 dB less, as the engine's point source in the
+air gives for both. Farther out the grass's scattered sound comes from the few late
+rays that land near the microphone, so it changes with their seed.
+
+**The airport's flights.** The demo's departure and arrival, simulated every 20 m at
+each listener, their level following their thrust:
+
+| listener | departure: L_Amax | SEL | arrival: L_Amax | SEL |
+|---|---:|---:|---:|---:|
+| departure_4km | 87.4 (87.2) | 96.1 (96.0) | 49.6 (43.1) | 64.1 (60.7) |
+| lateral_450m | 85.0 (85.0) | 95.4 (94.5) | 43.0 (54.4) | 57.1 (68.8) |
+| approach_2000m | 52.0 (54.8) | 67.6 (68.6) | 91.2 (91.5) | 97.1 (98.8) |
+
+(dB(A); Doc 29's in brackets.) Where the jet is heard in the air, they agree within
+0.9 dB but for the arrival's SEL, 1.7 dB under as its NPD curves have it. Where it is
+heard rolling on the runway they part, as the two reckon sound running along the
+ground differently. Doc 29 takes off its lateral attenuation, 10.9 dB at grazing for
+a listener ahead of a landing roll or behind a take-off roll, from measurements and so
+averaged over their weather, and behind a take-off roll adds its start-of-roll
+directivity (5.1 dB down at approach_2000m). The engine reckons the scene's ground in
+still air: the hard runway reflects the sound back up, so the arrival's roll-out is
+6.5 dB over Doc 29 at departure_4km, 2.4 km ahead of it along the runway, while the
+meadow takes much of it away from 250 Hz up, so it is 11.4 dB under at lateral_450m, 1
+km away across the grass (at 250 Hz the roll-out's end is 14 dB quieter there than
+at departure_4km); the departure's take-off roll is 2.7 dB under at approach_2000m.
+
+## Ground-borne vibration against the FTA's manual
+
+`validation/fta_vibration.py` holds `acoustic_spaces.vibration` (see [Vibration through
+the ground](outdoor.md#vibration-through-the-ground)) against the manual it comes from,
+the FTA's *Transit Noise and Vibration Impact Assessment Manual* (FTA Report No. 0123,
+2018).
+
+**The base curves against figure 6-4.** The manual gives its curves twice: as equations
+(table 6-10) and drawn (figure 6-4). The equations, against the figure read by eye to
+about half a decibel:
+
+| curve | 10 ft | 100 ft | 300 ft |
+|---|---:|---:|---:|
+| locomotive-powered trains | 94.6 (94.5) | 78.4 (78.5) | 67.1 (67.0) |
+| rapid transit or light rail | 81.6 (81.5) | 67.5 (67.5) | 55.8 (56.0) |
+| rubber-tyred vehicles | 75.5 (75.0) | 56.8 (57.0) | 50.6 (50.5) at 200 ft |
+
+(VdB; the figure in brackets. The bus's curve leaves the figure's 50 VdB at about 200
+ft.) The figure draws the curves from 10 to 300 ft, and the code refuses distances
+outside: fitted as cubics in log10 of the distance, they turn back up farther out (the
+bus's past about 1090 ft).
+
+**The worked example.** Example 6-1 has light rail at 40 mph 125 ft from wood-frame
+houses on soil that propagates efficiently, reads the base curve there as 65 VdB, and
+adds: 65 - 1.9 for the speed = 63.1; + 10 for the soil - 5 for the coupling = 68.1; +
+6 for the floor's resonances - 2 to the first floor = 72.1. From the same reading the
+code gives 63.1, 68.1 and 72.1; from the curve itself, 65.43 VdB at 125 ft, 72.5.
+
+**The speed rows.** Table 6-11's adjustments for 20 to 60 mph against 20 log10 of the
+speed (eq. 6-4), for rail against 50 mph and buses against 30 mph: all ten within the
+table's 0.1 dB.
+
+**The plant's and the damage criteria's levels.** Tables 7-4 and 7-5 give each row's rms
+level beside its peak particle velocity, "calculated from the PPV limits using a crest
+factor of 4", 12 dB. All 14 rows of plant and the four damage criteria are within the
+tables' rounding, 0.5 dB, but for a hydromill in rock: its 0.017 in/s gives 72.6 VdB,
+and the table prints 75. The code keeps both as printed.
+
+**The manual's words.** Its text has light rail "70 VdB or more near their tracks"
+(73.1 VdB 50 ft out on its curve) and buses and trucks rarely over 70 VdB (69.6 VdB 25
+ft out). It also puts heavy diesel locomotives "approximately 5 to 10 dB higher" than
+rail transit vehicles; its two curves are 12.3, 11.5 and 10.9 dB apart at 25, 50 and
+100 ft.
+
+No measurement is compared here: the curves are the upper range of measurements of
+North American systems, and the method gives no spectra.
+
 ## Edge diffraction in whole cities
 
 Edge diffraction looks, for the source and for each listener, at every pair of an edge
@@ -3795,6 +4002,9 @@ python validation/rotorcraft.py --json rotorcraft.json
 python validation/urban_sources.py --json urban_sources.json
 python validation/rail_sources.py --json rail_sources.json
 python validation/plant_sources.py --json plant_sources.json
+python validation/doc29_reference.py --workbook doc29-volume3-part1-workbook.xlsx
+python validation/aircraft_noise.py --json aircraft_noise.json
+python validation/fta_vibration.py
 python validation/city_speed.py --json city_speed.json   # --sizes 10 20 30 40 60
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters

@@ -3,12 +3,15 @@
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early
-path of a walk with Doppler; trucks, buses, motorcycles, a police car, a fire engine,
-trains and a tram in the pass-by demos, with horns on the car and the train, and road
-works in the street; listeners as microphones; a standard error for every parameter; a
-stereo recording for a scene's sound system, so that every example with a stage, a sound
-system or a talker plays out of the box; the listeners a demo plays picked for a run;
-the editor's Scene YAML panel; and four of BRAS's rooms in the validation report.
+path of a walk with Doppler; aircraft taking off and landing by ECAC Doc 29 in the new
+airport example; trucks, buses, motorcycles, a police car, a fire engine, trains and a
+tram in the pass-by demos, with horns on the car and the train, and road works in the
+street; the ground-borne vibration of trains, trams and road works by the FTA's method,
+and the trains and the tram heard in a house; listeners as microphones; a standard error
+for every parameter; a stereo recording for a scene's sound system, so that every
+example with a stage, a sound system or a talker plays out of the box; the listeners a
+demo plays picked for a run; the editor's Scene YAML panel; and four of BRAS's rooms in
+the validation report.
 
 Results change from 4.0.1: EDT, in 99 of 152 octave-band EDTs of six examples, by up to
 9.6 %; the late part by rounding, as its rays are traced in 10 batches; random
@@ -50,6 +53,30 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
   the air ask without leave), and `helicopter_demo.py` adds its pass to each listener's
   mix of the concert, both at their simulated levels. An example may have more than one
   demo (`demos.demos_of`, `Demo.builds_on`).
+
+**Aircraft and ground vibration**
+
+- Aircraft noise at receivers by ECAC Doc 29 (5th edition, 2026) in the new
+  `acoustic_spaces.doc29`: one departure's or arrival's SEL and L_Amax from the NPD
+  curves along its flight path's segments, with Volume 3's three hypothetical aircraft
+  (the ANP database's own may not be passed on), checked by the new
+  `validation/doc29_reference.py` against all of Volume 3's reference levels.
+- Doc 29's flight performance: `doc29.performance` makes an aircraft's profile from its
+  procedural steps by Volume 2 Appendix B, matching all 26 of Volume 3 Part 2's
+  reference profiles, and `doc29.anp.read_database` reads a copy of the ANP database one
+  downloads under its terms.
+- Aircraft taking off and landing in a scene: the new `airport` example's
+  `flight_demo.py` flies Doc 29's hypothetical twin jet JETW past its listeners by
+  Appendix B, its sound power and directivity from its NPD curves following its thrust
+  (`doc29.source`, `doc29.atmosphere`). The new `validation/aircraft_noise.py` checks
+  the source against its NPD curves and the flights against Doc 29's own levels; the
+  flights agree within 0.9 dB in the air but for the arrival's SEL (1.7 dB under), and
+  part by up to 11.4 dB on the runway, where the engine reckons the ground in still air.
+- Ground-borne vibration of trains, trams and construction plant, and the rumble it
+  makes indoors, by the general method of the US FTA's manual (2018) in the new
+  `acoustic_spaces.vibration`; the railway's and the street's new `vibration.py` print
+  it at their buildings against the manual's limits, checked by the new
+  `validation/fta_vibration.py` against the manual's figure and worked example.
 
 **Microphones**
 
@@ -113,6 +140,8 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
 - A pass-by demo run at `--speed` with some of a vehicle's sources left out
   (`--police-car siren`, `--fire-engine siren`) stopped at its walk, as the sources left
   out kept the scene's speed; they now walk at the run's.
+- The Run demo window, switched to another demo, could come out too short for that
+  demo's options, which then had to be scrolled to.
 
 **Examples and demos**
 
@@ -148,6 +177,10 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
   TSI's 660 and 370 Hz notes in turn, each 109 dB(C) 25 m ahead as EN 15153-2 allows at
   most (`demos.horn.TRAIN_HORN`), held against the rule in
   `validation/urban_sources.py`; `parameters.c_weighted` gives C-weighted levels.
+- The railway's pass-by demo and the street's tram can be heard in a house at each
+  listener (`--indoors`): the train through a closed double-glazed window by EN ISO
+  12354-3 (the new `acoustic_spaces.facade`), the rumble of the ground's vibration by
+  the FTA's general method, or both.
 - The road vehicles' sound power is CNOSSOS-EU's Table F-1 as amended in 2021
   (Commission Delegated Directive (EU) 2021/1226): the car's at 50 km/h is 98.4 dB(A)
   instead of 96.0, and its passes in `roadside` and `street` are louder by about as

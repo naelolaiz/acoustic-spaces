@@ -137,6 +137,11 @@ class Pictures(scene_pictures.Pictures):
             return None
         return float(np.interp(t, times, levels))
 
+    def speed_text(self) -> str:
+        """How fast the vehicle goes, for the stills' heading: ``At 50 km/h``, or as
+        walk.json says it (``speed_text``, an aircraft's ``From 0 to 309 km/h``)."""
+        return self.facts.get("speed_text") or f"At {kmh(self.facts['speed_kmh'])} km/h"
+
     def lines(self, k: int, t: float | None = None) -> list:
         """What a still of stop ``k`` says, ``t`` s into its pass."""
         stop = self.stops[k]
@@ -149,8 +154,17 @@ class Pictures(scene_pictures.Pictures):
             f"Loudest {heard['max_a_db']:.1f} dB(A) (L_Amax), {heard['max_s']:.1f} s in",
             f"Sound exposure level {heard['sel_a_db']:.1f} dB(A) (SEL)",
             f"Closest {heard['closest_m']:.1f} m away",
-            f"Its direct sound falls {heard['pitch_semitones']:.1f} semitones (Doppler)",
         ]
+        if "pitch_semitones" in heard:
+            lines.append(
+                f"Its direct sound falls {heard['pitch_semitones']:.1f} semitones (Doppler)"
+            )
+        if "vibration_vdb" in heard:
+            rumble = heard.get("parts", {}).get("rumble", heard)["max_a_db"]
+            lines.append(
+                f"Floor shaking {heard['vibration_vdb']:.0f} VdB at most, its rumble "
+                f"{rumble:.1f} dB(A)"
+            )
         if stop.gain_db > 0.5:
             lines.append(f"Turned up {stop.gain_db:.0f} dB here so you can hear it")
         about = self.facts.get("about") or (
@@ -227,11 +241,10 @@ class Pictures(scene_pictures.Pictures):
         img = canvas()
         draw = ImageDraw.Draw(img)
         name = self.scene.get("name", "scene")
-        speed = kmh(self.facts["speed_kmh"])
         heading(
             draw,
             f"{name}, simulated",
-            f"At {speed} km/h, heard at {counted(len(self.stops), 'place')}, "
+            f"{self.speed_text()}, heard at {counted(len(self.stops), 'place')}, "
             "its pitch falling as it goes by (Doppler)",
         )
         self.draw_scene(img, self.plan(*PLAN_BOX), stop.key, t)
@@ -263,8 +276,8 @@ class Pictures(scene_pictures.Pictures):
         if self.fmt == "binaural":
             thumbnail_badge(draw, 50, y)
             y += 90
-        speed = f"{kmh(self.facts['speed_kmh'])} km/h, Doppler"
-        text(draw, (50, y), speed, font("SemiBold", 32), LISTENER)
+        speed = self.facts.get("speed_text") or f"{kmh(self.facts['speed_kmh'])} km/h"
+        text(draw, (50, y), f"{speed}, Doppler", font("SemiBold", 32), LISTENER)
         text(draw, (50, 655), "made with acoustic-spaces", font("Medium", 24), TEXT)
         return img
 

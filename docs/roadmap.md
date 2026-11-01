@@ -391,9 +391,34 @@ Movement:
 - [ ] A train horn's directivity measured, mounted on a train's front (Toward et al.
   found one 1 dB down 30 degrees off its axis, where the siren the horns take is 3.6 dB
   down).
-- [ ] Aircraft taking off, landing and flying over.
-- [ ] Ground-borne vibration from trains and construction plant, and the noise it makes
-  in the rooms of a building.
+- [x] Aircraft noise at receivers by ECAC Doc 29: one movement's SEL and LAmax from
+  the NPD curves along the flight path's segments, with Volume 3's three hypothetical
+  aircraft, checked against all of Volume 3's reference levels, grids and segment
+  results.
+- [x] Doc 29's flight performance (Volume 2 Appendix B): profiles from procedural
+  steps at any aerodrome, checked against all of Volume 3 Part 2's reference profiles;
+  tables read from a copy of the ANP database of one's own.
+- [ ] Doc 29's bank angles in turns: from the ground track's turn radii (Volume 2
+  Appendix B5, eq. B-14) for the engines' installation correction, and their effect on
+  the climb in the performance calculation.
+- [x] Aircraft taking off and landing in a scene, heard in a demo, its levels checked
+  against Doc 29's: the airport example's twin jet, flown by Doc 29's Appendix B.
+- [ ] Houses under the airport example's flights, and an aircraft flying over at
+  cruise.
+- [ ] The L_Amax of a pass with slow and fast time weighting, as measured, beside the
+  highest quasi-static level the captions give now.
+- [x] Ground-borne vibration from trains, trams and construction plant, and the rumble
+  it makes in a building's rooms, by the US FTA's general method: overall levels from
+  its curves and tables against its limits and damage criteria, for the railway's
+  trains and the street's tram and road works; checked against the manual's figure,
+  worked example and tables.
+- [x] The pass-by demos heard in a house at each listener: the train or the tram
+  through a closed window (EN ISO 12354-3) and the rumble of the ground's vibration.
+- [ ] The road works heard in a house too.
+- [ ] Ground-borne vibration by the FTA's detailed method: band by band, from a train's
+  force density and a site's transfer mobility (read off the manual's measured curves
+  or measured), and the floors and walls radiating it into the rooms in the engine,
+  so the rumble is heard in a building's simulated rooms, not only reckoned.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:
@@ -521,11 +546,11 @@ Known issues found by the review of 25 October 2026 (see
   part carries the first orders' specular share as the exact paths do, checked against
   the BRAS rooms' decay.
 
-Version 4.1.0 (and, in the sections above, the helicopters, the road vehicles, the
-trains, the road works, the horns and the faster walks outdoors under Movement, the
-demos' elements in their scenes and a recording for a scene's sound system under
-Examples, and the Run demo window, the listeners a demo plays and the Scene YAML panel
-under Editor):
+Version 4.1.0 (and, in the sections above, the helicopters, the aircraft, the road
+vehicles, the trains, the road works, the horns, the ground's vibration, the pass-by
+demos heard in a house and the faster walks outdoors under Movement, the demos' elements
+in their scenes and a recording for a scene's sound system under Examples, and the Run
+demo window, the listeners a demo plays and the Scene YAML panel under Editor):
 
 - [x] Uncertainty: each parameter's standard error, how much it would change between
   runs with other seeds, from the late rays traced in batches (a jackknife over them),

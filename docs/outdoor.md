@@ -1122,6 +1122,243 @@ of a descent or a turn), the engine and the gearbox, and the fuselage's reflecti
 shadow. `trim` takes the airspeed it is given, through still air: the flyover demo
 gives it the speed over the ground less the wind.
 
+## Aircraft by ECAC Doc 29
+
+`acoustic_spaces.doc29` gives the noise of one movement of an aircraft, a departure or
+an arrival, at receivers on the ground by ECAC Doc 29, the European method for noise
+contours around civil airports (*Report on Standard Method of Computing Noise Contours
+around Civil Airports*, 5th edition, 2026). Like the vibration below, it is an
+assessment by the method's own empirical curves and corrections, apart from the
+scene's sound: nothing of it goes through the simulation.
+
+- **The aircraft** (`doc29.tables`): its NPD curves, the sound exposure level (SEL)
+  and the maximum level (LAmax) at 200 to 25,000 ft from a straight, steady flight at
+  160 kt for each power, its engines' installation (on the fuselage, under the wings,
+  propellers) and its fixed-point profiles, the height, speed and power along the
+  ground track from the start of roll or to touchdown.
+- **The flight path** (`doc29.flight_path`, Volume 2 section 3.6): the profile along a
+  ground track (`doc29.Track`), carried on to the track's ends and the track to the
+  profile's, cut into straight segments: the take-off and landing rolls in steps of 10
+  m/s, the initial climb and the final approach below 4231 ft at the heights that keep
+  the lateral attenuation from changing more than 1.5 dB along a segment, and airborne
+  segments whose speed changes by more than 20 kt in steps of 10 m/s; the track's
+  nodes joined in, and no source lower than 1 m.
+- **Each segment's level** (`doc29.segment_levels`, chapter 4) at each receiver: the
+  NPD curves at its power and distance (no nearer than 30 m), corrected for its speed
+  against 160 kt, the engines' installation round the roll axis, the lateral
+  attenuation of sound passing low over the ground, its finite length, behind a
+  take-off roll the start-of-roll directivity, and the air's impedance at the
+  aerodrome against the NPD curves' (`doc29.impedance_db`).
+- **The event** (`doc29.event`): the segments' energy summed to the SEL, their greatest
+  level the LAmax.
+
+`doc29.volume3` holds the reference cases of Doc 29 Volume 3: three hypothetical
+aircraft, which rely on no data of the ANP database (a jet with its engines on the rear
+fuselage, `JETF`; one with them under the wings, `JETW`; a turboprop, `PROP`), each
+arriving and departing on a straight and a curved route at a hypothetical aerodrome,
+and the levels Volume 3 gives at its 18 receptors:
+
+```python
+import numpy as np
+from acoustic_spaces.doc29 import volume3
+
+case = volume3.Case.named("JETFDC")  # JETF departing on the curved route
+levels = case.event(np.array([[6500.0, 0.0, 0.0], [8200.0, -1800.0, 0.0]]))
+levels.sel, levels.lamax  # dB(A) at each receiver (x, y, z in m)
+```
+
+An arrival's profile measures its distances to touchdown and its track from the
+landing threshold: `flight_path(..., threshold_m=...)` takes the profile's distance at
+the threshold. Volume 3's reference cases put it at the approach's lowest node above
+the runway (`doc29.path.lowest_approach_node`), the jets' profile point at 15.2 m, 290.2
+m before touchdown, and the turboprop's cut at 17.2 m, 328.1 m before it.
+
+**Flight profiles from procedures** (`doc29.performance`, Volume 2 Appendix B). An
+aircraft's fixed-point profile can also be computed from the steps of its procedure
+(the take-off; climbs at a constant calibrated airspeed; accelerations at a rate of
+climb or with a share of the thrust; level flight; on approach the descents, level
+and idle steps, the landing and the decelerations on the runway), its engine and
+aerodynamic coefficients and its weight, at the aerodrome's elevation, temperature
+and sea-level pressure and into its headwind (`performance.Aerodrome`; by default sea
+level in the standard atmosphere into 8 kt, the conditions the coefficients are given
+for). Where the thrust changes from one step to the next, a point 1000 ft on (or half
+the step, if that is shorter) takes the change, as Appendix B does. The calculation
+is in feet, knots and pounds, as Appendix B's is; `performance.as_profile` gives the
+points in metres for `flight_path`:
+
+```python
+from acoustic_spaces.doc29 import performance, volume3
+
+plane = volume3.performance()["JETW"]
+steps = volume3.departure_procedures()[("JETW", "ICAO_A")]
+hot = performance.Aerodrome(elevation_ft=5000.0, temperature_c=40.0, headwind_kt=0.0)
+points = performance.departure(plane, steps, plane.weights[("D", "1")], hot)
+profile = performance.as_profile(points)  # for doc29.flight_path
+```
+
+**The ANP database**, the method's data for real aircraft (EASA's Aircraft Noise and
+Performance database), is not part of the package: its terms of use (issue 3, 2024)
+allow the data only for noise contours of an average fleet and traffic, not for
+benchmarking aircraft types, and forbid publishing it or passing it on to anyone who
+has not accepted them. With a copy downloaded from EASA under those terms,
+`doc29.anp.read_database(folder)` reads its tables from the folder by their files'
+names (aircraft, NPD, spectral classes, fixed-point profiles, jet and propeller
+engine coefficients, aerodynamic coefficients, default weights, departure and
+approach procedural steps), and `Database.profile` flies an aircraft's procedure where
+the database has it, else its fixed-point profile. The readers take the fields
+Volume 2 Appendix G lists, as Volume 3's workbooks lay them out; they have not been
+tried on a download of the database.
+
+Its levels agree with all of Volume 3's reference results: the 99 levels at its
+receptors within 0.006 dB, its 12 grids of 37,458 points at 0.003 dB rms, and its
+3516 rows of segment results term by term, the segments' places within 7.3 m: the
+differences come from where Volume 3 puts its cuts by speed and from its conversion of
+metres to feet ([the check](validation.md#aircraft-noise-against-doc-29-volume-3)).
+Its flight profiles agree with all 26 of Volume 3's (Part 2: JETW and PROP arriving
+and departing at sea level and at 2000 and 5000 ft, at 15 and 40 °C, into headwinds of
+-5 to 8 kt): their 314 points' heights, speeds and thrusts to Volume 3's rounding,
+their distances within 0.15 ft. Volume 3's profiles differ from Volume 2's printed
+equations in three places, where the package follows Volume 3
+([the check](validation.md#flight-profiles-against-doc-29-volume-3)).
+
+**The NPD curves in the aerodrome's air** (`doc29.atmosphere`, Volume 2 Appendix D).
+The NPD curves hold the attenuation of the AIR-1845 atmosphere, an average of no one
+temperature and humidity. `atmosphere.adjusted(curves, spectral_class, temperature_c,
+humidity_percent, pressure_kpa)` adjusts them to another air by Appendix D's three
+steps: the spectral class taken back to the aircraft, out to each NPD distance through
+both atmospheres, and the difference of their A-weighted levels added to the curves.
+The aerodrome's absorption is ISO 9613-1's, averaged over each third octave. It gives
+Volume 2's worked example (JETW's spectral classes at 10 °C, 80 % relative humidity
+and 101.325 kPa, its tables D-3c and D-4) within 0.1 dB, the tables' rounding.
+
+**An aircraft in a scene** (`doc29.source`). Doc 29 gives an aircraft's sound as levels
+at receivers, so a source of a scene that sends the same sound is made from them:
+
+- *its sound power* from its spectral class (the spectrum 1000 ft under it at the time
+  of its maximum level), scaled to its NPD curves' maximum level 1000 ft away at its
+  power, with the AIR-1845 attenuation over those 1000 ft added back and the reflection
+  off the soft ground the NPD curves are measured over (1.2 m above it) taken out:
+  grass, its reflection's energy added to the direct sound's (`sound_power_db`,
+  `ground_gain_db`);
+- *its directivity* from its engines' installation correction (eq. 4-15), by the
+  depression angle across the flight path, the same in every band; nought straight
+  down, where the NPD curves are measured, so the sound power is raised to keep the
+  level there (`directivity`, `below_offset_db`);
+- *its thrust along the flight*: its sound power changes with the thrust as the NPD
+  curves' maximum level 1000 ft away does, its spectrum kept (`power_change_db`);
+- *its flight* as a walk's keyframes (`flight`): the flight path's segments flown as
+  Doc 29 interpolates them (along a segment the square of the speed changes evenly with
+  the distance), so each place is reached when the aircraft gets there, the aircraft
+  facing the way it flies.
+
+The airport example's [flight demo](demos.md#aircraft-taking-off-and-landing) flies
+Volume 3's JETW this way. The NPD curves are measured at 160 kt and give no
+directivity along the flight path but behind a take-off roll (eq. 4-22): the source
+keeps none of that either, and the engine reckons the ground, the air and the
+lateral spreading in its own way, so its levels differ from Doc 29's; how far is
+[measured](validation.md#an-aircraft-in-the-engine-against-doc-29).
+
+What it leaves out for now: bank angles from the turns (a segment takes the bank it is
+given; Volume 3's cases fly level, and the performance calculation flies turns as
+straight), the dispersion of tracks round a backbone, the line-of-sight blockage of
+terrain, levels summed over many movements (LAeq, Lden) and contours. Volume 3 gives
+no reference maximum levels, so the LAmax is not checked, and no idle steps of an
+approach away from sea level in the standard atmosphere, which Appendix B adjusts so
+that the aircraft slows as it does there: those are checked against that definition
+only.
+
+## Vibration through the ground
+
+Trains, trams and construction plant shake the ground as well as the air: a building
+near them feels it, and its rooms rumble with the sound their floors, walls and
+ceilings radiate (ground-borne noise). `acoustic_spaces.vibration` gives both by the
+general method of the US Federal Transit Administration (FTA, *Transit Noise and
+Vibration Impact Assessment Manual*, FTA Report No. 0123, 2018). It is an assessment
+from the manual's curves and tables, apart from the scene's sound: nothing of it goes
+through the simulation.
+
+- **Trains and trams** (the manual's General Vibration Assessment, section 6.4). A base
+  curve gives the overall rms vibration level of the ground 10 to 300 ft (3.0 to 91.4
+  m) from the track's centreline, as far as the manual draws it (figure 6-4, the
+  equations of table 6-10): one for trains hauled by locomotives, one for rapid transit
+  and light rail (multiple units and trams too), one for a bus on a smooth road
+  (`vibration.CURVES`; each train of the railway demo has its own, `rail.Train.curve`).
+  The level changes with the speed as 20 log10 of it (eq. 6-4) and, in `vibration.Line`,
+  with the vehicles' suspension and wheels, the track's condition and special trackwork
+  near, a floating slab, ballast mats, resilient fasteners or ties, an elevated
+  structure or a subway's, and the ground: +10 dB for soil that propagates efficiently,
+  +2 to +9 dB for a rock layer (tables 6-11 and 6-12, with the manual's rules for which
+  add up). `vibration.indoor_db` takes it into a building and up to a floor: the
+  foundation's coupling loss, 2 dB a floor up to the fifth and 1 dB a floor up to the
+  tenth, and 6 dB for the floors' resonances (tables 6-12 and 6-13). Where a building's
+  structure is not known, the manual's conservative change from outdoors to indoors
+  stands for all three: +3 dB for a small masonry building or a light wood-frame
+  house's first floor, +6 dB for its second and third, 0 dB for a large building.
+  `vibration.noise_level` gives the rumble in dB(A): the room's vibration level less 50,
+  35 or 20 dB as the vibration peaks below 30 Hz (most surface track), at 30 to 60 Hz
+  (most subways, surface track on very stiff clayey soil) or above 60 Hz (subways in
+  rock) (table 6-14).
+- **Construction plant** (section 7.2). Table 7-4's 14 kinds of plant, from an impact
+  pile driver to a small bulldozer: the peak particle velocity (PPV) and rms level 25 ft
+  away, falling as (25 ft / D)^1.5 and 30 dB a decade (`vibration.plant_ppv`,
+  `vibration.plant_level`, eq. 7-2 and 7-3), against the PPV that may damage four kinds
+  of building (`vibration.DAMAGE`, table 7-5), from 12.7 mm/s for reinforced concrete,
+  steel or timber to 3.05 mm/s for buildings extremely susceptible to it. The street's
+  breaker is the table's hoe ram, its dumper its loaded trucks
+  (`plant.Machine.vibration`).
+- **Limits** (tables 6-2 to 6-4, `vibration.criterion`): the indoor vibration and
+  rumble above which there is impact, for buildings with equipment sensitive to
+  vibration, for residences and for institutions used mostly by day, and for concert
+  halls, studios, auditoriums and theatres, by how many events a day: frequent (more
+  than 70), occasional (30 to 70) or infrequent (fewer than 30). For residences with
+  frequent events they are 72 VdB and 35 dB(A).
+
+Levels are in VdB, decibels re 1 micro-inch per second (25.4 nm/s), as the manual gives
+them, and a PPV in mm/s and in/s.
+
+The railway example's `vibration.py` stands a house where each of the scene's listeners
+in use is (or those `--listeners` names, in that order), as far from the track, and prints for each of the demo's trains at its own speed
+the vibration of the ground outside, of the house's floor and the rumble in its rooms
+against the limits for residences, and from how far each limit holds. The house is a
+small masonry building whose structure is not known, the trains the scene's one
+regional train an hour, 24 a day, which are infrequent events; `--building`, `--floor`,
+`--ground`, `--peak` and `--trains-per-day` change them. A freight train's locomotive
+counts as an infrequent event and its wagons, which pass for minutes, as frequent ones,
+as the manual says; it puts the locomotive "often" 3 to 8 dB over the wagons, and the
+wagons are taken 3 dB under it. 25 m from the track:
+
+| train | speed | ground | indoors | rumble | vibration within its limit from | rumble from |
+|---|---:|---:|---:|---:|---:|---:|
+| S-Bahn | 120 km/h | 72.7 | 75.7 | 25.7 | 14 m | 3.0 m |
+| regional | 160 km/h | 86.3 | 89.3 | 39.3 | 63 m | 16 m |
+| intercity | 200 km/h | 88.2 | 91.2 | 41.2 | 76 m | 20 m |
+| freight, its locomotive | 100 km/h | 82.2 | 85.2 | 35.2 | 43 m | 9.7 m |
+| freight, its wagons | 100 km/h | 79.2 | 82.2 | 32.2 | 69 m | 18 m |
+| tram | 50 km/h | 65.1 | 68.1 | 18.1 | 3.5 m | 3.0 m |
+
+(VdB, the rumble in dB(A); the limits are 80 VdB and 43 dB(A), the wagons' 72 VdB and
+35 dB(A); 3.0 m is where the curves start.) The street's `vibration.py` does the same
+for the tram, 6.0 m from the houses, its passes frequent events as the manual has most
+rapid transit's: 77.6 VdB indoors, 5.6 dB over the limit, and the rumble 27.6 dB(A),
+7.4 dB under it. Its breaker, 4.0 m from the houses, gives them a PPV of 5.94 mm/s,
+over the damage criteria of the two most fragile kinds of building, and 95.4 VdB, 23.4
+dB over the limit for residences; the dumper gives 5.08 mm/s, over the most fragile
+kind's and 0.1 % under the next one's (0.1998 against 0.2 in/s), and 94.4 VdB. The
+office block, 8.0 m from both, stays under every damage criterion; the method gives it
+no limits for annoyance, as it counts offices only where something in them is
+sensitive to vibration. Both scripts run from the editor's **Run demo** window. The
+pass-by demos play the rumble at each listener, with the train or the tram through a
+closed window (`--indoors`, see [Trains passing by](demos.md#trains-passing-by)).
+
+What the method leaves out: it gives overall levels, not their spectra, so the rooms
+are not simulated. Its curves are the upper range of measurements of North American
+systems in good condition, which the manual says ground-borne vibration rarely exceeds
+by more than 1 or 2 dB unless wheels or rails are worn; European trains and soils may
+differ. Its table of speeds runs from 20 to 60 mph (32 to 97 km/h); the faster trains
+take its 20 log10 of the speed further. The manual's detailed method works band by
+band from a train's force density and a site's transfer mobility, which it says to
+measure (see the [roadmap](roadmap.md)).
+
 ## In the editor
 
 The editor builds and edits outdoor scenes too: see

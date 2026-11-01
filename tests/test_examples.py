@@ -79,7 +79,7 @@ def test_every_example_is_in_a_group() -> None:
 
 def test_example_path() -> None:
     assert example_path("studio").parent.name == "studio"
-    with pytest.raises(ValueError, match="examples: apartment, archway, bim_office"):
+    with pytest.raises(ValueError, match="examples: airport, apartment, archway, bim_office"):
         example_path("cathedral")
 
 

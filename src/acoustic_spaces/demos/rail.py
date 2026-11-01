@@ -63,7 +63,7 @@ from pathlib import Path
 
 import numpy as np
 
-from acoustic_spaces.demos import Option, pipeline
+from acoustic_spaces.demos import Option, indoors, pipeline
 from acoustic_spaces.demos.audio import read, resampled
 from acoustic_spaces.demos.audio import write as write_wav
 from acoustic_spaces.demos.passby import (
@@ -612,6 +612,11 @@ class Train:
     speed_kmh: float = field(default=100.0)
     #: What it is in a few words, for the stills ("A regional train").
     short: str = ""
+    #: The base curve of the ground's vibration the FTA's general method gives this kind
+    #: of train (:data:`acoustic_spaces.vibration.CURVES`; the manual's table 6-9):
+    #: locomotive-hauled trains the locomotive-powered curve, multiple units and trams
+    #: the rapid transit one.
+    curve: str = "locomotive"
 
     @property
     def length_m(self) -> float:
@@ -630,6 +635,7 @@ TRAINS: dict[str, Train] = {
         (Unit(5, 67.4, "wheel_discs"),),
         120.0,
         "An S-Bahn",
+        "rapid_transit",
     ),
     "regional": Train(
         "a regional train: an electric locomotive and five coaches",
@@ -654,6 +660,7 @@ TRAINS: dict[str, Train] = {
         (Unit(21, 30.0, air_conditioning=True),),
         50.0,
         "A low-floor tram",
+        "rapid_transit",
     ),
 }
 #: Where along a unit its first and last bogie are (shares of its length).
@@ -852,7 +859,41 @@ class TrainVehicle(Vehicle):
                     steps=(self.sound_step, "scene", "walk"),
                 )
             )
+        out.append(
+            Option(
+                "indoors",
+                indoors.help_of(self.noun),
+                indoors.OFF,
+                "choice",
+                indoors.choices(self.noun),
+                steps=("walk", "video"),
+            )
+        )
         return out
+
+    def house(self, args: argparse.Namespace) -> indoors.House | None:
+        """The house at each listener ``--indoors`` asks for, or None outdoors."""
+        try:
+            return indoors.House.of(getattr(args, "indoors", None), self.noun)
+        except ValueError as exc:
+            raise SystemExit(f"error: {exc}") from None
+
+    def wheels(self, args: argparse.Namespace) -> indoors.Wheels:
+        """What shakes the ground: the train's base curve at its speed, and its wheels,
+        its points at the rail top (its bogies); a freight train's wagons
+        FREIGHT_WAGONS_DB under the curve, its locomotive on it."""
+        from acoustic_spaces import vibration
+
+        info = pipeline.read_json(args.work / self.name / self.info_file)
+        train = TRAINS[info["train"]]
+        points = info["parts"][self.name]
+        wagons = vibration.FREIGHT_WAGONS_DB if info["train"] == "freight" else 0.0
+        return indoors.Wheels(
+            train.curve,
+            float(info["speed_kmh"]),
+            tuple(float(p["behind_m"]) for p in points),
+            tuple(0.0 if p["unit"] == 0 else wagons for p in points),
+        )
 
     def horn_on(self, args: argparse.Namespace) -> bool:
         """Whether its horn sounds: ``--horn blasts``."""
@@ -884,6 +925,7 @@ class TrainVehicle(Vehicle):
         horn = getattr(args, "horn", None)
         if self.horn is not None and horn is not None and horn not in HORN_PLAYS:
             raise SystemExit(f"error: --horn is one of {', '.join(HORN_PLAYS)}, not {horn!r}")
+        self.house(args)
 
     def _parts_of(self, keys: tuple[str, ...]) -> tuple[str, ...]:
         """Its sources that the trains ``keys`` have points at."""

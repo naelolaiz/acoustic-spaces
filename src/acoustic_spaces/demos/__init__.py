@@ -811,9 +811,12 @@ RUN = "run"
 
 def _option_of(action: argparse.Action, folder: Path) -> Option:
     """The :class:`Option` of a script's argument: a number, a flag, a choice, a path
-    (read when the example has the file its default names, else written) or a text."""
+    (read when the example has the file its default names, else written), the
+    listeners to tick (``--listeners``) or a text."""
     default = action.default
-    if isinstance(action, argparse._StoreTrueAction):
+    if action.dest == "listeners":
+        kind = "listeners"  # ticked in a list of the scene's listeners
+    elif isinstance(action, argparse._StoreTrueAction):
         kind = "flag"
     elif action.choices:
         kind = "choice"
@@ -853,6 +856,7 @@ def script_demo(script: str | Path) -> Demo:
         for action in parser._actions
         if not isinstance(action, argparse._HelpAction)
     ]
+    names = {option.name for option in options}
     return Demo(
         name=script.stem,
         example=script.parent.name,
@@ -862,6 +866,10 @@ def script_demo(script: str | Path) -> Demo:
         steps=[Step(RUN, None, "run the script")],
         options=options,
         stepless=True,
+        # A --listeners option ticks the listeners of the scene it reads.
+        listeners=(
+            (lambda args: listeners_in(args.scene)) if {"listeners", "scene"} <= names else None
+        ),
     )
 
 
