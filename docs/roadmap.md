@@ -392,8 +392,15 @@ Movement:
   found one 1 dB down 30 degrees off its axis, where the siren the horns take is 3.6 dB
   down).
 - [ ] Aircraft taking off, landing and flying over.
-- [ ] Ground-borne vibration from trains and construction plant, and the noise it makes
-  in the rooms of a building.
+- [x] Ground-borne vibration from trains, trams and construction plant, and the rumble
+  it makes in a building's rooms, by the US FTA's general method: overall levels from
+  its curves and tables against its limits and damage criteria, for the railway's
+  trains and the street's tram and road works; checked against the manual's figure,
+  worked example and tables.
+- [ ] Ground-borne vibration by the FTA's detailed method: band by band, from a train's
+  force density and a site's transfer mobility (read off the manual's measured curves
+  or measured), and the floors and walls radiating it into the rooms in the engine,
+  so the rumble is heard in a building's simulated rooms, not only reckoned.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:

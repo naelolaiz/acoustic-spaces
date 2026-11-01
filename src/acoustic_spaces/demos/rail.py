@@ -612,6 +612,11 @@ class Train:
     speed_kmh: float = field(default=100.0)
     #: What it is in a few words, for the stills ("A regional train").
     short: str = ""
+    #: The base curve of the ground's vibration the FTA's general method gives this kind
+    #: of train (:data:`acoustic_spaces.vibration.CURVES`; the manual's table 6-9):
+    #: locomotive-hauled trains the locomotive-powered curve, multiple units and trams
+    #: the rapid transit one.
+    curve: str = "locomotive"
 
     @property
     def length_m(self) -> float:
@@ -630,6 +635,7 @@ TRAINS: dict[str, Train] = {
         (Unit(5, 67.4, "wheel_discs"),),
         120.0,
         "An S-Bahn",
+        "rapid_transit",
     ),
     "regional": Train(
         "a regional train: an electric locomotive and five coaches",
@@ -654,6 +660,7 @@ TRAINS: dict[str, Train] = {
         (Unit(21, 30.0, air_conditioning=True),),
         50.0,
         "A low-floor tram",
+        "rapid_transit",
     ),
 }
 #: Where along a unit its first and last bogie are (shares of its length).

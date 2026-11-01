@@ -597,16 +597,20 @@ def test_a_mast_shows_the_wind_up_it(tmp_path: Path) -> None:
     plotter.close()
 
 
-def test_buildings_hide_the_arrows_inside_them(tmp_path: Path) -> None:
+def test_buildings_hide_the_arrows_inside_them(tmp_path: Path, monkeypatch) -> None:
+    from acoustic_spaces import viz
     from acoustic_spaces.geometry.outdoor import in_polygon
-    from acoustic_spaces.viz import WindMap, _plan_points, plot_wind
+    from acoustic_spaces.viz import WindMap, plot_wind
 
     room = _windy(tmp_path, "street", "  preset: windy\n")
+    # Only the buildings: the arrows that the sources and listeners keep clear of (the
+    # road works' in front of the houses) are another test's.
+    monkeypatch.setattr(viz, "_plan_points", lambda room: np.zeros((0, 2)))
     plotter = pv.Plotter(off_screen=True)
     plot_wind(room, plotter, render=False)
     (arrows,) = plotter.renderer.actors.values()
     # The arrows 10 m up: none in the middle of the 15 m offices, over the 9 m houses yes.
-    middles = WindMap.of(room).arrows(clear=_plan_points(room)).middles
+    middles = WindMap.of(room).arrows().middles
     offices = np.array([[-30, -20], [30, -20], [30, -6], [-30, -6]])
     houses = np.array([[-30, 6], [10, 6], [10, 16], [-30, 16]])
     assert in_polygon(middles, offices).any() and in_polygon(middles, houses).any()

@@ -171,6 +171,12 @@ Rotating sound fields, and decoding them to the ears:
 .. automodule:: acoustic_spaces.airfoil_noise
 ```
 
+## Ground-borne vibration
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.vibration
+```
+
 ## Head tracking
 
 ```{eval-rst}
