@@ -32,6 +32,7 @@ there already (a scene file, a simulation's results).
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
 import shlex
 import subprocess
@@ -50,8 +51,10 @@ from acoustic_spaces.i18n import N_
 #: folder, ``inputs``: a WAV file for each of some sources (``--input NAME=WAV``, as
 #: often as needed), what they play instead of the demo's own recordings, ``files``: a
 #: WAV file for each of some names the option lists as its choices (``--stem
-#: NAME=WAV``), such as the stems of a song, and ``movers``: the sources and listeners
-#: that move in a run, by name and comma-separated, or ``none`` (:func:`moving_names`).
+#: NAME=WAV``), such as the stems of a song, ``movers``: the sources and listeners
+#: that move in a run, by name and comma-separated, or ``none`` (:func:`moving_names`),
+#: and ``listeners``: the listeners a run plays, by name and comma-separated
+#: (:func:`listener_names`), which the editor ticks in a list.
 KINDS = (
     "text",
     "choice",
@@ -64,6 +67,7 @@ KINDS = (
     "inputs",
     "files",
     "movers",
+    "listeners",
 )
 PATH_KINDS = ("file", "path", "folder")
 #: The kinds whose value is a dict of names and files.
@@ -123,7 +127,6 @@ ADVANCED = frozenset(
         "--scene",
         "--credit",
         "--tour",
-        "--listeners",
         "--movements",
         "--bpm",
         "--downbeat",
@@ -143,6 +146,68 @@ def moving_names(text: str | None) -> list[str] | None:
     if str(text).strip().casefold() == NO_MOVERS:
         return []
     return [name.strip() for name in str(text).split(",") if name.strip()]
+
+
+def listener_names(text: str | None) -> list[str] | None:
+    """The listeners a ``listeners`` option names (``--listeners front,back``), in its
+    order, each once: None when it is not given, so that the demo plays every one."""
+    if text is None:
+        return None
+    names = [name.strip() for name in str(text).split(",") if name.strip()]
+    return list(dict.fromkeys(names))
+
+
+def picked(args: argparse.Namespace, names: Sequence[str]) -> list[str]:
+    """``names`` (the listeners a demo plays, in its order) without those ``--listeners``
+    leaves out: all of them when it is not given."""
+    chosen = listener_names(getattr(args, "listeners", None))
+    if chosen is None:
+        return list(names)
+    return [name for name in names if name in chosen]
+
+
+def chosen_order(args: argparse.Namespace, names: Sequence[str]) -> list[str]:
+    """``names`` (the listeners a demo can play) in the order ``--listeners`` gives
+    them, the others left out; all of them in their own order when it is not given."""
+    chosen = listener_names(getattr(args, "listeners", None))
+    if chosen is None:
+        return list(names)
+    return [name for name in chosen if name in names]
+
+
+def listeners_in(scene: str | Path) -> list[str]:
+    """The listeners in use (not ``enabled: false``) of the scene file ``scene``, in its
+    order, read as the file has them (no check of the scene): what a demo playing that
+    scene can play."""
+    path = Path(scene)
+    stat = path.stat()
+    return list(_listeners_in(str(path.resolve()), stat.st_mtime_ns, stat.st_size))
+
+
+@functools.lru_cache(maxsize=16)
+def _listeners_in(path: str, _mtime_ns: int, _size: int) -> tuple[str, ...]:
+    import yaml
+
+    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    return tuple(
+        str(item["name"])
+        for item in data.get("listeners") or []
+        if isinstance(item, dict) and "name" in item and item.get("enabled", True) is not False
+    )
+
+
+LISTENERS_HELP = (
+    "only these listeners, comma separated (default: every one): the demo mixes those "
+    "alone and its video's tour leaves the others out; the simulation keeps every "
+    "listener, so another choice needs no new one"
+)
+
+
+def listeners_option(steps: tuple[str, ...] = ("render", "video"), help: str = "") -> Option:
+    """``--listeners a,b``: the listeners a run plays, for the steps that mix and tour
+    them; the editor ticks them in a list of the listeners the demo can play
+    (:attr:`Demo.listeners`)."""
+    return Option("listeners", help or LISTENERS_HELP, None, "listeners", steps=steps)
 
 
 def shell_line(argv: Sequence[str]) -> str:
@@ -194,6 +259,9 @@ class Option:
     #: while that option holds one of them, and leaves it at its default otherwise.
     #: None: it always matters.
     only: tuple[str, tuple[str, ...]] | None = None
+    #: Other flags it is given by, as before it took this one (``--tour``, for the demo
+    #: of any scene's ``--listeners``).
+    aliases: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -274,7 +342,7 @@ class Option:
             kwargs["type"] = float
         if self.choices:
             kwargs["choices"] = list(self.choices)
-        parser.add_argument(self.option, **kwargs)
+        parser.add_argument(self.option, *self.aliases, **kwargs)
 
 
 @dataclass(frozen=True)
@@ -377,6 +445,10 @@ class Demo:
     #: it starts. The editor's Run demo window ticks them in its table of what moves, which
     #: a ``movers`` option lets the user change for a run.
     moving: Callable[[argparse.Namespace], list[str]] | None = None
+    #: The listeners a run can play, in the demo's order, from the arguments (paths
+    #: resolved): the names its ``listeners`` option (``--listeners``) takes, and the
+    #: rows of the editor's list of them, all ticked by default.
+    listeners: Callable[[argparse.Namespace], list[str]] | None = None
     #: What a run with the arguments (paths resolved) does, in a line under the editor's
     #: form that follows the options (how far and how fast the pass-by demos' car drives,
     #: and so for how long); None to say nothing.
@@ -574,7 +646,35 @@ class Demo:
                 if not Path(file).is_file():
                     return f"{option.option} {name}: no {file}"
         if self.problems is not None:
-            return self.problems(self, args)
+            problem = self.problems(self, args)
+            if problem:
+                return problem
+        return self._listeners_problem(args, resolved)
+
+    def _listeners_problem(
+        self, args: argparse.Namespace, resolved: argparse.Namespace
+    ) -> str | None:
+        """What is wrong with the listeners ``--listeners`` names: none at all, or one
+        the demo cannot play (:attr:`listeners`, when it can tell)."""
+        option = next((o for o in self.options if o.kind == "listeners"), None)
+        if option is None:
+            return None
+        names = listener_names(getattr(args, option.name, None))
+        if names is None:
+            return None
+        if not names:
+            return f"{option.option} names no listener"
+        if self.listeners is None:
+            return None
+        try:
+            known = self.listeners(resolved)
+        except (Exception, SystemExit):  # the steps say what keeps them from the scene
+            return None
+        unknown = [name for name in names if name not in known]
+        if unknown:
+            return f"{option.option} {unknown[0]}: no such listener here; it has " + (
+                ", ".join(known) or "none"
+            )
         return None
 
     # -- running --------------------------------------------------------------------
@@ -791,13 +891,18 @@ __all__ = [
     "Demo",
     "Option",
     "Step",
+    "chosen_order",
     "common_options",
     "input_option",
     "demo_for",
     "demos_of",
     "list_demos",
+    "listener_names",
+    "listeners_in",
+    "listeners_option",
     "load",
     "moving_names",
+    "picked",
     "script_demo",
     "scripts_of",
     "shell_line",

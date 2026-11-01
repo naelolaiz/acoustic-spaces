@@ -302,3 +302,15 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     assert sorted(p.name for p in (work / "crossing" / "stills").glob("*.png")) == [
         "00_mix_position.png"
     ]
+    # --listeners: the mixes with the helicopter there are made already, and the video
+    # tours that listener alone; a listener the concert has no mix at is refused with
+    # the stadium demo's command for it.
+    singer = argparse.Namespace(**vars(args) | {"listeners": "singer"})
+    assert demo.step("mix").done(demo.resolved(singer))
+    assert demo.main(["video", "--step", "8", "--no-mp4", "--listeners", "singer"]) == 0
+    assert (work / "crossing" / "stills" / "00_singer.png").exists()
+    concert["seats"].pop("singer")
+    pipeline.write_json(work / "seats" / pipeline.SEATS, concert)
+    assert not demo.step("mix").done(demo.resolved(singer))
+    with pytest.raises(SystemExit, match="the concert has no mix at singer; run: python stad"):
+        demo.main(["mix", "--step", "8", "--listeners", "singer"])

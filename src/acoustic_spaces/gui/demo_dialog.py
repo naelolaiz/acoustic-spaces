@@ -45,6 +45,8 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
     QSizePolicy,
     QTableWidget,
@@ -54,7 +56,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from acoustic_spaces.demos import MAP_KINDS, NO_MOVERS, PATH_KINDS, Demo, Option, moving_names
+from acoustic_spaces.demos import (
+    MAP_KINDS,
+    NO_MOVERS,
+    PATH_KINDS,
+    Demo,
+    Option,
+    listener_names,
+    moving_names,
+)
 from acoustic_spaces.gui.inspector import int_spin, spin
 from acoustic_spaces.gui.sizing import body_size, fit, reading_width, scroll_bar_width, scrolled
 from acoustic_spaces.i18n import _, ngettext
@@ -374,6 +384,101 @@ class InputsField(QWidget):
             self._set(name, None)
 
 
+class ListenersField(QWidget):
+    """The field of ``--listeners``: a tick for each listener the demo can play
+    (:attr:`Demo.listeners`, which :meth:`set_listeners` gives), all ticked by default;
+    a run plays the ticked ones. All and None tick or untick them all."""
+
+    #: A tick changed.
+    changed = Signal()
+
+    def __init__(self, option: Option, tip: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.option = option
+        self.names: list[str] = []
+        #: The listeners unticked, kept by name while the list changes.
+        self.unticked: set[str] = set()
+        #: What :meth:`set_value` asked for before the list was there.
+        self._wanted: list[str] | None = None
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.list = QListWidget()
+        self.list.setToolTip(tip)
+        self.list.itemChanged.connect(self._ticked)
+        layout.addWidget(self.list)
+        row = QHBoxLayout()
+        self.all = QPushButton(_("All"))
+        self.all.setToolTip(_("Tick every listener: the demo plays them all, its default"))
+        self.all.clicked.connect(lambda: self._tick_all(True))
+        self.none = QPushButton(_("None"))
+        self.none.setToolTip(_("Untick every listener, to tick the few to hear"))
+        self.none.clicked.connect(lambda: self._tick_all(False))
+        row.addWidget(self.all)
+        row.addWidget(self.none)
+        row.addStretch(1)
+        layout.addLayout(row)
+
+    def set_listeners(self, names: list[str]) -> None:
+        """The rows: the listeners the demo can play, in its order, ticked unless they
+        were unticked before (or :meth:`set_value` left them out)."""
+        names = list(names)
+        if names == self.names and self.list.count() == len(names):
+            return
+        if self._wanted is not None and names:
+            self.unticked = set(names) - set(self._wanted)
+            self._wanted = None
+        self.names = names
+        self.list.blockSignals(True)
+        self.list.clear()
+        for name in names:
+            item = QListWidgetItem(name)
+            item.setFlags(
+                (item.flags() | Qt.ItemFlag.ItemIsUserCheckable) & ~Qt.ItemFlag.ItemIsEditable
+            )
+            ticked = name not in self.unticked
+            item.setCheckState(Qt.CheckState.Checked if ticked else Qt.CheckState.Unchecked)
+            self.list.addItem(item)
+        self.list.blockSignals(False)
+        # As tall as its rows, up to about six; a longer list scrolls.
+        rows = sum(self.list.sizeHintForRow(r) for r in range(min(len(names), 6)))
+        self.list.setFixedHeight(rows + 2 * self.list.frameWidth())
+
+    def ticked(self) -> list[str]:
+        return [name for name in self.names if name not in self.unticked]
+
+    def value(self) -> str | None:
+        """``--listeners``: None while every listener is ticked (or the list is not
+        there), else the ticked ones, comma separated (empty for none)."""
+        if not self.names:
+            return None if self._wanted is None else ",".join(self._wanted)
+        ticked = self.ticked()
+        return None if len(ticked) == len(self.names) else ",".join(ticked)
+
+    def set_value(self, value) -> None:
+        names = listener_names(value)
+        if not self.names:
+            self._wanted = names
+            return
+        self.unticked = set() if names is None else set(self.names) - set(names)
+        self.list.blockSignals(True)
+        for row, name in enumerate(self.names):
+            state = Qt.CheckState.Unchecked if name in self.unticked else Qt.CheckState.Checked
+            self.list.item(row).setCheckState(state)
+        self.list.blockSignals(False)
+
+    def _ticked(self, item: QListWidgetItem) -> None:
+        name = item.text()
+        if item.checkState() == Qt.CheckState.Checked:
+            self.unticked.discard(name)
+        else:
+            self.unticked.add(name)
+        self.changed.emit()
+
+    def _tick_all(self, ticked: bool) -> None:
+        self.set_value(None if ticked else "")
+        self.changed.emit()
+
+
 def walkers_of(scene: str | Path | None) -> list[tuple[str, object]]:
     """The sources and listeners of the scene file that have a walk, on or off, in use or
     left out of its simulations, as ("listeners" or "sources", item), listeners first;
@@ -588,10 +693,12 @@ def field_for(option: Option, tip: str) -> QWidget:
     """The widget that asks for ``option``: a tick for a flag, a list for a choice, a
     spin box for a number (with its unit; at zero, its ``unset`` text, for one the scene
     gives by default), a path with a Browse… button for a file or a folder, a table of
-    the sources for ``--input``, and a text field for the rest (empty where the demo
-    takes none)."""
+    the sources for ``--input``, a tick for each listener for ``--listeners``, and a
+    text field for the rest (empty where the demo takes none)."""
     if option.kind in MAP_KINDS:
         return InputsField(option, tip)
+    if option.kind == "listeners":
+        return ListenersField(option, tip)
     if option.kind in PATH_KINDS:
         return PathField(option, tip, sets=option.name == "hrtf")
     if option.kind == "flag":
@@ -626,7 +733,7 @@ def field_for(option: Option, tip: str) -> QWidget:
 def value_of(option: Option, widget: QWidget):
     """What the field holds, in the type the demo's step expects (None where it is
     empty: the demo is given no such option)."""
-    if isinstance(widget, (PathField, InputsField, MovementBox)):
+    if isinstance(widget, (PathField, InputsField, MovementBox, ListenersField)):
         return widget.value()
     if isinstance(widget, QCheckBox):
         return widget.isChecked()
@@ -864,7 +971,7 @@ class DemoDialog(QDialog):
                 continue
             tip = option.description
             widget = field_for(option, tip)
-            if isinstance(widget, (PathField, InputsField)):
+            if isinstance(widget, (PathField, InputsField, ListenersField)):
                 widget.set_value(getattr(args, option.name))
                 widget.changed.connect(self._refresh)
             elif isinstance(widget, QLineEdit):
@@ -956,12 +1063,17 @@ class DemoDialog(QDialog):
             if isinstance(widget, InputsField) and widget.option.kind == "inputs":
                 widget.set_sources(self._plays(demo, args))
                 args = self.arguments()
+            elif isinstance(widget, ListenersField):
+                widget.set_listeners(self._listeners(demo, args))
+                args = self.arguments()
         self.command.setText(demo.command(step, args))
         # An option that matters only with another's values (the police car's --siren
         # with --vehicle police_car) shows only then.
         values, moved = vars(args), False
         for name, form_rows in self._rows.items():
             widget, shown = self.fields[name], demo.option(name).applies(values)
+            if isinstance(widget, ListenersField):  # none to tick where the scene cannot tell
+                shown = shown and bool(widget.names)
             if form_rows.isRowVisible(widget) != shown:
                 form_rows.setRowVisible(widget, shown)
                 moved = True
@@ -1012,6 +1124,17 @@ class DemoDialog(QDialog):
         return "; ".join(found) or None
 
     @staticmethod
+    def _listeners(demo: Demo, args: argparse.Namespace) -> list[str]:
+        """The listeners ``demo`` can play with ``args``; none when it cannot tell (a
+        scene that cannot be read: the line under the form says why)."""
+        if demo.listeners is None:
+            return []
+        try:
+            return list(demo.listeners(demo.resolved(args)))
+        except (Exception, SystemExit):
+            return []
+
+    @staticmethod
     def _plays(demo: Demo, args: argparse.Namespace) -> dict[str, str]:
         """The sources ``demo`` feeds with ``args`` and what each plays; none when it
         cannot tell (a scene that cannot be read: the line under the form says why)."""
@@ -1047,6 +1170,7 @@ __all__ = [
     "ALL",
     "DemoDialog",
     "InputsField",
+    "ListenersField",
     "MovementBox",
     "PathField",
     "demos_for",

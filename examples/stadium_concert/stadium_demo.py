@@ -57,6 +57,8 @@ that time and the level there against the loudest listener's. On stage it is 7 t
 dB(A) louder than in the audience, too much to hear both in one video, so each stop is
 turned up to the loudness of the loudest one (K-weighted, as loudness meters weigh it)
 and its caption says by how much; the mixes in demo/seats keep one gain for all.
+`--listeners mix_position,east_stand` mixes those listeners alone, and the video tours
+them alone, each stop of the tour there with its phrases and the last to the end.
 """
 
 from __future__ import annotations
@@ -76,7 +78,10 @@ from acoustic_spaces.demos import (
     Step,
     common_options,
     input_option,
+    listeners_in,
+    listeners_option,
     music,
+    picked,
     pipeline,
     sibling,
 )
@@ -556,9 +561,7 @@ def render(args) -> None:
     the loudest peak at -1 dBFS. The feeds carry each source's level_db already, so
     auralize is not to apply it (``--equal-power``)."""
     table = feeds_table(args)
-    listeners = sorted({e["listener"] for e in responses_of(args)})
-    if args.listeners:
-        listeners = args.listeners.split(",")
+    listeners = picked(args, sorted({e["listener"] for e in responses_of(args)}))
     feeds = {name: args.work / "feeds" / f"{name}.wav" for name in table["sources"]}
     weights = {name: entry["gain_db"] for name, entry in table["sources"].items()}
     simulation = simulations(args)[0]
@@ -570,7 +573,9 @@ def tour_of(args, rendered) -> list[tuple[str, float, float]]:
     """(listener, start, end) in the master's time, leaving out the listeners of the
     default tour that have no mix (a scene without the stage's players, say). The stops
     end on the song's phrase boundaries, half a crossfade before a downbeat, so that each
-    crossfade ends on one; the first stop also takes what comes before the first."""
+    crossfade ends on one; the first stop also takes what comes before the first. The
+    stops at the listeners ``--listeners`` leaves out are left out too, and stops at one
+    listener in a row are joined."""
     table = feeds_table(args)
     song = table["song"]
     if args.tour:
@@ -581,16 +586,22 @@ def tour_of(args, rendered) -> list[tuple[str, float, float]]:
     else:
         steps = [(name, song.get("tour", {}).get(name, n)) for name, n in TOUR]
         steps = [(name, n) for name, n in steps if n > 0 or name == TOUR[-1][0]]
+    kept = set(picked(args, [name for name, _ in steps]))
+    steps = [(name, n) for name, n in steps if name in kept]
+    if not args.tour:
         skipped = sorted({name for name, _ in steps if name not in rendered})
         if skipped:
             print(f"note: no mix for {', '.join(skipped)}; the tour goes without them")
         steps = [(name, n) for name, n in steps if name in rendered]
-    return music.phrase_tour(
+    if not steps and args.listeners is not None:
+        raise SystemExit("error: the tour visits none of the listeners --listeners names")
+    tour = music.phrase_tour(
         steps,
         table["length_s"],
         phrase_s(song),
         first_s=song["downbeat_s"] - CROSSFADE_S / 2,
     )
+    return pipeline.picked_tour(tour, lambda stop: True)
 
 
 def gains_of(seats: dict, tour) -> dict[str, float]:
@@ -701,7 +712,7 @@ DEMO = Demo(
         Option("results", "folder written by simulate", Path("results_band"), "folder"),
         *common_options(),
         input_option(),
-        Option("listeners", "only these listeners, comma separated", None, steps=("render",)),
+        listeners_option(),
         Option(
             "tour",
             "listener:phrases,... (8 bars each, 0.5 is 4; the last runs to the end)",
@@ -713,6 +724,8 @@ DEMO = Demo(
     scene_from="band",
     plays=plays,
     problems=music.own_song_problems,
+    # The band step keeps the example's listeners as they are.
+    listeners=lambda args: listeners_in(args.source),
 )
 
 

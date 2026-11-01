@@ -38,6 +38,8 @@ keep one gain (the loudest peak at -1 dBFS): the hall's differences are heard as
 simulation gives them, from the podium, 2 m from the first violins, to the back row,
 and the captions give each stop's level against the loudest. Every source has the same
 power, so the balance between the instruments is the recording's own.
+`--listeners conductor,stalls-rear` plays each movement at the seats of its tour among
+those, or at all of them when its tour has none of them.
 """
 
 from __future__ import annotations
@@ -57,6 +59,9 @@ from acoustic_spaces.demos import (
     Step,
     common_options,
     input_option,
+    listener_names,
+    listeners_in,
+    listeners_option,
     pipeline,
     sibling,
 )
@@ -237,14 +242,24 @@ def responses_of(args) -> list[dict]:
 
 
 def stops_of(args) -> list[tuple[int, str]]:
-    """(movement, seat) for each stop of the tour."""
+    """(movement, seat) for each stop of the tour, ``--tour``'s or the default one, at
+    the seats ``--listeners`` names: each movement at the seats of its tour among them,
+    or at all of them, in that option's order, when its tour has none of them."""
     if args.tour:
         stops = []
         for part in args.tour.split(","):
             movement, seat = part.split(":")
             stops.append((int(movement), seat))
+    else:
+        stops = [(movement, seat) for movement, seats in TOUR for seat in seats]
+    names = listener_names(args.listeners)
+    if names is None:
         return stops
-    return [(movement, seat) for movement, seats in TOUR for seat in seats]
+    kept = []
+    for movement in dict.fromkeys(m for m, _ in stops):
+        here = [seat for m, seat in stops if m == movement and seat in names]
+        kept += [(movement, seat) for seat in here or names]
+    return kept
 
 
 def key_of(movement: int, seat: str) -> str:
@@ -465,6 +480,12 @@ DEMO = Demo(
         ),
         *common_options(),
         input_option(),
+        listeners_option(
+            help="only these seats, comma separated (default: every one): each movement is "
+            "heard at the seats of its tour among them, or at all of them when its tour has "
+            "none of them; the simulation keeps every seat, so another choice needs no new "
+            "one"
+        ),
         Option("movements", "only these movements, comma separated", None, steps=("tracks",)),
         Option(
             "tour",
@@ -475,6 +496,7 @@ DEMO = Demo(
     ],
     simulations=simulations,
     plays=plays,
+    listeners=lambda args: listeners_in(args.scene),
 )
 
 __all__ = ["DEMO"]

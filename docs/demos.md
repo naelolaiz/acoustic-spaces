@@ -46,6 +46,19 @@ exist, `--work FOLDER` puts everything somewhere else, and `--no-mp4` writes the
 and the stills without calling ffmpeg. Where a step needs an earlier one, it says which
 command to run.
 
+`--listeners a,b` has a demo play those listeners alone: it mixes them and its video
+tours them, leaving the others out. Every demo with several listeners takes it, with the
+names the scene gives them (a name the demo cannot play is refused with the list of
+those it can). The simulation still takes every listener in use, so another choice later
+needs no new simulation, except in the pass-by demos, which simulate the vehicle along
+its walk at each listener they play (a pass made already is kept). The demo of any scene
+and the pass-by demos visit them in the order given; the others keep their own tour's
+order: the church's tour keeps its times, a place left out giving its time to the one
+before; the stadium's and the lake's stops there keep their phrases, the last running to
+the end; the orchestra plays each movement at the seats of its tour among them, or at
+all of them when its tour has none. The gallery walk hears its visitor alone and takes
+no `--listeners`.
+
 `--input SOURCE=WAV`, once for each source, has a source play a recording of yours
 instead of what the demo gives it: `python lakeside_demo.py render --input
 subs=bass.wav`, or a singer of the choir (`--input singer_f1=take.wav`), a player of the
@@ -73,7 +86,10 @@ tip), and it runs in the background with its messages in the **Messages** panel,
 and folders the demo reads and writes, and the command line. Above **Run**, a line says
 what the run downloads and how much, until it is there: the orchestra's tracks, the
 church's takes and organ samples, the stadium's and the lake's song, the gallery's talk. The sources are a table, each with what it plays and the file it plays instead:
-**Choose WAV…** gives the selected one a file, **Default** takes it back. The
+**Choose WAV…** gives the selected one a file, **Default** takes it back. **Listeners**
+lists the listeners the demo can play, every one ticked: the run plays the ticked ones
+(`--listeners`), **None** unticks them all to tick the few to hear, **All** ticks them
+again. The
 **Movement** box lists the sources and listeners of the scene that have a walk, each
 with how it goes, how far and for how long, ticked when it moves in the run: *This
 scene*'s ticks start as **Moves** sets them in the scene and change that run only
@@ -154,7 +170,7 @@ play, so they stay silent; the stadium demo plays its song's stems through them.
 acoustic-spaces demo scene.yaml                 # every step, into demo/ beside the scene
 acoustic-spaces demo scene.yaml recording       # download the scene's free recording
 acoustic-spaces demo scene.yaml feeds           # one step: feeds, simulate, render, video
-acoustic-spaces demo scene.yaml --seconds 15 --tour front,back --hrtf me.sofa
+acoustic-spaces demo scene.yaml --seconds 15 --listeners front,back --hrtf me.sofa
 acoustic-spaces demo scene.yaml --moving none   # every walker standing where it starts
 ```
 
@@ -173,9 +189,9 @@ acoustic-spaces demo scene.yaml --moving none   # every walker standing where it
 - **simulate**: `acoustic-spaces simulate` on the scene, its binaural output through the
   HRTFs the scene's binaural output names, `--hrtf` instead, or the spherical head
   model when neither names any. A scene changed since its results is simulated again.
-- **render**: every listener in use (or those `--tour` names, in its order) hearing
-  every source that plays, with one gain for all, so that the listeners' differences in
-  level are heard as they are.
+- **render**: every listener in use (or those `--listeners` names, in its order;
+  `--tour`, its earlier name, still works) hearing every source that plays, with one
+  gain for all, so that the listeners' differences in level are heard as they are.
 - **video**: `tour.wav` hears each listener for `--seconds` (20 by default) while the
   recordings run on, crossfading between them; a recording too short for every listener
   shares its length out. Each stop is turned up to the loudness (K-weighted) of the
@@ -198,8 +214,8 @@ still simulation stays for what the stills say where nothing moves. The video is
 moving picture: the walks dotted, every walker where it is at that moment, and the
 level of the sources that play as simulated at that moment; the arrival time is left
 out where something moves, and T30 is the one where the walks start. A stop hears its
-listener where the clock has it then, so `--tour` puts a walker first to hear its walk
-from the start. `--moving` picks the walks of a run without changing the scene:
+listener where the clock has it then, so `--listeners` puts a walker first to hear its
+walk from the start. `--moving` picks the walks of a run without changing the scene:
 `--moving visitor,guide` moves those two and leaves every other walker standing where it
 starts, `--moving none` keeps them all still, so one scene serves both. A walk with
 Doppler (a car, a train) moves alone: every listener hears each early path through its
@@ -246,7 +262,8 @@ python orchestra_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, d
 ```
 
 Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement take
-equal shares of it), `--zips FOLDER` for a folder with zips downloaded before,
+equal shares of it), `--listeners conductor,stalls-rear` (each movement at the seats of
+its tour among them, or at all of them when it has none of them), `--zips FOLDER` for a folder with zips downloaded before,
 `--movements 1,2` for `tracks`, `--format` for another output the simulation wrote,
 `--no-mp4` for the audio and stills only. `demo/chapters.txt` lists the stops' times for
 a video description. `all` runs tracks, the simulation, render and video, leaving out
@@ -311,8 +328,9 @@ python church_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, dem
 ```
 
 Options: `--tour nave-back:0,conductor:25,...` (listener:start in seconds),
-`--listeners a,b` for `render`, `--format` for another output the simulation wrote
-(`ambix3`, `5.0`, ...; the video takes its first two channels), `--no-mp4` for the audio
+`--listeners nave-back,conductor` (those places alone, in `render` and `video`), `--format`
+for another output the simulation wrote (`ambix3`, `5.0`, ...; the video takes its first
+two channels), `--no-mp4` for the audio
 and stills only. The scene and its simulation go beside the script (`scene_choir.yaml`,
 `results_choir`), the rest to `./demo` (`--work`). `all` runs every step in turn,
 leaving out what is done already.
@@ -417,8 +435,8 @@ python stadium_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, de
 
 Options: `--song francium` or `rubidium` for `music` and `feeds` (with `--work
 demo_francium` for a folder of its own), `--tour mix_position:1,singer:0.5,east_stand:1`
-(listener:phrases of 8 bars, 0.5 for 4; the last one runs to the end), `--listeners a,b`
-for `render`, `--format` for another output the simulation wrote, `--no-mp4` for the
+(listener:phrases of 8 bars, 0.5 for 4; the last one runs to the end), `--listeners
+mix_position,east_stand` (those listeners alone, in `render` and `video`), `--format` for another output the simulation wrote, `--no-mp4` for the
 audio and stills only. `all` runs music, feeds, render and video; `band` and the
 simulation come before it.
 
@@ -550,7 +568,8 @@ Options: `--song great_british_summer` or `potassium` for `music` (below),
 or anything ffmpeg decodes, and its tempo, which the tour's phrases of 8 bars go by;
 nothing is downloaded, and the video credits the file by its name unless `--credit`
 says what to show), `--tour bedroom_window:still:1,audience::2`
-(listener:weather:phrases of 8 bars), `--last-phrases` (how long the last stop lasts, 0
+(listener:weather:phrases of 8 bars), `--listeners audience,bedroom_window` (those places
+alone, in both weathers), `--last-phrases` (how long the last stop lasts, 0
 to the end of the song; 2 by default), `--format` for another output the simulation
 wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and video;
 `scenes` and the two simulations come before it.
@@ -707,7 +726,9 @@ alone), `--fire-engine truck_siren_and_horn` what the fire engine plays (all thr
 `truck_and_siren`, `siren_and_horn` or `siren` alone), `--step 1` how far apart the
 vehicle is simulated along its walk (m), `--hrtf me.sofa` a measured head, `--input
 NAME=WAV` a dry recording of yours for the vehicle NAME (`police_car_siren=WAV` for the
-police car's siren, `fire_engine_horn=WAV` for the fire engine's horn). The vehicle drives the length of its walk at
+police car's siren, `fire_engine_horn=WAV` for the fire engine's horn), `--listeners
+verge,yard_25m` the listeners it is simulated and heard at (every one in use by default),
+in that order. The vehicle drives the length of its walk at
 that speed, so the pass lasts the length divided by the speed: the 150 m of the roadside
 take 10.8 s at 50 km/h, 7.7 s at 70 km/h. The **Run demo** window gives the three under
 its options as they change, and ticks the vehicle (the police car's two sources, the
@@ -918,7 +939,8 @@ Options: `--speed 200` how fast it flies over the ground (km/h; without it, the 
 its walk, 226.8 km/h), `--broadband bpm` its rotors' broadband noise from each blade
 section's own noise instead of Pegg's method ([Helicopters](outdoor.md#helicopters)),
 `--step 4` how far apart it is simulated along its walk (m), `--hrtf me.sofa` a
-measured head, `--input helicopter=WAV` a dry recording of yours. Its 900 m of flight
+measured head, `--input helicopter=WAV` a dry recording of yours, `--listeners
+under_track` the listeners it is simulated and heard at. Its 900 m of flight
 take 14.3 s at 63 m/s.
 
 - **The helicopter** is the example's source `helicopter`, a point at the main rotor's
@@ -990,7 +1012,8 @@ Options: `--height 330` how high it flies (m, at every place of its walk; by def
 as the scene has it), `--at 180` when it is over the centre
 spot, in seconds into the song as the sound system plays it (by default halfway
 through); `--speed`, `--broadband`, `--step` and `--input helicopter=WAV` as in the
-flyover demo, and `--tour` as in the stadium demo. At the mix position the walk takes 3.3 minutes on 4
+flyover demo, and `--tour` and `--listeners` as in the stadium demo (the helicopter is
+then simulated at those listeners alone, over the concert's mixes there). At the mix position the walk takes 3.3 minutes on 4
 cores, most of it playing the 301 places through with Doppler, so some 40 for the 12
 listeners.
 

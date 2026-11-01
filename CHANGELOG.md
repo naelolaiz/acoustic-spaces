@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Every demo with several listeners plays the ones picked for a run: `--listeners
+  a,b` mixes those alone and its video tours them alone. The simulation still takes
+  every listener in use, so another choice needs no new one, except in the pass-by
+  demos (roadside, street, the helicopter flyover and the helicopter over the stadium),
+  which simulate the vehicle along its walk at the listeners they play and keep a pass
+  made already. The demo of any scene and the pass-by demos visit them in the order
+  given; the church's tour keeps its times, a place left out giving its time to the one
+  before; the stadium's and the lake's stops there keep their phrases (stops at one
+  place in a row are joined); the orchestra plays each movement at the seats of its
+  tour among them, or at all of them when its tour has none. The lakeside, orchestra
+  and pass-by demos had no such choice before, and the church's `--listeners` picked
+  the mixes while its video still asked for every place. A name the demo cannot play, or none,
+  is refused with the names it can. The demo of any scene's `--tour` is now
+  `--listeners`; `--tour` still works. The editor's Run demo window lists the listeners
+  the demo can play, every one ticked, with **All** and **None**, out of Advanced
+  (`demos.listeners_option`, `Demo.listeners`).
+
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): three
   sources along one walk, the vehicle itself (`fire_engine`, CNOSSOS-EU's category 2, a
   medium heavy vehicle with two axles, its engine six cylinders at 1500 rpm), its siren

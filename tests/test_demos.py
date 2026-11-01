@@ -25,7 +25,11 @@ from acoustic_spaces.demos import (
     demos_of,
     input_option,
     list_demos,
+    listener_names,
+    listeners_in,
+    listeners_option,
     music,
+    picked,
     pipeline,
     scripts_of,
     shell_line,
@@ -268,6 +272,65 @@ def test_phrases_set_where_a_tour_cuts() -> None:
     )
     short = music.phrase_tour([("a", 1), ("b", 1), ("c", 1)], 20.0, phrase)
     assert [key for key, _, _ in short] == ["a", "b"]
+
+
+def test_a_tour_without_some_places_keeps_its_length_and_cuts() -> None:
+    """A tour that leaves places out: each stop left out gives its time to the stop
+    before it (those first, to the first one kept), stops at one place in a row become
+    one, and the tour lasts as long as before."""
+    tour = [("a", 0.0, 10.0), ("b", 10.0, 20.0), ("c", 20.0, 30.0), ("a", 30.0, 40.0)]
+    assert pipeline.picked_tour(tour, lambda stop: True) == tour
+    assert pipeline.picked_tour(tour, lambda stop: stop[0] != "b") == [
+        ("a", 0.0, 20.0),
+        ("c", 20.0, 30.0),
+        ("a", 30.0, 40.0),
+    ]
+    assert pipeline.picked_tour(tour, lambda stop: stop[0] == "c") == [("c", 0.0, 40.0)]
+    assert pipeline.picked_tour(tour, lambda stop: stop[0] == "a") == [("a", 0.0, 40.0)]
+    assert pipeline.picked_tour(tour, lambda stop: False) == []
+    # A place may be more than a name: a listener in a weather.
+    weathers = [("x", "evening", 0.0, 5.0), ("x", "still", 5.0, 9.0), ("y", "evening", 9.0, 12)]
+    assert pipeline.picked_tour(weathers, lambda stop: stop[0] == "x") == [
+        ("x", "evening", 0.0, 5.0),
+        ("x", "still", 5.0, 12),
+    ]
+
+
+def test_a_demo_plays_the_listeners_named(tmp_path: Path) -> None:
+    """``--listeners``: the names in its order, each once, none when it is not given;
+    the listeners a demo plays keep the demo's order; a name the demo cannot play, or
+    none, is refused with the names it can, and the editor labels it Listeners."""
+    assert listener_names(None) is None
+    assert listener_names(" b, a,,b ") == ["b", "a"]
+    assert listener_names("") == []
+    every = ["a", "b", "c"]
+    assert picked(argparse.Namespace(listeners=None), every) == every
+    assert picked(argparse.Namespace(listeners="c,a"), every) == ["a", "c"]
+    assert picked(argparse.Namespace(), every) == every
+    demo, _ran = _demo(tmp_path, listeners=lambda args: listeners_in(args.scene))
+    demo.options.append(listeners_option())
+    option = demo.option("listeners")
+    assert option.kind == "listeners" and option.label == "Listeners" and not option.advanced
+    assert option.steps == ("render", "video") and option.choices == ()
+    (tmp_path / "scene.yaml").write_text(
+        "listeners:\n"
+        "  - {name: front, position: [1, 1, 1]}\n"
+        "  - {name: left_out, position: [2, 1, 1], enabled: false}\n"
+        "  - {name: back, position: [3, 1, 1]}\n",
+        encoding="utf-8",
+    )
+    assert listeners_in(tmp_path / "scene.yaml") == ["front", "back"]
+    args = demo.parser().parse_args(["render", "--listeners", "back"])
+    assert args.listeners == "back" and demo.check(args) is None
+    assert demo.command("render", args) == "python test_demo.py render --listeners back"
+    args.listeners = "back,left_out"
+    assert demo.check(args) == "--listeners left_out: no such listener here; it has front, back"
+    args.listeners = " , "
+    assert demo.check(args) == "--listeners names no listener"
+    # A scene the demo cannot read yet leaves the names to the steps.
+    (tmp_path / "scene.yaml").unlink()
+    args.listeners = "anyone"
+    assert demo.check(args) is None
 
 
 # --------------------------------------------------------------------------- a demo
@@ -996,6 +1059,35 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
     # A missing scene is the command line's error.
     assert cli(["demo", "nothing.yaml"]) == 2
     assert "no " in capsys.readouterr().err
+
+
+def test_a_demo_of_any_scene_plays_the_listeners_named(tmp_path: Path, monkeypatch, capsys) -> None:
+    """``--listeners`` (or ``--tour``, its earlier name): the demo of any scene mixes
+    those listeners alone and its video visits them in that order, from a simulation of
+    every listener, so that another choice needs no new one; a listener the scene has
+    not is refused with those it has."""
+    pytest.importorskip("PIL")
+    from acoustic_spaces.cli import main as cli
+
+    scene = _any_scene(tmp_path)
+    monkeypatch.chdir(scene.parent)
+    run = ["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]
+    assert cli([*run, "--listeners", "seat-b"]) == 0
+    work = scene.parent / "demo"
+    report = pipeline.read_json(work / "results" / pipeline.PARAMETERS)
+    assert {e["listener"] for e in report["responses"]} == {"seat-a", "seat-b"}
+    assert set(pipeline.read_json(work / "seats" / "seats.json")["seats"]) == {"seat-b"}
+    assert sorted(p.name for p in (work / "stills").glob("*.png")) == ["00_seat-b.png"]
+    capsys.readouterr()
+    assert cli([*run, "--tour", "seat-b,seat-a"]) == 0
+    assert "simulate: done already" in capsys.readouterr().out
+    assert set(pipeline.read_json(work / "seats" / "seats.json")["seats"]) == {"seat-a", "seat-b"}
+    stills = sorted(p.name for p in (work / "stills").glob("*.png"))
+    assert stills == ["00_seat-b.png", "01_seat-a.png"]
+    assert cli(["demo", "scene.yaml", "--listeners", "nobody"]) == 2
+    assert "--listeners nobody: no such listener here; it has seat-a, seat-b" in (
+        capsys.readouterr().err
+    )
 
 
 def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, capsys) -> None:

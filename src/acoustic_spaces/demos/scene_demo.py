@@ -13,12 +13,14 @@ Each file is brought to one gated RMS (its channels mixed down) and every channe
 out of it keeps that gain, so a recording's stereo balance stays; then each source's
 sound power in the scene (``level_db``) sets how loud it is against the others, as the
 simulation says and not as the recordings happen to be. Sources with neither stay
-silent. Every listener in use is heard in turn, in the scene's order (or ``--tour``),
-for ``--seconds`` each while the piece runs on, with one gain for all the stops and a
-crossfade between them, binaural through the HRTFs of the scene's binaural output (or
-``--hrtf``, or a spherical head model when neither names any). The stills show the scene
-from above with the listener of the moment, the level there, how long the sound takes to
-arrive and T30 at mid frequencies, and say how the sound was made.
+silent. Every listener in use is heard in turn, in the scene's order (or only those
+``--listeners`` names, in its order), for ``--seconds`` each while the piece runs on,
+with one gain for all the stops and a crossfade between them, binaural through the HRTFs
+of the scene's binaural output (or ``--hrtf``, or a spherical head model when neither
+names any). The stills show the scene from above with the listener of the moment, the
+level there, how long the sound takes to arrive and T30 at mid frequencies, and say how
+the sound was made. The simulation keeps every listener in use, so another choice of
+``--listeners`` needs no new one.
 
 Sources and listeners whose walk is on move along it while the piece plays, all on one
 clock from its start (:func:`acoustic_spaces.walkthrough.simulate_movement`): every
@@ -34,14 +36,14 @@ shifts as it passes, the late sound crossfaded from place to place
     acoustic-spaces demo scene.yaml              # every step, into demo/ beside the scene
     acoustic-spaces demo scene.yaml recording    # download the scene's free recording
     acoustic-spaces demo scene.yaml feeds        # one step
-    acoustic-spaces demo scene.yaml --hrtf me.sofa --seconds 15 --tour front,back
+    acoustic-spaces demo scene.yaml --hrtf me.sofa --seconds 15 --listeners front,back
     acoustic-spaces demo scene.yaml --input talker=other_take.wav
     acoustic-spaces demo scene.yaml --moving none   # every walker standing where it starts
 
 The editor runs it from **Simulation > Run demo…** as *This scene*, with a tick for each
-walk in its Movement table. The video needs ffmpeg on the PATH and Pillow (the ``viz``
-extra). The five demos of the examples are scripts of their own, with their recordings;
-this one takes any scene.
+walk in its Movement table and for each listener in its Listeners list. The video needs
+ffmpeg on the PATH and Pillow (the ``viz`` extra). The five demos of the examples are
+scripts of their own, with their recordings; this one takes any scene.
 """
 
 from __future__ import annotations
@@ -64,6 +66,9 @@ from acoustic_spaces.demos import (
     Step,
     common_options,
     input_option,
+    listener_names,
+    listeners_in,
+    listeners_option,
     moving_names,
     pipeline,
 )
@@ -416,11 +421,11 @@ def feeds(args: argparse.Namespace) -> None:
 
 
 def listeners_of(args: argparse.Namespace, entries: list[dict]) -> list[str]:
-    """The listeners of the tour: ``--tour``, or every listener in use that the results
-    have, in the scene's order."""
+    """The listeners of the tour: those ``--listeners`` names, in its order, or every
+    listener in use that the results have, in the scene's order."""
     simulated = {e["listener"] for e in entries}
-    if args.tour:
-        names = [name.strip() for name in args.tour.split(",") if name.strip()]
+    names = listener_names(args.listeners)
+    if names is not None:
         missing = [name for name in names if name not in simulated]
         if missing:
             raise SystemExit(
@@ -722,12 +727,13 @@ DEMO = Demo(
             "float",
             steps=("video",),
         ),
-        Option(
-            "tour",
-            "only these listeners, in this order, comma separated (default: every listener "
-            "in use, in the scene's order)",
-            None,
-            steps=("render", "video"),
+        dataclasses.replace(
+            listeners_option(),
+            help="only these listeners, in this order, comma separated (default: every "
+            "listener in use, in the scene's order): the demo mixes those alone and its "
+            "video visits them in turn; the simulation keeps every listener, so another "
+            "choice needs no new one",
+            aliases=("--tour",),
         ),
         Option(
             "credit",
@@ -771,6 +777,7 @@ DEMO = Demo(
     completes=completed,
     plays=plays,
     moving=moving_of,
+    listeners=lambda args: listeners_in(args.scene),
 )
 
 if __name__ == "__main__":

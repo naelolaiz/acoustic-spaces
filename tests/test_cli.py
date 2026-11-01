@@ -1099,7 +1099,7 @@ def test_demo_of_a_scene_explains_itself(
     out = capsys.readouterr().out
     for word in ("recording", "feeds", "simulate", "render", "video", "--hrtf", "--seconds"):
         assert word in out
-    assert "--tour" in out
+    assert "--listeners" in out and "--tour" in out  # the earlier name still works
     # The shoebox without its recording: its talker plays nothing.
     data = yaml.safe_load(SHOEBOX.read_text(encoding="utf-8"))
     data["geometry"]["file"] = (SHOEBOX.parent / data["geometry"]["file"]).as_posix()
