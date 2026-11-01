@@ -5,7 +5,8 @@
 - Fixed: the airport's flight demo stopped on the departure ("the departing jet's sound
   is shorter than its pass"), its sound a sample shorter than its walk's rounded times.
 - Fixed: a stereo recording's left and right sources played 0.2 to 3 dB over their
-  sound power; the two channels now share one gain set from both, not from the mixdown.
+  sound power, in any scene's demo and the stadium's; the two channels now share one
+  gain set from both, not from the mixdown.
 - Fixed: a tour played up to 3 dB louder at a crossfade between two seats of one piece;
   the crossfade now keeps the power running on however alike the two mixes are.
 - A moving source renders faster: the paths at a moment of the eddies are worked out
