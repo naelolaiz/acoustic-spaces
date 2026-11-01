@@ -1079,8 +1079,10 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
         " at 16 kHz, mixed binaural through a spherical head model. "
         "Run as: acoustic-spaces demo scene.yaml all --seconds 0.8 --no-mp4"
     )
-    # A scene changed since is fed and simulated again.
-    later = (work / "feeds" / "feeds.json").stat().st_mtime + 10
+    # A scene changed since is fed and simulated again (later than both, however long
+    # the simulation took).
+    written = [work / "feeds" / "feeds.json", work / "results" / pipeline.PARAMETERS]
+    later = max(path.stat().st_mtime for path in written) + 10
     os.utime(scene, (later, later))
     from acoustic_spaces.demos.scene_demo import feeds_done
 
