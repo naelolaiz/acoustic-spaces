@@ -313,15 +313,16 @@ Scene files of 4.0.1 load unchanged; the `stadium_pa` example is now part of
   away, sounded in blasts; its pitch (two trumpets at 150 and 180 Hz), its spectrum, its
   blasts, its height and its directivity are assumptions, as no measured air horn of a
   fire engine was found. A recording given for the horn plays its blasts as loud as the
-  made horn's, whatever its pauses. `--fire-engine` plays all three
-  (`truck_siren_and_horn`), `truck_and_siren`, `siren_and_horn` or `siren`, and
-  `validation/urban_sources.py` holds the siren and the horn against their rules. The
-  police car and the fire engine are both an
-  `acoustic_spaces.demos.siren.EmergencyVehicle`; the police car's `police_car.json`
-  holds the car's numbers under `vehicle` instead of `car`. In the editor's Run demo
-  window the options of one vehicle alone (`--siren` and `--police-car` for the police
-  car, `--fire-engine`) show only while that vehicle is picked, and stay out of the
-  command line otherwise (`Option.only`).
+  made horn's, whatever its pauses. The captions have the horn as loud as its sound
+  plays around each place, its blasts 4.5 dB over its average and its pauses silent
+  (`passby.Vehicle.sounding`). `--fire-engine` plays all three (`truck_siren_and_horn`),
+  `truck_and_siren`, `siren_and_horn` or `siren`, and `validation/urban_sources.py`
+  holds the siren and the horn against their rules. The police car and the fire engine
+  are both an `acoustic_spaces.demos.siren.EmergencyVehicle`; the police car's
+  `police_car.json` holds the car's numbers under `vehicle` instead of `car`. In the
+  editor's Run demo window the options of one vehicle alone (`--siren` and
+  `--police-car` for the police car, `--fire-engine`) show only while that vehicle is
+  picked, and stay out of the command line otherwise (`Option.only`).
 - The road vehicles' sound power is CNOSSOS-EU's Table F-1 as amended in 2021
   (Commission Delegated Directive (EU) 2021/1226), which has a vehicle's point radiate
   alike every way instead of into the half space above the road, with coefficients A
