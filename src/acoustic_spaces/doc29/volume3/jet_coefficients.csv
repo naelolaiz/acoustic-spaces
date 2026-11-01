@@ -1,0 +1,4 @@
+Aircraft Identifier,Thrust Rating,E (lb),F (lb/kt),Ga (lb/ft),Gb (lb/ft2),H (lb/degC),K1 (lb/EPR),K2 (lb/EPR2),K3 (lb/(N1/sqrt(theta))),K4 (lb/(N1/sqrt(theta))2)
+JETW,MaxClimb,16000,-4,0.4,-1e-05,0,n/a,n/a,n/a,n/a
+JETW,IdleApproach,1100,-6.5,0.17,-1e-05,0,n/a,n/a,n/a,n/a
+JETW,MaxTakeoff,25000,-25,0.3,1e-05,0,n/a,n/a,n/a,n/a

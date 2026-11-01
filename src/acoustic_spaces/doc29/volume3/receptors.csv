@@ -1,0 +1,19 @@
+receptor_ID,Receptor Description,Relevant_Op/Route,X coordinate (nmi),Y coordinate (nmi),Height (ft),X coordinate (m),Y coordinate (m),Height (m)
+R01,"TakeOff, 6.5km from SOR","DC, DS",3.509719222,0,0,6500,0,0
+R02,"SOR, to the side","AC, AS, DC, DS",0,0.1079913607,0,0,200,0
+R03,"SOR, behind","AC, AS, DC, DS",-0.2699784017,0,0,-500,0,0
+R04,"SOR, benind and to the side","AC, AS, DC, DS",-0.2699784017,0.2699784017,0,-500,500,0
+R05,"Sideline, at runway end","AC, AS, DC, DS",1.61987041,0.2699784017,0,3000,500,0
+R06,Dep Curve,DC,4.427645788,-0.9719222462,0,8200,-1800,0
+R07,Dep Curve Outside,DC,5.183585313,-0.2159827214,0,9600,-400,0
+R08,Dep Curve Inside,DC,3.617710583,-1.781857451,0,6700,-3300,0
+R09,Dep Curve End,DC,5.399568035,-5.399568035,0,10000,-10000,0
+R10,Dep Curve End Outside,DC,6.479481641,-5.399568035,0,12000,-10000,0
+R11,Dep Curve End Inside,DC,4.319654428,-5.399568035,0,8000,-10000,0
+R12,Arr Curve,AC,-12.41900648,-0.9719222462,0,-23000,-1800,0
+R13,Arr Curve Outside,"AC, AS",-13.174946,-0.2699784017,0,-24400,-500,0
+R14,Arr Curve Inside,AC,-11.60907127,-1.781857451,0,-21500,-3300,0
+R15,Arr Curve End,AC,-13.39092873,-5.399568035,0,-24800,-10000,0
+R16,Arr Curve End Outside,AC,-14.47084233,-5.399568035,0,-26800,-10000,0
+R17,Arr Curve End Inside,AC,-12.31101512,-5.399568035,0,-22800,-10000,0
+R18,"Approach, 2.0km from threshold","AC, AS",-1.079913607,0,0,-2000,0,0

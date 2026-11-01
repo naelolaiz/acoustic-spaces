@@ -51,6 +51,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "open_air_stage",
             "lakeside_concert",
             "helicopter_flyover",
+            "airport",
         ),
     ),
     (N_("Models from CAD and BIM files"), ("rehearsal_room", "bim_office", "leaky_classroom")),

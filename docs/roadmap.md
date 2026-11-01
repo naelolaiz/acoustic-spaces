@@ -391,7 +391,22 @@ Movement:
 - [ ] A train horn's directivity measured, mounted on a train's front (Toward et al.
   found one 1 dB down 30 degrees off its axis, where the siren the horns take is 3.6 dB
   down).
-- [ ] Aircraft taking off, landing and flying over.
+- [x] Aircraft noise at receivers by ECAC Doc 29: one movement's SEL and LAmax from
+  the NPD curves along the flight path's segments, with Volume 3's three hypothetical
+  aircraft, checked against all of Volume 3's reference levels, grids and segment
+  results.
+- [x] Doc 29's flight performance (Volume 2 Appendix B): profiles from procedural
+  steps at any aerodrome, checked against all of Volume 3 Part 2's reference profiles;
+  tables read from a copy of the ANP database of one's own.
+- [ ] Doc 29's bank angles in turns: from the ground track's turn radii (Volume 2
+  Appendix B5, eq. B-14) for the engines' installation correction, and their effect on
+  the climb in the performance calculation.
+- [x] Aircraft taking off and landing in a scene, heard in a demo, its levels checked
+  against Doc 29's: the airport example's twin jet, flown by Doc 29's Appendix B.
+- [ ] Houses under the airport example's flights, and an aircraft flying over at
+  cruise.
+- [ ] The L_Amax of a pass with slow and fast time weighting, as measured, beside the
+  highest quasi-static level the captions give now.
 - [x] Ground-borne vibration from trains, trams and construction plant, and the rumble
   it makes in a building's rooms, by the US FTA's general method: overall levels from
   its curves and tables against its limits and damage criteria, for the railway's
