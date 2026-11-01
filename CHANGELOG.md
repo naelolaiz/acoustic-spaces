@@ -57,10 +57,14 @@
   the source against its NPD curves and the flights against Doc 29's own levels; the
   flights agree within 0.9 dB in the air but for the arrival's SEL (1.7 dB under), and
   part by up to 11.4 dB on the runway, where the engine reckons the ground in still air.
-- The railway's pass-by demo, the street's tram and its road works can be heard in a
-  house at each listener (`--indoors`): the train or the works through a closed
-  double-glazed window by EN ISO 12354-3 (the new `acoustic_spaces.facade`), the rumble
-  of the ground's vibration by the FTA's general method, or both.
+- The railway's pass-by demo, the street's tram and its road works can be heard indoors
+  (`--indoors`) by listeners in front of a building's wall, as the railway's new
+  `house_18m` is: through a closed double-glazed window by EN ISO 12354-3 (the new
+  `acoustic_spaces.facade`), the rumble of the ground's vibration by the FTA's general
+  method, or both. Every listener's caption says how hard the ground or the floor
+  shakes and whether that is felt, and a bass shaker's track plays it.
+- The railway example traces image sources to the second order, so the barrier's and
+  the house's reflections keep their partners off the ground.
 
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with

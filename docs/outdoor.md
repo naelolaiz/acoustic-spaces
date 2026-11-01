@@ -1317,7 +1317,9 @@ Levels are in VdB, decibels re 1 micro-inch per second (25.4 nm/s), as the manua
 them, and a PPV in mm/s and in/s.
 
 The railway example's `vibration.py` stands a house where each of the scene's listeners
-in use is (or those `--listeners` names, in that order), as far from the track, and prints for each of the demo's trains at its own speed
+in use is (or those `--listeners` names, in that order), as far from the track, or
+takes the scene's house a listener stands in front of (`house_18m`'s, its wall 20 m
+from the track), and prints for each of the demo's trains at its own speed
 the vibration of the ground outside, of the house's floor and the rumble in its rooms
 against the limits for residences, and from how far each limit holds. The house is a
 small masonry building whose structure is not known, the trains the scene's one
@@ -1347,10 +1349,12 @@ kind's and 0.1 % under the next one's (0.1998 against 0.2 in/s), and 94.4 VdB. T
 office block, 8.0 m from both, stays under every damage criterion; the method gives it
 no limits for annoyance, as it counts offices only where something in them is
 sensitive to vibration. Both scripts run from the editor's **Run demo** window. The
-pass-by demos play the rumble at each listener, with the train or the tram through a
-closed window (`--indoors`, see [Trains passing by](demos.md#trains-passing-by)),
-and the road works demo the breaker's and the dumper's (see [Road works in the
-street](demos.md#road-works-in-the-street)).
+pass-by demos play the rumble in the room of each listener in front of a house, with
+the train or the tram through a closed window (`--indoors`, see [Trains passing
+by](demos.md#trains-passing-by)), and the road works demo the breaker's and the
+dumper's (see [Road works in the street](demos.md#road-works-in-the-street)); at every
+listener their captions say how hard the ground or the floor shakes and whether that
+is felt, and a bass shaker's track plays it.
 
 What the method leaves out: it gives overall levels, not their spectra, so the rooms
 are not simulated. Its curves are the upper range of measurements of North American
