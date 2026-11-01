@@ -179,6 +179,12 @@ class Loudspeakers:
     def label(self) -> str:
         return self.name
 
+    def pressure_gains(self) -> np.ndarray:
+        """(channels,) what each channel picks up of a sound pressure that is the same
+        all over the room (1/√n in each of the n main speakers, as they play sound from straight above or below, and none in the LFE)."""
+        mains = [not s.lfe for s in self.speakers]
+        return np.where(mains, 1.0 / math.sqrt(sum(mains)), 0.0)
+
     @property
     def channel_names(self) -> list[str]:
         return [s.name for s in self.speakers]
