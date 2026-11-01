@@ -56,7 +56,7 @@ listeners:
     position: [30, 55, 1.5]
     orientation: {yaw: -90}
 simulation:
-  early: {method: image_sources, max_order: 1, diffraction: none}
+  early: {method: image_sources, max_order: 2, diffraction: none}
   late: {method: stochastic_ray_tracing, rays: 200000}
   ir_length_s: 0.6
 outputs:

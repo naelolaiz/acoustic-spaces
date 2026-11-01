@@ -231,6 +231,8 @@ class Device:
     #: sound has over whole periods of them.
     steady = True
     rms = SOUND_RMS
+    #: How long its sound fades in at the start of a pass and out at its end (s).
+    fade_s = FADE_S
 
     def __init__(self, part: str, file: str, place: str, loudness: str) -> None:
         self.part, self.file, self.place, self.loudness = part, file, place, loudness
@@ -247,10 +249,10 @@ class Device:
         """Its sound, dry and mono, ``duration_s`` long at ``rate``."""
         raise NotImplementedError
 
-    def input_gain(self, x: np.ndarray, rate: int) -> float | None:
+    def input_gain(self, x: np.ndarray, rate: int, pattern: str = "") -> float | None:
         """The gain of ``x``, a recording of it, so that it plays as loud as its made
-        sound, which has no pauses: its gated RMS brought to SOUND_RMS; None when it is
-        silent."""
+        sound (in ``pattern``), which has no pauses: its gated RMS brought to SOUND_RMS;
+        None when it is silent."""
         from acoustic_spaces.demos.audio import gated_rms
 
         rms = gated_rms(x, rate)
@@ -300,40 +302,55 @@ class Siren(Device):
 
 class Horn(Device):
     """A horn (:mod:`acoustic_spaces.demos.horn`) in blasts: the air horn's two
-    trumpets, or the ``kind`` given (:class:`~acoustic_spaces.demos.horn.Kind`)."""
+    trumpets, or the ``kind`` given (:class:`~acoustic_spaces.demos.horn.Kind`); with a
+    ``chord`` (a kind of the same notes sounding together), its pattern ``"chord"``
+    sounds that."""
 
     key = "horn"
     recorded = ", its blasts as loud as the made horn's, whatever its pauses"
     steady = False
 
-    def __init__(self, part: str, file: str, place: str, loudness: str, kind=None) -> None:
+    def __init__(
+        self, part: str, file: str, place: str, loudness: str, kind=None, chord=None
+    ) -> None:
         from acoustic_spaces.demos.horn import AIR_HORN
         from acoustic_spaces.demos.horn import SOUND_RMS as HORN_RMS
 
         super().__init__(part, file, place, loudness)
         self.kind = kind or AIR_HORN
+        self.chord = chord
         self.noun = self.kind.noun
         self.rms = HORN_RMS
+        # Its blasts rise and fall of themselves: the first is not faded in.
+        self.fade_s = self.kind.rise_s
 
     def pattern(self, args: argparse.Namespace) -> str:
         return "blasts"
 
+    def kind_of(self, pattern: str):
+        """What it sounds in ``pattern``: its chord for ``"chord"``, else its kind."""
+        if pattern != "chord":
+            return self.kind
+        if self.chord is None:
+            raise ValueError(f"the {self.noun} has no chord")
+        return self.chord
+
     def power(self, pattern: str, rate: int) -> np.ndarray:
         from acoustic_spaces.demos.horn import horn_power
 
-        return horn_power(rate, self.kind)
+        return horn_power(rate, self.kind_of(pattern))
 
     def sound(self, pattern: str, rate: int, duration_s: float) -> np.ndarray:
         from acoustic_spaces.demos.horn import horn_sound
 
-        return horn_sound(rate, duration_s, self.kind)
+        return horn_sound(rate, duration_s, self.kind_of(pattern))
 
-    def input_gain(self, x: np.ndarray, rate: int) -> float | None:
-        """A recording of a horn plays its blasts as loud as the made horn's, whatever
-        its pauses (:func:`~acoustic_spaces.demos.horn.recorded_gain`)."""
+    def input_gain(self, x: np.ndarray, rate: int, pattern: str = "blasts") -> float | None:
+        """A recording of a horn plays its blasts as loud as the made horn's in
+        ``pattern``, whatever its pauses (:func:`~acoustic_spaces.demos.horn.recorded_gain`)."""
         from acoustic_spaces.demos.horn import recorded_gain
 
-        return recorded_gain(x, rate, self.kind)
+        return recorded_gain(x, rate, self.kind_of(pattern))
 
     def doing(self, pattern: str) -> str:
         return f"its {self.noun} in blasts"
@@ -343,9 +360,9 @@ class Horn(Device):
         return f"{article} {self.noun}'s blasts"
 
     def credit(self, pattern: str) -> str:
-        hz = self.kind.hz
-        tones = " and ".join(f"{f:g}" for f in hz)
-        turn = " in turn," if self.kind.in_turn else ""
+        kind = self.kind_of(pattern)
+        tones = " and ".join(f"{f:g}" for f in kind.hz)
+        turn = " in turn," if kind.in_turn else " together," if pattern == "chord" else ""
         return f"{self.noun}: {tones} Hz{turn} in blasts, {self.loudness}"
 
 
@@ -463,6 +480,10 @@ class EmergencyVehicle(Vehicle):
         own = (self.body.sound_file,) if self.with_body(args) else ()
         return (*own, *(d.file for d in self.played(args)))
 
+    def fade_s(self, part: str) -> float:
+        device = next((d for d in self.devices if d.part == part), None)
+        return FADE_S if device is None else device.fade_s
+
     def sounding(
         self, args: argparse.Namespace, part: str, played, rate: int, at: np.ndarray
     ) -> np.ndarray | None:
@@ -477,9 +498,13 @@ class EmergencyVehicle(Vehicle):
             return None
         return blocks_loudness(np.asarray(played, dtype=float), rate, at, device.rms)
 
-    def input_gain(self, part: str, x: np.ndarray, rate: int) -> float | None:
+    def input_gain(
+        self, args: argparse.Namespace, part: str, x: np.ndarray, rate: int
+    ) -> float | None:
         device = next((d for d in self.devices if d.part == part), None)
-        return super().input_gain(part, x, rate) if device is None else device.input_gain(x, rate)
+        if device is None:
+            return super().input_gain(args, part, x, rate)
+        return device.input_gain(x, rate, device.pattern(args))
 
     def sound_path(self, args: argparse.Namespace, part: str) -> Path:
         files = {d.part: d.file for d in self.devices}
@@ -589,7 +614,14 @@ class EmergencyVehicle(Vehicle):
                     f"{device.noun}: {file.name}" if file is not None else device.credit(pattern)
                 )
         noun = self.noun[0].upper() + self.noun[1:]
-        return f"{noun}'s sound, {'; '.join(said)}; faded in and out over {FADE_S:g} s"
+        horns = [d for d in self.devices if d.part in parts and not d.steady]
+        # A horn's blasts rise and fall of themselves, unfaded (:meth:`fade_s`).
+        fade = f"; faded in and out over {FADE_S:g} s"
+        if horns and len(horns) < len(parts):
+            fade += ", not the horn"
+        elif horns:
+            fade = ""
+        return f"{noun}'s sound, {'; '.join(said)}{fade}"
 
     def texts(self) -> dict[str, str]:
         devices = self.devices
@@ -705,7 +737,7 @@ class FireEngine(EmergencyVehicle):
             FIRE_HORN,
             HORN_FILE,
             f"{HEIGHT_M:g} m up",
-            f"{ON_AXIS_DB_A:g} dB(A) at {AT_M:g} m (the horn rule's most)",
+            f"{ON_AXIS_DB_A:g} dB(A) at {AT_M:g} m (its rule's most)",
         )
         super().__init__(
             truck,

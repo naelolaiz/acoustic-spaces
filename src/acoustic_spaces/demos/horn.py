@@ -59,14 +59,18 @@ measured train horns ("Sound propagation and audibility of train horns", ISVR an
 RSSB). Each note is an air horn's, a sawtooth, as the fire engine's is, rich in
 harmonics as Toward et al. found a train horn; its blasts are a driver's warning,
 assumed; it is as directional as the siren NBS measured (Toward et al. measured a train
-horn 1 dB down 30 degrees off its axis, where the siren is 3.6 dB down).
+horn 1 dB down 30 degrees off its axis, where the siren is 3.6 dB down). Its notes
+may sound together too, as a chord (:data:`TRAIN_CHORD`): EN 15153-2 allows it (its
+point 5.2.1 b; the TSI, point 4.2.7.2.1 (4), as an extra signal) and asks the same 101
+to 109 dB(C) of the two as a group (its clause 5.2.2); here they are at 109 together,
+each note's sawtooth as large as the other's, in the same blasts.
 """
 
 from __future__ import annotations
 
 import functools
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -187,6 +191,9 @@ TRAIN_HORN = Kind(
     in_turn=True,
     site=TRAIN_SITE,
 )
+#: The train's horn with its two notes together, as a chord, in the same blasts: the two
+#: 109 dB(C) together 25 m ahead (EN 15153-2's most for a group of horns sounded at once).
+TRAIN_CHORD = replace(TRAIN_HORN, in_turn=False)
 #: The rule's notes (Hz) and the levels it lets each be 25 m ahead (dB(C)).
 TRAIN_NOTES_HZ = ((630.0, 690.0), (350.0, 390.0))
 TRAIN_LEVELS_DB_C = (101.0, 109.0)
@@ -470,6 +477,7 @@ __all__ = [
     "RULE_BAND_HZ",
     "SOUND_RMS",
     "Site",
+    "TRAIN_CHORD",
     "TRAIN_HORN",
     "TRAIN_HORN_HEIGHT_M",
     "TRAIN_LEVELS_DB_C",

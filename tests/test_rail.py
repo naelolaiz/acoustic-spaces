@@ -313,6 +313,80 @@ def test_the_train_horn_sounds_the_rules_notes_at_its_level() -> None:
     assert average == pytest.approx(total, rel=1e-9)
 
 
+def test_the_train_horn_sounds_its_notes_together_as_a_chord() -> None:
+    """--horn chord: the TSI's two notes together in the train horn's blasts, the two
+    109 dB(C) together 25 m ahead on EN 15153-2's site (a group's level); its made
+    sound holds both notes in every blast; a recording plays as loud as the chord's
+    made blasts; and the run, its walk and its credit say it is the chord."""
+    import importlib
+
+    from acoustic_spaces.demos import siren
+    from acoustic_spaces.parameters import c_weighted
+
+    horn = importlib.import_module("acoustic_spaces.demos.horn")
+    kind, notes = horn.TRAIN_CHORD, horn.TRAIN_HORN
+    assert not kind.in_turn and kind.notes == ((660.0, 370.0),)
+    timing = ("blasts", "blast_s", "gap_s", "every_s", "rise_s", "on_axis_db", "site")
+    assert all(getattr(kind, k) == getattr(notes, k) for k in timing)
+    site = kind.site
+    rise = site.horn_m - site.microphone_m
+    spread = 10.0 * math.log10(4.0 * math.pi * (kind.at_m**2 + rise**2))
+    off = float(siren.off_axis_db(math.degrees(math.atan2(rise, kind.at_m))))
+    power = horn.blast_power(RATE, kind)
+    heard = power + siren.directivity_index_db() + off - spread + horn.ground_db(RATE, kind)
+    assert c_weighted(heard) == pytest.approx(kind.on_axis_db, abs=1e-9)
+    x = horn.horn_sound(RATE, kind.every_s, kind)
+    for start in (0.0, kind.blast_s + kind.gap_s):
+        blast = x[int((start + 0.1) * RATE) : int((start + 0.9) * RATE)]
+        spectrum = np.abs(np.fft.rfft(blast))
+        f = np.fft.rfftfreq(len(blast), 1.0 / RATE)
+        assert sorted(f[np.argsort(spectrum)[-2:]]) == pytest.approx([370.0, 660.0], abs=1.5)
+    vehicle = rail.TRAIN_VEHICLE
+    chord = argparse.Namespace(horn="chord")
+    assert vehicle.horn_on(chord) and vehicle.horn_of(chord) == "chord"
+    np.testing.assert_array_equal(vehicle.horn.power("chord", RATE), horn.horn_power(RATE, kind))
+    made = horn.horn_sound(RATE, kind.power_s, kind)
+    assert vehicle.input_gain(chord, "train_horn", made, RATE) == pytest.approx(1.0, rel=1e-12)
+    blasts = argparse.Namespace(horn="blasts")
+    assert vehicle.input_gain(blasts, "train_horn", made, RATE) != pytest.approx(1.0, rel=1e-3)
+    assert vehicle.played_by(chord) != vehicle.played_by(blasts)
+    facts = {"speed_kmh": 160.0, "horn": "chord"}
+    assert "horn: 660 and 370 Hz together, in blasts" in vehicle.credits(facts, {})
+    assert "horn: 660 and 370 Hz in turn, in blasts" in vehicle.credits(
+        facts | {"horn": "blasts"}, {}
+    )
+
+
+def test_a_horns_first_blast_is_not_faded_in(tmp_path) -> None:
+    """A pass's sound fades in and out over FADE_S, but a horn's blasts rise and fall
+    of themselves: its feed fades over its own rise time only, so the first blast of
+    the train's horn plays at its level after rising as every blast does; the train's
+    other sources, the fire engine's and the car's horns as the train's horn."""
+    import importlib
+
+    from acoustic_spaces.demos import passby, siren
+    from acoustic_spaces.demos.audio import write
+
+    horn = importlib.import_module("acoustic_spaces.demos.horn")
+    vehicle = rail.TRAIN_VEHICLE
+    assert vehicle.fade_s("train_horn") == horn.TRAIN_HORN.rise_s == horn.RISE_S
+    assert vehicle.fade_s("train") == passby.FADE_S
+    assert siren.FIRE_ENGINE_VEHICLE.fade_s(siren.FIRE_HORN) == horn.AIR_HORN.rise_s
+    assert siren.FIRE_ENGINE_VEHICLE.fade_s(siren.FIRE_SIREN) == passby.FADE_S
+    assert siren.HONKING_CAR.fade_s(siren.CAR_HORN_PART) == horn.CAR_HORN.rise_s
+    duration = 6.0
+    args = argparse.Namespace(work=tmp_path, horn="blasts")
+    (tmp_path / "train").mkdir()
+    write(tmp_path / "train" / "train_horn.wav", vehicle.horn.sound("blasts", RATE, duration), RATE)
+    made = vehicle.made(args, RATE, duration, "train_horn")
+    x = passby.feed(None, args, RATE, duration, vehicle, "train_horn")
+    rise, n = int(horn.RISE_S * RATE), len(made)
+    np.testing.assert_array_equal(x[rise : n - rise], made[rise : n - rise])
+    first = slice(rise, int(horn.TRAIN_HORN.blast_s * RATE) - rise)
+    assert np.sqrt(np.mean(x[first] ** 2)) > 0.9 * np.max(np.abs(made)) / 3.0
+    assert np.max(np.abs(x[:rise])) <= np.max(np.abs(made[:rise]))
+
+
 def test_a_sites_ground_adds_each_harmonics_reflection_in_pressure() -> None:
     """On the train horn's site each harmonic's pressure and its reflection's off the
     ballast add, |1 + D Q (r1/r2) e^(-jk(r2 - r1))|² (e^(jωt), as the engine's), D the

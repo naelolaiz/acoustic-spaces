@@ -160,11 +160,10 @@ class Pictures(scene_pictures.Pictures):
                 f"Its direct sound falls {heard['pitch_semitones']:.1f} semitones (Doppler)"
             )
         if "vibration_vdb" in heard:
-            rumble = heard.get("parts", {}).get("rumble", heard)["max_a_db"]
-            lines.append(
-                f"Floor shaking {heard['vibration_vdb']:.0f} VdB at most, its rumble "
-                f"{rumble:.1f} dB(A)"
-            )
+            from acoustic_spaces.demos.indoors import shaking_line
+
+            floor = heard.get("shaking", "floor") == "floor"
+            lines.append(shaking_line(heard["vibration_vdb"], floor, heard.get("rumble_a_db")))
         if stop.gain_db > 0.5:
             lines.append(f"Turned up {stop.gain_db:.0f} dB here so you can hear it")
         about = self.facts.get("about") or (
@@ -172,6 +171,8 @@ class Pictures(scene_pictures.Pictures):
             f"{self.facts['sound_power_a_db']:.1f} dB(A) of sound power (CNOSSOS-EU)"
         )
         lines += [(line, MUTED) for line in about.split("\n")]
+        if "about" in heard:
+            lines += [(line, MUTED) for line in heard["about"].split("\n")]
         if self.fmt == "binaural":
             lines.append(("L and R mark your ears", MUTED))
         return lines
