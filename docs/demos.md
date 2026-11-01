@@ -946,13 +946,14 @@ km/h), `--speed` how fast it runs (km/h; by default the train's own above, whate
 the speed of the example's walk: the Run demo window's **Speed** reads *the train's
 own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in ballast;
 `slab`, slab track; `slab_absorber`, slab track with absorbers; `level_crossing`),
-`--horn off` the train's warning horn (`blasts` sounds it, see below), `--step 1` how
+`--horn off` the train's warning horn (`blasts` sounds it, see below), `--indoors off`
+where it is heard (see below), `--step 1` how
 far apart the train is simulated along its walk (m), `--hrtf me.sofa` a measured head,
 `--input train=WAV` a dry recording of yours (`train_roof=WAV` and
 `train_pantograph=WAV` for the sources up on the train, `train_horn=WAV` for its horn).
-The tram has no options of its own: a low-floor tram with air conditioning, 30 m long,
-on its track set in the street, at the speed of its walk (50 km/h) unless `--speed`
-says.
+The tram has no options of its own but `--indoors`: a low-floor tram with air
+conditioning, 30 m long, on its track set in the street, at the speed of its walk (50
+km/h) unless `--speed` says.
 
 - **Their sound power** is that of Schall 03 (Germany's method for the noise of
   railways and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`):
@@ -1006,6 +1007,24 @@ says.
   over the regional train's. Its blasts, its height on the train, the measuring site's
   ground and microphone height, and its directivity (the measured siren's) are
   assumptions; see [Validation](validation.md#sirens-and-road-vehicles-against-their-rules).
+- **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors`): a house stands at each
+  listener, as far from the track, and the pass is heard in its living room:
+  `train_and_rumble` the train through the room's closed window and the rumble the
+  ground's vibration makes in it, `train` the train alone, `rumble` the rumble alone
+  (`tram_and_rumble` and `tram` for the tram). The window is AGC's 4-16-4 double glazing
+  as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82 m² of it into a room
+  of 50 m³; by EN ISO 12354-3 each octave band in the room is the free field's plus 3 dB
+  (the façade's reflection) less the window's sound reduction index less 10 lg(V / (6
+  T0 S)) = 9.6 dB (`acoustic_spaces.facade`). That takes the S-Bahn at 80 km/h, 7.5 m
+  away, 32 to 35 dB(A) down, near the 31.6 dB that Rw + Ctr gives for traffic's
+  spectrum. The rumble is the FTA's general method (see [Vibration through the
+  ground](outdoor.md#vibration-through-the-ground)) at each moment of the pass: the
+  train's curve at the distance of its nearest wheels, the house's floor 3 dB over the
+  ground, its rooms' rumble 50 dB under that in dB(A), played as noise in the third
+  octave at 25 Hz, the same in both ears. As the train runs past the house it is the
+  rumble the table there gives 25 m away; 7.5 m away it is 34.0 dB(A) for the S-Bahn
+  and 48.9 for the regional train. The room's own reverberation is not added, and the
+  sound keeps the direction it comes from outdoors.
 - **Against Schall 03's own sum** (`validation/rail_sources.py`): in a free field, the
   engine's pass of the S-Bahn at 80 km/h and of the regional train at 160 km/h, 7.5 m
   from the track 1.2 m above the rail top and 25 m away 3.5 m above it, gives the same

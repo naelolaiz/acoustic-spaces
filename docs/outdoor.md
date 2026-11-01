@@ -1346,7 +1346,9 @@ dB over the limit for residences; the dumper gives 5.08 mm/s, over the most frag
 kind's and 0.1 % under the next one's (0.1998 against 0.2 in/s), and 94.4 VdB. The
 office block, 8.0 m from both, stays under every damage criterion; the method gives it
 no limits for annoyance, as it counts offices only where something in them is
-sensitive to vibration. Both scripts run from the editor's **Run demo** window.
+sensitive to vibration. Both scripts run from the editor's **Run demo** window. The
+pass-by demos play the rumble at each listener, with the train or the tram through a
+closed window (`--indoors`, see [Trains passing by](demos.md#trains-passing-by)).
 
 What the method leaves out: it gives overall levels, not their spectra, so the rooms
 are not simulated. Its curves are the upper range of measurements of North American

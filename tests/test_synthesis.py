@@ -6,6 +6,8 @@ from acoustic_spaces.synthesis import (
     band_gains,
     combine_bands,
     dirac_sequence,
+    equalized,
+    matched_gains,
     place_impulses,
     shape_noise,
     smooth_energy,
@@ -20,6 +22,30 @@ def test_band_gains_sum_to_one() -> None:
     assert gains.shape == (8, 2049)
     np.testing.assert_allclose(gains.sum(axis=0), 1.0, atol=1e-12)
     assert gains.min() >= 0.0
+
+
+@pytest.mark.parametrize("bands", [8, 24])
+def test_matched_gains_give_each_band_its_own_energy(bands: int) -> None:
+    """Gains stepping by 12 dB from band to band change an impulse's energy in each band
+    (white noise's, on average), as split_bands splits it, by their own square once
+    matched, where equalized alone gives a band some of its neighbour's; equal gains
+    and a band of none stay as they are."""
+    gains = 10.0 ** (np.where(np.arange(bands) % 2 == 0, 0.0, -12.0) / 20.0)
+    gains[-1] = 0.0
+    x = np.zeros(FS * 4)
+    x[FS * 2] = 1.0
+    before = np.sum(split_bands(x, FS, bands) ** 2, axis=1)
+
+    def change(g: np.ndarray) -> np.ndarray:
+        after = np.sum(split_bands(equalized(x, FS, g), FS, bands) ** 2, axis=1)
+        return 10.0 * np.log10(after[:-1] / before[:-1])
+
+    wanted = 20.0 * np.log10(gains[:-1])
+    assert np.max(np.abs(change(gains) - wanted)) > 0.5
+    matched = matched_gains(gains, FS)
+    assert matched[-1] == 0.0
+    np.testing.assert_allclose(change(matched), wanted, atol=0.01)
+    np.testing.assert_allclose(matched_gains(np.full(bands, 0.3), FS), 0.3, rtol=1e-12)
 
 
 def test_split_and_combine_reconstruct() -> None:

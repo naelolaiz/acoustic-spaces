@@ -412,6 +412,9 @@ Movement:
   its curves and tables against its limits and damage criteria, for the railway's
   trains and the street's tram and road works; checked against the manual's figure,
   worked example and tables.
+- [x] The pass-by demos heard in a house at each listener: the train or the tram
+  through a closed window (EN ISO 12354-3) and the rumble of the ground's vibration.
+- [ ] The road works heard in a house too.
 - [ ] Ground-borne vibration by the FTA's detailed method: band by band, from a train's
   force density and a site's transfer mobility (read off the manual's measured curves
   or measured), and the floors and walls radiating it into the rooms in the engine,

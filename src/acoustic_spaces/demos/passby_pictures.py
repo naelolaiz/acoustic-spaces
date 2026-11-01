@@ -154,8 +154,17 @@ class Pictures(scene_pictures.Pictures):
             f"Loudest {heard['max_a_db']:.1f} dB(A) (L_Amax), {heard['max_s']:.1f} s in",
             f"Sound exposure level {heard['sel_a_db']:.1f} dB(A) (SEL)",
             f"Closest {heard['closest_m']:.1f} m away",
-            f"Its direct sound falls {heard['pitch_semitones']:.1f} semitones (Doppler)",
         ]
+        if "pitch_semitones" in heard:
+            lines.append(
+                f"Its direct sound falls {heard['pitch_semitones']:.1f} semitones (Doppler)"
+            )
+        if "vibration_vdb" in heard:
+            rumble = heard.get("parts", {}).get("rumble", heard)["max_a_db"]
+            lines.append(
+                f"Floor shaking {heard['vibration_vdb']:.0f} VdB at most, its rumble "
+                f"{rumble:.1f} dB(A)"
+            )
         if stop.gain_db > 0.5:
             lines.append(f"Turned up {stop.gain_db:.0f} dB here so you can hear it")
         about = self.facts.get("about") or (
