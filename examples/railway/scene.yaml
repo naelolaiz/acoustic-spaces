@@ -9,8 +9,8 @@
 # along one walk, at the rail top, on the roof and at the pantograph, Schall 03's
 # heights; each plays the train's points at that height one behind the other (its
 # bogies, its cars' roofs, its pantograph), so the train goes by as long as it is. They
-# are left out of simulations until ticked, and passby_demo.py runs one of four trains
-# past.
+# are left out of simulations until ticked, as is the train's horn at its front, and
+# passby_demo.py runs one of four trains past, its horn sounding with --horn blasts.
 name: Railway across a meadow
 geometry:
   ground:
@@ -76,6 +76,21 @@ sources:
     directivity: {file: train.csv}
     walk:
       to: [[150, 0, 5.2]]
+      speed_m_s: 44.44
+      doppler: true
+      face_forward: true
+  # The train's warning horn at its front, 2.0 m above the rail top: its high note (660
+  # Hz) and its low note (370 Hz) in turn, each 109 dB(C) 25 m ahead (the most EN
+  # 15153-2 allows), a second each every 4 s; its sound power averaged over its blasts
+  # and pauses, with the directivity of a siren the National Bureau of Standards
+  # measured (siren.csv).
+  - name: train_horn
+    enabled: false
+    position: [-150, 0, 2.2]
+    level_db: [86.8, 86.9, 123.6, 134.8, 130.6, 128.6, 126.2, 125.3]
+    directivity: {file: siren.csv}
+    walk:
+      to: [[150, 0, 2.2]]
       speed_m_s: 44.44
       doppler: true
       face_forward: true

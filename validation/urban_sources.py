@@ -26,6 +26,20 @@ published apart from the models they come from.
   3550 Hz there (105 dB(A) at least, and over any component above it), its rise (0.2 s
   at most) and its level 7 m in front of the vehicle, 0.5 to 1.5 m up (93 dB(A) at
   least).
+- **The car's horn.** The street car's pair of disc horns, against the same rule: on
+  its bench (105 to 118 dB(A); Hella gives its S77 111), its band, its rise, and 7 m in
+  front of the car, 0.5 to 1.5 m up, the horn 0.5 m up over asphalt (93 dB(A) at least).
+- **The train's horn.** Its two notes against the rule for trains' horns (TSI LOC&PAS,
+  Regulation (EU) No 1302/2014, point 4.2.7.2.1: 660 +/- 30 and 370 +/- 20 Hz); each
+  note's level 25 m ahead of the train's front on EN 15153-2's open site, the horn
+  2.2 m and the microphone 1.5 m over the railway example's ballast, as the engine gives
+  it (its ground reflection averaged over each band) against the 109 dB(C) its sound
+  power is made to (each harmonic's reflection in pressure); in a free field there; its
+  A-weighted level 25 m ahead with the horn from 0.5 to 3.0 m up, which M. Toward et
+  al. measured over ballast to change little ("Sound propagation and audibility of
+  train horns", ISVR and RSSB), by its harmonics and by the engine; and each note's
+  A-weighted level against its C-weighted one, by octave bands as the engine weights
+  it and harmonic by harmonic (IEC 61672-1).
 - **The car's table.** The car's sound power by Table F-1 of CNOSSOS-EU as amended in
   2021 (:mod:`acoustic_spaces.demos.road`) and by the table of Directive (EU) 2015/996,
   which the car of acoustic-spaces 4.0.1 had, from 30 to 130 km/h.
@@ -39,6 +53,7 @@ only.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import math
 import tempfile
@@ -52,7 +67,7 @@ from acoustic_spaces.demos import horn, road, siren
 from acoustic_spaces.demos.audio import a_gain
 from acoustic_spaces.directivity import write_directivity_csv
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
-from acoustic_spaces.parameters import A_WEIGHTING_DB, a_weighted
+from acoustic_spaces.parameters import A_WEIGHTING_DB, a_weighted, c_weighted
 
 RATE = 48_000
 #: California's table I: the angles off the siren's axis (degrees), 3.0 m away, and the
@@ -99,17 +114,21 @@ def engine_levels(
     ground: dict,
     folder: Path,
     height_m: float = SIREN_HEIGHT_M,
+    reach_m: float = 20.0,
 ) -> dict:
     """The siren ``height_m`` up at the origin facing +x (the police car's 1.5 m by
     default), its directivity table written as the street's is, heard at ``listeners``
-    (name, position) over ``ground`` (a material): each listener's octave-band level per
-    0 dB of sound power in each band (dB), as the engine gives it."""
+    (name, position) over ``ground`` (a material) reaching ``reach_m`` each way: each
+    listener's octave-band level per 0 dB of sound power in each band (dB), as the
+    engine gives it."""
     table = write_directivity_csv(
         folder / "siren.csv", siren.directivity(), siren.directivity_comment("check")
     )
     scene = Scene.model_validate(
         {
-            "geometry": {"ground": {"extent": [[-20, -20], [20, 20]], "sky": 10}},
+            "geometry": {
+                "ground": {"extent": [[-reach_m, -reach_m], [reach_m, reach_m]], "sky": 10}
+            },
             "materials": {"ground": ground},
             "default_material": "ground",
             "sources": [
@@ -282,12 +301,132 @@ def check_fire_engine(folder: Path) -> dict:
     return out
 
 
-def horn_band() -> tuple[float, float]:
-    """The air horn's blast against the rule's band, from the spectrum of its made sound
-    (1 s, whole periods of both trumpets): the A-weighted level of its components
-    between RULE_BAND_HZ re the blast's whole A-weighted level, and how far its loudest
-    component there is over its loudest above them (dB)."""
-    x = horn.blast(RATE, 1.0)
+def check_car_horn(folder: Path) -> dict:
+    """The street car's pair of disc horns against the rule for vehicles' horns: on its
+    bench, 2 m away on its axis in a free field, the horn and the microphone 1.2 m up;
+    its band 1800 to 3550 Hz there; its rise; and its level 7 m in front of the car, 0.5
+    to 1.5 m up over asphalt, the horn CAR_HEIGHT_M up."""
+    kind = horn.CAR_HORN
+    free = {"absorption": [1.0] * 8, "scattering": 0.0}
+    asphalt = {"preset": "concrete_floor", "scattering": 0.05}
+    power = horn.blast_power(RATE, kind)
+    bench = engine_levels([("bench", (kind.at_m, 0.0, horn.HEIGHT_M))], free, folder, horn.HEIGHT_M)
+    on_bench = a_weighted(np.array(bench["bench"]) + power)
+    heights = np.round(np.arange(0.5, 1.5 + 1e-9, FIRE_STEP_M), 2)
+    front = [(f"{h:g} m", (SWISS_VEHICLE_M, 0.0, float(h))) for h in heights]
+    road_levels = engine_levels(front, asphalt, folder, horn.CAR_HEIGHT_M)
+    heard = {n: a_weighted(np.array(road_levels[n]) + power) for n, _ in front}
+    loudest = max(heard, key=heard.get)
+    band, above = horn_band(kind)
+    print(
+        f"car horn ({' and '.join(f'{f:g}' for f in kind.hz)} Hz): on the bench {kind.at_m:g} m "
+        f"away on the axis in a free field {on_bench:.1f} dB(A) (rule {HORN_BENCH[0]:g} to "
+        f"{HORN_BENCH[1]:g}; Hella's S77 {kind.on_axis_db:g}); on the car, "
+        f"{horn.CAR_HEIGHT_M:g} m up, {SWISS_VEHICLE_M:g} m in front over asphalt "
+        f"{min(heard.values()):.1f} to {heard[loudest]:.1f} dB(A) from 0.5 to 1.5 m up, the "
+        f"most {loudest} up (rule {horn.VEHICLE_DB_A:g} at least); its band "
+        f"{on_bench + band:.1f} dB(A) (rule: 105 at least), {above:.1f} dB over the loudest "
+        f"component above it (rule: over); each blast at its level {kind.rise_s:g} s after "
+        "it starts (rule: 0.2 s at most)"
+    )
+    return {
+        "bench_db_a": on_bench,
+        "vehicle_db_a": heard,
+        "band_db_a": on_bench + band,
+        "band_over_above_db": above,
+        "rise_s": kind.rise_s,
+    }
+
+
+#: Toward et al.'s horn heights over the ballast (m), their microphones' 1.5 m up.
+TOWARD_HEIGHTS_M = (0.5, 1.0, 1.5, 2.0, 2.5, 3.0)
+
+
+def c_gain(f: np.ndarray) -> np.ndarray:
+    """IEC 61672-1's C-weighting at ``f`` (Hz), as a gain in pressure."""
+    f2 = np.asarray(f, dtype=float) ** 2
+    gain = (12194.0**2 * f2) / ((f2 + 20.6**2) * (f2 + 12194.0**2))
+    return gain * 10.0 ** (0.062 / 20.0)
+
+
+def check_train_horn(folder: Path) -> dict:
+    """The train's horn against its rules: its notes; each note's level 25 m ahead on
+    EN 15153-2's site over the ballast in the engine, against the 109 dB(C) its sound
+    power is made to, and in a free field; the A-weighted level there with the horn from
+    0.5 to 3.0 m up (Toward et al.: hardly any change at 25 m), by its harmonics and by
+    the engine; and each note's A-weighted level against its C-weighted one."""
+    kind, site = horn.TRAIN_HORN, horn.TRAIN_SITE
+    out: dict = {"notes_hz": [f for (f,) in kind.notes]}
+    for (f,), (low, high) in zip(kind.notes, horn.TRAIN_NOTES_HZ, strict=True):
+        print(f"note {f:g} Hz (rule {low:g} to {high:g})")
+    ballast = {"impedance": site.ground}
+    free = {"absorption": [1.0] * 8, "scattering": 0.0}
+    mic = [("ahead", (kind.at_m, 0.0, site.microphone_m))]
+    over = engine_levels(mic, ballast, folder, site.horn_m, reach_m=40.0)["ahead"]
+    alone = engine_levels(mic, free, folder, site.horn_m, reach_m=40.0)["ahead"]
+    out["notes"] = {}
+    for note, (f,) in enumerate(kind.notes):
+        power = horn.blast_power(RATE, kind, note)
+        site_c = c_weighted(np.array(over) + power)
+        free_c = c_weighted(np.array(alone) + power)
+        # A against C: by octave band, as the engine weights levels, and harmonic by
+        # harmonic in a free field.
+        a_bands = a_weighted(np.array(alone) + power) - free_c
+        partials = [(k * f, float(size) ** 2) for k, size in horn._partials(f, RATE / 2, kind)]
+        freqs = np.array([p[0] for p in partials])
+        energy = np.array([p[1] for p in partials])
+        exact = 10.0 * math.log10(
+            float(np.sum(energy * a_gain(freqs) ** 2) / np.sum(energy * c_gain(freqs) ** 2))
+        )
+        out["notes"][f"{f:g}"] = {
+            "site_db_c": site_c,
+            "free_db_c": free_c,
+            "a_minus_c_bands_db": a_bands,
+            "a_minus_c_exact_db": exact,
+        }
+        print(
+            f"  {f:g} Hz, {kind.at_m:g} m ahead, the horn {site.horn_m:g} m and the microphone "
+            f"{site.microphone_m:g} m over the {site.ground} ballast: the engine gives "
+            f"{site_c:.1f} dB(C) (made to {kind.on_axis_db:g}; rule "
+            f"{horn.TRAIN_LEVELS_DB_C[0]:g} to {horn.TRAIN_LEVELS_DB_C[1]:g}), in a free "
+            f"field {free_c:.1f}; A-weighted {a_bands:+.1f} dB against C by octave bands, "
+            f"{exact:+.1f} harmonic by harmonic"
+        )
+    # Toward et al.'s horn over the ballast at heights of 0.5 to 3.0 m, its low note
+    # (their horn's 368 Hz), the A-weighted level 25 m ahead, re the horn at 2.2 m.
+    note = 1
+    power = horn.blast_power(RATE, kind, note)
+    harmonics, engine = {}, {}
+    for h in (*TOWARD_HEIGHTS_M, site.horn_m):
+        moved = dataclasses.replace(kind, site=dataclasses.replace(site, horn_m=h))
+        heard = power + horn.ground_db(RATE, moved, note)
+        harmonics[h] = a_weighted(heard)
+        level = engine_levels(mic, ballast, folder, h, reach_m=40.0)["ahead"]
+        engine[h] = a_weighted(np.array(level) + power)
+    rows = {
+        "by_harmonics_db": [harmonics[h] - harmonics[site.horn_m] for h in TOWARD_HEIGHTS_M],
+        "engine_db": [engine[h] - engine[site.horn_m] for h in TOWARD_HEIGHTS_M],
+    }
+    out["heights_m"] = list(TOWARD_HEIGHTS_M)
+    out |= rows
+    print(
+        "  the low note's A-weighted level 25 m ahead with the horn "
+        + ", ".join(f"{h:g}" for h in TOWARD_HEIGHTS_M)
+        + f" m up, re {site.horn_m:g} m: by its harmonics "
+        + ", ".join(f"{v:+.1f}" for v in rows["by_harmonics_db"])
+        + " dB; in the engine "
+        + ", ".join(f"{v:+.1f}" for v in rows["engine_db"])
+        + " dB (Toward et al.: hardly any change at 25 m)"
+    )
+    return out
+
+
+def horn_band(kind: horn.Kind = horn.AIR_HORN) -> tuple[float, float]:
+    """A horn's blast (the air horn's by default) against the rule's band, from the
+    spectrum of its made sound (1 s, whole periods of both its tones): the A-weighted
+    level of its components between RULE_BAND_HZ re the blast's whole A-weighted level,
+    and how far its loudest component there is over its loudest above them (dB)."""
+    x = horn.blast(RATE, 1.0, kind)
     power = np.abs(np.fft.rfft(x)) ** 2
     freq = np.fft.rfftfreq(len(x), 1.0 / RATE)
     weighted = power * a_gain(freq) ** 2
@@ -341,13 +480,24 @@ def main(argv=None) -> int:
         swiss = check_swiss(folder)
         print("\nThe fire engine's two tones and air horn (SR 741.41; 70/388/EEC, Annex I)")
         fire = check_fire_engine(folder)
+        print("\nThe street car's horn (70/388/EEC, Annex I)")
+        car_horn = check_car_horn(folder)
+        print("\nThe train's horn (TSI LOC&PAS 4.2.7.2, EN 15153-2:2020)")
+        train_horn = check_train_horn(folder)
     print("\nThe car's sound power, CNOSSOS-EU's Table F-1 of 2021 and of 2015/996, at 20 °C")
     car = check_car()
     print(f"\n{time.perf_counter() - started:.0f} s")
     if args.json:
         args.json.write_text(
             json.dumps(
-                {"california": california, "swiss": swiss, "fire_engine": fire, "car": car},
+                {
+                    "california": california,
+                    "swiss": swiss,
+                    "fire_engine": fire,
+                    "car_horn": car_horn,
+                    "train_horn": train_horn,
+                    "car": car,
+                },
                 indent=2,
             ),
             encoding="utf-8",

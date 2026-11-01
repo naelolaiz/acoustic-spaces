@@ -4,11 +4,11 @@
 
 Helicopters flying over, with the sound a source sends each way carried down each early
 path of a walk with Doppler; trucks, buses, motorcycles, a police car, a fire engine,
-trains and a tram in the pass-by demos; listeners as microphones; a standard error for
-every parameter; a stereo recording for a scene's sound system, so that every example
-with a stage, a sound system or a talker plays out of the box; the listeners a demo
-plays picked for a run; the editor's Scene YAML panel; and four of BRAS's rooms in the
-validation report.
+trains and a tram in the pass-by demos, with horns on the car and the train, and road
+works in the street; listeners as microphones; a standard error for every parameter; a
+stereo recording for a scene's sound system, so that every example with a stage, a sound
+system or a talker plays out of the box; the listeners a demo plays picked for a run;
+the editor's Scene YAML panel; and four of BRAS's rooms in the validation report.
 
 Results change from 4.0.1: EDT, in 99 of 152 octave-band EDTs of six examples, by up to
 9.6 %; the late part by rounding, as its rays are traced in 10 batches; random
@@ -110,6 +110,9 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
   early path now plays through its own delay, going from one moment's to the next's.
 - The pass-by demos' captions, stills and printouts gave a walk's speed such as 50.004
   km/h; they now give it to a tenth of a km/h (50 km/h, 72.5 km/h).
+- A pass-by demo run at `--speed` with some of a vehicle's sources left out
+  (`--police-car siren`, `--fire-engine siren`) stopped at its walk, as the sources left
+  out kept the scene's speed; they now walk at the run's.
 
 **Examples and demos**
 
@@ -134,6 +137,17 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
   dB(A) less over the example's ground, whose reflection the engine reckons otherwise.
 - The pass-by demos' video, run in another format than its passes were mixed in, says
   which format each is in and how to match them.
+- Road works in the street, played by its new `works_demo.py`: a breaker on an
+  excavator, a diesel generator, a dumper and its reversing alarm, each at the sound
+  power of Defra's database for construction sites (the alarm SAE J994's), checked by
+  the new `validation/plant_sources.py` (`acoustic_spaces.demos.plant`).
+- The street's car can sound its horn (`passby_demo.py --car car_and_horn`, or `horn`
+  alone): a pair of disc horns as loud as Hella's S77 (`demos.horn.CAR_HORN`), held
+  against the rule for vehicles' horns in `validation/urban_sources.py`.
+- The railway's train can sound its warning horn (`passby_demo.py --horn blasts`): the
+  TSI's 660 and 370 Hz notes in turn, each 109 dB(C) 25 m ahead as EN 15153-2 allows at
+  most (`demos.horn.TRAIN_HORN`), held against the rule in
+  `validation/urban_sources.py`; `parameters.c_weighted` gives C-weighted levels.
 - The road vehicles' sound power is CNOSSOS-EU's Table F-1 as amended in 2021
   (Commission Delegated Directive (EU) 2021/1226): the car's at 50 km/h is 98.4 dB(A)
   instead of 96.0, and its passes in `roadside` and `street` are louder by about as
