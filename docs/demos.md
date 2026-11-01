@@ -1046,23 +1046,16 @@ km/h) unless `--speed` says.
   with its own terms for the ground, which reckon the ground's reflection otherwise (see
   [Validation](validation.md#trains-against-schall-03-and-the-eus-limits), which also
   sets Schall 03's units beside the EU's limits for new trains).
-- **The railway**: 300 m of track, each train at its own speed on ballast, heard 7.5 m from the
-  track 1.2 m above the rail top (`tsi_7m5`), 25 m away over the meadow (`meadow_25m`)
-  and 25 m away on the other side, behind the barrier (`behind_barrier_25m`). The
-  passes peak at (L_Amax, with the SEL after it, dB(A)):
-
-  | | regional, 160 km/h | S-Bahn, 120 km/h | intercity, 200 km/h | freight, 100 km/h |
-  |---|---:|---:|---:|---:|
-  | 7.5 m | 95.3 (99.5) | 89.6 (91.8) | 98.2 (104.7) | 91.3 (102.7) |
-  | meadow, 25 m | 87.7 (93.2) | 82.1 (85.4) | 90.7 (98.4) | 84.2 (96.2) |
-  | behind the barrier, 25 m | 78.2 (79.1) | 66.2 (69.6) | 82.3 (83.2) | 74.7 (79.3) |
-
-  The longer a train, the more its SEL is over its L_Amax: the freight train, 446 m
-  long, takes 16 s to pass at 100 km/h, the S-Bahn, 67 m, 2 s at 120 km/h. The barrier,
-  3 m high and 4 m from the track, hides the rail top from the listener behind it, but
-  not the roof (4 m up) or the pantograph (5 m up): behind it the regional train peaks
-  9.5 dB(A) under its level on the meadow's side, the S-Bahn, whose rail top is 20 dB
-  over its roof in sound power (the regional train's 16 dB), 15.9 dB(A) under.
+- **The railway**: 300 m of track, each train at its own speed on ballast, heard 7.5 m
+  from the track 1.2 m above the rail top (`tsi_7m5`), 25 m away over the meadow
+  (`meadow_25m`), 25 m away on the other side, behind the barrier
+  (`behind_barrier_25m`), and 2 m in front of a house 20 m from the track
+  (`house_18m`). The longer a train, the more its SEL is over its L_Amax: the freight
+  train, 446 m long, takes 16 s to pass at 100 km/h, the S-Bahn, 67 m, 2 s at 120 km/h.
+  The barrier, 3 m high and 4 m from the track, hides the rail top from the listener
+  behind it, but not the roof (4 m up) or the pantograph (5 m up): the S-Bahn, whose
+  rail top is 20 dB over its roof in sound power (the regional train's 16 dB), loses
+  more behind it than the regional train.
 - **The tram in the street**: the tram runs down the middle of the street at 50 km/h, 4.0 m from the
   pavement's listener, and peaks at 95.6 dB(A) on the pavement (SEL 99.3), 91.1 on the
   balcony (95.4) and 73.7 in the garden (80.3): louder than the bus, which passes 2.5 m
