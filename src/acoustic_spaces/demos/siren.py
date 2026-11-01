@@ -124,6 +124,12 @@ FIRE_PARTS = (
 FIRE_SIREN_DB_A = 115.0
 FIRE_SIREN_HEIGHT_M = 3.0
 FIRE_SIREN_GAIN_DB = 6.0
+#: The sources of the street example's car: the car itself and its horn, along one
+#: walk; what it plays (``--car``), and the sources of each choice.
+CAR = "car"
+CAR_HORN_PART = "car_horn"
+CAR_PLAYS = ("car", "car_and_horn", "horn")
+CAR_PARTS = ((CAR,), (CAR, CAR_HORN_PART), (CAR_HORN_PART,))
 
 
 def fundamental_hz(pattern: str, times: np.ndarray) -> np.ndarray:
@@ -293,16 +299,20 @@ class Siren(Device):
 
 
 class Horn(Device):
-    """An air horn (:mod:`acoustic_spaces.demos.horn`): two trumpets in blasts."""
+    """A horn (:mod:`acoustic_spaces.demos.horn`) in blasts: the air horn's two
+    trumpets, or the ``kind`` given (:class:`~acoustic_spaces.demos.horn.Kind`)."""
 
-    key, noun = "horn", "air horn"
+    key = "horn"
     recorded = ", its blasts as loud as the made horn's, whatever its pauses"
     steady = False
 
-    def __init__(self, part: str, file: str, place: str, loudness: str) -> None:
+    def __init__(self, part: str, file: str, place: str, loudness: str, kind=None) -> None:
+        from acoustic_spaces.demos.horn import AIR_HORN
         from acoustic_spaces.demos.horn import SOUND_RMS as HORN_RMS
 
         super().__init__(part, file, place, loudness)
+        self.kind = kind or AIR_HORN
+        self.noun = self.kind.noun
         self.rms = HORN_RMS
 
     def pattern(self, args: argparse.Namespace) -> str:
@@ -311,30 +321,31 @@ class Horn(Device):
     def power(self, pattern: str, rate: int) -> np.ndarray:
         from acoustic_spaces.demos.horn import horn_power
 
-        return horn_power(rate)
+        return horn_power(rate, self.kind)
 
     def sound(self, pattern: str, rate: int, duration_s: float) -> np.ndarray:
         from acoustic_spaces.demos.horn import horn_sound
 
-        return horn_sound(rate, duration_s)
+        return horn_sound(rate, duration_s, self.kind)
 
     def input_gain(self, x: np.ndarray, rate: int) -> float | None:
         """A recording of a horn plays its blasts as loud as the made horn's, whatever
         its pauses (:func:`~acoustic_spaces.demos.horn.recorded_gain`)."""
         from acoustic_spaces.demos.horn import recorded_gain
 
-        return recorded_gain(x, rate)
+        return recorded_gain(x, rate, self.kind)
 
     def doing(self, pattern: str) -> str:
-        return "its air horn in blasts"
+        return f"its {self.noun} in blasts"
 
     def made(self, pattern: str) -> str:
-        return "an air horn's blasts"
+        article = "an" if self.noun[0] in "aeiou" else "a"
+        return f"{article} {self.noun}'s blasts"
 
     def credit(self, pattern: str) -> str:
-        from acoustic_spaces.demos.horn import HORN_HZ
-
-        return f"air horn: {HORN_HZ[0]:g} and {HORN_HZ[1]:g} Hz in blasts, {self.loudness}"
+        hz = self.kind.hz
+        tones = " and ".join(f"{f:g}" for f in hz)
+        return f"{self.noun}: {tones} Hz in blasts, {self.loudness}"
 
 
 class EmergencyVehicle(Vehicle):
@@ -538,6 +549,10 @@ class EmergencyVehicle(Vehicle):
             patterns = "; ".join(info[d.key].replace("_", "-") for d in devices)
             about = f"A {self.noun}'s {nouns} at {speed} km/h, {patterns}"
             return facts | {"about": f"{about}\n{', '.join(powers)} of sound power"}
+        if not devices:
+            # The vehicle alone, its devices off: as the road vehicle alone says it.
+            alone = self.body.facts(args, car)
+            return facts | alone | {"vehicle_sound_power_a_db": car["sound_power_a_db"]}
         powers.append(f"{self.itself} {car['sound_power_a_db']:.1f} dB(A)")
         doing = "; ".join(d.doing(info[d.key]) for d in devices)
         return facts | {
@@ -552,6 +567,9 @@ class EmergencyVehicle(Vehicle):
 
     def credits(self, facts: dict, files: dict[str, Path | None]) -> str:
         parts = self.plays_to.get(facts.get("plays", ""), self.every_part())
+        if parts == (self.name,):
+            # The vehicle alone, its devices off: as the road vehicle alone says it.
+            return self.body.credits(facts, files)
         said = []
         if self.name in parts:
             file = files.get(self.name)
@@ -707,6 +725,51 @@ class FireEngine(EmergencyVehicle):
         )
 
 
+class HonkingCar(EmergencyVehicle):
+    """The street example's car, its horn off unless ``--car`` says: the source ``car``,
+    the car itself (tyres and engine, CNOSSOS-EU's passenger car, as
+    :class:`~acoustic_spaces.demos.passby.RoadVehicle` makes it) 0.05 m above the road,
+    as :data:`~acoustic_spaces.demos.passby.THE_CAR` is; and ``car_horn``, its pair of
+    disc horns (:data:`~acoustic_spaces.demos.horn.CAR_HORN`) behind its front bumper,
+    CAR_HEIGHT_M up, along the same walk, facing the way it drives, with the measured
+    siren's directivity, in two short blasts every few seconds. ``--car car`` plays the
+    car alone, as it plays without a horn; ``car_and_horn`` both; ``horn`` the horn
+    alone."""
+
+    def __init__(self, script: str = "passby_demo.py") -> None:
+        from acoustic_spaces.demos.horn import CAR_HEIGHT_M, CAR_HORN
+
+        #: The car itself: a passenger car, its engine four cylinders at 2000 rpm, as
+        #: the car's of the roadside.
+        car = RoadVehicle(CAR, "1", "a passenger car", rpm=2000.0, cylinders=4)
+        hz = " and ".join(f"{f:g}" for f in CAR_HORN.hz)
+        horn = Horn(
+            CAR_HORN_PART,
+            CAR_HORN.file,
+            "behind its front bumper",
+            f"{CAR_HORN.on_axis_db_a:g} dB(A) at {CAR_HORN.at_m:g} m (Hella's S77), its "
+            f"tone discs at {CAR_HORN.disc_hz:g} Hz",
+            kind=CAR_HORN,
+        )
+        super().__init__(
+            car,
+            (horn,),
+            dict(zip(CAR_PLAYS, CAR_PARTS, strict=True)),
+            "a passenger car",
+            "car",
+            "what the car plays: car, the car itself (tyres and its engine, CNOSSOS-EU's "
+            "passenger car at --speed, from 0.05 m above the road), as a car going by "
+            "sounds; car_and_horn, the car with its horn in two short blasts every "
+            f"{CAR_HORN.every_s:g} s ({hz} Hz, {CAR_HORN.on_axis_db_a:g} dB(A) 2 m in "
+            f"front of it, {CAR_HEIGHT_M:g} m up), as a driver warning of it sounds; "
+            "horn, the horn alone",
+            "# The example with its car driving past alone, at the speed and with the "
+            "sound\n# power of the pass-by demo (CNOSSOS-EU; its horn as --car says), "
+            "written by\n# passby_demo.py.\n",
+            script,
+        )
+
+
 def directivity_comment(script: str) -> str:
     """The comment over the siren's directivity table."""
     return (
@@ -716,12 +779,17 @@ def directivity_comment(script: str) -> str:
     )
 
 
-#: The police car and the fire engine of the street example.
+#: The police car, the fire engine and the car with its horn of the street example.
 POLICE_CAR_VEHICLE = PoliceCar()
 FIRE_ENGINE_VEHICLE = FireEngine()
+HONKING_CAR = HonkingCar()
 
 __all__ = [
     "AT_M",
+    "CAR",
+    "CAR_HORN_PART",
+    "CAR_PARTS",
+    "CAR_PLAYS",
     "FIRE_ENGINE",
     "FIRE_ENGINE_VEHICLE",
     "FIRE_HORN",
@@ -731,6 +799,7 @@ __all__ = [
     "FIRE_SIREN_DB_A",
     "FIRE_SIREN_GAIN_DB",
     "FIRE_SIREN_HEIGHT_M",
+    "HONKING_CAR",
     "HIGH_HZ",
     "LOW_HZ",
     "ON_AXIS_DB_A",
@@ -749,6 +818,7 @@ __all__ = [
     "Device",
     "EmergencyVehicle",
     "FireEngine",
+    "HonkingCar",
     "Horn",
     "PoliceCar",
     "Siren",

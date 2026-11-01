@@ -274,8 +274,11 @@ def simulations(args: argparse.Namespace) -> list[pipeline.Simulation]:
     return [pipeline.Simulation(Path(args.scene), results_of(args), args.format)]
 
 
-def responses_of(args: argparse.Namespace) -> list[dict]:
-    return pipeline.responses_of(simulations(args)[0], args, DEMO.command("simulate", args))
+def responses_of(args: argparse.Namespace, demo: Demo | None = None) -> list[dict]:
+    """The responses of the scene's simulation; ``demo`` (this one by default) says how
+    to run it when they are not there."""
+    run = (demo or DEMO).command("simulate", args)
+    return pipeline.responses_of(simulations(args)[0], args, run)
 
 
 def problems(demo: Demo, args: argparse.Namespace) -> str | None:
@@ -328,10 +331,10 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
 # --------------------------------------------------------------------------- the feeds
 
 
-def feeds_table(args: argparse.Namespace) -> dict:
+def feeds_table(args: argparse.Namespace, demo: Demo | None = None) -> dict:
     path = work_of(args) / "feeds" / FEEDS
     if not path.exists():
-        raise SystemExit(f"error: no feeds yet; run first: {DEMO.command('feeds', args)}")
+        raise SystemExit(f"error: no feeds yet; run first: {(demo or DEMO).command('feeds', args)}")
     return pipeline.read_json(path)
 
 
@@ -437,17 +440,18 @@ def listeners_of(args: argparse.Namespace, entries: list[dict]) -> list[str]:
     return [lis.name for lis in scene.listeners if lis.in_use and lis.name in simulated]
 
 
-def render(args: argparse.Namespace) -> None:
+def render(args: argparse.Namespace, demo: Demo | None = None) -> None:
     """Every listener's mix (``--format``, binaural by default) with one gain for all, the
     loudest peak at -1 dBFS; ``auralize`` plays each feed at its source's sound power.
     The arrival time counts the sources that play, each at its sound power. When
-    something moves, :func:`render_moving` makes the mixes instead."""
+    something moves, :func:`render_moving` makes the mixes instead. ``demo``, this one by
+    default, is the demo that runs it, whose commands the messages give."""
     moving = moving_of(args)
     if moving:
-        render_moving(args, moving)
+        render_moving(args, moving, demo)
         return
-    table = feeds_table(args)
-    entries = responses_of(args)
+    table = feeds_table(args, demo)
+    entries = responses_of(args, demo)
     simulation = simulations(args)[0]
     feeds = {name: work_of(args) / "feeds" / f"{name}.wav" for name in table["sources"]}
     powers = {s.name: s.sound_power_db for s in scene_of(args).sources if s.name in feeds}
@@ -507,7 +511,7 @@ def levels_along(movement, source, listener: str) -> list[float | None]:
     return levels
 
 
-def render_moving(args: argparse.Namespace, moving: list[str]) -> None:
+def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None = None) -> None:
     """Every listener's mix with ``moving`` walking, all on one clock: the scene simulated
     with every mover at each moment of its walk
     (:func:`~acoustic_spaces.walkthrough.simulate_movement`), each feed played through
@@ -521,8 +525,8 @@ def render_moving(args: argparse.Namespace, moving: list[str]) -> None:
     from acoustic_spaces.room import Room
     from acoustic_spaces.walkthrough import render_movement, simulate_movement
 
-    table = feeds_table(args)
-    names = listeners_of(args, responses_of(args))
+    table = feeds_table(args, demo)
+    names = listeners_of(args, responses_of(args, demo))
     if not names:
         raise SystemExit("error: no listener to render; the scene's listeners are all left out")
     work = work_of(args)
@@ -547,7 +551,7 @@ def render_moving(args: argparse.Namespace, moving: list[str]) -> None:
     gain = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
     weights = {s.name: s.sound_power_db for s in playing}
     sources_move = any(s.name in moving for s in playing)
-    entries = responses_of(args)
+    entries = responses_of(args, demo)
     info = {}
     for name in names:
         x = mixes[name] * gain
@@ -585,12 +589,16 @@ def render_moving(args: argparse.Namespace, moving: list[str]) -> None:
 # --------------------------------------------------------------------------- the video
 
 
-def tour_of(args: argparse.Namespace, seats: dict, length_s: float) -> list[pipeline.TourStop]:
+def tour_of(
+    args: argparse.Namespace, seats: dict, length_s: float, demo: Demo | None = None
+) -> list[pipeline.TourStop]:
     """The stops: each listener for ``--seconds`` while the piece runs on; a piece too
     short for that shares its length out."""
-    names = [name for name in listeners_of(args, responses_of(args)) if name in seats["seats"]]
+    entries = responses_of(args, demo)
+    names = [name for name in listeners_of(args, entries) if name in seats["seats"]]
     if not names:
-        raise SystemExit(f"error: no mix to tour; run first: {DEMO.command('render', args)}")
+        run = (demo or DEMO).command("render", args)
+        raise SystemExit(f"error: no mix to tour; run first: {run}")
     each = min(float(args.seconds), length_s / len(names))
     if each < float(args.seconds) - 1e-6:
         print(f"the piece lasts {length_s:.0f} s: each listener is heard {each:.1f} s")
@@ -601,26 +609,29 @@ def tour_of(args: argparse.Namespace, seats: dict, length_s: float) -> list[pipe
     ]
 
 
-def video(args: argparse.Namespace) -> None:
+def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
     """tour.wav, one still per stop, the thumbnail, and tour.mp4: the stills with a
     scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``). When
     something moves, the video is a moving picture instead: the walkers go along their
-    walks as the piece plays, with a still of each stop."""
+    walks as the piece plays, with a still of each stop. ``demo``, this one by default,
+    is the demo that runs it: its commands and its settings go in the messages and on
+    the stills."""
+    demo = demo or DEMO
     from acoustic_spaces.demos import pictures, scene_pictures
     from acoustic_spaces.room import Room, outline_edges
     from acoustic_spaces.walkthrough import knots, movers
 
     work = work_of(args)
-    table = feeds_table(args)
+    table = feeds_table(args, demo)
     moving = moving_of(args)
     folder = work / (MOVING if moving else "seats")
-    seats = pipeline.seats_of(folder, DEMO.command("render", args))
+    seats = pipeline.seats_of(folder, demo.command("render", args))
     if seats.get("moving", []) != moving:
         raise SystemExit(
             f"error: the mixes in {folder} are of other walks; run first: "
-            f"{DEMO.command('render', args)}"
+            f"{demo.command('render', args)}"
         )
-    stops = tour_of(args, seats, float(table["length_s"]))
+    stops = tour_of(args, seats, float(table["length_s"]), demo)
     audio = pipeline.tour_audio(
         stops,
         folder,
@@ -642,7 +653,7 @@ def video(args: argparse.Namespace) -> None:
         stops,
         playing=list(table["sources"]),
         credit=args.credit or plays_line(table, free_of(scene)),
-        tool=pictures.settings_lines(DEMO, args, data, report),
+        tool=pictures.settings_lines(demo, args, data, report),
         fmt=args.format,
         paths={(kind, item.name): knots(item) for kind, item in movers(scene)},
         movement=seats.get("movement"),

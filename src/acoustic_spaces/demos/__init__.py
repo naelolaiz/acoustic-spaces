@@ -109,6 +109,7 @@ LABELS = {
     "--zips": N_("Downloads folder"),
     "--movements": N_("Movements"),
     "--rpm": N_("Engine speed"),
+    "--blows": N_("Blows a minute"),
     "--flight": N_("Flight's scene"),
     "--stadium": N_("Stadium's scene"),
     "--height": N_("Height"),

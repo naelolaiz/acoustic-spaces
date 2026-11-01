@@ -4,15 +4,18 @@ Five demos run recordings through example scenes, mix them at the scenes' listen
 make a video of the result, a sixth drives a car, a truck, a bus, a motorcycle, a
 police car with its siren on or a fire engine with its siren and its air horn past the
 listeners of two outdoor examples, a tram down the street of one of them and a train
-past those of a third, a seventh flies a helicopter over those of a fourth and an
-eighth flies it over the stadium's concert. Each shows one space and one kind of sound: a symphony orchestra
+past those of a third, a seventh flies a helicopter over those of a fourth, an
+eighth flies it over the stadium's concert and a ninth plays road works in the street.
+Each shows one space and one kind of sound: a symphony orchestra
 on the stage of a shoebox concert hall, a choir and an organ in a reverberant stone
 church, a band with its sound system and stage monitors in a stadium, the same band's
 song carried across a lake on a summer evening, a guide talking to a visitor who walks
 away from them through a gallery and then turns their head, a vehicle passing on a road
 across a meadow and along a street and a train on a railway across a meadow, its pitch
-falling as it goes by, and a helicopter
-flying over a meadow and low over the stadium during the song. None of them
+falling as it goes by, a helicopter
+flying over a meadow and low over the stadium during the song, and a breaker, a
+generator and a dumper reversing with its alarm on at road works in the street. None of
+them
 stands for what the simulator does elsewhere; the [examples](examples.md) cover far
 more, and any scene makes a demo of its own with the recordings its sources are given
 ([a demo of any scene](#a-demo-of-any-scene)).
@@ -682,11 +685,12 @@ talk: 16 MB for that talker, up to 145 MB for another (`--talker`).
 drives past and each listener hears one pass in turn, its pitch falling as it goes by.
 The video follows the vehicle on the plan, with the level heard over the pass drawn
 under it. `--vehicle` picks what goes past: in the roadside a passenger car (`car`) or
-an articulated truck (`truck`), in the street the car, a city bus (`bus`), a motorcycle
-(`motorcycle`), a police car with its siren on (`police_car`, the car itself, and
-`police_car_siren`), a fire engine with its siren on and its air horn in blasts
-(`fire_engine`, the vehicle itself, `fire_engine_siren` and `fire_engine_horn`) or a
-tram (`tram`, see [trains passing by](#trains-passing-by)).
+an articulated truck (`truck`), in the street the car (with `car_horn`, its horn, when
+`--car` says), a city bus (`bus`), a motorcycle (`motorcycle`), a police car with its
+siren on (`police_car`, the car itself, and `police_car_siren`), a fire engine with its
+siren on and its air horn in blasts (`fire_engine`, the vehicle itself,
+`fire_engine_siren` and `fire_engine_horn`) or a tram (`tram`, see [trains passing
+by](#trains-passing-by)).
 
 ```sh
 acoustic-spaces examples --copy . roadside && cd roadside   # or street
@@ -701,16 +705,17 @@ sound (by default its own: the car's four cylinders at 2000 rpm, the truck's six
 `--siren wail` the police car's siren (`wail`, `yelp` or `two_tone`), `--police-car
 car_and_siren` what the police car plays (the car itself and its siren, or `siren`
 alone), `--fire-engine truck_siren_and_horn` what the fire engine plays (all three,
-`truck_and_siren`, `siren_and_horn` or `siren` alone), `--step 1` how far apart the
-vehicle is simulated along its walk (m), `--hrtf me.sofa` a measured head, `--input
-NAME=WAV` a dry recording of yours for the vehicle NAME (`police_car_siren=WAV` for the
-police car's siren, `fire_engine_horn=WAV` for the fire engine's horn), `--listeners
-verge,yard_25m` the listeners it is simulated and heard at (every one in use by default),
-in that order. The vehicle drives the length of its walk at
-that speed, so the pass lasts the length divided by the speed: the 150 m of the roadside
-take 10.8 s at 50 km/h, 7.7 s at 70 km/h. The **Run demo** window gives the three under
-its options as they change, and ticks the vehicle (the police car's two sources, the
-fire engine's three) in its Movement box.
+`truck_and_siren`, `siren_and_horn` or `siren` alone), `--car car` what the street's car
+plays (the car alone, `car_and_horn` with its horn, or `horn` alone), `--step 1` how far
+apart the vehicle is simulated along its walk (m), `--hrtf me.sofa` a measured head,
+`--input NAME=WAV` a dry recording of yours for the vehicle NAME (`police_car_siren=WAV`
+for the police car's siren, `fire_engine_horn=WAV` for the fire engine's horn,
+`car_horn=WAV` for the car's), `--listeners verge,yard_25m` the listeners it is
+simulated and heard at (every one in use by default), in that order. The vehicle drives the length of its walk at that speed,
+so the pass lasts the length divided by the speed: the 150 m of the roadside take 10.8 s
+at 50 km/h, 7.7 s at 70 km/h. The **Run demo** window gives the three under its options
+as they change, and ticks the vehicle (the police car's two sources, the fire engine's
+three, the car's with its horn) in its Movement box.
 
 - **The road vehicles** are the example's sources of their names: point sources 0.05 m
   above the road, where CNOSSOS-EU puts a vehicle's sound, each with a walk along its
@@ -824,6 +829,25 @@ fire engine's three) in its Movement box.
   m in front of the vehicle, 0.5 to 1.5 m up (the rule: 93 at least), and, on its bench,
   110.2 dB(A) between 1800 and 3550 Hz (the rule: 105 at least), its loudest component
   there 6.0 dB over any above 3550 Hz (the rule: over).
+- **The car's horn** (in the street, `--car car_and_horn`, or `horn` alone) is a pair of
+  disc horns behind the car's front bumper (`car_horn`), 0.5 m up along the car's walk,
+  facing the way it drives, with the siren's directivity, in two blasts of 0.25 s, 0.15
+  s apart, every 3 s from the start of the pass, each at its level 0.02 s after it
+  starts (the blasts, the height and the directivity assumed). The horns are Hella's
+  S77, approved to UN Regulation 28: 360 and 430 Hz, 110 +/- 3 dB(A) 2 m in front of
+  them (Hella's sheet for its S70, S77 and S98), within the rule's 105 to 118. A disc
+  horn's diaphragm strikes its magnet's core every cycle and its tone disc rings, its
+  main components near 3 kHz, harmonics of the diaphragm's frequency (US patent
+  8,689,723): each horn's harmonics are struck alike and shaped by a resonance at 3 kHz
+  with a Q of 2 (assumed), which leaves the two fundamentals 24 and 23 dB under it. Its
+  sound power is 119.1 dB(A) during a blast and 110.9 dB(A) averaged over its blasts and
+  pauses, as the scene has it; the captions follow its blasts as the fire engine's
+  horn's do. Against the rule (`validation/urban_sources.py`): 109.9 dB(A) on its bench,
+  107.6 dB(A) between 1800 and 3550 Hz (105 at least), its loudest component there 1.9
+  dB over any above 3550 Hz, and 100.4 to 101.3 dB(A) 7 m in front of the car, 0.5 to
+  1.5 m up (93 at least). Made as the air horn is, a sawtooth at each fundamental, it
+  would give only 102.8 dB(A) between 1800 and 3550 Hz, under the rule. `--car car`, the
+  default, plays the car alone, as it plays without a horn.
 - **The pass**: the vehicle every metre along its walk (`--step`), simulated at each
   listener in turn (`acoustic-spaces walkthrough`), its sound played through those
   places with each early path through its own delay as it changes ([moving sources and
@@ -850,11 +874,11 @@ fire engine's three) in its Movement box.
   semitones as the car passes and 1.9 as the truck does, as the geometry says.
 - **The street**: 125 m of street, the car, the motorcycle and the fire engine in the
   lane on the offices' side, the bus and the police car in the lane on the houses' side
-  the other way, the tram down the middle of the street (see
-  [trains passing by](#trains-passing-by)), all at 50 km/h, heard on the pavement (6.2 m from the car, the
-  motorcycle and the fire engine's siren as they pass, 2.5 m from the bus and 2.0 m from
-  the police car's siren), on a balcony of the office block and in the garden behind the
-  noise barrier. The passes peak at (L_Amax, dB(A)):
+  the other way, the tram down the middle of the street (see [trains passing
+  by](#trains-passing-by)), all at 50 km/h, heard on the pavement (6.2 m from the car,
+  the motorcycle and the fire engine's siren as they pass, 2.5 m from the bus and 2.0 m
+  from the police car's siren), on a balcony of the office block and in the garden
+  behind the noise barrier. The passes peak at (L_Amax, dB(A)):
 
   | | car | bus | motorcycle | police car (wail) | fire engine | tram |
   |---|---:|---:|---:|---:|---:|---:|
@@ -872,7 +896,10 @@ fire engine's three) in its Movement box.
   between two of the horn's blasts; on the pavement a blast comes with the siren's peak
   and adds 0.7 dB to it (113.0 dB(A), the siren alone 112.3). The balcony hears the fire
   engine nearly as loud as the pavement does, as its siren, 3.0 m up in the lane on the
-  offices' side, passes 7.6 m from the balcony and 6.2 m from the pavement.
+  offices' side, passes 7.6 m from the balcony and 6.2 m from the pavement. With its
+  horn (`--car car_and_horn`) the car peaks at 97.1 dB(A) on the pavement, 94.0 on the
+  balcony and 81.6 in the garden, its horn's loudest blast 17.6 to 19.9 dB over the
+  car's own loudest.
 
   The garden hears the car loudest where the car sees it straight through the 4 m gap
   between the houses and the barrier (14 m short of the gap), less while the barrier
@@ -1135,3 +1162,72 @@ the main rotor's disc in its trim). The rotors' model is 3.4 dB louder than the
 helicopter's noise certificate, as in the flyover. The stills draw the stadium as the
 stadium demo's do, without the helicopter, and the concert's mixes are taken as they
 are: one rendered with other HRTFs than `--hrtf` names is not caught.
+
+## Road works in the street
+
+`works_demo.py` comes with the `street` example too: road works in the lane on the
+houses' side, 20 m along from the pavement's listener, heard on the pavement, on the
+balcony and in the garden in turn, binaurally, and a video that tours them.
+
+```sh
+acoustic-spaces examples --copy . street && cd street
+python works_demo.py all   # or scene, feeds, simulate, render, video one at a time
+```
+
+Options: `--blows 480` how many blows a minute the breaker strikes (Epiroc's MB 1650, a
+1650 kg breaker, strikes 320 to 640), `--seconds 20` how long each listener is heard,
+`--listeners pavement,garden` which listeners and in which order (every one in use by
+default; `--tour`, its earlier name, still works), `--hrtf me.sofa` a measured head, `--input
+NAME=WAV` a dry recording of yours instead of a made sound (`breaker`, `generator`,
+`dumper` or `dumper_alarm`). The scene with the works alone goes to `scene_works.yaml`,
+everything else to `demo_works/`. In the editor, **Simulation > Run demo…** on the
+street's scene has it beside the pass-by demo.
+
+- **The machines** are rows of Defra's noise database for construction sites (*Update
+  of noise database for prediction of noise on construction and open sites*, Hepworth
+  Acoustics for Defra, 2005, the data BS 5228-1 Annex C gives;
+  `acoustic_spaces.demos.plant`): each one's octave-band levels 10 m away, its sound
+  power 28 dB over them, a point over hard ground radiating into a half sphere.
+
+  | source | Defra's row | height | 10 m away | sound power |
+  |---|---|---:|---:|---:|
+  | `breaker` | a 1650 kg breaker on a 15 t excavator of 121 kW, breaking up brick foundations (table 1, row 9) | 1.0 m | 90 dB(A) | 118.3 dB(A) |
+  | `generator` | a 6 kVA diesel generator at 3000 rpm (table 4, row 87) | 0.5 m | 65 dB(A) | 92.9 dB(A) |
+  | `dumper` | a 9 t dumper of 75 kW, the loudest moment of its drive-by (table 4, row 4) | 1.5 m | 76 dB(A) | 103.5 dB(A) |
+
+  The heights are assumed. Their sound is made to that power: the breaker's blows, a
+  burst of noise each at `--blows`, and the engines' firing, the generator's at its
+  3000 rpm (one cylinder, assumed) and the dumper's at 2200 rpm (four cylinders,
+  assumed), each brought to its row's octave spectrum. Defra's levels are averages
+  over an activity, its pauses too; the made sounds are steady.
+- **The reversing alarm** (`dumper_alarm`), at the dumper's back, 1.2 m up, facing the
+  works: a tonal alarm at 1200 Hz, 107 dB(A) 1.2 m in front of it on its axis (SAE J994
+  Type B; Hella's 009148021 is one), on and off for as long, 1.5 times a second (J994
+  asks for 1 to 2; the rate is assumed within that), as directional as the siren NBS
+  measured (assumed, as for the fire engine's air horn). Its sound power is 111.7 dB(A)
+  while it sounds and 108.6 dB(A) on average over its beeps, which the scene holds. The
+  pavement's listener is in front of the dumper, behind its alarm, 11 dB under its axis.
+- **What each place hears** (the simulated level of each source, dB(A)):
+
+  | | breaker | generator | dumper | alarm | all |
+  |---|---:|---:|---:|---:|---:|
+  | pavement | 91.0 | 65.4 | 77.8 | 79.7 | 91.5 |
+  | balcony | 89.0 | 62.9 | 75.7 | 77.3 | 89.5 |
+  | garden | 72.1 | 48.0 | 57.7 | 58.5 | 72.5 |
+
+  The houses stand between the works and the garden, which hears them over and round
+  the houses and the barrier, 19 dB(A) under the pavement.
+- **A tone is heard as the street makes it at its frequency.** The table's levels are
+  each octave band's, as a sound spread over the octave has them. The alarm's beeps are
+  one tone, where the reflections off the road and the facades add up or cancel: they
+  come out 2.9 dB under the table's level on the pavement, 0.7 dB over it on the
+  balcony and 5.3 dB under it in the garden (the simulated responses at 1200 Hz, which
+  change a few tens of centimetres away). The engines' firing, a row of tones, comes
+  out within 1.1 dB of the table's; the breaker's blows, noise, within 0.4 dB. The
+  captions give the octaves' levels.
+
+What it leaves out: the dumper stands still while its alarm sounds, as if it reversed on
+the spot; the machines' bodies are not in the scene, so nothing of the dumper shields
+the alarm, and Defra's levels are taken as coming from one point at each machine's
+height. See [Validation](validation.md#road-works-against-defras-rows-and-the-eus-limits)
+for the rows against their own levels and the EU's limits for outdoor machines.

@@ -26,6 +26,9 @@ published apart from the models they come from.
   3550 Hz there (105 dB(A) at least, and over any component above it), its rise (0.2 s
   at most) and its level 7 m in front of the vehicle, 0.5 to 1.5 m up (93 dB(A) at
   least).
+- **The car's horn.** The street car's pair of disc horns, against the same rule: on
+  its bench (105 to 118 dB(A); Hella gives its S77 111), its band, its rise, and 7 m in
+  front of the car, 0.5 to 1.5 m up, the horn 0.5 m up over asphalt (93 dB(A) at least).
 - **The car's table.** The car's sound power by Table F-1 of CNOSSOS-EU as amended in
   2021 (:mod:`acoustic_spaces.demos.road`) and by the table of Directive (EU) 2015/996,
   which the car of acoustic-spaces 4.0.1 had, from 30 to 130 km/h.
@@ -282,12 +285,49 @@ def check_fire_engine(folder: Path) -> dict:
     return out
 
 
-def horn_band() -> tuple[float, float]:
-    """The air horn's blast against the rule's band, from the spectrum of its made sound
-    (1 s, whole periods of both trumpets): the A-weighted level of its components
-    between RULE_BAND_HZ re the blast's whole A-weighted level, and how far its loudest
-    component there is over its loudest above them (dB)."""
-    x = horn.blast(RATE, 1.0)
+def check_car_horn(folder: Path) -> dict:
+    """The street car's pair of disc horns against the rule for vehicles' horns: on its
+    bench, 2 m away on its axis in a free field, the horn and the microphone 1.2 m up;
+    its band 1800 to 3550 Hz there; its rise; and its level 7 m in front of the car, 0.5
+    to 1.5 m up over asphalt, the horn CAR_HEIGHT_M up."""
+    kind = horn.CAR_HORN
+    free = {"absorption": [1.0] * 8, "scattering": 0.0}
+    asphalt = {"preset": "concrete_floor", "scattering": 0.05}
+    power = horn.blast_power(RATE, kind)
+    bench = engine_levels([("bench", (kind.at_m, 0.0, horn.HEIGHT_M))], free, folder, horn.HEIGHT_M)
+    on_bench = a_weighted(np.array(bench["bench"]) + power)
+    heights = np.round(np.arange(0.5, 1.5 + 1e-9, FIRE_STEP_M), 2)
+    front = [(f"{h:g} m", (SWISS_VEHICLE_M, 0.0, float(h))) for h in heights]
+    road_levels = engine_levels(front, asphalt, folder, horn.CAR_HEIGHT_M)
+    heard = {n: a_weighted(np.array(road_levels[n]) + power) for n, _ in front}
+    loudest = max(heard, key=heard.get)
+    band, above = horn_band(kind)
+    print(
+        f"car horn ({' and '.join(f'{f:g}' for f in kind.hz)} Hz): on the bench {kind.at_m:g} m "
+        f"away on the axis in a free field {on_bench:.1f} dB(A) (rule {HORN_BENCH[0]:g} to "
+        f"{HORN_BENCH[1]:g}; Hella's S77 {kind.on_axis_db_a:g}); on the car, "
+        f"{horn.CAR_HEIGHT_M:g} m up, {SWISS_VEHICLE_M:g} m in front over asphalt "
+        f"{min(heard.values()):.1f} to {heard[loudest]:.1f} dB(A) from 0.5 to 1.5 m up, the "
+        f"most {loudest} up (rule {horn.VEHICLE_DB_A:g} at least); its band "
+        f"{on_bench + band:.1f} dB(A) (rule: 105 at least), {above:.1f} dB over the loudest "
+        f"component above it (rule: over); each blast at its level {kind.rise_s:g} s after "
+        "it starts (rule: 0.2 s at most)"
+    )
+    return {
+        "bench_db_a": on_bench,
+        "vehicle_db_a": heard,
+        "band_db_a": on_bench + band,
+        "band_over_above_db": above,
+        "rise_s": kind.rise_s,
+    }
+
+
+def horn_band(kind: horn.Kind = horn.AIR_HORN) -> tuple[float, float]:
+    """A horn's blast (the air horn's by default) against the rule's band, from the
+    spectrum of its made sound (1 s, whole periods of both its tones): the A-weighted
+    level of its components between RULE_BAND_HZ re the blast's whole A-weighted level,
+    and how far its loudest component there is over its loudest above them (dB)."""
+    x = horn.blast(RATE, 1.0, kind)
     power = np.abs(np.fft.rfft(x)) ** 2
     freq = np.fft.rfftfreq(len(x), 1.0 / RATE)
     weighted = power * a_gain(freq) ** 2
@@ -341,13 +381,21 @@ def main(argv=None) -> int:
         swiss = check_swiss(folder)
         print("\nThe fire engine's two tones and air horn (SR 741.41; 70/388/EEC, Annex I)")
         fire = check_fire_engine(folder)
+        print("\nThe street car's horn (70/388/EEC, Annex I)")
+        car_horn = check_car_horn(folder)
     print("\nThe car's sound power, CNOSSOS-EU's Table F-1 of 2021 and of 2015/996, at 20 °C")
     car = check_car()
     print(f"\n{time.perf_counter() - started:.0f} s")
     if args.json:
         args.json.write_text(
             json.dumps(
-                {"california": california, "swiss": swiss, "fire_engine": fire, "car": car},
+                {
+                    "california": california,
+                    "swiss": swiss,
+                    "fire_engine": fire,
+                    "car_horn": car_horn,
+                    "car": car,
+                },
                 indent=2,
             ),
             encoding="utf-8",

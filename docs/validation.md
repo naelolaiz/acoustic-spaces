@@ -3163,6 +3163,21 @@ point 1.2.1.7); 7 m in front of the vehicle over asphalt, 0.5 to 1.5 m up, it gi
 its spectrum, its blasts, its height and its directivity are assumptions, as no
 measured air horn of a fire engine was found; the rule bounds them only as above.
 
+**The car's horn.** The street car's pair of disc horns (`--car car_and_horn`), at 360
+and 430 Hz, 0.5 m up, against the same rule. On its bench, 2 m in front of it on its
+axis in a free field, a blast gives 109.9 dB(A) (the rule: 105 to 118; Hella gives its
+S77 110 +/- 3, the air over the 2 m taking the last 0.1 dB of the treble); between 1800
+and 3550 Hz it gives 107.6 dB(A) there (the rule: 105 at least), its loudest component
+in that band 1.9 dB over the loudest above 3550 Hz (the rule: over); each blast is at
+its level 0.02 s after it starts (the rule: 0.2 s at most); 7 m in front of the car over
+asphalt, 0.5 to 1.5 m up, it gives 100.4 to 101.3 dB(A), the most 0.5 m up (the rule: 93
+at least). Its spectrum is a disc horn's, its harmonics struck alike and shaped by its
+tone disc's resonance at 3 kHz, where a single-disc horn's main components are (US
+patent 8,689,723), with a Q of 2 (assumed); made as the air horn is, a sawtooth at each
+fundamental, it would give only 102.8 dB(A) between 1800 and 3550 Hz, under the rule,
+which a horn sold as approved meets. Its blasts, its height and its directivity are
+assumed.
+
 **The car's table.** CNOSSOS-EU's Table F-1 as amended in 2021, which the road
 vehicles take (`acoustic_spaces.demos.road`), against Directive (EU) 2015/996's, which
 the car had before acoustic-spaces 4.1.0, at 20 °C:
@@ -3250,6 +3265,43 @@ Commission Regulation (EU) No 1304/2014 (the TSI Noise, table 4) for new units t
 roughness (EN ISO 3095:2013, 6.2); Schall 03's levels are for units of the German fleet
 on rails in average condition, rougher than the TSI's track. That Schall 03 is over the limits says that, not that
 either is wrong; no measured pass-by is compared here.
+
+## Road works against Defra's rows and the EU's limits
+
+`validation/plant_sources.py` holds the road works demo's machines and reversing alarm
+(`acoustic_spaces.demos.plant`, see [Road works in the street](demos.md#road-works-in-the-street))
+against the data they come from and the EU's limits for outdoor machines. Each machine
+is a row of Defra's noise database for construction sites (2005, the data of BS 5228-1
+Annex C), its sound power the row's level 10 m away plus 28 dB:
+
+| machine | Defra's row, 10 m away | its octaves, A-weighted and added | the engine, 10 m away | sound power |
+|---|---:|---:|---:|---:|
+| breaker (table 1, row 9) | 90 | 90.3 | 90.1 | 118.3 |
+| generator (table 4, row 87) | 65 | 64.9 | 64.8 | 92.9 |
+| dumper (table 4, row 4) | 76 | 75.5 | 75.3 | 103.5 |
+
+(dB(A)). Defra rounds its levels to whole decibels. The engine's is each machine at its
+height over a hard ground, its reflection added by its energy, heard 10 m away 1.5 m up
+(Defra gives no height): within 0.2 dB of the octaves' sum, as a point over hard ground
+radiating into a half sphere gives back.
+
+**The EU's limits.** Stage II of Directive 2000/14/EC (Article 12) lets a new 6 kVA
+generator (its electric power taken as 6 kW) send 97 dB(A); Defra's sends 92.9. A
+wheeled dumper of 75 kW may send 103 dB(A); Defra's sends 103.5, but Defra's is the
+loudest moment of a drive-by on a site and the directive's a test cycle of its own. The
+directive's 103 dB(A) for an excavator of 121 kW is for the excavator without its
+breaker. Breaking, Defra's sends 118.3 dB(A); Epiroc guarantees 121 dB(A) for its MB
+1650 (by 2000/14/EC, measured to EN ISO 3744), a 1650 kg breaker as Defra's.
+
+**The reversing alarm.** In a free field, 1.2 m up facing along its axis, the engine
+gives 107.0 dB(A) 1.2 m in front of it while it sounds, the 107 of SAE J994 Type B, and
+96.0 dB(A) 1.2 m behind it, 11 dB under, as the siren's directivity it is given has it.
+Its sound power in the scene is its average over its beeps and pauses, 3.1 dB under its
+sound power while it sounds (108.6 and 111.7 dB(A)).
+
+No measured site is compared here: Defra's levels are averages over the machines it
+measured, and the made sounds' time structure (the blows, the firing, the beeps' rate)
+is assumed.
 
 ## Edge diffraction in whole cities
 
@@ -3650,6 +3702,10 @@ Files and runs:
   against Schall 03's own sum, exact in a free field and 2.9 to 4.0 dB(A) under it over
   the railway example's ground, which the two reckon otherwise, not against measured
   pass-bys (see [Trains](#trains-against-schall-03-and-the-eus-limits)).
+  The road works' machines are rows of Defra's database for construction sites as
+  published, checked against the rows' own levels and the EU's limits, not against a
+  measured site; the reversing alarm's level is its rule's (see
+  [Road works](#road-works-against-defras-rows-and-the-eus-limits)).
   A helicopter's tones are checked against theory, its broadband noise against Pegg's
   worked example, and the whole against one certified level, which it is 3.4 dB over
   (see [Helicopter rotors](#helicopter-rotors-against-theory-and-a-certified-level));
@@ -3713,6 +3769,7 @@ python validation/doppler.py --json doppler.json
 python validation/rotorcraft.py --json rotorcraft.json
 python validation/urban_sources.py --json urban_sources.json
 python validation/rail_sources.py --json rail_sources.json
+python validation/plant_sources.py --json plant_sources.json
 python validation/city_speed.py --json city_speed.json   # --sizes 10 20 30 40 60
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters

@@ -1,7 +1,9 @@
-"""The air horn of the pass-by demos' fire engine: its sound, its blasts and its level
-as the rule for vehicles' horns sets them (Council Directive 70/388/EEC, Annex I), and
-the vehicle that carries it (:class:`~acoustic_spaces.demos.siren.FireEngine`). Nothing
-of the simulation uses it.
+"""The horns of the pass-by demos: the fire engine's air horn
+(:class:`~acoustic_spaces.demos.siren.FireEngine`) and the street car's pair of disc
+horns (:class:`~acoustic_spaces.demos.siren.HonkingCar`), their sound, their blasts and
+their level as the rule for vehicles' horns sets them (Council Directive 70/388/EEC,
+Annex I); each a :class:`Kind`, the air horn's (:data:`AIR_HORN`) the default of every
+function here. Nothing of the simulation uses it.
 
 The rule tests a horn on a bench, in a free field or an anechoic room, 2 m in front of
 it in the direction it is loudest, the horn and the microphone 1.2 m above the ground
@@ -26,12 +28,24 @@ BLAST_S long, GAP_S apart, every EVERY_S, each rising to its level over RISE_S (
 within 0.2 s) and falling as fast. Its sound power in the scene is its average over its
 blasts and pauses, as its made sound has them; a recording of a horn plays its blasts as
 loud as the made horn's, whatever its own pauses (:func:`recorded_gain`).
+
+The car's horns (:data:`CAR_HORN`) are a pair of disc horns as a maker sells them for
+cars: Hella's S77, approved to UN Regulation 28, at 360 and 430 Hz, 110 +/- 3 dB(A) 2 m
+away (Hella's sheet for its S70, S77 and S98), within the rule's 105 to 118. A disc
+horn's diaphragm strikes its magnet's core every cycle and its tone disc rings: its main
+components near 3 kHz, harmonics of the diaphragm's frequency (US patent 8,689,723,
+"Disk for horn of vehicle"). Each is made so: its harmonics struck alike and shaped by a
+resonance at DISC_HZ, its Q DISC_Q (assumed: a broad peak, which leaves the two
+fundamentals 24 and 23 dB under it). The rest is assumed as for the air
+horn: as directional as the siren NBS measured, behind the car's front bumper,
+CAR_HEIGHT_M up, and sounded in two short blasts every few seconds, a driver's warning.
 """
 
 from __future__ import annotations
 
 import functools
 import math
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -64,56 +78,111 @@ POWER_S = 3 * EVERY_S
 HORN_FILE = "horn.wav"
 
 
-def sounding(times) -> np.ndarray:
+@dataclass(frozen=True)
+class Kind:
+    """A horn: its fundamentals (Hz), its level on its axis (dB(A)) that far in front of
+    it (m) on the rule's bench, and how it is sounded: ``blasts`` blasts ``blast_s``
+    long, ``gap_s`` apart, from the start of every ``every_s``, each rising to its level
+    over ``rise_s`` and falling as fast (s); its name and its sound's file; and for a
+    disc horn its tone disc's resonance."""
+
+    noun: str
+    hz: tuple[float, ...]
+    on_axis_db_a: float
+    at_m: float
+    blasts: int
+    blast_s: float
+    gap_s: float
+    every_s: float
+    rise_s: float
+    file: str
+    #: A disc horn's tone disc: its resonance (Hz) and how sharp it is (its Q), which
+    #: shape the harmonics of each fundamental, all struck alike; 0 for a sawtooth's.
+    disc_hz: float = 0.0
+    disc_q: float = 0.0
+
+    @property
+    def power_s(self) -> float:
+        """How many seconds of it its sound power is taken from: three periods of its
+        blasts."""
+        return 3.0 * self.every_s
+
+
+#: The fire engine's air horn.
+AIR_HORN = Kind(
+    "air horn", HORN_HZ, ON_AXIS_DB_A, AT_M, BLASTS, BLAST_S, GAP_S, EVERY_S, RISE_S, HORN_FILE
+)
+#: The car's pair of disc horns: Hella's S77 (360 and 430 Hz, 110 dB(A) at 2 m), their
+#: tone discs ringing at DISC_HZ with a Q of DISC_Q (assumed), in two blasts of a quarter
+#: of a second every 3 s (assumed), CAR_HEIGHT_M up (assumed).
+DISC_HZ = 3000.0
+DISC_Q = 2.0
+CAR_HORN = Kind(
+    "horn", (360.0, 430.0), 110.0, AT_M, 2, 0.25, 0.15, 3.0, 0.02, "horn.wav", DISC_HZ, DISC_Q
+)
+CAR_HEIGHT_M = 0.5
+
+
+def sounding(times, kind: Kind = AIR_HORN) -> np.ndarray:
     """How loud the horn is at ``times`` (s), from 0 (silent) to 1 (a blast at its
-    level): BLASTS blasts from the start of every EVERY_S, each rising and falling over
-    RISE_S by a squared sine."""
-    t = np.mod(np.asarray(times, dtype=float), EVERY_S)
+    level): its blasts from the start of every period, each rising and falling over its
+    rise time by a squared sine."""
+    t = np.mod(np.asarray(times, dtype=float), kind.every_s)
     out = np.zeros_like(t)
-    for k in range(BLASTS):
-        start = k * (BLAST_S + GAP_S)
+    for k in range(kind.blasts):
+        start = k * (kind.blast_s + kind.gap_s)
         into = t - start
-        edge = np.minimum(into, BLAST_S - into)
-        inside = (into >= 0.0) & (into <= BLAST_S)
-        ramp = np.sin(0.5 * np.pi * np.clip(edge / RISE_S, 0.0, 1.0)) ** 2
+        edge = np.minimum(into, kind.blast_s - into)
+        inside = (into >= 0.0) & (into <= kind.blast_s)
+        ramp = np.sin(0.5 * np.pi * np.clip(edge / kind.rise_s, 0.0, 1.0)) ** 2
         out = np.where(inside, ramp, out)
     return out
 
 
-def blast(sample_rate: int, duration_s: float) -> np.ndarray:
-    """The two trumpets sounding without a pause, ``duration_s`` long at
-    ``sample_rate``: a sawtooth at each of HORN_HZ (its harmonics, each 1/k of the
-    fundamental, faded out as they near the Nyquist frequency), as loud as each other,
-    unscaled."""
+def blast(sample_rate: int, duration_s: float, kind: Kind = AIR_HORN) -> np.ndarray:
+    """The horns sounding without a pause, ``duration_s`` long at ``sample_rate``: at
+    each of its fundamentals a sawtooth (its harmonics, each 1/k of the fundamental), or
+    for a disc horn its harmonics struck alike and shaped by its tone disc's resonance
+    (:func:`disc`), faded out as they near the Nyquist frequency; the horns as loud as
+    each other, unscaled."""
     n = int(round(duration_s * sample_rate))
     t = np.arange(n) / sample_rate
     nyquist = sample_rate / 2.0
     x = np.zeros(n)
-    for f in HORN_HZ:
+    for f in kind.hz:
         k = 1
         while k * f < nyquist:
             fade = min(max((nyquist - k * f) / (0.1 * nyquist), 0.0), 1.0)
-            x += fade * np.sin(2.0 * np.pi * k * f * t) / k
+            size = disc(k * f, kind) if kind.disc_hz > 0.0 else 1.0 / k
+            x += fade * size * np.sin(2.0 * np.pi * k * f * t)
             k += 1
     return x
 
 
-def horn_sound(sample_rate: int, duration_s: float) -> np.ndarray:
+def disc(f, kind: Kind) -> np.ndarray:
+    """How a disc horn's tone disc shapes its harmonic at ``f`` (Hz), from 1 at its
+    resonance: a resonance of the kind's disc_hz and disc_q."""
+    f = np.asarray(f, dtype=float)
+    off = f / kind.disc_hz - kind.disc_hz / f
+    return 1.0 / np.sqrt(1.0 + (kind.disc_q * off) ** 2)
+
+
+def horn_sound(sample_rate: int, duration_s: float, kind: Kind = AIR_HORN) -> np.ndarray:
     """The horn's sound, dry and mono, ``duration_s`` long at ``sample_rate``, from the
     start of its blasts: :func:`blast` times :func:`sounding`, at an RMS of SOUND_RMS
     over whole periods of its blasts."""
     if duration_s <= 0.0:
         raise ValueError("the horn's sound needs a positive duration")
-    tone = blast(sample_rate, duration_s)
-    gate = sounding(np.arange(len(tone)) / sample_rate)
-    return tone * gate * (SOUND_RMS / _rms(sample_rate))
+    tone = blast(sample_rate, duration_s, kind)
+    gate = sounding(np.arange(len(tone)) / sample_rate, kind)
+    return tone * gate * (SOUND_RMS / _rms(sample_rate, kind))
 
 
 @functools.lru_cache(maxsize=8)
-def _rms(sample_rate: int) -> float:
-    """The RMS of :func:`blast` times :func:`sounding` over POWER_S."""
-    tone = blast(sample_rate, POWER_S)
-    x = tone * sounding(np.arange(len(tone)) / sample_rate)
+def _rms(sample_rate: int, kind: Kind = AIR_HORN) -> float:
+    """The RMS of :func:`blast` times :func:`sounding` over the kind's power_s."""
+    tone = blast(sample_rate, kind.power_s, kind)
+    x = tone * sounding(np.arange(len(tone)) / sample_rate, kind)
     return float(np.sqrt(np.mean(x**2)))
 
 
@@ -140,61 +209,67 @@ def sounding_rms(x: np.ndarray, sample_rate: int) -> float:
     return float(np.sqrt(np.median(power[power >= loudest * 10.0 ** (-GATE_DB / 10.0)])))
 
 
-def recorded_gain(x: np.ndarray, sample_rate: int) -> float | None:
+def recorded_gain(x: np.ndarray, sample_rate: int, kind: Kind = AIR_HORN) -> float | None:
     """The gain of ``x``, a recording of a horn, that makes it as loud while it sounds as
     :func:`horn_sound` is while it sounds (:func:`sounding_rms` of both), whatever its
     blasts and pauses; None when it is silent."""
     rms = sounding_rms(x, sample_rate)
     if rms <= 0.0:
         return None
-    return _sounding(sample_rate) / rms
+    return _sounding(sample_rate, kind) / rms
 
 
 @functools.lru_cache(maxsize=8)
-def _sounding(sample_rate: int) -> float:
-    """:func:`sounding_rms` of :func:`horn_sound` over POWER_S."""
-    return sounding_rms(horn_sound(sample_rate, POWER_S), sample_rate)
+def _sounding(sample_rate: int, kind: Kind = AIR_HORN) -> float:
+    """:func:`sounding_rms` of :func:`horn_sound` over the kind's power_s."""
+    return sounding_rms(horn_sound(sample_rate, kind.power_s, kind), sample_rate)
 
 
-def duty() -> float:
+def duty(kind: Kind = AIR_HORN) -> float:
     """The share of the time the horn sounds, in energy: the mean of :func:`sounding`
     squared over a period of its blasts."""
-    t = np.linspace(0.0, EVERY_S, 300_001)[:-1]
-    return float(np.mean(sounding(t) ** 2))
+    t = np.linspace(0.0, kind.every_s, 300_001)[:-1]
+    return float(np.mean(sounding(t, kind) ** 2))
 
 
 @functools.lru_cache(maxsize=8)
-def _bands(sample_rate: int) -> tuple[float, ...]:
+def _bands(sample_rate: int, kind: Kind = AIR_HORN) -> tuple[float, ...]:
     """The share of a blast's sound in each octave band."""
     from acoustic_spaces.synthesis import split_bands
 
-    x = blast(sample_rate, POWER_S)
+    x = blast(sample_rate, kind.power_s, kind)
     energy = np.mean(split_bands(x, sample_rate) ** 2, axis=1)
     return tuple(float(e) for e in energy / energy.sum())
 
 
-def blast_power(sample_rate: int) -> np.ndarray:
-    """(8,) the horn's sound power per octave band while it sounds (dB re 1 pW):
-    ON_AXIS_DB_A at AT_M on its axis, less its directivity index and the spreading of
-    free field."""
+def blast_power(sample_rate: int, kind: Kind = AIR_HORN) -> np.ndarray:
+    """(8,) the horn's sound power per octave band while it sounds (dB re 1 pW): its
+    level on its axis on the bench as in a free field, less its directivity index and the
+    spreading of free field."""
     from acoustic_spaces.demos.siren import directivity_index_db
     from acoustic_spaces.parameters import a_weighted
 
-    bands = 10.0 * np.log10(np.array(_bands(sample_rate)))
-    total = ON_AXIS_DB_A + 20.0 * math.log10(AT_M) + 10.0 * math.log10(4.0 * math.pi)
+    bands = 10.0 * np.log10(np.array(_bands(sample_rate, kind)))
+    total = kind.on_axis_db_a + 20.0 * math.log10(kind.at_m) + 10.0 * math.log10(4.0 * math.pi)
     total -= directivity_index_db()
     return total - a_weighted(bands) + bands
 
 
-def horn_power(sample_rate: int) -> np.ndarray:
+def horn_power(sample_rate: int, kind: Kind = AIR_HORN) -> np.ndarray:
     """(8,) the horn's sound power per octave band (dB re 1 pW) averaged over its blasts
     and the pauses between them, as its sound is made (:func:`horn_sound`): its
     :func:`blast_power` times :func:`duty`."""
-    return blast_power(sample_rate) + 10.0 * math.log10(duty())
+    return blast_power(sample_rate, kind) + 10.0 * math.log10(duty(kind))
 
 
 __all__ = [
+    "AIR_HORN",
     "AT_M",
+    "CAR_HEIGHT_M",
+    "CAR_HORN",
+    "DISC_HZ",
+    "DISC_Q",
+    "Kind",
     "BLOCK_S",
     "BLASTS",
     "BLAST_S",
@@ -211,6 +286,7 @@ __all__ = [
     "VEHICLE_DB_A",
     "blast",
     "blast_power",
+    "disc",
     "duty",
     "horn_power",
     "horn_sound",

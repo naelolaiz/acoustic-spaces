@@ -19,6 +19,14 @@
 - The pass-by demos' video, run in another format than its passes were mixed in, says
   which format each is in and how to match them.
 
+- Road works in the street, played by its new `works_demo.py`: a breaker on an
+  excavator, a diesel generator, a dumper and its reversing alarm, each at the sound
+  power of Defra's database for construction sites (the alarm SAE J994's), checked by
+  the new `validation/plant_sources.py` (`acoustic_spaces.demos.plant`).
+- The street's car can sound its horn (`passby_demo.py --car car_and_horn`, or `horn`
+  alone): a pair of disc horns as loud as Hella's S77 (`demos.horn.CAR_HORN`), held
+  against the rule for vehicles' horns in `validation/urban_sources.py`.
+
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with
   `--fire-engine` picking which play (`acoustic_spaces.demos.horn`; `police_car.json`
