@@ -268,15 +268,26 @@ def test_a_train_runs_at_its_own_speed_unless_told(tmp_path) -> None:
     assert rail.TRAM_VEHICLE.own_speed_kmh(argparse.Namespace()) is None
 
 
-def test_the_railway_demo_runs_a_train_past(tmp_path) -> None:
+def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
     """--train s_bahn on the quick railway: its points' sounds (a column each), the scene
     with the train's three sources alone at their front points' sound power, Schall 03's
     directivity beside it, facing the way it goes, and the pass: as long as the walk and
-    the train, its level the parts' energies added."""
+    the train, its level the parts' energies added, and each height's sound in the mix
+    as far under the rail top's as its level is."""
     pytest.importorskip("PIL")
     from acoustic_spaces import Scene
-    from acoustic_spaces.demos import audio, load, pipeline
+    from acoustic_spaces.demos import audio, load, passby, pipeline
+    from acoustic_spaces.synthesis import split_bands
 
+    # Each height is rendered alone and the three are added: keep what is added.
+    added = []
+    real_summed = passby.summed
+
+    def summed(played):
+        added.append([np.array(x) for x in played])
+        return real_summed(played)
+
+    monkeypatch.setattr(passby, "summed", summed)
     folder = _railway(tmp_path)
     demo = load(folder / "passby_demo.py").at(folder)
     run = ["all", "--train", "s_bahn", "--speed", "80", "--step", "4", "--no-mp4"]
@@ -311,6 +322,23 @@ def test_the_railway_demo_runs_a_train_past(tmp_path) -> None:
     assert heard["heard_s"][-1] > lasts - 0.5
     mix, _ = audio.read(work / "walk" / "tsi_7m5.binaural.wav")
     assert len(mix) / RATE > lasts
+    # Each height plays at its own sound power: its sound in the mix is as far under the
+    # rail top's as its SEL is (the roof's some 16 dB(A) under, the pantograph's 28), not as
+    # loud as it.
+    weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)
+
+    def a_energy(x: np.ndarray) -> float:
+        return sum(
+            float(weights @ np.sum(split_bands(x[:, k], RATE) ** 2, axis=1))
+            for k in range(x.shape[1])
+        )
+
+    (played,) = added
+    rail_top = a_energy(played[0])
+    for name, x in zip(parts[1:], played[1:], strict=True):
+        under = 10.0 * math.log10(rail_top / a_energy(x))
+        told = heard["parts"]["train"]["sel_a_db"] - heard["parts"][name]["sel_a_db"]
+        assert told > 5.0 and under == pytest.approx(told, abs=1.5), name
     assert (work / "stills" / "00_tsi_7m5.png").exists()
     # Another track makes the sound again.
     again = demo.resolved(demo.parser().parse_args([*run, "--track", "slab"]))
