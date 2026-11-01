@@ -78,11 +78,12 @@
   second order, so the barrier's and the houses' reflections keep their partners off
   the ground. The railway's trains now peak 2.2 to 2.9 dB(A) lower on the meadow, whose
   listener hears the barrier's reflection, 0.7 to 1.0 lower 7.5 m from the track, and
-  as before behind the barrier. Across the lake the evening's weather now makes the song 7.1 dB(A) louder
-  at the bedroom window than still air, as the house's wall gives back what comes in
-  off the water too (the docs' 2.3 dB was out of date: 4.4 at the first order). Behind the
-  tree belt's trees, their trunks' scattered sound now fills the ground's dip at 500 Hz
-  and 1 kHz: the garden there is 4.5 and 1.8 dB louder than without the wood.
+  as before behind the barrier. Across the lake the evening's weather now makes the
+  song 7.1 dB(A) louder at the bedroom window than still air, as the house's wall gives
+  back what comes in off the water too (the docs' 2.3 dB was out of date: 4.4 at the
+  first order). Behind the tree belt's trees, their trunks' scattered sound now fills
+  the ground's dip at 500 Hz and 1 kHz: the garden there is 4.5 and 1.8 dB louder than
+  without the wood.
 
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with
@@ -185,7 +186,8 @@
 - Outdoors, the places of a walking source share the parabolic equation's runs where
   they stand at one height over one ground without zones (`simulate(share_waves=...)`):
   an aircraft's 26 places take 31 s instead of 89 s, with the same early levels to 10⁻⁷
-  dB. Still scenes are unchanged, bit for bit.
+  dB. Still scenes are unchanged, bit for bit. A place waiting for its run keeps only
+  its bent paths.
 - The sound a source sends each way (`acoustic_spaces.emission`): along a walk with
   Doppler, `render_walk` and `render_movement` take an `Emission`, and each early path
   carries what is sent the way it leaves the source (`Mixture`, `directivity.on_grid`,
