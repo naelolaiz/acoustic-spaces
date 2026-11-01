@@ -81,8 +81,8 @@ open scene where it would read the example's (a copy is known by its
 folder's name or, saved anywhere, by the scene's name: a renamed scene is a scene of
 its own). Pick the demo and fill in the options that change what it plays, labelled in
 words (they start at the same defaults the command line uses, each one's flag in its
-tip), and it runs in the background with its messages in the **Messages** panel,
-**Cancel** stopping it. **Advanced** holds the step, what fine-tunes the run, the files
+tip), and it runs in the background with its messages in the **Messages** panel
+(where a file it wrote opens with a click on its path), **Cancel** stopping it. **Advanced** holds the step, what fine-tunes the run, the files
 and folders the demo reads and writes, and the command line. Above **Run**, a line says
 what the run downloads and how much, until it is there: the orchestra's tracks, the
 church's takes and organ samples, the stadium's and the lake's song, the gallery's talk. The sources are a table, each with what it plays and the file it plays instead:

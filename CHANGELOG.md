@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The editor's **Messages** panel underlines the paths of files and folders that are
+  there when a message comes, such as a demo's video or mix once it is written: a click
+  opens one with this computer's default app (a folder in the file manager), and its
+  right-click menu has **Open** and **Copy path**. Only sound, video, pictures, text and
+  tables, scenes, 3D models, PDFs and folders open; a script or a program never does.
+  What a demo prints counts its relative paths from the folder it runs in
+  (`gui.messages.paths_in`).
+
 - Every demo with several listeners plays the ones picked for a run: `--listeners
   a,b` mixes those alone and its video tours them alone. The simulation still takes
   every listener in use, so another choice needs no new one, except in the pass-by

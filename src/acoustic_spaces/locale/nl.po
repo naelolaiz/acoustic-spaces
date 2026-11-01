@@ -5781,6 +5781,33 @@ msgid "{title}: no values"
 msgstr "{title}: geen waarden"
 
 #: acoustic_spaces/gui/messages.py
+msgid "Open"
+msgstr "Openen"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Open {path} with this computer's default app"
+msgstr "{path} openen met de standaardapp van deze computer"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Copy path"
+msgstr "Pad kopiëren"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Copy {path} for pasting elsewhere"
+msgstr "{path} kopiëren om elders te plakken"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid ""
+"Click to open {path} with this computer's default app; right-click to copy "
+"the path"
+msgstr ""
+"Klikken om {path} met de standaardapp van deze computer te openen; "
+"rechtsklikken om het pad te kopiëren"
+
+#: acoustic_spaces/gui/messages.py
 msgid "Show the messages that only say what happened, such as a run's steps"
 msgstr ""
 "De meldingen tonen die alleen zeggen wat er gebeurde, zoals de stappen van "
@@ -5828,6 +5855,25 @@ msgstr ""
 #: acoustic_spaces/gui/messages.py
 msgid "Item"
 msgstr "Item"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Not opened: {path} is no longer there"
+msgstr "Niet geopend: {path} is er niet meer"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid ""
+"Not opened: only sound, video, pictures, text, tables, scenes, 3D models, "
+"PDFs and folders open from here, not {path}"
+msgstr ""
+"Niet geopend: vanaf hier openen alleen geluid, video, afbeeldingen, tekst, "
+"tabellen, scènes, 3D-modellen, pdf's en mappen, niet {path}"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "No app on this computer opened {path}"
+msgstr "Geen app op deze computer heeft {path} geopend"
 
 #: acoustic_spaces/gui/messages.py
 #, python-brace-format
