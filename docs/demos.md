@@ -1022,7 +1022,9 @@ km/h) unless `--speed` says.
   m² of it into a room of 50 m³. Each octave band in the room is the simulated level at
   the listener, the façade's reflection in it, less D_2m,nT = R + 10 lg(V / (6 T0 S)),
   the window's sound reduction index plus 9.6 dB (`acoustic_spaces.facade`); for
-  traffic's spectrum that is Rw + Ctr + 9.6 = 34.6 dB. The rumble is the FTA's general method (see [Vibration
+  traffic's spectrum that is Rw + Ctr + 9.6 = 34.6 dB; the S-Bahn's, higher in
+  frequency, loses 39.6 dB(A) at the railway's house (86.8 dB(A) outdoors, 47.1 in the
+  room). The rumble is the FTA's general method (see [Vibration
   through the ground](outdoor.md#vibration-through-the-ground)) at each moment of the
   pass: the train's curve at the distance from its nearest wheels to the room's wall
   behind the listener, the floor 3 dB over the ground, its rooms' rumble 50 dB under that
@@ -1050,12 +1052,22 @@ km/h) unless `--speed` says.
   from the track 1.2 m above the rail top (`tsi_7m5`), 25 m away over the meadow
   (`meadow_25m`), 25 m away on the other side, behind the barrier
   (`behind_barrier_25m`), and 2 m in front of a house 20 m from the track
-  (`house_18m`). The longer a train, the more its SEL is over its L_Amax: the freight
-  train, 446 m long, takes 16 s to pass at 100 km/h, the S-Bahn, 67 m, 2 s at 120 km/h.
-  The barrier, 3 m high and 4 m from the track, hides the rail top from the listener
-  behind it, but not the roof (4 m up) or the pantograph (5 m up): the S-Bahn, whose
-  rail top is 20 dB over its roof in sound power (the regional train's 16 dB), loses
-  more behind it than the regional train.
+  (`house_18m`, 2 m in front of the house's wall, its reflection included). The passes
+  peak at (L_Amax, with the SEL after it, dB(A)):
+
+  | | regional, 160 km/h | S-Bahn, 120 km/h | intercity, 200 km/h | freight, 100 km/h |
+  |---|---:|---:|---:|---:|
+  | 7.5 m | 94.5 (98.5) | 88.7 (90.8) | 97.5 (103.7) | 90.3 (101.6) |
+  | meadow, 25 m | 85.3 (90.6) | 79.6 (82.7) | 88.5 (95.9) | 81.3 (93.4) |
+  | behind the barrier, 25 m | 78.3 (79.3) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (79.6) |
+  | house, 18 m | 92.1 (97.2) | 86.8 (89.5) | 95.1 (102.5) | 88.3 (100.2) |
+
+  The longer a train, the more its SEL is over its L_Amax: the freight train, 446 m
+  long, takes 16 s to pass at 100 km/h, the S-Bahn, 67 m, 2 s at 120 km/h. The barrier,
+  3 m high and 4 m from the track, hides the rail top from the listener behind it, but
+  not the roof (4 m up) or the pantograph (5 m up): behind it the regional train peaks
+  7.0 dB(A) under its level on the meadow's side, the S-Bahn, whose rail top is 20 dB
+  over its roof in sound power (the regional train's 16 dB), 13.4 dB(A) under.
 - **The tram in the street**: the tram runs down the middle of the street at 50 km/h, 4.0 m from the
   pavement's listener, and peaks at 95.6 dB(A) on the pavement (SEL 99.3), 91.1 on the
   balcony (95.4) and 73.7 in the garden (80.3): louder than the bus, which passes 2.5 m
