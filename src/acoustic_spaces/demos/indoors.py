@@ -611,28 +611,8 @@ def mean_square(energy, loudest_db: float):
 
 def pressure_gains(fmt) -> np.ndarray:
     """(channels,) what each channel of the format ``fmt`` picks up of a sound pressure
-    that is the same all over the room: all of it in each ear, a mono or W channel and
-    a microphone's omnidirectional part (its gradient part none); a loudspeaker layout
-    1/√n in each of its n main speakers, as it plays sound from straight above or
-    below, and none in its LFE."""
-    from acoustic_spaces.spatial.ambisonics import Ambisonics
-    from acoustic_spaces.spatial.loudspeakers import Loudspeakers
-    from acoustic_spaces.spatial.microphone import Microphone
-
-    if isinstance(fmt, Ambisonics):
-        out = np.zeros(fmt.channels)
-        out[0] = 1.0
-        return out
-    if isinstance(fmt, Loudspeakers):
-        mains = [not s.lfe for s in fmt.speakers]
-        return np.where(mains, 1.0 / math.sqrt(sum(mains)), 0.0)
-    if isinstance(fmt, Microphone):
-        if fmt.a is None:
-            return np.asarray(fmt.weights, dtype=float)
-        steady, scaled = fmt.parts()
-        low = float(fmt.a_in(8)[0])
-        return np.asarray(steady.weights, dtype=float) + low * np.asarray(scaled.weights)
-    return np.ones(fmt.channels)
+    that is the same all over the room (the format's own ``pressure_gains``)."""
+    return np.asarray(fmt.pressure_gains(), dtype=float)
 
 
 def grid(end_s: float) -> np.ndarray:

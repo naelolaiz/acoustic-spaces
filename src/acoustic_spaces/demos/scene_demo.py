@@ -9,15 +9,15 @@ page): a file of yours, such as a band's stereo mix, or one of the free recordin
 (:mod:`acoustic_spaces.recordings`), which the ``recording`` step downloads the first
 time and keeps for every scene that names it. So the left and right loudspeakers of a
 sound system play the two sides of one recording, and its subwoofers both mixed down.
-Each file is brought to one gated RMS (its channels mixed down) and every channel taken
-out of it keeps that gain, so a recording's stereo balance stays; then each source's
-sound power in the scene (``level_db``) sets how loud it is against the others, as the
-simulation says and not as the recordings happen to be. Sources with neither stay
-silent. Every listener in use is heard in turn, in the scene's order (or only those
-``--listeners`` names, in its order), for ``--seconds`` each while the piece runs on,
-with one gain for all the stops and a crossfade between them, binaural through the HRTFs
-of the scene's binaural output (or ``--hrtf``, or a spherical head model when neither
-names any). The stills show the scene from above with the listener of the moment, the
+A file mixed down is brought to one gated RMS; its left and right channels share one
+gain that brings their mean square to it, so a recording's stereo balance stays; then
+each source's sound power in the scene (``level_db``) sets how loud it is against the
+others, as the simulation says and not as the recordings happen to be. Sources with
+neither stay silent. Every listener in use is heard in turn, in the scene's order (or
+only those ``--listeners`` names, in its order), for ``--seconds`` each while the piece
+runs on, with one gain for all the stops and a crossfade between them, binaural through
+the HRTFs of the scene's binaural output (or ``--hrtf``, or a spherical head model when
+neither names any). The stills show the scene from above with the listener of the moment, the
 level there, how long the sound takes to arrive and T30 at mid frequencies, and say how
 the sound was made. The simulation keeps every listener in use, so another choice of
 ``--listeners`` needs no new one.
@@ -367,10 +367,13 @@ def channel_of(x: np.ndarray, channel: str | None) -> np.ndarray:
 def feeds(args: argparse.Namespace) -> None:
     """One WAV per source that plays: its file (its signal, what ``--input`` gives it, or
     the scene's recording), at the scene's sample rate, the channel the source names or
-    mixed down to mono. Each file is brought to one gated RMS (FEED_RMS; its channels
-    mixed down), and the channels taken out of it keep that gain, so that its stereo
-    balance stays and ``auralize`` sets the balance between the sources from their sound
-    powers; sources without one are listed as silent."""
+    mixed down to mono. A file mixed down is brought to one gated RMS (FEED_RMS); its
+    left and right channels share one gain, which brings their mean square to FEED_RMS,
+    so that its stereo balance stays and each channel's source plays at its sound power
+    on average over the two, as ``auralize`` sets the balance between the sources from
+    their sound powers (one gain from the mixdown played them up to 3 dB over, as two
+    channels unlike each other cancel in it); sources without one are listed as
+    silent."""
     scene = scene_of(args)
     rate = scene.simulation.sample_rate
     out = work_of(args) / "feeds"
@@ -378,7 +381,7 @@ def feeds(args: argparse.Namespace) -> None:
     silent: list[str] = []
     length = 0
     free = free_of(scene)
-    read_in: dict[Path, tuple[np.ndarray, float]] = {}
+    read_in: dict[Path, tuple[np.ndarray, dict[bool, float]]] = {}
     for name, played in signals_of(args, scene).items():
         if played is None:
             silent.append(name)
@@ -393,13 +396,16 @@ def feeds(args: argparse.Namespace) -> None:
             raise SystemExit(f"error: {name} plays {signal}, which is not there")
         if signal not in read_in:
             x, r = decoded(signal)
-            x = resampled(x, r, rate)
-            rms = gated_rms(x, rate)
+            read_in[signal] = (resampled(x, r, rate), {})
+        x, gains = read_in[signal]
+        stereo_pair = channel in ("left", "right")
+        if stereo_pair not in gains:
+            parts = [stereo(x)[:, 0], stereo(x)[:, 1]] if stereo_pair else [mono(x)]
+            rms = float(np.sqrt(np.mean([gated_rms(p, rate) ** 2 for p in parts])))
             if rms <= 0.0:
                 raise SystemExit(f"error: {signal} is silent")
-            read_in[signal] = (x, FEED_RMS / rms)
-        x, gain = read_in[signal]
-        y = channel_of(x, channel) * gain
+            gains[stereo_pair] = FEED_RMS / rms
+        y = channel_of(x, channel) * gains[stereo_pair]
         write(out / f"{name}.wav", y, rate)
         length = max(length, len(y))
         table[name] = {"signal": str(signal), "channel": channel, "length_s": len(y) / rate}

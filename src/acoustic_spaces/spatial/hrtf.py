@@ -128,6 +128,20 @@ class HRTF:
             delays[start : start + _CHUNK] = delay
         return (out, delays) if onsets else out
 
+    def onsets_at(self, directions: np.ndarray) -> np.ndarray:
+        """The onsets (dirs, 2) that :meth:`interpolate` gives for head directions
+        (dirs, 3) (samples, fractions included), without mixing the responses."""
+        v = np.atleast_2d(np.asarray(directions, dtype=float))
+        v = v / np.linalg.norm(v, axis=1, keepdims=True)
+        if len(self.directions) < 4:
+            return self.onsets()[self.nearest(v)]
+        measured, _ = self._alignment()
+        delays = np.empty((len(v), 2))
+        for start in range(0, len(v), _CHUNK):
+            index, weights = self._corners(v[start : start + _CHUNK])
+            delays[start : start + _CHUNK] = np.einsum("kj,kje->ke", weights, measured[index])
+        return delays
+
     def _corners(self, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """The measured directions (k, 3) to mix for unit directions (k, 3), and their
         weights (k, 3)."""

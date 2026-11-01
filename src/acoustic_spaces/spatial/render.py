@@ -42,6 +42,8 @@ class Format(Protocol):
     label: str
     channel_names: list[str]
 
+    def pressure_gains(self) -> np.ndarray: ...
+
 
 @dataclass(frozen=True)
 class Mono:
@@ -57,6 +59,11 @@ class Mono:
     def gains(self, directions: np.ndarray) -> np.ndarray:
         return np.ones((len(np.atleast_2d(directions)), 1))
 
+    def pressure_gains(self) -> np.ndarray:
+        """(channels,) what each channel picks up of a sound pressure that is the same
+        all over the room (all of it)."""
+        return np.ones(1)
+
 
 @dataclass
 class Binaural:
@@ -70,6 +77,11 @@ class Binaural:
     @property
     def channel_names(self) -> list[str]:
         return ["L", "R"]
+
+    def pressure_gains(self) -> np.ndarray:
+        """(channels,) what each channel picks up of a sound pressure that is the same
+        all over the room (all of it in each ear)."""
+        return np.ones(2)
 
     def at(self, sample_rate: float) -> HRTF:
         """The HRTF at ``sample_rate``."""

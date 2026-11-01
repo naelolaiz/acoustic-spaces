@@ -513,10 +513,15 @@ def feeds(args) -> None:
         "mono": master.mean(axis=1),
     } | {name: mix(gains, others) for name, (gains, others) in MONITOR_MIXES.items()}
     signals |= {name: mix(gains) for name, gains in BAND_MIX.items()}
-    # The master's channels share one gain, so its stereo balance stays.
-    reference = gated_rms(master, rate)
+    # The master's channels share one gain, so its stereo balance stays, set from both
+    # (their mean square): one from the mixdown, which two unlike channels lower, would
+    # play them up to 3 dB over their sound power.
+    pair = float(
+        np.sqrt((gated_rms(master[:, 0], rate) ** 2 + gated_rms(master[:, 1], rate) ** 2) / 2)
+    )
+    reference = {"left": pair, "right": pair, "mono": gated_rms(master, rate)}
     norm = {
-        k: reference if k in ("left", "right", "mono") else gated_rms(v, rate)
+        k: reference[k] if k in reference else gated_rms(v, rate)
         for k, v in signals.items()
         if v is not None
     }

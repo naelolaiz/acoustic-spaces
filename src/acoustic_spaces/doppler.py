@@ -323,6 +323,10 @@ class Filters:
         self.size = 8
         self.roots: OrderedDict = OrderedDict()
         self.moves: OrderedDict = OrderedDict()
+        # The paths at a moment, which :meth:`moved` and :meth:`at` both read, and the
+        # angles of the paths' own phases at a place, the same at every moment.
+        self.moments: OrderedDict = OrderedDict()
+        self.angles: OrderedDict = OrderedDict()
 
     def at(self, k: int, moment: int = 0) -> np.ndarray:
         key = (k, moment)
@@ -348,15 +352,38 @@ class Filters:
         return roots
 
     def _paths(self, k: int, moment: int):
-        """The early paths at place ``k`` and, in turbulence, moment ``moment``."""
+        """The early paths at place ``k`` and, in turbulence, moment ``moment``, kept
+        for the moments in use."""
         response = self.responses[k]
         paths = response.early
         if paths.wander is None:
             return paths
+        key = (k, moment if self.gusts is not None else 0)
+        if key in self.moments:
+            self.moments.move_to_end(key)
+            return self.moments[key]
         if self.gusts is None:
-            return response.moment(self.seed)
-        roots = self._place_roots(k)
-        return paths.at_moment(roots, self.gusts.draws(roots, paths.point, moment))
+            out = response.moment(self.seed)
+        else:
+            roots = self._place_roots(k)
+            out = paths.at_moment(roots, self.gusts.draws(roots, paths.point, moment))
+        self.moments[key] = out
+        while len(self.moments) > 2 * self.size:
+            self.moments.popitem(last=False)
+        return out
+
+    def _angles(self, k: int, seed: int | None) -> np.ndarray:
+        """The angles of the paths' own phases at place ``k``
+        (:func:`~acoustic_spaces.engine.coherent.path_angles`), kept for the places in
+        use: the eddies change when the paths arrive, not what they are."""
+        if k in self.angles:
+            self.angles.move_to_end(k)
+            return self.angles[k]
+        angles = coherent.path_angles(self.responses[k].early, seed)
+        self.angles[k] = angles
+        while len(self.angles) > self.size:
+            self.angles.popitem(last=False)
+        return angles
 
     def moved(self, k: int, moment: int = 0) -> np.ndarray:
         """(paths,) how far the eddies move each path's delay (its top band's, s) at
@@ -382,8 +409,8 @@ class Filters:
         response = self.responses[k]
         # In turbulence the top band's delay at the moment is in the path's delay
         # (:meth:`moved`); its other bands' lags behind it stay here.
-        paths = self._paths(k, moment)
-        paths = coherent.with_own_phases(paths, response.seed if self.seed is None else self.seed)
+        seed = response.seed if self.seed is None else self.seed
+        paths = coherent.with_own_phases(self._paths(k, moment), seed, self._angles(k, seed))
         if self.directivity is not None:
             weights = source_weights(
                 self.directivity,
@@ -429,7 +456,7 @@ def _onsets(responses, track: Track, hrtf, rate: int) -> np.ndarray:
                 for k in heard
             ]
         )
-        onsets[heard] = hrtf.interpolate(heads, onsets=True)[1] / rate
+        onsets[heard] = hrtf.onsets_at(heads) / rate
     return onsets
 
 

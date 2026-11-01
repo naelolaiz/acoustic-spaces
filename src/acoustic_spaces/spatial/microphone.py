@@ -76,6 +76,16 @@ class Microphone:
     def channels(self) -> int:
         return len(self.names)
 
+    def pressure_gains(self) -> np.ndarray:
+        """(channels,) what each channel picks up of a sound pressure that is the same
+        all over the room: the capsules' omnidirectional part (in the lowest band, for
+        a pattern that changes with frequency), none of their gradient part."""
+        if self.a is None:
+            return np.asarray(self.weights, dtype=float)
+        steady, scaled = self.parts()
+        low = float(self.a_in(8)[0])
+        return np.asarray(steady.weights, dtype=float) + low * np.asarray(scaled.weights)
+
     @property
     def channel_names(self) -> list[str]:
         return list(self.names)
