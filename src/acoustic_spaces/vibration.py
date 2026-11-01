@@ -488,12 +488,16 @@ def horizontal_distance(
     corners = np.asarray(path, dtype=float)[:, :2]
     if closed:
         corners = np.vstack([corners, corners[:1]])
-    if len(corners) == 1:
-        return float(np.linalg.norm(p - corners[0]))
     a, b = corners[:-1], corners[1:]
     ab = b - a
-    t = np.clip(np.einsum("ij,ij->i", p - a, ab) / np.einsum("ij,ij->i", ab, ab), 0.0, 1.0)
-    return float(np.min(np.linalg.norm(a + t[:, None] * ab - p, axis=1)))
+    lengths = np.einsum("ij,ij->i", ab, ab)
+    # A leg of no length (a point repeated, a ring closed on its first corner) is that
+    # point.
+    t = np.divide(
+        np.einsum("ij,ij->i", p - a, ab), lengths, out=np.zeros(len(ab)), where=lengths > 0.0
+    )
+    nearest = a + np.clip(t, 0.0, 1.0)[:, None] * ab
+    return float(np.min(np.linalg.norm(np.vstack([nearest, corners[-1:]]) - p, axis=1)))
 
 
 __all__ = [

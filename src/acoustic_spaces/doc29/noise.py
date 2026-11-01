@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .path import Segment
+from .path import Segment, power_between
 from .tables import FOOT_M, KNOT_M_S, Aircraft, NpdCurves
 
 #: The NPD curves' reference speed (m/s), 160 kt, and the time t0 of the scaled
@@ -143,16 +143,7 @@ class SegmentLevels:
 
 def _power(segment: Segment, q: np.ndarray, length: float) -> np.ndarray:
     p1, p2 = segment.powers
-    f = np.clip(q / length, 0.0, 1.0)
-    if p1 >= 0 and p2 >= 0:
-        p = np.sqrt(p1**2 + f * (p2**2 - p1**2))
-    elif p1 < 0 and p2 < 0:
-        p = -np.sqrt(p1**2 + f * (p2**2 - p1**2))
-    elif p1 < 0:
-        p = p1 + (p2 - p1) * np.sqrt(f)
-    else:
-        p = p2 + (p1 - p2) * np.sqrt(1.0 - f)
-    return np.maximum(p, 1.0)
+    return np.maximum(power_between(p1, p2, np.clip(q / length, 0.0, 1.0)), 1.0)
 
 
 def segment_levels(

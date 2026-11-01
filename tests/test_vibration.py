@@ -160,6 +160,10 @@ def test_distances_in_plan() -> None:
     square = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
     assert v.horizontal_distance((5.0, -4.0), square, closed=True) == pytest.approx(4.0)
     assert v.horizontal_distance((-3.0, 5.0), square, closed=True) == pytest.approx(3.0)
+    # A point repeated (a walk's stop) or a ring closed on its first corner.
+    assert v.horizontal_distance((10.0, 7.5), [track[0], track[0], track[1]]) == 7.5
+    assert v.horizontal_distance((-3.0, 5.0), [*square, square[0]], closed=True) == 3.0
+    assert v.horizontal_distance((3.0, 4.0, 9.0), [(0.0, 0.0, 0.0)]) == 5.0
     curve = v.CURVES["rapid_transit"]
     near, far = v.NEAREST_M, v.FARTHEST_M
     d = v.distance_for(curve.level, 65.0, near, far)
