@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -861,6 +861,7 @@ def render_walk(
     sample_rate: int | None = None,
     seed: int | None = None,
     equal_power: bool = False,
+    followers: Sequence[tuple[float, np.ndarray | tuple[np.ndarray, float]]] = (),
 ) -> np.ndarray:
     """``signals`` (source names to a signal at ``sample_rate``, or a (signal, rate)
     pair) played along the walk, as (samples, channels) in format ``fmt`` (default
@@ -871,11 +872,21 @@ def render_walk(
     Doppler, the source that walks (or every source, for a walking listener) may send an
     :class:`~acoustic_spaces.emission.Emission` at ``sample_rate``, the sound it sends
     each way: each early path carries what is sent the way it leaves the source, and the
-    late part the emission's sound averaged over the directions."""
+    late part the emission's sound averaged over the directions.
+
+    ``followers`` are more sounds of a walking source with Doppler, each (lag_s,
+    signal) going along its walk ``lag_s`` seconds after it, as the wheels and the cars
+    of a train follow its front: each is heard as the walker's own signal would be,
+    ``lag_s`` later, and scaled as it is. The result is long enough for the last
+    follower's."""
     from acoustic_spaces.spatial import Mono, for_listener
 
     if not signals:
         raise ValueError("no signals to render")
+    if followers and (walk.kind != "sources" or not walk.doppler or walk.name not in signals):
+        raise ValueError(
+            "sounds follow a walking source along a walk with Doppler, with its own signal"
+        )
     fmt = fmt or Mono()
     result = walk.result
     rate = int(sample_rate or result.settings.sample_rate)
@@ -902,6 +913,15 @@ def render_walk(
     if walk.doppler:
         each_way = set(signals) if walk.kind == "listeners" else {walk.name}
     dry = _dry(signals, gains, rate, each_way)
+    behind: list[tuple[int, np.ndarray]] = []
+    for lag_s, value in followers:
+        if not math.isfinite(lag_s) or lag_s < 0.0:
+            raise ValueError(f"a sound follows the walker 0 s or more behind it, not {lag_s}")
+        if isinstance(dry[walk.name], Emission):
+            raise ValueError("sounds follow a walker that sends one sound every way")
+        (follower,) = _dry({walk.name: value}, gains, rate, set()).values()
+        assert isinstance(follower, np.ndarray)
+        behind.append((int(round(lag_s * rate)), follower))
 
     cache: dict[tuple[str, str], np.ndarray] = {}
 
@@ -924,7 +944,8 @@ def render_walk(
         # The paths' delays change along the walk: as long as the longest response.
         longest = max(result[key_of(s, k)].length_s for s in moving for k in range(len(walk.names)))
         taps = max(taps, int(math.ceil(longest * rate)))
-    length = max(_samples(x) for x in dry.values()) + taps - 1
+    length = max([_samples(x) for x in dry.values()] + [lag + len(x) for lag, x in behind])
+    length += taps - 1
     out = np.zeros((length, fmt.channels))
     # Outdoors in turbulence the early paths flicker as the eddies drift past, the same
     # eddies all along the walk.
@@ -982,6 +1003,7 @@ def render_walk(
                 gusts,
                 source_walks=walk.kind == "sources",
                 crossfade_s=crossfade_s,
+                followers=behind if source == walk.name else (),
             )
     return out
 
@@ -1000,13 +1022,15 @@ def _doppler(
     *,
     source_walks: bool,
     crossfade_s: float,
+    followers: Sequence[tuple[int, np.ndarray]] = (),
 ) -> None:
     """Adds to ``out`` the mono ``signal`` (or the sound the source sends each way)
     heard along a walk with Doppler, through ``keys`` (the pair's response in ``result``
     at each place, the walker there at ``times`` and ``positions``; ``source_walks``
     when the walker is the source): the late parts crossfaded from place to place, the
     early paths each through its own changing delay
-    (:func:`acoustic_spaces.doppler.render`)."""
+    (:func:`acoustic_spaces.doppler.render`); and each of ``followers`` (lag, signal)
+    the same way, ``lag`` samples later."""
     from acoustic_spaces import doppler
     from acoustic_spaces.engine.early import EarlyReflections
 
@@ -1032,11 +1056,13 @@ def _doppler(
             late[keys[k]] = chosen.spatial_impulse_response(fmt, rate, seed)
         ir = late[keys[k]]
         first = max(begin - len(ir) + 1, 0)
-        piece = signal[first:end]
-        if len(piece) == 0:
-            continue
-        wet = convolve(piece, ir)[begin - first : end - first]
-        out[begin : begin + len(wet)] += weight[: len(wet)] * wet
+        for lag, played in [(0, signal), *followers]:
+            piece = played[first:end]
+            if len(piece) == 0 or begin + lag >= length:
+                continue
+            wet = convolve(piece, ir)[begin - first : end - first]
+            wet = (weight[: len(wet)] * wet)[: length - begin - lag]
+            out[begin + lag : begin + lag + len(wet)] += wet
     responses = [result[key] for key in keys]
     steps = np.linalg.norm(np.diff(np.asarray(positions, dtype=float), axis=0), axis=1)
     # The most a path's delay moves from one place to the next and stays the same path's:
@@ -1061,6 +1087,7 @@ def _doppler(
         seed=seed,
         axes=axes,
         directivity=directivity,
+        followers=followers,
     )
 
 

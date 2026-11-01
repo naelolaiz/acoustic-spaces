@@ -34,6 +34,8 @@ src/acoustic_spaces/   Python package
   gltf.py              export to glTF (.glb) for Blender: room, paths, particle animation
   results.py           writing a simulation's responses and parameters to a folder
   examples.py          the example scenes that ship with the package
+  demos/               what the demos share: steps and options, recordings, mixes, the
+                       tour, stills and video (a new demo describes its steps and options)
   gui/                 the graphical editor (Qt)
   cli.py               command-line interface
   i18n.py              the language of the text shown, and its translation

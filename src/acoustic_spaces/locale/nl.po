@@ -5781,6 +5781,33 @@ msgid "{title}: no values"
 msgstr "{title}: geen waarden"
 
 #: acoustic_spaces/gui/messages.py
+msgid "Open"
+msgstr "Openen"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Open {path} with this computer's default app"
+msgstr "{path} openen met de standaardapp van deze computer"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Copy path"
+msgstr "Pad kopiëren"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Copy {path} for pasting elsewhere"
+msgstr "{path} kopiëren om elders te plakken"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid ""
+"Click to open {path} with this computer's default app; right-click to copy "
+"the path"
+msgstr ""
+"Klikken om {path} met de standaardapp van deze computer te openen; "
+"rechtsklikken om het pad te kopiëren"
+
+#: acoustic_spaces/gui/messages.py
 msgid "Show the messages that only say what happened, such as a run's steps"
 msgstr ""
 "De meldingen tonen die alleen zeggen wat er gebeurde, zoals de stappen van "
@@ -5828,6 +5855,25 @@ msgstr ""
 #: acoustic_spaces/gui/messages.py
 msgid "Item"
 msgstr "Item"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Not opened: {path} is no longer there"
+msgstr "Niet geopend: {path} is er niet meer"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid ""
+"Not opened: only sound, video, pictures, text, tables, scenes, 3D models, "
+"PDFs and folders open from here, not {path}"
+msgstr ""
+"Niet geopend: vanaf hier openen alleen geluid, video, afbeeldingen, tekst, "
+"tabellen, scènes, 3D-modellen, pdf's en mappen, niet {path}"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "No app on this computer opened {path}"
+msgstr "Geen app op deze computer heeft {path} geopend"
 
 #: acoustic_spaces/gui/messages.py
 #, python-brace-format
@@ -8309,6 +8355,46 @@ msgstr ""
 "https://doi.org/10.14279/depositonce-6729.2) zijn niet inbegrepen: een deel "
 "downloaden en met auralize.sh voor een zitplaats mixen."
 
+#: examples/railway/scene.yaml
+msgctxt "example"
+msgid "Railway across a meadow"
+msgstr "Spoorlijn door een weiland"
+
+#: examples/railway/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a railway line on ballast across a meadow, heard where the EU's "
+"rule for the noise of trains measures one going by (7.5 m from the track's "
+"centre, 1.2 m above the rail top), 25 m away over the meadow, and 25 m away "
+"on the other side behind a noise barrier 3 m high, 4 m from the track, which "
+"the trains' sound comes over and round (`first_order` diffraction follows "
+"it). The line source along the track is its traffic on average: one regional "
+"train an hour at 160 km/h, its sound power per metre Schall 03's (Germany's "
+"method for the noise of railways, 2014), all of it at the rail top. A train "
+"runs past at 160 km/h, its pitch falling as it goes by (Doppler): three "
+"sources along one walk, at the rail top, on the roof and at the pantograph, "
+"Schall 03's heights; each plays the train's points at that height one behind "
+"the other (its bogies, its cars' roofs, its pantograph), so the train goes "
+"by as long as it is. They are left out of simulations until ticked, and "
+"passby_demo.py runs one of four trains past."
+msgstr ""
+"Buiten: een spoorlijn op ballast door een weiland, gehoord waar de EU-regel "
+"voor het geluid van treinen een passage meet (7.5 m van het midden van het "
+"spoor, 1.2 m boven de bovenkant van de spoorstaaf), 25 m verder boven het "
+"weiland en 25 m aan de andere kant achter een geluidsscherm van 3 m hoog op "
+"4 m van het spoor, waarover en waaromheen het geluid van de treinen komt "
+"(diffractie `first_order` volgt dat). De lijnbron langs het spoor is het "
+"verkeer erop gemiddeld: één regionale trein per uur met 160 km/h, met het "
+"geluidsvermogen per meter van Schall 03 (de Duitse methode voor het geluid "
+"van spoorwegen, 2014), helemaal op de bovenkant van de spoorstaaf. Een trein "
+"rijdt met 160 km/h voorbij, zijn toonhoogte daalt bij het passeren "
+"(Doppler): drie bronnen langs één route, op de bovenkant van de spoorstaaf, "
+"op het dak en bij de stroomafnemer, de hoogten van Schall 03; elk speelt de "
+"punten van de trein op die hoogte achter elkaar (zijn draaistellen, de daken "
+"van zijn rijtuigen, zijn stroomafnemer), zodat de trein zo lang voorbijkomt "
+"als hij lang is. Ze blijven buiten de simulaties tot ze aangevinkt worden, "
+"en passby_demo.py laat een van vier treinen voorbijrijden."
+
 #: examples/rehearsal_room/scene.yaml
 msgctxt "example"
 msgid "Rehearsal room from SketchUp (Collada)"
@@ -8572,9 +8658,9 @@ msgid ""
 "block, one in the garden, where the traffic comes over the top of the "
 "barrier and round its ends: `first_order` diffraction follows it. A car, a "
 "bus, a motorcycle, a police car with its siren on and a fire engine with its "
-"siren and its air horn drive along the street at 50 km/h, their pitch "
-"falling as they pass (Doppler): they are left out of simulations until "
-"ticked, and passby_demo.py plays one."
+"siren and its air horn drive along the street at 50 km/h, and a tram runs "
+"down its middle at 50 km/h, their pitch falling as they pass (Doppler): they "
+"are left out of simulations until ticked, and passby_demo.py plays one."
 msgstr ""
 "Buiten: een straat van 12 m breed tussen een rij huizen van 9 m hoog en een "
 "kantoorgebouw van 15 m hoog, met verkeer langs de straat (een lijnbron van "
@@ -8586,9 +8672,9 @@ msgstr ""
 "verkeer over de bovenkant van het scherm en om de uiteinden heen komt: de "
 "diffractie `first_order` volgt dat. Een auto, een bus, een motor, een "
 "politieauto met de sirene aan en een brandweerwagen met sirene en luchthoorn "
-"rijden met 50 km/h door de straat, hun toonhoogte daalt bij het passeren "
-"(Doppler): ze blijven buiten de simulaties tot ze aangevinkt worden, en "
-"passby_demo.py speelt er één."
+"rijden met 50 km/h door de straat en een tram door het midden ervan, ook met "
+"50 km/h, hun toonhoogte daalt bij het passeren (Doppler): ze blijven buiten "
+"de simulaties tot ze aangevinkt worden, en passby_demo.py speelt er één."
 
 #: examples/studio/scene.yaml
 msgctxt "example"

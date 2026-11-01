@@ -5808,6 +5808,33 @@ msgid "{title}: no values"
 msgstr "{title}: keine Werte"
 
 #: acoustic_spaces/gui/messages.py
+msgid "Open"
+msgstr "Öffnen"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Open {path} with this computer's default app"
+msgstr "{path} mit der Standard-App dieses Computers öffnen"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Copy path"
+msgstr "Pfad kopieren"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Copy {path} for pasting elsewhere"
+msgstr "{path} kopieren, um ihn anderswo einzufügen"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid ""
+"Click to open {path} with this computer's default app; right-click to copy "
+"the path"
+msgstr ""
+"Klicken, um {path} mit der Standard-App dieses Computers zu öffnen; "
+"Rechtsklick, um den Pfad zu kopieren"
+
+#: acoustic_spaces/gui/messages.py
 msgid "Show the messages that only say what happened, such as a run's steps"
 msgstr ""
 "Die Meldungen anzeigen, die nur sagen, was geschah, etwa die Schritte einer "
@@ -5855,6 +5882,25 @@ msgstr ""
 #: acoustic_spaces/gui/messages.py
 msgid "Item"
 msgstr "Element"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Not opened: {path} is no longer there"
+msgstr "Nicht geöffnet: {path} ist nicht mehr da"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid ""
+"Not opened: only sound, video, pictures, text, tables, scenes, 3D models, "
+"PDFs and folders open from here, not {path}"
+msgstr ""
+"Nicht geöffnet: Von hier aus öffnen sich nur Ton, Video, Bilder, Text, "
+"Tabellen, Szenen, 3D-Modelle, PDFs und Ordner, nicht {path}"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "No app on this computer opened {path}"
+msgstr "Keine App auf diesem Computer hat {path} geöffnet"
 
 #: acoustic_spaces/gui/messages.py
 #, python-brace-format
@@ -8351,6 +8397,46 @@ msgstr ""
 "https://doi.org/10.14279/depositonce-6729.2) sind nicht enthalten: einen "
 "Satz herunterladen und mit auralize.sh für einen Platz mischen."
 
+#: examples/railway/scene.yaml
+msgctxt "example"
+msgid "Railway across a meadow"
+msgstr "Bahnstrecke über eine Wiese"
+
+#: examples/railway/scene.yaml
+msgctxt "example"
+msgid ""
+"Outdoors: a railway line on ballast across a meadow, heard where the EU's "
+"rule for the noise of trains measures one going by (7.5 m from the track's "
+"centre, 1.2 m above the rail top), 25 m away over the meadow, and 25 m away "
+"on the other side behind a noise barrier 3 m high, 4 m from the track, which "
+"the trains' sound comes over and round (`first_order` diffraction follows "
+"it). The line source along the track is its traffic on average: one regional "
+"train an hour at 160 km/h, its sound power per metre Schall 03's (Germany's "
+"method for the noise of railways, 2014), all of it at the rail top. A train "
+"runs past at 160 km/h, its pitch falling as it goes by (Doppler): three "
+"sources along one walk, at the rail top, on the roof and at the pantograph, "
+"Schall 03's heights; each plays the train's points at that height one behind "
+"the other (its bogies, its cars' roofs, its pantograph), so the train goes "
+"by as long as it is. They are left out of simulations until ticked, and "
+"passby_demo.py runs one of four trains past."
+msgstr ""
+"Im Freien: eine Bahnstrecke auf Schotter quer über eine Wiese, gehört dort, "
+"wo die EU-Vorschrift für den Lärm von Zügen eine Vorbeifahrt misst (7.5 m "
+"von der Gleismitte, 1.2 m über der Schienenoberkante), 25 m entfernt über "
+"der Wiese und 25 m entfernt auf der anderen Seite hinter einer 3 m hohen "
+"Lärmschutzwand 4 m vom Gleis, über die und um die herum der Schall der Züge "
+"kommt (die Beugung `first_order` folgt ihm). Die Linienquelle entlang des "
+"Gleises ist sein Verkehr im Mittel: ein Regionalzug pro Stunde mit 160 km/h, "
+"seine Schallleistung je Meter nach Schall 03 (Deutschlands Verfahren für den "
+"Lärm von Eisenbahnen, 2014), ganz an der Schienenoberkante. Ein Zug fährt "
+"mit 160 km/h vorbei, seine Tonhöhe fällt beim Vorbeifahren (Doppler): drei "
+"Quellen auf einem Weg, an der Schienenoberkante, auf dem Dach und am "
+"Stromabnehmer, die Höhen von Schall 03; jede spielt die Punkte des Zuges in "
+"dieser Höhe hintereinander (seine Drehgestelle, die Dächer seiner Wagen, "
+"seinen Stromabnehmer), so dass der Zug so lange vorbeifährt, wie er lang "
+"ist. Sie bleiben aus den Simulationen, bis sie angehakt werden, und "
+"passby_demo.py lässt einen von vier Zügen vorbeifahren."
+
 #: examples/rehearsal_room/scene.yaml
 msgctxt "example"
 msgid "Rehearsal room from SketchUp (Collada)"
@@ -8617,9 +8703,9 @@ msgid ""
 "block, one in the garden, where the traffic comes over the top of the "
 "barrier and round its ends: `first_order` diffraction follows it. A car, a "
 "bus, a motorcycle, a police car with its siren on and a fire engine with its "
-"siren and its air horn drive along the street at 50 km/h, their pitch "
-"falling as they pass (Doppler): they are left out of simulations until "
-"ticked, and passby_demo.py plays one."
+"siren and its air horn drive along the street at 50 km/h, and a tram runs "
+"down its middle at 50 km/h, their pitch falling as they pass (Doppler): they "
+"are left out of simulations until ticked, and passby_demo.py plays one."
 msgstr ""
 "Im Freien: eine 12 m breite Straße zwischen einer 9 m hohen Häuserzeile und "
 "einem 15 m hohen Bürogebäude, mit Verkehr entlang der Straße (eine 30 m "
@@ -8632,9 +8718,9 @@ msgstr ""
 "der Wand und um ihre Enden herum ankommt: die Beugung `first_order` folgt "
 "ihm. Ein Auto, ein Bus, ein Motorrad, ein Polizeiauto mit eingeschalteter "
 "Sirene und ein Feuerwehrauto mit Sirene und Drucklufthorn fahren mit 50 km/h "
-"durch die Straße, ihre Tonhöhe fällt beim Vorbeifahren (Doppler): sie "
-"bleiben aus den Simulationen, bis sie angehakt werden, und passby_demo.py "
-"spielt eines davon."
+"durch die Straße und eine Straßenbahn mit 50 km/h durch ihre Mitte, ihre "
+"Tonhöhe fällt beim Vorbeifahren (Doppler): sie bleiben aus den Simulationen, "
+"bis sie angehakt werden, und passby_demo.py spielt eines davon."
 
 #: examples/studio/scene.yaml
 msgctxt "example"

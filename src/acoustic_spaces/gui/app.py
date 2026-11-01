@@ -827,10 +827,18 @@ class MainWindow(QMainWindow):
             )
         )
 
-    def log(self, text: str, level: str = "info", *, status: bool = True) -> None:
+    def log(
+        self,
+        text: str,
+        level: str = "info",
+        *,
+        status: bool = True,
+        folder: str | Path | None = None,
+    ) -> None:
         """Add ``text`` to the messages, a warning in amber and an error in red, and show
-        it in the status bar unless ``status`` is False."""
-        self.message_panel.add(text, level)
+        it in the status bar unless ``status`` is False. Its paths open with a click,
+        those relative to ``folder`` counted from there."""
+        self.message_panel.add(text, level, folder=folder)
         if status:
             self.statusBar().showMessage(text, 8000)
 
@@ -1812,11 +1820,14 @@ class MainWindow(QMainWindow):
 
     def _progress(self, message: str) -> None:
         self.activity.step(message)
+        # A demo prints its paths relative to the folder it runs in.
+        demo = getattr(self.job, "demo", None)
         # The status bar says it already, beside the moving bar.
         self.log(
             # Translators: the time since a run started, then what it does now.
             fmt(_("{time:6.1f} s  {step}"), time=time.perf_counter() - self._started, step=message),
             status=False,
+            folder=demo.folder if demo is not None else None,
         )
 
     def _closed_meanwhile(self) -> bool:

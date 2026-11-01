@@ -1,11 +1,12 @@
-"""A car, a bus, a motorcycle, a police car with its siren on or a fire engine with its
-siren and its air horn driving along the street between the houses and the office
+"""A car, a bus, a motorcycle, a police car with its siren on, a fire engine with its
+siren and its air horn or a tram going along the street between the houses and the office
 block, heard binaurally on the pavement, on a balcony and in the garden behind the noise
 barrier, its pitch falling as it goes by (Doppler); and a video that follows.
 
 The vehicles are the example's own (the sources `car`, `bus`, `motorcycle`, `police_car`
-with `police_car_siren`, and `fire_engine` with `fire_engine_siren` and
-`fire_engine_horn`, left out of its simulations until ticked), at 50 km/h (--speed);
+with `police_car_siren`, `fire_engine` with `fire_engine_siren` and `fire_engine_horn`,
+and `tram` with `tram_roof`, left out of its simulations until ticked), at 50 km/h
+(--speed);
 --vehicle picks the one that goes past. The car, the bus and the motorcycle send their
 sound from 0.05 m above the road with CNOSSOS-EU's sound power per octave band for that
 speed and their category (Directive 2002/49/EC, Annex II, Appendix F, Table F-1, as
@@ -21,9 +22,13 @@ fire engine is a medium heavy vehicle with two axles made as the bus is, its sir
 its cab's roof, 3.0 m up, playing the two tones as loud as the Swiss rule lets them be
 on a vehicle, and its air horn 1.2 m up, in blasts as loud as the rule for vehicles'
 horns lets one be on its bench; --fire-engine leaves out the horn, the vehicle itself,
-or both. Run it from the folder of the street example (`acoustic-spaces examples --copy
-. street && cd street`), in the Python environment acoustic-spaces is installed in, with
-ffmpeg on the PATH:
+or both. The tram is a low-floor tram with air conditioning, 30 m long, on its track set
+in the street, its sound power Schall 03's (Germany's method for the noise of railways
+and tramways, 2014) at the rail top, shared out between its four bogies, and on its
+roof, between its two halves; each of its two sources plays its points at its height
+one behind the other, so it goes by as long as it is. Run it from the folder of the
+street example (`acoustic-spaces examples --copy . street && cd street`), in the Python
+environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
     python passby_demo.py sound   # demo/NAME/NAME.wav (and NAME/siren.wav, horn.wav): dry
     python passby_demo.py scene   # scene_demo.yaml: the vehicle alone, at --speed, with Doppler
@@ -50,6 +55,7 @@ import sys
 from pathlib import Path
 
 from acoustic_spaces.demos import passby
+from acoustic_spaces.demos.rail import TRAM_VEHICLE
 from acoustic_spaces.demos.siren import FIRE_ENGINE_VEHICLE, POLICE_CAR_VEHICLE
 
 DEMO = passby.demo(
@@ -57,7 +63,14 @@ DEMO = passby.demo(
     "street",
     "A vehicle driving down the street",
     __doc__,
-    (passby.THE_CAR, passby.BUS, passby.MOTORCYCLE, POLICE_CAR_VEHICLE, FIRE_ENGINE_VEHICLE),
+    (
+        passby.THE_CAR,
+        passby.BUS,
+        passby.MOTORCYCLE,
+        POLICE_CAR_VEHICLE,
+        FIRE_ENGINE_VEHICLE,
+        TRAM_VEHICLE,
+    ),
 )
 
 __all__ = ["DEMO"]

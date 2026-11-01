@@ -175,15 +175,18 @@ def test_the_credit_of_a_vehicle_with_a_siren_fits_its_stills(vehicle) -> None:
 @pytest.mark.parametrize("example", ["roadside", "street"])
 def test_a_vehicles_own_options_matter_with_it_alone(example: str) -> None:
     """The options of some of the vehicles alone (the police car's siren, what the fire
-    engine plays) say they matter only with --vehicle at one of them; those every
-    vehicle has (the engine's speed) always matter."""
+    engine plays, the road vehicles' engine speed) say they matter only with --vehicle
+    at one of them; those every vehicle has (the speed) always matter."""
     from acoustic_spaces.demos import load
 
     demo = load(Path(example_path(example)).parent / "passby_demo.py")
-    assert demo.option("rpm").only is None and demo.option("speed").only is None
+    assert demo.option("speed").only is None
     if example == "roadside":
         assert all(o.only is None for o in demo.options)
         return
+    # The tram has no engine of a road vehicle.
+    road = ("car", "bus", "motorcycle", "police_car", "fire_engine")
+    assert demo.option("rpm").only == ("vehicle", road)
     assert demo.option("siren").only == ("vehicle", ("police_car",))
     assert demo.option("police_car").only == ("vehicle", ("police_car",))
     assert demo.option("fire_engine").only == ("vehicle", ("fire_engine",))
@@ -583,6 +586,15 @@ def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, caps
     assert not demo.is_done(demo.step("walk"), every)
     with pytest.raises(SystemExit, match="no pass at yard_25m"):
         demo.main(["video", *run, "--listeners", "yard_25m,verge"])
+    # The video in another format than the passes': it says which each is.
+    with pytest.raises(
+        SystemExit,
+        match="mixed binaural through a spherical head model, and this run asks for them as "
+        "mono: give the video the --format and --hrtf the walk had",
+    ):
+        demo.main(["video", *run, "--listeners", "verge", "--format", "mono"])
+    assert pipeline.label_text("binaural-kemar") == "binaural through the HRTFs of kemar"
+    assert pipeline.label_text(None) == "of an output not kept"
 
 
 def _street(tmp_path: Path) -> Path:

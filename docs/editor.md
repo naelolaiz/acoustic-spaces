@@ -15,10 +15,7 @@ say), it prints the short usage instead, with the reason.
 
 ![The editor with the concert hall example: the scene tree, the room with its early reflection paths, the source's properties and the echogram of a run](images/editor.png)
 
-The editor works on the same scene files as the command line. Rest the mouse on any
-label, field, button or column header for a tip that says what it means, with its unit:
-the rows of the Results table say what each parameter measures, and the band columns
-which frequencies each octave band holds.
+The editor works on the same scene files as the command line.
 
 - **File > Open example** opens the bundled rooms, in the groups of
   [Example scenes](examples.md). Saving one asks where to keep your copy and takes the
@@ -35,10 +32,7 @@ which frequencies each octave band holds.
   listeners, the wind outdoors, simulation settings and output formats. Selecting an entry, there or by
   clicking it in the 3D view, shows its form under **Properties**. Every change is
   checked against the scene schema; a refused change says why under **Messages**, and
-  every change can be undone. **Properties** takes the window's whole height on the
-  right and is never narrower than its widest form needs (up to half the screen), the
-  window opening wide enough for it; a row too long for it puts its field under its
-  label.
+  every change can be undone.
 - Sources and listeners sit in their **groups** (the form's **Group** field; groups
   nest with `/`, as PA/Delays). Each source, listener and group has a tick: unticked,
   it is left out of simulations, maps and checks, and is saved as `enabled: false` (the
@@ -48,13 +42,6 @@ which frequencies each octave band holds.
   eye follows its tick when that changes, by a click, undo or redo; shown again by its
   eye, an item left out is drawn faded. See
   [Groups, and sources left out](scenes.md#groups-and-sources-left-out).
-- The markers of sources and listeners in the 3D view take their size from the
-  scene: a fifth of the usual spacing between them, from 1.2 % to 2.5 % of the model's
-  size, all of them alike. Where two crowd, such as the singer and the vocal wedges on
-  a stadium's stage, every marker gets smaller alike so that those two do not overlap
-  (down to a fifth of that size, to stay clearly visible), in the plan too, and an
-  arrow stops short of a marker ahead of it; hiding what crowds gives the rest their
-  size back.
 - **Place source** and **Place listener**, then click a surface: on a floor the new
   point stands at ear or mouth height, on a wall or ceiling it goes half a metre into
   the room. In the plan, the click places it above the floor there. Sources and
@@ -69,112 +56,33 @@ which frequencies each octave band holds.
   **Audience seating** for the seats (see
   [Walls, doors and openings](scenes.md#walls-doors-and-openings)).
 - **Edit > Edit movement…**, or **Edit movement…** in a source's or listener's form,
-  opens the **Movement** panel: the walk of the selected point source or listener (see
-  [Walks](scenes.md#walks)) as a table of keyframes, where it is and how it faces at each
-  time, with the row 0 where it starts. No speed is set: **Add keyframe** puts one at the
-  playhead, where the mover would be then (on a keyframe already, or at 0 s, a second
-  past the end of its walk), to drag into place in the plan or the 3D view (its handles
-  are numbered as the rows; Shift moves one up and down in 3D) or to type where it is;
-  the **Speed** column shows what follows, the distance to the next keyframe over the
-  time to it. A keyframe at the same place waits there, one with other angles turns on
-  the spot; dimmed angles keep facing as at the keyframe before, and typing one turns
-  it there. Every change is one step of the history, as the forms' are. The timeline
-  below runs to the longest walk at least; make **End** longer to add keyframes past
-  it. The slider (or **Play**) moves every mover in the 3D view and the plan to where
-  it is then, nothing simulated; **Moves** (in the panel and the forms) keeps a walk but
-  leaves its mover standing, as `enabled: false` does, and **Doppler** has it play as a
-  vehicle does, each early path through a delay that changes as it goes, so its pitch
-  shifts as it passes (`doppler: true`; a walk with Doppler moves alone, so the other
-  walks must be off). A line or a surface source does not move: its form shows
-  **Moves** and **Edit movement…** greyed, with a tip saying so. A walk through points at
-  one speed (`to`, as the car of the `roadside` and `street` examples has) is edited the
-  other way round: a row per point, its **x**, **y** and **z** typed or its handle
-  dragged, the walk's one speed typed in the **Speed** column (m/s; the hint gives it in
-  km/h too), and the times following from them, read-only, as do the angles of a walker
-  that faces the way it goes. **Add point** splits the leg the playhead is on where the
-  mover is then (at 0 s or on a point, it adds one a second further on past the end,
-  along the last leg), and **Remove point** takes the selected one away; **Convert to
-  keyframes** bakes the walk into keyframes to time each place, its turns through the
-  corners included (facing forward, it faces its first leg from the start, so its own
-  orientation turns that way). The columns give their units. A dragged keyframe or point
-  keeps its height above the floor, as a dragged source or listener does. **Render
-  movement…** simulates every mover on one clock and writes what each listener in use
-  hears of what the sources play (their **Plays** files) as a WAV file, in the
-  background, as `walkthrough --all` does (see
-  [Walkthroughs](spatial-audio.md#walkthroughs)), in the output **Output** picks: the
-  scene's outputs, binaural ones first, and binaural through a spherical head model first
-  when the scene has none (the `roadside` lists mono only), since a source passing by
-  goes from one ear to the other only in binaural. A walk with Doppler plays there too
-  when it is the only one that moves. One gain brings the loudest peak to -1 dBFS, so
-  the balance between the listeners holds; the messages name the output.
+  opens the **Movement** panel on the selected point source's or listener's
+  [walk](scenes.md#walks): a table of keyframes, where it is and how it faces at each
+  time, or, for a walk through points at one speed, a row per point and the speed. Drag
+  a keyframe's or a point's handle in the plan or the 3D view, or type its values; every
+  change can be undone. The slider and **Play** move every mover along its walk, nothing
+  simulated. **Moves** keeps a walk but leaves its mover standing, and **Doppler** has
+  it play as a passing vehicle does (`doppler: true`; it then moves alone). A line or a
+  surface source does not move. **Render movement…** simulates every mover on one clock
+  and writes what each listener hears as a WAV file, as `walkthrough --all` does (see
+  [Walkthroughs](spatial-audio.md#walkthroughs)).
 - The scene tree's **Simulation** entry has the settings of
-  [Simulation](simulation.md): the early part's method, highest order, rays,
-  diffraction, **Reflections over an edge** (on one side of it or on both) and **In
-  pressure up to**; the late part's method, rays per band,
-  reception, arrival directions, **Batches** (from 2, standard errors for the
-  parameters), ray splitting and **Run on** (*default*: this computer's default, the CPU
-  unless the tune window made it *auto*; or the CPU, a GPU, both, or *auto*); the
-  scattering model; the wave solver, its highest band, how it takes the wind outdoors
-  (**Wind**: an effective speed of sound or moving air) and where it runs; **Performance** (CPU
-  threads and the ray search tree); and, under **Response**, the length, the sample
-  rate, octave or third-octave **Bands**, the early-to-late transition and the seed.
-  The scene's own entry sets the air's temperature, humidity and pressure, and shows
-  the volume and the rooms the model holds. Its **Recording** is what the sources with
-  a **Channel** play in a demo of the scene: one of the free recordings, each with its
-  licence and download size, or a file of yours (**Choose recording…**; *(none)* takes
-  it away).
+  [Simulation](simulation.md). The scene's own entry sets the air's temperature,
+  humidity and pressure, and its **Recording** is what the sources with a **Channel**
+  play in a demo of the scene: one of the free recordings or a file of yours.
 - **Simulation > Tune CPU and GPU…** times the CPU and the GPU on the open scene (or
   on the concert hall example when the scene cannot run as it is), as
   `acoustic-spaces tune` does (see
   [Tuning the devices for a computer](simulation.md#tuning-the-devices-for-a-computer);
   needs the `gpu` extra). It runs in the background, once per computer, and then shows
-  the table of times with a check box, **Make auto the default on this computer**
-  (ticked): scenes whose **Run on** is *default* then run on the fastest device found,
-  in the editor and on the command line. When the open scene names its own devices, a
-  second check box (ticked) sets its **Run on** back to *default* (an edit like any
-  other, undone with Undo). **OK** saves the timings and these choices; **Cancel**
-  saves nothing, not even the timings.
-- **Simulation > Run demo…** runs a [demo](demos.md) of the open scene. *This scene*
-  plays what each source's **Plays** says through it (its own file, or its channel of
-  the scene's **Recording**, downloaded first when it is a free one), mixes every
-  listener and makes a video ([a demo of any scene](demos.md#a-demo-of-any-scene)); the scene of an
-  example that comes with a demo (the orchestra in the concert hall, the choir and organ
-  in the church, the band in the stadium, the concert across the lake, the walk through
-  the gallery, the car passing the roadside and driving down the street), or a copy of
-  one, also has that demo, reading the open scene, and the window starts on it (a copy
-  is known by its folder's name or, saved anywhere, by the scene's name). The example's
-  scripts that are no demos follow, each one step that prints what it finds in the
-  **Messages** panel, its options its own arguments: the stadium concert's and the
-  concert stage's `align.py`, `feedback.py` (the singer's microphone's gain before
-  feedback) and `near_field.py`, the town hall's `delays.py` and the listening room's
-  `bass.py`. Pick
-  the demo and fill in the options that change what it plays, labelled in words with
-  each one's flag in its tip, which start at the same defaults the command line uses
-  (the **What the sources play** table lists the sources, what
-  each plays and the WAV file it plays instead: **Choose WAV…** gives the selected one a
-  file, **Default** takes it back; the **Movement** box ticks the sources and listeners
-  whose walk moves in the run, which *This scene* lets you change for that run,
-  `--moving`, a walker left out of the scene showing only when the demo moves it, and
-  **Edit movement…** opens the Movement panel on the selected one; the **Listeners**
-  list ticks the listeners the demo can play, all of them at first, and the run plays
-  the ticked ones, `--listeners`, **None** unticking them all and **All** ticking them
-  again; a number shows its
-  unit, and the pass-by demos' **Speed** reads *as in the scene* at zero, the speed of
-  the vehicle's walk, with the line under the Movement box saying how far, how fast
-  (km/h and m/s) and so for how long the vehicle drives, as the options stand; an
-  option of one vehicle alone, as the police car's siren, shows only while that vehicle
-  is picked), and it runs in its own process in the background, with what it prints in the **Messages**
-  panel and **Cancel** to stop it. **Advanced**, closed until opened, holds the step
-  (*all* runs the demo from nothing to its video, leaving out what is done already),
-  what fine-tunes the run (the tour's stops, how far apart a walk's places are
-  simulated), the files and folders the demo reads and writes, and the command line it
-  is about to run, so the same run can be repeated in a terminal. The window asks for a
-  scene with changes to be saved first, as the demo reads the file. An example's demo
-  plays recordings it downloads, which the line above **Run** names with their size
-  until they are there (the orchestra's three movements are 2.0 GB), or a sound it
-  makes (the pass-by demos' vehicles), and can take a while. A demo writes beside the scene
-  (*This scene* into `demo/`), or under your home folder when that folder cannot be
-  written.
+  the table of times with a check box, **Make auto the default on this computer**:
+  scenes whose **Run on** is *default* then run on the fastest device found, in the
+  editor and on the command line.
+- **Simulation > Run demo…** runs a [demo](demos.md) of the open scene in the
+  background, with what it prints under **Messages** and **Cancel** to stop it: *This
+  scene* ([a demo of any scene](demos.md#a-demo-of-any-scene)), and for an example's
+  scene its own demos and scripts. See [Running a demo](demos.md#running-a-demo) for
+  the window.
 - The scene tree's **Outputs** entry chooses what a run writes: mono, binaural,
   Ambisonics or loudspeakers. For binaural, **HRTF file…** takes a SOFA file from the
   disk, **Spherical head** goes back to the model, and **Download HRTFs…** offers the
@@ -238,54 +146,23 @@ which frequencies each octave band holds.
   of a pair.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
   as you edit, with the number of problems in red.
-- **Messages** shows warnings (leaks, results from before the latest changes, dropouts
-  while playing) in amber and errors (a refused change, a run that cannot start or
-  failed, a file that cannot be read or written) in red; so does the scene's own form
-  for its problems and warnings. Every other message is shaded, so that one ends where
-  the next begins. The ticks above them show or hide the info, the warnings and the
-  errors (with how many there are of each); **Item** keeps only the messages that name
-  one source, listener or material (the list holds those that messages name, with how
-  many do), and the filter keeps only those holding some words. **Clear** removes the
-  messages on show and keeps those hidden.
-- **View > Scene YAML** opens a tab beside **Messages**, hidden on a new installation
-  and from then on shown or hidden at each start as it was last left. It shows the scene
-  as YAML text, coloured (keys, text, numbers, true, false and null, comments) and with
-  line numbers: the data
-  **Save** writes, with each list of numbers or names on one line as the example scene
-  files have them (Save writes an item a line), and the files under the scene's folder
-  relative to it. It follows every change made in the forms, the 3D view or the plan, and
-  selecting a source, listener, material or settings entry brings its entry to the top.
-  Edit the text and press **Apply** (Ctrl+Return) to make it the scene: it is checked as
-  every other change is (the scene schema, then the geometry), in one step that
-  **Undo** takes back. Text that is not valid YAML, or that the checks refuse, stays as
-  typed, with the lines the reason points at marked in red and the reason below it and
-  under **Messages**; **Revert** drops the edits. Edits not applied stay when the scene
-  changes meanwhile, the panel saying so in amber, and **Save** says under **Messages**
-  that it saved without them. Below the text are the scene's problems in red and its
-  warnings in amber, as its form shows them. The text is made from the scene, not read
-  from its file, so comments in the file do not show (Save does not keep them either).
-  **Find** (Ctrl+F) finds words in it; Tab writes two spaces and Enter keeps the
-  indent.
-- While a run, a coverage map, a tuning or an export goes on, the status bar says what
-  runs, what it does now and for how long, beside a moving bar and a **Cancel**
-  button; resting the mouse on the bar says so at length.
-- When a run, a coverage map or a tuning ends while another window is in front, the
-  editor's entry in the taskbar flashes (on macOS, its Dock icon bounces). Nothing pops
-  up: the results come to the front and **Messages** says how it went.
+- **Messages** shows warnings in amber and errors in red; so does the scene's own form
+  for its problems and warnings.
+- **View > Scene YAML** shows the scene as YAML text that follows every edit. Edited
+  text is applied with **Apply** (Ctrl+Return), checked as every other change is, in
+  one step that **Undo** takes back; text the checks refuse stays as typed, with the
+  reason. The text is made from the scene, not read from its file, so the file's
+  comments do not show (Save does not keep them either).
+- Runs, coverage maps, tunings and exports go on in the background, with **Cancel** in
+  the status bar.
 - **View > Show leaks** traces rays from the sources and shows where they escape from a
   model that is not closed: its open edges, the escaping rays and a marker on each gap,
   with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It
   traces again when the geometry, the materials or the sources change.
-- **View > Show wind** draws the wind of an outdoor scene in the 3D view and the plan:
-  sky blue arrows the way it blows, as long as it is strong, at the height the scene
-  gives its speed at, each weather zone with its name and wind, and the scene's wind in
-  a corner. **View > Show wind profile** stands a mast in the 3D view in each weather
-  where the wind blows, with arrows up it and a curve through the wind at every height:
-  how the wind grows with height over the ground (see
-  [Wind and temperature](outdoor.md#wind-and-temperature)). Both are on at first. The
-  scene tree's **Wind** entry, outdoors with wind or temperature, has an eye for each
-  (its own, and that of **Wind profile** under it) and lists the weather zones with
-  their winds; selecting one shows its weather in the scene's form.
+- **View > Show wind** draws the wind of an outdoor scene in the 3D view and the plan,
+  with the weather zones and their winds, and **View > Show wind profile** stands a
+  mast with the wind at every height in each weather (see
+  [Wind and temperature](outdoor.md#wind-and-temperature)).
 - **View > Language** shows the editor and the command line in English, Spanish,
   Catalan, Italian, German or Dutch, or in the computer's language, from their next
   start (see [Language](getting-started.md#language)). Numbers in the editor follow the
@@ -354,31 +231,18 @@ with their heights, which can be changed, and buttons to add and remove them:
   the scene's own, where **Remove building** leaves one out of the file, and **Remove
   the map's buildings** drops the file.
 
-The plan draws the vegetation in dashed green and the zones in their materials'
-colours; the 3D view draws the vegetation in see-through green and leaves the sky out
-but for its edges, which show where the ground ends. The scene's own entry then has a
-**Wind and temperature** group: the weather, the wind and the temperature over the
-ground, their **Eddies** with their strength, size, **Eddies' height** (the height the
-strength holds at; 0: the same at every height) and **Weaker with height** (see
-[Turbulence](outdoor.md#turbulence)), and **Show the
-profile**, a plot of them and of the speed of sound (see
-[Wind and temperature](outdoor.md#wind-and-temperature)). **Weather of** chooses whose
-weather the fields show and change, the whole scene's or a
-[weather zone](outdoor.md#weather-zones)'s: **Add weather zone** draws one in the plan
-like a zone, dotted in sky blue with its name and wind, and **Remove weather zone**
-drops the chosen one. A zone's weather starts as the scene's, its fields are those it changes,
-(none) under **Weather** leaves the scene's weather unchanged there, and **Ground
-temperature** gives the ground in the zone a temperature of its own. **Add weather
-class** adds a [weather class](outdoor.md#levels-over-a-long-term), a weather that
-holds for a share of the time, for the levels over a long term and L_den: **Weather
-of** then shows it, with its **Share of the time** in each period of the day (the
-other classes make room, in proportion, when one changes), its ground temperature and,
-under **Eddies**, eddies of its own if it has them. The first class holds all the time
-in the scene's weather, the next ones none of it until given a share, and **Remove
-weather class** gives the chosen one's share to the others. A run then runs the scene
-in every class, and the Results panel adds the row **Long-term level** and, under
-**Run details**, the rating level and the level in each period and each class. **Draw
-room** replaces an outdoor scene with a floor plan, after asking.
+The scene's own entry then has a **Wind and temperature** group: the weather, the wind,
+the temperature over the ground and their **Eddies** (see
+[Turbulence](outdoor.md#turbulence)), with **Show the profile** to plot them.
+**Weather of** picks whose weather the fields show: the scene's, a
+[weather zone](outdoor.md#weather-zones)'s (**Add weather zone** draws one in the plan)
+or a [weather class](outdoor.md#levels-over-a-long-term)'s (**Add weather class**),
+each class with its share of the time in each period of the day. A material's page has
+a **Ground impedance** group, to make the material a ground. The **Simulation** entry
+adds the **Parabolic equation** (narrow-angle or wide-angle) and, with buildings,
+barriers or vegetation, an **Insertion loss** list: ticking one runs the scene again
+without it (see [Results outdoors](outdoor.md#results-outdoors)). **Draw room**
+replaces an outdoor scene with a floor plan, after asking.
 
 ## Exporting to Blender
 
@@ -405,13 +269,10 @@ the scene's (+z up, metres).
   [Simulation](simulation.md)), one object of edges per order. Edges do not render: to
   render them, use Object > Convert > Curve and give the curve a bevel depth.
 - `--particles` adds the particles of `animate` as small spheres that move with them and
-  shrink with their level, gone 60 dB down. The animation runs 40 times slower than the
-  sound (`--slow-motion`): the default 100 ms take 4 s, 96 frames at 24 fps. If the
-  timeline ends sooner, set its end frame, then press play. With the default 1000
-  particles (`--count`) the file is about 3 MB. The editor asks for the same three:
-  **Sound to animate**, **Slow motion** and **Particles**. Outdoors it starts with sound
-  enough to reach the farthest listener (a tenth more than the direct sound takes,
-  rounded up to 100 ms), slowed down to last about the default's 4 s: 1900 ms at 2.1×
-  for the `lakeside_concert` example's village 568 m away. Outdoors most particles soon
-  leave through the open sky and fly on straight. Blender draws a dashed line from each
-  particle to the object that holds them; **Overlays > Relationship Lines** hides them.
+  shrink with their level, gone 60 dB down: 1000 of them (`--count`) over the first
+  100 ms (`--duration`), 40 times slower than the sound (`--slow-motion`). If the
+  timeline ends sooner, set its end frame, then press play. The editor asks for the same
+  three: **Particles**, **Sound to animate** and **Slow motion**; outdoors it starts
+  with sound enough to reach the farthest listener. Blender draws a dashed line from
+  each particle to the object that holds them; **Overlays > Relationship Lines** hides
+  them.
