@@ -548,6 +548,17 @@ def a_weighted(levels_db: Sequence[float] | np.ndarray) -> float:
         return float(10.0 * np.log10(np.sum(10.0 ** (levels / 10.0))))
 
 
+#: C-weighting of the octave bands (dB, IEC 61672-1, rounded).
+C_WEIGHTING_DB: tuple[float, ...] = (-0.8, -0.2, 0.0, 0.0, 0.0, -0.2, -0.8, -3.0)
+
+
+def c_weighted(levels_db: Sequence[float] | np.ndarray) -> float:
+    """The C-weighted level (dB) of levels per octave band (``OCTAVE_BANDS_HZ``)."""
+    levels = np.asarray(levels_db, dtype=float) + np.array(C_WEIGHTING_DB)
+    with np.errstate(divide="ignore"):
+        return float(10.0 * np.log10(np.sum(10.0 ** (levels / 10.0))))
+
+
 #: Speech that talks: male or female.
 Talker = Literal["male", "female"]
 #: The long-term spectrum of speech (IEC 60268-16:2011, table A.2): octave-band levels
@@ -1201,6 +1212,7 @@ def free_field_reference(
 __all__ = [
     "ALL_PARAMETERS",
     "A_WEIGHTING_DB",
+    "C_WEIGHTING_DB",
     "DECAY_RANGES",
     "ECHO_CRITERIA",
     "MORE_PARAMETERS",
@@ -1225,6 +1237,7 @@ __all__ = [
     "OCTAVE_RATIO",
     "a_weighted",
     "band_decay",
+    "c_weighted",
     "band_energy_share",
     "band_filter_gains",
     "free_field_reference",

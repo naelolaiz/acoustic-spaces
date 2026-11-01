@@ -757,25 +757,28 @@ def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     """``--scene`` (scene_demo.yaml) from ``--from`` (scene.yaml): the vehicle's sources
     it plays (:meth:`Vehicle.parts`) in use, along their walk with Doppler, at its own
     speed or at ``--speed`` (:func:`driving`), and their sound power at that speed
-    (:meth:`Vehicle.edit`), every other source left out."""
+    (:meth:`Vehicle.edit`), every other source left out; those of the vehicle's it
+    leaves out (:meth:`Vehicle.every_part`) still walk at that speed, so that its
+    sources go along one walk."""
     info = car_info(args, vehicle)
     data = yaml.safe_load(args.source.read_text(encoding="utf-8"))
     data["name"] = f"{data.get('name', 'scene')}: a {vehicle.noun} passing"
     own = {s.name: s for s in source_scene(args).sources}
-    parts = vehicle.parts(args)
+    parts, every = vehicle.parts(args), vehicle.every_part()
     for source in data["sources"]:
-        if source["name"] in parts:
-            source["enabled"] = True
+        name = source["name"]
+        source["enabled"] = name in parts
+        if name in parts:
             vehicle.edit(source, info, args)
+        if name in every and source.get("walk"):
             walk = source["walk"]
             if forced_speed(args, vehicle) is not None:
                 walk["speed_m_s"] = round(info["speed_kmh"] / 3.6, 6)
                 if walk.get("keyframes"):
-                    walk["to"] = [list(place) for place in places_of(own[source["name"]])]
+                    walk["to"] = [list(place) for place in places_of(own[name])]
                     walk.pop("keyframes")
-            walk["doppler"] = True
-        else:
-            source["enabled"] = False
+            if name in parts:
+                walk["doppler"] = True
     pipeline.write_scene(args.scene, data, vehicle.texts()["header"], args.source.parent)
     print(
         f"wrote {args.scene}: the {vehicle.noun} at {kmh(info['speed_kmh'])} km/h, "

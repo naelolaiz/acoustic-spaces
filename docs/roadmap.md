@@ -378,8 +378,19 @@ Movement:
   train, an S-Bahn, an intercity or a freight train past as long as each is, and a tram
   in the street; the engine's pass checked against Schall 03's own sum.
 - [ ] CNOSSOS-EU's railway noise for the trains, to choose instead of Schall 03.
-- [ ] Construction plant (breakers, excavators, generators), car horns and reversing
-  alarms.
+- [x] Construction plant and reversing alarms: road works in the street (a breaker on an
+  excavator, a generator and a dumper reversing with its alarm on) from Defra's noise
+  database for construction sites, and a demo that plays them; checked against Defra's
+  rows, the EU's limits for outdoor machines and SAE J994.
+- [x] Car horns: the street's car with a pair of disc horns (`passby_demo.py --car
+  car_and_horn`), as loud as a maker's approved to UN Regulation 28, checked against the
+  rule for vehicles' horns; a horn's levels in the captions follow its blasts.
+- [x] A train's warning horn (`passby_demo.py --horn blasts` on the railway): the TSI's
+  two notes in turn, each as loud as EN 15153-2 allows 25 m ahead, the measuring site's
+  ground taken out harmonic by harmonic.
+- [ ] A train horn's directivity measured, mounted on a train's front (Toward et al.
+  found one 1 dB down 30 degrees off its axis, where the siren the horns take is 3.6 dB
+  down).
 - [ ] Aircraft taking off, landing and flying over.
 - [ ] Ground-borne vibration from trains and construction plant, and the noise it makes
   in the rooms of a building.

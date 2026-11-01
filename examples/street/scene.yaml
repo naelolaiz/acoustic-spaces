@@ -4,11 +4,13 @@
 # over it: sound that reaches the sky leaves, and the ground reaches 30 m past the
 # buildings, then goes on as if it never ended. One listener stands on the pavement, one
 # on a balcony of the office block, one in the garden, where the traffic comes over the
-# top of the barrier and round its ends: `first_order` diffraction follows it. A car, a
-# bus, a motorcycle, a police car with its siren on and a fire engine with its siren
-# and its air horn drive along the street at 50 km/h, and a tram runs down its middle
-# at 50 km/h, their pitch falling as they pass (Doppler): they are left out of
-# simulations until ticked, and passby_demo.py plays one.
+# top of the barrier and round its ends: `first_order` diffraction follows it. A car
+# (with its horn, if wanted), a bus, a motorcycle, a police car with its siren on and a
+# fire engine with its siren and its air horn drive along the street at 50 km/h, and a
+# tram runs down its middle at 50 km/h, their pitch falling as they pass (Doppler):
+# they are left out of simulations until ticked, and passby_demo.py plays one. Road
+# works in the lane on the houses' side (a breaker on an excavator, a generator, and a
+# dumper reversing with its alarm on) are left out too; works_demo.py plays them.
 name: Street with a noise barrier
 geometry:
   ground: {margin: 30}
@@ -48,7 +50,11 @@ sources:
   # A passenger car in the lane on the offices' side, its sound power per octave band
   # CNOSSOS-EU's at 50 km/h (Directive 2002/49/EC, Annex II, Appendix F, Table F-1, as
   # amended in 2021); its sound comes from 0.05 m above the road, where the method
-  # places it.
+  # places it. Its horn, a pair of disc horns (360 and 430 Hz, 110 dB(A) 2 m in front
+  # of them, as Hella's S77, their tone discs ringing near 3 kHz), 0.5 m up, goes along
+  # its walk facing the way it drives, with the directivity of siren.csv, in two short
+  # blasts every 3 s, its sound power their average (passby_demo.py --car car_and_horn
+  # sounds it).
   - name: car
     enabled: false
     position: [-55, -2, 0.05]
@@ -56,6 +62,16 @@ sources:
     walk:
       to: [[70, -2, 0.05]]
       speed_m_s: 13.89
+      doppler: true
+  - name: car_horn
+    enabled: false
+    position: [-55, -2, 0.5]
+    level_db: [56.1, 55.7, 68.8, 79.9, 91.5, 104.0, 107.6, 102.7]
+    directivity: {file: siren.csv}
+    walk:
+      to: [[70, -2, 0.5]]
+      speed_m_s: 13.89
+      face_forward: true
       doppler: true
   # A city bus with two axles (CNOSSOS-EU's category 2) in the lane on the houses' side,
   # the other way, at 50 km/h.
@@ -165,6 +181,32 @@ sources:
       speed_m_s: 13.89
       face_forward: true
       doppler: true
+  # Road works in the lane on the houses' side, 20 m along from the pavement's
+  # listener: a 1650 kg hydraulic breaker on a 15 t excavator breaking up the road, a
+  # 6 kVA diesel generator on the pavement and a 9 t dumper reversing to them, its
+  # alarm at its back, 1.2 m up, facing the works. Each machine's sound power per octave
+  # band is its level 10 m away in Defra's noise database for construction sites (2005,
+  # the data of BS 5228-1 Annex C) plus 28 dB; the alarm's is a tonal one's at 1200 Hz,
+  # 107 dB(A) 1.2 m in front of it (SAE J994 Type B), beeping half the time, with the
+  # directivity of siren.csv (works_demo.py plays them).
+  - name: breaker
+    enabled: false
+    position: [-20, 2, 1.0]
+    level_db: [116.0, 116.0, 114.0, 117.0, 111.0, 111.0, 108.0, 104.0]
+  - name: generator
+    enabled: false
+    position: [-26, 4.5, 0.5]
+    level_db: [105.0, 100.0, 92.0, 88.0, 87.0, 85.0, 82.0, 70.0]
+  - name: dumper
+    enabled: false
+    position: [-13, 2, 1.5]
+    level_db: [110.0, 104.0, 103.0, 102.0, 96.0, 96.0, 92.0, 83.0]
+  - name: dumper_alarm
+    enabled: false
+    position: [-14.5, 2, 1.2]
+    orientation: {yaw: 180}
+    level_db: [48.6, 48.2, 51.6, 56.2, 108.6, 59.9, 44.1, 35.9]
+    directivity: {file: siren.csv}
 listeners:
   - name: pavement
     position: [0, 4, 1.6]

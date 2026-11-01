@@ -268,6 +268,95 @@ def test_a_train_runs_at_its_own_speed_unless_told(tmp_path) -> None:
     assert rail.TRAM_VEHICLE.own_speed_kmh(argparse.Namespace()) is None
 
 
+def test_the_train_horn_sounds_the_rules_notes_at_its_level() -> None:
+    """The train's horn: the TSI's high and low notes in turn, each in blasts of its
+    own; each note's sound power put back on EN 15153-2's site (its directivity, the
+    spreading, the site's ground) is 109 dB(C) 25 m ahead; its made sound plays each
+    note at its sound power against the other's; and its sound power is the notes', each
+    over its share of the time."""
+    import importlib
+
+    from acoustic_spaces.demos import siren
+    from acoustic_spaces.parameters import c_weighted
+
+    horn = importlib.import_module("acoustic_spaces.demos.horn")
+    kind = horn.TRAIN_HORN
+    assert kind.in_turn and kind.notes == ((660.0,), (370.0,))
+    for (f,), (low, high) in zip(kind.notes, horn.TRAIN_NOTES_HZ, strict=True):
+        assert low <= f <= high
+    least, most = horn.TRAIN_LEVELS_DB_C
+    assert least <= kind.on_axis_db <= most and kind.weighting == "C" and kind.at_m == 25.0
+    t = np.linspace(0.0, 3.0 * kind.every_s, 120_001)
+    gates = [horn.sounding(t, kind, note) for note in range(2)]
+    assert np.max(gates[0] * gates[1]) == 0.0
+    np.testing.assert_array_equal(gates[0] + gates[1], horn.sounding(t, kind))
+    site = kind.site
+    rise = site.horn_m - site.microphone_m
+    spread = 10.0 * math.log10(4.0 * math.pi * (kind.at_m**2 + rise**2))
+    off = float(siren.off_axis_db(math.degrees(math.atan2(rise, kind.at_m))))
+    for note in range(2):
+        power = horn.blast_power(RATE, kind, note)
+        ground = horn.ground_db(RATE, kind, note)
+        assert np.ptp(ground) > 1.0
+        heard = power + siren.directivity_index_db() + off - spread + ground
+        assert c_weighted(heard) == pytest.approx(kind.on_axis_db, abs=1e-9)
+    x = horn.horn_sound(RATE, kind.power_s, kind)
+    times = np.arange(len(x)) / RATE
+    steady = [horn.sounding(times, kind, note) > 0.999 for note in range(2)]
+    played = [float(np.mean(x[s] ** 2)) for s in steady]
+    powers = [float(np.sum(10.0 ** (horn.blast_power(RATE, kind, n) / 10.0))) for n in range(2)]
+    assert 10.0 * math.log10(played[0] / played[1]) == pytest.approx(
+        10.0 * math.log10(powers[0] / powers[1]), abs=0.1
+    )
+    total = sum(horn.duty(kind, note) * powers[note] for note in range(2))
+    average = float(np.sum(10.0 ** (horn.horn_power(RATE, kind) / 10.0)))
+    assert average == pytest.approx(total, rel=1e-9)
+
+
+def test_a_sites_ground_adds_each_harmonics_reflection_in_pressure() -> None:
+    """On the train horn's site each harmonic's pressure and its reflection's off the
+    ballast add, |1 + D Q (r1/r2) e^(-jk(r2 - r1))|² (e^(jωt), as the engine's), D the
+    reflection's directivity against the direct sound's and Q the ground's spherical
+    reflection factor, averaged over each band's harmonics by their energy; the band
+    of the high note's fundamental, half a wavelength short of cancelling, the lowest."""
+    import importlib
+
+    from acoustic_spaces.demos import siren
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+    from acoustic_spaces.materials.ground import PRESETS, spherical_reflection, surface_impedance
+
+    horn = importlib.import_module("acoustic_spaces.demos.horn")
+    kind = horn.TRAIN_HORN
+    hs, hr, d = kind.site.horn_m, kind.site.microphone_m, kind.at_m
+    r1, r2 = math.hypot(d, hs - hr), math.hypot(d, hs + hr)
+    sent = 10.0 ** (
+        (
+            siren.off_axis_db(math.degrees(math.atan2(hs + hr, d)))
+            - siren.off_axis_db(math.degrees(math.atan2(hs - hr, d)))
+        )
+        / 20.0
+    )
+    for note, (f0,) in enumerate(kind.notes):
+        k = np.arange(1, int(RATE / 2 / f0) + 1)
+        f = k * f0
+        size = np.clip((RATE / 2 - f) / (0.1 * RATE / 2), 0.0, 1.0) / k
+        wavenumber = 2.0 * np.pi * f / 343.0
+        q = spherical_reflection(
+            1.0 / surface_impedance(f, PRESETS["gravel"][0]), (hs + hr) / r2, wavenumber, r2
+        )
+        gain = np.abs(1.0 + sent * q * (r1 / r2) * np.exp(-1j * wavenumber * (r2 - r1))) ** 2
+        band = np.clip(np.round(np.log2(f / OCTAVE_BANDS_HZ[0])), 0, 7)
+        want = np.zeros(8)
+        for b in range(8):
+            if np.any(band == b):
+                e = size[band == b] ** 2
+                want[b] = 10.0 * np.log10(np.sum(e * gain[band == b]) / np.sum(e))
+        got = horn.ground_db(RATE, kind, note)
+        np.testing.assert_allclose(got, want, atol=1e-9)
+    # The high note: 660 Hz, (r2 - r1) about 0.4 of its wavelength.
+    assert int(np.argmin(horn.ground_db(RATE, kind, 0))) == OCTAVE_BANDS_HZ.index(500)
+
+
 def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
     """--train s_bahn on the quick railway: its points' sounds (a column each), the scene
     with the train's three sources alone at their front points' sound power, Schall 03's
@@ -358,6 +447,68 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
     # Another track makes the sound again.
     again = demo.resolved(demo.parser().parse_args([*run, "--track", "slab"]))
     assert not demo.is_done(demo.step("sound"), again)
+
+
+def test_the_railway_demo_sounds_the_trains_horn(tmp_path, monkeypatch) -> None:
+    """--horn blasts on the quick railway: the horn's sound beside the train's, its
+    source in the scene at its front at its sound power with the measured siren's
+    directivity, facing the way it goes, and in the mix as far over the rail top's
+    sound as its SEL is, its captions following its blasts. Without --horn it stays
+    off."""
+    pytest.importorskip("PIL")
+    from acoustic_spaces import Scene
+    from acoustic_spaces.demos import audio, load, passby, pipeline
+    from acoustic_spaces.synthesis import split_bands
+
+    added = []
+    real_summed = passby.summed
+
+    def summed(played):
+        added.append([np.array(x) for x in played])
+        return real_summed(played)
+
+    monkeypatch.setattr(passby, "summed", summed)
+    folder = _railway(tmp_path)
+    demo = load(folder / "passby_demo.py").at(folder)
+    run = ["all", "--train", "s_bahn", "--speed", "80", "--step", "8", "--no-mp4"]
+    parts = ["train", "train_roof", "train_pantograph"]
+    assert demo.moving(demo.resolved(demo.parser().parse_args(run))) == parts
+    run += ["--horn", "blasts"]
+    args = demo.resolved(demo.parser().parse_args(run))
+    assert demo.check(args) is None
+    assert demo.moving(args) == [*parts, "train_horn"]
+    blasts = "its horn at its front, 2 m above the rail top, in blasts"
+    assert demo.plays(args)["train_horn"] == blasts
+    assert demo.main(run) == 0
+    work = folder / "demo"
+    info = pipeline.read_json(work / "train" / "train.json")
+    assert info["horn"] == "blasts" and len(info["horn_level_db"]) == 8
+    x, rate = audio.read(work / "train" / "train_horn.wav")
+    assert rate == RATE and x.shape == (round(40.0 / (80.0 / 3.6) * RATE), 1)
+    scene = Scene.from_yaml(folder / "scene_demo.yaml")
+    assert [s.name for s in scene.sources if s.in_use] == [*parts, "train_horn"]
+    blower = next(s for s in scene.sources if s.name == "train_horn")
+    assert blower.level_db == info["horn_level_db"] and blower.position[2] == 2.2
+    assert blower.directivity.file == folder / "scene_demo_train_horn.csv"
+    lines = blower.directivity.file.read_text(encoding="utf-8").splitlines()
+    assert lines[3:] == (folder / "siren.csv").read_text(encoding="utf-8").splitlines()[3:]
+    assert blower.walk.face_forward and blower.walk.doppler
+    facts = pipeline.read_json(work / "walk" / "walk.json")
+    assert facts["parts"] == [*parts, "train_horn"] and facts["horn"] == "blasts"
+    assert ", its horn in blasts " in facts["about"]
+    heard = facts["listeners"]["tsi_7m5"]
+    weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)
+
+    def a_energy(x: np.ndarray) -> float:
+        return sum(
+            float(weights @ np.sum(split_bands(x[:, k], RATE) ** 2, axis=1))
+            for k in range(x.shape[1])
+        )
+
+    (played,) = added
+    over = 10.0 * math.log10(a_energy(played[3]) / a_energy(played[0]))
+    told = heard["parts"]["train_horn"]["sel_a_db"] - heard["parts"]["train"]["sel_a_db"]
+    assert told > 5.0 and over == pytest.approx(told, abs=1.5)
 
 
 def test_the_street_demo_runs_the_tram_past(tmp_path) -> None:
