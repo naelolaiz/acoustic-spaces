@@ -549,13 +549,22 @@ def test_the_street_demo_runs_the_tram_past(tmp_path) -> None:
 
 def test_the_lines_on_a_trains_stills_fit_them() -> None:
     """The line on the stills that says what goes past, for every train on every track,
-    and the credit line, fit the still's width whole."""
+    the credit line, and what they say of a house the train is heard in, fit the
+    still's width whole."""
     pytest.importorskip("PIL")
     from PIL import Image, ImageDraw
 
+    from acoustic_spaces.demos import indoors
     from acoustic_spaces.demos.pictures import MARGIN, SIZE, fitted, font
 
     draw = ImageDraw.Draw(Image.new("RGB", SIZE))
+    house_lines = ["Floor shaking 100 VdB at most, its rumble 100.0 dB(A)"]
+    for choice in indoors.choices("train")[1:]:
+        house = indoors.House.of(choice, "train")
+        assert house is not None
+        house_lines += house.words().split("\n")
+    for line in house_lines:
+        assert draw.textlength(line, font=font("Regular", 23)) <= SIZE[0] - 1010 - MARGIN, line
     for vehicle in (rail.TRAIN_VEHICLE, rail.TRAM_VEHICLE):
         for key in vehicle.trains:
             for track in vehicle.tracks or (vehicle.track,):

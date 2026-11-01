@@ -199,6 +199,12 @@ Rotating sound fields, and decoding them to the ears:
 .. automodule:: acoustic_spaces.vibration
 ```
 
+## Sound through a façade
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.facade
+```
+
 ## Head tracking
 
 ```{eval-rst}

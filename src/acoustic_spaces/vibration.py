@@ -49,18 +49,27 @@ class Curve:
     coefficients: tuple[float, float, float, float]
     reference_kmh: float
 
-    def level(self, distance_m: float, speed_kmh: float | None = None) -> float:
+    def level(
+        self, distance_m: float, speed_kmh: float | None = None, extend: bool = False
+    ) -> float:
         """The level (VdB) ``distance_m`` from the track, at ``speed_kmh`` (eq. 6-4) or
         at the curve's own speed; a ValueError nearer or farther than the manual draws
-        the curve."""
-        if not NEAREST_M * (1 - 1e-9) <= distance_m <= FARTHEST_M * (1 + 1e-9):
+        the curve, unless ``extend``: then nearer it holds its value at
+        :data:`NEAREST_M`, and farther it goes on falling as it falls at
+        :data:`FARTHEST_M` (straight on in log10 of the distance; the cubics themselves
+        turn back up there)."""
+        inside = NEAREST_M * (1 - 1e-9) <= distance_m <= FARTHEST_M * (1 + 1e-9)
+        if not inside and not extend:
             raise ValueError(
                 f"the manual draws its curves from {NEAREST_M:.2f} to {FARTHEST_M:.1f} m "
                 f"(10 to 300 ft) from the track, not {distance_m:g} m"
             )
-        x = math.log10(distance_m / FOOT_M)
         a0, a1, a2, a3 = self.coefficients
+        x = math.log10(min(max(distance_m, NEAREST_M), FARTHEST_M) / FOOT_M)
         level = a0 + a1 * x + a2 * x**2 + a3 * x**3
+        if distance_m > FARTHEST_M:
+            slope = a1 + 2.0 * a2 * x + 3.0 * a3 * x**2
+            level += slope * math.log10(distance_m / FARTHEST_M)
         if speed_kmh is not None:
             level += speed_db(speed_kmh, self.reference_kmh)
         return level
@@ -293,6 +302,15 @@ def indoor_db(building: str, floor: int = 1) -> float:
 #: 60 Hz (most subways, surface track on very stiff clayey soil) or above 60 Hz
 #: (subways founded in rock or very stiff clayey soil).
 NOISE_DB: dict[str, float] = {"low": -50.0, "mid": -35.0, "high": -20.0}
+#: The manual's unweighted sound pressure level of the rumble against the room surfaces'
+#: vibration level (dB): "approximately 5 dB" less (section 6.4, step 2d).
+UNWEIGHTED_DB = -5.0
+#: Where each peak of :data:`NOISE_DB` puts the rumble (Hz): the third octave whose
+#: A-weighting is the table's adjustment less :data:`UNWEIGHTED_DB` to within 1.1 dB (25
+#: Hz -44.7 dB, 50 Hz -30.2, 125 Hz -16.1), as the manual's note to its table 5-5 says
+#: the A-weighted level comes from A-weighting the vibration's spectrum and taking off
+#: 5 dB for the room.
+RUMBLE_HZ: dict[str, float] = {"low": 25.0, "mid": 50.0, "high": 125.0}
 
 
 def noise_level(vibration_vdb: float, peak: str = "low") -> float:
@@ -490,7 +508,9 @@ __all__ = [
     "NEAREST_M",
     "NOISE_DB",
     "PLANT",
+    "RUMBLE_HZ",
     "SPECIAL_BUILDINGS",
+    "UNWEIGHTED_DB",
     "Criterion",
     "Curve",
     "Damage",

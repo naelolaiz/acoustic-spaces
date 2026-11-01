@@ -107,6 +107,28 @@ def equalized(signal: np.ndarray, sample_rate: float, gains) -> np.ndarray:
     return np.fft.irfft(spectrum * curve, n_fft, axis=0)[:n]
 
 
+def matched_gains(gains, sample_rate: float, rounds: int = 30) -> np.ndarray:
+    """Gains for :func:`equalized` (8 octave bands or 24 third-octave bands) whose filter
+    changes the energy of white noise in each band, as :func:`split_bands` splits it,
+    by ``gains`` squared. Across a crossover :func:`equalized` goes from one band's gain
+    to the next's, so where they differ a band takes some of its neighbour's; these are
+    ``gains`` nudged until each band's energy is its own, as near as ``rounds`` rounds
+    get it (to 0.001 dB): for gains stepping 12 dB from band to band, the lower ones
+    some 5 dB further down. A band of no gain stays at none."""
+    gains = np.asarray(gains, dtype=float)
+    shapes = _band_gains(1 << 16, float(sample_rate), len(gains))
+    weights = shapes**2
+    wanted = gains**2 * weights.sum(axis=1)
+    out = gains.copy()
+    for _ in range(rounds):
+        got = weights @ (out @ shapes) ** 2
+        ratio = np.divide(wanted, got, out=np.ones_like(got), where=got > 0.0)
+        out = out * np.sqrt(ratio)
+        if np.all(np.abs(10.0 * np.log10(ratio[wanted > 0.0])) < 1e-3):
+            break
+    return out
+
+
 def split_bands(
     signal: np.ndarray, sample_rate: float, bands: int = len(OCTAVE_BANDS_HZ)
 ) -> np.ndarray:
