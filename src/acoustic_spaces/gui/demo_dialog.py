@@ -995,6 +995,10 @@ class DemoDialog(QDialog):
             old.setParent(None)  # off the window at once, not when Qt deletes it
             old.deleteLater()
         self.options, self.advanced_options = form, more
+        if self.isVisible():
+            # Shown now, not when Qt next gets round to it, so that _fit measures them.
+            form.show()
+            more.show()
         self._refresh()
         if self.isVisible():  # another demo: as tall as its form, as wide as the window
             self._fit(self.width())

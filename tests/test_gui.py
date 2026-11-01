@@ -3436,6 +3436,29 @@ def test_demo_dialog_picks_the_listeners(qapp, monkeypatch) -> None:
     unsaved.deleteLater()
 
 
+def test_demo_dialog_fits_the_demo_picked(qapp, monkeypatch) -> None:
+    """Picking another demo in the open Run demo window fits the window to that demo's
+    form, as opening on it does: the railway's vibration script after its pass-by, its
+    every option in view without scrolling."""
+    from acoustic_spaces.gui import sizing
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    monkeypatch.setattr(sizing, "screen_room", lambda widget: QSize(1880, 960))
+    opened = DemoDialog(scene=example_path("railway"), start="vibration")
+    opened.show()
+    qapp.processEvents()
+    switched = DemoDialog(scene=example_path("railway"))
+    switched.show()
+    qapp.processEvents()
+    assert switched.demo.name == "passby"
+    switched.picker.setCurrentIndex([d.name for d in switched.demos].index("vibration"))
+    qapp.processEvents()
+    for dialog in (opened, switched):
+        assert dialog.demo.name == "vibration"
+        assert dialog.scroll.verticalScrollBar().maximum() == 0
+        dialog.deleteLater()
+
+
 def test_demo_dialog_says_what_a_run_downloads(qapp, tmp_path: Path) -> None:
     """Above Run, whatever is open, the Run demo window says what the run downloads and
     how much, until it is there: the orchestra's tracks of the movements neither in the
