@@ -113,6 +113,13 @@ class Track:
         return float(x), float(y)
 
 
+def speed_between(v1, v2, f):
+    """The speed ``f`` of the distance from ``v1`` to ``v2`` (m/s), its square linear
+    in the distance, so that the speed is linear in time (eq. 3-2); ``f`` a number or
+    an array of them."""
+    return np.sqrt(np.maximum(v1**2 + f * (v2**2 - v1**2), 0.0))
+
+
 def interpolate(a: Node, b: Node, s: float) -> Node:
     """The node ``s`` along the way from ``a`` to ``b``: the height and the bank angle
     linear in the distance, the speed and the power in its square, linear in time
@@ -121,7 +128,7 @@ def interpolate(a: Node, b: Node, s: float) -> Node:
     return Node(
         s=s,
         height=a.height + f * (b.height - a.height),
-        speed=math.sqrt(max(a.speed**2 + f * (b.speed**2 - a.speed**2), 0.0)),
+        speed=float(speed_between(a.speed, b.speed, f)),
         power=power_between(a.power, b.power, f),
         bank=a.bank + f * (b.bank - a.bank),
         ground=a.ground and b.ground,
