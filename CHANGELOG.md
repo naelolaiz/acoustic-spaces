@@ -6,6 +6,8 @@
   is shorter than its pass"), its sound a sample shorter than its walk's rounded times.
 - Fixed: a stereo recording's left and right sources played 0.2 to 3 dB over their
   sound power; the two channels now share one gain set from both, not from the mixdown.
+- Fixed: a tour played 1 to 3 dB louder at a crossfade between two seats of one piece;
+  the crossfade now keeps the power running on however alike the two mixes are.
 - Paths in the editor's **Messages** panel open with a click in the default app (never a
   script or a program), and their right-click menu copies them.
 

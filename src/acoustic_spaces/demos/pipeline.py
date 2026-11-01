@@ -5,9 +5,10 @@ each listener from them and the feeds. :func:`render_mixes` does that for every 
 with one gain for all (the loudest peak at -1 dBFS), measures each mix (its gated level
 in dB(A), its gated K-weighted loudness, when the sound arrives) and writes
 ``seats.json``. :func:`tour_audio` cuts the mixes into one piece on the tour's times, each
-shifted earlier by its arrival so the music runs on across a cut, with equal-power
-crossfades; :func:`video` writes the stills and, through ffmpeg, the MP4 with a scrolling
-spectrogram over the bottom of them (the demos draw their thumbnails themselves).
+shifted earlier by its arrival so the music runs on across a cut, with crossfades whose
+power runs on however alike the mixes are; :func:`video` writes the stills and, through
+ffmpeg, the MP4 with a scrolling spectrogram over the bottom of them (the demos draw
+their thumbnails themselves).
 
 With ``--hrtf``, the mixes ask for the responses simulated through that file
 (``binaural-<its name>``) and refuse ones made through the spherical head, so that a mix
@@ -476,14 +477,16 @@ def tour_audio(
     peak_db: float = -1.0,
 ) -> np.ndarray:
     """The tour as stereo: each stop's mix shifted earlier by its arrival (``lag_s`` in
-    ``seats``) so the music runs on across a cut, equal-power crossfades of
-    ``crossfade_s`` centred on the cuts between joined stops, a fade at the end and the
-    peak at ``peak_db``."""
+    ``seats``) so the music runs on across a cut, crossfades of ``crossfade_s`` centred
+    on the cuts between joined stops (:func:`crossfaded`: the power runs on, however
+    alike the two mixes are), a fade at the end and the peak at ``peak_db``."""
     rate, fmt = seats["rate"], seats["format"]
     length = round(stops[-1].end * rate)
     out = np.zeros((length, 2))
     half = int(crossfade_s * rate / 2)
-    ramp = np.sin(np.linspace(0.0, np.pi / 2, 2 * half))  # equal power
+    ramp = np.sin(np.linspace(0.0, np.pi / 2, 2 * half))
+    joined = [stops[k].joined_after and stops[k + 1].joined_before for k in range(len(stops) - 1)]
+    previous: np.ndarray | None = None  # the stop before, when it is joined to this one
     for k, stop in enumerate(stops):
         seat = seats["seats"][stop.key]
         x = audio.stereo(audio.read(folder / f"{stop.key}.{fmt}.wav")[0])
@@ -491,15 +494,17 @@ def tour_audio(
         x = audio.shifted(x, round(seat.get("lag_s", 0.0) * rate) - offset, length)
         x = x * 10.0 ** (stop.gain_db / 20.0)
         a, b = round(stop.at * rate), round(stop.end * rate)
-        before = stop.joined_before and k > 0
-        after = stop.joined_after and k < len(stops) - 1
-        w = np.zeros(length)
-        w[(a - half if before else a) : (b + half if after else b)] = 1.0
+        before = k > 0 and joined[k - 1] and half > 0
+        after = k < len(stops) - 1 and joined[k] and half > 0
         if before:
-            w[a - half : a + half] = ramp
-        if after:
-            w[b - half : b + half] = ramp[::-1]
-        out += x * w[:, None]
+            assert previous is not None
+            if round(stops[k - 1].end * rate) != a:
+                raise ValueError(f"{stops[k - 1].key} must end where {stop.key} starts")
+            cut = slice(a - half, a + half)
+            out[cut] += crossfaded(previous[cut], x[cut], ramp)
+        alone = slice(a + half if before else a, b - half if after else b)
+        out[alone] += x[alone]
+        previous = x if after else None
     fade = min(int(fade_out_s * rate), length)
     if fade:
         out[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
@@ -507,6 +512,24 @@ def tour_audio(
     if peak > 0:
         out *= 10.0 ** (peak_db / 20.0) / peak
     return out
+
+
+def crossfaded(x0: np.ndarray, x1: np.ndarray, ramp: np.ndarray) -> np.ndarray:
+    """``x0`` fading out and ``x1`` fading in over ``ramp`` (a quarter sine): equal
+    power for two unlike mixes, and scaled, sample by sample, by how alike the two are
+    over the crossfade (their correlation coefficient), so that the power runs from one
+    mix's to the other's as it would for unlike ones. Two seats of one piece, each
+    brought forward by its arrival, are much alike: an equal-power crossfade plays them
+    up to 3 dB louder at the cut."""
+    fade_out, fade_in = ramp[::-1, None], ramp[:, None]
+    both = x0 * fade_out + x1 * fade_in
+    p0, p1 = float(np.mean(x0**2)), float(np.mean(x1**2))
+    if p0 <= 0.0 or p1 <= 0.0:
+        return both
+    rho = float(np.mean(x0 * x1)) / np.sqrt(p0 * p1)
+    unlike = ramp[::-1] ** 2 * p0 + ramp**2 * p1
+    alike = unlike + 2.0 * rho * ramp[::-1] * ramp * np.sqrt(p0 * p1)
+    return both * np.sqrt(unlike / np.maximum(alike, unlike / 4.0))[:, None]
 
 
 def picked_tour(tour: Sequence[tuple], keep: Callable[[tuple], bool]) -> list[tuple]:
