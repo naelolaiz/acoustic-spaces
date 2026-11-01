@@ -48,7 +48,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import numpy as np
 import yaml
 
 from acoustic_spaces import recordings
@@ -65,7 +64,7 @@ from acoustic_spaces.demos import (
     pipeline,
     sibling,
 )
-from acoustic_spaces.demos.audio import gated_rms, mono, read, stereo, write
+from acoustic_spaces.demos.audio import channels_rms, gated_rms, mono, read, stereo, write
 from acoustic_spaces.demos.scene_demo import FEED_RMS
 
 #: The songs the demo can play (``--song``): the free songs of
@@ -178,7 +177,7 @@ def music_step(args) -> None:
     music.write_tracks({song["name"]: song["files"]}, folder, rate=RATE, channels=2)
     x, rate = read(song_path(args))
     x = stereo(x)
-    pair = np.sqrt(np.mean([gated_rms(x[:, k], rate) ** 2 for k in (0, 1)]))
+    pair = channels_rms(x, rate)
     for name, channel in CHANNELS.items():
         y = mono(x) if channel == "mono" else x[:, channel]
         level = gated_rms(y, rate) if channel == "mono" else pair

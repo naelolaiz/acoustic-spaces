@@ -73,6 +73,7 @@ from acoustic_spaces.demos import (
     pipeline,
 )
 from acoustic_spaces.demos.audio import (
+    channels_rms,
     decoded,
     gated_rms,
     level_db,
@@ -400,8 +401,7 @@ def feeds(args: argparse.Namespace) -> None:
         x, gains = read_in[signal]
         stereo_pair = channel in ("left", "right")
         if stereo_pair not in gains:
-            parts = [stereo(x)[:, 0], stereo(x)[:, 1]] if stereo_pair else [mono(x)]
-            rms = float(np.sqrt(np.mean([gated_rms(p, rate) ** 2 for p in parts])))
+            rms = channels_rms(stereo(x), rate) if stereo_pair else gated_rms(x, rate)
             if rms <= 0.0:
                 raise SystemExit(f"error: {signal} is silent")
             gains[stereo_pair] = FEED_RMS / rms
