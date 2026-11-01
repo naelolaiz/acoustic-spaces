@@ -690,7 +690,7 @@ def train_points(train: Train, speed_kmh: float, track: str = "ballast") -> list
     """The points of ``train`` going at ``speed_kmh`` on ``track``, each unit's sources
     at each height shared out evenly between its points there: by height, then from the
     front."""
-    points = []
+    points: list[Point] = []
     front = 0.0
     for i, unit in enumerate(train.units):
         heights: dict[float, np.ndarray] = {}

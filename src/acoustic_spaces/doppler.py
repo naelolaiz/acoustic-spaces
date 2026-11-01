@@ -641,7 +641,7 @@ def render(
             ears = (
                 [delay] if reading.onsets is None else [delay + reading.onset(t, e) for e in (0, 1)]
             )
-            heard = []
+            at_ears: list[np.ndarray] = []
             for _, signal in signals:
                 reads = []
                 for each in ears:
@@ -650,22 +650,22 @@ def render(
                         reads.append(reading.sent(emission, positions, rate))
                     else:
                         reads.append(read(signal, positions, reading.cutoff))
-                heard.append(np.column_stack(reads))
-            active.append((reading, heard))
+                at_ears.append(np.column_stack(reads))
+            active.append((reading, at_ears))
         if not active:
             continue
         for j in range(c0, c1):
             start = (j - 1) * hop
             centre = j * hop / rate
             totals: list = [None] * len(signals)
-            for reading, heard in active:
+            for reading, at_ears in active:
                 if j < reading.first or j > reading.last:
                     continue
                 spectrum = _filter_at(filters, reading.track, centre, gusts)
                 if spectrum is None:
                     continue
-                for i, signal in enumerate(heard):
-                    piece = signal[start - n0 : start - n0 + 2 * hop] * window[:, None]
+                for i, sound in enumerate(at_ears):
+                    piece = sound[start - n0 : start - n0 + 2 * hop] * window[:, None]
                     if not np.any(piece):
                         continue
                     part = np.fft.rfft(piece, n_fft, axis=0).T * spectrum
