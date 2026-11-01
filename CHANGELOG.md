@@ -63,8 +63,11 @@
   `acoustic_spaces.facade`), the rumble of the ground's vibration by the FTA's general
   method, or both. Every listener's caption says how hard the ground or the floor
   shakes and whether that is felt, and a bass shaker's track plays it.
-- The railway and tree belt examples trace image sources to the second order, so the
-  barrier's and the houses' reflections keep their partners off the ground. Behind the
+- The railway, tree belt and lakeside concert examples trace image sources to the
+  second order, so the barrier's and the houses' reflections keep their partners off
+  the ground. Across the lake the evening's weather now makes the song 7.1 dB(A) louder
+  at the bedroom window than still air, as the house's wall gives back what comes in
+  off the water too (the docs' 2.3 dB was out of date: 4.4 at the first order). Behind the
   tree belt's trees, their trunks' scattered sound now fills the ground's dip at 500 Hz
   and 1 kHz: the garden there is 4.5 and 1.8 dB louder than without the wood.
 

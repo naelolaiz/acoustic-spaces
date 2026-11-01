@@ -32,7 +32,7 @@ tour moves every 8 bars of the tempo given, and the video credits the file by it
 unless `--credit` says what to show. The editor runs the same steps from Simulation >
 Run demo…
 
-From the audience to the far shore the sound drops by 20 to 25 dB(A), too much to
+From the audience to the far shore the sound drops by 24 to 25 dB(A), too much to
 hear the far places in a video. So each stop of the tour is brought to the same loudness
 (K-weighted, as loudness meters weigh it) as the audience's, and its caption says how
 much quieter it really is. The window in still air keeps the gain of the window in the

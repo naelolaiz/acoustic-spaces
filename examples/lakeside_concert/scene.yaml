@@ -131,7 +131,7 @@ listeners:
     position: [-140, 0, 1.5]
     orientation: {yaw: 0}
 simulation:
-  early: {method: image_sources, max_order: 1, diffraction: none}
+  early: {method: image_sources, max_order: 2, diffraction: none}
   late: {method: stochastic_ray_tracing}
 outputs:
   - mono

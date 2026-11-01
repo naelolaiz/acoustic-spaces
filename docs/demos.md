@@ -576,22 +576,22 @@ wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and vi
   every 10 m up, and a 3.5 m/s breeze) and the village's (a 1 m/s breeze among the
   houses). The breeze and the cool air bend the sound down to the water, which gives it
   back almost whole. `scene_still.yaml` is the same scene with no atmosphere.
-- **What it gives.** At the bedroom window the evening's weather makes the song 2.3 dB(A)
-  louder than still air would, in the garden 4.2 dB; behind the stage, upwind, it is
-  0.6 dB quieter, and on the boat 1 dB quieter. (With the sound system the example's
-  single source was, radiating every way alike, the window gained 4.8 dB: the arrays send
-  less of the sound up, where the weather bends it down to the water.)
-- **How loud.** From the audience to the far shore the sound drops by 20 to 25 dB(A),
+- **What it gives.** At the bedroom window the evening's weather makes the song 7.1 dB(A)
+  louder than still air would, in the garden 5.3 dB; behind the stage, upwind, it is
+  0.5 dB quieter, and on the boat 1.0 dB quieter. The window gains most: what the
+  weather bends down comes in off the water as well as straight, and the house's wall
+  beside the window gives back each of those again.
+- **How loud.** From the audience to the far shore the sound drops by 24 to 25 dB(A),
   too much to hear the far places in a video, so each stop is turned up to the
   audience's loudness and its caption says how much quieter the place really is, in
   dB(A). The loudness is K-weighted, as meters weigh it, not A-weighted: the far places
   and the back of the stage keep little but bass (the array boxes radiate every way below
   250 Hz and the water gives the low end back whole), which the A weighting all but
   leaves out, so matching dB(A) would put their bass far above the audience's. The window
-  in still air keeps the gain of the window in the evening's weather, so the 2.3 dB is
+  in still air keeps the gain of the window in the evening's weather, so the 7.1 dB is
   heard.
 - **The cuts.** Each place's mix is shifted earlier by the time the loudest sound takes
-  to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.65 s
+  to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.66 s
   at the window), so that the beat runs on across each 1 s crossfade, every 8 bars.
 - **The pictures** draw the lake from above with the wind's arrows, the weather zones and
   their weather, the arrays and the subwoofers with cones the way they aim, and the
