@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: the airport's flight demo stopped on the departure ("the departing jet's sound
+  is shorter than its pass"), its sound a sample shorter than its walk's rounded times.
 - Paths in the editor's **Messages** panel open with a click in the default app (never a
   script or a program), and their right-click menu copies them.
 

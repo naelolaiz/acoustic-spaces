@@ -195,3 +195,16 @@ def test_the_flight_demo_says_what_keeps_a_jet_from_flying(tmp_path) -> None:
     (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     args = demo.resolved(demo.parser().parse_args(["all", "--vehicle", "departure"]))
     assert "two places apart in plan" in demo.check(args)
+
+
+def test_each_jets_sound_is_as_long_as_its_walk() -> None:
+    """The sound a flight is made for lasts as long as the walk the scene gets, whose
+    keyframes' times are rounded: as many samples as its pass, which a sound as long as
+    the flight itself missed by a sample or two on the departure."""
+    from acoustic_spaces import Scene
+
+    scene = Scene.from_yaml(example_path("airport"))
+    for jet in (aircraft.DEPARTURE, aircraft.ARRIVAL):
+        flown = jet.flight_of(scene)
+        info = jet.info(_args(Path(example_path("airport")).parent), scene, 0.0)
+        assert info["duration_s"] == flown.keyframes()[-1]["time_s"]
