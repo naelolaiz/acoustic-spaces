@@ -237,6 +237,36 @@ def test_the_horn_blasts_as_its_rule_and_its_assumptions_say() -> None:
     )
 
 
+def test_a_horns_levels_follow_its_blasts() -> None:
+    """The captions have a horn as loud as its sound plays around each place: over whole
+    periods of its blasts as loud as its sound power, during a blast 1/duty louder,
+    silent in its pauses; the fire engine's siren, which sounds all along, as it is."""
+    from acoustic_spaces.demos import horn
+    from acoustic_spaces.demos.passby import blocks_loudness, sounded
+    from acoustic_spaces.parameters import a_weighted
+    from acoustic_spaces.walkthrough import PassBy
+
+    rate = 16_000
+    x = horn.horn_sound(rate, 3 * horn.EVERY_S)
+    at = np.arange(0.0, 3 * horn.EVERY_S, 0.1) + 0.05
+    loud = blocks_loudness(x, rate, at, horn.SOUND_RMS)
+    assert np.mean(loud) == pytest.approx(1.0, rel=1e-3)
+    assert np.max(loud) == pytest.approx(1.0 / horn.duty(), rel=1e-3)
+    assert np.min(loud) == 0.0
+    vehicle = siren.FIRE_ENGINE_VEHICLE
+    assert np.array_equal(vehicle.sounding(None, siren.FIRE_HORN, x, rate, at), loud)
+    assert vehicle.sounding(None, siren.FIRE_SIREN, x, rate, at) is None
+    assert THE_CAR.sounding(None, "car", x, rate, at) is None
+    levels = np.full((len(at), 8), 80.0)
+    passing = PassBy("horn", "here", at, levels, np.full(len(at), 85.0))
+    heard = sounded(passing, loud)
+    blast = 10.0 * math.log10(1.0 / horn.duty())
+    assert heard.levels[np.argmax(loud)] == pytest.approx(levels[0] + blast)
+    # Over whole periods its energy is its sound power's, as the steady level's.
+    steady = 10.0 ** (a_weighted(levels[0]) / 10.0)
+    assert np.mean(10.0 ** (heard.levels_a / 10.0)) == pytest.approx(steady, rel=1e-3)
+
+
 def test_the_fire_engine_meets_the_rules_in_the_engine(tmp_path: Path) -> None:
     """validation/urban_sources.py's check of the fire engine: its two tones 7 m in front
     as loud as the Swiss rule allows to a tenth of a dB, within it on the bench; its horn

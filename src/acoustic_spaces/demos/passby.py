@@ -161,6 +161,16 @@ class Vehicle:
         x, r = read(path)
         return resampled(mono(x), r, rate)
 
+    def sounding(
+        self, args: argparse.Namespace, part: str, played, rate: int, at: np.ndarray
+    ) -> np.ndarray | None:
+        """How loud the source ``part`` sounds around each of the times ``at`` (s into
+        its pass, one a place), against the sound power its scene source has, in energy:
+        None for a sound as loud all along (a vehicle's; ``played``, its feed at
+        ``rate``, is not read), unless it sounds now and then (a horn's blasts,
+        :class:`~acoustic_spaces.demos.siren.EmergencyVehicle`)."""
+        return None
+
     def input_gain(self, part: str, x: np.ndarray, rate: int) -> float | None:
         """The gain of ``x``, a recording ``--input`` gives the source ``part``, so that it
         plays as loud as a made sound: its gated RMS
@@ -759,6 +769,40 @@ def summed(mixes: Sequence[np.ndarray]) -> np.ndarray:
     return out
 
 
+def blocks_loudness(x: np.ndarray, rate: int, at: np.ndarray, rms: float) -> np.ndarray:
+    """How loud ``x`` (at ``rate``) is around each of the times ``at`` (s), in energy
+    against a sound of RMS ``rms``: its mean square from halfway to the time before to
+    halfway to the next (the first from the start, the last to the end), over
+    ``rms`` squared; 0 where none of ``x`` is."""
+    at = np.asarray(at, dtype=float)
+    if len(at) == 0:
+        return np.zeros(0)
+    middle = (at[1:] + at[:-1]) / 2.0
+    edges = np.concatenate([[0.0], middle, [len(x) / rate]])
+    out = np.zeros(len(at))
+    for k in range(len(at)):
+        lo = int(round(max(edges[k], 0.0) * rate))
+        hi = int(round(min(edges[k + 1], len(x) / rate) * rate))
+        if hi > lo:
+            out[k] = float(np.mean(np.asarray(x[lo:hi], dtype=float) ** 2)) / rms**2
+    return out
+
+
+def sounded(passing, loud: np.ndarray):
+    """``passing`` (a :class:`~acoustic_spaces.walkthrough.PassBy`) with each place's
+    energy times ``loud`` (one a place): a source that sounds now and then, heard as it
+    sounds around each place."""
+    from acoustic_spaces.parameters import a_weighted
+    from acoustic_spaces.walkthrough import PassBy
+
+    energy = 10.0 ** (np.asarray(passing.levels, dtype=float) / 10.0)
+    energy = energy * np.asarray(loud, dtype=float)[:, None]
+    with np.errstate(divide="ignore"):
+        levels = 10.0 * np.log10(energy)
+    levels_a = np.array([a_weighted(row) for row in levels])
+    return PassBy(passing.source, passing.listener, passing.times, levels, levels_a)
+
+
 def heard_together(passes: Sequence):
     """The level along a walk of sources going along it together, from each one's
     :func:`~acoustic_spaces.walkthrough.pass_by`: their energies added band by band at
@@ -824,9 +868,10 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
     # alone: here each gets its sound power against the loudest part's, as one
     # rendering of them all would give it.
     gains = power_gains({part: sources[part].sound_power_db for part in parts}, parts)
-    sent = {}
+    sent, fed = {}, {}
     for part in parts:
         x = feed(demo, args, rate, duration, vehicle, part)
+        fed[part] = x
         gain = gains[part]
         sent[part] = x.scaled(gain) if not isinstance(x, np.ndarray) else (x * gain, rate)
     rooms = {part: alone(room, part) for part in parts} if len(parts) > 1 else {parts[0]: room}
@@ -845,7 +890,9 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             )
             print(f"playing the {part} through {len(walked.names)} places with Doppler")
             played.append(render_walk(walked, {part: sent[part]}, fmt, sample_rate=rate))
-            passes.append(pass_by(walked))
+            passing = pass_by(walked)
+            loud = vehicle.sounding(args, part, fed[part], rate, walked.points.times)
+            passes.append(passing if loud is None else sounded(passing, loud))
             points = walked.points if part == parts[0] else points
         mixes[name] = summed(played)
         level = heard_together(passes)

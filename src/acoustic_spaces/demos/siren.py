@@ -220,6 +220,11 @@ class Device:
     key = noun = "siren"
     #: How a recording of it is levelled, in words, when not as the made sound's RMS.
     recorded = ""
+    #: Whether it sounds all along (a siren), or now and then (a horn's blasts), its
+    #: sound power the average over its sounding and its pauses: then the RMS its made
+    #: sound has over whole periods of them.
+    steady = True
+    rms = SOUND_RMS
 
     def __init__(self, part: str, file: str, place: str, loudness: str) -> None:
         self.part, self.file, self.place, self.loudness = part, file, place, loudness
@@ -292,6 +297,13 @@ class Horn(Device):
 
     key, noun = "horn", "air horn"
     recorded = ", its blasts as loud as the made horn's, whatever its pauses"
+    steady = False
+
+    def __init__(self, part: str, file: str, place: str, loudness: str) -> None:
+        from acoustic_spaces.demos.horn import SOUND_RMS as HORN_RMS
+
+        super().__init__(part, file, place, loudness)
+        self.rms = HORN_RMS
 
     def pattern(self, args: argparse.Namespace) -> str:
         return "blasts"
@@ -438,6 +450,20 @@ class EmergencyVehicle(Vehicle):
     def sound_files(self, args: argparse.Namespace) -> tuple[str, ...]:
         own = (self.body.sound_file,) if self.with_body(args) else ()
         return (*own, *(d.file for d in self.played(args)))
+
+    def sounding(
+        self, args: argparse.Namespace, part: str, played, rate: int, at: np.ndarray
+    ) -> np.ndarray | None:
+        """A device that sounds now and then (a horn) is heard around each place as
+        loud as its sound plays there, faded in and out with it: its mean square there
+        against its made sound's over whole periods of its blasts and pauses, which its
+        sound power is the average of."""
+        from acoustic_spaces.demos.passby import blocks_loudness
+
+        device = next((d for d in self.devices if d.part == part), None)
+        if device is None or device.steady:
+            return None
+        return blocks_loudness(np.asarray(played, dtype=float), rate, at, device.rms)
 
     def input_gain(self, part: str, x: np.ndarray, rate: int) -> float | None:
         device = next((d for d in self.devices if d.part == part), None)
