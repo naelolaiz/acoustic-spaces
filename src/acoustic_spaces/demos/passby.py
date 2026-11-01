@@ -1163,9 +1163,12 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
         raise SystemExit(f"error: no {path}; run first: {demo.command('walk', args)}")
     facts = pipeline.read_json(path)
     seats = pipeline.seats_of(folder, demo.command("walk", args))
-    if seats.get("label") != pipeline.output_label(args):
+    wanted = pipeline.output_label(args)
+    if seats.get("label") != wanted:
         raise SystemExit(
-            f"error: the passes in {folder} are of another format; run: "
+            f"error: the passes in {folder} are mixed {pipeline.label_text(seats.get('label'))}"
+            f", and this run asks for them {pipeline.label_text(wanted)}: give the video the "
+            f"--format and --hrtf the walk had, or mix the passes again: "
             f"{demo.command('walk', args)}"
         )
     facts = heard_only(args, facts, demo.command("walk", args))

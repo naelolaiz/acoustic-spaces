@@ -121,6 +121,20 @@ def output_label(args: argparse.Namespace) -> str:
     return hrtf_label(getattr(args, "format", "binaural"), getattr(args, "hrtf", None))
 
 
+def label_text(label: str | None) -> str:
+    """An output (:func:`output_label`) in words, as mixes are made: ``binaural through
+    a spherical head model``, ``binaural through the HRTFs of me`` (``binaural-me``, the
+    SOFA file's name without its suffix), ``as mono``; ``of an output not kept`` for
+    mixes that do not say."""
+    if not label:
+        return "of an output not kept"
+    if label == "binaural":
+        return "binaural through a spherical head model"
+    if label.startswith("binaural-"):
+        return f"binaural through the HRTFs of {label.removeprefix('binaural-')}"
+    return f"as {label}"
+
+
 def simulate_argv(simulation: Simulation, hrtf: str | Path | None = None) -> list[str]:
     """The arguments of ``acoustic-spaces simulate`` for a simulation."""
     argv = ["simulate", str(simulation.scene), "--out", str(simulation.results)]
@@ -676,6 +690,7 @@ __all__ = [
     "credited",
     "gains_of",
     "hrtf_label",
+    "label_text",
     "input_feed",
     "labels_of",
     "missing_mixes",

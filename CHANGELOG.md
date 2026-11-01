@@ -9,28 +9,29 @@
   mixing and touring those alone; the demo of any scene's `--tour` becomes `--listeners`
   (`--tour` still works), and the editor's Run demo window lists the listeners to tick
   (`demos.listeners_option`, `Demo.listeners`).
-- Trains and a tram in the pass-by demos. The new `railway` example is a railway line
-  on ballast across a meadow, heard where the EU's rule for trains' noise measures a
+- Trains and a tram in the pass-by demos. The new `railway` example is a railway line on
+  ballast across a meadow, heard where the EU's rule for trains' noise measures a
   pass-by (7.5 m from the track, 1.2 m above the rail top), 25 m away over the meadow
   and 25 m away behind a noise barrier; its `passby_demo.py --train` runs a regional
   train (the default, 160 km/h), an S-Bahn, an intercity or a freight train past, each
-  at its own speed unless `--speed` says, on the track of `--track` (ballast, slab track, slab track with absorbers, a level
-  crossing), at the listeners `--listeners` picks, as the other pass-by demos. The street's runs a low-floor tram down the middle of the street at 50
-  km/h (`--vehicle tram`). Their sound power is Schall 03's (Germany's method for the
-  noise of railways and tramways, 2014; the new `acoustic_spaces.demos.rail`): each
-  unit's sources per octave band at its speed and on its track, at the rail top, on the
-  roof (4 m) and at the pantograph (5 m), with its directivity round the track. A
-  train is three sources along one walk, one a height, each playing the train's points
-  at its height (its bogies, its cars' roofs, its pantograph) one behind the other, so
-  the train passes as long as it is: `render_walk` and `doppler.render` take
-  `followers`, more sounds along the walk of a source, rendered with it, each that much
-  later. The new `validation/rail_sources.py` holds a pass in the engine against
-  Schall 03's own sum (the same SEL within 0.01 dB in a free field; over the example's
-  ground the engine gives 2.9 to 4.0 dB(A) less, as it reckons the ground's reflection
-  otherwise) and Schall 03's units at 80 km/h beside the TSI Noise's limits for new
-  units (6.2 to 9.0 dB over them by Schall 03's reckoning). In the editor's Run demo
-  window an option of some vehicles alone (the road vehicles' engine speed, which the
-  tram has not) shows only while one of them is picked.
+  at its own speed unless `--speed` says, on the track of `--track` (ballast, slab
+  track, slab track with absorbers, a level crossing), at the listeners `--listeners`
+  picks, as the other pass-by demos. The street's runs a low-floor tram down the middle
+  of the street at 50 km/h (`--vehicle tram`). Their sound power is Schall 03's
+  (Germany's method for the noise of railways and tramways, 2014; the new
+  `acoustic_spaces.demos.rail`): each unit's sources per octave band at its speed and on
+  its track, at the rail top, on the roof (4 m) and at the pantograph (5 m), with its
+  directivity round the track. A train is three sources along one walk, one a height,
+  each playing the train's points at its height (its bogies, its cars' roofs, its
+  pantograph) one behind the other, so the train passes as long as it is: `render_walk`
+  and `doppler.render` take `followers`, more sounds along the walk of a source,
+  rendered with it, each that much later. The new `validation/rail_sources.py` holds a
+  pass in the engine against Schall 03's own sum (the same SEL within 0.01 dB in a free
+  field; over the example's ground the engine gives 2.9 to 4.0 dB(A) less, as it reckons
+  the ground's reflection otherwise) and Schall 03's units at 80 km/h beside the TSI
+  Noise's limits for new units (6.2 to 9.0 dB over them by Schall 03's reckoning). In
+  the editor's Run demo window an option of some vehicles alone (the road vehicles'
+  engine speed, which the tram has not) shows only while one of them is picked.
 
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with
@@ -67,6 +68,10 @@
 - Fixed: the pass-by demos' captions, stills and printouts gave a walk's speed such as
   50.004 km/h; they now give it to a tenth of a km/h (50 km/h, 72.5 km/h).
 
+- The pass-by demos' video, run in another format than its passes were mixed in, says
+  which each is (binaural through a spherical head model, through the HRTFs of a SOFA
+  file, or another format) and to give it the walk's `--format` and `--hrtf`, or to mix
+  the passes again; it said only that they were of another format.
 - A scene can name the `recording` its sound system plays in a demo (a file, or one of
   five free recordings by name, downloaded the first time), and each source the
   `channel` it plays (`left`, `right` or `mono`), so that a stage's loudspeakers play

@@ -586,6 +586,15 @@ def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, caps
     assert not demo.is_done(demo.step("walk"), every)
     with pytest.raises(SystemExit, match="no pass at yard_25m"):
         demo.main(["video", *run, "--listeners", "yard_25m,verge"])
+    # The video in another format than the passes': it says which each is.
+    with pytest.raises(
+        SystemExit,
+        match="mixed binaural through a spherical head model, and this run asks for them as "
+        "mono: give the video the --format and --hrtf the walk had",
+    ):
+        demo.main(["video", *run, "--listeners", "verge", "--format", "mono"])
+    assert pipeline.label_text("binaural-kemar") == "binaural through the HRTFs of kemar"
+    assert pipeline.label_text(None) == "of an output not kept"
 
 
 def _street(tmp_path: Path) -> Path:
