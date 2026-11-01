@@ -3227,6 +3227,31 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert box.note.text().startswith("Nothing in this scene moves.")
     assert box.table.isHidden() and box.table.isRowHidden(0) and box.ticked() == []
     road.deleteLater()
+    # In the street, the police car's siren and what it plays, and what the fire engine
+    # plays, show only with that vehicle picked; hidden, they stay out of the command.
+    street = DemoDialog(scene=example_path("street"))
+    assert street.picker.currentData() == "passby"
+    vehicle = street.fields["vehicle"]
+
+    def shown() -> set[str]:
+        return {
+            name
+            for name in ("siren", "police_car", "fire_engine", "rpm")
+            if street._rows[name].isRowVisible(street.fields[name])
+        }
+
+    assert vehicle.currentText() == "car" and shown() == {"rpm"}
+    vehicle.setCurrentText("police_car")
+    assert shown() == {"siren", "police_car", "rpm"}
+    street.fields["siren"].setCurrentText("yelp")
+    assert street.command.text() == "python passby_demo.py all --vehicle police_car --siren yelp"
+    vehicle.setCurrentText("fire_engine")
+    assert shown() == {"fire_engine", "rpm"}
+    assert street.command.text() == "python passby_demo.py all --vehicle fire_engine"
+    assert street.arguments().siren == "wail"
+    vehicle.setCurrentText("police_car")
+    assert street.fields["siren"].currentText() == "yelp"
+    street.deleteLater()
     # The stadium's helicopter likewise: the crossing flies it, the concert leaves it out.
     stadium = DemoDialog(scene=example_path("stadium_concert"))
     assert stadium.movement.walkers == [("sources", "helicopter", True)]

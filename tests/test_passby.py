@@ -74,10 +74,12 @@ def test_the_table_is_the_2021_one_not_2015s() -> None:
         ("street", BUS),
         ("street", MOTORCYCLE),
         ("street", siren.POLICE_CAR_VEHICLE.car),
+        ("street", siren.FIRE_ENGINE_VEHICLE.body),
     ],
 )
 def test_the_examples_road_vehicles_are_cnossos_at_their_speed(example: str, vehicle) -> None:
-    """The road vehicles of the roadside and the street, the police car's car too: point
+    """The road vehicles of the roadside and the street, the police car's car and the fire
+    engine's truck too: point
     sources 0.05 m up, left out of the example's simulations, CNOSSOS-EU's levels for
     their category at the speed of their walk, with Doppler."""
     scene = Scene.from_yaml(example_path(example))
@@ -124,6 +126,134 @@ def test_the_streets_police_car_has_the_measured_siren(tmp_path: Path) -> None:
     assert table.read_text(encoding="utf-8") == (path.parent / "siren.csv").read_text(
         encoding="utf-8"
     )
+
+
+def test_the_streets_fire_engine_has_its_siren_and_horn_at_their_rules() -> None:
+    """The street's fire engine: left out, its siren on its cab's roof and its air horn
+    along its walk, both facing the way it drives with siren.csv, the two tones
+    FIRE_SIREN_GAIN_DB louder than the police car's and the horn at its sound power
+    averaged over its blasts."""
+    from acoustic_spaces.demos import horn
+    from acoustic_spaces.demos.passby import car_problem
+
+    path = Path(example_path("street"))
+    scene = Scene.from_yaml(path)
+    sources = {s.name: s for s in scene.sources}
+    rate = scene.simulation.sample_rate
+    vehicle = siren.FIRE_ENGINE_VEHICLE
+    assert vehicle.every_part() == (siren.FIRE_ENGINE, siren.FIRE_SIREN, siren.FIRE_HORN)
+    assert car_problem(scene, path.name, vehicle) is None
+    for name, height, power in (
+        (siren.FIRE_SIREN, siren.FIRE_SIREN_HEIGHT_M, siren.siren_power("two_tone", rate) + 6.0),
+        (siren.FIRE_HORN, horn.HEIGHT_M, horn.horn_power(rate)),
+    ):
+        source = sources[name]
+        assert not source.in_use and source.position[2] == height
+        assert source.walk.doppler and source.walk.face_forward
+        assert source.walk.to[-1][:2] == sources[siren.FIRE_ENGINE].walk.to[-1][:2]
+        assert source.level_db == pytest.approx(power, abs=0.05)
+        assert source.directivity.file == path.parent / "siren.csv"
+
+
+@pytest.mark.parametrize("vehicle", [siren.POLICE_CAR_VEHICLE, siren.FIRE_ENGINE_VEHICLE])
+def test_the_credit_of_a_vehicle_with_a_siren_fits_its_stills(vehicle) -> None:
+    """The stills' credit line of the police car and of the fire engine, every source
+    they play made, fits the still's width whole, not cut short."""
+    pytest.importorskip("PIL")
+    from PIL import Image, ImageDraw
+
+    from acoustic_spaces.demos.pictures import MARGIN, SIZE, fitted
+
+    facts = {"cylinders": 6, "rpm": 1500.0, "siren": "two_tone", "horn": "blasts"}
+    credit = vehicle.credits(facts, {})
+    assert credit.endswith("faded in and out over 1 s")
+    draw = ImageDraw.Draw(Image.new("RGB", SIZE))
+    line, _ = fitted(draw, credit, 19, SIZE[0] - 2 * MARGIN)
+    assert line == credit
+
+
+@pytest.mark.parametrize("example", ["roadside", "street"])
+def test_a_vehicles_own_options_matter_with_it_alone(example: str) -> None:
+    """The options of some of the vehicles alone (the police car's siren, what the fire
+    engine plays) say they matter only with --vehicle at one of them; those every
+    vehicle has (the engine's speed) always matter."""
+    from acoustic_spaces.demos import load
+
+    demo = load(Path(example_path(example)).parent / "passby_demo.py")
+    assert demo.option("rpm").only is None and demo.option("speed").only is None
+    if example == "roadside":
+        assert all(o.only is None for o in demo.options)
+        return
+    assert demo.option("siren").only == ("vehicle", ("police_car",))
+    assert demo.option("police_car").only == ("vehicle", ("police_car",))
+    assert demo.option("fire_engine").only == ("vehicle", ("fire_engine",))
+    siren_option = demo.option("siren")
+    assert siren_option.applies({"vehicle": "police_car"})
+    assert not siren_option.applies({"vehicle": "car"})
+
+
+def test_the_horn_blasts_as_its_rule_and_its_assumptions_say() -> None:
+    """The air horn: BLASTS blasts BLAST_S long, GAP_S apart, every EVERY_S, each at its
+    level RISE_S after it starts (the rule: 0.2 s at most); its two trumpets' fundamentals
+    its loudest tones; SOUND_RMS over whole periods; 118 dB(A) 2 m away on its axis in a
+    free field while it sounds, and its sound power averaged over its blasts and pauses
+    as much under that as its sound is silent."""
+    from acoustic_spaces.demos import horn
+    from acoustic_spaces.parameters import a_weighted
+
+    assert horn.RISE_S <= 0.2 and 105.0 <= horn.ON_AXIS_DB_A <= 118.0
+    t = np.array([0.0, horn.RISE_S, 0.3, horn.BLAST_S + 0.1, horn.BLAST_S + horn.GAP_S + 0.3])
+    assert horn.sounding(t) == pytest.approx([0.0, 1.0, 1.0, 0.0, 1.0])
+    assert horn.sounding(t + horn.EVERY_S) == pytest.approx(horn.sounding(t))
+    assert horn.sounding([2 * (horn.BLAST_S + horn.GAP_S) + 0.1]) == pytest.approx([0.0])
+    rate = 16_000
+    x = horn.horn_sound(rate, horn.EVERY_S)
+    assert np.sqrt(np.mean(x**2)) == pytest.approx(horn.SOUND_RMS, rel=1e-3)
+    tone = horn.blast(rate, 1.0)
+    spectrum = np.abs(np.fft.rfft(tone))
+    f = np.fft.rfftfreq(len(tone), 1.0 / rate)
+    assert sorted(f[np.argsort(spectrum)[-2:]]) == pytest.approx(list(horn.HORN_HZ))
+    blast = horn.blast_power(48_000)
+    di = siren.directivity_index_db()
+    on_axis = a_weighted(blast) + di - 20 * math.log10(horn.AT_M) - 10 * math.log10(4 * math.pi)
+    assert on_axis == pytest.approx(horn.ON_AXIS_DB_A, abs=1e-9)
+    assert 0.3 < horn.duty() < 0.4
+    assert horn.horn_power(48_000) == pytest.approx(blast + 10 * math.log10(horn.duty()))
+    with pytest.raises(ValueError, match="duration"):
+        horn.horn_sound(rate, 0.0)
+    # A recording of a horn plays its blasts as loud as the made horn's, whatever its
+    # pauses: the made horn given back as it is, and one long blast.
+    made = horn.horn_sound(rate, horn.POWER_S)
+    assert horn.recorded_gain(made, rate) == pytest.approx(1.0, rel=1e-12)
+    long = 0.3 * horn.blast(rate, 2.0)
+    full = horn.sounding(np.arange(len(made)) / rate) == 1.0
+    level = np.sqrt(np.mean((long * horn.recorded_gain(long, rate)) ** 2))
+    assert level == pytest.approx(np.sqrt(np.mean(made[full] ** 2)), rel=0.02)
+    assert horn.recorded_gain(np.zeros(rate), rate) is None
+    vehicle = siren.FIRE_ENGINE_VEHICLE
+    assert vehicle.input_gain(siren.FIRE_HORN, long, rate) == horn.recorded_gain(long, rate)
+    assert vehicle.input_gain(siren.FIRE_SIREN, long, rate) == pytest.approx(
+        siren.SOUND_RMS / audio.gated_rms(long, rate)
+    )
+
+
+def test_the_fire_engine_meets_the_rules_in_the_engine(tmp_path: Path) -> None:
+    """validation/urban_sources.py's check of the fire engine: its two tones 7 m in front
+    as loud as the Swiss rule allows to a tenth of a dB, within it on the bench; its horn
+    at the most the rule allows on its bench, above the least on the vehicle, its band
+    1800 to 3550 Hz above 105 dB(A) and above any component over it."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
+    import urban_sources
+
+    out = urban_sources.check_fire_engine(tmp_path)
+    loudest = max(out["siren"]["vehicle_db_a"].values())
+    assert siren.FIRE_SIREN_DB_A - 0.15 < loudest <= siren.FIRE_SIREN_DB_A
+    assert 116.0 <= out["siren"]["bench_db_a"] <= 129.0
+    assert out["horn"]["bench_db_a"] == pytest.approx(118.0, abs=0.05)
+    assert min(out["horn"]["vehicle_db_a"].values()) >= 93.0
+    assert out["horn"]["band_db_a"] >= 105.0 and out["horn"]["band_over_above_db"] > 0.0
 
 
 def test_the_vehicles_sound_has_cnossos_spectrum_and_its_engines_firing() -> None:
@@ -411,18 +541,22 @@ def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, caps
 
 
 def _street(tmp_path: Path) -> Path:
-    """The street example, quick: no buildings nor barrier, the police car's walk 40 m
-    long, the pavement alone, 16 kHz, seeded (two runs trace the same rays)."""
+    """The street example, quick: no buildings nor barrier, the police car's and the fire
+    engine's walks 40 m long, the pavement alone, 16 kHz, seeded (two runs trace the same rays)."""
     folder = tmp_path / "street"
     shutil.copytree(Path(example_path("street")).parent, folder)
     data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
     data["geometry"] = {"ground": {"extent": [[-30, -15], [30, 15]], "sky": 10}}
     data["assignments"] = {"ground": "asphalt"}
-    for police in data["sources"]:
-        if police["name"].startswith("police_car"):
-            z = police["position"][2]
-            police["position"] = [20, 2, z]
-            police["walk"]["to"] = [[-20, 2, z]]
+    for each in data["sources"]:
+        if each["name"].startswith("police_car"):
+            z = each["position"][2]
+            each["position"] = [20, 2, z]
+            each["walk"]["to"] = [[-20, 2, z]]
+        if each["name"].startswith("fire_engine"):
+            z = each["position"][2]
+            each["position"] = [-20, -2, z]
+            each["walk"]["to"] = [[20, -2, z]]
     data["listeners"] = [lis for lis in data["listeners"] if lis["name"] == "pavement"]
     data["simulation"].update({"sample_rate": 16_000, "ir_length_s": 0.2, "seed": 1})
     data["simulation"]["late"] = {"method": "stochastic_ray_tracing", "rays": 500}
@@ -454,15 +588,16 @@ def test_the_passby_demo_drives_the_police_car_with_its_siren(tmp_path: Path) ->
         "police_car": "a police car at 50 km/h, made to CNOSSOS-EU's sound power",
         "police_car_siren": "its siren on its roof, two-tone",
     }
+    # The demo says the vehicle in words, not as its source's name.
+    assert demo.summary(resolved).startswith("The police car drives 40.0 m along its walk")
     run = ["all", "--vehicle", "police_car", "--siren", "two_tone", "--step", "4", "--no-mp4"]
     assert demo.main(run) == 0
     work = folder / "demo"
     info = pipeline.read_json(work / "police_car" / "police_car.json")
     assert info["siren"] == "two_tone" and info["plays"] == "car_and_siren"
     assert info["siren_sound_power_a_db"] == pytest.approx(128.6, abs=0.1)
-    assert info["car"]["category"] == "1" and info["car"]["sound_power_a_db"] == pytest.approx(
-        98.4, abs=0.1
-    )
+    car = info["vehicle"]
+    assert car["category"] == "1" and car["sound_power_a_db"] == pytest.approx(98.4, abs=0.1)
     for name in ("police_car.wav", "siren.wav"):
         x, rate = audio.read(work / "police_car" / name)
         assert rate == 16_000 and len(x) == pytest.approx(40.0 / 13.89 * rate, abs=2)
@@ -472,7 +607,7 @@ def test_the_passby_demo_drives_the_police_car_with_its_siren(tmp_path: Path) ->
     car, top = (
         next(s for s in scene.sources if s.name == n) for n in ("police_car", "police_car_siren")
     )
-    assert car.level_db == info["car"]["level_db"] and car.directivity == "omni"
+    assert car.level_db == info["vehicle"]["level_db"] and car.directivity == "omni"
     assert top.level_db == info["siren_level_db"] and top.walk.face_forward and top.walk.doppler
     assert top.directivity.file == folder / "scene_demo_police_car_siren.csv"
     table, own = (
@@ -540,3 +675,99 @@ def test_the_passby_demo_drives_the_police_car_with_its_siren(tmp_path: Path) ->
     info = pipeline.read_json(work / "motorcycle" / "motorcycle.json")
     assert info["category"] == "4b" and info["rolling_db"] is None
     assert info["rpm"] == 4000.0 and info["cylinders"] == 2
+
+
+def test_the_passby_demo_drives_the_fire_engine_with_its_siren_and_horn(
+    tmp_path: Path,
+) -> None:
+    """--vehicle fire_engine on the quick street: the truck's sound (CNOSSOS-EU's medium
+    heavy vehicle), the two tones and the horn's blasts, the scene with its three
+    sources alone at their sound powers, the siren and the horn facing the way it drives
+    with their directivity tables beside the scene, and its pass, the three heard
+    together, each at its own sound power: the horn's sound as far under the siren's as
+    its level; --fire-engine siren_and_horn leaves out the truck."""
+    pytest.importorskip("PIL")
+    from acoustic_spaces.demos import horn, load
+    from acoustic_spaces.parameters import A_WEIGHTING_DB
+    from acoustic_spaces.synthesis import split_bands
+
+    folder = _street(tmp_path)
+    demo = load(folder / "passby_demo.py").at(folder)
+    run = ["all", "--vehicle", "fire_engine", "--step", "4", "--no-mp4"]
+    args = demo.resolved(demo.parser().parse_args(run))
+    assert demo.check(args) is None
+    parts = [siren.FIRE_ENGINE, siren.FIRE_SIREN, siren.FIRE_HORN]
+    assert demo.moving(args) == parts
+    assert demo.plays(args) == {
+        "fire_engine": "a fire engine at 50 km/h, made to CNOSSOS-EU's sound power",
+        "fire_engine_siren": "its siren on its cab's roof, two-tone",
+        "fire_engine_horn": "its air horn 1.2 m up, blasts",
+    }
+    assert demo.main(run) == 0
+    work = folder / "demo"
+    info = pipeline.read_json(work / "fire_engine" / "fire_engine.json")
+    assert info["plays"] == "truck_siren_and_horn" and info["siren"] == "two_tone"
+    assert info["horn"] == "blasts" and info["vehicle"]["category"] == "2"
+    assert info["siren_sound_power_a_db"] == pytest.approx(134.6, abs=0.1)
+    assert info["horn_sound_power_a_db"] == pytest.approx(122.7, abs=0.1)
+    for name in ("fire_engine.wav", "siren.wav", horn.HORN_FILE):
+        x, rate = audio.read(work / "fire_engine" / name)
+        assert rate == 16_000 and len(x) == pytest.approx(40.0 / 13.89 * rate, abs=2)
+    scene = Scene.from_yaml(folder / "scene_demo.yaml")
+    assert [s.name for s in scene.sources if s.in_use] == parts
+    sources = {s.name: s for s in scene.sources}
+    assert sources["fire_engine"].level_db == info["vehicle"]["level_db"]
+    for name, key in ((siren.FIRE_SIREN, "siren"), (siren.FIRE_HORN, "horn")):
+        assert sources[name].level_db == info[f"{key}_level_db"]
+        assert sources[name].walk.face_forward and sources[name].walk.doppler
+        assert sources[name].directivity.file == folder / f"scene_demo_{name}.csv"
+    facts = pipeline.read_json(work / "walk" / "walk.json")
+    assert facts["parts"] == parts and facts["horn"] == "blasts"
+    assert facts["about"].startswith("A fire engine at 50 km/h, its siren on, two-tone; its")
+    heard = facts["listeners"]["pavement"]
+    energy = sum(10.0 ** (p["sel_a_db"] / 10.0) for p in heard["parts"].values())
+    assert heard["sel_a_db"] == pytest.approx(10.0 * math.log10(energy), abs=0.02)
+    seats = pipeline.read_json(work / "walk" / pipeline.SEATS)
+    mix, _ = audio.read(work / "walk" / "pavement.binaural.wav")
+    every = mix / seats["gain"]
+    # The siren and the horn alone, then the siren alone: the horn's sound is what the
+    # second leaves out of the first.
+    mixes = {}
+    for plays in ("siren_and_horn", "siren"):
+        again = [*run, "--fire-engine", plays]
+        args = demo.resolved(demo.parser().parse_args(again))
+        assert not demo.is_done(demo.step("sound"), args)
+        assert demo.main(again) == 0
+        scene = Scene.from_yaml(folder / "scene_demo.yaml")
+        assert [s.name for s in scene.sources if s.in_use] == list(demo.moving(args))
+        seats = pipeline.read_json(work / "walk" / pipeline.SEATS)
+        mix, _ = audio.read(work / "walk" / "pavement.binaural.wav")
+        mixes[plays] = mix / seats["gain"]
+    assert demo.moving(args) == [siren.FIRE_SIREN]
+    n = min(len(every), *(len(m) for m in mixes.values()))
+    weights = 10.0 ** (np.asarray(A_WEIGHTING_DB) / 10.0)
+
+    def a_energy(x: np.ndarray) -> float:
+        return sum(
+            float(weights @ np.sum(split_bands(x[:, k], 16_000) ** 2, axis=1))
+            for k in range(x.shape[1])
+        )
+
+    alone = mixes["siren"][:n]
+    under = 10.0 * math.log10(a_energy(alone) / a_energy(mixes["siren_and_horn"][:n] - alone))
+    told = heard["parts"]["fire_engine_siren"]["sel_a_db"]
+    told -= heard["parts"]["fire_engine_horn"]["sel_a_db"]
+    assert told > 3.0 and under == pytest.approx(told, abs=1.5)
+    # The truck adds its rumble under the horn's and the siren's pitches.
+    truck = every[:n] - mixes["siren_and_horn"][:n]
+    low = [float(np.sum(split_bands(x[:, 0], 16_000)[0] ** 2)) for x in (truck, alone)]
+    assert low[0] > 10.0 * low[1]
+    # And it plays at its own sound power: as far under the siren's and the horn's
+    # sound as its level is under theirs.
+    under = 10.0 * math.log10(a_energy(mixes["siren_and_horn"][:n]) / a_energy(truck))
+    devices = sum(
+        10.0 ** (heard["parts"][name]["sel_a_db"] / 10.0)
+        for name in ("fire_engine_siren", "fire_engine_horn")
+    )
+    told = 10.0 * math.log10(devices) - heard["parts"]["fire_engine"]["sel_a_db"]
+    assert told > 20.0 and under == pytest.approx(told, abs=1.5)

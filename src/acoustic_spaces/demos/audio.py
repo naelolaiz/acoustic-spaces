@@ -72,14 +72,19 @@ def gated_rms(x: np.ndarray, rate: int) -> float:
     return float(np.sqrt(on.mean()))
 
 
-def a_weighted(x: np.ndarray, rate: int) -> np.ndarray:
-    """``x`` (samples, channels) through the A weighting (IEC 61672), by FFT."""
-    n = 1 << math.ceil(math.log2(len(x)))  # a length the FFT is fast at
-    f2 = np.fft.rfftfreq(n, 1.0 / rate) ** 2
+def a_gain(freq) -> np.ndarray:
+    """The A weighting's gain in amplitude (IEC 61672) at ``freq`` (Hz), 1 at 1 kHz."""
+    f2 = np.asarray(freq, dtype=float) ** 2
     gain = (12194.0**2 * f2**2) / (
         (f2 + 20.6**2) * np.sqrt((f2 + 107.7**2) * (f2 + 737.9**2)) * (f2 + 12194.0**2)
     )
-    gain *= 10.0 ** (2.0 / 20.0)  # 0 dB at 1 kHz
+    return gain * 10.0 ** (2.0 / 20.0)  # 0 dB at 1 kHz
+
+
+def a_weighted(x: np.ndarray, rate: int) -> np.ndarray:
+    """``x`` (samples, channels) through the A weighting (IEC 61672), by FFT."""
+    n = 1 << math.ceil(math.log2(len(x)))  # a length the FFT is fast at
+    gain = a_gain(np.fft.rfftfreq(n, 1.0 / rate))
     rows = np.ascontiguousarray(np.atleast_2d(x.T))  # a channel per row
     return np.fft.irfft(np.fft.rfft(rows, n) * gain, n)[:, : len(x)].T
 
@@ -190,6 +195,7 @@ def mmss(t: float) -> str:
 
 
 __all__ = [
+    "a_gain",
     "a_weighted",
     "db",
     "decoded",

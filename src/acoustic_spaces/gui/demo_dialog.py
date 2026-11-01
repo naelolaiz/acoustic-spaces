@@ -854,6 +854,7 @@ class DemoDialog(QDialog):
         for layout in (rows, more_rows):
             layout.setContentsMargins(0, 0, 0, 0)
         self.fields = {}
+        self._rows: dict[str, QFormLayout] = {}
         args = self.starts.get(demo.name) or starting_arguments(demo)
         self._show_movement(demo, args)
         reads = reads_scene(demo)
@@ -877,8 +878,10 @@ class DemoDialog(QDialog):
             label = QLabel(_(option.label))
             label.setBuddy(widget)
             label.setToolTip(f"{tip} ({option.option})")
-            (more_rows if option.advanced or option is reads else rows).addRow(label, widget)
+            form_rows = more_rows if option.advanced or option is reads else rows
+            form_rows.addRow(label, widget)
             self.fields[option.name] = widget
+            self._rows[option.name] = form_rows
         self._layout.replaceWidget(self.options, form)
         self._advanced_layout.replaceWidget(self.advanced_options, more)
         for old in (self.options, self.advanced_options):
@@ -954,6 +957,16 @@ class DemoDialog(QDialog):
                 widget.set_sources(self._plays(demo, args))
                 args = self.arguments()
         self.command.setText(demo.command(step, args))
+        # An option that matters only with another's values (the police car's --siren
+        # with --vehicle police_car) shows only then.
+        values, moved = vars(args), False
+        for name, form_rows in self._rows.items():
+            widget, shown = self.fields[name], demo.option(name).applies(values)
+            if form_rows.isRowVisible(widget) != shown:
+                form_rows.setRowVisible(widget, shown)
+                moved = True
+        if moved and self.isVisible():
+            self._fit(self.width())
         if demo.moving is not None and all(o.kind != "movers" for o in demo.options):
             self._show_movement(demo, args)  # what it moves may follow an option (--vehicle)
         self.folder.setText(_("Runs in {folder}").format(folder=demo.folder))
@@ -1015,9 +1028,14 @@ class DemoDialog(QDialog):
         return self.step.currentText() or ALL
 
     def arguments(self) -> argparse.Namespace:
-        """The options as the fields hold them."""
+        """The options as the fields hold them, those that do not matter with the
+        others (hidden, :attr:`Option.only`) at their defaults."""
         demo = self.demo
         values = {name: value_of(demo.option(name), w) for name, w in self.fields.items()}
+        for name in values:
+            option = demo.option(name)
+            if not option.applies(values):
+                values[name] = option.default
         return argparse.Namespace(**values)
 
     def chosen(self) -> tuple[Demo, str, argparse.Namespace]:

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): three
+  sources along one walk, the vehicle itself (`fire_engine`, CNOSSOS-EU's category 2,
+  a medium heavy vehicle with two axles, its engine six cylinders at 1500 rpm), its
+  siren (`fire_engine_siren`, 3.0 m up on its cab's roof) and its air horn
+  (`fire_engine_horn`, 1.2 m up), heard together, each at its own sound power. The
+  siren plays the police car's two tones 6.0 dB louder, as loud as the Swiss rule lets
+  them be on a vehicle: 114.9 dB(A) 7 m in front of it (134.6 dB(A) of sound power).
+  The new `acoustic_spaces.demos.horn` is an air horn as loud as the rule for vehicles'
+  horns (Council Directive 70/388/EEC, Annex I) lets one be on its test bench, 118 dB(A)
+  2 m away, sounded in blasts; its pitch (two trumpets at 150 and 180 Hz), its
+  spectrum, its blasts, its height and its directivity are assumptions, as no measured
+  air horn of a fire engine was found. A recording given for the horn plays its blasts
+  as loud as the made horn's, whatever its pauses. `--fire-engine` plays all three
+  (`truck_siren_and_horn`), `truck_and_siren`, `siren_and_horn` or `siren`, and
+  `validation/urban_sources.py` holds the siren and the horn against their rules. The
+  police car and the fire engine are both an `acoustic_spaces.demos.siren.EmergencyVehicle`;
+  the police car's `police_car.json` holds the car's numbers under `vehicle` instead of
+  `car`. In the editor's Run demo window the options of one vehicle alone (`--siren` and
+  `--police-car` for the police car, `--fire-engine`) show only while that vehicle is
+  picked, and stay out of the command line otherwise (`Option.only`).
+
 - The pass-by demos drive more than the car past their listeners, each picked with
   `passby_demo.py --vehicle` and each the example's source of its name, left out of
   the example's simulations until ticked, with a walk with Doppler: in `roadside` the
