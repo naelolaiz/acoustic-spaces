@@ -26,6 +26,13 @@
 - The street's car can sound its horn (`passby_demo.py --car car_and_horn`, or `horn`
   alone): a pair of disc horns as loud as Hella's S77 (`demos.horn.CAR_HORN`), held
   against the rule for vehicles' horns in `validation/urban_sources.py`.
+- The railway's train can sound its warning horn (`passby_demo.py --horn blasts`): the
+  TSI's 660 and 370 Hz notes in turn, each 109 dB(C) 25 m ahead as EN 15153-2 allows at
+  most (`demos.horn.TRAIN_HORN`), held against the rule in `validation/urban_sources.py`;
+  `parameters.c_weighted` gives C-weighted levels.
+- Fixed: a pass-by demo run at `--speed` with some of a vehicle's sources left out
+  (`--police-car siren`, `--fire-engine siren`) stopped at its walk, as the sources left
+  out kept the scene's speed; they now walk at the run's.
 
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with

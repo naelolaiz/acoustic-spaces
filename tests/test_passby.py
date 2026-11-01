@@ -198,7 +198,7 @@ def test_the_car_horn_meets_the_rule_in_the_engine(tmp_path: Path) -> None:
     from acoustic_spaces.parameters import a_weighted
 
     kind = horn.CAR_HORN
-    assert kind.rise_s <= 0.2 and 105.0 <= kind.on_axis_db_a <= 118.0
+    assert kind.rise_s <= 0.2 and 105.0 <= kind.on_axis_db <= 118.0
     t = np.array([0.1, 0.3, 0.5, 0.8, 2.9])
     assert horn.sounding(t, kind) == pytest.approx([1.0, 0.0, 1.0, 0.0, 0.0])
     rate = 16_000
@@ -213,7 +213,7 @@ def test_the_car_horn_meets_the_rule_in_the_engine(tmp_path: Path) -> None:
     blast = horn.blast_power(48_000, kind)
     di = siren.directivity_index_db()
     on_axis = a_weighted(blast) + di - 20 * math.log10(kind.at_m) - 10 * math.log10(4 * math.pi)
-    assert on_axis == pytest.approx(kind.on_axis_db_a, abs=1e-9)
+    assert on_axis == pytest.approx(kind.on_axis_db, abs=1e-9)
     assert horn.horn_power(48_000, kind) == pytest.approx(blast + 10 * math.log10(horn.duty(kind)))
     made = horn.horn_sound(rate, kind.power_s, kind)
     assert horn.recorded_gain(made, rate, kind) == pytest.approx(1.0, rel=1e-12)
@@ -223,7 +223,7 @@ def test_the_car_horn_meets_the_rule_in_the_engine(tmp_path: Path) -> None:
     import urban_sources
 
     out = urban_sources.check_car_horn(tmp_path)
-    assert out["bench_db_a"] == pytest.approx(kind.on_axis_db_a, abs=0.15)
+    assert out["bench_db_a"] == pytest.approx(kind.on_axis_db, abs=0.15)
     assert min(out["vehicle_db_a"].values()) >= horn.VEHICLE_DB_A
     assert out["band_db_a"] >= 105.0 and out["band_over_above_db"] > 0.0
 
@@ -553,6 +553,35 @@ def test_the_passby_demo_says_what_keeps_the_car_from_driving(tmp_path: Path) ->
     data["sources"] = [s for s in data["sources"] if s["name"] != "car"]
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     assert demo.check(args) == "scene.yaml has no source 'car' to drive"
+
+
+def test_a_vehicles_sources_left_out_walk_at_the_demos_speed(tmp_path: Path) -> None:
+    """At --speed, the sources of a vehicle that a run leaves out (the police car itself
+    with --police-car siren, the fire engine's horn, the train's horn) walk at that
+    speed too in the demo's scene, out of use: its sources still go along one walk,
+    which the walk step checks."""
+    import shutil
+
+    from acoustic_spaces import Scene
+    from acoustic_spaces.demos import load
+    from acoustic_spaces.demos.passby import car_problem
+    from acoustic_spaces.demos.rail import TRAIN_VEHICLE
+    from acoustic_spaces.demos.siren import FIRE_ENGINE_VEHICLE, POLICE_CAR_VEHICLE
+
+    for example, vehicle, run in (
+        ("street", POLICE_CAR_VEHICLE, ["--vehicle", "police_car", "--police-car", "siren"]),
+        ("street", FIRE_ENGINE_VEHICLE, ["--vehicle", "fire_engine", "--fire-engine", "siren"]),
+        ("railway", TRAIN_VEHICLE, ["--train", "s_bahn"]),
+    ):
+        folder = tmp_path / f"{example}_{vehicle.name}"
+        shutil.copytree(Path(example_path(example)).parent, folder)
+        demo = load(folder / "passby_demo.py").at(folder)
+        assert demo.main(["scene", *run, "--speed", "30"]) == 0
+        scene = Scene.from_yaml(folder / "scene_demo.yaml")
+        assert car_problem(scene, "scene_demo.yaml", vehicle) is None, vehicle.name
+        mine = [s for s in scene.sources if s.name in vehicle.every_part()]
+        assert any(not s.in_use for s in mine)
+        assert {round(s.walk.speed_m_s, 4) for s in mine} == {round(30.0 / 3.6, 4)}
 
 
 def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -> None:

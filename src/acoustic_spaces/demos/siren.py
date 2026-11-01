@@ -345,7 +345,8 @@ class Horn(Device):
     def credit(self, pattern: str) -> str:
         hz = self.kind.hz
         tones = " and ".join(f"{f:g}" for f in hz)
-        return f"{self.noun}: {tones} Hz in blasts, {self.loudness}"
+        turn = " in turn," if self.kind.in_turn else ""
+        return f"{self.noun}: {tones} Hz{turn} in blasts, {self.loudness}"
 
 
 class EmergencyVehicle(Vehicle):
@@ -747,7 +748,7 @@ class HonkingCar(EmergencyVehicle):
             CAR_HORN_PART,
             CAR_HORN.file,
             "behind its front bumper",
-            f"{CAR_HORN.on_axis_db_a:g} dB(A) at {CAR_HORN.at_m:g} m (Hella's S77), its "
+            f"{CAR_HORN.on_axis_db:g} dB(A) at {CAR_HORN.at_m:g} m (Hella's S77), its "
             f"tone discs at {CAR_HORN.disc_hz:g} Hz",
             kind=CAR_HORN,
         )
@@ -760,7 +761,7 @@ class HonkingCar(EmergencyVehicle):
             "what the car plays: car, the car itself (tyres and its engine, CNOSSOS-EU's "
             "passenger car at --speed, from 0.05 m above the road), as a car going by "
             "sounds; car_and_horn, the car with its horn in two short blasts every "
-            f"{CAR_HORN.every_s:g} s ({hz} Hz, {CAR_HORN.on_axis_db_a:g} dB(A) 2 m in "
+            f"{CAR_HORN.every_s:g} s ({hz} Hz, {CAR_HORN.on_axis_db:g} dB(A) 2 m in "
             f"front of it, {CAR_HEIGHT_M:g} m up), as a driver warning of it sounds; "
             "horn, the horn alone",
             "# The example with its car driving past alone, at the speed and with the "

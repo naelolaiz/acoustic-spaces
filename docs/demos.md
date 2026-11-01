@@ -945,9 +945,10 @@ km/h), `--speed` how fast it runs (km/h; by default the train's own above, whate
 the speed of the example's walk: the Run demo window's **Speed** reads *the train's
 own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in ballast;
 `slab`, slab track; `slab_absorber`, slab track with absorbers; `level_crossing`),
-`--step 1` how far apart the train is simulated along its
-walk (m), `--hrtf me.sofa` a measured head, `--input train=WAV` a dry recording of
-yours (`train_roof=WAV` and `train_pantograph=WAV` for the sources up on the train).
+`--horn off` the train's warning horn (`blasts` sounds it, see below), `--step 1` how
+far apart the train is simulated along its walk (m), `--hrtf me.sofa` a measured head,
+`--input train=WAV` a dry recording of yours (`train_roof=WAV` and
+`train_pantograph=WAV` for the sources up on the train, `train_horn=WAV` for its horn).
 The tram has no options of its own: a low-floor tram with air conditioning, 30 m long,
 on its track set in the street, at the speed of its walk (50 km/h) unless `--speed`
 says.
@@ -992,6 +993,18 @@ says.
   that much later. The units' lengths and the points' places are assumptions; Schall 03
   gives only each unit's sound power per metre of track. Its sound's time structure
   (steady noise) is made up too; its spectrum per octave band is Schall 03's.
+- **The horn** (`--horn blasts`, the example's `train_horn`, at the train's front 2.0 m
+  above the rail top, along its walk): its high note (660 Hz) and its low note (370 Hz)
+  in turn, the notes of the EU's rule for locomotives and passenger trains (TSI
+  LOC&PAS, point 4.2.7.2.1), a second each, 0.2 s apart, every 4 s, each as loud as EN
+  15153-2 lets it be, 109 dB(C) 25 m ahead of the train over an open, flat site
+  (`acoustic_spaces.demos.horn.TRAIN_HORN`). Each note is an air horn's sawtooth, rich in
+  harmonics, its sound power taken from that level with the site's ground reflection
+  taken out, harmonic by harmonic: 140.2 dB(A) while the high note sounds and 139.2
+  while the low one does, 136.4 dB(A) averaged over its blasts and pauses, 5.8 dB(A)
+  over the regional train's. Its blasts, its height on the train, the measuring site's
+  ground and microphone height, and its directivity (the measured siren's) are
+  assumptions; see [Validation](validation.md#sirens-and-road-vehicles-against-their-rules).
 - **Against Schall 03's own sum** (`validation/rail_sources.py`): in a free field, the
   engine's pass of the S-Bahn at 80 km/h and of the regional train at 160 km/h, 7.5 m
   from the track 1.2 m above the rail top and 25 m away 3.5 m above it, gives the same

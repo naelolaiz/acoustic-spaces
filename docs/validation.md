@@ -3106,8 +3106,9 @@ says which.
 
 ## Sirens and road vehicles against their rules
 
-`validation/urban_sources.py` holds the pass-by demos' police car's siren and the fire
-engine's siren and air horn (`acoustic_spaces.demos.siren`, `acoustic_spaces.demos.horn`,
+`validation/urban_sources.py` holds the pass-by demos' police car's siren, the fire
+engine's siren and air horn, the car's horn and the train's horn
+(`acoustic_spaces.demos.siren`, `acoustic_spaces.demos.horn`,
 see [Vehicles passing by](demos.md#vehicles-passing-by)) against what the rules for
 sirens and horns ask, with the siren's directivity table in the engine, and compares
 the car's sound power by the two versions of CNOSSOS-EU's table.
@@ -3177,6 +3178,30 @@ patent 8,689,723), with a Q of 2 (assumed); made as the air horn is, a sawtooth 
 fundamental, it would give only 102.8 dB(A) between 1800 and 3550 Hz, under the rule,
 which a horn sold as approved meets. Its blasts, its height and its directivity are
 assumed.
+
+**The train's horn.** The railway train's warning horn (`--horn blasts`) sounds the
+two notes of the EU's rule for locomotives and passenger trains (TSI LOC&PAS,
+Regulation (EU) No 1302/2014, point 4.2.7.2.1), 660 and 370 Hz (the rule: 660 +/- 30
+and 370 +/- 20), one after the other. EN 15153-2:2020, which the rule names for the
+level, asks each note sounded alone for 101 to 109 dB(C) (L_pCeq) on the vehicle, 25 m
+ahead of the train's front on its centre line over an open, flat site. Each note is
+made to 109 there with the horn 2.2 m and the microphone 1.5 m over the railway
+example's ballast (assumed: the sample of the standard seen leaves out where the
+microphone stands, and M. Toward et al., "Sound propagation and audibility of train
+horns", ISVR and RSSB, measured train horns 1.5 m up), each harmonic's reflection off
+the ballast added in pressure and taken out of its sound power. The engine, which
+averages a reflection's interference over each band, gives the high note 108.8 dB(C)
+there and the low one 108.9, and 109.6 and 109.1 in a free field. Toward et al.
+measured a train horn of 368 Hz over ballast with the horn from 0.5 to 3.0 m up and
+found virtually no difference at 25 m; the low note's A-weighted level there changes by
++1.5 to 0 dB over those heights by its harmonics and by 0 to -0.5 dB in the engine.
+A-weighted, the low note is 2.4 dB under its C-weighted level harmonic by harmonic
+(Toward et al. take 2 dB off the rules' C-weighted levels for their A-weighted ones)
+and 1.4 dB under it by octave bands, as the engine weights it; the high note 0.5 and
+1.0 dB. Its blasts, its height on the train and its directivity, the measured siren's,
+are assumptions: Toward et al. measured a train horn 1 dB down 30 degrees off its axis,
+where the siren is 3.6 dB down, so beside the track the horn may be a few decibels
+louder than here.
 
 **The car's table.** CNOSSOS-EU's Table F-1 as amended in 2021, which the road
 vehicles take (`acoustic_spaces.demos.road`), against Directive (EU) 2015/996's, which
