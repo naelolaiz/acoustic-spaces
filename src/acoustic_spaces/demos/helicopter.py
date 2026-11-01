@@ -102,6 +102,7 @@ class Helicopter(Vehicle):
         self.script = script
 
     go, goes, going, way = "fly", "flies", "flying over", "its flight path"
+    noun = HELICOPTER
     steady = "its rotors are trimmed for one steady speed"
     step_m = STEP_M
     sound_file, info_file = BELOW_FILE, INFO_FILE

@@ -5,9 +5,10 @@
 # buildings, then goes on as if it never ended. One listener stands on the pavement, one
 # on a balcony of the office block, one in the garden, where the traffic comes over the
 # top of the barrier and round its ends: `first_order` diffraction follows it. A car, a
-# bus, a motorcycle and a police car with its siren on drive along the street at 50
-# km/h, their pitch falling as they pass (Doppler): they are left out of simulations
-# until ticked, and passby_demo.py plays one.
+# bus, a motorcycle, a police car with its siren on and a fire engine with its siren
+# and its air horn drive along the street at 50 km/h, their pitch falling as they pass
+# (Doppler): they are left out of simulations until ticked, and passby_demo.py plays
+# one.
 name: Street with a noise barrier
 geometry:
   ground: {margin: 30}
@@ -99,6 +100,42 @@ sources:
     directivity: {file: siren.csv}
     walk:
       to: [[-55, 2, 1.5]]
+      speed_m_s: 13.89
+      face_forward: true
+      doppler: true
+  # A fire engine on a call, in the lane on the offices' side, at 50 km/h: the vehicle
+  # itself, a medium heavy vehicle with two axles (CNOSSOS-EU's category 2, as the
+  # bus's), 0.05 m above the road; its siren, the two tones of DIN 14610, on its cab's
+  # roof, 3.0 m up, as loud as the Swiss rule lets them be on a vehicle (115 dB(A) 7 m
+  # in front of it); and its air horn, 1.2 m up, in blasts, as loud as the rule for
+  # horns lets one be on its bench (118 dB(A) 2 m away). The three go along one walk;
+  # the siren and the horn face the way it drives, with the directivity of siren.csv
+  # (passby_demo.py --fire-engine picks which play).
+  - name: fire_engine
+    enabled: false
+    position: [-55, -2, 0.05]
+    level_db: [106.1, 99.2, 99.3, 100.2, 101.3, 96.9, 90.1, 84.2]
+    walk:
+      to: [[70, -2, 0.05]]
+      speed_m_s: 13.89
+      doppler: true
+  - name: fire_engine_siren
+    enabled: false
+    position: [-55, -2, 3.0]
+    level_db: [84.0, 84.4, 93.0, 136.1, 121.6, 125.2, 122.3, 121.2]
+    directivity: {file: siren.csv}
+    walk:
+      to: [[70, -2, 3.0]]
+      speed_m_s: 13.89
+      face_forward: true
+      doppler: true
+  - name: fire_engine_horn
+    enabled: false
+    position: [-55, -2, 1.2]
+    level_db: [89.9, 124.1, 121.4, 119.2, 117.7, 114.3, 111.1, 110.3]
+    directivity: {file: siren.csv}
+    walk:
+      to: [[70, -2, 1.2]]
       speed_m_s: 13.89
       face_forward: true
       doppler: true

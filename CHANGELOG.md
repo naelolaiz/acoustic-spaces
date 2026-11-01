@@ -12,13 +12,15 @@ parameter, from the late rays traced in batches. Random scattering traced band b
 and paths over edges that render their energy. A stereo recording that a scene's sound
 system plays in its demo, a file of your own or one of five free songs and talks
 downloaded the first time, so that every example with a stage, a sound system or a
-talker plays out of the box. Trucks, buses, motorcycles and a police car with its siren
-on in the pass-by demos, with CNOSSOS-EU's sound power of their category and the siren
-checked against California's and the Swiss rules for sirens. Everything a demo plays in
-its example's scene, a simpler Run demo window that also runs the examples' scripts and
-says what a run downloads, the editor's Scene YAML panel, and the validation report with
-four of BRAS's rooms and IACC against their binaural responses, checked claim by claim
-against the scripts and tests its numbers come from.
+talker plays out of the box. Trucks, buses, motorcycles, a police car with its siren on
+and a fire engine with its siren and air horn in the pass-by demos, with CNOSSOS-EU's
+sound power of their category, the police car's siren checked against California's and
+the Swiss rules for sirens, the fire engine's against the Swiss rule and its horn
+against the European rule for vehicles' horns. Everything a demo plays in its example's
+scene, a simpler Run demo window that also runs the examples' scripts and says what a
+run downloads, the editor's Scene YAML panel, and the validation report with four of
+BRAS's rooms and IACC against their binaural responses, checked claim by claim against
+the scripts and tests its numbers come from.
 
 Results change from 4.0.1: EDT, whose line fit now starts at the onset in every
 response, in 99 of the 152 octave-band EDTs of six examples, by up to 9.6 % (in
@@ -299,6 +301,27 @@ Scene files of 4.0.1 load unchanged; the `stadium_pa` example is now part of
   octave band the rule wants it loudest in and the Swiss rule's levels on the test bench
   and 7 m in front of the vehicle. In the editor's Run demo window the vehicle, the
   engine's speed, the siren and what the police car plays are options with their tips.
+- The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): three
+  sources along one walk, the vehicle itself (`fire_engine`, CNOSSOS-EU's category 2, a
+  medium heavy vehicle with two axles, its engine six cylinders at 1500 rpm), its siren
+  (`fire_engine_siren`, 3.0 m up on its cab's roof) and its air horn
+  (`fire_engine_horn`, 1.2 m up), heard together, each at its own sound power. The siren
+  plays the police car's two tones 6.0 dB louder, as loud as the Swiss rule lets them be
+  on a vehicle: 114.9 dB(A) 7 m in front of it (134.6 dB(A) of sound power). The new
+  `acoustic_spaces.demos.horn` is an air horn as loud as the rule for vehicles' horns
+  (Council Directive 70/388/EEC, Annex I) lets one be on its test bench, 118 dB(A) 2 m
+  away, sounded in blasts; its pitch (two trumpets at 150 and 180 Hz), its spectrum, its
+  blasts, its height and its directivity are assumptions, as no measured air horn of a
+  fire engine was found. A recording given for the horn plays its blasts as loud as the
+  made horn's, whatever its pauses. `--fire-engine` plays all three
+  (`truck_siren_and_horn`), `truck_and_siren`, `siren_and_horn` or `siren`, and
+  `validation/urban_sources.py` holds the siren and the horn against their rules. The
+  police car and the fire engine are both an
+  `acoustic_spaces.demos.siren.EmergencyVehicle`; the police car's `police_car.json`
+  holds the car's numbers under `vehicle` instead of `car`. In the editor's Run demo
+  window the options of one vehicle alone (`--siren` and `--police-car` for the police
+  car, `--fire-engine`) show only while that vehicle is picked, and stay out of the
+  command line otherwise (`Option.only`).
 - The road vehicles' sound power is CNOSSOS-EU's Table F-1 as amended in 2021
   (Commission Delegated Directive (EU) 2021/1226), which has a vehicle's point radiate
   alike every way instead of into the half space above the road, with coefficients A

@@ -158,8 +158,9 @@ which frequencies each octave band holds.
   **Edit movement…** opens the Movement panel on the selected one; a number shows its
   unit, and the pass-by demos' **Speed** reads *as in the scene* at zero, the speed of
   the vehicle's walk, with the line under the Movement box saying how far, how fast
-  (km/h and m/s) and so for how long the vehicle drives, as the options stand), and
-  it runs in its own process in the background, with what it prints in the **Messages**
+  (km/h and m/s) and so for how long the vehicle drives, as the options stand; an
+  option of one vehicle alone, as the police car's siren, shows only while that vehicle
+  is picked), and it runs in its own process in the background, with what it prints in the **Messages**
   panel and **Cancel** to stop it. **Advanced**, closed until opened, holds the step
   (*all* runs the demo from nothing to its video, leaving out what is done already),
   what fine-tunes the run (the tour's stops, how far apart a walk's places are
