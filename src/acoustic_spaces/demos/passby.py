@@ -1026,13 +1026,7 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
     if not names:
         raise SystemExit(f"error: every listener of {args.scene.name} is left out")
     # The house each listener stands in front of, where --indoors hears the pass.
-    inside = indoors.facings(room.scene, names) if house is not None else {}
-    if house is not None and not any(inside.values()):
-        raise SystemExit(
-            f"error: --indoors hears the {vehicle.noun} in a house that a listener stands "
-            f"{indoors.FACADE_M[0]:g} to {indoors.FACADE_M[1]:g} m in front of; no listener "
-            f"of {args.scene.name} does"
-        )
+    inside = indoors.houses_heard(room.scene, names, house, vehicle.noun, args.scene.name)
     # The parts heard through the air: all of them, unless every house hears the rumble
     # alone and no listener is outdoors.
     outdoors = [name for name in names if inside.get(name) is None]
@@ -1106,7 +1100,7 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             if here is not None and here.rumble:
                 rumble = here.rumble_a_db(felt - here.indoor_vdb)
                 loudest = max(powers.values())
-                sound = here.rumble_sound(shaking, rumble, rate, n, loudest, seed=len(passes))
+                sound = here.rumble_sound(shaking, rumble, rate, n, loudest, seed=names.index(name))
                 played.append(sound[:, None] * indoors.pressure_gains(fmt)[None, :])
                 passes.append(here.rumble_pass(indoors.RUMBLE, name, shaking, rumble))
                 heard_parts.append(indoors.RUMBLE)

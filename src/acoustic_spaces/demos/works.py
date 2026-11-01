@@ -111,14 +111,14 @@ def houses(args: argparse.Namespace) -> indoors.StillHouses | None:
             shaking.append(indoors.Plant(source.name, machine.vibration, _point(source.position)))
     if (house is None and not shaking) or not playing:
         return None
-    names = [lis.name for lis in found.listeners]
-    inside = indoors.facings(found, names) if house is not None else {}
-    if house is not None and not any(inside.values()):
+    if house is not None and house.rumble and not shaking:
+        shakers = ", ".join(n for n, m in plant.MACHINES.items() if m.vibration is not None)
         raise SystemExit(
-            f"error: --indoors hears the works in a house that a listener stands "
-            f"{indoors.FACADE_M[0]:g} to {indoors.FACADE_M[1]:g} m in front of; no listener "
-            f"of {args.scene.name} does"
+            f"error: --indoors {choice} hears the rumble of the ground's vibration, but "
+            f"nothing that plays shakes it ({shakers} do); try --indoors {NOUN}"
         )
+    names = [lis.name for lis in found.listeners]
+    inside = indoors.houses_heard(found, names, house, NOUN, args.scene.name)
     return indoors.StillHouses(
         house,
         str(choice),

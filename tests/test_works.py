@@ -2,6 +2,7 @@
 :mod:`acoustic_spaces.demos.works`): Defra's rows, their sound power, the EU's limits,
 the reversing alarm, the made sounds and the demo that plays them."""
 
+import argparse
 import math
 from pathlib import Path
 
@@ -403,3 +404,23 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     assert all("post" not in seat for seat in seats["seats"].values())
     for name, x in again.items():
         assert a_energy(x) == pytest.approx(a_energy(outdoors[name]), rel=1e-6)
+
+
+def test_the_rumble_indoors_needs_something_that_shakes_the_ground(tmp_path) -> None:
+    """With the breaker and the dumper left out, nothing shakes the ground: --indoors
+    rumble says so, --indoors works hears the rest through the window."""
+    import yaml
+
+    folder = _street(tmp_path)
+    scene = folder / "scene_works.yaml"
+    works.scene(argparse.Namespace(source=folder / "scene.yaml", scene=scene))
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    for source in data["sources"]:
+        if source["name"] in ("breaker", "dumper"):
+            source["enabled"] = False
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    args = argparse.Namespace(scene=scene, indoors="rumble", format="binaural", hrtf=None)
+    with pytest.raises(SystemExit, match="nothing that plays shakes it"):
+        works.houses(args)
+    args.indoors = "works"
+    assert works.houses(args) is not None

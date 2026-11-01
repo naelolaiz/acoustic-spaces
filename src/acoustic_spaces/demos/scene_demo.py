@@ -655,6 +655,15 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
             f"error: the mixes in {folder} are of other walks; run first: "
             f"{demo.command('render', args)}"
         )
+    # The mixes heard where the stills say: outdoors, or in the houses --indoors asks.
+    if any(
+        seat.get("post") != (None if indoors is None else indoors.info(key).get("post"))
+        for key, seat in seats["seats"].items()
+    ):
+        raise SystemExit(
+            f"error: the mixes in {folder} were made for another --indoors; "
+            f"run first: {demo.command('render', args)}"
+        )
     stops = tour_of(args, seats, float(table["length_s"]), demo)
     audio = pipeline.tour_audio(
         stops,
@@ -681,15 +690,6 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
     data = scene.to_data()
     report = pipeline.read_json(results_of(args) / pipeline.PARAMETERS)
     outline = outline_edges(Room.from_scene(scene))[0]
-    # The mixes heard where the stills say: outdoors, or in the houses --indoors asks.
-    if any(
-        seat.get("post") != (None if indoors is None else indoors.info(key).get("post"))
-        for key, seat in seats["seats"].items()
-    ):
-        raise SystemExit(
-            f"error: the mixes in {folder} were made for another --indoors; "
-            f"run first: {demo.command('render', args)}"
-        )
     drawing = scene_pictures.Pictures(
         data,
         outline,

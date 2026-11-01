@@ -110,8 +110,9 @@ class Facing:
 
 def facing(scene, position) -> Facing | None:
     """The building of the outdoor ``scene`` whose wall a listener at ``position``
-    stands in front of: FACADE_M from it in plan, outside its footprint and lower than
-    its roof; the nearest such, or None."""
+    stands in front of: FACADE_M from it in plan, square in front of it (not off a
+    corner, where ISO 1996-2's façade position does not hold), outside its footprint
+    and lower than its roof; the nearest such, or None."""
     from acoustic_spaces.geometry.io import UNIT_SCALE
     from acoustic_spaces.geometry.outdoor import in_polygon
 
@@ -131,6 +132,8 @@ def facing(scene, position) -> Facing | None:
         if in_polygon(here[None, :2], footprint)[0] or here[2] - ground >= scale * building.height:
             continue
         wall = vibration.nearest_points(here[None], footprint, closed=True)[0]
+        if np.min(np.linalg.norm(footprint[:, :2] - wall, axis=1)) <= FACADE_TOLERANCE_M:
+            continue  # off a corner: in front of no wall
         distance = float(np.linalg.norm(wall - here[:2]))
         near = least - FACADE_TOLERANCE_M <= distance <= most + FACADE_TOLERANCE_M
         if near and (found is None or distance < found.distance_m):
@@ -143,6 +146,22 @@ def facings(scene, names) -> dict[str, Facing | None]:
     (:func:`facing`), or None."""
     where = {lis.name: lis.position for lis in scene.listeners}
     return {name: facing(scene, where[name]) for name in names}
+
+
+def houses_heard(scene, names, house: House | None, noun: str, scene_name: str) -> dict:
+    """:func:`facings` of the listeners ``names`` where ``--indoors`` hears the ``noun``
+    in a house (``house``), none outdoors; SystemExit when no listener stands in front
+    of a house."""
+    if house is None:
+        return {}
+    found = facings(scene, names)
+    if not any(found.values()):
+        raise SystemExit(
+            f"error: --indoors hears the {noun} in a house that a listener stands "
+            f"{FACADE_M[0]:g} to {FACADE_M[1]:g} m in front of; no listener of "
+            f"{scene_name} does"
+        )
+    return found
 
 
 @dataclass(frozen=True)
@@ -361,6 +380,8 @@ class StillHouses:
                 distance = float(np.hypot(*(at - here)))
             else:
                 distance = float(where.distances(at[None])[0])
+            # Nearer than 10 ft, where the trains' curves start, the level holds.
+            distance = max(distance, vibration.NEAREST_M)
             energy += 10.0 ** (vibration.plant_level(machine.row, distance) / 10.0)
         return 10.0 * math.log10(energy) if energy > 0.0 else -math.inf
 
@@ -433,6 +454,10 @@ class StillHouses:
                 levels = np.asarray(bands, dtype=float) + indoor
                 entry["spl_db"] = [round(float(v), 2) for v in levels]
                 entry["spl_a_db"] = round(a_weighted(levels), 2)
+            else:
+                # A band unknown outdoors leaves the level inside unknown too.
+                entry["spl_db"] = None
+                entry["spl_a_db"] = None
             responses.append(entry)
         return {**report, "responses": responses}
 
@@ -463,7 +488,9 @@ def write_shakers(folder, shakers: dict[str, np.ndarray], rate: int) -> dict:
     """``<listener>.shaker.wav`` in ``folder`` for each of ``shakers`` (what is felt
     there, m/s; :func:`shaker_sound`), one gain for all, the loudest peak at -1 dBFS;
     what their full scale is (a velocity) and the third octave they are in, for the
-    demo's JSON; nothing without shakers, or with nothing felt."""
+    demo's JSON; nothing without shakers, or with nothing felt. As with dBFS, a sample
+    of 1 is ``full_scale_mm_s``, and a track's RMS level in dBFS plus
+    ``full_scale_vdb`` is its vibration level in VdB (an RMS level)."""
     from acoustic_spaces.demos.audio import write
 
     peak = max((float(np.abs(x).max(initial=0.0)) for x in shakers.values()), default=0.0)

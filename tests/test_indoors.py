@@ -205,7 +205,9 @@ def test_a_listener_0_5_to_2_m_in_front_of_a_wall_is_in_its_house() -> None:
         ((0.0, 4.0, 8.9), "houses"),
         ((0.0, 4.0, 9.0), None),
         ((0.0, 10.0, 1.6), None),
-        ((11.0, 5.0, 1.6), "houses"),
+        # Off the corner (10, 6), square in front of neither wall.
+        ((11.0, 5.0, 1.6), None),
+        ((11.0, 7.0, 1.6), "houses"),
     ):
         facing = indoors.facing(street, at)
         assert (facing and facing.name) == house, at
@@ -448,3 +450,26 @@ def test_the_tram_has_indoors_and_the_street_s_other_vehicles_not() -> None:
     option = demo.option("indoors")
     assert option.only == ("vehicle", ("tram",))
     assert option.choices == indoors.choices("tram")
+
+
+def test_a_house_beside_still_plant() -> None:
+    """Plant nearer than 10 ft shakes as it does 10 ft away, not without bound; a level
+    unknown in a band outdoors is unknown in the house too, not the outdoor one."""
+    from acoustic_spaces.spatial import Mono
+
+    breaker = indoors.Plant("breaker", "hoe_ram", (0.0, 0.0, 1.0))
+    house = indoors.House.of("works_and_rumble", "works")
+    still = indoors.StillHouses(
+        house,
+        "works_and_rumble",
+        (breaker,),
+        {"out": (0.0, 0.0, 1.5), "in": (0.0, -1.0, 1.5)},
+        {"out": None, "in": indoors.Facing("h", (0.0, 0.0), 1.0)},
+        100.0,
+        Mono(),
+    )
+    nearest = vibration.plant_level("hoe_ram", vibration.NEAREST_M)
+    assert still.ground_vdb("out") == still.ground_vdb("in") == pytest.approx(nearest)
+    report = {"responses": [{"listener": "in", "spl_db": [None] + [50.0] * 7, "spl_a_db": 60.0}]}
+    (entry,) = still.report(report)["responses"]
+    assert entry["spl_a_db"] is None and entry["spl_db"] is None
