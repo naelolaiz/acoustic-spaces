@@ -1,11 +1,20 @@
-"""The reference cases of Doc 29 Volume 3 Part 1 (5th edition, 2026): three
-hypothetical aircraft that rely on no ANP data, a rear-engined jet (JETF), a
-wing-engined jet (JETW) and a propeller aircraft (PROP), each arriving and departing
-on a straight and a curved route at a hypothetical aerodrome, and the sound exposure
-levels Volume 3 gives at its receptors.
+"""The reference cases of Doc 29 Volume 3 (5th edition, 2026), of three hypothetical
+aircraft that rely on no ANP data: a rear-engined jet (JETF), a wing-engined jet
+(JETW) and a propeller aircraft (PROP).
 
-The tables are Volume 3's (its Appendix A and B, tables A-1 and A-6 to A-12 and B-1, as
-its workbook gives them), read as the ANP database's are.
+- Part 1, the noise: each aircraft arriving and departing on a straight and a curved
+  route at a hypothetical aerodrome (:data:`CASES`), and the sound exposure levels
+  Volume 3 gives at its receptors (its Appendix A and B, tables A-1 and A-6 to A-12
+  and B-1, as its workbook gives them).
+- Part 2, the flight performance: JETW and PROP flying departure and approach
+  procedures at aerodromes of other elevations, temperatures, pressures and headwinds
+  (:func:`profile_cases`), and the fixed-point profiles Volume 3 gives for them (its
+  Appendix C and D, tables C-1 to C-8 and D-1 and D-2). The approach procedures are as
+  its table C-6.2 prints them, to 0.1 ft, kt and degree, which its profiles are
+  computed from (its workbook has more digits); the lengths of its Level-Idle steps,
+  which the table gives in the column of the descent angle, are their distances.
+
+The tables are read as the ANP database's are.
 """
 
 from __future__ import annotations
@@ -18,6 +27,18 @@ import numpy as np
 
 from .noise import Event, event, impedance_db
 from .path import Segment, Track, flight_path, lowest_approach_node
+from .performance import (
+    Aerodrome,
+    ApproachStep,
+    DepartureStep,
+    Performance,
+    Point,
+    arrival,
+    departure,
+    read_approach_steps,
+    read_departure_steps,
+    read_performance,
+)
 from .tables import (
     Aircraft,
     NpdCurves,
@@ -177,3 +198,98 @@ CASES = tuple(
     for o in ("A", "D")
     for r in ("C", "S")
 )
+
+
+@cache
+def performance() -> dict[str, Performance]:
+    """Part 2's two aircraft, JETW and PROP, with their engine and aerodynamic
+    coefficients and their default weights (tables C-1 to C-5), by identifier."""
+    return read_performance(
+        DATA / "performance_aircraft.csv",
+        jet=DATA / "jet_coefficients.csv",
+        propeller=DATA / "propeller_coefficients.csv",
+        aerodynamic=DATA / "aerodynamic_coefficients.csv",
+        weights=DATA / "default_weights.csv",
+    )
+
+
+@cache
+def departure_procedures() -> dict[tuple[str, str], tuple[DepartureStep, ...]]:
+    """Part 2's departure procedures (table C-6.1), by (aircraft, procedure)."""
+    return {
+        (name, procedure): steps
+        for (name, procedure, _), steps in read_departure_steps(
+            DATA / "departure_steps.csv"
+        ).items()
+    }
+
+
+@cache
+def approach_procedures() -> dict[tuple[str, str], tuple[ApproachStep, ...]]:
+    """Part 2's approach procedures (table C-6.2), by (aircraft, procedure)."""
+    return read_approach_steps(DATA / "approach_steps.csv")
+
+
+@dataclass(frozen=True)
+class ProfileCase:
+    """A reference case of Part 2 (tables C-7 and C-8): an aircraft flying a departure
+    ("D") or approach ("A") procedure from an aerodrome; its number is Volume 3's, "2A"
+    or "54" for instance."""
+
+    number: str
+    operation: str
+    aircraft: str
+    procedure: str
+    aerodrome: Aerodrome
+
+    def points(self) -> list[Point]:
+        """Its fixed-point profile: a departure at the aircraft's default take-off
+        weight (table C-5), an arrival at 90 % of its greatest landing weight."""
+        plane = performance()[self.aircraft]
+        if self.operation == "D":
+            steps = departure_procedures()[(self.aircraft, self.procedure)]
+            return departure(plane, steps, plane.weights[("D", "1")], self.aerodrome)
+        return arrival(
+            plane, approach_procedures()[(self.aircraft, self.procedure)], None, self.aerodrome
+        )
+
+
+@cache
+def profile_cases() -> tuple[ProfileCase, ...]:
+    """Part 2's 26 cases: nine arrivals (table C-7) and seventeen departures (C-8)."""
+    found = []
+    for name in ("arrival_cases.csv", "departure_cases.csv"):
+        for row in read_rows(DATA / name):
+            found.append(
+                ProfileCase(
+                    number=row["Case Number"],
+                    operation=row["Operation Mode"],
+                    aircraft=row["Aircraft Identifier"],
+                    procedure=row["Procedure"],
+                    aerodrome=Aerodrome(
+                        elevation_ft=float(row["Elevation"]),
+                        temperature_c=float(row["Temperature (°C)"]),
+                        pressure_inhg=float(row["S/L Pressure (in-Hg)"]),
+                        headwind_kt=float(row["Headwind (kt)"]),
+                    ),
+                )
+            )
+    return tuple(found)
+
+
+@cache
+def reference_profiles() -> dict[str, tuple[Point, ...]]:
+    """Volume 3's fixed-point profiles of Part 2's cases (tables D-1 and D-2, to 0.1
+    ft, kt and lb), by case number."""
+    found: dict[str, list[Point]] = {}
+    for name in ("arrival_profiles.csv", "departure_profiles.csv"):
+        for row in read_rows(DATA / name):
+            found.setdefault(row["Case Number"], []).append(
+                Point(
+                    distance_ft=float(row["Distance (ft)"]),
+                    height_ft=float(row["Altitude (ft)"]),
+                    speed_kt=float(row["True Airspeed (kt)"]),
+                    thrust_lb=float(row["Corrected Net Thrust (lb per engine)"]),
+                )
+            )
+    return {key: tuple(points) for key, points in found.items()}

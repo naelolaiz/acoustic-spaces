@@ -51,9 +51,13 @@ def read_rows(path: str | Path) -> list[dict[str, str]]:
 
 
 def _column(names: Iterable[str], *wanted: str) -> str:
-    """The first of ``names`` whose name, its case and punctuation aside, starts with
-    one of ``wanted``."""
+    """The first of ``names`` whose name, its case and punctuation aside, is one of
+    ``wanted`` or else starts with one of them."""
     names = list(names)
+    for want in wanted:
+        for name in names:
+            if _key(name) == _key(want):
+                return name
     for want in wanted:
         for name in names:
             if _key(name).startswith(_key(want)):
@@ -207,7 +211,7 @@ def read_spectral_classes(path: str | Path) -> dict[str, SpectralClass]:
         return {}
     c = list(rows[0].keys())
     name = _column(c, "Spectral Class Identifier", "Spectral Class ID")
-    bands = [_column(c, f"L_{hz}Hz", f"L{hz}") for hz in SPECTRAL_BANDS_HZ]
+    bands = [_column(c, f"L_{hz}Hz", f"L{hz}Hz", f"{hz}Hz", str(hz)) for hz in SPECTRAL_BANDS_HZ]
     return {
         row[name]: SpectralClass(
             name=row[name],
@@ -248,7 +252,7 @@ def read_fixed_point_profiles(
     number = _column(c, "Point Number")
     distance = _column(c, "Distance")
     height = _column(c, "Altitude", "Height")
-    speed = _column(c, "True Airspeed", "Speed")
+    speed = _column(c, "True Airspeed", "TAS", "Speed")
     power = _column(c, "Corrected Net Thrust", "Power")
     grouped: dict[tuple[str, str, str, str], list[tuple[int, ProfilePoint]]] = {}
     for row in rows:

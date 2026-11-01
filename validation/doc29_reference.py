@@ -1,6 +1,6 @@
 """Check :mod:`acoustic_spaces.doc29` against the reference cases of ECAC Doc 29 Volume 3
-Part 1 (5th edition, 2026): three hypothetical aircraft arriving and departing on
-straight and curved routes, twelve cases.
+(5th edition, 2026): Part 1's three hypothetical aircraft arriving and departing on
+straight and curved routes, twelve cases, and Part 2's flight profiles, 26 cases.
 
     python validation/doc29_reference.py [--workbook doc29-volume3-part1.xlsx]
 
@@ -18,9 +18,16 @@ straight and curved routes, twelve cases.
   their way, the segments' places and terms match the reference closer, and the
   levels change this little.
 
-What is not checked: the maximum levels (Volume 3 gives none), the flight
-performance of Appendix B (the cases fly Volume 3's fixed-point profiles) and bank
-angles in turns (its cases fly them level).
+- **The flight profiles** of Part 2 (tables D-1 and D-2, which the package holds): each
+  case's fixed-point profile from its procedural steps by Volume 2 Appendix B, nine
+  arrivals and seventeen departures, 314 points, against Volume 3's, which round to
+  0.1 ft, kt and lb.
+
+What is not checked: the maximum levels (Volume 3 gives none), the noise of Part 2's
+profiles (Volume 3 gives none either), bank angles in turns (its cases fly them level)
+and the idle steps of an approach away from sea level in the standard atmosphere
+(Appendix B7.1.2 and B7.1.4 adjust them; all of Volume 3's arrivals are at sea level in
+it).
 """
 
 from __future__ import annotations
@@ -113,6 +120,42 @@ def receptor_levels() -> float:
         )
     print(f"  all {len(reference)}: within {worst:.4f} dB (the table gives 0.01 dB)")
     return worst
+
+
+def profiles() -> float:
+    """Tables D-1 and D-2: each case's fixed-point profile against Volume 3's."""
+    reference = volume3.reference_profiles()
+    print("Flight profiles from the procedures against tables D-1 and D-2 (ft, ft, kt, lb):")
+    worst = np.zeros(4)
+    for case in volume3.profile_cases():
+        mine = case.points()
+        ref = reference[case.number]
+        if len(mine) != len(ref):
+            print(f"  {case.number}: {len(mine)} points, Volume 3 {len(ref)}")
+            worst[:] = np.inf
+            continue
+        d = np.abs(
+            [
+                (
+                    a.distance_ft - b.distance_ft,
+                    a.height_ft - b.height_ft,
+                    a.speed_kt - b.speed_kt,
+                    a.thrust_lb - b.thrust_lb,
+                )
+                for a, b in zip(mine, ref, strict=True)
+            ]
+        ).max(axis=0)
+        worst = np.maximum(worst, d)
+        print(
+            f"  {case.number:>3} {case.aircraft} {case.procedure:<27} {len(ref):2d} points,"
+            f" largest differences {d[0]:.2f} {d[1]:.2f} {d[2]:.2f} {d[3]:.2f}"
+        )
+    count = sum(len(p) for p in reference.values())
+    print(
+        f"  all {count} points: distance within {worst[0]:.2f} ft, height {worst[1]:.2f} ft,"
+        f" speed {worst[2]:.2f} kt, thrust {worst[3]:.2f} lb (the tables give 0.1)"
+    )
+    return float(worst.max())
 
 
 def segment_terms(rows: list[dict[str, str]]) -> None:
@@ -215,6 +258,8 @@ def main() -> int:
     parser.add_argument("--workbook", type=Path, help="Volume 3 Part 1's workbook (xlsx)")
     args = parser.parse_args()
     receptor_levels()
+    print()
+    profiles()
     if args.workbook is not None:
         segments = sheet(args.workbook, "B-2_Segment_Results")
         print(f"\nEvery segment against worksheet B-2 ({len(segments)} rows):")

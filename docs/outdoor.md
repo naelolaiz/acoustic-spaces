@@ -1173,27 +1173,62 @@ the threshold. Volume 3's reference cases put it at the approach's lowest node a
 the runway (`doc29.path.lowest_approach_node`), the jets' profile point at 15.2 m, 290.2
 m before touchdown, and the turboprop's cut at 17.2 m, 328.1 m before it.
 
-The ANP database, the method's data for real aircraft (EASA's Aircraft Noise and
+**Flight profiles from procedures** (`doc29.performance`, Volume 2 Appendix B). An
+aircraft's fixed-point profile can also be computed from the steps of its procedure
+(the take-off; climbs at a constant calibrated airspeed; accelerations at a rate of
+climb or with a share of the thrust; level flight; on approach the descents, level
+and idle steps, the landing and the decelerations on the runway), its engine and
+aerodynamic coefficients and its weight, at the aerodrome's elevation, temperature
+and sea-level pressure and into its headwind (`performance.Aerodrome`; by default sea
+level in the standard atmosphere into 8 kt, the conditions the coefficients are given
+for). Where the thrust changes from one step to the next, a point 1000 ft on (or half
+the step, if that is shorter) takes the change, as Appendix B does. The calculation
+is in feet, knots and pounds, as Appendix B's is; `performance.as_profile` gives the
+points in metres for `flight_path`:
+
+```python
+from acoustic_spaces.doc29 import performance, volume3
+
+plane = volume3.performance()["JETW"]
+steps = volume3.departure_procedures()[("JETW", "ICAO_A")]
+hot = performance.Aerodrome(elevation_ft=5000.0, temperature_c=40.0, headwind_kt=0.0)
+points = performance.departure(plane, steps, plane.weights[("D", "1")], hot)
+profile = performance.as_profile(points)   # for doc29.flight_path
+```
+
+**The ANP database**, the method's data for real aircraft (EASA's Aircraft Noise and
 Performance database), is not part of the package: its terms of use (issue 3, 2024)
 allow the data only for noise contours of an average fleet and traffic, not for
 benchmarking aircraft types, and forbid publishing it or passing it on to anyone who
-has not accepted them. `doc29.read_aircraft`, `read_npd`, `read_spectral_classes` and
-`read_fixed_point_profiles` read tables with the fields Volume 2 Appendix G lists, as
-Volume 3's workbook lays them out; they have not been tried on a download of the
-database.
+has not accepted them. With a copy downloaded from EASA under those terms,
+`doc29.anp.read_database(folder)` reads its tables from the folder by their files'
+names (aircraft, NPD, spectral classes, fixed-point profiles, jet and propeller
+engine coefficients, aerodynamic coefficients, default weights, departure and
+approach procedural steps), and `Database.profile` flies an aircraft's procedure where
+the database has it, else its fixed-point profile. The readers take the fields
+Volume 2 Appendix G lists, as Volume 3's workbooks lay them out; they have not been
+tried on a download of the database.
 
 Its levels agree with all of Volume 3's reference results: the 99 levels at its
 receptors within 0.006 dB, its 12 grids of 37,458 points at 0.003 dB rms, and its
 3516 rows of segment results term by term, the segments' places within 7.3 m: the
 differences come from where Volume 3 puts its cuts by speed and from its conversion of
 metres to feet ([the check](validation.md#aircraft-noise-against-doc-29-volume-3)).
-What it leaves out for now: the flight performance of Volume 2 Appendix B (profiles
-from procedural steps, the cases fly fixed-point profiles), bank angles from the turns
-(a segment takes the bank it is given; Volume 3's cases fly level), the dispersion of
-tracks round a backbone, the NPD curves recalculated for another atmosphere (Appendix
-D), the line-of-sight blockage of terrain, levels summed over many movements (LAeq,
-Lden) and contours. Volume 3 gives no reference maximum levels, so the LAmax is not
-checked.
+Its flight profiles agree with all 26 of Volume 3's (Part 2: JETW and PROP arriving
+and departing at sea level and at 2000 and 5000 ft, at 15 and 40 °C, into headwinds of
+-5 to 8 kt): their 314 points' heights, speeds and thrusts to Volume 3's rounding,
+their distances within 0.15 ft. Volume 3's profiles differ from Volume 2's printed
+equations in three places, where the package follows Volume 3
+([the check](validation.md#flight-profiles-against-doc-29-volume-3)).
+
+What it leaves out for now: bank angles from the turns (a segment takes the bank it is
+given; Volume 3's cases fly level, and the performance calculation flies turns as
+straight), the dispersion of tracks round a backbone, the NPD curves recalculated for
+another atmosphere (Appendix D), the line-of-sight blockage of terrain, levels summed
+over many movements (LAeq, Lden) and contours. Volume 3 gives no reference maximum
+levels, so the LAmax is not checked, and no idle steps of an approach away from sea
+level in the standard atmosphere, which Appendix B adjusts so that the aircraft slows
+as it does there: those are checked against that definition only.
 
 ## Vibration through the ground
 

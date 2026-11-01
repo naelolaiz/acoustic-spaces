@@ -45,6 +45,10 @@
   curves along its flight path's segments, with Volume 3's three hypothetical aircraft
   (the ANP database's own may not be passed on), checked by the new
   `validation/doc29_reference.py` against all of Volume 3's reference levels.
+- Doc 29's flight performance: `doc29.performance` makes an aircraft's profile from its
+  procedural steps by Volume 2 Appendix B, matching all 26 of Volume 3 Part 2's
+  reference profiles, and `doc29.anp.read_database` reads a copy of the ANP database
+  one downloads under its terms.
 
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with

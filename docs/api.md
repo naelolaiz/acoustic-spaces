@@ -182,7 +182,11 @@ Rotating sound fields, and decoding them to the ears:
 
 .. automodule:: acoustic_spaces.doc29.noise
 
+.. automodule:: acoustic_spaces.doc29.performance
+
 .. automodule:: acoustic_spaces.doc29.volume3
+
+.. automodule:: acoustic_spaces.doc29.anp
 ```
 
 ## Ground-borne vibration

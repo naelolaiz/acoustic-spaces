@@ -1,0 +1,10 @@
+Case Number,Operation Mode,Aircraft Identifier,Procedure,Elevation,Temperature (°C),Headwind (kt),S/L Pressure (in-Hg),Local airfied Pressure (in-Hg)
+2A,A,JETW,Descend,0,15,0,29.92,29.92
+2B,A,JETW,Level_Decel,0,15,0,29.92,29.92
+2C,A,JETW,Level_Idle,0,15,0,29.92,29.92
+2D,A,JETW,Descend_Decel,0,15,0,29.92,29.92
+2E,A,JETW,Descend2,0,15,0,29.92,29.92
+6A,A,JETW,Descend,0,15,8,29.92,29.92
+6B,A,JETW,Level_Decel,0,15,8,29.92,29.92
+6C,A,JETW,Level_Idle,0,15,8,29.92,29.92
+6E,A,JETW,Descend2,0,15,8,29.92,29.92

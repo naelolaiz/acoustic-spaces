@@ -395,9 +395,12 @@ Movement:
   the NPD curves along the flight path's segments, with Volume 3's three hypothetical
   aircraft, checked against all of Volume 3's reference levels, grids and segment
   results.
-- [ ] Doc 29's flight performance (Volume 2 Appendix B): profiles from procedural
-  steps, checked against Volume 3 Part 2; bank angles in turns; tables read from a copy
-  of the ANP database of one's own.
+- [x] Doc 29's flight performance (Volume 2 Appendix B): profiles from procedural
+  steps at any aerodrome, checked against all of Volume 3 Part 2's reference profiles;
+  tables read from a copy of the ANP database of one's own.
+- [ ] Doc 29's bank angles in turns: from the ground track's turn radii (Volume 2
+  Appendix B5, eq. B-14) for the engines' installation correction, and their effect on
+  the climb in the performance calculation.
 - [ ] Aircraft taking off, landing and flying over in a scene, heard in a demo, its
   levels checked against Doc 29's.
 - [x] Ground-borne vibration from trains, trams and construction plant, and the rumble

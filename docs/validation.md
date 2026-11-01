@@ -3382,9 +3382,56 @@ before touchdown for the jets, 328.1 m for the turboprop). The azimuth of the
 start-of-roll directivity is taken in the plane of the runway, as Volume 3 takes it
 (straight behind a source 1 m up it is 180 degrees).
 
-What is not checked: the maximum levels (Volume 3 gives none), the flight performance
-of Volume 2 Appendix B (the cases fly fixed-point profiles) and banked turns (the cases
-fly them level).
+What is not checked: the maximum levels (Volume 3 gives none) and banked turns (the
+cases fly them level).
+
+## Flight profiles against Doc 29 Volume 3
+
+The same script holds `acoustic_spaces.doc29.performance`, the flight performance of
+Volume 2 Appendix B (see [Aircraft by ECAC Doc 29](outdoor.md#aircraft-by-ecac-doc-29)),
+against the reference profiles of Volume 3 Part 2: JETW and PROP flying departure and
+approach procedures, nine arrivals and seventeen departures (its tables C-7 and C-8),
+and the fixed-point profiles Volume 3 gives for them (D-1 and D-2, which the package
+holds, to 0.1 ft, kt and lb). The cases fly from sea level and from 2000 and 5000 ft,
+at 15 and 40 °C, at sea-level pressures of 29.92 and 30.71 inHg, into headwinds of -5,
+0 and 8 kt; the departures climb at constant speed, accelerate at a rate of climb or
+with a share of the thrust, cut back to climb thrust or deeply to the minimum reduced
+thrust, and fly level at constant speed or accelerating; the arrivals descend at
+constant speed or decelerating, fly level at constant speed, decelerating or at idle,
+and descend at idle.
+
+**The profiles.** Every case has as many points as Volume 3's, 314 in all, and every
+point's height, true airspeed and corrected net thrust per engine agree to Volume 3's
+rounding (within 0.05 ft, kt and lb). The distances along the track agree within
+0.15 ft; Volume 3's own distances for the same step differ by as much between cases
+(ICAO_A's acceleration from 3787.5 ft is 4678.3 ft long in case 6, 4678.5 ft in case
+74, with the same start).
+
+Volume 3's profiles differ from Volume 2's printed equations in three places, and the
+package follows Volume 3's:
+
+- A propeller aircraft's thrust at the middle of a climb (eq. B-12 in B6.1.2) takes the
+  true airspeed there of the climb's calibrated airspeed, as the jets' thrust takes the
+  middle's altitude, not the rms of the two ends' true airspeeds that Volume 2 prints:
+  that puts PROP's climbs up to 545 ft farther along at 10,000 ft.
+- The deceleration of a Descend-Decel step (eq. B-41) takes the speeds along the path
+  over the ground, the true airspeeds less w/cos γ, where Volume 2 prints the true
+  airspeeds less w, divided by cos γ: that moves the thrust by up to 9.3 lb.
+- An arrival flies at 90 % of the greatest landing weight, as Volume 2 B7 says
+  (143,299.8 lb), not at the 143,300 lb of the default weights table (C-5): 0.12 lb.
+
+Volume 3's approach procedures are taken as its table C-6.2 prints them, to 0.1 ft,
+kt and degree, which its profiles are computed from: its workbook's steps have more
+digits (49.868766 ft where the table prints 49.9), which move the profiles by up to
+0.62 ft and 0.86 lb. Its table gives the lengths of the Level-Idle steps in the column
+of the descent angle; they are the steps' distances.
+
+What is not checked: the idle steps of an approach away from sea level in the
+standard atmosphere, which Appendix B7.1.2 and B7.1.4 adjust so that the aircraft
+slows as it does there (all of Volume 3's arrivals are at sea level in the standard
+atmosphere; the tests check that the deceleration holds), a runway's gradient (all
+of its runways are level), the noise of these profiles (Volume 3 gives none) and
+turns (the calculation flies them straight).
 
 ## Ground-borne vibration against the FTA's manual
 

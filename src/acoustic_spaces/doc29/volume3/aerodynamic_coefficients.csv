@@ -1,0 +1,11 @@
+Aircraft Identifier,Operation Type,Flap Identifier,B (ft/lb),C/D (kt/sqrt(lb)),R
+JETW,A,5,-,-,0.07
+JETW,A,15,-,-,0.075
+JETW,A,25,-,0.375,0.1
+JETW,A,30,-,0.35,0.12
+JETW,A,ZERO,-,-,0.055
+JETW,D,1,-,-,0.06
+JETW,D,5,0.0075,0.4,0.07
+JETW,D,ZERO,-,-,0.055
+PROP,D,17,0.0091,0.365,0.11
+PROP,D,ZERO,-,-,0.08
