@@ -39,7 +39,8 @@ published apart from the models they come from.
   al. measured over ballast to change little ("Sound propagation and audibility of
   train horns", ISVR and RSSB), by its harmonics and by the engine; and each note's
   A-weighted level against its C-weighted one, by octave bands as the engine weights
-  it and harmonic by harmonic (IEC 61672-1).
+  it and harmonic by harmonic (IEC 61672-1); and its two notes together, as a chord,
+  against the 109 dB(C) EN 15153-2 allows a group of horns.
 - **The car's table.** The car's sound power by Table F-1 of CNOSSOS-EU as amended in
   2021 (:mod:`acoustic_spaces.demos.road`) and by the table of Directive (EU) 2015/996,
   which the car of acoustic-spaces 4.0.1 had, from 30 to 130 km/h.
@@ -354,7 +355,8 @@ def check_train_horn(folder: Path) -> dict:
     EN 15153-2's site over the ballast in the engine, against the 109 dB(C) its sound
     power is made to, and in a free field; the A-weighted level there with the horn from
     0.5 to 3.0 m up (Toward et al.: hardly any change at 25 m), by its harmonics and by
-    the engine; and each note's A-weighted level against its C-weighted one."""
+    the engine; each note's A-weighted level against its C-weighted one; and the two
+    notes together, as a chord, against the 109 dB(C) the group is made to."""
     kind, site = horn.TRAIN_HORN, horn.TRAIN_SITE
     out: dict = {"notes_hz": [f for (f,) in kind.notes]}
     for (f,), (low, high) in zip(kind.notes, horn.TRAIN_NOTES_HZ, strict=True):
@@ -392,6 +394,17 @@ def check_train_horn(folder: Path) -> dict:
             f"field {free_c:.1f}; A-weighted {a_bands:+.1f} dB against C by octave bands, "
             f"{exact:+.1f} harmonic by harmonic"
         )
+    # Its two notes together, as a chord: the two 109 dB(C) together, a group's level.
+    chord = horn.blast_power(RATE, horn.TRAIN_CHORD)
+    out["chord"] = {
+        "site_db_c": c_weighted(np.array(over) + chord),
+        "free_db_c": c_weighted(np.array(alone) + chord),
+    }
+    print(
+        f"  the chord, {kind.at_m:g} m ahead over the ballast: the engine gives "
+        f"{out['chord']['site_db_c']:.1f} dB(C) (made to {kind.on_axis_db:g}), in a free "
+        f"field {out['chord']['free_db_c']:.1f}"
+    )
     # Toward et al.'s horn over the ballast at heights of 0.5 to 3.0 m, its low note
     # (their horn's 368 Hz), the A-weighted level 25 m ahead, re the horn at 2.2 m.
     note = 1

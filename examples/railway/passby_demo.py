@@ -20,9 +20,10 @@ spectrum of its sources there; `--input NAME=WAV` plays a dry recording of yours
 each of them instead. `--horn blasts` sounds the train's warning horn too, the
 example's `train_horn` at its front 2.0 m above the rail top: its high note (660 Hz)
 and its low note (370 Hz) in turn, each 109 dB(C) 25 m ahead, the most EN 15153-2
-allows, a second each every 4 s. Run it from the folder of the railway example (`acoustic-spaces
-examples --copy . railway && cd railway`), in the Python environment acoustic-spaces is
-installed in, with ffmpeg on the PATH:
+allows, a second each every 4 s; `--horn chord` sounds the two together. Run it from
+the folder of the railway example (`acoustic-spaces examples --copy . railway && cd
+railway`), in the Python environment acoustic-spaces is installed in, with ffmpeg on
+the PATH:
 
     python passby_demo.py sound   # demo/train/train.wav, train_roof.wav, ...: dry, a column a point
     python passby_demo.py scene   # scene_demo.yaml: the train alone, at --speed, with Doppler

@@ -576,22 +576,22 @@ wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and vi
   every 10 m up, and a 3.5 m/s breeze) and the village's (a 1 m/s breeze among the
   houses). The breeze and the cool air bend the sound down to the water, which gives it
   back almost whole. `scene_still.yaml` is the same scene with no atmosphere.
-- **What it gives.** At the bedroom window the evening's weather makes the song 2.3 dB(A)
-  louder than still air would, in the garden 4.2 dB; behind the stage, upwind, it is
-  0.6 dB quieter, and on the boat 1 dB quieter. (With the sound system the example's
-  single source was, radiating every way alike, the window gained 4.8 dB: the arrays send
-  less of the sound up, where the weather bends it down to the water.)
-- **How loud.** From the audience to the far shore the sound drops by 20 to 25 dB(A),
+- **What it gives.** At the bedroom window the evening's weather makes the song 7.1 dB(A)
+  louder than still air would, in the garden 5.3 dB; behind the stage, upwind, it is
+  0.5 dB quieter, and on the boat 1.0 dB quieter. The window gains most: what the
+  weather bends down comes in off the water as well as straight, and the house's wall
+  beside the window gives back each of those again.
+- **How loud.** From the audience to the far shore the sound drops by 24 to 25 dB(A),
   too much to hear the far places in a video, so each stop is turned up to the
   audience's loudness and its caption says how much quieter the place really is, in
   dB(A). The loudness is K-weighted, as meters weigh it, not A-weighted: the far places
   and the back of the stage keep little but bass (the array boxes radiate every way below
   250 Hz and the water gives the low end back whole), which the A weighting all but
   leaves out, so matching dB(A) would put their bass far above the audience's. The window
-  in still air keeps the gain of the window in the evening's weather, so the 2.3 dB is
+  in still air keeps the gain of the window in the evening's weather, so the 7.1 dB is
   heard.
 - **The cuts.** Each place's mix is shifted earlier by the time the loudest sound takes
-  to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.65 s
+  to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.66 s
   at the window), so that the beat runs on across each 1 s crossfade, every 8 bars.
 - **The pictures** draw the lake from above with the wind's arrows, the weather zones and
   their weather, the arrays and the subwoofers with cones the way they aim, and the
@@ -946,7 +946,7 @@ km/h), `--speed` how fast it runs (km/h; by default the train's own above, whate
 the speed of the example's walk: the Run demo window's **Speed** reads *the train's
 own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in ballast;
 `slab`, slab track; `slab_absorber`, slab track with absorbers; `level_crossing`),
-`--horn off` the train's warning horn (`blasts` sounds it, see below), `--indoors off`
+`--horn off` the train's warning horn (`blasts` or `chord` sounds it, see below), `--indoors off`
 where it is heard (see below), `--step 1` how
 far apart the train is simulated along its walk (m), `--hrtf me.sofa` a measured head,
 `--input train=WAV` a dry recording of yours (`train_roof=WAV` and
@@ -1004,27 +1004,40 @@ km/h) unless `--speed` says.
   harmonics, its sound power taken from that level with the site's ground reflection
   taken out, harmonic by harmonic: 140.2 dB(A) while the high note sounds and 139.2
   while the low one does, 136.4 dB(A) averaged over its blasts and pauses, 5.8 dB(A)
-  over the regional train's. Its blasts, its height on the train, the measuring site's
-  ground and microphone height, and its directivity (the measured siren's) are
-  assumptions; see [Validation](validation.md#sirens-and-road-vehicles-against-their-rules).
-- **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors`): a house stands at each
-  listener, as far from the track, and the pass is heard in its living room:
-  `train_and_rumble` the train through the room's closed window and the rumble the
-  ground's vibration makes in it, `train` the train alone, `rumble` the rumble alone
-  (`tram_and_rumble` and `tram` for the tram). The window is AGC's 4-16-4 double glazing
-  as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82 m² of it into a room
-  of 50 m³; by EN ISO 12354-3 each octave band in the room is the free field's plus 3 dB
-  (the façade's reflection) less the window's sound reduction index less 10 lg(V / (6
-  T0 S)) = 9.6 dB (`acoustic_spaces.facade`). That takes the S-Bahn at 80 km/h, 7.5 m
-  away, 32 to 35 dB(A) down, near the 31.6 dB that Rw + Ctr gives for traffic's
-  spectrum. The rumble is the FTA's general method (see [Vibration through the
-  ground](outdoor.md#vibration-through-the-ground)) at each moment of the pass: the
-  train's curve at the distance of its nearest wheels, the house's floor 3 dB over the
-  ground, its rooms' rumble 50 dB under that in dB(A), played as noise in the third
-  octave at 25 Hz, the same in both ears. As the train runs past the house it is the
-  rumble the table there gives 25 m away; 7.5 m away it is 34.0 dB(A) for the S-Bahn
-  and 48.9 for the regional train. The room's own reverberation is not added, and the
-  sound keeps the direction it comes from outdoors.
+  over the regional train's. `--horn chord` sounds the two notes together in the same
+  blasts, which EN 15153-2 allows, the two 109 dB(C) together (its level for a group of
+  horns sounded at once; `TRAIN_CHORD`): 139.7 dB(A) while it sounds, 136.4 averaged.
+  Its blasts, its height on the train, the measuring site's ground and microphone
+  height, and its directivity (the measured siren's) are assumptions; see
+  [Validation](validation.md#sirens-and-road-vehicles-against-their-rules).
+- **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors`): a listener 0.5 to 2 m in
+  front of a building's wall, where ISO 1996-2 measures in front of a façade, hears the
+  pass in the room behind it, and the others hear it outdoors. The railway's
+  `house_18m` stands 2 m in front of a house 20 m from the track; the street's pavement
+  and balcony stand in front of its houses and its offices. `train_and_rumble` plays the
+  train through the room's closed window and the rumble the ground's vibration makes in
+  it, `train` the train alone, `rumble` the rumble alone (`tram_and_rumble` and `tram`
+  for the tram). The room is EN ISO 12354-3's, not the building's geometry: AGC's
+  4-16-4 double glazing as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82
+  m² of it into a room of 50 m³. Each octave band in the room is the simulated level at
+  the listener, the façade's reflection in it, less D_2m,nT = R + 10 lg(V / (6 T0 S)),
+  the window's sound reduction index plus 9.6 dB (`acoustic_spaces.facade`); for
+  traffic's spectrum that is Rw + Ctr + 9.6 = 34.6 dB. The rumble is the FTA's general method (see [Vibration
+  through the ground](outdoor.md#vibration-through-the-ground)) at each moment of the
+  pass: the train's curve at the distance from its nearest wheels to the room's wall
+  behind the listener, the floor 3 dB over the ground, its rooms' rumble 50 dB under that
+  in dB(A), played as noise in the third octave at 25 Hz, the same in both ears: in the
+  railway's house 27.5 dB(A) for the S-Bahn and 41.3 for the regional
+  train. The room's own reverberation is not added, and the sound keeps the direction it
+  comes from outdoors.
+- **What is felt**: each listener's caption gives how hard the floor of its house, or
+  outdoors the ground under it, shakes at most during the pass, in VdB (the FTA's
+  curves, which are the ground's), and whether that is felt, from about 65 VdB (the
+  manual's threshold of perception). Outdoors nothing rumbles: the manual counts
+  ground-borne noise only inside buildings. Each listener's vibration is also a track
+  for a bass shaker, `walk/<listener>.shaker.wav`, and the tour's `tour.shaker.wav`:
+  noise in the third octave at 25 Hz whose RMS is the vibration's velocity, every
+  listener at one gain, its full scale in `walk.json` (`shaker`).
 - **Against Schall 03's own sum** (`validation/rail_sources.py`): in a free field, the
   engine's pass of the S-Bahn at 80 km/h and of the regional train at 160 km/h, 7.5 m
   from the track 1.2 m above the rail top and 25 m away 3.5 m above it, gives the same
@@ -1210,7 +1223,8 @@ python works_demo.py all   # or scene, feeds, simulate, render, video one at a t
 Options: `--blows 480` how many blows a minute the breaker strikes (Epiroc's MB 1650, a
 1650 kg breaker, strikes 320 to 640), `--seconds 20` how long each listener is heard,
 `--listeners pavement,garden` which listeners and in which order (every one in use by
-default; `--tour`, its earlier name, still works), `--hrtf me.sofa` a measured head, `--input
+default; `--tour`, its earlier name, still works), `--indoors off` where they are heard
+(see below), `--hrtf me.sofa` a measured head, `--input
 NAME=WAV` a dry recording of yours instead of a made sound (`breaker`, `generator`,
 `dumper` or `dumper_alarm`). The scene with the works alone goes to `scene_works.yaml`,
 everything else to `demo_works/`. In the editor, **Simulation > Run demo…** on the
@@ -1258,6 +1272,21 @@ street's scene has it beside the pass-by demo.
   change a few tens of centimetres away). The engines' firing, a row of tones, comes
   out within 1.1 dB of the table's; the breaker's blows, noise, within 0.4 dB. The
   captions give the octaves' levels.
+- **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors.StillHouses`): as in [Trains
+  passing by](#trains-passing-by), the pavement's listener, 2 m in front of the houses,
+  and the balcony's, 1 m in front of the offices, hear the works in a room behind that
+  wall, and the garden hears them outdoors: `works_and_rumble` the works through the
+  closed window and the rumble of the breaker's and the dumper's vibration, `works` the
+  window alone, `rumble` the rumble alone. The vibration is each machine's level at its
+  distance from the room's wall by the FTA's eq. 7-3 from table 7-4 (a hoe ram, 87 VdB
+  at 25 ft; loaded trucks, 86 VdB), their energies added, with no adjustment for the
+  building, as the manual compares plant's level with its limits as it is; the rumble is
+  50 dB under it in dB(A), as the trains'. It is 29.8 dB(A) in the houses (their floor
+  at 79.8 VdB) and 25.5 in the offices (75.5), and steady, as the breaker's blows come
+  faster than noise at 25 Hz can swell and fade. The garden's ground shakes at 66.1
+  VdB, just felt. The captions give what is felt at each listener, and each one's
+  vibration is a bass shaker's track (`<listener>.shaker.wav` beside the mixes,
+  `tour.shaker.wav`), as the trains' are.
 
 What it leaves out: the dumper stands still while its alarm sounds, as if it reversed on
 the spot; the machines' bodies are not in the scene, so nothing of the dumper shields

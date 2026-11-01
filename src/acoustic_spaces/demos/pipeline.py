@@ -356,15 +356,18 @@ def render_mixes(
     equal_power: bool = False,
     first: str = "",
     inputs: dict[str, Path] | None = None,
+    post: Callable[[Mix, np.ndarray, int], np.ndarray] | None = None,
 ) -> dict:
     """Every mix as ``folder/<key>.<format>.wav``, with one gain for all (the loudest
     peak at -1 dBFS), and ``folder/seats.json``: the rate, the format, the gain and
     each mix's ``lag_s`` (when its sound arrives), ``rms_db`` (gated, A-weighted),
     ``loudness_db`` (K-weighted), ``relative_db`` (against the loudest), length and the
     ``inputs`` it played. ``inputs`` (``--input``) replaces the feeds of the sources it
-    names (:func:`with_inputs`). Mixes that exist, newer than their feeds and responses
-    and made with the same inputs, are kept unless ``--again``, their earlier gain
-    undone."""
+    names (:func:`with_inputs`). ``post`` changes each mix as it is made, before the
+    gain (a house's window and rumble, :mod:`acoustic_spaces.demos.indoors`); a mix's
+    ``info["post"]`` says how. Mixes that exist, newer than their feeds and responses
+    and made with the same inputs and the same ``post``, are kept unless ``--again``,
+    their earlier gain undone."""
     fmt, label = args.format, output_label(args)
     seats_path = folder / SEATS
     previous = read_json(seats_path) if seats_path.exists() else {}
@@ -381,7 +384,10 @@ def render_mixes(
         out = path_of(mix)
         if not (reuse and out.exists() and mix.key in previous.get("seats", {})):
             return False
-        if previous["seats"][mix.key].get("inputs", {}) != mix.info.get("inputs", {}):
+        before = previous["seats"][mix.key]
+        if before.get("inputs", {}) != mix.info.get("inputs", {}):
+            return False
+        if before.get("post") != mix.info.get("post"):
             return False
         made = [mix.simulation.results / PARAMETERS, *mix.feeds.values()]
         return all(out.stat().st_mtime >= path.stat().st_mtime for path in made if path.exists())
@@ -399,6 +405,9 @@ def render_mixes(
         else:
             auralize(mix.simulation.results, mix.feeds, mix.listener, label, out, equal_power)
         x, rate = audio.read(out)
+        if post is not None and not keep[mix.key]:
+            x = post(mix, x, rate)
+            audio.write(out, x, rate)
         peaks[mix.key] = float(np.abs(x).max()) / (old_gain if keep[mix.key] else 1.0)
     gain = 10.0 ** (-1.0 / 20.0) / max(peaks.values())
     info: dict[str, dict] = {}
@@ -474,12 +483,16 @@ def tour_audio(
     *,
     crossfade_s: float = 1.0,
     fade_out_s: float = 4.0,
-    peak_db: float = -1.0,
+    peak_db: float | None = -1.0,
+    kind: str | None = None,
 ) -> np.ndarray:
     """The tour as stereo: each stop's mix shifted earlier by its arrival (``lag_s`` in
-    ``seats``) so the music runs on across a cut, crossfades of ``crossfade_s`` centred
-    on the cuts between joined stops (:func:`crossfaded`: the power runs on, however
-    alike the two mixes are), a fade at the end and the peak at ``peak_db``."""
+    ``seats``) so the music runs on across a cut, turned up as the stop is, crossfades
+    of ``crossfade_s`` centred on the cuts between joined stops (:func:`crossfaded`: the
+    power runs on, however alike the two mixes are), a fade at the end and the peak at
+    ``peak_db``. With a ``kind``, each stop's ``<listener>.<kind>.wav`` instead of its
+    mix (what is felt there, ``"shaker"``), neither turned up nor brought to a peak, as
+    it is."""
     rate, fmt = seats["rate"], seats["format"]
     length = round(stops[-1].end * rate)
     out = np.zeros((length, 2))
@@ -489,10 +502,11 @@ def tour_audio(
     previous: np.ndarray | None = None  # the stop before, when it is joined to this one
     for k, stop in enumerate(stops):
         seat = seats["seats"][stop.key]
-        x = audio.stereo(audio.read(folder / f"{stop.key}.{fmt}.wav")[0])
+        x = audio.stereo(audio.read(folder / f"{stop.key}.{kind or fmt}.wav")[0])
         offset = round((stop.at - stop.start) * rate)  # the mix's start in the tour
         x = audio.shifted(x, round(seat.get("lag_s", 0.0) * rate) - offset, length)
-        x = x * 10.0 ** (stop.gain_db / 20.0)
+        if kind is None:
+            x = x * 10.0 ** (stop.gain_db / 20.0)
         a, b = round(stop.at * rate), round(stop.end * rate)
         before = k > 0 and joined[k - 1] and half > 0
         after = k < len(stops) - 1 and joined[k] and half > 0
@@ -509,7 +523,7 @@ def tour_audio(
     if fade:
         out[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
     peak = float(np.abs(out).max())
-    if peak > 0:
+    if peak > 0 and peak_db is not None and kind is None:
         out *= 10.0 ** (peak_db / 20.0) / peak
     return out
 

@@ -22,6 +22,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import overload
 
 import numpy as np
 
@@ -31,6 +32,8 @@ INCH_M = 0.0254
 MILE_KM = 1.609344
 #: The reference of a vibration level in VdB: 1 micro-inch per second (m/s).
 VELOCITY_REFERENCE_M_S = 1e-6 * INCH_M
+#: Section 5.2: "the threshold of perception for humans is approximately 65 VdB".
+PERCEPTION_VDB = 65.0
 #: How near and how far from the track the manual draws its base curves (figure 6-4):
 #: 10 to 300 ft from the track's centreline (m), the diagonal distance for a subway.
 NEAREST_M, FARTHEST_M = 10.0 * FOOT_M, 300.0 * FOOT_M
@@ -64,15 +67,21 @@ class Curve:
                 f"the manual draws its curves from {NEAREST_M:.2f} to {FARTHEST_M:.1f} m "
                 f"(10 to 300 ft) from the track, not {distance_m:g} m"
             )
+        return float(self.levels(np.array([distance_m]), speed_kmh)[0])
+
+    def levels(self, distances_m, speed_kmh: float | None = None) -> np.ndarray:
+        """:meth:`level` at each of ``distances_m`` (m), extended as ``extend`` does."""
+        d = np.asarray(distances_m, dtype=float)
         a0, a1, a2, a3 = self.coefficients
-        x = math.log10(min(max(distance_m, NEAREST_M), FARTHEST_M) / FOOT_M)
-        level = a0 + a1 * x + a2 * x**2 + a3 * x**3
-        if distance_m > FARTHEST_M:
-            slope = a1 + 2.0 * a2 * x + 3.0 * a3 * x**2
-            level += slope * math.log10(distance_m / FARTHEST_M)
+        x = np.log10(np.clip(d, NEAREST_M, FARTHEST_M) / FOOT_M)
+        out = a0 + a1 * x + a2 * x**2 + a3 * x**3
+        slope = a1 + 2.0 * a2 * x + 3.0 * a3 * x**2
+        out = out + np.where(
+            d > FARTHEST_M, slope * np.log10(np.maximum(d, FARTHEST_M) / FARTHEST_M), 0.0
+        )
         if speed_kmh is not None:
-            level += speed_db(speed_kmh, self.reference_kmh)
-        return level
+            out = out + speed_db(speed_kmh, self.reference_kmh)
+        return out
 
 
 #: Table 6-9 and 6-10: the three base curves. The locomotive-powered curve is for trains
@@ -202,18 +211,21 @@ class Line:
             conditions = vehicles + track
         return conditions + TREATMENTS[self.treatment]
 
-    def path_db(self, distance_m: float) -> float:
+    @overload
+    def path_db(self, distance_m: float) -> float: ...
+    @overload
+    def path_db(self, distance_m: np.ndarray) -> np.ndarray: ...
+    def path_db(self, distance_m):
         """Table 6-12's adjustment for the structure and the ground, ``distance_m`` from
-        the track (dB)."""
+        the track (dB), a number or an array of them."""
         if self.ground == "efficient":
-            ground = EFFICIENT_SOIL_DB
+            ground = EFFICIENT_SOIL_DB + 0.0 * np.asarray(distance_m, dtype=float)
         elif self.ground == "rock":
-            ground = float(
-                np.interp(distance_m, [d for d, _ in ROCK_DB], [db for _, db in ROCK_DB])
-            )
+            ground = np.interp(distance_m, [d for d, _ in ROCK_DB], [db for _, db in ROCK_DB])
         else:
-            ground = 0.0
-        return STRUCTURES[self.structure] + ground
+            ground = 0.0 * np.asarray(distance_m, dtype=float)
+        out = STRUCTURES[self.structure] + ground
+        return float(out) if np.ndim(out) == 0 else out
 
 
 def ground_level(
@@ -484,16 +496,38 @@ def horizontal_distance(
     """The distance (m) in plan from ``point`` (x, y[, z]) to the nearest point of
     ``path``, a line through (x, y[, z]) points, or the outline of a footprint when
     ``closed``."""
-    p = np.asarray(point, dtype=float)[:2]
+    return float(horizontal_distances([point], path, closed)[0])
+
+
+def horizontal_distances(points, path, closed: bool = False) -> np.ndarray:
+    """(n,) :func:`horizontal_distance` of each of ``points`` (n, 2 or 3)."""
+    p = np.atleast_2d(np.asarray(points, dtype=float))[:, :2]
+    return np.linalg.norm(nearest_points(p, path, closed) - p, axis=1)
+
+
+def nearest_points(points, path, closed: bool = False) -> np.ndarray:
+    """(n, 2) the point of ``path`` (as :func:`horizontal_distance` takes it) nearest
+    each of ``points`` (n, 2 or 3), in plan."""
+    p = np.atleast_2d(np.asarray(points, dtype=float))[:, None, :2]
     corners = np.asarray(path, dtype=float)[:, :2]
     if closed:
         corners = np.vstack([corners, corners[:1]])
-    if len(corners) == 1:
-        return float(np.linalg.norm(p - corners[0]))
     a, b = corners[:-1], corners[1:]
     ab = b - a
-    t = np.clip(np.einsum("ij,ij->i", p - a, ab) / np.einsum("ij,ij->i", ab, ab), 0.0, 1.0)
-    return float(np.min(np.linalg.norm(a + t[:, None] * ab - p, axis=1)))
+    lengths = np.einsum("ij,ij->i", ab, ab)
+    # A leg of no length (a point repeated, a ring closed on its first corner) is that
+    # point.
+    t = np.divide(
+        np.einsum("nij,ij->ni", p - a, ab),
+        lengths,
+        out=np.zeros((len(p), len(ab))),
+        where=lengths > 0.0,
+    )
+    nearest = a + np.clip(t, 0.0, 1.0)[..., None] * ab
+    ends = np.broadcast_to(corners[-1:], (len(p), 1, 2))
+    candidates = np.concatenate([nearest, ends], axis=1)
+    which = np.argmin(np.linalg.norm(candidates - p, axis=2), axis=1)
+    return candidates[np.arange(len(p)), which]
 
 
 __all__ = [
@@ -507,6 +541,7 @@ __all__ = [
     "GENERIC",
     "NEAREST_M",
     "NOISE_DB",
+    "PERCEPTION_VDB",
     "PLANT",
     "RUMBLE_HZ",
     "SPECIAL_BUILDINGS",
@@ -522,9 +557,11 @@ __all__ = [
     "floors_db",
     "ground_level",
     "horizontal_distance",
+    "horizontal_distances",
     "indoor_db",
     "level_of",
     "mm_s",
+    "nearest_points",
     "noise_level",
     "plant_level",
     "plant_ppv",

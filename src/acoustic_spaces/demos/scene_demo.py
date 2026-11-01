@@ -446,13 +446,17 @@ def listeners_of(args: argparse.Namespace, entries: list[dict]) -> list[str]:
     return [lis.name for lis in scene.listeners if lis.in_use and lis.name in simulated]
 
 
-def render(args: argparse.Namespace, demo: Demo | None = None) -> None:
+def render(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> None:
     """Every listener's mix (``--format``, binaural by default) with one gain for all, the
     loudest peak at -1 dBFS; ``auralize`` plays each feed at its source's sound power.
     The arrival time counts the sources that play, each at its sound power. When
     something moves, :func:`render_moving` makes the mixes instead. ``demo``, this one by
-    default, is the demo that runs it, whose commands the messages give."""
+    default, is the demo that runs it, whose commands the messages give. ``indoors``
+    (a :class:`~acoustic_spaces.demos.indoors.StillHouses`) hears each mix in the house
+    its listener stands in front of, or outdoors, and writes what is felt there."""
     moving = moving_of(args)
+    if moving and indoors is not None and indoors.house is not None:
+        raise SystemExit(f"error: --indoors hears a scene where nothing moves; {moving[0]} does")
     if moving:
         render_moving(args, moving, demo)
         return
@@ -462,12 +466,31 @@ def render(args: argparse.Namespace, demo: Demo | None = None) -> None:
     feeds = {name: work_of(args) / "feeds" / f"{name}.wav" for name in table["sources"]}
     powers = {s.name: s.sound_power_db for s in scene_of(args).sources if s.name in feeds}
     mixes = [
-        pipeline.Mix(name, simulation, name, feeds, weights=powers)
+        pipeline.Mix(
+            name,
+            simulation,
+            name,
+            feeds,
+            weights=powers,
+            info={} if indoors is None else indoors.info(name),
+        )
         for name in listeners_of(args, entries)
     ]
     if not mixes:
         raise SystemExit("error: no listener to render; the scene's listeners are all left out")
-    pipeline.render_mixes(mixes, work_of(args) / "seats", args)
+    post = None if indoors is None else indoors.post
+    folder = work_of(args) / "seats"
+    seats = pipeline.render_mixes(mixes, folder, args, post=post)
+    if indoors is not None and indoors.plant:
+        from acoustic_spaces.demos.indoors import write_shakers
+
+        rate = int(seats["rate"])
+        felt = {
+            seat["listener"]: indoors.shaker(seat["listener"], rate, round(seat["length_s"] * rate))
+            for seat in seats["seats"].values()
+        }
+        seats["shaker"] = write_shakers(folder, felt, rate)
+        pipeline.write_json(folder / pipeline.SEATS, seats)
 
 
 def format_of(args: argparse.Namespace, scene: Scene):
@@ -615,13 +638,14 @@ def tour_of(
     ]
 
 
-def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
+def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> None:
     """tour.wav, one still per stop, the thumbnail, and tour.mp4: the stills with a
     scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``). When
     something moves, the video is a moving picture instead: the walkers go along their
     walks as the piece plays, with a still of each stop. ``demo``, this one by default,
     is the demo that runs it: its commands and its settings go in the messages and on
-    the stills."""
+    the stills. ``indoors`` (a :class:`~acoustic_spaces.demos.indoors.StillHouses`),
+    the mixes heard in a house at each listener: the stills give the levels there."""
     demo = demo or DEMO
     from acoustic_spaces.demos import pictures, scene_pictures
     from acoustic_spaces.room import Room, outline_edges
@@ -637,6 +661,15 @@ def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
             f"error: the mixes in {folder} are of other walks; run first: "
             f"{demo.command('render', args)}"
         )
+    # The mixes heard where the stills say: outdoors, or in the houses --indoors asks.
+    if any(
+        seat.get("post") != (None if indoors is None else indoors.info(key).get("post"))
+        for key, seat in seats["seats"].items()
+    ):
+        raise SystemExit(
+            f"error: the mixes in {folder} were made for another --indoors; "
+            f"run first: {demo.command('render', args)}"
+        )
     stops = tour_of(args, seats, float(table["length_s"]), demo)
     audio = pipeline.tour_audio(
         stops,
@@ -647,6 +680,18 @@ def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
     )
     write(work / "tour.wav", audio, seats["rate"])
     print(f"wrote {work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    if seats.get("shaker"):
+        from acoustic_spaces.demos.indoors import tour_shaker
+
+        tour_shaker(
+            work,
+            stops,
+            folder,
+            seats,
+            seats["shaker"],
+            min(CROSSFADE_S, stops[0].length / 2),
+            min(FADE_OUT_S, stops[-1].length / 2),
+        )
     scene = moving_scene(args)
     data = scene.to_data()
     report = pipeline.read_json(results_of(args) / pipeline.PARAMETERS)
@@ -654,7 +699,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
     drawing = scene_pictures.Pictures(
         data,
         outline,
-        report,
+        report if indoors is None else indoors.report(report),
         seats["seats"],
         stops,
         playing=list(table["sources"]),
@@ -663,6 +708,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
         fmt=args.format,
         paths={(kind, item.name): knots(item) for kind, item in movers(scene)},
         movement=seats.get("movement"),
+        indoors=None if indoors is None else indoors.pictures(),
     )
     pictures.save(drawing.thumbnail(), work / "thumbnail.png")
     if moving:

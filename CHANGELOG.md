@@ -36,7 +36,8 @@
   against the rule for vehicles' horns in `validation/urban_sources.py`.
 - The railway's train can sound its warning horn (`passby_demo.py --horn blasts`): the
   TSI's 660 and 370 Hz notes in turn, each 109 dB(C) 25 m ahead as EN 15153-2 allows at
-  most (`demos.horn.TRAIN_HORN`), held against the rule in `validation/urban_sources.py`;
+  most (`demos.horn.TRAIN_HORN`), or together as a chord (`--horn chord`), held against
+  the rule in `validation/urban_sources.py`;
   `parameters.c_weighted` gives C-weighted levels.
 - Fixed: a pass-by demo run at `--speed` with some of a vehicle's sources left out
   (`--police-car siren`, `--fire-engine siren`) stopped at its walk, as the sources left
@@ -64,10 +65,19 @@
   the source against its NPD curves and the flights against Doc 29's own levels; the
   flights agree within 0.9 dB in the air but for the arrival's SEL (1.7 dB under), and
   part by up to 11.4 dB on the runway, where the engine reckons the ground in still air.
-- The railway's pass-by demo and the street's tram can be heard in a house at each
-  listener (`--indoors`): the train through a closed double-glazed window by EN ISO
-  12354-3 (the new `acoustic_spaces.facade`), the rumble of the ground's vibration by the
-  FTA's general method, or both.
+- The railway's pass-by demo, the street's tram and its road works can be heard indoors
+  (`--indoors`) by listeners in front of a building's wall, as the railway's new
+  `house_18m` is: through a closed double-glazed window by EN ISO 12354-3 (the new
+  `acoustic_spaces.facade`), the rumble of the ground's vibration by the FTA's general
+  method, or both. Every listener's caption says how hard the ground or the floor
+  shakes and whether that is felt, and a bass shaker's track plays it.
+- The railway, tree belt and lakeside concert examples trace image sources to the
+  second order, so the barrier's and the houses' reflections keep their partners off
+  the ground. Across the lake the evening's weather now makes the song 7.1 dB(A) louder
+  at the bedroom window than still air, as the house's wall gives back what comes in
+  off the water too (the docs' 2.3 dB was out of date: 4.4 at the first order). Behind the
+  tree belt's trees, their trunks' scattered sound now fills the ground's dip at 500 Hz
+  and 1 kHz: the garden there is 4.5 and 1.8 dB louder than without the wood.
 
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with
