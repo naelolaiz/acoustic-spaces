@@ -67,6 +67,25 @@ def test_levels_are_gated_and_weighted() -> None:
     assert audio.loudness_db(quiet, RATE) > audio.level_db(quiet, RATE) - 6.0
 
 
+def test_two_channels_are_gated_together() -> None:
+    """A recording's two channels are gated on their summed power, as BS.1770 gates
+    several channels: the right one pausing while the left plays counts its pause, as
+    in the mixdown, where gating each on its own leaves it out. One channel alone, or
+    two alike, give the level of one."""
+    tone = _tone(4.0)
+    pair = np.stack([tone, np.where(np.arange(len(tone)) < len(tone) // 2, 0.0, tone)], axis=1)
+    together = audio.channels_rms(pair, RATE)
+    rms = float(np.sqrt(np.mean(tone**2)))
+    assert together == pytest.approx(rms * np.sqrt(0.75), rel=0.01)  # 3/4 of the power
+    each = np.sqrt(
+        (audio.gated_rms(pair[:, 0], RATE) ** 2 + audio.gated_rms(pair[:, 1], RATE) ** 2) / 2
+    )
+    assert each == pytest.approx(rms, rel=0.01)  # the pause left out
+    assert audio.channels_rms(tone, RATE) == pytest.approx(audio.gated_rms(tone, RATE))
+    alike = np.stack([tone, tone], axis=1)
+    assert audio.channels_rms(alike, RATE) == pytest.approx(audio.gated_rms(alike, RATE))
+
+
 def test_lag_and_shift_line_two_takes_up() -> None:
     """``lag_of`` finds how far a signal runs behind another and ``shifted`` moves it
     back, which is how the tours bring a mix forward by its arrival."""
