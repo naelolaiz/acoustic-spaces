@@ -8,7 +8,7 @@
   sound power, in any scene's demo and the stadium's; the two channels now share one
   gain set from both gated together, not from the mixdown. The lakeside concert's
   subwoofers, fed the song's mixdown, played up to 3 dB under theirs; they are now
-  brought to the same level.
+  brought to the same level. Feeds made before in a work folder are made again.
 - Fixed: a tour played up to 3 dB louder at a crossfade between two seats of one piece;
   the crossfade now keeps the power running on however alike the two mixes are.
 - A moving source renders faster: the paths at a moment of the eddies are worked out

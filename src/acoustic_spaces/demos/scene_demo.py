@@ -92,6 +92,9 @@ from acoustic_spaces.scene import Scene
 FEED_RMS = 0.1
 #: The feeds, and what each source plays, in the work folder.
 FEEDS = "feeds.json"
+#: How the feeds are levelled, kept in FEEDS: feeds levelled otherwise (a stereo
+#: recording's channels from their mixdown, before 4.1.0) are made again.
+FEED_LEVELS = "channels gated together"
 #: --hrtf here: a scene names its own HRTFs in its binaural output.
 HRTF_HELP = (
     "binaural mixes through this SOFA file of HRTFs, your own or measured, instead of the "
@@ -347,6 +350,8 @@ def feeds_done(args: argparse.Namespace) -> bool:
         return False
     made = path.stat().st_mtime
     table = pipeline.read_json(path)
+    if table.get("levels") != FEED_LEVELS:
+        return False
     scene = _current(args.scene)
     if scene is None:
         return False
@@ -421,7 +426,13 @@ def feeds(args: argparse.Namespace) -> None:
         print(f"{name:>20}: silent (no signal)")
     pipeline.write_json(
         out / FEEDS,
-        {"rate": rate, "length_s": length / rate, "sources": table, "silent": silent},
+        {
+            "rate": rate,
+            "length_s": length / rate,
+            "levels": FEED_LEVELS,
+            "sources": table,
+            "silent": silent,
+        },
     )
     print(f"wrote {len(table)} feeds to {out}")
 

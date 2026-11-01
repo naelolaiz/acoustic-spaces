@@ -65,7 +65,7 @@ from acoustic_spaces.demos import (
     sibling,
 )
 from acoustic_spaces.demos.audio import channels_rms, gated_rms, mono, read, stereo, write
-from acoustic_spaces.demos.scene_demo import FEED_RMS
+from acoustic_spaces.demos.scene_demo import FEED_LEVELS, FEED_RMS
 
 #: The songs the demo can play (``--song``): the free songs of
 #: :mod:`acoustic_spaces.recordings`, each with the files it is made of (one here, a
@@ -155,7 +155,11 @@ def music_done(args) -> bool:
     """Whether the song and each loudspeaker's signal are there."""
     folder = music_folder(args)
     names = [song_of(args)["name"], *CHANNELS]
-    return all((folder / f"{name}.wav").exists() for name in names)
+    if not all((folder / f"{name}.wav").exists() for name in names):
+        return False
+    # Signals levelled otherwise (the song's raw channels, before 4.1.0) are made again.
+    song = folder / "song.json"
+    return song.exists() and pipeline.read_json(song).get("levels") == FEED_LEVELS
 
 
 def music_download(args) -> str | None:
@@ -184,7 +188,8 @@ def music_step(args) -> None:
         if level <= 0.0:
             raise SystemExit(f"error: {song['name']} is silent")
         write(folder / f"{name}.wav", y * (FEED_RMS / level), rate)
-    pipeline.write_json(folder / "song.json", {k: v for k, v in song.items() if k in SONG_KEPT})
+    kept = {k: v for k, v in song.items() if k in SONG_KEPT}
+    pipeline.write_json(folder / "song.json", kept | {"levels": FEED_LEVELS})
     print(f"wrote {', '.join(CHANNELS)} ({len(x) / rate:.0f} s of {song['name']}) to {folder}")
 
 
