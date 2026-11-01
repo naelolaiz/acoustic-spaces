@@ -126,11 +126,16 @@ class Pictures(scene_pictures.Pictures):
 
     def heard_at(self, listener: str, t: float) -> float | None:
         """The A-weighted level heard at ``listener`` ``t`` s into its pass (dB), as
-        simulated; None before the vehicle's sound arrives and after its last place's."""
+        simulated; None before the vehicle's sound arrives and after its last place's, and
+        while nothing of it is heard (a train's pass before its first bogie comes by)."""
         times = self.heard[listener]["heard_s"]
         if not times[0] <= t <= times[-1]:
             return None
-        return float(np.interp(t, times, self.heard[listener]["levels_a_db"]))
+        levels = np.asarray(self.heard[listener]["levels_a_db"], dtype=float)
+        k = int(np.searchsorted(times, t, side="right"))
+        if not np.all(np.isfinite(levels[max(k - 1, 0) : k + 1])):
+            return None
+        return float(np.interp(t, times, levels))
 
     def lines(self, k: int, t: float | None = None) -> list:
         """What a still of stop ``k`` says, ``t`` s into its pass."""

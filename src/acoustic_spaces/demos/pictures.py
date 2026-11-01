@@ -254,7 +254,9 @@ def rays(
     source is there (``levels``, dB, over the 24 dB below the loudest): its opacity from
     ``alpha[0]`` to the sum of both, its width from 1 to ``1 + width`` pixels;
     ``colour_of`` gives a source's colour from its name, ``plan`` maps its position (a
-    plan, a section)."""
+    plan, a section). A source whose level is not a number (minus infinity: nothing of it
+    heard there yet, as before a train's first bogie comes by) gets no line."""
+    levels = {name: v for name, v in levels.items() if math.isfinite(v)}
     if not levels:
         return
     top = max(levels.values())

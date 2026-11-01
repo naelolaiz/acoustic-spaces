@@ -264,7 +264,8 @@ class Pictures:
     def level_at(self, listener: str, t: float | None = None) -> float | None:
         """The A-weighted level of every playing source together (dB), as simulated, at
         ``t`` when something moves; None when the simulation gives none for one of them
-        (a response too short for its decay), rather than a sum that leaves it out."""
+        (a response too short for its decay), rather than a sum that leaves it out, and
+        when nothing of them is heard."""
         if t is not None and listener in self.along:
             k = self.moment(t)
             values = [
@@ -274,7 +275,8 @@ class Pictures:
             values = [self.levels.get((s["name"], listener)) for s in self.playing]
         if not values or any(v is None for v in values):
             return None
-        return 10.0 * math.log10(sum(10.0 ** (v / 10.0) for v in values))
+        energy = sum(10.0 ** (v / 10.0) for v in values)
+        return 10.0 * math.log10(energy) if energy > 0.0 else None
 
     def t30_at(self, listener: str) -> float | None:
         values = [self.t30.get((s["name"], listener)) for s in self.playing]

@@ -273,11 +273,24 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
     with the train's three sources alone at their front points' sound power, Schall 03's
     directivity beside it, facing the way it goes, and the pass: as long as the walk and
     the train, its level the parts' energies added, and each height's sound in the mix
-    as far under the rail top's as its level is."""
+    as far under the rail top's as its level is. The video's frames draw from its first
+    moment, before the first bogie is heard (its level minus infinity there), to its
+    last."""
     pytest.importorskip("PIL")
     from acoustic_spaces import Scene
     from acoustic_spaces.demos import audio, load, passby, pipeline
     from acoustic_spaces.synthesis import split_bands
+
+    # Without ffmpeg (--no-mp4) the video draws only its stills: draw its frames too.
+    drawn = []
+    real_animation = pipeline.animation
+
+    def animation(folder, duration, draw, *rest, **options):
+        for t in np.linspace(0.0, duration, 7):
+            drawn.append(draw(float(t)).size)
+        return real_animation(folder, duration, draw, *rest, **options)
+
+    monkeypatch.setattr(pipeline, "animation", animation)
 
     # Each height is rendered alone and the three are added: keep what is added.
     added = []
@@ -340,6 +353,8 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
         told = heard["parts"]["train"]["sel_a_db"] - heard["parts"][name]["sel_a_db"]
         assert told > 5.0 and under == pytest.approx(told, abs=1.5), name
     assert (work / "stills" / "00_tsi_7m5.png").exists()
+    assert len(drawn) == 7
+    assert facts["listeners"]["tsi_7m5"]["levels_a_db"][0] == -math.inf
     # Another track makes the sound again.
     again = demo.resolved(demo.parser().parse_args([*run, "--track", "slab"]))
     assert not demo.is_done(demo.step("sound"), again)
