@@ -28,7 +28,8 @@
   against the rule for vehicles' horns in `validation/urban_sources.py`.
 - The railway's train can sound its warning horn (`passby_demo.py --horn blasts`): the
   TSI's 660 and 370 Hz notes in turn, each 109 dB(C) 25 m ahead as EN 15153-2 allows at
-  most (`demos.horn.TRAIN_HORN`), held against the rule in `validation/urban_sources.py`;
+  most (`demos.horn.TRAIN_HORN`), or together as a chord (`--horn chord`), held against
+  the rule in `validation/urban_sources.py`;
   `parameters.c_weighted` gives C-weighted levels.
 - Fixed: a pass-by demo run at `--speed` with some of a vehicle's sources left out
   (`--police-car siren`, `--fire-engine siren`) stopped at its walk, as the sources left

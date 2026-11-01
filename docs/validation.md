@@ -3191,8 +3191,11 @@ microphone stands, and M. Toward et al., "Sound propagation and audibility of tr
 horns", ISVR and RSSB, measured train horns 1.5 m up), each harmonic's reflection off
 the ballast added in pressure and taken out of its sound power. The engine, which
 averages a reflection's interference over each band, gives the high note 108.8 dB(C)
-there and the low one 108.9, and 109.6 and 109.1 in a free field. Toward et al.
-measured a train horn of 368 Hz over ballast with the horn from 0.5 to 3.0 m up and
+there and the low one 108.9, and 109.6 and 109.1 in a free field. Sounded together as
+a chord (`--horn chord`), which EN 15153-2 allows, the two notes are made to 109 dB(C)
+together, its level for a group of horns; the engine gives 108.9 dB(C) there and 109.3
+in a free field. Toward et al. measured a train horn of 368 Hz over ballast with the
+horn from 0.5 to 3.0 m up and
 found virtually no difference at 25 m; the low note's A-weighted level there changes by
 +1.5 to 0 dB over those heights by its harmonics and by 0 to -0.5 dB in the engine.
 A-weighted, the low note is 2.4 dB under its C-weighted level harmonic by harmonic

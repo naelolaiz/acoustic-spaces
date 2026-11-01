@@ -251,6 +251,12 @@ class Vehicle:
         (:mod:`acoustic_spaces.demos.rail`)."""
         return Trail()
 
+    def fade_s(self, part: str) -> float:
+        """How long the sound of its source ``part`` fades in at the start of its pass
+        and out at its end (s): FADE_S, unless it sounds in blasts that rise and fall
+        of themselves (a horn's), whose first is not to be faded in."""
+        return FADE_S
+
     def sounding(
         self, args: argparse.Namespace, part: str, played, rate: int, at: np.ndarray
     ) -> np.ndarray | None:
@@ -272,9 +278,11 @@ class Vehicle:
         for a vehicle with a :meth:`house`."""
         raise NotImplementedError
 
-    def input_gain(self, part: str, x: np.ndarray, rate: int) -> float | None:
+    def input_gain(
+        self, args: argparse.Namespace, part: str, x: np.ndarray, rate: int
+    ) -> float | None:
         """The gain of ``x``, a recording ``--input`` gives the source ``part``, so that it
-        plays as loud as a made sound: its gated RMS
+        plays as loud as a made sound for the arguments ``args``: its gated RMS
         (:func:`~acoustic_spaces.demos.audio.gated_rms`) brought to SOUND_RMS, the RMS of
         a made sound that has no pauses; None when it is silent."""
         from acoustic_spaces.demos.road import SOUND_RMS
@@ -733,13 +741,14 @@ def feed(
     """What the vehicle (or its source ``part``) plays along its pass, at ``rate``: its
     made sound (:meth:`Vehicle.made`), or the file ``--input NAME=WAV`` gives it (mixed
     down to mono, cut to the pass, as loud as its made sound,
-    :meth:`Vehicle.input_gain`), faded in and out over
-    FADE_S."""
+    :meth:`Vehicle.input_gain`), faded in and out over its
+    :meth:`Vehicle.fade_s`."""
     from acoustic_spaces.emission import Emission, Faded
 
     n = int(round(duration_s * rate))
-    fade = min(int(FADE_S * rate), n // 2)
     part = part or vehicle.name
+    fade_s = vehicle.fade_s(part)
+    fade = min(int(fade_s * rate), n // 2)
     file = car_input(args, vehicle, part)
     if file is None:
         x = vehicle.made(args, rate, duration_s, part)
@@ -763,7 +772,7 @@ def feed(
                 f"error: {file.name} is {len(x) / rate:.1f} s long; the {vehicle.noun} takes "
                 f"{duration_s:.1f} s along its walk"
             )
-        gain = vehicle.input_gain(part, x[:n], rate)
+        gain = vehicle.input_gain(args, part, x[:n], rate)
         if gain is None:
             raise SystemExit(f"error: {file} is silent")
         x = x * gain
@@ -773,15 +782,15 @@ def feed(
             f"error: the {vehicle.noun}'s sound is shorter than its pass; run: "
             f"{demo.command(vehicle.sound_step, args)}"
         )
-    return faded(x, rate)
+    return faded(x, rate, fade_s)
 
 
-def faded(x: np.ndarray, rate: int) -> np.ndarray:
-    """``x`` faded in over its first FADE_S and out over its last (half its length at
-    most each), as a pass's sound plays."""
+def faded(x: np.ndarray, rate: int, fade_s: float = FADE_S) -> np.ndarray:
+    """``x`` faded in over its first ``fade_s`` and out over its last (half its length
+    at most each), as a pass's sound plays."""
     x = np.array(x, dtype=float)
     n = len(x)
-    fade = min(int(FADE_S * rate), n // 2)
+    fade = min(int(fade_s * rate), n // 2)
     ramp = np.sin(np.linspace(0.0, np.pi / 2, fade)) ** 2
     x[:fade] *= ramp
     x[n - fade :] *= ramp[::-1]

@@ -946,7 +946,7 @@ km/h), `--speed` how fast it runs (km/h; by default the train's own above, whate
 the speed of the example's walk: the Run demo window's **Speed** reads *the train's
 own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in ballast;
 `slab`, slab track; `slab_absorber`, slab track with absorbers; `level_crossing`),
-`--horn off` the train's warning horn (`blasts` sounds it, see below), `--indoors off`
+`--horn off` the train's warning horn (`blasts` or `chord` sounds it, see below), `--indoors off`
 where it is heard (see below), `--step 1` how
 far apart the train is simulated along its walk (m), `--hrtf me.sofa` a measured head,
 `--input train=WAV` a dry recording of yours (`train_roof=WAV` and
@@ -1004,9 +1004,12 @@ km/h) unless `--speed` says.
   harmonics, its sound power taken from that level with the site's ground reflection
   taken out, harmonic by harmonic: 140.2 dB(A) while the high note sounds and 139.2
   while the low one does, 136.4 dB(A) averaged over its blasts and pauses, 5.8 dB(A)
-  over the regional train's. Its blasts, its height on the train, the measuring site's
-  ground and microphone height, and its directivity (the measured siren's) are
-  assumptions; see [Validation](validation.md#sirens-and-road-vehicles-against-their-rules).
+  over the regional train's. `--horn chord` sounds the two notes together in the same
+  blasts, which EN 15153-2 allows, the two 109 dB(C) together (its level for a group of
+  horns sounded at once; `TRAIN_CHORD`): 139.7 dB(A) while it sounds, 136.4 averaged.
+  Its blasts, its height on the train, the measuring site's ground and microphone
+  height, and its directivity (the measured siren's) are assumptions; see
+  [Validation](validation.md#sirens-and-road-vehicles-against-their-rules).
 - **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors`): a house stands at each
   listener, as far from the track, and the pass is heard in its living room:
   `train_and_rumble` the train through the room's closed window and the rumble the

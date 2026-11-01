@@ -386,8 +386,8 @@ Movement:
   car_and_horn`), as loud as a maker's approved to UN Regulation 28, checked against the
   rule for vehicles' horns; a horn's levels in the captions follow its blasts.
 - [x] A train's warning horn (`passby_demo.py --horn blasts` on the railway): the TSI's
-  two notes in turn, each as loud as EN 15153-2 allows 25 m ahead, the measuring site's
-  ground taken out harmonic by harmonic.
+  two notes in turn (or together, `--horn chord`), as loud as EN 15153-2 allows 25 m
+  ahead, the measuring site's ground taken out harmonic by harmonic.
 - [ ] A train horn's directivity measured, mounted on a train's front (Toward et al.
   found one 1 dB down 30 degrees off its axis, where the siren the horns take is 3.6 dB
   down).
