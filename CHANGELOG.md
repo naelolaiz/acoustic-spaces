@@ -5,479 +5,177 @@
 - Paths in the editor's **Messages** panel open with a click in the default app (never a
   script or a program), and their right-click menu copies them.
 
-- Every demo with several listeners plays the ones picked for a run: `--listeners
-  a,b` mixes those alone and its video tours them alone. The simulation still takes
-  every listener in use, so another choice needs no new one, except in the pass-by
-  demos (roadside, street, the helicopter flyover and the helicopter over the stadium),
-  which simulate the vehicle along its walk at the listeners they play and keep a pass
-  made already. The demo of any scene and the pass-by demos visit them in the order
-  given; the church's tour keeps its times, a place left out giving its time to the one
-  before; the stadium's and the lake's stops there keep their phrases (stops at one
-  place in a row are joined); the orchestra plays each movement at the seats of its
-  tour among them, or at all of them when its tour has none. The lakeside, orchestra
-  and pass-by demos had no such choice before, and the church's `--listeners` picked
-  the mixes while its video still asked for every place. A name the demo cannot play, or none,
-  is refused with the names it can. The demo of any scene's `--tour` is now
-  `--listeners`; `--tour` still works. The editor's Run demo window lists the listeners
-  the demo can play, every one ticked, with **All** and **None**, out of Advanced
+- Every demo with several listeners plays the ones picked for a run (`--listeners a,b`),
+  mixing and touring those alone; the demo of any scene's `--tour` becomes `--listeners`
+  (`--tour` still works), and the editor's Run demo window lists the listeners to tick
   (`demos.listeners_option`, `Demo.listeners`).
 
-- The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): three
-  sources along one walk, the vehicle itself (`fire_engine`, CNOSSOS-EU's category 2, a
-  medium heavy vehicle with two axles, its engine six cylinders at 1500 rpm), its siren
-  (`fire_engine_siren`, 3.0 m up on its cab's roof) and its air horn
-  (`fire_engine_horn`, 1.2 m up), heard together, each at its own sound power. The siren
-  plays the police car's two tones 6.0 dB louder, as loud as the Swiss rule lets them be
-  on a vehicle: 114.9 dB(A) 7 m in front of it (134.6 dB(A) of sound power). The new
-  `acoustic_spaces.demos.horn` is an air horn as loud as the rule for vehicles' horns
-  (Council Directive 70/388/EEC, Annex I) lets one be on its test bench, 118 dB(A) 2 m
-  away, sounded in blasts; its pitch (two trumpets at 150 and 180 Hz), its spectrum, its
-  blasts, its height and its directivity are assumptions, as no measured air horn of a
-  fire engine was found. A recording given for the horn plays its blasts as loud as the
-  made horn's, whatever its pauses. The captions have the horn as loud as its sound
-  plays around each place, its blasts 4.5 dB over its average and its pauses silent
-  (`passby.Vehicle.sounding`). `--fire-engine` plays all three (`truck_siren_and_horn`),
-  `truck_and_siren`, `siren_and_horn` or `siren`, and `validation/urban_sources.py`
-  holds the siren and the horn against their rules. The police car and the fire engine
-  are both an `acoustic_spaces.demos.siren.EmergencyVehicle`; the police car's
-  `police_car.json` holds the car's numbers under `vehicle` instead of `car`. In the
-  editor's Run demo window the options of one vehicle alone (`--siren` and
-  `--police-car` for the police car, `--fire-engine`) show only while that vehicle is
-  picked, and stay out of the command line otherwise (`Option.only`).
+- The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
+  vehicle, its siren and its air horn along one walk, each at its own sound power, with
+  `--fire-engine` picking which play (`acoustic_spaces.demos.horn`; `police_car.json`
+  now holds the car's numbers under `vehicle`). The horn's pitch, spectrum, blasts,
+  height and directivity are assumptions, as no measured air horn of a fire engine was
+  found.
 
-- The pass-by demos drive more than the car past their listeners, each picked with
-  `passby_demo.py --vehicle` and each the example's source of its name, left out of
-  the example's simulations until ticked, with a walk with Doppler: in `roadside` the
-  car or an articulated truck at 70 km/h the other way, in `street` the car, a city bus,
-  a motorcycle or a police car with its siren on, all at 50 km/h. The truck, the bus and
-  the motorcycle have CNOSSOS-EU's sound power of their category (3, heavy vehicles; 2,
-  medium heavy vehicles; 4b, motorcycles, which have propulsion noise alone;
-  `acoustic_spaces.demos.road`) and a sound made to it from their tyres and an engine of
-  their own (`--rpm`: six cylinders at 1200 rpm, six at 1500, two at 4000). The police
-  car is two sources along one walk: the car itself (`police_car`), CNOSSOS-EU's
-  passenger car 0.05 m above the road, and its siren (`police_car_siren`), 1.5 m up on
-  its roof, facing the way it drives, each simulated alone and the two heard together
-  (`--police-car siren` plays the siren alone). The car is 32 dB(A) under the siren,
-  but the siren sends next to nothing under its pitch: in the octaves of 63 to 250 Hz
-  the police car's sound is the car's, the rumble of it going by. The siren plays wail,
-  yelp or two
-  tones (`--siren`), a square wave at the sweep rates California's rule for sirens asks
-  and at the two tones and the cycle the Swiss rule for priority vehicles asks, with the
-  level and the directivity (`siren.csv`) of a 100 W electronic siren the National
-  Bureau of Standards measured in 1978 (`acoustic_spaces.demos.siren`): 130.6 dB(A) of
-  sound power for the wail and the yelp, 128.6 dB(A) for the two tones. The new
-  `validation/urban_sources.py` holds it against California's classes of siren (above
-  class B everywhere from 0 to 50 degrees off its axis, 1 to 2 dB under class A),
-  the octave band the rule wants it loudest in and the Swiss rule's levels on the test
-  bench and 7 m in front of the vehicle. In the editor's Run demo window the vehicle,
-  the engine's speed, the siren and what the police car plays are options with their
-  tips.
+- The pass-by demos drive more vehicles past (`passby_demo.py --vehicle`): an
+  articulated truck in `roadside`, and a city bus, a motorcycle and a police car with
+  its siren on in `street`, each with CNOSSOS-EU's sound power of its category
+  (`acoustic_spaces.demos.road`). The siren plays wail, yelp or two tones (`--siren`) at
+  the level and directivity of a 100 W electronic siren the National Bureau of Standards
+  measured (`acoustic_spaces.demos.siren`), checked by `validation/urban_sources.py`.
 - The road vehicles' sound power is CNOSSOS-EU's Table F-1 as amended in 2021
-  (Commission Delegated Directive (EU) 2021/1226), which has a vehicle's point radiate
-  alike every way instead of into the half space above the road, with coefficients A
-  higher than Directive (EU) 2015/996's. The car's sound power at 50 km/h is 98.4 dB(A)
-  instead of 96.0 (2.1 to 2.7 dB(A) more from 30 to 130 km/h), its `level_db` in the
-  `roadside` and `street` scenes with it, and its passes are louder by about as much:
-  76.3 dB(A) at the roadside's verge instead of 73.7, 79.4 dB(A) on the street's
-  pavement instead of 76.9.
-- Upgrading: `acoustic_spaces.demos.car` is now `acoustic_spaces.demos.road`, for every
-  category: `light_vehicle_power(speed, temperature)` is `vehicle_power("1", speed,
-  temperature)`, `car_sound` is `vehicle_sound`, and the table's coefficients are in
-  `CATEGORIES` instead of `ROLLING_A` and the like; `VehiclePower` has the category
-  first. The pass-by demos' step that makes the vehicle's sound is `sound` instead of
-  `car` (`passby_demo.py sound`), and writes `demo/NAME/NAME.wav` for the vehicle NAME
-  (`demo/police_car/police_car.wav` and `siren.wav` for the police car's car and its
-  siren).
+  (Commission Delegated Directive (EU) 2021/1226): the car's at 50 km/h is 98.4 dB(A)
+  instead of 96.0, and its passes in `roadside` and `street` are louder by about as
+  much.
+- Upgrading: `acoustic_spaces.demos.car` is now `acoustic_spaces.demos.road`
+  (`light_vehicle_power(speed, temperature)` is `vehicle_power("1", speed,
+  temperature)`, `car_sound` is `vehicle_sound`, the coefficients are in `CATEGORIES`,
+  and `VehiclePower` takes the category first). The pass-by demos' step `car` is
+  `sound`, and writes `demo/NAME/NAME.wav`.
 - Fixed: a walk with Doppler in binaural through measured ears (a SOFA file, such as
-  `kemar`) lost the treble for a moment between each two places, audible as a vehicle
-  passes. Where each ear's response starts was in its filter, and
-  measured ears start a few samples apart from one direction to the next (KEMAR's far
-  ear by up to 11 samples between places 1 m apart along a road 25 m away), so two
-  places' filters mixed, or two windows overlapping, cancelled each other: for the truck
-  heard 25 m from the road (the `roadside` example's `yard_25m`), up to 6.8 dB lost at
-  8 to 16 kHz for 40 ms at a time. Each ear's
-  onset now goes into that ear's delay, read through the same cubic and sinc as the
-  path's. The spherical head's onsets move at most half a sample from place to place,
-  and lost up to 0.8 dB there.
+  `kemar`) lost up to 6.8 dB at 8 to 16 kHz for 40 ms at a time between places, audible
+  as a vehicle passes; each ear's onset now goes into that ear's delay.
 - Fixed: in turbulence, a walk with Doppler left out the delay the eddies give each
-  path's top band: the path's filter held only how its other bands lag behind the top
-  one, and its delay none of the eddies', so they did not move the top band at all
-  and moved the others by their difference from it. The `helicopter_flyover` example's
-  flyovers had it. The top band's delay at each moment now goes into the path's delay,
-  taken between the moments on either side. A test plays a tone at 8 kHz and compares
-  it, half-way between two moments, with the tone through the response whose paths are
-  delayed half-way: the largest difference was 43 % of the tone's amplitude and is now
-  0.009 %.
+  path's top band, as in the `helicopter_flyover` example's flyovers; that delay now
+  goes into the path's delay.
 - Fixed: listening in turbulence (`auralize`, the editor's **Listen**, walks without
-  Doppler) crossfaded each moment of the eddies into the next (every 125 ms in
-  `open_air_stage`), which mixed each early path at two delays a few microseconds apart
-  and cancelled the treble half-way between moments: up to 8.9 dB at 8 to 16 kHz for
-  20 ms at a time at `open_air_stage`'s listener 300 m downwind. Each early path now
-  plays through its own delay, which goes from one moment's to the next's, as along a
-  walk with Doppler (`acoustic_spaces.doppler.render` takes a `span` of samples for
-  it), in about the same time. The same test, standing still: the largest difference
-  was 19 % of the tone's amplitude and is now 0.05 %.
-- Fixed: the pass-by demos' captions, stills and printouts gave a walk's speed as it
-  came out of its length and time, such as 50.004 km/h for a walk of 13.89 m/s; they
-  now give it to a tenth of a km/h without a trailing zero (50 km/h, 72.5 km/h).
-  Tours made again from an earlier walk keep its old wording under the heading until
-  the walk is made again.
+  Doppler) cancelled the treble between the eddies' moments, by up to 8.9 dB at 8 to 16
+  kHz; each early path now plays through its own delay, going from one moment's to the
+  next's.
+- Fixed: the pass-by demos' captions, stills and printouts gave a walk's speed such as
+  50.004 km/h; they now give it to a tenth of a km/h (50 km/h, 72.5 km/h).
 
-- A scene can name the `recording` its sound system plays in a demo of it
-  (`acoustic-spaces demo`, the editor's *This scene*), and each source the `channel` of
-  it that it plays (`left`, `right`, or `mono`, both mixed down), so that a stage's
-  loudspeakers play the two sides of one stereo mix and nobody has to mix the band's
-  instruments. The recording is a file (WAV, or anything ffmpeg decodes) or one of five
-  free recordings by name: three songs in stereo (`spicy_funk_cake` and
-  `great_british_summer`, CC BY 4.0; `potassium`, CC0) and a man and a woman talking
-  (`speech_male`, `speech_female`, from the ACE corpus, CC BY 4.0). A free recording is
-  downloaded the first time a demo plays it (the demo's new first step, `recording`; the
-  Run demo window says so above Run, with its size), kept in the user's data folder for
-  every scene, and credited on the video's stills. A source's own `signal` can have a
-  `channel` too, and be any format ffmpeg decodes. Each file is brought to one gated
-  RMS and its channels keep that gain, so the stereo balance stays. In the editor:
-  **Recording** on the scene's page, **Channel** on a source's.
+- A scene can name the `recording` its sound system plays in a demo (a file, or one of
+  five free recordings by name, downloaded the first time), and each source the
+  `channel` it plays (`left`, `right` or `mono`), so that a stage's loudspeakers play
+  one stereo mix. In the editor: **Recording** on the scene's page, **Channel** on a
+  source's.
 - The examples with a stage, a sound system or a talker play in their demo out of the
-  box: concert_stage, stadium_concert, lakeside_concert, open_air_stage and studio a
-  song through their loudspeakers, left and right as the audience sees them, and
-  town_hall_pa, lecture_hall, leaky_classroom, shoebox, bim_office, material_libraries
-  and gallery the man talking. Their talkers now speak at the normal vocal effort of
-  IEC 60268-16, 60 dB(A) 1 m in front, with a man's speech spectrum: 73.3 dB of sound
-  power for the cardioid ones and 78.0 dB for the shoebox's omnidirectional one, instead
-  of the default 94 dB spread evenly over the bands (81 dB(A) at 1 m, a shout). Their
-  levels and speech intelligibility change with it: the shoebox's seat hears 60.1 dB(A)
-  instead of 79.0, and the lecture hall's median STI is 0.54 instead of 0.58 (one seed),
-  as the quieter speech nears the threshold of hearing in the outer bands. The rehearsal
-  room's guitar amplifier and drum kit, the concert hall's soloist and piano and the
-  archway's singer keep 94 dB, as no sound power of theirs that could be cited was
-  found; their scene files say so.
-- Editor: the **Scene YAML** panel, a tab beside **Messages** that **View > Scene YAML**
-  opens (hidden on a new installation, then shown or hidden at each start as last left,
-  in the user's settings), shows the scene as coloured YAML with line numbers, the data
-  Save writes with each list on one line, and follows every edit; selecting an item
-  brings its entry to the top. Edited text becomes the scene with **Apply**
-  (Ctrl+Return), checked as every edit is and undone in one step; text that does not
-  read or that the checks refuse stays, with the lines the reason points at marked in
-  red. `Scene.file_text(folder, readable=True)` gives that layout (`Scene.yaml_text`
-  takes `readable` too); Save writes as before.
-- A listener's microphone can have a pattern that changes with frequency, as a real
-  capsule's does: `pattern` takes one per octave band (8) or third-octave band (24), as
-  names or values of `a`, for a single capsule, an XY pair's `capsule` or an MS pair's
-  `mid`. Its `a` goes from band to band across the crossovers of the synthesis's band
-  filters; the response is rendered in two parts (what the capsule picks up whatever
-  `a` is, and what `a` scales, through a filter of gain `a` in each band), exact as
-  both take the same paths and impulses, so in a band whose neighbours agree it picks
-  up as that band's pattern does (within 0.01 dB in the shoebox example's room). Walks
-  with Doppler take it path by path; the feedback scripts of the stadium and the
-  concert stage take the voice into the microphone band by band. The editor's listener form shows such a
-  pattern as *per band: …* and keeps it until another is picked; its balloon shows 1
-  kHz. A pattern that is the same in every band is rendered once, as before.
-- Editor: sources and listeners left out of simulations (`enabled: false`) start
-  hidden in the 3D view and the plan, as the stadium's helicopter, band and singer's
-  microphone, and an eye follows its tick when that changes (a click, undo or redo);
-  shown again by its eye, an item left out is drawn faded as before.
+  box, a song or a man talking. Their talkers now speak at the normal vocal effort of
+  IEC 60268-16, 60 dB(A) 1 m in front, instead of the default 94 dB: the shoebox's seat
+  hears 60.1 dB(A) instead of 79.0, and the lecture hall's median STI is 0.54 instead of
+  0.58 (one seed).
+- Editor: the **Scene YAML** panel (**View > Scene YAML**) shows the scene as YAML that
+  follows every edit, and **Apply** makes edited text the scene, checked and undone as
+  any edit is (`Scene.file_text(folder, readable=True)`).
+- A listener's microphone can have a pattern that changes with frequency, one per octave
+  or third-octave band, for a single capsule, an XY pair's `capsule` or an MS pair's
+  `mid`; the editor shows it as *per band: …*.
+- Editor: sources and listeners left out of simulations (`enabled: false`) start hidden
+  in the 3D view and the plan, and their eye follows their tick.
 - Editor: the markers of sources and listeners are all one size, in the 3D view, the
-  plan and `acoustic-spaces view`: where two would overlap, all of them shrink alike
-  (down to a fifth of their size) instead of only those two, so that one kind of item
-  always looks the same. Sources and listeners left out, drawn faded, do not shrink
-  the others in `view`.
+  plan and `acoustic-spaces view`, and shrink alike where two would overlap.
 - Editor: **Run demo…** runs the demos of an installed copy's examples in
-  `~/acoustic-spaces/<example>` even where the package's folder can be written (a
-  virtual environment), so that nothing is written among the package's files, which an
-  upgrade or an uninstall replaces or removes; before, only a folder that could not be
-  written went there (`examples.is_installed_example`).
+  `~/acoustic-spaces/<example>`, never among the package's files
+  (`examples.is_installed_example`).
 - Docs: [Where the results go](docs/getting-started.md#where-the-results-go): the
   files of `simulate`, the editor's runs and exports, `auralize`, walkthroughs and
   demos, for scenes with many listeners such as the stadium.
 
 - Random scattering (`simulation.scattering.method: random`) traces each band with rays
-  of its own where the bands' scattering coefficients differ, as vector-based scattering
-  does: `by_band` applies to both now, and so does the editor's **Trace each band with
-  rays of its own**. With one ray for all bands, a reflection sends the ray in a Lambert
-  direction with the bands' mean coefficient as probability and re-weights each band by
-  its own coefficient over that mean: right on average, but over many reflections a
-  band's weight drifts towards zero and its energy rides on a few rays. The scattering
-  of the surfaces' size (on by default) makes the bands' coefficients differ, and in the
-  BRAS rooms random's T30 then had standard errors 15 to 180 times vector's; in the
-  coupled rooms (CR1) the reverberation chamber's T20 at 63 Hz from the first
-  loudspeaker came out 3.1 s against 8.9 s measured. A box that diffuses the bass and
-  reflects the treble now decays with random scattering as with vector-based scattering
-  in every band; with one ray, its treble decayed 146 times as fast as Eyring's rate. A
-  simulation with random scattering takes 3 to 4 times as long as before in the example
-  box and the lecture hall (about two thirds of vector's time); `by_band: false` traces
-  one ray for all bands as before. Vector-based scattering (the default) does not
-  change, nor does random scattering where every band has the same coefficient.
+  of its own where the bands' coefficients differ, as vector-based scattering does
+  (`by_band`): with one ray for all bands, its T30 in the BRAS rooms had standard errors
+  15 to 180 times vector's. It takes 3 to 4 times as long as before; `by_band: false`
+  keeps one ray for all bands.
 - Standard errors: the late rays are traced in batches (`simulation.late.batches`, 10 by
-  default; **Batches** in the editor), each with the random streams of its share of the
-  rays: the same rays as at once, with the same result but for rounding, which can tip a
-  split or a roulette the other way. A jackknife over the batches gives each parameter
-  its standard error, one standard deviation of how much it would change between runs
-  with other seeds: in `parameters.json` (`standard_errors`), as the largest in JNDs
-  from 125 Hz to 4 kHz in `simulate`'s output (with a suggestion of more rays when it is
-  over half a JND, `compare.CONVERGED_JND`), and in the tips of the editor's results,
-  amber over half a JND (`Response.standard_errors()`, `compare.in_jnds()`). Over 60
-  seeds of a diffuse box, their root mean square came within 0.91 to 1.18 of the spread
-  between the runs. The 10 batches make the late part 10 to 16 % slower in the shoebox
-  and concert hall examples on 4 cores and take about an eighth more of its memory,
-  which the estimate of a run's memory includes; `batches: 1` traces the rays at once.
-- EDT's line fit starts at the onset in every response. The decay curve was taken
-  against the response's total, summed in another order than the curve, so it started a
-  rounding above or below 0 dB, and above it the fit left out the slot holding the
-  direct sound: in 99 of the 152 octave-band EDTs of six examples (at 5,000 rays), by up
-  to 9.6 % (in `studio`). EDT of measured responses, read sample by sample, moves by
-  0.05 % at most in BRAS, whose `measured.json` files are made again.
+  default), and a jackknife over them gives each parameter its standard error, in
+  `parameters.json`, `simulate`'s output and the editor's results. The batches make the
+  late part 10 to 16 % slower; `batches: 1` traces the rays at once.
+- EDT's line fit starts at the onset in every response; it left out the slot holding the
+  direct sound in 99 of 152 octave-band EDTs of six examples, by up to 9.6 %.
 - Cleaning a model also splits a face where its edge runs past a corner at which three
-  faces meet along the line, not only past the ends of open edges, and drops a sliver
-  whose own corner lies on the edge it closes (within 10 µm, `T_JUNCTION_TOLERANCE_M`)
-  instead of splitting it into two faces with a repeated corner. The BRAS auditorium
-  (CR4) is now closed, 8,656.6 m³; it had two open edges, 50 faces with a repeated
-  corner and no volume. No example's model changes, nor those of BRAS CR2 and CR3.
+  faces meet, so the BRAS auditorium (CR4) is now closed (8,656.6 m³); no example's
+  model changes.
 - Behind a barrier on a hard ground with `first_order`, the path over the top with the
-  reflection off the ground behind it is kept where the reflection off the ground before
-  the barrier is found. Both come from the source's image in the ground, and the edge
-  diffraction took the one it found for the geometric wave of both, so 4 m behind a
-  barrier 3 m high the level stepped by 0.35 dB at 63 Hz where the listener rose into
-  sight of that reflection, and stayed 0.33 dB low above. With `both_sides` it now
-  follows the exact level within 0.05 dB in every band. No example changes; in BRAS CR2,
-  12 terms over its 10 pairs that were left out count now, which moves the early level
-  by up to 0.8 dB at 63 Hz.
+  reflection off the ground behind it is kept, where the level stepped by 0.35 dB at 63
+  Hz; with `both_sides` it follows the exact level within 0.05 dB. No example changes;
+  BRAS CR2's early level moves by up to 0.8 dB at 63 Hz.
 - The validation report's measured rooms hold four of BRAS's, all run again with this
-  version (see [Validation](docs/validation.md#measured-rooms-bras)): the coupled rooms
-  (CR1, a reverberation chamber and a laboratory with the door between them open by
-  4.1°) and the auditorium (CR4) beside the seminar room and the hall. With the fitted
-  absorption the auditorium's decay comes out 12 to 21 % long from 125 Hz to 4 kHz, and
-  its clarity within about one JND; calibrated on one loudspeaker position's responses,
-  its T20 and T30 at the other come within 0.7 JNDs on average. In the coupled rooms the
-  chamber's sound decays as two-room theory gives for the model's slit by the door,
-  within 5.3 % (`validation/coupled_rooms.py`, new), but in that theory the real rooms
-  are joined 10 to 16 times more strongly, so its EDT
-  and T20 come out 2 to 25 JNDs long from 63 Hz to 2 kHz. G is compared from seat to
-  seat, as the level of the measured responses is uncertain by about 3 dB; the report
-  gives the offset, with checks against diffuse theory and the direct sound. IACC_E and
-  IACC_L are compared with BRAS's binaural responses in the seminar room, the hall and
-  the auditorium (`validation/bras_binaural.py`, with FABIAN's head-related impulse
-  responses and the directivity of the QSC K8 loudspeakers): IACC_L is within one JND in
-  19 to 26 of each room's 30 loudspeaker and band values, IACC_E in 18 to 25, low in the
-  hall from 500 Hz to 2 kHz, where the simulated early sound is less alike at the two ears
-  than the measured (`validation/bras_iacc_parts.py`, new, renders one loudspeaker's
-  response whole and in parts). The tables give each room's largest standard error, and
-  in the coupled rooms each source's averages. Since 4.0.1 the seminar room's and the
-  hall's average differences move by 0.16 JNDs at most in every band but 125 Hz (which
-  the echogram's fix below moves by up to 2.6 JNDs), except the calibrated hall's (up to
-  0.68 JNDs), whose fit lands on slightly different coefficients.
-- Rendered responses (mono, binaural, Ambisonics and loudspeakers) give each path over
-  an edge a phase of its own above the bands that add in pressure, drawn from the path
-  and the response's seed and turned as far as other paths' sound reaches it where it
-  arrives; a path over an edge that arrives alone keeps its phase, and reflections keep
-  theirs. The pieces a diffracted wave is cut into carry energies that already hold
-  their interference, and a rendered response added them in pressure again with one
-  phase, counting it twice: forty pieces within a millisecond rendered more than 20
-  times their energy at 250 Hz, as forty reflections of one phase still do. They now
-  render their energy on average over seeds, within 0.2 of it from 250 Hz up, one
-  response scattering about that as a room does from seat to seat
-  (`tests/test_coherent.py`).
-- The echogram's 63 and 125 Hz bands, read through band filters that let in a little
-  of the 250 Hz band, took the same pieces' interference a second time from there.
-  Each path over an edge now takes the mean of those phases over seeds in that
-  reading, which needs no seed, so the low bands no longer depend on how much the
-  pieces carry above them (`tests/test_coherent.py`); calibration reads the same way.
-  The parameters `simulate` reports at 125 Hz move where many diffracted paths arrive
-  together, as in BRAS's rooms: with the fitted absorption, the hall's EDT goes from 13
-  to 3.8 % short, its T20 from 17 to 19 % long and its C80 from 0.18 to 0.58 dB low, and
-  the seminar room's EDT from 1.5 to 3.9 % long and its C80 from 0.58 to 0.95 dB low (see
-  [Validation](docs/validation.md#measured-rooms-bras)); outdoors every band adds in
-  pressure, and nothing changes.
-- The validation report was checked claim by claim against the scripts and tests its
-  numbers come from, and corrected where a statement went further than they do; among
-  others: the barrier's insertion loss without the path reflected on both sides is
-  0.5 and 0.7 dB too low at 1 and 2 kHz 90 m behind, not only too high; the parabolic
-  equation is within 0.35 dB of the fast field program to 1 km with the gradient
-  stopping 100 m up (not 0.1 dB), and 11 dB at 1 kHz 10 km out; the weather zones'
-  mean-profile table had four rows from the zones' table; the turbulence check's
-  averages took gravel as soft and compacted soil as hard; the matched layer at its
-  default 8 cells returns 67 dB down or more (not 57); a coverage map's T30 is within
-  5 % of full simulations at the tests' three points, not everywhere; the GPU's
-  outdoor comparison does not depend on the eddies. Numbers that came from one-off
-  checks are now printed by the scripts or tests, labelled as one-off checks, or left
-  out:
-  `outdoor_propagation.py` gives where each source's rays stop reaching the
-  microphones' height; `turbulence.py --profile` the engine with Cn² taken down to the
-  ground, and averages over the soft and the harder grounds; `ground_reflection.py
-  --parabolic` where each ground's largest difference falls; `leaves.py` runs 10
-  million late rays and three seeds and gives their spread (at 100,000 rays the level
-  behind dense leaves at 8 kHz moved by up to 22 dB from one seed to another); the new
-  `validation/coupled_rooms.py` compares BRAS's coupled rooms with two-room diffuse
-  theory; the new `validation/bras_room_energy.py` prints the table of what each part of
-  the scattering model does in BRAS's rooms, which no script printed (it gives the
-  report's numbers; the report now says that the random model's row moves most from one
-  seed to another); and a test pins how
-  a coloured sound in a rendered response's first milliseconds moves G. Every run time
-  in the report was measured again, each run alone on the machine: most runs are faster
-  than the report said (the real-time convolver's blocks take 0.13 ms on average, not
-  0.30), and the edge diffraction's timing is the mean of three runs, as the script
-  takes it, not the median of nine.
+  version: the coupled rooms (CR1) and the auditorium (CR4) join the seminar room and
+  the hall, with G compared from seat to seat and IACC against BRAS's binaural responses
+  (`validation/coupled_rooms.py`, `validation/bras_binaural.py`,
+  `validation/bras_iacc_parts.py`; see
+  [Validation](docs/validation.md#measured-rooms-bras)).
+- Rendered responses give each path over an edge a phase of its own above the bands that
+  add in pressure, so the pieces of a diffracted wave no longer count their interference
+  twice (forty pieces within a millisecond rendered more than 20 times their energy at
+  250 Hz).
+- The echogram's 63 and 125 Hz bands no longer take the interference of paths over edges
+  a second time from the 250 Hz band. The parameters at 125 Hz move where many
+  diffracted paths arrive together, as in BRAS's rooms (with the fitted absorption, the
+  hall's EDT goes from 13 to 3.8 % short).
+- The validation report was checked claim by claim against its scripts and tests and
+  corrected where it went further than they do; numbers from one-off checks are now
+  printed by the scripts or tests, labelled as one-off checks, or left out, and every
+  run time was measured again.
 - Outdoors, the places of a walking source share the parabolic equation's runs where
-  they stand at one height over one ground and neither the weather nor the ground has
-  zones (`simulate(share_waves=...)`, which `simulate_walk` and `simulate_movement`
-  give it): a run from one place serves the listeners of every other that the sound
-  goes the same way to, each reached by a last step of its own
-  (`march(independent=True)` in `engine.parabolic` and `engine.wide_angle`), so that
-  it gets what a run of its own place would give it. An aircraft's 26 places 64 m
-  apart, 100 m up over 1.6 km of a meadow in the `windy` preset, take 31 s instead of
-  89 s on four cores, with the same early levels to 10⁻⁷ dB. Still scenes are
-  unchanged, bit for bit.
+  they stand at one height over one ground without zones (`simulate(share_waves=...)`):
+  an aircraft's 26 places take 31 s instead of 89 s, with the same early levels to 10⁻⁷
+  dB. Still scenes are unchanged, bit for bit.
 - The sound a source sends each way (`acoustic_spaces.emission`): along a walk with
-  Doppler, `render_walk` and `render_movement` take an `Emission` for the walker (or
-  for a source a walking listener passes) instead of one signal, and each early path
-  carries what is sent the way it leaves the source, at the time it leaves, the
-  source's directivity taken out of its filter; the late part plays the emission's
-  sound averaged over the directions. `Mixture` makes one of signals that do not
-  correlate, each with an amplitude per direction, and gives its directivity per band.
-  Against the exact field, a tone sent louder ahead and turned in phase with the height
-  is within 0.11 dB in level at 30 m/s and 0.42 dB for a train at 4 kHz, as one
-  signal is (`validation/doppler.py`). `directivity.on_grid` and `sphere_mean` read a
-  grid of directions as a balloon's is read.
-- Helicopters (`acoustic_spaces.rotorcraft`): `trim` balances a helicopter flying
-  level by momentum theory, and `emission` gives the sound its main and tail rotors
-  send each way, for a walk with Doppler: each rotor's tones from its blades' steady
-  lift, drag and thickness (the Ffowcs Williams and Hawkings equation far from the
-  rotor, in closed form) and its broadband noise by Pegg's method (NASA TM-80200).
-  `AS350_B3` is an Airbus Helicopters AS350 B3. The tones agree with Gutin's formula
-  and with Farassat's formulation 1A in time, blade point by blade point, to within
-  2 x 10⁻⁵ of the loudest harmonic, and Pegg's worked example comes out as he gives it;
-  flying the AS350 B3's noise certification, the model's sound exposure level is 88.0
-  dB(A), 3.4 dB over the certified 84.6 dB(A), nearly all of it Pegg's broadband noise
-  of the main rotor (`validation/rotorcraft.py`).
+  Doppler, `render_walk` and `render_movement` take an `Emission`, and each early path
+  carries what is sent the way it leaves the source (`Mixture`, `directivity.on_grid`,
+  `sphere_mean`).
+- Helicopters (`acoustic_spaces.rotorcraft`): `trim` balances a helicopter in level
+  flight, and `emission` gives the tones and broadband noise (Pegg's method) its rotors
+  send each way. Flying the AS350 B3's noise certification, the model gives 88.0 dB(A),
+  3.4 dB over the certified 84.6 dB(A) (`validation/rotorcraft.py`).
 - `emission.Periodic`, a sound that repeats, kept as one period in each direction,
   which may turn with a rotor and be sent from off the source's place; `emission.Sum`
   adds emissions up; every `Emission` gives its `directivity()`. `air.density` gives
   the density of dry air.
-- A helicopter flying over: the `helicopter_flyover` example, an AS350 B3 150 m up at
-  63 m/s over a meadow, against a light wind and through eddies, heard right under its
-  track and 150 m to its left and right, and `flyover_demo.py`, which plays its rotors'
-  sound down each early path with Doppler, the rotors trimmed at its airspeed (its
-  speed over the ground less the wind at its height). The pass-by demo takes the
-  vehicle that goes past (`demos.passby.Vehicle`; `demos.helicopter`); the car's demos
-  are unchanged. From 150 m up, places 4 m apart follow the exact field of a flyover
-  to within 55 dB at 4 kHz (`validation/doppler.py`), so the demo simulates the
-  helicopter every 4 m.
+- A helicopter flying over: the `helicopter_flyover` example, an AS350 B3 150 m up over
+  a meadow, and `flyover_demo.py`, which plays its rotors' sound down each early path
+  with Doppler (`demos.passby.Vehicle`, `demos.helicopter`).
 - `Emission.sound_power_db` gives an emission's sound power per band, `emission.Faded`
   fades one in and out, and `directivity.write_directivity_csv` writes a directivity
   as a CSV table a scene reads.
-- A helicopter over the stadium concert: the `stadium_concert` example's scene has the
-  flyover's AS350 B3, left out of the concert's simulations, crossing the stadium 1200 m
-  at 63 m/s, 150 m up as a police or a television helicopter given leave may (without
-  leave the EU's rules of the air keep it 300 m above the roof: `--height 330`), with
-  its rotors' sound power and directivity. `helicopter_demo.py`, the example's second
-  demo, flies it over the stadium halfway through the song and adds its pass to each
-  listener's mix of the concert, both at their simulated levels; the editor shows its
-  walk, and the Run demo window lists it as what the demo moves. An example may have
-  more than one demo (`demos.demos_of`, `Demo.builds_on`): the editor's Run demo lists
-  them, the example's own first. The stadium demo's stills take another heading and
-  leave out the sources left out of its simulations, as the stadium examples'
-  `align.py`, `near_field.py` and `feedback.py` now do with the sources and listeners
-  left out (`align.py` and `feedback.py` failed on one before). The editor's plan fits
-  the places walks go through too.
-- A helicopter's broadband noise by either of two models, its `broadband`: Pegg's
-  method (`"pegg"`, the default) or each blade section's own noise in the flow past it
-  (`"bpm"`), Brooks, Pope and Marcolini's airfoil self-noise (NASA RP-1218,
-  `acoustic_spaces.airfoil_noise`) summed over the blades' sections round the turn,
-  each at its own speed and angle of attack from the blades' trimmed pitch
-  (`rotorcraft.pitch`), its bands moved by its own Doppler shift. A `Rotor` gives its
-  blades' twist, lift slope, trailing edge and tips. The airfoil self-noise matches
-  the two sample outputs of its authors' code to within 0.01 dB, the pitch its closed
-  form, and the sum over the blades one done place by place. In the AS350 B3's
-  certification overflight the two models fall on either side of the certified 84.6
-  dB(A): 88.0 with Pegg's, 80.1 with the blade sections', whose broadband noise is 19
-  dB under Pegg's for the main rotor (`validation/rotorcraft.py`). The flyover
-  and the stadium crossing demos take `--broadband bpm`. `air.viscosity` gives the
-  kinematic viscosity of dry air.
-- `walkthrough.pass_by` no longer gives NaN for L_Amax, the SEL and L_Aeq when a
-  place's G is undefined in a band, as at a helicopter's place 600 m away behind the
-  stadium's stands, which the few rays that reach it may leave without energy in some
-  bands: there the place's level is that of the energy its response holds, as
-  outdoors (-inf where none arrives). Every other place's levels are unchanged.
+- A helicopter over the stadium concert: the `stadium_concert` scene has the AS350 B3
+  crossing 150 m up (`--height 330` keeps it 300 m above the roof, as the EU's rules of
+  the air ask without leave), and `helicopter_demo.py` adds its pass to each listener's
+  mix of the concert, both at their simulated levels. An example may have more than one
+  demo (`demos.demos_of`, `Demo.builds_on`).
+- A helicopter's broadband noise by either of two models (`broadband`): Pegg's method
+  (the default) or Brooks, Pope and Marcolini's airfoil self-noise summed over the blade
+  sections (`"bpm"`, `acoustic_spaces.airfoil_noise`). In the AS350 B3's certification
+  overflight they fall on either side of the certified 84.6 dB(A): 88.0 with Pegg's,
+  80.1 with the blade sections'.
+- `walkthrough.pass_by` no longer gives NaN for L_Amax, the SEL and L_Aeq when a place's
+  G is undefined in a band; every other place's levels are unchanged.
 - Examples go by their names only: `examples.FORMER_NAMES` is removed, and
   `gallery_walk` no longer finds the gallery.
 - One stadium: `stadium_pa` is merged into `stadium_concert`, whose sound system plays
-  alone, for the crowd, with its Monitors and Stage groups left out, as `stadium_pa`
-  had it. The concert's description takes the map's notes, measured on it: on the
-  pitch from the mix position back, nine points in ten within 2.6 dB, the map in under
-  five minutes on 4 cores. The two had drifted apart: since the tuning of 23 October
-  `stadium_pa`'s front fills played at 122 dB and the concert's at 116 dB, which it
-  keeps; at 122 dB they brought the front rows up to 104.5 dB(A), 7 dB over the mix
-  position. The test of the stadium examples' shared parts compares each of
-  `concert_stage`'s sources and listeners with the concert's one by one, which would
-  have caught it. The memory estimate's checks in the docs, in one
-  batch and in the default 10, are measured again on `stadium_concert`.
-- The editor's Run demo window is simpler: it shows the options that change what a demo
-  plays, labelled in words (`Option.label`, each one's flag in its tip), and keeps the
-  step, what fine-tunes the run, the files and folders the demo reads and writes and
-  the command line under **Advanced**, closed until opened (`Option.advanced`); its
-  introduction is one line. The labels are translated in the five catalogs.
-- The editor runs an example's scripts that are no demos too, listed in the Run demo
-  window after its demos: the stadium concert's and the concert stage's `align.py`,
-  `feedback.py` and `near_field.py`, the town hall's `delays.py` and the listening
-  room's `bass.py`, each one step, its options its own arguments, what it prints in the
-  Messages panel (`demos.scripts_of`, `demos.script_demo`: a script with a `TITLE` and
-  a `parser()`; `Demo.stepless`, `Option.positional`).
-- The orchestra demo downloads its recording: `tracks` reads the 61 tracks of each
-  movement out of its zip on the TU Berlin's server by HTTP range requests, without
-  keeping the zip (2.0 GB for the three movements), where it asked for the zips to be
-  downloaded by hand. A zip downloaded before, or the folder it was unpacked
-  into, is read from `--zips` as before, and the tracks there already are kept, so a
-  download cut short goes on where it stopped.
+  alone for the crowd with its Monitors and Stage groups left out; its front fills keep
+  the concert's 116 dB, where `stadium_pa`'s had drifted to 122 dB.
+- The editor's Run demo window is simpler: the options that change what a demo plays,
+  labelled in words (`Option.label`), and the rest under **Advanced**
+  (`Option.advanced`).
+- The editor runs an example's scripts that are no demos from the Run demo window too,
+  such as the stadium's `align.py` and `feedback.py` (`demos.scripts_of`,
+  `demos.script_demo`).
+- The orchestra demo downloads its 61 tracks itself, by HTTP range requests out of the
+  TU Berlin's zips without keeping them (2.0 GB for the three movements); `--zips` still
+  reads zips downloaded before.
 - The Run demo window says above **Run** what the run downloads and how much, until it
-  is there (`Step.downloads`): the orchestra's tracks of the movements still missing,
-  the church's takes and organ samples, the stadium's and the lake's song (nothing for
-  a song of your own), the gallery's talk.
-- `fetch.open_zip` and `fetch.RangeFile` take the size of the blocks they ask the
-  server for (`block`; 4 MiB as before), and keep 64 MiB of them. The orchestra's zips
-  are read in blocks of 32 MiB, as their server takes about half a second to answer
-  each request (189 s for the three movements here, 622 s in blocks of 4 MiB); the
-  church's archives in blocks of 1 MiB, as its takes are 1 to 2 MB each, which brings
-  its download from 183 MB to 127 MB.
-- The download sizes the demos give are the ones measured: the stadium's
-  "Spicy Funk Cake" is 313 MB to download (450 MB unpacked, which the docs gave as the
-  download), "Francium" 42 MB and "Rubidium" 43 MB (the docs said 800 MB for
-  "Francium"), the church's music 127 MB (it said about 100 MB), and the gallery's talk
-  reads 16 MB of the corpus's 148 MB archive for the default talker, up to 145 MB for
-  another.
+  is there (`Step.downloads`).
+- `fetch.open_zip` and `fetch.RangeFile` take the size of the blocks they ask for
+  (`block`, 4 MiB as before) and keep 64 MiB of them; the orchestra's zips are read in
+  blocks of 32 MiB and the church's archives in 1 MiB, which brings the church's
+  download from 183 MB to 127 MB.
+- The download sizes the demos give are the measured ones, such as 313 MB for the
+  stadium's "Spicy Funk Cake" (450 MB unpacked, which the docs gave as the download).
 - Listeners can be microphones: a listener's `pattern` is what its mono output picks up
-  through, aimed where it faces: a first-order pattern (subcardioid to figure8, as
-  sources take them), or a coincident pair in two channels, left and right: an XY pair
-  (`{pair: xy, angle_deg, capsule}`), a Blumlein pair or an MS pair decoded to left and
-  right (`{pair: ms, mid, side_db}`). Each early path and late impulse is picked up from
-  its direction (`spatial.Microphone`, `spatial.for_listener`), in `simulate`'s mono
-  files, `auralize`, walkthroughs, movements and the editor's listening; the report's
-  mono output names the microphone. The parameters, the echo check and the other
-  outputs stay an omnidirectional listener's, and `validate` warns about a pattern in a
-  scene without a mono output. The editor's listener form has a **Microphone** choice
-  (with a pair's angle, capsules, mid and side), and the selected listener shows its
-  microphone's balloon in the 3D view, one for each capsule of a pair; its angles' tips
-  say they aim it. Translated in the five catalogs. A listener without a pattern renders
-  as before.
+  through, a first-order pattern or an XY, Blumlein or MS pair in two channels
+  (`spatial.Microphone`), with a **Microphone** choice in the editor. The parameters and
+  the other outputs stay an omnidirectional listener's.
 - `scene` exports `Orientation`, `XYPair`, `BlumleinPair` and `MSPair`.
-- Everything a demo plays is in its example's scene, so the editor shows it: the stadium
-  concert's band (its Band group: the drum kit, the singer's voice, the guitar
-  amplifier), the church's choir, organ pipes and the places its demo tours (Choir,
-  Organ pipes, Choir concert), the lakeside concert's sound system (PA) and its listener
-  behind the stage, and the gallery's listener `standing`, where the visitor looks
-  round. Each is left out of the example's own simulations until ticked, so the
-  examples' results stay as they were (the same to the last bit); the demos take them in
-  instead of adding their own, and a test fails when a demo plays a source or listener
-  its example lacks. The church demo's places take the church's names for `--tour` and
-  `--listeners` (`nave-back`, `side-aisle`, `front-pews`, `conductor`, `in-the-choir`,
-  `nave-middle`), and the gallery demo's `--stand` moves its listener when given.
-- The stadium concert and the concert stage also hold the singer's microphone
-  (`singer_mic`, a supercardioid listener 5 cm in front of the singer's voice, aimed at
-  it). `feedback.py` (both examples') takes the microphone and the voice from the scene
-  as they are, instead of turning first-order Ambisonics into the pattern by hand at a
-  mouth of its own: the voice is where the stadium demo has always had it, 20 cm in
-  front of the singer's head (`feedback.py` put the mouth 9 cm in front and 8 cm down),
-  and the supercardioid's a is 0.37, as the scene's patterns have it (0.366 before). Its
-  gain before feedback moves by up to 0.8 dB in a band and 0.4 dB as it stands, and the
-  frequencies where it rings first change.
+- Everything a demo plays is in its example's scene, left out of the example's own
+  simulations until ticked, so the editor shows it and the examples' results stay the
+  same to the last bit; the church demo's places take the church's names for `--tour`
+  and `--listeners`.
+- The stadium concert and the concert stage hold the singer's microphone (`singer_mic`,
+  a supercardioid 5 cm in front of the voice), which `feedback.py` takes from the scene
+  as it is; its gain before feedback moves by up to 0.8 dB in a band.
 
 ## 4.0.1
 

@@ -215,8 +215,8 @@ A whole town or a district from a map runs as it is. Edge diffraction looks for 
 that reflect off a wall, a roof or the ground before or after bending over an edge, and
 it skips the walls and roofs that no such path can reach before it traces a ray, with
 the same results as testing them all. On four cores 900 buildings simulate in about 17
-s and 3,600 in about 56 s, where earlier versions took 81 s for 900 and ran out of
-memory from about 1,600 (see [Validation](validation.md#edge-diffraction-in-whole-cities)).
+s and 3,600 in about 56 s (see
+[Validation](validation.md#edge-diffraction-in-whole-cities)).
 About five sixths of that time for 900, and over half for 3,600, goes to the terms that
 make reflections fade at the edges ([Simulation](simulation.md#edge-diffraction)).
 The work still grows with the square of the buildings: for tens of thousands, cut the
@@ -443,7 +443,7 @@ zones the scene's weather holds, and where zones overlap the first wins. The edd
 (`turbulence`) are the scene's everywhere. A zone that restates the scene's weather
 changes nothing but rounding. `inspect` names each zone, its corners and its weather;
 in the editor, **Weather of** chooses between the scene's weather and each zone's, and
-**Add weather zone** draws one in the plan (see [In the editor](#in-the-editor)). The
+**Add weather zone** draws one in the plan (see [the editor](editor.md#outdoor-scenes)). The
 views draw each zone with its name and its wind's speed at the scene's wind height
 (`lee: 1.0 m/s`), with its ground temperature when it has one of its own
 (`lake: 0.0 m/s, 12.0 °C`), and its own arrows in it; the 3D view raises see-through
@@ -663,7 +663,7 @@ default 10 m, 0.34 of the given values up to 10 m, then falling), because eddies
 size reach that high and the thin layer of stronger ones right at the ground does not
 tell in the parabolic equation (see [Validation](validation.md#turbulence-against-a-parabolic-equation-through-random-eddies)).
 Without `turbulence`, or with both structure parameters 0, the results are those
-without eddies, bit for bit; without `height_m` they are those of earlier versions.
+without eddies, bit for bit.
 
 ### How the simulation takes eddies into account
 
@@ -1019,7 +1019,7 @@ Maps gain the parameters `long_term` (dB per band) and `rating_level` (dB(A)).
 Python, `acoustic_spaces.engine.long_term.simulate` and `coverage_map` take
 `long_term=` to run classes the scene does not give, and `Scene.under(weather_class)`
 is the scene in one class. In the editor, weather classes are added and changed under
-**Weather of** (see [In the editor](#in-the-editor)).
+**Weather of** (see [the editor](editor.md#outdoor-scenes)).
 
 The level in each class is as accurate as the simulation in that weather (see [How the
 simulation bends sound](#how-the-simulation-bends-sound)). The combination is the
@@ -1124,62 +1124,8 @@ gives it the speed over the ground less the wind.
 
 ## In the editor
 
-**File > New outdoor scene** starts one: a flat meadow 200 m across, with a source and
-a listener 50 m apart. The **Geometry** entry of an outdoor scene has an **Outdoors**
-group: the ground's height, the margin and the sky, its extent (ticked, where the
-ground ends; unticked, the margin round what stands on it), the buildings, barriers and
-vegetation with their heights, which can be changed or removed (the vegetation's table
-also gives each one's shape and what fills it), and the ground zones. **Add building**,
-**Add barrier**, **Add vegetation** (a belt of trees, a hedge or a lone tree) and **Add
-zone** draw them in the plan view, with the usual sizes to change afterwards; what the
-scene file sets besides (a hedge's width, a tree's crown, the foliage and stems) stays
-there. **Terrain from a file** makes the ground follow a grid of heights, described
-under the ground's fields (its points, heights and grid), and **Buildings from a map**
-adds a GeoJSON file's buildings after asking which properties hold their heights and
-names; they stand in the buildings table after the scene's own, where **Remove
-building** leaves one out of the file (see [the editor](editor.md#outdoor-scenes)). A
-material's page
-has a **Ground impedance** group: tick it to make the material a ground (grass to
-start with), then pick the ground, the model, a flow resistivity of your own, a layer's
-thickness or the porosity rate. Unticked, the material keeps the absorption the
-impedance gave it. The scene's own entry has a **Wind and temperature** group: the
-weather (a preset, or custom), the wind's speed, direction, height and profile, the
-temperature's gradient and its change near the ground, and the roughness; changing a
-value makes the weather custom. Under them, **Eddies** picks the turbulence (none, a
-preset or custom), with the temperature's and the wind's structure parameters and the
-size of the largest eddies; they stay as the weather changes. A measured profile is set in the scene file, and
-**Remove the measured profile** drops it; **Show the profile** plots the temperature,
-the wind and the speed of sound over the ground, across the wind, downwind and upwind.
-**Weather of** chooses whose weather the fields show and change, the whole scene's or
-a [weather zone](#weather-zones)'s: **Add weather zone** draws one in the plan, corner
-by corner, like a zone, **Remove weather zone** drops the chosen one, and a zone has a
-**Ground temperature** of its own; (none) under **Weather** leaves the scene's weather
-unchanged in a zone, and the zone's fields are those it changes. The plan draws the
-weather zones dotted in sky blue, with their names and winds, and **View > Show wind**
-and **View > Show wind profile** draw the wind and its profile (see
-[Wind and temperature](#wind-and-temperature)); the eyes of the scene tree's **Wind**
-entry do the same, and the weather zones listed under it show their weather when
-selected. **Add weather class** adds a
-[weather class](#levels-over-a-long-term), which **Weather of** then shows: the first
-holds all the time in the scene's weather, the next ones none of it until given their
-share in the **Share of the time** table, one cell per period; changing one class's
-share makes room in the others, in proportion, so that each period's shares add up to
-100 %. A class has its own **Ground temperature** and may have eddies of its own (under
-**Eddies**, (none) is the scene's). **Remove weather class** drops the chosen one and
-gives its share to the others. The periods are set in the scene file, and the form
-names them.
-On the simulation page, **In pressure up to** goes up to 8000 Hz in an outdoor
-scene, the wave solver's **Wind** takes the wind as an effective speed of sound or
-as moving air, and **Parabolic equation** picks the narrow-angle or the wide-angle one
-in wind or temperature gradients. The 3D view and the export to Blender leave the sky out (the 3D view keeps its
-edges, to show where the ground ends), and the status bar gives the ground's area
-instead of a reverberation time. **Draw room** replaces an outdoor scene with a floor
-plan after asking, and brings **In pressure up to** back to a room's default when it
-was above 500 Hz. The **Simulation** entry of an outdoor scene with buildings,
-barriers or vegetation has an **Insertion loss** list, where ticking them runs the
-scene again without them (see [Results outdoors](#results-outdoors)), and the Results
-panel has the rows **Re free field**, **Insertion loss** and **Long-term level**,
-with the rating level and each period's and class's level under **Run details**.
+The editor builds and edits outdoor scenes too: see
+[Outdoor scenes](editor.md#outdoor-scenes).
 
 ## What is not modelled yet
 

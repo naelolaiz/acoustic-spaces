@@ -356,7 +356,7 @@ part of its event's diffracted wave, whose terms add up as one wave, so the two 
 a narrow face nearly cancel as they do in pressure. A wave's energy is that of its
 pieces added up in pressure and averaged over the band, never below nothing. Behind the
 `archway`'s wall, where the reflection off the arch's jamb, 40 cm deep, appears, the
-level steps by at most 0.08 dB from 250 Hz to 1 kHz (1.4 dB in 4.0.0). The
+level steps by at most 0.08 dB from 250 Hz to 1 kHz. The
 [known issues](validation.md#known-issues-of-the-edge-fade) list these, with what is
 checked and what is not. The fade comes with any `diffraction` but `none`. The late
 part is unchanged, since its scattered rays already find their way round corners.
@@ -586,8 +586,7 @@ simulation:
   find the same surfaces at the same distances; where a ray meets two faces at exactly
   the same point (a shared edge) the other tree may take the other one. In BRAS's
   chamber music hall (2,309 triangles, five listeners) one band of 50,000 rays takes
-  5.7 s on four cores with `sah` and 17 s with `median` (41 s in earlier versions, whose
-  walk through the tree was slower too).
+  5.7 s on four cores with `sah` and 17 s with `median`.
 
 `simulate`, `map` and `calibrate` take `--threads N` and `--ray-tree sah|median` to
 override them, `view`, `export` and `walkthrough` `--threads`; the editor's Simulation

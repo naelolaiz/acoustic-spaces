@@ -599,21 +599,7 @@ assumes; why the real hall decays as Eyring's formula gives and the model does n
 not traced (the simplified BRAS model, which smooths the hall's details away, is one
 candidate).
 
-**The hall's early part at low frequencies.** The plots of 15 October 2026 had the
-hall's EDT about 23 and 19 % long at 63 and 125 Hz and C80 about 1.5 and 1.3 dB low:
-their early part was weaker. Traced again at LS1's five positions without edge
-diffraction, that day's code and 4.0.1 give the same early energy, bit for bit, with
-every band in energy as that day's code had them (with 63 and 125 Hz in pressure,
-4.0.1's default, 0.5 and 0.2 dB more). With it (`first_order`) this version's early
-energy is 6.6 and 3.9 dB higher than that day's at 63 and 125 Hz, 2.3 dB at 250 Hz and
-1.0 dB at 500 Hz (means over the five positions; 4.7 to 9.8 dB at 63 Hz). The late part
-is the same. Without the [fade at
-edges](#reflections-that-fade-at-edges-against-the-exact-solution), which 4.0.0 added,
-it is 3.9 and 1.4 dB higher (1.8 to 6.8 dB at 63 Hz): the fade adds 2.7 and 2.5 dB of
-the change. In 4.0.1 it was 5.8 dB higher at 125 Hz, 1.9 dB more than now: its
-echogram's 125 Hz reading took the interference of the paths over edges a second time
-from the 250 Hz band, which this version no longer does. These traces are one-off
-checks, which no script in the repository makes. At 125 Hz C80 is now 0.6 dB low and
+**The hall's early part at low frequencies.** At 125 Hz C80 is 0.6 dB low and
 EDT 3.8 % short; at 63 Hz the early part is too strong (C80 1.1 dB high, EDT 3.6 JNDs
 short).
 
@@ -1113,17 +1099,6 @@ the edge diffraction already bends a path, the fade leaves out the terms it adds
 strip with `first_order` the edge diffraction bends the reflection off the strip, and
 the fade adds its copy off the ground (0.4 dB at 63 Hz).
 
-The edge diffraction's own tests outdoors found two more faults of the fade, now fixed
-and tested (`tests/test_edge_fade.py`). Behind a barrier on a hard ground, the leg
-before a reflection off the ground also took the barrier top's term, where the line to
-the listener's image passes the barrier beyond the ground; that wave is the path over
-the barrier with the reflection after it, which the edge diffraction has already, and
-the level was up to 0.8 dB off at 125 Hz. And the end of a wall as high as a roof
-elsewhere counted as standing on the roof's plane, so that right on the shadow line of
-the wall's end a reflection off that plane from below came as strong as the sound
-round the end: 2.8 to 6.3 dB too loud, and 3.1 dB too soft at 1 kHz, where the two
-cancelled. Neither changes any of the levels above.
-
 Behind a barrier 3 m high on a rigid ground (a thin screen across x = 0), with the
 source at (-4, 0, 0.5) and a listener at x = 4 m rising from 1 to 8 m 1 cm at a time,
 the exact level is that of the geometric paths and of the four paths over the top, from
@@ -1181,38 +1156,8 @@ dB:
 | with the fade | 0.06 | 0.10 | 0.02 | 0.03 | 0.04 | 0.05 | 0.07 | 0.13 |
 | without | 3.03 | 3.72 | 2.38 | 2.52 | 2.64 | 2.73 | 2.78 | 2.83 |
 
-Walking these lines found faults that made steps of 0.2 to 2.5 dB, now fixed: the
-cross terms of the terms with their paths went to other paths, as the edge diffraction
-hands the paths back sorted by arrival; of the two orders of a reflection off the floor
-and off a wall (perpendicular planes, one image), one that cannot be was kept, and the
-path over an edge may take the other order, so each path now takes the terms of both;
-paths through the line where two such planes meet were dropped, found or not; a path
-whose reflection off the floor lies just behind a wall was checked clear to that point
-rather than to where the path over the corner reflects; a listener exactly in a face's
-plane counted as in front of it; the paths of the highest order took the terms of
-reflections off faces the listener is behind, though in front of those faces the early
-stage follows no such reflection; the wave that takes over behind a face's plane from
-a reflection the size scattering weakens (after Christensen and Rindel, as in ODEON,
-from the third reflection of a path on with `first_order`) was not weakened alike, which made 0.72 dB at
-63 Hz into the plane of the wall round the corner; and where the paths over the corner
-reach its top, where it meets the ceiling, neither the leg before the reflection off
-the ceiling nor the one after it took them. `test_no_step_round_the_gallery_corner`
-walks seven of these places.
-
-Steps of 0.16 to 0.30 dB at 63 and 125 Hz in three more places are gone too. At y =
-12.00 and 17.34 m on x = 5.5 m several events stop a path that is not found, as its
-reflection off the floor or the ceiling lies past its face where the corner blocks a
-leg next to it, and such a path was left out, with its terms, though the path over the
-corner, which reflects off the floor or the ceiling elsewhere, goes on: it is now
-followed (see [Simulation](simulation.md#edge-diffraction)). At y = 16.40 m on x = 3 m
-a path off wall_6, wall_7 and wall_2 reflects off wall_2 before wall_7 on one side and
-after it on the other (perpendicular planes, one image), and the early stage's rays had
-found only one of the two orders, which the fade took as the only one: it now tries
-every order of reflections off perpendicular planes.
-
 The largest steps left stand out from their neighbours' by at most 0.08 dB, all at 63
-and 125 Hz; from 250 Hz up by at most 0.01 dB, where in 4.0.0 they stood out by up to
-0.10 dB at 500 Hz to 1 kHz as the listener crossed the plane of wall_3 (y = 8 m). The
+and 125 Hz; from 250 Hz up by at most 0.01 dB. The
 largest, 0.08 dB at 125 Hz between y = 13.33 and 13.34 m on x = 5.5 m, and a smaller
 one at 63 Hz near y = 9.81 m on x = 4 m come from a path that the corner stops on one
 leg while another of its reflection points slides past the end of its face into a
@@ -1253,10 +1198,7 @@ and 0.17 dB apart on the balcony.
 On the pavement and the balcony the early level changes by at most 0.25 and 0.16 dB(A)
 from one 10 cm to the next, and in the garden by at most 1.38 dB(A), where 1 kHz swings
 by 2.5 dB at x = 28.8 m and does so smoothly 1 cm apart; without the fade the garden's
-level steps by up to 12.2 dB(A) from one 10 cm to the next. The steps of 0.90 to 1.90
-dB that two events stopping a path made in the garden, at x = -41.60, 30.41, 32.00 and
-34.00 m (see the next paragraph), are gone: 1 cm apart, the level there stood out from
-its neighbours' by at most 0.11 dB in any band when they were fixed. The steps left
+level steps by up to 12.2 dB(A) from one 10 cm to the next. The steps left
 that stand out by more than 0.1 dB in some band 1 cm apart, but at 8 kHz, where a
 centimetre is a quarter of a wavelength and the level swings by up to 0.76 dB from one
 to the next (three more at 4 kHz in the garden, at x = 19.40, 28.72 and 28.88 m, are
@@ -1300,16 +1242,6 @@ barrier's top cuts off reaches the top's end at x = 14 m. The dip at 9.99 m is t
 paragraph's. `tests/test_walks.py` walks the garden round the four largest steps in CI
 and holds them to 1.5 dB in a band and 0.6 dB(A).
 
-The four steps that are gone came from paths that two events stop at once. At x =
--41.60, 30.41 and 32.00 m the reflection off the offices' façade of a path that the
-houses' corner or the barrier blocks reaches an end of the façade (x = -30 and 30 m):
-the path went from being stopped by two events to one, or back, and its path over the
-edge came or went at once (the edge diffraction's own path over the barrier with that
-reflection does the same at 30.41 m, 0.60 dB at 125 Hz without the fade). At 34.00 m a
-second-order path off the façade and the houses' end wall, stopped where it misses the
-wall, has its last leg pass the barrier's end as well. The fade now follows such paths
-(see [Simulation](simulation.md#edge-diffraction)).
-
 At x = 10.0 m, where the car crosses the plane of the houses' end wall, the sound over
 the houses' corner dips by up to 10 dB at 63 Hz within 2 cm (1.0 dB in the garden's
 level over 1 cm). It is the edge diffraction's own term, with or without the fade: it
@@ -1329,8 +1261,7 @@ would also be the better one here is not checked.
   still reflects on the face, which makes the steps of up to 0.08 dB left round the
   gallery's corner (see above). The edge diffraction's own paths over an edge with a
   reflection before or after it stop where that reflection leaves its face, which the
-  fade makes up for where it follows the path; without the fade the street's garden
-  stepped by 0.60 dB at 125 Hz there when this was fixed.
+  fade makes up for where it follows the path.
 - **Corners of edges.** A term stops where the point it diffracts at leaves the end of
   its edge, as the UTD has no terms for the corners of edges, unless that end lies in a
   plane the path reflects off next to the event, where the edge goes on as its image in
@@ -1363,16 +1294,11 @@ would also be the better one here is not checked.
   proportion. Walking the `archway`'s listener behind the wall 1 cm at a time
   (x = 7.6 m, y = 5.3 to 7.8 m), where the reflection off the arch's jamb, 40 cm deep,
   appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz, between y = 5.39
-  and 5.40 m (see the next item), and by at most 0.16 dB from 2 kHz up. In 4.0.0, where
-  the cross terms between pairs of terms could take more than the terms carried and the
-  sum stopped at zero, it stepped by 1.37 dB at 500 Hz and 1.06 dB at 250 Hz at
-  y = 6.14 m and by 0.92 dB at 250 Hz at 7.33 m, and by up to 4.4 dB before the terms
-  of one event took their cross terms with each other. The edge diffraction's own
-  paths, without the fade, step there by up to 1.56 dB at 63 Hz and 1.88 dB from 250 Hz
-  up. Averaged over the walk, in a one-off check, the level was 0.4, 1.1 and 0.7 dB
-  above that with every band in pressure (`coherent_max_band_hz: 8000`) at 250, 500 and
-  1000 Hz (4.0.0: 0.1, 1.6 and 0.9 dB) and 0.1 to 0.4 dB below it from 2 kHz up: not
-  traced.
+  and 5.40 m (see the next item), and by at most 0.16 dB from 2 kHz up. The edge
+  diffraction's own paths, without the fade, step there by up to 1.56 dB at 63 Hz and
+  1.88 dB from 250 Hz up. Averaged over the walk, in a one-off check, the level was 0.4,
+  1.1 and 0.7 dB above that with every band in pressure (`coherent_max_band_hz: 8000`)
+  at 250, 500 and 1000 Hz and 0.1 to 0.4 dB below it from 2 kHz up: not traced.
 - **Cut off by a thick end.** Behind the `archway`'s wall the level steps by 0.57 dB at
   63 Hz and 0.41 dB at 125 Hz between y = 5.39 and 5.40 m, and by 0.08 dB or less from
   250 Hz up, as it did with every band in pressure in a one-off check. Reflections
@@ -3260,8 +3186,8 @@ levels in figures only).
 Edge diffraction looks, for the source and for each listener, at every pair of an edge
 and a plane they face, for a path that reflects off the plane before or after bending
 over the edge. In a city the edges and the planes both grow with the buildings, so the
-pairs grow with their square: 900 buildings made 20 million pairs per listener, and the
-engine ran out of memory from about 1,600 buildings. Most pairs cannot carry a path.
+pairs grow with their square: 900 buildings make 20 million pairs per listener. Most
+pairs cannot carry a path.
 The ray tests start just off the edge and head for the mirror image of the source or
 listener in the plane, so a ray from an edge behind the plane never reaches it, and one
 from the rest of the edge meets the plane where the image casts the edge's shadow on
@@ -3292,11 +3218,8 @@ Diffraction includes the terms that make the other specular paths fade at the ed
 ([above](#reflections-that-fade-at-edges-against-the-exact-solution)). In a one-off
 check when the culling was written, on a run where 900 buildings simulated in 16.6 s
 (15.6 s of it diffraction), 1,600 in 21.4 s (20.1 s) and 3,600 in 56.4 s (54.5 s),
-they did so without those terms in 2.6 s (1.6 s), 4.8 s (3.6 s) and 24.4 s (22.4 s);
-and with every pair tested and without those terms, as in earlier versions, 100
-buildings took 1.3 s (3.7 s in that run), 400 took 15.1 s (9.1 s) and 900 81.1 s and
-7.1 GB (16.6 s), and 1,600 ran out of 14 GB. The tested
-share stays near 3 %: the shadow of a wall facing the source covers a wedge of the city
+they did so without those terms in 2.6 s (1.6 s), 4.8 s (3.6 s) and 24.4 s (22.4 s).
+The tested share stays near 3 %: the shadow of a wall facing the source covers a wedge of the city
 that widens away from it, and only the ray tests tell whether other buildings hide the
 wall. The work therefore still grows with the square of the buildings, and a few
 thousand buildings take tens of seconds per source. Tens of thousands need the map cut
