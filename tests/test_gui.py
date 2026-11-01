@@ -565,6 +565,90 @@ def test_messages_show_hide_filter_and_clear(window) -> None:
     assert window.messages.toPlainText().endswith(f"message {LIMIT + 200}")
 
 
+def test_message_paths_open_with_a_click(window, tmp_path, monkeypatch) -> None:
+    """A path in a message to a file or folder that is there is underlined: a click opens
+    it with the default app and its right-click menu copies it. Scripts, files that are
+    not there and paths relative to no folder stay plain text."""
+    from PySide6.QtGui import QTextCursor
+
+    from acoustic_spaces.gui import messages
+    from acoustic_spaces.gui.messages import paths_in
+
+    work = tmp_path / "my work"
+    work.mkdir()
+    tour = work / "tour.wav"
+    video = work / "video.mp4"
+    script = work / "make.py"
+    for path in (tour, video, script):
+        path.write_bytes(b"")
+
+    def spans(text, folder=None):
+        return [(text[start:end], path) for start, end, path in paths_in(text, folder)]
+
+    # Spaces in a path, and a sentence's punctuation around it.
+    text = f"wrote {tour} (1.5 s) and '{work}'."
+    assert spans(text) == [(str(tour), str(tour)), (str(work), str(work))]
+    # What a demo prints, relative to the folder it runs in.
+    assert spans("wrote my work/video.mp4: 12 s", tmp_path) == [("my work/video.mp4", str(video))]
+    assert spans("wrote my work/video.mp4") == []
+    assert spans(f"python {script} video") == []  # never a script
+    assert spans(f"wrote {work / 'gone.wav'}") == []
+    assert spans("frame 100/2000, km/h and / alone", tmp_path) == []
+
+    opened = []
+    monkeypatch.setattr(messages, "_default_app", lambda path: opened.append(path) or True)
+    panel = window.message_panel
+    view = window.messages
+    window.log(text, "warning")
+
+    def links_in(block):
+        found = []
+        for fragment in (piece.fragment() for piece in block):
+            style = fragment.charFormat()
+            if style.isAnchor():
+                assert style.fontUnderline()
+                assert style.foreground().color() == level_colour(view, "warning")
+                found.append((fragment.text(), style.anchorHref()))
+        return found
+
+    block = view.document().lastBlock()
+    assert links_in(block) == [(str(tour), str(tour)), (str(work), str(work))]
+    # A click on the path opens it; elsewhere in the message, nothing.
+    cursor = QTextCursor(block)
+    cursor.setPosition(block.position() + text.index(str(tour)) + 3)
+    view.setTextCursor(cursor)
+    view.ensureCursorVisible()  # in sight however the message wraps
+    point = view.cursorRect(cursor).center()
+    assert view.path_at(point) == str(tour)
+    QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=point)
+    assert opened == [str(tour)]
+    cursor.setPosition(block.position() + 2)
+    QTest.mouseClick(
+        view.viewport(), Qt.MouseButton.LeftButton, pos=view.cursorRect(cursor).center()
+    )
+    assert opened == [str(tour)]
+    # Its menu opens it or copies it, above the usual Copy.
+    menu = view.menu_for(point)
+    actions = {action.text(): action for action in menu.actions()}
+    assert [action.text() for action in menu.actions()][:2] == ["Open", "Copy path"]
+    assert all(action.toolTip() for action in menu.actions()[:2])
+    actions["Copy path"].trigger()
+    assert QApplication.clipboard().text() == str(tour)
+    actions["Open"].trigger()
+    assert opened == [str(tour), str(tour)]
+    # A file gone since says so; a script never opens, whatever asks.
+    tour.unlink()
+    assert not panel.open_path(str(tour))
+    assert panel.entries[-1][:2] == (f"Not opened: {tour} is no longer there", "warning")
+    assert not panel.open_path(str(script))
+    assert panel.entries[-1][1] == "warning" and str(script) in panel.entries[-1][0]
+    assert opened == [str(tour), str(tour)]
+    # The links stay when the messages are shown again.
+    panel.filter.setText("1.5 s")
+    assert view.toPlainText() == text
+    assert links_in(view.document().lastBlock()) == [(str(tour), str(tour)), (str(work), str(work))]
+
+
 def test_yaml_spans_and_indents() -> None:
     """The YAML panel's colours: keys, strings, numbers, true, false and null,
     comments, punctuation, and quoted text running on to the next line."""

@@ -75,32 +75,12 @@ demos take `--input car=engine.wav`, a dry recording played as the car's sound.
 
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demos
-(the stadium has two: its concert first, then the helicopter over it), then the
-example's scripts that are no demos (the stadium's `feedback.py`, say), each reading the
-open scene where it would read the example's (a copy is known by its
-folder's name or, saved anywhere, by the scene's name: a renamed scene is a scene of
-its own). Pick the demo and fill in the options that change what it plays, labelled in
-words (they start at the same defaults the command line uses, each one's flag in its
-tip), and it runs in the background with its messages in the **Messages** panel,
-**Cancel** stopping it. **Advanced** holds the step, what fine-tunes the run, the files
-and folders the demo reads and writes, and the command line. Above **Run**, a line says
-what the run downloads and how much, until it is there: the orchestra's tracks, the
-church's takes and organ samples, the stadium's and the lake's song, the gallery's talk. The sources are a table, each with what it plays and the file it plays instead:
-**Choose WAV…** gives the selected one a file, **Default** takes it back. **Listeners**
-lists the listeners the demo can play, every one ticked: the run plays the ticked ones
-(`--listeners`), **None** unticks them all to tick the few to hear, **All** ticks them
-again. The
-**Movement** box lists the sources and listeners of the scene that have a walk, each
-with how it goes, how far and for how long, ticked when it moves in the run: *This
-scene*'s ticks start as **Moves** sets them in the scene and change that run only
-(`--moving`, below), **As in the scene** ticks them as the scene does again, and an
-example's demo shows what it moves (the walk through the gallery moves its visitor, the
-pass-by demos their car; the other example demos move nothing). A walker left out of
-the scene's simulations is listed only when a demo moves it: the car, which the pass-by
-demos put in the scene they write. **Edit movement…** closes the window and opens the
-[Movement panel](editor.md) on the selected walker. The window shows the command line it
-is about to run, so a run started there can be repeated in a terminal or a script. A
-demo reads the scene from its file, so a scene with changes is saved first.
+and its scripts that are no demos. The window shows the options that change what the
+demo plays, at the command line's defaults, the file each source plays, the listeners
+to play and the walkers that move; **Advanced** holds the step, the paths and the
+command line, to repeat the run in a terminal. A line above **Run** says what the run
+downloads and how much. A scene with changes is saved first, as the demo reads its
+file.
 
 Every still says how its sound was made, at the bottom: the version, the early
 reflections (traced or image sources, their order, diffraction) and the late sound with
@@ -230,11 +210,6 @@ results, the mixes in `seats/` (in `moving/` when something moves), `tour.wav`, 
 stills, `thumbnail.png` and `tour.mp4`.
 In Python the demo is `acoustic_spaces.demos.scene_demo`
 (`python -m acoustic_spaces.demos.scene_demo all --scene scene.yaml`).
-
-The scripts share one package, `acoustic_spaces.demos`: the steps and options above,
-the recordings and their phrases, the simulate command and its HRTF, the mixes and
-their one gain, the crossfaded tour, the stills and the video. A new demo describes its
-steps and options and gets the rest, including the editor's window.
 
 ## An orchestra in the concert hall
 
@@ -907,9 +882,8 @@ fire engine's three) in its Movement box.
   (which the car, so close to it, makes nearly as strong and in step with it) and the
   second-order reflections, fades at the edges that cut it off. From one metre of road
   to the next the garden's early sound from the car changes by at most 3.1 dB(A),
-  smoothly where paths go in and out of step, where without the fade (as before 4.0.0)
-  it steps by up to 11.3 dB(A); 1 cm apart, the steps left stand out by 0.55 dB(A) at
-  most (see [Validation](validation.md#along-a-street)). The late sound comes from rays
+  smoothly where paths go in and out of step; 1 cm apart, the steps left stand out by
+  0.55 dB(A) at most (see [Validation](validation.md#along-a-street)). The late sound comes from rays
   drawn at random, few of which reach the garden, so two runs of the car's pass put its
   level up to 2.1 dB(A) apart at one place (its L_Amax within 0.01 dB, the balcony's
   0.17 dB apart) unless the scene has a `seed` (see

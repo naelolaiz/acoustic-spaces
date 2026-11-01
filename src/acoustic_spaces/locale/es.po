@@ -5819,6 +5819,33 @@ msgid "{title}: no values"
 msgstr "{title}: sin valores"
 
 #: acoustic_spaces/gui/messages.py
+msgid "Open"
+msgstr "Abrir"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Open {path} with this computer's default app"
+msgstr "Abrir {path} con la aplicación predeterminada de este ordenador"
+
+#: acoustic_spaces/gui/messages.py
+msgid "Copy path"
+msgstr "Copiar la ruta"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Copy {path} for pasting elsewhere"
+msgstr "Copiar {path} para pegarla en otro sitio"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid ""
+"Click to open {path} with this computer's default app; right-click to copy "
+"the path"
+msgstr ""
+"Hacer clic para abrir {path} con la aplicación predeterminada de este "
+"ordenador; clic derecho para copiar la ruta"
+
+#: acoustic_spaces/gui/messages.py
 msgid "Show the messages that only say what happened, such as a run's steps"
 msgstr ""
 "Mostrar los mensajes que solo dicen lo que ocurrió, como los pasos de una "
@@ -5865,6 +5892,25 @@ msgstr ""
 #: acoustic_spaces/gui/messages.py
 msgid "Item"
 msgstr "Elemento"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "Not opened: {path} is no longer there"
+msgstr "No se abrió: {path} ya no está"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid ""
+"Not opened: only sound, video, pictures, text, tables, scenes, 3D models, "
+"PDFs and folders open from here, not {path}"
+msgstr ""
+"No se abrió: desde aquí solo se abren sonido, vídeo, imágenes, texto, "
+"tablas, escenas, modelos 3D, PDF y carpetas, no {path}"
+
+#: acoustic_spaces/gui/messages.py
+#, python-brace-format
+msgid "No app on this computer opened {path}"
+msgstr "Ninguna aplicación de este ordenador abrió {path}"
 
 #: acoustic_spaces/gui/messages.py
 #, python-brace-format
