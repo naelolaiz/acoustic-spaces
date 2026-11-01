@@ -2,13 +2,14 @@
 held against the manual's own tables and worked example, and the railway's and the
 street's scripts that use it."""
 
+import argparse
 import math
 from pathlib import Path
 
 import pytest
 
 from acoustic_spaces import vibration as v
-from acoustic_spaces.demos import plant, rail, scripts_of, sibling
+from acoustic_spaces.demos import listeners_in, plant, rail, scripts_of, sibling
 from acoustic_spaces.examples import example_path
 
 MPH = v.MILE_KM
@@ -191,7 +192,13 @@ def test_the_railways_script(capsys: pytest.CaptureFixture[str]) -> None:
     """The railway's script: each train at its own speed at the scene's listeners, the
     house small masonry (3 dB more indoors), 24 trains a day (infrequent events, 80 VdB
     and 43 dB(A)), the freight train's wagons against frequent events 3 dB under."""
-    assert [d.name for d in scripts_of("railway")] == ["vibration"]
+    (demo,) = scripts_of("railway")
+    assert demo.name == "vibration"
+    # The editor ticks the houses among the scene's listeners in use.
+    assert demo.option("listeners").kind == "listeners"
+    scene = example_path("railway")
+    args = demo.resolved(argparse.Namespace(scene=scene, listeners=None))
+    assert demo.listeners(args) == listeners_in(scene) != []
     assert _script("railway").main([]) == 0
     out = capsys.readouterr().out
     assert "residences, 24 trains a day: infrequent events" in out
