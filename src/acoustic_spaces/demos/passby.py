@@ -24,7 +24,8 @@ siren on its roof, with the level and the directivity of a measured one
 its air horn (:mod:`acoustic_spaces.demos.horn`); a helicopter plays the sound its rotors send each
 way (:mod:`acoustic_spaces.demos.helicopter`).
 
-Each listener in use is simulated with the vehicle every ``--step`` along its walk
+Each listener in use (or each ``--listeners`` names) is simulated with the vehicle every
+``--step`` along its walk
 (:func:`acoustic_spaces.walkthrough.simulate_walk`) and hears it through those places,
 each early path through its own delay as it changes and the late sound crossfaded from
 place to place (:func:`~acoustic_spaces.walkthrough.render_walk`); the level along the
@@ -45,7 +46,18 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from acoustic_spaces.demos import Demo, Option, Step, common_options, input_option, pipeline
+from acoustic_spaces.demos import (
+    Demo,
+    Option,
+    Step,
+    chosen_order,
+    common_options,
+    input_option,
+    listener_names,
+    listeners_in,
+    listeners_option,
+    pipeline,
+)
 from acoustic_spaces.demos.audio import gated_rms, level_db, loudness_db, mono, read, resampled
 from acoustic_spaces.demos.audio import write as write_wav
 
@@ -828,7 +840,8 @@ def heard_together(passes: Sequence):
 
 
 def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> None:
-    """Each listener in use: the vehicle simulated every ``--step`` along its walk, its
+    """Each listener in use (those ``--listeners`` names, in its order): the vehicle
+    simulated every ``--step`` along its walk, its
     sound played through those places with Doppler, and the level along the way; one
     gain for every listener (the loudest peak at -1 dBFS), into ``walk/``: a WAV per
     listener, seats.json and walk.json. A vehicle of several sources (the police car and
@@ -876,7 +889,7 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
         sent[part] = x.scaled(gain) if not isinstance(x, np.ndarray) else (x * gain, rate)
     rooms = {part: alone(room, part) for part in parts} if len(parts) > 1 else {parts[0]: room}
     fmt = format_of(args, room.scene)
-    names = listeners_of(room)
+    names = chosen_order(args, listeners_of(room))
     if not names:
         raise SystemExit(f"error: every listener of {args.scene.name} is left out")
     c = room.speed_of_sound()
@@ -960,7 +973,8 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
 
 def walk_done(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> bool:
     """Whether the passes are there, made from the scene, the vehicle's sound, the step
-    and the format of this run, and newer than what they are made from."""
+    and the format of this run, newer than what they are made from, and at every
+    listener the run plays (:func:`heard_by`)."""
     path = args.work / "walk" / WALK
     if not path.exists() or not args.scene.exists():
         return False
@@ -983,15 +997,23 @@ def walk_done(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> bool:
         facts.get("plays") == plays
         and facts.get("label") == pipeline.output_label(args)
         and facts.get("step_m") == float(args.step_m)
+        and set(heard_by(args)) <= set(facts.get("listeners", {}))
     )
+
+
+def heard_by(args: argparse.Namespace) -> list[str]:
+    """The listeners a run plays: those ``--listeners`` names, in its order, or every
+    listener in use of the demo's scene, in its order."""
+    names = listener_names(getattr(args, "listeners", None))
+    return listeners_in(args.scene) if names is None else names
 
 
 # --------------------------------------------------------------------------- the video
 
 
 def stops_of(facts: dict, seats: dict, hint: str) -> list[pipeline.TourStop]:
-    """One stop per listener: its whole pass, turned up to the loudness of the loudest
-    (K-weighted), GAP_S of silence between two."""
+    """One stop per listener of ``facts``: its whole pass, turned up to the loudness of
+    the loudest (K-weighted), GAP_S of silence between two."""
     names = list(facts["listeners"])
     pipeline.missing_mixes(seats, names, hint)
     gains = pipeline.gains_of(seats, names)
@@ -1005,6 +1027,19 @@ def stops_of(facts: dict, seats: dict, hint: str) -> list[pipeline.TourStop]:
         )
         at += length + GAP_S
     return stops
+
+
+def heard_only(args: argparse.Namespace, facts: dict, hint: str) -> dict:
+    """``facts`` (walk.json) with the listeners ``--listeners`` names alone, in its
+    order; as they are when it names none. Stop with ``hint`` when one has no pass."""
+    names = listener_names(getattr(args, "listeners", None))
+    if names is None:
+        return facts
+    heard = facts["listeners"]
+    missing = [name for name in names if name not in heard]
+    if missing:
+        raise SystemExit(f"error: no pass at {missing[0]}; run: {hint}")
+    return facts | {"listeners": {name: heard[name] for name in names}}
 
 
 def credit_of(args: argparse.Namespace, facts: dict, vehicle: Vehicle = THE_CAR) -> str:
@@ -1034,6 +1069,7 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
             f"error: the passes in {folder} are of another format; run: "
             f"{demo.command('walk', args)}"
         )
+    facts = heard_only(args, facts, demo.command("walk", args))
     stops = stops_of(facts, seats, demo.command("walk", args))
     audio = pipeline.tour_audio(stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0)
     write_wav(args.work / "tour.wav", audio, seats["rate"])
@@ -1253,12 +1289,20 @@ def demo(
             ),
             *[o for o in common_options() if o.name != "again"],
             dataclasses.replace(input_option(("walk", "video")), help=texts["input"]),
+            listeners_option(
+                ("walk", "video"),
+                help=f"only these listeners, in this order, comma separated (default: every "
+                f"listener in use, in the scene's order): the {noun} is simulated along its "
+                "walk and heard at those alone, and the video plays their passes in turn",
+            ),
         ],
         scene_from="scene",
         problems=lambda shown, args: problems(shown, args, pick(args)),
         plays=lambda args: plays(args, pick(args)),
         moving=lambda args: moving(args, pick(args)),
         summary=lambda args: summary(args, pick(args)),
+        # The scene step keeps the example's listeners as they are.
+        listeners=lambda args: listeners_in(args.source),
     )
     made.steps = [
         Step(

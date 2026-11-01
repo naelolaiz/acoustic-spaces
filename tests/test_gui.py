@@ -3048,6 +3048,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
         "Format": "format",
         "HRTFs": "hrtf",
         "What the sources play": "inputs",
+        "Listeners": "listeners",
     }
     assert "(--song)" in dialog.options.layout().labelForField(dialog.fields["song"]).toolTip()
     for name in ("work", "results", "source", "scene", "tour", "bpm", "again"):
@@ -3285,6 +3286,67 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     ]
     assert labels and all(label.toolTip() for label in labels)
     dialog.deleteLater()
+
+
+def test_demo_dialog_picks_the_listeners(qapp, monkeypatch) -> None:
+    """The Run demo window lists the listeners the demo can play, every one ticked: a
+    run plays the ticked ones (--listeners). None unticks them all, which cannot run,
+    and All ticks them again, the plain command. The church's demo lists the places it
+    puts in its scene, the gallery's walk, which hears its visitor alone, none, and a
+    scene that cannot be read hides the list."""
+    from PySide6.QtWidgets import QDialogButtonBox
+
+    from acoustic_spaces import examples
+    from acoustic_spaces.demos import shell_line
+    from acoustic_spaces.gui.demo_dialog import DemoDialog, ListenersField
+
+    monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
+    dialog = DemoDialog(scene=example_path("stadium_concert"))
+    ok = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
+    field = dialog.fields["listeners"]
+    assert isinstance(field, ListenersField) and dialog.options.isAncestorOf(field)
+    label = dialog.options.layout().labelForField(field)
+    assert label.text() == "Listeners" and "(--listeners)" in label.toolTip()
+    assert field.names[:3] == ["singer", "guitarist", "drummer"] and len(field.names) == 12
+    assert field.ticked() == field.names
+    assert dialog.command.text() == "python stadium_demo.py all"
+    field.none.click()
+    assert field.ticked() == []
+    assert dialog.command.text() == "python stadium_demo.py all " + shell_line(["--listeners", ""])
+    assert dialog.problem.text() == "Cannot run: --listeners names no listener"
+    assert not ok.isEnabled()
+    for row in (field.names.index("mix_position"), field.names.index("east_stand")):
+        field.list.item(row).setCheckState(Qt.CheckState.Checked)
+    command = "python stadium_demo.py all --listeners mix_position,east_stand"
+    assert dialog.command.text() == command
+    assert dialog.problem.text() == "" and ok.isEnabled()
+    assert dialog.chosen()[2].listeners == "mix_position,east_stand"
+    field.all.click()
+    assert dialog.command.text() == "python stadium_demo.py all"
+    # This scene: the stadium's listeners in use, ticked again.
+    dialog.picker.setCurrentIndex(dialog.picker.findData("scene"))
+    field = dialog.fields["listeners"]
+    assert len(field.names) == 12 and field.ticked() == field.names
+    field.list.item(0).setCheckState(Qt.CheckState.Unchecked)
+    assert dialog.command.text().startswith("acoustic-spaces demo scene.yaml all --listeners ")
+    assert "singer" not in dialog.command.text().split("--listeners ")[1]
+    dialog.deleteLater()
+    church = DemoDialog(scene=example_path("church"))
+    assert church.fields["listeners"].names == [
+        "nave-back",
+        "side-aisle",
+        "front-pews",
+        "conductor",
+        "in-the-choir",
+        "nave-middle",
+    ]
+    church.deleteLater()
+    walk = DemoDialog(scene=example_path("gallery"))
+    assert "listeners" not in walk.fields
+    walk.deleteLater()
+    unsaved = DemoDialog(scene=None)
+    assert not unsaved._rows["listeners"].isRowVisible(unsaved.fields["listeners"])
+    unsaved.deleteLater()
 
 
 def test_demo_dialog_says_what_a_run_downloads(qapp, tmp_path: Path) -> None:

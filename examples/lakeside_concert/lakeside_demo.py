@@ -38,7 +38,9 @@ hear the far places in a video. So each stop of the tour is brought to the same 
 much quieter it really is. The window in still air keeps the gain of the window in the
 evening's weather, so the difference the weather makes is heard as the simulation gives
 it. Each place's mix is shifted earlier by the time the sound takes to reach it (1.6 s
-across the lake), so that the beat carries on across the cuts.
+across the lake), so that the beat carries on across the cuts. `--listeners
+audience,bedroom_window` mixes those places alone, in both weathers, and the video tours
+them alone, each stop of the tour there with its phrases.
 """
 
 from __future__ import annotations
@@ -56,7 +58,9 @@ from acoustic_spaces.demos import (
     Step,
     common_options,
     input_option,
+    listeners_option,
     music,
+    picked,
     pipeline,
     sibling,
 )
@@ -259,7 +263,8 @@ def render(args) -> None:
     feeds = {name: music_folder(args) / f"{name}.wav" for name in CHANNELS}
     mixes = []
     for weather, simulation in weathers(args).items():
-        for listener in sorted({e["listener"] for e in responses_of(args, weather)}):
+        simulated = sorted({e["listener"] for e in responses_of(args, weather)})
+        for listener in picked(args, simulated):
             mixes.append(
                 pipeline.Mix(
                     f"{listener}.{weather}",
@@ -276,7 +281,8 @@ def render(args) -> None:
 
 def tour_of(args) -> list[tuple[str, str, float, float]]:
     """(listener, weather, start, end) in the song's time; the stops end on the song's
-    phrase boundaries (8 bars)."""
+    phrase boundaries (8 bars). The stops at the places ``--listeners`` leaves out are
+    left out too, and stops at one place in one weather in a row are joined."""
     steps = TOUR
     if args.tour:
         steps = []
@@ -284,6 +290,10 @@ def tour_of(args) -> list[tuple[str, str, float, float]]:
             fields = part.split(":")
             weather = fields[1] if len(fields) > 1 and fields[1] else "evening"
             steps.append((fields[0], weather, float(fields[2]) if len(fields) > 2 else 1.0))
+    kept = set(picked(args, [listener for listener, _, _ in steps]))
+    steps = [step for step in steps if step[0] in kept]
+    if not steps:
+        raise SystemExit("error: the tour visits none of the listeners --listeners names")
     song = played(args)
     x, rate = read(song_path(args))
     tour = music.phrase_tour(
@@ -292,7 +302,20 @@ def tour_of(args) -> list[tuple[str, str, float, float]]:
         phrase_s(song),
         last_phrases=args.last_phrases,
     )
-    return [(listener, weather, start, stop) for (listener, weather), start, stop in tour]
+    stops = [(listener, weather, start, stop) for (listener, weather), start, stop in tour]
+    return pipeline.picked_tour(stops, lambda stop: True)
+
+
+def listeners(args) -> list[str]:
+    """The places the scenes step puts in the demo's scenes, in the example's order: its
+    listeners in use, and the one behind the stage, which the example leaves out of its
+    own simulations."""
+    data = yaml.safe_load(args.source.read_text(encoding="utf-8")) or {}
+    return [
+        item["name"]
+        for item in data.get("listeners") or []
+        if item.get("enabled", True) is not False or item["name"] == UPWIND
+    ]
 
 
 def gains_of(seats: dict, tour) -> dict[str, float]:
@@ -410,6 +433,11 @@ DEMO = Demo(
         ),
         *common_options(),
         input_option(),
+        listeners_option(
+            help="only these places, comma separated (default: every one): the demo mixes "
+            "those alone, in both weathers, and its video's tour leaves the others out; the "
+            "simulations keep every place, so another choice needs no new ones"
+        ),
         Option(
             "tour",
             "listener:weather:phrases,... (weather evening or still; 8 bars a phrase)",
@@ -428,6 +456,7 @@ DEMO = Demo(
     scene_from="scenes",
     plays=plays,
     problems=music.own_song_problems,
+    listeners=listeners,
 )
 
 __all__ = ["DEMO"]

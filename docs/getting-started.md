@@ -220,8 +220,8 @@ listener. Sources and listeners left out of simulations (`enabled: false`) get n
   demo…**) writes into `demo/` beside the scene (`--work` elsewhere): the simulation in
   `results/`, one mix per listener in `seats/` (`moving/` when something walks), named
   `LISTENER.binaural.wav`, and `tour.wav`, the stills in `stills/`, `thumbnail.png` and
-  `tour.mp4`, which visits every listener in use in the scene's order (`--tour` picks
-  them). An example's own demo writes its scene and simulation beside its script (the
+  `tour.mp4`, which visits every listener in use in the scene's order (`--listeners`
+  picks them). An example's own demo writes its scene and simulation beside its script (the
   stadium's `scene_band.yaml` and `results_band/`) and the rest into `demo/` there
   ([Demos](demos.md)).
 - The editor runs a demo in the open scene's folder, where the command line runs it,
