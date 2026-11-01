@@ -422,6 +422,9 @@ Movement:
   force density and a site's transfer mobility (read off the manual's measured curves
   or measured), and the floors and walls radiating it into the rooms in the engine,
   so the rumble is heard in a building's simulated rooms, not only reckoned.
+- [ ] Ground-borne vibration by the ISO and DIN norms, beside the FTA's manual, which
+  is US guidance: rail systems' vibration predicted as ISO 14837-1 guides, people in
+  buildings by ISO 2631-2 and DIN 4150-2, and damage to buildings by DIN 4150-3.
 - [ ] Movement: a path drawn in the plan click by click.
 
 Editor:
