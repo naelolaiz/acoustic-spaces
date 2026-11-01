@@ -643,9 +643,10 @@ def simulate(
             say(f"{label}: paths bent by the wind and the temperature")
             # The parabolic equation's runs come back from whoever drives this, with this
             # source's share of their time; while they wait, other sources are traced, so
-            # the timer stops, and what only the paths' search needed is let go.
+            # the timer stops, and what only the paths' search needed is let go, the paths
+            # as they were before the bending too (the plan holds what it keeps of them).
             planned = refraction.plan(listener_pos, straight, paths, cutoff)
-            del candidates, diffraction, straight
+            del candidates, diffraction, straight, paths, refraction
             add(info, "early_s", time.perf_counter() - started)
             pressures, seconds = yield planned
             started = time.perf_counter() - seconds
