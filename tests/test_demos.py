@@ -1352,6 +1352,13 @@ def test_a_demo_of_any_scene_plays_the_channels_of_its_recording(
         "fan": "mono",
     }
     assert feeds_done(args)
+    # Feeds levelled the old way (before 4.1.0, with no "levels") are made again.
+    old = dict(table)
+    old.pop("levels")
+    pipeline.write_json(scene.parent / "demo" / "feeds" / "feeds.json", old)
+    assert not feeds_done(args)
+    assert cli(["demo", "scene.yaml", "feeds"]) == 0
+    assert feeds_done(args)
     feed = {
         k: audio.read(scene.parent / "demo" / "feeds" / f"{k}.wav")[0].ravel()
         for k in table["sources"]
