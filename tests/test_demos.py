@@ -830,6 +830,36 @@ def test_a_tour_crossfades_its_stops_and_ends_at_full_scale(tmp_path: Path) -> N
     assert pipeline.gains_of(seats, ["near", "far"]) == {"near": 0.0, "far": 0.0}
 
 
+def test_a_tour_crossfade_keeps_the_power_however_alike_the_two_mixes_are(
+    tmp_path: Path,
+) -> None:
+    """The power runs on across the cut both for two seats much alike (the same music,
+    brought forward by its arrival), which an equal-power crossfade played 3 dB louder,
+    and for two unlike ones."""
+    folder = tmp_path / "seats"
+    rng = np.random.default_rng(1)
+    noise = rng.standard_normal((10 * RATE, 2)) * 0.1
+    signals = {"same": noise, "alike": noise, "unlike": rng.standard_normal((10 * RATE, 2)) * 0.1}
+    info = {}
+    for key, x in signals.items():
+        audio.write(folder / f"{key}.binaural.wav", x, RATE)
+        info[key] = {"lag_s": 0.0, "length_s": 10.0}
+    seats = {"rate": RATE, "format": "binaural", "seats": info}
+
+    def level_at_cut(second: str) -> float:
+        stops = [
+            pipeline.TourStop("same", 0.0, 0.0, 4.0),
+            pipeline.TourStop(second, 4.0, 4.0, 8.0),
+        ]
+        out = pipeline.tour_audio(stops, folder, seats, crossfade_s=1.0, fade_out_s=0.0)
+        cut = out[int(3.9 * RATE) : int(4.1 * RATE)]
+        away = out[int(2.0 * RATE) : int(3.0 * RATE)]
+        return audio.db(float(np.sqrt(np.mean(cut**2) / np.mean(away**2))))
+
+    assert level_at_cut("alike") == pytest.approx(0.0, abs=0.2)
+    assert level_at_cut("unlike") == pytest.approx(0.0, abs=0.3)
+
+
 def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
     """Without ffmpeg (``--no-mp4``) the video step still writes every still, the list
     the concat demuxer reads and the chapters."""
