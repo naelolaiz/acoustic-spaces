@@ -377,7 +377,9 @@ Movement:
 - [x] Trains and trams by Schall 03: the `railway` example, its demo running a regional
   train, an S-Bahn, an intercity or a freight train past as long as each is, and a tram
   in the street; the engine's pass checked against Schall 03's own sum.
-- [ ] CNOSSOS-EU's railway noise for the trains, to choose instead of Schall 03.
+- [ ] CNOSSOS-EU's railway noise for the trains, to choose instead of Schall 03: second
+  to it, as the Directive's default transfer functions give about 6 dB(A) more rolling
+  noise than TWINS and leave trams poorly covered.
 - [x] Construction plant and reversing alarms: road works in the street (a breaker on an
   excavator, a generator and a dumper reversing with its alarm on) from Defra's noise
   database for construction sites, and a demo that plays them; checked against Defra's
