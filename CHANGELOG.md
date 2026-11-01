@@ -100,7 +100,8 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
 - Outdoors, the places of a walking source share the parabolic equation's runs where
   they stand at one height over one ground without zones (`simulate(share_waves=...)`):
   an aircraft's 26 places take 31 s instead of 89 s, with the same early levels to 10⁻⁷
-  dB. Still scenes are unchanged, bit for bit.
+  dB. Still scenes are unchanged, bit for bit. A place waiting for its run keeps only
+  its bent paths.
 - A moving source renders faster: the paths at a moment of the eddies are worked out
   once, their own phases' angles once per place, and the HRTF onsets without the HRIRs.
 
@@ -150,8 +151,9 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
   shorter than its pass"), its sound a sample shorter than its walk's rounded times.
 - A stereo recording's left and right sources played 0.2 to 3 dB over their sound power,
   in any scene's demo and the stadium's; the two channels now share one gain set from
-  both, not from the mixdown. The lakeside concert's subwoofers, fed the song's mixdown,
-  played up to 3 dB under theirs; they are now brought to the same level.
+  both gated together, not from the mixdown. The lakeside concert's subwoofers, fed the
+  song's mixdown, played up to 3 dB under theirs; they are now brought to the same
+  level. Feeds made before in a work folder are made again.
 - A tour played up to 3 dB louder at a crossfade between two seats of one piece; the
   crossfade now keeps the power running on however alike the two mixes are.
 
@@ -198,11 +200,14 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
   and whether that is felt, and a bass shaker's track plays it.
 - The railway, tree belt and lakeside concert examples trace image sources to the second
   order, so the barrier's and the houses' reflections keep their partners off the
-  ground. Across the lake the evening's weather now makes the song 7.1 dB(A) louder at
-  the bedroom window than still air, as the house's wall gives back what comes in off
-  the water too (the docs' 2.3 dB was out of date: 4.4 at the first order). Behind the
-  tree belt's trees, their trunks' scattered sound now fills the ground's dip at 500 Hz
-  and 1 kHz: the garden there is 4.5 and 1.8 dB louder than without the wood.
+  ground. The railway's trains now peak 2.2 to 2.9 dB(A) lower on the meadow, whose
+  listener hears the barrier's reflection, 0.7 to 1.0 lower 7.5 m from the track, and as
+  before behind the barrier. Across the lake the evening's weather now makes the song
+  7.1 dB(A) louder at the bedroom window than still air, as the house's wall gives back
+  what comes in off the water too (the docs' 2.3 dB was out of date: 4.4 at the first
+  order). Behind the tree belt's trees, their trunks' scattered sound now fills the
+  ground's dip at 500 Hz and 1 kHz: the garden there is 4.5 and 1.8 dB louder than
+  without the wood.
 - The road vehicles' sound power is CNOSSOS-EU's Table F-1 as amended in 2021
   (Commission Delegated Directive (EU) 2021/1226): the car's at 50 km/h is 98.4 dB(A)
   instead of 96.0, and its passes in `roadside` and `street` are louder by about as

@@ -48,7 +48,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import numpy as np
 import yaml
 
 from acoustic_spaces import recordings
@@ -65,8 +64,8 @@ from acoustic_spaces.demos import (
     pipeline,
     sibling,
 )
-from acoustic_spaces.demos.audio import gated_rms, mono, read, stereo, write
-from acoustic_spaces.demos.scene_demo import FEED_RMS
+from acoustic_spaces.demos.audio import channels_rms, gated_rms, mono, read, stereo, write
+from acoustic_spaces.demos.scene_demo import FEED_LEVELS, FEED_RMS
 
 #: The songs the demo can play (``--song``): the free songs of
 #: :mod:`acoustic_spaces.recordings`, each with the files it is made of (one here, a
@@ -156,7 +155,11 @@ def music_done(args) -> bool:
     """Whether the song and each loudspeaker's signal are there."""
     folder = music_folder(args)
     names = [song_of(args)["name"], *CHANNELS]
-    return all((folder / f"{name}.wav").exists() for name in names)
+    if not all((folder / f"{name}.wav").exists() for name in names):
+        return False
+    # Signals levelled otherwise (the song's raw channels, before 4.1.0) are made again.
+    song = folder / "song.json"
+    return song.exists() and pipeline.read_json(song).get("levels") == FEED_LEVELS
 
 
 def music_download(args) -> str | None:
@@ -178,14 +181,15 @@ def music_step(args) -> None:
     music.write_tracks({song["name"]: song["files"]}, folder, rate=RATE, channels=2)
     x, rate = read(song_path(args))
     x = stereo(x)
-    pair = np.sqrt(np.mean([gated_rms(x[:, k], rate) ** 2 for k in (0, 1)]))
+    pair = channels_rms(x, rate)
     for name, channel in CHANNELS.items():
         y = mono(x) if channel == "mono" else x[:, channel]
         level = gated_rms(y, rate) if channel == "mono" else pair
         if level <= 0.0:
             raise SystemExit(f"error: {song['name']} is silent")
         write(folder / f"{name}.wav", y * (FEED_RMS / level), rate)
-    pipeline.write_json(folder / "song.json", {k: v for k, v in song.items() if k in SONG_KEPT})
+    kept = {k: v for k, v in song.items() if k in SONG_KEPT}
+    pipeline.write_json(folder / "song.json", kept | {"levels": FEED_LEVELS})
     print(f"wrote {', '.join(CHANNELS)} ({len(x) / rate:.0f} s of {song['name']}) to {folder}")
 
 
@@ -202,7 +206,7 @@ def played(args) -> dict:
     path = music_folder(args) / "song.json"
     if not path.exists():
         raise SystemExit(f"error: no song yet; run first: {DEMO.command('music', args)}")
-    return pipeline.read_json(path)
+    return {k: v for k, v in pipeline.read_json(path).items() if k in SONG_KEPT}
 
 
 # --------------------------------------------------------------------------- the scenes
