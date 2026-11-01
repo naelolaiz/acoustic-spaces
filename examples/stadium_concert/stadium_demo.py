@@ -85,7 +85,15 @@ from acoustic_spaces.demos import (
     pipeline,
     sibling,
 )
-from acoustic_spaces.demos.audio import gated_rms, lag_of, read, resampled, shifted, write
+from acoustic_spaces.demos.audio import (
+    channels_rms,
+    gated_rms,
+    lag_of,
+    read,
+    resampled,
+    shifted,
+    write,
+)
 
 #: The songs the demo can play (``--song``), each from its release, only the files it
 #: needs: the master and the stems by the names the mixes use, each a list of files
@@ -516,9 +524,7 @@ def feeds(args) -> None:
     # The master's channels share one gain, so its stereo balance stays, set from both
     # (their mean square): one from the mixdown, which two unlike channels lower, would
     # play them up to 3 dB over their sound power.
-    pair = float(
-        np.sqrt((gated_rms(master[:, 0], rate) ** 2 + gated_rms(master[:, 1], rate) ** 2) / 2)
-    )
+    pair = channels_rms(master, rate)
     reference = {"left": pair, "right": pair, "mono": gated_rms(master, rate)}
     norm = {
         k: reference[k] if k in reference else gated_rms(v, rate)

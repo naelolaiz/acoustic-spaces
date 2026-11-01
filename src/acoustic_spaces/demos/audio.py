@@ -59,12 +59,26 @@ def gated_rms(x: np.ndarray, rate: int) -> float:
     in the details: its blocks overlap by 75 %, its first gate is at -70 LUFS, absolute,
     and its second 10 LU below the mean. No weighting is applied here; the callers
     weight first."""
-    m = mono(x)
+    return _gated(mono(x)[:, None], rate)
+
+
+def channels_rms(x: np.ndarray, rate: int) -> float:
+    """The RMS of the channels of ``x`` (samples, channels) together: their mean square,
+    over the 400 ms blocks in which they play, gated on the channels' summed power as
+    BS.1770 gates several channels (and as :func:`gated_rms` gates one), so that a
+    channel that pauses while the others play counts its pause. The level that the
+    left and right channels of one recording share one gain from."""
+    return _gated(np.atleast_2d(np.asarray(x, dtype=float).T).T, rate)
+
+
+def _gated(x: np.ndarray, rate: int) -> float:
+    """The RMS (samples, channels) over the blocks :func:`gated_rms` keeps, the gates on
+    the mean over the channels of each block's mean square."""
     block = int(0.4 * rate)
-    n = len(m) // block
+    n = len(x) // block
     if n == 0:
-        return float(np.sqrt(np.mean(m**2)))
-    power = (m[: n * block].reshape(n, block) ** 2).mean(axis=1)
+        return float(np.sqrt(np.mean(x**2)))
+    power = (x[: n * block].reshape(n, block, -1) ** 2).mean(axis=(1, 2))
     on = power[power > 1e-7 * power.max()]
     if on.size == 0:
         return 0.0

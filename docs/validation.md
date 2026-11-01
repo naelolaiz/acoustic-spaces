@@ -2451,7 +2451,12 @@ Each band of the wide-angle equation marches a grid of twenty points per wavelen
 its highest frequency in steps of three wavelengths, ten tridiagonal solves a step,
 where the narrow-angle one takes a pair of Fourier transforms a step on a grid half as
 fine, in steps of five wavelengths: three to four times the work, all of it in the
-bands the parabolic equation gives. Neither equation is checked against measurements
+bands the parabolic equation gives. The narrow-angle equation's step is not converged
+for a high source (a one-off check): for one 30 m up, 180 m away, a step an eighth as
+long moves the 100 Hz band by up to 0.8 dB, so a level can also move by up to about
+0.75 dB with the other listeners in its direction, whose ranges break the run's steps;
+the wide-angle equation is converged at its step, and the helicopter's scenes use it.
+Neither equation is checked against measurements
 in strong refraction, and neither is combined with a terrain yet (see
 [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
 
