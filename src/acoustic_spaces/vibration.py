@@ -491,6 +491,13 @@ def horizontal_distance(
 
 def horizontal_distances(points, path, closed: bool = False) -> np.ndarray:
     """(n,) :func:`horizontal_distance` of each of ``points`` (n, 2 or 3)."""
+    p = np.atleast_2d(np.asarray(points, dtype=float))[:, :2]
+    return np.linalg.norm(nearest_points(p, path, closed) - p, axis=1)
+
+
+def nearest_points(points, path, closed: bool = False) -> np.ndarray:
+    """(n, 2) the point of ``path`` (as :func:`horizontal_distance` takes it) nearest
+    each of ``points`` (n, 2 or 3), in plan."""
     p = np.atleast_2d(np.asarray(points, dtype=float))[:, None, :2]
     corners = np.asarray(path, dtype=float)[:, :2]
     if closed:
@@ -508,7 +515,9 @@ def horizontal_distances(points, path, closed: bool = False) -> np.ndarray:
     )
     nearest = a + np.clip(t, 0.0, 1.0)[..., None] * ab
     ends = np.broadcast_to(corners[-1:], (len(p), 1, 2))
-    return np.min(np.linalg.norm(np.concatenate([nearest, ends], axis=1) - p, axis=2), axis=1)
+    candidates = np.concatenate([nearest, ends], axis=1)
+    which = np.argmin(np.linalg.norm(candidates - p, axis=2), axis=1)
+    return candidates[np.arange(len(p)), which]
 
 
 __all__ = [
@@ -542,6 +551,7 @@ __all__ = [
     "indoor_db",
     "level_of",
     "mm_s",
+    "nearest_points",
     "noise_level",
     "plant_level",
     "plant_ppv",

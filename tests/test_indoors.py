@@ -210,24 +210,35 @@ def test_a_listener_0_5_to_2_m_in_front_of_a_wall_is_in_its_house() -> None:
         facing = indoors.facing(street, at)
         assert (facing and facing.name) == house, at
     facing = indoors.facing(street, (0.0, 4.0, 1.6))
-    assert facing is not None
+    assert facing is not None and facing.wall == (0.0, 6.0)
     away = facing.distances([(0.0, 0.0), (-40.0, 6.0), (0.0, 10.0)])
-    np.testing.assert_allclose(away, [6.0, 10.0, 4.0])
+    np.testing.assert_allclose(away, [6.0, 40.0, 4.0])
 
 
-def test_the_ground_shakes_a_house_from_its_nearest_wall() -> None:
-    """At a house, the ground shakes as the curve says at the distance from each wheel
-    to the house's outline, not to the listener in front of it."""
+def test_the_ground_shakes_a_room_from_behind_its_listener() -> None:
+    """In a house, the ground shakes as the curve says at the distance from each wheel
+    to the room's wall behind the listener, not to the listener in front of it; nor to
+    the building's nearest corner: the street's row of houses ends 4 m from the
+    breaker, but the pavement's room is 20 m along the street from it."""
     speed = 72.0
     path = _Path(100.0, speed / 3.6)
     wheels = indoors.Wheels("locomotive", speed, (3.0,), (0.0,))
     times = np.linspace(0.0, 10.0, 201)
-    house = indoors.Facing("house", ((-5.0, 12.0), (5.0, 12.0), (5.0, 20.0), (-5.0, 20.0)), 2.0)
+    house = indoors.Facing("house", (0.0, 12.0), 2.0)
     at_house = indoors.ground_vdb(wheels, path, house, times)
     at_listener = indoors.ground_vdb(wheels, path, (0.0, 10.0, 1.5), times)
     curve = vibration.CURVES["locomotive"]
     assert np.max(at_house) == pytest.approx(curve.level(12.0, speed), abs=1e-6)
     assert np.max(at_listener) == pytest.approx(curve.level(10.0, speed), abs=1e-6)
+    from acoustic_spaces import Scene
+    from acoustic_spaces.examples import example_path
+
+    street = Scene.from_yaml(example_path("street"))
+    breaker = next(s for s in street.sources if s.name == "breaker").position
+    room = indoors.facings(street, ["pavement"])["pavement"]
+    assert room is not None and room.distances([breaker])[0] == pytest.approx(math.hypot(20, 4))
+    houses = next(b for b in street.geometry.all_buildings() if b.name == "houses")
+    assert vibration.horizontal_distance(breaker, houses.footprint, closed=True) == 4.0
 
 
 def test_what_is_felt_is_the_vibrations_velocity() -> None:

@@ -14,10 +14,10 @@ through a zero-phase filter that changes each octave band's energy by as much
 comes from outdoors; the room's own reverberation is not added.
 
 The rumble: by the FTA's general method (:mod:`acoustic_spaces.vibration`), the ground
-at the house shakes at each moment as the train's base curve says at the distance in
-plan from each of its wheels to the house's outline, the nearest of them: when it runs
-past, the manual's level for the house's distance from the track; as it comes and goes,
-less. The house, a small masonry
+under the room shakes at each moment as the train's base curve says at the distance in
+plan from its nearest wheels to the room's wall (the point of the house's wall nearest
+the listener): when it runs past, the manual's level for that
+wall's distance from the track; as it comes and goes, less. The house, a small masonry
 building whose structure is not known, adds the manual's 3 dB on its floors, and its
 room's surfaces radiate the rumble at the level of table 6-14 for vibration peaking
 below 30 Hz (the railway's vibration.py's defaults). Its sound is noise in the third
@@ -91,17 +91,21 @@ def help_of(noun: str) -> str:
 
 @dataclass(frozen=True)
 class Facing:
-    """The house a listener stands in front of: the scene's building ``name``, its
-    ``footprint`` in plan (m) and how far the listener is from its wall (m)."""
+    """The house a listener stands in front of: the scene's building ``name``, the
+    point of its wall nearest the listener in plan (m), the room's, and how far the
+    listener is from it (m)."""
 
     name: str
-    footprint: tuple[tuple[float, float], ...]
+    wall: tuple[float, float]
     distance_m: float
 
     def distances(self, points) -> np.ndarray:
-        """(n,) how far each of ``points`` (n, 2 or 3) is in plan from the house's
-        outline (m): where the ground's vibration from there reaches it first."""
-        return vibration.horizontal_distances(points, self.footprint, closed=True)
+        """(n,) how far each of ``points`` (n, 2 or 3) is in plan from the room's wall
+        (m), where the ground's vibration from there reaches the room. A long
+        building's nearest corner may be far nearer, as a row of houses' end is to works
+        along its street, but the room is behind the listener."""
+        p = np.atleast_2d(np.asarray(points, dtype=float))[:, :2]
+        return np.linalg.norm(p - np.asarray(self.wall), axis=1)
 
 
 def facing(scene, position) -> Facing | None:
@@ -126,11 +130,11 @@ def facing(scene, position) -> Facing | None:
         footprint = scale * np.asarray(building.footprint, dtype=float)
         if in_polygon(here[None, :2], footprint)[0] or here[2] - ground >= scale * building.height:
             continue
-        distance = float(vibration.horizontal_distances(here[None], footprint, closed=True)[0])
+        wall = vibration.nearest_points(here[None], footprint, closed=True)[0]
+        distance = float(np.linalg.norm(wall - here[:2]))
         near = least - FACADE_TOLERANCE_M <= distance <= most + FACADE_TOLERANCE_M
         if near and (found is None or distance < found.distance_m):
-            corners = tuple((float(x), float(y)) for x, y in footprint)
-            found = Facing(str(building.name), corners, distance)
+            found = Facing(str(building.name), (float(wall[0]), float(wall[1])), distance)
     return found
 
 
@@ -266,7 +270,7 @@ def ground_vdb(
     ``wheels`` go along ``path`` (the walk's :class:`~acoustic_spaces.walkthrough.Knots`,
     of the vehicle's front): the curve at the distance in plan of each wheel that is on
     the walk then (its front's place ``behind_m`` earlier, between the walk's start and
-    end) from the position, or from the house's outline, with the ``line``'s
+    end) from the position, or from the room's wall, with the ``line``'s
     adjustments (none by default) and the wheel's offset, the greatest of them; -inf
     when none is. Nearer than 10 ft the curve holds, farther than 300 ft it falls on as
     it falls there (:meth:`~acoustic_spaces.vibration.Curve.level`)."""
@@ -325,7 +329,7 @@ class StillHouses:
     format.
 
     The plant's vibration at a house is each machine's level at its distance in plan
-    from the house's outline (:func:`~acoustic_spaces.vibration.plant_level`, eq.
+    from the room's wall behind the listener (:func:`~acoustic_spaces.vibration.plant_level`, eq.
     7-3), their energies added, and the manual compares plant's level with its limits
     as it is, with no adjustment for the building (section 7.2, step 4); its rumble is
     table 6-14's for vibration peaking below 30 Hz, as the trains'. Outdoors the ground
