@@ -9,15 +9,15 @@ page): a file of yours, such as a band's stereo mix, or one of the free recordin
 (:mod:`acoustic_spaces.recordings`), which the ``recording`` step downloads the first
 time and keeps for every scene that names it. So the left and right loudspeakers of a
 sound system play the two sides of one recording, and its subwoofers both mixed down.
-Each file is brought to one gated RMS (its channels mixed down) and every channel taken
-out of it keeps that gain, so a recording's stereo balance stays; then each source's
-sound power in the scene (``level_db``) sets how loud it is against the others, as the
-simulation says and not as the recordings happen to be. Sources with neither stay
-silent. Every listener in use is heard in turn, in the scene's order (or only those
-``--listeners`` names, in its order), for ``--seconds`` each while the piece runs on,
-with one gain for all the stops and a crossfade between them, binaural through the HRTFs
-of the scene's binaural output (or ``--hrtf``, or a spherical head model when neither
-names any). The stills show the scene from above with the listener of the moment, the
+A file mixed down is brought to one gated RMS; its left and right channels share one
+gain that brings their mean square to it, so a recording's stereo balance stays; then
+each source's sound power in the scene (``level_db``) sets how loud it is against the
+others, as the simulation says and not as the recordings happen to be. Sources with
+neither stay silent. Every listener in use is heard in turn, in the scene's order (or
+only those ``--listeners`` names, in its order), for ``--seconds`` each while the piece
+runs on, with one gain for all the stops and a crossfade between them, binaural through
+the HRTFs of the scene's binaural output (or ``--hrtf``, or a spherical head model when
+neither names any). The stills show the scene from above with the listener of the moment, the
 level there, how long the sound takes to arrive and T30 at mid frequencies, and say how
 the sound was made. The simulation keeps every listener in use, so another choice of
 ``--listeners`` needs no new one.

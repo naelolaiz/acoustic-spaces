@@ -163,15 +163,15 @@ acoustic-spaces demo scene.yaml --moving none   # every walker standing where it
 - **recording**: downloads the free recording the scene names, unless it is there or
   no source plays it; the editor's Run demo window says so above Run, with its size.
 - **feeds**: each source's file (its `signal`, or the scene's `recording`), at the
-  scene's sample rate, its `channel` or mixed down to mono. Each file is brought to one
-  gated RMS (unweighted, its channels mixed down) and every channel taken out of it
-  keeps that gain, so a recording's stereo balance stays and how loud each source plays
-  against the others is its sound power in the scene (`level_db`, with its feed's gain
-  and equalizer), as the simulation says, and not how loud the recording happens to
-  be. Sources with neither stay silent and are listed as such. `--input
-  SOURCE=WAV` plays another file instead of a source's signal or the recording, without
-  changing the scene (the source's `channel` is taken out of it in the same way), and
-  gives a silent source one.
+  scene's sample rate, its `channel` or mixed down to mono. A file mixed down is brought
+  to one gated RMS (unweighted); its left and right channels share one gain that
+  brings their mean square to it, so a recording's stereo balance stays and how loud
+  each source plays against the others is its sound power in the scene (`level_db`,
+  with its feed's gain and equalizer), as the simulation says, and not how loud the
+  recording happens to be. Sources with neither stay silent and are listed as such.
+  `--input SOURCE=WAV` plays another file instead of a source's signal or the
+  recording, without changing the scene (the source's `channel` is taken out of it in
+  the same way), and gives a silent source one.
 - **simulate**: `acoustic-spaces simulate` on the scene, its binaural output through the
   HRTFs the scene's binaural output names, `--hrtf` instead, or the spherical head
   model when neither names any. A scene changed since its results is simulated again.
