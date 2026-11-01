@@ -214,6 +214,9 @@ def test_the_railways_script(capsys: pytest.CaptureFixture[str]) -> None:
     assert f"tsi_7m5                    7.5 m{wagons:9.1f}" in out
     tram = v.ground_level("rapid_transit", 25.0, 50.0)
     assert f"{tram:9.1f}{tram + 3:9.1f}{tram + 3 - 50:9.1f}\n" in out
+    # house_18m stands 2 m in front of the house, its wall 20 m from the track.
+    house = v.ground_level("locomotive", 20.0, 160.0)
+    assert f"house_18m (house)         20.0 m{house:9.1f}{house + 3:9.1f}" in out
     # --listeners: those houses alone, in that order.
     assert _script("railway").main(["--listeners", "meadow_25m,tsi_7m5"]) == 0
     out = capsys.readouterr().out
