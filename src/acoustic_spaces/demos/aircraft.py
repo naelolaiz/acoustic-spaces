@@ -201,7 +201,9 @@ class Aircraft(Vehicle):
             "temperature_c": air.temperature_c,
             "pressure_kpa": air.pressure_kpa,
             "rate": int(example.simulation.sample_rate),
-            "duration_s": round(flown.duration_s, 6),
+            # As long as the walk the scene gets, whose keyframes' times are rounded: a
+            # sound as long as the flight itself can end a sample or two before its pass.
+            "duration_s": flown.keyframes()[-1]["time_s"],
             "speed_kmh": round(float(speed_kmh), 6),
             "slowest_kmh": round(3.6 * min(flown.speeds), 4),
             "fastest_kmh": round(3.6 * max(flown.speeds), 4),

@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from typing import overload
 
 import numpy as np
 
@@ -113,6 +114,13 @@ class Track:
         return float(x), float(y)
 
 
+def speed_between(v1, v2, f):
+    """The speed ``f`` of the distance from ``v1`` to ``v2`` (m/s), its square linear
+    in the distance, so that the speed is linear in time (eq. 3-2); ``f`` a number or
+    an array of them."""
+    return np.sqrt(np.maximum(v1**2 + f * (v2**2 - v1**2), 0.0))
+
+
 def interpolate(a: Node, b: Node, s: float) -> Node:
     """The node ``s`` along the way from ``a`` to ``b``: the height and the bank angle
     linear in the distance, the speed and the power in its square, linear in time
@@ -121,22 +129,29 @@ def interpolate(a: Node, b: Node, s: float) -> Node:
     return Node(
         s=s,
         height=a.height + f * (b.height - a.height),
-        speed=math.sqrt(max(a.speed**2 + f * (b.speed**2 - a.speed**2), 0.0)),
+        speed=float(speed_between(a.speed, b.speed, f)),
         power=power_between(a.power, b.power, f),
         bank=a.bank + f * (b.bank - a.bank),
         ground=a.ground and b.ground,
     )
 
 
-def power_between(p1: float, p2: float, f: float) -> float:
-    """The power ``f`` of the way from ``p1`` to ``p2`` (eq. 3-2d to 3-2g)."""
+@overload
+def power_between(p1: float, p2: float, f: float) -> float: ...
+@overload
+def power_between(p1: float, p2: float, f: np.ndarray) -> np.ndarray: ...
+def power_between(p1, p2, f):
+    """The power ``f`` of the way from ``p1`` to ``p2`` (eq. 3-2d to 3-2g), ``f`` a
+    number or an array of them."""
     if p1 >= 0 and p2 >= 0:
-        return math.sqrt(p1**2 + f * (p2**2 - p1**2))
-    if p1 < 0 and p2 < 0:
-        return -math.sqrt(p1**2 + f * (p2**2 - p1**2))
-    if p1 < 0:
-        return p1 + (p2 - p1) * math.sqrt(f)
-    return p2 + (p1 - p2) * math.sqrt(1.0 - f)
+        p = np.sqrt(p1**2 + f * (p2**2 - p1**2))
+    elif p1 < 0 and p2 < 0:
+        p = -np.sqrt(p1**2 + f * (p2**2 - p1**2))
+    elif p1 < 0:
+        p = p1 + (p2 - p1) * np.sqrt(f)
+    else:
+        p = p2 + (p1 - p2) * np.sqrt(1.0 - f)
+    return float(p) if np.ndim(p) == 0 else p
 
 
 def _by_speed(a: Node, b: Node, ground: bool) -> list[Node]:

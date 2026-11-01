@@ -7,18 +7,20 @@ path of a walk with Doppler; aircraft taking off and landing by ECAC Doc 29 in t
 airport example; trucks, buses, motorcycles, a police car, a fire engine, trains and a
 tram in the pass-by demos, with horns on the car and the train, and road works in the
 street; the ground-borne vibration of trains, trams and road works by the FTA's method,
-and the trains and the tram heard in a house; listeners as microphones; a standard error
-for every parameter; a stereo recording for a scene's sound system, so that every
-example with a stage, a sound system or a talker plays out of the box; the listeners a
-demo plays picked for a run; the editor's Scene YAML panel; and four of BRAS's rooms in
-the validation report.
+and the trains, the tram and the road works heard indoors; listeners as microphones; a
+standard error for every parameter; a stereo recording for a scene's sound system, so
+that every example with a stage, a sound system or a talker plays out of the box; the
+listeners a demo plays picked for a run; the editor's Scene YAML panel; and four of
+BRAS's rooms in the validation report.
 
 Results change from 4.0.1: EDT, in 99 of 152 octave-band EDTs of six examples, by up to
 9.6 %; the late part by rounding, as its rays are traced in 10 batches; random
 scattering where the bands' coefficients differ; indoors, rendered responses and the
 echogram's 63 and 125 Hz bands where paths over edges arrive together; the treble of
 binaural walks through measured ears and of listening in turbulence; the car's sound
-power, 2.1 to 2.7 dB(A) more; and the examples' talkers, at 60 dB(A) 1 m in front
+power, 2.1 to 2.7 dB(A) more; the tree belt and lakeside concert examples, traced to the
+second order; the demos' stereo sources and the lakeside concert's subwoofers, by up to
+3 dB, and tours at their crossfades; and the examples' talkers, at 60 dB(A) 1 m in front
 instead of 94 dB of sound power. Scene files of 4.0.1 load unchanged; `stadium_pa` is
 now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
 `acoustic_spaces.demos.car` is now `acoustic_spaces.demos.road`.
@@ -99,6 +101,8 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
   they stand at one height over one ground without zones (`simulate(share_waves=...)`):
   an aircraft's 26 places take 31 s instead of 89 s, with the same early levels to 10⁻⁷
   dB. Still scenes are unchanged, bit for bit.
+- A moving source renders faster: the paths at a moment of the eddies are worked out
+  once, their own phases' angles once per place, and the HRTF onsets without the HRIRs.
 
 **Fixes**
 
@@ -142,6 +146,14 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
   out kept the scene's speed; they now walk at the run's.
 - The Run demo window, switched to another demo, could come out too short for that
   demo's options, which then had to be scrolled to.
+- The airport's flight demo stopped on the departure ("the departing jet's sound is
+  shorter than its pass"), its sound a sample shorter than its walk's rounded times.
+- A stereo recording's left and right sources played 0.2 to 3 dB over their sound power,
+  in any scene's demo and the stadium's; the two channels now share one gain set from
+  both, not from the mixdown. The lakeside concert's subwoofers, fed the song's mixdown,
+  played up to 3 dB under theirs; they are now brought to the same level.
+- A tour played up to 3 dB louder at a crossfade between two seats of one piece; the
+  crossfade now keeps the power running on however alike the two mixes are.
 
 **Examples and demos**
 
@@ -175,12 +187,22 @@ now part of `stadium_concert`, `gallery_walk` no longer names the gallery, and
   against the rule for vehicles' horns in `validation/urban_sources.py`.
 - The railway's train can sound its warning horn (`passby_demo.py --horn blasts`): the
   TSI's 660 and 370 Hz notes in turn, each 109 dB(C) 25 m ahead as EN 15153-2 allows at
-  most (`demos.horn.TRAIN_HORN`), held against the rule in
-  `validation/urban_sources.py`; `parameters.c_weighted` gives C-weighted levels.
-- The railway's pass-by demo and the street's tram can be heard in a house at each
-  listener (`--indoors`): the train through a closed double-glazed window by EN ISO
-  12354-3 (the new `acoustic_spaces.facade`), the rumble of the ground's vibration by
-  the FTA's general method, or both.
+  most (`demos.horn.TRAIN_HORN`), or together as a chord (`--horn chord`), held against
+  the rule in `validation/urban_sources.py`; `parameters.c_weighted` gives C-weighted
+  levels.
+- The railway's pass-by demo, the street's tram and its road works can be heard indoors
+  (`--indoors`) by listeners in front of a building's wall, as the railway's new
+  `house_18m` is: through a closed double-glazed window by EN ISO 12354-3 (the new
+  `acoustic_spaces.facade`), the rumble of the ground's vibration by the FTA's general
+  method, or both. Every listener's caption says how hard the ground or the floor shakes
+  and whether that is felt, and a bass shaker's track plays it.
+- The railway, tree belt and lakeside concert examples trace image sources to the second
+  order, so the barrier's and the houses' reflections keep their partners off the
+  ground. Across the lake the evening's weather now makes the song 7.1 dB(A) louder at
+  the bedroom window than still air, as the house's wall gives back what comes in off
+  the water too (the docs' 2.3 dB was out of date: 4.4 at the first order). Behind the
+  tree belt's trees, their trunks' scattered sound now fills the ground's dip at 500 Hz
+  and 1 kHz: the garden there is 4.5 and 1.8 dB louder than without the wood.
 - The road vehicles' sound power is CNOSSOS-EU's Table F-1 as amended in 2021
   (Commission Delegated Directive (EU) 2021/1226): the car's at 50 km/h is 98.4 dB(A)
   instead of 96.0, and its passes in `roadside` and `street` are louder by about as

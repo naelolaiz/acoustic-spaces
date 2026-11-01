@@ -830,6 +830,36 @@ def test_a_tour_crossfades_its_stops_and_ends_at_full_scale(tmp_path: Path) -> N
     assert pipeline.gains_of(seats, ["near", "far"]) == {"near": 0.0, "far": 0.0}
 
 
+def test_a_tour_crossfade_keeps_the_power_however_alike_the_two_mixes_are(
+    tmp_path: Path,
+) -> None:
+    """The power runs on across the cut both for two seats much alike (the same music,
+    brought forward by its arrival), which an equal-power crossfade played 3 dB louder,
+    and for two unlike ones."""
+    folder = tmp_path / "seats"
+    rng = np.random.default_rng(1)
+    noise = rng.standard_normal((10 * RATE, 2)) * 0.1
+    signals = {"same": noise, "alike": noise, "unlike": rng.standard_normal((10 * RATE, 2)) * 0.1}
+    info = {}
+    for key, x in signals.items():
+        audio.write(folder / f"{key}.binaural.wav", x, RATE)
+        info[key] = {"lag_s": 0.0, "length_s": 10.0}
+    seats = {"rate": RATE, "format": "binaural", "seats": info}
+
+    def level_at_cut(second: str) -> float:
+        stops = [
+            pipeline.TourStop("same", 0.0, 0.0, 4.0),
+            pipeline.TourStop(second, 4.0, 4.0, 8.0),
+        ]
+        out = pipeline.tour_audio(stops, folder, seats, crossfade_s=1.0, fade_out_s=0.0)
+        cut = out[int(3.9 * RATE) : int(4.1 * RATE)]
+        away = out[int(2.0 * RATE) : int(3.0 * RATE)]
+        return audio.db(float(np.sqrt(np.mean(cut**2) / np.mean(away**2))))
+
+    assert level_at_cut("alike") == pytest.approx(0.0, abs=0.2)
+    assert level_at_cut("unlike") == pytest.approx(0.0, abs=0.3)
+
+
 def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
     """Without ffmpeg (``--no-mp4``) the video step still writes every still, the list
     the concat demuxer reads and the chapters."""
@@ -1049,8 +1079,10 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
         " at 16 kHz, mixed binaural through a spherical head model. "
         "Run as: acoustic-spaces demo scene.yaml all --seconds 0.8 --no-mp4"
     )
-    # A scene changed since is fed and simulated again.
-    later = (work / "feeds" / "feeds.json").stat().st_mtime + 10
+    # A scene changed since is fed and simulated again (later than both, however long
+    # the simulation took).
+    written = [work / "feeds" / "feeds.json", work / "results" / pipeline.PARAMETERS]
+    later = max(path.stat().st_mtime for path in written) + 10
     os.utime(scene, (later, later))
     from acoustic_spaces.demos.scene_demo import feeds_done
 
@@ -1251,8 +1283,9 @@ def test_a_demo_of_any_scene_plays_the_channels_of_its_recording(
     tmp_path: Path, monkeypatch, recordings_folder: Path
 ) -> None:
     """Sources with a channel and no signal play that channel of the scene's recording:
-    left and right keep the recording's stereo balance (one gain for the file, its
-    channels mixed down to the feeds' gated RMS), mono plays both mixed down; a source's
+    left and right keep the recording's stereo balance (one gain for both, which brings
+    their mean square to the feeds' gated RMS, so that unlike channels do not play over
+    their sound power), mono plays both mixed down at the feeds' gated RMS; a source's
     own signal still wins, and its channel picks a channel of it. A free recording not
     downloaded yet is the recording step's download; there, it plays as a file would,
     and the stills credit it as its licence asks."""
@@ -1304,14 +1337,26 @@ def test_a_demo_of_any_scene_plays_the_channels_of_its_recording(
         k: audio.read(scene.parent / "demo" / "feeds" / f"{k}.wav")[0].ravel()
         for k in table["sources"]
     }
-    gain = FEED_RMS / audio.gated_rms(band, rate)
-    np.testing.assert_allclose(feed["radio"], band[:, 0] * gain, atol=1e-6)
-    np.testing.assert_allclose(feed["fan"], band.mean(axis=1) * gain, atol=1e-6)
+
+    def pair_gain(x: np.ndarray) -> float:
+        x = audio.stereo(x)
+        squares = [audio.gated_rms(x[:, i], rate) ** 2 for i in (0, 1)]
+        return FEED_RMS / float(np.sqrt(np.mean(squares)))
+
+    np.testing.assert_allclose(feed["radio"], band[:, 0] * pair_gain(band), atol=1e-6)
+    left = band[:, 0] * pair_gain(band)
+    right = band[:, 1] * pair_gain(band)
+    mean_square = (audio.gated_rms(left, rate) ** 2 + audio.gated_rms(right, rate) ** 2) / 2
+    assert np.sqrt(mean_square) == pytest.approx(FEED_RMS, rel=1e-6)
+    # One gain from the mixdown would play the band's two tones (unlike each other) over.
+    assert pair_gain(band) < FEED_RMS / audio.gated_rms(band, rate)
+    mixdown_gain = FEED_RMS / audio.gated_rms(band, rate)
+    np.testing.assert_allclose(feed["fan"], band.mean(axis=1) * mixdown_gain, atol=1e-6)
     assert audio.gated_rms(feed["fan"], rate) == pytest.approx(FEED_RMS, rel=1e-6)
     talk, talk_rate = audio.read(scene.parent / "sounds" / "talk.wav")
-    right = audio.resampled(talk, talk_rate, rate)
+    talk = audio.resampled(talk, talk_rate, rate)
     np.testing.assert_allclose(
-        feed["talker"], right[:, 1] * FEED_RMS / audio.gated_rms(right, rate), atol=1e-6
+        feed["talker"], audio.stereo(talk)[:, 1] * pair_gain(talk), atol=1e-6
     )
     # A free recording: the recording step downloads it, the feeds wait for it.
     data["recording"] = "potassium"

@@ -386,8 +386,8 @@ Movement:
   car_and_horn`), as loud as a maker's approved to UN Regulation 28, checked against the
   rule for vehicles' horns; a horn's levels in the captions follow its blasts.
 - [x] A train's warning horn (`passby_demo.py --horn blasts` on the railway): the TSI's
-  two notes in turn, each as loud as EN 15153-2 allows 25 m ahead, the measuring site's
-  ground taken out harmonic by harmonic.
+  two notes in turn (or together, `--horn chord`), as loud as EN 15153-2 allows 25 m
+  ahead, the measuring site's ground taken out harmonic by harmonic.
 - [ ] A train horn's directivity measured, mounted on a train's front (Toward et al.
   found one 1 dB down 30 degrees off its axis, where the siren the horns take is 3.6 dB
   down).
@@ -412,9 +412,10 @@ Movement:
   its curves and tables against its limits and damage criteria, for the railway's
   trains and the street's tram and road works; checked against the manual's figure,
   worked example and tables.
-- [x] The pass-by demos heard in a house at each listener: the train or the tram
-  through a closed window (EN ISO 12354-3) and the rumble of the ground's vibration.
-- [ ] The road works heard in a house too.
+- [x] The pass-by demos and the road works heard indoors by listeners in front of a
+  building's wall: the train, the tram or the works through a closed window (EN ISO
+  12354-3) and the rumble of the ground's vibration; at every listener, what is felt,
+  in the captions and as a bass shaker's track.
 - [ ] Ground-borne vibration by the FTA's detailed method: band by band, from a train's
   force density and a site's transfer mobility (read off the manual's measured curves
   or measured), and the floors and walls radiating it into the rooms in the engine,
@@ -548,9 +549,10 @@ Known issues found by the review of 25 October 2026 (see
 
 Version 4.1.0 (and, in the sections above, the helicopters, the aircraft, the road
 vehicles, the trains, the road works, the horns, the ground's vibration, the pass-by
-demos heard in a house and the faster walks outdoors under Movement, the demos' elements
-in their scenes and a recording for a scene's sound system under Examples, and the Run
-demo window, the listeners a demo plays and the Scene YAML panel under Editor):
+demos and the road works heard indoors and the faster walks outdoors under Movement, the
+demos' elements in their scenes and a recording for a scene's sound system under
+Examples, and the Run demo window, the listeners a demo plays and the Scene YAML panel
+under Editor):
 
 - [x] Uncertainty: each parameter's standard error, how much it would change between
   runs with other seeds, from the late rays traced in batches (a jackknife over them),

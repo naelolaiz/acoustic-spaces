@@ -581,7 +581,8 @@ def simulate(
         ``own_late``, no late energy (None): it comes from other sources. A generator: in
         wind or temperature gradients it yields its requests of the parabolic equation
         (:meth:`~acoustic_spaces.engine.refracted.Refraction.plan`) and takes their
-        pressures back (:func:`~acoustic_spaces.engine.refracted.solve`)."""
+        pressures back (:func:`~acoustic_spaces.engine.refracted.solve`) with its share of
+        the seconds their runs took."""
         coherent = low_bands if single or room.outdoor is not None else 0
         direct = np.linalg.norm(listener_pos - position, axis=1) / c
         cutoff = np.minimum(direct + transition, length)
@@ -640,9 +641,15 @@ def simulate(
         )
         if refraction is not None:
             say(f"{label}: paths bent by the wind and the temperature")
-            # The parabolic equation's runs come back from whoever drives this.
+            # The parabolic equation's runs come back from whoever drives this, with this
+            # source's share of their time; while they wait, other sources are traced, so
+            # the timer stops, and what only the paths' search needed is let go.
             planned = refraction.plan(listener_pos, straight, paths, cutoff)
-            paths = planned.finish((yield planned))
+            del candidates, diffraction, straight
+            add(info, "early_s", time.perf_counter() - started)
+            pressures, seconds = yield planned
+            started = time.perf_counter() - seconds
+            paths = planned.finish(pressures)
             direct = direct_times(direct, paths)
         if model.plants is not None:
             say(f"{label}: paths through vegetation")
@@ -865,7 +872,8 @@ def simulate(
 def _drive(steps: list[Generator]) -> None:
     """Runs the generators ``steps`` (sources being traced) to their ends, the requests
     of the parabolic equation each yields solved together with the others' at that
-    point (:func:`~acoustic_spaces.engine.refracted.solve`)."""
+    point (:func:`~acoustic_spaces.engine.refracted.solve`) and sent back with each
+    one's share of the time that took."""
     waiting = []
     for step in steps:
         try:
@@ -873,11 +881,14 @@ def _drive(steps: list[Generator]) -> None:
         except StopIteration:
             pass
     while waiting:
+        started = time.perf_counter()
         solved = solve([planned for _, planned in waiting])
+        # Each source's share of the runs' time.
+        seconds = (time.perf_counter() - started) / len(waiting)
         going = []
         for (step, _), pressures in zip(waiting, solved, strict=True):
             try:
-                going.append((step, step.send(pressures)))
+                going.append((step, step.send((pressures, seconds))))
             except StopIteration:
                 pass
         waiting = going

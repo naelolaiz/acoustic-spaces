@@ -251,6 +251,12 @@ class Vehicle:
         (:mod:`acoustic_spaces.demos.rail`)."""
         return Trail()
 
+    def fade_s(self, part: str) -> float:
+        """How long the sound of its source ``part`` fades in at the start of its pass
+        and out at its end (s): FADE_S, unless it sounds in blasts that rise and fall
+        of themselves (a horn's), whose first is not to be faded in."""
+        return FADE_S
+
     def sounding(
         self, args: argparse.Namespace, part: str, played, rate: int, at: np.ndarray
     ) -> np.ndarray | None:
@@ -262,19 +268,21 @@ class Vehicle:
         return None
 
     def house(self, args: argparse.Namespace):
-        """The house at each listener the run hears it in
-        (:class:`~acoustic_spaces.demos.indoors.House`), or None to hear it outdoors:
-        none, unless the vehicle has ``--indoors`` (a train's)."""
+        """What the run hears in the houses that listeners stand in front of
+        (:class:`~acoustic_spaces.demos.indoors.House`), or None to hear it outdoors
+        everywhere: none, unless the vehicle has ``--indoors`` (a train's)."""
         return None
 
     def wheels(self, args: argparse.Namespace):
         """What of it shakes the ground (:class:`~acoustic_spaces.demos.indoors.Wheels`),
-        for a vehicle with a :meth:`house`."""
-        raise NotImplementedError
+        or None: nothing, unless it is a train."""
+        return None
 
-    def input_gain(self, part: str, x: np.ndarray, rate: int) -> float | None:
+    def input_gain(
+        self, args: argparse.Namespace, part: str, x: np.ndarray, rate: int
+    ) -> float | None:
         """The gain of ``x``, a recording ``--input`` gives the source ``part``, so that it
-        plays as loud as a made sound: its gated RMS
+        plays as loud as a made sound for the arguments ``args``: its gated RMS
         (:func:`~acoustic_spaces.demos.audio.gated_rms`) brought to SOUND_RMS, the RMS of
         a made sound that has no pauses; None when it is silent."""
         from acoustic_spaces.demos.road import SOUND_RMS
@@ -733,13 +741,14 @@ def feed(
     """What the vehicle (or its source ``part``) plays along its pass, at ``rate``: its
     made sound (:meth:`Vehicle.made`), or the file ``--input NAME=WAV`` gives it (mixed
     down to mono, cut to the pass, as loud as its made sound,
-    :meth:`Vehicle.input_gain`), faded in and out over
-    FADE_S."""
+    :meth:`Vehicle.input_gain`), faded in and out over its
+    :meth:`Vehicle.fade_s`."""
     from acoustic_spaces.emission import Emission, Faded
 
     n = int(round(duration_s * rate))
-    fade = min(int(FADE_S * rate), n // 2)
     part = part or vehicle.name
+    fade_s = vehicle.fade_s(part)
+    fade = min(int(fade_s * rate), n // 2)
     file = car_input(args, vehicle, part)
     if file is None:
         x = vehicle.made(args, rate, duration_s, part)
@@ -763,7 +772,7 @@ def feed(
                 f"error: {file.name} is {len(x) / rate:.1f} s long; the {vehicle.noun} takes "
                 f"{duration_s:.1f} s along its walk"
             )
-        gain = vehicle.input_gain(part, x[:n], rate)
+        gain = vehicle.input_gain(args, part, x[:n], rate)
         if gain is None:
             raise SystemExit(f"error: {file} is silent")
         x = x * gain
@@ -773,15 +782,15 @@ def feed(
             f"error: the {vehicle.noun}'s sound is shorter than its pass; run: "
             f"{demo.command(vehicle.sound_step, args)}"
         )
-    return faded(x, rate)
+    return faded(x, rate, fade_s)
 
 
-def faded(x: np.ndarray, rate: int) -> np.ndarray:
-    """``x`` faded in over its first FADE_S and out over its last (half its length at
-    most each), as a pass's sound plays."""
+def faded(x: np.ndarray, rate: int, fade_s: float = FADE_S) -> np.ndarray:
+    """``x`` faded in over its first ``fade_s`` and out over its last (half its length
+    at most each), as a pass's sound plays."""
     x = np.array(x, dtype=float)
     n = len(x)
-    fade = min(int(FADE_S * rate), n // 2)
+    fade = min(int(fade_s * rate), n // 2)
     ramp = np.sin(np.linspace(0.0, np.pi / 2, fade)) ** 2
     x[:fade] *= ramp
     x[n - fade :] *= ramp[::-1]
@@ -976,9 +985,12 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
     listener, seats.json and walk.json. A vehicle of several sources (the police car and
     its siren, :meth:`Vehicle.parts`) has each simulated and played alone, and heard
     together: their sounds added, each at its own sound power, and their levels'
-    energies added. In a house at each listener (``--indoors``,
+    energies added. In the house a listener stands in front of (``--indoors``,
     :mod:`acoustic_spaces.demos.indoors`), each part comes in through its window, and
-    the rumble of its floors and walls is one more part (``rumble``)."""
+    the rumble of its floors and walls is one more part (``rumble``); the other
+    listeners hear it outdoors. A vehicle that shakes the ground (a train) gives each
+    listener what is felt there too, the ground's or the house's floor's vibration, as
+    a track for a bass shaker (:func:`~acoustic_spaces.demos.indoors.write_shakers`)."""
     from acoustic_spaces.demos import indoors
     from acoustic_spaces.demos.scene_demo import format_of
     from acoustic_spaces.render import power_gains
@@ -1010,9 +1022,15 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
     rate = int(room.scene.simulation.sample_rate)
     duration = pass_s(car)
     house = vehicle.house(args)
-    # The parts heard through the air: all of them, unless the house hears the rumble
-    # alone.
-    aired = parts if house is None or house.airborne else ()
+    names = chosen_order(args, listeners_of(room))
+    if not names:
+        raise SystemExit(f"error: every listener of {args.scene.name} is left out")
+    # The house each listener stands in front of, where --indoors hears the pass.
+    inside = indoors.houses_heard(room.scene, names, house, vehicle.noun, args.scene.name)
+    # The parts heard through the air: all of them, unless every house hears the rumble
+    # alone and no listener is outdoors.
+    outdoors = [name for name in names if inside.get(name) is None]
+    aired = parts if house is None or house.airborne or outdoors else ()
     # Each part is played alone below, where the rendering scales it against itself
     # alone: here each gets its sound power against the loudest part's, as one
     # rendering of them all would give it.
@@ -1032,18 +1050,17 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
     longest = max((t.length_s for t in trails.values()), default=0.0)
     rooms = {part: alone(room, part) for part in aired} if len(aired) > 1 else {parts[0]: room}
     fmt = format_of(args, room.scene)
-    names = chosen_order(args, listeners_of(room))
-    if not names:
-        raise SystemExit(f"error: every listener of {args.scene.name} is left out")
     c = room.speed_of_sound()
-    wheels = vehicle.wheels(args) if house is not None and house.rumble else None
-    # The rumble is worked out until the last wheels leave the walk's end.
+    wheels = vehicle.wheels(args)
+    # The vibration is worked out until the last wheels leave the walk's end.
     shaking = indoors.grid(duration + wheels.length_s) if wheels is not None else None
-    mixes, heard = {}, {}
+    mixes, heard, shakers = {}, {}, {}
     points = walk_points(car, float(args.step_m))
     for name in names:
         played, passes, heard_parts = [], [], []
-        for part in aired:
+        facing = inside.get(name)
+        here = house if facing is not None else None
+        for part in aired if here is None or here.airborne else ():
             print(f"simulating the {part} every {args.step_m:g} m along its walk, heard at {name}")
             walked = simulate_walk(
                 rooms[part], part, listener=name, step_m=float(args.step_m), progress=print
@@ -1065,22 +1082,30 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             if loud is not None:
                 passing = sounded(passing, loud)
             passing = trailed(passing, trail, longest)
-            if house is not None:
-                wet, passing = house.heard(wet, rate), house.through(passing)
+            if here is not None:
+                wet, passing = here.heard(wet, rate), here.through(passing)
             played.append(wet)
             passes.append(passing)
             heard_parts.append(part)
             points = walked.points if part == parts[0] else points
         position = next(lis for lis in room.scene.listeners if lis.name == name).position
         if wheels is not None:
-            ground = house.ground_vdb(wheels, knots(car), position, shaking)
-            rumble = house.rumble_a_db(ground)
-            loudest = max(powers.values())
             n = int(round(float(shaking[-1]) * rate))
-            sound = house.rumble_sound(shaking, rumble, rate, n, loudest, seed=len(passes))
-            played.append(sound[:, None] * indoors.pressure_gains(fmt)[None, :])
-            passes.append(house.rumble_pass(indoors.RUMBLE, name, shaking, rumble))
-            heard_parts.append(indoors.RUMBLE)
+            # What is felt: the house's floor, or the ground under the listener.
+            if here is not None:
+                assert facing is not None
+                felt = here.ground_vdb(wheels, knots(car), facing, shaking) + here.indoor_vdb
+            else:
+                felt = indoors.ground_vdb(wheels, knots(car), position, shaking)
+            if here is not None and here.rumble:
+                rumble = here.rumble_a_db(felt - here.indoor_vdb)
+                loudest = max(powers.values())
+                sound = here.rumble_sound(shaking, rumble, rate, n, loudest, seed=names.index(name))
+                played.append(sound[:, None] * indoors.pressure_gains(fmt)[None, :])
+                passes.append(here.rumble_pass(indoors.RUMBLE, name, shaking, rumble))
+                heard_parts.append(indoors.RUMBLE)
+            seed = names.index(name)
+            shakers[name] = indoors.shaker_sound(shaking, felt, rate, n, seed=seed)
         mixes[name] = summed(played)
         level = heard_together(passes)
         distances = np.linalg.norm(points.positions - np.asarray(position), axis=1)
@@ -1093,12 +1118,18 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             "leq_a_db": round(level.equivalent_a, 2),
             "closest_m": round(float(distances.min()), 2),
         }
-        if aired:
+        if any(part != indoors.RUMBLE for part in heard_parts):
             heard[name]["pitch_semitones"] = round(
                 pitch_change(points, position, None if vehicle.timed else speed, c), 3
             )
         if wheels is not None:
-            heard[name]["vibration_vdb"] = round(float(np.max(ground)) + house.indoor_vdb, 2)
+            heard[name]["vibration_vdb"] = round(float(np.max(felt)), 2)
+            heard[name]["shaking"] = "floor" if here is not None else "ground"
+            if here is not None and here.rumble:
+                heard[name]["rumble_a_db"] = round(passes[-1].max_a, 2)
+        if facing is not None and here is not None:
+            heard[name]["inside"] = facing.name
+            heard[name]["about"] = here.words(facing.name)
         if len(heard_parts) > 1:
             heard[name]["parts"] = {
                 part: {"max_a_db": round(p.max_a, 2), "sel_a_db": round(p.exposure_a, 2)}
@@ -1106,7 +1137,8 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             }
         print(
             f"{name}: L_Amax {level.max_a:.1f} dB(A), SEL {level.exposure_a:.1f} dB(A), "
-            f"closest {distances.min():.1f} m" + ("" if house is None else ", in a house there")
+            f"closest {distances.min():.1f} m"
+            + ("" if facing is None or here is None else f", in the {facing.name} there")
         )
     peak = max(float(np.abs(m).max(initial=0.0)) for m in mixes.values())
     gain = 10.0 ** (-1.0 / 20.0) / peak if peak > 0 else 1.0
@@ -1123,6 +1155,7 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             "length_s": len(mix) / rate,
         }
     label = pipeline.output_label(args)
+    shaker = indoors.write_shakers(out, shakers, rate)
     pipeline.write_json(
         out / pipeline.SEATS,
         {"rate": rate, "format": args.format, "label": label, "gain": gain, "seats": seats},
@@ -1142,6 +1175,7 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             "times": [round(float(t), 4) for t in points.times],
             "positions": np.round(points.positions, 4).tolist(),
             "listeners": heard,
+            **({"shaker": shaker} if shaker else {}),
         },
     )
     print(
@@ -1150,13 +1184,11 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
 
 
 def facts_of(args: argparse.Namespace, vehicle: Vehicle, made: dict) -> dict:
-    """What walk.json says of the vehicle (:meth:`Vehicle.facts`), and of the house it
-    is heard in, if any: ``indoors`` and a line more for the stills' ``about``."""
+    """What walk.json says of the vehicle (:meth:`Vehicle.facts`), and ``indoors`` when
+    it is heard in houses."""
     facts = vehicle.facts(args, made)
-    house = vehicle.house(args)
-    if house is not None:
+    if vehicle.house(args) is not None:
         facts["indoors"] = args.indoors
-        facts["about"] = f"{facts['about']}\n{house.words()}"
     return facts
 
 
@@ -1266,6 +1298,10 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     audio = pipeline.tour_audio(stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0)
     write_wav(args.work / "tour.wav", audio, seats["rate"])
     print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    if facts.get("shaker"):
+        from acoustic_spaces.demos.indoors import tour_shaker
+
+        tour_shaker(args.work, stops, folder, seats, facts["shaker"], 0.0, 0.0)
     room = room_of(demo, args)
     data = room.scene.to_data()
     tool = pictures.settings_lines(demo, args, data)

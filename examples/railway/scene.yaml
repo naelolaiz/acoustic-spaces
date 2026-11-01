@@ -1,8 +1,9 @@
 # Outdoors: a railway line on ballast across a meadow, heard where the EU's rule for the
 # noise of trains measures one going by (7.5 m from the track's centre, 1.2 m above the
-# rail top), 25 m away over the meadow, and 25 m away on the other side behind a noise
-# barrier 3 m high, 4 m from the track, which the trains' sound comes over and round
-# (`first_order` diffraction follows it). The line source along the track is its traffic
+# rail top), 25 m away over the meadow, 2 m in front of a house's wall 20 m from the
+# track, and 25 m away on the other side behind a noise barrier 3 m high, 4 m from the
+# track, which the trains' sound comes over and round (`first_order` diffraction follows
+# it). The line source along the track is its traffic
 # on average: one regional train an hour at 160 km/h, its sound power per metre Schall
 # 03's (Germany's method for the noise of railways, 2014), all of it at the rail top. A
 # train runs past at 160 km/h, its pitch falling as it goes by (Doppler): three sources
@@ -19,6 +20,11 @@ geometry:
     zones:
       - name: track_bed
         polygon: [[-200, -2], [200, -2], [200, 2], [-200, 2]]
+  # A two-storey house on the meadow, its wall 20 m from the track.
+  buildings:
+    - name: house
+      footprint: [[-66, 20], [-54, 20], [-54, 28], [-66, 28]]
+      height: 7
   barriers:
     - name: noise_barrier
       path: [[-100, -4], [100, -4]]
@@ -31,10 +37,14 @@ materials:
   concrete:
     preset: rough_concrete
     scattering: 0.1
+  brick:
+    preset: brickwork
+    scattering: 0.2
 assignments:
   ground: meadow
   track_bed: ballast
   barriers: concrete
+  house: brick
 sources:
   # The track's traffic on average over an hour: one regional train (an electric
   # locomotive and five coaches) at 160 km/h, Schall 03's sound power per metre of
@@ -101,11 +111,16 @@ listeners:
   - name: meadow_25m
     position: [0, 25, 1.5]
     orientation: {yaw: -90}
+  # 2 m in front of the house's wall, 18 m from the track: --indoors hears the trains
+  # inside the house.
+  - name: house_18m
+    position: [-60, 18, 1.5]
+    orientation: {yaw: -90}
   - name: behind_barrier_25m
     position: [0, -25, 1.5]
     orientation: {yaw: 90}
 simulation:
-  early: {method: image_sources, max_order: 1, diffraction: first_order}
+  early: {method: image_sources, max_order: 2, diffraction: first_order}
   late: {method: stochastic_ray_tracing}
   ir_length_s: 0.5
 outputs:

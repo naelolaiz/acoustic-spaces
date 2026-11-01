@@ -10,6 +10,11 @@ breaker strikes; ``--input NAME=WAV`` a dry recording of yours instead), ``simul
 simulates the scene, and ``render`` and ``video`` are the scene demo's
 (:mod:`acoustic_spaces.demos.scene_demo`): every listener for ``--seconds`` while the
 works go on, binaural, one gain for all, each stop's caption giving the level there.
+``--indoors`` hears them inside the house a listener stands in front of instead:
+through its closed window, with the rumble of the breaker's and the dumper's vibration,
+or either alone (:class:`acoustic_spaces.demos.indoors.StillHouses`). What is felt at
+each listener, the ground's or the house's floor's vibration, is a track for a bass
+shaker too (``<listener>.shaker.wav`` beside the mixes, ``tour.shaker.wav``).
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from acoustic_spaces.demos import (
     Option,
     Step,
     common_options,
+    indoors,
     input_option,
     listeners_in,
     pipeline,
@@ -39,6 +45,8 @@ from acoustic_spaces.demos.audio import mono, read, resampled, write
 SOURCES = (plant.BREAKER.name, plant.GENERATOR.name, plant.DUMPER.name, plant.ALARM)
 #: What the feeds step keeps beside the feeds.
 WORKS = "works.json"
+#: What ``--indoors`` calls the works.
+NOUN = "works"
 
 
 def machine_of(name: str) -> plant.Machine | None:
@@ -73,7 +81,53 @@ def problems(demo: Demo, args: argparse.Namespace) -> str | None:
         return f"{demo.option('blows').option} is a positive number, not {args.blows!r}"
     if float(args.seconds) <= 0.0:
         return f"{demo.option('seconds').option} is a positive number, not {args.seconds!r}"
+    try:
+        indoors.House.of(getattr(args, "indoors", None), NOUN)
+    except ValueError as exc:
+        return str(exc)
     return None
+
+
+def _point(position) -> tuple[float, float, float]:
+    x, y, z = (float(v) for v in position)
+    return x, y, z
+
+
+def houses(args: argparse.Namespace) -> indoors.StillHouses | None:
+    """The works at each listener: in the house it stands in front of, as ``--indoors``
+    asks (the works heard through its window, the rumble of the breaker's and the
+    dumper's vibration, or both), or outdoors, with what is felt there; None when
+    nothing of them shakes the ground and they are heard outdoors."""
+    from acoustic_spaces import Scene
+
+    choice = getattr(args, "indoors", None)
+    house = indoors.House.of(choice, NOUN)
+    found = Scene.from_yaml(args.scene)
+    playing = [s for s in found.sources if s.in_use and s.name in SOURCES]
+    shaking = []
+    for source in playing:
+        machine = machine_of(source.name)
+        if machine is not None and machine.vibration is not None:
+            shaking.append(indoors.Plant(source.name, machine.vibration, _point(source.position)))
+    if (house is None and not shaking) or not playing:
+        return None
+    if house is not None and house.rumble and not shaking:
+        shakers = ", ".join(n for n, m in plant.MACHINES.items() if m.vibration is not None)
+        raise SystemExit(
+            f"error: --indoors {choice} hears the rumble of the ground's vibration, but "
+            f"nothing that plays shakes it ({shakers} do); try --indoors {NOUN}"
+        )
+    names = [lis.name for lis in found.listeners]
+    inside = indoors.houses_heard(found, names, house, NOUN, args.scene.name)
+    return indoors.StillHouses(
+        house,
+        str(choice),
+        tuple(shaking),
+        {lis.name: _point(lis.position) for lis in found.listeners},
+        inside,
+        max(s.sound_power_db for s in playing),
+        scene_demo.format_of(args, found),
+    )
 
 
 # --------------------------------------------------------------------------- the scene
@@ -229,7 +283,7 @@ def video(shown: Demo, args: argparse.Namespace) -> None:
     """The scene demo's video of the works, its stills crediting the made sounds."""
     if not args.credit:
         args = argparse.Namespace(**{**vars(args), "credit": credit(args)})
-    scene_demo.video(args, shown)
+    scene_demo.video(args, shown, houses(args))
 
 
 def demo(script: Path, example: str = "street") -> Demo:
@@ -253,6 +307,14 @@ def demo(script: Path, example: str = "street") -> Demo:
                 unit="/min",
             ),
             dataclasses.replace(shared["seconds"], steps=("feeds", "video")),
+            Option(
+                "indoors",
+                indoors.help_of(NOUN),
+                indoors.OFF,
+                "choice",
+                indoors.choices(NOUN),
+                steps=("render", "video"),
+            ),
             shared["listeners"],
             shared["credit"],
             Option(
@@ -290,7 +352,7 @@ def demo(script: Path, example: str = "street") -> Demo:
         SIMULATE,
         Step(
             "render",
-            lambda args: scene_demo.render(args, made),
+            lambda args: scene_demo.render(args, made, houses(args)),
             "every listener, with one gain for all",
         ),
         Step(
@@ -302,4 +364,4 @@ def demo(script: Path, example: str = "street") -> Demo:
     return made
 
 
-__all__ = ["SOURCES", "demo", "feeds", "level_of", "plays", "scene"]
+__all__ = ["NOUN", "SOURCES", "demo", "feeds", "houses", "level_of", "plays", "scene"]

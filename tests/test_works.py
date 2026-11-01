@@ -2,6 +2,7 @@
 :mod:`acoustic_spaces.demos.works`): Defra's rows, their sound power, the EU's limits,
 the reversing alarm, the made sounds and the demo that plays them."""
 
+import argparse
 import math
 from pathlib import Path
 
@@ -263,3 +264,163 @@ def test_the_works_demo_says_what_is_wrong(tmp_path) -> None:
     assert "roof" in demo.check(args)
     args = demo.resolved(demo.parser().parse_args(["all", "--tour", "garden,pavement"]))
     assert demo.check(args) is None and args.listeners == "garden,pavement"
+
+
+def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monkeypatch) -> None:
+    """--indoors, mono: at the pavement and the balcony, 2 and 1 m in front of the
+    houses and the offices, the works' sound comes through the window as much under
+    its sound outdoors as their levels through the façade say, within 2 dB (their
+    tones, the alarm's 1.2 kHz beeps and the engines' firing, fall where they fall in
+    the octave bands, near a crossover between two bands' gains: 0.06 to 1.6 dB
+    measured); the rumble has the energy its level gives in the engine's units (to 0.05
+    dB), the breaker's and the dumper's vibration at their distances from the
+    building, their energies added, no adjustment for the building, 50 dB under in
+    dB(A); the two together are the sum of their energies. The garden, in front of no
+    wall, hears them outdoors. What is felt at each is the ground's vibration, a
+    shaker track. Another --indoors mixes again, and the video refuses mixes made for
+    another."""
+    pytest.importorskip("PIL")
+    from acoustic_spaces import Scene, vibration
+    from acoustic_spaces.demos import audio, indoors, load, pipeline, scene_pictures
+    from acoustic_spaces.facade import HOUSE
+
+    folder = _street(tmp_path)
+    demo = load(folder / "works_demo.py").at(folder)
+    assert demo.option("indoors").choices == indoors.choices("works")
+    common = ["--seconds", "4", "--no-mp4", "--format", "mono"]
+    work = folder / "demo_works"
+
+    def mixes() -> tuple[dict, dict[str, np.ndarray]]:
+        seats = pipeline.read_json(work / "seats" / pipeline.SEATS)
+        return seats, {
+            key: audio.read(work / "seats" / f"{key}.mono.wav")[0][:, 0] / seats["gain"]
+            for key in seats["seats"]
+        }
+
+    def a_energy(x: np.ndarray) -> float:
+        """The A-weighted sum of squares of ``x``, by its spectrum."""
+        f = np.fft.rfftfreq(len(x), 1.0 / RATE)
+        power = np.abs(np.fft.rfft(x) * audio.a_gain(f)) ** 2
+        power[1 : (len(x) + 1) // 2] *= 2.0
+        return float(np.sum(power)) / len(x)
+
+    assert demo.main(["all", *common]) == 0
+    _, outdoors = mixes()
+    heard = {}
+    for choice in ("works", "rumble", "works_and_rumble"):
+        assert demo.main(["render", *common, "--indoors", choice]) == 0
+        heard[choice] = mixes()
+    scene = Scene.from_yaml(folder / "scene_works.yaml")
+    loudest = max(s.sound_power_db for s in scene.sources if s.in_use)
+    sources = {s.name: s for s in scene.sources}
+    report = pipeline.read_json(work / "results" / pipeline.PARAMETERS)
+    fronts = indoors.facings(scene, [listener.name for listener in scene.listeners])
+    assert {k: v and v.name for k, v in fronts.items()} == {
+        "pavement": "houses",
+        "balcony": "offices",
+        "garden": None,
+    }
+
+    def vibration_at(away) -> float:
+        """The breaker's and the dumper's vibration (VdB), ``away`` their distance."""
+        return 10.0 * math.log10(
+            sum(
+                10.0 ** (vibration.plant_level(row, float(away(sources[s]))) / 10.0)
+                for s, row in (("breaker", "hoe_ram"), ("dumper", "loaded_trucks"))
+            )
+        )
+
+    felt = math.nan
+    for listener in scene.listeners:
+        name, here = listener.name, np.asarray(listener.position[:2])
+        facing = fronts[name]
+        if facing is None:
+            for choice, (seats, mixed) in heard.items():
+                assert "post" not in seats["seats"][name], choice
+                assert a_energy(mixed[name]) == pytest.approx(a_energy(outdoors[name]), rel=1e-6)
+            felt = vibration_at(lambda s, h=here: np.hypot(*(np.asarray(s.position[:2]) - h)))
+            continue
+        levels = [r for r in report["responses"] if r["listener"] == name]
+        outside = sum(10.0 ** (a_weighted(r["spl_db"]) / 10.0) for r in levels)
+        inside = sum(
+            10.0 ** (a_weighted(np.add(r["spl_db"], HOUSE.indoor_db())) / 10.0) for r in levels
+        )
+        told = 10.0 * math.log10(outside / inside)
+        window = heard["works"][1][name]
+        drop = 10.0 * math.log10(a_energy(outdoors[name]) / a_energy(window))
+        assert drop == pytest.approx(told, abs=2.0), name
+        vdb = vibration_at(lambda s, f=facing: f.distances([s.position])[0])
+        seat = heard["works_and_rumble"][0]["seats"][name]
+        assert seat["vibration_vdb"] == pytest.approx(vdb, abs=0.01)
+        assert seat["rumble_a_db"] == pytest.approx(vdb - 50.0, abs=0.01)
+        rumble = heard["rumble"][1][name]
+        fade = int(indoors.FADE_S * RATE)
+        share = (
+            len(rumble)
+            - 2 * fade
+            + 2 * float(np.sum(np.sin(np.linspace(0.0, np.pi / 2, fade)) ** 4))
+        ) / len(rumble)
+        wanted = float(indoors.mean_square(10.0 ** (seat["rumble_a_db"] / 10.0), loudest)) * share
+        assert 10.0 * math.log10(a_energy(rumble) / len(rumble) / wanted) == pytest.approx(
+            0.0, abs=0.05
+        )
+        both = heard["works_and_rumble"][1][name]
+        assert a_energy(both) == pytest.approx(a_energy(window) + a_energy(rumble), rel=0.02)
+    # The stills: the level in the house, the works through the window and the rumble.
+    drawn = []
+    real = scene_pictures.Pictures
+
+    def pictures(*args, **kwargs):
+        drawn.append(real(*args, **kwargs))
+        return drawn[-1]
+
+    monkeypatch.setattr(scene_pictures, "Pictures", pictures)
+    with pytest.raises(SystemExit, match="another --indoors"):
+        demo.main(["video", *common, "--indoors", "works"])
+    assert demo.main(["video", *common, "--indoors", "works_and_rumble"]) == 0
+    lines = [line if isinstance(line, str) else line[0] for line in drawn[-1].lines(0)]
+    first = drawn[-1].stops[0].key
+    seat = heard["works_and_rumble"][0]["seats"][first]
+    inside = sum(
+        10.0 ** (a_weighted(np.add(r["spl_db"], HOUSE.indoor_db())) / 10.0)
+        for r in report["responses"]
+        if r["listener"] == first
+    )
+    level = 10.0 * math.log10(inside + 10.0 ** (seat["rumble_a_db"] / 10.0))
+    assert first == "pavement" and lines[0] == f"{level:.0f} dB(A) here, as simulated"
+    shaking = indoors.shaking_line(seat["vibration_vdb"], True, seat["rumble_a_db"])
+    assert shaking in lines
+    assert "Inside the houses here, through a closed window (EN ISO 12354-3)" in lines
+    told = drawn[-1].indoors["vibration_vdb"]["garden"]
+    assert told == pytest.approx(felt, abs=0.01) and "garden" not in drawn[-1].indoors["about"]
+    # What is felt: a shaker track at each listener, and along the tour.
+    seats = heard["works_and_rumble"][0]
+    assert seats["shaker"]["hz"] == 25.0
+    assert all((work / "seats" / f"{key}.shaker.wav").exists() for key in seats["seats"])
+    assert (work / "tour.shaker.wav").exists()
+    # Outdoors again: the mixes made again, without the house.
+    assert demo.main(["render", *common]) == 0
+    seats, again = mixes()
+    assert all("post" not in seat for seat in seats["seats"].values())
+    for name, x in again.items():
+        assert a_energy(x) == pytest.approx(a_energy(outdoors[name]), rel=1e-6)
+
+
+def test_the_rumble_indoors_needs_something_that_shakes_the_ground(tmp_path) -> None:
+    """With the breaker and the dumper left out, nothing shakes the ground: --indoors
+    rumble says so, --indoors works hears the rest through the window."""
+    import yaml
+
+    folder = _street(tmp_path)
+    scene = folder / "scene_works.yaml"
+    works.scene(argparse.Namespace(source=folder / "scene.yaml", scene=scene))
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    for source in data["sources"]:
+        if source["name"] in ("breaker", "dumper"):
+            source["enabled"] = False
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    args = argparse.Namespace(scene=scene, indoors="rumble", format="binaural", hrtf=None)
+    with pytest.raises(SystemExit, match="nothing that plays shakes it"):
+        works.houses(args)
+    args.indoors = "works"
+    assert works.houses(args) is not None

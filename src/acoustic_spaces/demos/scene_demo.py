@@ -9,15 +9,15 @@ page): a file of yours, such as a band's stereo mix, or one of the free recordin
 (:mod:`acoustic_spaces.recordings`), which the ``recording`` step downloads the first
 time and keeps for every scene that names it. So the left and right loudspeakers of a
 sound system play the two sides of one recording, and its subwoofers both mixed down.
-Each file is brought to one gated RMS (its channels mixed down) and every channel taken
-out of it keeps that gain, so a recording's stereo balance stays; then each source's
-sound power in the scene (``level_db``) sets how loud it is against the others, as the
-simulation says and not as the recordings happen to be. Sources with neither stay
-silent. Every listener in use is heard in turn, in the scene's order (or only those
-``--listeners`` names, in its order), for ``--seconds`` each while the piece runs on,
-with one gain for all the stops and a crossfade between them, binaural through the HRTFs
-of the scene's binaural output (or ``--hrtf``, or a spherical head model when neither
-names any). The stills show the scene from above with the listener of the moment, the
+A file mixed down is brought to one gated RMS; its left and right channels share one
+gain that brings their mean square to it, so a recording's stereo balance stays; then
+each source's sound power in the scene (``level_db``) sets how loud it is against the
+others, as the simulation says and not as the recordings happen to be. Sources with
+neither stay silent. Every listener in use is heard in turn, in the scene's order (or
+only those ``--listeners`` names, in its order), for ``--seconds`` each while the piece
+runs on, with one gain for all the stops and a crossfade between them, binaural through
+the HRTFs of the scene's binaural output (or ``--hrtf``, or a spherical head model when
+neither names any). The stills show the scene from above with the listener of the moment, the
 level there, how long the sound takes to arrive and T30 at mid frequencies, and say how
 the sound was made. The simulation keeps every listener in use, so another choice of
 ``--listeners`` needs no new one.
@@ -367,10 +367,13 @@ def channel_of(x: np.ndarray, channel: str | None) -> np.ndarray:
 def feeds(args: argparse.Namespace) -> None:
     """One WAV per source that plays: its file (its signal, what ``--input`` gives it, or
     the scene's recording), at the scene's sample rate, the channel the source names or
-    mixed down to mono. Each file is brought to one gated RMS (FEED_RMS; its channels
-    mixed down), and the channels taken out of it keep that gain, so that its stereo
-    balance stays and ``auralize`` sets the balance between the sources from their sound
-    powers; sources without one are listed as silent."""
+    mixed down to mono. A file mixed down is brought to one gated RMS (FEED_RMS); its
+    left and right channels share one gain, which brings their mean square to FEED_RMS,
+    so that its stereo balance stays and each channel's source plays at its sound power
+    on average over the two, as ``auralize`` sets the balance between the sources from
+    their sound powers (one gain from the mixdown played them up to 3 dB over, as two
+    channels unlike each other cancel in it); sources without one are listed as
+    silent."""
     scene = scene_of(args)
     rate = scene.simulation.sample_rate
     out = work_of(args) / "feeds"
@@ -378,7 +381,7 @@ def feeds(args: argparse.Namespace) -> None:
     silent: list[str] = []
     length = 0
     free = free_of(scene)
-    read_in: dict[Path, tuple[np.ndarray, float]] = {}
+    read_in: dict[Path, tuple[np.ndarray, dict[bool, float]]] = {}
     for name, played in signals_of(args, scene).items():
         if played is None:
             silent.append(name)
@@ -393,13 +396,16 @@ def feeds(args: argparse.Namespace) -> None:
             raise SystemExit(f"error: {name} plays {signal}, which is not there")
         if signal not in read_in:
             x, r = decoded(signal)
-            x = resampled(x, r, rate)
-            rms = gated_rms(x, rate)
+            read_in[signal] = (resampled(x, r, rate), {})
+        x, gains = read_in[signal]
+        stereo_pair = channel in ("left", "right")
+        if stereo_pair not in gains:
+            parts = [stereo(x)[:, 0], stereo(x)[:, 1]] if stereo_pair else [mono(x)]
+            rms = float(np.sqrt(np.mean([gated_rms(p, rate) ** 2 for p in parts])))
             if rms <= 0.0:
                 raise SystemExit(f"error: {signal} is silent")
-            read_in[signal] = (x, FEED_RMS / rms)
-        x, gain = read_in[signal]
-        y = channel_of(x, channel) * gain
+            gains[stereo_pair] = FEED_RMS / rms
+        y = channel_of(x, channel) * gains[stereo_pair]
         write(out / f"{name}.wav", y, rate)
         length = max(length, len(y))
         table[name] = {"signal": str(signal), "channel": channel, "length_s": len(y) / rate}
@@ -440,13 +446,17 @@ def listeners_of(args: argparse.Namespace, entries: list[dict]) -> list[str]:
     return [lis.name for lis in scene.listeners if lis.in_use and lis.name in simulated]
 
 
-def render(args: argparse.Namespace, demo: Demo | None = None) -> None:
+def render(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> None:
     """Every listener's mix (``--format``, binaural by default) with one gain for all, the
     loudest peak at -1 dBFS; ``auralize`` plays each feed at its source's sound power.
     The arrival time counts the sources that play, each at its sound power. When
     something moves, :func:`render_moving` makes the mixes instead. ``demo``, this one by
-    default, is the demo that runs it, whose commands the messages give."""
+    default, is the demo that runs it, whose commands the messages give. ``indoors``
+    (a :class:`~acoustic_spaces.demos.indoors.StillHouses`) hears each mix in the house
+    its listener stands in front of, or outdoors, and writes what is felt there."""
     moving = moving_of(args)
+    if moving and indoors is not None and indoors.house is not None:
+        raise SystemExit(f"error: --indoors hears a scene where nothing moves; {moving[0]} does")
     if moving:
         render_moving(args, moving, demo)
         return
@@ -456,12 +466,31 @@ def render(args: argparse.Namespace, demo: Demo | None = None) -> None:
     feeds = {name: work_of(args) / "feeds" / f"{name}.wav" for name in table["sources"]}
     powers = {s.name: s.sound_power_db for s in scene_of(args).sources if s.name in feeds}
     mixes = [
-        pipeline.Mix(name, simulation, name, feeds, weights=powers)
+        pipeline.Mix(
+            name,
+            simulation,
+            name,
+            feeds,
+            weights=powers,
+            info={} if indoors is None else indoors.info(name),
+        )
         for name in listeners_of(args, entries)
     ]
     if not mixes:
         raise SystemExit("error: no listener to render; the scene's listeners are all left out")
-    pipeline.render_mixes(mixes, work_of(args) / "seats", args)
+    post = None if indoors is None else indoors.post
+    folder = work_of(args) / "seats"
+    seats = pipeline.render_mixes(mixes, folder, args, post=post)
+    if indoors is not None and indoors.plant:
+        from acoustic_spaces.demos.indoors import write_shakers
+
+        rate = int(seats["rate"])
+        felt = {
+            seat["listener"]: indoors.shaker(seat["listener"], rate, round(seat["length_s"] * rate))
+            for seat in seats["seats"].values()
+        }
+        seats["shaker"] = write_shakers(folder, felt, rate)
+        pipeline.write_json(folder / pipeline.SEATS, seats)
 
 
 def format_of(args: argparse.Namespace, scene: Scene):
@@ -609,13 +638,14 @@ def tour_of(
     ]
 
 
-def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
+def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> None:
     """tour.wav, one still per stop, the thumbnail, and tour.mp4: the stills with a
     scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``). When
     something moves, the video is a moving picture instead: the walkers go along their
     walks as the piece plays, with a still of each stop. ``demo``, this one by default,
     is the demo that runs it: its commands and its settings go in the messages and on
-    the stills."""
+    the stills. ``indoors`` (a :class:`~acoustic_spaces.demos.indoors.StillHouses`),
+    the mixes heard in a house at each listener: the stills give the levels there."""
     demo = demo or DEMO
     from acoustic_spaces.demos import pictures, scene_pictures
     from acoustic_spaces.room import Room, outline_edges
@@ -631,6 +661,15 @@ def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
             f"error: the mixes in {folder} are of other walks; run first: "
             f"{demo.command('render', args)}"
         )
+    # The mixes heard where the stills say: outdoors, or in the houses --indoors asks.
+    if any(
+        seat.get("post") != (None if indoors is None else indoors.info(key).get("post"))
+        for key, seat in seats["seats"].items()
+    ):
+        raise SystemExit(
+            f"error: the mixes in {folder} were made for another --indoors; "
+            f"run first: {demo.command('render', args)}"
+        )
     stops = tour_of(args, seats, float(table["length_s"]), demo)
     audio = pipeline.tour_audio(
         stops,
@@ -641,6 +680,18 @@ def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
     )
     write(work / "tour.wav", audio, seats["rate"])
     print(f"wrote {work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    if seats.get("shaker"):
+        from acoustic_spaces.demos.indoors import tour_shaker
+
+        tour_shaker(
+            work,
+            stops,
+            folder,
+            seats,
+            seats["shaker"],
+            min(CROSSFADE_S, stops[0].length / 2),
+            min(FADE_OUT_S, stops[-1].length / 2),
+        )
     scene = moving_scene(args)
     data = scene.to_data()
     report = pipeline.read_json(results_of(args) / pipeline.PARAMETERS)
@@ -648,7 +699,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
     drawing = scene_pictures.Pictures(
         data,
         outline,
-        report,
+        report if indoors is None else indoors.report(report),
         seats["seats"],
         stops,
         playing=list(table["sources"]),
@@ -657,6 +708,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None) -> None:
         fmt=args.format,
         paths={(kind, item.name): knots(item) for kind, item in movers(scene)},
         movement=seats.get("movement"),
+        indoors=None if indoors is None else indoors.pictures(),
     )
     pictures.save(drawing.thumbnail(), work / "thumbnail.png")
     if moving:

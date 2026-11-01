@@ -2,6 +2,7 @@
 
 import importlib
 import math
+import time
 
 import numpy as np
 import pytest
@@ -306,8 +307,12 @@ def test_sources_alike_share_the_parabolic_equation_s_runs(monkeypatch) -> None:
     separate = simulate(room)
     alone = len(runs)
     runs.clear()
+    started = time.perf_counter()
     shared = simulate(room, share_waves=[s.name for s in sources])
+    seconds = time.perf_counter() - started
     assert 0 < len(runs) < alone and all(runs)
+    # Each source's early time is its own: their sum is within the run's.
+    assert sum(shared.details[s.name]["early_s"] for s in sources) < seconds
     for key in separate.responses:
         a, b = (r[key].early.energy.sum(axis=0) for r in (separate, shared))
         np.testing.assert_allclose(10 * np.log10(b / a), 0.0, atol=0.01)

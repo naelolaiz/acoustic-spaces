@@ -339,24 +339,32 @@ def _top_phase(paths: EarlyReflections) -> np.ndarray:
     return np.where(magnitude > 1e-12, top / np.maximum(magnitude, 1e-300), 1.0)
 
 
-def with_own_phases(paths: EarlyReflections, seed: int | None) -> EarlyReflections:
+def with_own_phases(
+    paths: EarlyReflections, seed: int | None, angles: np.ndarray | None = None
+) -> EarlyReflections:
     """``paths`` as a rendered response has them: each path over an edge turned by its
     :func:`own_phases` in the bands above the coherent ones. The same paths without such
-    bands or such paths."""
+    bands or such paths. ``angles``: their :func:`path_angles` for ``seed``, when worked
+    out once for every moment of the same paths."""
     if paths.coherent_bands >= paths.energy.shape[1] or not paths.diffracted.any():
         return paths
-    return dataclasses.replace(paths, own_phase=own_phases(paths, seed))
+    return dataclasses.replace(paths, own_phase=own_phases(paths, seed, angles))
 
 
-def own_phases(paths: EarlyReflections, seed: int | None) -> np.ndarray:
+def own_phases(
+    paths: EarlyReflections, seed: int | None, angles: np.ndarray | None = None
+) -> np.ndarray:
     """(n,) the phase factor beyond the one held from the coherent bands that a rendered
     response gives each path above them. A path over an edge is turned by an angle
     drawn uniformly from the path (its edge, order, faces, crossings and source point,
     and which of the paths alike it is) and ``seed``, times how loud the other paths'
     sound is where it arrives against its own (:func:`arriving_with`), up to one: so it
     adds to the paths it arrives with in energy on average, and one that arrives alone
-    keeps its phase. A reflection keeps its phase (one)."""
-    return np.exp(1j * _angles(paths, seed) * _turns(paths))
+    keeps its phase. A reflection keeps its phase (one). ``angles``: their
+    :func:`path_angles`, when worked out already."""
+    if angles is None:
+        angles = path_angles(paths, seed)
+    return np.exp(1j * angles * _turns(paths))
 
 
 def with_mean_phases(paths: EarlyReflections) -> EarlyReflections:
@@ -462,10 +470,10 @@ def _band_shape(f: np.ndarray, b: int, bands: int) -> np.ndarray:
     return lower - step(edges[b])
 
 
-def _angles(paths: EarlyReflections, seed: int | None) -> np.ndarray:
+def path_angles(paths: EarlyReflections, seed: int | None) -> np.ndarray:
     """(n,) an angle in [-pi, pi) for each path over an edge, zero for the others,
     drawn from what the path is and ``seed``: wherever the source and the listener
-    stand, the same path gets the same angle."""
+    stand, the same path gets the same angle, and at every moment of the eddies."""
     out = np.zeros(len(paths))
     seen: dict[tuple, int] = {}
     for i in np.flatnonzero(paths.diffracted):
@@ -883,6 +891,7 @@ __all__ = [
     "held_phase",
     "own_phases",
     "pair_energy",
+    "path_angles",
     "reflection_phases",
     "sample_frequencies",
     "shaped",

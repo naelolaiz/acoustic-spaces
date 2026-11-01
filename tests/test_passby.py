@@ -217,7 +217,10 @@ def test_the_car_horn_meets_the_rule_in_the_engine(tmp_path: Path) -> None:
     assert horn.horn_power(48_000, kind) == pytest.approx(blast + 10 * math.log10(horn.duty(kind)))
     made = horn.horn_sound(rate, kind.power_s, kind)
     assert horn.recorded_gain(made, rate, kind) == pytest.approx(1.0, rel=1e-12)
-    assert siren.HONKING_CAR.input_gain(siren.CAR_HORN_PART, made, rate) == pytest.approx(1.0)
+    honking = siren.HONKING_CAR
+    assert honking.input_gain(argparse.Namespace(), siren.CAR_HORN_PART, made, rate) == (
+        pytest.approx(1.0)
+    )
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
     import urban_sources
@@ -242,7 +245,9 @@ def test_the_credit_of_a_vehicle_with_a_siren_fits_its_stills(vehicle) -> None:
 
     facts = {"cylinders": 6, "rpm": 1500.0, "siren": "two_tone", "horn": "blasts"}
     credit = vehicle.credits(facts, {})
-    assert credit.endswith("faded in and out over 1 s")
+    assert credit.endswith("faded in and out over 1 s") == (vehicle is siren.POLICE_CAR_VEHICLE)
+    if vehicle is not siren.POLICE_CAR_VEHICLE:
+        assert credit.endswith("faded in and out over 1 s, not the horn")
     draw = ImageDraw.Draw(Image.new("RGB", SIZE))
     line, _ = fitted(draw, credit, 19, SIZE[0] - 2 * MARGIN)
     assert line == credit
@@ -311,8 +316,9 @@ def test_the_horn_blasts_as_its_rule_and_its_assumptions_say() -> None:
     assert level == pytest.approx(np.sqrt(np.mean(made[full] ** 2)), rel=0.02)
     assert horn.recorded_gain(np.zeros(rate), rate) is None
     vehicle = siren.FIRE_ENGINE_VEHICLE
-    assert vehicle.input_gain(siren.FIRE_HORN, long, rate) == horn.recorded_gain(long, rate)
-    assert vehicle.input_gain(siren.FIRE_SIREN, long, rate) == pytest.approx(
+    run = argparse.Namespace()
+    assert vehicle.input_gain(run, siren.FIRE_HORN, long, rate) == horn.recorded_gain(long, rate)
+    assert vehicle.input_gain(run, siren.FIRE_SIREN, long, rate) == pytest.approx(
         siren.SOUND_RMS / audio.gated_rms(long, rate)
     )
 

@@ -8,15 +8,15 @@ per band as
     D_2m,nT = R' + ΔL_fs + 10 lg(V / (6 T0 S)),
 
 R' the façade's apparent sound reduction index, S its area as the room sees it, V the
-room's volume, ΔL_fs what the façade's shape adds (none for a flat one). 2 m in front of
-a façade the level is 3 dB over the free field's, its reflection added (ISO 1996-2:2017,
-the correction for a microphone 0.5 to 2 m in front of a reflecting façade); a listener
-of a scene without the house stands in that free field, so the room's level is
+room's volume, ΔL_fs what the façade's shape adds (none for a flat one). The level 2 m
+in front of the façade holds the façade's own reflection, which the pass-by demos
+simulate, the house standing in the scene and the listener in front of it, so the
+room's level is
 
-    L_room = L_free + 3 - D_2m,nT.
+    L_room = L_2m - D_2m,nT.
 
 Here the closed window is the façade's only path: R' S is the window's R over its own
-area (the area cancels), so the room hears L_free + 3 - R - 10 lg(V / (6 T0 S_window)).
+area (the area cancels), so the room hears L_2m - R - 10 lg(V / (6 T0 S_window)).
 The wall round it, a masonry one, lets through far less, and is left out; so are the
 window's frame and seals and any vent, so the room is as quiet as the glazing lets it
 be.
@@ -33,9 +33,6 @@ from acoustic_spaces.parameters import OCTAVE_BANDS_HZ
 
 #: EN ISO 12354-3's reference reverberation time of a room (s): a furnished dwelling's.
 T0_S = 0.5
-#: How much louder the sound is 2 m in front of a reflecting façade than in the free
-#: field (dB; ISO 1996-2:2017).
-FACADE_REFLECTION_DB = 3.0
 #: AGC Glass Europe's THERMOBEL 4-16-4, double glazing of two 4 mm panes 16 mm apart: its
 #: sound reduction index per octave band from 125 Hz to 4 kHz (dB), measured by EN ISO
 #: 10140 on a pane of 1.23 by 1.48 m, Rw (C; Ctr) = 30 (-1; -4) dB, "not better than
@@ -84,13 +81,13 @@ class Facade:
         return np.asarray(self.reduction_db, dtype=float) + self.room_term_db
 
     def indoor_db(self) -> np.ndarray:
-        """(8,) the room's level less the free field's outside, per octave band (dB):
-        3 - D_2m,nT."""
-        return FACADE_REFLECTION_DB - self.level_difference()
+        """(8,) the room's level less the level 2 m in front of the façade, its
+        reflection included, per octave band (dB): -D_2m,nT."""
+        return -self.level_difference()
 
     def gains(self) -> np.ndarray:
-        """(8,) the amplitude gain per octave band from the free field outside to the
-        room."""
+        """(8,) the amplitude gain per octave band from 2 m in front of the façade to
+        the room."""
         return 10.0 ** (self.indoor_db() / 20.0)
 
 
@@ -135,7 +132,6 @@ def weighted(reduction_db) -> tuple[int, int, int]:
 
 
 __all__ = [
-    "FACADE_REFLECTION_DB",
     "GLAZING_R_DB",
     "HOUSE",
     "PANE_M",

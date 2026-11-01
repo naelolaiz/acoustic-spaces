@@ -32,7 +32,7 @@ tour moves every 8 bars of the tempo given, and the video credits the file by it
 unless `--credit` says what to show. The editor runs the same steps from Simulation >
 Run demo…
 
-From the audience to the far shore the sound drops by 20 to 25 dB(A), too much to
+From the audience to the far shore the sound drops by 24 to 25 dB(A), too much to
 hear the far places in a video. So each stop of the tour is brought to the same loudness
 (K-weighted, as loudness meters weigh it) as the audience's, and its caption says how
 much quieter it really is. The window in still air keeps the gain of the window in the
@@ -48,6 +48,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import numpy as np
 import yaml
 
 from acoustic_spaces import recordings
@@ -64,7 +65,8 @@ from acoustic_spaces.demos import (
     pipeline,
     sibling,
 )
-from acoustic_spaces.demos.audio import mono, read, write
+from acoustic_spaces.demos.audio import gated_rms, mono, read, stereo, write
+from acoustic_spaces.demos.scene_demo import FEED_RMS
 
 #: The songs the demo can play (``--song``): the free songs of
 #: :mod:`acoustic_spaces.recordings`, each with the files it is made of (one here, a
@@ -167,13 +169,22 @@ def music_download(args) -> str | None:
 def music_step(args) -> None:
     """Download ``--song`` (one member of a zip archive, or the file itself), or read the
     song of your own ``--music`` names, bring it to 48 kHz stereo, and write what each
-    loudspeaker plays (CHANNELS). A song downloaded before is kept."""
+    loudspeaker plays (CHANNELS), each at the level its sound power sets: the left and
+    right channels share one gain that brings their mean square to FEED_RMS, and the
+    subwoofers' mixdown, which two unlike channels lower, is brought to it too. A song
+    downloaded before is kept."""
     song = song_of(args)
     folder = music_folder(args)
     music.write_tracks({song["name"]: song["files"]}, folder, rate=RATE, channels=2)
     x, rate = read(song_path(args))
+    x = stereo(x)
+    pair = np.sqrt(np.mean([gated_rms(x[:, k], rate) ** 2 for k in (0, 1)]))
     for name, channel in CHANNELS.items():
-        write(folder / f"{name}.wav", mono(x) if channel == "mono" else x[:, channel], rate)
+        y = mono(x) if channel == "mono" else x[:, channel]
+        level = gated_rms(y, rate) if channel == "mono" else pair
+        if level <= 0.0:
+            raise SystemExit(f"error: {song['name']} is silent")
+        write(folder / f"{name}.wav", y * (FEED_RMS / level), rate)
     pipeline.write_json(folder / "song.json", {k: v for k, v in song.items() if k in SONG_KEPT})
     print(f"wrote {', '.join(CHANNELS)} ({len(x) / rate:.0f} s of {song['name']}) to {folder}")
 

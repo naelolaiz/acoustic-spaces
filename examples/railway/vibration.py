@@ -7,11 +7,12 @@ it, by the US Federal Transit Administration's general method.
 
 For each of the railway demo's trains at its own speed, and a house standing where
 each of the scene's listeners in use is (or those --listeners names), as far from the
-track as it: the vibration of the ground outside, of a floor inside, and the rumble the
-room's surfaces radiate (the ground-borne noise), each against the FTA's limits for
-residences; and how far from the track a house must be for both to hold. The method
-is the General Vibration Assessment of the FTA's Transit Noise and Vibration Impact
-Assessment Manual (FTA Report No. 0123, 2018, section 6.4;
+track as it, or the scene's house a listener stands in front of (house_18m), as far as
+its wall behind the listener: the vibration of the ground outside, of a floor inside,
+and the rumble the room's surfaces radiate (the ground-borne noise), each against the
+FTA's limits for residences; and how far from the track a house must be for both to
+hold. The method is the General Vibration Assessment of the FTA's Transit Noise and
+Vibration Impact Assessment Manual (FTA Report No. 0123, 2018, section 6.4;
 :mod:`acoustic_spaces.vibration`): its base curve for the kind of train, adjusted for
 its speed, the ground and the building. It gives overall levels, not their spectra,
 and it rests on North American trains and soils.
@@ -87,8 +88,10 @@ def parser() -> argparse.ArgumentParser:
 
 def places_of(scene: Scene, track, wanted: str | None) -> list[tuple[str, float]]:
     """The houses: where each listener in use is (those ``wanted`` names, in its order),
-    each as far from the track as it."""
-    from acoustic_spaces.demos import listener_names
+    each as far from the track as it, or the scene's building a listener stands in front
+    of (:func:`~acoustic_spaces.demos.indoors.facing`), as far as its wall behind the
+    listener."""
+    from acoustic_spaces.demos import indoors, listener_names
 
     here = {lst.name: lst for lst in scene.listeners if lst.in_use}
     names = listener_names(wanted)
@@ -100,7 +103,13 @@ def places_of(scene: Scene, track, wanted: str | None) -> list[tuple[str, float]
             f"error: --listeners: {', '.join(unknown) or 'none named'}; the scene's "
             f"listeners in use are {', '.join(here) or 'none'}"
         )
-    return [(name, vibration.horizontal_distance(here[name].position, track)) for name in names]
+    places = []
+    for name in names:
+        room = indoors.facing(scene, here[name].position)
+        at = here[name].position if room is None else room.wall
+        label = name if room is None else f"{name} ({room.name})"
+        places.append((label, vibration.horizontal_distance(at, track)))
+    return places
 
 
 def track_of(scene: Scene) -> list[tuple[float, float, float]]:
@@ -159,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     places = places_of(scene, track, args.listeners)
     print(
         "Ground-borne vibration by the FTA's general method (FTA Report No. 0123, 2018), "
-        "as if a house stood where each listener is:"
+        "in the house a listener stands in front of, as if one stood where the others are:"
     )
     print(
         f"  the house {vibration.BUILDINGS[args.building]}: on its floor {args.floor} "

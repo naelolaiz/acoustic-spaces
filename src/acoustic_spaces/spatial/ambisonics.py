@@ -70,6 +70,13 @@ class Ambisonics:
     def label(self) -> str:
         return f"ambix{self.order}"
 
+    def pressure_gains(self) -> np.ndarray:
+        """(channels,) what each channel picks up of a sound pressure that is the same
+        all over the room (all of it in W, none in the other channels)."""
+        out = np.zeros(self.channels)
+        out[0] = 1.0
+        return out
+
     @property
     def channel_names(self) -> list[str]:
         if self.order <= 1:

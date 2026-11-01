@@ -754,8 +754,9 @@ PARTS: dict[float, tuple[str, str]] = {
     4.0: ("_roof", "its roof: the fans and the pantograph's foot, 4 m up"),
     5.0: ("_pantograph", "its pantograph's head, 5 m up"),
 }
-#: What ``--horn`` lets a train's horn do: stay off, or sound its notes in blasts.
-HORN_PLAYS = ("off", "blasts")
+#: What ``--horn`` lets a train's horn do: stay off, sound its notes in blasts one after
+#: the other, or sound them together, as a chord, in the same blasts.
+HORN_PLAYS = ("off", "blasts", "chord")
 
 
 class TrainVehicle(Vehicle):
@@ -771,7 +772,8 @@ class TrainVehicle(Vehicle):
     blasts`` sounds it too: the source of its name with ``_horn``, at its front
     TRAIN_HORN_HEIGHT_M above the rail top along the same walk
     (:data:`~acoustic_spaces.demos.horn.TRAIN_HORN`, with the measured siren's
-    directivity, facing the way it goes), off by default."""
+    directivity, facing the way it goes), off by default; ``--horn chord`` sounds its
+    notes together (:data:`~acoustic_spaces.demos.horn.TRAIN_CHORD`)."""
 
     demo_name = "passby"
     go, goes, going, way = "run", "runs", "passing", "the track"
@@ -787,7 +789,7 @@ class TrainVehicle(Vehicle):
         script: str,
         horn: bool = False,
     ) -> None:
-        from acoustic_spaces.demos.horn import TRAIN_HORN, TRAIN_HORN_HEIGHT_M
+        from acoustic_spaces.demos.horn import TRAIN_CHORD, TRAIN_HORN, TRAIN_HORN_HEIGHT_M
         from acoustic_spaces.demos.siren import Horn
 
         self.name, self.noun, self.trains = name, noun, trains
@@ -799,6 +801,7 @@ class TrainVehicle(Vehicle):
                 f"at its front, {TRAIN_HORN_HEIGHT_M:g} m above the rail top",
                 f"{TRAIN_HORN.on_axis_db:g} dB(C) {TRAIN_HORN.at_m:g} m ahead (EN 15153-2's most)",
                 kind=TRAIN_HORN,
+                chord=TRAIN_CHORD,
             )
             if horn
             else None
@@ -847,12 +850,13 @@ class TrainVehicle(Vehicle):
             out.append(
                 Option(
                     "horn",
-                    f"the {self.noun}'s warning horn: off; or blasts, its high note "
+                    f"the {self.noun}'s warning horn: off; blasts, its high note "
                     f"({high:g} Hz) and its low note ({low:g} Hz) in turn, "
                     f"{kind.blast_s:g} s each, every {kind.every_s:g} s, each "
                     f"{kind.on_axis_db:g} dB(C) {kind.at_m:g} m ahead (the most EN "
-                    f"15153-2 allows), from its front {TRAIN_HORN_HEIGHT_M:g} m above the "
-                    "rail top",
+                    "15153-2 allows); or chord, the two notes together in the same "
+                    f"blasts, {kind.on_axis_db:g} dB(C) together (EN 15153-2 allows it); "
+                    f"from its front {TRAIN_HORN_HEIGHT_M:g} m above the rail top",
                     HORN_PLAYS[0],
                     "choice",
                     HORN_PLAYS,
@@ -896,8 +900,12 @@ class TrainVehicle(Vehicle):
         )
 
     def horn_on(self, args: argparse.Namespace) -> bool:
-        """Whether its horn sounds: ``--horn blasts``."""
-        return self.horn is not None and getattr(args, "horn", None) == "blasts"
+        """Whether its horn sounds: ``--horn blasts`` or ``--horn chord``."""
+        return self.horn is not None and getattr(args, "horn", None) in HORN_PLAYS[1:]
+
+    def horn_of(self, args: argparse.Namespace) -> str:
+        """How its horn sounds (one of :data:`HORN_PLAYS`): ``--horn``, or off."""
+        return str(args.horn) if self.horn_on(args) else HORN_PLAYS[0]
 
     def train_of(self, args: argparse.Namespace) -> str:
         """Which train runs: the option of its name, or its first."""
@@ -971,9 +979,9 @@ class TrainVehicle(Vehicle):
         rate = int(scene.simulation.sample_rate)
         horn: dict = {}
         if self.horn is not None:
-            horn["horn"] = HORN_PLAYS[1] if self.horn_on(args) else HORN_PLAYS[0]
+            horn["horn"] = self.horn_of(args)
             if self.horn_on(args):
-                level = self.horn.power("blasts", rate)
+                level = self.horn.power(horn["horn"], rate)
                 horn["horn_level_db"] = [round(float(v), 1) for v in level]
                 horn["horn_sound_power_a_db"] = round(a_weighted(level), 2)
         return {
@@ -1066,10 +1074,12 @@ class TrainVehicle(Vehicle):
             f"{info['sound_power_a_db']:.1f} dB(A) of sound power"
         )
         if self.horn is not None and "horn_level_db" in info:
-            write_wav(folder / self.horn.file, self.horn.sound("blasts", rate, duration), rate)
+            plays = info.get("horn", HORN_PLAYS[1])
+            write_wav(folder / self.horn.file, self.horn.sound(plays, rate, duration), rate)
+            chord = " of its chord" if plays == "chord" else ""
             out += (
-                f"; its horn's blasts, {info['horn_sound_power_a_db']:.1f} dB(A) of sound "
-                "power on average"
+                f"; its horn's blasts{chord}, {info['horn_sound_power_a_db']:.1f} dB(A) of "
+                "sound power on average"
             )
         return out
 
@@ -1109,6 +1119,13 @@ class TrainVehicle(Vehicle):
         )
         return Trail(points[0]["behind_m"] / speed, behind)
 
+    def fade_s(self, part: str) -> float:
+        """Its horn's blasts rise and fall of themselves (the first is not faded in);
+        its other sources fade as a pass's do."""
+        if self.horn is not None and part == self.horn.part:
+            return self.horn.fade_s
+        return FADE_S
+
     def sounding(
         self, args: argparse.Namespace, part: str, played, rate: int, at: np.ndarray
     ) -> np.ndarray | None:
@@ -1121,10 +1138,12 @@ class TrainVehicle(Vehicle):
             return None
         return blocks_loudness(np.asarray(played, dtype=float), rate, at, self.horn.rms)
 
-    def input_gain(self, part: str, x: np.ndarray, rate: int) -> float | None:
+    def input_gain(
+        self, args: argparse.Namespace, part: str, x: np.ndarray, rate: int
+    ) -> float | None:
         if self.horn is not None and part == self.horn.part:
-            return self.horn.input_gain(x, rate)
-        return super().input_gain(part, x, rate)
+            return self.horn.input_gain(x, rate, self.horn_of(args))
+        return super().input_gain(args, part, x, rate)
 
     def plays(self, args: argparse.Namespace, speed: str) -> str:
         return f"{TRAINS[self.train_of(args)].title} {speed}made to Schall 03's sound power"
@@ -1133,7 +1152,8 @@ class TrainVehicle(Vehicle):
         out = {}
         for part in self.parts(args):
             if self.horn is not None and part == self.horn.part:
-                out[part] = f"its horn {self.horn.place}, in blasts"
+                chord = ", its notes together" if self.horn_of(args) == "chord" else ""
+                out[part] = f"its horn {self.horn.place}, in blasts{chord}"
                 continue
             what = PARTS[self.heights()[part]][1]
             out[part] = f"{self.plays(args, speed)}: {what}" if part == self.name else f"{what}"
@@ -1141,7 +1161,7 @@ class TrainVehicle(Vehicle):
 
     def played_by(self, args: argparse.Namespace) -> str:
         speed = f"{round(speed_of(args, self), 4):g} km/h"
-        horn = " horn" if self.horn_on(args) else ""
+        horn = {"off": "", "blasts": " horn", "chord": " horn chord"}[self.horn_of(args)]
         return f"{self.name} {self.train_of(args)} {speed} {self.track_of(args)}{horn}"
 
     def facts(self, args: argparse.Namespace, info: dict) -> dict:
@@ -1157,7 +1177,8 @@ class TrainVehicle(Vehicle):
             horn["horn"] = info["horn"]
         if "horn_sound_power_a_db" in info:
             horn["horn_sound_power_a_db"] = info["horn_sound_power_a_db"]
-            about += f", its horn in blasts {info['horn_sound_power_a_db']:.1f} dB(A)"
+            chord = "'s chord" if info.get("horn") == "chord" else ""
+            about += f", its horn{chord} in blasts {info['horn_sound_power_a_db']:.1f} dB(A)"
         return {
             "train": info["train"],
             "track": info["track"],
@@ -1173,19 +1194,18 @@ class TrainVehicle(Vehicle):
     def credits(self, facts: dict, files: dict[str, Path | None]) -> str:
         given = [f"{part}: {file.name}" for part, file in files.items() if file is not None]
         horn = ""
-        if (
-            self.horn is not None
-            and facts.get("horn") == HORN_PLAYS[1]
-            and files.get(self.horn.part) is None
-        ):
-            horn = f"; {self.horn.credit('blasts')}"
+        fade = f"faded in and out over {FADE_S:g} s"
+        if self.horn is not None and facts.get("horn") in HORN_PLAYS[1:]:
+            # Its blasts rise and fall of themselves, unfaded (:meth:`fade_s`).
+            fade += ", not the horn"
+            if files.get(self.horn.part) is None:
+                horn = f"; {self.horn.credit(facts['horn'])}"
         if given:
-            return f"Playing {'; '.join(given)}{horn}, faded in and out over {FADE_S:g} s"
+            return f"Playing {'; '.join(given)}{horn}, {fade}"
         return (
             f"{self.noun.capitalize()}'s sound made up: noise at each bogie, roof and "
             "pantograph with the octave spectrum of Schall 03's sources there "
-            f"(16. BImSchV, Anlage 2, 2014) at {kmh(facts['speed_kmh'])} km/h{horn}; faded "
-            f"in and out over {FADE_S:g} s"
+            f"(16. BImSchV, Anlage 2, 2014) at {kmh(facts['speed_kmh'])} km/h{horn}; {fade}"
         )
 
     def texts(self) -> dict[str, str]:
