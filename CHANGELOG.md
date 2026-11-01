@@ -17,10 +17,11 @@ and a fire engine with its siren and air horn in the pass-by demos, with CNOSSOS
 sound power of their category, the police car's siren checked against California's and
 the Swiss rules for sirens, the fire engine's against the Swiss rule and its horn
 against the European rule for vehicles' horns. Everything a demo plays in its example's
-scene, a simpler Run demo window that also runs the examples' scripts and says what a
-run downloads, the editor's Scene YAML panel, and the validation report with four of
-BRAS's rooms and IACC against their binaural responses, checked claim by claim against
-the scripts and tests its numbers come from.
+scene, the listeners a demo plays picked for a run (`--listeners`), a simpler Run demo
+window that also runs the examples' scripts and says what a run downloads, the editor's
+Scene YAML panel, and the validation report with four of BRAS's rooms and IACC against
+their binaural responses, checked claim by claim against the scripts and tests its
+numbers come from.
 
 Results change from 4.0.1: EDT, whose line fit now starts at the onset in every
 response, in 99 of the 152 octave-band EDTs of six examples, by up to 9.6 % (in
@@ -418,6 +419,22 @@ Scene files of 4.0.1 load unchanged; the `stadium_pa` example is now part of
   "Francium"), the church's music 127 MB (it said about 100 MB), and the gallery's talk
   reads 16 MB of the corpus's 148 MB archive for the default talker, up to 145 MB for
   another.
+- Every demo with several listeners plays the ones picked for a run: `--listeners a,b`
+  mixes those alone and its video tours them alone. The simulation still takes every
+  listener in use, so another choice needs no new one, except in the pass-by demos
+  (roadside, street, the helicopter flyover and the helicopter over the stadium), which
+  simulate the vehicle along its walk at the listeners they play and keep a pass made
+  already. The demo of any scene and the pass-by demos visit them in the order given;
+  the church's tour keeps its times, a place left out giving its time to the one before;
+  the stadium's and the lake's stops there keep their phrases (stops at one place in a
+  row are joined); the orchestra plays each movement at the seats of its tour among
+  them, or at all of them when its tour has none. The lakeside, orchestra and pass-by
+  demos had no such choice before, and the church's `--listeners` picked the mixes while
+  its video still asked for every place. A name the demo cannot play, or none, is
+  refused with the names it can. The demo of any scene's `--tour` is now `--listeners`;
+  `--tour` still works. The editor's Run demo window lists the listeners the demo can
+  play, every one ticked, with **All** and **None**, out of Advanced
+  (`demos.listeners_option`, `Demo.listeners`).
 
 **Editor**
 

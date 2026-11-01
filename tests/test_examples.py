@@ -467,7 +467,20 @@ def test_church_demo_scene_and_organ(tmp_path: Path) -> None:
     assert len([name for name in names if name.startswith("singer_")]) == 19
     assert [name for name in names if name.startswith("organ_")] == list(demo.ORGAN_SOURCES)
     assert {item.name for item in room.scene.listeners} == {name for name, _ in demo.TOUR}
+    assert demo.DEMO.listeners(args) == [name for name, _ in demo.TOUR]
     assert room.scene.simulation.ir_length_s >= 9.0
+    # --listeners: the tour at those places alone, from the start to the end of the
+    # music, each place left out giving its time to the one before.
+    tour = demo.tour_of(argparse.Namespace(**vars(args) | {"listeners": "conductor,nave-back"}))
+    starts = dict(demo.TOUR)
+    assert tour == [
+        ("nave-back", 0.0, starts["conductor"]),
+        ("conductor", starts["conductor"], demo.end_of_music()),
+    ]
+    with pytest.raises(SystemExit, match="visits none of the listeners"):
+        demo.tour_of(
+            argparse.Namespace(**vars(args) | {"tour": "nave-back:0", "listeners": "conductor"})
+        )
     # The mixes weigh each source by the sound power the scene gives it.
     weights = {source["name"]: source["level_db"] for source in demo.scene_of(args)["sources"]}
     church = Scene.from_yaml(example_path("church"))
@@ -616,6 +629,25 @@ def test_stadium_demo_band_and_feeds(tmp_path: Path) -> None:
     assert tour[1][1] == pytest.approx(phrase) and tour[-1][2] == 195.0
     seats = {"seats": {"mix_position": {"rms_db": -40.0}, "singer": {"rms_db": -22.0}}}
     assert demo.gains_of(seats, tour) == {"mix_position": 18.0, "singer": 0.0}
+    # --listeners: the stops there alone, each with its phrases, the last to the end of
+    # the song, without the note on the mixes the others lack.
+    full = demo.tour_of(_demo_args(demo.DEMO, work=work), set(demo.TITLES))
+    two = _demo_args(demo.DEMO, work=work, listeners="east_stand,mix_position")
+    tour = demo.tour_of(two, {"mix_position", "east_stand"})
+    assert [name for name, _, _ in tour] == ["mix_position", "east_stand", "mix_position"]
+    assert (
+        tour[0] == full[0]
+        and tour[1][1:] == full[1][1:]
+        and tour[-1][1:]
+        == (
+            full[2][1],
+            195.0,
+        )
+    )
+    # One listener: the whole song there, in one stop.
+    assert demo.tour_of(
+        _demo_args(demo.DEMO, work=work, listeners="mix_position"), {"mix_position"}
+    ) == [("mix_position", 0.0, 195.0)]
     # The default tour fits in each song, every stop on a 4 or 8 bar boundary half a
     # crossfade before a downbeat, and the last stop longer than a phrase.
     for name, length in (("spicy_funk_cake", 195.0), ("francium", 294.5), ("rubidium", 232.0)):
@@ -787,6 +819,20 @@ def test_orchestra_demo_tour(tmp_path: Path) -> None:
     assert np.abs(pause).max() == 0.0  # between the movements
     assert np.abs(audio[int(5 * rate) : int(6 * rate)]).max() > 0.4  # playing before the cut
     assert np.abs(audio[int(20 * rate) : int(21 * rate)]).max() > 0.4  # and after it
+    # --listeners: each movement at the seats of its tour among them, or at all of them
+    # when it has none of them; the seats the scene has in use, by their names.
+    picked = _demo_args(demo.DEMO, work=work, listeners="stalls-rear,conductor")
+    assert demo.stops_of(picked) == [
+        (1, "conductor"),
+        (2, "stalls-rear"),
+        (4, "conductor"),
+        (4, "stalls-rear"),
+    ]
+    front = _demo_args(demo.DEMO, work=work, listeners="stalls-front")
+    assert demo.stops_of(front) == [(1, "stalls-front"), (2, "stalls-front"), (4, "stalls-front")]
+    assert demo.DEMO.listeners(demo.DEMO.resolved(demo.DEMO.defaults())) == [
+        seat["name"] for seat in scene["listeners"]
+    ]
 
 
 def test_orchestra_demo_downloads_the_tracks(tmp_path: Path, monkeypatch) -> None:
@@ -965,6 +1011,24 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     assert [(name, weather) for name, weather, _, _ in tour] == [s[:2] for s in demo.TOUR]
     assert tour[1][2] == pytest.approx(2 * phrase)
     assert tour[-1][3] - tour[-1][2] == pytest.approx(2 * phrase)
+    # --listeners: the stops at those places alone, in both weathers, each with its
+    # phrases. The places: the example's in use and the one behind the stage, which the
+    # demo puts in its scenes.
+    two = _demo_args(demo.DEMO, work=work, listeners="bedroom_window,audience")
+    tour = demo.tour_of(two)
+    assert [stop[:2] for stop in tour] == [
+        ("audience", "evening"),
+        ("bedroom_window", "evening"),
+        ("bedroom_window", "still"),
+        ("bedroom_window", "evening"),
+        ("audience", "evening"),
+    ]
+    assert tour[1][2] == pytest.approx(2 * phrase) and tour[-1][2] == pytest.approx(5 * phrase)
+    assert tour[-1][3] - tour[-1][2] == pytest.approx(2 * phrase)
+    # One place: its stops in a row joined into one.
+    alone = demo.tour_of(_demo_args(demo.DEMO, work=work, listeners="audience"))
+    assert alone == [("audience", "evening", 0.0, pytest.approx(4 * phrase))]
+    assert demo.listeners(args) == ["audience", "boat", "garden", "bedroom_window", "behind_stage"]
     custom = _demo_args(
         demo.DEMO, work=work, tour="bedroom_window:still:1,audience", last_phrases=0
     )

@@ -391,6 +391,8 @@ Editor:
   loudspeakers' alignment) run from the Run demo window.
 - [x] The Run demo window says what a run downloads and how much, above Run; the
   orchestra demo downloads its tracks itself, as the other demos do their recordings.
+- [x] The listeners a demo plays, picked for a run: `--listeners` in every demo with
+  several listeners, and a Listeners list to tick in the Run demo window.
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.
@@ -508,8 +510,8 @@ Known issues found by the review of 25 October 2026 (see
 
 Version 4.1.0 (and, in the sections above, the helicopters, the road vehicles and the
 faster walks outdoors under Movement, the demos' elements in their scenes and a
-recording for a scene's sound system under Examples, and the Run demo window and the
-Scene YAML panel under Editor):
+recording for a scene's sound system under Examples, and the Run demo window, the
+listeners a demo plays and the Scene YAML panel under Editor):
 
 - [x] Uncertainty: each parameter's standard error, how much it would change between
   runs with other seeds, from the late rays traced in batches (a jackknife over them),

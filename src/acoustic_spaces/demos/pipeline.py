@@ -495,6 +495,30 @@ def tour_audio(
     return out
 
 
+def picked_tour(tour: Sequence[tuple], keep: Callable[[tuple], bool]) -> list[tuple]:
+    """The stops of ``tour`` that ``keep`` keeps, each stop a tuple that ends in its
+    start and its stop in time, in time order: a stop left out gives its time to the
+    stop before it (those before the first kept one, to that one), and a stop at the
+    same place as the one before it (all but its times alike) is joined to it, so that
+    the tour lasts as long and cuts where it did between the stops it keeps. Empty
+    when it keeps none."""
+    out: list[tuple] = []
+    begin = None
+    for stop in tour:
+        *place, start, end = stop
+        if not keep(stop):
+            if out:
+                out[-1] = (*out[-1][:-1], end)
+            elif begin is None:
+                begin = start
+            continue
+        if out and list(out[-1][:-2]) == place:
+            out[-1] = (*out[-1][:-1], end)
+            continue
+        out.append((*place, start if out or begin is None else begin, end))
+    return out
+
+
 def gains_of(seats: dict, keys: Sequence[str]) -> dict[str, float]:
     """The gain (dB) each mix of a tour plays at: up to the loudness of the loudest one,
     K-weighted (``loudness_db``), not A-weighted as the levels are: the bass, which the A
@@ -657,6 +681,7 @@ __all__ = [
     "missing_mixes",
     "output_label",
     "outputs_of",
+    "picked_tour",
     "read_json",
     "render_mixes",
     "response_rate",

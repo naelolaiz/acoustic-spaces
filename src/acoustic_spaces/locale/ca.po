@@ -1810,6 +1810,23 @@ msgid "WAV file for {source}"
 msgstr "Fitxer WAV per a {source}"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "All"
+msgstr "Tots"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every listener: the demo plays them all, its default"
+msgstr ""
+"Marca tots els receptors: la demo els reprodueix tots, el predeterminat"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "None"
+msgstr "Cap"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every listener, to tick the few to hear"
+msgstr "Desmarca tots els receptors, per marcar els pocs que es volen sentir"
+
+#: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
 msgid "{count} keyframe, {length:.1f} m in {time:.1f} s"
 msgid_plural "{count} keyframes, {length:.1f} m in {time:.1f} s"

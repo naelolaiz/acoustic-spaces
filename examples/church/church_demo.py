@@ -50,6 +50,8 @@ organ sits 11 dB below its full one inside its feeds.
 `video` tours six places over the three verses with 1 s crossfades. Every place keeps
 one gain, so the levels between them are the church's; each mix is shifted earlier by
 the time the sound takes to reach that place, so that the music runs on across a cut.
+`--listeners nave-back,conductor` mixes those places alone, and the video tours them
+alone, each place left out giving its time to the one before.
 """
 
 from __future__ import annotations
@@ -72,6 +74,8 @@ from acoustic_spaces.demos import (
     Step,
     common_options,
     input_option,
+    listeners_option,
+    picked,
     pipeline,
     sibling,
 )
@@ -756,8 +760,7 @@ def render(args) -> None:
     the loudest peak at -1 dBFS. auralize gives each source its level_db; when the sound
     arrives counts each source as loud as that."""
     table = feeds_table(args)
-    every = [item["name"] for item in scene_of(args)["listeners"]]
-    listeners = args.listeners.split(",") if args.listeners else every
+    listeners = picked(args, [item["name"] for item in scene_of(args)["listeners"]])
     feeds = {name: args.work / "feeds" / f"{name}.wav" for name in table["sources"]}
     weights = {source["name"]: source["level_db"] for source in scene_of(args)["sources"]}
     simulation = simulations(args)[0]
@@ -768,14 +771,21 @@ def render(args) -> None:
 
 
 def tour_of(args) -> list[tuple[str, float, float]]:
+    """(listener, start, end) of each stop: the tour's own, or ``--tour``'s, without
+    the places ``--listeners`` leaves out, each giving its time to the stop before."""
     steps = TOUR
     if args.tour:
         steps = [(part.split(":")[0], float(part.split(":")[1])) for part in args.tour.split(",")]
     end = end_of_music()
-    return [
+    tour = [
         (name, t, steps[k + 1][1] if k + 1 < len(steps) else end)
         for k, (name, t) in enumerate(steps)
     ]
+    kept = set(picked(args, [name for name, _, _ in tour]))
+    tour = pipeline.picked_tour(tour, lambda stop: stop[0] in kept)
+    if not tour:
+        raise SystemExit("error: the tour visits none of the listeners --listeners names")
+    return tour
 
 
 def playing(t: float) -> tuple[str, ...]:
@@ -874,12 +884,14 @@ DEMO = Demo(
         Option("results", "folder written by simulate", Path("results_choir"), "folder"),
         *common_options(),
         input_option(),
-        Option("listeners", "only these listeners, comma separated", None, steps=("render",)),
+        listeners_option(),
         Option("tour", "listener:start_s,... (each runs until the next)", None, steps=("video",)),
     ],
     simulations=simulations,
     scene_from="scene",
     plays=plays,
+    # The scene step puts the tour's places in the scene it writes, and them alone.
+    listeners=lambda args: [name for name, _ in TOUR],
 )
 
 __all__ = ["DEMO"]

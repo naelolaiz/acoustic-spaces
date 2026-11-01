@@ -29,7 +29,8 @@ acoustic-spaces is installed in, with ffmpeg on the PATH:
     python helicopter_demo.py video       # demo/crossing: tour.wav, the stills, tour.mp4
 
 or `python helicopter_demo.py all`; the editor's Simulation > Run demo… runs it too. Use
-headphones.
+headphones. `--listeners mix_position,east_stand` flies it past those listeners alone,
+which the stadium demo's mixes must have, and the video tours them alone.
 
 Both play at their simulated levels: the loudspeakers' feeds stand for their sound
 power (stadium_demo.py's feeds step), the helicopter's sound is in pascals 1 m from its
@@ -55,7 +56,16 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from acoustic_spaces.demos import Option, Step, passby, pipeline, sibling
+from acoustic_spaces.demos import (
+    Option,
+    Step,
+    listener_names,
+    listeners_in,
+    passby,
+    picked,
+    pipeline,
+    sibling,
+)
 from acoustic_spaces.demos.audio import level_db, loudness_db, mmss, read, write
 from acoustic_spaces.demos.helicopter import HELICOPTER, Helicopter
 
@@ -190,13 +200,27 @@ def flight_done(args) -> bool:
 
 def band_args(args, crossing: bool = False):
     """The stadium demo's arguments for this run: its work folder (or the crossing's
-    folder in it), the scene with the band, its results, and the format, the HRTFs and
-    the tour of this run."""
+    folder in it), the scene with the band, its results, and the format, the HRTFs, the
+    listeners and the tour of this run."""
     band = stadium.DEMO.defaults()
     band.work = args.work / CROSSING if crossing else args.work
     band.scene, band.results, band.source = args.band, args.results, args.stadium
     band.format, band.hrtf, band.no_mp4, band.tour = args.format, args.hrtf, args.no_mp4, args.tour
+    band.listeners = args.listeners
     return band
+
+
+def concert_seats(args, band, concert: dict) -> dict:
+    """The concert's mixes (its ``seats``, by key) at the listeners this run plays: those
+    ``--listeners`` names, each of which must have one, or all of them."""
+    names = picked(args, [seat["listener"] for seat in concert["seats"].values()])
+    missing = [name for name in listener_names(args.listeners) or [] if name not in names]
+    if missing:
+        raise SystemExit(
+            f"error: the concert has no mix at {missing[0]}; run: "
+            f"{stadium.DEMO.command('render', band)}"
+        )
+    return {key: seat for key, seat in concert["seats"].items() if seat["listener"] in names}
 
 
 def crossing_times(args, facts: dict, table: dict) -> tuple[float, float]:
@@ -242,6 +266,7 @@ def mix(args) -> None:
     as the helicopter is heard, into ``crossing/feeds``, for the video."""
     band = band_args(args)
     concert = pipeline.seats_of(band.work / "seats", stadium.DEMO.command("render", band))
+    played = concert_seats(args, band, concert)
     table = stadium.feeds_table(band)
     folder = args.work / "walk"
     passes = pipeline.seats_of(folder, DEMO.command("walk", args))
@@ -276,11 +301,11 @@ def mix(args) -> None:
         out[start : start + len(y)] += y
         return out
 
-    peak = max(float(np.abs(crossed(k, s)).max()) for k, s in concert["seats"].items())
+    peak = max(float(np.abs(crossed(k, s)).max()) for k, s in played.items())
     gain = 10.0 ** (-1.0 / 20.0) / peak
     out = args.work / CROSSING
     seats = {}
-    for key, seat in concert["seats"].items():
+    for key, seat in played.items():
         x = crossed(key, seat) * gain
         write(out / "seats" / f"{key}.{fmt}.wav", x, rate)
         seats[key] = seat | {
@@ -316,7 +341,8 @@ def mix(args) -> None:
 
 def mix_done(args) -> bool:
     """Whether the mixes with the helicopter are there, newer than the concert's mixes
-    and the helicopter's passes, and made for ``--at``."""
+    and the helicopter's passes, made for ``--at`` and at every listener this run
+    plays."""
     out = args.work / CROSSING
     path, feeds = out / "seats" / pipeline.SEATS, out / "feeds" / "feeds.json"
     used = [args.work / "seats" / pipeline.SEATS, args.work / "walk" / pipeline.SEATS]
@@ -325,11 +351,17 @@ def mix_done(args) -> bool:
     if any(f.stat().st_mtime > path.stat().st_mtime for f in used):
         return False
     try:
-        table = stadium.feeds_table(band_args(args))
+        band = band_args(args)
+        table = stadium.feeds_table(band)
+        concert = pipeline.read_json(args.work / "seats" / pipeline.SEATS)
+        wanted = concert_seats(args, band, concert)
     except SystemExit:
         return False
     at = float(table["length_s"]) / 2.0 if args.at is None else float(args.at)
-    return pipeline.read_json(feeds).get("helicopter", {}).get("at_s") == round(at, 6)
+    made = pipeline.read_json(path)["seats"]
+    return pipeline.read_json(feeds).get("helicopter", {}).get("at_s") == round(at, 6) and set(
+        wanted
+    ) <= set(made)
 
 
 def video(args) -> None:
@@ -402,6 +434,8 @@ DEMO = passby.demo(
 DEMO.builds_on = stadium.DEMO.name
 DEMO.problems = problems
 DEMO.moving = moving
+# The flight's scenes keep the stadium's listeners as they are.
+DEMO.listeners = lambda args: listeners_in(args.stadium)
 _FLIGHT = Option(
     "source",
     "the stadium with the helicopter's flight over it, which flight writes",
@@ -413,6 +447,13 @@ _FLIGHT = Option(
 _REPLACED = {
     "source": _FLIGHT,
     "scene": dataclasses.replace(DEMO.option("scene"), default=Path("scene_overhead.yaml")),
+    "listeners": dataclasses.replace(
+        DEMO.option("listeners"),
+        steps=("walk", "mix", "video"),
+        help="only these listeners, comma separated (default: every listener in use): the "
+        "helicopter is simulated along its flight and heard at those alone, over the "
+        "stadium demo's mixes there, and the video's tour leaves the others out",
+    ),
 }
 DEMO.options = [_REPLACED.get(o.name, o) for o in DEMO.options] + [
     Option(

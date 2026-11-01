@@ -568,6 +568,21 @@ def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, caps
     args = demo.resolved(demo.parser().parse_args(["all", "--step", "4"]))
     assert not demo.is_done(demo.step("sound"), args)
     assert not demo.is_done(demo.step("scene"), args)
+    # --listeners: the passes there are made already, so the video alone goes again,
+    # with that listener alone; the walk at another one simulates it alone, and then
+    # the passes at every listener are no longer all there.
+    run = ["--step", "4", "--speed", "72", "--no-mp4"]
+    capsys.readouterr()
+    assert demo.main(["all", *run, "--listeners", "yard_25m"]) == 0
+    assert "walk: done already" in capsys.readouterr().out
+    chapters = (work / "chapters.txt").read_text(encoding="utf-8").splitlines()
+    assert chapters == ["0:00 yard 25m"]
+    assert demo.main(["walk", *run, "--listeners", "verge"]) == 0
+    assert set(pipeline.read_json(work / "walk" / "walk.json")["listeners"]) == {"verge"}
+    every = demo.resolved(demo.parser().parse_args(["all", *run]))
+    assert not demo.is_done(demo.step("walk"), every)
+    with pytest.raises(SystemExit, match="no pass at yard_25m"):
+        demo.main(["video", *run, "--listeners", "yard_25m,verge"])
 
 
 def _street(tmp_path: Path) -> Path:

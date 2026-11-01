@@ -155,7 +155,10 @@ which frequencies each octave band holds.
   file, **Default** takes it back; the **Movement** box ticks the sources and listeners
   whose walk moves in the run, which *This scene* lets you change for that run,
   `--moving`, a walker left out of the scene showing only when the demo moves it, and
-  **Edit movement…** opens the Movement panel on the selected one; a number shows its
+  **Edit movement…** opens the Movement panel on the selected one; the **Listeners**
+  list ticks the listeners the demo can play, all of them at first, and the run plays
+  the ticked ones, `--listeners`, **None** unticking them all and **All** ticking them
+  again; a number shows its
   unit, and the pass-by demos' **Speed** reads *as in the scene* at zero, the speed of
   the vehicle's walk, with the line under the Movement box saying how far, how fast
   (km/h and m/s) and so for how long the vehicle drives, as the options stand; an

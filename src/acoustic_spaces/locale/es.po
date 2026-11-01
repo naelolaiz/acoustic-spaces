@@ -1829,6 +1829,24 @@ msgid "WAV file for {source}"
 msgstr "Archivo WAV para {source}"
 
 #: acoustic_spaces/gui/demo_dialog.py
+msgid "All"
+msgstr "Todos"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Tick every listener: the demo plays them all, its default"
+msgstr ""
+"Marca todos los receptores: la demo los reproduce todos, lo predeterminado"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "None"
+msgstr "Ninguno"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Untick every listener, to tick the few to hear"
+msgstr ""
+"Desmarca todos los receptores, para marcar los pocos que se quieren oír"
+
+#: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
 msgid "{count} keyframe, {length:.1f} m in {time:.1f} s"
 msgid_plural "{count} keyframes, {length:.1f} m in {time:.1f} s"
