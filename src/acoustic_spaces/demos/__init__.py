@@ -189,6 +189,11 @@ class Option:
     unset: str = ""
     #: Given without its flag, before the others (an example script's scene).
     positional: bool = False
+    #: Another option and the values of it this one matters with, as ``("vehicle",
+    #: ("police_car",))`` for the police car's siren: the editor shows its field only
+    #: while that option holds one of them, and leaves it at its default otherwise.
+    #: None: it always matters.
+    only: tuple[str, tuple[str, ...]] | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -199,6 +204,14 @@ class Option:
     @property
     def option(self) -> str:
         return self.flag or "--" + self.name.replace("_", "-")
+
+    def applies(self, values: dict[str, Any]) -> bool:
+        """Whether it matters with the options at ``values`` (by name): always, unless
+        it matters only with some values of another (:attr:`only`)."""
+        if self.only is None:
+            return True
+        name, among = self.only
+        return values.get(name) in among
 
     @property
     def label(self) -> str:

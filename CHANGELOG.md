@@ -19,7 +19,9 @@
   `validation/urban_sources.py` holds the siren and the horn against their rules. The
   police car and the fire engine are both an `acoustic_spaces.demos.siren.EmergencyVehicle`;
   the police car's `police_car.json` holds the car's numbers under `vehicle` instead of
-  `car`.
+  `car`. In the editor's Run demo window the options of one vehicle alone (`--siren` and
+  `--police-car` for the police car, `--fire-engine`) show only while that vehicle is
+  picked, and stay out of the command line otherwise (`Option.only`).
 
 - The pass-by demos drive more than the car past their listeners, each picked with
   `passby_demo.py --vehicle` and each the example's source of its name, left out of

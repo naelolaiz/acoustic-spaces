@@ -1136,6 +1136,19 @@ def demo(
                 own.append(option)
     fleet = [engine for v in vehicles for engine in v.engines()]
     own = [dataclasses.replace(o, help=rpm_help(fleet)) if o.name == "rpm" else o for o in own]
+    if several:
+        # An option of some of the vehicles alone (the police car's --siren) matters
+        # only with --vehicle at one of them; the editor shows it then alone.
+        having = {
+            o.name: tuple(v.name for v in vehicles if any(m.name == o.name for m in v.options()))
+            for o in own
+        }
+        own = [
+            o
+            if len(having[o.name]) == len(vehicles)
+            else dataclasses.replace(o, only=("vehicle", having[o.name]))
+            for o in own
+        ]
     choice = [
         Option(
             "vehicle",

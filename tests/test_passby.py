@@ -172,6 +172,26 @@ def test_the_credit_of_a_vehicle_with_a_siren_fits_its_stills(vehicle) -> None:
     assert line == credit
 
 
+@pytest.mark.parametrize("example", ["roadside", "street"])
+def test_a_vehicles_own_options_matter_with_it_alone(example: str) -> None:
+    """The options of some of the vehicles alone (the police car's siren, what the fire
+    engine plays) say they matter only with --vehicle at one of them; those every
+    vehicle has (the engine's speed) always matter."""
+    from acoustic_spaces.demos import load
+
+    demo = load(Path(example_path(example)).parent / "passby_demo.py")
+    assert demo.option("rpm").only is None and demo.option("speed").only is None
+    if example == "roadside":
+        assert all(o.only is None for o in demo.options)
+        return
+    assert demo.option("siren").only == ("vehicle", ("police_car",))
+    assert demo.option("police_car").only == ("vehicle", ("police_car",))
+    assert demo.option("fire_engine").only == ("vehicle", ("fire_engine",))
+    siren_option = demo.option("siren")
+    assert siren_option.applies({"vehicle": "police_car"})
+    assert not siren_option.applies({"vehicle": "car"})
+
+
 def test_the_horn_blasts_as_its_rule_and_its_assumptions_say() -> None:
     """The air horn: BLASTS blasts BLAST_S long, GAP_S apart, every EVERY_S, each at its
     level RISE_S after it starts (the rule: 0.2 s at most); its two trumpets' fundamentals
