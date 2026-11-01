@@ -77,7 +77,7 @@ def ground_gain_db(temperature_c: float = 15.0) -> np.ndarray:
     """(24,) what the soft ground under the NPD curves' microphone adds to the sound of
     an aircraft 1000 ft from it straight above, per third octave of the spectral
     classes, 50 Hz to 10 kHz (dB): the reflection's energy added to the direct sound's,
-    1 + |Q|² (r1 / r2)², averaged over the band, Q the reflection factor of a point
+    ``1 + |Q|² (r1 / r2)²``, averaged over the band, Q the reflection factor of a point
     source's sound off grass at normal incidence
     (:func:`~acoustic_spaces.materials.ground.spherical_reflection`), r1 the 1000 ft and
     r2 the image's path, 2.4 m longer, in air at ``temperature_c``."""
@@ -125,7 +125,7 @@ def power_change_db(maximum: NpdCurves, power, reference: float) -> np.ndarray:
 def depression_deg(directions) -> np.ndarray:
     """(n,) the depression angle (degrees) under the wing plane of ``directions`` (n, 3)
     in the aircraft's frame (x forward, y left, z up), measured across the flight path:
-    atan2(-z, |y|), negative above the wing plane; nought straight ahead and behind."""
+    ``atan2(-z, |y|)``, negative above the wing plane; nought straight ahead and behind."""
     d = np.asarray(directions, dtype=float).reshape(-1, 3)
     return np.degrees(np.arctan2(-d[:, 2], np.abs(d[:, 1])))
 
