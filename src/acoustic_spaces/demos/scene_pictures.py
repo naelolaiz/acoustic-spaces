@@ -97,11 +97,12 @@ class Pictures:
     name): :class:`~acoustic_spaces.walkthrough.Knots`) and ``movement`` the moving mixes'
     moments and the level of each source at each listener at each (seats.json's
     ``movement``), which :meth:`frame` draws and says at any moment of the tour.
-    ``indoors``, the mixes heard in a house at each listener
-    (:meth:`~acoustic_spaces.demos.indoors.StillHouses.pictures`, with ``report``'s
-    levels those in the houses): whether the sources are heard through its window
-    (``airborne``), the rumble of its floors and walls at each listener
-    (``rumble_a_db``, ``vibration_vdb``) and what to say of it (``about``)."""
+    ``indoors``, the mixes heard in the houses listeners stand in front of, or
+    outdoors (:meth:`~acoustic_spaces.demos.indoors.StillHouses.pictures`, with
+    ``report``'s levels those where they are heard): whether the sources are heard
+    through a house's window (``airborne``), what to say of each listener's house
+    (``about``), the rumble of its floors and walls (``rumble_a_db``), and how hard the
+    ground or a house's floor shakes at each listener (``vibration_vdb``)."""
 
     def __init__(
         self,
@@ -281,7 +282,7 @@ class Pictures:
         else:
             values = [self.levels.get((s["name"], listener)) for s in self.playing]
         rumble = self.indoors.get("rumble_a_db", {}).get(listener)
-        if not self.indoors.get("airborne", True):
+        if listener in self.indoors.get("about", {}) and not self.indoors.get("airborne", True):
             values = []  # in the house, the rumble alone
         elif not values or any(v is None for v in values):
             return None
@@ -326,13 +327,16 @@ class Pictures:
         if near is not None:
             lines.append(f"Nearest playing: {near[0].replace('_', ' ')}, {near[1]:.1f} m away")
         shaking = self.indoors.get("vibration_vdb", {}).get(stop.key)
+        about = self.indoors.get("about", {}).get(stop.key)
         if shaking is not None:
-            rumble = self.indoors["rumble_a_db"][stop.key]
-            lines.append(f"Ground shaking {shaking:.0f} VdB, its rumble {rumble:.1f} dB(A)")
+            from acoustic_spaces.demos.indoors import shaking_line
+
+            rumble = self.indoors.get("rumble_a_db", {}).get(stop.key)
+            lines.append(shaking_line(shaking, about is not None, rumble))
         if stop.gain_db > 0.5:
             lines.append(f"Turned up {stop.gain_db:.0f} dB here so you can hear it")
-        if "about" in self.indoors:
-            lines += [(line, MUTED) for line in self.indoors["about"].split("\n")]
+        if about is not None:
+            lines += [(line, MUTED) for line in about.split("\n")]
         if t is not None and self.paths:
             walking = ", ".join(name.replace("_", " ") for _kind, name in self.paths)
             lines.append((f"Moving along their walks: {walking}", MUTED))

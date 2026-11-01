@@ -10,9 +10,11 @@ breaker strikes; ``--input NAME=WAV`` a dry recording of yours instead), ``simul
 simulates the scene, and ``render`` and ``video`` are the scene demo's
 (:mod:`acoustic_spaces.demos.scene_demo`): every listener for ``--seconds`` while the
 works go on, binaural, one gain for all, each stop's caption giving the level there.
-``--indoors`` hears them in a house at each listener instead: through its closed
-window, with the rumble of the breaker's and the dumper's vibration, or either alone
-(:class:`acoustic_spaces.demos.indoors.StillHouses`).
+``--indoors`` hears them inside the house a listener stands in front of instead:
+through its closed window, with the rumble of the breaker's and the dumper's vibration,
+or either alone (:class:`acoustic_spaces.demos.indoors.StillHouses`). What is felt at
+each listener, the ground's or the house's floor's vibration, is a track for a bass
+shaker too (``<listener>.shaker.wav`` beside the mixes, ``tour.shaker.wav``).
 """
 
 from __future__ import annotations
@@ -92,15 +94,14 @@ def _point(position) -> tuple[float, float, float]:
 
 
 def houses(args: argparse.Namespace) -> indoors.StillHouses | None:
-    """The house at each listener ``--indoors`` asks for (the works heard through its
-    window, the rumble of the breaker's and the dumper's vibration, or both), or None
-    for the works outdoors."""
+    """The works at each listener: in the house it stands in front of, as ``--indoors``
+    asks (the works heard through its window, the rumble of the breaker's and the
+    dumper's vibration, or both), or outdoors, with what is felt there; None when
+    nothing of them shakes the ground and they are heard outdoors."""
     from acoustic_spaces import Scene
 
     choice = getattr(args, "indoors", None)
     house = indoors.House.of(choice, NOUN)
-    if house is None:
-        return None
     found = Scene.from_yaml(args.scene)
     playing = [s for s in found.sources if s.in_use and s.name in SOURCES]
     shaking = []
@@ -108,11 +109,22 @@ def houses(args: argparse.Namespace) -> indoors.StillHouses | None:
         machine = machine_of(source.name)
         if machine is not None and machine.vibration is not None:
             shaking.append(indoors.Plant(source.name, machine.vibration, _point(source.position)))
+    if (house is None and not shaking) or not playing:
+        return None
+    names = [lis.name for lis in found.listeners]
+    inside = indoors.facings(found, names) if house is not None else {}
+    if house is not None and not any(inside.values()):
+        raise SystemExit(
+            f"error: --indoors hears the works in a house that a listener stands "
+            f"{indoors.FACADE_M[0]:g} to {indoors.FACADE_M[1]:g} m in front of; no listener "
+            f"of {args.scene.name} does"
+        )
     return indoors.StillHouses(
         house,
         str(choice),
         tuple(shaking),
         {lis.name: _point(lis.position) for lis in found.listeners},
+        inside,
         max(s.sound_power_db for s in playing),
         scene_demo.format_of(args, found),
     )
@@ -297,7 +309,7 @@ def demo(script: Path, example: str = "street") -> Demo:
             dataclasses.replace(shared["seconds"], steps=("feeds", "video")),
             Option(
                 "indoors",
-                indoors.help_of(NOUN, "the works"),
+                indoors.help_of(NOUN),
                 indoors.OFF,
                 "choice",
                 indoors.choices(NOUN),

@@ -446,10 +446,10 @@ def render(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> 
     The arrival time counts the sources that play, each at its sound power. When
     something moves, :func:`render_moving` makes the mixes instead. ``demo``, this one by
     default, is the demo that runs it, whose commands the messages give. ``indoors``
-    (a :class:`~acoustic_spaces.demos.indoors.StillHouses`) hears each mix in a house
-    at its listener."""
+    (a :class:`~acoustic_spaces.demos.indoors.StillHouses`) hears each mix in the house
+    its listener stands in front of, or outdoors, and writes what is felt there."""
     moving = moving_of(args)
-    if moving and indoors is not None:
+    if moving and indoors is not None and indoors.house is not None:
         raise SystemExit(f"error: --indoors hears a scene where nothing moves; {moving[0]} does")
     if moving:
         render_moving(args, moving, demo)
@@ -473,7 +473,18 @@ def render(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> 
     if not mixes:
         raise SystemExit("error: no listener to render; the scene's listeners are all left out")
     post = None if indoors is None else indoors.post
-    pipeline.render_mixes(mixes, work_of(args) / "seats", args, post=post)
+    folder = work_of(args) / "seats"
+    seats = pipeline.render_mixes(mixes, folder, args, post=post)
+    if indoors is not None and indoors.plant:
+        from acoustic_spaces.demos.indoors import write_shakers
+
+        rate = int(seats["rate"])
+        felt = {
+            seat["listener"]: indoors.shaker(seat["listener"], rate, round(seat["length_s"] * rate))
+            for seat in seats["seats"].values()
+        }
+        seats["shaker"] = write_shakers(folder, felt, rate)
+        pipeline.write_json(folder / pipeline.SEATS, seats)
 
 
 def format_of(args: argparse.Namespace, scene: Scene):
@@ -654,13 +665,27 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
     )
     write(work / "tour.wav", audio, seats["rate"])
     print(f"wrote {work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    if seats.get("shaker"):
+        from acoustic_spaces.demos.indoors import tour_shaker
+
+        tour_shaker(
+            work,
+            stops,
+            folder,
+            seats,
+            seats["shaker"],
+            min(CROSSFADE_S, stops[0].length / 2),
+            min(FADE_OUT_S, stops[-1].length / 2),
+        )
     scene = moving_scene(args)
     data = scene.to_data()
     report = pipeline.read_json(results_of(args) / pipeline.PARAMETERS)
     outline = outline_edges(Room.from_scene(scene))[0]
     # The mixes heard where the stills say: outdoors, or in the houses --indoors asks.
-    wanted = None if indoors is None else f"indoors {indoors.choice}"
-    if {seat.get("post") for seat in seats["seats"].values()} != {wanted}:
+    if any(
+        seat.get("post") != (None if indoors is None else indoors.info(key).get("post"))
+        for key, seat in seats["seats"].items()
+    ):
         raise SystemExit(
             f"error: the mixes in {folder} were made for another --indoors; "
             f"run first: {demo.command('render', args)}"

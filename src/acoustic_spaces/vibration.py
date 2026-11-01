@@ -31,6 +31,8 @@ INCH_M = 0.0254
 MILE_KM = 1.609344
 #: The reference of a vibration level in VdB: 1 micro-inch per second (m/s).
 VELOCITY_REFERENCE_M_S = 1e-6 * INCH_M
+#: Section 5.2: "the threshold of perception for humans is approximately 65 VdB".
+PERCEPTION_VDB = 65.0
 #: How near and how far from the track the manual draws its base curves (figure 6-4):
 #: 10 to 300 ft from the track's centreline (m), the diagonal distance for a subway.
 NEAREST_M, FARTHEST_M = 10.0 * FOOT_M, 300.0 * FOOT_M
@@ -484,7 +486,12 @@ def horizontal_distance(
     """The distance (m) in plan from ``point`` (x, y[, z]) to the nearest point of
     ``path``, a line through (x, y[, z]) points, or the outline of a footprint when
     ``closed``."""
-    p = np.asarray(point, dtype=float)[:2]
+    return float(horizontal_distances([point], path, closed)[0])
+
+
+def horizontal_distances(points, path, closed: bool = False) -> np.ndarray:
+    """(n,) :func:`horizontal_distance` of each of ``points`` (n, 2 or 3)."""
+    p = np.atleast_2d(np.asarray(points, dtype=float))[:, None, :2]
     corners = np.asarray(path, dtype=float)[:, :2]
     if closed:
         corners = np.vstack([corners, corners[:1]])
@@ -494,10 +501,14 @@ def horizontal_distance(
     # A leg of no length (a point repeated, a ring closed on its first corner) is that
     # point.
     t = np.divide(
-        np.einsum("ij,ij->i", p - a, ab), lengths, out=np.zeros(len(ab)), where=lengths > 0.0
+        np.einsum("nij,ij->ni", p - a, ab),
+        lengths,
+        out=np.zeros((len(p), len(ab))),
+        where=lengths > 0.0,
     )
-    nearest = a + np.clip(t, 0.0, 1.0)[:, None] * ab
-    return float(np.min(np.linalg.norm(np.vstack([nearest, corners[-1:]]) - p, axis=1)))
+    nearest = a + np.clip(t, 0.0, 1.0)[..., None] * ab
+    ends = np.broadcast_to(corners[-1:], (len(p), 1, 2))
+    return np.min(np.linalg.norm(np.concatenate([nearest, ends], axis=1) - p, axis=2), axis=1)
 
 
 __all__ = [
@@ -511,6 +522,7 @@ __all__ = [
     "GENERIC",
     "NEAREST_M",
     "NOISE_DB",
+    "PERCEPTION_VDB",
     "PLANT",
     "RUMBLE_HZ",
     "SPECIAL_BUILDINGS",
@@ -526,6 +538,7 @@ __all__ = [
     "floors_db",
     "ground_level",
     "horizontal_distance",
+    "horizontal_distances",
     "indoor_db",
     "level_of",
     "mm_s",

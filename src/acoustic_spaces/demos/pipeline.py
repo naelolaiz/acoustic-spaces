@@ -482,12 +482,15 @@ def tour_audio(
     *,
     crossfade_s: float = 1.0,
     fade_out_s: float = 4.0,
-    peak_db: float = -1.0,
+    peak_db: float | None = -1.0,
+    kind: str | None = None,
 ) -> np.ndarray:
     """The tour as stereo: each stop's mix shifted earlier by its arrival (``lag_s`` in
-    ``seats``) so the music runs on across a cut, equal-power crossfades of
-    ``crossfade_s`` centred on the cuts between joined stops, a fade at the end and the
-    peak at ``peak_db``."""
+    ``seats``) so the music runs on across a cut, turned up as the stop is, equal-power
+    crossfades of ``crossfade_s`` centred on the cuts between joined stops, a fade at
+    the end and the peak at ``peak_db``. With a ``kind``, each stop's
+    ``<listener>.<kind>.wav`` instead of its mix (what is felt there, ``"shaker"``),
+    neither turned up nor brought to a peak, as it is."""
     rate, fmt = seats["rate"], seats["format"]
     length = round(stops[-1].end * rate)
     out = np.zeros((length, 2))
@@ -495,10 +498,11 @@ def tour_audio(
     ramp = np.sin(np.linspace(0.0, np.pi / 2, 2 * half))  # equal power
     for k, stop in enumerate(stops):
         seat = seats["seats"][stop.key]
-        x = audio.stereo(audio.read(folder / f"{stop.key}.{fmt}.wav")[0])
+        x = audio.stereo(audio.read(folder / f"{stop.key}.{kind or fmt}.wav")[0])
         offset = round((stop.at - stop.start) * rate)  # the mix's start in the tour
         x = audio.shifted(x, round(seat.get("lag_s", 0.0) * rate) - offset, length)
-        x = x * 10.0 ** (stop.gain_db / 20.0)
+        if kind is None:
+            x = x * 10.0 ** (stop.gain_db / 20.0)
         a, b = round(stop.at * rate), round(stop.end * rate)
         before = stop.joined_before and k > 0
         after = stop.joined_after and k < len(stops) - 1
@@ -513,7 +517,7 @@ def tour_audio(
     if fade:
         out[-fade:] *= np.linspace(1.0, 0.0, fade)[:, None] ** 2
     peak = float(np.abs(out).max())
-    if peak > 0:
+    if peak > 0 and peak_db is not None and kind is None:
         out *= 10.0 ** (peak_db / 20.0) / peak
     return out
 
