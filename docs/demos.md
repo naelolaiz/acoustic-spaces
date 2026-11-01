@@ -923,8 +923,7 @@ walk (m), `--hrtf me.sofa` a measured head, `--input train=WAV` a dry recording 
 yours (`train_roof=WAV` and `train_pantograph=WAV` for the sources up on the train).
 The tram has no options of its own: a low-floor tram with air conditioning, 30 m long,
 on its track set in the street, at the speed of its walk (50 km/h) unless `--speed`
-says. In the **Run demo** window an option of one vehicle alone shows only while that
-vehicle is picked.
+says.
 
 - **Their sound power** is that of Schall 03 (Germany's method for the noise of
   railways and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`):
