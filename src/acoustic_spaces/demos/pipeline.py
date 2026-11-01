@@ -355,15 +355,18 @@ def render_mixes(
     equal_power: bool = False,
     first: str = "",
     inputs: dict[str, Path] | None = None,
+    post: Callable[[Mix, np.ndarray, int], np.ndarray] | None = None,
 ) -> dict:
     """Every mix as ``folder/<key>.<format>.wav``, with one gain for all (the loudest
     peak at -1 dBFS), and ``folder/seats.json``: the rate, the format, the gain and
     each mix's ``lag_s`` (when its sound arrives), ``rms_db`` (gated, A-weighted),
     ``loudness_db`` (K-weighted), ``relative_db`` (against the loudest), length and the
     ``inputs`` it played. ``inputs`` (``--input``) replaces the feeds of the sources it
-    names (:func:`with_inputs`). Mixes that exist, newer than their feeds and responses
-    and made with the same inputs, are kept unless ``--again``, their earlier gain
-    undone."""
+    names (:func:`with_inputs`). ``post`` changes each mix as it is made, before the
+    gain (a house's window and rumble, :mod:`acoustic_spaces.demos.indoors`); a mix's
+    ``info["post"]`` says how. Mixes that exist, newer than their feeds and responses
+    and made with the same inputs and the same ``post``, are kept unless ``--again``,
+    their earlier gain undone."""
     fmt, label = args.format, output_label(args)
     seats_path = folder / SEATS
     previous = read_json(seats_path) if seats_path.exists() else {}
@@ -380,7 +383,10 @@ def render_mixes(
         out = path_of(mix)
         if not (reuse and out.exists() and mix.key in previous.get("seats", {})):
             return False
-        if previous["seats"][mix.key].get("inputs", {}) != mix.info.get("inputs", {}):
+        before = previous["seats"][mix.key]
+        if before.get("inputs", {}) != mix.info.get("inputs", {}):
+            return False
+        if before.get("post") != mix.info.get("post"):
             return False
         made = [mix.simulation.results / PARAMETERS, *mix.feeds.values()]
         return all(out.stat().st_mtime >= path.stat().st_mtime for path in made if path.exists())
@@ -397,6 +403,9 @@ def render_mixes(
             print(f"{out}: there already")
         else:
             auralize(mix.simulation.results, mix.feeds, mix.listener, label, out, equal_power)
+            if post is not None:
+                x, rate = audio.read(out)
+                audio.write(out, post(mix, x, rate), rate)
         x, rate = audio.read(out)
         peaks[mix.key] = float(np.abs(x).max()) / (old_gain if keep[mix.key] else 1.0)
     gain = 10.0 ** (-1.0 / 20.0) / max(peaks.values())

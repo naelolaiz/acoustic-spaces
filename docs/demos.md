@@ -1210,7 +1210,8 @@ python works_demo.py all   # or scene, feeds, simulate, render, video one at a t
 Options: `--blows 480` how many blows a minute the breaker strikes (Epiroc's MB 1650, a
 1650 kg breaker, strikes 320 to 640), `--seconds 20` how long each listener is heard,
 `--listeners pavement,garden` which listeners and in which order (every one in use by
-default; `--tour`, its earlier name, still works), `--hrtf me.sofa` a measured head, `--input
+default; `--tour`, its earlier name, still works), `--indoors off` where they are heard
+(see below), `--hrtf me.sofa` a measured head, `--input
 NAME=WAV` a dry recording of yours instead of a made sound (`breaker`, `generator`,
 `dumper` or `dumper_alarm`). The scene with the works alone goes to `scene_works.yaml`,
 everything else to `demo_works/`. In the editor, **Simulation > Run demo…** on the
@@ -1258,6 +1259,18 @@ street's scene has it beside the pass-by demo.
   change a few tens of centimetres away). The engines' firing, a row of tones, comes
   out within 1.1 dB of the table's; the breaker's blows, noise, within 0.4 dB. The
   captions give the octaves' levels.
+- **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors.StillHouses`): a house
+  stands at each listener, as far from the works, the one of [Trains passing
+  by](#trains-passing-by):
+  `works_and_rumble` hears the works through its closed window and the rumble of the
+  breaker's and the dumper's vibration, `works` the window alone, `rumble` the rumble
+  alone. The vibration is each machine's level at its distance by the FTA's eq. 7-3
+  from table 7-4 (a hoe ram, 87 VdB at 25 ft; loaded trucks, 86 VdB), their energies
+  added, with no adjustment for the building, as the manual compares plant's level
+  with its limits as it is; the rumble is 50 dB under it in dB(A), as the trains'. It
+  is 30.2 dB(A) at the pavement (the ground at 80.2 VdB), 25.7 at the balcony (75.7)
+  and 16.1 in the garden (66.1), and steady, as the breaker's blows come faster than
+  noise at 25 Hz can swell and fade. The captions give the levels in the house.
 
 What it leaves out: the dumper stands still while its alarm sounds, as if it reversed on
 the spot; the machines' bodies are not in the scene, so nothing of the dumper shields

@@ -96,7 +96,12 @@ class Pictures:
     something moves, ``paths`` gives each walker's knots (("sources" or "listeners",
     name): :class:`~acoustic_spaces.walkthrough.Knots`) and ``movement`` the moving mixes'
     moments and the level of each source at each listener at each (seats.json's
-    ``movement``), which :meth:`frame` draws and says at any moment of the tour."""
+    ``movement``), which :meth:`frame` draws and says at any moment of the tour.
+    ``indoors``, the mixes heard in a house at each listener
+    (:meth:`~acoustic_spaces.demos.indoors.StillHouses.pictures`, with ``report``'s
+    levels those in the houses): whether the sources are heard through its window
+    (``airborne``), the rumble of its floors and walls at each listener
+    (``rumble_a_db``, ``vibration_vdb``) and what to say of it (``about``)."""
 
     def __init__(
         self,
@@ -112,12 +117,14 @@ class Pictures:
         fmt: str = "binaural",
         paths: Mapping[tuple[str, str], object] | None = None,
         movement: dict | None = None,
+        indoors: dict | None = None,
     ):
         self.scene, self.report, self.seats, self.stops = scene, report, seats, list(stops)
         self.paths = dict(paths or {})
         self.moments = np.asarray((movement or {}).get("times", [0.0]), dtype=float)
         self.along = (movement or {}).get("levels_a_db", {})
         self.credit, self.tool, self.fmt = credit, tool, fmt
+        self.indoors = dict(indoors or {})
         self.sources = [s for s in scene["sources"] if s.get("enabled", True) is not False]
         self.playing = [s for s in self.sources if s["name"] in set(playing)]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
@@ -273,9 +280,14 @@ class Pictures:
             ]
         else:
             values = [self.levels.get((s["name"], listener)) for s in self.playing]
-        if not values or any(v is None for v in values):
+        rumble = self.indoors.get("rumble_a_db", {}).get(listener)
+        if not self.indoors.get("airborne", True):
+            values = []  # in the house, the rumble alone
+        elif not values or any(v is None for v in values):
             return None
         energy = sum(10.0 ** (v / 10.0) for v in values)
+        if rumble is not None:
+            energy += 10.0 ** (rumble / 10.0)
         return 10.0 * math.log10(energy) if energy > 0.0 else None
 
     def t30_at(self, listener: str) -> float | None:
@@ -313,8 +325,14 @@ class Pictures:
         near = self.nearest(stop.key, t)
         if near is not None:
             lines.append(f"Nearest playing: {near[0].replace('_', ' ')}, {near[1]:.1f} m away")
+        shaking = self.indoors.get("vibration_vdb", {}).get(stop.key)
+        if shaking is not None:
+            rumble = self.indoors["rumble_a_db"][stop.key]
+            lines.append(f"Ground shaking {shaking:.0f} VdB, its rumble {rumble:.1f} dB(A)")
         if stop.gain_db > 0.5:
             lines.append(f"Turned up {stop.gain_db:.0f} dB here so you can hear it")
+        if "about" in self.indoors:
+            lines += [(line, MUTED) for line in self.indoors["about"].split("\n")]
         if t is not None and self.paths:
             walking = ", ".join(name.replace("_", " ") for _kind, name in self.paths)
             lines.append((f"Moving along their walks: {walking}", MUTED))

@@ -60,12 +60,13 @@ def choices(noun: str) -> tuple[str, ...]:
     return (OFF, f"{noun}_and_{RUMBLE}", noun, RUMBLE)
 
 
-def help_of(noun: str) -> str:
-    """The help of ``--indoors`` for a vehicle called ``noun``."""
+def help_of(noun: str, away: str = "the track") -> str:
+    """The help of ``--indoors`` for a vehicle called ``noun`` (or the road works),
+    the house standing as far from ``away`` as the listener."""
     off, both, alone, rumble = choices(noun)
     return (
         f"where the {noun} is heard: {off}, outdoors at each listener; or inside a house "
-        f"standing there, as far from the track: {both}, the {noun} through the house's "
+        f"standing there, as far from {away}: {both}, the {noun} through the house's "
         "closed window (4-16-4 double glazing, EN ISO 12354-3) and the rumble its "
         "ground-borne vibration makes in the room (the FTA's general method); "
         f"{alone}, through the window alone; {rumble}, the rumble alone"
@@ -227,6 +228,110 @@ class House:
         return f"In a house here, {window}" if self.airborne else f"In a house here: {rumble}"
 
 
+@dataclass(frozen=True)
+class Plant:
+    """A source of a scene where nothing moves that shakes the ground: construction
+    plant (the road works' breaker and dumper), its row of the FTA's table 7-4
+    (:data:`~acoustic_spaces.vibration.PLANT`), where it stands."""
+
+    source: str
+    row: str
+    position: tuple[float, float, float]
+
+
+@dataclass(frozen=True)
+class StillHouses:
+    """A house at each listener of a scene where nothing moves (the road works'), as far
+    from the sources as the listener, and what is heard in it (``house``, as
+    ``--indoors`` asks, ``choice``): the scene's sound through the house's window, the
+    rumble the ``plant``'s vibration makes in its room, or both. ``listeners`` are the
+    listeners' positions, ``loudest_db`` the sound power of the loudest source that
+    plays (dB re 1 pW), ``fmt`` the mixes' format.
+
+    The plant's vibration at a house is each machine's level at its distance in plan
+    (:func:`~acoustic_spaces.vibration.plant_level`, eq. 7-3), their energies added,
+    and the manual compares plant's level with its limits as it is, with no adjustment
+    for the building (section 7.2, step 4); its rumble is table 6-14's for vibration
+    peaking below 30 Hz, as the trains'. A breaker's blows, 5 to 11 a second, come
+    faster than noise in the third octave at 25 Hz, under 6 Hz wide, can swell and
+    fade, so its rumble is steady."""
+
+    house: House
+    choice: str
+    plant: tuple[Plant, ...]
+    listeners: dict[str, tuple[float, float, float]]
+    loudest_db: float
+    fmt: object
+
+    def ground_vdb(self, listener: str) -> float:
+        """The ground's vibration at ``listener``'s house (VdB), -inf with no plant."""
+        here = np.asarray(self.listeners[listener], dtype=float)[:2]
+        energy = 0.0
+        for machine in self.plant:
+            distance = float(np.hypot(*(np.asarray(machine.position[:2]) - here)))
+            energy += 10.0 ** (vibration.plant_level(machine.row, distance) / 10.0)
+        return 10.0 * math.log10(energy) if energy > 0.0 else -math.inf
+
+    def rumble_a_db(self, listener: str) -> float:
+        """The rumble in ``listener``'s house (dB(A))."""
+        return self.ground_vdb(listener) + vibration.NOISE_DB[self.house.peak]
+
+    def info(self, listener: str) -> dict:
+        """What ``listener``'s mix keeps of its house (``post``, how the mix was made;
+        with the rumble, the vibration and its rumble)."""
+        out: dict = {"post": f"indoors {self.choice}"}
+        if self.house.rumble:
+            out["vibration_vdb"] = round(self.ground_vdb(listener), 2)
+            out["rumble_a_db"] = round(self.rumble_a_db(listener), 2)
+        return out
+
+    def post(self, mix, x: np.ndarray, rate: int) -> np.ndarray:
+        """``x`` (samples, channels), ``mix``'s sound outdoors in the engine's units, as
+        the house hears it: through its window, or none of it for the rumble alone; and
+        the rumble, steady over the whole mix, faded in and out (:meth:`House.
+        rumble_sound`), in every channel as a pressure (:func:`pressure_gains`)."""
+        x = np.atleast_2d(np.asarray(x, dtype=float).T).T
+        out = self.house.heard(x, rate) if self.house.airborne else np.zeros_like(x)
+        if self.house.rumble:
+            n = len(x)
+            level = self.rumble_a_db(mix.listener)
+            ends = [0.0, n / rate]
+            names = sorted(self.listeners)
+            seed = names.index(mix.listener) if mix.listener in names else 0
+            sound = self.house.rumble_sound(ends, [level, level], rate, n, self.loudest_db, seed)
+            out = out + sound[:, None] * pressure_gains(self.fmt)[None, :]
+        return out
+
+    def report(self, report: dict) -> dict:
+        """``report`` (parameters.json) as heard in the houses: each response's levels
+        per octave band through the window (:meth:`House.through`'s), its A-weighted
+        level from them; none for the rumble alone."""
+        from acoustic_spaces.parameters import a_weighted
+
+        indoor = self.house.facade.indoor_db()
+        responses = []
+        for entry in report.get("responses", []):
+            entry = dict(entry)
+            bands = entry.get("spl_db")
+            if not self.house.airborne:
+                entry["spl_a_db"] = None
+            elif bands is not None and all(v is not None for v in bands):
+                levels = np.asarray(bands, dtype=float) + indoor
+                entry["spl_db"] = [round(float(v), 2) for v in levels]
+                entry["spl_a_db"] = round(a_weighted(levels), 2)
+            responses.append(entry)
+        return {**report, "responses": responses}
+
+    def pictures(self) -> dict:
+        """What the stills say of the houses (:class:`~acoustic_spaces.demos.
+        scene_pictures.Pictures`'s ``indoors``)."""
+        out: dict = {"airborne": self.house.airborne, "about": self.house.words()}
+        if self.house.rumble:
+            out["vibration_vdb"] = {name: self.ground_vdb(name) for name in self.listeners}
+            out["rumble_a_db"] = {name: self.rumble_a_db(name) for name in self.listeners}
+        return out
+
+
 def third_octave_noise(centre_hz: float, rate: int, n: int, seed: int = 0) -> np.ndarray:
     """(n,) noise of one third octave, from 2^(-1/6) to 2^(1/6) of ``centre_hz``, flat in
     it and nothing outside, made in the frequency domain (so one period of it, without
@@ -304,6 +409,8 @@ __all__ = [
     "PEAK",
     "RUMBLE",
     "House",
+    "Plant",
+    "StillHouses",
     "Wheels",
     "a_mean_square",
     "choices",

@@ -1348,7 +1348,9 @@ office block, 8.0 m from both, stays under every damage criterion; the method gi
 no limits for annoyance, as it counts offices only where something in them is
 sensitive to vibration. Both scripts run from the editor's **Run demo** window. The
 pass-by demos play the rumble at each listener, with the train or the tram through a
-closed window (`--indoors`, see [Trains passing by](demos.md#trains-passing-by)).
+closed window (`--indoors`, see [Trains passing by](demos.md#trains-passing-by)),
+and the road works demo the breaker's and the dumper's (see [Road works in the
+street](demos.md#road-works-in-the-street)).
 
 What the method leaves out: it gives overall levels, not their spectra, so the rooms
 are not simulated. Its curves are the upper range of measurements of North American
