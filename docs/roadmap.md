@@ -396,9 +396,6 @@ Editor:
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.
-- [x] Paths in the messages that open with a click in the computer's default app (a
-  demo's video or mix, a folder in the file manager), copied from their right-click
-  menu; never a script or a program.
 - [x] Markers sized from the spacing of the sources and listeners, smaller where they
   would overlap, and arrows that stop short of a marker ahead.
 - [x] The wind drawn outdoors, in the 3D view and the plan: arrows the way it blows, as

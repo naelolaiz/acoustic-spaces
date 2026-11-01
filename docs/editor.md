@@ -246,13 +246,7 @@ which frequencies each octave band holds.
   errors (with how many there are of each); **Item** keeps only the messages that name
   one source, listener or material (the list holds those that messages name, with how
   many do), and the filter keeps only those holding some words. **Clear** removes the
-  messages on show and keeps those hidden. A path to a file or folder that is there when
-  the message comes is underlined, a demo's video or mix once it is written, say: a click
-  opens it with this computer's default app (a folder in the file manager), and its
-  right-click menu has **Open** and **Copy path**. Only sound, video, pictures, text and
-  tables, scenes, 3D models, PDFs and folders open this way (not a folder whose name has
-  an extension, as a Mac's apps have); a script or a program never does. What a demo
-  prints counts its relative paths from the folder it runs in.
+  messages on show and keeps those hidden.
 - **View > Scene YAML** opens a tab beside **Messages**, hidden on a new installation
   and from then on shown or hidden at each start as it was last left. It shows the scene
   as YAML text, coloured (keys, text, numbers, true, false and null, comments) and with
