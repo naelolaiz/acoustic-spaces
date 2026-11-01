@@ -195,6 +195,10 @@ def test_interpolated_hrtfs_give_the_measured_responses_and_a_smooth_itd() -> No
     # Fewer than four directions: the nearest one.
     few = HRTF(coarse.directions[:3], coarse.hrir[:3], FS)
     np.testing.assert_array_equal(few.interpolate(coarse.directions[1] + 0.01), few.hrir[[1]])
+    # The onsets alone are the ones that come with the responses.
+    for hrtf in (coarse, few):
+        _, onsets = hrtf.interpolate(heads, onsets=True)
+        np.testing.assert_array_equal(hrtf.onsets_at(heads), onsets)
 
 
 def test_interpolated_hrtfs_keep_the_spectrum() -> None:
