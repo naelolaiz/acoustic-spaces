@@ -8,6 +8,8 @@
   sound power; the two channels now share one gain set from both, not from the mixdown.
 - Fixed: a tour played up to 3 dB louder at a crossfade between two seats of one piece;
   the crossfade now keeps the power running on however alike the two mixes are.
+- A moving source renders faster: the paths at a moment of the eddies are worked out
+  once, their own phases' angles once per place, and the HRTF onsets without the HRIRs.
 - Paths in the editor's **Messages** panel open with a click in the default app (never a
   script or a program), and their right-click menu copies them.
 
