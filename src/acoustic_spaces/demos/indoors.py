@@ -313,14 +313,7 @@ def ground_vdb(
         else:
             here = np.asarray(where, dtype=float)[:2]
             distances = np.hypot(x - here[0], y - here[1])
-        levels = np.array(
-            [
-                curve.level(float(d), wheels.speed_kmh, extend=True)
-                + source
-                + line.path_db(float(d))
-                for d in distances
-            ]
-        )
+        levels = curve.levels(distances, wheels.speed_kmh) + source + line.path_db(distances)
         out[on] = np.maximum(out[on], levels + offset)
     return out
 

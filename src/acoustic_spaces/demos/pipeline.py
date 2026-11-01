@@ -403,10 +403,10 @@ def render_mixes(
             print(f"{out}: there already")
         else:
             auralize(mix.simulation.results, mix.feeds, mix.listener, label, out, equal_power)
-            if post is not None:
-                x, rate = audio.read(out)
-                audio.write(out, post(mix, x, rate), rate)
         x, rate = audio.read(out)
+        if post is not None and not keep[mix.key]:
+            x = post(mix, x, rate)
+            audio.write(out, x, rate)
         peaks[mix.key] = float(np.abs(x).max()) / (old_gain if keep[mix.key] else 1.0)
     gain = 10.0 ** (-1.0 / 20.0) / max(peaks.values())
     info: dict[str, dict] = {}

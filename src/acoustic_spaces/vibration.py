@@ -22,6 +22,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import overload
 
 import numpy as np
 
@@ -66,15 +67,21 @@ class Curve:
                 f"the manual draws its curves from {NEAREST_M:.2f} to {FARTHEST_M:.1f} m "
                 f"(10 to 300 ft) from the track, not {distance_m:g} m"
             )
+        return float(self.levels(np.array([distance_m]), speed_kmh)[0])
+
+    def levels(self, distances_m, speed_kmh: float | None = None) -> np.ndarray:
+        """:meth:`level` at each of ``distances_m`` (m), extended as ``extend`` does."""
+        d = np.asarray(distances_m, dtype=float)
         a0, a1, a2, a3 = self.coefficients
-        x = math.log10(min(max(distance_m, NEAREST_M), FARTHEST_M) / FOOT_M)
-        level = a0 + a1 * x + a2 * x**2 + a3 * x**3
-        if distance_m > FARTHEST_M:
-            slope = a1 + 2.0 * a2 * x + 3.0 * a3 * x**2
-            level += slope * math.log10(distance_m / FARTHEST_M)
+        x = np.log10(np.clip(d, NEAREST_M, FARTHEST_M) / FOOT_M)
+        out = a0 + a1 * x + a2 * x**2 + a3 * x**3
+        slope = a1 + 2.0 * a2 * x + 3.0 * a3 * x**2
+        out = out + np.where(
+            d > FARTHEST_M, slope * np.log10(np.maximum(d, FARTHEST_M) / FARTHEST_M), 0.0
+        )
         if speed_kmh is not None:
-            level += speed_db(speed_kmh, self.reference_kmh)
-        return level
+            out = out + speed_db(speed_kmh, self.reference_kmh)
+        return out
 
 
 #: Table 6-9 and 6-10: the three base curves. The locomotive-powered curve is for trains
@@ -204,18 +211,21 @@ class Line:
             conditions = vehicles + track
         return conditions + TREATMENTS[self.treatment]
 
-    def path_db(self, distance_m: float) -> float:
+    @overload
+    def path_db(self, distance_m: float) -> float: ...
+    @overload
+    def path_db(self, distance_m: np.ndarray) -> np.ndarray: ...
+    def path_db(self, distance_m):
         """Table 6-12's adjustment for the structure and the ground, ``distance_m`` from
-        the track (dB)."""
+        the track (dB), a number or an array of them."""
         if self.ground == "efficient":
-            ground = EFFICIENT_SOIL_DB
+            ground = EFFICIENT_SOIL_DB + 0.0 * np.asarray(distance_m, dtype=float)
         elif self.ground == "rock":
-            ground = float(
-                np.interp(distance_m, [d for d, _ in ROCK_DB], [db for _, db in ROCK_DB])
-            )
+            ground = np.interp(distance_m, [d for d, _ in ROCK_DB], [db for _, db in ROCK_DB])
         else:
-            ground = 0.0
-        return STRUCTURES[self.structure] + ground
+            ground = 0.0 * np.asarray(distance_m, dtype=float)
+        out = STRUCTURES[self.structure] + ground
+        return float(out) if np.ndim(out) == 0 else out
 
 
 def ground_level(
