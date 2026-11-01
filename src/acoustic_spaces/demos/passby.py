@@ -85,6 +85,53 @@ WALK = "walk.json"
 # --------------------------------------------------------------------------- the vehicle
 
 
+@dataclasses.dataclass(frozen=True)
+class Trail:
+    """What goes along a source's walk with it: the source itself ``lead_s`` behind
+    where its walk has it (its sound and its levels that much later), and the sounds
+    ``behind`` it, each (lag_s, signal, offset_db) ``lag_s`` behind the source, its
+    signal scaled as the source's is, its sound power per octave band ``offset_db`` over
+    the source's (a train's bogies and cars, behind its front)."""
+
+    lead_s: float = 0.0
+    behind: tuple[tuple[float, np.ndarray, np.ndarray], ...] = ()
+
+    @property
+    def length_s(self) -> float:
+        """How far behind the walk the last of it goes (s)."""
+        return self.lead_s + max((lag for lag, _, _ in self.behind), default=0.0)
+
+
+def trailed(passing, trail: Trail, extra_s: float):
+    """``passing`` (a :class:`~acoustic_spaces.walkthrough.PassBy` of a source alone)
+    with what goes along with it (``trail``): each copy's level that much later, its
+    energy band by band ``offset_db`` over the source's, all added, the times going on
+    ``extra_s`` past the walk's last place, in its steps."""
+    from acoustic_spaces.parameters import a_weighted
+    from acoustic_spaces.walkthrough import PassBy
+
+    if not trail.behind and trail.lead_s == 0.0 and extra_s <= 0.0:
+        return passing
+    times = np.asarray(passing.times, dtype=float)
+    step = float(np.median(np.diff(times))) if len(times) > 1 else 1.0
+    more = int(math.ceil(max(extra_s, 0.0) / step - 1e-9))
+    grid = np.concatenate([times, times[-1] + step * np.arange(1, more + 1)])
+    energy = 10.0 ** (np.asarray(passing.levels, dtype=float) / 10.0)
+    copies = [(0.0, np.zeros(energy.shape[1])), *((lag, off) for lag, _, off in trail.behind)]
+    total = np.zeros((len(grid), energy.shape[1]))
+    for lag, offset in copies:
+        at = grid - trail.lead_s - lag
+        scale = 10.0 ** (np.asarray(offset, dtype=float) / 10.0)
+        for band in range(energy.shape[1]):
+            total[:, band] += scale[band] * np.interp(
+                at, times, energy[:, band], left=0.0, right=0.0
+            )
+    with np.errstate(divide="ignore"):
+        levels = 10.0 * np.log10(total)
+    levels_a = np.array([a_weighted(row) for row in levels])
+    return PassBy(passing.source, passing.listener, grid, levels, levels_a)
+
+
 class Vehicle:
     """What a pass-by demo plays past the listeners: the example's source of that name,
     the words the demo says it with, and how its sound and its sound power are made
@@ -98,6 +145,8 @@ class Vehicle:
     #: The vehicle in a word or two, for the demo's words ("car", "police car"; its
     #: source's name may join them with an underscore).
     noun = "car"
+    #: Whether it goes at a speed of its own without --speed (:meth:`own_speed_kmh`).
+    own_speed = False
     #: What it is, in a few words, for the demo's choice of vehicle.
     title = "a car"
     #: Why its keyframes must keep one speed.
@@ -115,6 +164,11 @@ class Vehicle:
 
     def check(self, args: argparse.Namespace) -> None:
         """Stop with an error when its own options cannot make its sound."""
+        return None
+
+    def own_speed_kmh(self, args: argparse.Namespace) -> float | None:
+        """The speed it goes at without ``--speed`` (km/h), or None to go as its walk in
+        the scene goes (a train goes at its own)."""
         return None
 
     def problem(self, source) -> str | None:
@@ -172,6 +226,12 @@ class Vehicle:
             return None
         x, r = read(path)
         return resampled(mono(x), r, rate)
+
+    def trail(self, args: argparse.Namespace, part: str, played: np.ndarray, rate: int) -> Trail:
+        """What goes along the walk of its source ``part`` with it, which plays
+        ``played`` at ``rate`` (:class:`Trail`): nothing, unless the vehicle is a train
+        (:mod:`acoustic_spaces.demos.rail`)."""
+        return Trail()
 
     def sounding(
         self, args: argparse.Namespace, part: str, played, rate: int, at: np.ndarray
@@ -426,14 +486,26 @@ def kmh(speed: float) -> str:
     return f"{round(float(speed), 1):g}"
 
 
+def forced_speed(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> float | None:
+    """The speed a run gives the vehicle instead of its walk's (km/h): ``--speed``, or
+    its own (:meth:`Vehicle.own_speed_kmh`, a train's); None to go as its walk goes."""
+    if args.speed is not None:
+        return float(args.speed)
+    return vehicle.own_speed_kmh(args)
+
+
 def speed_of(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> float:
     """The speed the vehicle goes at (km/h): ``--speed``, checked positive and finite,
-    or without it the speed of its walk in the example's scene (:func:`walk_speed`)."""
+    or without it its own (a train's) or the speed of its walk in the example's scene
+    (:func:`walk_speed`)."""
     if args.speed is not None:
         speed = float(args.speed)
         if not math.isfinite(speed) or speed <= 0.0:
             raise SystemExit(f"error: --speed is a positive number of km/h, not {args.speed!r}")
         return speed
+    own = vehicle.own_speed_kmh(args)
+    if own is not None:
+        return own
     scene = source_scene(args)
     problem = car_problem(scene, args.source.name, vehicle)
     if problem:
@@ -663,6 +735,15 @@ def feed(
             f"error: the {vehicle.noun}'s sound is shorter than its pass; run: "
             f"{demo.command(vehicle.sound_step, args)}"
         )
+    return faded(x, rate)
+
+
+def faded(x: np.ndarray, rate: int) -> np.ndarray:
+    """``x`` faded in over its first FADE_S and out over its last (half its length at
+    most each), as a pass's sound plays."""
+    x = np.array(x, dtype=float)
+    n = len(x)
+    fade = min(int(FADE_S * rate), n // 2)
     ramp = np.sin(np.linspace(0.0, np.pi / 2, fade)) ** 2
     x[:fade] *= ramp
     x[n - fade :] *= ramp[::-1]
@@ -687,7 +768,7 @@ def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
             source["enabled"] = True
             vehicle.edit(source, info, args)
             walk = source["walk"]
-            if args.speed is not None:
+            if forced_speed(args, vehicle) is not None:
                 walk["speed_m_s"] = round(info["speed_kmh"] / 3.6, 6)
                 if walk.get("keyframes"):
                     walk["to"] = [list(place) for place in places_of(own[source["name"]])]
@@ -881,12 +962,18 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
     # alone: here each gets its sound power against the loudest part's, as one
     # rendering of them all would give it.
     gains = power_gains({part: sources[part].sound_power_db for part in parts}, parts)
-    sent, fed = {}, {}
+    sent, trails, fed = {}, {}, {}
     for part in parts:
         x = feed(demo, args, rate, duration, vehicle, part)
         fed[part] = x
         gain = gains[part]
         sent[part] = x.scaled(gain) if not isinstance(x, np.ndarray) else (x * gain, rate)
+        # What follows the source along its walk (a train's bogies and cars) plays as it
+        # does, its signal scaled as the source's.
+        trail = vehicle.trail(args, part, x, rate)
+        behind = tuple((lag, y * gain, off) for lag, y, off in trail.behind)
+        trails[part] = Trail(trail.lead_s, behind)
+    longest = max(t.length_s for t in trails.values())
     rooms = {part: alone(room, part) for part in parts} if len(parts) > 1 else {parts[0]: room}
     fmt = format_of(args, room.scene)
     names = chosen_order(args, listeners_of(room))
@@ -901,11 +988,23 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             walked = simulate_walk(
                 rooms[part], part, listener=name, step_m=float(args.step_m), progress=print
             )
-            print(f"playing the {part} through {len(walked.names)} places with Doppler")
-            played.append(render_walk(walked, {part: sent[part]}, fmt, sample_rate=rate))
+            trail = trails[part]
+            more = f" and {len(trail.behind)} more behind it" if trail.behind else ""
+            print(f"playing the {part}{more} through {len(walked.names)} places with Doppler")
+            wet = render_walk(
+                walked,
+                {part: sent[part]},
+                fmt,
+                sample_rate=rate,
+                followers=[(lag, y) for lag, y, _ in trail.behind],
+            )
+            lead = int(round(trail.lead_s * rate))
+            played.append(np.concatenate([np.zeros((lead, wet.shape[1])), wet]))
             passing = pass_by(walked)
             loud = vehicle.sounding(args, part, fed[part], rate, walked.points.times)
-            passes.append(passing if loud is None else sounded(passing, loud))
+            if loud is not None:
+                passing = sounded(passing, loud)
+            passes.append(trailed(passing, trail, longest))
             points = walked.points if part == parts[0] else points
         mixes[name] = summed(played)
         level = heard_together(passes)
@@ -1064,9 +1163,12 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
         raise SystemExit(f"error: no {path}; run first: {demo.command('walk', args)}")
     facts = pipeline.read_json(path)
     seats = pipeline.seats_of(folder, demo.command("walk", args))
-    if seats.get("label") != pipeline.output_label(args):
+    wanted = pipeline.output_label(args)
+    if seats.get("label") != wanted:
         raise SystemExit(
-            f"error: the passes in {folder} are of another format; run: "
+            f"error: the passes in {folder} are mixed {pipeline.label_text(seats.get('label'))}"
+            f", and this run asks for them {pipeline.label_text(wanted)}: give the video the "
+            f"--format and --hrtf the walk had, or mix the passes again: "
             f"{demo.command('walk', args)}"
         )
     facts = heard_only(args, facts, demo.command("walk", args))
@@ -1149,17 +1251,24 @@ def summary(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> str | None:
         scene = source_scene(args)
         if car_problem(scene, args.source.name, vehicle) or problems_of_speed(args, scene, vehicle):
             return None
-        path = knots(driving(car_of(scene, vehicle), args.speed))
+        own = vehicle.own_speed_kmh(args)
+        path = knots(driving(car_of(scene, vehicle), forced_speed(args, vehicle)))
     except (Exception, SystemExit):
         return None
     speed = path.length_m / path.duration_s
-    whose = "--speed" if args.speed is not None else "as its walk in the scene goes"
     noun, way = vehicle.noun, vehicle.way.removeprefix("the ").removeprefix("its ")
+    if args.speed is not None:
+        whose = "--speed"
+    elif own is not None:
+        whose = f"the {noun}'s own"
+    else:
+        whose = "as its walk in the scene goes"
+    edit = f"the {way}" if own is not None else f"the {way}, and its speed"
     return (
         f"The {noun} {vehicle.goes} {path.length_m:.1f} m along its walk at "
         f"{3.6 * speed:.1f} km/h ({speed:.2f} m/s, {whose}): the pass, and the {noun}'s "
         f"sound, last {path.duration_s:.1f} s. --speed {vehicle.goes} it faster or slower "
-        f"along the same {way}; Edit movement… changes the {way}, and its speed."
+        f"along the same {way}; Edit movement… changes {edit}."
     )
 
 
@@ -1169,6 +1278,8 @@ def problems_of_speed(args: argparse.Namespace, scene, vehicle: Vehicle = THE_CA
     if args.speed is not None:
         speed = float(args.speed)
         return None if math.isfinite(speed) and speed > 0.0 else "--speed is not positive"
+    if vehicle.own_speed_kmh(args) is not None:
+        return None
     try:
         walk_speed(car_of(scene, vehicle), vehicle)
     except ValueError as exc:
@@ -1260,7 +1371,11 @@ def demo(
                 "float",
                 steps=(first.sound_step, "scene", "walk"),
                 unit="km/h",
-                unset="as in the scene",
+                unset=(
+                    f"the {first.noun}'s own"
+                    if all(v.own_speed for v in vehicles)
+                    else "as in the scene"
+                ),
             ),
             *own,
             Option(
@@ -1345,12 +1460,16 @@ __all__ = [
     "THE_CAR",
     "TRUCK",
     "RoadVehicle",
+    "Trail",
     "Vehicle",
     "car_problem",
     "demo",
     "driving",
+    "faded",
+    "forced_speed",
     "pitch_change",
     "road_texts",
     "rpm_help",
+    "trailed",
     "walk_speed",
 ]

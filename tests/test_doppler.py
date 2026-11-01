@@ -295,6 +295,41 @@ def test_the_late_part_and_the_eddies_go_along(short) -> None:
     assert np.array_equal(wet, render_walk(walk, {"s": dry}, Mono()))
 
 
+def test_sounds_that_follow_the_walker_are_heard_as_its_own_later(short) -> None:
+    """A sound following the walker (a train's wheels behind its front) is heard as the
+    walker's own sound would be, its lag later, through the early paths and the late
+    part: exactly a render of its own, delayed, but for the filters' faint lead-in that
+    such a render cuts at its start."""
+    walk = simulate_walk(
+        Room.from_scene(short.scene("source", 30.0, "grass")), step_m=2.0, late_step_m=4.0
+    )
+    lead, behind = _noise(1.0, seed=3), _noise(1.0, seed=4)
+    first = render_walk(walk, {"s": lead}, Mono())
+    second = render_walk(walk, {"s": behind}, Mono())
+    for lag_s in (0.25, 0.0):
+        lag = round(lag_s * RATE)
+        together = render_walk(walk, {"s": lead}, Mono(), followers=[(lag_s, behind)])
+        assert len(together) == lag + len(second)
+        expected = np.zeros_like(together)
+        expected[: len(first)] += first
+        expected[lag:] += second
+        peak = np.abs(expected).max()
+        np.testing.assert_allclose(together[lag:], expected[lag:], rtol=0.0, atol=1e-12 * peak)
+        assert np.abs(together[:lag] - expected[:lag]).max(initial=0.0) < 1e-3 * peak
+    with pytest.raises(ValueError, match="0 s or more behind"):
+        render_walk(walk, {"s": lead}, Mono(), followers=[(-0.1, behind)])
+    elevation, azimuth = _grid(30.0)
+    sent = Mixture(lead[None, :], np.ones((len(elevation), len(azimuth), 1)), RATE)
+    with pytest.raises(ValueError, match="sends one sound every way"):
+        render_walk(walk, {"s": sent}, Mono(), followers=[(0.1, behind)])
+    for still in (
+        simulate_walk(Room.from_scene(short.scene("source", 30.0, "hard", False))),
+        simulate_walk(Room.from_scene(short.scene("listener", 30.0, "hard")), late_step_m=None),
+    ):
+        with pytest.raises(ValueError, match="a walking source along a walk with Doppler"):
+            render_walk(still, {"s": lead}, Mono(), followers=[(0.1, behind)])
+
+
 def test_a_walker_standing_in_the_eddies_hears_each_path_half_way_between_moments() -> None:
     """With Doppler too, each path's delay goes from one moment of the eddies to the
     next's, its top band's in the delay and the rest in the filter: half-way, a tone

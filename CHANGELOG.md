@@ -9,6 +9,15 @@
   mixing and touring those alone; the demo of any scene's `--tour` becomes `--listeners`
   (`--tour` still works), and the editor's Run demo window lists the listeners to tick
   (`demos.listeners_option`, `Demo.listeners`).
+- Trains and a tram in the pass-by demos, by Schall 03 (`acoustic_spaces.demos.rail`):
+  the new `railway` example's `passby_demo.py --train` runs a regional train, an S-Bahn,
+  an intercity or a freight train past, each as long as it is, and the street's runs a
+  tram (`--vehicle tram`), with `render_walk` and `doppler.render` taking `followers`,
+  more sounds along one source's walk. `validation/rail_sources.py` checks a pass
+  against Schall 03's own sum: the same SEL within 0.01 dB in a free field, 2.9 to 4.0
+  dB(A) less over the example's ground, whose reflection the engine reckons otherwise.
+- The pass-by demos' video, run in another format than its passes were mixed in, says
+  which format each is in and how to match them.
 
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with

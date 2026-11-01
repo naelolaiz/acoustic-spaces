@@ -3336,6 +3336,9 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     assert street.arguments().siren == "wail"
     vehicle.setCurrentText("police_car")
     assert street.fields["siren"].currentText() == "yelp"
+    # The tram has no engine of a road vehicle's.
+    vehicle.setCurrentText("tram")
+    assert shown() == set()
     street.deleteLater()
     # The stadium's helicopter likewise: the crossing flies it, the concert leaves it out.
     stadium = DemoDialog(scene=example_path("stadium_concert"))
