@@ -1251,8 +1251,9 @@ def test_a_demo_of_any_scene_plays_the_channels_of_its_recording(
     tmp_path: Path, monkeypatch, recordings_folder: Path
 ) -> None:
     """Sources with a channel and no signal play that channel of the scene's recording:
-    left and right keep the recording's stereo balance (one gain for the file, its
-    channels mixed down to the feeds' gated RMS), mono plays both mixed down; a source's
+    left and right keep the recording's stereo balance (one gain for both, which brings
+    their mean square to the feeds' gated RMS, so that unlike channels do not play over
+    their sound power), mono plays both mixed down at the feeds' gated RMS; a source's
     own signal still wins, and its channel picks a channel of it. A free recording not
     downloaded yet is the recording step's download; there, it plays as a file would,
     and the stills credit it as its licence asks."""
@@ -1304,14 +1305,26 @@ def test_a_demo_of_any_scene_plays_the_channels_of_its_recording(
         k: audio.read(scene.parent / "demo" / "feeds" / f"{k}.wav")[0].ravel()
         for k in table["sources"]
     }
-    gain = FEED_RMS / audio.gated_rms(band, rate)
-    np.testing.assert_allclose(feed["radio"], band[:, 0] * gain, atol=1e-6)
-    np.testing.assert_allclose(feed["fan"], band.mean(axis=1) * gain, atol=1e-6)
+
+    def pair_gain(x: np.ndarray) -> float:
+        x = audio.stereo(x)
+        squares = [audio.gated_rms(x[:, i], rate) ** 2 for i in (0, 1)]
+        return FEED_RMS / float(np.sqrt(np.mean(squares)))
+
+    np.testing.assert_allclose(feed["radio"], band[:, 0] * pair_gain(band), atol=1e-6)
+    left = band[:, 0] * pair_gain(band)
+    right = band[:, 1] * pair_gain(band)
+    mean_square = (audio.gated_rms(left, rate) ** 2 + audio.gated_rms(right, rate) ** 2) / 2
+    assert np.sqrt(mean_square) == pytest.approx(FEED_RMS, rel=1e-6)
+    # One gain from the mixdown would play the band's two tones (unlike each other) over.
+    assert pair_gain(band) < FEED_RMS / audio.gated_rms(band, rate)
+    mixdown_gain = FEED_RMS / audio.gated_rms(band, rate)
+    np.testing.assert_allclose(feed["fan"], band.mean(axis=1) * mixdown_gain, atol=1e-6)
     assert audio.gated_rms(feed["fan"], rate) == pytest.approx(FEED_RMS, rel=1e-6)
     talk, talk_rate = audio.read(scene.parent / "sounds" / "talk.wav")
-    right = audio.resampled(talk, talk_rate, rate)
+    talk = audio.resampled(talk, talk_rate, rate)
     np.testing.assert_allclose(
-        feed["talker"], right[:, 1] * FEED_RMS / audio.gated_rms(right, rate), atol=1e-6
+        feed["talker"], audio.stereo(talk)[:, 1] * pair_gain(talk), atol=1e-6
     )
     # A free recording: the recording step downloads it, the feeds wait for it.
     data["recording"] = "potassium"
