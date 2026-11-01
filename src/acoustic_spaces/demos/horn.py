@@ -403,7 +403,7 @@ def ground_db(
     )
     wavenumber = 2.0 * np.pi * f / speed_of_sound
     depth = kind.site.horn_m + kind.site.microphone_m
-    q = spherical_reflection(admittance, depth / image, wavenumber, image)
+    q = spherical_reflection(admittance, np.asarray(depth / image), wavenumber, np.asarray(image))
     # e^(jωt), as the engine's reflection factors.
     reflected = sent * q * (direct / image) * np.exp(-1j * wavenumber * (image - direct))
     gain = np.abs(1.0 + reflected) ** 2
