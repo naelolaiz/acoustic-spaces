@@ -2630,7 +2630,7 @@ On SwiftShader, a software Vulkan driver on the container's 4 cores (the CPU run
 0.3 to 1.1 s), which shows that the two agree, not how fast a GPU is; `python
 validation/outdoor_gpu.py` times your own. The GPU rows are from that run, when the
 port was added; the CPU's next-seed rows come out the same with this version's code
-(the container that checked them has no GPU driver). The tree belt's rays through its foliage and
+(the container that checked them has no GPU driver). The tree belt's rows are from when it traced its image sources to the first order; at the second, as it does now, the house's reflection keeps its ground partners, the late sound changes with it, and the next seed differs by 1.01 dB and 17.7 ms (its GPU row needs a run on a GPU). The tree belt's rays through its foliage and
 stems come out as far from the CPU's as the next seed's do. The stage in the wind
 agrees to 0.02 dB with the same seed, whose rays start where the CPU's do; the next
 seed starts them elsewhere and moves the late sound at the two listeners downwind by
