@@ -206,7 +206,7 @@ def played(args) -> dict:
     path = music_folder(args) / "song.json"
     if not path.exists():
         raise SystemExit(f"error: no song yet; run first: {DEMO.command('music', args)}")
-    return pipeline.read_json(path)
+    return {k: v for k, v in pipeline.read_json(path).items() if k in SONG_KEPT}
 
 
 # --------------------------------------------------------------------------- the scenes
