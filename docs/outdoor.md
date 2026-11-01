@@ -1122,6 +1122,79 @@ of a descent or a turn), the engine and the gearbox, and the fuselage's reflecti
 shadow. `trim` takes the airspeed it is given, through still air: the flyover demo
 gives it the speed over the ground less the wind.
 
+## Aircraft by ECAC Doc 29
+
+`acoustic_spaces.doc29` gives the noise of one movement of an aircraft, a departure or
+an arrival, at receivers on the ground by ECAC Doc 29, the European method for noise
+contours around civil airports (*Report on Standard Method of Computing Noise Contours
+around Civil Airports*, 5th edition, 2026). Like the vibration below, it is an
+assessment by the method's own empirical curves and corrections, apart from the
+scene's sound: nothing of it goes through the simulation.
+
+- **The aircraft** (`doc29.tables`): its NPD curves, the sound exposure level (SEL)
+  and the maximum level (LAmax) at 200 to 25,000 ft from a straight, steady flight at
+  160 kt for each power, its engines' installation (on the fuselage, under the wings,
+  propellers) and its fixed-point profiles, the height, speed and power along the
+  ground track from the start of roll or to touchdown.
+- **The flight path** (`doc29.flight_path`, Volume 2 section 3.6): the profile along a
+  ground track (`doc29.Track`), carried on to the track's ends and the track to the
+  profile's, cut into straight segments: the take-off and landing rolls in steps of 10
+  m/s, the initial climb and the final approach below 4231 ft at the heights that keep
+  the lateral attenuation from changing more than 1.5 dB along a segment, and airborne
+  segments whose speed changes by more than 20 kt in steps of 10 m/s; the track's
+  nodes joined in, and no source lower than 1 m.
+- **Each segment's level** (`doc29.segment_levels`, chapter 4) at each receiver: the
+  NPD curves at its power and distance (no nearer than 30 m), corrected for its speed
+  against 160 kt, the engines' installation round the roll axis, the lateral
+  attenuation of sound passing low over the ground, its finite length, behind a
+  take-off roll the start-of-roll directivity, and the air's impedance at the
+  aerodrome against the NPD curves' (`doc29.impedance_db`).
+- **The event** (`doc29.event`): the segments' energy summed to the SEL, their greatest
+  level the LAmax.
+
+`doc29.volume3` holds the reference cases of Doc 29 Volume 3: three hypothetical
+aircraft, which rely on no data of the ANP database (a jet with its engines on the rear
+fuselage, `JETF`; one with them under the wings, `JETW`; a turboprop, `PROP`), each
+arriving and departing on a straight and a curved route at a hypothetical aerodrome,
+and the levels Volume 3 gives at its 18 receptors:
+
+```python
+import numpy as np
+from acoustic_spaces.doc29 import volume3
+
+case = volume3.Case.named("JETFDC")   # JETF departing on the curved route
+levels = case.event(np.array([[6500.0, 0.0, 0.0], [8200.0, -1800.0, 0.0]]))
+levels.sel, levels.lamax              # dB(A) at each receiver (x, y, z in m)
+```
+
+An arrival's profile measures its distances to touchdown and its track from the
+landing threshold: `flight_path(..., threshold_m=...)` takes the profile's distance at
+the threshold. Volume 3's reference cases put it at the approach's lowest node above
+the runway (`doc29.path.lowest_approach_node`), the jets' profile point at 15.2 m, 290.2
+m before touchdown, and the turboprop's cut at 17.2 m, 328.1 m before it.
+
+The ANP database, the method's data for real aircraft (EASA's Aircraft Noise and
+Performance database), is not part of the package: its terms of use (issue 3, 2024)
+allow the data only for noise contours of an average fleet and traffic, not for
+benchmarking aircraft types, and forbid publishing it or passing it on to anyone who
+has not accepted them. `doc29.read_aircraft`, `read_npd`, `read_spectral_classes` and
+`read_fixed_point_profiles` read tables with the fields Volume 2 Appendix G lists, as
+Volume 3's workbook lays them out; they have not been tried on a download of the
+database.
+
+Its levels agree with all of Volume 3's reference results: the 99 levels at its
+receptors within 0.006 dB, its 12 grids of 37,458 points at 0.003 dB rms, and its
+3516 rows of segment results term by term, the segments' places within 7.3 m: the
+differences come from where Volume 3 puts its cuts by speed and from its conversion of
+metres to feet ([the check](validation.md#aircraft-noise-against-doc-29-volume-3)).
+What it leaves out for now: the flight performance of Volume 2 Appendix B (profiles
+from procedural steps, the cases fly fixed-point profiles), bank angles from the turns
+(a segment takes the bank it is given; Volume 3's cases fly level), the dispersion of
+tracks round a backbone, the NPD curves recalculated for another atmosphere (Appendix
+D), the line-of-sight blockage of terrain, levels summed over many movements (LAeq,
+Lden) and contours. Volume 3 gives no reference maximum levels, so the LAmax is not
+checked.
+
 ## Vibration through the ground
 
 Trains, trams and construction plant shake the ground as well as the air: a building

@@ -3328,6 +3328,64 @@ No measured site is compared here: Defra's levels are averages over the machines
 measured, and the made sounds' time structure (the blows, the firing, the beeps' rate)
 is assumed.
 
+## Aircraft noise against Doc 29 Volume 3
+
+`validation/doc29_reference.py` holds `acoustic_spaces.doc29` (see [Aircraft by ECAC
+Doc 29](outdoor.md#aircraft-by-ecac-doc-29)) against the reference cases of Doc 29
+Volume 3 Part 1 (5th edition, 2026), which ECAC publishes for checking a new
+implementation of Volume 2's method: three hypothetical aircraft (a jet with its
+engines on the rear fuselage, one with them under the wings, a turboprop), each
+arriving and departing on a straight and a curved route, twelve cases. Volume 3 gives
+their levels at 18 receptors (its table B-1, which the package holds), every term of
+every segment at those receptors and the levels on a grid (the worksheets B-2 and B-3
+of its Part 1 workbook, which `--workbook` reads).
+
+**The levels at the receptors.** All 99 within 0.006 dB of table B-1, which gives them
+to 0.01 dB; the largest difference of a case is 0.004 to 0.006 dB.
+
+**The grids.** The rms difference δRMS that Volume 3 aims at 0.01 dB or less:
+
+| case | points | δRMS | largest | case | points | δRMS | largest |
+|---|---:|---:|---:|---|---:|---:|---:|
+| JETFAC | 2732 | 0.0029 | 0.0054 | JETWDC | 3868 | 0.0029 | 0.0061 |
+| JETFAS | 2750 | 0.0028 | 0.0053 | JETWDS | 3876 | 0.0029 | 0.0057 |
+| JETFDC | 3269 | 0.0030 | 0.0065 | PROPAC | 3042 | 0.0028 | 0.0056 |
+| JETFDS | 3273 | 0.0029 | 0.0060 | PROPAS | 3042 | 0.0028 | 0.0055 |
+| JETWAC | 2929 | 0.0030 | 0.0097 | PROPDC | 2875 | 0.0030 | 0.0061 |
+| JETWAS | 2932 | 0.0030 | 0.0098 | PROPDS | 2870 | 0.0029 | 0.0059 |
+
+(dB.) The grid's levels are given to 0.01 dB, whose rounding alone is 0.0029 dB rms.
+
+**Every segment.** Each case has as many segments as Volume 3's, and each term of its
+3516 rows matches to within 0.0014 dB for the baseline level, 0.0008 dB for the speed,
+0.0003 dB for the engines' installation, 0.0013 dB for the lateral attenuation and
+0.0014 dB for the start-of-roll directivity; the finite segment correction differs by
+up to 0.052 dB on a few segments, and their segment levels with it. Two things of
+Volume 3's own make those differences, both traced:
+
+- Its ground tracks are 0.0019 % short: the routes in metres were converted to feet
+  through nautical miles of 6076 ft (a nautical mile is 6076.1 ft), so a track's end
+  100 km out is 1.9 m nearer, and the nodes of a short segment by a turn move by a few
+  tenths of a metre.
+- It lays the lengths into which eq. 3-3i cuts a climbing or descending segment by
+  speed, which are lengths along the segment, along the ground track instead: its
+  cuts lie up to 7.3 m farther on than the cuts here.
+
+Cut its way, the segments' places agree within 1.9 m, the finite segment correction
+within 0.021 dB, and the levels at the receptors change by at most 0.0005 dB.
+
+Two choices follow Volume 3 where Volume 2 leaves room: the heights that cut the
+initial climb and the final approach are Volume 2's in feet (its heights in metres are
+rounded: 304.8 m scaled by them gives 37.72 m where Volume 2's example says 37.8 m), and
+an arrival's landing threshold is its approach's lowest node above the runway (290.2 m
+before touchdown for the jets, 328.1 m for the turboprop). The azimuth of the
+start-of-roll directivity is taken in the plane of the runway, as Volume 3 takes it
+(straight behind a source 1 m up it is 180 degrees).
+
+What is not checked: the maximum levels (Volume 3 gives none), the flight performance
+of Volume 2 Appendix B (the cases fly fixed-point profiles) and banked turns (the cases
+fly them level).
+
 ## Ground-borne vibration against the FTA's manual
 
 `validation/fta_vibration.py` holds `acoustic_spaces.vibration` (see [Vibration through
@@ -3842,6 +3900,7 @@ python validation/rotorcraft.py --json rotorcraft.json
 python validation/urban_sources.py --json urban_sources.json
 python validation/rail_sources.py --json rail_sources.json
 python validation/plant_sources.py --json plant_sources.json
+python validation/doc29_reference.py --workbook doc29-volume3-part1-workbook.xlsx
 python validation/fta_vibration.py
 python validation/city_speed.py --json city_speed.json   # --sizes 10 20 30 40 60
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver

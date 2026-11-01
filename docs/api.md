@@ -171,6 +171,20 @@ Rotating sound fields, and decoding them to the ears:
 .. automodule:: acoustic_spaces.airfoil_noise
 ```
 
+## Aircraft noise (ECAC Doc 29)
+
+```{eval-rst}
+.. automodule:: acoustic_spaces.doc29
+
+.. automodule:: acoustic_spaces.doc29.tables
+
+.. automodule:: acoustic_spaces.doc29.path
+
+.. automodule:: acoustic_spaces.doc29.noise
+
+.. automodule:: acoustic_spaces.doc29.volume3
+```
+
 ## Ground-borne vibration
 
 ```{eval-rst}

@@ -40,6 +40,11 @@
   `validation/fta_vibration.py` against the manual's figure and worked example.
 - Fixed: the Run demo window, switched to another demo, could come out too short for that
   demo's options, which then had to be scrolled to.
+- Aircraft noise at receivers by ECAC Doc 29 (5th edition, 2026) in the new
+  `acoustic_spaces.doc29`: one departure's or arrival's SEL and L_Amax from the NPD
+  curves along its flight path's segments, with Volume 3's three hypothetical aircraft
+  (the ANP database's own may not be passed on), checked by the new
+  `validation/doc29_reference.py` against all of Volume 3's reference levels.
 
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with
