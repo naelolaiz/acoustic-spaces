@@ -3433,6 +3433,61 @@ atmosphere; the tests check that the deceleration holds), a runway's gradient (a
 of its runways are level), the noise of these profiles (Volume 3 gives none) and
 turns (the calculation flies them straight).
 
+## An aircraft in the engine against Doc 29
+
+`validation/aircraft_noise.py` holds the airport example's flight demo
+(`acoustic_spaces.demos.aircraft`, see [Aircraft taking off and
+landing](demos.md#aircraft-taking-off-and-landing)) against Doc 29's own levels: JETW's
+source (`doc29.source`), simulated in the engine, against its NPD curves in the
+scene's air, and the example's flights against Doc 29's sum over the same flight
+path's segments. The late rays are seeded, so a run gives these numbers.
+
+**The source against its NPD curves.** JETW flies straight and level at 160 kt, the
+NPD curves' speed, over a microphone 1.2 m above grass, at 15,000 lb of thrust an
+engine departing and 5,000 lb arriving:
+
+| distance | departure: L_Amax | SEL | arrival: L_Amax | SEL |
+|---|---:|---:|---:|---:|
+| 200 ft (61 m) | 101.5 (102.5) | 104.1 (104.0) | 97.5 (98.4) | 100.0 (101.8) |
+| 400 ft (122 m) | 95.0 (95.4) | 100.3 (100.2) | 90.9 (91.2) | 96.2 (98.0) |
+| 630 ft (192 m) | 90.6 (90.6) | 97.6 (97.4) | 86.5 (86.5) | 93.5 (95.2) |
+| 1000 ft (305 m) | 86.0 (85.8) | 94.6 (94.4) | 81.9 (81.6) | 90.6 (92.1) |
+| 2000 ft (610 m) | 78.7 (78.2) | 89.6 (89.3) | 74.8 (74.0) | 85.7 (87.0) |
+| 4000 ft (1219 m) | 70.1 (70.0) | 83.8 (83.6) | 66.4 (65.9) | 80.1 (81.4) |
+
+(dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The source
+is made to the NPD curves' L_Amax 1000 ft away, which the engine gives back within 0.3
+dB. Nearer, the NPD curves' L_Amax grows faster than one point source's with one
+spectrum: at 200 ft it is 0.9 dB (departure) and 0.8 dB (arrival) over it, so the
+engine reads 1.0 and 0.9 dB under there. The arrival's SEL is 1.3 to 1.8 dB under its
+NPD curves, the departure's within 0.3 dB: JETW's arrival curves have SEL - L_Amax =
+10 lg(πd/V) within 0.1 dB out to 1000 ft, a point source's with no air absorption,
+where the departure's are 2.0 to 2.2 dB less, as the engine's point source in the
+air gives for both. Farther out the grass's scattered sound comes from the few late
+rays that land near the microphone, so it changes with their seed.
+
+**The airport's flights.** The demo's departure and arrival, simulated every 20 m at
+each listener, their level following their thrust:
+
+| listener | departure: L_Amax | SEL | arrival: L_Amax | SEL |
+|---|---:|---:|---:|---:|
+| departure_4km | 87.4 (87.2) | 96.1 (96.0) | 49.6 (43.1) | 64.1 (60.7) |
+| lateral_450m | 85.0 (85.0) | 95.4 (94.5) | 43.0 (54.4) | 57.1 (68.8) |
+| approach_2000m | 52.0 (54.8) | 67.6 (68.6) | 91.2 (91.5) | 97.1 (98.8) |
+
+(dB(A); Doc 29's in brackets.) Where the jet is heard in the air, they agree within
+0.9 dB but for the arrival's SEL, 1.7 dB under as its NPD curves have it. Where it is
+heard rolling on the runway they part, as the two reckon sound running along the
+ground differently. Doc 29 takes off its lateral attenuation, 10.9 dB at grazing for
+a listener ahead of a landing roll or behind a take-off roll, from measurements and so
+averaged over their weather, and behind a take-off roll adds its start-of-roll
+directivity (5.1 dB down at approach_2000m). The engine reckons the scene's ground in
+still air: the hard runway reflects the sound back up, so the arrival's roll-out is
+6.5 dB over Doc 29 at departure_4km, 2.4 km ahead of it along the runway, while the
+meadow takes much of it away from 250 Hz up, so it is 11.4 dB under at lateral_450m, 1
+km away across the grass (at 250 Hz the roll-out's end is 14 dB quieter there than
+at departure_4km); the departure's take-off roll is 2.7 dB under at approach_2000m.
+
 ## Ground-borne vibration against the FTA's manual
 
 `validation/fta_vibration.py` holds `acoustic_spaces.vibration` (see [Vibration through
@@ -3948,6 +4003,7 @@ python validation/urban_sources.py --json urban_sources.json
 python validation/rail_sources.py --json rail_sources.json
 python validation/plant_sources.py --json plant_sources.json
 python validation/doc29_reference.py --workbook doc29-volume3-part1-workbook.xlsx
+python validation/aircraft_noise.py --json aircraft_noise.json
 python validation/fta_vibration.py
 python validation/city_speed.py --json city_speed.json   # --sizes 10 20 30 40 60
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver

@@ -13,7 +13,12 @@ flight path built of segments.
 - :mod:`.volume3` holds Volume 3's three hypothetical reference aircraft: Part 1's
   routes, receptors and reference sound exposure levels, and Part 2's procedures,
   aerodromes and reference flight profiles;
-- :mod:`.anp` reads a copy of the ANP database that the user has downloaded.
+- :mod:`.anp` reads a copy of the ANP database that the user has downloaded;
+- :mod:`.atmosphere` adjusts an aircraft's NPD curves to the air at the aerodrome
+  (Volume 2 Appendix D);
+- :mod:`.source` makes an aircraft a source for the engine: its sound power and
+  directivity from its NPD curves, its spectral class and its installation correction,
+  and its flight path as a walk timed as it flies.
 
 The ANP database's own aircraft are not part of this package: its terms (EASA's ANP
 Database Terms and Conditions, issue 3, 2024) allow their use only for noise contours
@@ -25,7 +30,7 @@ download of the database.
 
 from __future__ import annotations
 
-from . import anp, performance
+from . import anp, atmosphere, performance, source
 from .noise import Event, SegmentLevels, event, impedance_db, segment_levels
 from .path import Segment, Track, flight_path
 from .tables import (
@@ -49,6 +54,7 @@ __all__ = [
     "SpectralClass",
     "Track",
     "anp",
+    "atmosphere",
     "event",
     "flight_path",
     "impedance_db",
@@ -58,4 +64,5 @@ __all__ = [
     "read_npd",
     "read_spectral_classes",
     "segment_levels",
+    "source",
 ]

@@ -49,6 +49,13 @@
   procedural steps by Volume 2 Appendix B, matching all 26 of Volume 3 Part 2's
   reference profiles, and `doc29.anp.read_database` reads a copy of the ANP database
   one downloads under its terms.
+- Aircraft taking off and landing in a scene: the new `airport` example's
+  `flight_demo.py` flies Doc 29's hypothetical twin jet JETW past its listeners by
+  Appendix B, its sound power and directivity from its NPD curves following its thrust
+  (`doc29.source`, `doc29.atmosphere`). The new `validation/aircraft_noise.py` checks
+  the source against its NPD curves and the flights against Doc 29's own levels; the
+  flights agree within 0.9 dB in the air but for the arrival's SEL (1.7 dB under), and
+  part by up to 11.4 dB on the runway, where the engine reckons the ground in still air.
 
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with

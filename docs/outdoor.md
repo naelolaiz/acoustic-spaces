@@ -1162,9 +1162,9 @@ and the levels Volume 3 gives at its 18 receptors:
 import numpy as np
 from acoustic_spaces.doc29 import volume3
 
-case = volume3.Case.named("JETFDC")   # JETF departing on the curved route
+case = volume3.Case.named("JETFDC")  # JETF departing on the curved route
 levels = case.event(np.array([[6500.0, 0.0, 0.0], [8200.0, -1800.0, 0.0]]))
-levels.sel, levels.lamax              # dB(A) at each receiver (x, y, z in m)
+levels.sel, levels.lamax  # dB(A) at each receiver (x, y, z in m)
 ```
 
 An arrival's profile measures its distances to touchdown and its track from the
@@ -1193,7 +1193,7 @@ plane = volume3.performance()["JETW"]
 steps = volume3.departure_procedures()[("JETW", "ICAO_A")]
 hot = performance.Aerodrome(elevation_ft=5000.0, temperature_c=40.0, headwind_kt=0.0)
 points = performance.departure(plane, steps, plane.weights[("D", "1")], hot)
-profile = performance.as_profile(points)   # for doc29.flight_path
+profile = performance.as_profile(points)  # for doc29.flight_path
 ```
 
 **The ANP database**, the method's data for real aircraft (EASA's Aircraft Noise and
@@ -1221,14 +1221,51 @@ their distances within 0.15 ft. Volume 3's profiles differ from Volume 2's print
 equations in three places, where the package follows Volume 3
 ([the check](validation.md#flight-profiles-against-doc-29-volume-3)).
 
+**The NPD curves in the aerodrome's air** (`doc29.atmosphere`, Volume 2 Appendix D).
+The NPD curves hold the attenuation of the AIR-1845 atmosphere, an average of no one
+temperature and humidity. `atmosphere.adjusted(curves, spectral_class, temperature_c,
+humidity_percent, pressure_kpa)` adjusts them to another air by Appendix D's three
+steps: the spectral class taken back to the aircraft, out to each NPD distance through
+both atmospheres, and the difference of their A-weighted levels added to the curves.
+The aerodrome's absorption is ISO 9613-1's, averaged over each third octave. It gives
+Volume 2's worked example (JETW's spectral classes at 10 °C, 80 % relative humidity
+and 101.325 kPa, its tables D-3c and D-4) within 0.1 dB, the tables' rounding.
+
+**An aircraft in a scene** (`doc29.source`). Doc 29 gives an aircraft's sound as levels
+at receivers, so a source of a scene that sends the same sound is made from them:
+
+- *its sound power* from its spectral class (the spectrum 1000 ft under it at the time
+  of its maximum level), scaled to its NPD curves' maximum level 1000 ft away at its
+  power, with the AIR-1845 attenuation over those 1000 ft added back and the reflection
+  off the soft ground the NPD curves are measured over (1.2 m above it) taken out:
+  grass, its reflection's energy added to the direct sound's (`sound_power_db`,
+  `ground_gain_db`);
+- *its directivity* from its engines' installation correction (eq. 4-15), by the
+  depression angle across the flight path, the same in every band; nought straight
+  down, where the NPD curves are measured, so the sound power is raised to keep the
+  level there (`directivity`, `below_offset_db`);
+- *its thrust along the flight*: its sound power changes with the thrust as the NPD
+  curves' maximum level 1000 ft away does, its spectrum kept (`power_change_db`);
+- *its flight* as a walk's keyframes (`flight`): the flight path's segments flown as
+  Doc 29 interpolates them (along a segment the square of the speed changes evenly with
+  the distance), so each place is reached when the aircraft gets there, the aircraft
+  facing the way it flies.
+
+The airport example's [flight demo](demos.md#aircraft-taking-off-and-landing) flies
+Volume 3's JETW this way. The NPD curves are measured at 160 kt and give no
+directivity along the flight path but behind a take-off roll (eq. 4-22): the source
+keeps none of that either, and the engine reckons the ground, the air and the
+lateral spreading in its own way, so its levels differ from Doc 29's; how far is
+[measured](validation.md#an-aircraft-in-the-engine-against-doc-29).
+
 What it leaves out for now: bank angles from the turns (a segment takes the bank it is
 given; Volume 3's cases fly level, and the performance calculation flies turns as
-straight), the dispersion of tracks round a backbone, the NPD curves recalculated for
-another atmosphere (Appendix D), the line-of-sight blockage of terrain, levels summed
-over many movements (LAeq, Lden) and contours. Volume 3 gives no reference maximum
-levels, so the LAmax is not checked, and no idle steps of an approach away from sea
-level in the standard atmosphere, which Appendix B adjusts so that the aircraft slows
-as it does there: those are checked against that definition only.
+straight), the dispersion of tracks round a backbone, the line-of-sight blockage of
+terrain, levels summed over many movements (LAeq, Lden) and contours. Volume 3 gives
+no reference maximum levels, so the LAmax is not checked, and no idle steps of an
+approach away from sea level in the standard atmosphere, which Appendix B adjusts so
+that the aircraft slows as it does there: those are checked against that definition
+only.
 
 ## Vibration through the ground
 

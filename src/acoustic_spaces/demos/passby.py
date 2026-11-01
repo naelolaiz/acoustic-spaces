@@ -143,10 +143,17 @@ class Vehicle:
     #: How it goes: "drive", "drives" and "driving past", along "the road".
     go, goes, going, way = "drive", "drives", "driving past", "the road"
     #: The vehicle in a word or two, for the demo's words ("car", "police car"; its
-    #: source's name may join them with an underscore).
+    #: source's name may join them with an underscore), and the word for the vehicles
+    #: of a demo of several, this one the first.
     noun = "car"
+    fleet_noun = "vehicle"
     #: Whether it goes at a speed of its own without --speed (:meth:`own_speed_kmh`).
     own_speed = False
+    #: Whether its own numbers time its walk, at no one speed (an aircraft's flight
+    #: profile, :mod:`acoustic_spaces.demos.aircraft`): it goes as they say, its
+    #: keyframes written into the demo's scene (:meth:`edit`), and --speed does not
+    #: apply.
+    timed = False
     #: What it is, in a few words, for the demo's choice of vehicle.
     title = "a car"
     #: Why its keyframes must keep one speed.
@@ -174,6 +181,17 @@ class Vehicle:
     def problem(self, source) -> str | None:
         """What else keeps ``source`` (its scene source, with a walk that is on) from
         going past: nothing, unless the vehicle needs more."""
+        return None
+
+    def mean_speed_m_s(self, args: argparse.Namespace, scene) -> float:
+        """The speed it goes at along its walk in ``scene`` (m/s), the example's: its
+        walk's (:func:`walk_speed`), unless it is :attr:`timed`, whose own numbers give
+        the walk of the demo's scene, its length over its time."""
+        return walk_speed(car_of(scene, self), self)
+
+    def how_it_goes(self, args: argparse.Namespace, scene) -> str | None:
+        """How a :attr:`timed` vehicle goes, in a line for the demo's summary (None: as
+        a vehicle at one speed is said)."""
         return None
 
     def info(self, args: argparse.Namespace, scene, speed_kmh: float) -> dict:
@@ -285,6 +303,11 @@ class Vehicle:
         """The help of the demo's options and steps that speak of it: ``speed``,
         ``input``, ``sound`` and the demo scene's ``header``."""
         raise NotImplementedError
+
+    def fleet_texts(self) -> dict[str, str] | None:
+        """The help of a demo of several vehicles, this one the first, as :meth:`texts`
+        (None: a road vehicle's, :func:`road_texts`)."""
+        return None
 
 
 #: Engines with their cylinders in words, for the stills.
@@ -462,13 +485,16 @@ ROAD_VEHICLES = (THE_CAR, TRUCK, BUS, MOTORCYCLE)
 
 def walk_speed(car, vehicle: Vehicle = THE_CAR) -> float:
     """The speed the walk of ``car`` (a scene source) goes at (m/s): its ``speed_m_s``
-    along points, or along keyframes the one steady speed they keep; a ValueError says
+    along points, or along keyframes the one steady speed they keep (for a
+    :attr:`~Vehicle.timed` vehicle, their length over their time); a ValueError says
     when keyframes go at different speeds or wait."""
     from acoustic_spaces.walkthrough import knots
 
     if car.walk.keyframes is None:
         return float(car.walk.speed_m_s)
     path = knots(car)
+    if vehicle.timed:
+        return path.length_m / path.duration_s
     speeds = np.linalg.norm(np.diff(path.positions, axis=0), axis=1) / np.diff(path.times)
     slow, fast = float(speeds.min()), float(speeds.max())
     if slow <= 0.0 or fast > slow * (1.0 + STEADY):
@@ -489,7 +515,7 @@ def kmh(speed: float) -> str:
 def forced_speed(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> float | None:
     """The speed a run gives the vehicle instead of its walk's (km/h): ``--speed``, or
     its own (:meth:`Vehicle.own_speed_kmh`, a train's); None to go as its walk goes."""
-    if args.speed is not None:
+    if getattr(args, "speed", None) is not None:
         return float(args.speed)
     return vehicle.own_speed_kmh(args)
 
@@ -497,8 +523,8 @@ def forced_speed(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> float 
 def speed_of(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> float:
     """The speed the vehicle goes at (km/h): ``--speed``, checked positive and finite,
     or without it its own (a train's) or the speed of its walk in the example's scene
-    (:func:`walk_speed`)."""
-    if args.speed is not None:
+    (:func:`walk_speed`; a :attr:`~Vehicle.timed` vehicle's own mean speed)."""
+    if getattr(args, "speed", None) is not None:
         speed = float(args.speed)
         if not math.isfinite(speed) or speed <= 0.0:
             raise SystemExit(f"error: --speed is a positive number of km/h, not {args.speed!r}")
@@ -511,7 +537,7 @@ def speed_of(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> float:
     if problem:
         raise SystemExit(f"error: {problem}")
     try:
-        return 3.6 * walk_speed(car_of(scene, vehicle), vehicle)
+        return 3.6 * vehicle.mean_speed_m_s(args, scene)
     except ValueError as exc:
         raise SystemExit(f"error: {exc}") from None
 
@@ -780,8 +806,9 @@ def scene(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
             if name in parts:
                 walk["doppler"] = True
     pipeline.write_scene(args.scene, data, vehicle.texts()["header"], args.source.parent)
+    speed = f"{kmh(info['speed_kmh'])} km/h" + (" on average" if vehicle.timed else "")
     print(
-        f"wrote {args.scene}: the {vehicle.noun} at {kmh(info['speed_kmh'])} km/h, "
+        f"wrote {args.scene}: the {vehicle.noun} at {speed}, "
         f"{info['sound_power_db']:.1f} dB of sound power"
     )
 
@@ -824,21 +851,27 @@ def room_of(demo: Demo, args: argparse.Namespace):
 # --------------------------------------------------------------------------- the pass
 
 
-def pitch_change(points, listener, speed_m_s: float, c: float) -> float:
+def pitch_change(points, listener, speed_m_s: float | None, c: float) -> float:
     """How far the pitch of the vehicle's direct sound falls at ``listener`` (a position)
     from where its walk starts to where it ends (semitones): heard at c / (c - v_r), v_r
-    the vehicle's speed towards the listener, along its first leg and its last."""
+    the vehicle's speed towards the listener, along its first leg and its last, at
+    ``speed_m_s`` or, None, at each leg's own speed (its length over its time)."""
     positions = np.asarray(points.positions, dtype=float)
     at = np.asarray(listener, dtype=float)
 
-    def towards(k: int, leg: np.ndarray) -> float:
+    def towards(k: int, leg: np.ndarray, between: tuple[int, int]) -> float:
         to = at - positions[k]
         distance = float(np.linalg.norm(to))
-        heading = leg / max(float(np.linalg.norm(leg)), 1e-12)
-        return speed_m_s * float(np.dot(heading, to)) / max(distance, 1e-12)
+        length = max(float(np.linalg.norm(leg)), 1e-12)
+        if speed_m_s is None:
+            times = points.times
+            speed = length / float(times[between[1]] - times[between[0]])
+        else:
+            speed = speed_m_s
+        return speed * float(np.dot(leg / length, to)) / max(distance, 1e-12)
 
-    first = towards(0, positions[1] - positions[0])
-    last = towards(-1, positions[-1] - positions[-2])
+    first = towards(0, positions[1] - positions[0], (0, 1))
+    last = towards(-1, positions[-1] - positions[-2], (-2, -1))
     return 12.0 * math.log2((c - last) / (c - first))
 
 
@@ -1021,7 +1054,9 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             "sel_a_db": round(level.exposure_a, 2),
             "leq_a_db": round(level.equivalent_a, 2),
             "closest_m": round(float(distances.min()), 2),
-            "pitch_semitones": round(pitch_change(points, position, speed, c), 3),
+            "pitch_semitones": round(
+                pitch_change(points, position, None if vehicle.timed else speed, c), 3
+            ),
         }
         if len(parts) > 1:
             heard[name]["parts"] = {
@@ -1254,13 +1289,15 @@ def summary(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> str | None:
         scene = source_scene(args)
         if car_problem(scene, args.source.name, vehicle) or problems_of_speed(args, scene, vehicle):
             return None
+        if vehicle.timed:
+            return vehicle.how_it_goes(args, scene)
         own = vehicle.own_speed_kmh(args)
         path = knots(driving(car_of(scene, vehicle), forced_speed(args, vehicle)))
     except (Exception, SystemExit):
         return None
     speed = path.length_m / path.duration_s
     noun, way = vehicle.noun, vehicle.way.removeprefix("the ").removeprefix("its ")
-    if args.speed is not None:
+    if getattr(args, "speed", None) is not None:
         whose = "--speed"
     elif own is not None:
         whose = f"the {noun}'s own"
@@ -1277,11 +1314,12 @@ def summary(args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> str | None:
 
 def problems_of_speed(args: argparse.Namespace, scene, vehicle: Vehicle = THE_CAR) -> str | None:
     """What keeps the vehicle of ``scene`` from one speed: a ``--speed`` that is not
-    positive, or without one keyframes that are not steady."""
-    if args.speed is not None:
+    positive, or without one keyframes that are not steady; nothing for a
+    :attr:`~Vehicle.timed` vehicle, which goes as its own numbers say."""
+    if getattr(args, "speed", None) is not None:
         speed = float(args.speed)
         return None if math.isfinite(speed) and speed > 0.0 else "--speed is not positive"
-    if vehicle.own_speed_kmh(args) is not None:
+    if vehicle.own_speed_kmh(args) is not None or vehicle.timed:
         return None
     try:
         walk_speed(car_of(scene, vehicle), vehicle)
@@ -1313,13 +1351,12 @@ def demo(
 
     first = vehicles[0]
     several = len(vehicles) > 1
-    noun = "vehicle" if several else first.name
-    texts = (
-        road_texts("vehicle", "NAME", f"demo/NAME/NAME.wav (the {first.name}'s, …)")
-        if several
-        else first.texts()
-    )
+    noun = first.fleet_noun if several else first.name
+    texts = first.texts()
     if several:
+        texts = first.fleet_texts() or road_texts(
+            "vehicle", "NAME", f"demo/NAME/NAME.wav (the {first.name}'s, …)"
+        )
         texts["input"] = texts["input"].replace(
             "as NAME=WAV", f"as NAME=WAV for the vehicle of --vehicle ({first.name}=WAV, …)"
         )
@@ -1358,15 +1395,11 @@ def demo(
             steps=(first.sound_step, "scene", "walk"),
         )
     ]
-    made = Demo(
-        name=first.demo_name,
-        example=example,
-        title=title,
-        description=description,
-        script=Path(script),
-        steps=[],
-        options=[
-            *(choice if several else []),
+    # A vehicle whose own numbers time its walk (an aircraft) goes at no --speed.
+    speed = (
+        []
+        if all(v.timed for v in vehicles)
+        else [
             Option(
                 "speed",
                 texts["speed"],
@@ -1379,7 +1412,19 @@ def demo(
                     if all(v.own_speed for v in vehicles)
                     else "as in the scene"
                 ),
-            ),
+            )
+        ]
+    )
+    made = Demo(
+        name=first.demo_name,
+        example=example,
+        title=title,
+        description=description,
+        script=Path(script),
+        steps=[],
+        options=[
+            *(choice if several else []),
+            *speed,
             *own,
             Option(
                 "step_m",
@@ -1432,7 +1477,9 @@ def demo(
         Step(
             "scene",
             lambda args: scene(made, args, pick(args)),
-            f"scene_demo.yaml: the {noun} alone, at --speed, with Doppler",
+            f"scene_demo.yaml: the {noun} alone, "
+            + ("along its flight" if first.timed else "at --speed")
+            + ", with Doppler",
             lambda args: scene_done(args, pick(args)),
         ),
         Step(

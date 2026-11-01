@@ -137,6 +137,11 @@ class Pictures(scene_pictures.Pictures):
             return None
         return float(np.interp(t, times, levels))
 
+    def speed_text(self) -> str:
+        """How fast the vehicle goes, for the stills' heading: ``At 50 km/h``, or as
+        walk.json says it (``speed_text``, an aircraft's ``From 0 to 309 km/h``)."""
+        return self.facts.get("speed_text") or f"At {kmh(self.facts['speed_kmh'])} km/h"
+
     def lines(self, k: int, t: float | None = None) -> list:
         """What a still of stop ``k`` says, ``t`` s into its pass."""
         stop = self.stops[k]
@@ -227,11 +232,10 @@ class Pictures(scene_pictures.Pictures):
         img = canvas()
         draw = ImageDraw.Draw(img)
         name = self.scene.get("name", "scene")
-        speed = kmh(self.facts["speed_kmh"])
         heading(
             draw,
             f"{name}, simulated",
-            f"At {speed} km/h, heard at {counted(len(self.stops), 'place')}, "
+            f"{self.speed_text()}, heard at {counted(len(self.stops), 'place')}, "
             "its pitch falling as it goes by (Doppler)",
         )
         self.draw_scene(img, self.plan(*PLAN_BOX), stop.key, t)
@@ -263,8 +267,8 @@ class Pictures(scene_pictures.Pictures):
         if self.fmt == "binaural":
             thumbnail_badge(draw, 50, y)
             y += 90
-        speed = f"{kmh(self.facts['speed_kmh'])} km/h, Doppler"
-        text(draw, (50, y), speed, font("SemiBold", 32), LISTENER)
+        speed = self.facts.get("speed_text") or f"{kmh(self.facts['speed_kmh'])} km/h"
+        text(draw, (50, y), f"{speed}, Doppler", font("SemiBold", 32), LISTENER)
         text(draw, (50, 655), "made with acoustic-spaces", font("Medium", 24), TEXT)
         return img
 
