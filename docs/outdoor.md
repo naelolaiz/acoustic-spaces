@@ -1122,6 +1122,96 @@ of a descent or a turn), the engine and the gearbox, and the fuselage's reflecti
 shadow. `trim` takes the airspeed it is given, through still air: the flyover demo
 gives it the speed over the ground less the wind.
 
+## Vibration through the ground
+
+Trains, trams and construction plant shake the ground as well as the air: a building
+near them feels it, and its rooms rumble with the sound their floors, walls and
+ceilings radiate (ground-borne noise). `acoustic_spaces.vibration` gives both by the
+general method of the US Federal Transit Administration (FTA, *Transit Noise and
+Vibration Impact Assessment Manual*, FTA Report No. 0123, 2018). It is an assessment
+from the manual's curves and tables, apart from the scene's sound: nothing of it goes
+through the simulation.
+
+- **Trains and trams** (the manual's General Vibration Assessment, section 6.4). A base
+  curve gives the overall rms vibration level of the ground 10 to 300 ft (3.0 to 91.4
+  m) from the track's centreline, as far as the manual draws it (figure 6-4, the
+  equations of table 6-10): one for trains hauled by locomotives, one for rapid transit
+  and light rail (multiple units and trams too), one for a bus on a smooth road
+  (`vibration.CURVES`; each train of the railway demo has its own, `rail.Train.curve`).
+  The level changes with the speed as 20 log10 of it (eq. 6-4) and, in `vibration.Line`,
+  with the vehicles' suspension and wheels, the track's condition and special trackwork
+  near, a floating slab, ballast mats, resilient fasteners or ties, an elevated
+  structure or a subway's, and the ground: +10 dB for soil that propagates efficiently,
+  +2 to +9 dB for a rock layer (tables 6-11 and 6-12, with the manual's rules for which
+  add up). `vibration.indoor_db` takes it into a building and up to a floor: the
+  foundation's coupling loss, 2 dB a floor up to the fifth and 1 dB a floor up to the
+  tenth, and 6 dB for the floors' resonances (tables 6-12 and 6-13). Where a building's
+  structure is not known, the manual's conservative change from outdoors to indoors
+  stands for all three: +3 dB for a small masonry building or a light wood-frame
+  house's first floor, +6 dB for its second and third, 0 dB for a large building.
+  `vibration.noise_level` gives the rumble in dB(A): the room's vibration level less 50,
+  35 or 20 dB as the vibration peaks below 30 Hz (most surface track), at 30 to 60 Hz
+  (most subways, surface track on very stiff clayey soil) or above 60 Hz (subways in
+  rock) (table 6-14).
+- **Construction plant** (section 7.2). Table 7-4's 14 kinds of plant, from an impact
+  pile driver to a small bulldozer: the peak particle velocity (PPV) and rms level 25 ft
+  away, falling as (25 ft / D)^1.5 and 30 dB a decade (`vibration.plant_ppv`,
+  `vibration.plant_level`, eq. 7-2 and 7-3), against the PPV that may damage four kinds
+  of building (`vibration.DAMAGE`, table 7-5), from 12.7 mm/s for reinforced concrete,
+  steel or timber to 3.05 mm/s for buildings extremely susceptible to it. The street's
+  breaker is the table's hoe ram, its dumper its loaded trucks
+  (`plant.Machine.vibration`).
+- **Limits** (tables 6-2 to 6-4, `vibration.criterion`): the indoor vibration and
+  rumble above which there is impact, for buildings with equipment sensitive to
+  vibration, for residences and for institutions used mostly by day, and for concert
+  halls, studios, auditoriums and theatres, by how many events a day: frequent (more
+  than 70), occasional (30 to 70) or infrequent (fewer than 30). For residences with
+  frequent events they are 72 VdB and 35 dB(A).
+
+Levels are in VdB, decibels re 1 micro-inch per second (25.4 nm/s), as the manual gives
+them, and a PPV in mm/s and in/s.
+
+The railway example's `vibration.py` stands a house where each of the scene's listeners
+in use is (or those `--listeners` names, in that order), as far from the track, and prints for each of the demo's trains at its own speed
+the vibration of the ground outside, of the house's floor and the rumble in its rooms
+against the limits for residences, and from how far each limit holds. The house is a
+small masonry building whose structure is not known, the trains the scene's one
+regional train an hour, 24 a day, which are infrequent events; `--building`, `--floor`,
+`--ground`, `--peak` and `--trains-per-day` change them. A freight train's locomotive
+counts as an infrequent event and its wagons, which pass for minutes, as frequent ones,
+as the manual says; it puts the locomotive "often" 3 to 8 dB over the wagons, and the
+wagons are taken 3 dB under it. 25 m from the track:
+
+| train | speed | ground | indoors | rumble | vibration within its limit from | rumble from |
+|---|---:|---:|---:|---:|---:|---:|
+| S-Bahn | 120 km/h | 72.7 | 75.7 | 25.7 | 14 m | 3.0 m |
+| regional | 160 km/h | 86.3 | 89.3 | 39.3 | 63 m | 16 m |
+| intercity | 200 km/h | 88.2 | 91.2 | 41.2 | 76 m | 20 m |
+| freight, its locomotive | 100 km/h | 82.2 | 85.2 | 35.2 | 43 m | 9.7 m |
+| freight, its wagons | 100 km/h | 79.2 | 82.2 | 32.2 | 69 m | 18 m |
+| tram | 50 km/h | 65.1 | 68.1 | 18.1 | 3.5 m | 3.0 m |
+
+(VdB, the rumble in dB(A); the limits are 80 VdB and 43 dB(A), the wagons' 72 VdB and
+35 dB(A); 3.0 m is where the curves start.) The street's `vibration.py` does the same
+for the tram, 6.0 m from the houses, its passes frequent events as the manual has most
+rapid transit's: 77.6 VdB indoors, 5.6 dB over the limit, and the rumble 27.6 dB(A),
+7.4 dB under it. Its breaker, 4.0 m from the houses, gives them a PPV of 5.94 mm/s,
+over the damage criteria of the two most fragile kinds of building, and 95.4 VdB, 23.4
+dB over the limit for residences; the dumper gives 5.08 mm/s, over the most fragile
+kind's and 0.1 % under the next one's (0.1998 against 0.2 in/s), and 94.4 VdB. The
+office block, 8.0 m from both, stays under every damage criterion; the method gives it
+no limits for annoyance, as it counts offices only where something in them is
+sensitive to vibration. Both scripts run from the editor's **Run demo** window.
+
+What the method leaves out: it gives overall levels, not their spectra, so the rooms
+are not simulated. Its curves are the upper range of measurements of North American
+systems in good condition, which the manual says ground-borne vibration rarely exceeds
+by more than 1 or 2 dB unless wheels or rails are worn; European trains and soils may
+differ. Its table of speeds runs from 20 to 60 mph (32 to 97 km/h); the faster trains
+take its 20 log10 of the speed further. The manual's detailed method works band by
+band from a train's force density and a site's transfer mobility, which it says to
+measure (see the [roadmap](roadmap.md)).
+
 ## In the editor
 
 The editor builds and edits outdoor scenes too: see

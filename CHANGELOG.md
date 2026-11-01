@@ -33,6 +33,11 @@
 - Fixed: a pass-by demo run at `--speed` with some of a vehicle's sources left out
   (`--police-car siren`, `--fire-engine siren`) stopped at its walk, as the sources left
   out kept the scene's speed; they now walk at the run's.
+- Ground-borne vibration of trains, trams and construction plant, and the rumble it
+  makes indoors, by the general method of the US FTA's manual (2018) in the new
+  `acoustic_spaces.vibration`; the railway's and the street's new `vibration.py` print it
+  at their buildings against the manual's limits, checked by the new
+  `validation/fta_vibration.py` against the manual's figure and worked example.
 
 - The street's pass-by demo drives a fire engine past (`--vehicle fire_engine`): the
   vehicle, its siren and its air horn along one walk, each at its own sound power, with

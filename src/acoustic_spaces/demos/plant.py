@@ -84,6 +84,10 @@ class Machine:
     cylinders: int = 0
     #: Its net installed power (kW), for the EU's limits.
     power_kw: float | None = None
+    #: The row of the FTA's table 7-4 for its ground vibration
+    #: (:data:`acoustic_spaces.vibration.PLANT`), or None for one the manual counts
+    #: among those that make little (it names air compressors, light trucks and loaders).
+    vibration: str | None = None
 
     def sound_power(self) -> np.ndarray:
         """(8,) its sound power per octave band (dB re 1 pW)."""
@@ -109,6 +113,7 @@ BREAKER = Machine(
     1.0,
     "blows",
     power_kw=121.0,
+    vibration="hoe_ram",
 )
 GENERATOR = Machine(
     "generator",
@@ -139,6 +144,7 @@ DUMPER = Machine(
     rpm=2200.0,
     cylinders=4,
     power_kw=75.0,
+    vibration="loaded_trucks",
 )
 MACHINES = {m.name: m for m in (BREAKER, GENERATOR, DUMPER)}
 

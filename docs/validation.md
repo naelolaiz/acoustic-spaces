@@ -3328,6 +3328,53 @@ No measured site is compared here: Defra's levels are averages over the machines
 measured, and the made sounds' time structure (the blows, the firing, the beeps' rate)
 is assumed.
 
+## Ground-borne vibration against the FTA's manual
+
+`validation/fta_vibration.py` holds `acoustic_spaces.vibration` (see [Vibration through
+the ground](outdoor.md#vibration-through-the-ground)) against the manual it comes from,
+the FTA's *Transit Noise and Vibration Impact Assessment Manual* (FTA Report No. 0123,
+2018).
+
+**The base curves against figure 6-4.** The manual gives its curves twice: as equations
+(table 6-10) and drawn (figure 6-4). The equations, against the figure read by eye to
+about half a decibel:
+
+| curve | 10 ft | 100 ft | 300 ft |
+|---|---:|---:|---:|
+| locomotive-powered trains | 94.6 (94.5) | 78.4 (78.5) | 67.1 (67.0) |
+| rapid transit or light rail | 81.6 (81.5) | 67.5 (67.5) | 55.8 (56.0) |
+| rubber-tyred vehicles | 75.5 (75.0) | 56.8 (57.0) | 50.6 (50.5) at 200 ft |
+
+(VdB; the figure in brackets. The bus's curve leaves the figure's 50 VdB at about 200
+ft.) The figure draws the curves from 10 to 300 ft, and the code refuses distances
+outside: fitted as cubics in log10 of the distance, they turn back up farther out (the
+bus's past about 1090 ft).
+
+**The worked example.** Example 6-1 has light rail at 40 mph 125 ft from wood-frame
+houses on soil that propagates efficiently, reads the base curve there as 65 VdB, and
+adds: 65 - 1.9 for the speed = 63.1; + 10 for the soil - 5 for the coupling = 68.1; +
+6 for the floor's resonances - 2 to the first floor = 72.1. From the same reading the
+code gives 63.1, 68.1 and 72.1; from the curve itself, 65.43 VdB at 125 ft, 72.5.
+
+**The speed rows.** Table 6-11's adjustments for 20 to 60 mph against 20 log10 of the
+speed (eq. 6-4), for rail against 50 mph and buses against 30 mph: all ten within the
+table's 0.1 dB.
+
+**The plant's and the damage criteria's levels.** Tables 7-4 and 7-5 give each row's rms
+level beside its peak particle velocity, "calculated from the PPV limits using a crest
+factor of 4", 12 dB. All 14 rows of plant and the four damage criteria are within the
+tables' rounding, 0.5 dB, but for a hydromill in rock: its 0.017 in/s gives 72.6 VdB,
+and the table prints 75. The code keeps both as printed.
+
+**The manual's words.** Its text has light rail "70 VdB or more near their tracks"
+(73.1 VdB 50 ft out on its curve) and buses and trucks rarely over 70 VdB (69.6 VdB 25
+ft out). It also puts heavy diesel locomotives "approximately 5 to 10 dB higher" than
+rail transit vehicles; its two curves are 12.3, 11.5 and 10.9 dB apart at 25, 50 and
+100 ft.
+
+No measurement is compared here: the curves are the upper range of measurements of
+North American systems, and the method gives no spectra.
+
 ## Edge diffraction in whole cities
 
 Edge diffraction looks, for the source and for each listener, at every pair of an edge
@@ -3795,6 +3842,7 @@ python validation/rotorcraft.py --json rotorcraft.json
 python validation/urban_sources.py --json urban_sources.json
 python validation/rail_sources.py --json rail_sources.json
 python validation/plant_sources.py --json plant_sources.json
+python validation/fta_vibration.py
 python validation/city_speed.py --json city_speed.json   # --sizes 10 20 30 40 60
 python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
