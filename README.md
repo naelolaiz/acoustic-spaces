@@ -7,7 +7,7 @@ loudspeaker formats.
 
 ![The church example in 3D: the stone nave with its early reflection paths from the altar to the front of the nave, coloured by order up to the third](docs/images/church_paths.png)
 
-**Status: 4.0** (see the [roadmap](docs/roadmap.md) and the
+**Status: 4.1** (see the [roadmap](docs/roadmap.md) and the
 [known issues](docs/validation.md#known-issues)).
 
 ## What it does
@@ -19,19 +19,27 @@ loudspeaker formats.
   is open: [scene files](docs/scenes.md).
 - **Simulation**, in octave or third-octave bands: ray-traced early reflections with
   edge diffraction, added in pressure at low frequencies, a stochastic late tail and,
-  for the lowest bands, a wave solver, both on the CPU or a GPU; ISO 3382-1 parameters,
-  the STI and echo criteria for every source and listener:
+  for the lowest bands, a wave solver, both on the CPU or a GPU; ISO 3382-1 parameters
+  with their standard errors, the STI and echo criteria for every source and listener:
   [simulation](docs/simulation.md).
+- **Outdoors**: the ground and its impedance, terrain, buildings from a map, barriers
+  and trees, wind, temperature and turbulence; road vehicles by CNOSSOS-EU, trains and
+  trams by Schall 03, construction plant from Defra's database, helicopters from their
+  rotors, aircraft by ECAC Doc 29, ground-borne vibration by the US FTA's manual and
+  sound through a closed window by EN ISO 12354-3: [outdoor scenes](docs/outdoor.md).
 - **Coverage maps** of the parameters and of the speech transmission index over the
   audience: [coverage maps](docs/coverage-maps.md).
 - **Listening**: impulse responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker
-  formats as WAV files; dry recordings run through them offline or in real time on the
+  formats, or through a listener's microphone (first-order patterns, XY, Blumlein and MS
+  pairs), as WAV files; dry recordings run through them offline or in real time on the
   sound card, head-tracked on headphones, or heard along a walk through the room:
-  [spatial audio and listening](docs/spatial-audio.md). Eight [demos](docs/demos.md),
-  binaural for headphones: an orchestra in the concert hall, a choir and an organ in the
-  church, a band in the stadium and across a lake, a walk through the gallery, vehicles
-  passing by, and a helicopter over a meadow and over the stadium; their videos are in
-  one [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8).
+  [spatial audio and listening](docs/spatial-audio.md).
+- **Demos**, binaural for headphones: an orchestra in the concert hall, a choir and an
+  organ in the church, a band in the stadium and across a lake, a walk through the
+  gallery, road vehicles with sirens and horns, trains and a tram passing by, road works
+  in a street, a helicopter over a meadow and over the stadium, and a jet taking off and
+  landing; any scene makes a demo of its own: [demos](docs/demos.md), and videos in one
+  [playlist](https://www.youtube.com/playlist?list=PLWz5JDREfod8).
 - **Measuring real rooms** with sine sweeps, comparing them with their model in just
   noticeable differences, and fitting the model's absorption to them:
   [measurements](docs/measurements.md).
@@ -92,13 +100,15 @@ print(response.parameters().table())
 - [Example scenes](docs/examples.md): the bundled rooms and what each shows.
 - [Scene files](docs/scenes.md): geometry, materials, walls and openings, audience
   seating, sources and directivity.
-- [Outdoor scenes](docs/outdoor.md): the ground and the open sky, buildings and
-  barriers.
+- [Outdoor scenes](docs/outdoor.md): the ground and the open sky, terrain, buildings,
+  barriers and trees, wind and turbulence, passing vehicles, aircraft and vibration
+  through the ground.
 - [Simulation](docs/simulation.md): early reflections, the late part, scattering,
   frequency bands, edge diffraction, low frequencies and the wave solver.
 - [Coverage maps](docs/coverage-maps.md): parameters and the STI over the audience area.
 - [Spatial audio and listening](docs/spatial-audio.md): binaural, Ambisonics and
   loudspeaker outputs, convolution, real-time playback and head tracking.
+- [Demos](docs/demos.md): what each demo plays, its recordings and its options.
 - [Measurements](docs/measurements.md): measuring impulse responses, comparing them with
   simulations, and fitting materials to them.
 - [Running on another computer](docs/remote.md): a scene and its files in one pack, and
@@ -127,10 +137,11 @@ in every format.
 
 ## Contributing
 
-Pull requests are welcome. Run `ruff check . && ruff format --check . && pytest -W error`
-before opening one; CI runs the tests on all three platforms and ruff on Linux.
+Pull requests are welcome.
 [CONTRIBUTING.md](https://github.com/naelolaiz/acoustic-spaces/blob/main/CONTRIBUTING.md)
-covers the development setup, the documentation, the validation scripts and releases.
+covers the development setup, the checks to run before opening one (ruff, mypy, the
+translation catalogs and `pytest -W error`), the documentation, the validation scripts
+and releases. CI runs the tests on all three platforms, and ruff and mypy on Linux.
 
 ## License
 
