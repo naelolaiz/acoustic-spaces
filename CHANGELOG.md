@@ -71,6 +71,18 @@
   between its notes as louder blasts (3 to 5 dB over at 5 cm). The street's car with its
   horn now peaks at 97.0, 93.9 and 80.5 dB(A) (was 97.1, 94.0 and 81.6), the fire
   engine at 111.0 dB(A) on the balcony (was 111.1).
+- The pass-by demos fill a train's or tram's sound files a point at a time in 32 bits:
+  the railway example's freight train, 50 points at the rail top for 10.8 s at 48 kHz,
+  takes 104 MB instead of 415 MB.
+- `acoustic_spaces.vibration` raises a ValueError that says what it takes for a speed or
+  a distance from plant that is not a finite number above 0, a land use or a kind of
+  events its tables do not have, and special trackwork that is not a finite 0 m or more
+  away (None for none near). A train's `Unit` raises one for a tank wagon or air
+  conditioning that its category's data sheet does not have, instead of leaving it out.
+- Docs: the TSI table gives each unit's whole pass over Tp, beside EN ISO 3095:2013's own
+  time windows for a coach or a wagon; the glazing's traffic figure is rated from its
+  octaves, 29 - 4 + 9.6 = 34.6 dB; the FTA curves' docs say how `Curve.levels` reads
+  them outside 10 to 300 ft.
 - Changed: an emission's sound power and directivity (`Emission.sound_power_db`,
   `directivity`) are now in IEC 61260-1 octaves between their band edges, 44.7 Hz to
   11.2 kHz, not in the auralization's crossover bands, whose 63 Hz band reached down to

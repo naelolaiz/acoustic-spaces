@@ -3284,9 +3284,11 @@ the 4 m bed. Schall 03 puts a train's rolling noise at one point at the rail top
 comes from its wheels, rails and sleepers, at heights apart, where one point's dip
 would not be as deep.
 
-**The TSI's limits.** Each unit of the demo's trains alone at 80 km/h over the
-example's ground, its level over the time it takes to pass (L_pAeq,Tp, Tp its length
-over its speed) 7.5 m from the track 1.2 m above the rail top, beside the limits of
+**The TSI's limits.** Each unit of the demo's trains alone at 80 km/h over the example's
+ground, 7.5 m from the track 1.2 m above the rail top: the sound exposure of its whole
+pass, each of its points walked from 100 m before the listener to 100 m past it (Schall
+03's sum over the same 200 m of track), over Tp, the time the unit takes to pass, its
+length over its speed (what the script prints as L_pAeq,Tp), beside the limits of
 Commission Regulation (EU) No 1304/2014 (the TSI Noise, table 4) for new units there:
 
 | unit | Tp | engine | Schall 03 | limit |
@@ -3301,6 +3303,18 @@ Commission Regulation (EU) No 1304/2014 (the TSI Noise, table 4) for new units t
 roughness (EN ISO 3095:2013, 6.2); Schall 03's levels are for units of the German fleet
 on rails in average condition, rougher than the TSI's track. That Schall 03 is over the limits says that, not that
 either is wrong; no measured pass-by is compared here.
+
+EN ISO 3095:2013 measures a trailer unit, a coach or a wagon, over two identical units
+one behind the other, from the middle of the first passing to the middle of the second
+(over Tp), or, as an exception, one unit that is acoustically symmetric, at the end of a
+train behind a quieter vehicle, from its middle passing until its level is 10 dB under
+its maximum (over Tp / 2), as S. Radulović et al., "Pass-by noise measurements using one
+versus two identical trailer units within available standard methods" (RAILCON '24,
+Niš), quote its figures: for a lone symmetric unit, the table's quantity but for the
+tail past those 10 dB. In the engine, two of each unit windowed the first way, or one
+windowed the second, give at most 0.2 dB less than the table; one unit from its front
+passing to its rear passing, 0.1 dB less for the S-Bahn and 1.1 to 1.7 dB less for the
+others.
 
 ## Road works against Defra's rows and the EU's limits
 
@@ -3519,9 +3533,12 @@ about half a decibel:
 | rubber-tyred vehicles | 75.5 (75.0) | 56.8 (57.0) | 50.6 (50.5) at 200 ft |
 
 (VdB; the figure in brackets. The bus's curve leaves the figure's 50 VdB at about 200
-ft.) The figure draws the curves from 10 to 300 ft, and the code refuses distances
-outside: fitted as cubics in log10 of the distance, they turn back up farther out (the
-bus's past about 1090 ft).
+ft.) The figure draws the curves from 10 to 300 ft; fitted as cubics in log10 of the
+distance, they turn back up farther out (the bus's past about 1090 ft). `Curve.level`
+and `ground_level` refuse distances outside that range (`Curve.level` takes them with
+`extend=True`); `Curve.levels`, which the pass-by demos' rumble and shaking take, holds
+the 10 ft value nearer and goes on along the curve's slope at 300 ft farther, straight
+on in log10 of the distance, as `extend` does.
 
 **The worked example.** Example 6-1 has light rail at 40 mph 125 ft from wood-frame
 houses on soil that propagates efficiently, reads the base curve there as 65 VdB, and
