@@ -327,6 +327,30 @@ msgstr ""
 "livello a lungo termine con la penalizzazione di ogni periodo, ponderato A "
 "(L_den)"
 
+#: acoustic_spaces/engine/coverage.py
+msgid "Long-term insertion loss (dB)"
+msgstr "Perdita per inserzione a lungo termine (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"insertion loss over a long term: the long-term level without the buildings, "
+"barriers or vegetation less that with them"
+msgstr ""
+"perdita per inserzione a lungo termine: il livello a lungo termine senza gli "
+"edifici, le barriere acustiche o la vegetazione meno quello con essi"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Long-term insertion loss (dB(A))"
+msgstr "Perdita per inserzione a lungo termine (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"A-weighted insertion loss over a long term of the buildings, barriers or "
+"vegetation"
+msgstr ""
+"perdita per inserzione a lungo termine ponderata A degli edifici, delle "
+"barriere acustiche o della vegetazione"
+
 #: acoustic_spaces/examples.py
 msgid "Rooms"
 msgstr "Ambienti"
@@ -811,6 +835,21 @@ msgstr ""
 "come cresce il vento con l'altezza sul terreno"
 
 #: acoustic_spaces/gui/app.py
+msgid "F&ollow the run"
+msgstr "S&eguire l'esecuzione"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"While a run, coverage map, export or demo goes on, ring the sources and "
+"listeners its latest step works on in the 3D view and the plan, and draw the "
+"walkers where the place along a walk it simulates has them"
+msgstr ""
+"Mentre è in corso un calcolo, una mappa di copertura, un'esportazione o una "
+"dimostrazione, cerchiare nella vista 3D e nella pianta le sorgenti e i "
+"ricevitori su cui lavora il suo ultimo passo, e disegnare i mobili dove li "
+"colloca il punto del percorso che simula"
+
+#: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
 msgstr "Salva &schermata…"
 
@@ -1064,6 +1103,11 @@ msgstr "Modifica non applicata: {reason}"
 #, python-brace-format
 msgid "Surface {name}"
 msgstr "Superficie {name}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot keep whether the views follow the run: {reason}"
+msgstr "Impossibile salvare se le viste seguono l'esecuzione: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -6569,6 +6613,15 @@ msgstr "sposta vertice"
 #: acoustic_spaces/gui/plan_view.py
 #, python-brace-format
 msgid ""
+"Not moved: {name} is drawn where the run simulates it, {time:.2f} s along "
+"its walk; drag it once the run is over"
+msgstr ""
+"Non spostato: {name} è disegnato dove lo simula l'esecuzione, a {time:.2f} s "
+"del suo percorso; trascinarlo quando l'esecuzione è finita"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid ""
 "Not moved: {name} is drawn where it is at {time:.2f} s; drag its keyframes, "
 "or its start at 0 s"
 msgstr ""
@@ -8449,15 +8502,15 @@ msgid ""
 "behind a noise barrier 3 m high, 4 m from the track, which the trains' sound "
 "comes over and round (`first_order` diffraction follows it). The line source "
 "along the track is its traffic on average: one regional train an hour at 160 "
-"km/h, its sound power per metre Schall 03's (Germany's method for the noise "
-"of railways, 2014), all of it at the rail top. A train runs past at 160 "
-"km/h, its pitch falling as it goes by (Doppler): three sources along one "
-"walk, at the rail top, on the roof and at the pantograph, Schall 03's "
-"heights; each plays the train's points at that height one behind the other "
-"(its bogies, its cars' roofs, its pantograph), so the train goes by as long "
-"as it is. They are left out of simulations until ticked, as is the train's "
-"horn at its front, and passby_demo.py runs one of four trains past, its horn "
-"sounding with --horn blasts."
+"km/h, its sound power per metre and its directivity round the track Schall "
+"03's (Germany's method for the noise of railways, 2014), all of it at the "
+"rail top. A train runs past at 160 km/h, its pitch falling as it goes by "
+"(Doppler): three sources along one walk, at the rail top, on the roof and at "
+"the pantograph, Schall 03's heights; each plays the train's points at that "
+"height one behind the other (its bogies, its cars' roofs, its pantograph), "
+"so the train goes by as long as it is. They are left out of simulations "
+"until ticked, as is the train's horn at its front, and passby_demo.py runs "
+"one of four trains past, its horn sounding with --horn blasts."
 msgstr ""
 "All'aperto: una linea ferroviaria su ballast attraverso un prato, ascoltata "
 "dove la norma dell'UE per il rumore dei treni ne misura uno al passaggio (a "
@@ -8467,16 +8520,16 @@ msgstr ""
 "sopra e attorno alla quale arriva il suono dei treni (la diffrazione "
 "`first_order` lo segue). La sorgente lineare lungo il binario è il suo "
 "traffico in media: un treno regionale all'ora a 160 km/h, con la potenza "
-"sonora per metro di Schall 03 (il metodo tedesco per il rumore delle "
-"ferrovie, 2014), tutta sul piano del ferro. Un treno passa a 160 km/h e la "
-"sua altezza scende al passaggio (Doppler): tre sorgenti lungo uno stesso "
-"percorso, sul piano del ferro, sul tetto e al pantografo, le altezze di "
-"Schall 03; ciascuna riproduce i punti del treno a quell'altezza uno dietro "
-"l'altro (i suoi carrelli, i tetti delle sue carrozze, il suo pantografo), "
-"così che il treno impiega a passare quanto è lungo. Restano fuori dalle "
-"simulazioni finché non vengono spuntate, come la tromba del treno sul suo "
-"frontale, e passby_demo.py fa passare uno di quattro treni, con la tromba "
-"che suona con --horn blasts."
+"sonora per metro e la direttività attorno al binario di Schall 03 (il metodo "
+"tedesco per il rumore delle ferrovie, 2014), tutta sul piano del ferro. Un "
+"treno passa a 160 km/h e la sua altezza scende al passaggio (Doppler): tre "
+"sorgenti lungo uno stesso percorso, sul piano del ferro, sul tetto e al "
+"pantografo, le altezze di Schall 03; ciascuna riproduce i punti del treno a "
+"quell'altezza uno dietro l'altro (i suoi carrelli, i tetti delle sue "
+"carrozze, il suo pantografo), così che il treno impiega a passare quanto è "
+"lungo. Restano fuori dalle simulazioni finché non vengono spuntate, come la "
+"tromba del treno sul suo frontale, e passby_demo.py fa passare uno di "
+"quattro treni, con la tromba che suona con --horn blasts."
 
 #: examples/rehearsal_room/scene.yaml
 msgctxt "example"

@@ -56,6 +56,7 @@ from acoustic_spaces.gui.document import (
     model_scene,
     outdoor_scene,
 )
+from acoustic_spaces.gui.following import NO_RUN, RunFocus, RunView
 from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
 from acoustic_spaces.gui.levels import rich_lines
 from acoustic_spaces.gui.map_view import MapPanel
@@ -86,6 +87,10 @@ TITLE = N_("Acoustic Spaces editor")
 #: The user's setting that keeps whether the Scene YAML panel is shown: hidden until it
 #: is shown once, then as it was left.
 YAML_PANEL_SETTING = "editor_yaml_panel"
+#: The setting that keeps whether the views follow a run (View > Follow the run).
+FOLLOW_RUN_SETTING = "editor_follow_run"
+#: How often at most the views show what a run works on (ms).
+FOLLOW_RUN_MS = 150
 SCENE_FILTER = N_("Scenes (*.yaml *.yml)")
 #: What the messages say of a part drawn in the plan, by the plan view's purpose;
 #: {count} its corners or points and the rest its sizes (:data:`NEW_PART_SIZES`).
@@ -160,6 +165,10 @@ class MainWindow(QMainWindow):
         self.job: SimulationJob | None = None
         self._job_scene = None
         self._job_document: Document | None = None
+        #: What the run going on works on, from its lines; None while none goes on.
+        self._focus: RunFocus | None = None
+        #: The hidden sources and listeners the views show while the run works on them.
+        self._revealed: set[tuple[str, str]] = set()
         self._started = 0.0
         #: The document is a bundled example: Save asks for a new place.
         self.from_example = False
@@ -234,6 +243,11 @@ class MainWindow(QMainWindow):
         self._player_timer = QTimer(self)
         self._player_timer.setInterval(100)
         self._player_timer.timeout.connect(self._player_poll)
+        # The views follow a run a few times a second at most, however fast it writes.
+        self._follow_timer = QTimer(self)
+        self._follow_timer.setSingleShot(True)
+        self._follow_timer.setInterval(FOLLOW_RUN_MS)
+        self._follow_timer.timeout.connect(self._show_run)
         #: What plays: the file, source and listener, whether head-tracked, where in the
         #: file it started and when, the file's length (s), the gain, the scene it was
         #: simulated for, the status bar's text, and whether the log said the scene has
@@ -508,6 +522,18 @@ class MainWindow(QMainWindow):
         self.wind_profile_action.setCheckable(True)
         self.wind_profile_action.setChecked(True)
         self.wind_profile_action.toggled.connect(lambda *_: self._wind_shown())
+        self.follow_action = a(
+            _("F&ollow the run"),
+            lambda: None,
+            tip=_(
+                "While a run, coverage map, export or demo goes on, ring the sources and "
+                "listeners its latest step works on in the 3D view and the plan, and draw "
+                "the walkers where the place along a walk it simulates has them"
+            ),
+        )
+        self.follow_action.setCheckable(True)
+        self.follow_action.setChecked(i18n.setting(FOLLOW_RUN_SETTING) is not False)
+        self.follow_action.toggled.connect(self._follow_toggled)
         self.screenshot_action = a(
             _("Save &screenshot…"), self.save_screenshot, tip=_("Save the 3D view as a PNG picture")
         )
@@ -618,6 +644,7 @@ class MainWindow(QMainWindow):
         view.addSeparator()
         view.addActions([self.reset_camera_action, self.paths_action, self.leaks_action])
         view.addActions([self.wind_action, self.wind_profile_action])
+        view.addAction(self.follow_action)
         view.addAction(self.screenshot_action)
         view.addSeparator()
         for dock in self.docks.values():
@@ -925,7 +952,10 @@ class MainWindow(QMainWindow):
         paths = None if response is None else response.early
         coverage = None if self._map_stale() else self.map_panel.shown_in_3d()
         leaks = self._leaks() if self.leaks_action.isChecked() else None
-        hidden = self.document.hidden
+        run = self._run_view()
+        # What a run works on shows while it does, hidden or not.
+        self._revealed = self._run_reveals(run)
+        hidden = self.document.hidden - self._revealed
         outdoors = self.document.room.outdoor is not None
         self.wind_action.setEnabled(outdoors)
         self.wind_profile_action.setEnabled(outdoors)
@@ -942,8 +972,61 @@ class MainWindow(QMainWindow):
             wind_profile=self.wind_profile_action.isChecked(),
             mover=mover,
             time=time,
+            run=run,
         )
-        self.plan.show_room(self.document.room, self.selection, hidden, wind, mover, time)
+        self.plan.show_room(self.document.room, self.selection, hidden, wind, mover, time, run)
+
+    # -- following a run ----------------------------------------------------------------
+
+    def _run_view(self) -> RunView:
+        """What the views show of the run going on (:mod:`acoustic_spaces.gui.following`):
+        nothing when none goes on, when View > Follow the run is off, or when the run's
+        scene is no longer open."""
+        if (
+            self._focus is None
+            or not self.follow_action.isChecked()
+            or self._job_document is not self.document
+        ):
+            return NO_RUN
+        return self._focus.view
+
+    def _run_reveals(self, run: RunView) -> set[tuple[str, str]]:
+        """The hidden sources and listeners (eye off, as those left out of simulations
+        start) that ``run`` works on: what it names, and at a place its walkers."""
+        involved = set(run.names)
+        if run.time is not None:
+            involved |= set(run.walks)
+        return self.document.hidden & involved
+
+    def _show_run(self) -> None:
+        run = self._run_view()
+        if self._run_reveals(run) != self._revealed:
+            self._draw()  # another hidden one to show, or one to hide again
+            return
+        self.viewport.show_run(run)
+        self.plan.show_run(run)
+
+    def _follow_toggled(self, on: bool) -> None:
+        self._show_run()
+        try:
+            i18n.save_setting(FOLLOW_RUN_SETTING, on)
+        except OSError as exc:
+            self.log(
+                _("Cannot keep whether the views follow the run: {reason}").format(reason=exc),
+                "warning",
+            )
+
+    def _walks_of(self, job: SimulationJob):
+        """What gives the scene whose walks ``job`` simulates its walkers along: a demo's
+        own (:attr:`~acoustic_spaces.demos.Demo.walks`), else the scene it runs on."""
+        if isinstance(job, DemoJob):
+            demo, args = job.demo, job.args
+            if demo.walks is not None:
+                return lambda: demo.walks(demo.resolved(args))
+            scene = self.document.scene
+            return lambda: scene
+        room = job.room
+        return None if room is None else (lambda: room.scene)
 
     # -- movement -------------------------------------------------------------------
 
@@ -1794,6 +1877,7 @@ class MainWindow(QMainWindow):
         self.job = job
         self._job_scene = self.document.scene
         self._job_document = self.document
+        self._focus = RunFocus(self.document.scene, self._walks_of(job))
         job.progress.connect(self._progress)
         # Bound methods, so Qt queues the worker's signals to this window's thread.
         job.failed.connect(self._failed)
@@ -1820,6 +1904,9 @@ class MainWindow(QMainWindow):
 
     def _progress(self, message: str) -> None:
         self.activity.step(message)
+        if self._focus is not None and self._focus.read(message):
+            if not self._follow_timer.isActive():
+                self._follow_timer.start()
         # A demo prints its paths relative to the folder it runs in.
         demo = getattr(self.job, "demo", None)
         # The status bar says it already, beside the moving bar.
@@ -1979,6 +2066,9 @@ class MainWindow(QMainWindow):
         self.map_panel.set_running(False)
         self.cancel_action.setEnabled(False)
         self.activity.stop()
+        self._focus = None
+        self._follow_timer.stop()
+        self._show_run()
 
     # -- results --------------------------------------------------------------------
 

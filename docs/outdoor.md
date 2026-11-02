@@ -107,9 +107,11 @@ follow the terrain: their points stand at the map's height over the ground under
   source and the listener, as the outdoor standards (CNOSSOS-EU, Nord2000) have it: the
   plane through the least-squares line of the profile, level across it, with the
   reflection factor of the ground under the reflection point (its material, or the
-  grounds of the zones its Fresnel zone covers, as on flat ground). Over a plain or a
-  plane slope that is the ground itself, and the reflection is the one flat ground
-  gives.
+  grounds of the zones its Fresnel zone covers, as on flat ground). The line is fitted
+  to the whole profile, segment by segment, as CNOSSOS-EU fits it, so it follows the
+  ground's shape, not where the edges of the terrain's triangles cross the profile. Over
+  a plain or a plane slope that is the ground itself, and the reflection is the one flat
+  ground gives.
 - **Crests** between the source and the listener bend the sound over them. The ground's
   profile in the vertical plane between the two is drawn, and the string pulled taut
   over it from one to the other bends at the crests in the way: each is a wedge whose
@@ -1013,8 +1015,9 @@ long_term:
 
 The scene is run as it is, for its impulse responses, and once in each class, all with
 the same seed so that every run traces the same rays; a class whose weather is the
-scene's own takes the scene's run, so n classes cost at most n + 1 runs. Then, at every
-listener and every map point, per octave band and A-weighted:
+scene's own takes the scene's run, so n classes cost at most n + 1 runs (each made twice
+with `insertion_loss_of`, with and without what it names). Then, at every listener, per
+octave band and A-weighted:
 
 - the level in each class;
 - the level in each period: the energy mean of the classes' levels, each by its share
@@ -1026,17 +1029,21 @@ listener and every map point, per octave band and A-weighted:
   with others, L_R, a whole-day rating level as ISO 1996-1 defines it.
 
 The long-term level relative to free field, and the long-term insertion loss of what
-`insertion_loss_of` names (taken in every class), come with them. `simulate` prints
-them. `parameters.json` has a `long_term` block (the classes, their shares and the
-periods), and each response a `long_term` entry with `spl_db`, `spl_a_db`,
-`rating_level_db` and `rating` (L_den or L_R), the levels of each period and each
-class, and `re_free_field_db` and `insertion_loss_db` with their A-weighted values.
-Maps gain the parameters `long_term` (dB per band) and `rating_level` (dB(A)).
+`insertion_loss_of` names (the long-term level without them less that with them, from
+the runs with and without them in every class), come with them. `simulate` prints them.
+`parameters.json` has a `long_term` block (the classes, their shares and the periods),
+and each response a `long_term` entry with `spl_db`, `spl_a_db`, `rating_level_db` and
+`rating` (L_den or L_R), the levels of each period and each class, and
+`re_free_field_db` and `insertion_loss_db` with their A-weighted values. A map gains at
+every point the parameters `long_term` (dB per band), `rating_level` (dB(A)) and, with
+`insertion_loss_of`, the long-term insertion loss `long_term_insertion_loss` (dB per
+band) and `long_term_insertion_loss_a` (dB(A)); its other parameters, `spl`,
+`re_free_field` and `insertion_loss` among them, are those of the scene's own weather.
 `inspect` lists the classes with their shares and weathers, and the periods. From
-Python, `acoustic_spaces.engine.long_term.simulate` and `coverage_map` take
-`long_term=` to run classes the scene does not give, and `Scene.under(weather_class)`
-is the scene in one class. In the editor, weather classes are added and changed under
-**Weather of** (see [the editor](editor.md#outdoor-scenes)).
+Python, `acoustic_spaces.engine.long_term.simulate` and `coverage_map` take `long_term=`
+to run classes the scene does not give, and `Scene.under(weather_class)` is the scene in
+one class. In the editor, weather classes are added and changed under **Weather of**
+(see [the editor](editor.md#outdoor-scenes)).
 
 The level in each class is as accurate as the simulation in that weather (see [How the
 simulation bends sound](#how-the-simulation-bends-sound)). The combination is the
@@ -1124,13 +1131,16 @@ and which Pegg's fit to measured rotors holds.
 
 A scene's source carries the sound power and the directivity of what the rotors send,
 for the levels the simulation and the pass-by report and for the late part:
-`sent.sound_power_db(trim.density, trim.sound_speed)` gives the one per octave band
-and `sent.directivity()` the other, which
+`sent.sound_power_db(trim.density, trim.sound_speed)` gives the one per octave band and
+`sent.directivity()` the other, which
 `acoustic_spaces.directivity.write_directivity_csv` writes as a table a scene reads
-(`directivity: {file: helicopter.csv}`). The `helicopter_flyover` example has them for
-an AS350 B3 150 m up at 63 m/s against a light wind, and its
-[flyover demo](demos.md#a-helicopter-flying-over) flies it over a meadow, its rotors
-trimmed at its airspeed: its speed over the ground less the wind at its height.
+(`directivity: {file: helicopter.csv}`). Both are in IEC octaves, so the main rotor's
+tones at its blade passing frequency and at twice it (19.7 and 39.4 Hz for the AS350
+B3), below the 63 Hz octave, are in no band ([the sound sent each
+way](spatial-audio.md#moving-sources-and-doppler)). The `helicopter_flyover` example has
+them for an AS350 B3 150 m up at 63 m/s against a light wind, and its [flyover
+demo](demos.md#a-helicopter-flying-over) flies it over a meadow, its rotors trimmed at
+its airspeed: its speed over the ground less the wind at its height.
 
 What it leaves out: loads that change round the turn (in forward flight the
 advancing blade carries less lift than the retreating one, and the blades flap), the
@@ -1160,14 +1170,20 @@ scene's sound: nothing of it goes through the simulation.
   the lateral attenuation from changing more than 1.5 dB along a segment, and airborne
   segments whose speed changes by more than 20 kt in steps of 10 m/s; the track's
   nodes joined in, and no source lower than 1 m.
-- **Each segment's level** (`doc29.segment_levels`, chapter 4) at each receiver: the
-  NPD curves at its power and distance (no nearer than 30 m), corrected for its speed
-  against 160 kt, the engines' installation round the roll axis, the lateral
-  attenuation of sound passing low over the ground, its finite length, behind a
-  take-off roll the start-of-roll directivity, and the air's impedance at the
-  aerodrome against the NPD curves' (`doc29.impedance_db`).
+- **Each segment's level** (`doc29.segment_levels`, chapter 4) at each receiver: the NPD
+  curves at its power and distance (no nearer than 30 m), corrected for its speed
+  against 160 kt, the engines' installation round the roll axis, the lateral attenuation
+  of sound passing low over the ground, its finite length and, behind a take-off roll,
+  the start-of-roll directivity. The caller passes the adjustment for the air's
+  impedance at the aerodrome against the NPD curves',
+  `impedance=doc29.impedance_db(temperature_c, pressure_kpa)`; left out, it is nought:
+  the NPD curves' reference day, 25 °C and 101.325 kPa (the standard atmosphere at sea
+  level adds 0.074 dB).
 - **The event** (`doc29.event`): the segments' energy summed to the SEL, their greatest
-  level the LAmax.
+  level the LAmax. Beyond the NPD curves' powers their levels are extrapolated from the
+  two curves at that end (eq. 4-3); where that takes a segment's level more than 5 dB
+  from the nearest curve's, the event warns (`doc29.NpdExtrapolationWarning`), as Volume
+  2 section 4.2 cautions.
 
 `doc29.volume3` holds the reference cases of Doc 29 Volume 3: three hypothetical
 aircraft, which rely on no data of the ANP database (a jet with its engines on the rear
@@ -1216,27 +1232,32 @@ profile = performance.as_profile(points)  # for doc29.flight_path
 **The ANP database**, the method's data for real aircraft (EASA's Aircraft Noise and
 Performance database), is not part of the package: its terms of use (issue 3, 2024)
 allow the data only for noise contours of an average fleet and traffic, not for
-benchmarking aircraft types, and forbid publishing it or passing it on to anyone who
-has not accepted them. With a copy downloaded from EASA under those terms,
-`doc29.anp.read_database(folder)` reads its tables from the folder by their files'
-names (aircraft, NPD, spectral classes, fixed-point profiles, jet and propeller
-engine coefficients, aerodynamic coefficients, default weights, departure and
-approach procedural steps), and `Database.profile` flies an aircraft's procedure where
-the database has it, else its fixed-point profile. The readers take the fields
-Volume 2 Appendix G lists, as Volume 3's workbooks lay them out; they have not been
-tried on a download of the database.
+benchmarking aircraft types, and forbid publishing it or passing it on to anyone who has
+not accepted them. With a copy downloaded from EASA under those terms,
+`doc29.anp.read_database(folder)` reads its tables from the folder by their files' names
+(aircraft, NPD, spectral classes, fixed-point profiles, jet and propeller engine
+coefficients, aerodynamic coefficients, default weights, departure and approach
+procedural steps), and `Database.profile` flies an aircraft's procedure where the
+database has it, else its fixed-point profile. A procedure gives the corrected net
+thrust in lb, so `Database.profile` refuses it for an aircraft whose NPD curves are in
+another power parameter (shaft horsepower in %, for instance). The readers take the
+fields Volume 2 Appendix G lists, as Volume 3's workbooks lay them out: a fixed-point
+profile's distances, heights and speeds in the unit its column's name gives in brackets
+(m, ft or feet; m/s, kt, kts or knots), the lateral directivity by how it starts
+(Fuselage, Wing or Prop); anything else is an error. They have not been tried on a
+download of the database.
 
 Its levels agree with all of Volume 3's reference results: the 99 levels at its
-receptors within 0.006 dB, its 12 grids of 37,458 points at 0.003 dB rms, and its
-3516 rows of segment results term by term, the segments' places within 7.3 m: the
-differences come from where Volume 3 puts its cuts by speed and from its conversion of
-metres to feet ([the check](validation.md#aircraft-noise-against-doc-29-volume-3)).
-Its flight profiles agree with all 26 of Volume 3's (Part 2: JETW and PROP arriving
-and departing at sea level and at 2000 and 5000 ft, at 15 and 40 °C, into headwinds of
--5 to 8 kt): their 314 points' heights, speeds and thrusts to Volume 3's rounding,
-their distances within 0.15 ft. Volume 3's profiles differ from Volume 2's printed
-equations in three places, where the package follows Volume 3
-([the check](validation.md#flight-profiles-against-doc-29-volume-3)).
+receptors within 0.0055 dB, its 12 grids of 37,458 points at 0.003 dB rms, and its 3516
+rows of segment results term by term, the segments' places within 7.3 m: the differences
+come from where Volume 3 puts its cuts by speed and from its conversion of metres to
+feet ([the check](validation.md#aircraft-noise-against-doc-29-volume-3)). Its flight
+profiles agree with all 26 of Volume 3's (Part 2: JETW arriving and departing and PROP
+departing, at sea level and at 2000 and 5000 ft, at 15 and 40 °C, into headwinds of -5
+to 8 kt): their 314 points' heights, speeds and thrusts to Volume 3's rounding, their
+distances within 0.15 ft. Volume 3's profiles differ from Volume 2's printed equations
+in three places, where the package follows Volume 3 ([the
+check](validation.md#flight-profiles-against-doc-29-volume-3)).
 
 **The NPD curves in the aerodrome's air** (`doc29.atmosphere`, Volume 2 Appendix D).
 The NPD curves hold the attenuation of the AIR-1845 atmosphere, an average of no one
@@ -1278,11 +1299,11 @@ lateral spreading in its own way, so its levels differ from Doc 29's; how far is
 What it leaves out for now: bank angles from the turns (a segment takes the bank it is
 given; Volume 3's cases fly level, and the performance calculation flies turns as
 straight), the dispersion of tracks round a backbone, the line-of-sight blockage of
-terrain, levels summed over many movements (LAeq, Lden) and contours. Volume 3 gives
-no reference maximum levels, so the LAmax is not checked, and no idle steps of an
-approach away from sea level in the standard atmosphere, which Appendix B adjusts so
-that the aircraft slows as it does there: those are checked against that definition
-only.
+terrain, levels summed over many movements (LAeq, Lden) and contours. Volume 3 gives no
+reference maximum levels, so the LAmax is checked only against Volume 2's equations, and
+no idle steps of an approach away from sea level in the standard atmosphere, which
+Appendix B adjusts so that the aircraft slows as it does there: those are checked
+against that definition only.
 
 ## Vibration through the ground
 
