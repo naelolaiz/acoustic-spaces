@@ -20,8 +20,10 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import shutil
 import subprocess
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -54,8 +56,29 @@ def read_json(path: Path) -> dict:
 
 
 def write_json(path: Path, data: dict) -> None:
+    """``data`` as JSON at ``path``, a number that is not finite (a level where nothing is
+    heard, minus infinity) written as null, as strict JSON has no such numbers."""
+
+    def strict(node):
+        if isinstance(node, float) and not math.isfinite(node):
+            return None
+        if isinstance(node, dict):
+            return {k: strict(v) for k, v in node.items()}
+        if isinstance(node, (list, tuple)):
+            return [strict(v) for v in node]
+        return node
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(strict(data), indent=2, allow_nan=False) + "\n", encoding="utf-8")
+
+
+def named_from(path: Path, folder: Path) -> str:
+    """``path`` relative to ``folder``, or in full when it lies on another drive than
+    ``folder`` (Windows), for a scene file to name it; see :func:`write_scene`."""
+    try:
+        return Path(os.path.relpath(path, folder)).as_posix()
+    except ValueError:
+        return Path(path).resolve().as_posix()
 
 
 # --------------------------------------------------------------------------- simulation
@@ -161,24 +184,32 @@ def labels_of(entries: list[dict]) -> set[str]:
     return {o["format"] for e in entries for o in outputs_of(e)}
 
 
+def binaural_missing(args: argparse.Namespace, entries: list[dict]) -> bool:
+    """Whether binaural mixes cannot be made from these responses as the run asks:
+    through ``--hrtf``, or without it through the spherical head model, not responses
+    simulated through other HRTFs. Other formats are not checked."""
+    if getattr(args, "format", "binaural") != "binaural":
+        return False
+    return output_label(args) not in labels_of(entries)
+
+
 def simulated(simulation: Simulation, args: argparse.Namespace) -> bool:
-    """Whether the simulation's results are there, through ``--hrtf`` when given, and
-    newer than the scene (a scene changed since is simulated again)."""
+    """Whether the simulation's results are there, through ``--hrtf`` when given (or the
+    spherical head model when not, :func:`binaural_missing`), and newer than the scene
+    (a scene changed since is simulated again)."""
     path = simulation.results / PARAMETERS
     if not path.exists():
         return False
     scene = Path(simulation.scene)
     if scene.exists() and scene.stat().st_mtime > path.stat().st_mtime:
         return False
-    label = output_label(args)
-    fmt = getattr(args, "format", "binaural")
-    return label == fmt or label in labels_of(read_json(path)["responses"])
+    return not binaural_missing(args, read_json(path)["responses"])
 
 
 def responses_of(simulation: Simulation, args: argparse.Namespace, first: str = "") -> list[dict]:
-    """The responses of a simulation, checked for ``--hrtf``; without them, stop with the
-    commands to run first: ``first`` (the step that writes the scene, when the scene is
-    missing) and the simulate command."""
+    """The responses of a simulation, checked for ``--hrtf`` (:func:`binaural_missing`);
+    without them, stop with the commands to run first: ``first`` (the step that writes
+    the scene, when the scene is missing) and the simulate command."""
     hrtf = getattr(args, "hrtf", None)
     path = simulation.results / PARAMETERS
     if not path.exists():
@@ -188,10 +219,9 @@ def responses_of(simulation: Simulation, args: argparse.Namespace, first: str = 
             f"{before}  {simulate_command(simulation, hrtf)}"
         )
     entries = read_json(path)["responses"]
-    label = output_label(args)
-    if label != getattr(args, "format", "binaural") and label not in labels_of(entries):
+    if binaural_missing(args, entries):
         raise SystemExit(
-            f"error: {simulation.results} has no responses through {hrtf}"
+            f"error: {simulation.results} has no responses {label_text(output_label(args))}"
             f" ({', '.join(sorted(labels_of(entries)))}); run first:\n"
             f"  {simulate_command(simulation, hrtf)}"
         )
@@ -359,15 +389,17 @@ def render_mixes(
     post: Callable[[Mix, np.ndarray, int], np.ndarray] | None = None,
 ) -> dict:
     """Every mix as ``folder/<key>.<format>.wav``, with one gain for all (the loudest
-    peak at -1 dBFS), and ``folder/seats.json``: the rate, the format, the gain and
-    each mix's ``lag_s`` (when its sound arrives), ``rms_db`` (gated, A-weighted),
-    ``loudness_db`` (K-weighted), ``relative_db`` (against the loudest), length and the
-    ``inputs`` it played. ``inputs`` (``--input``) replaces the feeds of the sources it
-    names (:func:`with_inputs`). ``post`` changes each mix as it is made, before the
+    peak at -1 dBFS), and ``folder/seats.json``: the rate, the format, the output
+    (``label``, :func:`output_label`), the gain and each mix's ``lag_s`` (when its sound
+    arrives), ``rms_db`` (gated, A-weighted), ``loudness_db`` (K-weighted),
+    ``relative_db`` (against the loudest), length and the ``inputs`` it played.
+    ``inputs`` (``--input``) replaces the feeds of the sources it names
+    (:func:`with_inputs`). ``post`` changes each mix as it is made, before the
     gain (a house's window and rumble, :mod:`acoustic_spaces.demos.indoors`); a mix's
     ``info["post"]`` says how. Mixes that exist, newer than their feeds and responses
-    and made with the same inputs and the same ``post``, are kept unless ``--again``,
-    their earlier gain undone."""
+    and made with the same inputs, the same ``post`` and the same output (``label``:
+    the format, through ``--hrtf``), are kept unless ``--again``, their earlier gain
+    undone."""
     fmt, label = args.format, output_label(args)
     seats_path = folder / SEATS
     previous = read_json(seats_path) if seats_path.exists() else {}
@@ -379,10 +411,12 @@ def render_mixes(
         return folder / f"{mix.key}.{fmt}.wav"
 
     def kept(mix: Mix) -> bool:
-        """Whether the mix is there, made with the same inputs, and newer than its feeds
-        and its responses."""
+        """Whether the mix is there, made with the same inputs and output, and newer
+        than its feeds and its responses."""
         out = path_of(mix)
         if not (reuse and out.exists() and mix.key in previous.get("seats", {})):
+            return False
+        if previous.get("label") != label:  # through other HRTFs, or not known
             return False
         before = previous["seats"][mix.key]
         if before.get("inputs", {}) != mix.info.get("inputs", {}):
@@ -436,17 +470,27 @@ def render_mixes(
         v["relative_db"] = v["rms_db"] - top
         late = v["lag_s"] * 1e3
         print(f"{key:>{width}}: {v['relative_db']:+6.1f} dB(A), sound arrives {late:5.0f} ms late")
-    seats = {"rate": rate, "format": fmt, "gain": gain, "seats": info}
+    seats = {"rate": rate, "format": fmt, "label": label, "gain": gain, "seats": info}
     write_json(seats_path, seats)
     return seats
 
 
-def seats_of(folder: Path, hint: str) -> dict:
-    """``seats.json`` in the mixes' folder, or stop with the step to run."""
+def seats_of(folder: Path, hint: str, args: argparse.Namespace | None = None) -> dict:
+    """``seats.json`` in the mixes' folder, or stop with the step to run; with ``args``,
+    also when the mixes were made for another output than the run asks for
+    (:func:`output_label`: another ``--format``, or through other HRTFs)."""
     path = folder / SEATS
     if not path.exists():
         raise SystemExit(f"error: no mixes in {folder}; run first: {hint}")
-    return read_json(path)
+    seats = read_json(path)
+    wanted = None if args is None else output_label(args)
+    if wanted is not None and seats.get("label") != wanted:
+        raise SystemExit(
+            f"error: the mixes in {folder} are mixed {label_text(seats.get('label'))}, and "
+            f"this run asks for them {label_text(wanted)}: give the --format and --hrtf they "
+            f"were made with, or make them again: {hint}"
+        )
+    return seats
 
 
 # --------------------------------------------------------------------------- the tour
@@ -602,11 +646,14 @@ def video(
     no_mp4: bool = False,
     spectrum_box: tuple[int, int, int, int] = SPECTRUM_BOX,
     chapters: Sequence[str] | None = None,
+    shown: Callable[[int], str] | None = None,
 ) -> None:
     """One still per frame (``name``, seconds) drawn by ``draw(k)``, into
     ``folder/stills``, ``chapters.txt`` when given, and ``folder/tour.mp4`` from them and
     ``audio_path``: the stills with a scrolling spectrogram in ``spectrum_box`` (ffmpeg,
-    unless ``no_mp4``)."""
+    unless ``no_mp4``). As it is encoded, its messages begin with what the still on
+    show shows, ``shown(k)``: the sources and listeners it is of (:func:`_encode`); the
+    still's name by default."""
     stills = folder / "stills"
     stills.mkdir(parents=True, exist_ok=True)
     lines = []
@@ -623,11 +670,19 @@ def video(
     if no_mp4:
         return
     out = folder / "tour.mp4"
+    ends = np.cumsum([duration for _name, duration in frames])
+
+    def still_at(t: float) -> str:
+        k = min(int(np.searchsorted(ends, t, side="right")), len(frames) - 1)
+        return shown(k) if shown is not None else frames[k][0]
+
     _ffmpeg(
         ["-f", "concat", "-safe", "0", "-i", str(stills / "stills.txt")],
         audio_path,
         _spectrum(spectrum_box, 30, "fps=30,"),
         out,
+        length_s=float(ends[-1]),
+        shown=still_at,
     )
     print(f"wrote {out}")
 
@@ -643,12 +698,15 @@ def animation(
     no_mp4: bool = False,
     spectrum_box: tuple[int, int, int, int] = SPECTRUM_BOX,
     chapters: Sequence[str] | None = None,
+    shown: Callable[[float], str] | None = None,
 ) -> None:
     """A moving picture: ``draw(t)`` at every frame (``t`` in s, ``fps`` a second) for
     ``duration_s``, piped to ffmpeg with ``audio_path`` and a scrolling spectrogram in
     ``spectrum_box``, into ``folder/tour.mp4``; and the frames at ``stills`` (name,
     ``t``) as pictures in ``folder/stills``, which is all that ``no_mp4`` writes, with
-    ``chapters.txt`` when given."""
+    ``chapters.txt`` when given. As it is encoded, its messages begin with what the
+    frame at ``t`` shows, ``shown(t)``: the sources and listeners it is of, a walker
+    with the moment of its walk (:func:`_encode`)."""
     pictures = folder / "stills"
     pictures.mkdir(parents=True, exist_ok=True)
     for k, (name, t) in enumerate(stills):
@@ -671,10 +729,16 @@ def animation(
         stdin.write(first.tobytes())
         for k in range(1, frames):
             stdin.write(draw(k / fps).convert("RGB").tobytes())
-            if k % (10 * fps) == 0:
-                print(f"  {k / fps:.0f} of {duration_s:.0f} s", flush=True)
 
-    _ffmpeg(source, audio_path, _spectrum(spectrum_box, fps, ""), out, feed)
+    _ffmpeg(
+        source,
+        audio_path,
+        _spectrum(spectrum_box, fps, ""),
+        out,
+        feed,
+        length_s=duration_s,
+        shown=shown,
+    )
     print(f"wrote {out}")
 
 
@@ -689,28 +753,63 @@ def _spectrum(box: tuple[int, int, int, int], fps: int, pictures: str) -> str:
     )
 
 
-def _ffmpeg(source: list[str], audio_path: Path, spectrum: str, out: Path, feed=None) -> None:
+def _ffmpeg(
+    source: list[str],
+    audio_path: Path,
+    spectrum: str,
+    out: Path,
+    feed=None,
+    *,
+    length_s: float,
+    shown: Callable[[float], str] | None = None,
+) -> None:
     """ffmpeg: the pictures from ``source`` (or piped in by ``feed(stdin)``), the sound,
-    the spectrogram over them, into an MP4 for the web."""
+    the spectrogram over them, into an MP4 for the web, ``length_s`` long; saying how
+    far it has come as it goes (:func:`_encode`)."""
     if shutil.which("ffmpeg") is None:
         raise SystemExit("error: ffmpeg is needed for the video")
     command = [
-        "ffmpeg", "-v", "error", "-stats", "-y", *source, "-i", str(audio_path),
-        "-filter_complex", spectrum, "-map", "[v]", "-map", "1:a",
+        "ffmpeg", "-v", "error", "-nostats", "-progress", "pipe:1", "-y", *source,
+        "-i", str(audio_path), "-filter_complex", spectrum, "-map", "[v]", "-map", "1:a",
         "-c:v", "libx264", "-preset", "slow", "-crf", "18",
         "-c:a", "aac", "-b:a", "384k", "-movflags", "+faststart", str(out),
     ]  # fmt: skip
-    if feed is None:
-        subprocess.run(command, check=True)
-        return
-    with subprocess.Popen(command, stdin=subprocess.PIPE) as process:
-        try:
-            feed(process.stdin)
-        finally:
-            process.stdin.close()
+    piped = subprocess.PIPE if feed is not None else None
+    with subprocess.Popen(command, stdin=piped, stdout=subprocess.PIPE) as process:
+        said = threading.Thread(target=_encode, args=(process.stdout, length_s, shown), daemon=True)
+        said.start()
+        if feed is not None:
+            try:
+                feed(process.stdin)
+            finally:
+                process.stdin.close()
         code = process.wait()
+        said.join()
     if code:
         raise subprocess.CalledProcessError(code, command)
+
+
+def _encode(progress, length_s: float, shown: Callable[[float], str] | None) -> None:
+    """A message for each report of ffmpeg's ``-progress`` (about two a second): how far
+    the video has come, after what its picture shows then (``shown(t)``, ``t`` in s of
+    the video), as ``hall, car @ 3.40 s -> seat: encoding the video, 12.1 of 60.0 s``;
+    read to the end, so that ffmpeg never waits on it."""
+    t = None
+    for line in progress:
+        key, _, value = line.decode("utf-8", "replace").strip().partition("=")
+        if key in ("out_time_us", "out_time_ms"):  # both in µs
+            t = int(value) / 1e6 if value.lstrip("-").isdigit() else None
+        elif key == "progress" and t is not None and t >= 0.0:
+            t = min(t, length_s)
+            done = f"{t:.1f} of {length_s:.1f} s"
+            try:
+                head = shown(t) if shown is not None else ""
+            except Exception:  # noqa: BLE001 - a message is not worth the video
+                head = ""
+            print(
+                f"{head}: encoding the video, {done}" if head else f"encoding the video: {done}",
+                flush=True,
+            )
 
 
 __all__ = [
@@ -721,6 +820,7 @@ __all__ = [
     "Mix",
     "Simulation",
     "TourStop",
+    "binaural_missing",
     "animation",
     "arrival_s",
     "auralize",

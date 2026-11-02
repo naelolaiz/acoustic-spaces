@@ -773,3 +773,48 @@ def test_hrtf_folder_follows_the_system(monkeypatch, tmp_path: Path) -> None:
     assert hrtf_sets.data_folder().name == hrtf_sets.FOLDER
     monkeypatch.setenv("ACOUSTIC_SPACES_HRTF", str(tmp_path / "mine"))
     assert hrtf_sets.data_folder() == tmp_path / "mine"
+
+
+BANDS_A = [1.0, 0.8, 0.6, 0.5, 0.5, 0.4, 0.3, 0.3]
+
+
+@pytest.mark.parametrize(
+    "fmt",
+    [
+        Ambisonics(1),
+        Ambisonics(3),
+        first_order("hypercardioid"),
+        xy(),
+        blumlein(),
+        ms("supercardioid", -3.0),
+        first_order(BANDS_A),
+        xy(110.0, BANDS_A),
+    ],
+    ids=["foa", "ambix3", "hypercardioid", "xy", "blumlein", "ms", "per-band", "xy-per-band"],
+)
+def test_pressure_gains_are_a_sound_alike_from_every_direction(fmt) -> None:
+    """A sound pressure the same all over the room is, at the listener, sound alike and
+    in phase from every direction: what each channel picks up of it (``pressure_gains``)
+    is its pickup averaged over the sphere (in the lowest band, for a microphone whose
+    pattern changes with frequency)."""
+    directions = fibonacci_sphere(20_000)
+    if isinstance(fmt, Ambisonics):
+        averaged = fmt.gains(directions).mean(axis=0)
+    else:
+        averaged = fmt.band_gains(directions, 8)[:, :, 0].mean(axis=0)
+    assert np.allclose(fmt.pressure_gains(), averaged, atol=1e-5)
+
+
+@pytest.mark.parametrize("name", list(LAYOUTS))
+def test_loudspeakers_play_a_pressure_alike_everywhere_at_unit_power(name: str) -> None:
+    """On loudspeakers a sound pressure the same all over the room plays alike from every
+    main speaker at unit power, as their panning plays one direction, and not from the
+    LFE; on a layout without height speakers that is how it plays sound from straight
+    above or below."""
+    layout = Loudspeakers.layout(name)
+    gains = layout.pressure_gains()
+    mains = np.array([not s.lfe for s in layout.speakers])
+    assert np.sum(gains**2) == pytest.approx(1.0)
+    assert np.allclose(gains[mains], gains[mains][0]) and not np.any(gains[~mains])
+    if layout.horizontal:
+        assert np.allclose(layout.gains(np.array([[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]])), gains)

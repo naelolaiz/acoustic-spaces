@@ -811,7 +811,7 @@ def video(args) -> None:
     from acoustic_spaces.demos.pictures import save, settings_lines
 
     pictures = sibling(__file__, "church_pictures")
-    seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
+    seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args), args)
     tour = tour_of(args)
     pipeline.missing_mixes(seats, [name for name, _, _ in tour], DEMO.command("render", args))
     stops = [pipeline.TourStop(name, start, start, stop) for name, start, stop in tour]

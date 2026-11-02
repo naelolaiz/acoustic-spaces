@@ -66,6 +66,53 @@ def test_the_table_is_the_2021_one_not_2015s() -> None:
     assert car.rolling_b == (30.0, 41.5, 38.9, 25.7, 32.5, 37.2, 39.0, 40.0)
 
 
+#: Table F-1 of Directive 2002/49/EC, Annex II, as amended by Commission Delegated
+#: Directive (EU) 2021/1226, 63 Hz to 8 kHz: A_R, B_R, A_P, B_P of each category (the
+#: consolidated text and UBA's BUB-D 2021, Anlage 4, table A-1, agree).
+TABLE_F1 = {
+    "1": (
+        (83.1, 89.2, 87.7, 93.1, 100.1, 96.7, 86.8, 76.2),
+        (30.0, 41.5, 38.9, 25.7, 32.5, 37.2, 39.0, 40.0),
+        (97.9, 92.5, 90.7, 87.2, 84.7, 88.0, 84.4, 77.1),
+        (-1.3, 7.2, 7.7, 8.0, 8.0, 8.0, 8.0, 8.0),
+    ),
+    "2": (
+        (88.7, 93.2, 95.7, 100.9, 101.7, 95.1, 87.8, 83.6),
+        (30.0, 35.8, 32.6, 23.8, 30.1, 36.2, 38.3, 40.1),
+        (105.5, 100.2, 100.5, 98.7, 101.0, 97.8, 91.2, 85.0),
+        (-1.9, 4.7, 6.4, 6.5, 6.5, 6.5, 6.5, 6.5),
+    ),
+    "3": (
+        (91.7, 96.2, 98.2, 104.9, 105.1, 98.5, 91.1, 85.6),
+        (30.0, 33.5, 31.3, 25.4, 31.8, 37.1, 38.6, 40.6),
+        (108.8, 104.2, 103.5, 102.9, 102.6, 98.5, 93.8, 87.5),
+        (0.0, 3.0, 4.6, 5.0, 5.0, 5.0, 5.0, 5.0),
+    ),
+    "4a": (
+        None,
+        None,
+        (93.0, 93.0, 93.5, 95.3, 97.2, 100.4, 95.8, 90.9),
+        (4.2, 7.4, 9.8, 11.6, 15.7, 18.9, 20.3, 20.6),
+    ),
+    "4b": (
+        None,
+        None,
+        (99.9, 101.9, 96.7, 94.4, 95.2, 94.7, 92.1, 88.6),
+        (3.2, 5.9, 11.9, 11.6, 11.5, 12.6, 11.1, 12.0),
+    ),
+}
+
+
+def test_every_coefficient_is_table_f1s() -> None:
+    """Every coefficient of every category, against the amended Table F-1 as published,
+    so that a slip in one band of a category no demo plays is caught too."""
+    assert set(CATEGORIES) == set(TABLE_F1)
+    for key, (a_r, b_r, a_p, b_p) in TABLE_F1.items():
+        kind = CATEGORIES[key]
+        got = (kind.rolling_a, kind.rolling_b, kind.propulsion_a, kind.propulsion_b)
+        assert got == (a_r, b_r, a_p, b_p), key
+
+
 @pytest.mark.parametrize(
     ("example", "vehicle"),
     [
@@ -655,6 +702,8 @@ def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -
     assert driven.walk.keyframes is None and driven.walk.speed_m_s == pytest.approx(20.0)
     assert driven.walk.to == [(0.0, 2.0, 0.05), (-20.0, 2.0, 0.05)] and driven.walk.doppler
     assert demo.is_done(demo.step("scene"), args)
+    # The editor follows the car along the walk the demo simulates: this one, at --speed.
+    assert demo.walks(args).sources == Scene.from_yaml(folder / "scene_demo.yaml").sources
     # The same, from Python: a wait drops out of the places.
     source = Scene.from_yaml(path)
     (car,) = [s for s in source.sources if s.name == "car"]
@@ -730,7 +779,8 @@ def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, caps
     with pytest.raises(
         SystemExit,
         match="mixed binaural through a spherical head model, and this run asks for them as "
-        "mono: give the video the --format and --hrtf the walk had",
+        "mono: give the --format and --hrtf they were made with, or make them again: python "
+        "passby_demo.py walk",
     ):
         demo.main(["video", *run, "--listeners", "verge", "--format", "mono"])
     assert pipeline.label_text("binaural-kemar") == "binaural through the HRTFs of kemar"
