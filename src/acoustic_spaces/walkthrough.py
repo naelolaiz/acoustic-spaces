@@ -40,12 +40,20 @@ as in a walk of its own: every listener hears each early path through its changi
 delay. ``walk.enabled: false`` keeps a walk
 but leaves its walker standing still, and :func:`with_moving` picks which walks are on
 for one run, so that one scene serves both still and moving.
+
+Each copy is named for its walker, its place and its time on the walk
+(:func:`place_name`, ``car #12 @ 3.40 s``), and the simulation's progress messages name
+it so; a demo's video names the moment of each walk it shows (:func:`moment_name`,
+``car @ 3.40 s``): :func:`place_of` reads the walker and the time back from both. A head
+turned as a demo scripts it is named with its yaw (:func:`facing_name`, ``standing
+facing 90.0 deg``), which :func:`facing_of` reads back.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import math
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,6 +85,47 @@ STEP_DEG = 20.0
 LATE_STEP_M = 2.0
 #: Length (s) of the crossfade from one place's response to the next.
 CROSSFADE_S = 0.05
+
+#: A place's name (:func:`place_name`), whole.
+_PLACE = re.compile(r"(?P<name>.+?)(?: #\d+)? @ (?P<time>\d+(?:\.\d+)?) s")
+_FACING = re.compile(r"(?P<name>.+) facing (?P<yaw>\d+(?:\.\d+)?) deg")
+
+
+def place_name(name: str, k: int, time_s: float) -> str:
+    """The name of the copy of the walker ``name`` at its ``k``-th place, ``time_s`` (s)
+    into its walk: ``car #12 @ 3.40 s``. Numbered, as places less than 10 ms apart would
+    share a time."""
+    return f"{name} #{k} @ {time_s:.2f} s"
+
+
+def moment_name(name: str, time_s: float) -> str:
+    """The walker ``name`` ``time_s`` (s) into its walk, as a demo's video says what it
+    shows: ``car @ 3.40 s``."""
+    return f"{name} @ {max(time_s, 0.0):.2f} s"
+
+
+def facing_name(name: str, yaw_deg: float) -> str:
+    """``name`` turned to the yaw ``yaw_deg`` (degrees, as a scene's orientation gives
+    it), as a demo says what it shows while a head turns: ``standing facing 90.0 deg``."""
+    return f"{name} facing {yaw_deg % 360.0:.1f} deg"
+
+
+def facing_of(label: str) -> tuple[str, float] | None:
+    """What a name that says which way it faces (:func:`facing_name`) names, and the yaw
+    (degrees); None for any other name."""
+    found = _FACING.fullmatch(label)
+    if found is None:
+        return None
+    return found["name"], float(found["yaw"])
+
+
+def place_of(label: str) -> tuple[str, float] | None:
+    """The walker and the time (s) of a place's name (:func:`place_name`) or a moment's
+    (:func:`moment_name`); None for any other name."""
+    found = _PLACE.fullmatch(label)
+    if found is None:
+        return None
+    return found["name"], float(found["time"])
 
 
 @dataclass(frozen=True)
@@ -347,8 +396,7 @@ def simulate_walk(
     _check_speed(room, item, knots(item).top_speed)
     if doppler:
         _check_doppler(room, settings)
-    # Numbered, as places less than 10 ms apart would share a time.
-    names = tuple(f"{item.name} #{k} @ {t:.2f} s" for k, t in enumerate(points.times))
+    names = tuple(place_name(item.name, k, t) for k, t in enumerate(points.times))
     copies = [
         _copy_at(item, label, place, None if points.angles is None else points.angles[k], yaw)
         for k, (place, label, yaw) in enumerate(
@@ -600,7 +648,7 @@ def simulate_movement(
             else:
                 at.append(len(places))
                 places.append(k)
-        names = tuple(f"{item.name} #{j} @ {times[first]:.2f} s" for j, first in enumerate(places))
+        names = tuple(place_name(item.name, j, times[first]) for j, first in enumerate(places))
         copies[kind, item.name] = tuple(names[j] for j in at)
         added[kind] += [
             _copy_at(item, names[j], positions[first], angles[first])
@@ -629,10 +677,9 @@ def simulate_movement(
         for j, copy in enumerate(added[kind]):
             if not inside[offset + j]:
                 where = ", ".join(f"{v:.2f}" for v in copy.position)
-                name, _, when = copy.name.rpartition(" @ ")
+                name, when = place_of(copy.name)
                 raise ValueError(
-                    f"the walk of {name.rpartition(' #')[0]!r} leaves the room at ({where}) m, "
-                    f"{when} in"
+                    f"the walk of {name!r} leaves the room at ({where}) m, {when:.2f} s in"
                 )
     # The moving sources' places share the parabolic equation's runs where they can.
     result = simulate(
@@ -1263,10 +1310,15 @@ __all__ = [
     "WalkPoints",
     "WalkResponses",
     "crossfade_weights",
+    "facing_name",
+    "facing_of",
     "knots",
     "late_mixing",
+    "moment_name",
     "movers",
     "pass_by",
+    "place_name",
+    "place_of",
     "render_movement",
     "render_walk",
     "save_movement",

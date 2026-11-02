@@ -732,6 +732,46 @@ def test_the_mixes_keep_one_gain_and_are_measured(tmp_path: Path, monkeypatch) -
     assert made == ["near", "far"]
 
 
+def test_mixes_through_other_hrtfs_are_made_again(tmp_path: Path, monkeypatch) -> None:
+    """A mix made through other HRTFs (``--hrtf``) than the run asks for is made again,
+    though it is newer than its feeds and its responses, as is one whose seats.json does
+    not say; and the steps that play the mixes refuse those of another output."""
+    mixes, folder, made = _mixes(tmp_path, monkeypatch)
+    results = mixes[0].simulation.results
+    entries = pipeline.read_json(results / pipeline.PARAMETERS)["responses"]
+    for entry in entries:  # simulated through both heads
+        entry["outputs"].append({"format": "binaural-kemar", "wav": entry["outputs"][0]["wav"]})
+    pipeline.write_json(results / pipeline.PARAMETERS, {"responses": entries})
+    plain = argparse.Namespace(format="binaural", hrtf=None, again=False)
+    kemar = argparse.Namespace(format="binaural", hrtf="hrtfs/kemar.sofa", again=False)
+    assert pipeline.render_mixes(mixes, folder, plain)["label"] == "binaural"
+    made.clear()
+    assert pipeline.render_mixes(mixes, folder, kemar)["label"] == "binaural-kemar"
+    assert made == ["near", "far"]
+    made.clear()
+    pipeline.render_mixes(mixes, folder, kemar)
+    assert made == []
+    pipeline.render_mixes(mixes, folder, plain)
+    assert made == ["near", "far"]
+    assert pipeline.seats_of(folder, "run render", plain)["label"] == "binaural"
+    with pytest.raises(
+        SystemExit,
+        match="are mixed binaural through a spherical head model, and this run asks for them "
+        "binaural through the HRTFs of kemar: give the --format and --hrtf they were made "
+        "with, or make them again: run render",
+    ):
+        pipeline.seats_of(folder, "run render", kemar)
+    # Mixes from before seats.json said through which HRTFs: refused, and made again.
+    seats = pipeline.read_json(folder / pipeline.SEATS)
+    seats.pop("label")
+    pipeline.write_json(folder / pipeline.SEATS, seats)
+    with pytest.raises(SystemExit, match="are mixed of an output not kept"):
+        pipeline.seats_of(folder, "run render", plain)
+    made.clear()
+    pipeline.render_mixes(mixes, folder, plain)
+    assert made == ["near", "far"]
+
+
 def test_a_file_given_to_a_source_takes_the_place_of_its_feed(tmp_path: Path, capsys) -> None:
     """``--input``: the file, mixed down to mono and at the feed's rate, brought to the
     gated RMS of the feed it replaces and cut or padded with silence to its length;
@@ -879,6 +919,58 @@ def test_a_tour_crossfade_keeps_the_power_however_alike_the_two_mixes_are(
     assert level_at_cut("unlike") == pytest.approx(0.0, abs=0.3)
 
 
+def test_a_shaker_tour_keeps_each_stops_level_and_its_power_across_the_cuts(
+    tmp_path: Path,
+) -> None:
+    """A tour of what is felt (``kind="shaker"``) plays each stop's track as it is,
+    neither turned up nor brought to a peak, and its power runs on across a cut from one
+    stop's to the next's, for tracks alike, unlike, and 10 dB apart."""
+    folder = tmp_path / "seats"
+    rng = np.random.default_rng(3)
+    rumble = rng.standard_normal(10 * RATE) * 0.01
+    tracks = {
+        "same": rumble,
+        "alike": rumble,
+        "unlike": rng.standard_normal(10 * RATE) * 0.01,
+        "quiet": rng.standard_normal(10 * RATE) * 0.01 * 10.0 ** (-10.0 / 20.0),
+    }
+    info = {}
+    for key, x in tracks.items():
+        audio.write(folder / f"{key}.binaural.wav", audio.stereo(x), RATE)
+        audio.write(folder / f"{key}.shaker.wav", x, RATE)
+        info[key] = {"lag_s": 0.0, "length_s": 10.0, "loudness_db": -30.0}
+    seats = {"rate": RATE, "format": "binaural", "seats": info}
+
+    def tour(second: str) -> np.ndarray:
+        stops = [
+            pipeline.TourStop("same", 0.0, 0.0, 4.0, gain_db=12.0),
+            pipeline.TourStop(second, 4.0, 4.0, 8.0, gain_db=12.0),
+        ]
+        return pipeline.tour_audio(
+            stops, folder, seats, crossfade_s=1.0, fade_out_s=0.0, kind="shaker"
+        )
+
+    def rms(x: np.ndarray) -> float:
+        return float(np.sqrt(np.mean(x**2)))
+
+    for second in ("alike", "unlike", "quiet"):
+        out = tour(second)
+        # Each stop as it is: no gain, no peak.
+        assert rms(out[: 3 * RATE, 0]) == pytest.approx(rms(rumble[: 3 * RATE]), rel=1e-6)
+        assert rms(out[5 * RATE : 8 * RATE, 0]) == pytest.approx(
+            rms(tracks[second][5 * RATE : 8 * RATE]), rel=1e-6
+        )
+        # Across the cut the power goes from one stop's to the other's, as the squares of
+        # the quarter sines share it, however alike the two are.
+        cut = slice(int(3.6 * RATE), int(4.4 * RATE))
+        ramp = np.sin(np.linspace(0.0, np.pi / 2, RATE))[int(0.1 * RATE) : int(0.9 * RATE)]
+        p0, p1 = np.mean(rumble[cut] ** 2), np.mean(tracks[second][cut] ** 2)
+        expected = float(np.mean(ramp[::-1] ** 2 * p0 + ramp**2 * p1))
+        assert audio.db(float(np.mean(out[cut, 0] ** 2)) / expected) / 2.0 == pytest.approx(
+            0.0, abs=0.3
+        )
+
+
 def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
     """Without ffmpeg (``--no-mp4``) the video step still writes every still, the list
     the concat demuxer reads and the chapters."""
@@ -925,6 +1017,62 @@ def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
     )
     assert times == [0.5]
     assert [p.name for p in (tmp_path / "walk" / "stills").glob("*.png")] == ["00_setting-off.png"]
+
+
+def test_the_video_says_what_each_moment_shows(tmp_path: Path, capsys) -> None:
+    """As ffmpeg encodes a video, each message begins with what the picture then shows
+    (a walker with the moment of its walk, for the editor to draw it there), and says
+    how far the video has come; a tour of stills names the still on show."""
+    import re
+    import shutil
+    import time
+
+    pytest.importorskip("PIL")
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("needs ffmpeg")
+    from PIL import Image
+
+    from acoustic_spaces.walkthrough import moment_name
+
+    def frame(t: float):
+        time.sleep(0.06)  # slow enough for ffmpeg to report more than once
+        return Image.new("RGB", (64, 32), (int(100 * t), 10, 10))
+
+    folder = tmp_path / "demo"
+    audio.write(folder / "tour.wav", audio.stereo(_tone(2.0)), RATE)
+    box = (0, 16, 64, 16)
+    pipeline.animation(
+        folder,
+        2.0,
+        frame,
+        folder / "tour.wav",
+        fps=10,
+        spectrum_box=box,
+        shown=lambda t: f"stage, {moment_name('car', 3.0 + t)} -> seat",
+    )
+    lines = [line for line in capsys.readouterr().out.splitlines() if "encoding" in line]
+    said = [
+        re.fullmatch(r"stage, car @ (\S+) s -> seat: encoding the video, (\S+) of 2\.0 s", line)
+        for line in lines
+    ]
+    assert len(lines) > 1 and all(said), lines
+    moments = [(float(m[1]), float(m[2])) for m in said]  # type: ignore[index]
+    # The walk's moment is the video's (said to 0.1 s), as the picture has it then.
+    assert all(walk == pytest.approx(3.0 + t, abs=0.051) for walk, t in moments), lines
+    assert [t for _, t in moments] == sorted(t for _, t in moments)
+    assert moments[-1][1] == pytest.approx(2.0, abs=0.15)
+    assert (folder / "tour.mp4").stat().st_size > 0
+    # A tour of stills names the still on show, by its name unless told otherwise.
+    pipeline.video(
+        folder,
+        [("near", 1.0), ("far", 1.0)],
+        lambda k: Image.new("RGB", (64, 32), (10, 10, 10)),
+        folder / "tour.wav",
+        spectrum_box=box,
+    )
+    heads = [line.split(":")[0] for line in capsys.readouterr().out.splitlines()]
+    assert {"near", "far"} >= {head for head in heads if not head.startswith("wrote")}
+    assert heads.count("far") >= 1
 
 
 # --------------------------------------------------------------------------- any scene
@@ -1168,6 +1316,8 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     args = demo.defaults()
     args.scene = Path("scene.yaml")
     assert moving_of(demo.resolved(args)) == ["seat-b"] and demo.check(args) is None
+    # The editor follows the walks the run plays: those of --moving alone, else the scene's.
+    assert [item.name for _kind, item in movers(demo.walks(demo.resolved(args)))] == ["seat-b"]
     args.moving = "seat-b,radio"
     assert demo.check(args) == (
         "radio walks with Doppler, which plays alone: leave the others standing "
@@ -1179,6 +1329,7 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     )
     args.moving = "none"
     assert moving_of(demo.resolved(args)) == [] and demo.check(args) is None
+    assert movers(demo.walks(demo.resolved(args))) == []
     assert demo.command("render", args) == "acoustic-spaces demo scene.yaml render --moving none"
 
     assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0
@@ -1227,6 +1378,11 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
         drawing.lines(1, 1.2)
     )
     assert drawing.frame(1.2).getbbox() is not None
+    # The video's messages name what each moment shows: the walker at its walk's moment.
+    assert drawing.stop_at(1.2) == (1, pytest.approx(1.2))
+    assert drawing.shown_at(0.3) == "talker, radio -> seat-a"
+    assert drawing.shown_at(1.2) == "talker, radio -> seat-b @ 1.20 s"
+    assert drawing.shown(1) == "talker, radio -> seat-b"  # a still: no moment
     # Again: there already; with every walker standing, the still mixes instead.
     capsys.readouterr()
     assert cli(["demo", "scene.yaml", "render"]) == 0
