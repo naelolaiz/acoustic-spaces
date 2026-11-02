@@ -637,7 +637,7 @@ def video(
     demo, run_args = run_by or (DEMO, args)
     made_by = demo.command("render" if run_by is None else "mix", run_args)
     pictures = sibling(__file__, "stadium_pictures")
-    seats = pipeline.seats_of(args.work / "seats", made_by)
+    seats = pipeline.seats_of(args.work / "seats", made_by, args)
     tour = tour_of(args, seats["seats"])
     pipeline.missing_mixes(seats, [name for name, _, _ in tour], made_by)
     gains = gains_of(seats, tour)

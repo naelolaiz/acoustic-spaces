@@ -18,8 +18,9 @@ categories 2 and 3; below 20 km/h the levels are those at 20 km/h. The two add u
 alone. The point radiates alike in every direction, and the method spreads its power as
 a source in free field does (20 lg d + 11 dB), adding the ground's reflection apart, as a
 simulation does: L_W is the vehicle's ``level_db``, per band, as it stands. Corrections
-the method has for other road surfaces, studded tyres and the acceleration near
-junctions are left out: the vehicle goes at one speed on the reference surface.
+the method has for other road surfaces, studded tyres, road gradients and the
+acceleration near junctions are left out: the vehicle goes at one speed on a level road
+with the reference surface.
 
 The table is the one in force since the 2021 amendment, which also says that the point
 radiates uniformly (Directive (EU) 2015/996 had it radiate into the half space above the

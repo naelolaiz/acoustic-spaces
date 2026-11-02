@@ -107,8 +107,17 @@ CURVES: dict[str, Curve] = {
 }
 
 
+def _require_positive(value: float, what: str, unit: str) -> None:
+    """A ValueError unless ``value``, ``what`` it is in ``unit``, is a finite number above
+    0."""
+    if not (math.isfinite(value) and value > 0.0):
+        raise ValueError(f"{what} is a positive number of {unit}, not {value!r}")
+
+
 def speed_db(speed_kmh: float, reference_kmh: float) -> float:
     """Eq. 6-4: the change in vibration level with speed, 20 log10(speed / reference)."""
+    _require_positive(speed_kmh, "the speed", "km/h")
+    _require_positive(reference_kmh, "the reference speed", "km/h")
     return 20.0 * math.log10(speed_kmh / reference_kmh)
 
 
@@ -195,6 +204,12 @@ class Line:
         ):
             if value not in known:
                 raise ValueError(f"unknown {name} {value!r}; use one of {', '.join(known)}")
+        near = self.special_trackwork_m
+        if near is not None and not (math.isfinite(near) and near >= 0.0):
+            raise ValueError(
+                "special_trackwork_m is the distance from the nearest turnout or crossover, "
+                f"0 m or more, or None for none near; not {near!r}"
+            )
 
     def source_db(self) -> float:
         """Table 6-11's adjustment for the vehicles, the track and its treatment (dB):
@@ -354,12 +369,14 @@ class Criterion:
     noise_dba: float | None
 
 
+#: Table 6-2's kinds of events (:func:`events`).
+EVENT_KINDS = ("frequent", "occasional", "infrequent")
 #: Table 6-3, by land use: 1 buildings where vibration would interfere with what is done
 #: inside (moderately sensitive equipment such as optical microscopes), 2 residences and
 #: buildings where people normally sleep, 3 institutions used mostly by day; and by
-#: events (:func:`events`).
+#: events (:data:`EVENT_KINDS`).
 CRITERIA: dict[int, dict[str, Criterion]] = {
-    1: {kind: Criterion(65.0, None) for kind in ("frequent", "occasional", "infrequent")},
+    1: {kind: Criterion(65.0, None) for kind in EVENT_KINDS},
     2: {
         "frequent": Criterion(72.0, 35.0),
         "occasional": Criterion(75.0, 38.0),
@@ -383,10 +400,18 @@ SPECIAL_BUILDINGS: dict[str, tuple[Criterion, Criterion]] = {
 
 def criterion(use: int | str, kind: str) -> Criterion:
     """The criterion for the land use ``use`` (1, 2 or 3, :data:`CRITERIA`, or a
-    special building, :data:`SPECIAL_BUILDINGS`) and events of ``kind``."""
-    if isinstance(use, str):
+    special building, :data:`SPECIAL_BUILDINGS`) and events of ``kind`` (one of
+    :data:`EVENT_KINDS`)."""
+    if kind not in EVENT_KINDS:
+        raise ValueError(f"unknown kind of events {kind!r}; use one of {', '.join(EVENT_KINDS)}")
+    if isinstance(use, str) and use in SPECIAL_BUILDINGS:
         frequent, other = SPECIAL_BUILDINGS[use]
         return frequent if kind == "frequent" else other
+    if isinstance(use, str) or use not in CRITERIA:
+        raise ValueError(
+            f"unknown land use {use!r}; use 1, 2 or 3 (table 6-3) or a special building "
+            f"(table 6-4): {', '.join(SPECIAL_BUILDINGS)}"
+        )
     return CRITERIA[use][kind]
 
 
@@ -431,12 +456,14 @@ PLANT_REFERENCE_M = 25.0 * FOOT_M
 def plant_ppv(plant: str, distance_m: float) -> float:
     """Eq. 7-2: the peak particle velocity (in/s) ``distance_m`` from ``plant``
     (:data:`PLANT`), PPV (25 ft / D)^1.5, a point source with normal propagation."""
+    _require_positive(distance_m, "the distance from the plant", "metres")
     return PLANT[plant].ppv_in_s * (PLANT_REFERENCE_M / distance_m) ** 1.5
 
 
 def plant_level(plant: str, distance_m: float) -> float:
     """Eq. 7-3: the rms vibration level (VdB) ``distance_m`` from ``plant``, Lv - 30
     log10(D / 25 ft)."""
+    _require_positive(distance_m, "the distance from the plant", "metres")
     return PLANT[plant].level_vdb - 30.0 * math.log10(distance_m / PLANT_REFERENCE_M)
 
 
@@ -536,6 +563,7 @@ __all__ = [
     "CRITERIA",
     "CURVES",
     "DAMAGE",
+    "EVENT_KINDS",
     "FARTHEST_M",
     "FREIGHT_WAGONS_DB",
     "GENERIC",

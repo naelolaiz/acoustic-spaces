@@ -9,9 +9,11 @@ per band as
 
 R' the façade's apparent sound reduction index, S its area as the room sees it, V the
 room's volume, ΔL_fs what the façade's shape adds (none for a flat one). The level 2 m
-in front of the façade holds the façade's own reflection, which the pass-by demos
-simulate, the house standing in the scene and the listener in front of it, so the
-room's level is
+in front of the façade, L_2m, holds the façade's own reflection. The pass-by demos and
+the road works demo simulate it there, the house standing in the scene: at a listener
+that stands 2 m in front of the wall, or else at one more listener at the point 2 m in
+front of it, square to it, at the listener's height
+(:func:`acoustic_spaces.demos.indoors.with_fronts`). The room's level is
 
     L_room = L_2m - D_2m,nT.
 
