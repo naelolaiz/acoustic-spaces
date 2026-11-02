@@ -1,7 +1,8 @@
 """A train running past on the railway across the meadow, heard binaurally where the EU's
 rule for the noise of trains measures one going by (7.5 m from the track's centre, 1.2 m
-above the rail top), 25 m away over the meadow and 25 m away behind the noise barrier,
-its pitch falling as it goes by (Doppler); and a video that follows.
+above the rail top), 25 m away over the meadow, 2 m in front of the wall of a house 20 m
+from the track (`house_18m`) and 25 m away behind the noise barrier, its pitch falling
+as it goes by (Doppler); and a video that follows.
 
 The train is the example's three sources `train` (at the rail top), `train_roof` (4 m
 up) and `train_pantograph` (5 m up), left out of its simulations until ticked, at the
@@ -16,14 +17,16 @@ that speed and track, shared out between its points: its bogies at the rail top,
 cars' roofs, its pantograph; each source plays the train's points at its height one
 behind the other, as far behind its front as they are, so the train goes by as long as
 it is (the regional train 151 m), each with its own sound, noise with the octave
-spectrum of its sources there; `--input NAME=WAV` plays a dry recording of yours at
-each of them instead. `--horn blasts` sounds the train's warning horn too, the
-example's `train_horn` at its front 2.0 m above the rail top: its high note (660 Hz)
-and its low note (370 Hz) in turn, each 109 dB(C) 25 m ahead, the most EN 15153-2
-allows, a second each every 4 s; `--horn chord` sounds the two together. Run it from
-the folder of the railway example (`acoustic-spaces examples --copy . railway && cd
-railway`), in the Python environment acoustic-spaces is installed in, with ffmpeg on
-the PATH:
+spectrum of its sources there; `--input NAME=WAV` plays a dry recording of yours at each
+of them instead. `--horn blasts` sounds the train's warning horn too, the example's
+`train_horn` at its front 2.0 m above the rail top: its high note (660 Hz) and its low
+note (370 Hz) in turn, each 109 dB(C) 25 m ahead, the most EN 15153-2 allows, a second
+each every 4 s; `--horn chord` sounds the two together. `--indoors train_and_rumble` has
+`house_18m` hear the train inside the house, through its closed window, with the rumble
+the ground's vibration makes in its room (`train` through the window alone, `rumble`
+the rumble alone); the other listeners hear it outdoors. Run it from the folder of the
+railway example (`acoustic-spaces examples --copy . railway && cd railway`), in the
+Python environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
     python passby_demo.py sound   # demo/train/train.wav, train_roof.wav, ...: dry, a column a point
     python passby_demo.py scene   # scene_demo.yaml: the train alone, at --speed, with Doppler
