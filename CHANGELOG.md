@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
+  University and the University of Iceland, and described as a KEMAR dummy head with one
+  of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.
+- Docs: G of responses written with `simulate --normalize` takes the reference energy
+  0.01 × `ir_gain`² (from `parameters.json`), and the JNDs of T20, T30 and C50 are
+  ISO 3382-1's of EDT and C80 taken by analogy; Barron's total and the first batch of
+  split rays are given as the code has them.
 - Editor: **View > Follow the run** rings the sources and listeners a run's step works
   on, a demo's too, and draws a walking source and the run's other walkers where the
   place being simulated has them, on the walks the run simulates (`Demo.walks`); while
@@ -83,13 +90,13 @@
   time windows for a coach or a wagon; the glazing's traffic figure is rated from its
   octaves, 29 - 4 + 9.6 = 34.6 dB; the FTA curves' docs say how `Curve.levels` reads
   them outside 10 to 300 ft.
-- Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
-  University and the University of Iceland, and described as a KEMAR dummy head with one
-  of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.
-- Docs: G of responses written with `simulate --normalize` takes the reference energy
-  0.01 × `ir_gain`² (from `parameters.json`), and the JNDs of T20, T30 and C50 are
-  ISO 3382-1's of EDT and C80 taken by analogy; Barron's total and the first batch of
-  split rays are given as the code has them.
+- Fixed: over a terrain, the mean plane the early sound reflects off is the
+  least-squares line of the whole ground profile, as CNOSSOS-EU fits it (ISO/TR
+  17534-4's TC05 and TC06), not of the corners where the terrain's triangles cut the
+  profile, which moved it with the grid. Early levels in sight over uneven ground
+  change, by up to 2.1 dB (1 kHz) at the hillside example's listener on the slope.
+- Models load faster: the search for faces to split at T-junctions is vectorised and
+  gives the same faces (a 2 km terrain builds in 0.3 s instead of 5.4 s).
 
 ## 4.1.0
 
