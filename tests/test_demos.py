@@ -732,6 +732,46 @@ def test_the_mixes_keep_one_gain_and_are_measured(tmp_path: Path, monkeypatch) -
     assert made == ["near", "far"]
 
 
+def test_mixes_through_other_hrtfs_are_made_again(tmp_path: Path, monkeypatch) -> None:
+    """A mix made through other HRTFs (``--hrtf``) than the run asks for is made again,
+    though it is newer than its feeds and its responses, as is one whose seats.json does
+    not say; and the steps that play the mixes refuse those of another output."""
+    mixes, folder, made = _mixes(tmp_path, monkeypatch)
+    results = mixes[0].simulation.results
+    entries = pipeline.read_json(results / pipeline.PARAMETERS)["responses"]
+    for entry in entries:  # simulated through both heads
+        entry["outputs"].append({"format": "binaural-kemar", "wav": entry["outputs"][0]["wav"]})
+    pipeline.write_json(results / pipeline.PARAMETERS, {"responses": entries})
+    plain = argparse.Namespace(format="binaural", hrtf=None, again=False)
+    kemar = argparse.Namespace(format="binaural", hrtf="hrtfs/kemar.sofa", again=False)
+    assert pipeline.render_mixes(mixes, folder, plain)["label"] == "binaural"
+    made.clear()
+    assert pipeline.render_mixes(mixes, folder, kemar)["label"] == "binaural-kemar"
+    assert made == ["near", "far"]
+    made.clear()
+    pipeline.render_mixes(mixes, folder, kemar)
+    assert made == []
+    pipeline.render_mixes(mixes, folder, plain)
+    assert made == ["near", "far"]
+    assert pipeline.seats_of(folder, "run render", plain)["label"] == "binaural"
+    with pytest.raises(
+        SystemExit,
+        match="are mixed binaural through a spherical head model, and this run asks for them "
+        "binaural through the HRTFs of kemar: give the --format and --hrtf they were made "
+        "with, or make them again: run render",
+    ):
+        pipeline.seats_of(folder, "run render", kemar)
+    # Mixes from before seats.json said through which HRTFs: refused, and made again.
+    seats = pipeline.read_json(folder / pipeline.SEATS)
+    seats.pop("label")
+    pipeline.write_json(folder / pipeline.SEATS, seats)
+    with pytest.raises(SystemExit, match="are mixed of an output not kept"):
+        pipeline.seats_of(folder, "run render", plain)
+    made.clear()
+    pipeline.render_mixes(mixes, folder, plain)
+    assert made == ["near", "far"]
+
+
 def test_a_file_given_to_a_source_takes_the_place_of_its_feed(tmp_path: Path, capsys) -> None:
     """``--input``: the file, mixed down to mono and at the feed's rate, brought to the
     gated RMS of the feed it replaces and cut or padded with silence to its length;

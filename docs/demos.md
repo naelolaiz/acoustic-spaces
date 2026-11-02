@@ -45,7 +45,8 @@ python church_demo.py all      # every step in order, leaving out what is done a
 ```
 
 `all` is the short way through: it skips the steps whose result is in the work folder
-already (the scene file, the simulation's results, each stop's mix), so a run that
+already (the scene file, the simulation's results, each stop's mix, for the run's
+`--format` and `--hrtf`), so a run that
 stopped halfway carries on where it left off, and a change to one step is seen in the
 video without simulating again. `--again` mixes the stops afresh even where their files
 exist, `--work FOLDER` puts everything somewhere else, and `--no-mp4` writes the audio

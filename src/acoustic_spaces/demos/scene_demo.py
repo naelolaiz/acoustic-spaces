@@ -666,7 +666,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
     table = feeds_table(args, demo)
     moving = moving_of(args)
     folder = work / (MOVING if moving else "seats")
-    seats = pipeline.seats_of(folder, demo.command("render", args))
+    seats = pipeline.seats_of(folder, demo.command("render", args), args)
     if seats.get("moving", []) != moving:
         raise SystemExit(
             f"error: the mixes in {folder} are of other walks; run first: "

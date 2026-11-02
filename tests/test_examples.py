@@ -919,7 +919,8 @@ def test_stadium_pictures_show_the_crowd() -> None:
 def test_demo_scripts_take_an_hrtf(tmp_path: Path) -> None:
     """Every demo's simulate command carries ``--hrtf``; its mixes then ask for the
     responses made through that file (``binaural-<name>``) and refuse ones made through
-    the spherical head; other formats are left alone; and asked for mixes before the
+    the spherical head, and without it the other way round (so ``all`` simulates again);
+    other formats are left alone; and asked for mixes before the
     scene and the simulation exist, a demo says which step writes the scene."""
     sofa = tmp_path / "me.sofa"
     plain = argparse.Namespace(format="binaural", hrtf=None)
@@ -956,6 +957,7 @@ def test_demo_scripts_take_an_hrtf(tmp_path: Path) -> None:
             (head, args, True),
             (ears, with_hrtf, True),
             (head, with_hrtf, False),
+            (ears, args, False),  # nor through the file for ones through the head
         ):
             pipeline.write_json(results / pipeline.PARAMETERS, {"responses": entries})
             output = pipeline.output_label(argparse.Namespace(**vars(asked) | {"hrtf": None}))
@@ -964,7 +966,8 @@ def test_demo_scripts_take_an_hrtf(tmp_path: Path) -> None:
             if fine:
                 assert pipeline.responses_of(simulation, asked) == entries
             else:
-                with pytest.raises(SystemExit, match="me.sofa"):
+                said = "me.sofa" if asked is with_hrtf else r"spherical head model \(binaural-me\)"
+                with pytest.raises(SystemExit, match=said):
                     pipeline.responses_of(simulation, asked)
 
 

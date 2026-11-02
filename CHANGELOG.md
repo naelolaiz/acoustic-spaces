@@ -15,6 +15,10 @@
   take was shorter than the walk and the turn (F4's, 36 s); the guide now says it again
   from its start, 2 s after it ends. Its walk and turn are made again for another
   `--hrtf`, where `all` took them as done and the video stopped for want of their sound.
+- Fixed: `all` in the other demos took mixes made through other HRTFs (`--hrtf`) as
+  done, and without `--hrtf` a simulation through an HRTF file too, mixing through it;
+  their videos now refuse mixes of another `--format` or HRTF. Mixes from before say
+  neither, so they are made again.
 
 ## 4.1.0
 
