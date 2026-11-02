@@ -4,6 +4,8 @@ demo run on a quick copy of the example."""
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import functools
 import math
 import shutil
 from pathlib import Path
@@ -12,7 +14,9 @@ import numpy as np
 import pytest
 import yaml
 
+from acoustic_spaces import rotorcraft as rc
 from acoustic_spaces.demos import audio, pipeline
+from acoustic_spaces.demos import helicopter as helicopter_module
 from acoustic_spaces.demos.helicopter import HELICOPTER_VEHICLE, POWER_S, airspeed
 from acoustic_spaces.directivity import read_directivity_csv
 from acoustic_spaces.examples import example_path
@@ -134,6 +138,48 @@ def test_the_stadiums_helicopter_is_its_rotors_model() -> None:
     assert helicopter.level_db == pytest.approx(level, abs=0.051)
     table = read_directivity_csv(path.parent / "helicopter.csv")
     np.testing.assert_allclose(table.table, sent.directivity().table, rtol=2e-3)
+
+
+@pytest.mark.parametrize("model", ["pegg", "bpm"])
+def test_the_helicopters_rotors_are_found_once_for_every_length(model: str, monkeypatch) -> None:
+    """The demo trims the helicopter and finds its rotors' tones and, by BPM, its noise's
+    bands once, then makes each length its steps send from them (its sound power's
+    second and its pass): sample for sample what :func:`rotorcraft.emission` makes at
+    that length. Coarse tones and blade sums keep it quick; both ways use them."""
+    calls = dict.fromkeys(("tones", "bpm_bands"), 0)
+
+    def counted(name: str, **coarse):
+        f = getattr(rc, name)
+
+        def call(*args, **kwargs):
+            calls[name] += 1
+            return f(*args, **coarse | kwargs)
+
+        monkeypatch.setattr(rc, name, call)
+
+    counted("tones", harmonics=6, stations=6)
+    counted("bpm_bands", segments=4, azimuths=8)
+    # Caches of the test's own, so that nothing coarse stays in the demo's.
+    for name in ("_rotors", "_sent"):
+        fresh = functools.lru_cache(getattr(helicopter_module, name).__wrapped__)
+        monkeypatch.setattr(helicopter_module, name, fresh)
+    rate, air = 8000, {"temperature_c": 20.0, "pressure_kpa": 101.325}
+    info = {"rate": rate, "airspeed_m_s": 40.0, "broadband": model} | air
+    made = {n: HELICOPTER_VEHICLE.emission(info, n / rate) for n in (rate, 5077)}
+    assert calls == {"tones": 2, "bpm_bands": 2 if model == "bpm" else 0}
+    trim = rc.trim(dataclasses.replace(rc.AS350_B3, broadband=model), 40.0, **air)
+    ways = np.random.default_rng(1).normal(size=(5077, 3))
+    ways /= np.linalg.norm(ways, axis=1, keepdims=True)
+    for n, (_, sent) in made.items():
+        assert sent.length == n
+        old = rc.emission(trim, seconds=n / rate, sample_rate=rate, seed=helicopter_module.SEED)
+        for part, old_part in zip(sent.parts, old.parts, strict=True):
+            assert type(part) is type(old_part)
+            for field in dataclasses.fields(part):
+                np.testing.assert_array_equal(
+                    getattr(part, field.name), getattr(old_part, field.name), err_msg=field.name
+                )
+        np.testing.assert_array_equal(sent.sent(0, 5077, ways), old.sent(0, 5077, ways))
 
 
 def _stadium(tmp_path: Path) -> Path:

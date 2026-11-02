@@ -74,6 +74,25 @@ BROADBAND = {
 
 
 @functools.lru_cache(maxsize=4)
+def _rotors(
+    airspeed_m_s: float, temperature_c: float, pressure_kpa: float, rate: int, broadband: str
+):
+    """What of the AS350 B3's sound does not depend on how long it lasts, found once for
+    all the lengths :func:`_sent` makes: its trim, its two rotors' tones (one period in
+    each direction) and, by ``broadband`` "bpm", its broadband noise's bands
+    (:func:`acoustic_spaces.rotorcraft.bpm_powers`)."""
+    from acoustic_spaces import rotorcraft
+
+    helicopter = dataclasses.replace(rotorcraft.AS350_B3, broadband=broadband)
+    trim = rotorcraft.trim(helicopter, airspeed_m_s, temperature_c, pressure_kpa)
+    tones = tuple(
+        rotorcraft.tones(trim, which, samples=0, sample_rate=rate) for which in ("main", "tail")
+    )
+    bands = rotorcraft.bpm_powers(trim) if broadband == "bpm" else None
+    return trim, tones, bands
+
+
+@functools.lru_cache(maxsize=4)
 def _sent(
     airspeed_m_s: float,
     temperature_c: float,
@@ -83,12 +102,14 @@ def _sent(
     broadband: str,
 ):
     """The AS350 B3's trim and the ``n`` samples it sends at ``rate``, its broadband
-    noise by ``broadband``."""
+    noise by ``broadband``: :func:`acoustic_spaces.rotorcraft.emission`, sample for
+    sample, from :func:`_rotors` and ``n`` samples of noise."""
     from acoustic_spaces import rotorcraft
+    from acoustic_spaces.emission import Sum
 
-    helicopter = dataclasses.replace(rotorcraft.AS350_B3, broadband=broadband)
-    trim = rotorcraft.trim(helicopter, airspeed_m_s, temperature_c, pressure_kpa)
-    return trim, rotorcraft.emission(trim, seconds=n / rate, sample_rate=rate, seed=SEED)
+    trim, tones, bands = _rotors(airspeed_m_s, temperature_c, pressure_kpa, rate, broadband)
+    noise = rotorcraft.broadband(trim, samples=n, sample_rate=rate, seed=SEED, bands=bands)
+    return trim, Sum((*(dataclasses.replace(tone, samples=n) for tone in tones), noise))
 
 
 class Helicopter(Vehicle):

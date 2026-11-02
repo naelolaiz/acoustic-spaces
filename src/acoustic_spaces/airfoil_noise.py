@@ -90,13 +90,17 @@ def thicknesses(
         )
         if trip == LIGHTLY_TRIPPED:
             dstar0 = 0.6 * dstar0
+    else:
+        dstar0 = 10.0 ** (3.0187 - 1.5397 * lr + 0.1059 * lr**2) * c
+    # The suction side's fits for a heavily tripped boundary layer; a lightly tripped
+    # one takes the untripped fits, as the report's code does (THICK, lines 70 to 80).
+    if trip == TRIPPED:
         suction = np.select(
             [alpha <= 5.0, alpha <= 12.5],
             [10.0 ** (0.0679 * alpha), 0.381 * 10.0 ** (0.1516 * alpha)],
             14.296 * 10.0 ** (0.0258 * alpha),
         )
     else:
-        dstar0 = 10.0 ** (3.0187 - 1.5397 * lr + 0.1059 * lr**2) * c
         suction = np.select(
             [alpha <= 7.5, alpha <= 12.5],
             [10.0 ** (0.0679 * alpha), 0.0162 * 10.0 ** (0.3066 * alpha)],
@@ -200,8 +204,10 @@ def tbl_te(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """TBL-TE and separation noise (the report's equations 24 to 30): the band levels
     (dB, ``(..., frequencies)``) of the pressure side, the suction side and the angle
-    of attack's part (the flow separating). Stalled, the sides' levels go and the angle
-    of attack's part is that of a translating dipole."""
+    of attack's part (the flow separating). Stalled, each side keeps only its scaling
+    term, 10 log10(delta*_s M^5 L D_l / r^2), as the report's code has it (its equations
+    28 and 29 drop the sides), and the angle of attack's part is that of a translating
+    dipole."""
     f = np.asarray(frequencies, dtype=float)
     p = [np.asarray(v, dtype=float)[..., None] for v in (chord, span, distance)]
     c, span_, r = p
