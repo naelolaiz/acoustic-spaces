@@ -143,16 +143,19 @@ acoustic-spaces simulate scene.yaml --out results --hrtf ~/.local/share/acoustic
 | --- | --- | --- | --- | --- |
 | `ku100` | a Neumann KU100 dummy head | CC BY 3.0 | 3.4 MB | 2702 directions, 48 kHz, 128 taps |
 | `kemar` | a KEMAR dummy head (SADIE II) | Apache 2.0 | 38 MB | 8802 directions, 48 kHz, 256 taps |
-| `viking` | one of 20 people, and a dummy head | CC BY 4.0 | 58.4 MB | 1513 directions, 48 kHz, 128 taps |
+| `viking` | a KEMAR dummy head with one of 20 pairs of replica pinnae, or none | CC BY 4.0 | 58.4 MB | 1513 directions, 48 kHz, 128 taps |
 
 The sets are other people's measurements: `ku100` is Benjamin Bernschütz's compilation
 at TH Köln (<https://doi.org/10.5281/zenodo.3928297>), `kemar` the University of York's
 SADIE II database (<https://doi.org/10.5281/zenodo.12092466>) and `viking` the Viking
-dataset v2 of Spagnol, Miccini and Unnthorsson at Reykjavík University
-(<https://doi.org/10.5281/zenodo.4160401>), which holds one file per head. Each licence
-asks for its credit in a work that uses it; the command and the editor both print it
-before downloading. A dummy head measures the same way every time; a person's own ears
-place sounds better for that person and worse for everybody else.
+dataset v2 of Spagnol, Miccini and Unnthórsson (Aalborg University and the University of
+Iceland, <https://doi.org/10.5281/zenodo.4160401>), measured at the University of
+Iceland, which holds one file per pair of pinnae: replicas moulded from lifelike model
+heads (A to S), KEMAR's own large pinnae (T) and flat baffles with no pinnae (Z). Each
+licence asks for its credit in a work that uses it; the command and the editor both
+print it before downloading. A dummy head measures the same way every time; a person's
+own ears place sounds better for that person and worse for everybody else, and none of
+these sets is a person's.
 
 In the editor, **Download HRTFs…** on the **Outputs** page (and in the **Run demo…**
 window beside the HRTF field) shows the same sets with their licences, downloads the
