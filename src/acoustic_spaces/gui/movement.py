@@ -142,7 +142,13 @@ def pose_at(item, time_s: float | None):
     unless it moves then (:func:`moves_at`)."""
     if not moves_at(item, time_s):
         return item
-    position, angles = path_of(item).at(time_s)
+    return on_path(item, path_of(item), time_s)
+
+
+def on_path(item, path: Knots, time_s: float):
+    """``item`` where ``path`` (:class:`~acoustic_spaces.walkthrough.Knots`, its own walk's
+    or another's) has it at ``time_s``, facing as it does then."""
+    position, angles = path.at(time_s)
     orientation = Orientation(yaw=angles[0], pitch=angles[1], roll=angles[2])
     return item.model_copy(update={"position": tuple(position), "orientation": orientation})
 
@@ -1018,6 +1024,7 @@ __all__ = [
     "handles_of",
     "movement_duration",
     "moves_at",
+    "on_path",
     "path_of",
     "pose_at",
 ]

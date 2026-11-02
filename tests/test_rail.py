@@ -4,6 +4,7 @@ directivity, a train's points and their sound."""
 
 import argparse
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -93,6 +94,91 @@ def test_equation_1_at_its_reference_and_off_it() -> None:
         coach.line_levels_a(100.0, "street")
     with pytest.raises(ValueError, match="no vehicle category Fz 11"):
         rail.Unit(11, 20.0)
+
+
+def test_high_floor_trams_and_metro_cars_by_their_sheets_and_tabelle_14() -> None:
+    """Beiblatt 2's high-floor tram (Fz 22) and metro car (Fz 23): running noise (m 1,
+    2) and the fans under the floor (m 3, at the rail top: Tabelle 13 Zeile 3, where the
+    low-floor tram's are on its roof, Zeile 4). The running noise goes with the speed
+    factor of Tabelle 14 Zeile 1 for the tram and Zeile 2 for the metro car, the fans
+    with Zeile 3's -10."""
+    lg2 = math.log10(2.0)
+    fans = 39.0 + np.array([-26, -15, -11, -8, -5, -6, -10, -11])  # both sheets' m 3
+    sheets = {
+        # a_A and Δa_f of m 1 and 2, and b of Tabelle 14 (63 Hz to 8 kHz).
+        22: (63.0, [-32, -23, -17, -11, -2, -7, -12, -19], [0, 0, -5, 5, 20, 15, 15, 20]),
+        23: (60.0, [-34, -25, -13, -9, -4, -6, -10, -17], [15, 10, 20, 20, 30, 25, 25, 20]),
+    }
+    for fz, (a_a, shares, factors) in sheets.items():
+        unit = rail.Unit(fz, 30.0)
+        at = unit.line_levels_a(100.0)
+        assert set(at) == {1, 2, 3}
+        for m in (1, 2):
+            np.testing.assert_allclose(at[m], a_a + np.array(shares))
+        np.testing.assert_allclose(at[3], fans)
+        slow = unit.line_levels_a(50.0)
+        for m in (1, 2):
+            np.testing.assert_allclose(at[m] - slow[m], np.array(factors) * lg2)
+        np.testing.assert_allclose(at[3] - slow[3], -10.0 * lg2)
+        points = rail.train_points(rail.Train("a tram", (unit,), 50.0), 50.0)
+        assert {p.height_m for p in points} == {0.0}
+    low_floor = rail.Train("a tram", (rail.Unit(21, 30.0),), 50.0)
+    assert {p.height_m for p in rail.train_points(low_floor, 50.0)} == {0.0, 4.0}
+
+
+def test_slab_track_with_absorbers_and_a_level_crossing_by_tabelle_7() -> None:
+    """Tabelle 7: slab track with absorbers raises the rolling noise (m 1, 2) by Zeile 3
+    and changes the reflection of every source at the rail top (m 1, 2, 7, 9, 11) by
+    Zeile 4; a level crossing raises the rolling noise by Zeile 5 and the reflection by
+    Zeile 6. The locomotive's sources up on its roof (m 5, 6, 8) keep their levels."""
+    loco = rail.Unit(7, 19.0, "discs")
+    at = loco.line_levels_a(100.0)
+    rows = {
+        "slab_absorber": ([0, 0, 0, 7, 3, 0, 0, 0], [0, 0, 0, -2, -2, -3, 0, 0]),
+        "level_crossing": ([0, 0, 0, 8, 4, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1]),
+    }
+    for track, (rolling, reflection) in rows.items():
+        on = loco.line_levels_a(100.0, track)
+        for m in (1, 2):
+            np.testing.assert_allclose(on[m] - at[m], np.add(rolling, reflection))
+        for m in (7, 9, 11):
+            np.testing.assert_allclose(on[m] - at[m], reflection)
+        for m in (5, 6, 8):
+            np.testing.assert_allclose(on[m], at[m])
+
+
+def test_grassed_tram_track_by_tabelle_15() -> None:
+    """Tabelle 15 Zeile 2 and 3: grassed track, its vegetation low or as high as the rail
+    top, changes a tram's running noise (m 1, 2) alone; its roof's fans (m 4) keep their
+    level."""
+    tram = rail.Unit(21, 30.0)
+    at = tram.line_levels_a(50.0)
+    rows = {
+        "grass_low": [-2, -4, -3, -1, -1, -1, -1, -3],
+        "grass_high": [1, -1, -3, -4, -4, -7, -7, -5],
+    }
+    for track, c1 in rows.items():
+        on = tram.line_levels_a(50.0, track)
+        for m in (1, 2):
+            np.testing.assert_allclose(on[m] - at[m], c1)
+        np.testing.assert_allclose(on[4], at[4])
+
+
+def test_a_tank_wagon_and_air_conditioning_only_where_the_sheets_have_them() -> None:
+    """Beiblatt 1 has a tank wagon's body (m 3, 4; Tabelle 5 Zeile 3, 4) for freight
+    wagons (Fz 10) with cast-iron or composite blocks or axle discs, not with wheel
+    discs; Beiblatt 2 has air conditioning (m 4 8 dB louder) for the low-floor tram (Fz
+    21) alone. Asked of any other unit, a ValueError naming where they are, not a unit
+    quietly without them."""
+    sheets = "Fz 10 with brakes cast_iron_blocks, composite_blocks, axle_discs; not for"
+    for fz, brakes in ((9, "axle_discs"), (10, "wheel_discs"), (21, "")):
+        with pytest.raises(ValueError, match=f"tank wagon, whose body .* has for {sheets} Fz {fz}"):
+            rail.Unit(fz, 20.0, brakes, tank=True)
+    for fz in (22, 23, 9):
+        with pytest.raises(ValueError, match=f"is for a low-floor tram, Fz 21, .* not for Fz {fz}"):
+            rail.Unit(fz, 20.0, air_conditioning=True)
+    for brakes in ("cast_iron_blocks", "composite_blocks", "axle_discs"):
+        assert {3, 4} <= set(rail.Unit(10, 17.8, brakes, tank=True).line_levels_a(100.0))
 
 
 def test_a_moving_unit_sends_its_level_per_metre_and_hour() -> None:
@@ -477,12 +563,13 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
     from acoustic_spaces.synthesis import split_bands
 
     # Without ffmpeg (--no-mp4) the video draws only its stills: draw its frames too.
-    drawn = []
+    drawn, said = [], []
     real_animation = pipeline.animation
 
     def animation(folder, duration, draw, *rest, **options):
         for t in np.linspace(0.0, duration, 7):
             drawn.append(draw(float(t)).size)
+            said.append(options["shown"](float(t)))
         return real_animation(folder, duration, draw, *rest, **options)
 
     monkeypatch.setattr(pipeline, "animation", animation)
@@ -549,7 +636,10 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
         assert told > 5.0 and under == pytest.approx(told, abs=1.5), name
     assert (work / "stills" / "00_tsi_7m5.png").exists()
     assert len(drawn) == 7
-    assert facts["listeners"]["tsi_7m5"]["levels_a_db"][0] == -math.inf
+    # The video's messages: the train at the moment of its walk, heard at the listener.
+    assert said[0] == "train @ 0.00 s -> tsi_7m5"
+    assert all(re.fullmatch(r"train @ \d+\.\d\d s -> tsi_7m5", line) for line in said), said
+    assert facts["listeners"]["tsi_7m5"]["levels_a_db"][0] is None
     # Another track makes the sound again.
     again = demo.resolved(demo.parser().parse_args([*run, "--track", "slab"]))
     assert not demo.is_done(demo.step("sound"), again)

@@ -57,7 +57,6 @@ from __future__ import annotations
 
 import argparse
 import math
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -178,6 +177,8 @@ CATEGORIES: dict[int, Category] = {
         },
         (
             Row(5, 41.0, (-30, -21, -13, -9, -6, -4, -9, -17)),
+            # The sheet's Ein-System-Version (a unit for one power supply system); its
+            # Zwei- and Drei-System-Version have a_A 46 and 47 dB, the shares the same.
             Row(6, 44.0, (-27, -21, -12, -8, -5, -5, -11, -19)),
             Row(7, 45.0, (-16, -9, -7, -7, -7, -9, -12, -19)),
             Row(8, 56.0, (-35, -24, -13, -4, -5, -7, -14, -25)),
@@ -492,12 +493,24 @@ def _factors(category: Category, kind: str) -> tuple[float, ...]:
     return TRAM_SPEED_FACTORS[kind]
 
 
+def _tank_brakes(category: Category) -> tuple[str, ...]:
+    """The brakes with which ``category``'s data sheet has a tank wagon's body, a
+    train's sources 3 and 4 (Tabelle 5): all the freight wagon's (Fz 10) but wheel discs;
+    none for any other category."""
+    if category.tram:
+        return ()
+    return tuple(
+        brakes for brakes, rows in category.rolling.items() if any(row.m in (3, 4) for row in rows)
+    )
+
+
 @dataclass(frozen=True)
 class Unit:
     """A vehicle unit of a train: its category Fz (:data:`CATEGORIES`), its brakes, its
     axles (its category's reference number unless given), its length (m), and for a
     freight wagon whether it is a tank wagon, for a low-floor tram whether it has air
-    conditioning."""
+    conditioning (a ValueError for a unit whose data sheet has no tank wagon's body or
+    no air conditioning)."""
 
     category: int
     length_m: float
@@ -512,7 +525,26 @@ class Unit:
                 f"Schall 03 has no vehicle category Fz {self.category}; it has "
                 f"{', '.join(str(k) for k in CATEGORIES)}"
             )
-        CATEGORIES[self.category].rows(self.brakes)
+        kind = CATEGORIES[self.category]
+        kind.rows(self.brakes)
+        brakes = self.brakes or next(iter(kind.rolling))
+        if self.tank and brakes not in _tank_brakes(kind):
+            sheets = "; ".join(
+                f"Fz {key} with brakes {', '.join(_tank_brakes(other))}"
+                for key, other in CATEGORIES.items()
+                if _tank_brakes(other)
+            )
+            raise ValueError(
+                "tank=True is for a tank wagon, whose body (sources 3 and 4) Schall 03 has "
+                f"for {sheets}; not for Fz {self.category} ({kind.name})"
+                + (f" with brakes {brakes}" if brakes else "")
+            )
+        if self.air_conditioning and self.category != 21:
+            raise ValueError(
+                "air_conditioning=True is for a low-floor tram, Fz 21, whose roof source 4 "
+                f"Schall 03 gives {AIR_CONDITIONING_DB:g} dB louder with it; not for "
+                f"Fz {self.category} ({kind.name})"
+            )
         if not math.isfinite(self.length_m) or self.length_m <= 0.0:
             raise ValueError(
                 f"a unit's length is a positive number of metres, not {self.length_m!r}"
@@ -1025,7 +1057,7 @@ class TrainVehicle(Vehicle):
             write_directivity_csv(
                 table, siren.directivity(), siren.directivity_comment(self.script)
             )
-            named = Path(os.path.relpath(table, args.source.parent)).as_posix()
+            named = pipeline.named_from(table, args.source.parent)
             source["directivity"] = {"file": named}
             source.setdefault("walk", {})["face_forward"] = True
             return
@@ -1035,7 +1067,7 @@ class TrainVehicle(Vehicle):
             "dB round the track,\nless its mean over the sphere; written by " + self.script
         )
         write_directivity_csv(table, directivity(), comment)
-        named = Path(os.path.relpath(table, args.source.parent)).as_posix()
+        named = pipeline.named_from(table, args.source.parent)
         source["directivity"] = {"file": named}
         source.setdefault("walk", {})["face_forward"] = True
 
@@ -1063,17 +1095,19 @@ class TrainVehicle(Vehicle):
         said = []
         for i, (part, points) in enumerate(info["parts"].items()):
             reference = np.asarray(points[0]["level_db"])
-            columns = [
-                point_sound(
+            # The file's 32-bit samples, a point a column, filled as each point's sound
+            # is made: the railway example's freight train, 50 points at the rail top
+            # for 10.8 s at 48 kHz, takes 104 MB.
+            columns = np.empty((int(round(duration * rate)), len(points)), np.float32, order="F")
+            for k, p in enumerate(points):
+                columns[:, k] = point_sound(
                     np.asarray(p["level_db"]),
                     rate,
                     duration,
                     reference_db=reference,
                     seed=1000 * i + k,
                 )
-                for k, p in enumerate(points)
-            ]
-            write_wav(folder / f"{part}.wav", np.column_stack(columns), rate)
+            write_wav(folder / f"{part}.wav", columns, rate)
             said.append(f"{len(points)} at {self.heights()[part]:g} m")
         out = (
             f"{duration:.1f} s of {TRAINS[info['train']].title} at "
