@@ -643,7 +643,12 @@ def video(
     gains = gains_of(seats, tour)
     stops = [pipeline.TourStop(name, start, start, stop, gains[name]) for name, start, stop in tour]
     audio = pipeline.tour_audio(
-        stops, args.work / "seats", seats, crossfade_s=CROSSFADE_S, fade_out_s=FADE_OUT_S
+        stops,
+        args.work / "seats",
+        seats,
+        crossfade_s=CROSSFADE_S,
+        fade_out_s=FADE_OUT_S,
+        scene=args.scene,
     )
     write(args.work / "tour.wav", audio, seats["rate"])
     print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")

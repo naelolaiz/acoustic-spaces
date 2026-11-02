@@ -7,6 +7,17 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: a demo's `tour.wav` and `tour.mp4` of an Ambisonics or loudspeaker mix
+  (`--format ambix3`, `5.0`...) are now decoded to the two ears (the binaural decoder,
+  virtual speakers), through the scene's HRTFs or the spherical head model; they played
+  the first two channels, W and Y as left and right, and nothing of a 5.0 centre.
+  Binaural and mono tours are unchanged.
+- Fixed: `--format` takes an output's label (`ambix3`, `5.0`) everywhere: the demos'
+  simulate step asks `simulate` for it as `--output` spells it (`ambisonics:3`,
+  `loudspeakers:5.0`), and the demos that render the mixes themselves (the demo of any
+  scene when something moves, the pass-by demos, the road works heard `--indoors`) take
+  it too; both stopped on a raw validation error, and a format they do not know now says
+  what to give.
 
 ## 4.1.0
 

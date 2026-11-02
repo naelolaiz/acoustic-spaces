@@ -1305,7 +1305,9 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
         )
     facts = heard_only(args, facts, demo.command("walk", args))
     stops = stops_of(facts, seats, demo.command("walk", args))
-    audio = pipeline.tour_audio(stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0)
+    audio = pipeline.tour_audio(
+        stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0, scene=args.scene
+    )
     write_wav(args.work / "tour.wav", audio, seats["rate"])
     print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
     if facts.get("shaker"):

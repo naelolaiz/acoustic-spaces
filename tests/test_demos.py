@@ -931,6 +931,115 @@ def test_a_shaker_tour_keeps_each_stops_level_and_its_power_across_the_cuts(
         )
 
 
+def _tour_of_one(folder: Path, x: np.ndarray, label: str, **scene) -> np.ndarray:
+    """The tour of one stop that plays ``x``, a mix of the format ``label``, as it is: no
+    fades, no gain, no peak; ``scene`` as tour_audio takes it."""
+    audio.write(folder / f"one.{label}.wav", x, RATE)
+    seats = {"rate": RATE, "format": label, "seats": {"one": {"lag_s": 0.0}}}
+    stops = [pipeline.TourStop("one", 0.0, 0.0, len(x) / RATE)]
+    return pipeline.tour_audio(
+        stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0, peak_db=None, **scene
+    )
+
+
+def _ears_db(x: np.ndarray) -> list[float]:
+    """The level (dB) of each ear of ``x`` (samples, 2)."""
+    return [audio.db(float(np.sqrt(np.mean(x[:, ear] ** 2)))) for ear in (0, 1)]
+
+
+def _through(dry: np.ndarray, hrtf, azimuth: float) -> np.ndarray:
+    """``dry`` heard from ``azimuth`` (degrees, to the left) through ``hrtf``."""
+    from acoustic_spaces.render import convolve
+    from acoustic_spaces.spatial import from_angles
+
+    return convolve(dry, hrtf.interpolate(from_angles(azimuth, 0.0))[0].T)[: len(dry)]
+
+
+def test_a_tour_decodes_an_ambisonics_mix_to_the_two_ears(tmp_path: Path) -> None:
+    """A first-order AmbiX mix (W, Y, Z, X) is heard at the two ears through the binaural
+    decoder and the spherical head model, not as W in the left ear and Y in the right: a
+    source on the left plays louder in the left ear, one on the right in the right ear,
+    one in front alike in both, each ear within 1.5 dB of the HRTF of its direction
+    itself (a first-order decoder leaves the far ear up to about 1 dB louder at this
+    rate, 8 kHz, and 1.8 dB at 48 kHz)."""
+    from acoustic_spaces.spatial import Ambisonics, from_angles, spherical_head
+
+    dry = np.random.default_rng(5).standard_normal(2 * RATE) * 0.1
+    head = spherical_head(RATE)
+    for azimuth in (90.0, -90.0, 0.0):
+        x = dry[:, None] * Ambisonics(1).gains(from_angles(azimuth, 0.0))
+        left, right = _ears_db(_tour_of_one(tmp_path / f"{azimuth:g}", x, "ambix1"))
+        assert [left, right] == pytest.approx(_ears_db(_through(dry, head, azimuth)), abs=1.5)
+        if azimuth > 0.0:
+            assert left - right > 5.0
+        elif azimuth < 0.0:
+            assert right - left > 5.0
+        else:
+            assert abs(left - right) < 1.0
+
+
+def test_a_tour_plays_a_loudspeaker_mix_as_virtual_speakers(tmp_path: Path) -> None:
+    """A 5.0 mix plays its five speakers as virtual ones, each through the HRTF of its
+    direction: a sound panned to the centre alone (silent in L and R, the first two
+    channels) is heard from straight ahead, alike in both ears. A 5.1 mix leaves out its
+    LFE channel, which the renders leave silent."""
+    from acoustic_spaces.spatial import Loudspeakers, from_angles, spherical_head
+
+    dry = np.random.default_rng(6).standard_normal(2 * RATE) * 0.1
+    x = dry[:, None] * Loudspeakers.layout("5.0").gains(from_angles(0.0, 0.0))
+    assert not x[:, :2].any() and np.array_equal(x[:, 2], dry)
+    out = _tour_of_one(tmp_path / "5.0", x, "5.0")
+    left, right = _ears_db(out)
+    assert abs(left - right) < 1.0
+    ahead = _through(dry, spherical_head(RATE), 0.0)
+    assert [left, right] == pytest.approx(_ears_db(ahead), abs=0.01)
+    with_lfe = np.insert(x, 3, dry, axis=1)  # L R C LFE Ls Rs
+    assert np.array_equal(_tour_of_one(tmp_path / "5.1", with_lfe, "5.1"), out)
+
+
+def test_a_tour_plays_one_or_two_channels_as_they_are(tmp_path: Path) -> None:
+    """A binaural mix, or a stereo microphone pair's (two channels of a mono output),
+    plays as it is, bit for bit; a mono one in both ears."""
+    rng = np.random.default_rng(7)
+    ears = (rng.standard_normal((RATE, 2)) * 0.1).astype(np.float32)
+    assert np.array_equal(_tour_of_one(tmp_path / "binaural", ears, "binaural"), ears)
+    assert np.array_equal(_tour_of_one(tmp_path / "pair", ears, "mono"), ears)
+    one = ears[:, :1]
+    assert np.array_equal(_tour_of_one(tmp_path / "mono", one, "mono"), np.repeat(one, 2, axis=1))
+
+
+def test_a_tour_places_a_layout_of_the_scenes_own_through_its_hrtfs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A layout of the scene's own (``--format speakers``, as simulate labels it) plays
+    as virtual speakers where the scene puts them, through the HRTFs its binaural output
+    names; without the scene the tour cannot place them, and says so."""
+    import acoustic_spaces.spatial
+    from acoustic_spaces.spatial import HRTF, spherical_head
+
+    head = spherical_head(RATE)
+    # The scene's HRTFs: the spherical head at half its amplitude.
+    quieter = HRTF(head.directions, head.hrir * 0.5, RATE, "ears")
+    monkeypatch.setattr(acoustic_spaces.spatial, "read_sofa", lambda path: quieter)
+    speakers = [{"name": n, "azimuth": a} for n, a in (("A", 60.0), ("B", -60.0), ("C", 180.0))]
+    scene = _any_scene(
+        tmp_path,
+        outputs=[
+            {"format": "binaural", "hrtf": "ears.sofa"},
+            {"format": "loudspeakers", "speakers": speakers},
+        ],
+    )
+    dry = np.random.default_rng(8).standard_normal(2 * RATE) * 0.1
+    x = np.zeros((len(dry), 3))
+    x[:, 0] = dry  # speaker A alone, 60 degrees to the left
+    out = _tour_of_one(tmp_path / "own", x, "speakers", scene=scene)
+    expected = [level - 6.02 for level in _ears_db(_through(dry, head, 60.0))]
+    assert _ears_db(out) == pytest.approx(expected, abs=0.01)
+    assert _ears_db(out)[0] - _ears_db(out)[1] > 3.0
+    with pytest.raises(ValueError, match="unknown format 'speakers'"):
+        _tour_of_one(tmp_path / "alone", x, "speakers")
+
+
 def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
     """Without ffmpeg (``--no-mp4``) the video step still writes every still, the list
     the concat demuxer reads and the chapters."""
@@ -1065,6 +1174,64 @@ def test_a_demo_of_any_scene_takes_the_scene_hrtfs(tmp_path: Path) -> None:
     assert demo.resolved(args).hrtf == scene.parent / "mine.sofa"
     args.hrtf, args.format = None, "ambix1"
     assert demo.resolved(args).hrtf is None
+
+
+def test_a_moving_scene_takes_its_format_by_label_too(tmp_path: Path) -> None:
+    """``--format`` names the format of the moving mixes as it does the still ones: by
+    the label ``simulate`` gives a scene's output (``ambix3``, ``5.0``), by the format
+    of one (``ambisonics``), or a format the scene has none of (``ambix1``, ``7.0.4``);
+    any other is refused with what to give."""
+    from acoustic_spaces.demos.scene_demo import format_of
+    from acoustic_spaces.scene import Scene
+
+    scene = Scene.from_yaml(
+        _any_scene(
+            tmp_path,
+            outputs=[
+                "binaural",
+                {"format": "ambisonics", "order": 3},
+                {"format": "loudspeakers", "layout": "5.0"},
+            ],
+        )
+    )
+
+    def fmt(label: str):
+        return format_of(argparse.Namespace(format=label, hrtf=None), scene)
+
+    assert (fmt("ambix3").label, fmt("ambix3").channels) == ("ambix3", 16)
+    assert fmt("ambisonics").label == "ambix3"
+    assert (fmt("5.0").label, fmt("loudspeakers").label) == ("5.0", "5.0")
+    assert (fmt("ambix1").channels, fmt("7.0.4").channels, fmt("binaural").channels) == (4, 11, 2)
+    for wrong in ("ambix8", "ambix\u00b2", "surround"):
+        with pytest.raises(ValueError, match=f"unknown format '{wrong}': give mono, binaural"):
+            fmt(wrong)
+    bare = Scene.from_yaml(_any_scene(tmp_path / "bare", outputs=["binaural"]))
+    with pytest.raises(ValueError, match="loudspeakers needs a layout: give one"):
+        format_of(argparse.Namespace(format="loudspeakers", hrtf=None), bare)
+
+
+def test_a_demo_simulates_the_output_its_mixes_are_named_by() -> None:
+    """``--format ambix3`` or ``5.0`` names the mixes by the label ``simulate`` gives
+    them, and the demo's simulate step asks for that output as ``--output`` spells it
+    (``ambisonics:3``, ``loudspeakers:5.0``), which ``simulate`` takes; a layout of the
+    scene's own (``speakers``) comes from the scene's outputs."""
+    from acoustic_spaces.cli import _output_spec
+    from acoustic_spaces.spatial import from_output
+
+    def argv(label: str) -> list[str]:
+        return pipeline.simulate_argv(pipeline.Simulation(Path("s.yaml"), Path("r"), label))
+
+    for label, spelt in [
+        ("ambix3", "ambisonics:3"),
+        ("ambix0", "ambisonics:0"),
+        ("5.0", "loudspeakers:5.0"),
+        ("7.0.4", "loudspeakers:7.0.4"),
+        ("binaural", "binaural"),
+        ("mono", "mono"),
+    ]:
+        assert argv(label)[-2:] == ["--output", spelt]
+        assert from_output(_output_spec(spelt)).label == label
+    assert "--output" not in argv("speakers")
 
 
 def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, capsys) -> None:

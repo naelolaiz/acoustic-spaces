@@ -360,7 +360,12 @@ def video(args) -> None:
     pipeline.missing_mixes(seats, keys, DEMO.command("render", args))
     tour = tour_of(args, seats)
     audio = pipeline.tour_audio(
-        tour, args.work / "seats", seats, crossfade_s=CROSSFADE_S, fade_out_s=FADE_OUT_S
+        tour,
+        args.work / "seats",
+        seats,
+        crossfade_s=CROSSFADE_S,
+        fade_out_s=FADE_OUT_S,
+        scene=args.scene,
     )
     write(args.work / "tour.wav", audio, seats["rate"])
     print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
