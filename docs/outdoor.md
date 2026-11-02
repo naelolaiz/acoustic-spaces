@@ -1152,7 +1152,10 @@ scene's sound: nothing of it goes through the simulation.
   take-off roll the start-of-roll directivity, and the air's impedance at the
   aerodrome against the NPD curves' (`doc29.impedance_db`).
 - **The event** (`doc29.event`): the segments' energy summed to the SEL, their greatest
-  level the LAmax.
+  level the LAmax. Beyond the NPD curves' powers their levels are extrapolated from the
+  two curves at that end (eq. 4-3); where that takes a segment's level more than 5 dB
+  from the nearest curve's, the event warns (`doc29.NpdExtrapolationWarning`), as Volume
+  2 section 4.2 cautions.
 
 `doc29.volume3` holds the reference cases of Doc 29 Volume 3: three hypothetical
 aircraft, which rely on no data of the ANP database (a jet with its engines on the rear
@@ -1201,15 +1204,20 @@ profile = performance.as_profile(points)  # for doc29.flight_path
 **The ANP database**, the method's data for real aircraft (EASA's Aircraft Noise and
 Performance database), is not part of the package: its terms of use (issue 3, 2024)
 allow the data only for noise contours of an average fleet and traffic, not for
-benchmarking aircraft types, and forbid publishing it or passing it on to anyone who
-has not accepted them. With a copy downloaded from EASA under those terms,
-`doc29.anp.read_database(folder)` reads its tables from the folder by their files'
-names (aircraft, NPD, spectral classes, fixed-point profiles, jet and propeller
-engine coefficients, aerodynamic coefficients, default weights, departure and
-approach procedural steps), and `Database.profile` flies an aircraft's procedure where
-the database has it, else its fixed-point profile. The readers take the fields
-Volume 2 Appendix G lists, as Volume 3's workbooks lay them out; they have not been
-tried on a download of the database.
+benchmarking aircraft types, and forbid publishing it or passing it on to anyone who has
+not accepted them. With a copy downloaded from EASA under those terms,
+`doc29.anp.read_database(folder)` reads its tables from the folder by their files' names
+(aircraft, NPD, spectral classes, fixed-point profiles, jet and propeller engine
+coefficients, aerodynamic coefficients, default weights, departure and approach
+procedural steps), and `Database.profile` flies an aircraft's procedure where the
+database has it, else its fixed-point profile. A procedure gives the corrected net
+thrust in lb, so `Database.profile` refuses it for an aircraft whose NPD curves are in
+another power parameter (shaft horsepower in %, for instance). The readers take the
+fields Volume 2 Appendix G lists, as Volume 3's workbooks lay them out: a fixed-point
+profile's distances, heights and speeds in the unit its column's name gives in brackets
+(m, ft or feet; m/s, kt, kts or knots), the lateral directivity by how it starts
+(Fuselage, Wing or Prop); anything else is an error. They have not been tried on a
+download of the database.
 
 Its levels agree with all of Volume 3's reference results: the 99 levels at its
 receptors within 0.006 dB, its 12 grids of 37,458 points at 0.003 dB rms, and its

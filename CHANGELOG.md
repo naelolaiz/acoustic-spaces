@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- `doc29.event` warns (`doc29.NpdExtrapolationWarning`) when a segment's power lies so
+  far outside the NPD curves' that their extrapolated level departs more than 5 dB from
+  the nearest curve's (Volume 2 section 4.2); in Volume 3's cases and the airport
+  example's flights it departs 2.3 dB at most.
+- `anp.Database.profile` refuses to fly procedural steps, which give thrust in lb, for
+  an aircraft whose NPD curves are in another power parameter (`Aircraft.power_in_lb`).
+- `doc29.read_fixed_point_profiles` reads a column's unit from round or square brackets
+  (m, ft, feet; m/s, kt, kts, knots) and stops on an unknown or missing one instead of
+  taking metres or m/s. `read_aircraft` and `noise.installation_db` take a lateral
+  directivity by how it starts ("Wing-mounted" is a wing installation); any other is an
+  error, where it gave no installation correction.
+- A walk whose first two places stand one above the other no longer flies the airport's
+  jets to NaN positions: `Track.through` leaves out a point within 1 µm of the one
+  before it, and `Track.at` and `Track.extended` pass over legs of no length.
+- `performance.departure` stops with an error on a climb step without the thrust to
+  climb, with more thrust than weight or into a headwind that leaves it no climb angle
+  (eq. B-21, B-22), instead of flying the profile backwards or failing in `math.asin`.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early

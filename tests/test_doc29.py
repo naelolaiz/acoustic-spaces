@@ -4,6 +4,7 @@ cases and Volume 2's equations."""
 from __future__ import annotations
 
 import math
+import warnings
 
 import numpy as np
 import pytest
@@ -177,3 +178,140 @@ def test_maximum_level_under_the_path() -> None:
     result = doc29.event(plane, sel, lamax, [segment], np.array([[0.0, 0.0, 0.0]]))
     assert float(result.sel[0]) == pytest.approx(92.9, abs=1e-6)
     assert float(result.lamax[0]) == pytest.approx(86.1, abs=1e-6)
+
+
+def _level_flight(power: float, height: float = 1000 * FOOT_M) -> doc29.Segment:
+    """A long level flight at the NPD curves' speed, ``height`` (m) over the origin."""
+    speed = ev.REFERENCE_SPEED_M_S
+    return doc29.Segment(
+        start=(-1e6, 0.0, height),
+        end=(1e6, 0.0, height),
+        speeds=(speed, speed),
+        powers=(power,) * 2,
+    )
+
+
+def test_power_far_outside_the_npd_curves_warns() -> None:
+    """Volume 2 section 4.2 extrapolates the NPD curves in power by eq. 4-3 and cautions
+    against extrapolation more than 5 dB from the NPD envelope: an event whose NPD
+    level at a segment's power departs more than 5 dB from the level at the nearest of
+    the curves' powers warns, once however many segments do; 4.9 dB does not."""
+    plane = volume3.aircraft()["JETW"]
+    sel, lamax = (volume3.npd()[("JETW", d, "D")] for d in ("SEL", "LAmax"))
+    receiver = np.array([[0.0, 0.0, 0.0]])
+    d = 1000 * FOOT_M
+    # The LAmax curves' slope above 22500 lb at 1000 ft (dB/lb), steeper than the SEL's.
+    slope = float(lamax.level(22500.0, d) - lamax.level(20000.0, d)) / 2500.0
+    assert slope > float(sel.level(22500.0, d) - sel.level(20000.0, d)) / 2500.0 > 0.0
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", doc29.NpdExtrapolationWarning)
+        for power in (22500.0, 22500.0 + 4.9 / slope, 10000.0):
+            doc29.event(plane, sel, lamax, [_level_flight(power)], receiver)
+    with pytest.warns(doc29.NpdExtrapolationWarning) as caught:
+        doc29.event(plane, sel, lamax, [_level_flight(22500.0 + 5.1 / slope)], receiver)
+    assert "LAmax NPD curves' powers, 10000 to 22500" in str(caught[0].message)
+    # Three times the top power, 1000 ft and 2000 ft up: one warning, of its SEL curves,
+    # whose levels there extrapolate from the top two curves (eq. 4-3).
+    beyond = 3 * 22500.0
+    with pytest.warns(doc29.NpdExtrapolationWarning) as caught:
+        result = doc29.event(
+            plane, sel, lamax, [_level_flight(beyond), _level_flight(beyond, 2 * d)], receiver
+        )
+    assert len(caught) == 1
+    tops = [sel.levels[-1][NPD_FEET.index(feet)] for feet in (1000.0, 2000.0)]
+    belows = [sel.levels[-2][NPD_FEET.index(feet)] for feet in (1000.0, 2000.0)]
+    over = [
+        (top - below) / 2500.0 * (beyond - 22500.0) for top, below in zip(tops, belows, strict=True)
+    ]
+    assert [part.baseline[0] for part in result.segments] == pytest.approx(
+        [top + up for top, up in zip(tops, over, strict=True)], abs=1e-9
+    )
+    words = str(caught[0].message)
+    assert "its flight's power, 67500, lies so far outside its SEL NPD curves' powers" in words
+    assert f"depart up to {max(over):.1f} dB" in words and "Corrected_Net_Thrust_(lb)" in words
+    # Below the curves as well: 1000 lb against the lowest, 10000 lb.
+    with pytest.warns(doc29.NpdExtrapolationWarning, match="power, 1000, lies"):
+        doc29.event(plane, sel, lamax, [_level_flight(1000.0)], receiver)
+
+
+def test_tables_read_units_in_brackets(tmp_path) -> None:
+    """A fixed-point profile's column gives its unit in round or square brackets, in
+    any case: feet, knots, kts, m and m/s read as Appendix G's ft and kt (G3.8) and
+    Volume 3's metres; a column naming another unit, or none, is an error."""
+    table = tmp_path / "profiles.csv"
+    header = "ACFT_ID;Op Mode;Profile ID;Stage Length;Point Number;{};{};{};Power\n"
+    rows = "X;D;P;1;1;0;0;0;25000\nX;D;P;1;2;1000;500;160;20000\n"
+    for names, length, speed in [
+        (("Distance [feet]", "Height (FT)", "Speed (knots)"), FOOT_M, KNOT_M_S),
+        (("Distance (m)", "Height [ m ]", "Speed (kts)"), 1.0, KNOT_M_S),
+        (("Distance (ft)", "Height AFE (ft)", "TAS (M/S)"), FOOT_M, 1.0),
+    ]:
+        table.write_text(header.format(*names) + rows)
+        (_, point) = doc29.read_fixed_point_profiles(table)[("X", "D", "P", "1")]
+        assert point.distance_m == pytest.approx(1000.0 * length, rel=1e-12)
+        assert point.height_m == pytest.approx(500.0 * length, rel=1e-12)
+        assert point.speed_m_s == pytest.approx(160.0 * speed, rel=1e-12)
+    for names, wrong in [
+        (("Distance (nmi)", "Height (ft)", "Speed (kt)"), r"'Distance \(nmi\)' names none"),
+        (("Distance (ft)", "Height", "Speed (kt)"), "'Height' names none"),
+        (
+            ("Distance (ft)", "Height (ft)", "Speed (km/h)"),
+            r"units of a speed in brackets, \(m/s\)",
+        ),
+        (("Distance (ft) (m)", "Height (ft)", "Speed (kt)"), "names more than one"),
+    ]:
+        table.write_text(header.format(*names) + rows)
+        with pytest.raises(ValueError, match=wrong):
+            doc29.read_fixed_point_profiles(table)
+
+
+def test_lateral_directivity_by_its_start(tmp_path) -> None:
+    """An aircraft's lateral directivity names its engine installation by its start
+    (Volume 2 Appendix G2: "Fuselage-mounted", "Wing-mounted" or "Prop"), whose
+    correction is eq. 4-15's; any other is an error naming the aircraft."""
+    table = tmp_path / "aircraft.csv"
+    header = (
+        "ACFT_ID,Description,Engine Type,Number of Engines,NPD_ID,Power Parameter,"
+        "Approach Spectral Class ID,Departure Spectral Class ID,Lateral Directivity Identifier\n"
+    )
+    rows = [
+        "A,a,Jet,2,A,CNT (lb),1,2,Wing-mounted",
+        "B,b,Jet,3,B,CNT (lb),1,2,FUSELAGE mounted",
+        "C,c,Turboprop,2,C,CNT (lb),1,2,Prop",
+        "D,d,Jet,2,D,CNT (lb),1,2,Wing",
+    ]
+    table.write_text(header + "\n".join(rows) + "\n")
+    planes = doc29.read_aircraft(table)
+    assert [p.installation for p in planes.values()] == ["Wing", "Fuselage", "Prop", "Wing"]
+    phi = np.array([0.0, 20.0, 45.0])
+    assert ev.installation_db("Wing-mounted", phi) == pytest.approx(ev.installation_db("Wing", phi))
+    assert float(ev.installation_db("Wing-mounted", np.array(0.0))) == pytest.approx(
+        10 * 0.062 * math.log10(0.0039)
+    )
+    table.write_text(header + rows[0] + "\nE,e,Jet,2,E,CNT (lb),1,2,Pod\n")
+    with pytest.raises(
+        ValueError, match="aircraft.csv, aircraft 'E': the lateral directivity 'Pod'"
+    ):
+        doc29.read_aircraft(table)
+    with pytest.raises(ValueError, match="none of Fuselage, Wing, Prop"):
+        ev.installation_db("Tail", phi)
+
+
+def test_a_track_whose_first_points_coincide() -> None:
+    """A walk's places one above the other give one point of the ground track: a track
+    through points of which two in a row coincide leaves the later out, and a track
+    with a leg of no length still finds its points along it and extends itself
+    the way its first and last legs with a length go (section 3.6.6)."""
+    track = doc29.Track.through([(0.0, 0.0), (0.0, 0.0), (0.0, 1e-7), (300.0, 400.0)], (0.0, 0.0))
+    assert track.points == ((0.0, 0.0), (300.0, 400.0)) and track.start_m == 0.0
+    with pytest.raises(ValueError, match="two points more than"):
+        doc29.Track.through([(5.0, 5.0), (5.0, 5.0)], (5.0, 5.0))
+    flat = doc29.Track(points=((0.0, 0.0), (0.0, 0.0), (300.0, 400.0), (300.0, 400.0)))
+    assert flat.at(0.0) == (0.0, 0.0)
+    assert flat.at(-50.0) == pytest.approx((-30.0, -40.0))
+    assert flat.at(250.0) == pytest.approx((150.0, 200.0))
+    assert flat.at(600.0) == pytest.approx((360.0, 480.0))
+    longer = flat.extended(-50.0, 600.0)
+    assert longer.points[0] == pytest.approx((-30.0, -40.0))
+    assert longer.points[-1] == pytest.approx((360.0, 480.0))
+    assert longer.at(0.0) == pytest.approx((0.0, 0.0))

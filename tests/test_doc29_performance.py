@@ -192,16 +192,24 @@ ANP_NAMES = {
 }
 
 
+def _anp_folder(tmp_path, aircraft: str = "performance_aircraft.csv"):
+    """A folder of Volume 3's tables named as the ANP database's, separated by
+    semicolons, its aircraft table Volume 3's ``aircraft``."""
+    folder = tmp_path / "download" / "ANP"
+    folder.mkdir(parents=True)
+    for name, anp in ANP_NAMES.items():
+        source = aircraft if anp == "Aircraft.csv" else name
+        text = (volume3.DATA / source).read_text(encoding="utf-8")
+        (folder / anp).write_text(text.replace(",", ";"), encoding="utf-8")
+    return folder
+
+
 def test_anp_database(tmp_path) -> None:
     """A folder of tables named as the ANP database's, separated by semicolons (here
     Volume 3's, which rely on no ANP data), reads as one database: its procedures fly
     Volume 3's profiles, and an aircraft without procedures flies its fixed-point
     profile."""
-    folder = tmp_path / "download" / "ANP"
-    folder.mkdir(parents=True)
-    for name, anp in ANP_NAMES.items():
-        text = (volume3.DATA / name).read_text(encoding="utf-8")
-        (folder / anp).write_text(text.replace(",", ";"), encoding="utf-8")
+    folder = _anp_folder(tmp_path)
     (folder / "Substitution_table.csv").write_text("ACFT_ID;Substitute\nA;B\n")
     database = doc29.anp.read_database(tmp_path)
     assert set(database.aircraft) == {"JETW", "PROP"}
@@ -222,3 +230,62 @@ def test_anp_database(tmp_path) -> None:
     with pytest.raises(ValueError, match="two files"):
         (folder / "aircraft_copy.csv").write_text("x")
         doc29.anp.find_tables(tmp_path)
+
+
+def test_procedures_fly_only_npd_curves_in_lb(tmp_path) -> None:
+    """Procedural steps give the corrected net thrust per engine in lb (Volume 2
+    Appendix B): an aircraft whose NPD curves are in another power parameter, as Volume
+    3 Part 1's PROP (its shaft horsepower in %), flies no profile from them. Part 2's
+    aircraft table calls PROP's power lb thrust, whose NPD curves at 28 and 100 (Part
+    1's %) its departure's thousands of lb then lie far beyond: its event warns (Volume 2
+    section 4.2)."""
+    with_lb = doc29.anp.read_database(_anp_folder(tmp_path / "lb"))
+    prop = with_lb.aircraft["PROP"]
+    assert prop.power_in_lb
+    profile = with_lb.profile("PROP", "D", "ICAO_A")
+    assert min(p.power for p in profile) > 10000.0
+    sel, lamax = with_lb.curves("PROP", "D")
+    assert (sel.powers, lamax.powers) == ((28.0, 100.0), (28.0, 100.0))
+    track = doc29.Track(points=((0.0, 0.0), (20000.0, 0.0)))
+    segments = doc29.flight_path(profile, track, departure=True)
+    with pytest.warns(doc29.NpdExtrapolationWarning, match="SEL NPD curves' powers, 28 to 100"):
+        doc29.event(prop, sel, lamax, segments, np.array([[6500.0, 0.0, 1.2]]))
+
+    part1 = doc29.anp.read_database(_anp_folder(tmp_path / "part1", "aircraft.csv"))
+    assert part1.aircraft["PROP"].power_parameter == "Shaft_Horse_Power_(%)"
+    with pytest.raises(ValueError, match="PROP: its procedural steps give corrected net thrust"):
+        part1.profile("PROP", "D", "ICAO_A")
+    with pytest.raises(ValueError, match="'Shaft_Horse_Power_\\(%\\)'"):
+        part1.profile("PROP", "D", "ICAO_A_ESF")
+    assert part1.profile("JETW", "D", "ICAO_A") == with_lb.profile("JETW", "D", "ICAO_A")
+    words = {
+        "Corrected_Net_Thrust_(lb)": True,
+        "CNT (lbf)": True,
+        "Pounds": True,
+        "Shaft_Horse_Power_(%)": False,
+        "CNT (% of max static thrust lb)": False,
+        "Percent": False,
+        "Other": False,
+    }
+    for parameter, in_lb in words.items():
+        assert dataclasses.replace(prop, power_parameter=parameter).power_in_lb is in_lb
+
+
+def test_a_climb_without_thrust_to_climb_is_an_error() -> None:
+    """Eq. B-21's climb angle has a sine between 0 and 1, eq. B-22's corrected for the
+    headwind lies between 0 and 90°: JETW at 300,000 lb (1.8 times its greatest take-off
+    weight) from a 6000 ft, 43 °C aerodrome has too little thrust to climb on from
+    1500 ft (it would fly its profile backwards), at 5000 lb more thrust than weight,
+    and into a 170 kt headwind no climb angle."""
+    plane = volume3.performance()["JETW"]
+    steps = volume3.departure_procedures()[("JETW", "ICAO_A")][:3]
+    hot = pf.Aerodrome(elevation_ft=6000.0, temperature_c=43.0)
+    with pytest.raises(ValueError, match="300000 lb has not enough thrust to climb to 3000 ft"):
+        pf.departure(plane, steps, 300000.0, hot)
+    with pytest.raises(ValueError, match="5000 lb has more thrust than weight on its climb"):
+        pf.departure(plane, steps, 5000.0)
+    with pytest.raises(ValueError, match="170 kt headwind against its climb to 1500 ft"):
+        pf.departure(plane, steps, plane.weights[("D", "1")], pf.Aerodrome(headwind_kt=170.0))
+    # The steps fly forwards at the default weight at the same aerodrome.
+    points = pf.departure(plane, steps, plane.weights[("D", "1")], hot)
+    assert np.all(np.diff([p.distance_ft for p in points]) > 0.0)

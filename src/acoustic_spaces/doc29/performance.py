@@ -547,13 +547,31 @@ def departure(
             mean = calibrated / math.sqrt(air.sigma(middle))
             thrust = engines.thrust(step, calibrated, speed, alt2, flaps.r)
             k = 1.01 if calibrated <= 200.0 else 0.95
-            gamma = math.asin(
-                k
-                * engines.surplus(
-                    engines.thrust(step, calibrated, mean, middle, flaps.r), middle, flaps.r
-                )
+            # The climb angle (eq. B-21), corrected for the headwind (eq. B-22).
+            sin_gamma = k * engines.surplus(
+                engines.thrust(step, calibrated, mean, middle, flaps.r), middle, flaps.r
             )
-            gamma *= (calibrated - REFERENCE_HEADWIND_KT) / (calibrated - w)
+            if not 0.0 < sin_gamma < 1.0:
+                trouble = (
+                    "not enough thrust to climb"
+                    if sin_gamma <= 0.0
+                    else "more thrust than weight on its climb"
+                )
+                raise ValueError(
+                    f"{aircraft.name} at {weight_lb:.0f} lb has {trouble} to "
+                    f"{step.altitude_ft:g} ft (eq. B-21 gives the sine of its climb angle "
+                    f"{sin_gamma:.3g}): check its weight and the aerodrome's elevation and "
+                    "temperature"
+                )
+            gamma = math.asin(sin_gamma)
+            if calibrated > w:
+                gamma *= (calibrated - REFERENCE_HEADWIND_KT) / (calibrated - w)
+            if calibrated <= w or not 0.0 < gamma < math.pi / 2.0:
+                raise ValueError(
+                    f"{aircraft.name}: a {w:g} kt headwind against its climb to "
+                    f"{step.altitude_ft:g} ft at {calibrated:.1f} kt CAS leaves no climb "
+                    "angle between 0 and 90° (eq. B-22): check the aerodrome's headwind"
+                )
             end = Point(
                 start.distance_ft + (step.altitude_ft - start.height_ft) / math.tan(gamma),
                 step.altitude_ft,

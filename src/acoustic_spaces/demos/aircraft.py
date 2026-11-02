@@ -117,11 +117,12 @@ class Aircraft(Vehicle):
     def problem(self, source) -> str | None:
         """Its walk gives a ground track, two places apart at least; an arrival's comes
         down to the runway, where it touches down."""
-        from acoustic_spaces.doc29.path import LOWEST_SOURCE_M
+        from acoustic_spaces.doc29.path import LOWEST_SOURCE_M, SAME_PLAN_POINT_M
 
         places = track_points(source)
-        plan = {(round(x, 6), round(y, 6)) for x, y, _ in places}
-        if len(plan) < 2:
+        # Track.through draws a ground track if a place lies more than this from the first.
+        x0, y0, _ = places[0]
+        if not any(math.hypot(x - x0, y - y0) > SAME_PLAN_POINT_M for x, y, _ in places):
             return f"the {self.name}'s walk needs two places apart in plan, its ground track"
         if not self.departing and not any(z <= LOWEST_SOURCE_M + 1e-6 for *_, z in places):
             return (
