@@ -1337,6 +1337,7 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
         stills=moments,
         no_mp4=args.no_mp4,
         chapters=[f"{pictures.mmss(stop.at)} {stop.key.replace('_', ' ')}" for stop in stops],
+        shown=drawing.shown_at,
     )
 
 

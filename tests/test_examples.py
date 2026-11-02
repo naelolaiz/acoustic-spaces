@@ -1268,6 +1268,9 @@ def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
     assert not late["sight"]
     for picture in (drawing.frame(0.0), drawing.frame(20.0), drawing.thumbnail()):
         assert picture.getbbox() is not None
+    # The video's messages: the visitor at the moment of its walk, then standing.
+    assert drawing.shown(5.0, "visitor", "standing") == "guide -> visitor @ 5.00 s"
+    assert drawing.shown(16.6 + 12.0, "visitor", "standing") == "guide -> standing"
 
 
 # --------------------------------------------------------------------------- the demo code

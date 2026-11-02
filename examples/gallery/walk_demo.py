@@ -524,6 +524,7 @@ def video(args) -> None:
         stills=[(name, t + 0.5) for name, t, _ in moments],
         no_mp4=args.no_mp4,
         chapters=[f"{int(t // 60)}:{int(t % 60):02d} {title}" for _, t, title in moments],
+        shown=lambda t: drawing.shown(t, VISITOR, STANDING),
     )
 
 

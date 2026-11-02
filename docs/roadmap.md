@@ -457,8 +457,9 @@ Editor:
   folder and put in the scene's binaural output.
 - [x] The Scene YAML panel: the scene as coloured YAML text that follows every edit, and
   edited text applied with the checks every edit goes through.
-- [x] The views follow a run: the sources and listeners its step works on ringed, and
-  a walking source's places shown as they are simulated.
+- [x] The views follow a run: the sources and listeners its step works on ringed, a
+  walking source's places shown as they are simulated, and a demo's video followed
+  moment by moment as it is encoded.
 
 Running on other computers, in steps:
 

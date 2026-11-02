@@ -4615,10 +4615,11 @@ def _walking_scene(walk_to=(4.0, 1.0, 1.5), speed=2.0) -> Scene:
 
 def test_a_run_s_lines_name_what_it_works_on(qapp) -> None:
     """The views follow the names a step's line begins with: a source, a source and a
-    listener, a point of a line source, or a place along a walk, whose time puts the
-    run's walkers where its walk has them then; nothing else in a line counts."""
+    listener, a point of a line source, a place along a walk or a moment of it, whose
+    time puts the run's walkers where its walk has them then; nothing else in a line
+    counts."""
     from acoustic_spaces.gui.following import NO_RUN, RunFocus
-    from acoustic_spaces.walkthrough import knots, place_name
+    from acoustic_spaces.walkthrough import knots, moment_name, place_name
 
     scene = _walking_scene()
     listener = scene.listeners[0].name
@@ -4653,6 +4654,21 @@ def test_a_run_s_lines_name_what_it_works_on(qapp) -> None:
     # The run's scene is read again at its next walk: a demo may have written it anew.
     focus.read(f"{place_name('car', 0, 0.0)}: early reflections")
     assert asked == [1, 1] and focus.view.time == 0.0
+    # A demo's video names what each moment of it shows: several sources, the listener of
+    # that pass, the walker at the moment of its walk.
+    video = f"stage, {moment_name('car', 2.5)} -> late stage: encoding the video, 7.1 of 40.0 s"
+    assert focus.read(video)
+    assert focus.view.names == {
+        ("sources", "stage"),
+        ("sources", "car"),
+        ("listeners", "late stage"),
+    }
+    assert focus.view.time == 2.5 and asked == [1, 1]  # the same walks as the line before
+    assert not focus.read(video)
+    assert focus.read(f"stage, {moment_name('car', 2.5)} -> {listener}: encoding the video")
+    assert focus.view.names >= {("listeners", listener)} and focus.view.time == 2.5
+    focus.read("stage, nobody -> late stage: encoding the video, 7.6 of 40.0 s")
+    assert focus.view == NO_RUN
     # A walk the run's scene does not give is not followed; nor one that cannot be read.
     focus = RunFocus(scene, lambda: box_scene())
     focus.read(f"{place_name('car', 3, 1.5)}: early reflections")

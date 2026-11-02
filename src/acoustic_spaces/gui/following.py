@@ -4,10 +4,12 @@ A run says what it does in lines of text, which the status bar and the Messages 
 show: the editor's own runs and a demo, which runs as a process of its own, alike. Each
 line of a step on sources and listeners begins with them: ``hall: early reflections``,
 ``hall -> seat: rendering binaural``, ``car #12 @ 3.40 s: stochastic ray tracing``, the
-last a place along a walk (:func:`~acoustic_spaces.walkthrough.place_name`).
-:class:`RunFocus` reads those names from each line: the views ring the sources and
-listeners they are, and at a place along a walk draw every walker of the run where it
-is at that place's time, on the walks the run simulates (:class:`RunView`).
+last a place along a walk (:func:`~acoustic_spaces.walkthrough.place_name`); a demo's
+video names what each moment of it shows, ``stage, car @ 3.40 s -> seat: encoding the
+video, ...`` (:func:`~acoustic_spaces.walkthrough.moment_name`). :class:`RunFocus` reads
+those names from each line: the views ring the sources and listeners they are, and at a
+place along a walk draw every walker of the run where it is at that place's time, on
+the walks the run simulates (:class:`RunView`).
 """
 
 from __future__ import annotations
@@ -23,8 +25,10 @@ from acoustic_spaces.walkthrough import Knots, movers, place_of
 
 #: Where a line's names end: the first colon and space.
 _HEAD = ": "
-#: Between a source and a listener of a line.
+#: Between a line's sources and its listeners.
 _PAIR = " -> "
+#: Between two sources, or two listeners, of a line.
+_AND = ", "
 #: One point of a line or surface source: ``hall (2)``.
 _POINT = re.compile(r"(?P<name>.+) \(\d+\)")
 #: No walks to follow.
@@ -92,15 +96,29 @@ class RunFocus:
         if not colon:
             return [], None
         named, place = [], None
-        for part in head.split(_PAIR):
-            found = self._name(part.strip())
+        for side in head.split(_PAIR):
+            found = self._names(side.strip())
             if found is None:
                 return [], None  # not a step on sources and listeners
-            name, at = found
-            named.append((self._kinds[name], name))
-            if at is not None and place is None:
-                place = (name, at)
+            for name, at in found:
+                named.append((self._kinds[name], name))
+                if at is not None and place is None:
+                    place = (name, at)
         return named, place
+
+    def _names(self, side: str) -> list[tuple[str, float | None]] | None:
+        """The scene's sources or listeners that one side of a line's head names: one,
+        or several between commas; None unless each names one."""
+        alone = self._name(side)
+        if alone is not None:
+            return [alone]
+        found = []
+        for part in side.split(_AND):
+            name = self._name(part.strip())
+            if name is None:
+                return None
+            found.append(name)
+        return found
 
     def _name(self, part: str) -> tuple[str, float | None] | None:
         """The scene's source or listener ``part`` names (itself, one of its points or a
@@ -112,8 +130,12 @@ class RunFocus:
             if label in self._kinds:
                 return label, None
             place = place_of(label)
-            if place is not None and place[0] in self._kinds:
-                return place
+            if place is None:
+                continue
+            # A walker's name may end as a place's number does: ``seat #3 @ 1.00 s``.
+            for name in (label.rpartition(" @ ")[0], place[0]):
+                if name in self._kinds:
+                    return name, place[1]
         return None
 
     def read(self, line: str) -> bool:

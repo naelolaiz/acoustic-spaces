@@ -927,6 +927,62 @@ def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
     assert [p.name for p in (tmp_path / "walk" / "stills").glob("*.png")] == ["00_setting-off.png"]
 
 
+def test_the_video_says_what_each_moment_shows(tmp_path: Path, capsys) -> None:
+    """As ffmpeg encodes a video, each message begins with what the picture then shows
+    (a walker with the moment of its walk, for the editor to draw it there), and says
+    how far the video has come; a tour of stills names the still on show."""
+    import re
+    import shutil
+    import time
+
+    pytest.importorskip("PIL")
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("needs ffmpeg")
+    from PIL import Image
+
+    from acoustic_spaces.walkthrough import moment_name
+
+    def frame(t: float):
+        time.sleep(0.06)  # slow enough for ffmpeg to report more than once
+        return Image.new("RGB", (64, 32), (int(100 * t), 10, 10))
+
+    folder = tmp_path / "demo"
+    audio.write(folder / "tour.wav", audio.stereo(_tone(2.0)), RATE)
+    box = (0, 16, 64, 16)
+    pipeline.animation(
+        folder,
+        2.0,
+        frame,
+        folder / "tour.wav",
+        fps=10,
+        spectrum_box=box,
+        shown=lambda t: f"stage, {moment_name('car', 3.0 + t)} -> seat",
+    )
+    lines = [line for line in capsys.readouterr().out.splitlines() if "encoding" in line]
+    said = [
+        re.fullmatch(r"stage, car @ (\S+) s -> seat: encoding the video, (\S+) of 2\.0 s", line)
+        for line in lines
+    ]
+    assert len(lines) > 1 and all(said), lines
+    moments = [(float(m[1]), float(m[2])) for m in said]  # type: ignore[index]
+    # The walk's moment is the video's (said to 0.1 s), as the picture has it then.
+    assert all(walk == pytest.approx(3.0 + t, abs=0.051) for walk, t in moments), lines
+    assert [t for _, t in moments] == sorted(t for _, t in moments)
+    assert moments[-1][1] == pytest.approx(2.0, abs=0.15)
+    assert (folder / "tour.mp4").stat().st_size > 0
+    # A tour of stills names the still on show, by its name unless told otherwise.
+    pipeline.video(
+        folder,
+        [("near", 1.0), ("far", 1.0)],
+        lambda k: Image.new("RGB", (64, 32), (10, 10, 10)),
+        folder / "tour.wav",
+        spectrum_box=box,
+    )
+    heads = [line.split(":")[0] for line in capsys.readouterr().out.splitlines()]
+    assert {"near", "far"} >= {head for head in heads if not head.startswith("wrote")}
+    assert heads.count("far") >= 1
+
+
 # --------------------------------------------------------------------------- any scene
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox"
@@ -1230,6 +1286,11 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
         drawing.lines(1, 1.2)
     )
     assert drawing.frame(1.2).getbbox() is not None
+    # The video's messages name what each moment shows: the walker at its walk's moment.
+    assert drawing.stop_at(1.2) == (1, pytest.approx(1.2))
+    assert drawing.shown_at(0.3) == "talker, radio -> seat-a"
+    assert drawing.shown_at(1.2) == "talker, radio -> seat-b @ 1.20 s"
+    assert drawing.shown(1) == "talker, radio -> seat-b"  # a still: no moment
     # Again: there already; with every walker standing, the still mixes instead.
     capsys.readouterr()
     assert cli(["demo", "scene.yaml", "render"]) == 0

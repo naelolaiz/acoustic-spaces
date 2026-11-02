@@ -730,6 +730,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
             work / "tour.wav",
             stills=[(stop.key, stop.at + min(0.5, stop.length / 2)) for stop in stops],
             no_mp4=args.no_mp4,
+            shown=drawing.shown_at,
         )
         return
     pipeline.video(
@@ -738,6 +739,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         drawing.still,
         work / "tour.wav",
         no_mp4=args.no_mp4,
+        shown=drawing.shown,
     )
 
 

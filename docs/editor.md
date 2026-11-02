@@ -161,7 +161,9 @@ The editor works on the same scene files as the command line.
   vehicle, **Render movement…**), every walker of the run is drawn where it is at that
   place's time, on the walks the run simulates: a demo's own scene when it has one, the
   vehicle at `--speed`, say. When only listeners walk, each source is traced to all their
-  places at once, so the views do not move them.
+  places at once, so the views do not move them. While a demo encodes its video, the
+  views show what the video shows at that moment: the listener of each pass of the
+  tour in turn, the sources that play, and the walkers where the video has them.
 - **View > Show leaks** traces rays from the sources and shows where they escape from a
   model that is not closed: its open edges, the escaping rays and a marker on each gap,
   with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It

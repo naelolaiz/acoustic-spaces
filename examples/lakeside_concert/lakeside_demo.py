@@ -391,6 +391,7 @@ def video(args) -> None:
         drawing.still,
         args.work / "tour.wav",
         no_mp4=args.no_mp4,
+        shown=lambda k: tour[k][0],
     )
 
 

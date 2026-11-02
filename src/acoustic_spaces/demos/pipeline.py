@@ -22,6 +22,7 @@ import json
 import math
 import shutil
 import subprocess
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -602,11 +603,14 @@ def video(
     no_mp4: bool = False,
     spectrum_box: tuple[int, int, int, int] = SPECTRUM_BOX,
     chapters: Sequence[str] | None = None,
+    shown: Callable[[int], str] | None = None,
 ) -> None:
     """One still per frame (``name``, seconds) drawn by ``draw(k)``, into
     ``folder/stills``, ``chapters.txt`` when given, and ``folder/tour.mp4`` from them and
     ``audio_path``: the stills with a scrolling spectrogram in ``spectrum_box`` (ffmpeg,
-    unless ``no_mp4``)."""
+    unless ``no_mp4``). As it is encoded, its messages begin with what the still on
+    show shows, ``shown(k)``: the sources and listeners it is of (:func:`_encode`); the
+    still's name by default."""
     stills = folder / "stills"
     stills.mkdir(parents=True, exist_ok=True)
     lines = []
@@ -623,11 +627,19 @@ def video(
     if no_mp4:
         return
     out = folder / "tour.mp4"
+    ends = np.cumsum([duration for _name, duration in frames])
+
+    def still_at(t: float) -> str:
+        k = min(int(np.searchsorted(ends, t, side="right")), len(frames) - 1)
+        return shown(k) if shown is not None else frames[k][0]
+
     _ffmpeg(
         ["-f", "concat", "-safe", "0", "-i", str(stills / "stills.txt")],
         audio_path,
         _spectrum(spectrum_box, 30, "fps=30,"),
         out,
+        length_s=float(ends[-1]),
+        shown=still_at,
     )
     print(f"wrote {out}")
 
@@ -643,12 +655,15 @@ def animation(
     no_mp4: bool = False,
     spectrum_box: tuple[int, int, int, int] = SPECTRUM_BOX,
     chapters: Sequence[str] | None = None,
+    shown: Callable[[float], str] | None = None,
 ) -> None:
     """A moving picture: ``draw(t)`` at every frame (``t`` in s, ``fps`` a second) for
     ``duration_s``, piped to ffmpeg with ``audio_path`` and a scrolling spectrogram in
     ``spectrum_box``, into ``folder/tour.mp4``; and the frames at ``stills`` (name,
     ``t``) as pictures in ``folder/stills``, which is all that ``no_mp4`` writes, with
-    ``chapters.txt`` when given."""
+    ``chapters.txt`` when given. As it is encoded, its messages begin with what the
+    frame at ``t`` shows, ``shown(t)``: the sources and listeners it is of, a walker
+    with the moment of its walk (:func:`_encode`)."""
     pictures = folder / "stills"
     pictures.mkdir(parents=True, exist_ok=True)
     for k, (name, t) in enumerate(stills):
@@ -671,10 +686,16 @@ def animation(
         stdin.write(first.tobytes())
         for k in range(1, frames):
             stdin.write(draw(k / fps).convert("RGB").tobytes())
-            if k % (10 * fps) == 0:
-                print(f"  {k / fps:.0f} of {duration_s:.0f} s", flush=True)
 
-    _ffmpeg(source, audio_path, _spectrum(spectrum_box, fps, ""), out, feed)
+    _ffmpeg(
+        source,
+        audio_path,
+        _spectrum(spectrum_box, fps, ""),
+        out,
+        feed,
+        length_s=duration_s,
+        shown=shown,
+    )
     print(f"wrote {out}")
 
 
@@ -689,28 +710,63 @@ def _spectrum(box: tuple[int, int, int, int], fps: int, pictures: str) -> str:
     )
 
 
-def _ffmpeg(source: list[str], audio_path: Path, spectrum: str, out: Path, feed=None) -> None:
+def _ffmpeg(
+    source: list[str],
+    audio_path: Path,
+    spectrum: str,
+    out: Path,
+    feed=None,
+    *,
+    length_s: float,
+    shown: Callable[[float], str] | None = None,
+) -> None:
     """ffmpeg: the pictures from ``source`` (or piped in by ``feed(stdin)``), the sound,
-    the spectrogram over them, into an MP4 for the web."""
+    the spectrogram over them, into an MP4 for the web, ``length_s`` long; saying how
+    far it has come as it goes (:func:`_encode`)."""
     if shutil.which("ffmpeg") is None:
         raise SystemExit("error: ffmpeg is needed for the video")
     command = [
-        "ffmpeg", "-v", "error", "-stats", "-y", *source, "-i", str(audio_path),
-        "-filter_complex", spectrum, "-map", "[v]", "-map", "1:a",
+        "ffmpeg", "-v", "error", "-nostats", "-progress", "pipe:1", "-y", *source,
+        "-i", str(audio_path), "-filter_complex", spectrum, "-map", "[v]", "-map", "1:a",
         "-c:v", "libx264", "-preset", "slow", "-crf", "18",
         "-c:a", "aac", "-b:a", "384k", "-movflags", "+faststart", str(out),
     ]  # fmt: skip
-    if feed is None:
-        subprocess.run(command, check=True)
-        return
-    with subprocess.Popen(command, stdin=subprocess.PIPE) as process:
-        try:
-            feed(process.stdin)
-        finally:
-            process.stdin.close()
+    piped = subprocess.PIPE if feed is not None else None
+    with subprocess.Popen(command, stdin=piped, stdout=subprocess.PIPE) as process:
+        said = threading.Thread(target=_encode, args=(process.stdout, length_s, shown), daemon=True)
+        said.start()
+        if feed is not None:
+            try:
+                feed(process.stdin)
+            finally:
+                process.stdin.close()
         code = process.wait()
+        said.join()
     if code:
         raise subprocess.CalledProcessError(code, command)
+
+
+def _encode(progress, length_s: float, shown: Callable[[float], str] | None) -> None:
+    """A message for each report of ffmpeg's ``-progress`` (about two a second): how far
+    the video has come, after what its picture shows then (``shown(t)``, ``t`` in s of
+    the video), as ``hall, car @ 3.40 s -> seat: encoding the video, 12.1 of 60.0 s``;
+    read to the end, so that ffmpeg never waits on it."""
+    t = None
+    for line in progress:
+        key, _, value = line.decode("utf-8", "replace").strip().partition("=")
+        if key in ("out_time_us", "out_time_ms"):  # both in µs
+            t = int(value) / 1e6 if value.lstrip("-").isdigit() else None
+        elif key == "progress" and t is not None and t >= 0.0:
+            t = min(t, length_s)
+            done = f"{t:.1f} of {length_s:.1f} s"
+            try:
+                head = shown(t) if shown is not None else ""
+            except Exception:  # noqa: BLE001 - a message is not worth the video
+                head = ""
+            print(
+                f"{head}: encoding the video, {done}" if head else f"encoding the video: {done}",
+                flush=True,
+            )
 
 
 __all__ = [

@@ -37,6 +37,7 @@ from acoustic_spaces.demos.pictures import (
     tool_line,
     tour_column,
 )
+from acoustic_spaces.walkthrough import moment_name
 
 FLOOR = (34, 38, 52)
 WALL = (120, 128, 150)
@@ -169,6 +170,14 @@ class Pictures:
             "sti": part["sti"][k],
             "sight": part["sight"][k],
         }
+
+    def shown(self, t: float, visitor: str, standing: str) -> str:
+        """What the picture at ``t`` (s of tour.wav) shows, for the video's messages: the
+        guide, then the listener ``visitor`` at that moment of its walk, or ``standing``
+        as the visitor turns there, as ``guide -> visitor @ 3.40 s``."""
+        state = self.state(t)
+        heard = moment_name(visitor, state["local"]) if state["part"] == "walk" else standing
+        return f"{self.guide['name']} -> {heard}"
 
     def moments(self) -> list[tuple[str, float, str]]:
         """The tour's moments (a name, the time in tour.wav, a title): setting off, the

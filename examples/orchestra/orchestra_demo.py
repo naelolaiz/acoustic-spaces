@@ -410,6 +410,7 @@ def video(args) -> None:
         args.work / "tour.wav",
         no_mp4=args.no_mp4,
         chapters=chapters,
+        shown=lambda k: seats["seats"][tour[k].key]["seat"],
     )
 
 
