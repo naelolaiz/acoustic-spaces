@@ -575,18 +575,28 @@ def directivity_db(angle_deg) -> np.ndarray:
     return 10.0 * np.log10(0.22 + 1.27 * s**2)
 
 
-def directivity():
-    """A train's directivity (:class:`~acoustic_spaces.directivity.Balloon`, octave
-    bands, alike in all): :func:`directivity_db` round the way it goes, which the
-    source faces."""
+#: The axis of a source's own frame that the track runs along: a train's forward axis,
+#: as it faces the way it goes; a line source's left axis, which it lies along.
+TRACK_AXES = {"forward": 0, "left": 1}
+
+
+def directivity(track: str = "forward"):
+    """Schall 03's directivity (:class:`~acoustic_spaces.directivity.Balloon`, octave
+    bands, alike in all): :func:`directivity_db` round the track, which runs along the
+    source's ``track`` axis (:data:`TRACK_AXES`): ``forward`` for a train, ``left`` for
+    a line source along the track (the railway example's line.csv)."""
     from acoustic_spaces.directivity import GRID_STEP_DEG, Balloon, _from_angles, _grid
 
+    if track not in TRACK_AXES:
+        raise ValueError(
+            f"a track runs along a source's {' or '.join(TRACK_AXES)} axis, not {track!r}"
+        )
     elevation, azimuth = _grid(GRID_STEP_DEG)
     ways = _from_angles(azimuth[None, :], elevation[:, None])
-    along = np.degrees(np.arccos(np.clip(ways[..., 0], -1.0, 1.0)))
+    along = np.degrees(np.arccos(np.clip(ways[..., TRACK_AXES[track]], -1.0, 1.0)))
     energy = 10.0 ** (directivity_db(along) / 10.0)
     table = np.repeat(energy[..., None], len(OCTAVE_BANDS_HZ), axis=2)
-    return Balloon.from_table(table, "train")
+    return Balloon.from_table(table, "train" if track == "forward" else "line")
 
 
 def unit_power(level_a_db: np.ndarray, speed_kmh: float) -> np.ndarray:
@@ -1262,6 +1272,7 @@ __all__ = [
     "SOURCES",
     "SPEED_FACTORS",
     "TRACKS",
+    "TRACK_AXES",
     "TRAINS",
     "TRAIN_VEHICLE",
     "TRAM_VEHICLE",

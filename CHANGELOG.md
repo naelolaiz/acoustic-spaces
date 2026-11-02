@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- The railway example's line source has Schall 03's directivity round the track
+  (equation 8, `line.csv`, `acoustic_spaces.demos.rail.directivity("left")`) and so 0.28
+  dB more sound power, its points 2.5 m apart instead of 10 m: in a free field it gives
+  Schall 03's sum within 0.01 dB(A), not 0.2 to 0.4 dB(A) over it. Over the example's
+  ground it is 0.2 to 0.7 dB(A) louder, 1.0 dB(A) quieter behind the barrier, and the
+  example takes 2.3 times as long to simulate.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early
