@@ -1076,7 +1076,9 @@ send each way, as an `Emission` for a walk with Doppler (see
   speed and angle of attack from the blades' trimmed pitch (`rotorcraft.pitch`), its
   bands moved by its own Doppler shift. A `Rotor` gives the blades' twist, lift
   slope, trailing edge and tips, and whether their boundary layers are tripped.
-  `rotorcraft.broadband(trim, ..., model="bpm")` picks one model for a call.
+  `rotorcraft.broadband(trim, ..., model="bpm")` picks one model for a call. BPM's sum
+  over the blades does not depend on the noise's length: `rotorcraft.bpm_powers` finds
+  it once, for `broadband(..., bands=...)` to send the noise at any length.
 - `AS350_B3` is an Airbus Helicopters AS350 B3 at its maximum mass of 2,250 kg, from
   its type certificate and NASA's flight tests of the type; its main blades' chord
   and twist and its tail rotor's speed, chord and thickness are assumed (the source

@@ -136,6 +136,9 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- The helicopter demos' `helicopter` and `walk` steps find the rotors' tones and BPM's
+  bands (`rotorcraft.bpm_powers`) once, not for each length: about 7 s faster, 15 s with
+  `--broadband bpm`.
 
 ## 4.1.0
 

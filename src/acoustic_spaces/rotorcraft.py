@@ -861,6 +861,24 @@ def _band_noises(centres: np.ndarray, samples: int, sample_rate: int, rng) -> np
     return out
 
 
+def bpm_powers(
+    trim: Trim, *, grid_deg: float = 5.0, rotors: tuple[str, ...] = ("main", "tail")
+) -> tuple[np.ndarray, np.ndarray]:
+    """The ``rotors``' broadband noise in a trim by :func:`bpm_bands` on a grid
+    ``grid_deg`` apart in the helicopter's frame: the third-octave bands' centres (Hz)
+    and the rotors' mean square pressures 1 m from the hub, summed, ``(elevations,
+    azimuths, bands)``. They do not depend on how long the noise lasts: :func:`broadband`
+    takes them as ``bands`` to send another length without summing the blades again."""
+    elevation, azimuth = _grid(grid_deg)
+    ways = _from_angles(azimuth[None, :], elevation[:, None])
+    powers = None
+    for which in rotors:
+        centres, part = bpm_bands(trim, which, ways)
+        powers = part if powers is None else powers + part
+    assert powers is not None
+    return centres, powers
+
+
 def broadband(
     trim: Trim,
     *,
@@ -870,15 +888,23 @@ def broadband(
     seed: int = 0,
     rotors: tuple[str, ...] = ("main", "tail"),
     model: str | None = None,
+    bands: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> Mixture:
     """The rotors' broadband noise in a trim, ``samples`` of it, its pattern on a grid
     ``grid_deg`` apart in the helicopter's frame, by the helicopter's ``broadband``
     model or ``model``: "bpm" (:func:`bpm_bands`, a noise in each third-octave band
-    with its level in every direction) or "pegg" (:func:`pegg_broadband`)."""
+    with its level in every direction) or "pegg" (:func:`pegg_broadband`). For "bpm",
+    ``bands`` are the bands' centres and powers that :func:`bpm_powers` gives for this
+    trim, grid and ``rotors``, if already found (their shape is checked, not their trim
+    or rotors); by default they are found here."""
     model = trim.helicopter.broadband if model is None else model
     if model not in BROADBAND_MODELS:
         raise ValueError(f"broadband noise by {' or '.join(BROADBAND_MODELS)}, not {model!r}")
     if model == "pegg":
+        if bands is not None:
+            raise ValueError(
+                "bands are BPM's (bpm_powers): leave them out for Pegg's broadband noise"
+            )
         return pegg_broadband(
             trim,
             samples=samples,
@@ -887,13 +913,17 @@ def broadband(
             seed=seed,
             rotors=rotors,
         )
+    if bands is None:
+        bands = bpm_powers(trim, grid_deg=grid_deg, rotors=rotors)
+    centres, powers = bands
     elevation, azimuth = _grid(grid_deg)
-    ways = _from_angles(azimuth[None, :], elevation[:, None])
-    powers = None
-    for which in rotors:
-        centres, part = bpm_bands(trim, which, ways)
-        powers = part if powers is None else powers + part
-    assert powers is not None
+    shape = (len(elevation), len(azimuth), len(centres))
+    if np.shape(powers) != shape:
+        raise ValueError(
+            f"the bands' powers must be {shape}, each band's in each direction of the grid "
+            f"{grid_deg:g} degrees apart; got {np.shape(powers)}: find them with bpm_powers "
+            "on the same grid"
+        )
     keep = centres * 10.0**-0.05 < sample_rate / 2.0
     signals = _band_noises(centres[keep], samples, sample_rate, np.random.default_rng(seed))
     return Mixture(signals, np.sqrt(powers[..., keep]), sample_rate)
@@ -951,6 +981,7 @@ __all__ = [
     "Rotor",
     "Trim",
     "bpm_bands",
+    "bpm_powers",
     "broadband",
     "emission",
     "pegg_bands",
