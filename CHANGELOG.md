@@ -24,6 +24,8 @@
   17534-4's TC05 and TC06), not of the corners where the terrain's triangles cut the
   profile, which moved it with the grid. Early levels in sight over uneven ground
   change, by up to 2.1 dB (1 kHz) at the hillside example's listener on the slope.
+- Models load faster: the search for faces to split at T-junctions is vectorised and
+  gives the same faces (a 2 km terrain builds in 0.3 s instead of 5.4 s).
 
 ## 4.1.0
 

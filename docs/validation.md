@@ -2575,8 +2575,8 @@ direct sound, the ground's reflection and the crest's wave ripple together; 125 
 stays 3 to 4 dB down (-3.9 and -3.1 dB at 26.5 and 29 m).
 
 **Cost.** Rolling hills 2 km across on a 20 m grid (10,000 cells, 21,233 triangles with
-a building): the model builds in 6.3 s, its 8 diffracting edges (the building's) are
-found in 0.2 s, the early path over the hills in 0.4 s and a whole run with 20,000 rays
+a building): the model builds in 0.3 s, its 8 diffracting edges (the building's) are
+found in 0.1 s, the early path over the hills in 0.4 s and a whole run with 20,000 rays
 takes 0.8 s, on four cores of a cloud machine with nothing else running. The terrain
 costs the late rays nothing
 beyond the triangles it adds, and the early sound the profile and the string over it,
@@ -4041,17 +4041,17 @@ seconds, the fade at edges' 53 minutes, the walks' 14, the ground's 5.5 (51 s of
 the wave solver's, 100 s the parabolic equation's), the outdoor measurements' 3.1 (3.0
 with turbulence, 20 seconds in still air), the turbulence's 3.9 (3.8 with `--profile`),
 the vegetation's 5.2, the leaves' 2.6, the wave solver's outdoors 11, the moving air's
-9.3, the insertion loss's 1.8, the terrain's 2.7, the fast field program's 5.7, the
-benchmark's 55 (much longer with `--far`), the weather zones' 7.2 (46 s of them the
-parabolic equation's, 6.4 minutes the mean profile's), the long term's 16 seconds, the
-moving sources' 5.6 minutes, the rotors' 3.3, the sirens' 4 seconds, the cities' 22 (1.3
-minutes with `--sizes 10 20 30 40 60`), each BRAS run of the coupled rooms, the seminar
-room or the auditorium 2 to 4 minutes (4 to 9 calibrated, 5 to 11 in third-octave bands)
-and of the hall about 1.5 hours (5.2 calibrated, 3.4 in third-octave bands), the
-binaural comparison 10 minutes in the seminar room, 6 in the auditorium and an hour in
-the hall, a loudspeaker of the hall in parts about 10 minutes, the coupled rooms against
-theory under a second, and the rooms' own decay 5.8 minutes. The cross-check's numbers
-come from 4.0.1 with seed 1;
+9.3, the insertion loss's 1.8, the terrain's 41 seconds (2 November), the fast field
+program's 5.7, the benchmark's 55 (much longer with `--far`), the weather zones' 7.2
+(46 s of them the parabolic equation's, 6.4 minutes the mean profile's), the long term's
+16 seconds, the moving sources' 5.6 minutes, the rotors' 3.3, the sirens' 4 seconds, the
+cities' 22 (1.3 minutes with `--sizes 10 20 30 40 60`), each BRAS run of the coupled
+rooms, the seminar room or the auditorium 2 to 4 minutes (4 to 9 calibrated, 5 to 11 in
+third-octave bands) and of the hall about 1.5 hours (5.2 calibrated, 3.4 in third-octave
+bands), the binaural comparison 10 minutes in the seminar room, 6 in the auditorium and
+an hour in the hall, a loudspeaker of the hall in parts about 10 minutes, the coupled
+rooms against theory under a second, and the rooms' own decay 5.8 minutes.
+The cross-check's numbers come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the
 onset in every response).
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it
