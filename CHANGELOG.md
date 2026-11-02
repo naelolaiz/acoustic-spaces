@@ -7,6 +7,17 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: a coverage-map column that a wall between two rooms crosses had one point,
+  whose slab counted the rays of both rooms; each room's part of it that holds at least
+  a fifth of it now gets a point that counts that room's rays alone. Mapped 0.7 m apart,
+  the apartment example's bedroom points next to the partition read 65 dB(A); they now
+  read 43 to 49 dB(A), 43.8 dB(A) where a listener simulated there gets 43.8 dB(A).
+- Fixed: a map slab's volume counted the part of its column in the room in fifths, and
+  all of it where the column reached into a building; it now counts the part in the air
+  of its room, from 24 by 24 samples. Mapped 1.25 or 1.5 m apart, the shoebox example's
+  edge columns move by 0.2 to 0.5 dB(A); in the street example mapped 3 m apart, 12
+  columns of its canyon that reach into a building rise by 0.1 to 1.1 dB(A) for its
+  traffic (up to 2 dB at 1 kHz).
 
 ## 4.1.0
 

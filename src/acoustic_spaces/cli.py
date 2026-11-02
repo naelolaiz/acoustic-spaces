@@ -1381,7 +1381,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
     grid = result.grid
     band = OCTAVE_BANDS_HZ.index(args.band)
     band_text = f"{args.band} Hz" if args.band < 1000 else f"{args.band // 1000} kHz"
-    levels = grid.index.shape[2]
+    levels = int(grid.level.max()) + 1
     print(
         f"\n{len(grid)} map points {grid.cell:g} m apart, {settings.height:g} m above the "
         f"audience surfaces" + (f", on {levels} levels" if levels > 1 else "")
