@@ -27,7 +27,7 @@ sources:
   # (helicopter.csv) of what they send, which flyover_demo.py plays down each path.
   - name: helicopter
     position: [-450, 0, 150]
-    level_db: [134.8, 130.4, 131.2, 130.5, 127.1, 125.2, 122.1, 121.7]
+    level_db: [130.7, 130.5, 131.4, 130.4, 127.0, 125.2, 122.0, 120.2]
     directivity: {file: helicopter.csv}
     walk:
       to: [[450, 0, 150]]

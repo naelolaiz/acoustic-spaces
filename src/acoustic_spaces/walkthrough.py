@@ -16,14 +16,21 @@ trace, is traced only every ``late_step_m``; the places in between mix the late 
 those on either side, in proportion to how near they are. :func:`render_walk` then
 plays signals through them: the response of the place the walker is nearest to, with a
 crossfade of ``crossfade_s`` half-way between two places, so that the sound changes
-smoothly as it walks. Each place's late part is drawn from the same random sequence,
-so the crossfades join tails that only differ in their decay. The walker stands at the
-end of its path once it is there, for as long as the signals last.
+smoothly as it walks. In each octave band the crossfade's power goes from one place's
+to the next's along a raised cosine, however alike the two sound
+(:func:`~acoustic_spaces.render.crossfaded`): a tone heard in another phase at the next
+place keeps its level, except near antiphase, where the two cancel in the middle of
+the crossfade by more than its gain, at most +6 dB, makes up. Each place's late part is
+drawn from the same random sequence, so the crossfades join tails that only differ in
+their decay. The walker stands at the end of its path once it is there, for as long as
+the signals last.
 
 At walking speed there is no Doppler shift (it is under half a percent, 8 cents). A
 walk with ``doppler: true`` (a car, a train, an aircraft) plays each early path through
 a delay that changes as the walker goes (:mod:`acoustic_spaces.doppler`), so the pitch
-of each shifts as it does on its way; the late part is crossfaded as without it, and
+of each shifts as it does on its way; the late part is crossfaded by weights that add
+up to one (:func:`crossfade_weights`), which keep the power of tails this alike, a
+walking source's as its sound is sent and a walking listener's as it is heard; and
 :func:`pass_by` gives the level over time, its maximum and the sound exposure level.
 Outdoors in turbulence the early sound flickers along the walk as in
 :func:`~acoustic_spaces.render.auralize`, through the same eddies from place to place.
@@ -43,7 +50,10 @@ for one run, so that one scene serves both still and moving.
 
 Each copy is named for its walker, its place and its time on the walk
 (:func:`place_name`, ``car #12 @ 3.40 s``), and the simulation's progress messages name
-it so: :func:`place_of` reads the walker and the time back.
+it so; a demo's video names the moment of each walk it shows (:func:`moment_name`,
+``car @ 3.40 s``): :func:`place_of` reads the walker and the time back from both. A head
+turned as a demo scripts it is named with its yaw (:func:`facing_name`, ``standing
+facing 90.0 deg``), which :func:`facing_of` reads back.
 """
 
 from __future__ import annotations
@@ -53,6 +63,7 @@ import math
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -63,6 +74,7 @@ from acoustic_spaces.materials.bands import resolution_of
 from acoustic_spaces.render import (
     _as_2d,
     convolve,
+    crossfaded,
     flickers,
     gusts_for,
     power_gains,
@@ -84,7 +96,8 @@ LATE_STEP_M = 2.0
 CROSSFADE_S = 0.05
 
 #: A place's name (:func:`place_name`), whole.
-_PLACE = re.compile(r"(?P<name>.+) #\d+ @ (?P<time>\d+(?:\.\d+)?) s")
+_PLACE = re.compile(r"(?P<name>.+?)(?: #\d+)? @ (?P<time>\d+(?:\.\d+)?) s")
+_FACING = re.compile(r"(?P<name>.+) facing (?P<yaw>\d+(?:\.\d+)?) deg")
 
 
 def place_name(name: str, k: int, time_s: float) -> str:
@@ -94,9 +107,30 @@ def place_name(name: str, k: int, time_s: float) -> str:
     return f"{name} #{k} @ {time_s:.2f} s"
 
 
+def moment_name(name: str, time_s: float) -> str:
+    """The walker ``name`` ``time_s`` (s) into its walk, as a demo's video says what it
+    shows: ``car @ 3.40 s``."""
+    return f"{name} @ {max(time_s, 0.0):.2f} s"
+
+
+def facing_name(name: str, yaw_deg: float) -> str:
+    """``name`` turned to the yaw ``yaw_deg`` (degrees, as a scene's orientation gives
+    it), as a demo says what it shows while a head turns: ``standing facing 90.0 deg``."""
+    return f"{name} facing {yaw_deg % 360.0:.1f} deg"
+
+
+def facing_of(label: str) -> tuple[str, float] | None:
+    """What a name that says which way it faces (:func:`facing_name`) names, and the yaw
+    (degrees); None for any other name."""
+    found = _FACING.fullmatch(label)
+    if found is None:
+        return None
+    return found["name"], float(found["yaw"])
+
+
 def place_of(label: str) -> tuple[str, float] | None:
-    """The walker and the time (s) of a place's name (:func:`place_name`); None for any
-    other name."""
+    """The walker and the time (s) of a place's name (:func:`place_name`) or a moment's
+    (:func:`moment_name`); None for any other name."""
     found = _PLACE.fullmatch(label)
     if found is None:
         return None
@@ -357,7 +391,8 @@ def simulate_walk(
     listener or source with a walk), placed every ``step_m``.
 
     A walking listener hears every source; a walking source is heard at ``listener``
-    (by default the scene's only listener), with the other sources standing still.
+    (by default the scene's only listener), with the other sources standing still. The
+    walk must go slower than sound.
 
     The late part is traced every ``late_step_m`` (see the module's description), or at
     every place with ``late_step_m=None`` or the statistical late method. ``settings``
@@ -367,8 +402,9 @@ def simulate_walk(
     kind, item = _walker(room, name)
     points = walk_points(item, step_m)
     doppler = item.walk.doppler
+    _check_speed(room, item, knots(item).top_speed)
     if doppler:
-        _check_doppler(room, item, knots(item).top_speed, settings)
+        _check_doppler(room, settings)
     names = tuple(place_name(item.name, k, t) for k, t in enumerate(points.times))
     copies = [
         _copy_at(item, label, place, None if points.angles is None else points.angles[k], yaw)
@@ -424,14 +460,20 @@ def simulate_walk(
     return WalkResponses(item.name, kind, points, names, result, late_places, doppler)
 
 
-def _check_doppler(room: Room, item, speed: float, settings: SimulationSettings | None) -> None:
-    """What a walk with Doppler cannot do: go as fast as sound, or take the wave solver."""
+def _check_speed(room: Room, item, speed: float) -> None:
+    """A walk goes slower than sound, with Doppler or without: the walker is heard as it
+    would be standing at each place, through sound that keeps to linear acoustics, which
+    has no meaning as fast as sound or faster (no shock wave, no sonic boom)."""
     c = room.speed_of_sound()
     if speed >= c:
         raise ValueError(
-            f"{item.name!r} walks at {speed:g} m/s, as fast as sound or "
-            f"faster ({c:.0f} m/s): Doppler needs it slower"
+            f"{item.name!r} walks at {speed:g} m/s, as fast as sound or faster "
+            f"({c:.0f} m/s): walks must go slower, as shock waves are not simulated"
         )
+
+
+def _check_doppler(room: Room, settings: SimulationSettings | None) -> None:
+    """What a walk with Doppler cannot do: take the wave solver."""
     if (settings or room.scene.simulation).wave.enabled:
         raise ValueError(
             "a walk with Doppler does not take the wave solver's bands: turn "
@@ -572,8 +614,8 @@ def simulate_movement(
     source in use, still or moving. The late part is traced every ``late_step_m`` along
     each mover's walk, as in :func:`simulate_walk`.
 
-    A walk with Doppler moves alone: with another mover it is refused. It must go slower
-    than sound, without the wave solver, as in :func:`simulate_walk`.
+    Every mover goes slower than sound. A walk with Doppler moves alone: with another
+    mover it is refused. It goes without the wave solver, as in :func:`simulate_walk`.
     """
     if step_m <= 0:
         raise ValueError("step_m must be positive")
@@ -584,6 +626,8 @@ def simulate_movement(
     if not moving:
         raise ValueError("nothing moves: give a listener or a source a walk that is enabled")
     paths = {item.name: knots(item) for _, item in moving}
+    for _, item in moving:
+        _check_speed(room, item, paths[item.name].top_speed)
     doppler = next((item for _, item in moving if item.walk.doppler), None)
     if doppler is not None:
         if len(moving) > 1:
@@ -592,7 +636,7 @@ def simulate_movement(
                 f"{doppler.name!r} walks with Doppler, which moves alone: leave {others} "
                 f"standing (turn their walks off), or turn its doppler off"
             )
-        _check_doppler(room, doppler, paths[doppler.name].top_speed, settings)
+        _check_doppler(room, settings)
     times = np.unique(np.concatenate([_sample_times(k, step_m, step_deg) for k in paths.values()]))
     copies: dict[tuple[str, str], tuple[str, ...]] = {}
     added: dict[str, list] = {"listeners": [], "sources": []}
@@ -713,7 +757,6 @@ def render_movement(
     turbulent = [r for r in result if flickers(r)]
     gusts = gusts_for(turbulent[0], length / rate, seed) if turbulent else None
     times = movement.times
-    starts, lengths = _boundaries(times, crossfade_s)
     cache: dict[tuple[str, str], np.ndarray] = {}
     # Where each mover's copies stand, for the steps of a walk with Doppler.
     places = {
@@ -746,8 +789,8 @@ def render_movement(
                     wet = convolve(signal, response(key, heard))
                     out[: len(wet)] += wet
                 continue
+            keys = [movement.key(source, listener, k) for k in range(len(times))]
             if movement.doppler:
-                keys = [movement.key(source, listener, k) for k in range(len(times))]
                 walks = ("sources", source) in movement.copies
                 positions = np.array([places[key[0] if walks else key[1]] for key in keys])
                 _doppler(
@@ -765,30 +808,12 @@ def render_movement(
                     crossfade_s=crossfade_s,
                 )
                 continue
-            for k in range(len(times)):
-                begin = 0 if k == 0 else int(math.floor(starts[k - 1] * rate))
-                end = (
-                    length
-                    if k == len(times) - 1
-                    else int(math.ceil((starts[k] + lengths[k]) * rate)) + 1
-                )
-                begin, end = max(begin, 0), min(end, length)
-                if begin >= end:
-                    continue  # the signals are over before this moment
-                t = np.arange(begin, end) / rate
-                weight = (_past(starts, lengths, k, t) - _past(starts, lengths, k + 1, t))[:, None]
-                key = movement.key(source, listener, k)
-                if flickers(result[key]):
-                    wet = through_eddies(signal, result[key], heard, rate, seed, gusts, begin, end)
-                    out[begin:end] += weight[: len(wet)] * wet
-                    continue
-                ir = response(key, heard)
-                first = max(begin - len(ir) + 1, 0)
-                piece = signal[first:end]
-                if len(piece) == 0:
-                    continue
-                wet = convolve(piece, ir)[begin - first : end - first]
-                out[begin : begin + len(wet)] += weight[: len(wet)] * wet
+
+            def place(k: int, begin: int, end: int, signal=signal, keys=keys, heard=heard):
+                ir = partial(response, keys[k], heard)
+                return _heard(signal, result[keys[k]], ir, heard, rate, seed, gusts, begin, end)
+
+            _crossfade_places(place, times, crossfade_s, rate, out)
         outputs[listener] = out
     return outputs
 
@@ -858,12 +883,61 @@ def _past(starts, lengths, k: int, t: np.ndarray) -> np.ndarray:
 def crossfade_weights(times, t, crossfade_s: float = CROSSFADE_S) -> np.ndarray:
     """Each place's weight (N, len(t)) at times ``t``: 1 while the walker is nearest
     to it, falling to 0 over the crossfade to the next (a raised cosine centred half-way
-    between them). They add up to 1."""
+    between them). They add up to 1. They are the gains of the late part of a walk with
+    Doppler, and each place's share of the power in each band of a walk without."""
     starts, lengths = _boundaries(np.asarray(times, dtype=np.float64), crossfade_s)
     t = np.asarray(t, dtype=np.float64)
     return np.array(
         [_past(starts, lengths, k, t) - _past(starts, lengths, k + 1, t) for k in range(len(times))]
     )
+
+
+def _heard(signal, response, ir, fmt, rate, seed, gusts, begin: int, end: int) -> np.ndarray:
+    """``signal`` through a place's ``response``, over samples ``begin`` to ``end`` (fewer
+    where its sound is over): through the eddies where it flickers, else through
+    ``ir()``, its impulse response in ``fmt``."""
+    if flickers(response):
+        return through_eddies(signal, response, fmt, rate, seed, gusts, begin, end)
+    taps = ir()
+    first = max(begin - len(taps) + 1, 0)
+    piece = signal[first:end]
+    if len(piece) == 0:
+        return np.zeros((0, fmt.channels))
+    return convolve(piece, taps)[begin - first : end - first]
+
+
+def _crossfade_places(place, times, crossfade_s: float, rate: int, out: np.ndarray) -> None:
+    """Adds to ``out`` (samples, channels) the sound of each place in turn, as
+    ``place(k, begin, end)`` gives place ``k``'s over samples ``begin`` to ``end`` (fewer
+    where it is over): each alone while the walker is nearest to it, and over the
+    crossfade half-way to the next (:func:`_boundaries`) the two crossfaded band by band,
+    each band's power going from one's to the other's along the raised cosine of
+    :func:`_past` however alike the two are (:func:`~acoustic_spaces.render.crossfaded`).
+    """
+    length, channels = out.shape
+    starts, lengths = _boundaries(np.asarray(times, dtype=np.float64), crossfade_s)
+    # The samples of each crossfade, from lo to hi: from its start to its end, in order.
+    lo = np.clip(np.ceil(starts * rate), 0, length).astype(np.int64)
+    hi = np.clip(np.ceil((starts + lengths) * rate), 0, length).astype(np.int64)
+    hi = np.maximum(hi, lo)
+    hi[:-1] = np.minimum(hi[:-1], lo[1:])
+    last = len(times) - 1
+    held = np.zeros((0, channels))  # the place before's sound over the crossfade
+    for k in range(len(times)):
+        begin = 0 if k == 0 else int(lo[k - 1])
+        end = length if k == last else int(hi[k])
+        if begin >= end:
+            continue  # the signals are over before the walker gets here
+        x = np.zeros((end - begin, channels))
+        sound = place(k, begin, end)
+        x[: len(sound)] = sound
+        into = 0 if k == 0 else int(hi[k - 1]) - begin
+        if into > 0:
+            ramp = np.sqrt(_past(starts, lengths, k, np.arange(begin, begin + into) / rate))
+            out[begin : begin + into] += crossfaded(held, x[:into], ramp, rate)
+        alone = end - begin if k == last else int(lo[k]) - begin
+        out[begin + into : begin + alone] += x[into:alone]
+        held = x[alone:]
 
 
 def _sound_powers(walk: WalkResponses) -> dict[str, float]:
@@ -985,32 +1059,16 @@ def render_walk(
     if not moving:
         return out
     times = walk.points.times
-    starts, lengths = _boundaries(times, crossfade_s)
-    for k in range(len(times)):
-        if walk.doppler:
-            break  # the late parts below, the early paths through their delays
-        begin = 0 if k == 0 else int(math.floor(starts[k - 1] * rate))
-        end = length if k == len(times) - 1 else int(math.ceil((starts[k] + lengths[k]) * rate)) + 1
-        begin, end = max(begin, 0), min(end, length)
-        if begin >= end:
-            continue  # the signals are over before the walker gets here
-        t = np.arange(begin, end) / rate
-        weight = (_past(starts, lengths, k, t) - _past(starts, lengths, k + 1, t))[:, None]
+    if not walk.doppler:
         for source in moving:
-            if flickers(result[key_of(source, k)]):
-                wet = through_eddies(
-                    dry[source], result[key_of(source, k)], fmt, rate, seed, gusts, begin, end
-                )
-                out[begin:end] += weight[: len(wet)] * wet
-                continue
-            ir = response(source, k)
-            first = max(begin - len(ir) + 1, 0)
-            piece = dry[source][first:end]
-            if len(piece) == 0:
-                continue
-            wet = convolve(piece, ir)[begin - first : end - first]
-            out[begin : begin + len(wet)] += weight[: len(wet)] * wet
-    if walk.doppler:
+
+            def place(k: int, begin: int, end: int, source=source) -> np.ndarray:
+                ir = partial(response, source, k)
+                key = key_of(source, k)
+                return _heard(dry[source], result[key], ir, fmt, rate, seed, gusts, begin, end)
+
+            _crossfade_places(place, times, crossfade_s, rate, out)
+    else:
         for source in moving:
             _doppler(
                 result,
@@ -1286,8 +1344,11 @@ __all__ = [
     "WalkPoints",
     "WalkResponses",
     "crossfade_weights",
+    "facing_name",
+    "facing_of",
     "knots",
     "late_mixing",
+    "moment_name",
     "movers",
     "pass_by",
     "place_name",

@@ -457,8 +457,9 @@ Editor:
   folder and put in the scene's binaural output.
 - [x] The Scene YAML panel: the scene as coloured YAML text that follows every edit, and
   edited text applied with the checks every edit goes through.
-- [x] The views follow a run: the sources and listeners its step works on ringed, and
-  a walking source's places shown as they are simulated.
+- [x] The views follow a run: the sources and listeners its step works on ringed, a
+  walking source's places shown as they are simulated, and a demo's video followed
+  moment by moment as it is encoded.
 
 Running on other computers, in steps:
 
@@ -578,6 +579,9 @@ under Editor):
   auditorium (CR4) beside the seminar room and the hall, G from seat to seat in all four
   with the measured level's 3 dB question reported, IACC of FABIAN's binaural responses
   in three (`validation/bras_binaural.py`), and each run's largest standard error.
+- [x] BRAS's coupled rooms with the door open by 30.4°, whose model had no inside (the
+  door leaf ran 24 mm into the wall at its hinge): the conversion joins the leaf to the
+  wall and floor.
 - [x] Random scattering traced band by band where the bands scatter differently, as
   vector-based scattering is: with one ray for all bands, re-weighted band by band, its
   decays in BRAS were noisy, and in the coupled rooms far too short.
@@ -598,8 +602,6 @@ under Editor):
 
 Next:
 
-- [ ] BRAS's coupled rooms with the door open by 30.4°, whose model has no closed inside:
-  the door leaf cuts some 2 cm into the wall at its hinge.
 - [ ] A microphone's measured on-axis response and measured patterns (files), as
   sources have.
 - [ ] Spaced pairs whose late parts correlate as real capsules' do at low frequencies.

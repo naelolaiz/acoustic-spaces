@@ -351,7 +351,7 @@ def video(args) -> None:
     from acoustic_spaces.demos.pictures import save, settings_lines
 
     pictures = sibling(__file__, "lakeside_pictures")
-    seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args))
+    seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args), args)
     tour = tour_of(args)
     keys = [f"{listener}.{weather}" for listener, weather, _, _ in tour]
     pipeline.missing_mixes(seats, keys, DEMO.command("render", args))
@@ -391,6 +391,7 @@ def video(args) -> None:
         drawing.still,
         args.work / "tour.wav",
         no_mp4=args.no_mp4,
+        shown=lambda k: tour[k][0],
     )
 
 

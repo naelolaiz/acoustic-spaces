@@ -4615,10 +4615,11 @@ def _walking_scene(walk_to=(4.0, 1.0, 1.5), speed=2.0) -> Scene:
 
 def test_a_run_s_lines_name_what_it_works_on(qapp) -> None:
     """The views follow the names a step's line begins with: a source, a source and a
-    listener, a point of a line source, or a place along a walk, whose time puts the
-    run's walkers where its walk has them then; nothing else in a line counts."""
+    listener, a point of a line source, a place along a walk or a moment of it, whose
+    time puts the run's walkers where its walk has them then, and a head turned to a
+    yaw; nothing else in a line counts."""
     from acoustic_spaces.gui.following import NO_RUN, RunFocus
-    from acoustic_spaces.walkthrough import knots, place_name
+    from acoustic_spaces.walkthrough import facing_name, knots, moment_name, place_name
 
     scene = _walking_scene()
     listener = scene.listeners[0].name
@@ -4653,6 +4654,32 @@ def test_a_run_s_lines_name_what_it_works_on(qapp) -> None:
     # The run's scene is read again at its next walk: a demo may have written it anew.
     focus.read(f"{place_name('car', 0, 0.0)}: early reflections")
     assert asked == [1, 1] and focus.view.time == 0.0
+    # A demo's video names what each moment of it shows: several sources, the listener of
+    # that pass, the walker at the moment of its walk.
+    video = f"stage, {moment_name('car', 2.5)} -> late stage: encoding the video, 7.1 of 40.0 s"
+    assert focus.read(video)
+    assert focus.view.names == {
+        ("sources", "stage"),
+        ("sources", "car"),
+        ("listeners", "late stage"),
+    }
+    assert focus.view.time == 2.5 and asked == [1, 1]  # the same walks as the line before
+    assert not focus.read(video)
+    assert focus.read(f"stage, {moment_name('car', 2.5)} -> {listener}: encoding the video")
+    assert focus.view.names >= {("listeners", listener)} and focus.view.time == 2.5
+    focus.read("stage, nobody -> late stage: encoding the video, 7.6 of 40.0 s")
+    assert focus.view == NO_RUN
+    # A head a demo turns: the listener turned to the yaw the line gives, where it stands.
+    seat = scene.listeners[1]
+    assert focus.read(f"stage -> {facing_name('late stage', 450.0)}: turning the head, 3 of 40 s")
+    assert focus.view.names == {("sources", "stage"), ("listeners", "late stage")}
+    assert focus.view.facing == ((("listeners", "late stage"), 90.0),)
+    shown = focus.view.pose("listeners", seat, None)
+    assert shown.orientation.yaw == 90.0 and shown.position == seat.position
+    assert focus.view.pose("sources", scene.sources[0], None) is scene.sources[0]
+    assert focus.read(f"stage -> {facing_name('late stage', 120.0)}: turning the head")
+    focus.read(f"stage -> {facing_name('nobody', 120.0)}: turning the head")
+    assert focus.view == NO_RUN  # no such listener: nothing
     # A walk the run's scene does not give is not followed; nor one that cannot be read.
     focus = RunFocus(scene, lambda: box_scene())
     focus.read(f"{place_name('car', 3, 1.5)}: early reflections")
@@ -4810,6 +4837,17 @@ def test_the_3d_view_rings_what_a_run_works_on(window, qapp) -> None:
     )
     viewport.show_room(window.document.room, ("sources", 0), run=run)  # a redraw keeps them
     assert set(viewport._rings) == {("sources", 1), ("listeners", 0)}
+    # One the run turns turns with its arrows and its directivity's balloon.
+    window.document.edit("cardioid", lambda data: data["sources"][0].update(directivity="cardioid"))
+    stage = window.document.scene.sources[0]
+    turned = RunView(frozenset({("sources", "stage")}), facing=((("sources", "stage"), 90.0),))
+    viewport.show_room(window.document.room, ("sources", 0), run=turned)
+    parts = viewport._point_actors["sources", 0]
+    assert len(parts) == 4  # the marker, the arrow, the arrow to the top, the balloon
+    ahead = np.add(stage.position, stage.orientation.forward())
+    for actor in [*parts, viewport._rings["sources", 0]]:
+        moved = np.array(actor.GetUserMatrix().MultiplyPoint([*ahead, 1.0]))[:3]
+        np.testing.assert_allclose(moved, np.add(stage.position, [0.0, 1.0, 0.0]), atol=1e-9)
     window._draw()  # no run goes on
     assert viewport._rings == {} and viewport.run == NO_RUN
     assert viewport._point_actors["sources", 1][0].GetUserMatrix() is None
