@@ -156,7 +156,12 @@ def segment_levels(
 ) -> SegmentLevels:
     """The contribution of ``segment`` of a flight of ``aircraft`` at ``receivers``
     (an array of x, y, z in m, one a row), its exposure from the SEL curves
-    ``exposure`` and its maximum level from the LAmax curves ``maximum``."""
+    ``exposure`` and its maximum level from the LAmax curves ``maximum``.
+
+    ``impedance`` is Doc 29's impedance adjustment (dB, eq. 4-6 and 4-7), added to both
+    levels: :func:`impedance_db` of the aerodrome's temperature and pressure. Its
+    default, 0, is the NPD curves' reference day (25 °C, 101.325 kPa), not the standard
+    atmosphere at sea level, for which the adjustment is 0.074 dB."""
     o = np.atleast_2d(np.asarray(receivers, dtype=float))
     s1 = np.asarray(segment.start, dtype=float)
     s2 = np.asarray(segment.end, dtype=float)
@@ -246,11 +251,13 @@ def segment_levels(
         sor = np.where(behind, start_of_roll_db(aircraft.jet, psi, d1), 0.0)
     level = baseline + duration + installation - attenuation + fraction + sor + impedance
 
-    # The maximum level: the NPD curve at the nearest point, the attenuation by the
-    # elevation of and the ground distance to that point.
-    near_z = np.where(behind, z1, np.where(ahead, z2, foot[:, 2] - o[:, 2]))
-    beta_max = np.degrees(np.arcsin(np.clip(near_z / np.maximum(nearest, 1e-9), -1.0, 1.0)))
-    ell_max = np.sqrt(np.maximum(nearest**2 - near_z**2, 0.0))
+    # The maximum level (section 4.5.5): the NPD curve at the distance to the segment's
+    # nearest point. Alongside the segment the elevation angle, the lateral displacement
+    # and so the depression angle are the equivalent level path's, as for the exposure
+    # (figure 4-6); behind or ahead of it, the elevation of and the ground distance to
+    # the nearest end (figure 4-7).
+    beta_max = np.where(alongside, beta_p, np.where(behind, beta1, beta2))
+    ell_max = np.where(alongside, lateral, np.where(behind, ell1, ell2))
     peak = (
         maximum.level(power, np.maximum(nearest, NEAREST_NPD_M))
         + installation_db(aircraft.installation, beta_max + np.where(starboard, bank, -bank))
@@ -300,7 +307,12 @@ def event(
     impedance: float = 0.0,
 ) -> Event:
     """The sound exposure level (eq. 4-11) and the maximum level (eq. 4-10) of the
-    flight ``segments`` of ``aircraft`` at ``receivers``."""
+    flight ``segments`` of ``aircraft`` at ``receivers``.
+
+    ``impedance`` is Doc 29's impedance adjustment (dB, eq. 4-6 and 4-7) added to every
+    segment's levels: :func:`impedance_db` of the aerodrome's temperature and pressure.
+    Its default, 0, is the NPD curves' reference day (25 °C, 101.325 kPa), not the
+    standard atmosphere at sea level, for which the adjustment is 0.074 dB."""
     parts = tuple(
         segment_levels(aircraft, exposure, maximum, s, receivers, impedance) for s in segments
     )

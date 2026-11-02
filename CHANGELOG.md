@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- Doc 29's maximum level at a receiver alongside a segment (`doc29.segment_levels`,
+  `doc29.event`) takes the equivalent level path's elevation angle, lateral
+  displacement and depression angle, as the exposure does (Volume 2 section 4.5.5).
+  L_Amax moves by up to 0.064 dB on Volume 3's grids and receptors under the jets'
+  departures, 0.017 dB under PROP's and 0.006 dB under the arrivals (SEL does not move),
+  and the airport example's departure at lateral_450m is 85.1 dB(A) by Doc 29 (was 85.0).
+- Volume 3's impedance adjustment converts its 29.92 inHg with Appendix B2.2's
+  3.38653131 kPa per inHg (`doc29.performance.KPA_PER_INHG`), not 3.386389: its levels
+  rise by 0.0002 dB, the 99 levels at its receptors now within 0.0055 dB of table B-1
+  (was 0.0057 dB).
+- `doc29.segment_levels` and `doc29.event` document their `impedance`, which the caller
+  passes from `doc29.impedance_db` for the aerodrome; its default, 0, is the NPD curves'
+  reference day (25 °C), 0.074 dB under the standard atmosphere at sea level.
+- Docs: JETW's arrival NPD curves give SEL - L_Amax within 0.22 dB of a point source's
+  (not 0.1 dB), Volume 3 Part 2 has no arrivals of PROP, and the NPD curves' microphone
+  height is cited from Volume 2 sections 2.5 and 4.5.4.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early

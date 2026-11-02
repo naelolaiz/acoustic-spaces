@@ -117,6 +117,34 @@ def test_idle_steps_keep_their_deceleration() -> None:
     assert descent(points, 4, 6, w) == pytest.approx(descent(standard, 4, 6, w), rel=1e-9)
 
 
+def test_runway_gradient() -> None:
+    """Eq. B-18: on a runway of gradient G (positive uphill) the take-off roll is the
+    level runway's s_TOw times a / (a - g G), a = V² / (2 s_TOw) the average
+    acceleration (ft/s²) to the true airspeed V (ft/s) at its end and g = 32.174 ft/s²;
+    the rest of the profile moves along with its end."""
+    plane = volume3.performance()["JETW"]
+    steps = volume3.departure_procedures()[("JETW", "ICAO_A")]
+    weight = plane.weights[("D", "1")]
+    level = pf.departure(plane, steps, weight)
+    s, v = level[1].distance_ft, level[1].speed_kt * 1.68781
+    a = v**2 / (2.0 * s)
+    assert s == pytest.approx(4897.54, abs=0.01)
+    rolls = []
+    for gradient in (0.01, -0.01):
+        points = pf.departure(plane, steps, weight, runway_gradient=gradient)
+        assert points[1].distance_ft == pytest.approx(s * a / (a - 32.174 * gradient), rel=1e-12)
+        rolls.append(points[1].distance_ft)
+        moved = points[1].distance_ft - s
+        assert [p.distance_ft - moved for p in points[1:]] == pytest.approx(
+            [p.distance_ft for p in level[1:]], rel=1e-12
+        )
+        for name in ("height_ft", "speed_kt", "thrust_lb"):
+            assert [getattr(p, name) for p in points] == pytest.approx(
+                [getattr(p, name) for p in level], rel=1e-12
+            )
+    assert rolls == pytest.approx([5111.27, 4700.96], abs=0.01)
+
+
 def test_no_change_of_rating_no_transition() -> None:
     """A climb at the take-off's thrust rating follows the take-off without a
     transition; a change of rating adds a point 1000 ft on (Appendix B6.1.6), with half

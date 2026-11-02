@@ -37,6 +37,9 @@ SEA_LEVEL_INHG = 29.92
 LAPSE_F_PER_FT = 0.003566
 SEA_LEVEL_RANKINE = 518.67
 PRESSURE_EXPONENT = 5.256
+#: An inch of mercury (kPa) as Appendix B2.2 converts it: less precise than 3.386389 on
+#: purpose, so that 29.92 inHg is the standard 101.325 kPa (its note 31).
+KPA_PER_INHG = 3.38653131
 #: The breakpoint temperature (°C) of eq. B-11, when the high-temperature jet
 #: coefficients are not given.
 BREAKPOINT_C = 30.0

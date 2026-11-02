@@ -1145,12 +1145,15 @@ scene's sound: nothing of it goes through the simulation.
   the lateral attenuation from changing more than 1.5 dB along a segment, and airborne
   segments whose speed changes by more than 20 kt in steps of 10 m/s; the track's
   nodes joined in, and no source lower than 1 m.
-- **Each segment's level** (`doc29.segment_levels`, chapter 4) at each receiver: the
-  NPD curves at its power and distance (no nearer than 30 m), corrected for its speed
-  against 160 kt, the engines' installation round the roll axis, the lateral
-  attenuation of sound passing low over the ground, its finite length, behind a
-  take-off roll the start-of-roll directivity, and the air's impedance at the
-  aerodrome against the NPD curves' (`doc29.impedance_db`).
+- **Each segment's level** (`doc29.segment_levels`, chapter 4) at each receiver: the NPD
+  curves at its power and distance (no nearer than 30 m), corrected for its speed
+  against 160 kt, the engines' installation round the roll axis, the lateral attenuation
+  of sound passing low over the ground, its finite length and, behind a take-off roll,
+  the start-of-roll directivity. The caller passes the adjustment for the air's
+  impedance at the aerodrome against the NPD curves',
+  `impedance=doc29.impedance_db(temperature_c, pressure_kpa)`; left out, it is nought:
+  the NPD curves' reference day, 25 °C and 101.325 kPa (the standard atmosphere at sea
+  level adds 0.074 dB).
 - **The event** (`doc29.event`): the segments' energy summed to the SEL, their greatest
   level the LAmax.
 
@@ -1212,16 +1215,16 @@ Volume 2 Appendix G lists, as Volume 3's workbooks lay them out; they have not b
 tried on a download of the database.
 
 Its levels agree with all of Volume 3's reference results: the 99 levels at its
-receptors within 0.006 dB, its 12 grids of 37,458 points at 0.003 dB rms, and its
-3516 rows of segment results term by term, the segments' places within 7.3 m: the
-differences come from where Volume 3 puts its cuts by speed and from its conversion of
-metres to feet ([the check](validation.md#aircraft-noise-against-doc-29-volume-3)).
-Its flight profiles agree with all 26 of Volume 3's (Part 2: JETW and PROP arriving
-and departing at sea level and at 2000 and 5000 ft, at 15 and 40 °C, into headwinds of
--5 to 8 kt): their 314 points' heights, speeds and thrusts to Volume 3's rounding,
-their distances within 0.15 ft. Volume 3's profiles differ from Volume 2's printed
-equations in three places, where the package follows Volume 3
-([the check](validation.md#flight-profiles-against-doc-29-volume-3)).
+receptors within 0.0055 dB, its 12 grids of 37,458 points at 0.003 dB rms, and its 3516
+rows of segment results term by term, the segments' places within 7.3 m: the differences
+come from where Volume 3 puts its cuts by speed and from its conversion of metres to
+feet ([the check](validation.md#aircraft-noise-against-doc-29-volume-3)). Its flight
+profiles agree with all 26 of Volume 3's (Part 2: JETW arriving and departing and PROP
+departing, at sea level and at 2000 and 5000 ft, at 15 and 40 °C, into headwinds of -5
+to 8 kt): their 314 points' heights, speeds and thrusts to Volume 3's rounding, their
+distances within 0.15 ft. Volume 3's profiles differ from Volume 2's printed equations
+in three places, where the package follows Volume 3 ([the
+check](validation.md#flight-profiles-against-doc-29-volume-3)).
 
 **The NPD curves in the aerodrome's air** (`doc29.atmosphere`, Volume 2 Appendix D).
 The NPD curves hold the attenuation of the AIR-1845 atmosphere, an average of no one
@@ -1263,11 +1266,11 @@ lateral spreading in its own way, so its levels differ from Doc 29's; how far is
 What it leaves out for now: bank angles from the turns (a segment takes the bank it is
 given; Volume 3's cases fly level, and the performance calculation flies turns as
 straight), the dispersion of tracks round a backbone, the line-of-sight blockage of
-terrain, levels summed over many movements (LAeq, Lden) and contours. Volume 3 gives
-no reference maximum levels, so the LAmax is not checked, and no idle steps of an
-approach away from sea level in the standard atmosphere, which Appendix B adjusts so
-that the aircraft slows as it does there: those are checked against that definition
-only.
+terrain, levels summed over many movements (LAeq, Lden) and contours. Volume 3 gives no
+reference maximum levels, so the LAmax is checked only against Volume 2's equations, and
+no idle steps of an approach away from sea level in the standard atmosphere, which
+Appendix B adjusts so that the aircraft slows as it does there: those are checked
+against that definition only.
 
 ## Vibration through the ground
 

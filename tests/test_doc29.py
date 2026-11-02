@@ -107,6 +107,13 @@ def test_corrections() -> None:
     )
 
 
+def test_volume3_impedance() -> None:
+    """Volume 3's aerodrome, 29.92 inHg at 15 °C, converted with the 3386.53131 Pa per
+    inHg of Volume 2 Appendix B2.2 (its note 31), is the standard atmosphere at sea
+    level, where the impedance adjustment (eq. 4-6 and 4-7) is 0.074 dB."""
+    assert volume3.impedance() == pytest.approx(ev.impedance_db(15.0, 101.325), abs=1e-5)
+
+
 def test_take_off_roll() -> None:
     """Volume 2's example of a take-off roll: 1600 m to 75 m/s in 8 segments, 25 to
     375 m long (figure 3-5)."""
@@ -177,3 +184,140 @@ def test_maximum_level_under_the_path() -> None:
     result = doc29.event(plane, sel, lamax, [segment], np.array([[0.0, 0.0, 0.0]]))
     assert float(result.sel[0]) == pytest.approx(92.9, abs=1e-6)
     assert float(result.lamax[0]) == pytest.approx(86.1, abs=1e-6)
+
+
+# The maximum level away from the ground track, by hand from Volume 2's equations: the
+# NPD curves at one of their powers (eq. 4-4), the installation correction of engines
+# under the wings (eq. 4-15), the lateral attenuation (eq. 4-18 and 4-19) and a jet's
+# start-of-roll directivity (eq. 4-24a and 4-25).
+
+
+def _lamax_npd(curves, power: float, distance_m: float) -> float:
+    """Eq. 4-4: the curve of ``power`` (one of the table's), linear in the logarithm of
+    the distance between the table's two distances round ``distance_m``."""
+    row = curves.levels[curves.powers.index(power)]
+    feet = distance_m / FOOT_M
+    j = next(i for i in range(len(NPD_FEET) - 1) if NPD_FEET[i] <= feet <= NPD_FEET[i + 1])
+    t = math.log10(feet / NPD_FEET[j]) / math.log10(NPD_FEET[j + 1] / NPD_FEET[j])
+    return row[j] + t * (row[j + 1] - row[j])
+
+
+def _wing(phi_deg: float) -> float:
+    """Eq. 4-15 for engines under the wings (a = 0.0039, b = 0.062, c = 0.8786)."""
+    phi = math.radians(phi_deg)
+    top = (0.0039 * math.cos(phi) ** 2 + math.sin(phi) ** 2) ** 0.062
+    return 10 * math.log10(top / (0.8786 * math.sin(2 * phi) ** 2 + math.cos(2 * phi) ** 2))
+
+
+def _lateral(beta_deg: float, ell_m: float) -> float:
+    """Eq. 4-18 and 4-19 at an elevation angle of 0 to 50 degrees."""
+    assert 0.0 <= beta_deg <= 50.0
+    gamma = 1.089 * (1 - math.exp(-0.00274 * ell_m)) if ell_m <= 914 else 1.0
+    return gamma * (1.137 - 0.0229 * beta_deg + 9.72 * math.exp(-0.142 * beta_deg))
+
+
+def _sor_jet(psi_deg: float, d_m: float) -> float:
+    """Eq. 4-24a, weakened beyond 762 m by eq. 4-25b."""
+    r = math.pi * psi_deg / 180
+    level = (
+        2329.44
+        - 8.0573 * psi_deg
+        + 11.51 * math.exp(r)
+        - 3.4601 * psi_deg / math.log(r)
+        - 17403338.3 * math.log(r) / psi_deg**2
+    )
+    return level * 762 / d_m if d_m > 762 else level
+
+
+def _jetw():
+    """JETW (engines under the wings) and its departure's SEL and LAmax curves."""
+    curves = volume3.npd()
+    return volume3.aircraft()["JETW"], curves[("JETW", "SEL", "D")], curves[("JETW", "LAmax", "D")]
+
+
+def test_maximum_level_beside_a_banked_flight() -> None:
+    """Beside a level segment 300 m up, banked 20 degrees (starboard wing up), the
+    maximum level at 500 m to port and to starboard is eq. 4-8a's: the NPD curve at
+    the slant distance, the installation correction at the depression angle beta - 20
+    to port and beta + 20 to starboard (section 4.5.2) and the lateral attenuation at
+    the elevation angle beta = atan(300/500) and 500 m."""
+    plane, sel, lamax = _jetw()
+    speed = ev.REFERENCE_SPEED_M_S
+    segment = doc29.Segment(
+        start=(-3000.0, 0.0, 300.0),
+        end=(3000.0, 0.0, 300.0),
+        speeds=(speed, speed),
+        powers=(20000.0, 20000.0),
+        banks=(20.0, 20.0),
+    )
+    receivers = np.array([[0.0, 500.0, 0.0], [0.0, -500.0, 0.0]])  # port, starboard
+    result = doc29.event(plane, sel, lamax, [segment], receivers)
+    beta = math.degrees(math.atan2(300.0, 500.0))
+    assert result.segments[0].depression == pytest.approx([beta - 20.0, beta + 20.0])
+    assert result.segments[0].depression == pytest.approx([10.964, 50.964], abs=5e-4)
+    level = _lamax_npd(lamax, 20000.0, math.hypot(300.0, 500.0)) - _lateral(beta, 500.0)
+    expected = [level + _wing(beta - 20.0), level + _wing(beta + 20.0)]
+    assert result.lamax == pytest.approx(expected, abs=1e-6)
+    assert result.lamax == pytest.approx([80.775, 81.969], abs=5e-4)
+
+
+def test_maximum_level_beside_a_climb() -> None:
+    """Beside a climbing segment the maximum level takes the equivalent level path's
+    geometry, as the exposure does (Volume 2 section 4.5.5, figure 4-6): the NPD curve
+    at the distance dp to the segment's nearest point, the lateral attenuation at the
+    lateral displacement l from the ground track and the elevation angle beta =
+    atan(h/l), h = sqrt(dp² - l²), and the installation correction at beta -/+ the
+    bank angle, not the elevation of and the ground distance to the nearest point."""
+    plane, sel, lamax = _jetw()
+    climb = math.radians(15.0)
+    start = np.array([0.0, 0.0, 100.0])
+    end = start + 3000.0 * np.array([math.cos(climb), 0.0, math.sin(climb)])
+    segment = doc29.Segment(
+        start=tuple(start),
+        end=tuple(end),
+        speeds=(80.0, 85.0),
+        powers=(20000.0, 20000.0),
+        banks=(10.0, 10.0),
+    )
+    ell = 800.0
+    receivers = np.array([[1000.0, ell, 0.0], [1000.0, -ell, 0.0]])  # port, starboard
+    result = doc29.event(plane, sel, lamax, [segment], receivers)
+    u = (end - start) / np.linalg.norm(end - start)
+    rel = receivers[0] - start
+    dp = math.sqrt(rel @ rel - (rel @ u) ** 2)
+    beta = math.degrees(math.atan(math.sqrt(dp**2 - ell**2) / ell))
+    level = _lamax_npd(lamax, 20000.0, dp) - _lateral(beta, ell)
+    expected = [level + _wing(beta - 10.0), level + _wing(beta + 10.0)]
+    assert result.lamax == pytest.approx(expected, abs=1e-6)
+
+
+def test_maximum_level_behind_and_ahead_of_the_rolls() -> None:
+    """Behind a take-off roll and ahead of a landing roll the maximum level takes the
+    nearest end (Volume 2 section 4.5.5, figure 4-7): the NPD curve at its distance d1
+    (d2), the lateral attenuation and the installation correction at its elevation
+    angle asin(z1/d1) and ground distance sqrt(d1² - z1²), and behind the take-off roll
+    a jet's start-of-roll directivity (eq. 4-9a, 4-24a, 4-25) at the azimuth in the
+    plane of the runway and the distance d1."""
+    plane, sel, lamax = _jetw()
+    ends = {"start": (0.0, 0.0, 1.0), "end": (500.0, 0.0, 1.0)}
+    take_off = doc29.Segment(
+        **ends, speeds=(10.0, 40.0), powers=(20000.0, 20000.0), roll="take-off"
+    )
+    landing = doc29.Segment(**ends, speeds=(40.0, 10.0), powers=(20000.0, 20000.0), roll="landing")
+
+    def expected(end: tuple[float, float, float], receiver, sor: bool) -> float:
+        dx, dy = receiver[0] - end[0], receiver[1] - end[1]
+        z = end[2] - receiver[2]
+        d = math.sqrt(dx**2 + dy**2 + z**2)
+        beta = math.degrees(math.asin(z / d))
+        level = _lamax_npd(lamax, 20000.0, d) + _wing(beta) - _lateral(beta, math.hypot(dx, dy))
+        return level + (_sor_jet(math.degrees(math.atan2(abs(dy), dx)), d) if sor else 0.0)
+
+    behind = np.array([[-300.0, 200.0, 0.0], [-1500.0, 400.0, 0.0]])
+    result = doc29.event(plane, sel, lamax, [take_off], behind)
+    assert result.lamax == pytest.approx(
+        [expected(ends["start"], r, sor=True) for r in behind], abs=1e-6
+    )
+    ahead = np.array([[900.0, 300.0, 0.0]])
+    result = doc29.event(plane, sel, lamax, [landing], ahead)
+    assert result.lamax == pytest.approx([expected(ends["end"], ahead[0], sor=False)], abs=1e-6)
