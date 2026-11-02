@@ -950,41 +950,43 @@ python passby_demo.py all --train freight   # or sound, scene, walk, video one a
 
 Options: `--train regional` the train (`regional`, an electric locomotive and five
 coaches, 151 m long, at 160 km/h; `s_bahn`, a four-car electric multiple unit, 67 m, at
-120 km/h; `intercity`, the locomotive and twelve coaches, 336 m, at 200 km/h;
-`freight`, the locomotive and 24 wagons with composite brake blocks, 446 m, at 100
-km/h), `--speed` how fast it runs (km/h; by default the train's own above, whatever
-the speed of the example's walk: the Run demo window's **Speed** reads *the train's
-own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in ballast;
-`slab`, slab track; `slab_absorber`, slab track with absorbers; `level_crossing`),
-`--horn off` the train's warning horn (`blasts` or `chord` sounds it, see below), `--indoors off`
-where it is heard (see below), `--step 1` how
-far apart the train is simulated along its walk (m), `--hrtf me.sofa` a measured head,
-`--input train=WAV` a dry recording of yours (`train_roof=WAV` and
-`train_pantograph=WAV` for the sources up on the train, `train_horn=WAV` for its horn).
-The tram has no options of its own but `--indoors`: a low-floor tram with air
-conditioning, 30 m long, on its track set in the street, at the speed of its walk (50
-km/h) unless `--speed` says.
+120 km/h; `intercity`, the locomotive and twelve coaches, 336 m, at 200 km/h; `freight`,
+the locomotive and 24 wagons with composite brake blocks, 5 of them tank wagons, 446 m,
+at 100 km/h), `--speed` how fast it runs (km/h; by default the train's own above,
+whatever the speed of the example's walk: the Run demo window's **Speed** reads *the
+train's own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in
+ballast; `slab`, slab track; `slab_absorber`, slab track with absorbers;
+`level_crossing`), `--horn off` the train's warning horn (`blasts` or `chord` sounds it,
+see below), `--indoors off` where it is heard (see below), `--step 1` how far apart the
+train is simulated along its walk (m), `--hrtf me.sofa` a measured head, `--input
+train=WAV` a dry recording of yours (`train_roof=WAV` and `train_pantograph=WAV` for the
+sources up on the train, `train_horn=WAV` for its horn). The tram has no options of its
+own but `--indoors`: a low-floor tram with air conditioning, 30 m long, on its track set
+in the street, at the speed of its walk (50 km/h) unless `--speed` says.
 
-- **Their sound power** is that of Schall 03 (Germany's method for the noise of
-  railways and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`):
-  for each vehicle unit, from its data sheet (Beiblatt 1 for trains, 2 for trams), each
-  of its sources' A-weighted sound power per metre of track for one unit an hour, per
+- **Their sound power** is that of Schall 03 (Germany's method for the noise of railways
+  and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`): for
+  each vehicle unit, from its data sheet (Beiblatt 1 for trains, 2 for trams), each of
+  its sources' A-weighted sound power per metre of track for one unit an hour, per
   octave band, at its speed and on its track (equation 1), with the speed factors of
-  Tabelle 6 and 14 and the track's corrections of Tabelle 7 and 15. A unit going by at
-  v km/h once an hour has the sound power of that level plus 10 lg(1000 v) dB. The
-  sources sit at the rail top (rolling noise, the bogies' aerodynamic noise, the fans
-  under the floor, the motors), on the roof, 4 m up (its aerodynamic noise and its
-  fans), and at the pantograph, 5 m up, each radiating louder across the track than
-  along it, by 10 lg(0.22 + 1.27 sin² δ) dB with δ the angle to the track (equation 8;
-  the example's `train.csv`, the street's `tram.csv`). At their speeds on ballast (the
-  tram on its street track):
+  Tabelle 6 and 14 and the track's corrections of Tabelle 7 and 15. A unit going by at v
+  km/h once an hour has the sound power of that level plus 10 lg(1000 v) dB. The sources
+  sit at the rail top (rolling noise, the bogies' aerodynamic noise, the fans under the
+  floor, the motors), 4 m up (on the roof its aerodynamic noise and its fans, and a tank
+  wagon's body, which its rolling noise makes ring), and at the pantograph, 5 m up, each
+  radiating louder across the track than along it, by 10 lg(0.22 + 1.27 sin² δ) dB with
+  δ the angle to the track (equation 8; the example's `train.csv`, the street's
+  `tram.csv`). Schall 03 takes a fifth of a freight train's wagons as tank wagons unless
+  its make-up is known (4.2), so 5 of the freight train's 24 are, every fifth from the
+  third: 4 m up it has 116.4 dB(A) of sound power, its locomotive's roof alone 111.8. At
+  their speeds on ballast (the tram on its street track):
 
   | train | units | length | speed | sound power |
   |---|---|---:|---:|---:|
   | `regional` | locomotive (Fz 7) + 5 coaches (Fz 9) | 151 m | 160 km/h | 130.6 dB(A) |
   | `s_bahn` | electric multiple unit (Fz 5) | 67 m | 120 km/h | 121.7 dB(A) |
   | `intercity` | locomotive + 12 coaches | 336 m | 200 km/h | 136.8 dB(A) |
-  | `freight` | locomotive + 24 wagons (Fz 10) | 446 m | 100 km/h | 131.8 dB(A) |
+  | `freight` | locomotive + 24 wagons (Fz 10), 5 of them tank wagons | 446 m | 100 km/h | 131.9 dB(A) |
   | `tram` | low-floor tram (Fz 21) | 30 m | 50 km/h | 115.0 dB(A) |
 
   The tram's sound power is 16.6 dB(A) over the car's at 50 km/h (CNOSSOS-EU's, 98.4
@@ -1029,20 +1031,27 @@ km/h) unless `--speed` says.
   `train` the train alone, `rumble` the rumble alone (`tram_and_rumble` and `tram` for
   the tram). The room is EN ISO 12354-3's, not the building's geometry: AGC's 4-16-4
   double glazing as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82 m² of
-  it into a room of 50 m³. Each octave band in the room is the simulated level at the
-  listener, the façade's reflection in it, less D_2m,nT = R + 10 lg(V / (6 T0 S)), the
-  window's sound reduction index plus 9.6 dB (`acoustic_spaces.facade`); for traffic's
-  spectrum that is Rw + Ctr + 9.6 = 29 - 4 + 9.6 = 34.6 dB, with ISO 717-1's rating of
-  AGC's values in octave bands, 29 (-1; -4) dB (AGC's 30 is rated from third octaves);
-  the S-Bahn's, higher in frequency, loses 39.6 dB(A) at the railway's house (86.8 dB(A)
-  outdoors, 47.1 in the room). The rumble is the FTA's general method (see [Vibration
-  through the ground](outdoor.md#vibration-through-the-ground)) at each moment of the
-  pass: the train's curve at the distance from its nearest wheels to the room's wall
-  behind the listener, the floor 3 dB over the ground, its rooms' rumble 50 dB under
-  that in dB(A), played as noise in the third octave at 25 Hz, the same in both ears: in
-  the railway's house 27.5 dB(A) for the S-Bahn and 41.3 for the regional train. The
-  room's own reverberation is not added, and the sound keeps the direction it comes from
-  outdoors.
+  it into a room of 50 m³. Each octave band in the room is the simulated level 2 m in
+  front of the wall, the façade's reflection in it (EN ISO 12354-3's L_1,2m), less
+  D_2m,nT = R + 10 lg(V / (6 T0 S)), the window's sound reduction index plus 9.6 dB
+  (`acoustic_spaces.facade`); for traffic's spectrum that is Rw + Ctr + 9.6 = 29 - 4 +
+  9.6 = 34.6 dB, with ISO 717-1's rating of AGC's values in octave bands, 29 (-1; -4) dB
+  (AGC's 30 is rated from third octaves); the S-Bahn's, higher in frequency, loses 39.6
+  dB(A) at the railway's house (86.8 dB(A) outdoors, 47.1 in the room). That level is
+  the listener's own where it stands 2 m out, as `house_18m` and the pavement do;
+  nearer, where the wall's reflection makes the 63 to 250 Hz bands louder or quieter,
+  the vehicle is simulated once more, as one more listener (`balcony_2m`), at the point
+  2 m in front of the wall, square to it, at the listener's height: for the balcony, 1 m
+  out from it. The room hears the listener's sound through the window, each octave band
+  changed at each moment by as much as the level 2 m out is over the listener's. The
+  rumble is the FTA's general method (see [Vibration through the
+  ground](outdoor.md#vibration-through-the-ground)) at each moment of the pass: the
+  train's curve at the distance from its nearest wheels to the room's wall behind the
+  listener, the floor 3 dB over the ground, its rooms' rumble 50 dB under that in dB(A),
+  played as noise in the third octave at 25 Hz, the same in both ears: in the railway's
+  house 27.5 dB(A) for the S-Bahn and 41.3 for the regional train. The room's own
+  reverberation is not added, and the sound keeps the direction it comes from at the
+  listener.
 - **What is felt**: each listener's caption gives how hard the floor of its house, or
   outdoors the ground under it, shakes at most during the pass, in VdB (the FTA's
   curves, which are the ground's), and whether that is felt, from about 65 VdB (the
@@ -1068,10 +1077,10 @@ km/h) unless `--speed` says.
 
   | | regional, 160 km/h | S-Bahn, 120 km/h | intercity, 200 km/h | freight, 100 km/h |
   |---|---:|---:|---:|---:|
-  | 7.5 m | 94.5 (98.5) | 88.7 (90.8) | 97.5 (103.7) | 90.3 (101.6) |
-  | meadow, 25 m | 85.3 (90.6) | 79.6 (82.7) | 88.5 (95.9) | 81.3 (93.4) |
-  | behind the barrier, 25 m | 78.3 (79.3) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (79.6) |
-  | house, 18 m | 92.1 (97.2) | 86.8 (89.5) | 95.1 (102.5) | 88.3 (100.2) |
+  | 7.5 m | 94.5 (98.5) | 88.7 (90.8) | 97.5 (103.7) | 90.5 (101.7) |
+  | meadow, 25 m | 85.3 (90.6) | 79.6 (82.7) | 88.5 (95.9) | 81.7 (93.6) |
+  | behind the barrier, 25 m | 78.3 (79.3) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (82.6) |
+  | house, 18 m | 92.1 (97.2) | 86.8 (89.5) | 95.1 (102.5) | 88.5 (100.3) |
 
   The longer a train, the more its SEL is over its L_Amax: the freight train, 446 m
   long, takes 16 s to pass at 100 km/h, the S-Bahn, 67 m, 2 s at 120 km/h. The barrier,
@@ -1240,11 +1249,12 @@ Options: `--blows 480` how many blows a minute the breaker strikes (Epiroc's MB 
 1650 kg breaker, strikes 320 to 640), `--seconds 20` how long each listener is heard,
 `--listeners pavement,garden` which listeners and in which order (every one in use by
 default; `--tour`, its earlier name, still works), `--indoors off` where they are heard
-(see below), `--hrtf me.sofa` a measured head, `--input
-NAME=WAV` a dry recording of yours instead of a made sound (`breaker`, `generator`,
-`dumper` or `dumper_alarm`). The scene with the works alone goes to `scene_works.yaml`,
-everything else to `demo_works/`. In the editor, **Simulation > Run demo…** on the
-street's scene has it beside the pass-by demo.
+(see below), `--hrtf me.sofa` a measured head, `--input NAME=WAV` a dry recording of
+yours instead of a made sound (`breaker`, `generator`, `dumper` or `dumper_alarm`). The
+scene with the works alone goes to `scene_works.yaml`, the same heard 2 m in front of
+the offices to `scene_works_2m.yaml` (see Indoors below), everything else to
+`demo_works/`. In the editor, **Simulation > Run demo…** on the street's scene has it
+beside the pass-by demo.
 
 - **The machines** are rows of Defra's noise database for construction sites (*Update
   of noise database for prediction of noise on construction and open sites*, Hepworth
@@ -1293,16 +1303,18 @@ street's scene has it beside the pass-by demo.
   and the balcony's, 1 m in front of the offices, hear the works in a room behind that
   wall, and the garden hears them outdoors: `works_and_rumble` the works through the
   closed window and the rumble of the breaker's and the dumper's vibration, `works` the
-  window alone, `rumble` the rumble alone. The vibration is each machine's level at its
-  distance from the room's wall by the FTA's eq. 7-3 from table 7-4 (a hoe ram, 87 VdB
-  at 25 ft; loaded trucks, 86 VdB), their energies added, with no adjustment for the
-  building, as the manual compares plant's level with its limits as it is; the rumble is
-  50 dB under it in dB(A), as the trains'. It is 29.8 dB(A) in the houses (their floor
-  at 79.8 VdB) and 25.5 in the offices (75.5), and steady, as the breaker's blows come
-  faster than noise at 25 Hz can swell and fade. The garden's ground shakes at 66.1
-  VdB, just felt. The captions give what is felt at each listener, and each one's
-  vibration is a bass shaker's track (`<listener>.shaker.wav` beside the mixes,
-  `tour.shaker.wav`), as the trains' are.
+  window alone, `rumble` the rumble alone. The offices' room takes its level outdoors at
+  the point 2 m in front of their wall, 1 m out from the balcony: the `scene` step
+  writes that point (`balcony_2m`) to `scene_works_2m.yaml`, which `simulate` simulates
+  too. The vibration is each machine's level at its distance from the room's wall by the
+  FTA's eq. 7-3 from table 7-4 (a hoe ram, 87 VdB at 25 ft; loaded trucks, 86 VdB),
+  their energies added, with no adjustment for the building, as the manual compares
+  plant's level with its limits as it is; the rumble is 50 dB under it in dB(A), as the
+  trains'. It is 29.8 dB(A) in the houses (their floor at 79.8 VdB) and 25.5 in the
+  offices (75.5), and steady, as the breaker's blows come faster than noise at 25 Hz can
+  swell and fade. The garden's ground shakes at 66.1 VdB, just felt. The captions give
+  what is felt at each listener, and each one's vibration is a bass shaker's track
+  (`<listener>.shaker.wav` beside the mixes, `tour.shaker.wav`), as the trains' are.
 
 What it leaves out: the dumper stands still while its alarm sounds, as if it reversed on
 the spot; the machines' bodies are not in the scene, so nothing of the dumper shields

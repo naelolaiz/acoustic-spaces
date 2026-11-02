@@ -4,6 +4,9 @@
   overlap-add in float64), for any number of response channels.
 - :func:`resample`: band-limited sample-rate conversion, so a 44.1 kHz recording can go
   through a 48 kHz response.
+- :func:`crossfaded`: a crossfade from one sound to another whose power runs on however
+  alike the two are, broadband or band by band: a tour's cuts from one seat to the
+  next, a walk's from one place to the next.
 - :func:`auralize`: the sources of a simulation each playing their own signal, heard at
   one listener in a spatial format (mono, binaural, Ambisonics, loudspeakers), summed.
   Outdoors in turbulence the early paths change as the eddies drift past: a new
@@ -165,6 +168,38 @@ def power_gains(sources, names) -> dict[str, float]:
         return {}
     loudest = max(levels.values())
     return {name: 10.0 ** ((level - loudest) / 20.0) for name, level in levels.items()}
+
+
+def crossfaded(
+    x0: np.ndarray, x1: np.ndarray, ramp: np.ndarray, sample_rate: float | None = None
+) -> np.ndarray:
+    """``x0`` fading out and ``x1`` fading in, (n,) or (n, channels): ``x1``'s gain is
+    ``ramp`` (n, rising from 0 to 1) and ``x0``'s sqrt(1 - ramp²), equal power for two
+    unlike sounds, both scaled, sample by sample, by how alike the two are over the
+    crossfade (their correlation coefficient, one for all channels), so that the power
+    runs from one's to the other's as it would for unlike ones. Alike sounds would
+    otherwise be up to 3 dB louder in the middle, sounds in antiphase silent. The
+    scaling is at most +6 dB: where the two cancel to less than half the amplitude
+    unlike sounds would have (near antiphase, in the middle of the crossfade), their
+    sum stays below it. With ``sample_rate``, each octave band
+    (:func:`~acoustic_spaces.synthesis.split_bands`) by its own correlation."""
+    x0, x1 = np.asarray(x0, dtype=float), np.asarray(x1, dtype=float)
+    ramp = np.asarray(ramp, dtype=float)
+    if sample_rate is not None:
+        from acoustic_spaces.synthesis import split_bands
+
+        bands = zip(split_bands(x0, sample_rate), split_bands(x1, sample_rate), strict=True)
+        return sum((crossfaded(b0, b1, ramp) for b0, b1 in bands), np.zeros_like(x0))
+    fade_in, fade_out = ramp, np.sqrt(np.clip(1.0 - ramp**2, 0.0, None))
+    shape = (-1,) + (1,) * (x0.ndim - 1)
+    both = x0 * fade_out.reshape(shape) + x1 * fade_in.reshape(shape)
+    p0, p1 = float(np.mean(x0**2)), float(np.mean(x1**2))
+    if p0 <= 0.0 or p1 <= 0.0:
+        return both
+    rho = float(np.mean(x0 * x1)) / math.sqrt(p0 * p1)
+    unlike = fade_out**2 * p0 + fade_in**2 * p1
+    alike = unlike + 2.0 * rho * fade_out * fade_in * math.sqrt(p0 * p1)
+    return both * np.sqrt(unlike / np.maximum(alike, unlike / 4.0)).reshape(shape)
 
 
 def auralize(
@@ -475,4 +510,13 @@ def play(
     return Playback(state["frames"], state["xruns"], state["load"])
 
 
-__all__ = ["Convolver", "Playback", "auralize", "convolve", "play", "power_gains", "resample"]
+__all__ = [
+    "Convolver",
+    "Playback",
+    "auralize",
+    "convolve",
+    "crossfaded",
+    "play",
+    "power_gains",
+    "resample",
+]
