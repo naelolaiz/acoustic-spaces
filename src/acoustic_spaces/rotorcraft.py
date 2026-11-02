@@ -944,15 +944,18 @@ def emission(
     )
 
 
-#: An Airbus Helicopters AS350 B3 (Ecureuil, sold as the H125) at its maximum mass of
-#: 2,250 kg. From its type certificate (EASA.R.008): the mass, the rotors' diameters
-#: (10.69 m and 1.86 m) and blades (three and two), and the main rotor turning between 375
-#: and 405 turns a minute in powered flight. From NASA's flight tests of an AS350 SD1
-#: (Greenwood, Sim and Boyd, AHS Forum 72, 2016): the drag area (f / A = 0.0071), the
-#: main rotor's speed (394 turns a minute, its tip at 220.6 m/s from their weight
-#: coefficient) and its OA209 blades (9 % thick). Assumed, from no source to hand: the
-#: main blades' chord (0.35 m) and twist (-10 degrees), the tail rotor's speed (2,086
-#: turns a minute, its tip at 203 m/s), chord (0.185 m), thickness (12 %), untwisted
+#: An Airbus Helicopters AS350 B3 (Ecureuil, sold as the H125) with the Arriel 2B engine
+#: at its maximum mass of 2,250 kg. From its type certificate (EASA.R.008): the mass, the
+#: rotors' diameters (10.69 m and 1.86 m) and blades (three and two), and the main rotor
+#: turning between 385 and 394 turns a minute in powered flight (375 and 405 with the
+#: Arriel 2B1 or 2D). From NASA's flight tests of an AS350 SD1 (Greenwood, Sim and Boyd,
+#: AHS Forum 72, 2016; Watts et al., NASA TM-2016-219354, table 1): the drag area
+#: (f = 7.26 ft², 0.674 m², which they give as f / A = 0.0071, a ratio that fits a larger
+#: disc than this one), the main rotor's speed (394 turns a minute, the Arriel 2B's most
+#: in powered flight; its tip at 220.6 m/s from their weight coefficient), the tail
+#: rotor's speed (2,086 turns a minute, its tip at 203 m/s) and the main rotor's OA209
+#: blades (9 % thick). Assumed, from no source to hand: the main blades' chord (0.35 m)
+#: and twist (-10 degrees), the tail rotor's chord (0.185 m), thickness (12 %), untwisted
 #: blades and the way it turns, both rotors' trailing edges (a rotor's default), and its
 #: hub 6.67 m behind the main rotor's shaft (from Airbus's 12.94 m overall with the rotors
 #: turning, less both rotors' radii) and 1 m lower. The main rotor turns clockwise seen
