@@ -27,11 +27,11 @@ from __future__ import annotations
 import argparse
 import functools
 import math
-import os
 from pathlib import Path
 
 import numpy as np
 
+from acoustic_spaces.demos import pipeline
 from acoustic_spaces.demos.audio import write as write_wav
 from acoustic_spaces.demos.passby import FADE_S, Vehicle, car_input, car_of, kmh, source_scene
 
@@ -283,7 +283,7 @@ class Aircraft(Vehicle):
             f"The directivity of {JET}'s engines ({info['installation']}-mounted), Doc 29's "
             f"installation correction, written by {self.script}",
         )
-        named = Path(os.path.relpath(table, args.source.parent)).as_posix()
+        named = pipeline.named_from(table, args.source.parent)
         source["directivity"] = {"file": named}
 
     # -- its words ---------------------------------------------------------------------

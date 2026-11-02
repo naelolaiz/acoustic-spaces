@@ -55,6 +55,10 @@ def test_what_an_emission_needs() -> None:
         Mixture(np.ones((1, 10)), np.ones((1, len(azimuth), 1)), RATE)
     with pytest.raises(ValueError, match="finite"):
         Mixture(np.full((1, 10), np.nan), np.ones((len(elevation), len(azimuth), 1)), RATE)
+    with pytest.raises(ValueError, match="at least one sample"):
+        Mixture(np.ones((1, 0)), np.ones((len(elevation), len(azimuth), 1)), RATE)
+    with pytest.raises(ValueError, match="sample rate"):
+        Mixture(np.ones((1, 10)), np.ones((len(elevation), len(azimuth), 1)), 0)
 
 
 def _periodic(**kw) -> Periodic:

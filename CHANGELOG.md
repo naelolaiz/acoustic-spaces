@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- Editor: **View > Follow the run** rings the sources and listeners a run's step works
+  on, a demo's too, and draws a walking source and the run's other walkers where the
+  place being simulated has them, on the walks the run simulates (`Demo.walks`); while
+  a demo's video is encoded, what the video shows at that moment; a head a demo turns
+  faces as it does then, its arrows and directivity balloon with it.
+- Demos: the video's messages say what it shows at each moment, `stage, car @ 3.40 s
+  -> seat: encoding the video, 12.1 of 60.0 s`, in place of ffmpeg's frame counter.
+- Fixed: the 3D view's names of walkers now move with them in the Movement panel's
+  preview; they stayed where each walk starts.
+- Fixed: the gallery walk demo stopped, after downloading the talk, when a talker's
+  take was shorter than the walk and the turn (F4's, 36 s); the guide now says it again
+  from its start, 2 s after it ends. Its walk and turn are made again for another
+  `--hrtf`, where `all` took them as done and the video stopped for want of their sound.
+- Fixed: `all` in the other demos took mixes made through other HRTFs (`--hrtf`) as
+  done, and without `--hrtf` a simulation through an HRTF file too, mixing through it;
+  their videos now refuse mixes of another `--format` or HRTF. Mixes from before say
+  neither, so they are made again.
+- A walk as fast as sound or faster now stops with an error without Doppler too, as it
+  did with Doppler: it played as places crossfaded one after another, as if shock waves
+  did not exist.
+- The demos' JSON files (walk.json and the others) are strict JSON: a level where
+  nothing is heard, as between a horn's blasts, is written null instead of -Infinity,
+  which browsers refuse.
+- On Windows, a demo whose scene lies on another drive than its example no longer stops
+  when it writes a siren's, horn's, train's, helicopter's or aircraft's directivity
+  table: the scene names the table in full.
+- `emission.Mixture` refuses signals without samples and a sample rate that is not
+  positive, which failed later with a division by zero.
+- The road docs say that CNOSSOS-EU's correction for road gradients is left out, that
+  the sirens' levels 7 m in front of a vehicle are taken 7 m from the siren, and that
+  recordings are levelled unweighted; a test holds every coefficient of Table F-1.
 - `doc29.event` warns (`doc29.NpdExtrapolationWarning`) when a segment's power lies so
   far outside the NPD curves' that their extrapolated level departs more than 5 dB from
   the nearest curve's (Volume 2 section 4.2); in Volume 3's cases and the airport
