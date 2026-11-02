@@ -208,6 +208,18 @@ def test_a_scene_names_its_recording_and_each_source_a_channel(tmp_path: Path) -
         data["recording"] = wrong
         with pytest.raises(ValidationError, match="a recording file, or one of"):
             Scene.model_validate(data)
+    # A name without a suffix that is no file is a free one mistyped; a file with a
+    # suffix may come later, and one without is taken when it is there.
+    for wrong, close in (("spicy_funk", "spicy_funk_cake"), ("Speech_Male", "speech_male")):
+        data["recording"] = wrong
+        with pytest.raises(ValidationError, match=f"no free recording.*speech_male.*{close}"):
+            Scene.model_validate(data, context={"base_dir": tmp_path})
+    (tmp_path / "take").write_bytes(b"")
+    data["recording"] = "take"
+    assert (
+        Scene.model_validate(data, context={"base_dir": tmp_path}).recording_file
+        == (tmp_path / "take").resolve()
+    )
     data["recording"], data["sources"][0]["channel"] = None, "centre"
     with pytest.raises(ValidationError, match="channel"):
         Scene.model_validate(data)

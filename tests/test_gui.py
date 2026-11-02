@@ -847,6 +847,20 @@ def test_scene_yaml_panel_starts_hidden_then_as_left(window, qapp, english) -> N
         third.close()
 
 
+def test_a_run_with_every_source_left_out_is_refused(window) -> None:
+    """With every source unticked, F5 and Pack say why they cannot, as simulate and pack
+    would refuse the scene, and start nothing."""
+    window.open_example(example_path("studio"))
+    count = len(window.document.scene.sources)
+    window.document.set_enabled("sources", list(range(count)), False)
+    window.run_simulation()
+    assert window.job is None
+    text = window.messages.toPlainText()
+    assert "Cannot run: every source is left out (enabled: false)" in text
+    assert window.pack_scene() is False
+    assert "Cannot pack: every source is left out" in window.messages.toPlainText()
+
+
 def test_background_task_says_what_runs(window, qapp) -> None:
     """While a run goes on, the status bar says what runs, its step and its time, with
     Cancel beside it; resting on the moving bar says so at length."""

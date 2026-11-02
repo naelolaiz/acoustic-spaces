@@ -4,6 +4,8 @@ measures, the recordings it fetches, and the pipeline from the mixes to the vide
 from __future__ import annotations
 
 import argparse
+import http.client
+import io
 import os
 import tarfile
 import zipfile
@@ -209,6 +211,94 @@ def test_a_remote_block_cut_short_every_time_fails(monkeypatch) -> None:
     with pytest.raises(OSError, match="came 9 long, 5 times"):
         remote.read(10)
     assert asked.count("bytes=0-99") == fetch.RETRIES
+
+
+def test_a_download_cut_short_is_refused_and_removed(tmp_path: Path) -> None:
+    """A server that announces 1000 bytes and sends 500: http.client ends the body
+    without an error, so the download counts the bytes. It fails and leaves neither the
+    file nor its .part, so that a SOFA set or a recording is not kept with a hole in it.
+    The whole body, or one sent without a length, still downloads."""
+    import http.server
+    import threading
+
+    sent = {"length": "1000", "body": b"x" * 500}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:  # quiet
+            pass
+
+        def do_GET(self) -> None:  # noqa: N802  http.server's name
+            self.send_response(200)
+            if sent["length"]:
+                self.send_header("Content-Length", sent["length"])
+            self.end_headers()
+            self.wfile.write(sent["body"])
+            self.close_connection = True
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_address[1]}/ears.sofa"
+    path = tmp_path / "ears.sofa"
+    try:
+        with pytest.raises(OSError, match="after 500 of 1000 bytes"):
+            fetch.download(url, path)
+        assert not path.exists()
+        assert not path.with_name("ears.sofa.part").exists()
+        sent["body"] = b"x" * 1000
+        assert fetch.download(url, path).stat().st_size == 1000
+        sent.update(length="", body=b"y" * 700)
+        assert fetch.download(url, path).read_bytes() == b"y" * 700
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def _http_response(raw: bytes) -> http.client.HTTPResponse:
+    """The response http.client reads from a server that sent ``raw`` and closed."""
+
+    class Socket:
+        def makefile(self, mode: str) -> io.BytesIO:
+            return io.BytesIO(raw)
+
+    response = http.client.HTTPResponse(Socket(), method="GET")
+    response.begin()
+    return response
+
+
+def test_a_body_cut_short_that_http_client_raises_for_is_an_os_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """http.client raises IncompleteRead, which is no OSError, for a body sent in chunks
+    that ends before its last (empty) chunk, and for a body of a length announced that
+    is read whole and ends short. A download fails with an OSError then, as callers
+    expect (``hrtf download`` catches OSError), and removes its .part file; a block of a
+    remote archive cut short so is asked for again, RETRIES times, then fails with one."""
+    head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+    whole = head + b"10\r\n0123456789abcdef\r\n0\r\n\r\n"
+    sent = {"raw": head + b"10\r\n0123456789abcdef\r\n10\r\n01234"}
+    asked: list[str | None] = []
+
+    def urlopen(url, headers=None, timeout=fetch.TIMEOUT):
+        asked.append((headers or {}).get("Range"))
+        return _http_response(sent["raw"])
+
+    monkeypatch.setattr(fetch, "urlopen", urlopen)
+    url, path = "https://example.org/ears.sofa", tmp_path / "ears.sofa"
+    with pytest.raises(OSError, match=r"ears.sofa: the download ended before its last chunk"):
+        fetch.download(url, path)
+    assert sorted(tmp_path.iterdir()) == []
+    sent["raw"] = whole
+    assert fetch.download(url, path).read_bytes() == b"0123456789abcdef"
+    first = b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-0/100\r\n"
+    sent["raw"] = first + b"Content-Length: 1\r\n\r\nx"
+    remote = fetch.RangeFile("https://example.org/takes.zip")
+    sent["raw"] = first.replace(b"0-0", b"0-99") + b"Content-Length: 100\r\n\r\n" + b"y" * 30
+    asked.clear()
+    with pytest.raises(OSError, match="bytes 0-99 came 30 long, 5 times"):
+        remote.read(10)
+    assert asked == ["bytes=0-99"] * fetch.RETRIES
 
 
 def test_a_remote_file_is_read_in_blocks_of_the_size_asked(monkeypatch) -> None:

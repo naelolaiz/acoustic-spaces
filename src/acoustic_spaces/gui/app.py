@@ -1812,7 +1812,8 @@ class MainWindow(QMainWindow):
         if self.job is not None:
             return
         # Listeners play no part in a map.
-        problems = [p for p in self.document.room.problems() if not p.startswith("listener ")]
+        problems = self.document.room.problems(in_use=("sources",))
+        problems = [p for p in problems if not p.startswith("listener ")]
         if problems:
             self.log(_("Cannot map: {problems}").format(problems="; ".join(problems)), "error")
             self.docks["messages"].raise_()

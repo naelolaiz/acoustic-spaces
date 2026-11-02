@@ -2828,14 +2828,24 @@ class Scene(_Model):
     @field_validator("recording", mode="before")
     @classmethod
     def _resolve_recording(cls, value, info: ValidationInfo):
-        """A free recording's name as it is; a file resolved against the scene's folder."""
+        """A free recording's name as it is; a file resolved against the scene's folder.
+        A file need not be there yet (it may be copied in later), unless its name has
+        no suffix, as a free recording's has: then it is a free name mistyped."""
         if value is None or (isinstance(value, str) and value in RECORDING_NAMES):
             return value
         if isinstance(value, str) and not value.strip():
             raise ValueError(f"a recording file, or one of {', '.join(RECORDING_NAMES)}")
         if not isinstance(value, (str, Path)):
             raise ValueError(f"a recording file, or one of {', '.join(RECORDING_NAMES)}")
-        return _resolve_path(Path(value), info)
+        path = _resolve_path(Path(value), info)
+        if not path.suffix and not path.is_file():
+            close = difflib.get_close_matches(str(value), RECORDING_NAMES, n=1)
+            hint = f"; did you mean {close[0]}?" if close else ""
+            raise ValueError(
+                f"{str(value)!r} is no free recording, nor a file there ({path}): a "
+                f"recording file, or one of {', '.join(RECORDING_NAMES)}{hint}"
+            )
+        return path
 
     @property
     def recording_file(self) -> Path | None:
@@ -2887,23 +2897,9 @@ class Scene(_Model):
         if self.long_term is not None and self.geometry.ground is None:
             raise ValueError("long_term is for outdoor scenes (geometry.ground)")
         removed = self.simulation.insertion_loss_of
-        if removed is not None:
-            if self.geometry.ground is None:
-                raise ValueError(
-                    "simulation.insertion_loss_of is for outdoor scenes (geometry.ground): "
-                    "it names their buildings, barriers or vegetation"
-                )
-            parts = self.geometry.part_names()
-            unknown = [name for name in removed if name not in parts]
-            if unknown:
-                known = ", ".join(parts) or "none"
-                raise ValueError(
-                    f"simulation.insertion_loss_of names {unknown[0]!r}, which is no "
-                    f"building, barrier or vegetation of the scene (they are: {known})"
-                )
-            twice = sorted({name for name in removed if removed.count(name) > 1})
-            if twice:
-                raise ValueError(f"simulation.insertion_loss_of names {twice[0]!r} twice")
+        problem = None if removed is None else insertion_loss_problem(self.geometry, removed)
+        if problem is not None:
+            raise ValueError(problem)
         return self
 
     def under(self, given: WeatherClass) -> Scene:
@@ -3024,6 +3020,31 @@ class Scene(_Model):
         files += [self.recording_file] if self.recording_file is not None else []
         files += [o.hrtf for o in self.outputs if o.hrtf is not None]
         return list(dict.fromkeys(Path(f) for f in files))
+
+
+def insertion_loss_problem(
+    geometry: Geometry, names: Sequence[str], what: str = "simulation.insertion_loss_of"
+) -> str | None:
+    """What is wrong with ``names`` as what an insertion loss is given for, ``what``
+    naming them in the message: None when they are buildings, barriers or vegetation of
+    this outdoor scene (:meth:`Geometry.part_names`), each named once."""
+    if geometry.ground is None:
+        return (
+            f"{what} is for outdoor scenes (geometry.ground): it names their buildings, "
+            "barriers or vegetation"
+        )
+    parts = geometry.part_names()
+    unknown = [name for name in names if name not in parts]
+    if unknown:
+        known = ", ".join(parts) or "none"
+        return (
+            f"{what} names {unknown[0]!r}, which is no building, barrier or vegetation of "
+            f"the scene (they are: {known})"
+        )
+    twice = sorted({name for name in names if names.count(name) > 1})
+    if twice:
+        return f"{what} names {twice[0]!r} twice"
+    return None
 
 
 def directivity_entries(spec) -> list[dict]:

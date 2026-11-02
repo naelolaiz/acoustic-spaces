@@ -136,6 +136,37 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- Fixed: a download cut short (fewer bytes than the server announced) is refused and
+  removed; it was kept as a whole HRTF set or recording, which later runs then used. One
+  sent in chunks and cut short fails with an `OSError` too, as callers expect
+  (`hrtf download` ended with a traceback), and a remote archive's block cut short is
+  asked for again.
+- Fixed: `simulate --without` and `map --without` are checked against the scene before
+  anything runs, as `insertion_loss_of` is: an unknown name failed only after the first
+  run, and a name given twice was taken.
+- Fixed: `pack` refuses a file whose name holds `:` or `\`, which it packed but no
+  computer could unpack, and two files, or a file and a folder, whose names macOS or
+  Windows take for one (differing only in case, or in the way a letter is encoded);
+  folders from outside the scene's folder are named apart from the others regardless of
+  case, and from files.
+- A scene with every source, or every listener, left out (`enabled: false`) is a
+  problem: `validate`, `inspect`, `pack` and the editor's Run (F5) and Pack refuse it,
+  as `simulate` did; runs that name their sources or listeners, walks, which take their
+  walker in any case, and maps, which need no listener, still take it.
+- Fixed: a walking source is heard at a listener left out that the walk names
+  (`walkthrough --listener`), as other runs that name one; with every listener left out
+  and none named, the error says so in place of `pick a listener: `.
+- A coefficient CSV laid out by columns, or with more than three rows, is refused with
+  the layout expected: the first loaded as absorption 1 in every band, the second
+  without its rows past the third. Lines of separators alone (`,,,`, a spreadsheet's
+  empty rows) are skipped.
+- A scene's `recording` without a suffix that is neither a free recording nor a file
+  there (a free name mistyped) is refused, naming the free ones.
+- A scene whose air pressure lies outside the range ISO 9613-1:1993 states the air
+  absorption's accuracy for (0.794 to 157.7 kPa in octave bands, 1 to 125.3 kPa in
+  third-octave bands) is warned about.
+- `pack --help` and the docs list the files sources play and the scene's recording among
+  the files a pack holds.
 
 ## 4.1.0
 
