@@ -1049,7 +1049,8 @@ def _doppler(
     """Adds to ``out`` the mono ``signal`` (or the sound the source sends each way)
     heard along a walk with Doppler, through ``keys`` (the pair's response in ``result``
     at each place, the walker there at ``times`` and ``positions``; ``source_walks``
-    when the walker is the source): the late parts crossfaded from place to place, the
+    when the walker is the source): the late parts crossfaded from place to place (a
+    walking source's sound as it is sent, a walking listener's as it is heard), the
     early paths each through its own changing delay
     (:func:`acoustic_spaces.doppler.render`); and each of ``followers`` (lag, signal)
     the same way, ``lag`` samples later."""
@@ -1077,13 +1078,23 @@ def _doppler(
             chosen = dataclasses.replace(chosen, early=EarlyReflections.empty(chosen.bands))
             late[keys[k]] = chosen.spatial_impulse_response(fmt, rate, seed)
         ir = late[keys[k]]
-        first = max(begin - len(ir) + 1, 0)
         for lag, played in [(0, signal), *followers]:
-            piece = played[first:end]
-            if len(piece) == 0 or begin + lag >= length:
-                continue
-            wet = convolve(piece, ir)[begin - first : end - first]
-            wet = (weight[: len(wet)] * wet)[: length - begin - lag]
+            if source_walks:
+                # A walking source: what it sends while at the place, through all of
+                # the place's late part, heard after its early paths from there.
+                piece = played[begin:end]
+                piece = piece * weight[: len(piece), 0]
+                if len(piece) == 0 or begin + lag >= length:
+                    continue
+                wet = convolve(piece, ir)[: length - begin - lag]
+            else:
+                # A walking listener: what reaches the place while it is there.
+                first = max(begin - len(ir) + 1, 0)
+                piece = played[first:end]
+                if len(piece) == 0 or begin + lag >= length:
+                    continue
+                wet = convolve(piece, ir)[begin - first : end - first]
+                wet = (weight[: len(wet)] * wet)[: length - begin - lag]
             out[begin + lag : begin + lag + len(wet)] += wet
     responses = [result[key] for key in keys]
     steps = np.linalg.norm(np.diff(np.asarray(positions, dtype=float), axis=0), axis=1)

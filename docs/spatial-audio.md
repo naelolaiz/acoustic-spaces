@@ -421,8 +421,10 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   a few samples apart from one direction to the next (KEMAR's far ear by up to 11
   samples between places 1 m apart along a road 25 m away), and two places' filters
   that start apart, mixed, would cancel the treble between them.
-- The late part is crossfaded from place to place as without Doppler, its pitch
-  unshifted; outdoors it is far below the early sound.
+- The late part is crossfaded from place to place, its pitch unshifted; outdoors it is
+  far below the early sound. A walking source's sound goes from one place's late part to
+  the next's as it is sent, so that each place's late part follows its early paths at
+  the retarded time; a walking listener hears the late part of the place it is at.
 - Against the exact field of a source passing 10 m from a listener over a hard ground,
   the sound is within 45 dB of it at 30 m/s, with places 1 m apart, and its level
   within 0.04 dB at every moment; a train at 80 m/s is within 38 dB and 0.42 dB at
@@ -470,7 +472,7 @@ and in each octave band. Each is the level of the source's sound power at a plac
 those of noise mapping's quasi-static source. In a band where a place's G is undefined,
 as where the few rays that reach a far place carry no energy in it, the place's level
 is that of the energy its response holds, as outdoors (-inf where none arrives).
-Through the walk's sound over grass, each band's energy came within 0.25 dB of them,
+Through the walk's sound over grass, each band's energy came within 0.26 dB of them,
 0.8 dB in the band of the ground's dip, where the band levels are averages over the
 band and the sound is read through band filters, whose skirts fill a dip (see
 [Validation](validation.md#moving-sources-against-the-exact-field)).

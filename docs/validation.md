@@ -2924,25 +2924,26 @@ places' band levels:
 
 | band | rendered | responses | pass-by | early part alone: rendered | responses |
 |---|---|---|---|---|---|
-| 63 Hz | -25.88 | -25.90 | -26.13 | -25.90 | -25.92 |
-| 125 Hz | -27.58 | -27.55 | -27.70 | -27.62 | -27.64 |
-| 250 Hz | -32.16 | -32.10 | -32.30 | -32.31 | -32.31 |
-| 500 Hz | -34.85 | -34.92 | -34.05 | -34.98 | -34.91 |
+| 63 Hz | -25.87 | -25.90 | -26.13 | -25.90 | -25.92 |
+| 125 Hz | -27.54 | -27.55 | -27.70 | -27.62 | -27.64 |
+| 250 Hz | -32.13 | -32.10 | -32.30 | -32.31 | -32.31 |
+| 500 Hz | -34.87 | -34.92 | -34.05 | -34.98 | -34.91 |
 | 1 kHz | -29.52 | -29.53 | -29.64 | -29.56 | -29.59 |
 | 2 kHz | -30.18 | -30.19 | -30.28 | -30.21 | -30.23 |
 | 4 kHz | -30.76 | -30.77 | -30.68 | -30.78 | -30.79 |
 | 8 kHz | -31.81 | -31.81 | -31.85 | -31.82 | -31.82 |
 
 The sound keeps the energy of the responses to within 0.07 dB in every band, with its
-late part and without. The late part is crossfaded as in any walk, drawn from one random
-sequence for every place; the responses here are drawn from the same one, as otherwise
-their late parts' chance correlation with the early sound would differ by up to 0.25
-dB in a band (a one-off check). The pass-by's band levels are within 0.25 dB of the sound, 0.8 dB in the
-500 Hz band, where the ground's dip falls: the pass-by takes the places' band levels,
-averaged over each band, where the sound is read through band filters, whose skirts
-fill a dip (a cause not checked separately). For a car at 30 m/s over
-this grass with 94 dB of sound power, the listener has L_Amax 61.4 dB(A) 2.03 s into
-the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A) over 4 s.
+late part and without. The late part is crossfaded from place to place as the car sends
+its sound, drawn from one random sequence for every place; the responses here are drawn
+from the same one, as otherwise their late parts' chance correlation with the early
+sound would differ by up to 0.25 dB in a band (a one-off check). The pass-by's band
+levels are within 0.26 dB of the sound, 0.8 dB in the 500 Hz band, where the ground's
+dip falls: the pass-by takes the places' band levels, averaged over each band, where the
+sound is read through band filters, whose skirts fill a dip (a cause not checked
+separately). For a car at 30 m/s over this grass with 94 dB of sound power, the listener
+has L_Amax 61.4 dB(A) 2.03 s into the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A) over
+4 s.
 
 **What it leaves out.** The engine's source is quasi-static, as the field it is
 compared with: a moving source's convective amplification is left out (taking its

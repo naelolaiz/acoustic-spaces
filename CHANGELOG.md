@@ -7,6 +7,13 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Walks with Doppler: a walking source's late part is faded from place to place as its
+  sound is sent, so that it follows the early paths from the same place, not from where
+  the source had got to when it was heard (27 m on for the helicopter overhead). Noise
+  through small cases moves by up to 0.8 dB in 125 ms windows (a 240 m flyover 150 m up,
+  places 4 m apart: L_max +0.4 dB, energy +0.04 dB; the street's car: 0.7, 0.01 and
+  0.04 dB), the validation's pass-by over grass by up to 0.04 dB in a band; walking
+  listeners are unchanged.
 
 ## 4.1.0
 
