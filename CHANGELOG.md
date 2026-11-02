@@ -136,6 +136,30 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- Fixed: `airfoil_noise.thicknesses` gave a lightly tripped boundary layer
+  (`LIGHTLY_TRIPPED`) the heavily tripped suction-side fits instead of the untripped
+  ones of Brooks, Pope and Marcolini's code: a 0.3048 m chord in 71.3 m/s was 1.3 dB too
+  loud in TBL-TE noise at 8 degrees and 3.4 dB too quiet at 12. The helicopter's blades,
+  tripped or not, are unchanged.
+- Docs: the AS350 B3's main rotor turns at 394 rpm, the most in powered flight with its
+  Arriel 2B engine and so the speed appendix J flies; its tail rotor's 2,086 rpm is
+  NASA's, no longer assumed; its tones agree with Farassat's formulation to 7.5 x 10⁻⁶
+  (main rotor) and 1.6 x 10⁻⁵ (tail rotor), not 10⁻⁵.
+- The helicopter demos' `helicopter` and `walk` steps find the rotors' tones and BPM's
+  bands (`rotorcraft.bpm_powers`) once, not for each length: about 7 s faster, 15 s with
+  `--broadband bpm`.
+- Fixed: with weather zones, the shares of a path's way under each weather, rounded one
+  by one, could add up to 1 ± 0.005 (± 0.01 across five weathers), scaling the speed of
+  sound in still air by as much; they are now divided by their sum. Over 300 m across
+  three weathers, a third each, the direct sound arrives at 868.5 ms (was 864.2) and the
+  levels at 1 to 8 kHz rise by 0.1 to 0.3 dB; the lakeside example is unchanged.
+- Docs: each caustic a curved ray touches advances its phase by a quarter period, as the
+  engine has it (a factor j, time going as e^(jωt)), not delays it; a test now holds the
+  sign, another the shadow zone's residue series to the fast field program.
+- Docs: in a belt under 20 m deep the engine's dense foliage takes more than ISO
+  9613-2's table at 63 and 125 Hz (in every band under 10 m) and up to 1.8 dB less at 4
+  and 8 kHz, not a little less throughout; stems 0.3 m across, 0.08 per m², take 0.002
+  dB per metre at 63 Hz (was 0.003).
 - Fixed: an example's demo that the editor's **Run demo…** runs away from the example
   (in `~/acoustic-spaces/<example>`, or beside a copy saved elsewhere) wrote its scenes,
   results and work among the example's files, an installed copy's too, and read the
