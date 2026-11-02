@@ -3146,28 +3146,31 @@ values of DIN 14610): the two tones, 440 and 586.7 Hz, lie within the base frequ
 of 360 to 630 Hz, a fourth apart (the rule: 3:4, -3 to +7 %), with a cycle of 3 s (2.5
 to 3.5 s) and no pause. On the axis 2 m away in a free field they give 119.4 dB(A),
 where the rule asks 116 to 129 dB(A) on the test bench; 7.00 m in front of the police
-car, its siren 1.5 m up, over the street's asphalt, the engine gives 108.1, 108.7 and
-110.8 dB(A) 0.5, 1.0 and 1.5 m up, where the rule asks 100 to 115 dB(A) on the vehicle.
+car's siren, taken at the car's front, 1.5 m up, over the street's asphalt, the engine
+gives 108.1, 108.7 and 110.8 dB(A) 0.5, 1.0 and 1.5 m up, where the rule asks 100 to
+115 dB(A) on the vehicle.
 The level of the two tones follows from the yelp's sound power, the same in all, as
 the loudspeaker is taken to send each pattern with one drive: 128.6 dB(A) against the
 yelp's 130.6.
 
 **The fire engine.** Its siren plays the same two tones 6.0 dB louder, 3.0 m up on its
 cab's roof, which the demo takes as loud as the Swiss rule lets two tones be on a
-vehicle. The engine gives them 112.3 to 114.9 dB(A) 7.00 m in front of the vehicle over
-the street's asphalt, every 0.1 m from 0.5 to 1.5 m up, the loudest 0.8 m up (the rule:
-100 to 115 dB(A)), and 125.4 dB(A) 2 m away on the axis in a free field (the bench: 116
-to 129). Its air horn, 1.2 m up, is held against the rule for vehicles' horns (Council
-Directive 70/388/EEC, Annex I): on the rule's bench, 2 m in front of it on its axis in a
-free field, a blast gives 118.0 dB(A), the most the rule allows (105 to 118, point
-1.2.1.6); between 1800 and 3550 Hz it gives 110.2 dB(A) there, where the rule asks 105
-at least, and its loudest component in that band is 6.0 dB over the loudest above 3550
-Hz, which the rule asks it to be over (point 1.2.3.1), from the spectrum of the made
-blast; each blast is at its level 0.05 s after it starts (the rule: 0.2 s at most,
-point 1.2.1.7); 7 m in front of the vehicle over asphalt, 0.5 to 1.5 m up, it gives
-107.9 to 108.6 dB(A), where the rule asks 93 at least (point 2.1.4). The horn's pitch,
-its spectrum, its blasts, its height and its directivity are assumptions, as no
-measured air horn of a fire engine was found; the rule bounds them only as above.
+vehicle. The engine gives them 112.3 to 114.9 dB(A) 7.00 m in front of the siren, which
+the demo takes to be at the vehicle's front, over the street's asphalt, every 0.1 m from
+0.5 to 1.5 m up, the loudest 0.8 m up (the rule: 100 to 115 dB(A) 7.00 m in front of the
+vehicle; a siren set 0.5 to 2 m back on the roof gives 0.4 to 1.4 dB less there), and
+125.4 dB(A) 2 m away on the axis in a free field (the bench: 116 to 129). Its air horn,
+1.2 m up, is held against the rule for vehicles' horns (Council Directive 70/388/EEC,
+Annex I): on the rule's bench, 2 m in front of it on its axis in a free field, a blast
+gives 118.0 dB(A), the most the rule allows (105 to 118, point 1.2.1.6); between 1800
+and 3550 Hz it gives 110.2 dB(A) there, where the rule asks 105 at least, and its
+loudest component in that band is 6.0 dB over the loudest above 3550 Hz, which the rule
+asks it to be over (point 1.2.3.1), from the spectrum of the made blast; each blast is
+at its level 0.05 s after it starts (the rule: 0.2 s at most, point 1.2.1.7); 7 m in
+front of the vehicle over asphalt, 0.5 to 1.5 m up, it gives 107.9 to 108.6 dB(A), where
+the rule asks 93 at least (point 2.1.4). The horn's pitch, its spectrum, its blasts, its
+height and its directivity are assumptions, as no measured air horn of a fire engine was
+found; the rule bounds them only as above.
 
 **The car's horn.** The street car's pair of disc horns (`--car car_and_horn`), at 360
 and 430 Hz, 0.5 m up, against the same rule. On its bench, 2 m in front of it on its
@@ -3362,19 +3365,19 @@ their levels at 18 receptors (its table B-1, which the package holds), every ter
 every segment at those receptors and the levels on a grid (the worksheets B-2 and B-3
 of its Part 1 workbook, which `--workbook` reads).
 
-**The levels at the receptors.** All 99 within 0.006 dB of table B-1, which gives them
-to 0.01 dB; the largest difference of a case is 0.004 to 0.006 dB.
+**The levels at the receptors.** All 99 within 0.0055 dB of table B-1, which gives them
+to 0.01 dB; the largest difference of a case is 0.0036 to 0.0055 dB.
 
 **The grids.** The rms difference δRMS that Volume 3 aims at 0.01 dB or less:
 
 | case | points | δRMS | largest | case | points | δRMS | largest |
 |---|---:|---:|---:|---|---:|---:|---:|
-| JETFAC | 2732 | 0.0029 | 0.0054 | JETWDC | 3868 | 0.0029 | 0.0061 |
-| JETFAS | 2750 | 0.0028 | 0.0053 | JETWDS | 3876 | 0.0029 | 0.0057 |
-| JETFDC | 3269 | 0.0030 | 0.0065 | PROPAC | 3042 | 0.0028 | 0.0056 |
-| JETFDS | 3273 | 0.0029 | 0.0060 | PROPAS | 3042 | 0.0028 | 0.0055 |
-| JETWAC | 2929 | 0.0030 | 0.0097 | PROPDC | 2875 | 0.0030 | 0.0061 |
-| JETWAS | 2932 | 0.0030 | 0.0098 | PROPDS | 2870 | 0.0029 | 0.0059 |
+| JETFAC | 2732 | 0.0029 | 0.0053 | JETWDC | 3868 | 0.0029 | 0.0059 |
+| JETFAS | 2750 | 0.0028 | 0.0053 | JETWDS | 3876 | 0.0029 | 0.0056 |
+| JETFDC | 3269 | 0.0029 | 0.0063 | PROPAC | 3042 | 0.0028 | 0.0058 |
+| JETFDS | 3273 | 0.0029 | 0.0058 | PROPAS | 3042 | 0.0028 | 0.0056 |
+| JETWAC | 2929 | 0.0030 | 0.0099 | PROPDC | 2875 | 0.0030 | 0.0061 |
+| JETWAS | 2932 | 0.0030 | 0.0100 | PROPDS | 2870 | 0.0029 | 0.0061 |
 
 (dB.) The grid's levels are given to 0.01 dB, whose rounding alone is 0.0029 dB rms.
 
@@ -3404,23 +3407,24 @@ before touchdown for the jets, 328.1 m for the turboprop). The azimuth of the
 start-of-roll directivity is taken in the plane of the runway, as Volume 3 takes it
 (straight behind a source 1 m up it is 180 degrees).
 
-What is not checked: the maximum levels (Volume 3 gives none) and banked turns (the
+What is not checked: the maximum levels (Volume 3 gives none; the tests check them
+beside, behind and ahead of segments against Volume 2's equations) and banked turns (the
 cases fly them level).
 
 ## Flight profiles against Doc 29 Volume 3
 
 The same script holds `acoustic_spaces.doc29.performance`, the flight performance of
 Volume 2 Appendix B (see [Aircraft by ECAC Doc 29](outdoor.md#aircraft-by-ecac-doc-29)),
-against the reference profiles of Volume 3 Part 2: JETW and PROP flying departure and
-approach procedures, nine arrivals and seventeen departures (its tables C-7 and C-8),
-and the fixed-point profiles Volume 3 gives for them (D-1 and D-2, which the package
-holds, to 0.1 ft, kt and lb). The cases fly from sea level and from 2000 and 5000 ft,
-at 15 and 40 °C, at sea-level pressures of 29.92 and 30.71 inHg, into headwinds of -5,
-0 and 8 kt; the departures climb at constant speed, accelerate at a rate of climb or
-with a share of the thrust, cut back to climb thrust or deeply to the minimum reduced
-thrust, and fly level at constant speed or accelerating; the arrivals descend at
-constant speed or decelerating, fly level at constant speed, decelerating or at idle,
-and descend at idle.
+against the reference profiles of Volume 3 Part 2: JETW flying departure and approach
+procedures and PROP departure procedures, nine arrivals and seventeen departures (its
+tables C-7 and C-8; Volume 3 gives no arrivals of PROP), and the fixed-point profiles
+Volume 3 gives for them (D-1 and D-2, which the package holds, to 0.1 ft, kt and lb).
+The cases fly from sea level and from 2000 and 5000 ft, at 15 and 40 °C, at sea-level
+pressures of 29.92 and 30.71 inHg, into headwinds of -5, 0 and 8 kt; the departures
+climb at constant speed, accelerate at a rate of climb or with a share of the thrust,
+cut back to climb thrust or deeply to the minimum reduced thrust, and fly level at
+constant speed or accelerating; the arrivals descend at constant speed or decelerating,
+fly level at constant speed, decelerating or at idle, and descend at idle.
 
 **The profiles.** Every case has as many points as Volume 3's, 314 in all, and every
 point's height, true airspeed and corrected net thrust per engine agree to Volume 3's
@@ -3448,12 +3452,13 @@ digits (49.868766 ft where the table prints 49.9), which move the profiles by up
 0.62 ft and 0.86 lb. Its table gives the lengths of the Level-Idle steps in the column
 of the descent angle; they are the steps' distances.
 
-What is not checked: the idle steps of an approach away from sea level in the
-standard atmosphere, which Appendix B7.1.2 and B7.1.4 adjust so that the aircraft
-slows as it does there (all of Volume 3's arrivals are at sea level in the standard
-atmosphere; the tests check that the deceleration holds), a runway's gradient (all
-of its runways are level), the noise of these profiles (Volume 3 gives none) and
-turns (the calculation flies them straight).
+What is not checked: the idle steps of an approach away from sea level in the standard
+atmosphere, which Appendix B7.1.2 and B7.1.4 adjust so that the aircraft slows as it
+does there (all of Volume 3's arrivals are at sea level in the standard atmosphere; the
+tests check that the deceleration holds), a runway's gradient (all of its runways are
+level; the tests check eq. B-18), a propeller aircraft's approach (Volume 3 gives none),
+the noise of these profiles (Volume 3 gives none) and turns (the calculation flies them
+straight).
 
 ## An aircraft in the engine against Doc 29
 
@@ -3477,16 +3482,16 @@ engine departing and 5,000 lb arriving:
 | 2000 ft (610 m) | 78.7 (78.2) | 89.6 (89.3) | 74.8 (74.0) | 85.7 (87.0) |
 | 4000 ft (1219 m) | 70.1 (70.0) | 83.8 (83.6) | 66.4 (65.9) | 80.1 (81.4) |
 
-(dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The source
-is made to the NPD curves' L_Amax 1000 ft away, which the engine gives back within 0.3
-dB. Nearer, the NPD curves' L_Amax grows faster than one point source's with one
-spectrum: at 200 ft it is 0.9 dB (departure) and 0.8 dB (arrival) over it, so the
-engine reads 1.0 and 0.9 dB under there. The arrival's SEL is 1.3 to 1.8 dB under its
-NPD curves, the departure's within 0.3 dB: JETW's arrival curves have SEL - L_Amax =
-10 lg(πd/V) within 0.1 dB out to 1000 ft, a point source's with no air absorption,
-where the departure's are 2.0 to 2.2 dB less, as the engine's point source in the
-air gives for both. Farther out the grass's scattered sound comes from the few late
-rays that land near the microphone, so it changes with their seed.
+(dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The source is
+made to the NPD curves' L_Amax 1000 ft away, which the engine gives back within 0.3 dB.
+Nearer, the NPD curves' L_Amax grows faster than one point source's with one spectrum:
+at 200 ft it is 0.9 dB (departure) and 0.8 dB (arrival) over it, so the engine reads 1.0
+and 0.9 dB under there. The arrival's SEL is 1.3 to 1.8 dB under its NPD curves, the
+departure's within 0.3 dB: JETW's arrival curves have SEL - L_Amax = 10 lg(πd/V) within
+0.22 dB out to 1000 ft, a point source's with no air absorption, where the departure's
+are 1.9 to 2.2 dB less, as the engine's point source in the air gives for both. Farther
+out the grass's scattered sound comes from the few late rays that land near the
+microphone, so it changes with their seed.
 
 **The airport's flights.** The demo's departure and arrival, simulated every 20 m at
 each listener, their level following their thrust:
@@ -3494,7 +3499,7 @@ each listener, their level following their thrust:
 | listener | departure: L_Amax | SEL | arrival: L_Amax | SEL |
 |---|---:|---:|---:|---:|
 | departure_4km | 87.4 (87.2) | 96.1 (96.0) | 49.6 (43.1) | 64.1 (60.7) |
-| lateral_450m | 85.0 (85.0) | 95.4 (94.5) | 43.0 (54.4) | 57.1 (68.8) |
+| lateral_450m | 85.0 (85.1) | 95.4 (94.5) | 43.0 (54.4) | 57.1 (68.8) |
 | approach_2000m | 52.0 (54.8) | 67.6 (68.6) | 91.2 (91.5) | 97.1 (98.8) |
 
 (dB(A); Doc 29's in brackets.) Where the jet is heard in the air, they agree within

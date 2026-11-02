@@ -7,13 +7,14 @@ segments to the event's sound exposure level, or its maximum level taken."""
 from __future__ import annotations
 
 import math
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
 
 from .path import Segment, power_between
-from .tables import FOOT_M, KNOT_M_S, Aircraft, NpdCurves
+from .tables import FOOT_M, KNOT_M_S, Aircraft, NpdCurves, installation_of
 
 #: The NPD curves' reference speed (m/s), 160 kt, and the time t0 of the scaled
 #: distance of the finite segment correction (s) (section 4.5.6, Appendix E).
@@ -21,6 +22,9 @@ REFERENCE_SPEED_M_S = 160.0 * KNOT_M_S
 T0_S = 1.0
 #: The nearest distance read off the NPD curves (m), section 4.2.
 NEAREST_NPD_M = 30.0
+#: How far an NPD level extrapolated in power (eq. 4-3) may depart from the level at
+#: the nearest power of the curves before :func:`event` warns (dB), section 4.2.
+NPD_ENVELOPE_DB = 5.0
 #: The lowest finite segment correction (dB), section 4.5.6.
 LOWEST_FRACTION_DB = -150.0
 #: The distance beyond which the start-of-roll directivity weakens (m), 2500 ft
@@ -43,12 +47,19 @@ def impedance_db(temperature_c: float = 15.0, pressure_kpa: float = 101.325) -> 
     return 10.0 * math.log10(416.86 * delta / math.sqrt(theta) / REFERENCE_IMPEDANCE)
 
 
+class NpdExtrapolationWarning(UserWarning):
+    """A flight's power lies so far outside its NPD curves' powers that their levels,
+    extrapolated in power (eq. 4-3), depart more than :data:`NPD_ENVELOPE_DB` from the
+    levels at the nearest power of the curves (Volume 2 section 4.2)."""
+
+
 def installation_db(installation: str, depression_deg: np.ndarray) -> np.ndarray:
     """The engine installation correction (dB) at the depression angle (degrees) under
-    the wing plane, eq. 4-15; nought for propellers, and at negative angles that at
-    nought."""
+    the wing plane, eq. 4-15, of the installation the lateral directivity
+    ``installation`` names (:func:`~.tables.installation_of`); nought for propellers,
+    and at negative angles that at nought."""
     phi = np.radians(np.maximum(np.asarray(depression_deg, dtype=float), 0.0))
-    coefficients = INSTALLATION.get(installation.lower())
+    coefficients = INSTALLATION.get(installation_of(installation).lower())
     if coefficients is None:
         return np.zeros_like(phi)
     a, b, c = coefficients
@@ -156,7 +167,12 @@ def segment_levels(
 ) -> SegmentLevels:
     """The contribution of ``segment`` of a flight of ``aircraft`` at ``receivers``
     (an array of x, y, z in m, one a row), its exposure from the SEL curves
-    ``exposure`` and its maximum level from the LAmax curves ``maximum``."""
+    ``exposure`` and its maximum level from the LAmax curves ``maximum``.
+
+    ``impedance`` is Doc 29's impedance adjustment (dB, eq. 4-6 and 4-7), added to both
+    levels: :func:`impedance_db` of the aerodrome's temperature and pressure. Its
+    default, 0, is the NPD curves' reference day (25 °C, 101.325 kPa), not the standard
+    atmosphere at sea level, for which the adjustment is 0.074 dB."""
     o = np.atleast_2d(np.asarray(receivers, dtype=float))
     s1 = np.asarray(segment.start, dtype=float)
     s2 = np.asarray(segment.end, dtype=float)
@@ -246,11 +262,13 @@ def segment_levels(
         sor = np.where(behind, start_of_roll_db(aircraft.jet, psi, d1), 0.0)
     level = baseline + duration + installation - attenuation + fraction + sor + impedance
 
-    # The maximum level: the NPD curve at the nearest point, the attenuation by the
-    # elevation of and the ground distance to that point.
-    near_z = np.where(behind, z1, np.where(ahead, z2, foot[:, 2] - o[:, 2]))
-    beta_max = np.degrees(np.arcsin(np.clip(near_z / np.maximum(nearest, 1e-9), -1.0, 1.0)))
-    ell_max = np.sqrt(np.maximum(nearest**2 - near_z**2, 0.0))
+    # The maximum level (section 4.5.5): the NPD curve at the distance to the segment's
+    # nearest point. Alongside the segment the elevation angle, the lateral displacement
+    # and so the depression angle are the equivalent level path's, as for the exposure
+    # (figure 4-6); behind or ahead of it, the elevation of and the ground distance to
+    # the nearest end (figure 4-7).
+    beta_max = np.where(alongside, beta_p, np.where(behind, beta1, beta2))
+    ell_max = np.where(alongside, lateral, np.where(behind, ell1, ell2))
     peak = (
         maximum.level(power, np.maximum(nearest, NEAREST_NPD_M))
         + installation_db(aircraft.installation, beta_max + np.where(starboard, bank, -bank))
@@ -300,19 +318,72 @@ def event(
     impedance: float = 0.0,
 ) -> Event:
     """The sound exposure level (eq. 4-11) and the maximum level (eq. 4-10) of the
-    flight ``segments`` of ``aircraft`` at ``receivers``."""
+    flight ``segments`` of ``aircraft`` at ``receivers``. A segment whose NPD level at
+    its power departs more than :data:`NPD_ENVELOPE_DB` from the level at the nearest
+    power of the curves gives an :class:`NpdExtrapolationWarning` (section 4.2).
+
+    ``impedance`` is Doc 29's impedance adjustment (dB, eq. 4-6 and 4-7) added to every
+    segment's levels: :func:`impedance_db` of the aerodrome's temperature and pressure.
+    Its default, 0, is the NPD curves' reference day (25 °C, 101.325 kPa), not the
+    standard atmosphere at sea level, for which the adjustment is 0.074 dB."""
     parts = tuple(
         segment_levels(aircraft, exposure, maximum, s, receivers, impedance) for s in segments
     )
+    _warn_beyond_envelope(aircraft, exposure, maximum, parts)
     exposures = np.array([p.exposure for p in parts])
     peaks = np.array([p.peak for p in parts])
     sel = 10.0 * np.log10(np.sum(10.0 ** (exposures / 10.0), axis=0))
     return Event(sel=sel, lamax=peaks.max(axis=0), segments=parts)
 
 
+def _warn_beyond_envelope(
+    aircraft: Aircraft,
+    exposure: NpdCurves,
+    maximum: NpdCurves,
+    parts: Sequence[SegmentLevels],
+) -> None:
+    """An :class:`NpdExtrapolationWarning` if the NPD level of one of ``parts`` at its
+    power and NPD distance (its baseline from the SEL curves ``exposure``, its maximum
+    from the LAmax curves ``maximum``) departs more than :data:`NPD_ENVELOPE_DB` from
+    the level at that power clipped to the curves' powers."""
+    for name, curves, at_power in (
+        ("SEL", exposure, [part.baseline for part in parts]),
+        ("LAmax", maximum, [part.maximum for part in parts]),
+    ):
+        low, high = curves.powers[0], curves.powers[-1]
+        first, last, worst = math.inf, -math.inf, 0.0
+        for part, level in zip(parts, at_power, strict=True):
+            outside = (part.power < low) | (part.power > high)
+            if not np.any(outside):
+                continue
+            power = part.power[outside]
+            distance = np.maximum(part.npd_distance[outside], NEAREST_NPD_M)
+            off = np.abs(level[outside] - curves.level(np.clip(power, low, high), distance))
+            far = off > NPD_ENVELOPE_DB
+            if np.any(far):
+                first = min(first, float(power[far].min()))
+                last = max(last, float(power[far].max()))
+                worst = max(worst, float(off.max()))
+        if worst > NPD_ENVELOPE_DB:
+            span = f"{first:g}" if first == last else f"{first:g} to {last:g}"
+            warnings.warn(
+                f"{aircraft.name}: its flight's power, {span}, lies so far outside its "
+                f"{name} NPD curves' powers, {low:g} to {high:g}, that the levels "
+                f"extrapolated to it depart up to {worst:.1f} dB from those at the nearest "
+                f"of the curves' powers, more than the {NPD_ENVELOPE_DB:g} dB Doc 29 "
+                "cautions against (Volume 2 section 4.2): check that the flight's power is "
+                f"in the curves' power parameter, {aircraft.power_parameter}",
+                NpdExtrapolationWarning,
+                stacklevel=3,
+            )
+            return
+
+
 __all__ = [
     "FOOT_M",
+    "NPD_ENVELOPE_DB",
     "Event",
+    "NpdExtrapolationWarning",
     "SegmentLevels",
     "event",
     "fraction_db",

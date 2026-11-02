@@ -4,8 +4,10 @@ aircraft, their NPD curves, their spectral classes and their fixed-point profile
 
 A table is a CSV file with a header row; its separator may be a comma or a semicolon.
 Columns are found by their names, whatever their case, spaces and punctuation, and a
-length, a speed or a distance between NPD points is read in the unit its column's name
-gives: ``(m)`` or ``(ft)``, ``(m/s)`` or ``(kt)``.
+length or a speed is read in the unit its column's name gives in round or square
+brackets, as Appendix G's "Distance (ft)" and Volume 3's "Distance (m)": m, ft or feet
+for a length, m/s, kt, kts or knots for a speed. A column that names another unit, or
+none, is an error.
 """
 
 from __future__ import annotations
@@ -22,6 +24,14 @@ import numpy as np
 FOOT_M = 0.3048
 KNOT_M_S = 1852.0 / 3600.0
 NAUTICAL_MILE_M = 1852.0
+#: The units a column of lengths (m) or of speeds (m/s) may give in brackets, its case
+#: and spaces aside.
+LENGTH_UNITS = {"m": 1.0, "ft": FOOT_M, "feet": FOOT_M}
+SPEED_UNITS = {"m/s": 1.0, "kt": KNOT_M_S, "kts": KNOT_M_S, "knots": KNOT_M_S}
+#: The engine installations a lateral directivity identifier names by its start, its
+#: case and punctuation aside (Volume 2 Appendix G2: "Fuselage-mounted", "Wing-mounted"
+#: or "Prop").
+INSTALLATIONS = ("Fuselage", "Wing", "Prop")
 #: The distances of the NPD tables (ft), 200 to 25000 ft (Volume 2 Appendix G).
 NPD_FEET = (200.0, 400.0, 630.0, 1000.0, 2000.0, 4000.0, 6300.0, 10000.0, 16000.0, 25000.0)
 #: The third-octave bands of a spectral class (Hz), 50 Hz to 10 kHz.
@@ -65,14 +75,41 @@ def _column(names: Iterable[str], *wanted: str) -> str:
     raise KeyError(f"no column {wanted[0]!r} among {names}")
 
 
+def _unit(name: str, units: dict[str, float], quantity: str) -> float:
+    """The SI units in one unit of the column ``name``: the unit of ``units`` its name
+    gives in round or square brackets."""
+    tags = {re.sub(r"\s", "", t).lower() for t in re.findall(r"[(\[]([^()\[\]]*)[)\]]", name)}
+    known = tags & units.keys()
+    if len(known) == 1:
+        return units[known.pop()]
+    choices = [f"({u})" for u in units]
+    raise ValueError(
+        f"the column {name!r} names {'more than one' if known else 'none'} of the units "
+        f"of a {quantity} in brackets, {', '.join(choices[:-1])} or {choices[-1]}"
+    )
+
+
 def _length_m(name: str) -> float:
-    """The metres in one unit of the column ``name``: (m) or (ft)."""
-    return FOOT_M if "(ft" in name.lower() else 1.0
+    """The metres in one unit of the column ``name`` (:data:`LENGTH_UNITS`)."""
+    return _unit(name, LENGTH_UNITS, "length")
 
 
 def _speed_m_s(name: str) -> float:
-    """The m/s in one unit of the column ``name``: (m/s) or (kt)."""
-    return KNOT_M_S if "(kt" in name.lower() else 1.0
+    """The m/s in one unit of the column ``name`` (:data:`SPEED_UNITS`)."""
+    return _unit(name, SPEED_UNITS, "speed")
+
+
+def installation_of(label: str) -> str:
+    """The engine installation, one of :data:`INSTALLATIONS`, that the lateral
+    directivity identifier ``label`` names by its start ("Wing-mounted" names "Wing")."""
+    key = _key(label)
+    for installation in INSTALLATIONS:
+        if key.startswith(installation.lower()):
+            return installation
+    raise ValueError(
+        f"the lateral directivity {label!r} is none of {', '.join(INSTALLATIONS)} "
+        "(Volume 2 Appendix G2)"
+    )
 
 
 @dataclass(frozen=True)
@@ -92,8 +129,8 @@ class Aircraft:
     #: The identifiers of its spectral classes on approach and on departure.
     approach_spectrum: str
     departure_spectrum: str
-    #: Its lateral directivity, "Fuselage", "Wing" or "Prop": the engine installation
-    #: correction of Volume 2 section 4.5.3.
+    #: Its lateral directivity, "Fuselage", "Wing" or "Prop" (:data:`INSTALLATIONS`):
+    #: the engine installation correction of Volume 2 section 4.5.3.
     installation: str
 
     @property
@@ -101,9 +138,19 @@ class Aircraft:
         """Whether its engines are jets (the start-of-roll directivity of jets)."""
         return self.engine_type.lower().startswith("jet")
 
+    @property
+    def power_in_lb(self) -> bool:
+        """Whether its NPD curves' power parameter is in pounds, as "Corrected Net Thrust
+        (lb)" (a percentage of one is not): the corrected net thrust per engine that
+        Appendix B's procedural steps give."""
+        text = self.power_parameter.lower()
+        pounds = re.search(r"(?<![a-z])lbf?s?(?![a-z])|pound", text) is not None
+        return pounds and "%" not in text and "percent" not in text
+
 
 def read_aircraft(path: str | Path) -> dict[str, Aircraft]:
-    """The aircraft of the aircraft table ``path``, by identifier."""
+    """The aircraft of the aircraft table ``path``, by identifier, each its lateral
+    directivity the installation of :data:`INSTALLATIONS` it names."""
     rows = read_rows(path)
     if not rows:
         return {}
@@ -111,6 +158,10 @@ def read_aircraft(path: str | Path) -> dict[str, Aircraft]:
     name = _column(c, "Aircraft Identifier", "ACFT_ID", "Aircraft ID")
     found = {}
     for row in rows:
+        try:
+            installation = installation_of(row[_column(c, "Lateral Directivity")])
+        except ValueError as error:
+            raise ValueError(f"{Path(path).name}, aircraft {row[name]!r}: {error}") from None
         found[row[name]] = Aircraft(
             name=row[name],
             description=row[_column(c, "Description")],
@@ -120,7 +171,7 @@ def read_aircraft(path: str | Path) -> dict[str, Aircraft]:
             power_parameter=row[_column(c, "Power Parameter")],
             approach_spectrum=row[_column(c, "Approach Spectral Class")],
             departure_spectrum=row[_column(c, "Departure Spectral Class")],
-            installation=row[_column(c, "Lateral Directivity")],
+            installation=installation,
         )
     return found
 
