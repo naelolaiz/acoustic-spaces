@@ -1,7 +1,7 @@
 """BRAS's coupled rooms against the diffuse theory of two rooms joined by an opening.
 
     python validation/coupled_rooms.py [--scene CR1_DoorAngle1] [--materials fitted]
-                                       [--opening 0.1] [--results results.json]
+                                       [--opening M2] [--results results.json]
                                        [--json numbers.json]
 
 BRAS's CR1 (``validation/bras/``) is a laboratory and a reverberation chamber joined by
@@ -21,15 +21,23 @@ In the model with the door at 4.1 degrees the rooms meet only where the leaf lea
 gap: between its free end and the jamb, 4 cm across (from the leaf's corner at x 0.607,
 y -1.468 m to the jamb's at 0.571, -1.488 m) over the door's 2.14 m, and over the
 wedge of air between the leaf and the wall, open above the leaf (0.01 m²): about
-0.1 m² in all, the default ``--opening``.
+0.1 m² in all, the default ``--opening`` for that scene.
+
+With the door at 30.4 degrees the leaf stands in the chamber beside the doorway, and
+sound crosses the doorway (1.48 by 2.14 m, less the 0.11 m of it the box on the leaf
+takes at the hinge: 2.9 m²), then the way round the leaf: 0.68 m between the box and
+the far side of the doorway over the leaf's 2.17 m, and over the leaf the 0.57 m²
+between it and the wall, about 2.0 m² in all. Two openings S1 and S2 crossed in turn,
+with no absorption between them, act in the same theory as one of S1 S2 / (S1 + S2):
+1.2 m², the default ``--opening`` for that scene.
 
 Per octave band from 125 Hz to 2 kHz the script prints each room's Eyring time with the
 scene's absorption and air (the chamber's paintedConcrete, the laboratory's other
 materials, over BRAS's surfaces and volumes), the slower decay of the two rooms joined
 by ``--opening``, the measured T20 of LS1 (in the chamber) at the laboratory's
 microphones, averaged over the two, and the opening that gives it in the theory; with
-``--results`` (the JSON of ``bras_validation.py`` for the same scene and materials) also
-the simulated T20 and the opening that gives that.
+``--results`` (a JSON of ``bras_validation.py`` that holds the scene with the same
+materials) also the simulated T20 and the opening that gives that.
 """
 
 from __future__ import annotations
@@ -52,6 +60,8 @@ LABORATORY = (102.3, 194.7)
 CHAMBER = (121.4, 175.8)
 #: The chamber's one material; the laboratory has the others.
 CHAMBER_MATERIAL = "mat_CR1_paintedConcrete"
+#: The opening (m²) between the rooms in each scene's model (see the notes above).
+OPENINGS = {"CR1_DoorAngle1": 0.1, "CR1_DoorAngle3": 1.2}
 #: The source in the chamber, heard in the laboratory.
 SOURCE = "LS1"
 BANDS_HZ = (125, 250, 500, 1000, 2000)
@@ -95,14 +105,16 @@ def mean_t20(pairs: dict, bands: list[int], value) -> np.ndarray:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--scene", default="CR1_DoorAngle1", choices=["CR1_DoorAngle1", "CR1_DoorAngle3"]
-    )
+    parser.add_argument("--scene", default="CR1_DoorAngle1", choices=list(OPENINGS))
     parser.add_argument("--materials", default="fitted", choices=["fitted", "initial"])
-    parser.add_argument("--opening", type=float, default=0.1, help="the opening (m²)")
+    parser.add_argument(
+        "--opening", type=float, help="the opening (m²; default: the scene's model's)"
+    )
     parser.add_argument("--results", type=Path, help="bras_validation.py's JSON for the scene")
     parser.add_argument("--json", type=Path, help="write the numbers to this JSON file")
     args = parser.parse_args(argv)
+    if args.opening is None:
+        args.opening = OPENINGS[args.scene]
 
     room = Room.from_scene(load_scene(args.scene, args.materials, None, None))
     centres = list(room.band_centres)
@@ -145,7 +157,16 @@ def main(argv: list[str] | None = None) -> int:
         ("opening that gives it (m²)", np.array(out["measured_opening_m2"]), "{:8.2f}"),
     ]
     if args.results:
-        result = json.loads(args.results.read_text())[0]
+        found = [
+            r
+            for r in json.loads(args.results.read_text())
+            if r["scene"] == args.scene and r["materials"] == args.materials
+        ]
+        if not found:
+            raise SystemExit(
+                f"{args.results} holds no {args.scene} with {args.materials} materials"
+            )
+        result = found[0]
         simulated = mean_t20(
             result["pairs"],
             result["bands_hz"],

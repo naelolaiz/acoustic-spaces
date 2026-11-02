@@ -499,9 +499,10 @@ surfaces, and the impulse responses. Four of its rooms are in `validation/bras` 
 scenes (its README says how they were made):
 
 - **CR1**, two coupled rooms, a laboratory of 102 m³ and a reverberation chamber of 121
-  m³, with the door between them open by 4.1°, four materials. BRAS also measured them
-  with the door open by 30.4°, but in that model the door leaf cuts into the wall, which
-  leaves it without a closed inside, so it is left out;
+  m³, with the door between them open by 4.1° and, a scene of its own, by 30.4°, four
+  materials. In BRAS's model with the door at 30.4° the door leaf runs 24 mm into the
+  wall at its hinge, which leaves the model without an inside; the conversion joins the
+  leaf to the wall and the floor;
 - **CR2**, a seminar room of 146 m³ with five surface materials;
 - **CR3**, a chamber music hall of 3331 m³ with upholstered seating, stage panels and
   structured plaster, seven materials;
@@ -527,14 +528,14 @@ is not the same analysis. G is compared from seat to seat, as the level of the m
 responses is uncertain by about 3 dB (see [Strength](#strength-g) below).
 
 The tables and plots in this section were made with this version on 29 and 30 October
-2026, on 4 cores of a cloud machine without a GPU, where the run times below were
-measured with each run alone on the machine (the coupled rooms', the seminar room's and
-the auditorium's in a second run on 30 October, which gave the same numbers). The
-coupled rooms, the seminar room and the auditorium each run in 2 to 4 minutes and 0.7
-to 1.1 GiB (4 to 9 minutes calibrated, 5 to 11 minutes and up to 1.2 GiB in
-third-octave bands); the hall takes 1.5 hours and 10.0 GiB (5.2 hours and 10.5 GiB
-calibrated, 3.4 hours and 11.8 GiB in third-octave bands),
-nearly all of it the early stage's edge diffraction at one listener (see
+2026 (the coupled rooms with the door at 30.4° on 2 November), on 4 cores of a cloud
+machine without a GPU, where the run times below were measured with each run alone on
+the machine (the coupled rooms', the seminar room's and the auditorium's in a second run
+on 30 October, which gave the same numbers). The coupled rooms, the seminar room and the
+auditorium each run in 2 to 4 minutes and 0.7 to 1.1 GiB (4 to 9 minutes calibrated, 5
+to 11 minutes and up to 1.2 GiB in third-octave bands); the hall takes 1.5 hours and
+10.0 GiB (5.2 hours and 10.5 GiB calibrated, 3.4 hours and 11.8 GiB in third-octave
+bands), nearly all of it the early stage's edge diffraction at one listener (see
 [Memory](simulation.md#memory)). 4.0.0 could not run the seminar room or the hall at
 their defaults: its early stage asked for 16.4 GiB at once in CR3 and 19.6 GiB in CR2.
 
@@ -546,32 +547,32 @@ initial`).
 
 Mean absolute difference from 125 Hz to 4 kHz in JNDs (for G in dB, the JND being 1 dB),
 and how many of the pair and band values are within one JND: of 60 in CR2, CR3 and CR4,
-of 24 in CR1 (23 for T30, which one of LS1's responses does not decay far enough for at
-125 Hz). With the fitted absorption:
+of 24 in CR1 at each angle of the door (23 for T30 at 4.1°, which one of LS1's responses
+does not decay far enough for at 125 Hz). With the fitted absorption:
 
-| | CR1 | CR2 | CR3 | CR4 |
-|---|---:|---:|---:|---:|
-| EDT | 7.8 (2) | 1.0 (44) | 2.0 (20) | 3.7 (3) |
-| T20 | 6.7 (1) | 1.0 (41) | 2.0 (9) | 3.0 (1) |
-| T30 | 7.7 (0) | 1.0 (43) | 1.8 (9) | 3.0 (0) |
-| C50 | 4.3 (1) | 1.0 (41) | 1.2 (34) | 1.3 (29) |
-| C80 | 4.0 (1) | 0.7 (52) | 1.0 (40) | 1.3 (26) |
-| D50 | 4.1 (1) | 1.0 (39) | 1.3 (31) | 1.3 (28) |
-| Ts | 3.6 (2) | 0.8 (41) | 1.0 (33) | 2.5 (9) |
-| G, seat to seat | 1.8 (5) | 0.3 (53) | 0.6 (52) | 0.5 (50) |
+| | CR1, 4.1° | CR1, 30.4° | CR2 | CR3 | CR4 |
+|---|---:|---:|---:|---:|---:|
+| EDT | 7.8 (2) | 7.6 (1) | 1.0 (44) | 2.0 (20) | 3.7 (3) |
+| T20 | 6.7 (1) | 4.6 (2) | 1.0 (41) | 2.0 (9) | 3.0 (1) |
+| T30 | 7.7 (0) | 3.8 (5) | 1.0 (43) | 1.8 (9) | 3.0 (0) |
+| C50 | 4.3 (1) | 2.0 (6) | 1.0 (41) | 1.2 (34) | 1.3 (29) |
+| C80 | 4.0 (1) | 2.5 (5) | 0.7 (52) | 1.0 (40) | 1.3 (26) |
+| D50 | 4.1 (1) | 2.0 (5) | 1.0 (39) | 1.3 (31) | 1.3 (28) |
+| Ts | 3.6 (2) | 5.0 (0) | 0.8 (41) | 1.0 (33) | 2.5 (9) |
+| G, seat to seat | 1.8 (5) | 0.6 (20) | 0.3 (53) | 0.6 (52) | 0.5 (50) |
 
 With the initial absorption:
 
-| | CR1 | CR2 | CR3 | CR4 |
-|---|---:|---:|---:|---:|
-| EDT | 16.3 (0) | 5.9 (6) | 4.8 (8) | 4.0 (8) |
-| T20 | 11.0 (1) | 6.5 (1) | 5.8 (12) | 3.7 (13) |
-| T30 | 5.6 (4) | 6.5 (0) | 5.7 (11) | 3.8 (10) |
-| C50 | 6.1 (3) | 1.6 (24) | 1.5 (23) | 1.6 (24) |
-| C80 | 6.0 (4) | 1.7 (28) | 1.4 (26) | 1.5 (27) |
-| D50 | 5.9 (3) | 1.7 (23) | 1.6 (21) | 1.7 (24) |
-| Ts | 12.5 (4) | 3.3 (14) | 2.2 (22) | 2.8 (16) |
-| G, seat to seat | 2.9 (2) | 0.3 (54) | 0.6 (51) | 0.5 (50) |
+| | CR1, 4.1° | CR1, 30.4° | CR2 | CR3 | CR4 |
+|---|---:|---:|---:|---:|---:|
+| EDT | 16.3 (0) | 13.1 (1) | 5.9 (6) | 4.8 (8) | 4.0 (8) |
+| T20 | 11.0 (1) | 6.3 (0) | 6.5 (1) | 5.8 (12) | 3.7 (13) |
+| T30 | 5.6 (4) | 8.1 (1) | 6.5 (0) | 5.7 (11) | 3.8 (10) |
+| C50 | 6.1 (3) | 2.9 (7) | 1.6 (24) | 1.5 (23) | 1.6 (24) |
+| C80 | 6.0 (4) | 3.5 (5) | 1.7 (28) | 1.4 (26) | 1.5 (27) |
+| D50 | 5.9 (3) | 2.9 (6) | 1.7 (23) | 1.6 (21) | 1.7 (24) |
+| Ts | 12.5 (4) | 5.7 (4) | 3.3 (14) | 2.2 (22) | 2.8 (16) |
+| G, seat to seat | 2.9 (2) | 1.2 (10) | 0.3 (54) | 0.6 (51) | 0.5 (50) |
 
 ![CR2, fitted absorption](validation/bras_CR2_fitted.png)
 
@@ -679,10 +680,10 @@ Hz the rooms come out 1 to 5 % longer than in octave bands, and the hall at 4 kH
 long instead of 7 %. Over 125 Hz to 4 kHz the seminar room's mean T30 difference goes
 from 1.0 to 0.9 JNDs; the hall's goes from 1.8 to 2.1 and the auditorium's from 3.0 to
 3.5, since their decays were long already and third octaves lengthen them. In the
-coupled rooms they lengthen the decay of LS1's sound further (T20 13.8 s at 125 Hz
-against 12.1 s in octave bands and 6.7 s measured). A third-octave run takes 10 and 11
-minutes for the seminar room and the auditorium instead of 4, and 3.4 hours for the hall
-instead of 1.5.
+coupled rooms with the door at 4.1° they lengthen the decay of LS1's sound further (T20
+13.8 s at 125 Hz against 12.1 s in octave bands and 6.7 s measured). A third-octave run
+takes 10 and 11 minutes for the seminar room and the auditorium instead of 4, and 3.4
+hours for the hall instead of 1.5.
 
 ![CR2, initial absorption](validation/bras_CR2_initial.png)
 
@@ -816,17 +817,41 @@ Eyring's formula gives for the laboratory with the fitted set, which is what was
 measured: as in the hall and the auditorium, the model decays more slowly than Eyring's
 diffuse field with the same absorption, here more so.
 
-Calibrated on LS1's responses from the initial set (`--calibrate LS1`), the fit raised
-the absorption of the chamber's painted concrete to 4.5 times BRAS's fitted value at 125
-Hz and 1.2 to 1.7 times from 250 Hz to 4 kHz, which brings LS1's EDT within 16 % and its
-T20 within 11 % from 125 Hz to 4 kHz, and took the laboratory's absorber down from 0.49
-to 0.20 at 1 kHz, as LS1's responses do not pin it (the fit reports an uncertainty of
-0.33 to 6.7 for it). LS2's responses, which the fit did not see, then decay in 2.2 s at
-1 kHz against 0.8 s measured, 55 JNDs off in EDT on average. A calibration fits the
-responses it is given; in coupled rooms each room needs responses of its own.
+With the door at 4.1° and calibrated on LS1's responses from the initial set
+(`--calibrate LS1`), the fit raised the absorption of the chamber's painted concrete to
+4.5 times BRAS's fitted value at 125 Hz and 1.2 to 1.7 times from 250 Hz to 4 kHz, which
+brings LS1's EDT within 16 % and its T20 within 11 % from 125 Hz to 4 kHz, and took the
+laboratory's absorber down from 0.49 to 0.20 at 1 kHz, as LS1's responses do not pin it
+(the fit reports an uncertainty of 0.33 to 6.7 for it). LS2's responses, which the fit
+did not see, then decay in 2.2 s at 1 kHz against 0.8 s measured, 55 JNDs off in EDT on
+average. A calibration fits the responses it is given; in coupled rooms each room needs
+responses of its own.
 
-The CR1 runs take 2 minutes and 0.7 GiB (5 minutes and 0.9 GiB in third-octave bands, 4
-minutes calibrated).
+![CR1 with the door at 30.4°, fitted absorption](validation/bras_CR1_DoorAngle3_fitted.png)
+
+With the door open by 30.4°, the leaf stands in the chamber beside the doorway. LS1's
+sound crosses the doorway (2.9 m² beside the box on the leaf) and then goes round the
+leaf (about 2.0 m², between the box and the doorway's far side and over the leaf), and
+in the same theory two openings crossed in turn, with no absorption between them, act as
+one of 1.2 m². Simulated, the sound decays in 7.2 s at 125 Hz and 4.0 s at 500 Hz, 1.5
+to 7.3 % faster than the theory with that opening from 125 Hz to 2 kHz (7.3 and 4.2 s):
+the simulated decays correspond to openings of 1.2 to 1.6 m². The measured sound decays
+in 4.5 and 3.6 s, so the decay comes much closer than with the door at 4.1°: T20 is 11
+to 12 % long from 500 Hz to 4 kHz (2.1 to 2.4 JNDs), against 5 to 24 %, and 60 and 28 %
+long at 125 and 250 Hz, against 81 and 55 %; C80 is 0.3 to 2.9 dB low from 125 Hz to 4
+kHz. In the theory the measured decays need openings of 2.2 to 2.5 m² from 250 Hz to 2
+kHz, 0.7 to 1.2 m² more than the simulated ones, and with the door at 4.1° 0.7 to 1.5 m²
+more: what the model lacks changes little with the door's angle. At 125 Hz they need 3.6
+m², more than the whole doorway (3.2 m²).
+
+LS2's measured decays bend more than with the door at 4.1° (EDT 0.80 s and T30 3.17 s at
+1 kHz), and the simulated ones bend too: T30 is within 1.6 JNDs from 500 Hz to 4 kHz,
+though 31 and 78 % long at 250 and 125 Hz. EDT is 1.08 s at 1 kHz, as with the door at
+4.1°. G from seat to seat, which holds the level of LS1's sound in the laboratory
+against LS2's, is within 1 dB in 20 of the 24 values (5 with the door at 4.1°).
+
+The CR1 runs take 2 minutes and 0.7 GiB with the door at either angle (5 minutes and 0.9
+GiB in third-octave bands, 4 minutes calibrated, with the door at 4.1°).
 
 ### Strength (G)
 
@@ -863,8 +888,9 @@ pair's simulated G less the mean over the room's pairs, against each pair's meas
 level less its mean, which the level's reference does not touch. From 125 Hz to 4 kHz it
 is within one JND (1 dB) in 53 of the 60 values in the seminar room, 52 in the hall and
 50 in the auditorium, 0.3 to 0.6 dB off on average. In the coupled rooms, where it holds
-the level of the chamber's sound against the laboratory's own, it is 1.8 dB off, 5 of 24
-within 1 dB: the coupling again.
+the level of the chamber's sound against the laboratory's own, it is 1.8 dB off with the
+door at 4.1°, 5 of 24 within 1 dB: the coupling again; with the door at 30.4°, 0.6 dB
+off, 20 of 24.
 
 ### Interaural cross-correlation
 
@@ -928,23 +954,24 @@ other seeds (see [Simulation](simulation.md), late reverberation). `bras_validat
 prints the largest over each room's pairs from 125 Hz to 4 kHz, in JNDs. With the fitted
 absorption, at 50,000 rays per band:
 
-| largest standard error (JNDs) | CR1 | CR2 | CR3 | CR4 |
-|---|---:|---:|---:|---:|
-| EDT | 1.08 | 0.12 | 0.56 | 0.48 |
-| T20 | 0.42 | 0.07 | 0.34 | 0.36 |
-| T30 | 0.22 | 0.05 | 0.25 | 0.20 |
-| C50 | 0.46 | 0.06 | 0.23 | 0.15 |
-| C80 | 0.57 | 0.05 | 0.22 | 0.20 |
-| D50 | 0.52 | 0.06 | 0.25 | 0.17 |
-| Ts | 0.88 | 0.06 | 0.14 | 0.20 |
+| largest standard error (JNDs) | CR1, 4.1° | CR1, 30.4° | CR2 | CR3 | CR4 |
+|---|---:|---:|---:|---:|---:|
+| EDT | 1.08 | 0.24 | 0.12 | 0.56 | 0.48 |
+| T20 | 0.42 | 0.28 | 0.07 | 0.34 | 0.36 |
+| T30 | 0.22 | 0.23 | 0.05 | 0.25 | 0.20 |
+| C50 | 0.46 | 0.15 | 0.06 | 0.23 | 0.15 |
+| C80 | 0.57 | 0.14 | 0.05 | 0.22 | 0.20 |
+| D50 | 0.52 | 0.11 | 0.06 | 0.25 | 0.17 |
+| Ts | 0.88 | 0.28 | 0.06 | 0.14 | 0.20 |
 
 In the seminar room no standard error is above an eighth of a JND. In the hall and the
 auditorium EDT's standard error is a third of a JND for a typical pair and band (the
 median, 0.33 and 0.28) and half a JND at most, so there a difference from the
 measurement below one JND is partly the run's own; decays 2 to 4 JNDs long are not. In
-the coupled rooms the largest are those of LS1's sound, which reaches the laboratory
-through the slit by the door: EDT 1.08 JNDs at 4 kHz. With the initial absorption the
-hall's largest is T30's, 0.92 JNDs at one pair at 4 kHz.
+the coupled rooms with the door at 4.1° the largest are those of LS1's sound, which
+reaches the laboratory through the slit by the door: EDT 1.08 JNDs at 4 kHz; with the
+door at 30.4° none is above 0.28 JNDs. With the initial absorption the hall's largest is
+T30's, 0.92 JNDs at one pair at 4 kHz.
 
 ## Edge diffraction against the exact solution
 
@@ -3919,12 +3946,13 @@ Files and runs:
 
 - **More measured rooms.** Four rooms have been compared with measurements (see
   [Measured rooms](#measured-rooms-bras)): their ISO 3382-1 parameters and G from seat
-  to seat, and in three of them IACC with a dummy head. G's absolute level has not,
-  as BRAS's calibration leaves the measured level uncertain by about 3 dB, nor the
-  lateral parameters (LF, LFC, LG), stage support and directional decay, which BRAS did
-  not measure, nor coupled rooms whose model joins them as the real ones are joined:
-  in two-room diffuse theory BRAS's door ajar joins its two rooms 10 to 16 times more
-  strongly than its model does.
+  to seat, and in three of them IACC with a dummy head. G's absolute level has not, as
+  BRAS's calibration leaves the measured level uncertain by about 3 dB, nor the lateral
+  parameters (LF, LFC, LG), stage support and directional decay, which BRAS did not
+  measure, nor coupled rooms whose model joins them as the real ones are joined: in
+  two-room diffuse theory BRAS's two rooms are joined by about 1 m² more than their
+  model from 250 Hz to 2 kHz, with the door ajar (10 to 16 times the model's slit) and
+  open alike.
 - **Wave effects.** Above the wave solver's bands the simulation is geometric. Edge
   diffraction is modelled (UTD, for the direct sound and first-order reflections, and
   the direct sound over two edges; the fade of every other specular path at edges,
@@ -4061,6 +4089,7 @@ python validation/bras_validation.py --materials initial --calibrate LS1 --plots
 python validation/bras_binaural.py path/to/BRAS --json binaural.json   # FABIAN's responses from BRAS
 python validation/bras_iacc_parts.py path/to/BRAS CR3 LS7   # one loudspeaker's response in parts
 python validation/coupled_rooms.py --results bras.json   # CR1 against two-room diffuse theory
+python validation/coupled_rooms.py --scene CR1_DoorAngle3 --results bras.json
 python validation/bras_room_energy.py --results bras.json   # what scattering does, rooms' own decay
 ```
 
