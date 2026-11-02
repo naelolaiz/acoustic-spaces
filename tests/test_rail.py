@@ -522,7 +522,7 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
     # The video's messages: the train at the moment of its walk, heard at the listener.
     assert said[0] == "train @ 0.00 s -> tsi_7m5"
     assert all(re.fullmatch(r"train @ \d+\.\d\d s -> tsi_7m5", line) for line in said), said
-    assert facts["listeners"]["tsi_7m5"]["levels_a_db"][0] == -math.inf
+    assert facts["listeners"]["tsi_7m5"]["levels_a_db"][0] is None
     # Another track makes the sound again.
     again = demo.resolved(demo.parser().parse_args([*run, "--track", "slab"]))
     assert not demo.is_done(demo.step("sound"), again)

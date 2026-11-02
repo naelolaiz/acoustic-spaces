@@ -1632,6 +1632,43 @@ def test_a_demo_scene_written_elsewhere_still_finds_its_files(tmp_path: Path) ->
     assert (example / "scene.yaml").read_text(encoding="utf-8").startswith("# a header\n")
 
 
+def test_a_table_on_another_drive_is_named_in_full(tmp_path: Path, monkeypatch) -> None:
+    """A table the demo writes beside its scene is named relative to the example's
+    folder, and in full when Windows finds no relative path (another drive), as
+    :func:`pipeline.write_scene` names the scene's files."""
+    import ntpath
+
+    table = tmp_path / "work" / "scene_siren.csv"
+    assert pipeline.named_from(table, tmp_path / "example") == "../work/scene_siren.csv"
+    with pytest.raises(ValueError):
+        ntpath.relpath("D:\\work\\scene_siren.csv", "C:\\example")
+
+    def other_drive(path, start):
+        raise ValueError("path is on mount 'D:', start on mount 'C:'")
+
+    monkeypatch.setattr(os.path, "relpath", other_drive)
+    assert pipeline.named_from(table, tmp_path / "example") == table.resolve().as_posix()
+
+
+def test_the_json_the_demos_write_is_strict(tmp_path: Path) -> None:
+    """Levels where nothing is heard (minus infinity) and other numbers that are not
+    finite are written null, as strict JSON (RFC 8259) has no such numbers."""
+    import json
+    import math
+
+    path = tmp_path / "walk.json"
+    data = {"levels": [70.5, -math.inf, math.nan], "top": math.inf, "n": 3, "at": (1.0, None)}
+    pipeline.write_json(path, data)
+    text = path.read_text(encoding="utf-8")
+    assert "Infinity" not in text and "NaN" not in text
+    assert json.loads(text) == {
+        "levels": [70.5, None, None],
+        "top": None,
+        "n": 3,
+        "at": [1.0, None],
+    }
+
+
 def test_the_stills_say_how_the_sound_was_made(tmp_path: Path) -> None:
     """The lines under every still state the simulation as it ran, the engine's defaults
     for what a scene leaves out, the wave solver and, outdoors in wind, what the weather

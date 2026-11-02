@@ -27,11 +27,11 @@ from __future__ import annotations
 import argparse
 import functools
 import math
-import os
 from pathlib import Path
 
 import numpy as np
 
+from acoustic_spaces.demos import pipeline
 from acoustic_spaces.demos.audio import write as write_wav
 from acoustic_spaces.demos.passby import FADE_S, Vehicle, car_input, car_of, kmh, source_scene
 
@@ -117,11 +117,12 @@ class Aircraft(Vehicle):
     def problem(self, source) -> str | None:
         """Its walk gives a ground track, two places apart at least; an arrival's comes
         down to the runway, where it touches down."""
-        from acoustic_spaces.doc29.path import LOWEST_SOURCE_M
+        from acoustic_spaces.doc29.path import LOWEST_SOURCE_M, SAME_PLAN_POINT_M
 
         places = track_points(source)
-        plan = {(round(x, 6), round(y, 6)) for x, y, _ in places}
-        if len(plan) < 2:
+        # Track.through draws a ground track if a place lies more than this from the first.
+        x0, y0, _ = places[0]
+        if not any(math.hypot(x - x0, y - y0) > SAME_PLAN_POINT_M for x, y, _ in places):
             return f"the {self.name}'s walk needs two places apart in plan, its ground track"
         if not self.departing and not any(z <= LOWEST_SOURCE_M + 1e-6 for *_, z in places):
             return (
@@ -282,7 +283,7 @@ class Aircraft(Vehicle):
             f"The directivity of {JET}'s engines ({info['installation']}-mounted), Doc 29's "
             f"installation correction, written by {self.script}",
         )
-        named = Path(os.path.relpath(table, args.source.parent)).as_posix()
+        named = pipeline.named_from(table, args.source.parent)
         source["directivity"] = {"file": named}
 
     # -- its words ---------------------------------------------------------------------

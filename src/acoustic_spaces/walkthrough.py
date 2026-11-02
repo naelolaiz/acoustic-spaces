@@ -382,7 +382,8 @@ def simulate_walk(
     listener or source with a walk), placed every ``step_m``.
 
     A walking listener hears every source; a walking source is heard at ``listener``
-    (by default the scene's only listener), with the other sources standing still.
+    (by default the scene's only listener), with the other sources standing still. The
+    walk must go slower than sound.
 
     The late part is traced every ``late_step_m`` (see the module's description), or at
     every place with ``late_step_m=None`` or the statistical late method. ``settings``
@@ -392,8 +393,9 @@ def simulate_walk(
     kind, item = _walker(room, name)
     points = walk_points(item, step_m)
     doppler = item.walk.doppler
+    _check_speed(room, item, knots(item).top_speed)
     if doppler:
-        _check_doppler(room, item, knots(item).top_speed, settings)
+        _check_doppler(room, settings)
     names = tuple(place_name(item.name, k, t) for k, t in enumerate(points.times))
     copies = [
         _copy_at(item, label, place, None if points.angles is None else points.angles[k], yaw)
@@ -449,14 +451,20 @@ def simulate_walk(
     return WalkResponses(item.name, kind, points, names, result, late_places, doppler)
 
 
-def _check_doppler(room: Room, item, speed: float, settings: SimulationSettings | None) -> None:
-    """What a walk with Doppler cannot do: go as fast as sound, or take the wave solver."""
+def _check_speed(room: Room, item, speed: float) -> None:
+    """A walk goes slower than sound, with Doppler or without: the walker is heard as it
+    would be standing at each place, through sound that keeps to linear acoustics, which
+    has no meaning as fast as sound or faster (no shock wave, no sonic boom)."""
     c = room.speed_of_sound()
     if speed >= c:
         raise ValueError(
-            f"{item.name!r} walks at {speed:g} m/s, as fast as sound or "
-            f"faster ({c:.0f} m/s): Doppler needs it slower"
+            f"{item.name!r} walks at {speed:g} m/s, as fast as sound or faster "
+            f"({c:.0f} m/s): walks must go slower, as shock waves are not simulated"
         )
+
+
+def _check_doppler(room: Room, settings: SimulationSettings | None) -> None:
+    """What a walk with Doppler cannot do: take the wave solver."""
     if (settings or room.scene.simulation).wave.enabled:
         raise ValueError(
             "a walk with Doppler does not take the wave solver's bands: turn "
@@ -597,8 +605,8 @@ def simulate_movement(
     source in use, still or moving. The late part is traced every ``late_step_m`` along
     each mover's walk, as in :func:`simulate_walk`.
 
-    A walk with Doppler moves alone: with another mover it is refused. It must go slower
-    than sound, without the wave solver, as in :func:`simulate_walk`.
+    Every mover goes slower than sound. A walk with Doppler moves alone: with another
+    mover it is refused. It goes without the wave solver, as in :func:`simulate_walk`.
     """
     if step_m <= 0:
         raise ValueError("step_m must be positive")
@@ -609,6 +617,8 @@ def simulate_movement(
     if not moving:
         raise ValueError("nothing moves: give a listener or a source a walk that is enabled")
     paths = {item.name: knots(item) for _, item in moving}
+    for _, item in moving:
+        _check_speed(room, item, paths[item.name].top_speed)
     doppler = next((item for _, item in moving if item.walk.doppler), None)
     if doppler is not None:
         if len(moving) > 1:
@@ -617,7 +627,7 @@ def simulate_movement(
                 f"{doppler.name!r} walks with Doppler, which moves alone: leave {others} "
                 f"standing (turn their walks off), or turn its doppler off"
             )
-        _check_doppler(room, doppler, paths[doppler.name].top_speed, settings)
+        _check_doppler(room, settings)
     times = np.unique(np.concatenate([_sample_times(k, step_m, step_deg) for k in paths.values()]))
     copies: dict[tuple[str, str], tuple[str, ...]] = {}
     added: dict[str, list] = {"listeners": [], "sources": []}
