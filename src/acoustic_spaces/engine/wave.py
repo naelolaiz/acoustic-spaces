@@ -112,7 +112,8 @@ WAVE_BANDS_HZ = OCTAVE_BANDS_HZ[:4]
 HIGH_PASS_S = 0.12
 #: Cells of the matched layer round an open model, and its damping at the grid's edge
 #: (the damping rate times half a time step). Sound leaving the model comes back from
-#: it some 60 dB down; from the grid's edge alone, 7 to 14 dB down.
+#: it 67 to 74 dB down; from the grid's edge alone, 7 to 14 dB down (docs/validation.md,
+#: Open models).
 LAYER_CELLS = 8
 LAYER_DAMPING = 0.5
 #: The wave solver's part of a response starts here (Hz), with the synthesis's
@@ -527,16 +528,36 @@ def _probe_points(listener: np.ndarray, cell: float) -> np.ndarray:
     return listener[None, :] + cell * offsets
 
 
+def _in_sight(bvh, listeners: np.ndarray, probes: np.ndarray) -> np.ndarray:
+    """(len(probes),) whether no face of ``bvh`` lies between each of ``probes`` (the
+    :func:`_probe_points` of each of ``listeners`` in turn) and its listener. A point
+    across a thin surface (a screen, a balcony's front) can have air of its own, and a
+    difference across the surface is no gradient of the listener's air."""
+    origins = np.repeat(listeners, len(probes) // len(listeners), axis=0)
+    offsets = probes - origins
+    distances = np.linalg.norm(offsets, axis=1)
+    seen = np.ones(len(probes), dtype=bool)
+    away = distances > 0.0  # all but the listeners' own points
+    seen[away] = ~bvh.occluded(
+        np.ascontiguousarray(origins[away]),
+        np.ascontiguousarray(offsets[away] / distances[away, None]),
+        np.ascontiguousarray(distances[away]),
+        np.full(int(away.sum()), -1, np.int64),
+    )
+    return seen
+
+
 def _first_order(
     probes: np.ndarray, found: Sequence[bool], name: str, courant: float = COURANT
 ) -> np.ndarray:
     """W, X, Y, Z (samples, 4) from the pressure at the listener and round it.
 
     X, Y and Z are c times the time integral of the pressure gradient (central
-    differences, or one-sided ones next to a surface), by the trapezoidal rule so that
-    they fall on the pressure's samples: X = -rho c u_x, against the particle velocity,
-    so that it points towards the sound (as in AmbiX). ``courant`` is the Courant number
-    of the speed of sound at the listener.
+    differences, or one-sided ones where a point is not ``found``: out of the air, or
+    across a surface from the listener), by the trapezoidal rule so that they fall on
+    the pressure's samples: X = -rho c u_x, against the particle velocity, so that it
+    points towards the sound (as in AmbiX). ``courant`` is the Courant number of the
+    speed of sound at the listener.
     """
     if not found[0]:
         raise ValueError(f"listener {name!r} is not in the air of the wave grid")
@@ -754,27 +775,43 @@ def wave_responses(
         )
         return solver, grid, fits, probes, courant, extremes, still
 
+    def kept(stencil: str, layer: int):
+        """What ``prepare`` gives, where its grid is closed without a matched layer or
+        open with one; otherwise None, and its grid goes before the next is made."""
+        built = prepare(stencil, layer)
+        return built if built[0].open == bool(layer) else None
+
     # The isotropic stencil, but round an open model the standard one with its matched
-    # layer, which the isotropic one has none of.
-    stencil = "standard" if scheme == "standard" else "isotropic"
-    solver, grid, fits, probes, courant, extremes, still = prepare(stencil, 0)
-    if solver.open:
+    # layer, which the isotropic one has none of. An outdoor model's sky is an opening,
+    # so its grid is open unless the source is shut in: the one with the layer first,
+    # and the isotropic stencil refused before any grid is made.
+    outdoor = model.room.outdoor is not None
+    if scheme == "isotropic" and outdoor:
+        raise ValueError(
+            "outdoors the isotropic stencil is not available (it has no matched layer for "
+            "the sky): set simulation.wave.scheme to auto or standard"
+        )
+    built = kept("standard", LAYER_CELLS) if outdoor else None
+    if built is None:
+        built = kept("standard" if scheme == "standard" else "isotropic", 0)
+    if built is None:
         if scheme == "isotropic":
             raise ValueError(
                 "the isotropic stencil has no matched layer for an open model: set "
                 "simulation.wave.scheme to auto or standard"
             )
-        stencil = "standard"
-        del solver  # its grid goes before the one with the layer is made
-        solver, grid, fits, probes, courant, extremes, still = prepare(stencil, LAYER_CELLS)
+        built = prepare("standard", LAYER_CELLS)
+    solver, grid, fits, probes, courant, extremes, still = built
     h = grid.cell
     signal, delay = source_signal(grid.rate, h, courant)
     samples = int(math.ceil(length_s * grid.rate))
     steps = samples + delay  # the source's term on step n stands for its value at time n
     drive = np.zeros(steps, np.float32)
     drive[: min(len(signal), steps)] = signal[:steps]
-    # Before any step: a listener outside the source's air, or a source closed in.
+    # Before any step: a listener outside the source's air, or a source closed in. A
+    # point round a listener counts only where the listener sees it.
     found = [solver.probe_found(p) for p in range(len(probes))]
+    found = (np.array(found) & _in_sight(bvh, listeners, probes)).tolist()
     missing = [listener for i, listener in enumerate(names) if not found[7 * i]]
     if missing:
         air, volume = solver.air_cells * h**3, model.room.volume_m3

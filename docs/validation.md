@@ -192,24 +192,26 @@ request and checks:
   surface and half a turn off an absorbing one at grazing incidence; and a thin
   screen's diffracted wave, with all four terms of the UTD added in pressure, to
   1e-9;
-- the wave solver, with both stencils where both apply: the modes of a rigid box
-  (within 0.6 Hz), both stencils' modes along a tube at 12, 8 and 5 cells per
-  wavelength as slow as their dispersion relation along an axis says (within 2e-5,
-  the 19-point stencil's error less than half the 7-point one's), the 19-point
-  stencil stable for 30,000 steps in a rotated room with a cube and a screen in it,
-  both stencils' highest modes 2⁻¹⁶ inside the stability limit (kicked, within
-  1.1 × 256 times the kick over 20,000 steps, rounded as the update rounds),
-  the reflection off the end
-  of a duct for four admittances (within 0.005, and below 0.05 for a matched end, and
-  off the inner face of a wall thinner than a cell), and off an end whose admittance
-  resonates (within 0.012 of the grid's theory from 30 to 250 Hz); admittances fitted to
-  four kinds of material (within 0.01 of their absorption in every band, passive); the
-  free-field level of the 63 Hz band (within 1 dB of the rays), the arrival time and
-  direction of the direct sound, open models and thin screens (stable, and the sound
-  leaves), the matched layer round an open model (what comes back 40 dB down or more,
-  against a grid too large for anything to come back; stable for 9,500 steps), one run
-  for bands with their own absorption, and the level of the late part across the
-  crossover to the rays (flat within 1 dB in sixth octaves);
+- the wave solver, with both stencils where both apply: the modes of a rigid box (within
+  0.6 Hz), both stencils' modes along a tube at 12, 8 and 5 cells per wavelength as slow
+  as their dispersion relation along an axis says (within 2e-5, the 19-point stencil's
+  error less than half the 7-point one's), the 19-point stencil stable for 30,000 steps
+  in a rotated room with a cube and a screen in it, both stencils' highest modes 2⁻¹⁶
+  inside the stability limit (kicked, within 1.1 × 256 times the kick over 20,000 steps,
+  rounded as the update rounds), the reflection off the end of a duct for four
+  admittances (within 0.005, and below 0.05 for a matched end, and off the inner face of
+  a wall thinner than a cell), and off an end whose admittance resonates (within 0.012
+  of the grid's theory from 30 to 250 Hz); admittances fitted to four kinds of material
+  (within 0.01 of their absorption in every band, passive); the free-field level of the
+  63 Hz band (within 0.3 dB of the rays), the arrival time and direction of the direct
+  sound and the strength of its first-order field against a point source's (within 0.6
+  dB at 2 and 4 m, with either stencil), the gradient at a listener just in front of a
+  thin screen taken on the listener's side, as in front of a solid block (within 1 dB),
+  open models and thin screens (stable, and the sound leaves), the matched layer round
+  an open model (what comes back 40 dB down or more, against a grid too large for
+  anything to come back; stable for 9,500 steps), one run for bands with their own
+  absorption, and the level of the late part across the crossover to the rays (flat
+  within 1 dB in sixth octaves);
 - the ray tracer against runs stored before its tree was rebuilt
   (`tests/reference/tracer.npz`): the faces and distances the tree finds, the specular
   paths, and every kind of late run on the CPU to single precision, so a change that

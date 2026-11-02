@@ -7,6 +7,19 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: the wave solver took the pressure gradient across a thin surface with air
+  behind it (a screen, a balcony's front) at a listener within a grid cell of it, so the
+  low end of Ambisonics, binaural and loudspeaker outputs and LF and LFC in the wave
+  bands came out wrong there; it now takes it on the listener's side. 0.1 m in front of
+  a rigid screen the figure of eight facing it falls from 0.6 to 6.2 dB below the
+  pressure in the 63 Hz band with the 7-point stencil (from 0.4 dB above to 14.9 dB
+  below with the 19-point one), as in front of a solid block.
+- Outdoor models make the wave solver's grid once per source instead of twice: a grid
+  without the matched layer (with `scheme: auto` the isotropic stencil's), made only to
+  find that the sky lets the sound out, is gone (the street example's set-up at 63 Hz
+  takes 2.4 s instead of 6.9 s on two threads), with the same results. The isotropic
+  stencil is now refused outdoors before any grid is made, also for a source shut in a
+  building, which used to run.
 
 ## 4.1.0
 
