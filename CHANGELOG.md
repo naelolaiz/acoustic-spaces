@@ -136,6 +136,11 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- Fixed: with weather zones, the shares of a path's way under each weather, rounded one
+  by one, could add up to 1 ± 0.005 (± 0.01 across five weathers), scaling the speed of
+  sound in still air by as much; they are now divided by their sum. Over 300 m across
+  three weathers, a third each, the direct sound arrives at 868.5 ms (was 864.2) and the
+  levels at 1 to 8 kHz rise by 0.1 to 0.3 dB; the lakeside example is unchanged.
 
 ## 4.1.0
 

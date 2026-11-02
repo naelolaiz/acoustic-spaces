@@ -601,6 +601,37 @@ def test_weather_zones_in_a_scene() -> None:
     )
 
 
+def test_the_shares_of_three_weathers_add_up_to_one() -> None:
+    """Three weathers each under a third of a 300 m way: rounded one by one, the shares
+    come to 0.335 each, 1.005 in all, which took the still air's speed 0.5 % too fast
+    and brought the direct sound 4.3 ms early. Divided by their sum, they give the
+    exact mean profile, each weather weighted by its share of the way."""
+    from acoustic_spaces.engine.refracted import MIX_STEP
+    from acoustic_spaces.engine.weather import Weather
+
+    def band(x0: float, x1: float) -> list[list[float]]:
+        return [[x0, -100.0], [x1, -100.0], [x1, 100.0], [x0, 100.0]]
+
+    scene = zoned(
+        [
+            {"name": "lee", "polygon": band(100.0, 200.0), "wind": {"speed_m_s": 2.0}},
+            {"name": "lake", "polygon": band(200.0, 300.0), "temperature_c": 15.0},
+        ],
+        listeners=((300.0, 0.0, 1.5), (299.0, 0.0, 1.5)),
+    )
+    weather = Weather(scene.atmosphere, scene.air.temperature_c, (-400.0, -50.0, 400.0, 50.0))
+    a, _ = weather.shares([[0.0, 0.0], [300.0, 0.0]])
+    assert np.round(a / MIX_STEP).sum() * MIX_STEP == pytest.approx(1.005)
+    # Each weather a third, the winds all blowing along the way.
+    exact = Profile(weather.nodes, weather.still.mean(axis=0) + weather.wind.mean(axis=0))
+    expected = Rays(exact, 2.0).eigenrays(1.5, 300.0, 0).time[0]
+    result = simulate(Room.from_scene(scene))
+    assert result["s", "l0"].direct_delay_s == pytest.approx(expected, abs=1e-5)
+    # A metre farther, the sound comes about 1 m / c later, not earlier.
+    later = result["s", "l0"].direct_delay_s - result["s", "l1"].direct_delay_s
+    assert later == pytest.approx(1.0 / exact.c[0], rel=0.05)
+
+
 def test_inspect_names_the_weather_zones(tmp_path, capsys) -> None:
     from acoustic_spaces.cli import main
 
