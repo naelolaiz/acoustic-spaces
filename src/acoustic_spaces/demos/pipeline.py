@@ -30,6 +30,7 @@ import numpy as np
 import yaml
 
 from acoustic_spaces.demos import audio, shell_line
+from acoustic_spaces.render import crossfaded
 
 PARAMETERS = "parameters.json"
 SEATS = "seats.json"
@@ -488,11 +489,12 @@ def tour_audio(
 ) -> np.ndarray:
     """The tour as stereo: each stop's mix shifted earlier by its arrival (``lag_s`` in
     ``seats``) so the music runs on across a cut, turned up as the stop is, crossfades
-    of ``crossfade_s`` centred on the cuts between joined stops (:func:`crossfaded`: the
-    power runs on, however alike the two mixes are), a fade at the end and the peak at
-    ``peak_db``. With a ``kind``, each stop's ``<listener>.<kind>.wav`` instead of its
-    mix (what is felt there, ``"shaker"``), neither turned up nor brought to a peak, as
-    it is."""
+    of ``crossfade_s`` centred on the cuts between joined stops, a quarter sine
+    (:func:`~acoustic_spaces.render.crossfaded`: the power runs on, however alike the
+    two mixes are; two seats of one piece, each brought forward by its arrival, are much
+    alike), a fade at the end and the peak at ``peak_db``. With a ``kind``, each stop's
+    ``<listener>.<kind>.wav`` instead of its mix (what is felt there, ``"shaker"``),
+    neither turned up nor brought to a peak, as it is."""
     rate, fmt = seats["rate"], seats["format"]
     length = round(stops[-1].end * rate)
     out = np.zeros((length, 2))
@@ -526,24 +528,6 @@ def tour_audio(
     if peak > 0 and peak_db is not None and kind is None:
         out *= 10.0 ** (peak_db / 20.0) / peak
     return out
-
-
-def crossfaded(x0: np.ndarray, x1: np.ndarray, ramp: np.ndarray) -> np.ndarray:
-    """``x0`` fading out and ``x1`` fading in over ``ramp`` (a quarter sine): equal
-    power for two unlike mixes, and scaled, sample by sample, by how alike the two are
-    over the crossfade (their correlation coefficient), so that the power runs from one
-    mix's to the other's as it would for unlike ones. Two seats of one piece, each
-    brought forward by its arrival, are much alike: an equal-power crossfade plays them
-    up to 3 dB louder at the cut."""
-    fade_out, fade_in = ramp[::-1, None], ramp[:, None]
-    both = x0 * fade_out + x1 * fade_in
-    p0, p1 = float(np.mean(x0**2)), float(np.mean(x1**2))
-    if p0 <= 0.0 or p1 <= 0.0:
-        return both
-    rho = float(np.mean(x0 * x1)) / np.sqrt(p0 * p1)
-    unlike = ramp[::-1] ** 2 * p0 + ramp**2 * p1
-    alike = unlike + 2.0 * rho * ramp[::-1] * ramp * np.sqrt(p0 * p1)
-    return both * np.sqrt(unlike / np.maximum(alike, unlike / 4.0))[:, None]
 
 
 def picked_tour(tour: Sequence[tuple], keep: Callable[[tuple], bool]) -> list[tuple]:

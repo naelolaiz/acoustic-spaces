@@ -226,8 +226,11 @@ request and checks:
   crossed it inside it; a ceiling that lets sound through counted as an opening, not a
   leak; a source outside a closed model named; and no leak in the other examples;
 - walkthroughs: the places along a walk every 25 cm, facing forward and turning the
-  shorter way round at the set pace; crossfade weights that add up to one and are
-  continuous; the late parts of the places between those traced mixed in proportion to
+  shorter way round at the set pace; crossfade weights that add up to one; crossfades
+  that are continuous, keep a tone heard a quarter or a third of a turn later at the
+  next place to within 0.1 dB of its level, turn a tone in antiphase up by 6 dB at most,
+  keep unlike noise's power (to 0.2 dB) and correct each octave band by its own
+  correlation; the late parts of the places between those traced mixed in proportion to
   the distance; one response everywhere equal to the plain convolution (to 1e-12); a
   walking listener, and a walking source heard at a listener; and the gallery walk
   rendered through its places;
@@ -2837,21 +2840,26 @@ error, mean and most), away from the walk's ends:
 
 | case | tone | waveform | level | without Doppler: waveform | level |
 |---|---|---|---|---|---|
-| car, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | 2.0 dB | 2.02 / 6.59 dB |
-| | 1 kHz | -54.0 dB | 0.003 / 0.029 dB | 2.4 dB | 1.41 / 6.16 dB |
-| | 4 kHz | -45.4 dB | 0.003 / 0.032 dB | 2.5 dB | 1.63 / 6.98 dB |
-| train, 80 m/s | 250 Hz | -46.4 dB | 0.007 / 0.024 dB | 2.2 dB | 2.22 / 4.84 dB |
-| | 1 kHz | -46.7 dB | 0.012 / 0.032 dB | 2.3 dB | 1.95 / 4.24 dB |
-| | 4 kHz | -38.7 dB | 0.081 / 0.415 dB | 2.5 dB | 2.68 / 10.88 dB |
-| passing listener, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | -2.4 dB | 2.01 / 6.05 dB |
-| | 1 kHz | -54.2 dB | 0.003 / 0.019 dB | 1.1 dB | 1.29 / 5.79 dB |
-| | 4 kHz | -45.5 dB | 0.003 / 0.019 dB | 2.4 dB | 1.53 / 6.11 dB |
+| car, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | 2.9 dB | 0.73 / 3.42 dB |
+| | 1 kHz | -54.0 dB | 0.003 / 0.029 dB | 2.9 dB | 0.76 / 3.54 dB |
+| | 4 kHz | -45.4 dB | 0.003 / 0.032 dB | 3.0 dB | 0.96 / 4.13 dB |
+| train, 80 m/s | 250 Hz | -46.4 dB | 0.007 / 0.024 dB | 2.9 dB | 1.62 / 2.75 dB |
+| | 1 kHz | -46.7 dB | 0.012 / 0.032 dB | 2.9 dB | 1.63 / 3.54 dB |
+| | 4 kHz | -38.7 dB | 0.081 / 0.415 dB | 3.1 dB | 2.39 / 12.21 dB |
+| passing listener, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | -0.5 dB | 0.22 / 2.87 dB |
+| | 1 kHz | -54.2 dB | 0.003 / 0.019 dB | 1.7 dB | 0.24 / 3.45 dB |
+| | 4 kHz | -45.5 dB | 0.003 / 0.019 dB | 2.9 dB | 0.35 / 3.78 dB |
 
 With Doppler the sound follows the field to within 39 dB and its level to within 0.42
 dB, the most for the train at 4 kHz, where its two paths cancel for a moment. The same
 walks crossfaded from place to place, as without Doppler, keep each place's pitch, so
 their phase jumps from place to place: the waveform's error is about as large as the
-field itself (-2.4 dB or more) and the level misses by 4 to 11 dB at times.
+field itself (-0.5 dB or more). Their crossfades keep each band's power however alike
+the places sound, so at 30 m/s the level misses by 0.2 to 1.0 dB on average and by 2.9
+to 4.1 dB at most. The train, its places 12.5 ms apart and so always crossfading, misses
+by 1.6 to 2.4 dB on average and 2.7 to 3.5 dB at most at 250 Hz and 1 kHz; at 4 kHz by
+12 dB 0.72 s in, where the field's two paths cancel for a moment (10 dB below its median
+level) and the places' do not.
 
 **The sound sent each way.** The same walks with the source sending a tone each way
 (an `Emission`, `acoustic_spaces.emission`): 1 + 0.8 cos θ in amplitude, θ from
@@ -2934,15 +2942,15 @@ places' band levels:
 | 8 kHz | -31.81 | -31.81 | -31.85 | -31.82 | -31.82 |
 
 The sound keeps the energy of the responses to within 0.07 dB in every band, with its
-late part and without. The late part is crossfaded as in any walk, drawn from one random
-sequence for every place; the responses here are drawn from the same one, as otherwise
-their late parts' chance correlation with the early sound would differ by up to 0.25
-dB in a band (a one-off check). The pass-by's band levels are within 0.25 dB of the sound, 0.8 dB in the
-500 Hz band, where the ground's dip falls: the pass-by takes the places' band levels,
-averaged over each band, where the sound is read through band filters, whose skirts
-fill a dip (a cause not checked separately). For a car at 30 m/s over
-this grass with 94 dB of sound power, the listener has L_Amax 61.4 dB(A) 2.03 s into
-the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A) over 4 s.
+late part and without. The late part is crossfaded by weights that add up to one, drawn
+from one random sequence for every place; the responses here are drawn from the same
+one, as otherwise their late parts' chance correlation with the early sound would differ
+by up to 0.25 dB in a band (a one-off check). The pass-by's band levels are within 0.25
+dB of the sound, 0.8 dB in the 500 Hz band, where the ground's dip falls: the pass-by
+takes the places' band levels, averaged over each band, where the sound is read through
+band filters, whose skirts fill a dip (a cause not checked separately). For a car at 30
+m/s over this grass with 94 dB of sound power, the listener has L_Amax 61.4 dB(A) 2.03 s
+into the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A) over 4 s.
 
 **What it leaves out.** The engine's source is quasi-static, as the field it is
 compared with: a moving source's convective amplification is left out (taking its

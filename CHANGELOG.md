@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Walks without Doppler crossfade from one place to the next band by band, corrected by
+  how alike the two places sound, so that each octave band's power runs on
+  (`acoustic_spaces.render.crossfaded`, shared with the demos' tours). Against the exact
+  field of a pass-by, pure tones' level misses by at most 2.7 to 4.1 dB instead of 4.2
+  to 7.0 dB, 0.2 to 2.4 dB on average instead of 1.3 to 2.7 dB, and for the train at 4
+  kHz by 12.2 instead of 10.9 dB, where the field's two paths cancel for a moment.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early
