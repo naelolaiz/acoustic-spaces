@@ -180,44 +180,30 @@ def _split_t_junctions(
         order = np.argsort(vertices[ends, 0], kind="stable")
         ends, xs = ends[order], vertices[ends[order], 0]
         n = len(faces)
-        # The edges with an end of an open edge within reach of their x range, besides
+        # The edges with an end of an odd edge within reach of their x range, besides
         # their own two.
         x = vertices[directed, 0]
+        first = np.searchsorted(xs, x.min(axis=1) - T_JUNCTION_TOLERANCE_M)
         reach = np.searchsorted(xs, x.max(axis=1) + T_JUNCTION_TOLERANCE_M, side="right")
-        reach -= np.searchsorted(xs, x.min(axis=1) - T_JUNCTION_TOLERANCE_M)
+        reach -= first
         own = np.isin(directed, ends).sum(axis=1)
+        rows = np.flatnonzero(reach > own)
+        hit_row, hit_end, hit_t = _ends_on_edges(vertices, directed, ends, rows, first, reach)
+        # Each face is split along the first of its edges (in the order of ``directed``)
+        # that has an end on it.
+        hit_face = hit_row % n
+        _, once = np.unique(hit_face, return_index=True)
         replaced: dict[int, list[list[int]]] = {}
-        for row in np.flatnonzero(reach > own).tolist():
-            face = row % n
-            if face in replaced:
-                continue
+        for row in np.sort(hit_row[once]).tolist():
+            on = slice(*np.searchsorted(hit_row, [row, row + 1]).tolist())
+            near, t = hit_end[on], hit_t[on]
+            face, k = row % n, row // n  # the face runs a -> b from its corner k
             a, b = directed[row]
-            pa, pb = vertices[a], vertices[b]
-            lo, hi = sorted((pa[0], pb[0]))
-            near = ends[
-                np.searchsorted(xs, lo - T_JUNCTION_TOLERANCE_M) : np.searchsorted(
-                    xs, hi + T_JUNCTION_TOLERANCE_M, side="right"
-                )
-            ]
-            if len(near) == 0:
-                continue
-            d = pb - pa
-            length = float(np.linalg.norm(d))
-            t = (vertices[near] - pa) @ d / length**2
-            off = np.linalg.norm(vertices[near] - (pa + np.outer(t, d)), axis=1)
-            inside = (
-                (off < T_JUNCTION_TOLERANCE_M)
-                & (t * length > T_JUNCTION_TOLERANCE_M)
-                & ((1.0 - t) * length > T_JUNCTION_TOLERANCE_M)
-            )
-            if not inside.any():
-                continue
-            k = row // n  # the face runs a -> b from its corner k
             c = int(faces[face, (k + 2) % 3])
-            if c in near[inside]:
+            if c in near:
                 replaced[face] = []
                 continue
-            corners = [int(a), *near[inside][np.argsort(t[inside])].tolist(), int(b)]
+            corners = [int(a), *near[np.argsort(t)].tolist(), int(b)]
             replaced[face] = [[p, q, c] for p, q in zip(corners[:-1], corners[1:], strict=True)]
         if not replaced:
             break
@@ -227,6 +213,51 @@ def _split_t_junctions(
         faces = np.concatenate([faces[kept], np.array(new, dtype=faces.dtype).reshape(-1, 3)])
         labels = np.concatenate([labels[kept], np.array(new_labels, dtype=labels.dtype)])
     return faces, labels
+
+
+#: (edge, end) pairs tested at once in :func:`_split_t_junctions`, to bound its memory.
+_PAIRS_PER_BLOCK = 1 << 18
+
+
+def _ends_on_edges(
+    vertices: np.ndarray,
+    directed: np.ndarray,
+    ends: np.ndarray,
+    rows: np.ndarray,
+    first: np.ndarray,
+    reach: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The ends (``ends``, sorted along x) that lie on the edges ``rows`` of
+    ``directed``, within ``T_JUNCTION_TOLERANCE_M`` of the edge and farther than that
+    from both its ends: the edge's row, the end and where along the edge it lies (0 at
+    its first corner, 1 at its second), in the order of the rows and, for each, of the
+    ends. Edge ``row`` is tested against the ``reach[row]`` ends from ``first[row]`` on,
+    those within its x range."""
+    sizes = reach[rows]
+    blocks = np.searchsorted(
+        np.cumsum(sizes), np.arange(1, sizes.sum() // _PAIRS_PER_BLOCK + 1) * _PAIRS_PER_BLOCK
+    )
+    out_row, out_end, out_t = [], [], []
+    for part in np.split(np.arange(len(rows)), blocks):
+        row, size = rows[part], sizes[part]
+        pair_row = np.repeat(row, size)
+        step = np.arange(int(size.sum())) - np.repeat(np.cumsum(size) - size, size)
+        end = ends[np.repeat(first[row], size) + step]
+        pa, pb = vertices[directed[pair_row, 0]], vertices[directed[pair_row, 1]]
+        d = pb - pa
+        length = np.linalg.norm(d, axis=1)
+        point = vertices[end]
+        t = np.einsum("ij,ij->i", point - pa, d) / length**2
+        off = np.linalg.norm(point - (pa + t[:, None] * d), axis=1)
+        inside = (
+            (off < T_JUNCTION_TOLERANCE_M)
+            & (t * length > T_JUNCTION_TOLERANCE_M)
+            & ((1.0 - t) * length > T_JUNCTION_TOLERANCE_M)
+        )
+        out_row.append(pair_row[inside])
+        out_end.append(end[inside])
+        out_t.append(t[inside])
+    return np.concatenate(out_row), np.concatenate(out_end), np.concatenate(out_t)
 
 
 def _orient_faces(faces: np.ndarray, areas: np.ndarray) -> np.ndarray:

@@ -24,14 +24,17 @@
   more than over the rail top. The two reckon the ground in different ways; their
   difference is reported, not checked.
 - **The TSI's limits.** The S-Bahn (an electric multiple unit), the electric locomotive,
-  a coach and a freight wagon of the demo, each alone at 80 km/h over the example's
-  ground: their level over the pass (L_pAeq,Tp, the time Tp being the unit's length over
-  its speed) 7.5 m from the track 1.2 m above the rail top, as the engine gives it and
-  as Schall 03 gives it, beside the limits the EU sets for new trains at that place and
-  speed (Commission Regulation (EU) No 1304/2014, the TSI Noise, table 4). Those limits
-  are for new units on a track of low roughness (EN ISO 3095:2013, 6.2); Schall 03's
-  levels are for units of the fleet as it ran in Germany on rails in average condition.
-  Schall 03's being over a limit says that, not that either is wrong.
+  a coach and a freight wagon (not a tank wagon) of the demo, each alone at 80 km/h over
+  the example's ground, 7.5 m from the track 1.2 m above the rail top: the sound
+  exposure of its whole pass (its points' walks, and Schall 03's sum, from WALK_M[0] to
+  WALK_M[1]) over the time Tp it takes to pass, its length over its speed (printed as
+  L_pAeq,Tp), as the engine gives it and as Schall 03 gives it, beside the limits the EU
+  sets for new trains at that place and speed (Commission Regulation (EU) No 1304/2014,
+  the TSI Noise, table 4); docs/validation.md sets it beside EN ISO 3095:2013's own time
+  windows for a coach or a wagon. Those limits are for new units on a track of low
+  roughness (EN ISO 3095:2013, 6.2); Schall 03's levels are for units of the fleet as it
+  ran in Germany on rails in average condition. Schall 03's being over a limit says
+  that, not that either is wrong.
 """
 
 from __future__ import annotations
@@ -70,7 +73,8 @@ AIR_DB_KM = (0.1, 0.4, 1.0, 1.9, 3.7, 9.7, 32.8, 117.0)
 #: The trains checked against Schall 03's sum, and their speeds (km/h).
 CHECKED = (("s_bahn", 80.0), ("regional", 160.0))
 #: The TSI Noise's limits at 80 km/h 7.5 m from the track (dB, L_pAeq,Tp), and the units
-#: of the demo's trains they are checked with: (what, limit, unit).
+#: of the demo's trains they are checked with: (what, limit, unit). The freight wagon
+#: is the freight train's first, not a tank wagon.
 TSI = (
     ("electric multiple unit (the S-Bahn)", 80.0, rail.TRAINS["s_bahn"].units[0]),
     ("electric locomotive", 84.0, rail.TRAINS["regional"].units[0]),
@@ -252,7 +256,8 @@ def check_sums(folder: Path) -> dict:
 
 
 def check_tsi(folder: Path) -> dict:
-    """Each unit alone at TSI_KMH over the ground: L_pAeq,Tp 7.5 m from the track."""
+    """Each unit alone at TSI_KMH over the ground, 7.5 m from the track: its whole
+    pass's SEL less 10 lg Tp, Tp its length over its speed (the L_pAeq,Tp printed)."""
     out = {}
     name, across, up = PLACES[0]
     for what, limit, unit in TSI:

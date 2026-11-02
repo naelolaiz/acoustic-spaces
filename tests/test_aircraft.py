@@ -184,7 +184,8 @@ def test_the_flight_demo_lands_the_jet_as_loud_as_its_levels_say(tmp_path) -> No
 
 def test_the_flight_demo_says_what_keeps_a_jet_from_flying(tmp_path) -> None:
     """An arrival whose walk never comes down to the runway has nowhere to touch down,
-    and a walk standing still gives no ground track."""
+    and a walk standing still in plan (within 1 µm, as `Track.through` takes it) gives
+    no ground track."""
     from acoustic_spaces.demos import load
 
     folder = _airport(tmp_path)
@@ -196,12 +197,13 @@ def test_the_flight_demo_says_what_keeps_a_jet_from_flying(tmp_path) -> None:
     demo = load(folder / "flight_demo.py").at(folder)
     args = demo.resolved(demo.parser().parse_args(["all", "--vehicle", "arrival"]))
     assert "first comes down to the runway, at most 1 m up" in demo.check(args)
-    for each in data["sources"]:
-        if each["name"] == "departure":
-            each["walk"] = {"to": [[0.0, 0.0, 20.0]], "doppler": True}
-    (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-    args = demo.resolved(demo.parser().parse_args(["all", "--vehicle", "departure"]))
-    assert "two places apart in plan" in demo.check(args)
+    for x in (0.0, 6e-7):
+        for each in data["sources"]:
+            if each["name"] == "departure":
+                each["walk"] = {"to": [[x, 0.0, 20.0]], "doppler": True}
+        (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        args = demo.resolved(demo.parser().parse_args(["all", "--vehicle", "departure"]))
+        assert "two places apart in plan" in demo.check(args)
 
 
 def test_each_jets_sound_is_as_long_as_its_walk() -> None:
@@ -215,3 +217,46 @@ def test_each_jets_sound_is_as_long_as_its_walk() -> None:
         flown = jet.flight_of(scene)
         info = jet.info(_args(Path(example_path("airport")).parent), scene, 0.0)
         assert info["duration_s"] == flown.keyframes()[-1]["time_s"]
+
+
+def test_a_walk_rising_straight_up_first_flies_as_without_that_place(tmp_path) -> None:
+    """A walk whose first two places stand one above the other (its first leg vertical)
+    has one point of the ground track there, the flight path's vertical projection onto
+    the ground (Doc 29 Volume 2's glossary): the departure and the arrival fly as along
+    the walk without its second place, not to positions of no number."""
+    from acoustic_spaces import Scene
+
+    folder = _airport(tmp_path)
+    path = folder / "scene.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    walks = {
+        "departure": ([0.0, 0.0, 1.0], [[0.0, 0.0, 30.0], [3000.0, 0.0, 300.0]]),
+        "arrival": (
+            [-2000.0, 0.0, 300.0],
+            [[-2000.0, 0.0, 200.0], [290.0, 0.0, 1.0], [890.0, 0.0, 1.0]],
+        ),
+    }
+    flights = {}
+    for vertical in (True, False):
+        for each in data["sources"]:
+            if each["name"] in walks:
+                start, to = walks[each["name"]]
+                each["position"] = start
+                each["walk"] = {"to": to if vertical else to[1:], "doppler": True}
+        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        scene = Scene.from_yaml(path)
+        for plane in (aircraft.DEPARTURE, aircraft.ARRIVAL):
+            source = next(s for s in scene.sources if s.name == plane.name)
+            assert plane.problem(source) is None
+            flights[(plane.name, vertical)] = plane.flight_of(scene)
+    for name in walks:
+        upright, plain = flights[(name, True)], flights[(name, False)]
+        positions = np.asarray(upright.positions)
+        assert np.all(np.isfinite(positions)) and math.isfinite(upright.duration_s)
+        assert positions == pytest.approx(np.asarray(plain.positions), abs=1e-9)
+        assert upright.times == pytest.approx(plain.times, abs=1e-9)
+    up = flights[("departure", True)]
+    assert up.positions[0] == (0.0, 0.0, 1.0) and up.speeds[0] == 0.0
+    down = np.asarray(flights[("arrival", True)].positions)
+    assert down[0, 0] == pytest.approx(-2000.0)
+    assert down[int(np.argmax(down[:, 2] <= 1.0 + 1e-9)), 0] == pytest.approx(290.0)
