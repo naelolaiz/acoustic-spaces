@@ -3454,25 +3454,35 @@ path's segments. The late rays are seeded, so a run gives these numbers.
 NPD curves' speed, over a microphone 1.2 m above grass, at 15,000 lb of thrust an
 engine departing and 5,000 lb arriving:
 
-| distance | departure: L_Amax | SEL | arrival: L_Amax | SEL |
+| distance | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| 200 ft (61 m) | 101.5 (102.5) | 104.1 (104.0) | 97.5 (98.4) | 100.0 (101.8) |
-| 400 ft (122 m) | 95.0 (95.4) | 100.3 (100.2) | 90.9 (91.2) | 96.2 (98.0) |
-| 630 ft (192 m) | 90.6 (90.6) | 97.6 (97.4) | 86.5 (86.5) | 93.5 (95.2) |
-| 1000 ft (305 m) | 86.0 (85.8) | 94.6 (94.4) | 81.9 (81.6) | 90.6 (92.1) |
-| 2000 ft (610 m) | 78.7 (78.2) | 89.6 (89.3) | 74.8 (74.0) | 85.7 (87.0) |
-| 4000 ft (1219 m) | 70.1 (70.0) | 83.8 (83.6) | 66.4 (65.9) | 80.1 (81.4) |
+| 200 ft (61 m) | 99.8 (102.5) | 104.0 (104.0) | 95.7 (98.4) | 100.0 (101.8) |
+| 400 ft (122 m) | 94.2 (95.4) | 100.2 (100.2) | 90.1 (91.2) | 96.1 (98.0) |
+| 630 ft (192 m) | 90.2 (90.6) | 97.5 (97.4) | 86.0 (86.5) | 93.3 (95.2) |
+| 1000 ft (305 m) | 85.6 (85.8) | 94.5 (94.4) | 81.5 (81.6) | 90.4 (92.1) |
+| 2000 ft (610 m) | 78.1 (78.2) | 89.5 (89.3) | 74.2 (74.0) | 85.6 (87.0) |
+| 4000 ft (1219 m) | 69.9 (70.0) | 83.7 (83.6) | 66.2 (65.9) | 80.0 (81.4) |
 
-(dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The source
-is made to the NPD curves' L_Amax 1000 ft away, which the engine gives back within 0.3
-dB. Nearer, the NPD curves' L_Amax grows faster than one point source's with one
-spectrum: at 200 ft it is 0.9 dB (departure) and 0.8 dB (arrival) over it, so the
-engine reads 1.0 and 0.9 dB under there. The arrival's SEL is 1.3 to 1.8 dB under its
-NPD curves, the departure's within 0.3 dB: JETW's arrival curves have SEL - L_Amax =
-10 lg(πd/V) within 0.1 dB out to 1000 ft, a point source's with no air absorption,
-where the departure's are 2.0 to 2.2 dB less, as the engine's point source in the
-air gives for both. Farther out the grass's scattered sound comes from the few late
-rays that land near the microphone, so it changes with their seed.
+(dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The engine's
+pass is measured as Doc 29 defines its levels (Volume 2's glossary, section 4.1 and its
+footnote 15): L_ASmax is the highest of its A-weighted level through a sound level
+meter's slow time weighting, and the SEL is taken over the time that level is within 10
+dB of it. The source is made to the NPD curves' L_Amax 1000 ft away, raised by the 0.29
+dB the slow time weighting takes off a point source's loudest moment there, and the
+engine gives it back within 0.2 dB. Nearer, the NPD curves' L_Amax grows faster than one
+point source's with one spectrum: at 200 ft the engine reads 2.8 dB (departure) and 2.6
+dB (arrival) under them. With no time weighting, the highest level of the places is 2.0
+dB over L_ASmax at 200 ft, 1.0 dB at 400 ft and 0.6 to 0.9 dB farther out, and the SEL
+of the whole walk is 0.4 to 0.5 dB over the 10 dB-down one. The departure's SEL is
+within 0.3 dB of its NPD curves, the arrival's 1.4 to 1.9 dB under: JETW's arrival
+curves have SEL - L_Amax = 10 lg(πd/V) within 0.1 dB out to 1000 ft, the SEL of a point
+source's whole pass over its level as it passes, with no time weighting and in air that
+absorbs nothing. Measured as Doc 29 defines its levels, that source's SEL - L_ASmax is
+1.0 dB more at 200 ft and 0.7 dB less at 1000 ft, and the air takes more off; the
+departure's curves are 2.0 to 2.2 dB under 10 lg(πd/V). Volume 3's aircraft are
+hypothetical, and its arrival curves seem not to follow those definitions. Farther out
+the grass's scattered sound comes from the few late rays that land near the microphone,
+so it changes with their seed.
 
 **The airport's flights.** The demo's departure and arrival, simulated every 20 m at
 each listener, their level following their thrust:

@@ -1241,7 +1241,11 @@ at receivers, so a source of a scene that sends the same sound is made from them
   power, with the AIR-1845 attenuation over those 1000 ft added back and the reflection
   off the soft ground the NPD curves are measured over (1.2 m above it) taken out:
   grass, its reflection's energy added to the direct sound's (`sound_power_db`,
-  `ground_gain_db`);
+  `ground_gain_db`). That maximum level is read with a sound level meter's slow time
+  weighting (1 s), which lags behind the passing aircraft and reads its loudest moment
+  low, so the level 1000 ft away is raised by what it takes off the NPD curves' own pass
+  at 160 kt in the scene's air (`slow_drop_db`; 0.29 dB for JETW at 15 °C and 70 %
+  humidity);
 - *its directivity* from its engines' installation correction (eq. 4-15), by the
   depression angle across the flight path, the same in every band; nought straight
   down, where the NPD curves are measured, so the sound power is raised to keep the

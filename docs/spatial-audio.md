@@ -464,15 +464,18 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
 
 The **pass-by levels** come with it: the walkthrough of a walk with Doppler prints the
 listener's L_Amax and when it is reached, the sound exposure level (SEL) and L_Aeq over
-the pass-by, and `--levels CSV` (for any walk) saves the level over time, A-weighted
-and in each octave band. Each is the level of the source's sound power at a place, as
+the pass-by, and `--levels CSV` (for any walk) saves the level over time, A-weighted and
+in each octave band. Each is the level of the source's sound power at a place, as
 `simulate` gives it, at the time its sound arrives, so its maximum and its exposure are
-those of noise mapping's quasi-static source. In a band where a place's G is undefined,
-as where the few rays that reach a far place carry no energy in it, the place's level
-is that of the energy its response holds, as outdoors (-inf where none arrives).
-Through the walk's sound over grass, each band's energy came within 0.25 dB of them,
-0.8 dB in the band of the ground's dip, where the band levels are averages over the
-band and the sound is read through band filters, whose skirts fill a dip (see
+those of noise mapping's quasi-static source; `slow_a` gives them as a sound level meter
+reads them with slow time weighting, as ECAC Doc 29 measures an aircraft: L_ASmax and
+the SEL over the time the level is within 10 dB of it (`parameters.event_levels` does so
+for any level over time). In a band where a place's G is undefined, as where the few
+rays that reach a far place carry no energy in it, the place's level is that of the
+energy its response holds, as outdoors (-inf where none arrives). Through the walk's
+sound over grass, each band's energy came within 0.25 dB of them, 0.8 dB in the band of
+the ground's dip, where the band levels are averages over the band and the sound is read
+through band filters, whose skirts fill a dip (see
 [Validation](validation.md#moving-sources-against-the-exact-field)).
 
 ```python
@@ -480,7 +483,7 @@ from acoustic_spaces.walkthrough import pass_by
 
 walk = simulate_walk(room)  # the car, with doppler: true
 sound = render_walk(walk, {"car": (engine, 48_000)})
-passing = pass_by(walk)  # passing.max_a, .exposure_a, .equivalent_a, .levels_a
+passing = pass_by(walk)  # passing.max_a, .exposure_a, .equivalent_a, .levels_a, .slow_a
 
 # Or the sound it sends each way: signals that do not correlate (here a tone's sine
 # and cosine), each with an amplitude per direction on a grid of elevations from -90

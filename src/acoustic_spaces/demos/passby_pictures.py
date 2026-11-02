@@ -153,8 +153,13 @@ class Pictures(scene_pictures.Pictures):
         lines += [
             f"Loudest {heard['max_a_db']:.1f} dB(A) (L_Amax), {heard['max_s']:.1f} s in",
             f"Sound exposure level {heard['sel_a_db']:.1f} dB(A) (SEL)",
-            f"Closest {heard['closest_m']:.1f} m away",
         ]
+        if "max_as_db" in heard:
+            lines.append(
+                f"As Doc 29 measures it: L_ASmax {heard['max_as_db']:.1f}, SEL "
+                f"{heard['sel_10db_down_a_db']:.1f} dB(A)"
+            )
+        lines.append(f"Closest {heard['closest_m']:.1f} m away")
         if "pitch_semitones" in heard:
             lines.append(
                 f"Its direct sound falls {heard['pitch_semitones']:.1f} semitones (Doppler)"

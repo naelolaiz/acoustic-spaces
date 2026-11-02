@@ -15,7 +15,7 @@ import yaml
 
 from acoustic_spaces.demos import aircraft
 from acoustic_spaces.examples import example_path
-from acoustic_spaces.parameters import A_WEIGHTING_DB
+from acoustic_spaces.parameters import A_WEIGHTING_DB, event_levels
 
 RATE = 16_000
 
@@ -153,6 +153,13 @@ def test_the_flight_demo_lands_the_jet_as_loud_as_its_levels_say(tmp_path) -> No
     assert facts["speed_text"] == f"From {fastest:g} to {slowest:g} km/h"
     heard = facts["listeners"]["beside"]
     assert math.isfinite(heard["sel_a_db"]) and heard["max_a_db"] > 80.0
+    # As Doc 29 measures it too (Volume 2: L_Amax slow-weighted, SEL over the 10 dB-down
+    # time): under the highest of its places and the whole pass's SEL.
+    measured = event_levels(heard["heard_s"], heard["levels_a_db"])
+    assert heard["max_as_db"] == pytest.approx(measured.max_db, abs=0.01)
+    assert heard["sel_10db_down_a_db"] == pytest.approx(measured.exposure_db, abs=0.01)
+    assert heard["max_as_db"] < heard["max_a_db"] - 0.1
+    assert heard["sel_10db_down_a_db"] < heard["sel_a_db"]
     # The mix against the levels, second by second (A-weighted, as heard).
     mix, _ = audio.read(work / "walk" / "beside.mono.wav")
     times = np.asarray(heard["heard_s"], dtype=float)

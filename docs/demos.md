@@ -1338,20 +1338,26 @@ listeners it is simulated and heard at.
   most 1 m up.
 - **Its sound** is noise with the octave spectrum of its sound power, which comes from
   its NPD curves and spectral class ([an aircraft in a
-  scene](outdoor.md#aircraft-by-ecac-doc-29)): 155.7 dB(A) at the departure's highest
-  thrust (25,000 lb, at its start of roll) and 145.4 dB(A) at the arrival's (its reverse
+  scene](outdoor.md#aircraft-by-ecac-doc-29)): 156.0 dB(A) at the departure's highest
+  thrust (25,000 lb, at its start of roll) and 145.7 dB(A) at the arrival's (its reverse
   thrust, 10,000 lb), louder and softer as the thrust changes along the flight: the
-  departure's climb thrust 8.0 dB under its start of roll, the arrival's approach 2.3
-  dB under its reverse thrust and the end of its roll-out 3.5 dB under. Its directivity is its engines' installation
-  correction (under the wings), in a table beside the demo's scene
-  (`scene_demo_departure.csv`). `demo/departure/engines.wav` is the made sound, dry, as
-  long as the flight. `--input departure=WAV` plays a dry recording instead, at least as
-  long as the flight, its level following the recording's.
+  departure's climb thrust 8.0 dB under its start of roll, the arrival's approach 2.3 dB
+  under its reverse thrust and the end of its roll-out 3.5 dB under. Its directivity is
+  its engines' installation correction (under the wings), in a table beside the demo's
+  scene (`scene_demo_departure.csv`). `demo/departure/engines.wav` is the made sound,
+  dry, as long as the flight. `--input departure=WAV` plays a dry recording instead, at
+  least as long as the flight, its level following the recording's.
 - **The pass**: the jet every 4 m along its flight at each listener in turn, through
   the direct sound and its reflection off the ground; the late sound is crossfaded from
   place to place. Places 4 m apart follow the exact field of a flyover closely from 100
   m away and more ([validation](validation.md#moving-sources-against-the-exact-field)).
   A flight of 6.5 km is some 1600 places at each listener, which takes a while.
+
+The captions give the pass's L_Amax, the highest level of the jet's places, each as
+heard with the jet standing there, and its SEL over the whole flight. They also give it
+as Doc 29 measures it: L_ASmax, the highest level through a sound level meter's slow
+time weighting, which lags about a second behind the passing jet, and the SEL over the
+time that level is within 10 dB of its highest.
 
 While the jet is in the air, what each listener hears is within 0.9 dB of Doc 29's own
 sum over the same flight path's segments, but for the arrival's SEL at
@@ -1363,7 +1369,4 @@ runway and meadow, where Doc 29 takes off an attenuation it has from measurement
 What it leaves out: one aircraft, Volume 3's hypothetical JETW, and no houses. Its
 sound is noise with one spectrum all along, with none of a jet's tones (its fan's, its
 buzz-saw noise), and the NPD curves give no directivity along the flight path but
-behind the take-off roll, so the source has none either. The captions' L_Amax is the
-highest level of the jet's places, each as heard with the jet standing there, with no
-time weighting; Doc 29's is measured with slow time weighting, which would lower a
-point source's loudest moment 200 ft away at 160 kt by 1.8 dB, 0.2 dB at 1000 ft.
+behind the take-off roll, so the source has none either.

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Doc 29's aircraft are louder in a scene, JETW by 0.29 dB: their NPD L_Amax is read
+  with slow time weighting, so `doc29.source.sound_power_db` now raises the level 1000
+  ft away by what that weighting takes off the NPD curves' own pass (`slow_drop_db`).
+  JETW's sound power goes from 155.7 to 156.0 dB(A) departing and from 145.4 to 145.7
+  dB(A) arriving, and the airport example's sources with it.
+- Pass-by levels as Doc 29 measures them: `PassBy.slow_a` and `parameters.event_levels`
+  give L_ASmax (slow time weighting) and the SEL over the 10 dB-down time, which the
+  flight demo's captions and `validation/aircraft_noise.py` now report. Against JETW's
+  NPD curves the engine's L_ASmax is 2.6 to 2.8 dB under at 200 ft (its quasi-static
+  L_Amax was 0.9 to 1.0 dB under) and within 0.2 dB at 1000 ft; the arrival's SEL is
+  1.4 to 1.9 dB under (was 1.3 to 1.8), the departure's still within 0.3 dB.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early

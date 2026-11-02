@@ -27,7 +27,10 @@ Where the response has them (see :data:`MORE_PARAMETERS`), also:
 
 :func:`speech_transmission_index` gives the STI of IEC 60268-16 from the same energies,
 or STIPA, :func:`useful_to_detrimental` U50, and :func:`echo_criterion` the echo
-criteria of Dietsch and Kraak from an impulse response.
+criteria of Dietsch and Kraak from an impulse response. :func:`time_weighted` gives a
+level over time through IEC 61672-1's exponential time weighting, and
+:func:`event_levels` a sound event's maximum time-weighted level and its sound exposure
+level over its 10 dB-down time.
 
 A response that stops before it has decayed loses the energy of its missing tail and
 reads too short; the tail is estimated from the last part of the decay and added back
@@ -41,7 +44,7 @@ import functools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import numpy as np
 
@@ -557,6 +560,96 @@ def c_weighted(levels_db: Sequence[float] | np.ndarray) -> float:
     levels = np.asarray(levels_db, dtype=float) + np.array(C_WEIGHTING_DB)
     with np.errstate(divide="ignore"):
         return float(10.0 * np.log10(np.sum(10.0 ** (levels / 10.0))))
+
+
+#: The time constant (s) of IEC 61672-1's slow time weighting, S.
+SLOW_S = 1.0
+#: How far apart (s) :func:`time_weighted` works the time-weighted level out by default.
+TIME_WEIGHTING_STEP_S = 0.01
+
+
+def time_weighted(
+    times: Sequence[float] | np.ndarray,
+    levels_db: Sequence[float] | np.ndarray,
+    time_constant_s: float = SLOW_S,
+    step_s: float = TIME_WEIGHTING_STEP_S,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """A level ``levels_db`` (dB) heard at ``times`` (s, increasing) through IEC
+    61672-1's exponential time weighting of time constant ``time_constant_s`` (the slow
+    time weighting S by default), as a sound level meter reads it: the mean square at
+    each moment t, 10^(L/10), weighted by exp(-(t - ξ)/τ)/τ over every earlier moment
+    ξ. Between the given times the mean square goes linearly in time; before the first
+    it is taken to have stood at its first value. Returns the times of a uniform grid
+    ``step_s`` apart from the first time to the last, the level there, and the
+    time-weighted level there (dB), worked out exactly for a mean square linear from
+    one grid time to the next."""
+    from scipy.signal import lfilter, lfilter_zi
+
+    t = np.asarray(times, dtype=float)
+    if t.ndim != 1 or len(t) < 2 or not np.all(np.diff(t) > 0.0):
+        raise ValueError("give two times or more, each later than the one before")
+    if time_constant_s <= 0.0 or step_s <= 0.0:
+        raise ValueError(
+            f"the time constant ({time_constant_s} s) and the step ({step_s} s) must be positive"
+        )
+    level = np.asarray(levels_db, dtype=float)
+    if level.shape != t.shape:
+        raise ValueError(f"give one level a time: {level.size} levels at {len(t)} times")
+    count = int(math.floor((t[-1] - t[0]) / step_s + 1e-9)) + 1
+    grid = t[0] + step_s * np.arange(count)
+    square = np.interp(grid, t, 10.0 ** (level / 10.0))
+    # τ y' = x - y over a step h with x linear from x0 to x1, a = exp(-h/τ):
+    # y1 = a y0 + x1 - a x0 - (x1 - x0) (τ/h) (1 - a).
+    a = math.exp(-step_s / time_constant_s)
+    c = time_constant_s / step_s * (1.0 - a)
+    b = [1.0 - c, c - a]
+    weighted = lfilter(b, [1.0, -a], square, zi=lfilter_zi(b, [1.0, -a]) * square[0])[0]
+    with np.errstate(divide="ignore"):
+        return grid, 10.0 * np.log10(square), 10.0 * np.log10(np.maximum(weighted, 0.0))
+
+
+class EventLevels(NamedTuple):
+    """The levels of a sound event, from :func:`event_levels`."""
+
+    #: The highest time-weighted level (dB): L_ASmax, A-weighted and slow.
+    max_db: float
+    #: The sound exposure level (dB) over the time the time-weighted level is within the
+    #: chosen drop of its highest: SEL over the 10 dB-down time.
+    exposure_db: float
+    #: When that time starts and ends (s, as the times given).
+    start_s: float
+    end_s: float
+
+
+def event_levels(
+    times: Sequence[float] | np.ndarray,
+    levels_db: Sequence[float] | np.ndarray,
+    time_constant_s: float = SLOW_S,
+    down_db: float = 10.0,
+    step_s: float = TIME_WEIGHTING_STEP_S,
+) -> EventLevels:
+    """The maximum level and the sound exposure level of a level ``levels_db`` (dB)
+    heard at ``times`` (s), as ECAC Doc 29 measures an aircraft's (Volume 2, its
+    glossary and section 4.1): the highest level through the time weighting of
+    ``time_constant_s`` (slow by default, :func:`time_weighted`), and the sound exposure
+    (the mean square integrated over time with no time weighting, IEC 61672-1), as a
+    level held for 1 s, from the first to the last time the time-weighted level is
+    within ``down_db`` of that highest: the "10 dB-down" time of eq. 4-1, which the NPD
+    curves' SEL is taken over (footnote 15). Doc 29's eq. 4-2 integrates its L_A(t),
+    which its glossary has slow-weighted; over a flyover's 10 dB-down time that differs
+    from the sound exposure by under 0.01 dB. Where a pass starts or ends within
+    ``down_db`` of its highest, that time is cut there: ``start_s`` or ``end_s`` is its
+    first or last time."""
+    grid, level, weighted = time_weighted(times, levels_db, time_constant_s, step_s)
+    top = int(np.argmax(weighted))
+    if not np.isfinite(weighted[top]):
+        return EventLevels(-math.inf, -math.inf, float(grid[0]), float(grid[-1]))
+    inside = np.flatnonzero(weighted >= weighted[top] - down_db)
+    first, last = int(inside[0]), int(inside[-1])
+    square = 10.0 ** (level[first : last + 1] / 10.0)
+    exposure = float(np.sum(square[1:] + square[:-1])) * step_s / 2.0
+    exposure_db = 10.0 * math.log10(exposure) if exposure > 0.0 else -math.inf
+    return EventLevels(float(weighted[top]), exposure_db, float(grid[first]), float(grid[last]))
 
 
 #: Speech that talks: male or female.
@@ -1219,18 +1312,23 @@ __all__ = [
     "PARAMETERS",
     "STIPA_MODULATION_HZ",
     "STI_BANDS_HZ",
+    "SLOW_S",
     "SPEECH_SPECTRUM_DB",
     "STI_MODULATION_HZ",
+    "TIME_WEIGHTING_STEP_S",
+    "EventLevels",
     "RoomParameters",
     "SpeechParameters",
     "Talker",
     "decay_curve",
     "echo_criterion",
+    "event_levels",
     "from_energy",
     "interaural_cross_correlation",
     "modulation_transfer",
     "speech_transmission_index",
     "sti_from_impulse_response",
+    "time_weighted",
     "useful_to_detrimental",
     "BandDecay",
     "FILTER_ORDER",

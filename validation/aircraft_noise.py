@@ -10,28 +10,34 @@ segments.
   sound power and directivity as the demo gives them
   (:mod:`acoustic_spaces.doc29.source`), simulated in the engine
   (:func:`~acoustic_spaces.walkthrough.simulate_walk`, its places ``STEP`` of the
-  distance apart, 4 m at 200 ft). Its maximum level (L_Amax) and sound exposure level
-  (SEL) are set against the NPD curves' in the scene's air (Appendix D,
+  distance apart, 4 m at 200 ft). Its maximum level and sound exposure level, measured
+  as the NPD curves' are (L_ASmax and the SEL over the 10 dB-down time, see below), are
+  set against the NPD curves' in the scene's air (Appendix D,
   :func:`acoustic_spaces.doc29.atmosphere.adjusted`) with Doc 29's impedance adjustment
   (eq. 4-6). The source is made to the NPD curves' maximum level 1000 ft away, so that
-  distance checks the closure (the spectrum, the ground taken out and put back, the
-  air); the others show how far the NPD curves' shapes differ from a point source with
-  one spectrum in the engine's air and ground.
+  distance checks the closure (the spectrum, the slow time weighting, the ground taken
+  out and put back, the air); the others show how far the NPD curves' shapes differ
+  from a point source with one spectrum in the engine's air and ground.
 - **The airport example's flights.** The demo's departure and arrival, each simulated
   at every listener of the example every ``--step`` along its flight, its level
   following its thrust (:meth:`~acoustic_spaces.demos.aircraft.Aircraft.sounding`):
-  L_Amax and SEL against Doc 29's at the same receivers, summed over the same flight
+  L_ASmax and SEL against Doc 29's at the same receivers, summed over the same flight
   path's segments with the NPD curves in the scene's air, the engines' installation,
   the lateral attenuation and the start-of-roll directivity
   (:func:`acoustic_spaces.doc29.noise.event`). The engine reckons the ground and the
   directivity behind the take-off roll in its own way; the differences are reported,
   not checked.
 
-The engine's L_Amax is the highest level of the places, each as with the aircraft
-standing there; Doc 29's is measured with slow time weighting. The late rays are
-seeded (``SEED``): the grass's scattered sound comes from the rays that land near the
-microphone, few when the aircraft is high, so it changes from place to place, and
-``--rays`` sets how many there are.
+Doc 29's levels are measured with a sound level meter's slow time weighting (Volume 2's
+glossary), and its SEL over the 10 dB-down time (section 4.1, footnote 15). The engine's
+pass is measured so (:attr:`~acoustic_spaces.walkthrough.PassBy.slow_a`): the A-weighted
+level of its places, each as with the aircraft standing there, heard when its sound
+arrives, through the slow time weighting, L_ASmax its highest, and the SEL from when it
+comes within 10 dB of that to when it falls 10 dB under. The highest level of the places
+with no time weighting (L_Amax) and the SEL of the whole walk are reported beside them.
+The late rays are seeded (``SEED``): the grass's scattered sound comes from the rays
+that land near the microphone, few when the aircraft is high, so it changes from place
+to place, and ``--rays`` sets how many there are.
 """
 
 from __future__ import annotations
@@ -86,7 +92,7 @@ def _flyover_scene(
     plane = aircraft.Aircraft(operation)
     maximum, spectrum = plane.curves()
     installation = aircraft._data()[0].installation
-    thirds = source.sound_power_db(maximum, spectrum, power, TEMPERATURE_C)
+    thirds = source.sound_power_db(maximum, spectrum, power, TEMPERATURE_C, HUMIDITY_PERCENT)
     level = power_levels(thirds, "octave") + source.below_offset_db(installation)
     table = folder / f"jetw_{operation}.csv"
     write_directivity_csv(table, source.directivity(installation), "JETW's installation")
@@ -156,22 +162,44 @@ def check_npd(folder: Path, rays: int | None = None) -> list[dict]:
             d = feet * FOOT_M
             want_max = float(maximum.level(power, d)) + impedance
             want_sel = float(exposure.level(power, d)) + impedance
-            row = {
-                "operation": operation,
-                "feet": feet,
-                "power_lb": power,
-                "engine_max_a_db": round(heard.max_a, 2),
-                "doc29_max_a_db": round(want_max, 2),
-                "engine_sel_a_db": round(heard.exposure_a, 2),
-                "doc29_sel_a_db": round(want_sel, 2),
-            }
+            row = {"operation": operation, "feet": feet, "power_lb": power}
+            row.update(_measured(heard, want_max, want_sel))
             rows.append(row)
-            print(
-                f"  {operation} {feet:6.0f} ft  L_Amax {heard.max_a:6.1f} against {want_max:6.1f}"
-                f" ({heard.max_a - want_max:+.1f})   SEL {heard.exposure_a:6.1f} against "
-                f"{want_sel:6.1f} ({heard.exposure_a - want_sel:+.1f})"
-            )
+            print(f"  {operation} {feet:6.0f} ft  " + _compared(row))
     return rows
+
+
+def _measured(heard, doc29_max: float, doc29_sel: float) -> dict:
+    """The engine's pass ``heard`` (a :class:`~acoustic_spaces.walkthrough.PassBy`) as
+    Doc 29 measures it, L_ASmax and the SEL over the 10 dB-down time, and with no time
+    weighting over the whole walk, beside Doc 29's L_Amax and SEL (dB(A)); whether the
+    walk starts or ends less than 10 dB under its L_ASmax, cutting the 10 dB-down time."""
+    from acoustic_spaces.parameters import TIME_WEIGHTING_STEP_S
+
+    slow = heard.slow_a
+    cut = slow.start_s == heard.times[0] or slow.end_s > heard.times[-1] - TIME_WEIGHTING_STEP_S
+    return {
+        "engine_max_as_db": round(slow.max_db, 2),
+        "engine_sel_10db_down_a_db": round(slow.exposure_db, 2),
+        "engine_10db_down_s": round(slow.end_s - slow.start_s, 2),
+        "engine_10db_down_cut": bool(cut),
+        "engine_max_a_db": round(heard.max_a, 2),
+        "engine_sel_a_db": round(heard.exposure_a, 2),
+        "doc29_max_a_db": round(doc29_max, 2),
+        "doc29_sel_a_db": round(doc29_sel, 2),
+    }
+
+
+def _compared(row: dict) -> str:
+    """A row of :func:`_measured` against Doc 29, for the terminal."""
+    want_max, want_sel = row["doc29_max_a_db"], row["doc29_sel_a_db"]
+    slow, sel = row["engine_max_as_db"], row["engine_sel_10db_down_a_db"]
+    return (
+        f"L_ASmax {slow:6.1f} against {want_max:6.1f} ({slow - want_max:+.1f}; L_Amax "
+        f"{row['engine_max_a_db']:.1f})   SEL {sel:6.1f} against {want_sel:6.1f} "
+        f"({sel - want_sel:+.1f}; whole walk {row['engine_sel_a_db']:.1f})"
+        + (", the walk cuts its 10 dB-down time" if row["engine_10db_down_cut"] else "")
+    )
 
 
 def check_flights(folder: Path, step_m: float, rays: int | None = None) -> list[dict]:
@@ -202,21 +230,10 @@ def check_flights(folder: Path, step_m: float, rays: int | None = None) -> list[
             walked = simulate_walk(room, plane.name, listener=listener.name, step_m=step_m)
             loud = 10.0 ** (plane.gains_db(args, walked.points.times) / 10.0)
             heard = sounded(pass_by(walked), loud)
-            row = {
-                "operation": plane.operation,
-                "listener": listener.name,
-                "engine_max_a_db": round(heard.max_a, 2),
-                "doc29_max_a_db": round(float(doc29.lamax[k]), 2),
-                "engine_sel_a_db": round(heard.exposure_a, 2),
-                "doc29_sel_a_db": round(float(doc29.sel[k]), 2),
-            }
+            row = {"operation": plane.operation, "listener": listener.name}
+            row.update(_measured(heard, float(doc29.lamax[k]), float(doc29.sel[k])))
             rows.append(row)
-            print(
-                f"  {plane.name:9s} {listener.name:15s} L_Amax {heard.max_a:6.1f} against "
-                f"{doc29.lamax[k]:6.1f} ({heard.max_a - doc29.lamax[k]:+.1f})   SEL "
-                f"{heard.exposure_a:6.1f} against {doc29.sel[k]:6.1f} "
-                f"({heard.exposure_a - doc29.sel[k]:+.1f})"
-            )
+            print(f"  {plane.name:9s} {listener.name:15s} " + _compared(row))
     return rows
 
 

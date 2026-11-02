@@ -9,7 +9,12 @@ flat soft ground (Volume 2 section 4.2), so they hold that ground's reflection. 
 source of the scene that sends the same sound gets:
 
 - **its spectrum** from the spectral class, scaled to the NPD curves' maximum level
-  1000 ft under the aircraft at its power (:func:`sound_power_db`);
+  1000 ft under the aircraft at its power, raised by what a sound level meter's slow
+  time weighting takes off it (:func:`sound_power_db`): Doc 29 reads its levels through
+  that weighting (Volume 2's glossary; IEC 61672-1's S, a time constant of 1 s), which
+  lags behind the passing aircraft, where the scene's source sends its sound with
+  none. On the NPD curves' own pass (:func:`slow_drop_db`) it takes 0.29 dB off JETW's
+  loudest moment, at 160 kt in air at 15 °C and 70 % humidity;
 - **its level** back at the source: the AIR-1845 atmosphere's attenuation over the
   1000 ft added back (Appendix D eq. D-1), and the soft ground's reflection taken out
   (:func:`ground_gain_db`): grass (Nord2000's class D, 200 kPa s/m², Miki's
@@ -44,8 +49,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .atmosphere import A_WEIGHTING_DB, AIR_1845_DB_PER_M, REFERENCE_M, SAMPLES
-from .noise import installation_db
+from .atmosphere import (
+    A_WEIGHTING_DB,
+    AIR_1845_DB_PER_M,
+    REFERENCE_M,
+    SAMPLES,
+    band_attenuation_db,
+)
+from .noise import REFERENCE_SPEED_M_S, installation_db
 from .path import Segment, power_between
 from .tables import NpdCurves, ProfilePoint, SpectralClass
 
@@ -97,19 +108,60 @@ def ground_gain_db(temperature_c: float = 15.0) -> np.ndarray:
     return out
 
 
+def slow_drop_db(
+    spectral_class: SpectralClass,
+    temperature_c: float = 15.0,
+    humidity_percent: float = 70.0,
+    pressure_kpa: float = 101.325,
+) -> float:
+    """How far (dB) a sound level meter's slow time weighting lowers the loudest moment
+    of the NPD curves' own pass, which their maximum level is read with (Volume 2's
+    glossary: L_A(t) and L_Amax are measured with slow time weighting): a point source
+    with the spectrum of ``spectral_class`` flying straight and level at 160 kt
+    (:data:`~.noise.REFERENCE_SPEED_M_S`) 1000 ft right over the microphone, in a free
+    field of air at ``temperature_c``, ``humidity_percent`` and ``pressure_kpa``, each
+    third octave spreading spherically and losing the air's attenuation over its path
+    beyond the 1000 ft (:func:`~.atmosphere.band_attenuation_db` over 1000 ft, per
+    metre), heard when its sound arrives; its A-weighted level as it passes over, with
+    no time weighting, less the highest through IEC 61672-1's slow time weighting
+    (:func:`acoustic_spaces.parameters.time_weighted`)."""
+    from acoustic_spaces.air import speed_of_sound
+    from acoustic_spaces.parameters import SLOW_S, time_weighted
+
+    levels = np.asarray(spectral_class.levels, dtype=float) + np.array(A_WEIGHTING_DB)
+    rates = band_attenuation_db(REFERENCE_M, temperature_c, humidity_percent, pressure_kpa)
+    rates = rates / REFERENCE_M
+    # Long enough on either side for the meter to have forgotten where the pass starts.
+    span = 40.0 * SLOW_S + 10.0 * REFERENCE_M / REFERENCE_SPEED_M_S
+    sent = np.linspace(-span, span, 8001)
+    r = np.hypot(REFERENCE_M, REFERENCE_SPEED_M_S * sent)
+    heard = levels - 20.0 * np.log10(r / REFERENCE_M)[:, None] - np.outer(r - REFERENCE_M, rates)
+    level = 10.0 * np.log10(np.sum(10.0 ** (heard / 10.0), axis=1))
+    _, _, slow = time_weighted(sent + r / speed_of_sound(temperature_c), level, SLOW_S)
+    return float(np.max(level) - np.max(slow))
+
+
 def sound_power_db(
     maximum: NpdCurves,
     spectral_class: SpectralClass,
     power: float,
     temperature_c: float = 15.0,
+    humidity_percent: float = 70.0,
+    pressure_kpa: float = 101.325,
 ) -> np.ndarray:
     """(24,) the sound power (dB re 1 pW) per third octave, 50 Hz to 10 kHz, of a point
     source that sends each way what the aircraft sends straight down at ``power``: in a
     free field of the AIR-1845 atmosphere, 1000 ft from it, the spectrum of
-    ``spectral_class`` at the maximum level of its NPD curves ``maximum`` there, less
-    the NPD's soft ground (:func:`ground_gain_db`)."""
+    ``spectral_class`` at the maximum level of its NPD curves ``maximum`` there, raised
+    by how far the slow time weighting the curves are read with lowers it
+    (:func:`slow_drop_db`, in the scene's air at ``temperature_c``,
+    ``humidity_percent`` and ``pressure_kpa``), less the NPD's soft ground
+    (:func:`ground_gain_db`)."""
     levels = np.asarray(spectral_class.levels, dtype=float)
-    levels = levels + float(maximum.level(power, REFERENCE_M)) - _a_level(levels)
+    top = float(maximum.level(power, REFERENCE_M)) + slow_drop_db(
+        spectral_class, temperature_c, humidity_percent, pressure_kpa
+    )
+    levels = levels + top - _a_level(levels)
     free = levels - ground_gain_db(temperature_c)
     rates = np.asarray(AIR_1845_DB_PER_M)
     return free + rates * REFERENCE_M + 10.0 * math.log10(4.0 * math.pi * REFERENCE_M**2)
@@ -310,5 +362,6 @@ __all__ = [
     "ground_gain_db",
     "power_change_db",
     "profile_between",
+    "slow_drop_db",
     "sound_power_db",
 ]

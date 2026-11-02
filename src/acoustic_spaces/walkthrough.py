@@ -20,13 +20,14 @@ smoothly as it walks. Each place's late part is drawn from the same random seque
 so the crossfades join tails that only differ in their decay. The walker stands at the
 end of its path once it is there, for as long as the signals last.
 
-At walking speed there is no Doppler shift (it is under half a percent, 8 cents). A
-walk with ``doppler: true`` (a car, a train, an aircraft) plays each early path through
-a delay that changes as the walker goes (:mod:`acoustic_spaces.doppler`), so the pitch
-of each shifts as it does on its way; the late part is crossfaded as without it, and
-:func:`pass_by` gives the level over time, its maximum and the sound exposure level.
-Outdoors in turbulence the early sound flickers along the walk as in
-:func:`~acoustic_spaces.render.auralize`, through the same eddies from place to place.
+At walking speed there is no Doppler shift (it is under half a percent, 8 cents). A walk
+with ``doppler: true`` (a car, a train, an aircraft) plays each early path through a
+delay that changes as the walker goes (:mod:`acoustic_spaces.doppler`), so the pitch of
+each shifts as it does on its way; the late part is crossfaded as without it, and
+:func:`pass_by` gives the level over time, its maximum and the sound exposure level,
+also as a sound level meter's slow time weighting reads them. Outdoors in turbulence the
+early sound flickers along the walk as in :func:`~acoustic_spaces.render.auralize`,
+through the same eddies from place to place.
 
 A walk may instead give ``keyframes``: where the walker is and how it faces at given
 times after its start, between which it moves and turns evenly, so that it can wait,
@@ -55,6 +56,7 @@ import numpy as np
 from acoustic_spaces.emission import Emission
 from acoustic_spaces.engine.simulate import SimulationResult, simulate
 from acoustic_spaces.materials.bands import resolution_of
+from acoustic_spaces.parameters import EventLevels, event_levels
 from acoustic_spaces.render import (
     _as_2d,
     convolve,
@@ -1174,6 +1176,16 @@ class PassBy:
         """The A-weighted equivalent level over the walk (dB(A)), L_Aeq,T with T its
         :attr:`duration_s`."""
         return self.exposure_a - 10.0 * math.log10(max(self.duration_s, 1e-12))
+
+    @property
+    def slow_a(self) -> EventLevels:
+        """The pass as a sound level meter reads an aircraft's for ECAC Doc 29
+        (:func:`~acoustic_spaces.parameters.event_levels`): the A-weighted level through
+        IEC 61672-1's slow time weighting (1 s), its mean square going linearly in time
+        from one place's :attr:`times` to the next; its highest, L_ASmax (``max_db``),
+        and the sound exposure level over the time it is within 10 dB of that, the
+        "10 dB-down" time (``exposure_db``, from ``start_s`` to ``end_s``)."""
+        return event_levels(self.times, self.levels_a)
 
 
 def _exposure(times: np.ndarray, levels: np.ndarray) -> np.ndarray:
