@@ -7,6 +7,12 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Maps over a long term gain the long-term insertion loss of what `insertion_loss_of`
+  names (`long_term_insertion_loss`, dB per band, and `long_term_insertion_loss_a`,
+  dB(A)), from the runs with and without it that every class already made. Their other
+  values, `insertion_loss` among them, are the scene's own weather's, and the levels in
+  each class and period and relative to free field over the long term are at listeners
+  only, as the docs now say.
 
 ## 4.1.0
 

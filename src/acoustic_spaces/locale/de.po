@@ -325,6 +325,30 @@ msgid "level over a long term with each period's penalty, A-weighted (L_den)"
 msgstr ""
 "Pegel über lange Zeit mit dem Zuschlag jedes Zeitraums, A-bewertet (L_den)"
 
+#: acoustic_spaces/engine/coverage.py
+msgid "Long-term insertion loss (dB)"
+msgstr "Langzeit-Einfügungsdämpfung (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"insertion loss over a long term: the long-term level without the buildings, "
+"barriers or vegetation less that with them"
+msgstr ""
+"Einfügungsdämpfung über lange Zeit: der Langzeitpegel ohne die Gebäude, "
+"Schallschirme oder Vegetation abzüglich des Pegels mit ihnen"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Long-term insertion loss (dB(A))"
+msgstr "Langzeit-Einfügungsdämpfung (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"A-weighted insertion loss over a long term of the buildings, barriers or "
+"vegetation"
+msgstr ""
+"A-bewertete Einfügungsdämpfung der Gebäude, Schallschirme oder Vegetation "
+"über lange Zeit"
+
 #: acoustic_spaces/examples.py
 msgid "Rooms"
 msgstr "Räume"

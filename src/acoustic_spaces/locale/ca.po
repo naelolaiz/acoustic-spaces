@@ -327,6 +327,30 @@ msgstr ""
 "nivell a llarg termini amb la penalització de cada període, ponderat A "
 "(L_den)"
 
+#: acoustic_spaces/engine/coverage.py
+msgid "Long-term insertion loss (dB)"
+msgstr "Pèrdua per inserció a llarg termini (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"insertion loss over a long term: the long-term level without the buildings, "
+"barriers or vegetation less that with them"
+msgstr ""
+"pèrdua per inserció a llarg termini: el nivell a llarg termini sense els "
+"edificis, pantalles acústiques o vegetació menys el nivell amb ells"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Long-term insertion loss (dB(A))"
+msgstr "Pèrdua per inserció a llarg termini (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"A-weighted insertion loss over a long term of the buildings, barriers or "
+"vegetation"
+msgstr ""
+"pèrdua per inserció a llarg termini ponderada A dels edificis, pantalles "
+"acústiques o vegetació"
+
 #: acoustic_spaces/examples.py
 msgid "Rooms"
 msgstr "Recintes"
