@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The road docs say that CNOSSOS-EU's correction for road gradients is left out, that
+  the sirens' levels 7 m in front of a vehicle are taken 7 m from the siren, and that
+  recordings are levelled unweighted; a test holds every coefficient of Table F-1.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early

@@ -119,8 +119,9 @@ FIRE_PARTS = (
 #: the loudest of 0.5 to 1.5 m up; the fire engine's siren FIRE_SIREN_HEIGHT_M up (m,
 #: assumed), as in the street example; and how much louder than the police car's its
 #: two tones are (dB): as loud as the rule allows, to the tenth of a dB under it (114.9
-#: dB(A)), as the engine gives the level there over the street's asphalt, every 0.1 m
-#: up (validation/urban_sources.py).
+#: dB(A)), as the engine gives the level 7 m in front of the siren, taken at the
+#: vehicle's front, over the street's asphalt, every 0.1 m up
+#: (validation/urban_sources.py).
 FIRE_SIREN_DB_A = 115.0
 FIRE_SIREN_HEIGHT_M = 3.0
 FIRE_SIREN_GAIN_DB = 6.0
@@ -639,7 +640,10 @@ class EmergencyVehicle(Vehicle):
             "input": f"a WAV file a source of the {self.noun} plays instead of its made "
             f"sound, as {self.name}=WAV for the {self.itself} itself (a dry recording, on "
             f"board or close to it) or {recordings}, mixed down to mono, at least as long as "
-            "the pass",
+            "the pass; each is brought to the unweighted RMS of the sound it replaces (a "
+            "horn's blasts to the made horn's), and the captions' levels stay the made "
+            "sounds', so a recording with another spectrum is heard louder or quieter in "
+            "dB(A) than they say",
             "sound": f"demo/{self.name}/{self.body.sound_file} and {files}: the "
             f"{self.itself}'s sound, made to CNOSSOS-EU, and {nouns}, dry",
             "header": self.header,
@@ -711,11 +715,11 @@ class FireEngine(EmergencyVehicle):
     CNOSSOS-EU's medium heavy vehicle, two axles) 0.05 m above the road;
     ``fire_engine_siren``, the two tones of DIN 14610 on its cab's roof,
     FIRE_SIREN_GAIN_DB louder than the police car's, which makes them FIRE_SIREN_DB_A 7 m
-    in front of it, the most the Swiss rule allows on a vehicle, with the siren
-    FIRE_SIREN_HEIGHT_M up; and ``fire_engine_horn``, an air horn
-    (:mod:`acoustic_spaces.demos.horn`) as loud as the rule for horns lets one be on its
-    bench; all three along one walk. ``--fire-engine`` plays them all, or leaves out the
-    horn, the vehicle itself, or both."""
+    in front of the siren (taken at the vehicle's front), the most the Swiss rule allows
+    on a vehicle, with the siren FIRE_SIREN_HEIGHT_M up; and ``fire_engine_horn``, an
+    air horn (:mod:`acoustic_spaces.demos.horn`) as loud as the rule for horns lets one
+    be on its bench; all three along one walk. ``--fire-engine`` plays them all, or
+    leaves out the horn, the vehicle itself, or both."""
 
     def __init__(self, script: str = "passby_demo.py") -> None:
         from acoustic_spaces.demos.horn import AT_M, HEIGHT_M, HORN_FILE, ON_AXIS_DB_A
