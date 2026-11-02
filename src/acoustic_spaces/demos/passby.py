@@ -869,6 +869,14 @@ def room_of(demo: Demo, args: argparse.Namespace):
     return Room.from_yaml(args.scene)
 
 
+def walked_scene(args: argparse.Namespace):
+    """The scene the walk step simulates the vehicle along its walk in (``--scene``, the
+    vehicle at --speed), for the editor to follow (:attr:`Demo.walks`)."""
+    from acoustic_spaces.scene import Scene
+
+    return Scene.from_yaml(args.scene)
+
+
 # --------------------------------------------------------------------------- the pass
 
 
@@ -1061,13 +1069,15 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
         facing = inside.get(name)
         here = house if facing is not None else None
         for part in aired if here is None or here.airborne else ():
-            print(f"simulating the {part} every {args.step_m:g} m along its walk, heard at {name}")
+            # Begun with the names, as the simulation's messages are: the editor rings them.
+            print(f"{part} -> {name}: simulating it every {args.step_m:g} m along its walk")
             walked = simulate_walk(
                 rooms[part], part, listener=name, step_m=float(args.step_m), progress=print
             )
             trail = trails[part]
             more = f" and {len(trail.behind)} more behind it" if trail.behind else ""
-            print(f"playing the {part}{more} through {len(walked.names)} places with Doppler")
+            places = len(walked.names)
+            print(f"{part} -> {name}: playing it{more} through {places} places with Doppler")
             wet = render_walk(
                 walked,
                 {part: sent[part]},
@@ -1284,15 +1294,7 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     if not path.exists():
         raise SystemExit(f"error: no {path}; run first: {demo.command('walk', args)}")
     facts = pipeline.read_json(path)
-    seats = pipeline.seats_of(folder, demo.command("walk", args))
-    wanted = pipeline.output_label(args)
-    if seats.get("label") != wanted:
-        raise SystemExit(
-            f"error: the passes in {folder} are mixed {pipeline.label_text(seats.get('label'))}"
-            f", and this run asks for them {pipeline.label_text(wanted)}: give the video the "
-            f"--format and --hrtf the walk had, or mix the passes again: "
-            f"{demo.command('walk', args)}"
-        )
+    seats = pipeline.seats_of(folder, demo.command("walk", args), args)
     facts = heard_only(args, facts, demo.command("walk", args))
     stops = stops_of(facts, seats, demo.command("walk", args))
     audio = pipeline.tour_audio(stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0)
@@ -1327,6 +1329,7 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
         stills=moments,
         no_mp4=args.no_mp4,
         chapters=[f"{pictures.mmss(stop.at)} {stop.key.replace('_', ' ')}" for stop in stops],
+        shown=drawing.shown_at,
     )
 
 
@@ -1551,6 +1554,7 @@ def demo(
         problems=lambda shown, args: problems(shown, args, pick(args)),
         plays=lambda args: plays(args, pick(args)),
         moving=lambda args: moving(args, pick(args)),
+        walks=walked_scene,
         summary=lambda args: summary(args, pick(args)),
         # The scene step keeps the example's listeners as they are.
         listeners=lambda args: listeners_in(args.source),
