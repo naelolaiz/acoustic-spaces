@@ -5,6 +5,7 @@ source and listener, and the pass-by levels (:func:`acoustic_spaces.walkthrough.
 import dataclasses
 import math
 import sys
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
@@ -17,9 +18,10 @@ from acoustic_spaces.directivity import _grid
 from acoustic_spaces.emission import Mixture
 from acoustic_spaces.render import convolve, gusts_for
 from acoustic_spaces.scene.model import Walk
-from acoustic_spaces.spatial import Binaural, Mono
+from acoustic_spaces.spatial import Ambisonics, Binaural, Loudspeakers, Mono
 from acoustic_spaces.spatial.directions import fibonacci_sphere
 from acoustic_spaces.spatial.hrtf import HRTF
+from acoustic_spaces.spatial.microphone import first_order, xy
 from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
@@ -293,6 +295,40 @@ def test_the_late_part_and_the_eddies_go_along(short) -> None:
     assert not np.allclose(wet, still)
     # Rendered again, the same: the eddies and the late part are drawn the same way.
     assert np.array_equal(wet, render_walk(walk, {"s": dry}, Mono()))
+
+
+class _Forgetful(OrderedDict):
+    """A cache that keeps nothing: every filter, path and angle is worked out anew."""
+
+    def __setitem__(self, key, value) -> None:
+        pass
+
+
+@pytest.mark.parametrize(
+    "fmt",
+    [
+        Mono(),
+        Binaural(),
+        Ambisonics(order=1),
+        Loudspeakers.layout("5.0"),
+        xy(),
+        first_order("hypercardioid"),
+    ],
+    ids=["mono", "binaural", "foa", "5.0", "xy", "hypercardioid"],
+)
+def test_the_caches_change_nothing(short, monkeypatch: pytest.MonkeyPatch, fmt) -> None:
+    """The filters, the paths at each moment of the eddies and their phases' angles that
+    a walk with Doppler keeps for the places in use give, sample for sample, what working
+    them out anew each time gives, in every format."""
+    data = short.scene("source", 30.0, "grass").model_dump(mode="json", exclude_none=True)
+    data["atmosphere"] = {"turbulence": "strong"}
+    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=4.0)
+    dry = _noise(0.6)
+    kept = render_walk(walk, {"s": dry}, fmt)
+    monkeypatch.setattr(dp, "OrderedDict", _Forgetful)
+    anew = render_walk(walk, {"s": dry}, fmt)
+    assert np.max(np.abs(kept)) > 0.0
+    assert np.array_equal(kept, anew)
 
 
 def test_sounds_that_follow_the_walker_are_heard_as_its_own_later(short) -> None:
