@@ -879,6 +879,58 @@ def test_a_tour_crossfade_keeps_the_power_however_alike_the_two_mixes_are(
     assert level_at_cut("unlike") == pytest.approx(0.0, abs=0.3)
 
 
+def test_a_shaker_tour_keeps_each_stops_level_and_its_power_across_the_cuts(
+    tmp_path: Path,
+) -> None:
+    """A tour of what is felt (``kind="shaker"``) plays each stop's track as it is,
+    neither turned up nor brought to a peak, and its power runs on across a cut from one
+    stop's to the next's, for tracks alike, unlike, and 10 dB apart."""
+    folder = tmp_path / "seats"
+    rng = np.random.default_rng(3)
+    rumble = rng.standard_normal(10 * RATE) * 0.01
+    tracks = {
+        "same": rumble,
+        "alike": rumble,
+        "unlike": rng.standard_normal(10 * RATE) * 0.01,
+        "quiet": rng.standard_normal(10 * RATE) * 0.01 * 10.0 ** (-10.0 / 20.0),
+    }
+    info = {}
+    for key, x in tracks.items():
+        audio.write(folder / f"{key}.binaural.wav", audio.stereo(x), RATE)
+        audio.write(folder / f"{key}.shaker.wav", x, RATE)
+        info[key] = {"lag_s": 0.0, "length_s": 10.0, "loudness_db": -30.0}
+    seats = {"rate": RATE, "format": "binaural", "seats": info}
+
+    def tour(second: str) -> np.ndarray:
+        stops = [
+            pipeline.TourStop("same", 0.0, 0.0, 4.0, gain_db=12.0),
+            pipeline.TourStop(second, 4.0, 4.0, 8.0, gain_db=12.0),
+        ]
+        return pipeline.tour_audio(
+            stops, folder, seats, crossfade_s=1.0, fade_out_s=0.0, kind="shaker"
+        )
+
+    def rms(x: np.ndarray) -> float:
+        return float(np.sqrt(np.mean(x**2)))
+
+    for second in ("alike", "unlike", "quiet"):
+        out = tour(second)
+        # Each stop as it is: no gain, no peak.
+        assert rms(out[: 3 * RATE, 0]) == pytest.approx(rms(rumble[: 3 * RATE]), rel=1e-6)
+        assert rms(out[5 * RATE : 8 * RATE, 0]) == pytest.approx(
+            rms(tracks[second][5 * RATE : 8 * RATE]), rel=1e-6
+        )
+        # Across the cut the power goes from one stop's to the other's, as the squares of
+        # the quarter sines share it, however alike the two are.
+        cut = slice(int(3.6 * RATE), int(4.4 * RATE))
+        ramp = np.sin(np.linspace(0.0, np.pi / 2, RATE))[int(0.1 * RATE) : int(0.9 * RATE)]
+        p0, p1 = np.mean(rumble[cut] ** 2), np.mean(tracks[second][cut] ** 2)
+        expected = float(np.mean(ramp[::-1] ** 2 * p0 + ramp**2 * p1))
+        assert audio.db(float(np.mean(out[cut, 0] ** 2)) / expected) / 2.0 == pytest.approx(
+            0.0, abs=0.3
+        )
+
+
 def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
     """Without ffmpeg (``--no-mp4``) the video step still writes every still, the list
     the concat demuxer reads and the chapters."""
