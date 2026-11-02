@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The pass-by captions average a horn's sound power over 125 ms (the Fast time constant)
+  before each place takes its share, so a short walk step no longer reads the beats
+  between its notes as louder blasts (3 to 5 dB over at 5 cm). The street's car with its
+  horn now peaks at 97.0, 93.9 and 80.5 dB(A) (was 97.1, 94.0 and 81.6), the fire
+  engine at 111.0 dB(A) on the balcony (was 111.1).
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early

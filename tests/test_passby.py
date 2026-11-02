@@ -323,6 +323,31 @@ def test_the_horn_blasts_as_its_rule_and_its_assumptions_say() -> None:
     )
 
 
+@pytest.mark.parametrize("kind", ["CAR_HORN", "AIR_HORN"])
+def test_a_horns_loudest_place_does_not_follow_the_step(kind: str) -> None:
+    """A place is no louder for the beats between a horn's notes (70 Hz between the car's
+    360 and 430 Hz, 30 Hz between the air horn's 150 and 180 Hz) that a short step's
+    time around it resolves: its sound's power is averaged over 125 ms first, so at 50
+    km/h its loudest place is a blast's level to 0.15 dB at every step from 5 cm to 1 m
+    (where without it it climbs to 3 to 5 dB over at 5 cm), and over whole periods its
+    loudness keeps its sound power."""
+    from acoustic_spaces.demos import horn
+    from acoustic_spaces.demos.passby import LOUDNESS_WINDOW_S, blocks_loudness
+
+    assert LOUDNESS_WINDOW_S == 0.125  # IEC 61672-1's Fast time constant
+    played = getattr(horn, kind)
+    rate = 16_000
+    x = horn.horn_sound(rate, 3 * played.every_s, played)
+    rms = math.sqrt(float(np.mean(x**2)))
+    blast = 10.0 * math.log10(1.0 / horn.duty(played))
+    speed = 50.0 / 3.6
+    for step in (0.05, 0.25, 0.5, 1.0):
+        at = np.arange(0.0, 3 * played.every_s, step / speed) + 0.3 * step / speed
+        loud = blocks_loudness(x, rate, at, rms)
+        assert 10.0 * math.log10(loud.max()) == pytest.approx(blast, abs=0.15), step
+        assert np.mean(loud) == pytest.approx(1.0, abs=0.01), step
+
+
 def test_a_horns_levels_follow_its_blasts() -> None:
     """The captions have a horn as loud as its sound plays around each place: over whole
     periods of its blasts as loud as its sound power, during a blast 1/duty louder,
@@ -336,7 +361,9 @@ def test_a_horns_levels_follow_its_blasts() -> None:
     x = horn.horn_sound(rate, 3 * horn.EVERY_S)
     at = np.arange(0.0, 3 * horn.EVERY_S, 0.1) + 0.05
     loud = blocks_loudness(x, rate, at, horn.SOUND_RMS)
-    assert np.mean(loud) == pytest.approx(1.0, rel=1e-3)
+    # To 0.02 dB: the sound starts with a blast, whose first 62.5 ms are averaged over
+    # what of the 125 ms around them lies in the sound.
+    assert np.mean(loud) == pytest.approx(1.0, rel=5e-3)
     assert np.max(loud) == pytest.approx(1.0 / horn.duty(), rel=1e-3)
     assert np.min(loud) == 0.0
     vehicle = siren.FIRE_ENGINE_VEHICLE
@@ -348,9 +375,10 @@ def test_a_horns_levels_follow_its_blasts() -> None:
     heard = sounded(passing, loud)
     blast = 10.0 * math.log10(1.0 / horn.duty())
     assert heard.levels[np.argmax(loud)] == pytest.approx(levels[0] + blast)
-    # Over whole periods its energy is its sound power's, as the steady level's.
+    # Over whole periods its energy is its sound power's, as the steady level's (to
+    # 0.02 dB, as its loudness above).
     steady = 10.0 ** (a_weighted(levels[0]) / 10.0)
-    assert np.mean(10.0 ** (heard.levels_a / 10.0)) == pytest.approx(steady, rel=1e-3)
+    assert np.mean(10.0 ** (heard.levels_a / 10.0)) == pytest.approx(steady, rel=5e-3)
 
 
 def test_the_fire_engine_meets_the_rules_in_the_engine(tmp_path: Path) -> None:
