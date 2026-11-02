@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- BRAS's coupled rooms with the door open by 30.4° join the validation: the conversion
+  joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
+  T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
+  kHz.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early

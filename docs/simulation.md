@@ -785,9 +785,10 @@ within 2 % on reverberation time from 500 Hz to 4 kHz and within one JND on clar
 and a chamber music hall and an auditorium within about one JND on clarity and 6 to
 10 % and 12 to 21 % long on reverberation time (from 250 and 125 Hz to 4 kHz), which
 comes within about one JND once their absorption is fitted with this package's own
-rays. In two-room diffuse theory the model of two coupled rooms joins them 10 to 16
-times less strongly than the real rooms are joined, and IACC_L comes within one JND of binaural responses in 19 to 26 of
-30 values per room. Edge diffraction
+rays. In two-room diffuse theory BRAS's two coupled rooms are joined by about 1 m² more
+than their model from 250 Hz to 2 kHz, with the door ajar (10 to 16 times the model's
+slit) and open alike, and IACC_L comes within one JND of binaural responses in 19 to 26
+of 30 values per room. Edge diffraction
 is checked against the exact solutions for a half-plane and for wedges, against
 Maekawa's chart, and over two edges against the exact BTM solution. The
 wave solver matches the frequencies of a box's modes within 0.25 % and their decay rates
