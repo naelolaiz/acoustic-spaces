@@ -54,7 +54,7 @@ from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # 
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
 from acoustic_spaces.gui.worker import MapJob, SimulationJob  # noqa: E402
 from acoustic_spaces.room import Room  # noqa: E402
-from acoustic_spaces.scene import Scene  # noqa: E402
+from acoustic_spaces.scene import Material, Scene  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 
@@ -182,6 +182,32 @@ def test_saving_an_example_copies_its_files(qapp, tmp_path: Path) -> None:
     assert "file: concert_hall.obj" in (tmp_path / "hall" / "scene.yaml").read_text()
     assert document.scene.geometry.file == (tmp_path / "hall" / "concert_hall.obj").resolve()
     assert not document.modified
+
+
+def test_saving_with_copies_points_the_signals_and_recording_at_them(qapp, tmp_path: Path) -> None:
+    """The sources' signals and the scene's recording are copied along with its other
+    files, and the scene names the copies (it named the originals, by absolute path)."""
+    old, new, newer = tmp_path / "old", tmp_path / "new", tmp_path / "newer"
+    (old / "sounds").mkdir(parents=True)
+    for name in ("voice.wav", "song.wav"):
+        write_wav(old / "sounds" / name, np.zeros(800), 8000)
+    document = Document(box_scene(), old / "scene.yaml")
+
+    def sounds(data: dict) -> None:
+        data["sources"][0]["signal"] = "sounds/voice.wav"
+        data["recording"] = "sounds/song.wav"
+
+    document.edit("sounds", sounds)
+    document.save(new / "scene.yaml", copy_files=True)
+    assert document.scene.sources[0].signal == (new / "sounds" / "voice.wav").resolve()
+    assert document.scene.recording_file == (new / "sounds" / "song.wav").resolve()
+    saved = (new / "scene.yaml").read_text(encoding="utf-8")
+    assert "signal: sounds/voice.wav" in saved and "recording: sounds/song.wav" in saved
+    # The document keeps each original's latest copy.
+    document.save(newer / "scene.yaml", copy_files=True)
+    voice = str((newer / "sounds" / "voice.wav").resolve())
+    assert document.copies[str((old / "sounds" / "voice.wav").resolve())] == voice
+    assert document.copies[str((new / "sounds" / "voice.wav").resolve())] == voice
 
 
 def test_saving_copies_the_element_file_of_an_inline_array(qapp, tmp_path: Path) -> None:
@@ -815,6 +841,66 @@ def test_scene_yaml_panel(window, qapp, tmp_path: Path) -> None:
     # written as the scene holds it, with the system's separators.
     model = Path(example_path("shoebox")).resolve().parent / "shoebox.obj"
     assert f"file: {model}\n" in panel.view.toPlainText() and not panel.edited()
+
+
+def test_scene_yaml_panel_takes_another_preset(window, qapp) -> None:
+    """A material's coefficients and source show in the text only where its preset does
+    not give them, so another preset applied in the text gives that preset's (the old
+    preset's stayed, written next to it)."""
+    panel = window.yaml_panel
+    window.docks["yaml"].toggleViewAction().trigger()
+    qapp.processEvents()
+    text = panel.view.toPlainText()
+    assert "  plaster:\n    preset: plasterboard\n    audience: false\n  floor:\n" in text
+    panel.view.setPlainText(text.replace("preset: plasterboard", "preset: carpet_thin", 1))
+    assert panel.apply()
+    material, carpet = window.document.scene.materials["plaster"], Material(preset="carpet_thin")
+    assert material.absorption == carpet.absorption
+    assert material.absorption[4:] == [0.2, 0.35, 0.4, 0.4]  # plasterboard's: 0.04 to 0.05
+    assert material.source == carpet.source and "carpet_thin" in material.source
+
+
+def test_scene_yaml_text_applied_after_a_save_elsewhere_keeps_its_files(
+    window, qapp, tmp_path: Path
+) -> None:
+    """The text names files relative to the folder it was shown for: applied after the
+    scene was saved in another folder, it names the same files (it took files of the same
+    name in the new folder, or was refused where there were none), and a file the save
+    copied, as an example's, stays the copy."""
+    panel = window.yaml_panel
+    window.docks["yaml"].toggleViewAction().trigger()
+    qapp.processEvents()
+    shoebox, hall = example_path("shoebox"), example_path("concert_hall")
+    one = tmp_path / "one"
+    for folder, model in ((one, shoebox), (tmp_path / "other", hall)):
+        folder.mkdir()
+        (folder / "room.obj").write_bytes((model.parent / f"{model.parent.name}.obj").read_bytes())
+    text = shoebox.read_text(encoding="utf-8").replace("file: shoebox.obj", "file: room.obj")
+    (one / "scene.yaml").write_text(text, encoding="utf-8")
+
+    def edited_and_saved(target: Path) -> None:
+        text = panel.view.toPlainText()
+        panel.view.setPlainText(re.sub(r"level_db: [0-9.]+", "level_db: 77.0", text, count=1))
+        assert window._save_to(target)
+        assert "Edited: Apply makes the text the scene" in panel.status.text()
+        assert panel.apply() and window.document.scene.sources[0].level_db == 77.0
+
+    # Saved where another room.obj is, and where none is.
+    for elsewhere in ("other", "empty"):
+        assert window.open_file(one / "scene.yaml")
+        assert "file: room.obj\n" in panel.view.toPlainText()
+        edited_and_saved(tmp_path / elsewhere / "scene.yaml")
+        assert window.document.scene.geometry.file == (one / "room.obj").resolve()
+        assert window.document.room.report.volume_m3 == pytest.approx(144.0)  # 8 x 6 x 3 m
+    # An example saved elsewhere, its model copied along.
+    assert window.open_example(hall)
+    edited_and_saved(tmp_path / "hall" / "scene.yaml")
+    assert window.document.scene.geometry.file == (tmp_path / "hall" / "concert_hall.obj").resolve()
+    # Only a comment added, then saved elsewhere: nothing to apply, nothing to undo.
+    steps = len(window.document._undo)
+    panel.view.setPlainText("# a note\n" + panel.view.toPlainText())
+    assert window._save_to(tmp_path / "again" / "scene.yaml")
+    assert panel.apply() and len(window.document._undo) == steps and not panel.edited()
 
 
 def test_scene_yaml_panel_starts_hidden_then_as_left(window, qapp, english) -> None:
@@ -3535,6 +3621,9 @@ def test_run_demo_in_the_editor(window, qapp, monkeypatch, tmp_path: Path) -> No
         def chosen(self):
             return demo, "wait", args
 
+        def deleteLater(self) -> None:
+            pass
+
     monkeypatch.setattr(app_module, "DemoDialog", Dialog)
     # The window offers the demos of the open scene, and knows whether it is saved.
     window.open_example(example_path("shoebox"))
@@ -3569,6 +3658,45 @@ def test_run_demo_in_the_editor(window, qapp, monkeypatch, tmp_path: Path) -> No
     window.demo_action.trigger()
     _wait(qapp, lambda: window.job is None)
     assert "The demo failed: wait: the demo stopped (2)" in window.messages.toPlainText()
+
+
+def test_a_demo_prints_any_text_whatever_the_code_page(qapp, tmp_path: Path, monkeypatch) -> None:
+    """The demo's process writes its messages as UTF-8 and the editor reads them so,
+    whatever the system's code page: on Windows a pipe takes the ANSI code page, which
+    has no letters for a Greek or Japanese folder name (cp1252 here, set as Windows would
+    through PYTHONIOENCODING). A byte that is no UTF-8, as ffmpeg may write into the same
+    pipe, reads as a replacement character rather than ending the run."""
+    import subprocess
+
+    from acoustic_spaces.gui.worker import DemoJob
+
+    demo, args = _waiting_demo(tmp_path, 0.0)
+    step = (
+        "print('Φάκελος 日本語 é', flush=True)\n"
+        "    sys.stdout.buffer.write(b'ffmpeg \\xe9t\\xe9\\n')\n"
+        "    sys.stdout.buffer.flush()"
+    )
+    demo.script.write_text(WAITING_DEMO.replace("time.sleep(args.seconds)", step), "utf-8")
+    args.work = tmp_path / "waiting" / "work"
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1252")
+    monkeypatch.setenv("ACOUSTIC_SPACES_TEST_KEPT", "kept")
+    started: dict = {}
+    popen = subprocess.Popen
+
+    def watched(*args, **kwargs):
+        started.update(kwargs)
+        return popen(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", watched)
+    job = DemoJob(demo, "wait", args)
+    report = job.compute()
+    assert report["step"] == "wait" and (args.work / "waited").read_text() == "done"
+    assert "Φάκελος 日本語 é" in job.lines and "ffmpeg \ufffdt\ufffd" in job.lines
+    # The editor's side decodes UTF-8 whatever its own code page; the process gets the
+    # editor's environment.
+    assert started["encoding"] == "utf-8" and started["errors"] == "replace"
+    env = started["env"]
+    assert env["PYTHONIOENCODING"] == "utf-8" and env["ACOUSTIC_SPACES_TEST_KEPT"] == "kept"
 
 
 def _hrtf_set(tmp_path: Path, monkeypatch):
@@ -3652,6 +3780,9 @@ def test_download_hrtfs_from_the_outputs_page(window, tmp_path: Path, monkeypatc
 
         def exec(self) -> int:
             return int(QDialog.DialogCode.Accepted)
+
+        def deleteLater(self) -> None:
+            pass
 
     monkeypatch.setattr(hrtf_dialog, "HrtfDialog", Dialog)
     window.open_example(example_path("studio"))
@@ -3785,13 +3916,102 @@ def test_a_demo_of_an_installed_example_runs_under_the_home_folder(
     assert demo.folder == mine.parent.resolve()
     assert work_of(args) == mine.parent.resolve() / "demo"
     # An example with a demo of its own: it runs under the home folder too, reading the
-    # installed copy's scene, which its command names.
+    # installed copy's scene. Its command names the script and every path in full, as
+    # the script counts the paths it is not given from its own folder
+    # (test_a_demo_run_away_from_its_script_reads_and_writes_where_the_editor_says).
     monkeypatch.setattr(examples, "_installed_dir", lambda: stadium.parent.parent)
     demo, args = next((d, a) for d, a in demos_for(stadium) if d.name == "stadium")
-    assert demo.folder == home / HOME_FOLDER / "stadium_concert"
-    assert demo.command("all", args) == "python stadium_demo.py all " + shell_line(
-        ["--from", str(stadium.resolve())]
+    there = home / HOME_FOLDER / "stadium_concert"
+    assert demo.folder == there
+    assert demo.command("all", args) == "python " + shell_line(
+        [
+            str(demo.script),
+            "all",
+            "--from",
+            str(stadium.resolve()),
+            "--scene",
+            str(there / "scene_band.yaml"),
+            "--results",
+            str(there / "results_band"),
+            "--work",
+            str(there / "demo"),
+        ]
     )
+
+
+def test_a_demo_run_away_from_its_script_reads_and_writes_where_the_editor_says(
+    qapp, tmp_path: Path, monkeypatch
+) -> None:
+    """The editor runs an example's demo away from its script for an installed copy (in
+    ~/acoustic-spaces/<example>) and for a copy saved in another folder (beside it). The
+    process it starts, ``python SCRIPT STEP ...``, counts the paths it is not given from
+    the script's folder, among the package's files or the example's: the editor gives it
+    every path in full, so that it reads and writes where the window says, the copy's
+    own scene included, and the Command box shows that same command."""
+    from acoustic_spaces import examples
+    from acoustic_spaces.demos import PATH_KINDS, Demo, load, shell_line
+    from acoustic_spaces.gui.demo_dialog import (
+        HOME_FOLDER,
+        demos_for,
+        reads_scene,
+        starting_arguments,
+    )
+
+    ran: dict = {}
+    monkeypatch.setattr(
+        Demo, "run", lambda demo, names, args, skip_done=False: ran.update(demo=demo, args=args)
+    )
+
+    def as_run(demo, args):
+        """The paths the process the editor starts for ``demo`` runs with: the script's
+        own Demo.main parsing its command line, in the folder the editor runs it in."""
+        argv = demo.run_argv("all", args)
+        assert demo.command("all", args) == "python " + shell_line(argv[1:])
+        demo.folder.mkdir(parents=True, exist_ok=True)
+        monkeypatch.chdir(demo.folder)
+        ran.clear()
+        assert load(argv[1]).main(argv[2:]) == 0
+        assert ran["demo"].folder == demo.script.parent  # where it counts its paths from
+        return ran["demo"].resolved(ran["args"])
+
+    def paths(demo, values) -> dict:
+        return {o.option: getattr(values, o.name) for o in demo.options if o.kind in PATH_KINDS}
+
+    stadium = example_path("stadium_concert")
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setattr(examples, "_installed_dir", lambda: stadium.parent.parent)
+    there = home / HOME_FOLDER / "stadium_concert"
+    # This scene runs with -m in that folder, the scripts that are no demos parse their
+    # own options there: the demos are the scripts that count from their own folder.
+    moved = [(d, a) for d, a in demos_for(stadium) if d.module is None and not d.stepless]
+    assert [demo.name for demo, _args in moved] == ["stadium", "crossing"]
+    for demo, args in moved:
+        assert demo.folder == there and not demo.in_place
+        theirs = as_run(demo, args)
+        assert paths(demo, theirs) == paths(demo, demo.resolved(args))
+        assert theirs.scene.parent == there and theirs.work == demo.work_folder(args)
+        assert demo.work_folder(args) == there / "demo"
+    # A path left empty is the demo's default, in that folder too; a file it reads that
+    # the folder has no copy of, the example's, as the window starts it, not a missing one.
+    demo, args = moved[0]
+    args.work = args.source = None
+    theirs = as_run(demo, args)
+    assert theirs.work == there / "demo" and not (there / "scene.yaml").exists()
+    assert theirs.source == stadium.resolve() == starting_arguments(demo).source
+
+    # A copy saved as scene.yaml (Save As's name) in a folder of its own, where its
+    # --from is the demo's default: the demo reads the copy, not the example's scene.
+    copy = tmp_path / "my project" / "scene.yaml"
+    copy.parent.mkdir()
+    copy.write_text(example_path("roadside").read_text(encoding="utf-8"), encoding="utf-8")
+    demo, args = next((d, a) for d, a in demos_for(copy) if d.name == "passby")
+    mine = copy.parent.resolve()
+    assert demo.folder == mine and not demo.in_place
+    theirs = as_run(demo, args)
+    assert paths(demo, theirs) == paths(demo, demo.resolved(args))
+    assert getattr(theirs, reads_scene(demo).name) == mine / "scene.yaml"
+    assert theirs.work == demo.work_folder(args) == mine / "demo"
 
 
 def test_demo_dialog_offers_the_hrtf_sets(qapp, tmp_path: Path, monkeypatch) -> None:
@@ -3810,6 +4030,9 @@ def test_demo_dialog_offers_the_hrtf_sets(qapp, tmp_path: Path, monkeypatch) -> 
         def exec(self) -> int:
             return int(QDialog.DialogCode.Accepted)
 
+        def deleteLater(self) -> None:
+            pass
+
     monkeypatch.setattr(hrtf_dialog, "HrtfDialog", Dialog)
     dialog = DemoDialog(scene=example_path("shoebox"))
     field = dialog.fields["hrtf"]
@@ -3819,6 +4042,79 @@ def test_demo_dialog_offers_the_hrtf_sets(qapp, tmp_path: Path, monkeypatch) -> 
     assert field.value() == path
     assert dialog.command.text().endswith(f"--hrtf {path}")
     dialog.deleteLater()
+
+
+def test_answered_dialogs_are_deleted(window, qapp, tmp_path: Path, monkeypatch) -> None:
+    """The Run demo, particle export, buildings-from-a-map and Download HRTFs windows
+    are deleted once answered, OK or Cancel, rather than staying behind as children of
+    the main window (or of the page or form that opened them) until it closes; what OK
+    chose is read before."""
+    import shiboken6
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QFileDialog, QPushButton
+
+    import acoustic_spaces.gui.inspector as inspector
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+    from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
+    from acoustic_spaces.gui.inspector import MapDialog
+
+    shown: list = []
+
+    def answer(code: QDialog.DialogCode, choose=lambda dialog: None):
+        def exec_(dialog) -> int:
+            shown.append(dialog)
+            choose(dialog)
+            return int(code)
+
+        return exec_
+
+    def gone() -> bool:
+        """Whether the window answered last is deleted, once Qt deletes what is due."""
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        return not shiboken6.isValid(shown[-1])
+
+    yes, no = QDialog.DialogCode.Accepted, QDialog.DialogCode.Rejected
+    window.open_example(example_path("studio"))
+    for kind in (DemoDialog, ParticleDialog, HrtfDialog):
+        monkeypatch.setattr(kind, "exec", answer(no))
+    window.demo_action.trigger()
+    assert type(shown[-1]) is DemoDialog and gone()
+    assert not window.export_blender(particles=True)
+    assert type(shown[-1]) is ParticleDialog and gone()
+    window.select("outputs")
+    page = window.inspector.pages["outputs"]
+    next(b for b in page.findChildren(QPushButton) if b.text().startswith("Download HRTFs")).click()
+    assert type(shown[-1]) is HrtfDialog and gone()
+    form = DemoDialog(scene=example_path("shoebox"))  # the HRTF field's own button
+    form.fields["hrtf"].sets.click()
+    assert type(shown[-1]) is HrtfDialog and gone()
+    form.deleteLater()
+
+    def few(dialog: ParticleDialog) -> None:
+        dialog.particles.setValue(20)
+
+    monkeypatch.setattr(ParticleDialog, "exec", answer(yes, few))
+    target = tmp_path / "particles.glb"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    assert window.export_blender(particles=True)
+    assert type(shown[-1]) is ParticleDialog and gone()
+    assert f"Wrote {target}: 20 particles from" in window.messages.toPlainText()
+
+    window.new_outdoor()
+    town = tmp_path / "town.geojson"
+    hall = {
+        "type": "Feature",
+        "properties": {"name": "hall", "height": 9},
+        "geometry": {"type": "Polygon", "coordinates": [[[-6, -6], [6, -6], [6, 6], [-6, 6]]]},
+    }
+    town.write_text(json.dumps({"type": "FeatureCollection", "features": [hall]}))
+    monkeypatch.setattr(
+        inspector.QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(town), ""))
+    )
+    monkeypatch.setattr(MapDialog, "exec", answer(yes))
+    window.inspector.pages["geometry"].map_button.click()
+    assert type(shown[-1]) is MapDialog and gone()
+    assert window.document.scene.geometry.building_names() == ["hall"]
 
 
 def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:

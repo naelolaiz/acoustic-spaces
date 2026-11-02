@@ -136,6 +136,50 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- Fixed: `airfoil_noise.thicknesses` gave a lightly tripped boundary layer
+  (`LIGHTLY_TRIPPED`) the heavily tripped suction-side fits instead of the untripped
+  ones of Brooks, Pope and Marcolini's code: a 0.3048 m chord in 71.3 m/s was 1.3 dB too
+  loud in TBL-TE noise at 8 degrees and 3.4 dB too quiet at 12. The helicopter's blades,
+  tripped or not, are unchanged.
+- Docs: the AS350 B3's main rotor turns at 394 rpm, the most in powered flight with its
+  Arriel 2B engine and so the speed appendix J flies; its tail rotor's 2,086 rpm is
+  NASA's, no longer assumed; its tones agree with Farassat's formulation to 7.5 x 10⁻⁶
+  (main rotor) and 1.6 x 10⁻⁵ (tail rotor), not 10⁻⁵.
+- The helicopter demos' `helicopter` and `walk` steps find the rotors' tones and BPM's
+  bands (`rotorcraft.bpm_powers`) once, not for each length: about 7 s faster, 15 s with
+  `--broadband bpm`.
+- Fixed: with weather zones, the shares of a path's way under each weather, rounded one
+  by one, could add up to 1 ± 0.005 (± 0.01 across five weathers), scaling the speed of
+  sound in still air by as much; they are now divided by their sum. Over 300 m across
+  three weathers, a third each, the direct sound arrives at 868.5 ms (was 864.2) and the
+  levels at 1 to 8 kHz rise by 0.1 to 0.3 dB; the lakeside example is unchanged.
+- Docs: each caustic a curved ray touches advances its phase by a quarter period, as the
+  engine has it (a factor j, time going as e^(jωt)), not delays it; a test now holds the
+  sign, another the shadow zone's residue series to the fast field program.
+- Docs: in a belt under 20 m deep the engine's dense foliage takes more than ISO
+  9613-2's table at 63 and 125 Hz (in every band under 10 m) and up to 1.8 dB less at 4
+  and 8 kHz, not a little less throughout; stems 0.3 m across, 0.08 per m², take 0.002
+  dB per metre at 63 Hz (was 0.003).
+- Fixed: an example's demo that the editor's **Run demo…** runs away from the example
+  (in `~/acoustic-spaces/<example>`, or beside a copy saved elsewhere) wrote its scenes,
+  results and work among the example's files, an installed copy's too, and read the
+  example's scene rather than a copy saved as `scene.yaml`; it now gets every path in
+  full, as the Command box shows (`Demo.in_place`).
+- Fixed: the Run demo, particle export, buildings-from-a-map and Download HRTFs windows
+  are deleted once answered, instead of staying behind until the editor closes.
+- Fixed: a demo's messages pass between its process and the editor as UTF-8, so a folder
+  name outside Windows' code page no longer stops the demo.
+- Fixed: another preset, file or entry, or a lower transmission loss, written for a
+  material in the Scene YAML panel or in a scene file the editor saves now gives its
+  coefficients and source; the old ones stayed, and the lower loss was refused as more
+  than the absorption. Scene files and the panel write a material's absorption,
+  scattering and source only where its preset, file, entry or transmission does not give
+  them, and a scattering entry by its name.
+- Fixed: Scene YAML text applied after the scene was saved in another folder names the
+  files it named; it took files of the same name in the new folder, or was refused where
+  there were none.
+- Fixed: an example saved elsewhere names the copies of its sources' signals and its
+  recording, as it does its other files; it named the originals.
 - Fixed: a download cut short (fewer bytes than the server announced) is refused and
   removed; it was kept as a whole HRTF set or recording, which later runs then used. One
   sent in chunks and cut short fails with an `OSError` too, as callers expect

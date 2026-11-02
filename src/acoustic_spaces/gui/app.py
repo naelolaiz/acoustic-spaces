@@ -1632,13 +1632,15 @@ class MainWindow(QMainWindow):
 
     def _files_moved(self, old, new) -> None:
         """The scene ``old`` became ``new``, the same scene with copies of its files (an
-        example saved elsewhere): runs and maps of ``old`` hold for ``new``."""
+        example saved elsewhere): runs, maps and Scene YAML text of ``old`` hold for
+        ``new``."""
         if self._result_scene is old:
             self._result_scene = new
         if self._coverage_scene is old:
             self._coverage_scene = new
         if self._job_scene is old:
             self._job_scene = new
+        self.yaml_panel.files_moved(old, new)
         self._changed()
 
     def save_screenshot(self) -> None:
@@ -1660,7 +1662,7 @@ class MainWindow(QMainWindow):
         from acoustic_spaces.gltf import SLOW_MOTION, export_gltf
 
         room = self.document.room
-        settings = None
+        slow = SLOW_MOTION
         if particles:
             kind, key = self.selection
             sources = room.scene.sources
@@ -1668,8 +1670,11 @@ class MainWindow(QMainWindow):
                 source = sources[key]
             else:  # the first one in use
                 source = next((s for s in sources if s.in_use), sources[0])
-            settings = ParticleDialog(room, source, self)
-            if not settings.exec():
+            dialog = ParticleDialog(room, source, self)
+            accepted = dialog.exec()
+            particle_count, duration_ms, slow = dialog.count, dialog.duration, dialog.slow_motion
+            dialog.deleteLater()
+            if not accepted:
                 return False
         title = _("Export particle animation to Blender") if particles else _("Export to Blender")
         start = "particles.glb" if particles else "room.glb"
@@ -1678,12 +1683,11 @@ class MainWindow(QMainWindow):
             return False
         response = None if particles else self._shown_response()
         traced = None
-        slow = SLOW_MOTION if settings is None else settings.slow_motion
         try:
             with busy():
-                if settings is not None:
+                if particles:
                     traced = trace_particles(
-                        room, source.name, count=settings.count, duration=settings.duration / 1e3
+                        room, source.name, count=particle_count, duration=duration_ms / 1e3
                     )
                 paths = None if response is None else response.early
                 export_gltf(room, path, paths=paths, particles=traced, slow_motion=slow)
@@ -1698,7 +1702,7 @@ class MainWindow(QMainWindow):
                     "{slow:g} s. In Blender: File > Import > glTF 2.0."
                 ),
                 path=path,
-                count=settings.count,
+                count=particle_count,
                 source=traced.source,
                 sound=1e3 * sound,
                 slow=slow * sound,
@@ -1851,10 +1855,13 @@ class MainWindow(QMainWindow):
             self.log(_("No demo to run: {reason}").format(reason=exc), "error")
             return
         if not dialog.exec():
-            if dialog.edit_request is not None:
-                self.edit_walker(*dialog.edit_request)
+            request = dialog.edit_request
+            dialog.deleteLater()
+            if request is not None:
+                self.edit_walker(*request)
             return
         demo, step, args = dialog.chosen()
+        dialog.deleteLater()
         job = DemoJob(demo, step, args)
         job.done.connect(self._demo_done)
         self._start(

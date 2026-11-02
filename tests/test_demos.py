@@ -714,6 +714,38 @@ def test_an_examples_script_runs_as_a_demo_of_one_step(tmp_path: Path) -> None:
     assert scripts_of("shoebox") == [] and scripts_of("measurement") == []
 
 
+def test_a_caption_leaves_out_a_path_at_its_default_where_the_demo_runs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The stills' caption (``names_only``, as ``pictures.settings_lines`` takes it)
+    gives the options a run was given, a path by its name, and leaves out a path at its
+    default. The editor runs a demo away from its script (a copy of the example) in the
+    copy's folder and gives it every path in full: the orchestra demo's ``--zips``, at
+    its default the folder the demo runs in (``.``), has no name to go by, and the
+    caption still says every option is at its default, as in the example's own folder;
+    a folder of the user's own is given by its name."""
+    demo = demo_for("orchestra")
+    assert demo is not None and demo.option("zips").default == Path(".")
+    copy = tmp_path / "copy of orchestra"
+    copy.mkdir()
+    moved = demo.at(copy)
+    argv = moved.run_argv("all", moved.resolved(moved.defaults()))
+    assert argv[argv.index("--zips") + 1] == str(copy)
+    monkeypatch.chdir(copy)  # where the editor runs it
+    # The process parses its command line as the script's own Demo.main does.
+    values = demo.resolved(demo.parser().parse_args(argv[2:]))
+    assert values.zips == copy and values.work == copy / "demo"
+    assert demo.arguments(values, names_only=True) == []
+    assert demo.command("all", values, names_only=True) == "python orchestra_demo.py all"
+    values.zips = tmp_path / "downloads"
+    assert demo.arguments(values, names_only=True) == ["--zips", "downloads"]
+    # In the example's own folder, wherever the command is typed.
+    monkeypatch.chdir(tmp_path)
+    assert demo.arguments(demo.resolved(demo.defaults()), names_only=True) == []
+    values.zips = copy
+    assert demo.arguments(values, names_only=True) == ["--zips", "copy of orchestra"]
+
+
 # --------------------------------------------------------------------------- the mixes
 
 
