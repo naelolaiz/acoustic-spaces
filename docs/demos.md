@@ -45,7 +45,8 @@ python church_demo.py all      # every step in order, leaving out what is done a
 ```
 
 `all` is the short way through: it skips the steps whose result is in the work folder
-already (the scene file, the simulation's results, each stop's mix), so a run that
+already (the scene file, the simulation's results, each stop's mix, for the run's
+`--format` and `--hrtf`), so a run that
 stopped halfway carries on where it left off, and a change to one step is seen in the
 video without simulating again. `--again` mixes the stops afresh even where their files
 exist, `--work FOLDER` puts everything somewhere else, and `--no-mp4` writes the audio
@@ -69,15 +70,16 @@ no `--listeners`.
 instead of what the demo gives it: `python lakeside_demo.py render --input
 subs=bass.wav`, or a singer of the choir (`--input singer_f1=take.wav`), a player of the
 orchestra (`--input fl1=flute.wav`, in every movement), any source of the stadium. The
-file is mixed down to mono, brought to the gated RMS of the feed it replaces, so the
-source plays as loud as the demo has it, and cut or padded with silence to that feed's
-length, so the tour's times hold; a name the demo has no source for is refused with
-the list of them. The mixes are made again when the inputs change. The credit line on
-the stills names the files that replaced a recording (and only them when every source
-has one); the captions go on describing the demo's own music. The walk through the
-gallery takes `--input guide=talk.wav`, played as it is: the video's one gain sets how
-loud it is heard, and the captions' level and STI stay the scene's voice; the pass-by
-demos take `--input car=engine.wav`, a dry recording played as the car's sound.
+file is mixed down to mono, brought to the gated RMS of the feed it replaces
+(unweighted, so a recording with another spectrum plays louder or quieter in dB(A)), and
+cut or padded with silence to that feed's length, so the tour's times hold; a name the
+demo has no source for is refused with the list of them. The mixes are made again when
+the inputs change. The credit line on the stills names the files that replaced a
+recording (and only them when every source has one); the captions go on describing the
+demo's own music. The walk through the gallery takes `--input guide=talk.wav`, played as
+it is: the video's one gain sets how loud it is heard, and the captions' level and STI
+stay the scene's voice; the pass-by demos take `--input car=engine.wav`, a dry recording
+played as the car's sound.
 
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demos
@@ -678,7 +680,9 @@ head.
 **Recording.** The ACE challenge corpus (Eaton, Gaubitch, Moore and Naylor, Imperial
 College London), **CC BY 4.0**: an anechoic talk, a man describing his way to work
 through Delft; `speech` reads the corpus's 148 MB archive as it comes, up to the
-talk: 16 MB for that talker, up to 145 MB for another (`--talker`).
+talk: 16 MB for that talker, up to 145 MB for another (`--talker`). A talk shorter than
+the walk and the turn need, as some talkers' are, is said again from its start, 2 s
+after it ends.
 
 ## Vehicles passing by
 
@@ -727,10 +731,12 @@ three, the car's with its horn) in its Movement box.
   unless `--speed` drives the vehicle through their places at one speed. The demo's
   scene (`scene_demo.yaml`) has the vehicle alone along its walk at that speed, with
   CNOSSOS-EU's sound power of its category at that speed on the method's reference road
-  surface, in the scene's air temperature: rolling noise A_R + B_R lg(v/70) + K (20 - t)
-  and propulsion noise A_P + B_P (v - 70)/70 per octave band, with the coefficients of
-  Table F-1 of Directive 2002/49/EC, Annex II, as amended by Commission Delegated
-  Directive (EU) 2021/1226 (`acoustic_spaces.demos.road`). At their speeds and 20 °C:
+  surface, level (the method's corrections for road gradients, other surfaces and
+  studded tyres are left out), in the scene's air temperature: rolling noise A_R + B_R
+  lg(v/70) + K (20 - t) and propulsion noise A_P + B_P (v - 70)/70 per octave band, with
+  the coefficients of Table F-1 of Directive 2002/49/EC, Annex II, as amended by
+  Commission Delegated Directive (EU) 2021/1226 (`acoustic_spaces.demos.road`). At their
+  speeds and 20 °C:
 
   | vehicle | CNOSSOS-EU category | speed | sound power | A-weighted |
   |---|---|---:|---:|---:|
@@ -806,30 +812,31 @@ three, the car's with its horn) in its Movement box.
   are heard together, each at its own sound power (`--fire-engine` leaves out the horn,
   the vehicle itself, or both). The siren plays the police car's two tones (440 and
   586.7 Hz, 1.5 s each), 6.0 dB louder: as loud as the Swiss rule lets two tones be on a
-  vehicle, 114.9 dB(A) 7 m in front of it at the loudest of 0.5 to 1.5 m up, over the
-  street's asphalt (the rule: 100 to 115 dB(A)), 134.6 dB(A) of sound power. The horn is
-  as loud as the rule for vehicles' horns (Council Directive 70/388/EEC, Annex I) lets
-  one be on its test bench: 118 dB(A) 2 m in front of it on its axis, in a free field
-  (the rule: 105 to 118). The rest of the horn is assumed, as no measured air horn of a
-  fire engine was found (`acoustic_spaces.demos.horn`): two trumpets sounding together
-  at 150 and 180 Hz, a minor third apart as a car's pair of horns is (about 405 to 420
-  Hz and 500 Hz), within the 125 to 180 Hz Wikipedia's article on vehicle horns gives
-  trucks' air horns, without a source; each a sawtooth (all its harmonics, each 1/k of
-  the fundamental); two blasts of 0.6 s, 0.3 s apart, every 3 s, each at its level 0.05
-  s after it starts (the rule: within 0.2 s); the height of the rule's bench; and the
-  siren's directivity. Its sound power in the scene is its average over its blasts and
-  pauses, 122.7 dB(A), as its made sound has them: during a blast it is 4.5 dB louder
-  (127.1 dB(A)) than that. The captions' levels have the horn as loud as its sound plays
-  around each place: its level there is the average's times how loud its sound is over
-  the time around that place (from halfway to the place before to halfway to the next)
-  against its average, faded in and out with it. A recording given for it (`--input
-  fire_engine_horn=WAV`) plays its blasts as loud as the made horn's, whatever its own
-  pauses, and the captions follow its own blasts. Against the rules
-  (`validation/urban_sources.py`): the siren gives 125.4 dB(A) on the Swiss rule's bench
-  (116 to 129) and 112.3 to 114.9 dB(A) on the vehicle; the horn 107.9 to 108.6 dB(A) 7
-  m in front of the vehicle, 0.5 to 1.5 m up (the rule: 93 at least), and, on its bench,
-  110.2 dB(A) between 1800 and 3550 Hz (the rule: 105 at least), its loudest component
-  there 6.0 dB over any above 3550 Hz (the rule: over).
+  vehicle, 114.9 dB(A) 7 m in front of the siren (taken at the vehicle's front) at the
+  loudest of 0.5 to 1.5 m up, over the street's asphalt (the rule: 100 to 115 dB(A)),
+  134.6 dB(A) of sound power. The horn is as loud as the rule for vehicles' horns
+  (Council Directive 70/388/EEC, Annex I) lets one be on its test bench: 118 dB(A) 2 m
+  in front of it on its axis, in a free field (the rule: 105 to 118). The rest of the
+  horn is assumed, as no measured air horn of a fire engine was found
+  (`acoustic_spaces.demos.horn`): two trumpets sounding together at 150 and 180 Hz, a
+  minor third apart as a car's pair of horns is (about 405 to 420 Hz and 500 Hz), within
+  the 125 to 180 Hz Wikipedia's article on vehicle horns gives trucks' air horns,
+  without a source; each a sawtooth (all its harmonics, each 1/k of the fundamental);
+  two blasts of 0.6 s, 0.3 s apart, every 3 s, each at its level 0.05 s after it starts
+  (the rule: within 0.2 s); the height of the rule's bench; and the siren's directivity.
+  Its sound power in the scene is its average over its blasts and pauses, 122.7 dB(A),
+  as its made sound has them: during a blast it is 4.5 dB louder (127.1 dB(A)) than
+  that. The captions' levels have the horn as loud as its sound plays around each place:
+  its level there is the average's times how loud its sound is over the time around that
+  place (from halfway to the place before to halfway to the next) against its average,
+  faded in and out with it. A recording given for it (`--input fire_engine_horn=WAV`)
+  plays its blasts as loud as the made horn's, whatever its own pauses, and the captions
+  follow its own blasts. Against the rules (`validation/urban_sources.py`): the siren
+  gives 125.4 dB(A) on the Swiss rule's bench (116 to 129) and 112.3 to 114.9 dB(A) on
+  the vehicle; the horn 107.9 to 108.6 dB(A) 7 m in front of the vehicle, 0.5 to 1.5 m
+  up (the rule: 93 at least), and, on its bench, 110.2 dB(A) between 1800 and 3550 Hz
+  (the rule: 105 at least), its loudest component there 6.0 dB over any above 3550 Hz
+  (the rule: over).
 - **The car's horn** (in the street, `--car car_and_horn`, or `horn` alone) is a pair of
   disc horns behind the car's front bumper (`car_horn`), 0.5 m up along the car's walk,
   facing the way it drives, with the siren's directivity, in two blasts of 0.25 s, 0.15

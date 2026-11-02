@@ -3146,28 +3146,31 @@ values of DIN 14610): the two tones, 440 and 586.7 Hz, lie within the base frequ
 of 360 to 630 Hz, a fourth apart (the rule: 3:4, -3 to +7 %), with a cycle of 3 s (2.5
 to 3.5 s) and no pause. On the axis 2 m away in a free field they give 119.4 dB(A),
 where the rule asks 116 to 129 dB(A) on the test bench; 7.00 m in front of the police
-car, its siren 1.5 m up, over the street's asphalt, the engine gives 108.1, 108.7 and
-110.8 dB(A) 0.5, 1.0 and 1.5 m up, where the rule asks 100 to 115 dB(A) on the vehicle.
+car's siren, taken at the car's front, 1.5 m up, over the street's asphalt, the engine
+gives 108.1, 108.7 and 110.8 dB(A) 0.5, 1.0 and 1.5 m up, where the rule asks 100 to
+115 dB(A) on the vehicle.
 The level of the two tones follows from the yelp's sound power, the same in all, as
 the loudspeaker is taken to send each pattern with one drive: 128.6 dB(A) against the
 yelp's 130.6.
 
 **The fire engine.** Its siren plays the same two tones 6.0 dB louder, 3.0 m up on its
 cab's roof, which the demo takes as loud as the Swiss rule lets two tones be on a
-vehicle. The engine gives them 112.3 to 114.9 dB(A) 7.00 m in front of the vehicle over
-the street's asphalt, every 0.1 m from 0.5 to 1.5 m up, the loudest 0.8 m up (the rule:
-100 to 115 dB(A)), and 125.4 dB(A) 2 m away on the axis in a free field (the bench: 116
-to 129). Its air horn, 1.2 m up, is held against the rule for vehicles' horns (Council
-Directive 70/388/EEC, Annex I): on the rule's bench, 2 m in front of it on its axis in a
-free field, a blast gives 118.0 dB(A), the most the rule allows (105 to 118, point
-1.2.1.6); between 1800 and 3550 Hz it gives 110.2 dB(A) there, where the rule asks 105
-at least, and its loudest component in that band is 6.0 dB over the loudest above 3550
-Hz, which the rule asks it to be over (point 1.2.3.1), from the spectrum of the made
-blast; each blast is at its level 0.05 s after it starts (the rule: 0.2 s at most,
-point 1.2.1.7); 7 m in front of the vehicle over asphalt, 0.5 to 1.5 m up, it gives
-107.9 to 108.6 dB(A), where the rule asks 93 at least (point 2.1.4). The horn's pitch,
-its spectrum, its blasts, its height and its directivity are assumptions, as no
-measured air horn of a fire engine was found; the rule bounds them only as above.
+vehicle. The engine gives them 112.3 to 114.9 dB(A) 7.00 m in front of the siren, which
+the demo takes to be at the vehicle's front, over the street's asphalt, every 0.1 m from
+0.5 to 1.5 m up, the loudest 0.8 m up (the rule: 100 to 115 dB(A) 7.00 m in front of the
+vehicle; a siren set 0.5 to 2 m back on the roof gives 0.4 to 1.4 dB less there), and
+125.4 dB(A) 2 m away on the axis in a free field (the bench: 116 to 129). Its air horn,
+1.2 m up, is held against the rule for vehicles' horns (Council Directive 70/388/EEC,
+Annex I): on the rule's bench, 2 m in front of it on its axis in a free field, a blast
+gives 118.0 dB(A), the most the rule allows (105 to 118, point 1.2.1.6); between 1800
+and 3550 Hz it gives 110.2 dB(A) there, where the rule asks 105 at least, and its
+loudest component in that band is 6.0 dB over the loudest above 3550 Hz, which the rule
+asks it to be over (point 1.2.3.1), from the spectrum of the made blast; each blast is
+at its level 0.05 s after it starts (the rule: 0.2 s at most, point 1.2.1.7); 7 m in
+front of the vehicle over asphalt, 0.5 to 1.5 m up, it gives 107.9 to 108.6 dB(A), where
+the rule asks 93 at least (point 2.1.4). The horn's pitch, its spectrum, its blasts, its
+height and its directivity are assumptions, as no measured air horn of a fire engine was
+found; the rule bounds them only as above.
 
 **The car's horn.** The street car's pair of disc horns (`--car car_and_horn`), at 360
 and 430 Hz, 0.5 m up, against the same rule. On its bench, 2 m in front of it on its

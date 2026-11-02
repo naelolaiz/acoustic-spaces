@@ -41,10 +41,13 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from acoustic_spaces.examples import examples_dir
 from acoustic_spaces.i18n import N_
+
+if TYPE_CHECKING:
+    from acoustic_spaces.scene import Scene
 
 #: The kinds of option, for the parser and for the editor's form: a free text, a choice
 #: from a list, a number, a flag, a file to read, a file the demo writes (``path``), a
@@ -446,6 +449,11 @@ class Demo:
     #: it starts. The editor's Run demo window ticks them in its table of what moves, which
     #: a ``movers`` option lets the user change for a run.
     moving: Callable[[argparse.Namespace], list[str]] | None = None
+    #: The scene whose walks a run simulates its walkers along, from the arguments (paths
+    #: resolved), when it is not the scene the editor has open: the pass-by demos'
+    #: vehicle at --speed in a scene of its own. While the demo runs, the editor draws the
+    #: walkers where the run simulates them, on these walks; None: the open scene's.
+    walks: Callable[[argparse.Namespace], Scene] | None = None
     #: The listeners a run can play, in the demo's order, from the arguments (paths
     #: resolved): the names its ``listeners`` option (``--listeners``) takes, and the
     #: rows of the editor's list of them, all ticked by default.

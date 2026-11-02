@@ -919,7 +919,8 @@ def test_stadium_pictures_show_the_crowd() -> None:
 def test_demo_scripts_take_an_hrtf(tmp_path: Path) -> None:
     """Every demo's simulate command carries ``--hrtf``; its mixes then ask for the
     responses made through that file (``binaural-<name>``) and refuse ones made through
-    the spherical head; other formats are left alone; and asked for mixes before the
+    the spherical head, and without it the other way round (so ``all`` simulates again);
+    other formats are left alone; and asked for mixes before the
     scene and the simulation exist, a demo says which step writes the scene."""
     sofa = tmp_path / "me.sofa"
     plain = argparse.Namespace(format="binaural", hrtf=None)
@@ -956,6 +957,7 @@ def test_demo_scripts_take_an_hrtf(tmp_path: Path) -> None:
             (head, args, True),
             (ears, with_hrtf, True),
             (head, with_hrtf, False),
+            (ears, args, False),  # nor through the file for ones through the head
         ):
             pipeline.write_json(results / pipeline.PARAMETERS, {"responses": entries})
             output = pipeline.output_label(argparse.Namespace(**vars(asked) | {"hrtf": None}))
@@ -964,7 +966,8 @@ def test_demo_scripts_take_an_hrtf(tmp_path: Path) -> None:
             if fine:
                 assert pipeline.responses_of(simulation, asked) == entries
             else:
-                with pytest.raises(SystemExit, match="me.sofa"):
+                said = "me.sofa" if asked is with_hrtf else r"spherical head model \(binaural-me\)"
+                with pytest.raises(SystemExit, match=said):
                     pipeline.responses_of(simulation, asked)
 
 
@@ -1103,11 +1106,17 @@ def test_lakeside_demo_plays_a_song_of_your_own(tmp_path: Path, monkeypatch) -> 
     assert music.own_song_problems(demo.DEMO, compressed) is None
 
 
-def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:
+def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
     """walk_demo.py writes the gallery with the guide speaking at the level IEC 60268-16
     gives that voice and the visitor standing round the corner; it cuts from the walk to
     the turn at a pause in the talk; and its pictures name the moments of the tour."""
     demo = _script("gallery", "walk_demo")
+    # The head tracker's head turns as --turn scripts it, and says which way it faces.
+    head = demo.turning([0.0, 10.0], [0.0, 90.0], 90.0, 10.0, every_s=0.0)
+    assert head(5.0) == (45.0, 0.0, 0.0)
+    assert capsys.readouterr().out == (
+        "guide -> standing facing 135.0 deg: turning the head, 5.0 of 10.0 s\n"
+    )
     args = _demo_args(
         demo.DEMO,
         source=example_path("gallery"),
@@ -1172,11 +1181,23 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:
     assert first == pytest.approx(pauses[0], abs=demo.PAUSE_S)
     assert second == pytest.approx(pauses[1], abs=demo.PAUSE_S)
     assert second - first >= turn_s
-    # A talk too short for the walk and the turn is refused, with what it would take.
+    assert demo.said(args, room)[2] == 1  # long enough: said once, as recorded
+    # A talk too short for the walk and the turn is said again from its start, AGAIN_S
+    # after it ends, as often as they need; the cuts fall in its pauses as before.
     short = argparse.Namespace(**vars(args) | {"talker": "short"})
-    write_wav(args.work / "speech" / "short.wav", talk[: int(0.5 * length * rate)], rate)
-    with pytest.raises(SystemExit, match="too short"):
-        demo.cuts(short, room)
+    half = talk[: int(0.5 * length * rate)]
+    write_wav(args.work / "speech" / "short.wav", half, rate)
+    spoken, _, times = demo.said(short, room)
+    gap = int(demo.AGAIN_S * rate)
+    assert times == 2 and len(spoken) == 2 * len(half) + gap
+    assert len(spoken) / rate >= demo.needed_s(short, room)
+    np.testing.assert_allclose(spoken[len(half) + gap :][: len(half)], half, atol=1e-6)
+    assert not spoken[len(half) : len(half) + gap].any()
+    first, second = demo.cuts(short, room)
+    assert second - first >= turn_s and second <= len(spoken) / rate
+    write_wav(args.work / "speech" / "silent.wav", np.zeros(0), rate)
+    with pytest.raises(SystemExit, match="silent is empty"):
+        demo.said(argparse.Namespace(**vars(args) | {"talker": "silent"}), room)
     with pytest.raises(SystemExit, match="run first"):
         demo.talk(argparse.Namespace(**vars(args) | {"talker": "F9"}))
     # --input guide=WAV: the guide says that file; no talk to download, its name in the
@@ -1190,11 +1211,16 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:
     assert demo.speech_done(given) and demo.talk(given)[1] == rate
     assert demo.credit_of(given) == "Playing guide: mine.wav"
     assert demo.credit_of(args).startswith("Speech: ACE challenge corpus, talker M4")
-    with pytest.raises(SystemExit, match="mine.wav is .* too short"):
-        demo.cuts(given, room)
+    assert demo.said(given, room)[2] == 2  # said again, as the corpus's short takes are
     (args.work / "walk").mkdir()
     pipeline.write_json(args.work / "walk" / demo.WALK, {"talker": args.talker})
+    assert not demo.part_done(args, "walk", demo.WALK)  # no sound for these ears yet
+    write_wav(args.work / "walk" / f"walk.{demo.label_of(args)}.wav", np.zeros((8, 2)), rate)
     assert demo.part_done(args, "walk", demo.WALK)
+    # Through another head (--hrtf) the walk is made again, not taken as done.
+    kemar = argparse.Namespace(**vars(args) | {"hrtf": tmp_path / "kemar.sofa"})
+    assert demo.label_of(kemar) != demo.label_of(args)
+    assert not demo.part_done(kemar, "walk", demo.WALK)
     assert not demo.part_done(given, "walk", demo.WALK)
     assert not demo.part_done(args, "turn", demo.TURNING)
 
@@ -1268,6 +1294,11 @@ def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
     assert not late["sight"]
     for picture in (drawing.frame(0.0), drawing.frame(20.0), drawing.thumbnail()):
         assert picture.getbbox() is not None
+    # The video's messages: the visitor at the moment of its walk, then standing.
+    assert drawing.shown(5.0, "visitor", "standing") == "guide -> visitor @ 5.00 s"
+    assert drawing.shown(16.6 + 12.0, "visitor", "standing") == (
+        "guide -> standing facing 180.0 deg"
+    )
 
 
 # --------------------------------------------------------------------------- the demo code
