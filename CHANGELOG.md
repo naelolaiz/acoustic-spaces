@@ -19,6 +19,58 @@
   done, and without `--hrtf` a simulation through an HRTF file too, mixing through it;
   their videos now refuse mixes of another `--format` or HRTF. Mixes from before say
   neither, so they are made again.
+- A walk as fast as sound or faster now stops with an error without Doppler too, as it
+  did with Doppler: it played as places crossfaded one after another, as if shock waves
+  did not exist.
+- The demos' JSON files (walk.json and the others) are strict JSON: a level where
+  nothing is heard, as between a horn's blasts, is written null instead of -Infinity,
+  which browsers refuse.
+- On Windows, a demo whose scene lies on another drive than its example no longer stops
+  when it writes a siren's, horn's, train's, helicopter's or aircraft's directivity
+  table: the scene names the table in full.
+- `emission.Mixture` refuses signals without samples and a sample rate that is not
+  positive, which failed later with a division by zero.
+- The road docs say that CNOSSOS-EU's correction for road gradients is left out, that
+  the sirens' levels 7 m in front of a vehicle are taken 7 m from the siren, and that
+  recordings are levelled unweighted; a test holds every coefficient of Table F-1.
+- `doc29.event` warns (`doc29.NpdExtrapolationWarning`) when a segment's power lies so
+  far outside the NPD curves' that their extrapolated level departs more than 5 dB from
+  the nearest curve's (Volume 2 section 4.2); in Volume 3's cases and the airport
+  example's flights it departs 2.3 dB at most.
+- `anp.Database.profile` refuses to fly procedural steps, which give thrust in lb, for
+  an aircraft whose NPD curves are in another power parameter (`Aircraft.power_in_lb`).
+- `doc29.read_fixed_point_profiles` reads a column's unit from round or square brackets
+  (m, ft, feet; m/s, kt, kts, knots) and stops on an unknown or missing one instead of
+  taking metres or m/s. `read_aircraft` and `noise.installation_db` take a lateral
+  directivity by how it starts ("Wing-mounted" is a wing installation); any other is an
+  error, where it gave no installation correction.
+- A walk whose first two places stand one above the other no longer flies the airport's
+  jets to NaN positions: `Track.through` leaves out a point within 1 µm of the one
+  before it, and `Track.at` and `Track.extended` pass over legs of no length.
+- `performance.departure` stops with an error on a climb step without the thrust to
+  climb, with more thrust than weight or into a headwind that leaves it no climb angle
+  (eq. B-21, B-22), instead of flying the profile backwards or failing in `math.asin`.
+- Doc 29's maximum level at a receiver alongside a segment (`doc29.segment_levels`,
+  `doc29.event`) takes the equivalent level path's elevation angle, lateral
+  displacement and depression angle, as the exposure does (Volume 2 section 4.5.5).
+  L_Amax moves by up to 0.064 dB on Volume 3's grids and receptors under the jets'
+  departures, 0.017 dB under PROP's and 0.006 dB under the arrivals (SEL does not move),
+  and the airport example's departure at lateral_450m is 85.1 dB(A) by Doc 29 (was 85.0).
+- Volume 3's impedance adjustment converts its 29.92 inHg with Appendix B2.2's
+  3.38653131 kPa per inHg (`doc29.performance.KPA_PER_INHG`), not 3.386389: its levels
+  rise by 0.0002 dB, the 99 levels at its receptors now within 0.0055 dB of table B-1
+  (was 0.0057 dB).
+- `doc29.segment_levels` and `doc29.event` document their `impedance`, which the caller
+  passes from `doc29.impedance_db` for the aerodrome; its default, 0, is the NPD curves'
+  reference day (25 °C), 0.074 dB under the standard atmosphere at sea level.
+- Docs: JETW's arrival NPD curves give SEL - L_Amax within 0.22 dB of a point source's
+  (not 0.1 dB), Volume 3 Part 2 has no arrivals of PROP, and the NPD curves' microphone
+  height is cited from Volume 2 sections 2.5 and 4.5.4.
+- The pass-by captions average a horn's sound power over 125 ms (the Fast time constant)
+  before each place takes its share, so a short walk step no longer reads the beats
+  between its notes as louder blasts (3 to 5 dB over at 5 cm). The street's car with its
+  horn now peaks at 97.0, 93.9 and 80.5 dB(A) (was 97.1, 94.0 and 81.6), the fire
+  engine at 111.0 dB(A) on the balcony (was 111.1).
 
 ## 4.1.0
 
