@@ -189,7 +189,8 @@ def _concert(folder: Path, stadium, length_s: float, rate: int = 16_000) -> dict
             "length_s": len(x) / rate,
             "relative_db": -6.02 * k,
         }
-    concert = {"rate": rate, "format": "binaural", "gain": 0.25, "seats": seats}
+    concert = {"rate": rate, "format": "binaural", "label": "binaural", "gain": 0.25}
+    concert["seats"] = seats
     pipeline.write_json(work / "seats" / pipeline.SEATS, concert)
     return concert
 
@@ -293,6 +294,9 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
         assert crossed["seats"][listener]["lag_s"] == concert["seats"][listener]["lag_s"]
     assert demo.step("mix").done(demo.resolved(args))
     assert not demo.step("mix").done(demo.resolved(argparse.Namespace(**vars(args) | {"at": 5.0})))
+    # Through other HRTFs than these mixes (and the concert's): made again, not done.
+    kemar = argparse.Namespace(**vars(args) | {"hrtf": "kemar.sofa"})
+    assert crossed["label"] == "binaural" and not demo.step("mix").done(demo.resolved(kemar))
     with pytest.raises(SystemExit, match="give --at 1 or later"):
         demo.main(["mix", "--step", "8", "--at", "0.2"])
 

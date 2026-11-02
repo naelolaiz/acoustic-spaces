@@ -115,16 +115,27 @@ class Database:
         """The profile ``profile`` of ``aircraft`` on arrival ("A") or departure ("D"), in
         metres: from its procedural steps where the database has them and the
         aircraft's coefficients (a departure at the default weight of its stage
-        length ``stage``), else its fixed-point profile."""
+        length ``stage``), else its fixed-point profile. Procedural steps give the
+        corrected net thrust in lb (Appendix B): for an aircraft whose NPD curves'
+        power parameter is not in lb (:attr:`Aircraft.power_in_lb`) they are a
+        ValueError."""
         plane = self.performance.get(aircraft)
-        if operation == "D" and (aircraft, profile, stage) in self.departure_procedures:
+        departing = operation == "D" and (aircraft, profile, stage) in self.departure_procedures
+        arriving = operation == "A" and (aircraft, profile) in self.approach_procedures
+        if departing or arriving:
             if plane is None:
                 raise KeyError(f"{aircraft}: no performance coefficients")
-            steps = self.departure_procedures[(aircraft, profile, stage)]
-            return as_profile(departure(plane, steps, plane.weights[("D", stage)], aerodrome))
-        if operation == "A" and (aircraft, profile) in self.approach_procedures:
-            if plane is None:
-                raise KeyError(f"{aircraft}: no performance coefficients")
+            noise = self.aircraft[aircraft]
+            if not noise.power_in_lb:
+                raise ValueError(
+                    f"{aircraft}: its procedural steps give corrected net thrust in lb "
+                    "(Volume 2 Appendix B), but its NPD curves are given against "
+                    f"{noise.power_parameter!r}: take its fixed-point profile "
+                    "(fixed_point_profiles) instead"
+                )
+            if departing:
+                steps = self.departure_procedures[(aircraft, profile, stage)]
+                return as_profile(departure(plane, steps, plane.weights[("D", stage)], aerodrome))
             approach = self.approach_procedures[(aircraft, profile)]
             return as_profile(arrival(plane, approach, None, aerodrome))
         return self.fixed_point_profiles[(aircraft, operation, profile, stage)]

@@ -150,6 +150,12 @@ class Mixture(Emission):
     def __post_init__(self) -> None:
         signals = np.atleast_2d(np.asarray(self.signals, dtype=float))
         weights = np.asarray(self.weights, dtype=float)
+        if signals.ndim != 2 or signals.shape[1] < 1:
+            raise ValueError(
+                f"signals must be (K, samples) with at least one sample; got {signals.shape}"
+            )
+        if int(self.sample_rate) <= 0:
+            raise ValueError(f"the sample rate must be positive; got {self.sample_rate}")
         if weights.ndim != 3 or weights.shape[-1] != len(signals):
             raise ValueError(
                 f"weights must be (elevations, azimuths, {len(signals)}), one per signal; "
