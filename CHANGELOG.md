@@ -136,6 +136,15 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- Fixed: an example's demo that the editor's **Run demo…** runs away from the example
+  (in `~/acoustic-spaces/<example>`, or beside a copy saved elsewhere) wrote its scenes,
+  results and work among the example's files, an installed copy's too, and read the
+  example's scene rather than a copy saved as `scene.yaml`; it now gets every path in
+  full, as the Command box shows (`Demo.in_place`).
+- Fixed: the Run demo, particle export, buildings-from-a-map and Download HRTFs windows
+  are deleted once answered, instead of staying behind until the editor closes.
+- Fixed: a demo's messages pass between its process and the editor as UTF-8, so a folder
+  name outside Windows' code page no longer stops the demo.
 
 ## 4.1.0
 

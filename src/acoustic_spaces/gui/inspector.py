@@ -2125,8 +2125,9 @@ class GeometryPage(Page):
             self.failed.emit(_("{name} holds no building footprints").format(name=Path(path).name))
             return
         dialog = MapDialog(self, Path(path).name, count, properties)
-        if dialog.exec():
-            choice = dialog.choice()
+        accepted, choice = dialog.exec(), dialog.choice()
+        dialog.deleteLater()
+        if accepted:
             self.run(lambda: self.document.set_buildings_file(path, **choice))
 
     def _remove_buildings_file(self) -> None:
@@ -4292,8 +4293,10 @@ class OutputsPage(Page):
         from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
 
         dialog = HrtfDialog(self)
-        if dialog.exec() and dialog.path is not None:
-            self._set_hrtf(str(dialog.path))
+        accepted, path = dialog.exec(), dialog.path
+        dialog.deleteLater()
+        if accepted and path is not None:
+            self._set_hrtf(str(path))
 
     def _set_hrtf(self, path: str | None) -> None:
         self._hrtf = path
