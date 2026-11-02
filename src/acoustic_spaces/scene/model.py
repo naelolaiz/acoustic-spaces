@@ -2461,10 +2461,15 @@ class EarlyStage(_Model):
         description=(
             "outdoors in wind or temperature gradients, the parabolic equation that gives "
             "the sound over the open ground in the low bands and in the shadows: "
-            "narrow_angle (the Green's function one: within 0.1 dB to 1 km in the gradients "
-            "near the ground that make the weather's shadows and focusing) or wide_angle "
-            "(split-step Padé: also sound that a gradient reaching hundreds of metres up "
-            "bends back at up to 40 degrees, over many kilometres; several times the work)"
+            "narrow_angle (the Green's function one, for the gradients near the ground that "
+            "make the weather's shadows and focusing, with the wide-angle one's level where "
+            "the reflection off the ground comes in more than 15 degrees up: in the windy "
+            "preset to 1 km under "
+            "0.1 dB from a fast field program on average and 0.6 dB at most in an octave band "
+            "from 63 to 500 Hz, down to 40 dB under the free field) or "
+            "wide_angle (split-step Padé: also sound that a gradient reaching hundreds of "
+            "metres up bends back at up to 40 degrees, over many kilometres; several times "
+            "the work)"
         ),
     )
     coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(

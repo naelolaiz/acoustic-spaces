@@ -507,17 +507,22 @@ is an arc of a circle, so its travel time and its length are exact.
   for one run of `simulate` or `map`, **Parabolic equation** in the editor). The
   default, `narrow_angle`, takes the refraction as a phase shift at each step, which
   holds for sound within some 15 degrees of the horizontal and a speed of sound close to
-  the ground's. The wide-angle one (split-step Padé, as in Collins' RAM) marches the
-  field with the exact one-way operator, written as a rational function of ten terms,
-  on finite differences of fourth order in height, with the ground's impedance as its
+  the ground's, so the listeners whose reflection off the ground comes in more steeply
+  get the wide-angle one's level: within 0.05 dB of a fast field program per octave band
+  in the `windy` preset (0.09 dB per third octave), where the narrow-angle one is up to
+  0.46 dB off (1.65 dB); flatter, the narrow-angle one is up to 0.56 dB off (0.90 dB),
+  and from 10 to 15 degrees up by up to 1.2 dB (3 dB) in 10 m/s of wind over a hard
+  ground. The wide-angle one (split-step Padé, as in Collins' RAM) marches the field
+  with the exact one-way operator, written as a rational function of ten terms, on
+  finite differences of fourth order in height, with the ground's impedance as its
   boundary and a starting field of the operator's own; it carries sound at up to 45
   degrees from the horizontal through air of any speed. On the benchmark's gradients
   going on to a kilometre up it is within 0.11 dB of the fast field program to 10 km
-  (0.4 dB at 10 Hz 44 dB deep in a shadow) where the narrow-angle one strays by 3 to
-  20 dB, and in the weather presets within 0.02 dB per band on average where the
+  (0.4 dB at 10 Hz 44 dB deep in a shadow) where the narrow-angle one strays by 3 to 20
+  dB, and in the weather presets within 0.02 dB per band on average where the
   narrow-angle one is within 0.08 dB (see
-  [Validation](validation.md#the-wide-angle-parabolic-equation)). It takes three
-  to four times the work, all of it in the bands the parabolic equation gives.
+  [Validation](validation.md#the-wide-angle-parabolic-equation)). It takes three to four
+  times the work, all of it in the bands the parabolic equation gives.
 - **Off façades and barriers** the paths bend the same way, in the vertical plane the
   reflections fold them into, with the wind's mean component over their legs. A path
   that would pass over the wall, or through something on the way, is left out.

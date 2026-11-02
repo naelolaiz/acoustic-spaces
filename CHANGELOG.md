@@ -136,6 +136,13 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- With the default narrow-angle parabolic equation, outdoors in wind or temperature
+  gradients, the listeners whose reflection off the ground comes in more than 15° up
+  (near a high source or a high listener) get the wide-angle one's level: against a fast
+  field program, in 17 weathers, grounds and heights, their octave bands are 0.03 dB off
+  on average and 0.10 dB at most (0.16 and 0.87 dB before, for a listener alone), their
+  third octaves 0.04 and 0.32 dB (0.41 and 2.67 dB). No other listener's level moves,
+  and the steep listeners' bands take about four times the work.
 
 ## 4.1.0
 

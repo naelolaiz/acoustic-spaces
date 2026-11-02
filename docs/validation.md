@@ -1518,21 +1518,21 @@ loss over the bands. Each pair is at 535 m / 845 m, in dB:
 | case | weather | overall, measured | published model | this package | mean difference, published model | this package |
 |---|---|---|---|---|---|---|
 | 1 | light downwind | 22.6 / 27.5 | 21.6 / 26.6 | 23.3 / 28.9 | 1.8 / 3.2 | 1.7 / 2.3 |
-| 2 | light downwind | 22.2 / 26.7 | 21.6 / 26.8 | 23.3 / 28.9 | 1.6 / 2.8 | 1.9 / 2.7 |
+| 2 | light downwind | 22.2 / 26.7 | 21.6 / 26.8 | 23.4 / 28.9 | 1.6 / 2.8 | 1.9 / 2.7 |
 | 3 | cross/downwind | 20.8 / 26.5 | 21.4 / 26.8 | 23.1 / 28.7 | 1.8 / 2.7 | 2.2 / 2.7 |
 | 4 | cross/downwind | 20.6 / 26.3 | 21.3 / 26.9 | 23.1 / 28.6 | 2.0 / 2.7 | 2.3 / 2.6 |
 | 5 | cross/upwind | 21.0 / 26.6 | 21.0 / 25.9 | 23.0 / 28.3 | 1.9 / 2.5 | 2.0 / 2.3 |
 | 6 | cross/upwind | 20.6 / 25.7 | 20.9 / 26.0 | 22.9 / 28.2 | 1.7 / 2.8 | 2.4 / 2.7 |
 | 7 | light upwind | 21.9 / 26.2 | 20.7 / 24.9 | 22.7 / 27.7 | 2.0 / 2.2 | 2.2 / 2.2 |
 | 8 | light upwind | 22.2 / 27.0 | 20.5 / 25.1 | 22.7 / 27.9 | 2.2 / 2.2 | 2.3 / 2.1 |
-| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.8 | 3.2 / 8.3 | 2.0 / 2.6 |
+| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.8 | 3.2 / 8.3 | 1.9 / 2.6 |
 | 10 | strong upwind | 23.1 / 27.2 | 19.9 / 50.0 | 22.1 / 27.9 | 3.1 / 7.7 | 2.0 / 2.5 |
 
 In the eight cases other than strong upwind (light winds, and cross winds in cases 3 to
 6), this package is about as close to the measurements as the authors' model: 1.7 to 2.4 dB per band on average at 535 m, 2.1 to 2.7 dB at 845
 m, against their 1.6 to 2.2 and 2.2 to 3.2 dB; the spread of the measurements over the
 five minutes is 1 to 3 dB. From 80 to 160 Hz this package loses more than was
-measured, 2.6 to 6.1 dB on average over those bands at 845 m and up to 4.2 dB at 535 m,
+measured, 2.6 to 6.0 dB on average over those bands at 845 m and up to 4.2 dB at 535 m,
 which puts its overall loss at 845 m 0.9 to 2.6 dB above the measured one. With the
 same inputs the authors' model loses 3.4 to 5.2 dB less than this package in those
 bands, from 4.3 dB less to 1.3 dB more than was measured. This package's parabolic
@@ -1556,11 +1556,11 @@ to 980 and 1230 m from those 119 and 167 m up (the script prints this for every 
 with a shadow), so only the lowest one is in shadow there, and the loss stays within
 about 1 dB of the measured one overall.
 
-The data gives no measure of the eddies. With `--turbulence moderate` the overall
-losses drop by up to 0.4 dB at 845 m and 0.2 dB at 535 m, as the eddies fill the ground
-dip a little; the mean differences move by 0.3 dB at most, better at 845 m in the nine
-other cases and 0.2 dB worse in case 8. In cases 9 and 10 the overall loss at 845 m comes to
-27.5 dB, against 27.4 and 27.2 measured.
+The data gives no measure of the eddies. With `--turbulence moderate` the overall losses
+drop by up to 0.4 dB at 845 m and 0.2 dB at 535 m, as the eddies fill the ground dip a
+little; the mean differences move by 0.3 dB at most, better at 845 m in the nine other
+cases and 0.2 dB worse in case 8. In cases 9 and 10 the overall loss at 845 m comes to
+27.4 and 27.5 dB, against 27.4 and 27.2 measured.
 
 ## Turbulence against a parabolic equation through random eddies
 
@@ -2481,14 +2481,50 @@ Each band of the wide-angle equation marches a grid of twenty points per wavelen
 its highest frequency in steps of three wavelengths, ten tridiagonal solves a step,
 where the narrow-angle one takes a pair of Fourier transforms a step on a grid half as
 fine, in steps of five wavelengths: three to four times the work, all of it in the
-bands the parabolic equation gives. The narrow-angle equation's step is not converged
-for a high source (a one-off check): for one 30 m up, 180 m away, a step an eighth as
-long moves the 100 Hz band by up to 0.8 dB, so a level can also move by up to about
-0.75 dB with the other listeners in its direction, whose ranges break the run's steps;
-the wide-angle equation is converged at its step, and the helicopter's scenes use it.
-Neither equation is checked against measurements
+bands the parabolic equation gives. Neither equation is checked against measurements
 in strong refraction, and neither is combined with a terrain yet (see
 [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
+
+**Steep sound.** The narrow-angle equation's phase shift at each step strays for sound
+that comes in steeply, and its step is not converged: each step also adds an error at
+the ground that shrinks with the height step, not the range step, so on its grid of
+heights shorter steps add up more of it. From 1 m up to 1.5 m up, 200 m downwind in the
+`windy` preset over grass, the 63 Hz band is 0.21 dB under the fast field program in
+steps of five wavelengths, 0.21 dB over it in steps of one and 0.93 dB over it in steps
+a 32nd as long. So in wind or temperature gradients, with the narrow-angle equation too,
+the listeners that the reflection off the ground reaches more than 15 degrees up get the
+wide-angle equation's level (in still air the narrow-angle one is exact but at the
+ground and keeps them). Against the program in the `windy` preset downwind and upwind
+over grass, from sources 5, 10, 30 and 120 m up to a listener 1.5 m up and from 1.5 m up
+to 30 m up, from 1.5 times their heights added (10 m at least) to 1 km away, where the
+level is above -15 dB re free field, the mean (largest) difference in dB:
+
+| bands | 15° or flatter, narrow-angle | steeper, narrow-angle | steeper, narrow-angle, half its step | steeper, wide-angle |
+|---|---|---|---|---|
+| octaves, 63 to 500 Hz | 0.09 (0.56) | 0.10 (0.46) | 0.09 (0.37) | 0.01 (0.05) |
+| third octaves, 50 to 250 Hz, sources 10 to 120 m up | 0.15 (0.90) | 0.23 (1.65) | 0.15 (0.90) | 0.03 (0.09) |
+
+A quarter of the narrow-angle step leaves the steep points 0.10 (0.40) and 0.18 (0.59)
+dB off. In 17 cases outside that set (`clear_night`, `sunny_day` with 3 m/s of wind, and
+5 and 10 m/s of wind down- and upwind; over grass and over a ground of 2000 kPa s/m²;
+sources 20 to 60 m up, listeners 1.5 and 4 m up; the 63 and 125 Hz octaves and the third
+octaves from 80 to 160 Hz) the steep points' octave bands are 0.16 (0.87) dB off with
+the narrow-angle equation, 0.17 (0.91) dB at half its step and 0.03 (0.10) dB with the
+wide-angle one, their third octaves 0.41 (2.67), 0.33 (2.18) and 0.04 (0.32) dB. In
+those cases the narrow-angle equation is about as far off just under 15 degrees, from 10
+to 15 degrees up: 0.12 (1.23) dB per octave band and 0.35 (3.02) dB per third octave. So
+the level jumps at 15 degrees by the narrow-angle equation's error there: in the 27
+geometries of both sets, per octave band from 63 to 500 Hz by 0.12 dB on average and up
+to 0.89 dB (125 Hz, from 60 m up to 4 m up, upwind in 10 m/s of wind over the hard
+ground), per third octave from 50 to 500 Hz by 0.26 dB and up to 2.2 dB, where the level
+is above -15 dB re free field; at the five largest jumps in each kind of band the
+wide-angle side is within 0.31 dB of the program and the narrow-angle side up to 2.2 dB
+off. Other listeners in the same direction, whose ranges break a run's steps, move a
+steep level by less than 0.001 dB, the wide-angle equation being converged at its step,
+and a flatter one as before, by up to 0.53 dB per third octave from 50 to 500 Hz and 0.17
+dB per octave band (a source 30 m up, downwind in the `windy` preset, listeners 47 m to 1
+km away). The steep listeners' bands take the wide-angle equation's work, about four times
+the narrow-angle one's.
 
 ## Terrain against closed forms and the exact wedge
 
