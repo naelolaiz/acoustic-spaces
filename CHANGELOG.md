@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Docs: the TSI table gives each unit's whole pass over Tp, beside EN ISO 3095:2013's own
+  time windows for a coach or a wagon; the glazing's traffic figure is rated from its
+  octaves, 29 - 4 + 9.6 = 34.6 dB; the FTA curves' docs say how `Curve.levels` reads
+  them outside 10 to 300 ft.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early

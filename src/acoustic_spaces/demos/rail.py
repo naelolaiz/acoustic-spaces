@@ -178,6 +178,8 @@ CATEGORIES: dict[int, Category] = {
         },
         (
             Row(5, 41.0, (-30, -21, -13, -9, -6, -4, -9, -17)),
+            # The sheet's Ein-System-Version (a unit for one power supply system); its
+            # Zwei- and Drei-System-Version have a_A 46 and 47 dB, the shares the same.
             Row(6, 44.0, (-27, -21, -12, -8, -5, -5, -11, -19)),
             Row(7, 45.0, (-16, -9, -7, -7, -7, -9, -12, -19)),
             Row(8, 56.0, (-35, -24, -13, -4, -5, -7, -14, -25)),

@@ -1012,26 +1012,27 @@ km/h) unless `--speed` says.
   [Validation](validation.md#sirens-and-road-vehicles-against-their-rules).
 - **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors`): a listener 0.5 to 2 m in
   front of a building's wall, where ISO 1996-2 measures in front of a façade, hears the
-  pass in the room behind it, and the others hear it outdoors. The railway's
-  `house_18m` stands 2 m in front of a house 20 m from the track; the street's pavement
-  and balcony stand in front of its houses and its offices. `train_and_rumble` plays the
-  train through the room's closed window and the rumble the ground's vibration makes in
-  it, `train` the train alone, `rumble` the rumble alone (`tram_and_rumble` and `tram`
-  for the tram). The room is EN ISO 12354-3's, not the building's geometry: AGC's
-  4-16-4 double glazing as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82
-  m² of it into a room of 50 m³. Each octave band in the room is the simulated level at
-  the listener, the façade's reflection in it, less D_2m,nT = R + 10 lg(V / (6 T0 S)),
-  the window's sound reduction index plus 9.6 dB (`acoustic_spaces.facade`); for
-  traffic's spectrum that is Rw + Ctr + 9.6 = 34.6 dB; the S-Bahn's, higher in
-  frequency, loses 39.6 dB(A) at the railway's house (86.8 dB(A) outdoors, 47.1 in the
-  room). The rumble is the FTA's general method (see [Vibration
+  pass in the room behind it, and the others hear it outdoors. The railway's `house_18m`
+  stands 2 m in front of a house 20 m from the track; the street's pavement and balcony
+  stand in front of its houses and its offices. `train_and_rumble` plays the train
+  through the room's closed window and the rumble the ground's vibration makes in it,
+  `train` the train alone, `rumble` the rumble alone (`tram_and_rumble` and `tram` for
+  the tram). The room is EN ISO 12354-3's, not the building's geometry: AGC's 4-16-4
+  double glazing as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82 m² of
+  it into a room of 50 m³. Each octave band in the room is the simulated level at the
+  listener, the façade's reflection in it, less D_2m,nT = R + 10 lg(V / (6 T0 S)), the
+  window's sound reduction index plus 9.6 dB (`acoustic_spaces.facade`); for traffic's
+  spectrum that is Rw + Ctr + 9.6 = 29 - 4 + 9.6 = 34.6 dB, with ISO 717-1's rating of
+  AGC's values in octave bands, 29 (-1; -4) dB (AGC's 30 is rated from third octaves);
+  the S-Bahn's, higher in frequency, loses 39.6 dB(A) at the railway's house (86.8 dB(A)
+  outdoors, 47.1 in the room). The rumble is the FTA's general method (see [Vibration
   through the ground](outdoor.md#vibration-through-the-ground)) at each moment of the
   pass: the train's curve at the distance from its nearest wheels to the room's wall
-  behind the listener, the floor 3 dB over the ground, its rooms' rumble 50 dB under that
-  in dB(A), played as noise in the third octave at 25 Hz, the same in both ears: in the
-  railway's house 27.5 dB(A) for the S-Bahn and 41.3 for the regional
-  train. The room's own reverberation is not added, and the sound keeps the direction it
-  comes from outdoors.
+  behind the listener, the floor 3 dB over the ground, its rooms' rumble 50 dB under
+  that in dB(A), played as noise in the third octave at 25 Hz, the same in both ears: in
+  the railway's house 27.5 dB(A) for the S-Bahn and 41.3 for the regional train. The
+  room's own reverberation is not added, and the sound keeps the direction it comes from
+  outdoors.
 - **What is felt**: each listener's caption gives how hard the floor of its house, or
   outdoors the ground under it, shakes at most during the pass, in VdB (the FTA's
   curves, which are the ground's), and whether that is felt, from about 65 VdB (the
