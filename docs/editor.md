@@ -163,7 +163,9 @@ The editor works on the same scene files as the command line.
   vehicle at `--speed`, say. When only listeners walk, each source is traced to all their
   places at once, so the views do not move them. While a demo encodes its video, the
   views show what the video shows at that moment: the listener of each pass of the
-  tour in turn, the sources that play, and the walkers where the video has them.
+  tour in turn, the sources that play, and the walkers where the video has them. A
+  head a demo turns (the gallery walk's look round) faces as it does then, as it is
+  rendered and in the video; arrows and directivity balloons turn with it.
 - **View > Show leaks** traces rays from the sources and shows where they escape from a
   model that is not closed: its open edges, the escaping rays and a marker on each gap,
   with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It

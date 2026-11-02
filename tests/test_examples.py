@@ -1103,11 +1103,17 @@ def test_lakeside_demo_plays_a_song_of_your_own(tmp_path: Path, monkeypatch) -> 
     assert music.own_song_problems(demo.DEMO, compressed) is None
 
 
-def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:
+def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
     """walk_demo.py writes the gallery with the guide speaking at the level IEC 60268-16
     gives that voice and the visitor standing round the corner; it cuts from the walk to
     the turn at a pause in the talk; and its pictures name the moments of the tour."""
     demo = _script("gallery", "walk_demo")
+    # The head tracker's head turns as --turn scripts it, and says which way it faces.
+    head = demo.turning([0.0, 10.0], [0.0, 90.0], 90.0, 10.0, every_s=0.0)
+    assert head(5.0) == (45.0, 0.0, 0.0)
+    assert capsys.readouterr().out == (
+        "guide -> standing facing 135.0 deg: turning the head, 5.0 of 10.0 s\n"
+    )
     args = _demo_args(
         demo.DEMO,
         source=example_path("gallery"),
@@ -1281,7 +1287,9 @@ def test_walk_pictures_name_the_moments_and_draw(tmp_path: Path) -> None:
         assert picture.getbbox() is not None
     # The video's messages: the visitor at the moment of its walk, then standing.
     assert drawing.shown(5.0, "visitor", "standing") == "guide -> visitor @ 5.00 s"
-    assert drawing.shown(16.6 + 12.0, "visitor", "standing") == "guide -> standing"
+    assert drawing.shown(16.6 + 12.0, "visitor", "standing") == (
+        "guide -> standing facing 180.0 deg"
+    )
 
 
 # --------------------------------------------------------------------------- the demo code

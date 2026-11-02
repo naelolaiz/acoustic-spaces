@@ -6,10 +6,12 @@ line of a step on sources and listeners begins with them: ``hall: early reflecti
 ``hall -> seat: rendering binaural``, ``car #12 @ 3.40 s: stochastic ray tracing``, the
 last a place along a walk (:func:`~acoustic_spaces.walkthrough.place_name`); a demo's
 video names what each moment of it shows, ``stage, car @ 3.40 s -> seat: encoding the
-video, ...`` (:func:`~acoustic_spaces.walkthrough.moment_name`). :class:`RunFocus` reads
-those names from each line: the views ring the sources and listeners they are, and at a
-place along a walk draw every walker of the run where it is at that place's time, on
-the walks the run simulates (:class:`RunView`).
+video, ...`` (:func:`~acoustic_spaces.walkthrough.moment_name`), and a head it turns
+with its yaw, ``guide -> standing facing 90.0 deg: turning the head, ...``
+(:func:`~acoustic_spaces.walkthrough.facing_name`). :class:`RunFocus` reads those names
+from each line: the views ring the sources and listeners they are, turn each to its yaw,
+and at a place along a walk draw every walker of the run where it is at that place's
+time, on the walks the run simulates (:class:`RunView`).
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from types import MappingProxyType
 from typing import Any
 
 from acoustic_spaces.gui.movement import KINDS, on_path, path_of, pose_at
-from acoustic_spaces.walkthrough import Knots, movers, place_of
+from acoustic_spaces.walkthrough import Knots, facing_of, movers, place_of
 
 #: Where a line's names end: the first colon and space.
 _HEAD = ": "
@@ -31,6 +33,9 @@ _PAIR = " -> "
 _AND = ", "
 #: One point of a line or surface source: ``hall (2)``.
 _POINT = re.compile(r"(?P<name>.+) \(\d+\)")
+#: A name a line gives: the source's or listener's, the time of the place along its walk
+#: and its yaw (degrees), when it gives them.
+_Named = tuple[str, float | None, float | None]
 #: No walks to follow.
 _NO_WALKS: Mapping[tuple[str, str], Knots] = MappingProxyType({})
 
@@ -40,11 +45,13 @@ class RunView:
     """What the views show of a run: the sources and listeners it works on, as (kind,
     name) pairs, and the time (s) of the place along a walk it simulates, None when at
     none, with the walks it simulates, (kind, name) to their knots (compared as the same
-    object: knots hold arrays)."""
+    object: knots hold arrays); and the yaw (degrees) of each it turns, as a scripted
+    head turn has it then, ((kind, name), yaw) pairs."""
 
     names: frozenset[tuple[str, str]] = frozenset()
     time: float | None = None
     walks: Mapping[tuple[str, str], Knots] = field(default=_NO_WALKS, compare=False)
+    facing: tuple[tuple[tuple[str, str], float], ...] = ()
 
     def same(self, other: RunView) -> bool:
         """Whether the views show ``other`` as they show this."""
@@ -54,11 +61,18 @@ class RunView:
         """Where the views draw ``item``, a source or listener of ``kind``: at a place of
         the run, where the run's walk has it then (standing still when the run does not
         walk it); else where the Movement panel's ``playhead`` has it
-        (:func:`~acoustic_spaces.gui.movement.pose_at`)."""
+        (:func:`~acoustic_spaces.gui.movement.pose_at`). Turned to the run's yaw for it,
+        when it gives one."""
         if self.time is None:
-            return pose_at(item, playhead)
-        path = self.walks.get((kind, item.name))
-        return item if path is None else on_path(item, path, self.time)
+            shown = pose_at(item, playhead)
+        else:
+            path = self.walks.get((kind, item.name))
+            shown = item if path is None else on_path(item, path, self.time)
+        yaw = dict(self.facing).get((kind, item.name))
+        if yaw is None:
+            return shown
+        turned = shown.orientation.model_copy(update={"yaw": yaw})
+        return shown.model_copy(update={"orientation": turned})
 
 
 #: Nothing to show: no run, or one that names nothing.
@@ -89,24 +103,31 @@ class RunFocus:
         self._walks: Mapping[tuple[str, str], Knots] | None = None
         self.view = NO_RUN
 
-    def named(self, line: str) -> tuple[list[tuple[str, str]], tuple[str, float] | None]:
-        """The scene's sources and listeners that ``line`` begins with, as (kind, name),
-        and the walker and time of the place it names, if any."""
+    def named(
+        self, line: str
+    ) -> tuple[list[tuple[str, str]], tuple[str, float] | None, dict[tuple[str, str], float]]:
+        """The scene's sources and listeners that ``line`` begins with, as (kind, name);
+        the walker and time of the place it names, if any; and the yaw of each it says
+        is turned (:func:`~acoustic_spaces.walkthrough.facing_name`)."""
         head, colon, _rest = line.strip().partition(_HEAD)
         if not colon:
-            return [], None
-        named, place = [], None
+            return [], None, {}
+        named: list[tuple[str, str]] = []
+        place, facing = None, {}
         for side in head.split(_PAIR):
             found = self._names(side.strip())
             if found is None:
-                return [], None  # not a step on sources and listeners
-            for name, at in found:
-                named.append((self._kinds[name], name))
+                return [], None, {}  # not a step on sources and listeners
+            for name, at, yaw in found:
+                pair = (self._kinds[name], name)
+                named.append(pair)
                 if at is not None and place is None:
                     place = (name, at)
-        return named, place
+                if yaw is not None:
+                    facing[pair] = yaw
+        return named, place, facing
 
-    def _names(self, side: str) -> list[tuple[str, float | None]] | None:
+    def _names(self, side: str) -> list[_Named] | None:
         """The scene's sources or listeners that one side of a line's head names: one,
         or several between commas; None unless each names one."""
         alone = self._name(side)
@@ -120,9 +141,18 @@ class RunFocus:
             found.append(name)
         return found
 
-    def _name(self, part: str) -> tuple[str, float | None] | None:
-        """The scene's source or listener ``part`` names (itself, one of its points or a
-        place along its walk), with the place's time; None when it names none."""
+    def _name(self, part: str) -> _Named | None:
+        """The scene's source or listener ``part`` names (itself, one of its points, a
+        place along its walk, each turned to a yaw or not), with the place's time and
+        the yaw; None when it names none."""
+        found = self._named(part)
+        if found is not None:
+            return (*found, None)
+        turned = facing_of(part)
+        found = None if turned is None else self._named(turned[0])
+        return None if found is None or turned is None else (*found, turned[1])
+
+    def _named(self, part: str) -> tuple[str, float | None] | None:
         point = _POINT.fullmatch(part)
         for label in (part, point["name"] if point else None):
             if label is None:
@@ -143,7 +173,7 @@ class RunFocus:
         sources alone keeps the listeners of the line before (a pass-by names its
         listener, then each place of the vehicle); a line that names nothing shows
         nothing."""
-        named, place = self.named(line)
+        named, place, facing = self.named(line)
         sources = {pair for pair in named if pair[0] == "sources"}
         listeners = {pair for pair in named if pair[0] == "listeners"}
         if sources and not listeners:
@@ -156,7 +186,7 @@ class RunFocus:
                 self._walks = self._read_walks()
             if any(name == place[0] for _kind, name in self._walks):
                 time, walks = place[1], self._walks
-        view = RunView(frozenset(sources | listeners), time, walks)
+        view = RunView(frozenset(sources | listeners), time, walks, tuple(sorted(facing.items())))
         changed = not view.same(self.view)
         self.view = view
         return changed

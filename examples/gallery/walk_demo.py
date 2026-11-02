@@ -453,6 +453,33 @@ def yaws_of(walked, room) -> np.ndarray:
     return np.full(len(walked.points.times), visitor_of(room.scene).orientation.yaw)
 
 
+def turning(times, yaws, facing: float, length_s: float, every_s: float = 0.5):
+    """The head tracker's ``head`` (yaw at ``t`` s from ``times`` and ``yaws``, pitch and
+    roll 0) that says, at most every ``every_s`` of the run, which way the head faces
+    then (:func:`~acoustic_spaces.walkthrough.facing_name`, ``facing`` the yaw it starts
+    from) and how far the turn has come: ``guide -> standing facing 90.0 deg: turning the
+    head, 12.0 of 40.0 s``."""
+    import time
+
+    from acoustic_spaces.walkthrough import facing_name
+
+    said = [-math.inf]
+
+    def head(t: float) -> tuple[float, float, float]:
+        yaw = float(np.interp(t, times, yaws))
+        now = time.monotonic()
+        if now - said[0] >= every_s:
+            said[0] = now
+            print(
+                f"guide -> {facing_name(STANDING, facing + yaw)}: turning the head, "
+                f"{t:.1f} of {length_s:.1f} s",
+                flush=True,
+            )
+        return yaw, 0.0, 0.0
+
+    return head
+
+
 def turn(args) -> None:
     """The turn: the visitor where the scene's listener standing is, simulated there
     once, the talk from the first cut through its response in Ambisonics, turned against
@@ -481,11 +508,11 @@ def turn(args) -> None:
     keys = turn_of(args)
     times, yaws = [t for t, _ in keys], [yaw for _, yaw in keys]
     dry = resample(x[int(first * rate) : int(second * rate)], rate, rate_out)
+    facing = standing[0].orientation.yaw
     print(f"turning the head through {len(keys)} keys")
-    wet = tracker.run(dry, head=lambda t: (float(np.interp(t, times, yaws)), 0.0, 0.0))
+    wet = tracker.run(dry, head=turning(times, yaws, facing, len(dry) / rate_out))
     out = args.work / "turn"
     write(out / f"turn.{label_of(args)}.wav", wet, rate_out)
-    facing = standing[0].orientation.yaw
     pipeline.write_json(
         out / TURNING,
         {

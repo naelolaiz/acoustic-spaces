@@ -5,7 +5,8 @@
 - Editor: **View > Follow the run** rings the sources and listeners a run's step works
   on, a demo's too, and draws a walking source and the run's other walkers where the
   place being simulated has them, on the walks the run simulates (`Demo.walks`); while
-  a demo's video is encoded, what the video shows at that moment.
+  a demo's video is encoded, what the video shows at that moment; a head a demo turns
+  faces as it does then, its arrows and directivity balloon with it.
 - Demos: the video's messages say what it shows at each moment, `stage, car @ 3.40 s
   -> seat: encoding the video, 12.1 of 60.0 s`, in place of ffmpeg's frame counter.
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
