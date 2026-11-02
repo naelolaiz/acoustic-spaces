@@ -57,7 +57,9 @@ How it works:
   one decay time to describe it.
 - G needs the source's free-field level: `--free-field ff.wav --distance 3` uses a
   measurement of the same source in free field (or with reflections windowed out),
-  and `--reference-energy 0.01` suits responses made by `simulate`.
+  and `--reference-energy 0.01` suits responses made by `simulate`. `simulate
+  --normalize` scales every file of a run by one gain, its `ir_gain` in
+  `parameters.json`, and those take 0.01 × `ir_gain`².
 - `analyze` also prints the STI and STIPA of the room alone and the echo criteria.
   `--lateral 2` takes channel 2 as a figure of eight with its null on the source, for
   LF, LFC and LJ; `--ambisonic` reads first-order AmbiX (W, Y, Z, X) facing the source,
@@ -88,8 +90,9 @@ for ir in result.impulse_responses.T:
 A model is checked against the room it stands for by comparing its parameters with
 those measured there. `compare` analyses a simulated and a measured impulse response
 the same way, each at its own sample rate, and shows band by band how far apart they
-are in just noticeable differences (JNDs, ISO 3382-1:2009, annex A): 5 % of the
-measured EDT, T20 and T30, 1 dB of C50, C80 and G, 0.05 of D50 and 10 ms of Ts.
+are in just noticeable differences (JNDs): 5 % of the measured EDT, 1 dB of C80 and G,
+0.05 of D50 and 10 ms of Ts, as ISO 3382-1:2009 gives them (annex A), and by analogy 5 %
+of the measured T20 and T30 and 1 dB of C50.
 
 ```sh
 acoustic-spaces simulate hall.yaml --out sim
@@ -133,8 +136,9 @@ EDT (s)           4 of 8           2.0
   above half a response's sample rate.
 - Each file has its own channel (`--simulated-channel`, `--measured-channel`, 1 by
   default) and its own reference for G, given as for `analyze`:
-  `--simulated-reference-energy 0.01` suits responses made by `simulate`, and the
-  measured side takes `--measured-free-field` with `--measured-distance`, or
+  `--simulated-reference-energy 0.01` suits responses made by `simulate` (0.01 ×
+  `ir_gain`² with `--normalize`, as above), and the measured side takes
+  `--measured-free-field` with `--measured-distance`, or
   `--measured-reference-energy`. G is compared only when both sides have one.
 - `--filters` and `--no-noise` apply to both files. `--json` writes every value and
   reason, and `--plot` overlays the two decays in each octave band (viz extra).

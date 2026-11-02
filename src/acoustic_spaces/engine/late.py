@@ -501,7 +501,8 @@ def stochastic_energy(
     time limit on that. With ``directions`` (unit vectors in room coordinates), each
     arrival is also counted at the nearest of them, every ``DIRECTION_STEP``.
 
-    With ``splitting``, a first tenth of the rays measures how much energy a ray
+    With ``splitting``, a first tenth of the rays (at least ``MIN_FIRST_RAYS``, or half
+    of them when there are fewer than twice that) measures how much energy a ray
     usually carries over time; the rest are split when they carry much more and thinned
     out by Russian roulette when they carry much less (a weight window). The result is
     unbiased either way, but late tails in rooms where a few rays escape the absorption

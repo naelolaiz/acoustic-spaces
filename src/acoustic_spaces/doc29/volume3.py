@@ -6,13 +6,14 @@ aircraft that rely on no ANP data: a rear-engined jet (JETF), a wing-engined jet
   route at a hypothetical aerodrome (:data:`CASES`), and the sound exposure levels
   Volume 3 gives at its receptors (its Appendix A and B, tables A-1 and A-6 to A-12
   and B-1, as its workbook gives them).
-- Part 2, the flight performance: JETW and PROP flying departure and approach
-  procedures at aerodromes of other elevations, temperatures, pressures and headwinds
-  (:func:`profile_cases`), and the fixed-point profiles Volume 3 gives for them (its
-  Appendix C and D, tables C-1 to C-8 and D-1 and D-2). The approach procedures are as
-  its table C-6.2 prints them, to 0.1 ft, kt and degree, which its profiles are
-  computed from (its workbook has more digits); the lengths of its Level-Idle steps,
-  which the table gives in the column of the descent angle, are their distances.
+- Part 2, the flight performance: JETW flying departure and approach procedures and
+  PROP departure procedures (Volume 3 gives no arrivals of PROP) at aerodromes of other
+  elevations, temperatures, pressures and headwinds (:func:`profile_cases`), and the
+  fixed-point profiles Volume 3 gives for them (its Appendix C and D, tables C-1 to C-8
+  and D-1 and D-2). The approach procedures are as its table C-6.2 prints them, to 0.1
+  ft, kt and degree, which its profiles are computed from (its workbook has more
+  digits); the lengths of its Level-Idle steps, which the table gives in the column of
+  the descent angle, are their distances.
 
 The tables are read as the ANP database's are.
 """
@@ -28,6 +29,7 @@ import numpy as np
 from .noise import Event, event, impedance_db
 from .path import Segment, Track, flight_path, lowest_approach_node
 from .performance import (
+    KPA_PER_INHG,
     Aerodrome,
     ApproachStep,
     DepartureStep,
@@ -133,7 +135,7 @@ def impedance() -> float:
     """The impedance adjustment at the aerodrome's temperature and pressure (dB; table
     A-9, the standard atmosphere's: 0.074 dB)."""
     row = read_rows(DATA / "meteorological.csv")[0]
-    pressure_kpa = float(row["Pressure (inHg)"]) * 3.386389
+    pressure_kpa = float(row["Pressure (inHg)"]) * KPA_PER_INHG
     return impedance_db(float(row["Temperature (degC)"]), pressure_kpa)
 
 
