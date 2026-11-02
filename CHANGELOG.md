@@ -7,6 +7,18 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Walks with Doppler keep each place's path filters only while the blocks that use them
+  are rendered, and from three channels on as the paths' shaping and the format's gains:
+  the street example's car walk at the default 0.25 m step holds 0.74 GiB of them
+  instead of up to 23.2 GiB in third-order Ambisonics and 15.9 GiB in 7.0.4, with the
+  same results. `simulate_movement` merges a mover's moments into places in
+  milliseconds, where 4000 moments took 12 s.
+- Walks with Doppler round each path's reading cutoff down to 32 / n of the Nyquist
+  frequency, n the taps it needs on each side, so that the paths share a few tables of
+  taps: a 2 s street pass builds 8 instead of 188 and renders about a fifth faster. The
+  sound changes almost only above 20 kHz (99 % of the difference lies above 20.6 kHz):
+  by about 4 to 7 % of the amplitude of white noise through it, under 0.1 % below
+  20 kHz.
 
 ## 4.1.0
 

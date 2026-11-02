@@ -603,16 +603,13 @@ def simulate_movement(
         # One copy per distinct place: the same while it stands still.
         places: list[int] = []  # the moment each place was first seen at
         at: list[int] = []  # each moment's place
+        # Each place by its position and angles, as floats: -0.0 is 0.0.
+        seen: dict[tuple[float, ...], int] = {}
         for k in range(len(times)):
-            for j, first in enumerate(places):
-                if np.array_equal(positions[k], positions[first]) and np.array_equal(
-                    angles[k], angles[first]
-                ):
-                    at.append(j)
-                    break
-            else:
-                at.append(len(places))
+            j = seen.setdefault((*positions[k].tolist(), *angles[k].tolist()), len(places))
+            if j == len(places):
                 places.append(k)
+            at.append(j)
         names = tuple(place_name(item.name, j, times[first]) for j, first in enumerate(places))
         copies[kind, item.name] = tuple(names[j] for j in at)
         added[kind] += [
