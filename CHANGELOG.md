@@ -136,6 +136,15 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- Fixed: `airfoil_noise.thicknesses` gave a lightly tripped boundary layer
+  (`LIGHTLY_TRIPPED`) the heavily tripped suction-side fits instead of the untripped
+  ones of Brooks, Pope and Marcolini's code: a 0.3048 m chord in 71.3 m/s was 1.3 dB too
+  loud in TBL-TE noise at 8 degrees and 3.4 dB too quiet at 12. The helicopter's blades,
+  tripped or not, are unchanged.
+- Docs: the AS350 B3's main rotor turns at 394 rpm, the most in powered flight with its
+  Arriel 2B engine and so the speed appendix J flies; its tail rotor's 2,086 rpm is
+  NASA's, no longer assumed; its tones agree with Farassat's formulation to 7.5 x 10⁻⁶
+  (main rotor) and 1.6 x 10⁻⁵ (tail rotor), not 10⁻⁵.
 
 ## 4.1.0
 
