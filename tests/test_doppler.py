@@ -22,7 +22,7 @@ from acoustic_spaces.spatial import Ambisonics, Binaural, Loudspeakers, Mono
 from acoustic_spaces.spatial.directions import fibonacci_sphere
 from acoustic_spaces.spatial.hrtf import HRTF
 from acoustic_spaces.spatial.microphone import first_order, xy
-from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
+from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_movement, simulate_walk
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
 
@@ -73,10 +73,22 @@ def test_doppler_is_off_unless_asked_and_round_trips(tmp_path: Path) -> None:
     assert Scene.from_yaml(path).sources[0].walk.doppler is True
 
 
-def test_doppler_needs_a_walk_slower_than_sound_and_no_wave_solver() -> None:
-    scene = reference.scene("source", 400.0, "hard")
+@pytest.mark.parametrize("doppler", [True, False])
+@pytest.mark.parametrize("walker", ["source", "listener"])
+def test_every_walk_goes_slower_than_sound(walker: str, doppler: bool) -> None:
+    """With Doppler or without, a walk as fast as sound or faster is refused before
+    anything is simulated: shock waves are not simulated."""
+    room = Room.from_scene(reference.scene(walker, 400.0, "hard", doppler))
     with pytest.raises(ValueError, match="as fast as sound or faster"):
-        simulate_walk(Room.from_scene(scene), step_m=10.0, late_step_m=None)
+        simulate_walk(room, step_m=10.0, late_step_m=None)
+    with pytest.raises(ValueError, match="as fast as sound or faster"):
+        simulate_movement(room, step_m=10.0)
+    # Just slower than sound is a walk.
+    room = Room.from_scene(reference.scene(walker, 330.0, "hard", doppler))
+    assert len(simulate_walk(room, step_m=40.0, late_step_m=None).names) > 1
+
+
+def test_doppler_needs_no_wave_solver() -> None:
     scene = reference.scene("source", 30.0, "hard")
     data = scene.model_dump(mode="json", exclude_none=True)
     data["simulation"]["wave"] = {"enabled": True}

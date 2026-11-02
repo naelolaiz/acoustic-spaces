@@ -927,23 +927,40 @@ def summed(mixes: Sequence[np.ndarray]) -> np.ndarray:
     return out
 
 
+#: How long a sound's power is averaged over around each moment before each place
+#: takes its share (s): 125 ms, the time constant of IEC 61672-1's Fast time weighting,
+#: so that a place is no louder or quieter for the beats between a horn's notes, many
+#: a second, its step happens to fall on.
+LOUDNESS_WINDOW_S = 0.125
+
+
 def blocks_loudness(x: np.ndarray, rate: int, at: np.ndarray, rms: float) -> np.ndarray:
     """How loud ``x`` (at ``rate``) is around each of the times ``at`` (s), in energy
-    against a sound of RMS ``rms``: its mean square from halfway to the time before to
-    halfway to the next (the first from the start, the last to the end), over
-    ``rms`` squared; 0 where none of ``x`` is."""
+    against a sound of RMS ``rms``: its mean square, averaged over
+    :data:`LOUDNESS_WINDOW_S` around each moment (over the part of that inside ``x`` at
+    its ends), from halfway to the time before to halfway to the next (the first from
+    the start, the last to the end), over ``rms`` squared; 0 where none of ``x`` is."""
     at = np.asarray(at, dtype=float)
     if len(at) == 0:
         return np.zeros(0)
+    power = np.asarray(x, dtype=float) ** 2
+    if power.ndim > 1:
+        power = power.mean(axis=tuple(range(1, power.ndim)))
+    n = len(power)
+    half = int(round(LOUDNESS_WINDOW_S * rate / 2.0))
+    total = np.concatenate([[0.0], np.cumsum(power)])
+    k = np.arange(n)
+    lo, hi = np.maximum(k - half, 0), np.minimum(k + half + 1, n)
+    smooth = (total[hi] - total[lo]) / np.maximum(hi - lo, 1)
     middle = (at[1:] + at[:-1]) / 2.0
-    edges = np.concatenate([[0.0], middle, [len(x) / rate]])
+    edges = np.concatenate([[0.0], middle, [n / rate]])
+    starts = np.round(np.clip(edges[:-1], 0.0, n / rate) * rate).astype(int)
+    ends = np.round(np.clip(edges[1:], 0.0, n / rate) * rate).astype(int)
+    run = np.concatenate([[0.0], np.cumsum(smooth)])
+    inside = ends > starts
     out = np.zeros(len(at))
-    for k in range(len(at)):
-        lo = int(round(max(edges[k], 0.0) * rate))
-        hi = int(round(min(edges[k + 1], len(x) / rate) * rate))
-        if hi > lo:
-            out[k] = float(np.mean(np.asarray(x[lo:hi], dtype=float) ** 2)) / rms**2
-    return out
+    out[inside] = (run[ends[inside]] - run[starts[inside]]) / (ends[inside] - starts[inside])
+    return out / rms**2
 
 
 def sounded(passing, loud: np.ndarray):
@@ -1294,15 +1311,7 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     if not path.exists():
         raise SystemExit(f"error: no {path}; run first: {demo.command('walk', args)}")
     facts = pipeline.read_json(path)
-    seats = pipeline.seats_of(folder, demo.command("walk", args))
-    wanted = pipeline.output_label(args)
-    if seats.get("label") != wanted:
-        raise SystemExit(
-            f"error: the passes in {folder} are mixed {pipeline.label_text(seats.get('label'))}"
-            f", and this run asks for them {pipeline.label_text(wanted)}: give the video the "
-            f"--format and --hrtf the walk had, or mix the passes again: "
-            f"{demo.command('walk', args)}"
-        )
+    seats = pipeline.seats_of(folder, demo.command("walk", args), args)
     facts = heard_only(args, facts, demo.command("walk", args))
     stops = stops_of(facts, seats, demo.command("walk", args))
     audio = pipeline.tour_audio(stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0)
@@ -1337,6 +1346,7 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
         stills=moments,
         no_mp4=args.no_mp4,
         chapters=[f"{pictures.mmss(stop.at)} {stop.key.replace('_', ' ')}" for stop in stops],
+        shown=drawing.shown_at,
     )
 
 
