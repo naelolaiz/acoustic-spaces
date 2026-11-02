@@ -1076,11 +1076,13 @@ send each way, as an `Emission` for a walk with Doppler (see
   speed and angle of attack from the blades' trimmed pitch (`rotorcraft.pitch`), its
   bands moved by its own Doppler shift. A `Rotor` gives the blades' twist, lift
   slope, trailing edge and tips, and whether their boundary layers are tripped.
-  `rotorcraft.broadband(trim, ..., model="bpm")` picks one model for a call.
-- `AS350_B3` is an Airbus Helicopters AS350 B3 at its maximum mass of 2,250 kg, from
-  its type certificate and NASA's flight tests of the type; its main blades' chord
-  and twist and its tail rotor's speed, chord and thickness are assumed (the source
-  code says which is which).
+  `rotorcraft.broadband(trim, ..., model="bpm")` picks one model for a call. BPM's sum
+  over the blades does not depend on the noise's length: `rotorcraft.bpm_powers` finds
+  it once, for `broadband(..., bands=...)` to send the noise at any length.
+- `AS350_B3` is an Airbus Helicopters AS350 B3 at its maximum mass of 2,250 kg, from its
+  type certificate and NASA's flight tests of the type; its main blades' chord and twist
+  and its tail rotor's chord and thickness are assumed (the source code says which is
+  which).
 
 ```python
 from acoustic_spaces import rotorcraft
@@ -1091,14 +1093,14 @@ sent = rotorcraft.emission(trim, seconds=30.0)  # 48 kHz: tones and broadband no
 sound = render_walk(walk, {"helicopter": sent})  # its walk with doppler: true
 ```
 
-The tones agree with Gutin's formula for a hovering rotor and with Farassat's
-formulation in time, blade point by blade point, to within 10⁻⁵ of the loudest
-harmonic; Pegg's worked example comes out as he gives it, and the airfoil self-noise
-matches the two sample outputs of its authors' code to within 0.01 dB (see
+The tones agree with Gutin's formula for a hovering rotor to within 3 x 10⁻¹⁵, and with
+Farassat's formulation in time, blade point by blade point, to within 7.5 x 10⁻⁶ of the
+loudest harmonic for the AS350 B3's main rotor and 1.6 x 10⁻⁵ for its tail rotor; Pegg's
+worked example comes out as he gives it, and the airfoil self-noise matches the two
+sample outputs of its authors' code to within 0.01 dB (see
 [Validation](validation.md#helicopter-rotors-against-theory-and-a-certified-level)).
-Flying the AS350 B3 over a microphone as its noise certification does, 150 m up at
-63 m/s, the two models fall on either side of the certified 84.6 dB(A) of sound
-exposure:
+Flying the AS350 B3 over a microphone as its noise certification does, 150 m up at 63
+m/s, the two models fall on either side of the certified 84.6 dB(A) of sound exposure:
 
 | broadband noise | sound exposure level | against the certified 84.6 dB(A) | main rotor's broadband alone |
 |---|---|---|---|
