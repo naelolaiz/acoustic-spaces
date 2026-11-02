@@ -66,3 +66,13 @@ c80 = both.value("c80", band=4)  # one value per point, 1 kHz
 plot_map(both, "c80.png", parameter="c80", room=result.room)
 show_room(result.room, coverage=both, parameter="sti")
 ```
+
+Maps do not run the wave solver: whatever `simulation.wave` says, their lowest bands
+come from the early paths, in pressure up to `simulation.early.coherent_max_band_hz`
+(see [Low frequencies](simulation.md#low-frequencies-early-reflections-in-pressure)),
+and the rays. For a small room's modes, put listeners where they matter and run them
+with the [wave solver](simulation.md#low-frequencies-the-wave-solver). Nor do maps give
+ISO 3382-3's quantities for open-plan offices (D2,S, Lp,A,S,4m, the distraction distance
+rD and the privacy and comfort distances); listeners on a line from an omnidirectional
+source with the standard's speech spectrum and level give the A-weighted level and the
+STI they are read from (see [Simulation](simulation.md)).

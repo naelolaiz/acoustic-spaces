@@ -7,6 +7,11 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: coverage maps of scenes with the wave solver on, which maps do not run, add the
+  early paths in pressure up to `coherent_max_band_hz` as documented, rather than in
+  energy. In the `room_modes` example's map G rises by 1.8 dB on average at 63 Hz and
+  1.2 dB at 125 Hz (up to 4.7 and 3.5 dB), C50 and C80 by up to 7.6 and 6.6 dB, and EDT
+  falls by up to 31 %; the bands from 250 Hz up do not move.
 
 ## 4.1.0
 

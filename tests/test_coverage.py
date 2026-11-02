@@ -243,6 +243,25 @@ def test_statistical_map_matches_listeners_at_its_points() -> None:
         np.testing.assert_allclose(values["g"][k], g, atol=0.01)
 
 
+def test_maps_ignore_the_wave_solver() -> None:
+    """Maps do not run the wave solver, so turning it on leaves them as they are: the
+    lowest bands still add the early paths in pressure up to coherent_max_band_hz
+    (125 Hz), rather than dropping them to energy as a listener does for the wave's
+    bands to take their place."""
+    simulation = {
+        "early": {"method": "image_sources", "max_order": 2},
+        "late": {"method": "stochastic_ray_tracing", "rays": 1000},
+        "ir_length_s": 0.5,
+        "seed": 2,
+    }
+    g = {}
+    for wave in (False, True):
+        room = _shoebox(simulation={**simulation, "wave": {"enabled": wave}})
+        result = coverage_map(room, settings=Coverage(spacing=2.0), threads=2)
+        g[wave] = result.get().values["g"]
+    np.testing.assert_allclose(g[True], g[False], rtol=0, atol=1e-9)
+
+
 def test_short_responses_end_within_the_fine_late_slots() -> None:
     # 105 ms: the late energy has coarse slots, but the far points end before them.
     simulation = {

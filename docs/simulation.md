@@ -128,10 +128,16 @@ The directions the sound arrives from give more of them:
 - T30 of figures of eight facing forward, left and up from the listener: where sound
   keeps running between two hard walls, the decay along that axis is longer.
 - STI and STIPA (IEC 60268-16) and U50, at the level the source's `level_db` gives and
-  the background noise of `coverage.noise_db`, as the coverage maps take them (NaN,
-  like G, when a band from 125 Hz up is undefined); and the echo criteria of Dietsch
-  and Kraak for speech and music, from the response filtered to the 1 kHz octave for
-  speech and to the two octaves about 1.4 kHz (0.7 to 2.8 kHz) for music.
+  the background noise of `coverage.noise_db`, as the coverage maps take them (NaN, like
+  G, when a band from 125 Hz up is undefined); and the echo criteria of Dietsch and
+  Kraak for speech and music, from the response filtered to the 1 kHz octave for speech
+  and to the two octaves about 1.4 kHz (0.7 to 2.8 kHz) for music. ISO 3382-3's
+  quantities for open-plan offices are not computed (the spatial decay rate D2,S, the
+  speech level at 4 m Lp,A,S,4m, the distraction distance rD and the privacy and comfort
+  distances): listeners on a line from an omnidirectional source given the standard's
+  normal speech spectrum as its `level_db` per band (57.4 dB(A) at 1 m in free field)
+  give the A-weighted level and the STI, with `coverage.noise_db` as the background
+  noise, to read them from.
 
 The echogram adds the arrivals in energy, as ODEON and CATT do, except the early
 reflections in the lowest bands, which add in pressure (see
@@ -436,7 +442,9 @@ simulation:
   scatter about the echogram's (see [Turbulence](outdoor.md#turbulence)).
 - The late part still adds in energy: its rays stand for many paths with random phases.
   So do the points of a line or surface source, which are uncorrelated.
-- With the wave solver up to the same band or higher, its bands take their place.
+- At a listener, the wave solver's bands take their place when it runs up to the same
+  band or higher. Coverage maps do not run it, and keep the paths in pressure whatever
+  `simulation.wave` says (see [Coverage maps](coverage-maps.md)).
 
 ```sh
 python examples/listening_room/bass.py

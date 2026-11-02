@@ -603,3 +603,7 @@ Next:
 - [ ] A microphone's measured on-axis response and measured patterns (files), as
   sources have.
 - [ ] Spaced pairs whose late parts correlate as real capsules' do at low frequencies.
+- [ ] ISO 3382-3's quantities for open-plan offices on a line of positions, with its
+  normal speech spectrum and the background noise: the spatial decay rate D2,S and
+  Lp,A,S,4m fitted to the speech level against distance, and the distraction, privacy
+  and comfort distances from the STI and the level along the line.

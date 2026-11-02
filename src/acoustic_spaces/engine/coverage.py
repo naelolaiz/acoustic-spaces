@@ -34,7 +34,7 @@ from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine import run_size
-from acoustic_spaces.engine.coherent import coherent_energy
+from acoustic_spaces.engine.coherent import band_count, coherent_energy
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel, free_field_energy
 from acoustic_spaces.engine.refracted import direct_times, refraction_for
@@ -47,7 +47,6 @@ from acoustic_spaces.engine.simulate import (
     _seed,
     _transition,
     check_late_method,
-    coherent_bands,
     response_length,
 )
 from acoustic_spaces.engine.turbulence import Eddies
@@ -730,9 +729,11 @@ def _trace_part(
     candidates = _candidates(
         model, position, sim.early.method, sim.early.max_order, sim.early.rays, threads
     )
-    # Indoors a line's or a surface's points add in energy; outdoors each point's own
-    # paths add in pressure, for the ground dip.
-    coherent = coherent_bands(sim, model.absorption.shape[1])
+    # Maps do not run the wave solver, so the lowest bands add in pressure up to
+    # coherent_max_band_hz whatever simulation.wave says. Indoors a line's or a
+    # surface's points add in energy; outdoors each point's own paths add in pressure,
+    # for the ground dip.
+    coherent = band_count(sim.early.coherent_max_band_hz, model.absorption.shape[1])
     coherent = coherent if single or room.outdoor is not None else 0
     diffraction = edges.diffraction(
         sim.early.diffraction,
@@ -850,6 +851,10 @@ def coverage_map(
     for female speech when the source's spectrum is ``speech_female``. In the map of
     all sources together, each source's sound arrives ``delay_ms`` later. Outdoors,
     every point also has its level relative to free field (``re_free_field``).
+
+    Maps do not run the wave solver: whatever ``simulation.wave`` says, the lowest bands
+    come from the early paths, in pressure up to ``early.coherent_max_band_hz``, and
+    the rays.
 
     ``grid`` takes the place of the one the settings give, so that two runs of a scene
     share their points (:func:`~acoustic_spaces.engine.insertion.coverage_map`).
