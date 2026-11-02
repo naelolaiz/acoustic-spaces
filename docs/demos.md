@@ -1108,7 +1108,7 @@ take 14.3 s at 63 m/s.
   crabwise would: a wind along its track, or none, suits it best. The demo's scene
   (`scene_demo.yaml`) has the helicopter alone with the sound power per octave band and
   the directivity of its rotors' sound at that airspeed, the directivity in a table
-  beside it (`scene_demo_helicopter.csv`): 138.9 dB, 133.1 dB(A) in the example, which
+  beside it (`scene_demo_helicopter.csv`): 137.7 dB, 132.9 dB(A) in the example, which
   its own scene has too.
 - **Its sound** is what the rotors send each way: each harmonic of each rotor's blade
   passing frequency with a pattern and a phase of its own, and broadband noise. Each
@@ -1186,7 +1186,7 @@ listeners.
 - **The helicopter and its pass** are the flyover demo's steps on that scene:
   `helicopter` its rotors' sound, `scene` the helicopter alone (`scene_overhead.yaml`)
   with the sound power and the directivity of its rotors at 63 m/s through still air
-  (138.3 dB, 132.9 dB(A)), and `walk` the helicopter every 4 m along its flight at
+  (137.1 dB, 132.8 dB(A)), and `walk` the helicopter every 4 m along its flight at
   each of the 12 listeners, with Doppler. At the mix position it peaks at about
   81 dB(A) (about 74 from 330 m), where the sound system's loudspeakers, simulated at
   their sound power, give 97 dB(A): it is some 15 dB under the music, heard most in the

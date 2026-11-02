@@ -33,7 +33,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from acoustic_spaces import synthesis
 from acoustic_spaces.directivity import (
     GRID_STEP_DEG,
     Balloon,
@@ -44,7 +43,7 @@ from acoustic_spaces.directivity import (
     on_grid,
     sphere_mean,
 )
-from acoustic_spaces.materials.bands import Resolution, band_centres
+from acoustic_spaces.materials.bands import Resolution, exact_limits
 
 #: Samples of the signals' spectra, one stretch after another, for their band powers;
 #: also how many samples a periodic sound is read in at a time.
@@ -80,7 +79,9 @@ class Emission:
     def directivity(self, bands: Resolution = "octave", name: str = "") -> Balloon:
         """The emission's directivity: its energy in each band and direction, on the
         grid ``GRID_STEP_DEG`` apart that measured balloons use, over the sphere's
-        mean."""
+        mean. The bands are IEC 61260-1's, between their base-10 edges
+        (:func:`~acoustic_spaces.materials.bands.exact_limits`), as in
+        :meth:`sound_power_db`."""
         return Balloon.from_table(self._grid_powers(bands), name)
 
     def sound_power_db(
@@ -89,26 +90,44 @@ class Emission:
         """The sound power level (dB re 1 pW) in each band of an emission that sends
         the far field's pressure 1 m from the source (Pa): its mean square over the
         sphere times 4π m² over the air's impedance, ``density`` times
-        ``sound_speed``."""
+        ``sound_speed``.
+
+        The bands are IEC 61260-1's octaves or third octaves, as ideal filters between
+        their base-10 edges (:func:`~acoustic_spaces.materials.bands.exact_limits`):
+        the 63 Hz octave holds what is sent from 44.7 to 89.1 Hz and the 8 kHz octave
+        what is sent from 5.6 to 11.2 kHz. What is sent below the lowest band's lower
+        edge (such as a rotor's blade passing at 20 Hz) or above the highest's upper
+        edge is in no band."""
         watts = 4.0 * np.pi * sphere_mean(self._grid_powers(bands)) / (density * sound_speed)
         return 10.0 * np.log10(np.maximum(watts, 1e-30) / 1e-12)
 
     def _grid_powers(self, bands: Resolution) -> np.ndarray:
         """(elevations, azimuths, bands) the mean square sent each way of the grid
-        ``GRID_STEP_DEG`` apart, in each band."""
+        ``GRID_STEP_DEG`` apart, in each IEC band (:func:`_in_bands`)."""
         elevation, azimuth = _grid(GRID_STEP_DEG)
         ways = _from_angles(azimuth[None, :], elevation[:, None]).reshape(-1, 3)
         return self._powers(bands, ways).reshape(len(elevation), len(azimuth), -1)
 
     def _powers(self, bands: Resolution, directions: np.ndarray) -> np.ndarray:
         """(n, bands) the mean square of the sound sent the ways ``directions`` (n, 3),
-        in each band."""
+        in each IEC band (:func:`_in_bands`)."""
         raise NotImplementedError
+
+
+def _in_bands(n: int, rate: float, bands: Resolution) -> np.ndarray:
+    """(n // 2 + 1, bands) which of the IEC 61260-1 ``bands`` each frequency of the
+    real FFT of ``n`` samples at ``rate`` lies in: 1 from a band's lower base-10 edge
+    up to its upper one (:func:`~acoustic_spaces.materials.bands.exact_limits`), 0
+    elsewhere, so that a frequency below the lowest band or above the highest is in
+    none."""
+    f = np.fft.rfftfreq(n, 1.0 / rate)[:, None]
+    lower, upper = exact_limits(bands)
+    return ((f >= lower) & (f < upper)).astype(float)
 
 
 def _band_powers(spectra: np.ndarray, gains: np.ndarray, n: int) -> np.ndarray:
     """(..., bands) the mean square in each band of ``n`` samples whose real FFT is
-    ``spectra`` (..., n // 2 + 1), shared out by ``gains`` (n // 2 + 1, bands)."""
+    ``spectra`` (..., n // 2 + 1), weighted by ``gains`` (n // 2 + 1, bands)."""
     power = np.abs(spectra) ** 2 / float(n) ** 2
     # Each bin but the first (and the last, for an even n) stands for two frequencies.
     power[..., 1 : (n + 1) // 2] *= 2.0
@@ -166,8 +185,7 @@ class Mixture(Emission):
 
     def _powers(self, bands: Resolution, directions: np.ndarray) -> np.ndarray:
         size = min(self.length, _SEGMENT)
-        # The band gains add up to one: they share each frequency's power out.
-        gains = synthesis.band_gains(size, self.sample_rate, len(band_centres(bands))).T
+        gains = _in_bands(size, self.sample_rate, bands)
         starts = range(0, self.length - size + 1, size)
         powers = sum(
             _band_powers(np.fft.rfft(self.signals[:, s : s + size], axis=1), gains, size)
@@ -312,7 +330,7 @@ class Periodic(Emission):
     def _powers(self, bands: Resolution, directions: np.ndarray) -> np.ndarray:
         n = self.table.shape[-1]
         # The FFT of one period holds its harmonics: bin k at k periods a second.
-        gains = synthesis.band_gains(n, n / self.period_s, len(band_centres(bands))).T
+        gains = _in_bands(n, n / self.period_s, bands)
         powers = _band_powers(np.fft.rfft(self.table, axis=-1), gains, n)
         return on_grid(powers, _unit(directions) @ self.axes.T)
 

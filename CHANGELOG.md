@@ -7,6 +7,14 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Changed: an emission's sound power and directivity (`Emission.sound_power_db`,
+  `directivity`) are now in IEC 61260-1 octaves between their band edges, 44.7 Hz to
+  11.2 kHz, not in the auralization's crossover bands, whose 63 Hz band reached down to
+  0 Hz and whose 8 kHz band up to half the sample rate. The helicopter's `level_db` and
+  `helicopter.csv` are regenerated: in helicopter_flyover 130.7 dB at 63 Hz (was 134.8,
+  with the main rotor's 19.7 and 39.4 Hz tones), 120.2 dB at 8 kHz (121.7) and 132.9
+  dB(A) (133.1); in stadium_concert 129.8 (134.0), 120.1 (121.6) and 132.8 dB(A)
+  (132.9).
 
 ## 4.1.0
 
