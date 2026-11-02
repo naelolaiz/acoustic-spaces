@@ -53,6 +53,8 @@ def _analytic_images(source: np.ndarray, max_order: int) -> dict[tuple, int]:
         # Symmetric placement: some paths reflect exactly on edges and corners.
         ((2.0, 3.0, 1.5), (6.0, 3.0, 1.2)),
         ((4.0, 3.0, 1.5), (4.0, 3.0, 1.6)),
+        # The path off the wall x = 0 and the floor reflects exactly in their corner.
+        ((2.0, 2.0, 1.0), (4.0, 4.5, 2.0)),
     ],
 )
 def test_early_paths_match_analytic_image_sources(method, source, listener) -> None:

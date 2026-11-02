@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 
@@ -277,9 +278,10 @@ class TraceModel:
         if self.transmission is not None:
             self.transmission = np.ascontiguousarray(self.transmission, dtype=np.float64)
 
-    @property
+    @cached_property
     def transparent(self) -> np.ndarray:
-        """(F,) faces that let all sound through in every band: openings."""
+        """(F,) faces that let all sound through in every band: openings (worked out once,
+        as the early stage asks for every reflection point it places)."""
         if self.transmission is None:
             return np.zeros(len(self.face_plane), dtype=bool)
         return np.all(self.transmission >= 1.0, axis=1)

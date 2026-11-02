@@ -7,6 +7,18 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: an early reflection whose point lies exactly on the foot of a wall, partition
+  or barrier standing on the surface it reflects off, and which goes on behind it, now
+  meets it there as it does beside the foot: through it with its transmission loss, or
+  stopped by a rigid one; it passed whole (with image sources twice). In the apartment
+  example a 0.7 m map's bedroom column at x = 8.0 m read 51 dB(A) instead of about 45
+  like its neighbours, and behind a 3 m barrier a listener placed symmetrically to the
+  source got 6 to 27 dB more early sound than 1 cm either side.
+- Fixed: no early path reflects off an opening any more. With edge diffraction those
+  paths, which carried no energy, had stood in for the reflection bending round the
+  opening's edge, so levels throughout a room with a 2 m doorway move by up to 1.8 dB at
+  63 Hz, 1.5 dB at 125 Hz and 0.2 dB above, and no longer step by 2 dB where the
+  reflection crosses the doorway's side.
 
 ## 4.1.0
 

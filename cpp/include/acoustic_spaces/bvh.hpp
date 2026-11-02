@@ -109,6 +109,10 @@ public:
     // Length of the model's bounding box diagonal; used to scale tolerances.
     double scale() const { return scale_; }
 
+    // Hits closer than this to a ray's origin are not reported, so that a ray leaving a
+    // face does not meet it again where it starts.
+    double min_distance() const { return 1e-9 * scale_; }
+
     // Whether p lies inside the model's bounding box, grown by `pad` on every side.
     bool encloses(const Vec3 &p, double pad) const {
         return p.x >= lower_.x - pad && p.x <= upper_.x + pad && p.y >= lower_.y - pad &&
@@ -361,7 +365,7 @@ private:
     template <typename Visit>
     void traverse(const Vec3 &origin, const Vec3 &dir, std::int64_t ignore, Visit visit,
                   double &limit) const {
-        const double t_min = 1e-9 * scale_;
+        const double t_min = min_distance();
         const Vec3 inv{1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z};
         struct Pending {
             std::uint32_t node;

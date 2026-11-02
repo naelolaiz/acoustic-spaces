@@ -13,7 +13,9 @@ from scipy.linalg import expm
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.cli import main
 from acoustic_spaces.engine import TraceModel, coverage_map
+from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.diffraction import find_edges
+from acoustic_spaces.engine.edge_fade import _nearest_face
 from acoustic_spaces.engine.particles import trace_particles
 from acoustic_spaces.engine.simulate import early_paths
 from acoustic_spaces.parameters import decay_curve
@@ -463,6 +465,51 @@ def test_paths_through_three_partitions_are_not_lost(tmp_path: Path) -> None:
     np.testing.assert_allclose(responses[1].energy(), responses[0].energy(), rtol=1e-9)
 
 
+@pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
+def test_a_reflection_at_the_foot_of_a_partition_passes_through_it(
+    tmp_path: Path, method: str
+) -> None:
+    """Listeners 3 m behind a 30 dB partition, as in the apartment example's bedroom,
+    where the reflection off the floor lies on the partition's foot (x = 8), or less
+    than the tolerances away: the reflection passes the partition once, as 1 mm either
+    side, and the early paths' energy is theirs. At x = 8 it had passed the foot whole,
+    and with image sources a second time as off the partition, the floor and the
+    partition at that point: 20 to 24 dB more."""
+    obj = _coupled(tmp_path / "rooms.obj", 5, 5, 4, 3)
+    materials = {
+        "wall": _flat(0.1, scattering=0.0),
+        "partition": _flat(0.1, scattering=0.0, transmission_loss=30),
+    }
+    assignments = {"room1": "wall", "room2": "wall", "partition": "partition"}
+    # The floor reflection at x = 2.5 + (x - 2.5) / 2.2. Just short of x = 8 the leg to
+    # the listener meets the partition within the early stage's tolerance of the floor,
+    # where the partition counts as the floor; just past it the leg to the source meets
+    # the partition nearer than the intersection test's least distance, then farther.
+    xs = (7.999, 8.0 - 1e-6, 8.0, 8.0 + 1e-8, 8.0 + 3e-7, 8.0 + 1e-6, 8.001)
+    energy, floor, orders = [], [], []
+    for x in xs:
+        scene = _scene(
+            obj,
+            materials,
+            assignments,
+            {"l": [x, 2.0, 1.2]},
+            source=[2.5, 1.0, 1.0],
+            early={"max_order": 3, "method": method, "diffraction": "none"},
+        )
+        paths = early_paths(Room.from_scene(scene))
+        energy.append(paths.energy.sum(axis=0))
+        orders.append(np.bincount(paths.order).tolist())
+        (on_floor,) = [
+            i for i in np.flatnonzero(paths.order == 1) if abs(paths.points[i][1][2]) < 1e-5
+        ]
+        assert paths.crossings[on_floor] == 1
+        floor.append(paths.energy[on_floor])
+    assert all(counts == orders[0] for counts in orders)
+    for found in (energy, floor):
+        ends = (found[0] + found[-1]) / 2
+        np.testing.assert_allclose(found, np.broadcast_to(ends, (len(xs), 8)), rtol=1e-3)
+
+
 def test_diffraction_bends_round_a_doorway(tmp_path: Path) -> None:
     # The opening is a hole for diffraction: its sides and lintel are free edges of the
     # partition, and sound bends round them to a listener out of sight in the next room.
@@ -487,6 +534,88 @@ def test_diffraction_bends_round_a_doorway(tmp_path: Path) -> None:
     room = Room.from_scene(closed)
     assert not np.any(find_edges(TraceModel.from_room(room)).wedge == 2.0)
     assert len(early_paths(room)) == 0
+
+
+@pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
+def test_no_path_reflects_off_an_opening(tmp_path: Path, method: str) -> None:
+    """An opening reflects nothing: where the reflection off the wall would lie in the
+    doorway, no path reflects there. It had been found with no energy."""
+    obj = _coupled(tmp_path / "door.obj", 4, 6, 4, 3, opening=(1.5, 2.5, 0.0, 2.0))
+    scene = _scene(
+        obj,
+        {"wall": _flat(0.1, scattering=0.0), "door": {"transmission": 1}},
+        {"room1": "wall", "room2": "wall", "partition": "wall", "opening": "door"},
+        {"l": [2.0, 2.0, 1.0]},  # the reflection off x = 4 at y = 2.09, z = 1.26
+        early={"max_order": 2, "method": method, "diffraction": "none"},
+    )
+    room = Room.from_scene(scene)
+    transparent = TraceModel.from_room(room).transparent
+    paths = early_paths(room)
+    assert np.any(paths.order > 0)
+    assert not any(transparent[faces].any() for faces in paths.faces)
+
+
+def _doorway(path: Path) -> Path:
+    """A 10 x 8 x 3 m room with a doorway from x = 4 to 6, as high as the room, in its
+    wall y = 0; the floor and the ceiling in three pieces that meet the doorway's
+    sides."""
+    xs = [0.0, 4.0, 6.0, 10.0]
+    width, height = 8.0, 3.0
+    groups: dict[str, list] = {"walls": [], "door": [], "floor": [], "ceiling": []}
+    for x0, x1, name in zip(xs[:-1], xs[1:], ("walls", "door", "walls"), strict=True):
+        groups[name].append(((x0, 0, 0), (x1, 0, 0), (x1, 0, height), (x0, 0, height)))
+        groups["floor"].append(((x0, 0, 0), (x0, width, 0), (x1, width, 0), (x1, 0, 0)))
+        groups["ceiling"].append(
+            ((x0, 0, height), (x1, 0, height), (x1, width, height), (x0, width, height))
+        )
+    groups["walls"] += [
+        ((0, width, 0), (0, width, height), (10, width, height), (10, width, 0)),
+        ((0, 0, 0), (0, 0, height), (0, width, height), (0, width, 0)),
+        ((10, 0, 0), (10, width, 0), (10, width, height), (10, 0, height)),
+    ]
+    return _write(path, groups)
+
+
+def test_no_step_where_a_reflection_crosses_a_doorway_s_side(tmp_path: Path) -> None:
+    """Where the reflection off the wall crosses the side of a doorway in it, from the
+    doorway onto the wall 2 mm along, the level steps by less than 0.1 dB in every band:
+    the edge diffraction bends the reflection round the doorway's side on both sides
+    of it. The reflection off the doorway, found with no energy, had taken the place of
+    that term on the doorway's side: 2.0 dB at 63 Hz and 0.1 to 0.6 dB above."""
+    obj = _doorway(tmp_path / "doorway.obj")
+    levels = []
+    for x in (7.999, 8.001):  # the reflection at x = 3 + (x - 3) * 0.6
+        scene = _scene(
+            obj,
+            {"hard": _flat(0.05, scattering=0.05), "open": {"transmission": 1}},
+            {"walls": "hard", "floor": "hard", "ceiling": "hard", "door": "open"},
+            {"l": [x, 2.0, 1.5]},
+            source=[3.0, 3.0, 1.5],
+            early={"max_order": 3, "diffraction": "first_order"},
+        )
+        levels.append(10 * np.log10(total_energy(early_paths(Room.from_scene(scene)))))
+    assert np.abs(levels[1] - levels[0]).max() < 0.1
+
+
+def test_the_face_nearest_to_a_point_in_a_doorway_is_the_wall_beside_it(
+    tmp_path: Path,
+) -> None:
+    """The edge fade gives a reflection off its faces, next to the leg that stops its
+    path, the face of its plane nearest to the point. In a doorway that is the wall
+    beside it, as an opening reflects nothing; it had been the doorway, which the point
+    lies in and which absorbs all sound."""
+    scene = _scene(
+        _doorway(tmp_path / "doorway.obj"),
+        {"hard": _flat(0.05), "open": {"transmission": 1}},
+        {"walls": "hard", "floor": "hard", "ceiling": "hard", "door": "open"},
+        {"l": [5.0, 4.0, 1.5]},
+    )
+    model = TraceModel.from_room(Room.from_scene(scene))
+    point = np.array([5.5, 0.0, 1.5])
+    plane = model.face_plane[np.flatnonzero(model.transparent)[0]]
+    face = _nearest_face(model, plane, point)
+    assert not model.transparent[face]
+    assert model.room.mesh.triangles[face][:, 0].min() == 6.0  # the wall from x = 6 on
 
 
 def test_particles_and_the_wave_solver_pass_openings(tmp_path: Path) -> None:

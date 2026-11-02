@@ -921,6 +921,8 @@ NB_MODULE(_native, m) {
              "Per ray, whether any face lies within t_max of its origin (ignoring face "
              "ignore[i]).")
         .def_prop_ro("scale", &as::Bvh::scale)
+        .def_prop_ro("min_distance", &as::Bvh::min_distance,
+                     "Hits closer than this to a ray's origin are not reported.")
         .def("layout", &bvh_layout,
              "The tree as flat arrays (see Bvh::layout in bvh.hpp), for tracing elsewhere: "
              "boxes (nodes x 6), first, count, faces and triangles (faces x 9).");

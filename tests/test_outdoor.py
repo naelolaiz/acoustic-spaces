@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import early_paths
+from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.coverage import coverage_map, map_grid
 from acoustic_spaces.engine.diffraction import find_edges
 from acoustic_spaces.engine.model import TraceModel
@@ -202,6 +203,51 @@ def test_a_barrier_diffracts_over_its_top_and_round_its_ends() -> None:
     assert np.all(paths.edge >= 0)  # the screen hides the direct sound and the ground
     over = math.dist([0, 0, 1], [5, 0, 3]) + math.dist([5, 0, 3], [15, 0, 1.5])
     assert paths.distance_m.min() == pytest.approx(over)
+
+
+@pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
+def test_a_barrier_stops_the_reflection_off_the_ground_at_its_foot(method: str) -> None:
+    """A source 5 m in front of a barrier 3 m high and listeners 5 m behind it, as high
+    as the source: for the middle one the reflection off the ground meets the barrier
+    right at its foot, where the barrier stops it as it does 1 cm either side. It had
+    passed there whole."""
+    geometry = {
+        "ground": {"margin": 20},
+        "barriers": [{"name": "screen", "path": [[5, -10], [5, 10]], "height": 3}],
+    }
+    for x in (9.99, 10.0, 10.01):
+        scene = outdoor(
+            geometry,
+            sources=[(0, 0, 1)],
+            listeners=[(x, 0, 1)],
+            early={"method": method, "max_order": 3, "diffraction": "none"},
+        )
+        assert len(early_paths(Room.from_scene(scene))) == 0
+
+
+def test_the_reflection_at_a_barrier_s_foot_bends_over_it_as_beside_it() -> None:
+    """As above, with the edge diffraction: the reflection off the ground that the
+    barrier stops right at its foot bends over its top there as it does 1 cm either
+    side, so the early level of the middle listener, and of one 3 nm farther (the
+    barrier then lies nearer to the end of the leg from the source than that leg is
+    tested), lies within 0.1 dB of the mean of theirs in every band. Neither leg had met
+    the barrier at its foot, so the edge diffraction took the reflection for one that
+    reaches the listener and left its terms out: 1.4 to 3.1 dB more."""
+    geometry = {
+        "ground": {"margin": 20},
+        "barriers": [{"name": "screen", "path": [[5, -10], [5, 10]], "height": 3}],
+    }
+    levels = []
+    for x in (9.99, 10.0, 10.0 + 3e-9, 10.01):
+        scene = outdoor(
+            geometry,
+            sources=[(0, 0, 1)],
+            listeners=[(x, 0, 1)],
+            early={"max_order": 2, "diffraction": "first_order"},
+        )
+        levels.append(10 * np.log10(total_energy(early_paths(Room.from_scene(scene)))))
+    beside = (levels[0] + levels[-1]) / 2
+    assert np.abs(np.array(levels[1:-1]) - beside).max() < 0.1
 
 
 def test_inside_corners_of_buildings_do_not_diffract() -> None:
