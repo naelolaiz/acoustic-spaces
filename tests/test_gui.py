@@ -54,7 +54,7 @@ from acoustic_spaces.gui.tune_dialog import FOLLOW, MAKE_DEFAULT, TuneDialog  # 
 from acoustic_spaces.gui.viewport import placement_position  # noqa: E402
 from acoustic_spaces.gui.worker import MapJob, SimulationJob  # noqa: E402
 from acoustic_spaces.room import Room  # noqa: E402
-from acoustic_spaces.scene import Scene  # noqa: E402
+from acoustic_spaces.scene import Material, Scene  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 
@@ -182,6 +182,32 @@ def test_saving_an_example_copies_its_files(qapp, tmp_path: Path) -> None:
     assert "file: concert_hall.obj" in (tmp_path / "hall" / "scene.yaml").read_text()
     assert document.scene.geometry.file == (tmp_path / "hall" / "concert_hall.obj").resolve()
     assert not document.modified
+
+
+def test_saving_with_copies_points_the_signals_and_recording_at_them(qapp, tmp_path: Path) -> None:
+    """The sources' signals and the scene's recording are copied along with its other
+    files, and the scene names the copies (it named the originals, by absolute path)."""
+    old, new, newer = tmp_path / "old", tmp_path / "new", tmp_path / "newer"
+    (old / "sounds").mkdir(parents=True)
+    for name in ("voice.wav", "song.wav"):
+        write_wav(old / "sounds" / name, np.zeros(800), 8000)
+    document = Document(box_scene(), old / "scene.yaml")
+
+    def sounds(data: dict) -> None:
+        data["sources"][0]["signal"] = "sounds/voice.wav"
+        data["recording"] = "sounds/song.wav"
+
+    document.edit("sounds", sounds)
+    document.save(new / "scene.yaml", copy_files=True)
+    assert document.scene.sources[0].signal == (new / "sounds" / "voice.wav").resolve()
+    assert document.scene.recording_file == (new / "sounds" / "song.wav").resolve()
+    saved = (new / "scene.yaml").read_text(encoding="utf-8")
+    assert "signal: sounds/voice.wav" in saved and "recording: sounds/song.wav" in saved
+    # The document keeps each original's latest copy.
+    document.save(newer / "scene.yaml", copy_files=True)
+    voice = str((newer / "sounds" / "voice.wav").resolve())
+    assert document.copies[str((old / "sounds" / "voice.wav").resolve())] == voice
+    assert document.copies[str((new / "sounds" / "voice.wav").resolve())] == voice
 
 
 def test_saving_copies_the_element_file_of_an_inline_array(qapp, tmp_path: Path) -> None:
@@ -815,6 +841,66 @@ def test_scene_yaml_panel(window, qapp, tmp_path: Path) -> None:
     # written as the scene holds it, with the system's separators.
     model = Path(example_path("shoebox")).resolve().parent / "shoebox.obj"
     assert f"file: {model}\n" in panel.view.toPlainText() and not panel.edited()
+
+
+def test_scene_yaml_panel_takes_another_preset(window, qapp) -> None:
+    """A material's coefficients and source show in the text only where its preset does
+    not give them, so another preset applied in the text gives that preset's (the old
+    preset's stayed, written next to it)."""
+    panel = window.yaml_panel
+    window.docks["yaml"].toggleViewAction().trigger()
+    qapp.processEvents()
+    text = panel.view.toPlainText()
+    assert "  plaster:\n    preset: plasterboard\n    audience: false\n  floor:\n" in text
+    panel.view.setPlainText(text.replace("preset: plasterboard", "preset: carpet_thin", 1))
+    assert panel.apply()
+    material, carpet = window.document.scene.materials["plaster"], Material(preset="carpet_thin")
+    assert material.absorption == carpet.absorption
+    assert material.absorption[4:] == [0.2, 0.35, 0.4, 0.4]  # plasterboard's: 0.04 to 0.05
+    assert material.source == carpet.source and "carpet_thin" in material.source
+
+
+def test_scene_yaml_text_applied_after_a_save_elsewhere_keeps_its_files(
+    window, qapp, tmp_path: Path
+) -> None:
+    """The text names files relative to the folder it was shown for: applied after the
+    scene was saved in another folder, it names the same files (it took files of the same
+    name in the new folder, or was refused where there were none), and a file the save
+    copied, as an example's, stays the copy."""
+    panel = window.yaml_panel
+    window.docks["yaml"].toggleViewAction().trigger()
+    qapp.processEvents()
+    shoebox, hall = example_path("shoebox"), example_path("concert_hall")
+    one = tmp_path / "one"
+    for folder, model in ((one, shoebox), (tmp_path / "other", hall)):
+        folder.mkdir()
+        (folder / "room.obj").write_bytes((model.parent / f"{model.parent.name}.obj").read_bytes())
+    text = shoebox.read_text(encoding="utf-8").replace("file: shoebox.obj", "file: room.obj")
+    (one / "scene.yaml").write_text(text, encoding="utf-8")
+
+    def edited_and_saved(target: Path) -> None:
+        text = panel.view.toPlainText()
+        panel.view.setPlainText(re.sub(r"level_db: [0-9.]+", "level_db: 77.0", text, count=1))
+        assert window._save_to(target)
+        assert "Edited: Apply makes the text the scene" in panel.status.text()
+        assert panel.apply() and window.document.scene.sources[0].level_db == 77.0
+
+    # Saved where another room.obj is, and where none is.
+    for elsewhere in ("other", "empty"):
+        assert window.open_file(one / "scene.yaml")
+        assert "file: room.obj\n" in panel.view.toPlainText()
+        edited_and_saved(tmp_path / elsewhere / "scene.yaml")
+        assert window.document.scene.geometry.file == (one / "room.obj").resolve()
+        assert window.document.room.report.volume_m3 == pytest.approx(144.0)  # 8 x 6 x 3 m
+    # An example saved elsewhere, its model copied along.
+    assert window.open_example(hall)
+    edited_and_saved(tmp_path / "hall" / "scene.yaml")
+    assert window.document.scene.geometry.file == (tmp_path / "hall" / "concert_hall.obj").resolve()
+    # Only a comment added, then saved elsewhere: nothing to apply, nothing to undo.
+    steps = len(window.document._undo)
+    panel.view.setPlainText("# a note\n" + panel.view.toPlainText())
+    assert window._save_to(tmp_path / "again" / "scene.yaml")
+    assert panel.apply() and len(window.document._undo) == steps and not panel.edited()
 
 
 def test_scene_yaml_panel_starts_hidden_then_as_left(window, qapp, english) -> None:

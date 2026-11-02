@@ -1632,13 +1632,15 @@ class MainWindow(QMainWindow):
 
     def _files_moved(self, old, new) -> None:
         """The scene ``old`` became ``new``, the same scene with copies of its files (an
-        example saved elsewhere): runs and maps of ``old`` hold for ``new``."""
+        example saved elsewhere): runs, maps and Scene YAML text of ``old`` hold for
+        ``new``."""
         if self._result_scene is old:
             self._result_scene = new
         if self._coverage_scene is old:
             self._coverage_scene = new
         if self._job_scene is old:
             self._job_scene = new
+        self.yaml_panel.files_moved(old, new)
         self._changed()
 
     def save_screenshot(self) -> None:

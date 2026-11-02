@@ -1116,6 +1116,8 @@ class Material(_Model):
     source: str | None = Field(default=None, description="where the coefficients come from")
     # Notes on the coefficients of a preset or file outside 0 to 1, held to that range.
     _clipped: list[str] = PrivateAttr(default_factory=list)
+    # The scattering entry ``scattering`` named, which validation replaces by its values.
+    _scattering_name: str | None = PrivateAttr(default=None)
 
     @property
     def clipped(self) -> list[str]:
@@ -1173,6 +1175,11 @@ class Material(_Model):
         origin = scattering_origin = None
         # Where coefficients read from data come from, for the note when they are clipped.
         absorption_from = scattering_from = None
+        # Whether the entry gives absorption, scattering values or a source of its own,
+        # which the rest of it may not give (to_data); if not, the file's version, taken
+        # before the file is read.
+        own = isinstance(self.scattering, list) or (self.absorption, self.source) != (None, None)
+        version = None if own else _file_version(self.file)
 
         if self.impedance is not None:
             if self.preset is not None or self.file is not None:
@@ -1210,6 +1217,7 @@ class Material(_Model):
             raise ValueError("entry names a material in a library file: give the file too")
 
         if isinstance(self.scattering, str):
+            self._scattering_name = self.scattering
             entry = _database_entry(self.scattering, "scattering")
             scattering, extrapolated = _from_data(entry.frequencies, entry.coefficients)
             scattering_origin = "scattering: " + _describe(entry.source, extrapolated)
@@ -1251,6 +1259,11 @@ class Material(_Model):
         if self.source is None:
             origins = [o for o in (origin, scattering_origin) if o]
             self.source = "; ".join(origins) or None
+        if not own:
+            # Read from the rest of its entry alone: to_data leaves all three out while
+            # the material and its file stay as they are. In __dict__, not in a field or
+            # private attribute, so that materials are compared without it.
+            self.__dict__["_given"] = (self.model_dump(mode="json", exclude_none=True), version)
         return self
 
     def _transmission(self) -> list[float] | None:
@@ -1270,6 +1283,50 @@ class Material(_Model):
         nothing through."""
         passing = self._transmission()
         return None if passing is None else convert(passing, bands)
+
+    def to_data(self) -> dict:
+        """The material as scene data, as :meth:`Scene.to_data` writes it: its
+        absorption, scattering and source only where they are not what the rest of the
+        entry gives (a preset, a file and entry, an impedance, a transmission, a
+        scattering entry, written by its name, or the default scattering), so that the
+        entry read again has the same values, and with another preset, file or entry the
+        values of that."""
+        data = self.model_dump(mode="json", exclude_none=True)
+        given_by = ("absorption", "scattering", "source")
+        entry = {key: value for key, value in data.items() if key not in given_by}
+        if self._scattering_name is not None:
+            entry["scattering"] = self._scattering_name
+        # A material read from such an entry, unchanged since, and its file too, is what
+        # the entry gives; else the entry is read again to see what it gives.
+        if self.__dict__.get("_given") != (data, _file_version(self.file)):
+            given = _material_of(entry)
+            for key in given_by:
+                # Compared by value: a copy with other values keeps the private attributes.
+                if key in data and (given is None or getattr(given, key) != getattr(self, key)):
+                    entry[key] = data[key]
+                    given = _material_of(entry)
+        return {key: entry[key] for key in data if key in entry}
+
+
+def _material_of(entry: dict) -> Material | None:
+    """The material the scene data ``entry`` gives, or None when it is not one (no
+    absorption, a file no longer there)."""
+    try:
+        return Material.model_validate(entry)
+    except (ValueError, OSError):
+        return None
+
+
+def _file_version(path: Path | None) -> tuple[int, int] | None:
+    """The modification time (ns) and size of the file at ``path``, or None when there
+    is no path or the file cannot be found."""
+    if path is None:
+        return None
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
 
 
 def _read_coefficients(path: Path):
@@ -2960,11 +3017,11 @@ class Scene(_Model):
 
     def to_data(self) -> dict:
         """The scene as plain YAML data, dicts and lists. Settings left unset are left out,
-        apart from those whose null is not their default."""
+        apart from those whose null is not their default, and so are a material's
+        coefficients and source where its preset, file or other settings give them
+        (:meth:`Material.to_data`)."""
         data = self.model_dump(mode="json", exclude_none=True)
-        for name, material in self.materials.items():
-            if material.impedance is not None:  # the impedance gives the absorption
-                data["materials"][name].pop("absorption", None)
+        data["materials"] = {name: m.to_data() for name, m in self.materials.items()}
         if self.simulation.early.coherent_max_band_hz is None:
             data["simulation"]["early"]["coherent_max_band_hz"] = None
         # The open sky's material is added when the scene is read: left out, as written.
@@ -2985,7 +3042,7 @@ class Scene(_Model):
         letters outside ASCII as they are, as the example scenes do; the data are the
         same."""
         data = self.to_data()
-        _map_files(data, file_name)
+        map_files(data, file_name)
         if readable:
             return yaml.dump(data, Dumper=_ReadableDumper, sort_keys=False, allow_unicode=True)
         return yaml.safe_dump(data, sort_keys=False)
@@ -3037,7 +3094,7 @@ def directivity_entries(spec) -> list[dict]:
     return entries
 
 
-def _map_files(data: dict, change: Callable[[str], str]) -> None:
+def map_files(data: dict, change: Callable[[str], str]) -> None:
     """Replace each file that scene data (:meth:`Scene.to_data`) names by ``change(file)``."""
     geometry = data["geometry"]
     places = [

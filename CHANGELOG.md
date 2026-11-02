@@ -136,6 +136,17 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- Fixed: another preset, file or entry, or a lower transmission loss, written for a
+  material in the Scene YAML panel or in a scene file the editor saves now gives its
+  coefficients and source; the old ones stayed, and the lower loss was refused as more
+  than the absorption. Scene files and the panel write a material's absorption,
+  scattering and source only where its preset, file, entry or transmission does not give
+  them, and a scattering entry by its name.
+- Fixed: Scene YAML text applied after the scene was saved in another folder names the
+  files it named; it took files of the same name in the new folder, or was refused where
+  there were none.
+- Fixed: an example saved elsewhere names the copies of its sources' signals and its
+  recording, as it does its other files; it named the originals.
 
 ## 4.1.0
 

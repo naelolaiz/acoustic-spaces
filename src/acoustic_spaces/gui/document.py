@@ -27,7 +27,7 @@ from acoustic_spaces.geometry.outdoor import SKY
 from acoustic_spaces.i18n import _, ngettext
 from acoustic_spaces.room import Room, matching_name
 from acoustic_spaces.scene import Scene
-from acoustic_spaces.scene.model import INDOOR_COHERENT_MAX_BAND_HZ, directivity_entries
+from acoustic_spaces.scene.model import INDOOR_COHERENT_MAX_BAND_HZ, map_files
 
 #: Heights above a floor for new sources and listeners (m): a talker, a seated ear.
 SOURCE_HEIGHT = 1.5
@@ -250,8 +250,17 @@ def _free_spots(plan: np.ndarray, mesh: RoomMesh, height: float, count: int) -> 
 def referenced_files(scene: Scene) -> list[Path]:
     """The files ``scene`` uses (:meth:`~acoustic_spaces.scene.Scene.files`): its model,
     terrain and map of buildings, material tables, source directivities (with the files
-    an array names for its element) and HRTFs."""
+    an array names for its element), the sources' signals, the scene's recording when it
+    is a file, and HRTFs."""
     return scene.files()
+
+
+def with_copies(scene: Scene, copies: dict[str, str]) -> Scene:
+    """``scene`` with each file it names that ``copies`` holds (original to copy)
+    replaced by its copy."""
+    data = scene.to_data()
+    map_files(data, lambda file: copies.get(file, file))
+    return Scene.model_validate(data)
 
 
 def _in_units(item: dict, scale: float) -> dict:
@@ -315,6 +324,9 @@ class Document(QObject):
         #: (``enabled: false``) start hidden, and an item's eye follows its tick when that
         #: changes (:meth:`_set`); either can be changed on its own after.
         self.hidden: set[tuple[str, str]] = left_out(scene)
+        #: The files the saves copied to another folder (:meth:`save` with
+        #: ``copy_files``), each original's path to its latest copy's.
+        self.copies: dict[str, str] = {}
 
     @classmethod
     def open(cls, path: str | Path) -> Document:
@@ -348,14 +360,24 @@ class Document(QObject):
 
     # -- changes --------------------------------------------------------------------
 
-    def edit(self, description: str, change: Callable[[dict], None]) -> None:
+    def edit(
+        self, description: str, change: Callable[[dict], None], *, base_dir: Path | None = None
+    ) -> None:
         """Apply ``change`` to a plain copy of the scene (the YAML structure as dicts and
         lists) and make the result current. Raises :class:`EditError` if the scene
-        schema or the geometry rejects it; the document is then unchanged."""
+        schema or the geometry rejects it; the document is then unchanged.
+
+        Relative paths in the changed data are resolved against ``base_dir``, by default
+        the document's folder. Given another folder (one the document was in before it
+        was saved elsewhere), the files a save copied (:attr:`copies`) are replaced by
+        their copies, as they were in the scene."""
         data = self.scene.to_data()
         change(data)
+        folder = self.base_dir if base_dir is None else Path(base_dir)
         try:
-            scene = Scene.model_validate(data, context={"base_dir": self.base_dir})
+            scene = Scene.model_validate(data, context={"base_dir": folder})
+            if folder != self.base_dir and self.copies:
+                scene = with_copies(scene, self.copies)
             room = Room.from_scene(scene, reuse=self.room)
         except (ValidationError, ValueError, OSError) as exc:
             raise EditError(_message(exc)) from exc
@@ -394,11 +416,10 @@ class Document(QObject):
     def save(self, path: str | Path | None = None, *, copy_files: bool = False) -> None:
         """Write the scene file (to ``path``, which becomes the document's file).
 
-        With ``copy_files``, the files the scene uses from its current folder (a model,
-        material tables, directivities, HRTFs) are copied along to the new folder,
-        keeping their relative places, and the scene refers to the copies. Files already
-        there with other contents are left alone; the scene then keeps using the
-        originals.
+        With ``copy_files``, the files the scene uses from its current folder (those
+        :func:`referenced_files` lists) are copied along to the new folder, keeping their
+        relative places, and the scene refers to the copies. Files already there with
+        other contents are left alone; the scene then keeps using the originals.
         """
         target = Path(path) if path is not None else self.path
         if target is None:
@@ -445,7 +466,7 @@ class Document(QObject):
                 copy.parent.mkdir(parents=True, exist_ok=True)
                 made.append(copy)
                 shutil.copy2(file, copy)
-            self._use_copies({str(file): str(copy) for file, copy in copies.items()}, folder)
+            self._use_copies({str(file): str(copy) for file, copy in copies.items()})
         except Exception:
             # A save that fails leaves nothing behind in the new folder.
             for copy in made:
@@ -455,29 +476,11 @@ class Document(QObject):
                     made_folder.rmdir()
             raise
 
-    def _use_copies(self, moved: dict[str, str], folder: Path) -> None:
-        """Point the scene at the copies of its files (``moved``, original to copy) in
-        ``folder``."""
-        data = self.scene.to_data()
-        if data["geometry"].get("file") in moved:
-            data["geometry"]["file"] = moved[data["geometry"]["file"]]
-        terrain = data["geometry"].get("ground", {}).get("terrain", {})
-        if terrain.get("file") in moved:
-            terrain["file"] = moved[terrain["file"]]
-        buildings = data["geometry"].get("buildings_file", {})
-        if buildings.get("file") in moved:
-            buildings["file"] = moved[buildings["file"]]
-        for material in data["materials"].values():
-            if material.get("file") in moved:
-                material["file"] = moved[material["file"]]
-        for source in data["sources"]:
-            for spec in directivity_entries(source.get("directivity")):
-                if spec.get("file") in moved:
-                    spec["file"] = moved[spec["file"]]
-        for output in data["outputs"]:
-            if output.get("hrtf") in moved:
-                output["hrtf"] = moved[output["hrtf"]]
-        scene = Scene.model_validate(data, context={"base_dir": folder})
+    def _use_copies(self, moved: dict[str, str]) -> None:
+        """Point the scene at the copies of its files (``moved``, original to copy)."""
+        scene = with_copies(self.scene, moved)
+        # A copy of a copy is the latest copy of the first original too.
+        self.copies = {old: moved.get(copy, copy) for old, copy in self.copies.items()} | moved
         # The same scene with other copies of its files: no undo step. The copies hold
         # the same bytes, so the loaded geometry and directivities stay (an array's take
         # seconds to add up again).
