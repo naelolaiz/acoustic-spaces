@@ -21,6 +21,7 @@ from acoustic_spaces.engine.crests import (
 )
 from acoustic_spaces.engine.diffraction import find_edges
 from acoustic_spaces.engine.model import TraceModel, _ground_faces
+from acoustic_spaces.engine.terrain import mean_plane
 from acoustic_spaces.geometry.outdoor import TerrainSurface, outdoor_mesh
 from acoustic_spaces.geometry.terrain import (
     HeightGrid,
@@ -426,6 +427,136 @@ def test_a_slope_reflects_as_a_tilted_plane() -> None:
     assert paths.distance_m[1] == pytest.approx(np.linalg.norm(image - [70, 50, 16]), abs=1e-9)
     assert room.outdoor.ground_at([[20, 50], [70, 50]]).tolist() == pytest.approx([4, 14])
     assert room.outdoor.building_at([[20, 50, 6]]) == [None]
+
+
+def _heights_over(plane, points) -> list[float]:
+    origin, normal = plane
+    return [float((np.asarray(p, dtype=float) - origin) @ normal) for p in points]
+
+
+def _dense_fit(profile, n: int = 200_000) -> tuple[float, float]:
+    """The slope and the height at the start of the least-squares line of ``profile``'s
+    heights against the distance along it, from ``n`` evenly spaced samples of the
+    polyline: an independent check of the exact fit, to a few micrometres (less where
+    corners lie a millimetre apart, which the samples cannot resolve)."""
+    profile = np.asarray(profile, dtype=float)
+    along = np.linalg.norm(profile[:, :2] - profile[0, :2], axis=1)
+    t = (np.arange(n) + 0.5) * along[-1] / n
+    slope, height = np.polyfit(t, np.interp(t, along, profile[:, 2]), 1)
+    return float(slope), float(height)
+
+
+def test_the_mean_plane_is_the_least_squares_line_of_the_whole_profile() -> None:
+    """The line is fitted to the profile itself, not to its corners: a V valley 5 m
+    deep has its mean height, 2.5 m down, and no slope, whatever corners lie along its
+    sides; any profile's plane is the least-squares line of densely sampled heights."""
+    valley = [[0.0, 0.0, 0.0], [50.0, 0.0, -5.0], [100.0, 0.0, 0.0]]
+    origin, normal = mean_plane(valley)
+    assert origin == pytest.approx([0.0, 0.0, -2.5], abs=1e-12)
+    assert normal == pytest.approx([0.0, 0.0, 1.0], abs=1e-12)
+    # Corners on its sides, spaced unevenly, change nothing (a fit to the corners puts
+    # the plane at -2.07 m with them and at -1.67 m without).
+    sides = [[x, 0.0, -0.1 * x] for x in (10.0, 20.0, 30.0, 40.0)] + [[62.0, 0.0, -3.8]]
+    more = mean_plane(sorted(valley + sides))
+    assert more[0] == pytest.approx(origin, abs=1e-12)
+    assert more[1] == pytest.approx(normal, abs=1e-12)
+    rng = np.random.default_rng(7)
+    for _ in range(20):
+        start, heading = rng.uniform(-300, 300, 2), rng.uniform(0, 2 * np.pi)
+        along = np.sort(np.concatenate([[0.0, 1.0], rng.uniform(0, 1, rng.integers(0, 12))]))
+        run = rng.uniform(5.0, 2000.0) * along
+        profile = np.column_stack(
+            [
+                start + run[:, None] * [np.cos(heading), np.sin(heading)],
+                rng.uniform(100.0, 140.0, len(run)),
+            ]
+        )
+        origin, normal = mean_plane(profile)
+        slope, height = _dense_fit(profile)
+        assert origin[:2].tolist() == profile[0, :2].tolist()
+        assert origin[2] == pytest.approx(height, abs=1e-4)
+        rise = -normal[:2] @ [np.cos(heading), np.sin(heading)] / normal[2]
+        assert rise == pytest.approx(slope, abs=1e-6)
+
+
+def test_the_mean_plane_is_cnossos_eus_in_the_iso_test_cases() -> None:
+    """ISO/TR 17534-4:2020's test cases TC05 and TC06 (CNOSSOS-EU over a ground that
+    rises 10 m, Tables 18 and 24, as NoiseModelling's tests quote them): the mean
+    planes' slopes a, their heights b at the start and the equivalent heights over them
+    of the source, the receivers and the slope's top, to the tables' two decimals."""
+    # The source's foot, where the ground's kind changes (a corner on a level stretch),
+    # the foot of the slope, a corner partway up it, its top and the receiver's foot.
+    profile = np.array(
+        [
+            [10.0, 10.0, 0.0],
+            [50.0, 18.42105263157895, 0.0],
+            [120.0, 33.1578947368421, 0.0],
+            [150.0, 39.473684210526315, 4.615384615384616],
+            [185.0, 46.8421052631579, 10.0],
+            [200.0, 50.0, 10.0],
+        ]
+    )
+    source, top = [10.0, 10.0, 1.0], profile[4]
+    tc05, tc06 = [200.0, 50.0, 14.0], [200.0, 50.0, 11.5]
+    for corners in (profile, profile[[0, 2, 4, 5]]):
+        plane = mean_plane(corners)
+        origin, normal = plane
+        assert normal[0] * 40.0 - normal[1] * 190.0 == pytest.approx(0.0, abs=1e-15)
+        assert math.hypot(*normal[:2]) / normal[2] == pytest.approx(0.05, abs=0.005)
+        assert origin[2] == pytest.approx(-2.83, abs=0.005)
+        assert _heights_over(plane, [source, tc05, tc06]) == pytest.approx(
+            [3.83, 6.16, 3.66], abs=0.005
+        )
+    # Table 24 also gives the mean planes on each side of the slope's top, where TC06's
+    # receiver, lower, is close enough to its line of sight for CNOSSOS-EU to add the
+    # sound diffracted there: two more profiles to fit (the engine's crests take their
+    # ground reflections off the profile's segments instead).
+    before, after = mean_plane(profile[:5]), mean_plane(profile[4:])
+    assert math.hypot(*before[1][:2]) / before[1][2] == pytest.approx(0.05, abs=0.005)
+    assert before[0][2] == pytest.approx(-2.33, abs=0.005)
+    assert _heights_over(before, [source, top]) == pytest.approx([3.33, 3.95], abs=0.005)
+    assert after[0][2] == pytest.approx(10.0, abs=1e-12)
+    assert _heights_over(after, [top, tc06]) == pytest.approx([0.0, 1.5], abs=1e-12)
+
+
+def test_the_ground_reflection_over_a_terrain_does_not_depend_on_its_grid() -> None:
+    """An embankment rising 8 m between x = 150 and 170 m, sampled on a 10 m and on a 5 m
+    grid (the same surface): along a grid line and across the cells, the reflection
+    off the mean plane is the same on both, and it is the image source's in the
+    least-squares plane of the densely sampled profile."""
+
+    def embankment(x: float, y: float) -> float:
+        return 8.0 * min(max((x - 150.0) / 20.0, 0.0), 1.0)
+
+    for source, listener in (((5, 100, 1.5), (295, 100, 17)), ((5, 20, 1.5), (295, 230, 17))):
+        found = []
+        for spacing, size in ((10.0, 31), (5.0, 61)):
+            terrain = {"heights": grid_rows(embankment, size, spacing), "spacing": spacing}
+            room = Room.from_scene(
+                scene(
+                    {"ground": {"terrain": terrain, "sky": 40}},
+                    sources=[source],
+                    listeners=[listener],
+                    early={"method": "image_sources", "max_order": 1, "diffraction": "none"},
+                )
+            )
+            paths = early_paths(room)
+            assert paths.order.tolist() == [0, 1]
+            found.append(paths)
+        assert found[1].distance_m == pytest.approx(found[0].distance_m, rel=1e-12)
+        assert found[1].points[1] == pytest.approx(found[0].points[1], abs=1e-9)
+        assert found[1].energy == pytest.approx(found[0].energy, rel=1e-9)
+        # The image of the source in the plane of the dense fit.
+        heading = np.subtract(listener[:2], source[:2]) / math.dist(listener[:2], source[:2])
+        bends = [(x - source[0]) / (listener[0] - source[0]) for x in (150.0, 170.0)]
+        t = np.sort(np.concatenate([np.linspace(0.0, 1.0, 11), bends]))[:, None]
+        line = np.array(source[:2]) + t * np.subtract(listener[:2], source[:2])
+        profile = np.column_stack([line, [embankment(x, y) for x, y in line]])
+        slope, height = _dense_fit(profile)
+        normal = np.array([*(-slope * heading), 1.0]) / math.hypot(slope, 1.0)
+        point = np.array([*source[:2], height])
+        image = np.array(source) - 2.0 * ((np.array(source) - point) @ normal) * normal
+        assert found[0].distance_m[1] == pytest.approx(math.dist(image, listener), abs=1e-5)
 
 
 def test_a_ridge_diffracts_and_a_listener_behind_it_hears_over_it() -> None:

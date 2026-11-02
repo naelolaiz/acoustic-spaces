@@ -49,8 +49,10 @@ place to place along the walk:
   the time it leaves, and the source's directivity is taken out of its filter.
 
 The late part and the wave solver's bands have no Doppler shift here: the late part
-of each place is crossfaded as in a walkthrough without it, and the wave solver's
-bands are not taken (a walk with Doppler and the wave solver stops with an error).
+of each place is crossfaded to the next's by weights that add up to one, which keep
+its power as the places' tails, drawn from one random sequence, are alike; and the
+wave solver's bands are not taken (a walk with Doppler and the wave solver stops with
+an error).
 The source radiates as it would standing at each place, as road and rail emission data
 have it: the convective amplification of a moving source (for a monopole up to 0.8 dB
 ahead at 30 m/s, 2 dB at 70 m/s, less behind) is left out, and emission measured in a
