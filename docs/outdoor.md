@@ -107,9 +107,11 @@ follow the terrain: their points stand at the map's height over the ground under
   source and the listener, as the outdoor standards (CNOSSOS-EU, Nord2000) have it: the
   plane through the least-squares line of the profile, level across it, with the
   reflection factor of the ground under the reflection point (its material, or the
-  grounds of the zones its Fresnel zone covers, as on flat ground). Over a plain or a
-  plane slope that is the ground itself, and the reflection is the one flat ground
-  gives.
+  grounds of the zones its Fresnel zone covers, as on flat ground). The line is fitted
+  to the whole profile, segment by segment, as CNOSSOS-EU fits it, so it follows the
+  ground's shape, not where the edges of the terrain's triangles cross the profile. Over
+  a plain or a plane slope that is the ground itself, and the reflection is the one flat
+  ground gives.
 - **Crests** between the source and the listener bend the sound over them. The ground's
   profile in the vertical plane between the two is drawn, and the string pulled taut
   over it from one to the other bends at the crests in the way: each is a wedge whose
