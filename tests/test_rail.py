@@ -4,6 +4,7 @@ directivity, a train's points and their sound."""
 
 import argparse
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -445,12 +446,13 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
     from acoustic_spaces.synthesis import split_bands
 
     # Without ffmpeg (--no-mp4) the video draws only its stills: draw its frames too.
-    drawn = []
+    drawn, said = [], []
     real_animation = pipeline.animation
 
     def animation(folder, duration, draw, *rest, **options):
         for t in np.linspace(0.0, duration, 7):
             drawn.append(draw(float(t)).size)
+            said.append(options["shown"](float(t)))
         return real_animation(folder, duration, draw, *rest, **options)
 
     monkeypatch.setattr(pipeline, "animation", animation)
@@ -517,6 +519,9 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
         assert told > 5.0 and under == pytest.approx(told, abs=1.5), name
     assert (work / "stills" / "00_tsi_7m5.png").exists()
     assert len(drawn) == 7
+    # The video's messages: the train at the moment of its walk, heard at the listener.
+    assert said[0] == "train @ 0.00 s -> tsi_7m5"
+    assert all(re.fullmatch(r"train @ \d+\.\d\d s -> tsi_7m5", line) for line in said), said
     assert facts["listeners"]["tsi_7m5"]["levels_a_db"][0] is None
     # Another track makes the sound again.
     again = demo.resolved(demo.parser().parse_args([*run, "--track", "slab"]))

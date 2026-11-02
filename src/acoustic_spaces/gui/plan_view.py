@@ -18,7 +18,8 @@ stands where the next click lands.
 
 Sources and listeners move by dragging and keep their height above the floor. Corners
 and points snap to the grid; Shift moves them freely. A click selects what is under the
-mouse, as in the 3D view; the wheel zooms and dragging empty space pans.
+mouse, as in the 3D view; the wheel zooms and dragging empty space pans. While a run goes
+on, a ring marks each source and listener it works on, as in the 3D view.
 """
 
 from __future__ import annotations
@@ -58,10 +59,16 @@ from acoustic_spaces.gui.document import (
     plan_corners,
     surface_heights,
 )
-from acoustic_spaces.gui.movement import handles_of, moves_at, path_of, pose_at
+from acoustic_spaces.gui.following import NO_RUN, RunView
+from acoustic_spaces.gui.movement import handles_of, path_of
 from acoustic_spaces.gui.numbers import fmt, number, point_text
 from acoustic_spaces.gui.tips import label_for, share_tips
-from acoustic_spaces.gui.viewport import SELECTED_COLOUR, material_colour, surface_materials
+from acoustic_spaces.gui.viewport import (
+    RUN_COLOUR,
+    SELECTED_COLOUR,
+    material_colour,
+    surface_materials,
+)
 from acoustic_spaces.i18n import N_, _
 from acoustic_spaces.room import Room, outline_edges
 from acoustic_spaces.viz import (
@@ -280,6 +287,8 @@ class PlanCanvas(QWidget):
         self.mover: tuple[str, int] | None = None
         #: The moment of the movement the movers are drawn at (s); None: at rest.
         self.time: float | None = None
+        #: What a run going on works on (see :meth:`show_run`).
+        self.run: RunView = NO_RUN
 
     # -- contents -------------------------------------------------------------------
 
@@ -291,11 +300,13 @@ class PlanCanvas(QWidget):
         wind: bool = True,
         mover: tuple[str, int] | None = None,
         time: float | None = None,
+        run: RunView = NO_RUN,
     ) -> None:
         """Draw ``room`` with ``selection`` highlighted, without the sources and
         listeners in ``hidden`` ((kind, name) pairs); outdoors, with the wind if
         ``wind``. With ``mover`` (a source or listener as (kind, index)), its keyframes
-        get handles to drag; with ``time``, every mover is drawn where it is then."""
+        get handles to drag; with ``time``, every mover is drawn where it is then;
+        ``run`` is what a run going on works on (:meth:`show_run`)."""
         new_geometry = room.mesh is not self._mesh
         self.room = room
         self.selection = selection or ("", None)
@@ -303,6 +314,7 @@ class PlanCanvas(QWidget):
         self.show_wind = wind
         self.mover = mover
         self.time = time
+        self.run = run
         self._wind = WindMap.of(room)
         self.corners = plan_corners(room.scene)
         self._walls = wall_labels(room)
@@ -388,7 +400,7 @@ class PlanCanvas(QWidget):
         if self.room is None:
             return []
         return [
-            (kind, k, pose_at(item, self.time))
+            (kind, k, self.run.pose(kind, item, self.time))
             for kind in ("sources", "listeners")
             for k, item in enumerate(getattr(self.room.scene, kind))
             if (kind, item.name) not in self.hidden
@@ -397,6 +409,14 @@ class PlanCanvas(QWidget):
     def set_time(self, time: float | None) -> None:
         """Draw every mover where it is at ``time`` (s) of the movement; None: at rest."""
         self.time = time
+        self.update()
+
+    def show_run(self, run: RunView) -> None:
+        """Ring the sources and listeners a run going on works on, and at a place along a
+        walk draw its walkers where it simulates them, rather than where the Movement
+        panel's playhead has them; :data:`~acoustic_spaces.gui.following.NO_RUN`: as
+        before the run."""
+        self.run = run
         self.update()
 
     def _handles(self) -> np.ndarray:
@@ -661,7 +681,19 @@ class PlanCanvas(QWidget):
         elif drag[0] in ("sources", "listeners") and preview is not None:
             kind, index = drag
             item = getattr(self.room.scene, kind)[index]
-            if moves_at(item, self.time):
+            away = self.run.pose(kind, item, self.time) is not item
+            if away and self.run.time is not None:
+                self.message.emit(
+                    fmt(
+                        _(
+                            "Not moved: {name} is drawn where the run simulates it, "
+                            "{time:.2f} s along its walk; drag it once the run is over"
+                        ),
+                        name=item.name,
+                        time=self.run.time,
+                    )
+                )
+            elif away:
                 self.message.emit(
                     fmt(
                         _(
@@ -1086,6 +1118,10 @@ class PlanCanvas(QWidget):
                 painter.setPen(QPen(_qcolor(colour, alpha), 2))
                 painter.drawLine(p, QPointF(p.x() + forward[0], p.y() - forward[1]))
             radius = 7.0 if chosen or self._hover == (group, k) else size
+            if (group, item.name) in self.run.names:  # a run works on it now
+                painter.setPen(QPen(QColor(RUN_COLOUR), 2.5))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawEllipse(p, radius + 5.0, radius + 5.0)
             painter.setPen(QPen(_qcolor(BACKGROUND[0], alpha), 1.5))
             painter.setBrush(_qcolor(colour, alpha))
             painter.drawEllipse(p, radius, radius)
@@ -1212,13 +1248,23 @@ class PlanView(QWidget):
         self._state()
 
     def show_room(
-        self, room: Room, selection=None, hidden=frozenset(), wind=True, mover=None, time=None
+        self,
+        room: Room,
+        selection=None,
+        hidden=frozenset(),
+        wind=True,
+        mover=None,
+        time=None,
+        run: RunView = NO_RUN,
     ) -> None:
-        self.canvas.show_room(room, selection, hidden, wind, mover, time)
+        self.canvas.show_room(room, selection, hidden, wind, mover, time, run)
         self._state()
 
     def set_time(self, time: float | None) -> None:
         self.canvas.set_time(time)
+
+    def show_run(self, run: RunView) -> None:
+        self.canvas.show_run(run)
 
     def fit(self) -> None:
         self.canvas.fit()

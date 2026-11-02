@@ -4593,7 +4593,264 @@ def test_render_movement_in_the_editor(window, qapp, tmp_path: Path, monkeypatch
     assert window.movement.output.currentText() == "binaural"
 
 
+# -- following a run --------------------------------------------------------------------
+
+
+def _walking_scene(walk_to=(4.0, 1.0, 1.5), speed=2.0) -> Scene:
+    """A box with a still source, a source walking with Doppler and two listeners."""
+    scene = box_scene()
+    data = scene.to_data()
+    still = dict(data["sources"][0], name="stage")
+    walker = dict(
+        data["sources"][0],
+        name="car",
+        position=[1.0, 1.0, 1.5],
+        walk={"to": [list(walk_to)], "speed_m_s": speed, "doppler": True},
+    )
+    data["sources"] = [still, walker]
+    seat = dict(data["listeners"][0], name="late stage")
+    data["listeners"] = [data["listeners"][0], seat]
+    return Scene.model_validate(data)
+
+
+def test_a_run_s_lines_name_what_it_works_on(qapp) -> None:
+    """The views follow the names a step's line begins with: a source, a source and a
+    listener, a point of a line source, a place along a walk or a moment of it, whose
+    time puts the run's walkers where its walk has them then, and a head turned to a
+    yaw; nothing else in a line counts."""
+    from acoustic_spaces.gui.following import NO_RUN, RunFocus
+    from acoustic_spaces.walkthrough import facing_name, knots, moment_name, place_name
+
+    scene = _walking_scene()
+    listener = scene.listeners[0].name
+    asked = []
+    walked = _walking_scene(walk_to=(1.0, 4.0, 1.5), speed=1.0)  # the run's own walk
+    focus = RunFocus(scene, lambda: asked.append(1) or walked)
+    assert focus.view == NO_RUN
+
+    assert focus.read("stage: early reflections (image sources, order 3)")
+    assert focus.view.names == {("sources", "stage")} and focus.view.time is None
+    assert not focus.read("stage (2): stochastic ray tracing (500 rays per band)")
+    assert focus.read(f"stage -> {listener}: rendering binaural")
+    assert focus.view.names == {("sources", "stage"), ("listeners", listener)}
+    # A line of a source alone keeps the listener the run named before.
+    assert focus.read(f"{place_name('car', 3, 1.5)}: early reflections (image sources)")
+    assert focus.view.names == {("sources", "car"), ("listeners", listener)}
+    assert focus.view.time == 1.5 and asked == [1]
+    car = scene.sources[1]
+    # On the run's walk, not on the open scene's.
+    shown = focus.view.pose("sources", car, None)
+    np.testing.assert_allclose(shown.position, knots(walked.sources[1]).at(1.5)[0])
+    assert shown.position != knots(car).at(1.5)[0].tolist()
+    assert focus.view.pose("sources", scene.sources[0], None) is scene.sources[0]
+    assert focus.read(f"{place_name('car', 4, 2.0)} (2): stochastic ray tracing")
+    assert focus.view.time == 2.0 and asked == [1]  # read once per walk
+    # Words that only look like a name do not count: "late stage" is the listener alone.
+    assert focus.read("late stage: starting the GPU")
+    assert focus.view.names == {("listeners", "late stage")} and focus.view.time is None
+    for line in ("mixing 2 listeners through 40 moments", "Long term: stage", "  12 of 60 s"):
+        focus.read(line)
+        assert focus.view == NO_RUN
+    # The run's scene is read again at its next walk: a demo may have written it anew.
+    focus.read(f"{place_name('car', 0, 0.0)}: early reflections")
+    assert asked == [1, 1] and focus.view.time == 0.0
+    # A demo's video names what each moment of it shows: several sources, the listener of
+    # that pass, the walker at the moment of its walk.
+    video = f"stage, {moment_name('car', 2.5)} -> late stage: encoding the video, 7.1 of 40.0 s"
+    assert focus.read(video)
+    assert focus.view.names == {
+        ("sources", "stage"),
+        ("sources", "car"),
+        ("listeners", "late stage"),
+    }
+    assert focus.view.time == 2.5 and asked == [1, 1]  # the same walks as the line before
+    assert not focus.read(video)
+    assert focus.read(f"stage, {moment_name('car', 2.5)} -> {listener}: encoding the video")
+    assert focus.view.names >= {("listeners", listener)} and focus.view.time == 2.5
+    focus.read("stage, nobody -> late stage: encoding the video, 7.6 of 40.0 s")
+    assert focus.view == NO_RUN
+    # A head a demo turns: the listener turned to the yaw the line gives, where it stands.
+    seat = scene.listeners[1]
+    assert focus.read(f"stage -> {facing_name('late stage', 450.0)}: turning the head, 3 of 40 s")
+    assert focus.view.names == {("sources", "stage"), ("listeners", "late stage")}
+    assert focus.view.facing == ((("listeners", "late stage"), 90.0),)
+    shown = focus.view.pose("listeners", seat, None)
+    assert shown.orientation.yaw == 90.0 and shown.position == seat.position
+    assert focus.view.pose("sources", scene.sources[0], None) is scene.sources[0]
+    assert focus.read(f"stage -> {facing_name('late stage', 120.0)}: turning the head")
+    focus.read(f"stage -> {facing_name('nobody', 120.0)}: turning the head")
+    assert focus.view == NO_RUN  # no such listener: nothing
+    # A walk the run's scene does not give is not followed; nor one that cannot be read.
+    focus = RunFocus(scene, lambda: box_scene())
+    focus.read(f"{place_name('car', 3, 1.5)}: early reflections")
+    assert focus.view.names == {("sources", "car")} and focus.view.time is None
+
+    def broken():
+        raise SystemExit("error: no scene_demo.yaml")
+
+    focus = RunFocus(scene, broken)
+    focus.read(f"{place_name('car', 3, 1.5)}: early reflections")
+    assert focus.view.names == {("sources", "car")} and focus.view.time is None
+
+
+def test_the_views_follow_a_run(window, qapp, tmp_path: Path, monkeypatch) -> None:
+    """While a movement renders, the plan rings what the run works on and draws the
+    walking source where the place it simulates has it; at the end, and with Follow the
+    run off, it shows the scene as before."""
+    from PySide6.QtWidgets import QFileDialog
+
+    from acoustic_spaces import i18n
+    from acoustic_spaces.gui.app import FOLLOW_RUN_SETTING
+    from acoustic_spaces.gui.following import NO_RUN
+    from acoustic_spaces.walkthrough import knots
+
+    window.open_example(example_path("studio"))
+    _quick(window.document)
+    start = window.document.scene.sources[0].position
+    _give_walk(window, "sources", 0, [{"time_s": 1.0, "position": [start[0] + 1.0, *start[1:]]}])
+    wav = tmp_path / "talk.wav"
+    write_wav(wav, np.r_[1.0, np.zeros(7999)], 8000)
+    window.document.update_point("sources", 0, signal=str(wav))
+    monkeypatch.setattr(
+        QFileDialog, "getSaveFileName", lambda *a, **k: (str(tmp_path / "heard.wav"), "")
+    )
+    window._follow_timer.setInterval(0)  # every change, so that the test sees each
+    source = window.document.scene.sources[0]
+    seen = []
+    show = window.plan.show_run
+
+    def shown(run) -> None:
+        show(run)
+        seen.append((run, _shown(window, "sources", 0).position))  # where the plan has it
+
+    monkeypatch.setattr(window.plan, "show_run", shown)
+    assert window.follow_action.isChecked() and window.follow_action.toolTip()
+    window.render_movement()
+    _wait(qapp, lambda: window.job is None)
+    qapp.processEvents()
+    placed = [(run, at) for run, at in seen if run.time is not None]
+    assert placed, "no place of the walk shown"
+    for run, at in placed:
+        assert ("sources", source.name) in run.names
+        np.testing.assert_allclose(at, knots(source).at(run.time)[0])
+    # The places a walk of 1 m in 1 s is simulated at, every 0.25 m.
+    assert {run.time for run, _at in placed} <= {0.0, 0.25, 0.5, 0.75, 1.0}
+    assert seen[-1] == (NO_RUN, source.position) and window.viewport.run == NO_RUN
+    assert window.plan.canvas.run == NO_RUN
+
+    # Off: the views show no run, and the choice is kept for the next start.
+    window.follow_action.setChecked(False)
+    assert i18n.setting(FOLLOW_RUN_SETTING) is False
+    seen.clear()
+    window.render_movement()
+    _wait(qapp, lambda: window.job is None)
+    qapp.processEvents()
+    assert seen and all(run == NO_RUN for run, _at in seen)
+    window.follow_action.setChecked(True)
+    assert i18n.setting(FOLLOW_RUN_SETTING) is True
+
+
+def test_a_run_shows_what_it_works_on_though_hidden(window, qapp) -> None:
+    """The roadside's car is left out, so hidden; a pass-by demo walks it in a scene of
+    its own: while the run works on it, the plan draws it where the run has it."""
+    from acoustic_spaces.gui.following import RunFocus
+    from acoustic_spaces.walkthrough import knots, place_name
+
+    window.open_example(example_path("roadside"))
+    assert ("sources", "car") in window.document.hidden
+
+    def demo_s(data: dict) -> None:
+        next(s for s in data["sources"] if s["name"] == "car")["enabled"] = True
+
+    data = window.document.scene.to_data()
+    demo_s(data)
+    walked = Scene.model_validate(data)
+    window._focus = RunFocus(window.document.scene, lambda: walked)
+    window._job_document = window.document
+
+    def drawn() -> dict:
+        return {(k, item.name): item for k, _i, item in window.plan.canvas._points()}
+
+    window._focus.read(f"{place_name('car', 40, 4.0)}: early reflections")
+    window._show_run()
+    car = next(s for s in walked.sources if s.name == "car")
+    np.testing.assert_allclose(drawn()["sources", "car"].position, knots(car).at(4.0)[0])
+    assert ("sources", "truck") not in drawn()
+    window._focus = None
+    window._show_run()
+    assert ("sources", "car") not in drawn() and ("sources", "car") in window.document.hidden
+
+
+def test_a_demo_s_walker_follows_the_demo_s_scene(window, qapp, tmp_path: Path) -> None:
+    """A demo runs on a scene of its own (Demo.walks): the editor follows its walks."""
+    from acoustic_spaces.gui.worker import DemoJob
+
+    window.open_example(example_path("studio"))
+    own = tmp_path / "scene_demo.yaml"
+
+    class Walking:
+        def __init__(self, walks) -> None:
+            self.walks = walks
+
+        def resolved(self, args):
+            return args
+
+    job = DemoJob(Walking(lambda args: args.scene), "walk", None)
+    job.args = type("Args", (), {"scene": own})()
+    assert window._walks_of(job)() == own
+    # A demo without walks of its own walks the open scene's.
+    job = DemoJob(Walking(None), "walk", None)
+    assert window._walks_of(job)() is window.document.scene
+
+
 # -- the 3D view (needs OpenGL: a display or Xvfb) --------------------------------------
+
+
+@pytest.mark.render
+def test_the_3d_view_rings_what_a_run_works_on(window, qapp) -> None:
+    """A ring around each source and listener a run works on, carried with its walker
+    to where the run simulates it, and gone when the run is over."""
+    from acoustic_spaces.gui.following import NO_RUN, RunView, walks_of
+
+    viewport = window.viewport
+    if not viewport.available:
+        pytest.skip(viewport.note)
+    scene = _walking_scene()
+    window.document.edit("walking", lambda data: data.update(scene.to_data()))
+    scene = window.document.scene
+    listener = scene.listeners[0].name
+    walks = walks_of(scene)
+    run = RunView(frozenset({("sources", "car"), ("listeners", listener)}), 1.0, walks)
+    viewport.show_run(run)
+    assert set(viewport._rings) == {("sources", 1), ("listeners", 0)}
+    ring = viewport._rings["sources", 1]
+    marker = viewport._point_actors["sources", 1][0]
+    assert ring.GetUserMatrix() is not None and marker.GetUserMatrix() is not None
+    moved = np.array(ring.GetUserMatrix().MultiplyPoint([*scene.sources[1].position, 1.0]))
+    np.testing.assert_allclose(moved[:3], walks["sources", "car"].at(1.0)[0], atol=1e-9)
+    assert viewport._rings["listeners", 0].GetUserMatrix() is None  # it stands still
+    # Its name goes with it: drawn from the points that move, not from a copy of them.
+    names = viewport._names.GetMapper().GetInputAlgorithm().GetInputDataObject(0, 0)
+    lift = next(lift for group, index, lift in viewport._lifts if (group, index) == ("sources", 1))
+    np.testing.assert_allclose(
+        names.GetPoints().GetPoint(1), walks["sources", "car"].at(1.0)[0] + [0.0, 0.0, lift]
+    )
+    viewport.show_room(window.document.room, ("sources", 0), run=run)  # a redraw keeps them
+    assert set(viewport._rings) == {("sources", 1), ("listeners", 0)}
+    # One the run turns turns with its arrows and its directivity's balloon.
+    window.document.edit("cardioid", lambda data: data["sources"][0].update(directivity="cardioid"))
+    stage = window.document.scene.sources[0]
+    turned = RunView(frozenset({("sources", "stage")}), facing=((("sources", "stage"), 90.0),))
+    viewport.show_room(window.document.room, ("sources", 0), run=turned)
+    parts = viewport._point_actors["sources", 0]
+    assert len(parts) == 4  # the marker, the arrow, the arrow to the top, the balloon
+    ahead = np.add(stage.position, stage.orientation.forward())
+    for actor in [*parts, viewport._rings["sources", 0]]:
+        moved = np.array(actor.GetUserMatrix().MultiplyPoint([*ahead, 1.0]))[:3]
+        np.testing.assert_allclose(moved, np.add(stage.position, [0.0, 1.0, 0.0]), atol=1e-9)
+    window._draw()  # no run goes on
+    assert viewport._rings == {} and viewport.run == NO_RUN
+    assert viewport._point_actors["sources", 1][0].GetUserMatrix() is None
 
 
 @pytest.mark.render
