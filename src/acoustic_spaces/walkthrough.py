@@ -40,12 +40,20 @@ as in a walk of its own: every listener hears each early path through its changi
 delay. ``walk.enabled: false`` keeps a walk
 but leaves its walker standing still, and :func:`with_moving` picks which walks are on
 for one run, so that one scene serves both still and moving.
+
+Each copy is named for its walker, its place and its time on the walk
+(:func:`place_name`, ``car #12 @ 3.40 s``), and the simulation's progress messages name
+it so; a demo's video names the moment of each walk it shows (:func:`moment_name`,
+``car @ 3.40 s``): :func:`place_of` reads the walker and the time back from both. A head
+turned as a demo scripts it is named with its yaw (:func:`facing_name`, ``standing
+facing 90.0 deg``), which :func:`facing_of` reads back.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import math
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,6 +85,47 @@ STEP_DEG = 20.0
 LATE_STEP_M = 2.0
 #: Length (s) of the crossfade from one place's response to the next.
 CROSSFADE_S = 0.05
+
+#: A place's name (:func:`place_name`), whole.
+_PLACE = re.compile(r"(?P<name>.+?)(?: #\d+)? @ (?P<time>\d+(?:\.\d+)?) s")
+_FACING = re.compile(r"(?P<name>.+) facing (?P<yaw>\d+(?:\.\d+)?) deg")
+
+
+def place_name(name: str, k: int, time_s: float) -> str:
+    """The name of the copy of the walker ``name`` at its ``k``-th place, ``time_s`` (s)
+    into its walk: ``car #12 @ 3.40 s``. Numbered, as places less than 10 ms apart would
+    share a time."""
+    return f"{name} #{k} @ {time_s:.2f} s"
+
+
+def moment_name(name: str, time_s: float) -> str:
+    """The walker ``name`` ``time_s`` (s) into its walk, as a demo's video says what it
+    shows: ``car @ 3.40 s``."""
+    return f"{name} @ {max(time_s, 0.0):.2f} s"
+
+
+def facing_name(name: str, yaw_deg: float) -> str:
+    """``name`` turned to the yaw ``yaw_deg`` (degrees, as a scene's orientation gives
+    it), as a demo says what it shows while a head turns: ``standing facing 90.0 deg``."""
+    return f"{name} facing {yaw_deg % 360.0:.1f} deg"
+
+
+def facing_of(label: str) -> tuple[str, float] | None:
+    """What a name that says which way it faces (:func:`facing_name`) names, and the yaw
+    (degrees); None for any other name."""
+    found = _FACING.fullmatch(label)
+    if found is None:
+        return None
+    return found["name"], float(found["yaw"])
+
+
+def place_of(label: str) -> tuple[str, float] | None:
+    """The walker and the time (s) of a place's name (:func:`place_name`) or a moment's
+    (:func:`moment_name`); None for any other name."""
+    found = _PLACE.fullmatch(label)
+    if found is None:
+        return None
+    return found["name"], float(found["time"])
 
 
 @dataclass(frozen=True)
@@ -333,7 +382,8 @@ def simulate_walk(
     listener or source with a walk), placed every ``step_m``.
 
     A walking listener hears every source; a walking source is heard at ``listener``
-    (by default the scene's only listener), with the other sources standing still.
+    (by default the scene's only listener), with the other sources standing still. The
+    walk must go slower than sound.
 
     The late part is traced every ``late_step_m`` (see the module's description), or at
     every place with ``late_step_m=None`` or the statistical late method. ``settings``
@@ -343,10 +393,10 @@ def simulate_walk(
     kind, item = _walker(room, name)
     points = walk_points(item, step_m)
     doppler = item.walk.doppler
+    _check_speed(room, item, knots(item).top_speed)
     if doppler:
-        _check_doppler(room, item, knots(item).top_speed, settings)
-    # Numbered, as places less than 10 ms apart would share a time.
-    names = tuple(f"{item.name} #{k} @ {t:.2f} s" for k, t in enumerate(points.times))
+        _check_doppler(room, settings)
+    names = tuple(place_name(item.name, k, t) for k, t in enumerate(points.times))
     copies = [
         _copy_at(item, label, place, None if points.angles is None else points.angles[k], yaw)
         for k, (place, label, yaw) in enumerate(
@@ -401,14 +451,20 @@ def simulate_walk(
     return WalkResponses(item.name, kind, points, names, result, late_places, doppler)
 
 
-def _check_doppler(room: Room, item, speed: float, settings: SimulationSettings | None) -> None:
-    """What a walk with Doppler cannot do: go as fast as sound, or take the wave solver."""
+def _check_speed(room: Room, item, speed: float) -> None:
+    """A walk goes slower than sound, with Doppler or without: the walker is heard as it
+    would be standing at each place, through sound that keeps to linear acoustics, which
+    has no meaning as fast as sound or faster (no shock wave, no sonic boom)."""
     c = room.speed_of_sound()
     if speed >= c:
         raise ValueError(
-            f"{item.name!r} walks at {speed:g} m/s, as fast as sound or "
-            f"faster ({c:.0f} m/s): Doppler needs it slower"
+            f"{item.name!r} walks at {speed:g} m/s, as fast as sound or faster "
+            f"({c:.0f} m/s): walks must go slower, as shock waves are not simulated"
         )
+
+
+def _check_doppler(room: Room, settings: SimulationSettings | None) -> None:
+    """What a walk with Doppler cannot do: take the wave solver."""
     if (settings or room.scene.simulation).wave.enabled:
         raise ValueError(
             "a walk with Doppler does not take the wave solver's bands: turn "
@@ -549,8 +605,8 @@ def simulate_movement(
     source in use, still or moving. The late part is traced every ``late_step_m`` along
     each mover's walk, as in :func:`simulate_walk`.
 
-    A walk with Doppler moves alone: with another mover it is refused. It must go slower
-    than sound, without the wave solver, as in :func:`simulate_walk`.
+    Every mover goes slower than sound. A walk with Doppler moves alone: with another
+    mover it is refused. It goes without the wave solver, as in :func:`simulate_walk`.
     """
     if step_m <= 0:
         raise ValueError("step_m must be positive")
@@ -561,6 +617,8 @@ def simulate_movement(
     if not moving:
         raise ValueError("nothing moves: give a listener or a source a walk that is enabled")
     paths = {item.name: knots(item) for _, item in moving}
+    for _, item in moving:
+        _check_speed(room, item, paths[item.name].top_speed)
     doppler = next((item for _, item in moving if item.walk.doppler), None)
     if doppler is not None:
         if len(moving) > 1:
@@ -569,7 +627,7 @@ def simulate_movement(
                 f"{doppler.name!r} walks with Doppler, which moves alone: leave {others} "
                 f"standing (turn their walks off), or turn its doppler off"
             )
-        _check_doppler(room, doppler, paths[doppler.name].top_speed, settings)
+        _check_doppler(room, settings)
     times = np.unique(np.concatenate([_sample_times(k, step_m, step_deg) for k in paths.values()]))
     copies: dict[tuple[str, str], tuple[str, ...]] = {}
     added: dict[str, list] = {"listeners": [], "sources": []}
@@ -590,7 +648,7 @@ def simulate_movement(
             else:
                 at.append(len(places))
                 places.append(k)
-        names = tuple(f"{item.name} #{j} @ {times[first]:.2f} s" for j, first in enumerate(places))
+        names = tuple(place_name(item.name, j, times[first]) for j, first in enumerate(places))
         copies[kind, item.name] = tuple(names[j] for j in at)
         added[kind] += [
             _copy_at(item, names[j], positions[first], angles[first])
@@ -619,10 +677,9 @@ def simulate_movement(
         for j, copy in enumerate(added[kind]):
             if not inside[offset + j]:
                 where = ", ".join(f"{v:.2f}" for v in copy.position)
-                name, _, when = copy.name.rpartition(" @ ")
+                name, when = place_of(copy.name)
                 raise ValueError(
-                    f"the walk of {name.rpartition(' #')[0]!r} leaves the room at ({where}) m, "
-                    f"{when} in"
+                    f"the walk of {name!r} leaves the room at ({where}) m, {when:.2f} s in"
                 )
     # The moving sources' places share the parabolic equation's runs where they can.
     result = simulate(
@@ -1253,10 +1310,15 @@ __all__ = [
     "WalkPoints",
     "WalkResponses",
     "crossfade_weights",
+    "facing_name",
+    "facing_of",
     "knots",
     "late_mixing",
+    "moment_name",
     "movers",
     "pass_by",
+    "place_name",
+    "place_of",
     "render_movement",
     "render_walk",
     "save_movement",

@@ -2,6 +2,98 @@
 
 ## Unreleased
 
+- Editor: **View > Follow the run** rings the sources and listeners a run's step works
+  on, a demo's too, and draws a walking source and the run's other walkers where the
+  place being simulated has them, on the walks the run simulates (`Demo.walks`); while
+  a demo's video is encoded, what the video shows at that moment; a head a demo turns
+  faces as it does then, its arrows and directivity balloon with it.
+- Demos: the video's messages say what it shows at each moment, `stage, car @ 3.40 s
+  -> seat: encoding the video, 12.1 of 60.0 s`, in place of ffmpeg's frame counter.
+- Fixed: the 3D view's names of walkers now move with them in the Movement panel's
+  preview; they stayed where each walk starts.
+- Fixed: the gallery walk demo stopped, after downloading the talk, when a talker's
+  take was shorter than the walk and the turn (F4's, 36 s); the guide now says it again
+  from its start, 2 s after it ends. Its walk and turn are made again for another
+  `--hrtf`, where `all` took them as done and the video stopped for want of their sound.
+- Fixed: `all` in the other demos took mixes made through other HRTFs (`--hrtf`) as
+  done, and without `--hrtf` a simulation through an HRTF file too, mixing through it;
+  their videos now refuse mixes of another `--format` or HRTF. Mixes from before say
+  neither, so they are made again.
+- A walk as fast as sound or faster now stops with an error without Doppler too, as it
+  did with Doppler: it played as places crossfaded one after another, as if shock waves
+  did not exist.
+- The demos' JSON files (walk.json and the others) are strict JSON: a level where
+  nothing is heard, as between a horn's blasts, is written null instead of -Infinity,
+  which browsers refuse.
+- On Windows, a demo whose scene lies on another drive than its example no longer stops
+  when it writes a siren's, horn's, train's, helicopter's or aircraft's directivity
+  table: the scene names the table in full.
+- `emission.Mixture` refuses signals without samples and a sample rate that is not
+  positive, which failed later with a division by zero.
+- The road docs say that CNOSSOS-EU's correction for road gradients is left out, that
+  the sirens' levels 7 m in front of a vehicle are taken 7 m from the siren, and that
+  recordings are levelled unweighted; a test holds every coefficient of Table F-1.
+- `doc29.event` warns (`doc29.NpdExtrapolationWarning`) when a segment's power lies so
+  far outside the NPD curves' that their extrapolated level departs more than 5 dB from
+  the nearest curve's (Volume 2 section 4.2); in Volume 3's cases and the airport
+  example's flights it departs 2.3 dB at most.
+- `anp.Database.profile` refuses to fly procedural steps, which give thrust in lb, for
+  an aircraft whose NPD curves are in another power parameter (`Aircraft.power_in_lb`).
+- `doc29.read_fixed_point_profiles` reads a column's unit from round or square brackets
+  (m, ft, feet; m/s, kt, kts, knots) and stops on an unknown or missing one instead of
+  taking metres or m/s. `read_aircraft` and `noise.installation_db` take a lateral
+  directivity by how it starts ("Wing-mounted" is a wing installation); any other is an
+  error, where it gave no installation correction.
+- A walk whose first two places stand one above the other no longer flies the airport's
+  jets to NaN positions: `Track.through` leaves out a point within 1 µm of the one
+  before it, and `Track.at` and `Track.extended` pass over legs of no length.
+- `performance.departure` stops with an error on a climb step without the thrust to
+  climb, with more thrust than weight or into a headwind that leaves it no climb angle
+  (eq. B-21, B-22), instead of flying the profile backwards or failing in `math.asin`.
+- Doc 29's maximum level at a receiver alongside a segment (`doc29.segment_levels`,
+  `doc29.event`) takes the equivalent level path's elevation angle, lateral
+  displacement and depression angle, as the exposure does (Volume 2 section 4.5.5).
+  L_Amax moves by up to 0.064 dB on Volume 3's grids and receptors under the jets'
+  departures, 0.017 dB under PROP's and 0.006 dB under the arrivals (SEL does not move),
+  and the airport example's departure at lateral_450m is 85.1 dB(A) by Doc 29 (was 85.0).
+- Volume 3's impedance adjustment converts its 29.92 inHg with Appendix B2.2's
+  3.38653131 kPa per inHg (`doc29.performance.KPA_PER_INHG`), not 3.386389: its levels
+  rise by 0.0002 dB, the 99 levels at its receptors now within 0.0055 dB of table B-1
+  (was 0.0057 dB).
+- `doc29.segment_levels` and `doc29.event` document their `impedance`, which the caller
+  passes from `doc29.impedance_db` for the aerodrome; its default, 0, is the NPD curves'
+  reference day (25 °C), 0.074 dB under the standard atmosphere at sea level.
+- Docs: JETW's arrival NPD curves give SEL - L_Amax within 0.22 dB of a point source's
+  (not 0.1 dB), Volume 3 Part 2 has no arrivals of PROP, and the NPD curves' microphone
+  height is cited from Volume 2 sections 2.5 and 4.5.4.
+- The pass-by captions average a horn's sound power over 125 ms (the Fast time constant)
+  before each place takes its share, so a short walk step no longer reads the beats
+  between its notes as louder blasts (3 to 5 dB over at 5 cm). The street's car with its
+  horn now peaks at 97.0, 93.9 and 80.5 dB(A) (was 97.1, 94.0 and 81.6), the fire
+  engine at 111.0 dB(A) on the balcony (was 111.1).
+- The pass-by demos fill a train's or tram's sound files a point at a time in 32 bits:
+  the railway example's freight train, 50 points at the rail top for 10.8 s at 48 kHz,
+  takes 104 MB instead of 415 MB.
+- `acoustic_spaces.vibration` raises a ValueError that says what it takes for a speed or
+  a distance from plant that is not a finite number above 0, a land use or a kind of
+  events its tables do not have, and special trackwork that is not a finite 0 m or more
+  away (None for none near). A train's `Unit` raises one for a tank wagon or air
+  conditioning that its category's data sheet does not have, instead of leaving it out.
+- Docs: the TSI table gives each unit's whole pass over Tp, beside EN ISO 3095:2013's own
+  time windows for a coach or a wagon; the glazing's traffic figure is rated from its
+  octaves, 29 - 4 + 9.6 = 34.6 dB; the FTA curves' docs say how `Curve.levels` reads
+  them outside 10 to 300 ft.
+- The pass-by demos' freight train has 5 tank wagons among its 24, Schall 03's share of
+  20 % when a freight train's make-up is not known (4.2), their bodies ringing 4 m up:
+  116.4 dB(A) of sound power there instead of 111.8, 131.9 dB(A) in all instead of
+  131.8. Behind the railway's barrier its SEL goes from 79.6 to 82.6 dB(A); at the other
+  listeners its levels rise by 0.1 to 0.4 dB.
+- The railway example's line source has Schall 03's directivity round the track
+  (equation 8, `line.csv`, `acoustic_spaces.demos.rail.directivity("left")`) and so 0.28
+  dB more sound power, its points 2.5 m apart instead of 10 m: in a free field it gives
+  Schall 03's sum within 0.01 dB(A), not 0.2 to 0.4 dB(A) over it. Over the example's
+  ground it is 0.2 to 0.7 dB(A) louder, 1.0 dB(A) quieter behind the barrier, and the
+  example takes 2.3 times as long to simulate.
 - `--indoors` takes a room's level outdoors 2 m in front of its wall, EN ISO 12354-3's
   L_1,2m, simulating one more listener there where its listener stands nearer: the
   offices' room behind the street's balcony, 1 m out, moves by up to 2.1 dB at 63 to 250
