@@ -1,6 +1,6 @@
 """The trains and trams of the pass-by demos (:mod:`acoustic_spaces.demos.rail`):
 Schall 03's data sheets, its equation 1, the sound power of a moving unit and its
-directivity, a train's points and their sound."""
+directivity, a train's points and their sound, and the railway example's line source."""
 
 import argparse
 import math
@@ -195,14 +195,93 @@ def test_a_moving_unit_sends_its_level_per_metre_and_hour() -> None:
 
 def test_the_directivity_is_schall_03s_round_the_track() -> None:
     """Across the track D_I is +1.7 dB, along it -6.6 dB; in the scene the pattern
-    averages 0 dB, DIRECTIVITY_DB under Schall 03's."""
+    averages 0 dB, DIRECTIVITY_DB under Schall 03's. A train's track runs along its
+    forward axis, a line source's along its left axis."""
     assert rail.directivity_db(90.0) == pytest.approx(1.73, abs=0.01)
     assert rail.directivity_db(0.0) == pytest.approx(-6.58, abs=0.01)
-    balloon = rail.directivity()
     ways = np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [-1.0, 0.0, 0.0]])
-    gains = 10.0 * np.log10(balloon.energy(ways)[:, 0])
-    expected = rail.directivity_db([90.0, 0.0, 90.0, 180.0]) - rail.DIRECTIVITY_DB
-    np.testing.assert_allclose(gains, expected, atol=0.05)
+    for track, angles in (("forward", [90.0, 0.0, 90.0, 180.0]), ("left", [0.0, 90.0, 90.0, 90.0])):
+        gains = 10.0 * np.log10(rail.directivity(track).energy(ways)[:, 0])
+        expected = rail.directivity_db(angles) - rail.DIRECTIVITY_DB
+        np.testing.assert_allclose(gains, expected, atol=0.05)
+    np.testing.assert_array_equal(rail.directivity().table, rail.directivity("forward").table)
+    with pytest.raises(ValueError, match="along a source's forward or left axis, not 'up'"):
+        rail.directivity("up")
+
+
+@pytest.mark.parametrize(("table", "track"), [("train.csv", "forward"), ("line.csv", "left")])
+def test_the_railway_examples_tables_are_the_modules(tmp_path, table, track) -> None:
+    """The railway example's directivity tables are :func:`rail.directivity` as
+    write_directivity_csv writes it, under their own comment: the trains' round their
+    forward axis, the line source's round its left axis, along which it lies."""
+    from acoustic_spaces.directivity import write_directivity_csv
+
+    shipped = (Path(example_path("railway")).parent / table).read_text(encoding="utf-8")
+    written = write_directivity_csv(tmp_path / table, rail.directivity(track))
+    rows = [row for row in shipped.splitlines() if not row.startswith("#")]
+    assert rows == written.read_text(encoding="utf-8").splitlines()
+    assert "Schall 03 (equation 8)" in shipped.splitlines()[0]
+
+
+def test_the_railway_examples_line_is_schall_03s_hourly_traffic(tmp_path) -> None:
+    """The railway example's line source is the regional train once an hour at 160 km/h
+    as Schall 03 sums a track. Its level is the train's sound power per metre (equation
+    1) over its 300 m with DIRECTIVITY_DB, to 0.1 dB. In a free field at the example's
+    listeners its points (line.csv, spacing_m apart) give, within 0.01 dB in every band,
+    Schall 03's sum of that level per metre over the line: pieces of 0.1 m (section
+    3.4), each radiating with D_I = 10 lg(0.22 + 1.27 sin² δ), δ the angle to the track
+    (equation 8), over a sphere (equation 11) through the scene's air. Without the
+    directivity they give 0.24 to 0.52 dB(A) more, 10 m apart 0.35 dB(A) less at
+    tsi_7m5."""
+    from acoustic_spaces import Room, Scene
+    from acoustic_spaces.air import energy_attenuation_per_m
+    from acoustic_spaces.engine import early_paths
+
+    scene = Scene.from_yaml(example_path("railway"))
+    (line,) = [s for s in scene.sources if s.name == "line"]
+    train = rail.TRAINS["regional"]
+    per_metre_a = 10.0 * np.log10(
+        sum(
+            10.0 ** (np.asarray(level) / 10.0)
+            for unit in train.units
+            for level in unit.line_levels_a(train.speed_kmh).values()
+        )
+    )
+    per_metre = per_metre_a - np.asarray(A_WEIGHTING_DB)
+    expected = per_metre + 10.0 * math.log10(line.line_m) + rail.DIRECTIVITY_DB
+    np.testing.assert_allclose(line.level_db, expected, atol=0.05)
+    assert line.directivity.file == Path(example_path("railway")).parent / "line.csv"
+    ends = line.outline()
+    np.testing.assert_allclose(ends, [[-150.0, 0.0, 0.2], [150.0, 0.0, 0.2]], atol=1e-9)
+
+    (tmp_path / "far.obj").write_text("v 0 0 -1000\nv 0.1 0 -1000\nv 0 0.1 -1000\nf 1 2 3\n")
+    free = Scene.model_validate(
+        {
+            "geometry": {"file": str(tmp_path / "far.obj")},
+            "materials": {"absorber": {"absorption": [1.0] * 8, "scattering": 0.0}},
+            "default_material": "absorber",
+            "air": scene.air.model_dump(mode="json"),
+            "sources": [line.model_dump(mode="json", exclude_none=True)],
+            "listeners": [{"name": s.name, "position": s.position} for s in scene.listeners],
+        }
+    )
+    room = Room.from_scene(free)
+    # Schall 03's sum of the scene's level per metre, the track along x.
+    pieces = 3000
+    x = ends[0, 0] + (np.arange(pieces) + 0.5) * line.line_m / pieces
+    power = line.power_db()
+    level_per_metre = power - rail.DIRECTIVITY_DB - 10.0 * math.log10(line.line_m)
+    damping = energy_attenuation_per_m(free.air.temperature_c, free.air.humidity_percent)
+    for listener in free.listeners:
+        across = np.hypot(listener.position[1] - ends[0, 1], listener.position[2] - ends[0, 2])
+        d = np.hypot(x - listener.position[0], across)
+        d_i = 0.22 + 1.27 * (across / d) ** 2
+        energy = d_i[:, None] * np.exp(-np.outer(d, damping)) / (4.0 * math.pi * d[:, None] ** 2)
+        schall = level_per_metre + 10.0 * np.log10(energy.sum(axis=0) * line.line_m / pieces)
+        paths = early_paths(room, "line", listener.name, max_order=0, diffraction="none")
+        assert len(paths.energy) == len(line.elements()) == 120
+        heard = power + 10.0 * np.log10(paths.energy.sum(axis=0))
+        np.testing.assert_allclose(heard, schall, atol=0.01, err_msg=listener.name)
 
 
 def test_a_trains_points_share_out_its_units_sound_power() -> None:
@@ -224,6 +303,38 @@ def test_a_trains_points_share_out_its_units_sound_power() -> None:
             10.0 * np.log10(sum(10.0 ** (v / 10.0) for v in levels.values())), 160.0
         )
         np.testing.assert_allclose(10.0 * np.log10(energy), expected)
+
+
+def test_a_fifth_of_the_freight_trains_wagons_are_tank_wagons() -> None:
+    """Schall 03 4.2 (Festlegungen zu Tabelle 5, Zeilen 3 und 4) takes 20 % of a freight
+    train's wagons as tank wagons unless its make-up is known: 5 of the freight train's
+    24 wagons, 20 % within one wagon, spread along it, each with its body ringing 4 m up
+    (sources 3 and 4): 4 m up 116.4 dB(A) of sound power, the locomotive's roof alone
+    111.8, the train 131.9 dB(A) in all. Its first wagon, the TSI's freight wagon in
+    validation/rail_sources.py, is not one. What its roof's source plays says so, and
+    the other trains', which have no tank wagons, do not."""
+    from acoustic_spaces.parameters import a_weighted
+
+    train = rail.TRAINS["freight"]
+    wagons = [unit for unit in train.units if unit.category == 10]
+    tanks = [k for k, unit in enumerate(wagons) if unit.tank]
+    assert len(wagons) == 24 and len(tanks) == 5
+    assert abs(len(tanks) / len(wagons) - 0.20) < 1.0 / len(wagons)
+    assert min(np.diff(tanks)) >= 4 and tanks[0] < 5 and tanks[-1] >= 19
+    assert train.units[1].category == 10 and not train.units[1].tank
+    points = rail.train_points(train, 100.0)
+    roof = [p for p in points if p.height_m == 4.0]
+    assert [p.unit for p in roof] == [0, *(k + 1 for k in tanks)]
+    loco = [p for p in roof if p.unit == 0]
+    assert a_weighted(rail.train_power_db(loco)) == pytest.approx(111.78, abs=0.01)
+    assert a_weighted(rail.train_power_db(roof)) == pytest.approx(116.35, abs=0.01)
+    assert a_weighted(rail.train_power_db(points)) == pytest.approx(131.86, abs=0.01)
+    tanks_there = "and its tank wagons' bodies there"
+    for name in ("freight", "regional"):
+        roofs = rail.TRAIN_VEHICLE.feeds(argparse.Namespace(train=name, horn="off"), "")
+        assert (tanks_there in roofs["train_roof"]) == (name == "freight"), name
+    tram = rail.TRAM_VEHICLE.feeds(argparse.Namespace(horn="off"), "")
+    assert tanks_there not in tram["tram_roof"]
 
 
 def test_a_points_sound_has_its_spectrum_and_its_share_of_the_level() -> None:

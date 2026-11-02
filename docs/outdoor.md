@@ -107,9 +107,11 @@ follow the terrain: their points stand at the map's height over the ground under
   source and the listener, as the outdoor standards (CNOSSOS-EU, Nord2000) have it: the
   plane through the least-squares line of the profile, level across it, with the
   reflection factor of the ground under the reflection point (its material, or the
-  grounds of the zones its Fresnel zone covers, as on flat ground). Over a plain or a
-  plane slope that is the ground itself, and the reflection is the one flat ground
-  gives.
+  grounds of the zones its Fresnel zone covers, as on flat ground). The line is fitted
+  to the whole profile, segment by segment, as CNOSSOS-EU fits it, so it follows the
+  ground's shape, not where the edges of the terrain's triangles cross the profile. Over
+  a plain or a plane slope that is the ground itself, and the reflection is the one flat
+  ground gives.
 - **Crests** between the source and the listener bend the sound over them. The ground's
   profile in the vertical plane between the two is drawn, and the string pulled taut
   over it from one to the other bends at the crests in the way: each is a wedge whose
@@ -1114,13 +1116,16 @@ and which Pegg's fit to measured rotors holds.
 
 A scene's source carries the sound power and the directivity of what the rotors send,
 for the levels the simulation and the pass-by report and for the late part:
-`sent.sound_power_db(trim.density, trim.sound_speed)` gives the one per octave band
-and `sent.directivity()` the other, which
+`sent.sound_power_db(trim.density, trim.sound_speed)` gives the one per octave band and
+`sent.directivity()` the other, which
 `acoustic_spaces.directivity.write_directivity_csv` writes as a table a scene reads
-(`directivity: {file: helicopter.csv}`). The `helicopter_flyover` example has them for
-an AS350 B3 150 m up at 63 m/s against a light wind, and its
-[flyover demo](demos.md#a-helicopter-flying-over) flies it over a meadow, its rotors
-trimmed at its airspeed: its speed over the ground less the wind at its height.
+(`directivity: {file: helicopter.csv}`). Both are in IEC octaves, so the main rotor's
+tones at its blade passing frequency and at twice it (19.7 and 39.4 Hz for the AS350
+B3), below the 63 Hz octave, are in no band ([the sound sent each
+way](spatial-audio.md#moving-sources-and-doppler)). The `helicopter_flyover` example has
+them for an AS350 B3 150 m up at 63 m/s against a light wind, and its [flyover
+demo](demos.md#a-helicopter-flying-over) flies it over a meadow, its rotors trimmed at
+its airspeed: its speed over the ground less the wind at its height.
 
 What it leaves out: loads that change round the turn (in forward flight the
 advancing blade carries less lift than the retreating one, and the blades flap), the

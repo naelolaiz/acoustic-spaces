@@ -226,8 +226,11 @@ request and checks:
   crossed it inside it; a ceiling that lets sound through counted as an opening, not a
   leak; a source outside a closed model named; and no leak in the other examples;
 - walkthroughs: the places along a walk every 25 cm, facing forward and turning the
-  shorter way round at the set pace; crossfade weights that add up to one and are
-  continuous; the late parts of the places between those traced mixed in proportion to
+  shorter way round at the set pace; crossfade weights that add up to one; crossfades
+  that are continuous, keep a tone heard a quarter or a third of a turn later at the
+  next place to within 0.1 dB of its level, turn a tone in antiphase up by 6 dB at most,
+  keep unlike noise's power (to 0.2 dB) and correct each octave band by its own
+  correlation; the late parts of the places between those traced mixed in proportion to
   the distance; one response everywhere equal to the plain convolution (to 1e-12); a
   walking listener, and a walking source heard at a listener; and the gallery walk
   rendered through its places;
@@ -2483,6 +2486,12 @@ slope, and within 2 mm and 7e-5 with the listener 160 m aside, where the ground 
 tilts across the profile, which the mean plane, level across it as the standards have
 it, leaves out.
 
+**The mean plane** of an uneven profile is CNOSSOS-EU's, the least-squares line of the
+whole profile: `tests/test_terrain.py` checks it against ISO/TR 17534-4's test cases
+TC05 and TC06 (the plane's slope and height and the equivalent heights of the source and
+the receivers over it, to the tables' two decimals), and that the same ground on a 10 m
+and on a 5 m grid gives the same reflection.
+
 **A ridge**, two slopes of 0.6 meeting at 241.9 degrees, with the source on one slope and
 the listener in its shadow on the other, against the Biot-Tolstoy-Medwin solution for the
 rigid wedge ([Edge diffraction](#edge-diffraction-against-the-exact-solution)), per
@@ -2556,9 +2565,9 @@ interference and the lit zone's ripples:
 | 16.5 | -4.36 | -8.72 | -10.61 | -11.22 | -14.06 | -17.34 | -20.11 | -23.17 |
 | 19.0 | -3.66 | -7.49 | -8.57 | -8.92 | -11.12 | -13.96 | -16.55 | -19.52 |
 | 21.5 | -2.85 | -6.24 | -6.14 | -6.06 | -6.95 | -8.40 | -9.65 | -11.44 |
-| 24.0 | -2.05 | -5.02 | -3.53 | -2.94 | -2.20 | -1.46 | +0.32 | +1.17 |
-| 26.5 | -1.18 | -3.93 | -1.16 | -0.31 | +0.85 | +0.96 | +0.93 | +0.55 |
-| 29.0 | -0.37 | -3.25 | +0.79 | +0.79 | +0.24 | +0.99 | +0.46 | +0.90 |
+| 24.0 | -2.06 | -5.01 | -3.52 | -2.95 | -2.20 | -1.46 | +0.32 | +1.17 |
+| 26.5 | -1.24 | -3.85 | -1.18 | -0.33 | +0.86 | +0.96 | +0.93 | +0.55 |
+| 29.0 | -0.51 | -3.09 | +0.64 | +0.91 | +0.26 | +0.98 | +0.45 | +0.91 |
 
 At 63 Hz the level first falls as the listener rises, from -6.8 dB at 1.5 m to -9.9 at
 6.5 m: the reflection off the ground behind the hill, in phase with the wave over the
@@ -2566,12 +2575,12 @@ crest at the ground, lags it more the higher the listener. From there every band
 through the edge of the shadow, 12.6 dB in the 2.5 m round the line of sight at 8 kHz,
 and every band but 125 Hz comes to within 1 dB of free field above it, where the
 direct sound, the ground's reflection and the crest's wave ripple together; 125 Hz
-stays 3 to 4 dB down (-3.9 and -3.3 dB at 26.5 and 29 m).
+stays 3 to 4 dB down (-3.9 and -3.1 dB at 26.5 and 29 m).
 
 **Cost.** Rolling hills 2 km across on a 20 m grid (10,000 cells, 21,233 triangles with
-a building): the model builds in 2.4 s, its 8 diffracting edges (the building's) are
-found in 0.1 s, the early path over the hills in 0.2 s and a whole run with 20,000 rays
-takes 0.5 s, on four cores of a cloud machine with nothing else running. The terrain
+a building): the model builds in 0.3 s, its 8 diffracting edges (the building's) are
+found in 0.1 s, the early path over the hills in 0.4 s and a whole run with 20,000 rays
+takes 0.8 s, on four cores of a cloud machine with nothing else running. The terrain
 costs the late rays nothing
 beyond the triangles it adds, and the early sound the profile and the string over it,
 once per listener.
@@ -2837,21 +2846,26 @@ error, mean and most), away from the walk's ends:
 
 | case | tone | waveform | level | without Doppler: waveform | level |
 |---|---|---|---|---|---|
-| car, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | 2.0 dB | 2.02 / 6.59 dB |
-| | 1 kHz | -54.0 dB | 0.003 / 0.029 dB | 2.4 dB | 1.41 / 6.16 dB |
-| | 4 kHz | -45.4 dB | 0.003 / 0.032 dB | 2.5 dB | 1.63 / 6.98 dB |
-| train, 80 m/s | 250 Hz | -46.4 dB | 0.007 / 0.024 dB | 2.2 dB | 2.22 / 4.84 dB |
-| | 1 kHz | -46.7 dB | 0.012 / 0.032 dB | 2.3 dB | 1.95 / 4.24 dB |
-| | 4 kHz | -38.7 dB | 0.081 / 0.415 dB | 2.5 dB | 2.68 / 10.88 dB |
-| passing listener, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | -2.4 dB | 2.01 / 6.05 dB |
-| | 1 kHz | -54.2 dB | 0.003 / 0.019 dB | 1.1 dB | 1.29 / 5.79 dB |
-| | 4 kHz | -45.5 dB | 0.003 / 0.019 dB | 2.4 dB | 1.53 / 6.11 dB |
+| car, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | 2.9 dB | 0.73 / 3.42 dB |
+| | 1 kHz | -54.0 dB | 0.003 / 0.029 dB | 2.9 dB | 0.76 / 3.54 dB |
+| | 4 kHz | -45.4 dB | 0.003 / 0.032 dB | 3.0 dB | 0.96 / 4.13 dB |
+| train, 80 m/s | 250 Hz | -46.4 dB | 0.007 / 0.024 dB | 2.9 dB | 1.62 / 2.75 dB |
+| | 1 kHz | -46.7 dB | 0.012 / 0.032 dB | 2.9 dB | 1.63 / 3.54 dB |
+| | 4 kHz | -38.7 dB | 0.081 / 0.415 dB | 3.1 dB | 2.39 / 12.21 dB |
+| passing listener, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | -0.5 dB | 0.22 / 2.87 dB |
+| | 1 kHz | -54.2 dB | 0.003 / 0.019 dB | 1.7 dB | 0.24 / 3.45 dB |
+| | 4 kHz | -45.5 dB | 0.003 / 0.019 dB | 2.9 dB | 0.35 / 3.78 dB |
 
 With Doppler the sound follows the field to within 39 dB and its level to within 0.42
 dB, the most for the train at 4 kHz, where its two paths cancel for a moment. The same
 walks crossfaded from place to place, as without Doppler, keep each place's pitch, so
 their phase jumps from place to place: the waveform's error is about as large as the
-field itself (-2.4 dB or more) and the level misses by 4 to 11 dB at times.
+field itself (-0.5 dB or more). Their crossfades keep each band's power however alike
+the places sound, so at 30 m/s the level misses by 0.2 to 1.0 dB on average and by 2.9
+to 4.1 dB at most. The train, its places 12.5 ms apart and so always crossfading, misses
+by 1.6 to 2.4 dB on average and 2.7 to 3.5 dB at most at 250 Hz and 1 kHz; at 4 kHz by
+12 dB 0.72 s in, where the field's two paths cancel for a moment (10 dB below its median
+level) and the places' do not.
 
 **The sound sent each way.** The same walks with the source sending a tone each way
 (an `Emission`, `acoustic_spaces.emission`): 1 + 0.8 cos θ in amplitude, θ from
@@ -2934,15 +2948,15 @@ places' band levels:
 | 8 kHz | -31.81 | -31.81 | -31.85 | -31.82 | -31.82 |
 
 The sound keeps the energy of the responses to within 0.07 dB in every band, with its
-late part and without. The late part is crossfaded as in any walk, drawn from one random
-sequence for every place; the responses here are drawn from the same one, as otherwise
-their late parts' chance correlation with the early sound would differ by up to 0.25
-dB in a band (a one-off check). The pass-by's band levels are within 0.25 dB of the sound, 0.8 dB in the
-500 Hz band, where the ground's dip falls: the pass-by takes the places' band levels,
-averaged over each band, where the sound is read through band filters, whose skirts
-fill a dip (a cause not checked separately). For a car at 30 m/s over
-this grass with 94 dB of sound power, the listener has L_Amax 61.4 dB(A) 2.03 s into
-the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A) over 4 s.
+late part and without. The late part is crossfaded by weights that add up to one, drawn
+from one random sequence for every place; the responses here are drawn from the same
+one, as otherwise their late parts' chance correlation with the early sound would differ
+by up to 0.25 dB in a band (a one-off check). The pass-by's band levels are within 0.25
+dB of the sound, 0.8 dB in the 500 Hz band, where the ground's dip falls: the pass-by
+takes the places' band levels, averaged over each band, where the sound is read through
+band filters, whose skirts fill a dip (a cause not checked separately). For a car at 30
+m/s over this grass with 94 dB of sound power, the listener has L_Amax 61.4 dB(A) 2.03 s
+into the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A) over 4 s.
 
 **What it leaves out.** The engine's source is quasi-static, as the field it is
 compared with: a moving source's convective amplification is left out (taking its
@@ -3296,7 +3310,7 @@ Commission Regulation (EU) No 1304/2014 (the TSI Noise, table 4) for new units t
 | electric multiple unit (the S-Bahn, 67.4 m) | 3.03 s | 82.3 | 86.2 | 80 |
 | electric locomotive (19.0 m) | 0.86 s | 87.7 | 90.4 | 84 |
 | coach (26.4 m) | 1.19 s | 84.0 | 88.0 | 79 |
-| freight wagon with composite blocks (17.8 m) | 0.80 s | 85.9 | 89.9 | 83 |
+| freight wagon with composite blocks, not a tank wagon (17.8 m) | 0.80 s | 85.9 | 89.9 | 83 |
 
 (dB(A)). Schall 03's units are 6.2 to 9.0 dB over the limits by its own reckoning, and
 2.3 to 5.0 dB over them in the engine. The limits are for new units on a track of low
@@ -4057,17 +4071,17 @@ seconds, the fade at edges' 53 minutes, the walks' 14, the ground's 5.5 (51 s of
 the wave solver's, 100 s the parabolic equation's), the outdoor measurements' 3.1 (3.0
 with turbulence, 20 seconds in still air), the turbulence's 3.9 (3.8 with `--profile`),
 the vegetation's 5.2, the leaves' 2.6, the wave solver's outdoors 11, the moving air's
-9.3, the insertion loss's 1.8, the terrain's 2.7, the fast field program's 5.7, the
-benchmark's 55 (much longer with `--far`), the weather zones' 7.2 (46 s of them the
-parabolic equation's, 6.4 minutes the mean profile's), the long term's 16 seconds, the
-moving sources' 5.6 minutes, the rotors' 3.3, the sirens' 4 seconds, the cities' 22 (1.3
-minutes with `--sizes 10 20 30 40 60`), each BRAS run of the coupled rooms, the seminar
-room or the auditorium 2 to 4 minutes (4 to 9 calibrated, 5 to 11 in third-octave bands)
-and of the hall about 1.5 hours (5.2 calibrated, 3.4 in third-octave bands), the
-binaural comparison 10 minutes in the seminar room, 6 in the auditorium and an hour in
-the hall, a loudspeaker of the hall in parts about 10 minutes, the coupled rooms against
-theory under a second, and the rooms' own decay 5.8 minutes. The cross-check's numbers
-come from 4.0.1 with seed 1;
+9.3, the insertion loss's 1.8, the terrain's 41 seconds (2 November), the fast field
+program's 5.7, the benchmark's 55 (much longer with `--far`), the weather zones' 7.2
+(46 s of them the parabolic equation's, 6.4 minutes the mean profile's), the long term's
+16 seconds, the moving sources' 5.6 minutes, the rotors' 3.3, the sirens' 4 seconds, the
+cities' 22 (1.3 minutes with `--sizes 10 20 30 40 60`), each BRAS run of the coupled
+rooms, the seminar room or the auditorium 2 to 4 minutes (4 to 9 calibrated, 5 to 11 in
+third-octave bands) and of the hall about 1.5 hours (5.2 calibrated, 3.4 in third-octave
+bands), the binaural comparison 10 minutes in the seminar room, 6 in the auditorium and
+an hour in the hall, a loudspeaker of the hall in parts about 10 minutes, the coupled
+rooms against theory under a second, and the rooms' own decay 5.8 minutes.
+The cross-check's numbers come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the
 onset in every response).
 pyroomacoustics draws its rays afresh on every run, so the script averages five runs of it

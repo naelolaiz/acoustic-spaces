@@ -12,15 +12,19 @@ simulates the scene, and ``render`` and ``video`` are the scene demo's
 works go on, binaural, one gain for all, each stop's caption giving the level there.
 ``--indoors`` hears them inside the house a listener stands in front of instead:
 through its closed window, with the rumble of the breaker's and the dumper's vibration,
-or either alone (:class:`acoustic_spaces.demos.indoors.StillHouses`). What is felt at
-each listener, the ground's or the house's floor's vibration, is a track for a bass
-shaker too (``<listener>.shaker.wav`` beside the mixes, ``tour.shaker.wav``).
+or either alone (:class:`acoustic_spaces.demos.indoors.StillHouses`); a room whose
+listener does not stand 2 m in front of its wall takes its level outdoors at the point
+there, which ``scene`` writes to a scene of its own (:func:`front_scene`) and
+``simulate`` simulates too. What is felt at each listener, the ground's or the house's
+floor's vibration, is a track for a bass shaker too (``<listener>.shaker.wav`` beside
+the mixes, ``tour.shaker.wav``).
 """
 
 from __future__ import annotations
 
 import argparse
 import dataclasses
+import math
 from pathlib import Path
 
 import numpy as np
@@ -40,6 +44,7 @@ from acoustic_spaces.demos import (
     scene_demo,
 )
 from acoustic_spaces.demos.audio import mono, read, resampled, write
+from acoustic_spaces.parameters import OCTAVE_BANDS_HZ
 
 #: The works' sources in the street example, in the order the demo lists them.
 SOURCES = (plant.BREAKER.name, plant.GENERATOR.name, plant.DUMPER.name, plant.ALARM)
@@ -93,11 +98,54 @@ def _point(position) -> tuple[float, float, float]:
     return x, y, z
 
 
-def houses(args: argparse.Namespace) -> indoors.StillHouses | None:
+def front_scene(args: argparse.Namespace) -> Path:
+    """The works heard where the rooms behind listeners that do not stand 2 m in front
+    of a wall take their level outdoors (:func:`~acoustic_spaces.demos.indoors.fronts`):
+    ``--scene`` with ``_2m`` after its name, its listeners those points."""
+    path = Path(args.scene)
+    return path.with_name(f"{path.stem}_2m{path.suffix}")
+
+
+def simulations(args: argparse.Namespace) -> list[pipeline.Simulation]:
+    """The scene's simulation and, when :func:`front_scene` is there, that one's."""
+    out = scene_demo.simulations(args)
+    front = pipeline.Simulation(
+        front_scene(args), scene_demo.work_of(args) / "results_2m", args.format
+    )
+    return [*out, front] if front.scene.exists() else out
+
+
+def front_points(found) -> dict[str, tuple[float, float, float]]:
+    """:func:`~acoustic_spaces.demos.indoors.fronts` of the listeners in use of the scene
+    ``found``."""
+    names = [lis.name for lis in found.listeners if lis.in_use]
+    return indoors.fronts(found, indoors.facings(found, names))
+
+
+def _levels(entries: list[dict], listener: str, sources) -> dict[str, list | None]:
+    """Each of ``sources``' level per octave band at ``listener`` in a simulation's
+    ``entries`` (parameters.json's responses), or None."""
+    found = {e["source"]: e.get("spl_db") for e in entries if e["listener"] == listener}
+    return {name: found.get(name) for name in sources}
+
+
+def _total_db(levels) -> np.ndarray:
+    """(8,) the levels per octave band of ``levels`` (each source's, None unknown), their
+    energies added; NaN in a band one of them does not know."""
+    rows = [[math.nan if v is None else v for v in row] for row in levels if row is not None]
+    if not rows:
+        return np.full(len(OCTAVE_BANDS_HZ), math.nan)
+    with np.errstate(divide="ignore"):
+        return 10.0 * np.log10(np.sum(10.0 ** (np.asarray(rows, dtype=float) / 10.0), axis=0))
+
+
+def houses(args: argparse.Namespace, demo: Demo | None = None) -> indoors.StillHouses | None:
     """The works at each listener: in the house it stands in front of, as ``--indoors``
     asks (the works heard through its window, the rumble of the breaker's and the
     dumper's vibration, or both), or outdoors, with what is felt there; None when
-    nothing of them shakes the ground and they are heard outdoors."""
+    nothing of them shakes the ground and they are heard outdoors. Through the window,
+    a room whose listener does not stand 2 m out takes its level outdoors from
+    :func:`front_scene`'s simulation. ``demo`` gives the commands to run first."""
     from acoustic_spaces import Scene
 
     choice = getattr(args, "indoors", None)
@@ -119,6 +167,22 @@ def houses(args: argparse.Namespace) -> indoors.StillHouses | None:
         )
     names = [lis.name for lis in found.listeners]
     inside = indoors.houses_heard(found, names, house, NOUN, args.scene.name)
+    fronts, shifts = {}, {}
+    points = front_points(found) if house is not None and house.airborne else {}
+    if points:
+        sources = [s.name for s in playing]
+        first = "the scene step" if demo is None else demo.command("scene", args)
+        if not front_scene(args).exists():
+            # The scene was written without these points (by an earlier works_demo.py).
+            raise SystemExit(f"error: no {front_scene(args)}; run first: {first}")
+        own = pipeline.responses_of(scene_demo.simulations(args)[0], args, first)
+        there = pipeline.responses_of(simulations(args)[-1], args, first)
+        for name in points:
+            fronts[name] = _levels(there, indoors.front_name(name), sources)
+            shift = _total_db(fronts[name].values()) - _total_db(
+                _levels(own, name, sources).values()
+            )
+            shifts[name] = np.where(np.isfinite(shift), shift, 0.0)
     return indoors.StillHouses(
         house,
         str(choice),
@@ -127,6 +191,8 @@ def houses(args: argparse.Namespace) -> indoors.StillHouses | None:
         inside,
         max(s.sound_power_db for s in playing),
         scene_demo.format_of(args, found),
+        fronts,
+        shifts,
     )
 
 
@@ -135,7 +201,12 @@ def houses(args: argparse.Namespace) -> indoors.StillHouses | None:
 
 def scene(args: argparse.Namespace) -> None:
     """``--scene`` (scene_works.yaml) from ``--from`` (scene.yaml): the street with its
-    road works alone, each of their sources at its sound power."""
+    road works alone, each of their sources at its sound power; and :func:`front_scene`
+    (scene_works_2m.yaml), the same heard at the points 2 m in front of the walls that
+    listeners stand less than 2 m in front of (none, when there are none), each named
+    after its listener (:func:`~acoustic_spaces.demos.indoors.front_name`)."""
+    from acoustic_spaces import Room
+
     data = yaml.safe_load(Path(args.source).read_text(encoding="utf-8"))
     rate = int(data.get("simulation", {}).get("sample_rate", 48000))
     found = {s["name"]: s for s in data.get("sources", [])}
@@ -155,11 +226,40 @@ def scene(args: argparse.Namespace) -> None:
         Path(args.source).parent,
     )
     print(f"wrote {args.scene}: {', '.join(SOURCES)}")
+    room = Room.from_yaml(args.scene)
+    points = front_points(room.scene)
+    indoors.with_fronts(room, points)  # SystemExit when one is not in the open air
+    path = front_scene(args)
+    if not points:
+        path.unlink(missing_ok=True)
+        return
+    listeners = {item["name"]: item for item in data.get("listeners") or []}
+    data["name"] = data["name"] + ", 2 m in front of the walls"
+    data["listeners"] = [
+        {k: v for k, v in listeners[name].items() if k != "walk"}
+        | {"name": indoors.front_name(name), "position": list(point)}
+        for name, point in points.items()
+    ]
+    pipeline.write_scene(
+        path,
+        data,
+        "# The street example with its road works alone, heard 2 m in front of the walls\n"
+        "# that its listeners stand less than 2 m in front of, written by works_demo.py.\n",
+        Path(args.source).parent,
+    )
+    print(f"wrote {path}: {', '.join(item['name'] for item in data['listeners'])}")
 
 
 def scene_done(args: argparse.Namespace) -> bool:
+    from acoustic_spaces import Scene
+
     scene_file, source = Path(args.scene), Path(args.source)
-    return scene_file.exists() and scene_file.stat().st_mtime >= source.stat().st_mtime
+    if not (scene_file.exists() and scene_file.stat().st_mtime >= source.stat().st_mtime):
+        return False
+    front = front_scene(args)
+    if not front_points(Scene.from_yaml(scene_file)):
+        return True
+    return front.exists() and front.stat().st_mtime >= source.stat().st_mtime
 
 
 # --------------------------------------------------------------------------- the feeds
@@ -283,7 +383,7 @@ def video(shown: Demo, args: argparse.Namespace) -> None:
     """The scene demo's video of the works, its stills crediting the made sounds."""
     if not args.credit:
         args = argparse.Namespace(**{**vars(args), "credit": credit(args)})
-    scene_demo.video(args, shown, houses(args))
+    scene_demo.video(args, shown, houses(args, shown))
 
 
 def demo(script: Path, example: str = "street") -> Demo:
@@ -339,7 +439,7 @@ def demo(script: Path, example: str = "street") -> Demo:
                 "made alarm's, whatever its pauses",
             ),
         ],
-        simulations=scene_demo.simulations,
+        simulations=simulations,
         scene_from="scene",
         problems=problems,
         plays=plays,
@@ -349,12 +449,18 @@ def demo(script: Path, example: str = "street") -> Demo:
         walks=scene_demo.moving_scene,
     )
     made.steps = [
-        Step("scene", scene, "scene_works.yaml: the street with its road works alone", scene_done),
+        Step(
+            "scene",
+            scene,
+            "scene_works.yaml: the street with its road works alone; scene_works_2m.yaml: "
+            "them 2 m in front of the walls listeners stand less than 2 m in front of",
+            scene_done,
+        ),
         Step("feeds", feeds, "what each machine and the alarm play, dry", feeds_done),
         SIMULATE,
         Step(
             "render",
-            lambda args: scene_demo.render(args, made, houses(args)),
+            lambda args: scene_demo.render(args, made, houses(args, made)),
             "every listener, with one gain for all",
         ),
         Step(
@@ -366,4 +472,16 @@ def demo(script: Path, example: str = "street") -> Demo:
     return made
 
 
-__all__ = ["NOUN", "SOURCES", "demo", "feeds", "houses", "level_of", "plays", "scene"]
+__all__ = [
+    "NOUN",
+    "SOURCES",
+    "demo",
+    "feeds",
+    "front_points",
+    "front_scene",
+    "houses",
+    "level_of",
+    "plays",
+    "scene",
+    "simulations",
+]
