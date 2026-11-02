@@ -58,7 +58,15 @@ from acoustic_spaces.demos import (
     listeners_option,
     pipeline,
 )
-from acoustic_spaces.demos.audio import gated_rms, level_db, loudness_db, mono, read, resampled
+from acoustic_spaces.demos.audio import (
+    channel_weights,
+    gated_rms,
+    level_db,
+    loudness_db,
+    mono,
+    read,
+    resampled,
+)
 from acoustic_spaces.demos.audio import write as write_wav
 
 #: The source of the examples that drives past.
@@ -1160,8 +1168,8 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
         seats[name] = {
             "listener": name,
             "lag_s": 0.0,
-            "rms_db": level_db(mix, rate),
-            "loudness_db": loudness_db(mix, rate),
+            "rms_db": level_db(mix, rate, channel_weights(fmt)),
+            "loudness_db": loudness_db(mix, rate, channel_weights(fmt)),
             "length_s": len(mix) / rate,
         }
     label = pipeline.output_label(args)

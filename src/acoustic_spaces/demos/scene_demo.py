@@ -73,6 +73,7 @@ from acoustic_spaces.demos import (
     pipeline,
 )
 from acoustic_spaces.demos.audio import (
+    channel_weights,
     channels_rms,
     decoded,
     gated_rms,
@@ -604,8 +605,8 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
             "listener": name,
             "lag_s": 0.0,
             "arrival_s": arrival,
-            "rms_db": level_db(x, rate),
-            "loudness_db": loudness_db(x, rate),
+            "rms_db": level_db(x, rate, channel_weights(fmt)),
+            "loudness_db": loudness_db(x, rate, channel_weights(fmt)),
             "length_s": len(x) / rate,
             "moves": moves,
         }
