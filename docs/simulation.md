@@ -34,14 +34,15 @@ or in a corner. Sound that bends round edges is added to them (see
   - `detector`: classic ray tracing, everything counted by the sphere.
 
   In rooms with absorption in one place and smooth walls, most late energy rides on
-  the few rays that keep clear of the absorber, and the tail breaks up where those
-  run out. With `splitting` (on by default), a first tenth of the rays measures how
-  much energy a ray usually carries over time; the rest are split into copies when
-  they carry more than 4 times that and thinned out by Russian roulette when they
-  carry less than a quarter (a weight window). The expected result is unchanged; with
-  random scattering, the example box's late tail (0.5 to 2.5 s) misses a 1-million-ray
-  reference by 0.5 to 2 dB per band instead of 1 to 8 dB at 100k rays (1 to 4 dB
-  instead of 4 to 17 dB at 10k), for about 1.5 times the run time.
+  the few rays that keep clear of the absorber, and the tail breaks up where those run
+  out. With `splitting` (on by default), a first tenth of the rays (at least 1,000, or
+  half of them when there are fewer than 2,000) measures how much energy a ray usually
+  carries over time; the rest are split into copies when they carry more than 4 times
+  that and thinned out by Russian roulette when they carry less than a quarter (a
+  weight window). The expected result is unchanged; with random scattering, the
+  example box's late tail (0.5 to 2.5 s) misses a 1-million-ray reference by 0.5 to 2
+  dB per band instead of 1 to 8 dB at 100k rays (1 to 4 dB instead of 4 to 17 dB at
+  10k), for about 1.5 times the run time.
 
   The rays are traced in `batches` (10 by default), each with the random streams of
   its share of the rays: the same rays as at once, so the same result but for rounding
@@ -68,15 +69,17 @@ or in a corner. Sound that bends round edges is added to them (see
 
   Nearly all of the run time goes into ray queries: which surface a ray meets next,
   and whether each listener can see a reflection (see [Performance](#performance)).
-- `statistical`: the reflected energy of Barron's revised theory, an exponential
-  decay at the Eyring reverberation time T from the direct sound on, less what the
-  early paths carry. Early paths end `transition_ms` after the direct sound (by
-  default the mixing time, the square root of the volume of the listener's room in
-  milliseconds), so the late part holds the scattered share of every early
-  reflection, the orders above `max_order` before the transition and everything after
-  it. The total is Barron's, c T / (13.8 V) for a unit source: the Sabine form 4 / A
-  with Eyring's absorption area, which reads 0.2 dB above the classical
-  4 (1 - α) / (α S) at a mean absorption of 0.1 and 0.8 dB above at 0.3.
+- `statistical`: the reflected energy of Barron's revised theory, an exponential decay
+  at the Eyring reverberation time T from the direct sound on, less what the early
+  paths carry. Early paths end `transition_ms` after the direct sound (by default the
+  mixing time, the square root of the volume of the listener's room in milliseconds),
+  so the late part holds the scattered share of every early reflection, the orders
+  above `max_order` before the transition and everything after it. The total is
+  Barron's, c T / (13.8 V) e^(-13.8 t_d / T) for a unit source whose direct sound
+  arrives at t_d (Barron and Lee's 31200 T / V e^(-0.04 r / T) where the direct sound
+  is 100 / r²): the Sabine form 4 / A with Eyring's absorption area and the same
+  exponential, which reads 0.2 dB above the classical 4 (1 - α) / (α S) at a mean
+  absorption of 0.1 and 0.8 dB above at 0.3.
 
 The two parts hand over by reflection order by default. Set `transition_ms` to
 keep early paths only that long after the direct sound.
