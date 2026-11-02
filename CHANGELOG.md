@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- The pass-by demos fill a train's or tram's sound files a point at a time in 32 bits:
+  the railway example's freight train, 50 points at the rail top for 10.8 s at 48 kHz,
+  takes 104 MB instead of 415 MB.
+- `acoustic_spaces.vibration` raises a ValueError that says what it takes for a speed or
+  a distance from plant that is not a finite number above 0, a land use or a kind of
+  events its tables do not have, and special trackwork that is not a finite 0 m or more
+  away (None for none near). A train's `Unit` raises one for a tank wagon or air
+  conditioning that its category's data sheet does not have, instead of leaving it out.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early
