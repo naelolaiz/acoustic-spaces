@@ -818,6 +818,21 @@ msgstr ""
 "de hoogte boven de grond toeneemt"
 
 #: acoustic_spaces/gui/app.py
+msgid "F&ollow the run"
+msgstr "Run &volgen"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"While a run, coverage map, export or demo goes on, ring the sources and "
+"listeners its latest step works on in the 3D view and the plan, and draw the "
+"walkers where the place along a walk it simulates has them"
+msgstr ""
+"Terwijl een berekening, dekkingskaart, export of demo loopt, in de "
+"3D-weergave en de plattegrond een ring tekenen om de bronnen en ontvangers "
+"waaraan de laatste stap werkt, en wat beweegt tekenen waar het is op de "
+"plaats van een route die wordt gesimuleerd"
+
+#: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
 msgstr "&Schermafbeelding opslaan…"
 
@@ -1071,6 +1086,11 @@ msgstr "Niet gewijzigd: {reason}"
 #, python-brace-format
 msgid "Surface {name}"
 msgstr "Oppervlak {name}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot keep whether the views follow the run: {reason}"
+msgstr "Kan niet bewaren of de weergaven de run volgen: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -6537,6 +6557,15 @@ msgstr "Niet verplaatst: {problem}"
 #: acoustic_spaces/gui/plan_view.py
 msgid "move corner"
 msgstr "hoek verplaatsen"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid ""
+"Not moved: {name} is drawn where the run simulates it, {time:.2f} s along "
+"its walk; drag it once the run is over"
+msgstr ""
+"Niet verplaatst: {name} is getekend waar de run het simuleert, op {time:.2f} "
+"s van zijn route; sleep het als de run voorbij is"
 
 #: acoustic_spaces/gui/plan_view.py
 #, python-brace-format

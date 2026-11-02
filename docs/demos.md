@@ -45,7 +45,8 @@ python church_demo.py all      # every step in order, leaving out what is done a
 ```
 
 `all` is the short way through: it skips the steps whose result is in the work folder
-already (the scene file, the simulation's results, each stop's mix), so a run that
+already (the scene file, the simulation's results, each stop's mix, for the run's
+`--format` and `--hrtf`), so a run that
 stopped halfway carries on where it left off, and a change to one step is seen in the
 video without simulating again. `--again` mixes the stops afresh even where their files
 exist, `--work FOLDER` puts everything somewhere else, and `--no-mp4` writes the audio
@@ -69,15 +70,16 @@ no `--listeners`.
 instead of what the demo gives it: `python lakeside_demo.py render --input
 subs=bass.wav`, or a singer of the choir (`--input singer_f1=take.wav`), a player of the
 orchestra (`--input fl1=flute.wav`, in every movement), any source of the stadium. The
-file is mixed down to mono, brought to the gated RMS of the feed it replaces, so the
-source plays as loud as the demo has it, and cut or padded with silence to that feed's
-length, so the tour's times hold; a name the demo has no source for is refused with
-the list of them. The mixes are made again when the inputs change. The credit line on
-the stills names the files that replaced a recording (and only them when every source
-has one); the captions go on describing the demo's own music. The walk through the
-gallery takes `--input guide=talk.wav`, played as it is: the video's one gain sets how
-loud it is heard, and the captions' level and STI stay the scene's voice; the pass-by
-demos take `--input car=engine.wav`, a dry recording played as the car's sound.
+file is mixed down to mono, brought to the gated RMS of the feed it replaces
+(unweighted, so a recording with another spectrum plays louder or quieter in dB(A)), and
+cut or padded with silence to that feed's length, so the tour's times hold; a name the
+demo has no source for is refused with the list of them. The mixes are made again when
+the inputs change. The credit line on the stills names the files that replaced a
+recording (and only them when every source has one); the captions go on describing the
+demo's own music. The walk through the gallery takes `--input guide=talk.wav`, played as
+it is: the video's one gain sets how loud it is heard, and the captions' level and STI
+stay the scene's voice; the pass-by demos take `--input car=engine.wav`, a dry recording
+played as the car's sound.
 
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demos
@@ -678,7 +680,9 @@ head.
 **Recording.** The ACE challenge corpus (Eaton, Gaubitch, Moore and Naylor, Imperial
 College London), **CC BY 4.0**: an anechoic talk, a man describing his way to work
 through Delft; `speech` reads the corpus's 148 MB archive as it comes, up to the
-talk: 16 MB for that talker, up to 145 MB for another (`--talker`).
+talk: 16 MB for that talker, up to 145 MB for another (`--talker`). A talk shorter than
+the walk and the turn need, as some talkers' are, is said again from its start, 2 s
+after it ends.
 
 ## Vehicles passing by
 
@@ -727,10 +731,12 @@ three, the car's with its horn) in its Movement box.
   unless `--speed` drives the vehicle through their places at one speed. The demo's
   scene (`scene_demo.yaml`) has the vehicle alone along its walk at that speed, with
   CNOSSOS-EU's sound power of its category at that speed on the method's reference road
-  surface, in the scene's air temperature: rolling noise A_R + B_R lg(v/70) + K (20 - t)
-  and propulsion noise A_P + B_P (v - 70)/70 per octave band, with the coefficients of
-  Table F-1 of Directive 2002/49/EC, Annex II, as amended by Commission Delegated
-  Directive (EU) 2021/1226 (`acoustic_spaces.demos.road`). At their speeds and 20 °C:
+  surface, level (the method's corrections for road gradients, other surfaces and
+  studded tyres are left out), in the scene's air temperature: rolling noise A_R + B_R
+  lg(v/70) + K (20 - t) and propulsion noise A_P + B_P (v - 70)/70 per octave band, with
+  the coefficients of Table F-1 of Directive 2002/49/EC, Annex II, as amended by
+  Commission Delegated Directive (EU) 2021/1226 (`acoustic_spaces.demos.road`). At their
+  speeds and 20 °C:
 
   | vehicle | CNOSSOS-EU category | speed | sound power | A-weighted |
   |---|---|---:|---:|---:|
@@ -806,30 +812,30 @@ three, the car's with its horn) in its Movement box.
   are heard together, each at its own sound power (`--fire-engine` leaves out the horn,
   the vehicle itself, or both). The siren plays the police car's two tones (440 and
   586.7 Hz, 1.5 s each), 6.0 dB louder: as loud as the Swiss rule lets two tones be on a
-  vehicle, 114.9 dB(A) 7 m in front of it at the loudest of 0.5 to 1.5 m up, over the
-  street's asphalt (the rule: 100 to 115 dB(A)), 134.6 dB(A) of sound power. The horn is
-  as loud as the rule for vehicles' horns (Council Directive 70/388/EEC, Annex I) lets
-  one be on its test bench: 118 dB(A) 2 m in front of it on its axis, in a free field
-  (the rule: 105 to 118). The rest of the horn is assumed, as no measured air horn of a
-  fire engine was found (`acoustic_spaces.demos.horn`): two trumpets sounding together
-  at 150 and 180 Hz, a minor third apart as a car's pair of horns is (about 405 to 420
-  Hz and 500 Hz), within the 125 to 180 Hz Wikipedia's article on vehicle horns gives
-  trucks' air horns, without a source; each a sawtooth (all its harmonics, each 1/k of
-  the fundamental); two blasts of 0.6 s, 0.3 s apart, every 3 s, each at its level 0.05
-  s after it starts (the rule: within 0.2 s); the height of the rule's bench; and the
-  siren's directivity. Its sound power in the scene is its average over its blasts and
-  pauses, 122.7 dB(A), as its made sound has them: during a blast it is 4.5 dB louder
-  (127.1 dB(A)) than that. The captions' levels have the horn as loud as its sound plays
-  around each place: its level there is the average's times how loud its sound is over
-  the time around that place (from halfway to the place before to halfway to the next)
-  against its average, faded in and out with it. A recording given for it (`--input
-  fire_engine_horn=WAV`) plays its blasts as loud as the made horn's, whatever its own
-  pauses, and the captions follow its own blasts. Against the rules
-  (`validation/urban_sources.py`): the siren gives 125.4 dB(A) on the Swiss rule's bench
-  (116 to 129) and 112.3 to 114.9 dB(A) on the vehicle; the horn 107.9 to 108.6 dB(A) 7
-  m in front of the vehicle, 0.5 to 1.5 m up (the rule: 93 at least), and, on its bench,
-  110.2 dB(A) between 1800 and 3550 Hz (the rule: 105 at least), its loudest component
-  there 6.0 dB over any above 3550 Hz (the rule: over).
+  vehicle, 114.9 dB(A) 7 m in front of the siren (taken at the vehicle's front) at the
+  loudest of 0.5 to 1.5 m up, over the street's asphalt (the rule: 100 to 115 dB(A)),
+  134.6 dB(A) of sound power. The horn is as loud as the rule for vehicles' horns
+  (Council Directive 70/388/EEC, Annex I) lets one be on its test bench: 118 dB(A) 2 m
+  in front of it on its axis, in a free field (the rule: 105 to 118). The rest of the
+  horn is assumed, as no measured air horn of a fire engine was found
+  (`acoustic_spaces.demos.horn`): two trumpets sounding together at 150 and 180 Hz, a
+  minor third apart as a car's pair of horns is (about 405 to 420 Hz and 500 Hz), within
+  the 125 to 180 Hz Wikipedia's article on vehicle horns gives trucks' air horns,
+  without a source; each a sawtooth (all its harmonics, each 1/k of the fundamental);
+  two blasts of 0.6 s, 0.3 s apart, every 3 s, each at its level 0.05 s after it starts
+  (the rule: within 0.2 s); the height of the rule's bench; and the siren's directivity.
+  Its sound power in the scene is its average over its blasts and pauses, 122.7 dB(A),
+  as its made sound has them: during a blast it is 4.5 dB louder (127.1 dB(A)) than
+  that. The captions' levels have the horn as loud as its sound plays around each place:
+  its level there is the average's times how loud its sound is around that place (as
+  **the pass** below says) against its average, faded in and out with it. A recording
+  given for it (`--input fire_engine_horn=WAV`) plays its blasts as loud as the made
+  horn's, whatever its own pauses, and the captions follow its own blasts. Against the
+  rules (`validation/urban_sources.py`): the siren gives 125.4 dB(A) on the Swiss rule's
+  bench (116 to 129) and 112.3 to 114.9 dB(A) on the vehicle; the horn 107.9 to 108.6
+  dB(A) 7 m in front of the vehicle, 0.5 to 1.5 m up (the rule: 93 at least), and, on
+  its bench, 110.2 dB(A) between 1800 and 3550 Hz (the rule: 105 at least), its loudest
+  component there 6.0 dB over any above 3550 Hz (the rule: over).
 - **The car's horn** (in the street, `--car car_and_horn`, or `horn` alone) is a pair of
   disc horns behind the car's front bumper (`car_horn`), 0.5 m up along the car's walk,
   facing the way it drives, with the siren's directivity, in two blasts of 0.25 s, 0.15
@@ -858,10 +864,14 @@ three, the car's with its horn) in its Movement box.
   apart; [validation](validation.md#moving-sources-against-the-exact-field)). The level
   at each moment, the loudest (L_Amax) and the sound exposure level (SEL) come from the
   same simulation, each place's as if the vehicle stood there (a horn's as loud as it
-  sounds around that place); the stills give them, with how close the vehicle comes and
-  how far the pitch of its direct sound falls from where it starts to where it ends. One
-  gain makes every pass, and each is turned up to the loudness of the loudest, by as
-  much as the still says.
+  sounds around that place: its sound's power averaged over 125 ms, the time constant of
+  a sound level meter's fast time weighting, so that the beats between its notes do not
+  count, then over the time from halfway to the place before to halfway to the next;
+  places farther apart than a blast lasts less those 125 ms read its blasts low, the
+  car's horn at 50 km/h by up to 0.2 dB 2 m apart and 1.3 dB 4 m apart); the stills give
+  them, with how close the vehicle comes and how far the pitch of its direct sound falls
+  from where it starts to where it ends. One gain makes every pass, and each is turned
+  up to the loudness of the loudest, by as much as the still says.
 - **The roadside**: 150 m of road, the car in the lane on the meadow's side at 50 km/h,
   the truck in the lane on the yard's side the other way at 70 km/h, heard at the verge,
   23 and 48 m away over the grass and 27 m away over the paved yard (from the car as it
@@ -884,7 +894,7 @@ three, the car's with its horn) in its Movement box.
   | | car | bus | motorcycle | police car (wail) | fire engine | tram |
   |---|---:|---:|---:|---:|---:|---:|
   | pavement | 79.4 | 90.3 | 78.1 | 114.8 | 113.0 | 95.6 |
-  | balcony | 74.0 | 80.3 | 73.4 | 104.5 | 111.1 | 91.1 |
+  | balcony | 74.0 | 80.3 | 73.4 | 104.5 | 111.0 | 91.1 |
   | garden | 62.7 | 71.3 | 61.5 | 95.1 | 97.2 | 73.7 |
 
   The police car's column is its siren's, which the car itself does not change at this
@@ -893,13 +903,13 @@ three, the car's with its horn) in its Movement box.
   at every listener and add 0.01 dB at most. It is heard under the siren's pitch, which
   dB(A) weighs little. The fire engine's column is its three sources together, its siren
   much the loudest: in the garden the siren alone peaks at 97.2 dB(A), the horn's blasts
-  at 90.0 and the truck at 68.4, and the fire engine peaks there as its siren does,
+  at 89.3 and the truck at 68.4, and the fire engine peaks there as its siren does,
   between two of the horn's blasts; on the pavement a blast comes with the siren's peak
   and adds 0.7 dB to it (113.0 dB(A), the siren alone 112.3). The balcony hears the fire
   engine nearly as loud as the pavement does, as its siren, 3.0 m up in the lane on the
   offices' side, passes 7.6 m from the balcony and 6.2 m from the pavement. With its
-  horn (`--car car_and_horn`) the car peaks at 97.1 dB(A) on the pavement, 94.0 on the
-  balcony and 81.6 in the garden, its horn's loudest blast 17.6 to 19.9 dB over the
+  horn (`--car car_and_horn`) the car peaks at 97.0 dB(A) on the pavement, 93.9 on the
+  balcony and 80.5 in the garden, its horn's loudest blast 17.5 to 19.7 dB over the
   car's own loudest.
 
   The garden hears the car loudest where the car sees it straight through the 4 m gap
@@ -940,41 +950,43 @@ python passby_demo.py all --train freight   # or sound, scene, walk, video one a
 
 Options: `--train regional` the train (`regional`, an electric locomotive and five
 coaches, 151 m long, at 160 km/h; `s_bahn`, a four-car electric multiple unit, 67 m, at
-120 km/h; `intercity`, the locomotive and twelve coaches, 336 m, at 200 km/h;
-`freight`, the locomotive and 24 wagons with composite brake blocks, 446 m, at 100
-km/h), `--speed` how fast it runs (km/h; by default the train's own above, whatever
-the speed of the example's walk: the Run demo window's **Speed** reads *the train's
-own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in ballast;
-`slab`, slab track; `slab_absorber`, slab track with absorbers; `level_crossing`),
-`--horn off` the train's warning horn (`blasts` or `chord` sounds it, see below), `--indoors off`
-where it is heard (see below), `--step 1` how
-far apart the train is simulated along its walk (m), `--hrtf me.sofa` a measured head,
-`--input train=WAV` a dry recording of yours (`train_roof=WAV` and
-`train_pantograph=WAV` for the sources up on the train, `train_horn=WAV` for its horn).
-The tram has no options of its own but `--indoors`: a low-floor tram with air
-conditioning, 30 m long, on its track set in the street, at the speed of its walk (50
-km/h) unless `--speed` says.
+120 km/h; `intercity`, the locomotive and twelve coaches, 336 m, at 200 km/h; `freight`,
+the locomotive and 24 wagons with composite brake blocks, 5 of them tank wagons, 446 m,
+at 100 km/h), `--speed` how fast it runs (km/h; by default the train's own above,
+whatever the speed of the example's walk: the Run demo window's **Speed** reads *the
+train's own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in
+ballast; `slab`, slab track; `slab_absorber`, slab track with absorbers;
+`level_crossing`), `--horn off` the train's warning horn (`blasts` or `chord` sounds it,
+see below), `--indoors off` where it is heard (see below), `--step 1` how far apart the
+train is simulated along its walk (m), `--hrtf me.sofa` a measured head, `--input
+train=WAV` a dry recording of yours (`train_roof=WAV` and `train_pantograph=WAV` for the
+sources up on the train, `train_horn=WAV` for its horn). The tram has no options of its
+own but `--indoors`: a low-floor tram with air conditioning, 30 m long, on its track set
+in the street, at the speed of its walk (50 km/h) unless `--speed` says.
 
-- **Their sound power** is that of Schall 03 (Germany's method for the noise of
-  railways and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`):
-  for each vehicle unit, from its data sheet (Beiblatt 1 for trains, 2 for trams), each
-  of its sources' A-weighted sound power per metre of track for one unit an hour, per
+- **Their sound power** is that of Schall 03 (Germany's method for the noise of railways
+  and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`): for
+  each vehicle unit, from its data sheet (Beiblatt 1 for trains, 2 for trams), each of
+  its sources' A-weighted sound power per metre of track for one unit an hour, per
   octave band, at its speed and on its track (equation 1), with the speed factors of
-  Tabelle 6 and 14 and the track's corrections of Tabelle 7 and 15. A unit going by at
-  v km/h once an hour has the sound power of that level plus 10 lg(1000 v) dB. The
-  sources sit at the rail top (rolling noise, the bogies' aerodynamic noise, the fans
-  under the floor, the motors), on the roof, 4 m up (its aerodynamic noise and its
-  fans), and at the pantograph, 5 m up, each radiating louder across the track than
-  along it, by 10 lg(0.22 + 1.27 sin² δ) dB with δ the angle to the track (equation 8;
-  the example's `train.csv`, the street's `tram.csv`). At their speeds on ballast (the
-  tram on its street track):
+  Tabelle 6 and 14 and the track's corrections of Tabelle 7 and 15. A unit going by at v
+  km/h once an hour has the sound power of that level plus 10 lg(1000 v) dB. The sources
+  sit at the rail top (rolling noise, the bogies' aerodynamic noise, the fans under the
+  floor, the motors), 4 m up (on the roof its aerodynamic noise and its fans, and a tank
+  wagon's body, which its rolling noise makes ring), and at the pantograph, 5 m up, each
+  radiating louder across the track than along it, by 10 lg(0.22 + 1.27 sin² δ) dB with
+  δ the angle to the track (equation 8; the example's `train.csv`, the street's
+  `tram.csv`). Schall 03 takes a fifth of a freight train's wagons as tank wagons unless
+  its make-up is known (4.2), so 5 of the freight train's 24 are, every fifth from the
+  third: 4 m up it has 116.4 dB(A) of sound power, its locomotive's roof alone 111.8. At
+  their speeds on ballast (the tram on its street track):
 
   | train | units | length | speed | sound power |
   |---|---|---:|---:|---:|
   | `regional` | locomotive (Fz 7) + 5 coaches (Fz 9) | 151 m | 160 km/h | 130.6 dB(A) |
   | `s_bahn` | electric multiple unit (Fz 5) | 67 m | 120 km/h | 121.7 dB(A) |
   | `intercity` | locomotive + 12 coaches | 336 m | 200 km/h | 136.8 dB(A) |
-  | `freight` | locomotive + 24 wagons (Fz 10) | 446 m | 100 km/h | 131.8 dB(A) |
+  | `freight` | locomotive + 24 wagons (Fz 10), 5 of them tank wagons | 446 m | 100 km/h | 131.9 dB(A) |
   | `tram` | low-floor tram (Fz 21) | 30 m | 50 km/h | 115.0 dB(A) |
 
   The tram's sound power is 16.6 dB(A) over the car's at 50 km/h (CNOSSOS-EU's, 98.4
@@ -1012,26 +1024,27 @@ km/h) unless `--speed` says.
   [Validation](validation.md#sirens-and-road-vehicles-against-their-rules).
 - **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors`): a listener 0.5 to 2 m in
   front of a building's wall, where ISO 1996-2 measures in front of a façade, hears the
-  pass in the room behind it, and the others hear it outdoors. The railway's
-  `house_18m` stands 2 m in front of a house 20 m from the track; the street's pavement
-  and balcony stand in front of its houses and its offices. `train_and_rumble` plays the
-  train through the room's closed window and the rumble the ground's vibration makes in
-  it, `train` the train alone, `rumble` the rumble alone (`tram_and_rumble` and `tram`
-  for the tram). The room is EN ISO 12354-3's, not the building's geometry: AGC's
-  4-16-4 double glazing as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82
-  m² of it into a room of 50 m³. Each octave band in the room is the simulated level at
-  the listener, the façade's reflection in it, less D_2m,nT = R + 10 lg(V / (6 T0 S)),
-  the window's sound reduction index plus 9.6 dB (`acoustic_spaces.facade`); for
-  traffic's spectrum that is Rw + Ctr + 9.6 = 34.6 dB; the S-Bahn's, higher in
-  frequency, loses 39.6 dB(A) at the railway's house (86.8 dB(A) outdoors, 47.1 in the
-  room). The rumble is the FTA's general method (see [Vibration
+  pass in the room behind it, and the others hear it outdoors. The railway's `house_18m`
+  stands 2 m in front of a house 20 m from the track; the street's pavement and balcony
+  stand in front of its houses and its offices. `train_and_rumble` plays the train
+  through the room's closed window and the rumble the ground's vibration makes in it,
+  `train` the train alone, `rumble` the rumble alone (`tram_and_rumble` and `tram` for
+  the tram). The room is EN ISO 12354-3's, not the building's geometry: AGC's 4-16-4
+  double glazing as measured by EN ISO 10140, Rw (C; Ctr) = 30 (-1; -4) dB, 1.82 m² of
+  it into a room of 50 m³. Each octave band in the room is the simulated level at the
+  listener, the façade's reflection in it, less D_2m,nT = R + 10 lg(V / (6 T0 S)), the
+  window's sound reduction index plus 9.6 dB (`acoustic_spaces.facade`); for traffic's
+  spectrum that is Rw + Ctr + 9.6 = 29 - 4 + 9.6 = 34.6 dB, with ISO 717-1's rating of
+  AGC's values in octave bands, 29 (-1; -4) dB (AGC's 30 is rated from third octaves);
+  the S-Bahn's, higher in frequency, loses 39.6 dB(A) at the railway's house (86.8 dB(A)
+  outdoors, 47.1 in the room). The rumble is the FTA's general method (see [Vibration
   through the ground](outdoor.md#vibration-through-the-ground)) at each moment of the
   pass: the train's curve at the distance from its nearest wheels to the room's wall
-  behind the listener, the floor 3 dB over the ground, its rooms' rumble 50 dB under that
-  in dB(A), played as noise in the third octave at 25 Hz, the same in both ears: in the
-  railway's house 27.5 dB(A) for the S-Bahn and 41.3 for the regional
-  train. The room's own reverberation is not added, and the sound keeps the direction it
-  comes from outdoors.
+  behind the listener, the floor 3 dB over the ground, its rooms' rumble 50 dB under
+  that in dB(A), played as noise in the third octave at 25 Hz, the same in both ears: in
+  the railway's house 27.5 dB(A) for the S-Bahn and 41.3 for the regional train. The
+  room's own reverberation is not added, and the sound keeps the direction it comes from
+  outdoors.
 - **What is felt**: each listener's caption gives how hard the floor of its house, or
   outdoors the ground under it, shakes at most during the pass, in VdB (the FTA's
   curves, which are the ground's), and whether that is felt, from about 65 VdB (the
@@ -1057,10 +1070,10 @@ km/h) unless `--speed` says.
 
   | | regional, 160 km/h | S-Bahn, 120 km/h | intercity, 200 km/h | freight, 100 km/h |
   |---|---:|---:|---:|---:|
-  | 7.5 m | 94.5 (98.5) | 88.7 (90.8) | 97.5 (103.7) | 90.3 (101.6) |
-  | meadow, 25 m | 85.3 (90.6) | 79.6 (82.7) | 88.5 (95.9) | 81.3 (93.4) |
-  | behind the barrier, 25 m | 78.3 (79.3) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (79.6) |
-  | house, 18 m | 92.1 (97.2) | 86.8 (89.5) | 95.1 (102.5) | 88.3 (100.2) |
+  | 7.5 m | 94.5 (98.5) | 88.7 (90.8) | 97.5 (103.7) | 90.5 (101.7) |
+  | meadow, 25 m | 85.3 (90.6) | 79.6 (82.7) | 88.5 (95.9) | 81.7 (93.6) |
+  | behind the barrier, 25 m | 78.3 (79.3) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (82.6) |
+  | house, 18 m | 92.1 (97.2) | 86.8 (89.5) | 95.1 (102.5) | 88.5 (100.3) |
 
   The longer a train, the more its SEL is over its L_Amax: the freight train, 446 m
   long, takes 16 s to pass at 100 km/h, the S-Bahn, 67 m, 2 s at 120 km/h. The barrier,
