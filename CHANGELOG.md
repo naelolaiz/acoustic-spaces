@@ -136,6 +136,15 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- The late part's tracer holds one copy of its results fewer, with the same results:
+  its threads' copies, the first taking the others' sums, so on one thread (as for
+  copies over 128 MiB) it holds half as much.
+- Fixed: with `late.device: both`, the CPU traced about 8 % of the rays whatever its
+  speed, as the GPU took 4,096 rays at least of each call of the default 10 batches;
+  each now takes no more than its share of a call.
+- The GPU tracer keeps its buffer of rays in flight (up to 46 MiB for one band, 88 MiB
+  for eight) through a late part, instead of making and clearing it for each of the
+  part's calls (160 per source with the defaults).
 
 ## 4.1.0
 
