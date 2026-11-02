@@ -2,8 +2,8 @@
 
 A model is checked against the room it stands for by comparing its parameters with
 those measured there, octave band by octave band, in just noticeable differences (JNDs,
-ISO 3382-1:2009, annex A, table A.1; annex B for IACC): a difference of less than one
-JND is too small to be heard.
+ISO 3382-1:2009, annex A, table A.1, and annex B for IACC; by analogy for T20, T30 and
+C50, see :data:`JND`): a difference of less than one JND is too small to be heard.
 
 - :func:`compare_impulse_responses` analyses two impulse responses, each at its own
   sample rate, as :func:`~acoustic_spaces.parameters.from_impulse_response` does.
@@ -40,10 +40,11 @@ from acoustic_spaces.parameters import (
     from_impulse_response,
 )
 
-#: Just noticeable differences (ISO 3382-1:2009, annex A, table A.1; annex B, table B.1
-#: for IACC), per parameter: the JND, and whether it is a fraction of the measured value
-#: (the decay times) rather than a step in the parameter's own unit (dB, s, or none for
-#: D50, LF, LFC and IACC). The directional decay times take that of T30. The standard
+#: Just noticeable differences per parameter: the JND, and whether it is a fraction of the
+#: measured value (the decay times) rather than a step in the parameter's own unit (dB, s,
+#: or none for D50, LF, LFC and IACC). ISO 3382-1:2009 gives those of EDT, C80, D50, Ts, G
+#: and LF (annex A, table A.1) and of IACC (annex B); T20 and T30 take EDT's and C50
+#: takes C80's by analogy, and the directional decay times take that of T30. The standard
 #: gives none for LJ and stage support, which are not compared.
 JND: dict[str, tuple[float, bool]] = {
     "edt": (0.05, True),
@@ -338,7 +339,8 @@ def compare_impulse_responses(
     :func:`~acoustic_spaces.parameters.from_impulse_response` with the same ``filters``
     and ``noise`` settings. The references are those of its ``reference_energy``: the
     energy of the same source at 10 m in free field, per band or of a broadband impulse
-    (0.01 for responses made by this package). G is compared only where both sides have
+    (0.01 for responses made by this package, 0.01 * ir_gain**2 for those written with
+    ``normalize``). G is compared only where both sides have
     one; without, it is missing in every band.
     """
     sides = {}
