@@ -1,6 +1,8 @@
 """The 3D view of the editor: the room's surfaces coloured by material, sources and
 listeners, the selection, early reflection paths and a coverage map; outdoors the
-vegetation, and the wind with the weather zones.
+vegetation, and the wind with the weather zones. While a run goes on, a ring around
+each source and listener it works on, and its walkers where it simulates them
+(:mod:`acoustic_spaces.gui.following`).
 
 A click selects what is under the mouse (sources and listeners before the surfaces in
 front of them). Dragging a source or listener moves it across the room, keeping its
@@ -18,7 +20,8 @@ from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from acoustic_spaces.geometry import points_inside
 from acoustic_spaces.gui.document import LISTENER_HEIGHT, SOURCE_HEIGHT, follow_floor
-from acoustic_spaces.gui.movement import handles_of, moves_at, path_of, pose_at
+from acoustic_spaces.gui.following import NO_RUN, RunView
+from acoustic_spaces.gui.movement import handles_of, path_of
 from acoustic_spaces.i18n import _
 from acoustic_spaces.room import UNASSIGNED, Room
 from acoustic_spaces.spatial.microphone import of_listener
@@ -45,6 +48,10 @@ from acoustic_spaces.viz import (
 
 #: Colour of the selected item.
 SELECTED_COLOUR = "#ffd166"
+#: Colour of the rings around what a run works on.
+RUN_COLOUR = "#06d6a0"
+#: A ring's radius in the 3D view, in marker radii.
+RING_SCALE = 2.2
 #: A click is a press and release less than this many pixels apart (else a drag).
 CLICK_PIXELS = 4
 #: Platforms without OpenGL windows.
@@ -132,8 +139,13 @@ class Viewport(QWidget):
         #: drawn at (see :meth:`show_room`).
         self.mover: tuple[str, int] | None = None
         self.time: float | None = None
+        #: What a run going on works on (see :meth:`show_run`).
+        self.run: RunView = NO_RUN
+        self._rings: dict[tuple[str, int], object] = {}
+        self._radii: dict[tuple[str, int], float] = {}
         self._handles: dict[int, object] = {}
         self._labels = None  # the points the names are at, to move with the movers
+        self._names = None  # the names drawn there
         self._lifts: list[tuple[str, int, float]] = []
         self._press = (0, 0)
         self._drag: dict | None = None
@@ -182,6 +194,7 @@ class Viewport(QWidget):
         wind_profile: bool = False,
         mover: tuple[str, int] | None = None,
         time: float | None = None,
+        run: RunView = NO_RUN,
     ):
         """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``,
         a coverage map (``coverage`` is (CoverageMap, parameter, band)) and the
@@ -192,12 +205,13 @@ class Viewport(QWidget):
         :func:`acoustic_spaces.viz.plot_wind`). Every walk is drawn as a line; with
         ``mover`` (a source or listener as (kind, index)), its keyframes get handles to
         drag, and with ``time`` every mover stands where it is then (:meth:`set_time`
-        moves them without drawing the room again).
+        moves them without drawing the room again); ``run`` is what a run going on works
+        on (:meth:`show_run`).
 
         The camera stays where it is, also when the room changes shape; only the first
         room gets the usual view (:meth:`reset_camera` gives it again)."""
         self._room = room
-        self.mover, self.time = mover, time
+        self.mover, self.time, self.run = mover, time, run
         if self.plotter is None:
             return
         import pyvista as pv
@@ -210,8 +224,9 @@ class Viewport(QWidget):
         self._actors.clear()
         self._markers, self._surfaces = [], []
         self._point_actors = {}
+        self._rings, self._radii = {}, {}
         self._handles = {}
-        self._labels, self._lifts = None, []
+        self._labels, self._names, self._lifts = None, None, []
         self._drag = None
         kind, key = selection or ("", None)
 
@@ -293,6 +308,7 @@ class Viewport(QWidget):
             self._actors[_key(actor)] = (group, index)
             self._markers.append(actor)
             parts = self._point_actors[group, index] = [actor]
+            self._radii[group, index] = radius * scale
             extent = extent_polydata(item, 0.5 * radius) if group == "sources" else None
             if extent is not None:  # a line or surface source
                 shape = plotter.add_mesh(
@@ -353,9 +369,12 @@ class Viewport(QWidget):
             names.append(item.name)
         if points:
             self._labels = pv.PolyData(np.asarray(points, dtype=float))
-            plotter.add_point_labels(
+            # The names as an array of the points, so that the labels are drawn from
+            # these points as they move (given as a list, they would be drawn from a copy).
+            self._labels.point_data["names"] = np.array(names, dtype=str)
+            self._names = plotter.add_point_labels(
                 self._labels,
-                names,
+                "names",
                 font_size=12,
                 text_color="white",
                 shape_color=PANEL,
@@ -376,8 +395,42 @@ class Viewport(QWidget):
             plotter.reset_camera()
         else:
             plotter.camera_position = camera
+        self._ring()
         self._place_movers()
         plotter.render()
+
+    def show_run(self, run: RunView) -> None:
+        """Ring the sources and listeners a run going on works on, and at a place along a
+        walk stand its walkers where it simulates them (:class:`RunView`), rather than
+        where the Movement panel's playhead has them; :data:`NO_RUN`: as before the run.
+        Moves what is drawn rather than drawing the room again."""
+        self.run = run
+        if self.plotter is not None and self._room is not None:
+            self._ring()
+            self._place_movers()
+            self.plotter.render()
+
+    def _ring(self) -> None:
+        """A ring around each source and listener :attr:`run` works on, where it stands
+        at rest (:meth:`_place_movers` carries it with its marker)."""
+        import pyvista as pv
+
+        for actor in self._rings.values():
+            self.plotter.remove_actor(actor, render=False)
+        self._rings = {}
+        scene = self._room.scene
+        for group, index in self._point_actors:
+            item = getattr(scene, group)[index]
+            if (group, item.name) not in self.run.names:
+                continue
+            ring = pv.Sphere(radius=RING_SCALE * self._radii[group, index], center=item.position)
+            self._rings[group, index] = self.plotter.add_mesh(
+                ring, color=RUN_COLOUR, opacity=0.35, pickable=False, render=False
+            )
+
+    def _pose(self, group: str, item):
+        """Where ``item`` is drawn: where a run simulates it, or where the playhead has it."""
+        return self.run.pose(group, item, self.time)
 
     def set_time(self, time: float | None) -> None:
         """Stand every mover where it is at ``time`` (s) of the movement (None: at rest),
@@ -392,9 +445,11 @@ class Viewport(QWidget):
         from vtkmodules.vtkCommonMath import vtkMatrix4x4
 
         scene = self._room.scene
-        for (group, index), actors in self._point_actors.items():
+        for (group, index), drawn in self._point_actors.items():
             item = getattr(scene, group)[index]
-            shown = pose_at(item, self.time)
+            shown = self._pose(group, item)
+            ring = self._rings.get((group, index))
+            actors = drawn if ring is None else [*drawn, ring]
             if shown is item:
                 for actor in actors:
                     actor.SetUserMatrix(None)
@@ -413,7 +468,7 @@ class Viewport(QWidget):
         if self._labels is not None:
             self._labels.points = np.array(
                 [
-                    np.add(pose_at(getattr(scene, group)[index], self.time).position, [0, 0, lift])
+                    np.add(self._pose(group, getattr(scene, group)[index]).position, [0, 0, lift])
                     for group, index, lift in self._lifts
                 ]
             )
@@ -519,7 +574,7 @@ class Viewport(QWidget):
                 start = tuple(handles_of(getattr(self._room.scene, kind)[which])[index])
             else:
                 item = getattr(self._room.scene, group)[index]
-                if moves_at(item, self.time):  # drawn away from its position: no drag
+                if self._pose(group, item) is not item:  # drawn away from its position
                     self.picked.emit(group, index)
                     return True
                 start = item.position
@@ -603,6 +658,8 @@ class Viewport(QWidget):
 
 
 __all__ = [
+    "RING_SCALE",
+    "RUN_COLOUR",
     "SELECTED_COLOUR",
     "Viewport",
     "material_colour",

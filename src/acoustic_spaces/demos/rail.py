@@ -57,7 +57,6 @@ from __future__ import annotations
 
 import argparse
 import math
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -1049,7 +1048,7 @@ class TrainVehicle(Vehicle):
             write_directivity_csv(
                 table, siren.directivity(), siren.directivity_comment(self.script)
             )
-            named = Path(os.path.relpath(table, args.source.parent)).as_posix()
+            named = pipeline.named_from(table, args.source.parent)
             source["directivity"] = {"file": named}
             source.setdefault("walk", {})["face_forward"] = True
             return
@@ -1059,7 +1058,7 @@ class TrainVehicle(Vehicle):
             "dB round the track,\nless its mean over the sphere; written by " + self.script
         )
         write_directivity_csv(table, directivity(), comment)
-        named = Path(os.path.relpath(table, args.source.parent)).as_posix()
+        named = pipeline.named_from(table, args.source.parent)
         source["directivity"] = {"file": named}
         source.setdefault("walk", {})["face_forward"] = True
 
