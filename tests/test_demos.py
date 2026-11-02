@@ -1168,6 +1168,8 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     args = demo.defaults()
     args.scene = Path("scene.yaml")
     assert moving_of(demo.resolved(args)) == ["seat-b"] and demo.check(args) is None
+    # The editor follows the walks the run plays: those of --moving alone, else the scene's.
+    assert [item.name for _kind, item in movers(demo.walks(demo.resolved(args)))] == ["seat-b"]
     args.moving = "seat-b,radio"
     assert demo.check(args) == (
         "radio walks with Doppler, which plays alone: leave the others standing "
@@ -1179,6 +1181,7 @@ def test_a_demo_of_any_scene_moves_its_walkers(tmp_path: Path, monkeypatch, caps
     )
     args.moving = "none"
     assert moving_of(demo.resolved(args)) == [] and demo.check(args) is None
+    assert movers(demo.walks(demo.resolved(args))) == []
     assert demo.command("render", args) == "acoustic-spaces demo scene.yaml render --moving none"
 
     assert cli(["demo", "scene.yaml", "--seconds", "0.8", "--no-mp4"]) == 0

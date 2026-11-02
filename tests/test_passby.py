@@ -627,6 +627,8 @@ def test_the_passby_demo_drives_keyframes_as_timed_or_at_speed(tmp_path: Path) -
     assert driven.walk.keyframes is None and driven.walk.speed_m_s == pytest.approx(20.0)
     assert driven.walk.to == [(0.0, 2.0, 0.05), (-20.0, 2.0, 0.05)] and driven.walk.doppler
     assert demo.is_done(demo.step("scene"), args)
+    # The editor follows the car along the walk the demo simulates: this one, at --speed.
+    assert demo.walks(args).sources == Scene.from_yaml(folder / "scene_demo.yaml").sources
     # The same, from Python: a wait drops out of the places.
     source = Scene.from_yaml(path)
     (car,) = [s for s in source.sources if s.name == "car"]
