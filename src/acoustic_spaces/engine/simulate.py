@@ -340,6 +340,7 @@ def early_paths(
             max_order=order,
             threads=threads,
             wide_angle=cfg.parabolic_equation == "wide_angle",
+            edges=None if found is None else found.edges,
         )
         if refraction is not None:
             paths = refraction.apply(target[None], [straight], [paths], np.array([cutoff]))[0]
@@ -638,6 +639,7 @@ def simulate(
             max_order=early_cfg.max_order,
             threads=threads,
             wide_angle=early_cfg.parabolic_equation == "wide_angle",
+            edges=None if diffraction is None else diffraction.edges,
         )
         if refraction is not None:
             say(f"{label}: paths bent by the wind and the temperature")

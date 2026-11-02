@@ -2763,6 +2763,52 @@ and bends it a little the whole way instead. That is the cost of the equivalent 
 take (Nord2000, Harmonoise), and the reason the bands up to 500 Hz, and up to 2 kHz in
 a shadow, come from the parabolic equation, which goes through the zones.
 
+## A barrier in wind against a lowered edge
+
+Where the effective speed of sound grows evenly with height, c = c₀ (1 + z / R), rays
+are arcs of radius R, and near the horizontal the heights z - x (d - x) / (2 R) along a
+way of length d straighten them: the path over an edge a from the source and b from the
+listener is the still-air path over the edge lowered by a b / (2 R). A thin rigid
+barrier between a source 1 m and a listener 1.5 m up, over a ground that takes in all
+sound, at 15 °C, with 0.17 m/s more wind per metre up towards the listener (R ≈ 2000 m):
+the level of the path over its top over the still air's (dB), and the still-air engine's
+over the edge lowered (the first in `tests/test_refraction.py`):
+
+| a, b, height | | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---|---|---|---|---|---|---|---|---|
+| 20, 80, 5 m | curved | +0.41 | +0.54 | +0.66 | +0.76 | +0.82 | +0.84 | +0.85 | +0.85 |
+| | lowered 0.40 m | +0.41 | +0.54 | +0.66 | +0.76 | +0.81 | +0.83 | +0.84 | +0.85 |
+| 50, 100, 4 m | curved | +1.03 | +1.46 | +2.01 | +2.68 | +3.41 | +4.06 | +4.52 | +4.75 |
+| | lowered 1.25 m | +1.04 | +1.46 | +2.02 | +2.69 | +3.41 | +4.06 | +4.52 | +4.77 |
+
+The two agree within 0.012 dB, and the path arrives 0.49 and 0.62 ms sooner. Across the
+shadow boundary, which the wind lowers, the early sound stays continuous: 150 m from the
+source behind the barrier 4 m high, 6.25 and 6.3 m up, either side of where the bent
+direct sound appears, its level is -60.05 and -60.06 dB at 63 Hz. Over two edges in
+turn, where each edge's coefficient changes as a lone edge's would, two such barriers 8
+m high, 45 and 55 m from the source and the listener 150 m away, screen 0.94 to 4.06 dB
+less than in still air (63 Hz to 8 kHz), against 0.92 to 3.95 dB with each top lowered
+by x (d - x) / (2 R), x the top's distance from the source: up to 0.70 dB too loud, at 1
+and 2 kHz.
+
+ISO 9613-2:1996 (7.4, K_met, eq. 18, which to first order lowers the edge as arcs of
+radius 2000 m do) and CNOSSOS-EU (Directive (EU) 2015/996, Annex II: arcs of radius Γ =
+max(1000, 8 d) m, eq. 2.5.24, of length 2 Γ arcsin(c / (2 Γ)) over a chord c, eq.
+2.5.25, for the path difference δ_F, eq. 2.5.26) take the path as curved too. The path
+differences (m), and how much less the barrier screens by the formula of both, 10 lg(3 +
+40 z / λ) (ISO 9613-2 eq. 14 with C₂ = 40, CNOSSOS-EU eq. 2.5.21; dB, 63 Hz to 8 kHz):
+
+| a, b, height | straight | lowered edge | ISO 9613-2 | CNOSSOS-EU, Γ = R | CNOSSOS-EU |
+|---|---|---|---|---|---|
+| 20, 80, 5 m | 0.471 | 0.380 | 0.383 (0.46 to 0.90) | 0.466 (0.02 to 0.05) | 0.451 (0.10 to 0.19) |
+| 50, 100, 4 m | 0.120 | 0.038 | 0.050 (0.63 to 3.68) | 0.097 (0.20 to 0.91) | 0.055 (0.58 to 3.26) |
+
+With R near 2000 m, ISO 9613-2 shortens the path difference as the arcs do, within 0.012
+m. CNOSSOS-EU's arcs, lengths in air of one speed, shorten it by a b d / (8 Γ²) whatever
+the edge's height, where the atmosphere's arcs, faster up high, shorten it by about the
+edge's height over the line from the source to the listener times d / (2 R) as well: by
+CNOSSOS-EU, an edge well over that line screens nearly as in still air.
+
 ## Levels over a long term
 
 `validation/long_term.py` checks how the engine combines weather classes and the

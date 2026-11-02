@@ -13,6 +13,7 @@ from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine.parabolic import march
 from acoustic_spaces.engine.refraction import Profile, Rays, node_heights
 from acoustic_spaces.engine.shadow import shadow_start
+from acoustic_spaces.engine.simulate import early_paths
 from acoustic_spaces.examples import example_path
 from acoustic_spaces.materials.ground import surface_impedance
 from acoustic_spaces.scene import Atmosphere
@@ -386,6 +387,88 @@ def test_the_parabolic_equation_s_bands_read_back_as_computed() -> None:
     )
     read = response.relative_to_free_field()[:wave_bands]
     np.testing.assert_allclose(read, computed, atol=0.02)
+
+
+# -- over an edge -------------------------------------------------------------------------
+
+
+def barrier(gradient: float | None, height: float = 5.0) -> Room:
+    """A thin rigid barrier ``height`` m high, 20 m from a source 1 m up and 80 m from a
+    listener 1.5 m up, over a ground that takes in all sound, in air at 15 °C whose
+    effective speed of sound grows by ``gradient`` (1/s) per metre up along the way
+    (None: still air)."""
+    data = {
+        "geometry": {
+            "ground": {"extent": [[-20.0, -60.0], [120.0, 60.0]], "sky": 40.0},
+            "barriers": [{"name": "wall", "path": [[20.0, -50.0], [20.0, 50.0]], "height": height}],
+        },
+        "materials": {
+            "soak": {"absorption": [1.0] * 8, "scattering": 0.0},
+            "hard": {"absorption": [0.0] * 8, "scattering": 0.0},
+        },
+        "assignments": {"ground": "soak", "barriers": "hard"},
+        "air": {"temperature_c": 15.0},
+        "sources": [{"name": "s", "position": [0.0, 0.0, 1.0]}],
+        "listeners": [{"name": "r", "position": [100.0, 0.0, 1.5]}],
+        "simulation": {
+            "early": {"method": "image_sources", "max_order": 1, "diffraction": "direct"}
+        },
+    }
+    if gradient is not None:
+        wind = 200.0 * gradient
+        data["atmosphere"] = {
+            "table": [[0.0, 15.0, 0.0], [200.0, 15.0, abs(wind)]],
+            "wind": {"speed_m_s": 1.0, "direction_deg": 0.0 if wind >= 0.0 else 180.0},
+        }
+    return Room.from_scene(Scene.model_validate(data))
+
+
+def over_the_top(room: Room) -> tuple[np.ndarray, float]:
+    """The energy (bands,) and the delay (s) of the early path over the barrier's top."""
+    paths = early_paths(room, "s", "r")
+    rows = np.flatnonzero((paths.edge >= 0) & (paths.order == 0))
+    top = max(rows, key=lambda i: paths.points[i][1][2])
+    return paths.energy[top], float(paths.delay_s[top])
+
+
+def test_downwind_a_barrier_screens_as_one_with_its_edge_lowered() -> None:
+    """In a profile of constant gradient g the rays are arcs of radius R = c / g, which,
+    paraxially, the still-air path over the edge lowered by a b / (2 R) straightens (a
+    and b the source's and the listener's distances to the barrier): the path difference
+    that ISO 9613-2:1996 (7.4, eq. 18) shortens by K_met and CNOSSOS-EU (Directive (EU)
+    2015/996, Annex II, eqs. 2.5.24 to 2.5.26) by its curved paths. Downwind 100 m
+    away, R about 2000 m, the barrier screens 0.4 to 0.85 dB less by band; straight legs
+    screened as in still air. The path takes the arcs' travel time, which straight legs
+    at the speeds of their heights miss by 16 microseconds."""
+    g = 0.17
+    still = barrier(None)
+    c = still.speed_of_sound()
+    radius = (c + g * 0.5 * (1.0 + 5.0)) / g
+    lowered, _ = over_the_top(barrier(None, 5.0 - 20.0 * 80.0 / (2.0 * radius)))
+    curved, delay = over_the_top(barrier(g))
+    plain, straight = over_the_top(still)
+    db = lambda e: 10.0 * np.log10(e)  # noqa: E731
+    np.testing.assert_allclose(db(curved) - db(lowered), 0.0, atol=0.02)
+    assert np.all(db(curved) - db(plain) > 0.35)
+    # Along an arc of a linear profile: t = acosh(1 + g^2 d^2 / (2 c1 c2)) / g, d its
+    # chord, c1 and c2 the speeds at its ends; 0.49 ms sooner than straight in still air.
+    arcs = sum(
+        math.acosh(1.0 + g * g * d2 / (2.0 * (c + g * z1) * (c + g * z2))) / g
+        for d2, z1, z2 in ((20.0**2 + 4.0**2, 1.0, 5.0), (80.0**2 + 3.5**2, 5.0, 1.5))
+    )
+    assert delay == pytest.approx(arcs, rel=1e-9) and straight - delay > 4.8e-4
+    # In air that does not move the path is the still air's to the bit.
+    calm, calm_delay = over_the_top(barrier(0.0))
+    assert np.array_equal(calm, plain) and calm_delay == straight
+
+
+def test_upwind_a_barrier_screens_as_in_still_air() -> None:
+    """Bent up, the sides keep their straight course (short of the shadow, which starts
+    some 200 m from them here) and only take longer."""
+    plain, straight = over_the_top(barrier(None))
+    up, delay = over_the_top(barrier(-0.17))
+    np.testing.assert_allclose(up, plain, rtol=1e-12)
+    assert delay > straight + 3e-4
 
 
 # -- weather zones -----------------------------------------------------------------------

@@ -519,9 +519,24 @@ is an arc of a circle, so its travel time and its length are exact.
 - **Off façades and barriers** the paths bend the same way, in the vertical plane the
   reflections fold them into, with the wind's mean component over their legs. A path
   that would pass over the wall, or through something on the way, is left out.
-- **Over an edge** (a roof, the top of a barrier) each leg keeps its straight course and
-  takes the travel time of its heights, and past the start of the shadow its level
-  falls as a creeping wave's does.
+- **Over an edge** (a roof, the top of a barrier) each side of the edge that the
+  atmosphere bends down, downwind or under an inversion, is the eigenray between the
+  edge and the source or the listener, unfolded off façades and with the straight side's
+  bounce off the ground, if any: the path takes its travel time, its length, its
+  bounce's angle (above 500 Hz: below, where rays fail over the ground, the straight
+  side's) and the edge's diffraction coefficient for the angles at which it meets and
+  leaves the edge. Curved, it turns less over the edge, and the barrier screens less
+  (ISO 9613-2 and CNOSSOS-EU take the path as curved too): in a gradient of radius R, as
+  much as in still air over the edge lowered by a b / (2 R), a and b the source's and
+  the listener's distances to it (see
+  [Validation](validation.md#a-barrier-in-wind-against-a-lowered-edge)). Its level
+  spreads as in still air, not as its own ray tube does: far behind a barrier downwind,
+  more rays arrive, bouncing off the ground, than the one each path follows. Over two
+  edges in turn the sides beyond them curve and the way between them stays straight;
+  round an upright edge (a barrier's end, a building's corner) they stay straight, as in
+  ISO 9613-2. A side that the atmosphere bends up keeps its straight course and takes
+  the travel time of its heights, and past the start of the shadow its level falls as a
+  creeping wave's does.
 - **The direct sound's time** in the results is when the bent direct sound arrives:
   sooner downwind, later upwind (the time along the ground in the shadow).
 - **The late rays** follow their arcs through the layers, in chords that stray at most
@@ -1389,13 +1404,14 @@ Vegetation is volumes filled evenly: a lone tree's trunk is left out, the foliag
 attenuation is given, not derived from its leaves' size and density, and stems stand
 upright at random.
 
-Sound bent over the top of a barrier or a roof keeps straight legs in any weather, its
-level falling only past the start of a refraction shadow: the wind and the temperature
-do not change how much a barrier screens, though downwind and under an inversion it
-screens less in practice (ISO 9613-2 and CNOSSOS-EU take that as a path curved over
-the edge). Behind a barrier, then, the weather classes of a [long-term
-level](#levels-over-a-long-term) differ only by the sound that does not pass over its
-edge, the late sound above all.
+Sound bent down over the top of a barrier or a roof follows one eigenray on each side of
+the edge, with the straight path's bounce off the ground (none or one), and spreads as
+in still air: far behind a barrier downwind, the rays that bounce off the ground again
+on their way are left out. A path that reflects off a roof or a sloping face on its way
+to the edge keeps straight legs, as do the terms of the edge fade and the way between
+two edges, and over two edges each edge's coefficient changes as a lone edge's would,
+which overstates how much less they screen by up to 0.7 dB behind two barriers downwind
+(see [Validation](validation.md#a-barrier-in-wind-against-a-lowered-edge)).
 
 The eddies are the same over the whole scene (weather zones change the wind and the
 temperature, not the eddies), and the eddies' largest size is the same at every

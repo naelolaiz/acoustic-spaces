@@ -238,6 +238,23 @@ def boundary_angles(n: np.ndarray, phi: np.ndarray, phi_source: np.ndarray) -> n
     )
 
 
+def _sides(angle: np.ndarray, found: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Which side of its boundary each term is on, from its ``angle``
+    (:func:`boundary_angles`), and whether it counts, given whether its wave's specular
+    path was ``found``: on the lit side where it was, on the dark side where it was not;
+    exactly on the boundary, the side ``found`` picks."""
+    lit = (angle > _ON_BOUNDARY) | ((np.abs(angle) <= _ON_BOUNDARY) & found)
+    return lit, lit == found
+
+
+def _in_front(n: np.ndarray, phi_source: np.ndarray) -> np.ndarray:
+    """(C, 3) whether each wave comes from in front of the face it reflects off (always
+    for the incident wave): on a free edge both faces' images are the same point, and
+    only one side is in front."""
+    yes = np.ones(len(np.atleast_1d(n)), dtype=bool)
+    return np.column_stack([yes, phi_source < np.pi, phi_source > (n - 1.0) * np.pi])
+
+
 def _boundary_distance(n: np.ndarray, beta: np.ndarray, sigma: float) -> np.ndarray:
     """The angle epsilon between a term's argument and its nearest singularity: the
     term is cot(eps / 2n) F(2 kL sin^2(eps / 2)), positive on the lit side."""
@@ -582,33 +599,16 @@ class EdgeDiffraction:
     def _face_factors(
         self, edge: np.ndarray, sin_beta: np.ndarray, phi_source: np.ndarray
     ) -> np.ndarray:
-        """(C, 2, B, M) what the reflections off face 0 and face n of ``edge`` take: their
-        specular share and, in the coherent bands, the phase of their reflection factor
-        at the angle the wave from ``phi_source`` (at ``sin_beta`` to the edge) meets
-        them at the edge, which a reflection on its boundary has."""
-        reflection = self.edges.reflection[edge][..., None]
-        out = np.broadcast_to(reflection, (*reflection.shape[:3], self.wavenumber.shape[1]))
-        out = out.astype(complex)
-        ground = self.model.factor_faces(self.edges.face[edge])  # (C, 2)
-        if self.coherent or ground.any():
-            n = self.edges.wedge[edge]
-            sines = np.column_stack([np.sin(phi_source), np.sin(n * np.pi - phi_source)])
-            cosines = np.asarray(sin_beta)[:, None] * np.abs(sines)
-            for side in (0, 1):
-                if self.coherent:
-                    out[:, side, : self.coherent] *= reflection_phases(
-                        self.model, self.edges.face[edge, side], cosines[:, side], self.coherent
-                    )
-                rows = np.flatnonzero(ground[:, side])
-                if len(rows):  # a surface with an impedance: its plane wave's factor
-                    out[rows, side] *= ground_factors(
-                        self.model,
-                        self.edges.face[edge[rows], side],
-                        cosines[rows, side],
-                        None,
-                        spherical=False,
-                    )
-        return out
+        """:func:`face_factors` of this source's sound."""
+        return face_factors(
+            self.model,
+            self.edges,
+            edge,
+            sin_beta,
+            phi_source,
+            self.coherent,
+            self.wavenumber.shape[1],
+        )
 
     def _continued(self, kl, angle, lit, bands: slice) -> np.ndarray:
         """:func:`_continued` in ``bands``, for ``kl`` there."""
@@ -929,7 +929,7 @@ class EdgeDiffraction:
         found, images, orders, front = self._specular(listener, paths, c)
         angle = boundary_angles(n, c["phi_r"], c["phi_s"])
         self._own_paths(listener, c, found, angle[:, 0] < -_ON_BOUNDARY)
-        lit = (angle > _ON_BOUNDARY) | ((np.abs(angle) <= _ON_BOUNDARY) & (found >= 0))
+        lit, counted = _sides(angle, found >= 0)
         kl = k * length_param[:, None, None]
         before = (kind == 1) | (kind == 3)  # a reflection before the edge
         first = np.where(before[:, None], c["bounce"], c["point"])
@@ -1015,7 +1015,6 @@ class EdgeDiffraction:
         # term continues its geometric wave by c and is part of the diffracted wave by
         # s = sqrt(1 - c^2) (_continued, :mod:`~acoustic_spaces.engine.clusters`); in
         # the others all of it adds in pressure.
-        counted = lit == (found >= 0)
         energy = np.zeros((len(edge), self.wavenumber.shape[0]))
         pressure = (waves * counted[:, :, None, None]).sum(axis=1)
         energy[:, : self.coherent] = np.mean(np.abs(pressure[:, : self.coherent]) ** 2, axis=2)
@@ -1461,12 +1460,8 @@ class EdgeDiffraction:
             points[:, column], reflections[:, column] = image, order
             if len(specular):
                 out[:, column] = _match(image, order, images, orders, specular, tolerance)
-        # A reflection off a face needs the wave to come from in front of it: on a free
-        # edge both faces' images are the same point, and only one side is in front.
-        n = edges.wedge[c["edge"]]
-        front = np.column_stack(
-            [np.ones(count, dtype=bool), c["phi_s"] < np.pi, c["phi_s"] > (n - 1.0) * np.pi]
-        )
+        # A reflection off a face needs the wave to come from in front of it.
+        front = _in_front(edges.wedge[c["edge"]], c["phi_s"])
         out = np.where(front, out, -1)
         return out, points, reflections, front
 
@@ -1521,6 +1516,87 @@ def _closest(start, end, edges, edge) -> np.ndarray:
         usable, across, 1.0
     )
     return start + np.where(usable, s, 0.0)[:, None] * line
+
+
+def face_factors(
+    model: TraceModel,
+    edges: Edges,
+    edge: np.ndarray,
+    sin_beta: np.ndarray,
+    phi_source: np.ndarray,
+    coherent: int,
+    samples: int,
+) -> np.ndarray:
+    """(C, 2, B, M) what the reflections off face 0 and face n of ``edges`` ``edge``
+    (C,) take, at ``samples`` (M) frequencies per band: their specular share and, in the
+    lowest ``coherent`` bands, the phase of their reflection factor at the angle the
+    wave from ``phi_source`` (at ``sin_beta`` to the edge) meets them at the edge, which
+    a reflection on its boundary has."""
+    reflection = edges.reflection[edge][..., None]
+    out = np.broadcast_to(reflection, (*reflection.shape[:3], samples))
+    out = out.astype(complex)
+    ground = model.factor_faces(edges.face[edge])  # (C, 2)
+    if coherent or ground.any():
+        n = edges.wedge[edge]
+        sines = np.column_stack([np.sin(phi_source), np.sin(n * np.pi - phi_source)])
+        cosines = np.asarray(sin_beta)[:, None] * np.abs(sines)
+        for side in (0, 1):
+            if coherent:
+                out[:, side, :coherent] *= reflection_phases(
+                    model, edges.face[edge, side], cosines[:, side], coherent
+                )
+            rows = np.flatnonzero(ground[:, side])
+            if len(rows):  # a surface with an impedance: its plane wave's factor
+                out[rows, side] *= ground_factors(
+                    model,
+                    edges.face[edge[rows], side],
+                    cosines[rows, side],
+                    None,
+                    spherical=False,
+                )
+    return out
+
+
+def edge_coefficient(
+    model: TraceModel,
+    edges: Edges,
+    edge: np.ndarray,
+    point: np.ndarray,
+    incoming: np.ndarray,
+    outgoing: np.ndarray,
+    lengths: tuple[np.ndarray, np.ndarray],
+    wavenumber: np.ndarray,
+    coherent: int = 0,
+    found: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """(C, 3, B, M) the uniform theory's diffraction coefficient at ``point`` (C, 3) on
+    ``edges`` ``edge`` (C,), its prefactor included, for sound that reaches the edge
+    along the unit vectors ``incoming`` (C, 3) and leaves it along ``outgoing`` (C, 3),
+    ``lengths`` (r1 and r2, each (C,)) m from where it comes from and where it goes, at
+    wave numbers ``wavenumber`` (B, M), by term: the incident wave's and the reflections'
+    off the edge's faces (:func:`face_factors`, ``coherent`` as there). Also (C, 3)
+    whether :class:`EdgeDiffraction` counts each term, given whether the specular path
+    of its wave is ``found`` (C, 3): where the listener is on the lit side of the wave's
+    boundary and the path is there, or on the dark side and it is not, the side that
+    ``found`` picks exactly on the boundary; a reflection off a face the wave comes from
+    behind has no path. Without ``found``, every term counts, on the lit side on its
+    boundary."""
+    n = edges.wedge[edge]
+    _, rho_s, phi_s, _ = edges.frame(edge, point - incoming)
+    _, _, phi_r, _ = edges.frame(edge, point + outgoing)
+    sin_beta = np.clip(rho_s, 1e-12, 1.0)
+    r1, r2 = lengths
+    kl = wavenumber[None] * (r1 * r2 / (r1 + r2) * sin_beta**2)[:, None, None]
+    angle = boundary_angles(n, phi_r, phi_s)
+    if found is None:
+        lit = angle >= 0.0
+        counted = np.ones_like(lit)
+    else:
+        lit, counted = _sides(angle, np.asarray(found, dtype=bool) & _in_front(n, phi_s))
+    factors = face_factors(model, edges, edge, sin_beta, phi_s, coherent, wavenumber.shape[1])
+    waves = _waves(n, phi_r, phi_s, kl, lit, factors)
+    prefactor = wedge_prefactor(n[:, None, None], wavenumber[None], sin_beta[:, None, None])
+    return waves * prefactor[:, None], counted
 
 
 def _waves(n, phi, phi_source, kl, lit, reflection) -> np.ndarray:
@@ -1917,6 +1993,8 @@ __all__ = [
     "Edges",
     "band_frequencies",
     "diffract",
+    "edge_coefficient",
+    "face_factors",
     "find_edges",
     "fresnel_tail",
     "transition",

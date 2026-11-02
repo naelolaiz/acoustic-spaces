@@ -13,11 +13,27 @@ the height and on the way the sound goes (:mod:`~acoustic_spaces.engine.refracti
   reflections fold the path into: unfolded, the path is one plane, along which the wind
   blows with its mean component over the legs. A ray that passes over the wall, or
   through something on the way, is left out.
-- Over an edge, and off any other surface, each leg keeps its straight course and
-  takes the travel time of its own heights, and its level falls into a shadow as a
-  creeping wave's: by exp(-2 Im kappa_1 d) over the distance d past the shadow's
-  start, kappa_1 the first mode of the residue series over a rigid ground
-  (:mod:`~acoustic_spaces.engine.shadow`).
+- Over an edge (the top of a barrier, a roof's), each side of the edge whose
+  atmosphere bends sound down towards the ground (downwind, under an inversion) is the
+  eigenray from its end to the edge, unfolded off vertical walls as above and with as
+  many bounces off the ground (none or one) as the straight side, the one leaving
+  nearest its direction: its travel time, its length, the angle of its bounce (above
+  :data:`WAVE_MAX_BAND_HZ`) and the angles at which it meets the edge, from which the
+  edge's diffraction coefficient is taken anew
+  (:func:`~acoustic_spaces.engine.diffraction.edge_coefficient`). Curved over the
+  edge, the path turns less there than the straight one, and the edge screens less:
+  ISO 9613-2:1996 (7.4, eq. 18, K_met) and CNOSSOS-EU (Directive (EU) 2015/996, Annex
+  II, eqs. 2.5.24 to 2.5.26) take that as a path curved over the edge too, with a
+  radius of their own. Its level spreads as in still air along the curved sides: one
+  eigenray's tube is not the sound there, where downwind more rays arrive after
+  bouncing off the ground. Over two edges in turn the sides before the first and after
+  the second curve, the way between the edges staying straight; round an upright edge
+  (K_met = 1 in ISO 9613-2:1996, 7.4) the sides stay straight.
+- Over an edge on a side that the atmosphere bends up, and off any other surface,
+  each leg keeps its straight course and takes the travel time of its own heights, and
+  its level falls into a shadow as a creeping wave's: by exp(-2 Im kappa_1 d) over the
+  distance d past the shadow's start, kappa_1 the first mode of the residue series over
+  a rigid ground (:mod:`~acoustic_spaces.engine.shadow`).
 
 Rays fail at low frequencies over the ground: the profiles change fastest within a
 wavelength of it, where the direct sound and its reflection meet. In the bands up to
@@ -51,6 +67,7 @@ import numpy as np
 
 from acoustic_spaces.engine import parabolic, run_size, wide_angle
 from acoustic_spaces.engine.coherent import ground_factors, reflection_phases
+from acoustic_spaces.engine.diffraction import Edges, edge_coefficient, find_edges
 from acoustic_spaces.engine.early import _EDGE_TOLERANCE, EarlyReflections, _face_at
 from acoustic_spaces.engine.model import TraceModel, _ground_faces, source_weights
 from acoustic_spaces.engine.refraction import CHORD_SAGITTA_M, Profile, Rays, _sine, node_heights
@@ -98,6 +115,14 @@ _FIRST_MODE = -1.0187929716474710
 _VERTICAL = 1e-9
 
 
+#: A side of an edge curves where its eigenray meets the edge more than this (radians)
+#: from above the straight side: where the atmosphere bends it down towards the ground.
+_BENT_DOWN_RAD = 1e-9
+#: An edge this close to vertical (the horizontal part of its direction) is upright: the
+#: sides of a path round it stay straight, as ISO 9613-2:1996 (7.4) has K_met = 1 there.
+_UPRIGHT = 1e-6
+
+
 #: How far (m/s) the late tracer's profile may stray from the atmosphere's, in the speed
 #: of sound plus the wind's: it drops the nodes it can (each layer is a piece of arc to
 #: follow), keeping those where the profile bends.
@@ -106,6 +131,17 @@ LATE_SPEED_TOLERANCE = 0.005
 #: line or surface source share them, and the listeners round a source.
 _KEPT_RAYS = 24
 _RAYS: OrderedDict = OrderedDict()
+
+
+@dataclass
+class _Side:
+    """The eigenray along one side of an edge (:meth:`Refraction._side`)."""
+
+    time: float  # s
+    length: float  # m
+    leaving: np.ndarray  # (3,) the unit vector it leaves its start in
+    arriving: np.ndarray  # (3,) the unit vector it arrives at its end in
+    ground: np.ndarray | None  # (bands, M) its bounce's reflection factor over the straight's
 
 
 @dataclass
@@ -133,7 +169,9 @@ class Refraction:
     """Bends the early paths of the source at ``source`` in an outdoor scene's
     atmosphere (not still), running the parabolic equation on ``threads`` threads (0:
     every core): the wide-angle one (:mod:`~acoustic_spaces.engine.wide_angle`) with
-    ``wide_angle``."""
+    ``wide_angle``. ``edges`` are the model's diffracting edges that the paths over
+    edges name (:func:`~acoustic_spaces.engine.diffraction.find_edges`, found when
+    first needed if not given)."""
 
     def __init__(
         self,
@@ -148,6 +186,7 @@ class Refraction:
         max_order: int = 1,
         threads: int = 0,
         wide_angle: bool = False,
+        edges: Edges | None = None,
     ) -> None:
         from acoustic_spaces.engine.diffraction import band_frequencies
 
@@ -190,6 +229,7 @@ class Refraction:
         self.wide_angle = bool(wide_angle)
         self._starts: dict[tuple, float | None] = {}
         self.eddies = Eddies.of(model, self.c)
+        self._edges = edges
 
     # -- profiles ----------------------------------------------------------------------
 
@@ -225,11 +265,14 @@ class Refraction:
                 )
         return self._profiles[key]
 
-    def rays(self, key: float) -> Rays:
-        index = (self._weather, key, self.zs)
+    def rays(self, key: float, height: float | None = None) -> Rays:
+        """The rays of the profile of ``key`` from the source, or from ``height`` (m
+        above the ground)."""
+        zs = self.zs if height is None else float(height)
+        index = (self._weather, key, zs)
         rays = _RAYS.get(index)
         if rays is None:
-            rays = _RAYS[index] = Rays(self.profile(key), self.zs)
+            rays = _RAYS[index] = Rays(self.profile(key), zs)
             while len(_RAYS) > _KEPT_RAYS:
                 _RAYS.popitem(last=False)
         else:
@@ -333,7 +376,14 @@ class Refraction:
             elif rows:
                 out.append(self._off_walls(listener, zr, paths, rows, planes, ratio, cutoff))
         if bent:
-            out.append(self._legs(paths[np.array(sorted(bent))]))
+            # The specular paths, by the planes they reflect off: the geometric waves the
+            # terms of the paths over an edge continue (as EdgeDiffraction finds them).
+            specular = {
+                tuple(int(p) for p in self.model.face_plane[paths.faces[i]])
+                for i in range(len(paths))
+                if paths.edge[i] < 0 and paths.crossings[i] == 0
+            }
+            out.append(self._legs(paths[np.array(sorted(bent))], specular))
         return out, request
 
     def _open_ground(self, k, listener, towards, reach, zr, straight, paths, rows, ratio, cutoff):
@@ -638,12 +688,30 @@ class Refraction:
 
     # -- legs --------------------------------------------------------------------------
 
-    def _legs(self, paths: EarlyReflections) -> EarlyReflections:
+    def _legs(self, paths: EarlyReflections, specular: set) -> EarlyReflections:
         """``paths`` with each straight leg's travel time in the atmosphere, and its
-        shadow's attenuation."""
+        shadow's attenuation; a path over an edge curves on the sides of it that the
+        atmosphere bends down (:meth:`_over_edges`, the ``specular`` paths as there)."""
         energy = paths.energy.copy()
         delay = paths.delay_s.copy()
+        distance = paths.distance_m.copy()
+        direction = paths.direction.copy()
+        spectrum = None if paths.spectrum is None else paths.spectrum.copy()
+        coherent = 0 if spectrum is None else spectrum.shape[1]
         for i, points in enumerate(paths.points):
+            curved = self._over_edges(paths, i, specular) if paths.edge[i] >= 0 else None
+            if curved is not None:
+                factor, delay[i], distance[i], arrival = curved
+                if coherent:
+                    shaped = spectrum[i] * factor[:coherent]
+                    level = np.mean(np.abs(shaped) ** 2, axis=1)
+                    energy[i, :coherent] *= level
+                    safe = np.sqrt(np.where(level > 0.0, level, 1.0))[:, None]
+                    spectrum[i] = np.where(level[:, None] > 0.0, shaped / safe, 1.0)
+                energy[i, coherent:] *= np.mean(np.abs(factor[coherent:]) ** 2, axis=1)
+                if arrival is not None:
+                    direction[i] = arrival
+                continue
             gain = np.ones(self.bands)
             shift = 0.0
             for a, b in zip(points[:-1], points[1:], strict=True):
@@ -652,7 +720,239 @@ class Refraction:
                 shift += t
             energy[i] *= gain
             delay[i] += shift
-        return dataclasses.replace(paths, energy=energy, delay_s=delay)
+        return dataclasses.replace(
+            paths,
+            energy=energy,
+            delay_s=delay,
+            distance_m=distance,
+            direction=direction,
+            spectrum=spectrum,
+        )
+
+    def _over_edges(self, paths: EarlyReflections, i: int, specular: set):
+        """Path ``i`` of ``paths``, over an edge (or two in turn, with no reflection),
+        with each side of the edges that the atmosphere bends down curved
+        (:meth:`_side`): the factor (bands, M) its pressure takes, as the edges'
+        diffraction coefficients change with the angles and lengths of the curved sides
+        (:func:`~acoustic_spaces.engine.diffraction.edge_coefficient`) and the air takes
+        their lengths; its delay (s) and length (m); and the direction it arrives from
+        (None: as before). The other legs keep their straight course, as in
+        :meth:`_leg`. Over one edge, its terms are those EdgeDiffraction counted, given
+        the ``specular`` paths there are (by the planes they reflect off); over two, each
+        edge's coefficient changes as a lone edge's would. None where neither side
+        curves, or where the path's corners are not of one edge (or two) and
+        reflections; and where the edge fade decides whether the incident wave's term
+        counts: on the dark side of its boundary, its specular path there, with a
+        reflection on one side of the edge; and round an upright edge."""
+        points = paths.points[i]
+        faces = np.asarray(paths.faces[i], dtype=np.int64)
+        inner = len(points) - 2
+        along = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1))])
+        total = float(along[-1])
+        if abs(total - float(paths.distance_m[i])) > 1e-9 * max(total, 1.0):
+            # Not the way the path goes: a term of the edge fade, whose corners are those
+            # of the specular path it belongs to (:mod:`~acoustic_spaces.engine.edge_fade`).
+            return None
+        edges = self._edge_list()
+        edge = int(paths.edge[i])
+        found = None
+        if inner - len(faces) == 1:
+            _, rho = edges.distances(np.full(inner, edge), points[1:-1])
+            on = np.flatnonzero(rho <= self.tolerance)
+            if len(on) != 1:
+                return None
+            corners, names = [int(on[0]) + 1], [edge]
+            # Whether the geometric waves of its terms have specular paths: the incident
+            # wave and the reflections off the edge's faces.
+            planes = tuple(int(p) for p in self.model.face_plane[faces])
+            before, after = planes[: corners[0] - 1], planes[corners[0] - 1 :]
+            found = np.array(
+                [
+                    [
+                        before + after in specular,
+                        before + (int(edges.plane[edge, 0]),) + after in specular,
+                        before + (int(edges.plane[edge, 1]),) + after in specular,
+                    ]
+                ]
+                * 2
+            )
+        elif inner == 2 and len(faces) == 0:
+            second = self._edge_at(points[2])
+            if second < 0:
+                return None
+            corners, names = [1, 2], [edge, second]
+        else:
+            return None
+        if np.any(np.hypot(*edges.direction[names, :2].T) <= _UPRIGHT):
+            return None
+        first, last = corners[0], corners[-1]
+        sides = (
+            self._side(points[: first + 1], faces[: first - 1], True),
+            self._side(points[last:], faces[first - 1 :], False),
+        )
+        if sides[0] is None and sides[1] is None:
+            return None
+        # The legs that stay straight: a side that does not curve, and the way between
+        # two edges.
+        legs = list(range(first, last))
+        if sides[0] is None:
+            legs = list(range(first)) + legs
+        if sides[1] is None:
+            legs += list(range(last, len(points) - 1))
+        gain = np.ones(self.bands)
+        time = 0.0
+        length = 0.0
+        for j in legs:
+            g, shift = self._leg(points[j], points[j + 1])
+            leg = float(np.linalg.norm(points[j + 1] - points[j]))
+            gain *= g
+            time += leg / self.c + shift
+            length += leg
+        for side in sides:
+            if side is not None:
+                time += side.time
+                length += side.length
+        # Straight and curved: the directions the path meets each edge in and leaves it
+        # in, and how far it has come and has to go.
+        towards = [_departure(points[j - 1 : j + 1]) for j in corners]
+        away = [_departure(points[j : j + 2]) for j in corners]
+        came = [float(along[j]) for j in corners]
+        bent_towards, bent_away, bent_came = list(towards), list(away), list(came)
+        if sides[0] is not None:
+            bent_towards[0] = sides[0].arriving
+            bent_came = [c - came[0] + sides[0].length for c in came]
+        if sides[1] is not None:
+            bent_away[-1] = sides[1].leaving
+        k = 2.0 * np.pi * self.frequencies / self.c
+        came_all = np.array(came + bent_came)
+        m = len(corners)
+        waves, counted = edge_coefficient(
+            self.model,
+            edges,
+            np.array(names * 2),
+            np.array([points[j] for j in corners] * 2),
+            np.array(towards + bent_towards),
+            np.array(away + bent_away),
+            (came_all, np.array([total] * m + [length] * m) - came_all),
+            k,
+            self.coherent,
+            found,
+        )
+        # The straight path's terms, curved as well.
+        counted = counted[:m]
+        if found is not None and found[0, 0] and not counted[0, 0] and len(faces) == 1:
+            return None
+        straight = (waves[:m] * counted[:, :, None, None]).sum(axis=1)
+        bent = (waves[m:] * counted[:, :, None, None]).sum(axis=1)
+        ratio = np.divide(bent, straight, out=np.ones_like(bent), where=np.abs(straight) > 0.0)
+        factor = np.prod(ratio, axis=0)
+        for side in sides:
+            if side is not None and side.ground is not None:
+                factor = factor * side.ground
+        # Spreading as 1 / (r1 r2 (r1 + r2)) over the first edge, along the curved sides,
+        # and the air.
+        r1, s1 = came[0], bent_came[0]
+        spread = (r1 * (total - r1) * total) / (s1 * (length - s1) * length)
+        energy = spread * gain * np.exp(-self.air * (length - total))
+        factor = factor * np.sqrt(energy)[:, None]
+        arrival = None if sides[1] is None else -sides[1].arriving
+        return factor, time, length, arrival
+
+    def _side(self, points: np.ndarray, faces: np.ndarray, to_edge: bool) -> _Side | None:
+        """The eigenray along one side of an edge, from ``points[0]`` to ``points[-1]``
+        through the corners between them, which reflect off ``faces``: unfolded off
+        vertical walls, with the straight side's bounces off the ground (none or one), in
+        the profile of the wind's mean component along it (the mean weather along it
+        with weather zones), the one leaving nearest the straight side's direction. The
+        edge is at its end with ``to_edge``, at its start otherwise. None where the side
+        stays straight: where the eigenray meets the edge from below the straight side or
+        along it (the atmosphere bends it up, or not at all), or none is found; where it
+        reflects off any other surface or off the ground twice, or goes straight up or
+        down."""
+        model = self.model
+        bounce = -1
+        for j, face in enumerate(faces):
+            if self.flat[face]:
+                if bounce >= 0:
+                    return None
+                bounce = j + 1
+            elif abs(float(model.plane_normal[model.face_plane[face]][2])) > _VERTICAL:
+                return None
+        bounces = int(bounce >= 0)
+        plan = np.diff(points[:, :2], axis=0)
+        lengths = np.linalg.norm(plan, axis=1)
+        reach = float(lengths.sum())
+        if reach <= 1e-6 or np.any(lengths <= 1e-9):
+            return None
+        za = max(float(points[0][2]) - self.ground, 0.0)
+        zb = max(float(points[-1][2]) - self.ground, 0.0)
+        if self.zoned:
+            key = self._mix(points[:, :2])
+        else:
+            key = self._key(float(self.wind @ plan.sum(axis=0)) / reach)
+        rays = self.rays(key, za)
+        found = rays.eigenrays(zb, reach, bounces)
+        rise = zb - za if bounces == 0 else -(za + zb)
+        same = [
+            k
+            for k in range(len(found))
+            if found.ground_bounces[k] == bounces and found.branch[k].lower_events == bounces
+        ]
+        if not same:
+            return None
+        # The straight side bent: of the eigenrays with its bounces (more than one where
+        # the atmosphere ducts the sound), the one that leaves nearest its direction.
+        k = min(same, key=lambda k: abs(float(found.launch[k]) - math.atan2(rise, reach)))
+        launch, arrival = float(found.launch[k]), float(found.arrival[k])
+        # Bent down, it comes down onto the edge or leaves it upwards, more than the
+        # straight side (from or to the ground's image of its far end, with a bounce).
+        if to_edge:
+            down = math.atan2(zb + za if bounces else zb - za, reach) - arrival
+        else:
+            down = launch - math.atan2(rise, reach)
+        if down <= _BENT_DOWN_RAD:
+            return None
+        start, end = plan[0] / lengths[0], plan[-1] / lengths[-1]
+        ground = None
+        if bounces:
+            # The ground reflects at the curved ray's angle instead of the straight one's,
+            # above the bands where rays fail over the ground (WAVE_MAX_BAND_HZ).
+            face = np.array([faces[bounce - 1]])
+            ends = tuple(points[bounce + j][None] for j in (-1, 0, 1))
+            chord = math.hypot(reach, rise)
+            sine = float(_sine(found.p[k], float(rays.profile.c[0])))
+            ground = (
+                ground_factors(
+                    model, face, np.array([sine]), np.array([found.length[k]]), ends=ends
+                )
+                / ground_factors(
+                    model, face, np.array([-rise / chord]), np.array([chord]), ends=ends
+                )
+            )[0]
+            ground[self.centres <= WAVE_MAX_BAND_HZ * 1.001] = 1.0
+        return _Side(
+            time=float(found.time[k]),
+            length=float(found.length[k]),
+            leaving=np.append(math.cos(launch) * start, math.sin(launch)),
+            arriving=np.append(math.cos(arrival) * end, math.sin(arrival)),
+            ground=ground,
+        )
+
+    def _edge_list(self) -> Edges:
+        """The model's diffracting edges."""
+        if self._edges is None:
+            self._edges = find_edges(self.model)
+        return self._edges
+
+    def _edge_at(self, point: np.ndarray) -> int:
+        """The diffracting edge that ``point`` lies on, or -1."""
+        edges = self._edge_list()
+        t, rho = edges.distances(np.arange(len(edges)), np.broadcast_to(point, (len(edges), 3)))
+        tolerance = self.tolerance
+        on = np.flatnonzero(
+            (rho <= tolerance) & (t >= -tolerance) & (t <= edges.length + tolerance)
+        )
+        return int(on[np.argmin(rho[on])]) if len(on) else -1
 
     def _leg(self, a: np.ndarray, b: np.ndarray):
         """The energy factor (bands,) and the extra travel time (s) of a straight leg

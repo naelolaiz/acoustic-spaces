@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Outdoors, sound bent down over a barrier's top or a roof's edge (downwind, under an
+  inversion) follows the curved eigenrays to and from the edge, which screens less: 0.41
+  to 0.85 dB less than in still air (was 0) 20 and 80 m from a barrier 5 m high in a
+  gradient of radius 2 km, and 40.45 to 40.54 dB(A) 25 m behind the railway example's
+  barrier in the `windy` preset blowing towards it (40.88 to 40.91 in `clear_night`; one
+  seed).
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early
