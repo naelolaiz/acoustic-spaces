@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
+  University and the University of Iceland, and described as a KEMAR dummy head with one
+  of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.
+- Docs: G of responses written with `simulate --normalize` takes the reference energy
+  0.01 × `ir_gain`² (from `parameters.json`), and the JNDs of T20, T30 and C50 are
+  ISO 3382-1's of EDT and C80 taken by analogy; Barron's total and the first batch of
+  split rays are given as the code has them.
 - Editor: **View > Follow the run** rings the sources and listeners a run's step works
   on, a demo's too, and draws a walking source and the run's other walkers where the
   place being simulated has them, on the walks the run simulates (`Demo.walks`); while
@@ -105,6 +112,30 @@
   L_1,2m, simulating one more listener there where its listener stands nearer: the
   offices' room behind the street's balcony, 1 m out, moves by up to 2.1 dB at 63 to 250
   Hz and 0.2 dB(A) for the tram and the road works. No documented number changes.
+- Walks without Doppler crossfade from one place to the next band by band, corrected by
+  how alike the two places sound, so that each octave band's power runs on
+  (`acoustic_spaces.render.crossfaded`, shared with the demos' tours). Against the exact
+  field of a pass-by, pure tones' level misses by at most 2.7 to 4.1 dB instead of 4.2
+  to 7.0 dB, 0.2 to 2.4 dB on average instead of 1.3 to 2.7 dB, and for the train at 4
+  kHz by 12.2 instead of 10.9 dB, where the field's two paths cancel for a moment.
+- Changed: an emission's sound power and directivity (`Emission.sound_power_db`,
+  `directivity`) are now in IEC 61260-1 octaves between their band edges, 44.7 Hz to
+  11.2 kHz, not in the auralization's crossover bands, whose 63 Hz band reached down to
+  0 Hz and whose 8 kHz band up to half the sample rate. The helicopter's `level_db` and
+  `helicopter.csv` are regenerated: in helicopter_flyover 130.7 dB at 63 Hz (was 134.8,
+  with the main rotor's 19.7 and 39.4 Hz tones), 120.2 dB at 8 kHz (121.7) and 132.9
+  dB(A) (133.1); in stadium_concert 129.8 (134.0), 120.1 (121.6) and 132.8 dB(A)
+  (132.9).
+- Maps over a long term gain the long-term insertion loss of what `insertion_loss_of`
+  names (`long_term_insertion_loss`, dB per band, and `long_term_insertion_loss_a`,
+  dB(A)), from the runs with and without it that every class already made. Their other
+  values, `insertion_loss` among them, are the scene's own weather's, and the levels in
+  each class and period and relative to free field over the long term are at listeners
+  only, as the docs now say.
+- BRAS's coupled rooms with the door open by 30.4° join the validation: the conversion
+  joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
+  T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
+  kHz.
 - Doc 29's aircraft are louder in a scene, JETW by 0.29 dB: their NPD L_Amax is read
   with slow time weighting, so `doc29.source.sound_power_db` now raises the level 1000
   ft away by what that weighting takes off the NPD curves' own pass (`slow_drop_db`).
@@ -1590,10 +1621,11 @@ and the last bits round alike on every platform.
 - `acoustic-spaces hrtf` lists free HRTF sets with their licences and downloads the one
   named into the user's data folder: `ku100` (a Neumann KU100 dummy head, TH Köln,
   CC BY 3.0, 3.4 MB), `kemar` (a KEMAR dummy head, SADIE II, Apache 2.0, 38 MB) and
-  `viking` (one of 20 people or a dummy head, Viking v2, CC BY 4.0, 58.4 MB, one file
-  per head with `--member`). `--url` takes any other SOFA file, `--folder` keeps them
-  elsewhere, and the licence and who measured the set are printed before anything is
-  downloaded. Until now a measured head had to be found and fetched by hand.
+  `viking` (a KEMAR dummy head with one of 20 pairs of replica pinnae or none, Viking v2,
+  CC BY 4.0, 58.4 MB, one file per pair of pinnae with `--member`). `--url` takes any
+  other SOFA file, `--folder` keeps them elsewhere, and the licence and who measured the
+  set are printed before anything is downloaded. Until now a measured head had to be
+  found and fetched by hand.
 
 **Running on another computer**
 

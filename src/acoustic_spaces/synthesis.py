@@ -132,16 +132,17 @@ def matched_gains(gains, sample_rate: float, rounds: int = 30) -> np.ndarray:
 def split_bands(
     signal: np.ndarray, sample_rate: float, bands: int = len(OCTAVE_BANDS_HZ)
 ) -> np.ndarray:
-    """Split a signal into the 8 octave bands or 24 third-octave bands: (n,) ->
-    (bands, n); the rows sum to the input. As the bands are zero-phase, what each
-    spreads before the first sample or after the last is not in it (see
-    :func:`acoustic_spaces.parameters.octave_bands`)."""
+    """Split a signal into the 8 octave bands or 24 third-octave bands: (n, ...) ->
+    (bands, n, ...), along its first axis; the bands sum to the input. As the bands are
+    zero-phase, what each spreads before the first sample or after the last is not in
+    it (see :func:`acoustic_spaces.parameters.octave_bands`)."""
     signal = np.asarray(signal, dtype=float)
     n = len(signal)
     n_fft = fft_size(n, sample_rate)
-    spectrum = np.fft.rfft(signal, n_fft)
+    spectrum = np.fft.rfft(signal, n_fft, axis=0)
     gains = _band_gains(n_fft, float(sample_rate), int(bands))
-    return np.fft.irfft(spectrum[None, :] * gains, n_fft, axis=1)[:, :n]
+    gains = gains.reshape(gains.shape + (1,) * (signal.ndim - 1))
+    return np.fft.irfft(spectrum[None] * gains, n_fft, axis=1)[:, :n]
 
 
 def band_energy_share(

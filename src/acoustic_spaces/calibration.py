@@ -4,8 +4,8 @@ A model of an existing room starts from absorption coefficients out of tables, w
 seldom match the room as built. :func:`calibrate` adjusts the absorption of the
 materials named, octave band by octave band, until the simulated parameters (T30, EDT
 and C80 by default) at each measured source and listener pair come as close as they can
-to those measured, in just noticeable differences (ISO 3382-1, annex A; see
-:data:`~acoustic_spaces.compare.JND`).
+to those measured, in just noticeable differences (ISO 3382-1, annex A, and by analogy
+for T30; see :data:`~acoustic_spaces.compare.JND`).
 
 It does not trace the room again for every trial. Each round traces it once, keeping
 the reflections each ray had off each material

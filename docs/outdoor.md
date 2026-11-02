@@ -1000,8 +1000,9 @@ long_term:
 
 The scene is run as it is, for its impulse responses, and once in each class, all with
 the same seed so that every run traces the same rays; a class whose weather is the
-scene's own takes the scene's run, so n classes cost at most n + 1 runs. Then, at every
-listener and every map point, per octave band and A-weighted:
+scene's own takes the scene's run, so n classes cost at most n + 1 runs (each made twice
+with `insertion_loss_of`, with and without what it names). Then, at every listener, per
+octave band and A-weighted:
 
 - the level in each class;
 - the level in each period: the energy mean of the classes' levels, each by its share
@@ -1013,17 +1014,21 @@ listener and every map point, per octave band and A-weighted:
   with others, L_R, a whole-day rating level as ISO 1996-1 defines it.
 
 The long-term level relative to free field, and the long-term insertion loss of what
-`insertion_loss_of` names (taken in every class), come with them. `simulate` prints
-them. `parameters.json` has a `long_term` block (the classes, their shares and the
-periods), and each response a `long_term` entry with `spl_db`, `spl_a_db`,
-`rating_level_db` and `rating` (L_den or L_R), the levels of each period and each
-class, and `re_free_field_db` and `insertion_loss_db` with their A-weighted values.
-Maps gain the parameters `long_term` (dB per band) and `rating_level` (dB(A)).
+`insertion_loss_of` names (the long-term level without them less that with them, from
+the runs with and without them in every class), come with them. `simulate` prints them.
+`parameters.json` has a `long_term` block (the classes, their shares and the periods),
+and each response a `long_term` entry with `spl_db`, `spl_a_db`, `rating_level_db` and
+`rating` (L_den or L_R), the levels of each period and each class, and
+`re_free_field_db` and `insertion_loss_db` with their A-weighted values. A map gains at
+every point the parameters `long_term` (dB per band), `rating_level` (dB(A)) and, with
+`insertion_loss_of`, the long-term insertion loss `long_term_insertion_loss` (dB per
+band) and `long_term_insertion_loss_a` (dB(A)); its other parameters, `spl`,
+`re_free_field` and `insertion_loss` among them, are those of the scene's own weather.
 `inspect` lists the classes with their shares and weathers, and the periods. From
-Python, `acoustic_spaces.engine.long_term.simulate` and `coverage_map` take
-`long_term=` to run classes the scene does not give, and `Scene.under(weather_class)`
-is the scene in one class. In the editor, weather classes are added and changed under
-**Weather of** (see [the editor](editor.md#outdoor-scenes)).
+Python, `acoustic_spaces.engine.long_term.simulate` and `coverage_map` take `long_term=`
+to run classes the scene does not give, and `Scene.under(weather_class)` is the scene in
+one class. In the editor, weather classes are added and changed under **Weather of**
+(see [the editor](editor.md#outdoor-scenes)).
 
 The level in each class is as accurate as the simulation in that weather (see [How the
 simulation bends sound](#how-the-simulation-bends-sound)). The combination is the
@@ -1111,13 +1116,16 @@ and which Pegg's fit to measured rotors holds.
 
 A scene's source carries the sound power and the directivity of what the rotors send,
 for the levels the simulation and the pass-by report and for the late part:
-`sent.sound_power_db(trim.density, trim.sound_speed)` gives the one per octave band
-and `sent.directivity()` the other, which
+`sent.sound_power_db(trim.density, trim.sound_speed)` gives the one per octave band and
+`sent.directivity()` the other, which
 `acoustic_spaces.directivity.write_directivity_csv` writes as a table a scene reads
-(`directivity: {file: helicopter.csv}`). The `helicopter_flyover` example has them for
-an AS350 B3 150 m up at 63 m/s against a light wind, and its
-[flyover demo](demos.md#a-helicopter-flying-over) flies it over a meadow, its rotors
-trimmed at its airspeed: its speed over the ground less the wind at its height.
+(`directivity: {file: helicopter.csv}`). Both are in IEC octaves, so the main rotor's
+tones at its blade passing frequency and at twice it (19.7 and 39.4 Hz for the AS350
+B3), below the 63 Hz octave, are in no band ([the sound sent each
+way](spatial-audio.md#moving-sources-and-doppler)). The `helicopter_flyover` example has
+them for an AS350 B3 150 m up at 63 m/s against a light wind, and its [flyover
+demo](demos.md#a-helicopter-flying-over) flies it over a meadow, its rotors trimmed at
+its airspeed: its speed over the ground less the wind at its height.
 
 What it leaves out: loads that change round the turn (in forward flight the
 advancing blade carries less lift than the retreating one, and the blades flap), the

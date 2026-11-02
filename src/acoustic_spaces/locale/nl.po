@@ -325,6 +325,30 @@ msgstr ""
 "niveau over een lange termijn met de toeslag van elke periode, A-gewogen "
 "(L_den)"
 
+#: acoustic_spaces/engine/coverage.py
+msgid "Long-term insertion loss (dB)"
+msgstr "Invoegdemping op lange termijn (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"insertion loss over a long term: the long-term level without the buildings, "
+"barriers or vegetation less that with them"
+msgstr ""
+"invoegdemping over een lange termijn: het langetermijnniveau zonder de "
+"gebouwen, geluidsschermen of vegetatie min het niveau met deze"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Long-term insertion loss (dB(A))"
+msgstr "Invoegdemping op lange termijn (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"A-weighted insertion loss over a long term of the buildings, barriers or "
+"vegetation"
+msgstr ""
+"A-gewogen invoegdemping over een lange termijn van de gebouwen, "
+"geluidsschermen of vegetatie"
+
 #: acoustic_spaces/examples.py
 msgid "Rooms"
 msgstr "Ruimtes"
