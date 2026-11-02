@@ -1106,9 +1106,9 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
     from acoustic_spaces.demos import scene_pictures
     from acoustic_spaces.scene import Scene
 
-    # What each still says: the level of the sources that play, all of them or none
-    # (a response too short for a level gives None), and T30 at mid frequencies, the
-    # mean of the 500 Hz and 1 kHz bands when both are there.
+    # What each still says: the level of the sources that play, to which one whose
+    # sound does not arrive (None) adds nothing, none where nothing is heard; and T30 at
+    # mid frequencies, the mean of the 500 Hz and 1 kHz bands when both are there.
     levels = {("talker", "seat-a"): None, ("radio", "seat-a"): 70.0, ("fan", "seat-b"): None}
     t30 = {("talker", "seat-b"): [1.0, 2.0], ("radio", "seat-b"): [1.0, None]}
     made = {
@@ -1137,12 +1137,25 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
         playing=["talker", "radio"],
     )
     assert drawing.title("seat-b") == ("seat-b", "Listener 2 of 2")
-    assert drawing.level_at("seat-a") is None
+    assert drawing.level_at("seat-a") == pytest.approx(70.0)
+    assert drawing.lines(0)[0] == "70 dB(A) here, as simulated"
     seat_b = drawing.lines(1)
     assert seat_b[0] == "73 dB(A) here, as simulated"
     assert "Reverberation time T30 1.5 s (mean of 500 Hz and 1 kHz)" in seat_b
     assert "Turned up 6 dB here so you can hear it" in seat_b
-    assert not any("dB(A)" in str(line) for line in drawing.lines(0))
+    made["responses"] = [
+        {**e, "spl_a_db": None} if e["listener"] == "seat-a" else e for e in made["responses"]
+    ]
+    silent = scene_pictures.Pictures(
+        Scene.from_yaml(scene).to_data(),
+        np.zeros((0, 2, 2)),
+        made,
+        seats["seats"],
+        stops,
+        playing=["talker", "radio"],
+    )
+    assert silent.level_at("seat-a") is None
+    assert not any("dB(A)" in str(line) for line in silent.lines(0))
     first, run = pictures.settings_lines(DEMO.at(scene.parent), args, {}, report)
     assert first.startswith("Simulated: early reflections traced to order 1 with 500 rays")
     assert "stochastic ray tracing for the late sound, 500 rays per band" in first

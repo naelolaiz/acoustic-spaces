@@ -582,11 +582,13 @@ sources:
   the demo downloads the first time and keeps for every scene. Left and right are the
   recording's, so the loudspeaker on the audience's left plays `left`. A source with
   neither a signal nor a channel is silent in the demo. The simulation reads neither.
-- `simulate` reports the sound pressure level per octave band and A-weighted
-  (`spl_db` and `spl_a_db` in `parameters.json`), the editor's results show it per
-  band, and `inspect` lists each source's sound power. In free field, the level 4 m from
-  a source comes out as its sound power less 10 log10(4 π r²) = 23 dB and the air's
-  absorption over the 4 m, to within 0.01 dB.
+- `simulate` reports the sound pressure level per octave band and A-weighted (`spl_db`
+  and `spl_a_db` in `parameters.json`), the editor's results show it per band, and
+  `inspect` lists each source's sound power. In a band whose G is undefined, the level
+  is that of the energy the response holds, as for the [pass-by
+  levels](spatial-audio.md#moving-sources-and-doppler), and null where no sound arrives.
+  In free field, the level 4 m from a source comes out as its sound power less 10
+  log10(4 π r²) = 23 dB and the air's absorption over the 4 m, to within 0.01 dB.
 
 The `town_hall_pa` example feeds two delay loudspeakers with their own gain, equalizer
 and delay, behind two columns that are coherent arrays.

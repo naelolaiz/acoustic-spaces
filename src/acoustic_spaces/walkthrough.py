@@ -1208,29 +1208,14 @@ def _exposure(times: np.ndarray, levels: np.ndarray) -> np.ndarray:
         return 10.0 * np.log10(energy)
 
 
-def _place_levels(response, power) -> np.ndarray:
-    """A place's sound pressure level per octave band (dB) of a source of sound power
-    ``power``. In a band whose G is undefined (the few rays that reach a far place may
-    carry no energy in it, or too little of its decay to read), the level of the energy
-    the response holds from the direct sound's arrival, as outdoors: -inf where none
-    arrives."""
-    params = response.parameters()
-    if not np.isfinite(params.g).all():
-        energy = response.octave_energy()
-        first = min(int(response.direct_delay_s / response.time_step), energy.shape[1] - 1)
-        with np.errstate(divide="ignore"):
-            held = 10.0 * np.log10(energy[:, first:].sum(axis=1) / response._reference())
-        params = dataclasses.replace(params, g=np.where(np.isfinite(params.g), params.g, held))
-    return response.levels(power, params)
-
-
 def pass_by(walk: WalkResponses, source: str | None = None) -> PassBy:
     """The level along ``walk`` at its listener (a walking source) or of ``source`` (a
     walking listener; by default the only source): each place's level, of the source's
     sound power, at the time it is heard (quasi-static: as with the source standing
     there), with its maximum, the sound exposure level and the equivalent level. In a
     band where a place's G is undefined (no sound arrives in it, or its decay cannot be
-    read), the place's level is that of the energy its response holds, as outdoors."""
+    read), the place's level is that of the energy its response holds, as outdoors
+    (:meth:`~acoustic_spaces.engine.response.Response.levels_or_held`)."""
     from acoustic_spaces.parameters import a_weighted
 
     result = walk.result
@@ -1259,7 +1244,7 @@ def pass_by(walk: WalkResponses, source: str | None = None) -> PassBy:
     times = np.asarray(walk.points.times, dtype=float)
     if walk.kind == "sources":
         times = times + np.array([r.direct_delay_s for r in responses])
-    levels = np.array([_place_levels(r, p) for r, p in zip(responses, power, strict=True)])
+    levels = np.array([r.levels_or_held(p) for r, p in zip(responses, power, strict=True)])
     levels_a = np.array([a_weighted(row) for row in levels])
     return PassBy(source, listener, times, levels, levels_a)
 

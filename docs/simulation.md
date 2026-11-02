@@ -123,8 +123,11 @@ The directions the sound arrives from give more of them:
   source, and the level of the late lateral sound, which envelops the listener.
 - IACC early and late (annex B), from the binaural response when the scene writes one
   (through the spherical head or a SOFA file; the first, if it writes several).
-- Stage support ST early (Gade's ST1) and ST late (annex C) for listeners within 1.5 m
-  of a source, where musicians hear themselves and each other.
+- Stage support ST early (Gade's ST1) and ST late (annex C), how well musicians hear
+  themselves and each other, for listeners 0.9 to 1.1 m from a source; elsewhere they
+  are empty. The standard measures them 1 m from the source, and the direct sound in
+  their first 10 ms changes them by up to 20 lg r dB at r metres: 0.9 dB at most within
+  that span, 6 dB at 0.5 m.
 - T30 of figures of eight facing forward, left and up from the listener: where sound
   keeps running between two hard walls, the decay along that axis is longer.
 - STI and STIPA (IEC 60268-16) and U50, at the level the source's `level_db` gives and

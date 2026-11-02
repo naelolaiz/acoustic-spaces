@@ -7,6 +7,17 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Stage support (ST early and late) is given only for listeners 0.9 to 1.1 m from a
+  source, as ISO 3382-1 measures it 1 m away. Given up to 1.5 m at the listener's own
+  distance, it was off by up to 20 lg r (about +3 dB at 1.5 m, -5.5 dB at 0.5 m, 13 to
+  26 dB low at the singers' ears and microphones); those listeners, the orchestra's
+  conductor, the stadium's drummer and the church's listener in the choir (for five of
+  its seven singers) no longer get it.
+- A still listener's level (`spl_db` and `spl_a_db` in `parameters.json`, with the
+  long-term levels, and the editor's results) and the scene demo's captions take
+  `pass_by`'s rule (`Response.levels_or_held`): in a band whose G is undefined, the
+  level of the energy the response holds. Levels that were empty there now have a value;
+  only where no sound arrives they stay empty, and levels given before do not change.
 
 ## 4.1.0
 

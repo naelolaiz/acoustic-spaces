@@ -6812,23 +6812,23 @@ msgstr ""
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
-"Early stage support (dB), for a listener within 1.5 m of the source: the "
+"Early stage support (dB), for a listener 0.9 to 1.1 m from the source: the "
 "energy from 20 to 100 ms over that of the first 10 ms, how well musicians "
 "hear each other"
 msgstr ""
-"Vroege podiumondersteuning (dB) voor een ontvanger binnen 1.5 m van de bron: "
-"de verhouding van de energie van 20 tot 100 ms tot die van de eerste 10 ms, "
-"die aangeeft hoe goed musici elkaar horen"
+"Vroege podiumondersteuning (dB) voor een ontvanger op 0.9 tot 1.1 m van de "
+"bron: de verhouding van de energie van 20 tot 100 ms tot die van de eerste "
+"10 ms, die aangeeft hoe goed musici elkaar horen"
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
-"Late stage support (dB), for a listener within 1.5 m of the source: the "
+"Late stage support (dB), for a listener 0.9 to 1.1 m from the source: the "
 "energy from 100 to 1000 ms over that of the first 10 ms, how much of the "
 "room musicians hear"
 msgstr ""
-"Late podiumondersteuning (dB) voor een ontvanger binnen 1.5 m van de bron: "
-"de verhouding van de energie van 100 tot 1000 ms tot die van de eerste 10 "
-"ms, die aangeeft hoeveel van de ruimte musici horen"
+"Late podiumondersteuning (dB) voor een ontvanger op 0.9 tot 1.1 m van de "
+"bron: de verhouding van de energie van 100 tot 1000 ms tot die van de eerste "
+"10 ms, die aangeeft hoeveel van de ruimte musici horen"
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
