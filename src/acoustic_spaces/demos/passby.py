@@ -1294,15 +1294,7 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     if not path.exists():
         raise SystemExit(f"error: no {path}; run first: {demo.command('walk', args)}")
     facts = pipeline.read_json(path)
-    seats = pipeline.seats_of(folder, demo.command("walk", args))
-    wanted = pipeline.output_label(args)
-    if seats.get("label") != wanted:
-        raise SystemExit(
-            f"error: the passes in {folder} are mixed {pipeline.label_text(seats.get('label'))}"
-            f", and this run asks for them {pipeline.label_text(wanted)}: give the video the "
-            f"--format and --hrtf the walk had, or mix the passes again: "
-            f"{demo.command('walk', args)}"
-        )
+    seats = pipeline.seats_of(folder, demo.command("walk", args), args)
     facts = heard_only(args, facts, demo.command("walk", args))
     stops = stops_of(facts, seats, demo.command("walk", args))
     audio = pipeline.tour_audio(stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0)
@@ -1337,6 +1329,7 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
         stills=moments,
         no_mp4=args.no_mp4,
         chapters=[f"{pictures.mmss(stop.at)} {stop.key.replace('_', ' ')}" for stop in stops],
+        shown=drawing.shown_at,
     )
 
 

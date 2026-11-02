@@ -43,7 +43,10 @@ for one run, so that one scene serves both still and moving.
 
 Each copy is named for its walker, its place and its time on the walk
 (:func:`place_name`, ``car #12 @ 3.40 s``), and the simulation's progress messages name
-it so: :func:`place_of` reads the walker and the time back.
+it so; a demo's video names the moment of each walk it shows (:func:`moment_name`,
+``car @ 3.40 s``): :func:`place_of` reads the walker and the time back from both. A head
+turned as a demo scripts it is named with its yaw (:func:`facing_name`, ``standing
+facing 90.0 deg``), which :func:`facing_of` reads back.
 """
 
 from __future__ import annotations
@@ -84,7 +87,8 @@ LATE_STEP_M = 2.0
 CROSSFADE_S = 0.05
 
 #: A place's name (:func:`place_name`), whole.
-_PLACE = re.compile(r"(?P<name>.+) #\d+ @ (?P<time>\d+(?:\.\d+)?) s")
+_PLACE = re.compile(r"(?P<name>.+?)(?: #\d+)? @ (?P<time>\d+(?:\.\d+)?) s")
+_FACING = re.compile(r"(?P<name>.+) facing (?P<yaw>\d+(?:\.\d+)?) deg")
 
 
 def place_name(name: str, k: int, time_s: float) -> str:
@@ -94,9 +98,30 @@ def place_name(name: str, k: int, time_s: float) -> str:
     return f"{name} #{k} @ {time_s:.2f} s"
 
 
+def moment_name(name: str, time_s: float) -> str:
+    """The walker ``name`` ``time_s`` (s) into its walk, as a demo's video says what it
+    shows: ``car @ 3.40 s``."""
+    return f"{name} @ {max(time_s, 0.0):.2f} s"
+
+
+def facing_name(name: str, yaw_deg: float) -> str:
+    """``name`` turned to the yaw ``yaw_deg`` (degrees, as a scene's orientation gives
+    it), as a demo says what it shows while a head turns: ``standing facing 90.0 deg``."""
+    return f"{name} facing {yaw_deg % 360.0:.1f} deg"
+
+
+def facing_of(label: str) -> tuple[str, float] | None:
+    """What a name that says which way it faces (:func:`facing_name`) names, and the yaw
+    (degrees); None for any other name."""
+    found = _FACING.fullmatch(label)
+    if found is None:
+        return None
+    return found["name"], float(found["yaw"])
+
+
 def place_of(label: str) -> tuple[str, float] | None:
-    """The walker and the time (s) of a place's name (:func:`place_name`); None for any
-    other name."""
+    """The walker and the time (s) of a place's name (:func:`place_name`) or a moment's
+    (:func:`moment_name`); None for any other name."""
     found = _PLACE.fullmatch(label)
     if found is None:
         return None
@@ -1275,8 +1300,11 @@ __all__ = [
     "WalkPoints",
     "WalkResponses",
     "crossfade_weights",
+    "facing_name",
+    "facing_of",
     "knots",
     "late_mixing",
+    "moment_name",
     "movers",
     "pass_by",
     "place_name",

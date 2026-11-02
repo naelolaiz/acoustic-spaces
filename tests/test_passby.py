@@ -704,7 +704,8 @@ def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, caps
     with pytest.raises(
         SystemExit,
         match="mixed binaural through a spherical head model, and this run asks for them as "
-        "mono: give the video the --format and --hrtf the walk had",
+        "mono: give the --format and --hrtf they were made with, or make them again: python "
+        "passby_demo.py walk",
     ):
         demo.main(["video", *run, "--listeners", "verge", "--format", "mono"])
     assert pipeline.label_text("binaural-kemar") == "binaural through the HRTFs of kemar"
