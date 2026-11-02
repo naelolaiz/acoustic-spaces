@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `--indoors` takes a room's level outdoors 2 m in front of its wall, EN ISO 12354-3's
+  L_1,2m, simulating one more listener there where its listener stands nearer: the
+  offices' room behind the street's balcony, 1 m out, moves by up to 2.1 dB at 63 to 250
+  Hz and 0.2 dB(A) for the tram and the road works. No documented number changes.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early
