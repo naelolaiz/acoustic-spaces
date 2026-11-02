@@ -10,7 +10,9 @@ from pydantic import ValidationError
 from test_ground import exact_reflection
 
 from acoustic_spaces import Room, Scene, simulate
+from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.parabolic import march
+from acoustic_spaces.engine.refracted import refraction_for
 from acoustic_spaces.engine.refraction import Profile, Rays, node_heights
 from acoustic_spaces.engine.shadow import shadow_start
 from acoustic_spaces.examples import example_path
@@ -175,6 +177,44 @@ def test_the_level_of_rays_that_turn_in_the_air() -> None:
         i = list(found.ground_bounces).index(bounces)
         level = 10 * math.log10(found.spreading[i] * found.length[i] ** 2)
         assert level == pytest.approx(reference, abs=0.2)
+
+
+def test_each_caustic_advances_the_phase_by_a_quarter_period() -> None:
+    """A ray past a fold caustic leads one that has touched none by a quarter period:
+    stationary phase on the Airy integral gives it exp(-i pi/4) against exp(i pi/4) with
+    time as exp(-i omega t), so a factor j with time as exp(j omega t), as the early
+    paths have it (a delay tau being exp(-j omega tau); a quarter-period delay would be
+    -j). Downwind of a source 2 m up, 200 m away 1.5 m up over a ground that reflects
+    everything in phase, some of the paths off the ground touch a caustic."""
+    source, listener = np.array([0.0, 0.0, 2.0]), np.array([200.0, 0.0, 1.5])
+    scene = Scene.model_validate(
+        {
+            "name": "downwind",
+            "geometry": {"ground": {"extent": [[-50.0, -20.0], [250.0, 20.0]], "sky": 20.0}},
+            "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+            "assignments": {"ground": "hard"},
+            "atmosphere": {"preset": "windy"},
+            "sources": [{"name": "s", "position": list(source)}],
+            "listeners": [{"name": "l", "position": list(listener)}],
+        }
+    )
+    room = Room.from_scene(scene)
+    refraction = refraction_for(
+        TraceModel.from_room(room),
+        source,
+        speed_of_sound=room.speed_of_sound(),
+        air=np.zeros(8),
+        coherent=2,
+    )
+    rays = refraction.rays(refraction._towards(np.array([1.0, 0.0])))  # the wind's way
+    found = rays.eigenrays(1.5, 200.0, 2)
+    assert set(found.caustics.tolist()) == {0, 1}
+    ones = np.ones(8)
+    corners = np.array([source[:2], listener[:2]])
+    paths, drawn, _ = refraction._curved(rays, found, 1.5, corners, (), listener, ones, ones)
+    assert drawn.all()
+    turn = np.broadcast_to((1j**found.caustics)[:, None, None], paths.spectrum.shape)
+    np.testing.assert_allclose(paths.spectrum, turn, rtol=0, atol=1e-12)
 
 
 @pytest.mark.parametrize(("g", "angle"), [(0.1, 5.0), (-0.1, -3.0), (0.02, 30.0)])

@@ -608,7 +608,8 @@ class Refraction:
                         level > 0.0, factor[:, :coherent] / np.where(level > 0.0, level, 1.0), 1.0
                     )
         if coherent:
-            # Each caustic delays the phase by a quarter period.
+            # Each caustic advances the phase by a quarter period: a factor j, time going
+            # as exp(j omega t), in which a delay tau is exp(-j omega tau).
             spectrum *= (1j ** found.caustics[index])[:, None, None]
         departure = np.array([_departure(r[1]) for r in rows])
         travelled = np.array([found.length[r[0]] for r in rows])

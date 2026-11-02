@@ -136,6 +136,13 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- Docs: each caustic a curved ray touches advances its phase by a quarter period, as the
+  engine has it (a factor j, time going as e^(jωt)), not delays it; a test now holds the
+  sign, another the shadow zone's residue series to the fast field program.
+- Docs: in a belt under 20 m deep the engine's dense foliage takes more than ISO
+  9613-2's table at 63 and 125 Hz (in every band under 10 m) and up to 1.8 dB less at 4
+  and 8 kHz, not a little less throughout; stems 0.3 m across, 0.08 per m², take 0.002
+  dB per metre at 63 Hz (was 0.003).
 
 ## 4.1.0
 

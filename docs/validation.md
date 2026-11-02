@@ -1783,26 +1783,24 @@ early paths alone lose (the leaves' extinction):
 | | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.03 | 0.27 | 0.59 | spread over seeds |
 
 The standard's table is empirical, for the foliage of whole woods, so this compares
-magnitudes rather than checking against an exact answer. Leaves 5 cm wide at 0.1 m²
-per m³, about a wood's trunk space with some foliage in it, take about what the table
-gives at 4 kHz (3.0 to 3.5 dB against 4.5) and more at 8 kHz (8.6 to 10.2 against 6); below
-1 kHz they take next to nothing, where the table's 1 to 3 dB are the standard's
-allowance for the whole wood, not what leaves scatter. The loss rises far more
-steeply with frequency than the table, and with the leaves' area and width, as
-measurements in dense foliage do (Aylor 1972 measured the loss through reeds and corn
-rising by several decibels per octave above 500 Hz): a leaf scatters once its size
-nears the wavelength, so wider
-leaves take hold at lower frequencies, and leaves 2 cm wide hardly matter below
+magnitudes rather than checking against an exact answer. Leaves 5 cm wide at 0.1 m² per
+m³, about a wood's trunk space with some foliage in it, take about what the table gives
+at 4 kHz (3.0 to 3.5 dB against 4.5) and more at 8 kHz (8.6 to 10.2 against 6); below 1
+kHz they take next to nothing, where the table's 1 to 2.5 dB are the standard's
+allowance for the whole wood, not what leaves scatter. The loss rises far more steeply
+with frequency than the table, and with the leaves' area and width, as measurements in
+dense foliage do (Aylor 1972 measured the loss through reeds and corn rising by several
+decibels per octave above 500 Hz): a leaf scatters once its size nears the wavelength,
+so wider leaves take hold at lower frequencies, and leaves 2 cm wide hardly matter below
 8 kHz. What the leaves scatter comes back as late sound, so a listener loses far less
-than the early paths do (the extinction row): with 1 m² per m³ the early paths lose
-165 dB at 8 kHz and the listener 40 to 44, the rest arriving scattered. Behind
-dense leaves at 4 and 8 kHz what arrives is the rare ray that slips through, so the
-level takes many rays to settle: with 100,000 rays (`--rays 100000`) it swings by up to
-22 dB from one seed to another at 8 kHz, with 10 million the seeds agree within
-1.7 dB. No measurement of a known leaf area and width was available to check
-against; the bridge between the disc's two limits, the discs standing in for real
-leaves, which flex and hang in clumps, and the single phase function per band are
-the model's assumptions.
+than the early paths do (the extinction row): with 1 m² per m³ the early paths lose 165
+dB at 8 kHz and the listener 40 to 44, the rest arriving scattered. Behind dense leaves
+at 4 and 8 kHz what arrives is the rare ray that slips through, so the level takes many
+rays to settle: with 100,000 rays (`--rays 100000`) it swings by up to 22 dB from one
+seed to another at 8 kHz, with 10 million the seeds agree within 1.7 dB. No measurement
+of a known leaf area and width was available to check against; the bridge between the
+disc's two limits, the discs standing in for real leaves, which flex and hang in clumps,
+and the single phase function per band are the model's assumptions.
 
 ## The wave solver in wind and temperature against a parabolic equation
 
