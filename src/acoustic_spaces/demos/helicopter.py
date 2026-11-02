@@ -21,12 +21,11 @@ import argparse
 import dataclasses
 import functools
 import math
-import os
 from pathlib import Path
 
 import numpy as np
 
-from acoustic_spaces.demos import Option
+from acoustic_spaces.demos import Option, pipeline
 from acoustic_spaces.demos.audio import write as write_wav
 from acoustic_spaces.demos.passby import FADE_S, Vehicle, car_of, kmh, pass_s
 
@@ -213,7 +212,7 @@ class Helicopter(Vehicle):
             f"The directivity of an {info['helicopter']}'s rotors at "
             f"{info['airspeed_m_s']:.1f} m/s through the air, written by {self.script}",
         )
-        named = Path(os.path.relpath(table, args.source.parent)).as_posix()
+        named = pipeline.named_from(table, args.source.parent)
         source["directivity"] = {"file": named}
         source.setdefault("walk", {})["face_forward"] = True
 

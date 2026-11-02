@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- The demos' JSON files (walk.json and the others) are strict JSON: a level where
+  nothing is heard, as between a horn's blasts, is written null instead of -Infinity,
+  which browsers refuse.
+- On Windows, a demo whose scene lies on another drive than its example no longer stops
+  when it writes a siren's, horn's, train's, helicopter's or aircraft's directivity
+  table: the scene names the table in full.
+- `emission.Mixture` refuses signals without samples and a sample rate that is not
+  positive, which failed later with a division by zero.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early

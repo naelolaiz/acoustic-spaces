@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
@@ -54,8 +55,29 @@ def read_json(path: Path) -> dict:
 
 
 def write_json(path: Path, data: dict) -> None:
+    """``data`` as JSON at ``path``, a number that is not finite (a level where nothing is
+    heard, minus infinity) written as null, as strict JSON has no such numbers."""
+
+    def strict(node):
+        if isinstance(node, float) and not math.isfinite(node):
+            return None
+        if isinstance(node, dict):
+            return {k: strict(v) for k, v in node.items()}
+        if isinstance(node, (list, tuple)):
+            return [strict(v) for v in node]
+        return node
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(strict(data), indent=2, allow_nan=False) + "\n", encoding="utf-8")
+
+
+def named_from(path: Path, folder: Path) -> str:
+    """``path`` relative to ``folder``, or in full when it lies on another drive than
+    ``folder`` (Windows), for a scene file to name it; see :func:`write_scene`."""
+    try:
+        return Path(os.path.relpath(path, folder)).as_posix()
+    except ValueError:
+        return Path(path).resolve().as_posix()
 
 
 # --------------------------------------------------------------------------- simulation

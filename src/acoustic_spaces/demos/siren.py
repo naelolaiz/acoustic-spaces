@@ -42,12 +42,11 @@ from __future__ import annotations
 import argparse
 import functools
 import math
-import os
 from pathlib import Path
 
 import numpy as np
 
-from acoustic_spaces.demos import Option
+from acoustic_spaces.demos import Option, pipeline
 from acoustic_spaces.demos.audio import write as write_wav
 from acoustic_spaces.demos.passby import (
     CYLINDER_WORDS,
@@ -532,7 +531,7 @@ class EmergencyVehicle(Vehicle):
             return
         table = args.scene.with_name(f"{args.scene.stem}_{source['name']}.csv")
         write_directivity_csv(table, directivity(), directivity_comment(self.script))
-        named = Path(os.path.relpath(table, args.source.parent)).as_posix()
+        named = pipeline.named_from(table, args.source.parent)
         source["directivity"] = {"file": named}
         source.setdefault("walk", {})["face_forward"] = True
 

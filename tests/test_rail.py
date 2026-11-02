@@ -517,7 +517,7 @@ def test_the_railway_demo_runs_a_train_past(tmp_path, monkeypatch) -> None:
         assert told > 5.0 and under == pytest.approx(told, abs=1.5), name
     assert (work / "stills" / "00_tsi_7m5.png").exists()
     assert len(drawn) == 7
-    assert facts["listeners"]["tsi_7m5"]["levels_a_db"][0] == -math.inf
+    assert facts["listeners"]["tsi_7m5"]["levels_a_db"][0] is None
     # Another track makes the sound again.
     again = demo.resolved(demo.parser().parse_args([*run, "--track", "slab"]))
     assert not demo.is_done(demo.step("sound"), again)
