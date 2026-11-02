@@ -462,8 +462,9 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   [Validation](validation.md#moving-sources-against-the-exact-field)). An emission
   measured or computed in a moving source's frame may carry its convective
   amplification.
-- The walker must go slower than sound, and the wave solver's bands do not follow a
-  walk with Doppler: with `simulation.wave.enabled` it stops with an error.
+- The walker must go slower than sound, as every walk must, with Doppler or without:
+  shock waves and sonic booms are not simulated. The wave solver's bands do not follow
+  a walk with Doppler: with `simulation.wave.enabled` it stops with an error.
 
 The **pass-by levels** come with it: the walkthrough of a walk with Doppler prints the
 listener's L_Amax and when it is reached, the sound exposure level (SEL) and L_Aeq over
