@@ -21,10 +21,15 @@ from acoustic_spaces.walkthrough import (
     WalkPoints,
     WalkResponses,
     crossfade_weights,
+    facing_name,
+    facing_of,
     knots,
     late_mixing,
+    moment_name,
     movers,
     pass_by,
+    place_name,
+    place_of,
     render_movement,
     render_walk,
     save_movement,
@@ -237,6 +242,15 @@ def test_several_movers_on_one_clock() -> None:
     assert movement.duration_s == 3.0 and movement.places == 10
     names = movement.copies["listeners", "w"]
     assert len(names) == 5 and names[0] == "w #0 @ 0.00 s" and names[3] == "w #3 @ 2.50 s"
+    # The progress messages name the places so; the editor reads the walker and time back.
+    assert place_name("w", 3, 2.5) == names[3] and place_of(names[3]) == ("w", 2.5)
+    assert place_of("my w #12 @ 10.25 s") == ("my w", 10.25)
+    assert place_of("still") is None and place_of("w #3 @ 2.50 s (2)") is None
+    # A video's moment of a walk, and a head turned to a yaw, as demos name them.
+    assert moment_name("w", 2.5) == "w @ 2.50 s" and place_of("w @ 2.50 s") == ("w", 2.5)
+    assert moment_name("w", -0.001) == "w @ 0.00 s"
+    assert facing_name("w", 450.0) == "w facing 90.0 deg"
+    assert facing_of("my w facing 270.0 deg") == ("my w", 270.0) and facing_of("w") is None
     assert movement.key("s", "w", 3) == ("s #3 @ 2.50 s", "w #3 @ 2.50 s")
     assert movement.key("still", "seat", 4) == ("still", "seat")
     assert movement.moves("s", "seat") and not movement.moves("still", "seat")
@@ -276,7 +290,8 @@ def test_several_movers_on_one_clock() -> None:
     fast = {**sources[0], "walk": {**sources[0]["walk"], "doppler": True}}
     with pytest.raises(ValueError, match="'s' walks with Doppler, which moves alone: leave w"):
         simulate_movement(Room.from_scene(_scene(sources=[fast, sources[1]], listeners=listeners)))
-    with pytest.raises(ValueError, match=r"leaves the room at \(8\.\d\d, 1\.00, 1\.50\)"):
+    leaves = r"the walk of 'w' leaves the room at \(8\.\d\d, 1\.00, 1\.50\) m, \d+\.\d\d s in"
+    with pytest.raises(ValueError, match=leaves):
         gone = [_walker({"to": [[9.0, 1.0, 1.5]]}), *listeners[1:]]
         simulate_movement(Room.from_scene(_scene(sources=sources, listeners=gone)))
     with pytest.raises(ValueError, match="step_m must be positive"):
@@ -648,18 +663,101 @@ def test_one_response_everywhere_is_a_plain_convolution() -> None:
 
 def test_crossfades_are_continuous() -> None:
     # Each place a pure gain: the result is the dry signal times the crossfaded gains,
-    # changing by at most one gain step per crossfade, with no jump.
+    # the power going from one place's to the next's as the weights share it (the places
+    # are alike), changing by at most one gain step per crossfade, with no jump.
     gains = [1.0, 0.25, 2.0, 0.5]
     times = [0.0, 0.3, 0.6, 0.9]
     walk = _fake_walk([[g] for g in gains], times)
     rate = 1000
     out = render_walk(walk, {"s": np.ones(1500)}, crossfade_s=0.05)[:, 0]
-    expected = np.array(gains) @ crossfade_weights(times, np.arange(1500) / rate, 0.05)
-    np.testing.assert_allclose(out, expected, atol=1e-12)
+    shares = crossfade_weights(times, np.arange(1500) / rate, 0.05)
+    np.testing.assert_allclose(out, np.sqrt(np.square(gains) @ shares), atol=1e-12)
     # A raised cosine: at most pi / 2 times the mean slope of a linear crossfade.
     assert np.abs(np.diff(out)).max() <= np.pi / 2 * 1.75 / 50 + 1e-9
     # (FFT convolution: equal to rounding.)
     assert out[0] == pytest.approx(1.0) and out[-1] == pytest.approx(0.5)
+
+
+def _two_places(second, signal: np.ndarray, rate: int = 48_000) -> np.ndarray:
+    """``signal`` along a walk by two places 0.5 s apart, through a unit impulse at the
+    first and ``second`` at the next: one crossfade, over 50 ms from 0.225 s."""
+    walk = _fake_walk([[1.0], second], [0.0, 0.5])
+    return render_walk(walk, {"s": signal}, sample_rate=rate, crossfade_s=0.05)[:, 0]
+
+
+def _sine_levels(x: np.ndarray, period: int) -> np.ndarray:
+    """The level (dB re a unit sine's) over each run of ``period`` samples of ``x``."""
+    power = np.convolve(x**2, np.ones(period) / period, mode="valid")
+    return 10.0 * np.log10(power / 0.5)
+
+
+@pytest.mark.parametrize("degrees", [90, 120])
+def test_a_tone_out_of_phase_at_the_next_place_keeps_its_level(degrees: int) -> None:
+    """A 1 kHz tone heard a quarter or a third of a turn later at the next place keeps
+    its level through the crossfade, its power going on as for unlike sounds
+    (render.crossfaded); weights adding up to one lost 3 and 6 dB in the middle."""
+    rate = 48_000
+    delay = rate * degrees // (360 * 1000)
+    second = np.zeros(delay + 1)
+    second[delay] = 1.0
+    tone = np.sin(2.0 * np.pi * 1000.0 * np.arange(rate // 2) / rate)
+    levels = _sine_levels(_two_places(second, tone), 48)
+    assert np.abs(levels[int(0.2 * rate) : int(0.3 * rate)]).max() < 0.1
+
+
+def test_a_tone_in_antiphase_at_the_next_place_is_turned_up_by_6_db_at_most() -> None:
+    """A tone heard in antiphase at the next place cancels in the middle of the
+    crossfade, which no gain makes up: the crossfade turns the two up by at most 6 dB
+    (render.crossfaded), so the tone keeps its level wherever the two cancel to no less
+    than half their amplitude, the outer 27 % on each side, and falls to nothing in the
+    middle; weights adding up to one lost 3 dB a quarter of the way in."""
+    rate = 48_000
+    tone = np.sin(2.0 * np.pi * 1000.0 * np.arange(rate // 2) / rate)
+    out = _two_places([-1.0], tone)
+    # The crossfade's gains: cosine and sine of a quarter turn times how far it has gone.
+    gone = np.clip((np.arange(len(tone)) / rate - 0.225) / 0.05, 0.0, 1.0)
+    cancelled = np.cos(0.5 * np.pi * gone) - np.sin(0.5 * np.pi * gone)
+    expected = tone * np.sign(cancelled) * np.minimum(1.0, 2.0 * np.abs(cancelled))
+    np.testing.assert_allclose(out, expected, atol=1e-9)
+
+
+def test_crossfades_correct_each_octave_band_by_its_own_likeness() -> None:
+    """Tones of 250 Hz and 4 kHz heard 4 samples later at the next place: alike at 250
+    Hz (7.5 degrees apart), a third of a turn apart at 4 kHz. Each keeps its level
+    through the crossfade, its band corrected by its own correlation; one correction for
+    both, by their mean correlation (0.25), would leave the 250 Hz tone 2 dB too loud
+    and the 4 kHz one 4 dB too quiet in the middle."""
+    from acoustic_spaces.synthesis import split_bands
+
+    rate = 48_000
+    t = np.arange(rate // 2) / rate
+    low, high = np.sin(2.0 * np.pi * 250.0 * t), np.sin(2.0 * np.pi * 4000.0 * t)
+    second = np.zeros(5)
+    second[4] = 1.0
+    bands = split_bands(_two_places(second, low + high), rate)
+    span = slice(int(0.2 * rate), int(0.3 * rate))
+    for band, period in ((2, 192), (6, 12)):
+        assert np.abs(_sine_levels(bands[band], period)[span]).max() < 0.1
+
+
+def test_unlike_noise_crossfades_at_equal_power() -> None:
+    """White noise heard 0.1 s later at every other place, so that two places' sounds
+    are unlike in every band: in the middle of each crossfade the noise keeps its power,
+    as an equal-power crossfade keeps it, where weights adding up to one lost 3 dB."""
+    rate = 48_000
+    times = np.arange(40) * 0.1
+    late = np.zeros(4801)
+    late[-1] = 1.0
+    walk = _fake_walk([[1.0] if k % 2 == 0 else late for k in range(40)], times)
+    noise = np.random.default_rng(2).standard_normal(4 * rate)
+    out = render_walk(walk, {"s": noise}, sample_rate=rate, crossfade_s=0.05)[:, 0]
+    middles = 0.5 * (times[1:] + times[:-1])
+    near = np.abs(np.arange(len(out)) / rate - middles[:, None]).min(axis=0)
+    mid = (near < 0.005) & (np.arange(len(out)) < 3.9 * rate)
+    alone = (near > 0.03) & (np.arange(len(out)) > 0.1 * rate) & (np.arange(len(out)) < 3.9 * rate)
+    assert 10.0 * np.log10(np.mean(out[mid] ** 2) / np.mean(out[alone] ** 2)) == pytest.approx(
+        0.0, abs=0.2
+    )
 
 
 def test_render_walk_with_the_example(tmp_path: Path) -> None:

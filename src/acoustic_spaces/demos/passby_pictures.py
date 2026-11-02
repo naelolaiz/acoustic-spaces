@@ -47,6 +47,12 @@ GRID_DB = 10.0
 GRID_S = 2.0
 
 
+def levels_of(heard: dict) -> np.ndarray:
+    """The levels ``heard`` (a listener's in walk.json) holds at its times (dB(A)), minus
+    infinity where nothing is heard (written null)."""
+    return np.asarray([-math.inf if v is None else v for v in heard["levels_a_db"]], dtype=float)
+
+
 class Pictures(scene_pictures.Pictures):
     """The frames of a pass-by tour (:meth:`frame`), a still of each stop at any moment
     of it (:meth:`still`) and a :meth:`thumbnail`.
@@ -131,7 +137,7 @@ class Pictures(scene_pictures.Pictures):
         times = self.heard[listener]["heard_s"]
         if not times[0] <= t <= times[-1]:
             return None
-        levels = np.asarray(self.heard[listener]["levels_a_db"], dtype=float)
+        levels = levels_of(self.heard[listener])
         k = int(np.searchsorted(times, t, side="right"))
         if not np.all(np.isfinite(levels[max(k - 1, 0) : k + 1])):
             return None
@@ -184,7 +190,7 @@ class Pictures(scene_pictures.Pictures):
         left, top, width, height = box
         heard = self.heard[listener]
         times = np.asarray(heard["heard_s"], dtype=float)
-        levels = np.asarray(heard["levels_a_db"], dtype=float)
+        levels = levels_of(heard)
         ceiling = GRID_DB * math.ceil((heard["max_a_db"] + 2.0) / GRID_DB)
         floor = ceiling - RANGE_DB
 

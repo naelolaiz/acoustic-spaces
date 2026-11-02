@@ -5,8 +5,8 @@ Doc 29 gives an aircraft's sound as levels at receivers: its NPD curves (the max
 level and the sound exposure level at distances from 200 to 25,000 ft, at each power,
 in the AIR-1845 atmosphere, at 160 kt) and its spectral class (the spectrum 1000 ft
 under it at the time of its maximum level). The NPD curves are measured 1.2 m above
-flat soft ground (Volume 2 section 4.2), so they hold that ground's reflection. A point
-source of the scene that sends the same sound gets:
+flat soft ground (Volume 2 sections 2.5 and 4.5.4), so they hold that ground's
+reflection. A point source of the scene that sends the same sound gets:
 
 - **its spectrum** from the spectral class, scaled to the NPD curves' maximum level
   1000 ft under the aircraft at its power (:func:`sound_power_db`);
@@ -23,8 +23,9 @@ source of the scene that sends the same sound gets:
 
 Doc 29 gives the NPD curves no directivity along the flight path but behind a take-off
 roll (eq. 4-22), which the scene's source does not hold, nor the impedance adjustment
-(eq. 4-6), a tenth of a decibel. The NPD curves at the powers of a flight differ by
-nearly the same at every distance: the aircraft's sound power changes with its power
+(eq. 4-6): 0.074 dB at sea level in the standard atmosphere, -0.24 dB 2000 ft up at
+15 °C and -0.83 dB 5000 ft up at 30 °C. The NPD curves at the powers of a flight differ
+by nearly the same at every distance: the aircraft's sound power changes with its power
 as the NPD curves' maximum level 1000 ft away does (:func:`power_change_db`), its
 spectrum kept.
 
@@ -49,8 +50,8 @@ from .noise import installation_db
 from .path import Segment, power_between
 from .tables import NpdCurves, ProfilePoint, SpectralClass
 
-#: How high the NPD curves' microphone is over the ground (m), Volume 2 section 4.2,
-#: and the flow resistivity of its soft ground (kPa s/m²), taken to be grass
+#: How high the NPD curves' microphone is over the ground (m), Volume 2 sections 2.5
+#: and 4.5.4, and the flow resistivity of its soft ground (kPa s/m²), taken to be grass
 #: (Nord2000's class D, :data:`acoustic_spaces.materials.ground.PRESETS`).
 MICROPHONE_M = 1.2
 SOFT_GROUND_KPA_S_M2 = 200.0

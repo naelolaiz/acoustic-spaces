@@ -45,6 +45,8 @@ MAP_PARAMETER_NAMES = (
     "insertion_loss_a",
     "long_term",
     "rating_level",
+    "long_term_insertion_loss",
+    "long_term_insertion_loss_a",
 )
 #: What the commands that read a scene take.
 SCENE_HELP = "path to a scene YAML file, or a pack of one (.zip, see pack)"

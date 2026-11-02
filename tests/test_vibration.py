@@ -128,6 +128,70 @@ def test_the_criteria_and_the_events() -> None:
     assert v.noise_level(80.0, "mid") == 45.0
 
 
+def test_the_special_buildings_by_table_6_4() -> None:
+    """Table 6-4: concert halls, TV studios and recording studios 65 VdB and 25 dB(A)
+    whatever the events; auditoriums 72 VdB and 30 dB(A) for frequent events, 80 VdB and
+    38 dB(A) for occasional or infrequent ones; theatres 72 and 35, 80 and 43."""
+    table = {
+        "concert_hall": ((65, 25), (65, 25)),
+        "tv_studio": ((65, 25), (65, 25)),
+        "recording_studio": ((65, 25), (65, 25)),
+        "auditorium": ((72, 30), (80, 38)),
+        "theatre": ((72, 35), (80, 43)),
+    }
+    assert set(v.SPECIAL_BUILDINGS) == set(table)
+    for use, (frequent, other) in table.items():
+        assert v.criterion(use, "frequent") == v.Criterion(*frequent)
+        for kind in ("occasional", "infrequent"):
+            assert v.criterion(use, kind) == v.Criterion(*other)
+
+
+def test_track_treatments_by_tables_6_11_and_6_12() -> None:
+    """Table 6-11's track treatments, a floating slab trackbed -15 dB, ballast mats -10
+    dB, high-resilience fasteners -5 dB, and table 6-12's resiliently supported ties
+    (low-vibration track) -10 dB, each added to the vehicles' adjustment (a stiff
+    primary suspension +8 dB)."""
+    table = {
+        "floating_slab": -15.0,
+        "ballast_mats": -10.0,
+        "resilient_fasteners": -5.0,
+        "resilient_ties": -10.0,
+    }
+    for treatment, db in table.items():
+        assert v.Line(treatment=treatment).source_db() == db
+        assert v.Line(vehicles="stiff_suspension", treatment=treatment).source_db() == 8.0 + db
+
+
+def test_what_the_method_does_not_take_is_a_value_error() -> None:
+    """Eq. 6-4 takes finite speeds above 0, eq. 7-2 and 7-3 finite distances above 0;
+    table 6-3 has land uses 1 to 3, table 6-4 its special buildings and table 6-2 three
+    kinds of events; special trackwork (table 6-11) is some distance away, or none near.
+    Anything else is a ValueError that says what it takes, not a math error or a quiet
+    result."""
+    for speed in (0.0, -50.0, math.nan, math.inf):
+        with pytest.raises(ValueError, match="the speed is a positive number of km/h"):
+            v.speed_db(speed, 80.0)
+    with pytest.raises(ValueError, match="the reference speed is a positive number of km/h"):
+        v.speed_db(50.0, 0.0)
+    with pytest.raises(ValueError, match="the speed is a positive number of km/h, not 0"):
+        v.ground_level("locomotive", 25.0, 0.0)
+    for d in (0.0, -4.0, math.nan, math.inf):
+        for at in (v.plant_ppv, v.plant_level):
+            with pytest.raises(ValueError, match="the distance from the plant is a positive"):
+                at("hoe_ram", d)
+    with pytest.raises(ValueError, match="unknown land use 4; use 1, 2 or 3"):
+        v.criterion(4, "frequent")
+    with pytest.raises(ValueError, match="unknown land use 'church'; .* concert_hall"):
+        v.criterion("church", "frequent")
+    for use in (2, "theatre"):
+        with pytest.raises(ValueError, match="unknown kind of events 'rare'; use one of"):
+            v.criterion(use, "rare")
+    for d in (-1.0, -math.inf, math.nan, math.inf):
+        with pytest.raises(ValueError, match="0 m or more, or None for none near"):
+            v.Line(special_trackwork_m=d)
+    assert v.Line(special_trackwork_m=0.0).source_db() == 10.0
+
+
 def test_construction_plant_by_table_7_4() -> None:
     """Each row's level is its peak particle velocity 12 dB down (a crest factor of 4)
     within the table's rounding, but for a hydromill in rock, which the table prints at

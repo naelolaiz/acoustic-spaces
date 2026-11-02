@@ -296,16 +296,21 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
   field changes fastest (with 10,000 rays per band, whose own noise is part of that).
   The gallery's walk takes about five minutes on 4 cores, six times as long as one
   response.
-- The dry signals play through the response of the place the walker is nearest to,
-  with a `--crossfade` (a raised cosine, 50 ms by default) half-way between two places,
-  so the sound changes smoothly as it walks: the crossfades' weights always add up to
-  one, and one response at every place gives exactly the convolution with it. The
-  raised cosine changes the gains without the corners of a linear crossfade, whose
-  sudden change of slope spreads a tone's energy to higher frequencies, and never
-  faster than π/2 times a linear crossfade's mean slope (the tests). Every place's late part is drawn from the same random
-  sequence, so the tails that cross fade differ only in their level and decay, not in
-  their noise. Once the walk is over, the walker stays where it ends for as long as the
-  signals last.
+- The dry signals play through the response of the place the walker is nearest to, with
+  a `--crossfade` (50 ms by default) half-way between two places, so the sound changes
+  smoothly as it walks. In each octave band the power goes from one place's to the
+  next's along a raised cosine, however alike the two sound: they fade along a quarter
+  period of a cosine and of a sine, equal power for unlike sounds, and both are turned
+  up or down by how alike they are over the crossfade (their correlation coefficient),
+  up by at most 6 dB. A tone heard a quarter or a third of a turn later at the next
+  place keeps its level to within 0.1 dB; in antiphase it dips over the middle 46 % of
+  the crossfade, to nothing half-way: there the two cancel to less than half the
+  amplitude unlike sounds would have, which 6 dB cannot make up. One response at every
+  place gives exactly the convolution with it, and between places that differ only in
+  level the gain changes no faster than π/2 times a linear crossfade's mean slope (the
+  tests). Every place's late part is drawn from the same random sequence, so the tails
+  that cross fade differ only in their level and decay, not in their noise. Once the
+  walk is over, the walker stays where it ends for as long as the signals last.
 - A walking listener hears every source; a walking source is heard at `--listener`,
   with the other sources where they stand. `--format` takes the formats of `simulate
   --output` (by default the scene's first output, or binaural with `--hrtf`, which is
@@ -421,16 +426,20 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   a few samples apart from one direction to the next (KEMAR's far ear by up to 11
   samples between places 1 m apart along a road 25 m away), and two places' filters
   that start apart, mixed, would cancel the treble between them.
-- The late part is crossfaded from place to place as without Doppler, its pitch
-  unshifted; outdoors it is far below the early sound.
+- The late part is crossfaded from place to place by weights that add up to one, its
+  pitch unshifted: the places' tails, drawn from one random sequence, are alike (in a
+  shoebox room, neighbouring places 25 cm apart, each traced, correlate by 0.97 or more
+  in every band, a one-off check), so its power runs on. Outdoors it is far below the
+  early sound.
 - Against the exact field of a source passing 10 m from a listener over a hard ground,
-  the sound is within 45 dB of it at 30 m/s, with places 1 m apart, and its level
-  within 0.04 dB at every moment; a train at 80 m/s is within 38 dB and 0.42 dB at
-  4 kHz. Crossfading from place to place instead misses the level by 4 to 11 dB at
-  times, where the two paths interfere (see
-  [Validation](validation.md#moving-sources-against-the-exact-field)). The places
-  should be no more than 1 m apart (the default `--step` is 25 cm): 2 m apart the
-  sound is within 38 dB of the field, 4 m apart only within 18 dB.
+  the sound is within 45 dB of it at 30 m/s, with places 1 m apart, and its level within
+  0.04 dB at every moment; a train at 80 m/s is within 38 dB and 0.42 dB at 4 kHz.
+  Crossfading from place to place instead misses the level by 2.7 to 4.1 dB at most, and
+  by 12 dB for the train at 4 kHz, where the field's two paths cancel for a moment and
+  the places' do not (see
+  [Validation](validation.md#moving-sources-against-the-exact-field)). The places should
+  be no more than 1 m apart (the default `--step` is 25 cm): 2 m apart the sound is
+  within 38 dB of the field, 4 m apart only within 18 dB.
 - The source is quasi-static: its sound power and directivity are those of a source
   standing at each place. A moving source's convective amplification, which makes it
   louder ahead of it and quieter behind, is left out: taking its intensity as
@@ -438,29 +447,32 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   up to 0.8 dB ahead at 30 m/s and 2.0 dB at 70 m/s, and take 0.7 and 1.6 dB behind.
 - **The sound sent each way.** From Python, the walker (or, for a walking listener, a
   source it passes) may send an `Emission` (`acoustic_spaces.emission`) instead of one
-  signal: the sound it sends in every direction of its own frame, as a rotor sends
-  each harmonic of its blades with a pattern and a phase of its own. Each early path
-  then carries what is sent the way it leaves the source (its first leg, turning from
-  one place's way to the next's) at the time it leaves, and the source's directivity
-  is taken out of the path's filter; the late part plays the emission's sound averaged
-  over the directions. `Mixture` makes one of signals that do not correlate, each
-  with an amplitude per direction; `Periodic` one of a sound that repeats, one period
-  of it in each direction, which may turn with a rotor and be sent from off the
-  source's place (a helicopter's tones, see [Helicopters](outdoor.md#helicopters));
-  `Sum` adds emissions up. The directivity and the sound power still give the band
-  levels the simulation and the pass-by report, so give the source the emission's own:
-  its `directivity()` (written for a scene file by
-  `acoustic_spaces.directivity.write_directivity_csv`) and its
-  `sound_power_db(density, sound_speed)`, which the flyover demo does
-  ([a helicopter flying over](demos.md#a-helicopter-flying-over)). A tone sent louder ahead (1 + 0.8 cos θ in amplitude) and
-  turned in phase with the height follows the exact field within 0.11 dB in level at
-  30 m/s and 0.42 dB for the train at 4 kHz, as one signal does there, with a cardioid
-  directivity on the source or without (see
+  signal: the sound it sends in every direction of its own frame, as a rotor sends each
+  harmonic of its blades with a pattern and a phase of its own. Each early path then
+  carries what is sent the way it leaves the source (its first leg, turning from one
+  place's way to the next's) at the time it leaves, and the source's directivity is
+  taken out of the path's filter; the late part plays the emission's sound averaged over
+  the directions. `Mixture` makes one of signals that do not correlate, each with an
+  amplitude per direction; `Periodic` one of a sound that repeats, one period of it in
+  each direction, which may turn with a rotor and be sent from off the source's place (a
+  helicopter's tones, see [Helicopters](outdoor.md#helicopters)); `Sum` adds emissions
+  up. The directivity and the sound power still give the band levels the simulation and
+  the pass-by report, so give the source the emission's own: its `directivity()`
+  (written for a scene file by `acoustic_spaces.directivity.write_directivity_csv`) and
+  its `sound_power_db(density, sound_speed)`, which the flyover demo does ([a helicopter
+  flying over](demos.md#a-helicopter-flying-over)). Both are in IEC 61260-1's octaves
+  (or third octaves), taken as ideal filters between their band edges: what is sent
+  below the 63 Hz octave's 44.7 Hz or above the 8 kHz octave's 11.2 kHz plays, but is in
+  no band. A tone sent louder ahead (1 + 0.8 cos θ in amplitude) and turned in phase
+  with the height follows the exact field within 0.11 dB in level at 30 m/s and 0.42 dB
+  for the train at 4 kHz, as one signal does there, with a cardioid directivity on the
+  source or without (see
   [Validation](validation.md#moving-sources-against-the-exact-field)). An emission
   measured or computed in a moving source's frame may carry its convective
   amplification.
-- The walker must go slower than sound, and the wave solver's bands do not follow a
-  walk with Doppler: with `simulation.wave.enabled` it stops with an error.
+- The walker must go slower than sound, as every walk must, with Doppler or without:
+  shock waves and sonic booms are not simulated. The wave solver's bands do not follow
+  a walk with Doppler: with `simulation.wave.enabled` it stops with an error.
 
 The **pass-by levels** come with it: the walkthrough of a walk with Doppler prints the
 listener's L_Amax and when it is reached, the sound exposure level (SEL) and L_Aeq over

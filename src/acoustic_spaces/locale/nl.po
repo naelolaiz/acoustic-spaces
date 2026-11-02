@@ -325,6 +325,30 @@ msgstr ""
 "niveau over een lange termijn met de toeslag van elke periode, A-gewogen "
 "(L_den)"
 
+#: acoustic_spaces/engine/coverage.py
+msgid "Long-term insertion loss (dB)"
+msgstr "Invoegdemping op lange termijn (dB)"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"insertion loss over a long term: the long-term level without the buildings, "
+"barriers or vegetation less that with them"
+msgstr ""
+"invoegdemping over een lange termijn: het langetermijnniveau zonder de "
+"gebouwen, geluidsschermen of vegetatie min het niveau met deze"
+
+#: acoustic_spaces/engine/coverage.py
+msgid "Long-term insertion loss (dB(A))"
+msgstr "Invoegdemping op lange termijn (dB(A))"
+
+#: acoustic_spaces/engine/coverage.py
+msgid ""
+"A-weighted insertion loss over a long term of the buildings, barriers or "
+"vegetation"
+msgstr ""
+"A-gewogen invoegdemping over een lange termijn van de gebouwen, "
+"geluidsschermen of vegetatie"
+
 #: acoustic_spaces/examples.py
 msgid "Rooms"
 msgstr "Ruimtes"
@@ -818,6 +842,21 @@ msgstr ""
 "de hoogte boven de grond toeneemt"
 
 #: acoustic_spaces/gui/app.py
+msgid "F&ollow the run"
+msgstr "Run &volgen"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"While a run, coverage map, export or demo goes on, ring the sources and "
+"listeners its latest step works on in the 3D view and the plan, and draw the "
+"walkers where the place along a walk it simulates has them"
+msgstr ""
+"Terwijl een berekening, dekkingskaart, export of demo loopt, in de "
+"3D-weergave en de plattegrond een ring tekenen om de bronnen en ontvangers "
+"waaraan de laatste stap werkt, en wat beweegt tekenen waar het is op de "
+"plaats van een route die wordt gesimuleerd"
+
+#: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
 msgstr "&Schermafbeelding opslaan…"
 
@@ -1071,6 +1110,11 @@ msgstr "Niet gewijzigd: {reason}"
 #, python-brace-format
 msgid "Surface {name}"
 msgstr "Oppervlak {name}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot keep whether the views follow the run: {reason}"
+msgstr "Kan niet bewaren of de weergaven de run volgen: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -6541,6 +6585,15 @@ msgstr "hoek verplaatsen"
 #: acoustic_spaces/gui/plan_view.py
 #, python-brace-format
 msgid ""
+"Not moved: {name} is drawn where the run simulates it, {time:.2f} s along "
+"its walk; drag it once the run is over"
+msgstr ""
+"Niet verplaatst: {name} is getekend waar de run het simuleert, op {time:.2f} "
+"s van zijn route; sleep het als de run voorbij is"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid ""
 "Not moved: {name} is drawn where it is at {time:.2f} s; drag its keyframes, "
 "or its start at 0 s"
 msgstr ""
@@ -8412,15 +8465,15 @@ msgid ""
 "behind a noise barrier 3 m high, 4 m from the track, which the trains' sound "
 "comes over and round (`first_order` diffraction follows it). The line source "
 "along the track is its traffic on average: one regional train an hour at 160 "
-"km/h, its sound power per metre Schall 03's (Germany's method for the noise "
-"of railways, 2014), all of it at the rail top. A train runs past at 160 "
-"km/h, its pitch falling as it goes by (Doppler): three sources along one "
-"walk, at the rail top, on the roof and at the pantograph, Schall 03's "
-"heights; each plays the train's points at that height one behind the other "
-"(its bogies, its cars' roofs, its pantograph), so the train goes by as long "
-"as it is. They are left out of simulations until ticked, as is the train's "
-"horn at its front, and passby_demo.py runs one of four trains past, its horn "
-"sounding with --horn blasts."
+"km/h, its sound power per metre and its directivity round the track Schall "
+"03's (Germany's method for the noise of railways, 2014), all of it at the "
+"rail top. A train runs past at 160 km/h, its pitch falling as it goes by "
+"(Doppler): three sources along one walk, at the rail top, on the roof and at "
+"the pantograph, Schall 03's heights; each plays the train's points at that "
+"height one behind the other (its bogies, its cars' roofs, its pantograph), "
+"so the train goes by as long as it is. They are left out of simulations "
+"until ticked, as is the train's horn at its front, and passby_demo.py runs "
+"one of four trains past, its horn sounding with --horn blasts."
 msgstr ""
 "Buiten: een spoorlijn op ballast door een weiland, gehoord waar de EU-regel "
 "voor het geluid van treinen een passage meet (7.5 m van het midden van het "
@@ -8430,13 +8483,14 @@ msgstr ""
 "waarover en waaromheen het geluid van de treinen komt (diffractie "
 "`first_order` volgt dat). De lijnbron langs het spoor is het verkeer erop "
 "gemiddeld: één regionale trein per uur met 160 km/h, met het geluidsvermogen "
-"per meter van Schall 03 (de Duitse methode voor het geluid van spoorwegen, "
-"2014), helemaal op de bovenkant van de spoorstaaf. Een trein rijdt met 160 "
-"km/h voorbij, zijn toonhoogte daalt bij het passeren (Doppler): drie bronnen "
-"langs één route, op de bovenkant van de spoorstaaf, op het dak en bij de "
-"stroomafnemer, de hoogten van Schall 03; elk speelt de punten van de trein "
-"op die hoogte achter elkaar (zijn draaistellen, de daken van zijn rijtuigen, "
-"zijn stroomafnemer), zodat de trein zo lang voorbijkomt als hij lang is. Ze "
+"per meter en de richtingskarakteristiek rond het spoor van Schall 03 (de "
+"Duitse methode voor het geluid van spoorwegen, 2014), helemaal op de "
+"bovenkant van de spoorstaaf. Een trein rijdt met 160 km/h voorbij, zijn "
+"toonhoogte daalt bij het passeren (Doppler): drie bronnen langs één route, "
+"op de bovenkant van de spoorstaaf, op het dak en bij de stroomafnemer, de "
+"hoogten van Schall 03; elk speelt de punten van de trein op die hoogte "
+"achter elkaar (zijn draaistellen, de daken van zijn rijtuigen, zijn "
+"stroomafnemer), zodat de trein zo lang voorbijkomt als hij lang is. Ze "
 "blijven buiten de simulaties tot ze aangevinkt worden, net als de hoorn van "
 "de trein aan zijn kop, en passby_demo.py laat een van vier treinen "
 "voorbijrijden, met zijn hoorn die klinkt bij --horn blasts."
