@@ -510,7 +510,8 @@ def turn(args) -> None:
     dry = resample(x[int(first * rate) : int(second * rate)], rate, rate_out)
     facing = standing[0].orientation.yaw
     print(f"turning the head through {len(keys)} keys")
-    wet = tracker.run(dry, head=turning(times, yaws, facing, len(dry) / rate_out))
+    length_s = (len(dry) + tracker.taps - 1) / rate_out  # the talk and the room's tail
+    wet = tracker.run(dry, head=turning(times, yaws, facing, length_s))
     out = args.work / "turn"
     write(out / f"turn.{label_of(args)}.wav", wet, rate_out)
     pipeline.write_json(
