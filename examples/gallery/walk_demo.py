@@ -610,12 +610,12 @@ def speech_done(args) -> bool:
 
 
 def part_done(args, name: str, info: str) -> bool:
-    """Whether the walk's or the turn's sound is there, made from what the guide says
-    now (files written before they kept "plays" said the talk of their "talker") and
-    from the scene as it is now."""
+    """Whether the walk's or the turn's sound is there for the ears this run asks for
+    (``--hrtf``), made from what the guide says now (files written before they kept
+    "plays" said the talk of their "talker") and from the scene as it is now."""
     path = args.work / name / info
-    if not path.exists():
-        return False
+    if not path.exists() or not (args.work / name / f"{name}.{label_of(args)}.wav").exists():
+        return False  # not made yet, or only through another head
     if args.scene.exists() and path.stat().st_mtime < args.scene.stat().st_mtime:
         return False  # the scene changed since: the walk edited, say
     facts = pipeline.read_json(path)

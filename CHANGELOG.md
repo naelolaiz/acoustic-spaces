@@ -13,7 +13,8 @@
   preview; they stayed where each walk starts.
 - Fixed: the gallery walk demo stopped, after downloading the talk, when a talker's
   take was shorter than the walk and the turn (F4's, 36 s); the guide now says it again
-  from its start, 2 s after it ends.
+  from its start, 2 s after it ends. Its walk and turn are made again for another
+  `--hrtf`, where `all` took them as done and the video stopped for want of their sound.
 
 ## 4.1.0
 

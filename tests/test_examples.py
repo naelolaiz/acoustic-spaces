@@ -1211,7 +1211,13 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
     assert demo.said(given, room)[2] == 2  # said again, as the corpus's short takes are
     (args.work / "walk").mkdir()
     pipeline.write_json(args.work / "walk" / demo.WALK, {"talker": args.talker})
+    assert not demo.part_done(args, "walk", demo.WALK)  # no sound for these ears yet
+    write_wav(args.work / "walk" / f"walk.{demo.label_of(args)}.wav", np.zeros((8, 2)), rate)
     assert demo.part_done(args, "walk", demo.WALK)
+    # Through another head (--hrtf) the walk is made again, not taken as done.
+    kemar = argparse.Namespace(**vars(args) | {"hrtf": tmp_path / "kemar.sofa"})
+    assert demo.label_of(kemar) != demo.label_of(args)
+    assert not demo.part_done(kemar, "walk", demo.WALK)
     assert not demo.part_done(given, "walk", demo.WALK)
     assert not demo.part_done(args, "turn", demo.TURNING)
 
