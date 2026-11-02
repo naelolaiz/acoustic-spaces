@@ -10,23 +10,24 @@ heights Schall 03 (Germany's method for the noise of railways, 2014) gives a tra
 sources; --train picks it: a regional train (an electric locomotive and five coaches,
 160 km/h), an S-Bahn (a four-car electric multiple unit, 120 km/h), an intercity train
 (an electric locomotive and twelve coaches, 200 km/h) or a freight train (an electric
-locomotive and 24 wagons with composite brake blocks, 100 km/h), at its own speed unless
---speed says, on sleepers in ballast unless --track says (slab track, with absorbers, a
-level crossing). Each unit's sources have Schall 03's sound power per octave band for
-that speed and track, shared out between its points: its bogies at the rail top, its
-cars' roofs, its pantograph; each source plays the train's points at its height one
-behind the other, as far behind its front as they are, so the train goes by as long as
-it is (the regional train 151 m), each with its own sound, noise with the octave
-spectrum of its sources there; `--input NAME=WAV` plays a dry recording of yours at each
-of them instead. `--horn blasts` sounds the train's warning horn too, the example's
-`train_horn` at its front 2.0 m above the rail top: its high note (660 Hz) and its low
-note (370 Hz) in turn, each 109 dB(C) 25 m ahead, the most EN 15153-2 allows, a second
-each every 4 s; `--horn chord` sounds the two together. `--indoors train_and_rumble` has
-`house_18m` hear the train inside the house, through its closed window, with the rumble
-the ground's vibration makes in its room (`train` through the window alone, `rumble`
-the rumble alone); the other listeners hear it outdoors. Run it from the folder of the
-railway example (`acoustic-spaces examples --copy . railway && cd railway`), in the
-Python environment acoustic-spaces is installed in, with ffmpeg on the PATH:
+locomotive and 24 wagons with composite brake blocks, 5 of them tank wagons, 100 km/h),
+at its own speed unless --speed says, on sleepers in ballast unless --track says (slab
+track, with absorbers, a level crossing). Each unit's sources have Schall 03's sound
+power per octave band for that speed and track, shared out between its points: its
+bogies at the rail top, its cars' roofs, its pantograph; each source plays the train's
+points at its height one behind the other, as far behind its front as they are, so the
+train goes by as long as it is (the regional train 151 m), each with its own sound,
+noise with the octave spectrum of its sources there; `--input NAME=WAV` plays a dry
+recording of yours at each of them instead. `--horn blasts` sounds the train's warning
+horn too, the example's `train_horn` at its front 2.0 m above the rail top: its high
+note (660 Hz) and its low note (370 Hz) in turn, each 109 dB(C) 25 m ahead, the most EN
+15153-2 allows, a second each every 4 s; `--horn chord` sounds the two together.
+`--indoors train_and_rumble` has `house_18m` hear the train inside the house, through
+its closed window, with the rumble the ground's vibration makes in its room (`train`
+through the window alone, `rumble` the rumble alone); the other listeners hear it
+outdoors. Run it from the folder of the railway example (`acoustic-spaces examples
+--copy . railway && cd railway`), in the Python environment acoustic-spaces is installed
+in, with ffmpeg on the PATH:
 
     python passby_demo.py sound   # demo/train/train.wav, train_roof.wav, ...: dry, a column a point
     python passby_demo.py scene   # scene_demo.yaml: the train alone, at --speed, with Doppler

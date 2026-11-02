@@ -97,6 +97,45 @@
   change, by up to 2.1 dB (1 kHz) at the hillside example's listener on the slope.
 - Models load faster: the search for faces to split at T-junctions is vectorised and
   gives the same faces (a 2 km terrain builds in 0.3 s instead of 5.4 s).
+- The pass-by demos' freight train has 5 tank wagons among its 24, Schall 03's share of
+  20 % when a freight train's make-up is not known (4.2), their bodies ringing 4 m up:
+  116.4 dB(A) of sound power there instead of 111.8, 131.9 dB(A) in all instead of
+  131.8. Behind the railway's barrier its SEL goes from 79.6 to 82.6 dB(A); at the other
+  listeners its levels rise by 0.1 to 0.4 dB.
+- The railway example's line source has Schall 03's directivity round the track
+  (equation 8, `line.csv`, `acoustic_spaces.demos.rail.directivity("left")`) and so 0.28
+  dB more sound power, its points 2.5 m apart instead of 10 m: in a free field it gives
+  Schall 03's sum within 0.01 dB(A), not 0.2 to 0.4 dB(A) over it. Over the example's
+  ground it is 0.2 to 0.7 dB(A) louder, 1.0 dB(A) quieter behind the barrier, and the
+  example takes 2.3 times as long to simulate.
+- `--indoors` takes a room's level outdoors 2 m in front of its wall, EN ISO 12354-3's
+  L_1,2m, simulating one more listener there where its listener stands nearer: the
+  offices' room behind the street's balcony, 1 m out, moves by up to 2.1 dB at 63 to 250
+  Hz and 0.2 dB(A) for the tram and the road works. No documented number changes.
+- Walks without Doppler crossfade from one place to the next band by band, corrected by
+  how alike the two places sound, so that each octave band's power runs on
+  (`acoustic_spaces.render.crossfaded`, shared with the demos' tours). Against the exact
+  field of a pass-by, pure tones' level misses by at most 2.7 to 4.1 dB instead of 4.2
+  to 7.0 dB, 0.2 to 2.4 dB on average instead of 1.3 to 2.7 dB, and for the train at 4
+  kHz by 12.2 instead of 10.9 dB, where the field's two paths cancel for a moment.
+- Changed: an emission's sound power and directivity (`Emission.sound_power_db`,
+  `directivity`) are now in IEC 61260-1 octaves between their band edges, 44.7 Hz to
+  11.2 kHz, not in the auralization's crossover bands, whose 63 Hz band reached down to
+  0 Hz and whose 8 kHz band up to half the sample rate. The helicopter's `level_db` and
+  `helicopter.csv` are regenerated: in helicopter_flyover 130.7 dB at 63 Hz (was 134.8,
+  with the main rotor's 19.7 and 39.4 Hz tones), 120.2 dB at 8 kHz (121.7) and 132.9
+  dB(A) (133.1); in stadium_concert 129.8 (134.0), 120.1 (121.6) and 132.8 dB(A)
+  (132.9).
+- Maps over a long term gain the long-term insertion loss of what `insertion_loss_of`
+  names (`long_term_insertion_loss`, dB per band, and `long_term_insertion_loss_a`,
+  dB(A)), from the runs with and without it that every class already made. Their other
+  values, `insertion_loss` among them, are the scene's own weather's, and the levels in
+  each class and period and relative to free field over the long term are at listeners
+  only, as the docs now say.
+- BRAS's coupled rooms with the door open by 30.4° join the validation: the conversion
+  joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
+  T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
+  kHz.
 
 ## 4.1.0
 

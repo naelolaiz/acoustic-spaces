@@ -6,14 +6,15 @@ package simulates, with the parameters of the responses measured in them:
 | Folder | Room | Volume | Surfaces |
 |---|---|---:|---:|
 | `CR1_DoorAngle1` | coupled rooms, a laboratory and a reverberation chamber, RWTH Aachen, the door between them open by 4.1° | 225 m³ | 4 materials |
-| `CR1_DoorAngle3` | the same, the door open by 30.4° | not closed | 4 materials |
+| `CR1_DoorAngle3` | the same, the door open by 30.4° | 225 m³ | 4 materials |
 | `CR2` | seminar room, TU Berlin | 146 m³ | 5 materials |
 | `CR3` | chamber music hall, Konzerthaus Berlin | 3331 m³ | 7 materials |
 | `CR4` | auditorium, TU Berlin | 8657 m³ | 8 materials |
 
-In `CR1_DoorAngle3` the door leaf cuts some 2 cm into the wall at its hinge, so the
-model has no closed inside and no volume; it is simulated as an open model or not at
-all, and its triangles close the laboratory's wall in `CR1_DoorAngle1` (see below).
+In BRAS's model of `CR1_DoorAngle3` the door leaf runs 24 mm into the wall at its hinge,
+which leaves the model without an inside; `convert_skp.py --join-door-leaf` joins the
+leaf to the wall and the floor (the script says how), and the model's triangles close
+the laboratory's wall in `CR1_DoorAngle1` (see below).
 
 `validation/bras_validation.py` simulates them and compares the results with the
 measurements, and `validation/bras_binaural.py` compares the IACC of binaural responses
@@ -84,7 +85,8 @@ Download and unpack `1_scene_descriptions-CR1.zip` to `1_scene_descriptions-CR4.
 ```sh
 pip install openskp                     # the sketchup extra: reads SketchUp files
 CR1="BRAS/1 Scene descriptions/CR1 coupled rooms (laboratory and reverberation chamber)/Geometry/rooms"
-python validation/bras/convert_skp.py "$CR1/CR1_DoorAngle3.skp" validation/bras/CR1_DoorAngle3/CR1_DoorAngle3.obj
+python validation/bras/convert_skp.py "$CR1/CR1_DoorAngle3.skp" validation/bras/CR1_DoorAngle3/CR1_DoorAngle3.obj \
+    --join-door-leaf                    # needs this package installed
 python validation/bras/convert_skp.py "$CR1/CR1_DoorAngle1.skp" validation/bras/CR1_DoorAngle1/CR1_DoorAngle1.obj \
     --fill-from validation/bras/CR1_DoorAngle3/CR1_DoorAngle3.obj
 python validation/bras/convert_skp.py "BRAS/1 Scene descriptions/CR2 small room (seminar room)/Geometry/CR2.skp" validation/bras/CR2/CR2.obj
