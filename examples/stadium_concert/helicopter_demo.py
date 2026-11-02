@@ -265,17 +265,12 @@ def mix(args) -> None:
     dBFS), into ``crossing/seats``, and the feeds' table with the song lasting as long
     as the helicopter is heard, into ``crossing/feeds``, for the video."""
     band = band_args(args)
-    concert = pipeline.seats_of(band.work / "seats", stadium.DEMO.command("render", band))
+    concert = pipeline.seats_of(band.work / "seats", stadium.DEMO.command("render", band), band)
     played = concert_seats(args, band, concert)
     table = stadium.feeds_table(band)
     folder = args.work / "walk"
-    passes = pipeline.seats_of(folder, DEMO.command("walk", args))
+    passes = pipeline.seats_of(folder, DEMO.command("walk", args), args)
     facts = pipeline.read_json(folder / passby.WALK)
-    if passes.get("label") != pipeline.output_label(args):
-        raise SystemExit(
-            f"error: the helicopter's passes in {folder} are of another format; run: "
-            f"{DEMO.command('walk', args)}"
-        )
     if (passes["rate"], passes["format"]) != (concert["rate"], concert["format"]):
         raise SystemExit(
             f"error: the concert's mixes are {concert['format']} at {concert['rate']} Hz, the "
@@ -316,9 +311,10 @@ def mix(args) -> None:
     top = max(seat["rms_db"] for seat in seats.values())
     for seat in seats.values():
         seat["relative_db"] = seat["rms_db"] - top
+    label = pipeline.output_label(args)
     pipeline.write_json(
         out / "seats" / pipeline.SEATS,
-        {"rate": rate, "format": fmt, "gain": gain, "seats": seats},
+        {"rate": rate, "format": fmt, "label": label, "gain": gain, "seats": seats},
     )
     heard = max(float(seat["length_s"]) for seat in passes["seats"].values())
     pipeline.write_json(
@@ -341,8 +337,8 @@ def mix(args) -> None:
 
 def mix_done(args) -> bool:
     """Whether the mixes with the helicopter are there, newer than the concert's mixes
-    and the helicopter's passes, made for ``--at`` and at every listener this run
-    plays."""
+    and the helicopter's passes, made for ``--at``, ``--format`` and ``--hrtf`` (the
+    concert's mixes too) and at every listener this run plays."""
     out = args.work / CROSSING
     path, feeds = out / "seats" / pipeline.SEATS, out / "feeds" / "feeds.json"
     used = [args.work / "seats" / pipeline.SEATS, args.work / "walk" / pipeline.SEATS]
@@ -358,10 +354,14 @@ def mix_done(args) -> bool:
     except SystemExit:
         return False
     at = float(table["length_s"]) / 2.0 if args.at is None else float(args.at)
-    made = pipeline.read_json(path)["seats"]
-    return pipeline.read_json(feeds).get("helicopter", {}).get("at_s") == round(at, 6) and set(
-        wanted
-    ) <= set(made)
+    made = pipeline.read_json(path)
+    label = pipeline.output_label(args)
+    return (
+        made.get("label") == label
+        and concert.get("label") == label
+        and pipeline.read_json(feeds).get("helicopter", {}).get("at_s") == round(at, 6)
+        and set(wanted) <= set(made["seats"])
+    )
 
 
 def video(args) -> None:

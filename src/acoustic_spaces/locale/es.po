@@ -815,6 +815,21 @@ msgstr ""
 "curva: cómo crece el viento con la altura sobre el terreno"
 
 #: acoustic_spaces/gui/app.py
+msgid "F&ollow the run"
+msgstr "Seg&uir la ejecución"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"While a run, coverage map, export or demo goes on, ring the sources and "
+"listeners its latest step works on in the 3D view and the plan, and draw the "
+"walkers where the place along a walk it simulates has them"
+msgstr ""
+"Mientras hay en curso un cálculo, un mapa de cobertura, una exportación o "
+"una demostración, marcar con un anillo en la vista 3D y en la planta las "
+"fuentes y los receptores con los que trabaja su último paso, y dibujar los "
+"móviles donde los sitúa el lugar del recorrido que simula"
+
+#: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
 msgstr "Guardar &captura de pantalla…"
 
@@ -1070,6 +1085,11 @@ msgstr "Sin cambios: {reason}"
 #, python-brace-format
 msgid "Surface {name}"
 msgstr "Superficie {name}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot keep whether the views follow the run: {reason}"
+msgstr "No se puede guardar si las vistas siguen la ejecución: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -6588,6 +6608,15 @@ msgstr "mover vértice"
 #: acoustic_spaces/gui/plan_view.py
 #, python-brace-format
 msgid ""
+"Not moved: {name} is drawn where the run simulates it, {time:.2f} s along "
+"its walk; drag it once the run is over"
+msgstr ""
+"No movido: {name} se dibuja donde lo simula la ejecución, a los {time:.2f} s "
+"de su recorrido; arrástrelo cuando la ejecución termine"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid ""
 "Not moved: {name} is drawn where it is at {time:.2f} s; drag its keyframes, "
 "or its start at 0 s"
 msgstr ""
@@ -8468,15 +8497,15 @@ msgid ""
 "behind a noise barrier 3 m high, 4 m from the track, which the trains' sound "
 "comes over and round (`first_order` diffraction follows it). The line source "
 "along the track is its traffic on average: one regional train an hour at 160 "
-"km/h, its sound power per metre Schall 03's (Germany's method for the noise "
-"of railways, 2014), all of it at the rail top. A train runs past at 160 "
-"km/h, its pitch falling as it goes by (Doppler): three sources along one "
-"walk, at the rail top, on the roof and at the pantograph, Schall 03's "
-"heights; each plays the train's points at that height one behind the other "
-"(its bogies, its cars' roofs, its pantograph), so the train goes by as long "
-"as it is. They are left out of simulations until ticked, as is the train's "
-"horn at its front, and passby_demo.py runs one of four trains past, its horn "
-"sounding with --horn blasts."
+"km/h, its sound power per metre and its directivity round the track Schall "
+"03's (Germany's method for the noise of railways, 2014), all of it at the "
+"rail top. A train runs past at 160 km/h, its pitch falling as it goes by "
+"(Doppler): three sources along one walk, at the rail top, on the roof and at "
+"the pantograph, Schall 03's heights; each plays the train's points at that "
+"height one behind the other (its bogies, its cars' roofs, its pantograph), "
+"so the train goes by as long as it is. They are left out of simulations "
+"until ticked, as is the train's horn at its front, and passby_demo.py runs "
+"one of four trains past, its horn sounding with --horn blasts."
 msgstr ""
 "Al aire libre: una vía de tren sobre balasto a través de un prado, escuchada "
 "donde la norma de la UE para el ruido de los trenes mide uno al pasar (a 7,5 "
@@ -8486,16 +8515,16 @@ msgstr ""
 "la vía, por encima y alrededor de la cual llega el sonido de los trenes (la "
 "difracción `first_order` lo sigue). La fuente lineal a lo largo de la vía es "
 "su tráfico en promedio: un tren regional por hora a 160 km/h, con la "
-"potencia acústica por metro de Schall 03 (el método alemán para el ruido de "
-"los ferrocarriles, 2014), toda en la cabeza del carril. Un tren pasa a 160 "
-"km/h y su tono baja al pasar (Doppler): tres fuentes a lo largo de un mismo "
-"recorrido, en la cabeza del carril, en el techo y en el pantógrafo, las "
-"alturas de Schall 03; cada una reproduce los puntos del tren a esa altura "
-"uno detrás de otro (sus bogies, los techos de sus coches, su pantógrafo), de "
-"modo que el tren tarda en pasar tanto como mide. Quedan fuera de las "
-"simulaciones hasta que se marcan, como la bocina del tren en su frente, y "
-"passby_demo.py hace pasar uno de cuatro trenes, con la bocina sonando con "
-"--horn blasts."
+"potencia acústica por metro y la directividad alrededor de la vía de Schall "
+"03 (el método alemán para el ruido de los ferrocarriles, 2014), toda en la "
+"cabeza del carril. Un tren pasa a 160 km/h y su tono baja al pasar "
+"(Doppler): tres fuentes a lo largo de un mismo recorrido, en la cabeza del "
+"carril, en el techo y en el pantógrafo, las alturas de Schall 03; cada una "
+"reproduce los puntos del tren a esa altura uno detrás de otro (sus bogies, "
+"los techos de sus coches, su pantógrafo), de modo que el tren tarda en pasar "
+"tanto como mide. Quedan fuera de las simulaciones hasta que se marcan, como "
+"la bocina del tren en su frente, y passby_demo.py hace pasar uno de cuatro "
+"trenes, con la bocina sonando con --horn blasts."
 
 #: examples/rehearsal_room/scene.yaml
 msgctxt "example"

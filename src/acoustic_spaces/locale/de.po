@@ -816,6 +816,22 @@ msgstr ""
 "wie der Wind mit der Höhe über dem Boden zunimmt"
 
 #: acoustic_spaces/gui/app.py
+msgid "F&ollow the run"
+msgstr "Lauf &folgen"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"While a run, coverage map, export or demo goes on, ring the sources and "
+"listeners its latest step works on in the 3D view and the plan, and draw the "
+"walkers where the place along a walk it simulates has them"
+msgstr ""
+"Während eine Berechnung, eine Versorgungskarte, ein Export oder eine Demo "
+"läuft, in der 3D-Ansicht und im Grundriss die Quellen und Empfänger mit "
+"einem Ring markieren, an denen der letzte Schritt arbeitet, und die "
+"Beweglichen dort zeichnen, wo sie an dem gerade simulierten Ort eines Weges "
+"sind"
+
+#: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
 msgstr "Bildsch&irmfoto speichern…"
 
@@ -1071,6 +1087,12 @@ msgstr "Nicht geändert: {reason}"
 #, python-brace-format
 msgid "Surface {name}"
 msgstr "Fläche {name}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot keep whether the views follow the run: {reason}"
+msgstr ""
+"Ob die Ansichten dem Lauf folgen, kann nicht gespeichert werden: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -6577,6 +6599,15 @@ msgstr "Ecke verschieben"
 #: acoustic_spaces/gui/plan_view.py
 #, python-brace-format
 msgid ""
+"Not moved: {name} is drawn where the run simulates it, {time:.2f} s along "
+"its walk; drag it once the run is over"
+msgstr ""
+"Nicht verschoben: {name} ist dort gezeichnet, wo der Lauf es simuliert, bei "
+"{time:.2f} s seines Weges; ziehen Sie es, wenn der Lauf vorbei ist"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid ""
 "Not moved: {name} is drawn where it is at {time:.2f} s; drag its keyframes, "
 "or its start at 0 s"
 msgstr ""
@@ -8454,15 +8485,15 @@ msgid ""
 "behind a noise barrier 3 m high, 4 m from the track, which the trains' sound "
 "comes over and round (`first_order` diffraction follows it). The line source "
 "along the track is its traffic on average: one regional train an hour at 160 "
-"km/h, its sound power per metre Schall 03's (Germany's method for the noise "
-"of railways, 2014), all of it at the rail top. A train runs past at 160 "
-"km/h, its pitch falling as it goes by (Doppler): three sources along one "
-"walk, at the rail top, on the roof and at the pantograph, Schall 03's "
-"heights; each plays the train's points at that height one behind the other "
-"(its bogies, its cars' roofs, its pantograph), so the train goes by as long "
-"as it is. They are left out of simulations until ticked, as is the train's "
-"horn at its front, and passby_demo.py runs one of four trains past, its horn "
-"sounding with --horn blasts."
+"km/h, its sound power per metre and its directivity round the track Schall "
+"03's (Germany's method for the noise of railways, 2014), all of it at the "
+"rail top. A train runs past at 160 km/h, its pitch falling as it goes by "
+"(Doppler): three sources along one walk, at the rail top, on the roof and at "
+"the pantograph, Schall 03's heights; each plays the train's points at that "
+"height one behind the other (its bogies, its cars' roofs, its pantograph), "
+"so the train goes by as long as it is. They are left out of simulations "
+"until ticked, as is the train's horn at its front, and passby_demo.py runs "
+"one of four trains past, its horn sounding with --horn blasts."
 msgstr ""
 "Im Freien: eine Bahnstrecke auf Schotter quer über eine Wiese, gehört dort, "
 "wo die EU-Vorschrift für den Lärm von Zügen eine Vorbeifahrt misst (7.5 m "
@@ -8472,16 +8503,17 @@ msgstr ""
 "über die und um die herum der Schall der Züge kommt (die Beugung "
 "`first_order` folgt ihm). Die Linienquelle entlang des Gleises ist sein "
 "Verkehr im Mittel: ein Regionalzug pro Stunde mit 160 km/h, seine "
-"Schallleistung je Meter nach Schall 03 (Deutschlands Verfahren für den Lärm "
-"von Eisenbahnen, 2014), ganz an der Schienenoberkante. Ein Zug fährt mit 160 "
-"km/h vorbei, seine Tonhöhe fällt beim Vorbeifahren (Doppler): drei Quellen "
-"auf einem Weg, an der Schienenoberkante, auf dem Dach und am Stromabnehmer, "
-"die Höhen von Schall 03; jede spielt die Punkte des Zuges in dieser Höhe "
-"hintereinander (seine Drehgestelle, die Dächer seiner Wagen, seinen "
-"Stromabnehmer), so dass der Zug so lange vorbeifährt, wie er lang ist. Sie "
-"bleiben aus den Simulationen, bis sie angehakt werden, wie auch das "
-"Signalhorn an der Spitze des Zuges, und passby_demo.py lässt einen von vier "
-"Zügen vorbeifahren, mit --horn blasts ertönt sein Signalhorn."
+"Schallleistung je Meter und seine Richtwirkung um das Gleis nach Schall 03 "
+"(Deutschlands Verfahren für den Lärm von Eisenbahnen, 2014), ganz an der "
+"Schienenoberkante. Ein Zug fährt mit 160 km/h vorbei, seine Tonhöhe fällt "
+"beim Vorbeifahren (Doppler): drei Quellen auf einem Weg, an der "
+"Schienenoberkante, auf dem Dach und am Stromabnehmer, die Höhen von Schall "
+"03; jede spielt die Punkte des Zuges in dieser Höhe hintereinander (seine "
+"Drehgestelle, die Dächer seiner Wagen, seinen Stromabnehmer), so dass der "
+"Zug so lange vorbeifährt, wie er lang ist. Sie bleiben aus den Simulationen, "
+"bis sie angehakt werden, wie auch das Signalhorn an der Spitze des Zuges, "
+"und passby_demo.py lässt einen von vier Zügen vorbeifahren, mit --horn "
+"blasts ertönt sein Signalhorn."
 
 #: examples/rehearsal_room/scene.yaml
 msgctxt "example"

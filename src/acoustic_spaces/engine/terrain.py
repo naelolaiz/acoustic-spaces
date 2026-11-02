@@ -2,25 +2,26 @@
 
 A terrain (``geometry.ground.terrain``) is a grid of heights cut into triangles. The
 early stage reflects sound off every face as off a plane, and off a gently rolling
-ground that goes wrong in two ways: a facet 5 m across sends a 5 m wave back as a
-plain would, and as a listener moves, the reflections off neighbouring facets come
-and go in jumps, two at once where the ground bulges and none where it hollows. So
-the early paths of a scene with a terrain do not reflect off its ground faces at all
-(the stochastic late tail still bounces its rays off every face). In their place the
-ground reflects once, off the **mean plane** of the terrain between the source and the
-listener, as the outdoor standards (CNOSSOS-EU, Nord2000) have it: the plane through
-the least-squares line of the ground's profile in the vertical plane between the two
-(:func:`mean_plane`), level across it. The sound reflects off it where the image of
-the source in the plane sees the listener; a source or listener below the plane
-counts as on it, so that the reflection grazes the ground, as the standards' equivalent
-heights have it. The reflection takes the ground's reflection factor under the
-reflection point (its material, or the grounds of the zones its Fresnel zone covers,
-as on a flat ground) and nothing may stand in its way but the ground itself. Over a
-plain, a flat terrain or a plane slope the mean plane is the ground, and the
-reflection is the one the flat ground gives. The sound bent over the terrain's crests
-reflects off the mean planes on each side of them in the same way
-(:mod:`acoustic_spaces.engine.crests`). Nothing of this touches a scene without a
-terrain.
+ground that goes wrong in two ways: a facet 5 m across sends a 5 m wave back as a plain
+would, and as a listener moves, the reflections off neighbouring facets come and go in
+jumps, two at once where the ground bulges and none where it hollows. So the early paths
+of a scene with a terrain do not reflect off its ground faces at all (the stochastic
+late tail still bounces its rays off every face). In their place the ground reflects
+once, off the **mean plane** of the terrain between the source and the listener, as the
+outdoor standards (CNOSSOS-EU, Nord2000) have it: the plane through the least-squares
+line of the ground's profile in the vertical plane between the two, fitted to the
+profile itself segment by segment as CNOSSOS-EU fits it, so that it follows the ground's
+shape, not where the edges of the terrain's triangles cross the profile
+(:func:`mean_plane`), level across it. The sound reflects off it where the image of the
+source in the plane sees the listener; a source or listener below the plane counts as on
+it, so that the reflection grazes the ground, as the standards' equivalent heights have
+it. The reflection takes the ground's reflection factor under the reflection point (its
+material, or the grounds of the zones its Fresnel zone covers, as on a flat ground) and
+nothing may stand in its way but the ground itself. Over a plain, a flat terrain or a
+plane slope the mean plane is the ground, and the reflection is the one the flat ground
+gives. The sound bent over the terrain's crests takes its ground reflections off the
+profile's segments on each side of them instead (:mod:`acoustic_spaces.engine.crests`).
+Nothing of this touches a scene without a terrain.
 """
 
 from __future__ import annotations
@@ -38,20 +39,30 @@ _TINY = 1e-9
 
 
 def mean_plane(profile: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """The mean plane of the ground along ``profile`` (k, 3), the points of the
-    terrain's profile between two points: a point on it and its unit normal, upwards.
-    The plane holds the least-squares line of the heights against the distance along
-    the profile, and the horizontal across the profile."""
+    """The mean plane of the ground along ``profile`` (k, 3), the corners of the
+    terrain's profile between two points in order, the ground running straight between
+    them: a point on it and its unit normal, upwards. The plane holds the least-squares
+    line of the profile's heights z against the distance s along it, and the horizontal
+    across the profile. As CNOSSOS-EU's mean plane, the line is fitted to the profile
+    itself, not to its corners: with s from the profile's middle, it passes there at the
+    mean height (the integral of z ds over the length L) with the slope 12 / L^3 times
+    the integral of s z ds, both summed exactly over the segments. Corners added along a
+    straight stretch of the profile change nothing."""
     profile = np.asarray(profile, dtype=float)
     across = profile[-1, :2] - profile[0, :2]
     run = float(np.linalg.norm(across))
     axis = across / run if run > _TINY else np.array([1.0, 0.0])
-    s = (profile[:, :2] - profile[0, :2]) @ axis
     z = profile[:, 2]
-    sm, zm = s.mean(), z.mean()
-    spread = float(((s - sm) ** 2).sum())
-    slope = float(((s - sm) * (z - zm)).sum() / spread) if spread > _TINY else 0.0
-    origin = np.array([profile[0, 0], profile[0, 1], zm - slope * sm])
+    if run > _TINY:
+        s = (profile[:, :2] - profile[0, :2]) @ axis - 0.5 * run
+        h, z0, z1 = np.diff(s), z[:-1], z[1:]
+        z_ds = float(np.sum(h * (z0 + z1))) / 2.0
+        sz_ds = float(np.sum(h * (s[:-1] * (2.0 * z0 + z1) + s[1:] * (z0 + 2.0 * z1)))) / 6.0
+        slope = 12.0 * sz_ds / run**3
+        height = z_ds / run - 0.5 * run * slope  # at the profile's start
+    else:
+        slope, height = 0.0, float(z.mean())
+    origin = np.array([profile[0, 0], profile[0, 1], height])
     normal = np.array([-slope * axis[0], -slope * axis[1], 1.0])
     return origin, normal / np.linalg.norm(normal)
 
