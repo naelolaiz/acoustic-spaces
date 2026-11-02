@@ -7,6 +7,20 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: with repeats, `deconvolve` and `measure` cut a response asked for longer than
+  the silence to the silence, as the next sweep's harmonic distortion lands right after
+  it; they cut it at the 2nd harmonic's peak, which let the 3rd and higher (for a
+  loudspeaker adding 0.2 x³ to a -6 dBFS sweep, 0.64 % of the linear peak) and part of
+  the 2nd into the average.
+- Fixed: with one sweep, `deconvolve` cuts a response to the recording's length less the
+  sweep's, past which the response lacks its high frequencies (`measure`: to the
+  silence); the cut was the 2nd harmonic's delay short of the period, whatever the
+  recording's length. A note says when a response comes out shorter than `--length`.
+- Fixed: analysing an impulse response, a band whose lower edge is at or above half the
+  sample rate (the 8 kHz band at sample rates below 11.25 kHz) has no parameters, nor
+  has the STI or IACC there; its filter's skirt over the band below gave it a T30, a G
+  and the rest. `analyze`, `measure`, `compare` and `calibrate` say so, with the band
+  that reaches past half the rate, which is analysed from its part below it.
 
 ## 4.1.0
 

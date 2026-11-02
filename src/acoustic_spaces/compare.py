@@ -14,7 +14,8 @@ value, their difference and that difference in JNDs; and per parameter, how many
 are within one JND and the mean absolute difference in JNDs from 125 Hz to 4 kHz. A
 band where either side has no value is missing, with the reason, never zero: a
 response that decays by less than 20 dB, a decay time whose range does not clear the
-background noise, or G without a reference on both sides.
+background noise, G without a reference on both sides, or a band above half a
+response's sample rate.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from acoustic_spaces.parameters import (
     PARAMETERS,
     RoomParameters,
     _band_label,
+    _beyond_nyquist,
     _label,
     _symbol,
     band_decay,
@@ -212,7 +214,12 @@ class Comparison:
 
 
 def _missing(
-    name: str, side: str, params: RoomParameters, band: int, decay_range_db: np.ndarray | None
+    name: str,
+    side: str,
+    params: RoomParameters,
+    band: int,
+    decay_range_db: np.ndarray | None,
+    sample_rate: float | None,
 ) -> str | None:
     """Why the value of ``name`` in ``band`` of one side cannot be compared, or None."""
     value = float(getattr(params, name)[band])
@@ -221,6 +228,9 @@ def _missing(
     symbol = _symbol(name)
     if not math.isnan(value):
         return f"the {side} {symbol} is infinite"  # clarity with no energy on one side
+    if sample_rate is not None and _beyond_nyquist(sample_rate)[band]:
+        half = sample_rate / 2.0
+        return f"the {side} response, at {sample_rate:g} Hz, holds nothing above {half:g} Hz"
     if all(math.isnan(float(getattr(params, n)[band])) for n in PARAMETERS):
         # The parameters rule: a band whose decay stops short has none at all.
         return f"the {side} response decays by less than {-_MIN_DECAY_DB:.0f} dB"
@@ -243,6 +253,8 @@ def _compare(
     measured: RoomParameters,
     simulated_range_db: np.ndarray | None = None,
     measured_range_db: np.ndarray | None = None,
+    simulated_rate: float | None = None,
+    measured_rate: float | None = None,
 ) -> Comparison:
     bands = len(OCTAVE_BANDS_HZ)
     for side, params in (("simulated", simulated), ("measured", measured)):
@@ -269,8 +281,8 @@ def _compare(
         missing = []
         for b in range(bands):
             reasons = [
-                _missing(name, "simulated", simulated, b, simulated_range_db),
-                _missing(name, "measured", measured, b, measured_range_db),
+                _missing(name, "simulated", simulated, b, simulated_range_db, simulated_rate),
+                _missing(name, "measured", measured, b, measured_range_db, measured_rate),
             ]
             missing.append("; ".join(r for r in reasons if r) or None)
         ok = np.array([reason is None for reason in missing])
@@ -292,17 +304,24 @@ def _compare(
     return Comparison(simulated=simulated, measured=measured, parameters=compared)
 
 
-def compare_parameters(simulated: RoomParameters, measured: RoomParameters) -> Comparison:
+def compare_parameters(
+    simulated: RoomParameters,
+    measured: RoomParameters,
+    *,
+    simulated_rate: float | None = None,
+    measured_rate: float | None = None,
+) -> Comparison:
     """Compare two sets of parameters, one value per octave band of ``OCTAVE_BANDS_HZ``.
 
     NaN values are missing bands, whose reason is read from the parameters themselves:
-    a band with no parameter at all decays by less than 20 dB, G alone is NaN without a
-    reference, and a decay time alone when the decay does not reach the bottom of its fit
-    range (:func:`compare_impulse_responses` also tells when the noise is in the way).
-    LF, LFC, IACC and the directional decay times are compared where both sides give
-    them.
+    a band with no parameter at all lies above half the sample rate of its response
+    (when ``simulated_rate`` or ``measured_rate``, in Hz, gives it) or else decays by
+    less than 20 dB, G alone is NaN without a reference, and a decay time alone when the
+    decay does not reach the bottom of its fit range (:func:`compare_impulse_responses`
+    also tells when the noise is in the way). LF, LFC, IACC and the directional decay
+    times are compared where both sides give them.
     """
-    return _compare(simulated, measured)
+    return _compare(simulated, measured, simulated_rate=simulated_rate, measured_rate=measured_rate)
 
 
 def in_jnds(values: RoomParameters, errors: RoomParameters) -> dict[str, np.ndarray]:
@@ -339,7 +358,9 @@ def compare_impulse_responses(
     and ``noise`` settings. The references are those of its ``reference_energy``: the
     energy of the same source at 10 m in free field, per band or of a broadband impulse
     (0.01 for responses made by this package). G is compared only where both sides have
-    one; without, it is missing in every band.
+    one; without, it is missing in every band. A band at or above half a response's
+    sample rate is missing (see
+    :func:`~acoustic_spaces.parameters.from_impulse_response`).
     """
     sides = {}
     for side, ir, rate, reference in (
@@ -351,7 +372,7 @@ def compare_impulse_responses(
         decay = band_decay(ir, rate, filters=filters, noise=noise)
         sides[side] = (params, decay.decay_range_db)
     (sim, sim_range), (meas, meas_range) = sides["simulated"], sides["measured"]
-    return _compare(sim, meas, sim_range, meas_range)
+    return _compare(sim, meas, sim_range, meas_range, simulated_rate, measured_rate)
 
 
 __all__ = [

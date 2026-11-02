@@ -604,7 +604,8 @@ def _modulation_kernel(slots: int, time_step: float, frequencies: tuple[float, .
 
 
 def _masking_slope_db(level: np.ndarray) -> np.ndarray:
-    """Level-dependent auditory masking of the next band up (IEC 60268-16, A.2.3)."""
+    """Level-dependent auditory masking of the next band up (IEC 60268-16:2020, A.4.2,
+    table A.2)."""
     return np.select(
         [level < 63.0, level < 67.0, level < 100.0],
         [0.5 * level - 65.0, 1.8 * level - 146.9, 0.5 * level - 59.8],
@@ -741,12 +742,15 @@ def echo_criterion(
     steepest rise of ts over the window, in units of the window. An echo makes ts jump:
     listeners hear one where EC exceeds 1.0 for speech or 1.8 for music (half of them;
     0.9 and 1.5 for a tenth).
-    NaN for a response shorter than the window.
+    NaN for a response shorter than the window, or with a band at or above half
+    ``sample_rate``.
     """
     if kind not in ECHO_CRITERIA:
         raise ValueError(f"unknown echo criterion {kind!r}; use 'speech' or 'music'")
     exponent, window, bands, _ = ECHO_CRITERIA[kind]
     ir = _mono(ir)
+    if _beyond_nyquist(sample_rate)[[OCTAVE_BANDS_HZ.index(f) for f in bands]].any():
+        return math.nan, math.nan
     # The filters' ringing ahead of the direct sound counts, at its own (negative)
     # times, or the direct sound would weigh half of what an echo does.
     lead = int(round(_FILTER_LEAD_S * sample_rate))
@@ -812,6 +816,23 @@ def octave_midbands() -> np.ndarray:
     nominal = np.array(OCTAVE_BANDS_HZ, dtype=float)
     k = np.round(np.log(nominal / 1000.0) / math.log(OCTAVE_RATIO))
     return 1000.0 * OCTAVE_RATIO**k
+
+
+def _octave_band_edges() -> tuple[np.ndarray, np.ndarray]:
+    """Lower and upper edges (Hz) of the IEC 61260-1 octave filters, fm G^(-1/2) and
+    fm G^(1/2) of the exact mid-band frequencies (:func:`octave_midbands`), where those
+    filters are 3 dB down: 5623 Hz between the 4 and 8 kHz bands, where
+    :func:`~acoustic_spaces.materials.bands.band_limits` gives the nominal 5657 Hz (the
+    crossover filters' edge)."""
+    mid = octave_midbands()
+    return mid / OCTAVE_RATIO**0.5, mid * OCTAVE_RATIO**0.5
+
+
+def _beyond_nyquist(sample_rate: float) -> np.ndarray:
+    """(bands,) whether each octave band's lower edge is at or above half
+    ``sample_rate``: a response at that rate holds nothing of the band's own, only what
+    its filter's skirt lets in of the bands below."""
+    return _octave_band_edges()[0] >= 0.5 * sample_rate
 
 
 def octave_filter_gains(n_fft: int, sample_rate: float, order: int = FILTER_ORDER) -> np.ndarray:
@@ -977,11 +998,13 @@ def _from_onset(
     ir: np.ndarray, sample_rate: float, filters: str, start: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """Octave bands of ``ir`` (bands, samples) from sample ``start`` on, and before it,
-    with the ringing the zero-phase filters spread ahead of the response."""
+    with the ringing the zero-phase filters spread ahead of the response. The bands at
+    or above half the sample rate are silent."""
     # Zero-phase filters ring before an impulse as much as after it. Room is made for
     # that ringing, and everything before the onset counts as arriving with it.
     lead = int(round(_FILTER_LEAD_S * sample_rate))
     bands = octave_bands(np.concatenate([np.zeros(lead), ir]), sample_rate, filters)
+    bands[_beyond_nyquist(sample_rate)] = 0.0
     return bands[:, lead + start :], bands[:, : lead + start]
 
 
@@ -1004,7 +1027,11 @@ def band_decay(
     """Filter ``ir`` into octave bands and, with ``noise``, find each band's noise floor.
 
     ``ir`` is (samples,) or (samples, 1), as :func:`~acoustic_spaces.audio.read_wav`
-    gives a mono file. The bands start at its onset, or at sample ``start``.
+    gives a mono file. The bands start at its onset, or at sample ``start``. A band
+    whose lower edge (its exact mid-band frequency over 10^0.15, where its IEC 61260-1
+    filter is 3 dB down: 5623 Hz for 8 kHz) is at or above half the sample rate holds
+    nothing of its own, and has no energy here; one that reaches past it holds its part
+    below it.
     """
     ir = _mono(ir)
     start = onset(ir) if start is None else int(start)
@@ -1079,6 +1106,12 @@ def from_impulse_response(
     (ISO 3382-1, 5.3.4); decay times whose range does not clear the noise by 10 dB
     (EDT 20 dB, T20 35 dB, T30 45 dB) are NaN.
 
+    Every parameter is NaN in a band whose lower edge (as :func:`band_decay` gives it)
+    is at or above half ``sample_rate``, as the response holds nothing of its own there (at
+    8 kHz, the 8 kHz band). A band that reaches past it is analysed from its part below
+    it (at 8 kHz the 4 kHz band, at 16 kHz the 8 kHz band); a broadband
+    ``reference_energy`` is taken over the same part.
+
     With ``stage``, ``st_early`` and ``st_late`` as well, for a response measured 1 m
     from the source. ``lateral`` is the response of a figure of eight with its null on
     the source, measured with ``ir`` and at the same sensitivity on its axis, for
@@ -1143,7 +1176,11 @@ def sti_from_impulse_response(
     """STI, or with ``stipa`` STIPA, of the room alone from a mono impulse response:
     from its octave bands (125 Hz to 8 kHz) from the onset on, with ``noise`` cut where
     they sink into the background noise and the noise taken off, as
-    :func:`from_impulse_response` takes them."""
+    :func:`from_impulse_response` takes them. NaN when one of those bands lies at or
+    above half ``sample_rate`` (at a sample rate below 11.25 kHz, the 8 kHz band
+    does)."""
+    if _beyond_nyquist(sample_rate)[1:].any():
+        return math.nan
     decay = band_decay(ir, sample_rate, filters=filters, noise=noise)
     width = max(1, int(round(_STI_SLOT_S * sample_rate)))
     slots = -(-decay.energy.shape[1] // width)
@@ -1163,7 +1200,8 @@ def interaural_cross_correlation(
     The interaural cross-correlation coefficient (ISO 3382-1, annex B) is the largest
     magnitude of the normalised cross-correlation of the two ears' responses within
     1 ms either way; ``iacc_e`` takes them from the direct sound's arrival at the nearer
-    ear to 80 ms later, ``iacc_l`` from there to the end.
+    ear to 80 ms later, ``iacc_l`` from there to the end. NaN in a band at or above
+    half ``sample_rate``.
     """
     binaural = np.asarray(binaural, dtype=float)
     if binaural.ndim != 2 or binaural.shape[1] != 2:

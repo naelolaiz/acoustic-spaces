@@ -74,7 +74,7 @@ def test_deconvolution_recovers_a_room_despite_distortion_and_noise() -> None:
     ir = deconvolve(recording, sweep, length_s=1.0)[:, 0]
     assert ir.shape == (FS,)
     assert np.argmax(np.abs(ir)) == 240
-    # Inside the swept band the response matches the room to within -30 dB.
+    # Inside the swept band its error energy is under 0.1 % of the room's in each band.
     for band in (2, 4, 6):  # 250 Hz, 1 kHz, 4 kHz
         want = octave_bands(room, FS)[band]
         got = octave_bands(ir, FS)[band]
@@ -98,6 +98,46 @@ def test_harmonic_distortion_lands_before_the_linear_response() -> None:
     assert np.argmax(difference) == pytest.approx(second, abs=2)
     assert difference[second - 1 : second + 2].max() > 0.05 * peak
     assert difference[delay - 100 :].max() < 1e-3 * peak
+
+
+@pytest.mark.parametrize("power", [3, 2])
+def test_repeats_keep_the_next_sweeps_distortion_out_of_a_long_response(power: int) -> None:
+    # A loudspeaker distorting before a room that is a unit impulse. Harmonic n of the
+    # next sweep lands L ln n before its linear response, a period on: from a lag of the
+    # silence (n = f_stop / f_start) to L ln 2 short of the period. A response asked for
+    # longer than the silence was cut only at the 2nd harmonic's peak, and took in the
+    # others: 0.64 % of the linear peak for x^3, 1.3 % for x^2.
+    sweep = Sweep(
+        sample_rate=FS, duration_s=1.0, f_start=20.0, f_stop=20_000.0, silence_s=0.5, repeats=2
+    )
+    x = sweep.signal()
+    y = x + 0.2 * x**power
+    after = int(0.02 * FS)
+    floor = np.abs(deconvolve(y, sweep)[after:, 0]).max()  # 0.06 % and 0.09 %
+    long = deconvolve(y, sweep, length_s=2.0)[:, 0]
+    assert np.abs(long[after:]).max() <= floor
+    assert len(long) == round(sweep.silence_s * FS)
+
+
+def test_one_sweep_gives_the_response_the_recording_holds() -> None:
+    # Frequency f of the response at a lag needs the recording to run on L ln(f / f_start)
+    # past it: a recording that stops with the excitation holds the whole band up to the
+    # silence, and one that goes on for a second, up to a second more.
+    sweep = _sweep()
+    room = _room(t60=2.0, length_s=3.0)
+    x = sweep.signal()
+    heard = _convolve(x, room)
+    silence = round(sweep.silence_s * FS)
+    assert len(deconvolve(heard[: len(x)], sweep, length_s=2.0)) == silence
+    assert len(deconvolve(heard[: len(x) + FS // 2], sweep, length_s=2.0)) == silence + FS // 2
+    ir = deconvolve(heard[: len(x) + FS], sweep, length_s=2.0)[:, 0]
+    assert len(ir) == 2 * FS
+    # Past the silence its error energy is under 0.1 % of the room's, as before it.
+    tail = slice(silence, None)
+    for band in (2, 4, 6, 7):  # 250 Hz, 1 kHz, 4 kHz, 8 kHz
+        want = octave_bands(room[: len(ir)], FS)[band, tail]
+        got = octave_bands(ir, FS)[band, tail]
+        assert np.sum((got - want) ** 2) < 1e-3 * np.sum(want**2)
 
 
 def test_deconvolution_takes_a_reference_read_from_a_wav_file() -> None:

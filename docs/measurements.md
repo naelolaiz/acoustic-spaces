@@ -31,9 +31,13 @@ acoustic-spaces analyze ir.wav --plot ir.png --json ir.json
 How it works:
 
 - The sweep is synchronized (Novak et al., 2015), so harmonic distortion of the
-  loudspeaker lands before the linear response and is cut away. Make the silence
-  after each sweep longer than the reverberation time; repeats are averaged, each
-  doubling lowering the background noise by 3 dB.
+  loudspeaker lands before the linear response and is cut away. Make the silence after
+  each sweep longer than the reverberation time: the responses are as long as the
+  silence (`--length` can shorten them) and no longer, as the next sweep's distortion
+  lands right after it, and a recording that stops with the excitation lacks the high
+  frequencies of the response beyond it. Only a single sweep recorded for longer gives
+  longer responses, up to the recording's length less the sweep's. Repeats are averaged,
+  each doubling lowering the background noise by 3 dB.
 - Deconvolution divides spectra, regularised outside the swept band.
 - `analyze` filters with IEC 61260-1 octave filters (Butterworth, order 3, zero
   phase), finds where each band sinks into the background noise (Lundeby et al.,
@@ -42,6 +46,11 @@ How it works:
   removes latency) is not taken for noise: the noise floor is looked for before it.
   Decay times are left out when a band's decay does not clear the noise by enough:
   20 dB for EDT, 35 dB for T20, 45 dB for T30.
+- A band whose lower edge is at or above half the sample rate holds nothing of its own:
+  all its parameters are left out, and so is the STI. At a sample rate below 11.25 kHz
+  that is the 8 kHz band, from 5.62 kHz up. A band that reaches past half the sample
+  rate (the 4 kHz band at 8 kHz, the 8 kHz band at 16 kHz) is analysed from its part
+  below it, with `--reference-energy` taken over the same part. A note says so.
 - Each T20 and T30 comes with its ISO 3382-2 non-linearity ξ (‰) and the decay's
   curvature (%), left out with the decay time they check (see
   [Simulation](simulation.md)): past 10 ‰ or 10 %, the decay is not straight enough for
@@ -120,7 +129,8 @@ EDT (s)           4 of 8           2.0
   and the mean absolute difference in JNDs from 125 Hz to 4 kHz.
 - A band where either side has no value shows `-` and is listed with the reason, never
   counted as a difference of zero: a response that decays by less than 20 dB, a decay
-  time whose range does not clear the background noise, or G without a reference.
+  time whose range does not clear the background noise, G without a reference, or a band
+  above half a response's sample rate.
 - Each file has its own channel (`--simulated-channel`, `--measured-channel`, 1 by
   default) and its own reference for G, given as for `analyze`:
   `--simulated-reference-energy 0.01` suits responses made by `simulate`, and the
@@ -178,11 +188,13 @@ T30 after       0.04    0.07    0.07    0.11    0.08    0.08    0.06    0.09
 ...
 ```
 
-- Each `--measured SOURCE LISTENER FILE` is an impulse response measured where the
-  scene has that source and listener: a WAV (its first channel, or `--channel`), or a
-  report written by `analyze --json`. `--measured-json` takes parameters already
-  measured, as `{"pairs": {"SOURCE LISTENER": {"t30": [...], "edt": [...]}}}` with eight
-  octave values each (null where missing), the format of `validation/bras/*/measured.json`.
+- Each `--measured SOURCE LISTENER FILE` is an impulse response measured where the scene
+  has that source and listener: a WAV (its first channel, or `--channel`), or a report
+  written by `analyze --json`. `--measured-json` takes parameters already measured, as
+  `{"pairs": {"SOURCE LISTENER": {"t30": [...], "edt": [...]}}}` with eight octave
+  values each (null where missing), the format of `validation/bras/*/measured.json`. A
+  band with no measured value (null, or above half a WAV's sample rate) is not fitted
+  to, and one that no pair has keeps its absorption.
 - Every material on a surface is fitted (at most 16), or those `--materials` names;
   `--parameters` picks others to match (T20, C50, D50, Ts, G).
 - The table gives each material's fitted absorption, what it started from (`was`), and

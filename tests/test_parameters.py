@@ -302,6 +302,63 @@ def test_strength_from_a_broadband_reference(filters: str) -> None:
     np.testing.assert_allclose(p.g, 0.0, atol=0.1)
 
 
+@pytest.mark.parametrize("filters", ["iec", "crossover"])
+def test_bands_above_half_the_sample_rate_have_no_parameters(filters: str) -> None:
+    # At 8 kHz the 8 kHz band (5.62 to 11.2 kHz) holds nothing of its own. The skirt of
+    # its IEC filter let in the 4 kHz band's decay, which gave it a T30 of 1.0 s and a G,
+    # and the STI took it in.
+    from acoustic_spaces.parameters import (
+        ALL_PARAMETERS,
+        echo_criterion,
+        interaural_cross_correlation,
+        sti_from_impulse_response,
+    )
+
+    fs, t60 = 8000, 1.0
+    rng = np.random.default_rng(5)
+    t = np.arange(2 * fs) / fs
+    tail = rng.standard_normal((len(t), 2)) * np.exp(-3.0 * math.log(10.0) * t / t60)[:, None]
+    ir, side = tail[:, 0], tail[:, 1]
+    p = from_impulse_response(
+        ir,
+        fs,
+        REFERENCE_ENERGY_10M,
+        filters=filters,
+        stage=True,
+        lateral=side,
+        directional=np.column_stack([side, side, side]),
+    )
+    for name in ALL_PARAMETERS:
+        assert math.isnan(getattr(p, name)[7]), name
+    # The 4 kHz band (2.82 to 5.62 kHz) is analysed from its part below 4 kHz.
+    assert p.t30[6] == pytest.approx(t60, rel=0.05)
+    assert p.t30_x[6] == pytest.approx(t60, rel=0.05)
+    assert np.isfinite(p.g[:7]).all() and np.isfinite(p.lf[:7]).all()
+    iacc = interaural_cross_correlation(tail, fs, filters=filters)
+    assert np.isnan(iacc["iacc_l"][7]) and np.isfinite(iacc["iacc_l"][:7]).all()
+    assert math.isnan(sti_from_impulse_response(ir, fs, filters=filters))
+    assert 0.0 < sti_from_impulse_response(np.repeat(ir, 2), 2 * fs, filters=filters) < 1.0
+    # At 2 kHz the music criterion's 2 kHz band (from 1.41 kHz up) is gone too.
+    speech, music = (
+        echo_criterion(ir[::4], fs / 4, kind, filters=filters)[0] for kind in ("speech", "music")
+    )
+    assert math.isfinite(speech) and math.isnan(music)
+
+
+@pytest.mark.parametrize("filters", ["iec", "crossover"])
+@pytest.mark.parametrize("fs", [8000, 16_000])
+def test_a_band_that_reaches_past_half_the_sample_rate(filters: str, fs: int) -> None:
+    # It is analysed from its part below half the sample rate, the 4 kHz band at 8 kHz
+    # and the 8 kHz band at 16 kHz, and a broadband reference is taken over that part:
+    # an impulse reads G = 0 in it as in the bands below.
+    ir = np.zeros(fs)
+    ir[fs // 100] = 0.1  # the free-field direct sound at 10 m
+    p = from_impulse_response(ir, fs, REFERENCE_ENERGY_10M, filters=filters)
+    whole = 8 if fs == 16_000 else 7
+    np.testing.assert_allclose(p.g[:whole], 0.0, atol=0.1)
+    assert np.isnan(p.g[whole:]).all()
+
+
 @pytest.mark.parametrize("bands", [1, 24])
 def test_a_reference_for_other_bands_is_refused(bands: int) -> None:
     # 24 third-octave references were cut to their first 8 and taken for octaves; one
@@ -322,7 +379,8 @@ def test_modulation_transfer_of_an_exponential() -> None:
 
 @pytest.mark.parametrize("t60, sti", [(0.5, 0.74), (1.0, 0.59), (2.0, 0.44)])
 def test_sti_of_reverberation_alone(t60: float, sti: float) -> None:
-    # Published values for an exponential decay without noise (Houtgast and Steeneken).
+    # An exponential decay without noise: its m(F) (Houtgast, Steeneken and Plomp, 1980)
+    # gives an STI of 0.7361, 0.5882 and 0.4371 at 0.5, 1 and 2 s.
     energy = np.tile(_exponential(t60, 8.0), (8, 1))
     assert speech_transmission_index(energy, DT) == pytest.approx(sti, abs=0.01)
 
