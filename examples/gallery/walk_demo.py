@@ -20,9 +20,11 @@ editor's Simulation > Run demo… runs it too. The scene goes beside the script
 (scene_demo.yaml); the speech, the walk, the head turn and the video go to ./demo
 (--work). Use headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of a
 spherical head. `--input guide=talk.wav` has the guide say a recording of yours instead
-(mono, as long as the walk and the turn need, about a minute); the voice's level and
+(mixed down to mono); the voice's level and
 STI in the captions are still the scene's (--voice), as the one gain of the video plays
-any recording as loud.
+any recording as loud. A talk shorter than the walk and the turn need (about a minute,
+longer than some of the corpus's takes) is said again from its start, AGAIN_S after it
+ends, as often as they need.
 
 The walk is the example's visitor's: it sets off 3 m in front of the guide and faces the
 way it goes, so the guide is behind it down the long arm; at the end it turns into the
@@ -144,6 +146,8 @@ TURN = [
 #: (s), each up to a pause in the talk within PAUSE_S.
 LINGER_S = 4.0
 PAUSE_S = 1.5
+#: The silence before a talk too short for the walk and the turn is said again (s).
+AGAIN_S = 2.0
 #: The rooms' tail kept after each part's talk ends, the fade at its end, and the
 #: silence between the parts (s).
 TAIL_S = 1.6
@@ -199,11 +203,51 @@ def played_by(args) -> str:
 
 
 def talk(args) -> tuple[np.ndarray, int]:
+    """The talk the guide says, as recorded: ``--input guide=``'s or ``--talker``'s
+    take, mixed down to mono."""
     path = guide_input(args) or speech_path(args)
     if not path.exists():
         raise SystemExit(f"error: no {path}; run first: {DEMO.command('speech', args)}")
     x, rate = read(path)
     return mono(x), rate
+
+
+def talk_name(args) -> str:
+    what = guide_input(args)
+    return what.name if what is not None else f"the talk of {args.talker}"
+
+
+def needed_s(args, room) -> float:
+    """How long a talk the walk and the turn need (s): each, the visitor's LINGER_S
+    after it and the PAUSE_S a cut may wait for a pause in the talk."""
+    walk_s = float(walk_points_of(room).times[-1])
+    return walk_s + turn_of(args)[-1][0] + 2 * (LINGER_S + PAUSE_S) + 1.0
+
+
+def said(args, room) -> tuple[np.ndarray, int, int]:
+    """The talk as the guide says it (:func:`talk`), and how many times: once, or again
+    from its start AGAIN_S after it ends, as often as the walk and the turn need
+    (:func:`needed_s`)."""
+    x, rate = talk(args)
+    if not len(x):
+        raise SystemExit(f"error: {talk_name(args)} is empty")
+    length_s, need_s = len(x) / rate, needed_s(args, room)
+    times = max(1, math.ceil((need_s + AGAIN_S) / (length_s + AGAIN_S)))
+    if times == 1:
+        return x, rate, 1
+    gap = np.zeros(int(round(AGAIN_S * rate)), dtype=x.dtype)
+    return np.concatenate([x, *([gap, x] * (times - 1))]), rate, times
+
+
+def say_again(args, room, spoken: np.ndarray, rate: int, times: int) -> None:
+    """Say so when the guide says the talk more than once (:func:`said`)."""
+    if times > 1:
+        once_s = (len(spoken) / rate - (times - 1) * AGAIN_S) / times
+        print(
+            f"{talk_name(args)} is {once_s:.0f} s long, and the walk and the turn take "
+            f"{needed_s(args, room):.0f} s: the guide says it {times} times, "
+            f"{AGAIN_S:g} s apart"
+        )
 
 
 def female(args) -> bool:
@@ -339,23 +383,15 @@ def pace_of(visitor) -> str:
 
 def cuts(args, room) -> tuple[float, float]:
     """Where the talk passes from the walk to the turn and where it ends (s): at a pause
-    near the end of each, after the visitor has listened LINGER_S longer."""
-    x, rate = talk(args)
+    near the end of each, after the visitor has listened LINGER_S longer; in the talk
+    as said (:func:`said`), as often as they need it."""
+    x, rate, _ = said(args, room)
     step = 0.1
     env = envelope(x, rate, step)
-    end_s = len(x) / rate
     walk_s = float(walk_points_of(room).times[-1])
-    first = min(quiet_moment(env, step, walk_s + LINGER_S, PAUSE_S), end_s)
+    first = quiet_moment(env, step, walk_s + LINGER_S, PAUSE_S)
     turned = turn_of(args)[-1][0]
-    second = min(quiet_moment(env, step, first + turned + LINGER_S, PAUSE_S), end_s)
-    if second - first < turned:
-        what = guide_input(args)
-        what = what.name if what is not None else f"the talk of {args.talker}"
-        raise SystemExit(
-            f"error: {what} is {end_s:.0f} s long, too short for the walk and the turn "
-            f"({walk_s + turned + 2 * LINGER_S:.0f} s); pick another"
-        )
-    return first, second
+    return first, quiet_moment(env, step, first + turned + LINGER_S, PAUSE_S)
 
 
 def guide_of(room):
@@ -384,7 +420,8 @@ def walk(args) -> None:
     from acoustic_spaces.walkthrough import render_walk, simulate_walk
 
     room = room_of(args)
-    x, rate = talk(args)
+    x, rate, times = said(args, room)
+    say_again(args, room, x, rate, times)
     first, _ = cuts(args, room)
     print("simulating the walk (the late part takes the longest)")
     walked = simulate_walk(room, VISITOR, progress=print)
@@ -416,6 +453,33 @@ def yaws_of(walked, room) -> np.ndarray:
     return np.full(len(walked.points.times), visitor_of(room.scene).orientation.yaw)
 
 
+def turning(times, yaws, facing: float, length_s: float, every_s: float = 0.5):
+    """The head tracker's ``head`` (yaw at ``t`` s from ``times`` and ``yaws``, pitch and
+    roll 0) that says, at most every ``every_s`` of the run, which way the head faces
+    then (:func:`~acoustic_spaces.walkthrough.facing_name`, ``facing`` the yaw it starts
+    from) and how far the turn has come: ``guide -> standing facing 90.0 deg: turning the
+    head, 12.0 of 40.0 s``."""
+    import time
+
+    from acoustic_spaces.walkthrough import facing_name
+
+    said = [-math.inf]
+
+    def head(t: float) -> tuple[float, float, float]:
+        yaw = float(np.interp(t, times, yaws))
+        now = time.monotonic()
+        if now - said[0] >= every_s:
+            said[0] = now
+            print(
+                f"guide -> {facing_name(STANDING, facing + yaw)}: turning the head, "
+                f"{t:.1f} of {length_s:.1f} s",
+                flush=True,
+            )
+        return yaw, 0.0, 0.0
+
+    return head
+
+
 def turn(args) -> None:
     """The turn: the visitor where the scene's listener standing is, simulated there
     once, the talk from the first cut through its response in Ambisonics, turned against
@@ -427,7 +491,8 @@ def turn(args) -> None:
     from acoustic_spaces.spatial import Ambisonics
 
     room = room_of(args)
-    x, rate = talk(args)
+    x, rate, times = said(args, room)
+    say_again(args, room, x, rate, times)
     first, second = cuts(args, room)
     standing = [lis for lis in room.scene.listeners if lis.name == STANDING]
     if not standing:
@@ -443,11 +508,12 @@ def turn(args) -> None:
     keys = turn_of(args)
     times, yaws = [t for t, _ in keys], [yaw for _, yaw in keys]
     dry = resample(x[int(first * rate) : int(second * rate)], rate, rate_out)
+    facing = standing[0].orientation.yaw
     print(f"turning the head through {len(keys)} keys")
-    wet = tracker.run(dry, head=lambda t: (float(np.interp(t, times, yaws)), 0.0, 0.0))
+    length_s = (len(dry) + tracker.taps - 1) / rate_out  # the talk and the room's tail
+    wet = tracker.run(dry, head=turning(times, yaws, facing, length_s))
     out = args.work / "turn"
     write(out / f"turn.{label_of(args)}.wav", wet, rate_out)
-    facing = standing[0].orientation.yaw
     pipeline.write_json(
         out / TURNING,
         {
@@ -524,6 +590,7 @@ def video(args) -> None:
         stills=[(name, t + 0.5) for name, t, _ in moments],
         no_mp4=args.no_mp4,
         chapters=[f"{int(t // 60)}:{int(t % 60):02d} {title}" for _, t, title in moments],
+        shown=lambda t: drawing.shown(t, VISITOR, STANDING),
     )
 
 
@@ -544,12 +611,12 @@ def speech_done(args) -> bool:
 
 
 def part_done(args, name: str, info: str) -> bool:
-    """Whether the walk's or the turn's sound is there, made from what the guide says
-    now (files written before they kept "plays" said the talk of their "talker") and
-    from the scene as it is now."""
+    """Whether the walk's or the turn's sound is there for the ears this run asks for
+    (``--hrtf``), made from what the guide says now (files written before they kept
+    "plays" said the talk of their "talker") and from the scene as it is now."""
     path = args.work / name / info
-    if not path.exists():
-        return False
+    if not path.exists() or not (args.work / name / f"{name}.{label_of(args)}.wav").exists():
+        return False  # not made yet, or only through another head
     if args.scene.exists() and path.stat().st_mtime < args.scene.stat().st_mtime:
         return False  # the scene changed since: the walk edited, say
     facts = pipeline.read_json(path)
@@ -680,7 +747,8 @@ DEMO = Demo(
         dataclasses.replace(
             input_option(("walk", "turn", "video")),
             help="a WAV file the guide says instead of the ACE talk, as guide=WAV: mixed "
-            "down to mono, at least as long as the walk and the turn need; the captions' "
+            "down to mono, said again from its start when shorter than the walk and the "
+            "turn; the captions' "
             "level and STI are the scene's voice (--voice), as the video's one gain plays "
             "any recording as loud",
         ),

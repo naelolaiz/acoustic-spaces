@@ -111,6 +111,15 @@ def test_air_absorption_per_third_octave() -> None:
     assert np.all(np.diff(third) > 0)
 
 
+def test_split_bands_splits_each_channel_along_the_first_axis() -> None:
+    x = np.random.default_rng(2).standard_normal((3000, 2))
+    bands = synthesis.split_bands(x, FS)
+    assert bands.shape == (8, 3000, 2)
+    for c in range(2):
+        np.testing.assert_allclose(bands[:, :, c], synthesis.split_bands(x[:, c], FS), atol=1e-12)
+    np.testing.assert_allclose(bands.sum(axis=0), x, atol=1e-12)
+
+
 def test_third_octave_filter_banks() -> None:
     n_fft = 1 << 14
     gains = synthesis.band_gains(n_fft, FS, 24)
