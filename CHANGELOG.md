@@ -115,7 +115,8 @@
   flight demo's captions and `validation/aircraft_noise.py` now report. Against JETW's
   NPD curves the engine's L_ASmax is 2.6 to 2.8 dB under at 200 ft (its quasi-static
   L_Amax was 0.9 to 1.0 dB under) and within 0.2 dB at 1000 ft; the arrival's SEL is
-  1.4 to 1.9 dB under (was 1.3 to 1.8), the departure's still within 0.3 dB.
+  1.4 to 1.9 dB under (was 1.3 to 1.8), the departure's still within 0.3 dB, and the
+  airport's flights move by up to 0.6 dB.
 
 ## 4.1.0
 

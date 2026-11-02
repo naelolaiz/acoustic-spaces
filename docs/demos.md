@@ -1382,9 +1382,9 @@ as Doc 29 measures it: L_ASmax, the highest level through a sound level meter's 
 time weighting, which lags about a second behind the passing jet, and the SEL over the
 time that level is within 10 dB of its highest.
 
-While the jet is in the air, what each listener hears is within 0.9 dB of Doc 29's own
+While the jet is in the air, what each listener hears is within 1.0 dB of Doc 29's own
 sum over the same flight path's segments, but for the arrival's SEL at
-approach_2000m, 1.7 dB under. While it rolls on the runway they part by up to 11.4 dB,
+approach_2000m, 1.9 dB under. While it rolls on the runway they part by up to 11.3 dB,
 as the engine reckons the sound running along the ground in still air over the scene's
 runway and meadow, where Doc 29 takes off an attenuation it has from measurements
 ([the check](validation.md#an-aircraft-in-the-engine-against-doc-29)).

@@ -3512,24 +3512,26 @@ so it changes with their seed.
 **The airport's flights.** The demo's departure and arrival, simulated every 20 m at
 each listener, their level following their thrust:
 
-| listener | departure: L_Amax | SEL | arrival: L_Amax | SEL |
+| listener | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| departure_4km | 87.4 (87.2) | 96.1 (96.0) | 49.6 (43.1) | 64.1 (60.7) |
-| lateral_450m | 85.0 (85.1) | 95.4 (94.5) | 43.0 (54.4) | 57.1 (68.8) |
-| approach_2000m | 52.0 (54.8) | 67.6 (68.6) | 91.2 (91.5) | 97.1 (98.8) |
+| departure_4km | 87.1 (87.2) | 95.9 (96.0) | 49.9 (43.1) | 64.1 (60.7) |
+| lateral_450m | 85.0 (85.1) | 95.5 (94.5) | 43.1 (54.4) | 57.3 (68.8) |
+| approach_2000m | 52.1 (54.8) | 67.8 (68.6) | 90.6 (91.5) | 96.9 (98.8) |
 
-(dB(A); Doc 29's in brackets.) Where the jet is heard in the air, they agree within
-0.9 dB but for the arrival's SEL, 1.7 dB under as its NPD curves have it. Where it is
-heard rolling on the runway they part, as the two reckon sound running along the
-ground differently. Doc 29 takes off its lateral attenuation, 10.9 dB at grazing for
-a listener ahead of a landing roll or behind a take-off roll, from measurements and so
-averaged over their weather, and behind a take-off roll adds its start-of-roll
-directivity (5.1 dB down at approach_2000m). The engine reckons the scene's ground in
-still air: the hard runway reflects the sound back up, so the arrival's roll-out is
-6.5 dB over Doc 29 at departure_4km, 2.4 km ahead of it along the runway, while the
-meadow takes much of it away from 250 Hz up, so it is 11.4 dB under at lateral_450m, 1
-km away across the grass (at 250 Hz the roll-out's end is 14 dB quieter there than
-at departure_4km); the departure's take-off roll is 2.7 dB under at approach_2000m.
+(dB(A); Doc 29's in brackets.) Where the jet is heard rolling, the walk starts or ends
+less than 10 dB under its L_ASmax, so its SEL there is over less than the 10 dB-down
+time. Where the jet is heard in the air, they agree within 1.0 dB but for the arrival's
+SEL, 1.9 dB under as its NPD curves have it. Where it is heard rolling on the runway
+they part, as the two reckon sound running along the ground differently. Doc 29 takes
+off its lateral attenuation, 10.9 dB at grazing for a listener ahead of a landing roll
+or behind a take-off roll, from measurements and so averaged over their weather, and
+behind a take-off roll adds its start-of-roll directivity (5.1 dB down at
+approach_2000m). The engine reckons the scene's ground in still air: the hard runway
+reflects the sound back up, so the arrival's roll-out is 6.8 dB over Doc 29 at
+departure_4km, 2.4 km ahead of it along the runway, while the meadow takes much of it
+away from 250 Hz up, so it is 11.3 dB under at lateral_450m, 1 km away across the grass
+(at 250 Hz the roll-out's end is 14 dB quieter there than at departure_4km); the
+departure's take-off roll is 2.7 dB under at approach_2000m.
 
 ## Ground-borne vibration against the FTA's manual
 
