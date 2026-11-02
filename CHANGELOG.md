@@ -7,6 +7,11 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: over a terrain, the mean plane the early sound reflects off is the
+  least-squares line of the whole ground profile, as CNOSSOS-EU fits it (ISO/TR
+  17534-4's TC05 and TC06), not of the corners where the terrain's triangles cut the
+  profile, which moved it with the grid. Early levels in sight over uneven ground
+  change, by up to 2.1 dB (1 kHz) at the hillside example's listener on the slope.
 
 ## 4.1.0
 

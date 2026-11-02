@@ -2483,6 +2483,12 @@ slope, and within 2 mm and 7e-5 with the listener 160 m aside, where the ground 
 tilts across the profile, which the mean plane, level across it as the standards have
 it, leaves out.
 
+**The mean plane** of an uneven profile is CNOSSOS-EU's, the least-squares line of the
+whole profile: `tests/test_terrain.py` checks it against ISO/TR 17534-4's test cases
+TC05 and TC06 (the plane's slope and height and the equivalent heights of the source and
+the receivers over it, to the tables' two decimals), and that the same ground on a 10 m
+and on a 5 m grid gives the same reflection.
+
 **A ridge**, two slopes of 0.6 meeting at 241.9 degrees, with the source on one slope and
 the listener in its shadow on the other, against the Biot-Tolstoy-Medwin solution for the
 rigid wedge ([Edge diffraction](#edge-diffraction-against-the-exact-solution)), per
@@ -2556,9 +2562,9 @@ interference and the lit zone's ripples:
 | 16.5 | -4.36 | -8.72 | -10.61 | -11.22 | -14.06 | -17.34 | -20.11 | -23.17 |
 | 19.0 | -3.66 | -7.49 | -8.57 | -8.92 | -11.12 | -13.96 | -16.55 | -19.52 |
 | 21.5 | -2.85 | -6.24 | -6.14 | -6.06 | -6.95 | -8.40 | -9.65 | -11.44 |
-| 24.0 | -2.05 | -5.02 | -3.53 | -2.94 | -2.20 | -1.46 | +0.32 | +1.17 |
-| 26.5 | -1.18 | -3.93 | -1.16 | -0.31 | +0.85 | +0.96 | +0.93 | +0.55 |
-| 29.0 | -0.37 | -3.25 | +0.79 | +0.79 | +0.24 | +0.99 | +0.46 | +0.90 |
+| 24.0 | -2.06 | -5.01 | -3.52 | -2.95 | -2.20 | -1.46 | +0.32 | +1.17 |
+| 26.5 | -1.24 | -3.85 | -1.18 | -0.33 | +0.86 | +0.96 | +0.93 | +0.55 |
+| 29.0 | -0.51 | -3.09 | +0.64 | +0.91 | +0.26 | +0.98 | +0.45 | +0.91 |
 
 At 63 Hz the level first falls as the listener rises, from -6.8 dB at 1.5 m to -9.9 at
 6.5 m: the reflection off the ground behind the hill, in phase with the wave over the
@@ -2566,12 +2572,12 @@ crest at the ground, lags it more the higher the listener. From there every band
 through the edge of the shadow, 12.6 dB in the 2.5 m round the line of sight at 8 kHz,
 and every band but 125 Hz comes to within 1 dB of free field above it, where the
 direct sound, the ground's reflection and the crest's wave ripple together; 125 Hz
-stays 3 to 4 dB down (-3.9 and -3.3 dB at 26.5 and 29 m).
+stays 3 to 4 dB down (-3.9 and -3.1 dB at 26.5 and 29 m).
 
 **Cost.** Rolling hills 2 km across on a 20 m grid (10,000 cells, 21,233 triangles with
-a building): the model builds in 2.4 s, its 8 diffracting edges (the building's) are
-found in 0.1 s, the early path over the hills in 0.2 s and a whole run with 20,000 rays
-takes 0.5 s, on four cores of a cloud machine with nothing else running. The terrain
+a building): the model builds in 6.3 s, its 8 diffracting edges (the building's) are
+found in 0.2 s, the early path over the hills in 0.4 s and a whole run with 20,000 rays
+takes 0.8 s, on four cores of a cloud machine with nothing else running. The terrain
 costs the late rays nothing
 beyond the triangles it adds, and the early sound the profile and the string over it,
 once per listener.
