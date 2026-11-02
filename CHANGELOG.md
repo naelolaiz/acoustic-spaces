@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A walk as fast as sound or faster now stops with an error without Doppler too, as it did with Doppler: it played as places crossfaded one after another, as if shock waves did not exist.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early
