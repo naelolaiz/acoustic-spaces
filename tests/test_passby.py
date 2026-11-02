@@ -66,6 +66,53 @@ def test_the_table_is_the_2021_one_not_2015s() -> None:
     assert car.rolling_b == (30.0, 41.5, 38.9, 25.7, 32.5, 37.2, 39.0, 40.0)
 
 
+#: Table F-1 of Directive 2002/49/EC, Annex II, as amended by Commission Delegated
+#: Directive (EU) 2021/1226, 63 Hz to 8 kHz: A_R, B_R, A_P, B_P of each category (the
+#: consolidated text and UBA's BUB-D 2021, Anlage 4, table A-1, agree).
+TABLE_F1 = {
+    "1": (
+        (83.1, 89.2, 87.7, 93.1, 100.1, 96.7, 86.8, 76.2),
+        (30.0, 41.5, 38.9, 25.7, 32.5, 37.2, 39.0, 40.0),
+        (97.9, 92.5, 90.7, 87.2, 84.7, 88.0, 84.4, 77.1),
+        (-1.3, 7.2, 7.7, 8.0, 8.0, 8.0, 8.0, 8.0),
+    ),
+    "2": (
+        (88.7, 93.2, 95.7, 100.9, 101.7, 95.1, 87.8, 83.6),
+        (30.0, 35.8, 32.6, 23.8, 30.1, 36.2, 38.3, 40.1),
+        (105.5, 100.2, 100.5, 98.7, 101.0, 97.8, 91.2, 85.0),
+        (-1.9, 4.7, 6.4, 6.5, 6.5, 6.5, 6.5, 6.5),
+    ),
+    "3": (
+        (91.7, 96.2, 98.2, 104.9, 105.1, 98.5, 91.1, 85.6),
+        (30.0, 33.5, 31.3, 25.4, 31.8, 37.1, 38.6, 40.6),
+        (108.8, 104.2, 103.5, 102.9, 102.6, 98.5, 93.8, 87.5),
+        (0.0, 3.0, 4.6, 5.0, 5.0, 5.0, 5.0, 5.0),
+    ),
+    "4a": (
+        None,
+        None,
+        (93.0, 93.0, 93.5, 95.3, 97.2, 100.4, 95.8, 90.9),
+        (4.2, 7.4, 9.8, 11.6, 15.7, 18.9, 20.3, 20.6),
+    ),
+    "4b": (
+        None,
+        None,
+        (99.9, 101.9, 96.7, 94.4, 95.2, 94.7, 92.1, 88.6),
+        (3.2, 5.9, 11.9, 11.6, 11.5, 12.6, 11.1, 12.0),
+    ),
+}
+
+
+def test_every_coefficient_is_table_f1s() -> None:
+    """Every coefficient of every category, against the amended Table F-1 as published,
+    so that a slip in one band of a category no demo plays is caught too."""
+    assert set(CATEGORIES) == set(TABLE_F1)
+    for key, (a_r, b_r, a_p, b_p) in TABLE_F1.items():
+        kind = CATEGORIES[key]
+        got = (kind.rolling_a, kind.rolling_b, kind.propulsion_a, kind.propulsion_b)
+        assert got == (a_r, b_r, a_p, b_p), key
+
+
 @pytest.mark.parametrize(
     ("example", "vehicle"),
     [
@@ -323,6 +370,31 @@ def test_the_horn_blasts_as_its_rule_and_its_assumptions_say() -> None:
     )
 
 
+@pytest.mark.parametrize("kind", ["CAR_HORN", "AIR_HORN"])
+def test_a_horns_loudest_place_does_not_follow_the_step(kind: str) -> None:
+    """A place is no louder for the beats between a horn's notes (70 Hz between the car's
+    360 and 430 Hz, 30 Hz between the air horn's 150 and 180 Hz) that a short step's
+    time around it resolves: its sound's power is averaged over 125 ms first, so at 50
+    km/h its loudest place is a blast's level to 0.15 dB at every step from 5 cm to 1 m
+    (where without it it climbs to 3 to 5 dB over at 5 cm), and over whole periods its
+    loudness keeps its sound power."""
+    from acoustic_spaces.demos import horn
+    from acoustic_spaces.demos.passby import LOUDNESS_WINDOW_S, blocks_loudness
+
+    assert LOUDNESS_WINDOW_S == 0.125  # IEC 61672-1's Fast time constant
+    played = getattr(horn, kind)
+    rate = 16_000
+    x = horn.horn_sound(rate, 3 * played.every_s, played)
+    rms = math.sqrt(float(np.mean(x**2)))
+    blast = 10.0 * math.log10(1.0 / horn.duty(played))
+    speed = 50.0 / 3.6
+    for step in (0.05, 0.25, 0.5, 1.0):
+        at = np.arange(0.0, 3 * played.every_s, step / speed) + 0.3 * step / speed
+        loud = blocks_loudness(x, rate, at, rms)
+        assert 10.0 * math.log10(loud.max()) == pytest.approx(blast, abs=0.15), step
+        assert np.mean(loud) == pytest.approx(1.0, abs=0.01), step
+
+
 def test_a_horns_levels_follow_its_blasts() -> None:
     """The captions have a horn as loud as its sound plays around each place: over whole
     periods of its blasts as loud as its sound power, during a blast 1/duty louder,
@@ -336,7 +408,9 @@ def test_a_horns_levels_follow_its_blasts() -> None:
     x = horn.horn_sound(rate, 3 * horn.EVERY_S)
     at = np.arange(0.0, 3 * horn.EVERY_S, 0.1) + 0.05
     loud = blocks_loudness(x, rate, at, horn.SOUND_RMS)
-    assert np.mean(loud) == pytest.approx(1.0, rel=1e-3)
+    # To 0.02 dB: the sound starts with a blast, whose first 62.5 ms are averaged over
+    # what of the 125 ms around them lies in the sound.
+    assert np.mean(loud) == pytest.approx(1.0, rel=5e-3)
     assert np.max(loud) == pytest.approx(1.0 / horn.duty(), rel=1e-3)
     assert np.min(loud) == 0.0
     vehicle = siren.FIRE_ENGINE_VEHICLE
@@ -348,9 +422,10 @@ def test_a_horns_levels_follow_its_blasts() -> None:
     heard = sounded(passing, loud)
     blast = 10.0 * math.log10(1.0 / horn.duty())
     assert heard.levels[np.argmax(loud)] == pytest.approx(levels[0] + blast)
-    # Over whole periods its energy is its sound power's, as the steady level's.
+    # Over whole periods its energy is its sound power's, as the steady level's (to
+    # 0.02 dB, as its loudness above).
     steady = 10.0 ** (a_weighted(levels[0]) / 10.0)
-    assert np.mean(10.0 ** (heard.levels_a / 10.0)) == pytest.approx(steady, rel=1e-3)
+    assert np.mean(10.0 ** (heard.levels_a / 10.0)) == pytest.approx(steady, rel=5e-3)
 
 
 def test_the_fire_engine_meets_the_rules_in_the_engine(tmp_path: Path) -> None:
@@ -704,7 +779,8 @@ def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, caps
     with pytest.raises(
         SystemExit,
         match="mixed binaural through a spherical head model, and this run asks for them as "
-        "mono: give the video the --format and --hrtf the walk had",
+        "mono: give the --format and --hrtf they were made with, or make them again: python "
+        "passby_demo.py walk",
     ):
         demo.main(["video", *run, "--listeners", "verge", "--format", "mono"])
     assert pipeline.label_text("binaural-kemar") == "binaural through the HRTFs of kemar"

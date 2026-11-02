@@ -39,6 +39,7 @@ from acoustic_spaces.demos.pictures import (
     tour_column,
 )
 from acoustic_spaces.demos.pipeline import TourStop
+from acoustic_spaces.walkthrough import moment_name
 
 #: Where the plan is drawn on a still: left, top, width, height.
 PLAN_BOX = (MARGIN, 172, 860, 640)
@@ -377,12 +378,35 @@ class Pictures:
         footer(draw, self.credit, self.tool)
         return img
 
+    def stop_at(self, t: float) -> tuple[int, float]:
+        """The stop playing at ``t`` (s of the tour), and the moment of its mix then (s,
+        the walks' time when something moves)."""
+        k = max((j for j, stop in enumerate(self.stops) if stop.at <= t + 1e-9), default=0)
+        stop = self.stops[k]
+        return k, stop.start + (t - stop.at)
+
     def frame(self, t: float) -> Image.Image:
         """The moving picture at ``t`` (s of the tour): the still of the stop then, with
         every walker where it is and the level at that moment."""
-        k = max((j for j, stop in enumerate(self.stops) if stop.at <= t + 1e-9), default=0)
-        stop = self.stops[k]
-        return self.still(k, stop.start + (t - stop.at))
+        return self.still(*self.stop_at(t))
+
+    def shown(self, k: int, t: float | None = None) -> str:
+        """What the still of stop ``k`` shows, for the video's messages: the sources that
+        play, then the stop's listener, each walker at ``t`` of its walk
+        (:func:`~acoustic_spaces.walkthrough.moment_name`), as ``stage, car @ 3.40 s ->
+        seat``."""
+
+        def named(kind: str, name: str) -> str:
+            walks = t is not None and (kind, name) in self.paths
+            return moment_name(name, t) if walks else name
+
+        sources = ", ".join(named("sources", s["name"]) for s in self.playing)
+        listener = named("listeners", self.stops[k].key)
+        return f"{sources} -> {listener}" if sources else listener
+
+    def shown_at(self, t: float) -> str:
+        """What the moving picture at ``t`` (s of the tour) shows (:meth:`shown`)."""
+        return self.shown(*self.stop_at(t))
 
     def thumbnail(self) -> Image.Image:
         img = canvas(THUMBNAIL)

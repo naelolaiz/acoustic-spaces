@@ -9,8 +9,7 @@ of the time it holds (ISO 1996-2, CNOSSOS-EU, Nord2000),
 The scene's ``long_term`` (:class:`~acoustic_spaces.scene.LongTerm`) gives the weather
 classes with their shares, and the periods of the day: by default the day (12 h), the
 evening (4 h) and the night (8 h), each with its own shares of the classes, as the
-inversions of a clear night do not come by day. The results give, at every listener
-and every map point:
+inversions of a clear night do not come by day. The results give, at every listener:
 
 - the level in each class, per octave band and A-weighted;
 - the level in each period, the mean over the classes with the period's shares;
@@ -29,6 +28,9 @@ responses, and once in each weather class, all with the same seed, so that every
 traces the same rays; a class whose weather is the scene's own takes the scene's run. The
 insertion loss (``simulation.insertion_loss_of``) is taken in every class, and the
 long-term levels give it too: the long-term level without the parts less that with them.
+A map gets at every point the long-term level per octave band, the rating level and,
+with an insertion loss, the long-term insertion loss per band and A-weighted; its other
+values are the scene's own weather's.
 """
 
 from __future__ import annotations
@@ -299,9 +301,11 @@ def coverage_map(
 ) -> coverage_stage.CoverageResult:
     """:func:`~acoustic_spaces.engine.insertion.coverage_map`, and the levels over a
     long term when the scene has weather classes: every map gains ``long_term`` (dB per
-    octave band, the long-term level) and ``rating_level`` (dB(A): L_den with the default
-    periods). The maps are the scene's own weather's, and every class's run shares
-    their points."""
+    octave band, the long-term level), ``rating_level`` (dB(A): L_den with the default
+    periods) and, with an insertion loss, ``long_term_insertion_loss`` (dB per band) and
+    ``long_term_insertion_loss_a`` (dB(A)), the long-term level without the parts less
+    that with them, from the runs with and without them in every class. The maps' other
+    values are the scene's own weather's, and every class's run shares their points."""
     room = _as_room(room)
     spec = _spec(room, long_term)
     common = {"without": without, "sources": sources, "threads": threads}
@@ -337,11 +341,21 @@ def coverage_map(
         maps = [runs[c].combined if name is None else runs[c].maps[name] for c in names]
         per_class = np.array([m.values["spl"] for m in maps])  # (classes, points, bands)
         per_period = period_levels(per_class, shares)
+        mean = mean_level(per_period, hours)
         values = {
             **kept.values,
-            "long_term": mean_level(per_period, hours),
+            "long_term": mean,
             "rating_level": rating_level(a_weighted(per_period), hours, penalties),
         }
+        if all("insertion_loss" in m.values for m in maps):
+            # The long-term level without the parts less that with them, as combine()
+            # takes it at a listener. A point where a class has no sound with the parts
+            # but some without them (-inf + inf) gets NaN: undefined.
+            losses = np.array([m.values["insertion_loss"] for m in maps])
+            with np.errstate(invalid="ignore"):
+                bare = mean_level(period_levels(per_class + losses, shares), hours)
+                values["long_term_insertion_loss"] = bare - mean
+                values["long_term_insertion_loss_a"] = a_weighted(bare) - a_weighted(mean)
         return dataclasses.replace(kept, values=values)
 
     maps = {name: with_levels(name) for name in own.maps}

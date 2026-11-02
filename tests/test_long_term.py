@@ -11,9 +11,14 @@ from conftest import silenced
 from pydantic import ValidationError
 
 from acoustic_spaces import Room, Scene
-from acoustic_spaces.cli import main
+from acoustic_spaces.cli import MAP_PARAMETER_NAMES, main
+from acoustic_spaces.engine import coverage as coverage_stage
 from acoustic_spaces.engine import insertion, long_term
-from acoustic_spaces.engine.coverage import LONG_TERM_MAP_PARAMETERS
+from acoustic_spaces.engine.coverage import (
+    LONG_TERM_INSERTION_LOSS_MAP_PARAMETERS,
+    LONG_TERM_MAP_PARAMETERS,
+    MAP_PARAMETERS,
+)
 from acoustic_spaces.engine.reweight import groups_of, reweighted_result
 from acoustic_spaces.results import write_results
 from acoustic_spaces.scene import LongTerm, WeatherClass
@@ -432,6 +437,72 @@ def test_maps_over_a_long_term() -> None:
     assert finite.any()
     assert (mean[finite] <= spl.max(axis=0)[finite] + 1e-9).all()
     assert (mean[finite] >= spl.min(axis=0)[finite] - 1e-9).all()
+    # Without an insertion loss there is none over the long term.
+    assert not set(LONG_TERM_INSERTION_LOSS_MAP_PARAMETERS) & set(result.parameters())
     # Without classes, the maps have no levels over a long term.
     plain = long_term.coverage_map(Room.from_scene(field(coverage=coverage)))
     assert not set(LONG_TERM_MAP_PARAMETERS) & set(plain.parameters())
+
+
+def test_the_insertion_loss_over_a_long_term_on_a_map(monkeypatch) -> None:
+    """The long-term insertion loss at every map point is the long-term level without the
+    wall less that with it, both energy means over the classes and periods (ISO 1996-2),
+    from the runs with and without the wall the map makes in each class anyway."""
+    stage_runs = []
+    stage = coverage_stage.coverage_map
+
+    def counted(room, **kwargs):
+        stage_runs.append(len(room.scene.geometry.barriers or []))
+        return stage(room, **kwargs)
+
+    class_runs = []
+    plain = insertion.coverage_map
+
+    def recorded(room, **kwargs):
+        result = plain(room, **kwargs)
+        class_runs.append((room.scene, result.get()))
+        return result
+
+    monkeypatch.setattr(coverage_stage, "coverage_map", counted)
+    monkeypatch.setattr(insertion, "coverage_map", recorded)
+    coverage = {"spacing": 20.0, "height": 1.5, "rays": 100}
+    scene = field(barriers=[WALL], classes=CLASSES, insertion_loss_of=["wall"], coverage=coverage)
+    result = long_term.coverage_map(Room.from_scene(scene), threads=1)
+    # No runs beyond the classes' own, each with and without the wall: the scene's
+    # (downwind), then upwind and inversion.
+    assert result.details["long_term"]["runs"] == 3.0
+    assert stage_runs == [1, 0] * 3
+    assert class_runs[1][0].atmosphere.wind.direction_deg == 180.0
+    assert class_runs[2][0].atmosphere.preset == "clear_night"
+    found = result.get()
+    assert set(LONG_TERM_INSERTION_LOSS_MAP_PARAMETERS) <= set(found.parameters())
+    assert "long_term_insertion_loss_a" in result.as_dict()["parameters"]
+    assert MAP_PARAMETER_NAMES == tuple(MAP_PARAMETERS)  # map --parameter takes them
+    # By hand from each class's map: its level with the wall and its insertion loss.
+    spl = np.array([run.values["spl"] for _scene, run in class_runs])  # (classes, points, bands)
+    loss = np.array([run.values["insertion_loss"] for _scene, run in class_runs])
+    shares = np.array([[c["share"][p] for p in ("day", "evening", "night")] for c in CLASSES])
+    hours = np.array([12.0, 4.0, 8.0]) / 24.0
+
+    def over_the_long_term(per_class):
+        return by_hand(np.array([by_hand(per_class, shares[:, p]) for p in range(3)]), hours)
+
+    with_wall, without_wall = over_the_long_term(spl), over_the_long_term(spl + loss)
+    np.testing.assert_allclose(found.values["long_term"], with_wall, atol=1e-9)
+    np.testing.assert_allclose(
+        found.values["long_term_insertion_loss"], without_wall - with_wall, atol=1e-9
+    )
+    a = found.values["long_term_insertion_loss_a"]
+    np.testing.assert_allclose(
+        a, long_term.a_weighted(without_wall) - long_term.a_weighted(with_wall), atol=1e-9
+    )
+    # Behind the wall it takes off well over 10 dB(A), in front of it next to nothing.
+    behind = found.grid.points[:, 0] > 10.0
+    assert behind.any() and (a[behind] > 10.0).all() and (np.abs(a[~behind]) < 3.0).all()
+    # The map's own insertion loss is still the scene's weather's (downwind), which the
+    # upwind and inversion classes' losses move the long-term one away from.
+    own = class_runs[0][1].values
+    np.testing.assert_array_equal(found.values["insertion_loss"], own["insertion_loss"])
+    np.testing.assert_array_equal(found.values["insertion_loss_a"], own["insertion_loss_a"])
+    assert np.nanmax(np.abs(a - own["insertion_loss_a"])) > 0.3
+    assert np.nanmax(np.abs(found.values["long_term_insertion_loss"] - own["insertion_loss"])) > 3
