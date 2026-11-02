@@ -678,7 +678,9 @@ head.
 **Recording.** The ACE challenge corpus (Eaton, Gaubitch, Moore and Naylor, Imperial
 College London), **CC BY 4.0**: an anechoic talk, a man describing his way to work
 through Delft; `speech` reads the corpus's 148 MB archive as it comes, up to the
-talk: 16 MB for that talker, up to 145 MB for another (`--talker`).
+talk: 16 MB for that talker, up to 145 MB for another (`--talker`). A talk shorter than
+the walk and the turn need, as some talkers' are, is said again from its start, 2 s
+after it ends.
 
 ## Vehicles passing by
 

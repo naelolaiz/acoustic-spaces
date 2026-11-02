@@ -1172,11 +1172,23 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:
     assert first == pytest.approx(pauses[0], abs=demo.PAUSE_S)
     assert second == pytest.approx(pauses[1], abs=demo.PAUSE_S)
     assert second - first >= turn_s
-    # A talk too short for the walk and the turn is refused, with what it would take.
+    assert demo.said(args, room)[2] == 1  # long enough: said once, as recorded
+    # A talk too short for the walk and the turn is said again from its start, AGAIN_S
+    # after it ends, as often as they need; the cuts fall in its pauses as before.
     short = argparse.Namespace(**vars(args) | {"talker": "short"})
-    write_wav(args.work / "speech" / "short.wav", talk[: int(0.5 * length * rate)], rate)
-    with pytest.raises(SystemExit, match="too short"):
-        demo.cuts(short, room)
+    half = talk[: int(0.5 * length * rate)]
+    write_wav(args.work / "speech" / "short.wav", half, rate)
+    spoken, _, times = demo.said(short, room)
+    gap = int(demo.AGAIN_S * rate)
+    assert times == 2 and len(spoken) == 2 * len(half) + gap
+    assert len(spoken) / rate >= demo.needed_s(short, room)
+    np.testing.assert_allclose(spoken[len(half) + gap :][: len(half)], half, atol=1e-6)
+    assert not spoken[len(half) : len(half) + gap].any()
+    first, second = demo.cuts(short, room)
+    assert second - first >= turn_s and second <= len(spoken) / rate
+    write_wav(args.work / "speech" / "silent.wav", np.zeros(0), rate)
+    with pytest.raises(SystemExit, match="silent is empty"):
+        demo.said(argparse.Namespace(**vars(args) | {"talker": "silent"}), room)
     with pytest.raises(SystemExit, match="run first"):
         demo.talk(argparse.Namespace(**vars(args) | {"talker": "F9"}))
     # --input guide=WAV: the guide says that file; no talk to download, its name in the
@@ -1190,8 +1202,7 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path) -> None:
     assert demo.speech_done(given) and demo.talk(given)[1] == rate
     assert demo.credit_of(given) == "Playing guide: mine.wav"
     assert demo.credit_of(args).startswith("Speech: ACE challenge corpus, talker M4")
-    with pytest.raises(SystemExit, match="mine.wav is .* too short"):
-        demo.cuts(given, room)
+    assert demo.said(given, room)[2] == 2  # said again, as the corpus's short takes are
     (args.work / "walk").mkdir()
     pipeline.write_json(args.work / "walk" / demo.WALK, {"talker": args.talker})
     assert demo.part_done(args, "walk", demo.WALK)

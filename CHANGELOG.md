@@ -10,6 +10,9 @@
   -> seat: encoding the video, 12.1 of 60.0 s`, in place of ffmpeg's frame counter.
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: the gallery walk demo stopped, after downloading the talk, when a talker's
+  take was shorter than the walk and the turn (F4's, 36 s); the guide now says it again
+  from its start, 2 s after it ends.
 
 ## 4.1.0
 
