@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
+  University and the University of Iceland, and described as a KEMAR dummy head with one
+  of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.
+- Docs: G of responses written with `simulate --normalize` takes the reference energy
+  0.01 × `ir_gain`² (from `parameters.json`), and the JNDs of T20, T30 and C50 are
+  ISO 3382-1's of EDT and C80 taken by analogy; Barron's total and the first batch of
+  split rays are given as the code has them.
 - Editor: **View > Follow the run** rings the sources and listeners a run's step works
   on, a demo's too, and draws a walking source and the run's other walkers where the
   place being simulated has them, on the walks the run simulates (`Demo.walks`); while
@@ -1608,10 +1615,11 @@ and the last bits round alike on every platform.
 - `acoustic-spaces hrtf` lists free HRTF sets with their licences and downloads the one
   named into the user's data folder: `ku100` (a Neumann KU100 dummy head, TH Köln,
   CC BY 3.0, 3.4 MB), `kemar` (a KEMAR dummy head, SADIE II, Apache 2.0, 38 MB) and
-  `viking` (one of 20 people or a dummy head, Viking v2, CC BY 4.0, 58.4 MB, one file
-  per head with `--member`). `--url` takes any other SOFA file, `--folder` keeps them
-  elsewhere, and the licence and who measured the set are printed before anything is
-  downloaded. Until now a measured head had to be found and fetched by hand.
+  `viking` (a KEMAR dummy head with one of 20 pairs of replica pinnae or none, Viking v2,
+  CC BY 4.0, 58.4 MB, one file per pair of pinnae with `--member`). `--url` takes any
+  other SOFA file, `--folder` keeps them elsewhere, and the licence and who measured the
+  set are printed before anything is downloaded. Until now a measured head had to be
+  found and fetched by hand.
 
 **Running on another computer**
 
