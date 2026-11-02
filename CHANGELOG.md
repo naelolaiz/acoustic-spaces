@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Editor: **View > Follow the run** rings the sources and listeners a run's step works
+  on, a demo's too, and draws a walking source and the run's other walkers where the
+  place being simulated has them, on the walks the run simulates (`Demo.walks`).
+- Fixed: the 3D view's names of walkers now move with them in the Movement panel's
+  preview; they stayed where each walk starts.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early

@@ -851,6 +851,7 @@ DEMO = Demo(
     completes=completed,
     plays=plays,
     moving=moving_of,
+    walks=moving_scene,
     listeners=lambda args: listeners_in(args.scene),
 )
 

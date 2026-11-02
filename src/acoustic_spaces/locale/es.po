@@ -815,6 +815,21 @@ msgstr ""
 "curva: cómo crece el viento con la altura sobre el terreno"
 
 #: acoustic_spaces/gui/app.py
+msgid "F&ollow the run"
+msgstr "Seg&uir la ejecución"
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"While a run, coverage map, export or demo goes on, ring the sources and "
+"listeners its latest step works on in the 3D view and the plan, and draw the "
+"walkers where the place along a walk it simulates has them"
+msgstr ""
+"Mientras hay en curso un cálculo, un mapa de cobertura, una exportación o "
+"una demostración, marcar con un anillo en la vista 3D y en la planta las "
+"fuentes y los receptores con los que trabaja su último paso, y dibujar los "
+"móviles donde los sitúa el lugar del recorrido que simula"
+
+#: acoustic_spaces/gui/app.py
 msgid "Save &screenshot…"
 msgstr "Guardar &captura de pantalla…"
 
@@ -1070,6 +1085,11 @@ msgstr "Sin cambios: {reason}"
 #, python-brace-format
 msgid "Surface {name}"
 msgstr "Superficie {name}"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Cannot keep whether the views follow the run: {reason}"
+msgstr "No se puede guardar si las vistas siguen la ejecución: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -6584,6 +6604,15 @@ msgstr "No se movió: {problem}"
 #: acoustic_spaces/gui/plan_view.py
 msgid "move corner"
 msgstr "mover vértice"
+
+#: acoustic_spaces/gui/plan_view.py
+#, python-brace-format
+msgid ""
+"Not moved: {name} is drawn where the run simulates it, {time:.2f} s along "
+"its walk; drag it once the run is over"
+msgstr ""
+"No movido: {name} se dibuja donde lo simula la ejecución, a los {time:.2f} s "
+"de su recorrido; arrástrelo cuando la ejecución termine"
 
 #: acoustic_spaces/gui/plan_view.py
 #, python-brace-format

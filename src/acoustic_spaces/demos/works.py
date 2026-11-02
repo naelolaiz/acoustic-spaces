@@ -345,6 +345,8 @@ def demo(script: Path, example: str = "street") -> Demo:
         plays=plays,
         # The works' scene keeps the street's listeners: read them before it is made.
         listeners=lambda args: listeners_in(args.source),
+        # Its render step plays what walks in the works' scene, as the scene demo does.
+        walks=scene_demo.moving_scene,
     )
     made.steps = [
         Step("scene", scene, "scene_works.yaml: the street with its road works alone", scene_done),

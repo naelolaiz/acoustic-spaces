@@ -40,12 +40,17 @@ as in a walk of its own: every listener hears each early path through its changi
 delay. ``walk.enabled: false`` keeps a walk
 but leaves its walker standing still, and :func:`with_moving` picks which walks are on
 for one run, so that one scene serves both still and moving.
+
+Each copy is named for its walker, its place and its time on the walk
+(:func:`place_name`, ``car #12 @ 3.40 s``), and the simulation's progress messages name
+it so: :func:`place_of` reads the walker and the time back.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import math
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,6 +82,25 @@ STEP_DEG = 20.0
 LATE_STEP_M = 2.0
 #: Length (s) of the crossfade from one place's response to the next.
 CROSSFADE_S = 0.05
+
+#: A place's name (:func:`place_name`), whole.
+_PLACE = re.compile(r"(?P<name>.+) #\d+ @ (?P<time>\d+(?:\.\d+)?) s")
+
+
+def place_name(name: str, k: int, time_s: float) -> str:
+    """The name of the copy of the walker ``name`` at its ``k``-th place, ``time_s`` (s)
+    into its walk: ``car #12 @ 3.40 s``. Numbered, as places less than 10 ms apart would
+    share a time."""
+    return f"{name} #{k} @ {time_s:.2f} s"
+
+
+def place_of(label: str) -> tuple[str, float] | None:
+    """The walker and the time (s) of a place's name (:func:`place_name`); None for any
+    other name."""
+    found = _PLACE.fullmatch(label)
+    if found is None:
+        return None
+    return found["name"], float(found["time"])
 
 
 @dataclass(frozen=True)
@@ -345,8 +369,7 @@ def simulate_walk(
     doppler = item.walk.doppler
     if doppler:
         _check_doppler(room, item, knots(item).top_speed, settings)
-    # Numbered, as places less than 10 ms apart would share a time.
-    names = tuple(f"{item.name} #{k} @ {t:.2f} s" for k, t in enumerate(points.times))
+    names = tuple(place_name(item.name, k, t) for k, t in enumerate(points.times))
     copies = [
         _copy_at(item, label, place, None if points.angles is None else points.angles[k], yaw)
         for k, (place, label, yaw) in enumerate(
@@ -590,7 +613,7 @@ def simulate_movement(
             else:
                 at.append(len(places))
                 places.append(k)
-        names = tuple(f"{item.name} #{j} @ {times[first]:.2f} s" for j, first in enumerate(places))
+        names = tuple(place_name(item.name, j, times[first]) for j, first in enumerate(places))
         copies[kind, item.name] = tuple(names[j] for j in at)
         added[kind] += [
             _copy_at(item, names[j], positions[first], angles[first])
@@ -619,10 +642,9 @@ def simulate_movement(
         for j, copy in enumerate(added[kind]):
             if not inside[offset + j]:
                 where = ", ".join(f"{v:.2f}" for v in copy.position)
-                name, _, when = copy.name.rpartition(" @ ")
+                name, when = place_of(copy.name)
                 raise ValueError(
-                    f"the walk of {name.rpartition(' #')[0]!r} leaves the room at ({where}) m, "
-                    f"{when} in"
+                    f"the walk of {name!r} leaves the room at ({where}) m, {when:.2f} s in"
                 )
     # The moving sources' places share the parabolic equation's runs where they can.
     result = simulate(
@@ -1257,6 +1279,8 @@ __all__ = [
     "late_mixing",
     "movers",
     "pass_by",
+    "place_name",
+    "place_of",
     "render_movement",
     "render_walk",
     "save_movement",

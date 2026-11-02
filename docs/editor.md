@@ -155,6 +155,13 @@ The editor works on the same scene files as the command line.
   comments do not show (Save does not keep them either).
 - Runs, coverage maps, tunings and exports go on in the background, with **Cancel** in
   the status bar.
+- **View > Follow the run** (on by default) rings, in the 3D view and the plan, the
+  sources and listeners that the latest step of a run (a demo's too) names, hidden ones
+  included. While a walking source is simulated place by place (a pass-by demo's
+  vehicle, **Render movement…**), every walker of the run is drawn where it is at that
+  place's time, on the walks the run simulates: a demo's own scene when it has one, the
+  vehicle at `--speed`, say. When only listeners walk, each source is traced to all their
+  places at once, so the views do not move them.
 - **View > Show leaks** traces rays from the sources and shows where they escape from a
   model that is not closed: its open edges, the escaping rays and a marker on each gap,
   with the report in the messages (see [Finding leaks](scenes.md#finding-leaks)). It

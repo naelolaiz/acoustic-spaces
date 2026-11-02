@@ -25,6 +25,8 @@ from acoustic_spaces.walkthrough import (
     late_mixing,
     movers,
     pass_by,
+    place_name,
+    place_of,
     render_movement,
     render_walk,
     save_movement,
@@ -237,6 +239,10 @@ def test_several_movers_on_one_clock() -> None:
     assert movement.duration_s == 3.0 and movement.places == 10
     names = movement.copies["listeners", "w"]
     assert len(names) == 5 and names[0] == "w #0 @ 0.00 s" and names[3] == "w #3 @ 2.50 s"
+    # The progress messages name the places so; the editor reads the walker and time back.
+    assert place_name("w", 3, 2.5) == names[3] and place_of(names[3]) == ("w", 2.5)
+    assert place_of("my w #12 @ 10.25 s") == ("my w", 10.25)
+    assert place_of("still") is None and place_of("w #3 @ 2.50 s (2)") is None
     assert movement.key("s", "w", 3) == ("s #3 @ 2.50 s", "w #3 @ 2.50 s")
     assert movement.key("still", "seat", 4) == ("still", "seat")
     assert movement.moves("s", "seat") and not movement.moves("still", "seat")
@@ -276,7 +282,8 @@ def test_several_movers_on_one_clock() -> None:
     fast = {**sources[0], "walk": {**sources[0]["walk"], "doppler": True}}
     with pytest.raises(ValueError, match="'s' walks with Doppler, which moves alone: leave w"):
         simulate_movement(Room.from_scene(_scene(sources=[fast, sources[1]], listeners=listeners)))
-    with pytest.raises(ValueError, match=r"leaves the room at \(8\.\d\d, 1\.00, 1\.50\)"):
+    leaves = r"the walk of 'w' leaves the room at \(8\.\d\d, 1\.00, 1\.50\) m, \d+\.\d\d s in"
+    with pytest.raises(ValueError, match=leaves):
         gone = [_walker({"to": [[9.0, 1.0, 1.5]]}), *listeners[1:]]
         simulate_movement(Room.from_scene(_scene(sources=sources, listeners=gone)))
     with pytest.raises(ValueError, match="step_m must be positive"):
