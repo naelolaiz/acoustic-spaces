@@ -3291,7 +3291,7 @@ Commission Regulation (EU) No 1304/2014 (the TSI Noise, table 4) for new units t
 | electric multiple unit (the S-Bahn, 67.4 m) | 3.03 s | 82.3 | 86.2 | 80 |
 | electric locomotive (19.0 m) | 0.86 s | 87.7 | 90.4 | 84 |
 | coach (26.4 m) | 1.19 s | 84.0 | 88.0 | 79 |
-| freight wagon with composite blocks (17.8 m) | 0.80 s | 85.9 | 89.9 | 83 |
+| freight wagon with composite blocks, not a tank wagon (17.8 m) | 0.80 s | 85.9 | 89.9 | 83 |
 
 (dB(A)). Schall 03's units are 6.2 to 9.0 dB over the limits by its own reckoning, and
 2.3 to 5.0 dB over them in the engine. The limits are for new units on a track of low

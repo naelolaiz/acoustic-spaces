@@ -628,7 +628,10 @@ class Train:
 #: a coach 26.4 m (a UIC type X coach's), a freight wagon of four axles 17.8 m (0.225
 #: axles a metre, the wagons the EU's rule for the noise of rolling stock is normalised
 #: to: TSI NOI, Regulation (EU) No 1304/2014), the S-Bahn a class 423 multiple unit of
-#: 67.4 m and ten axles, the tram 30.0 m.
+#: 67.4 m and ten axles, the tram 30.0 m. A fifth of the freight train's wagons are tank
+#: wagons, Schall 03's share in a freight train whose make-up is not known more closely
+#: (4.2, Festlegungen zu Tabelle 5, Zeilen 3 und 4): 5 of its 24, every fifth wagon from
+#: the third, whose bodies ring 4 m up (sources 3 and 4).
 TRAINS: dict[str, Train] = {
     "s_bahn": Train(
         "an S-Bahn: a four-car electric multiple unit",
@@ -650,8 +653,12 @@ TRAINS: dict[str, Train] = {
         "An intercity train",
     ),
     "freight": Train(
-        "a freight train: an electric locomotive and 24 wagons with composite blocks",
-        (Unit(7, 19.0, "discs"), *(Unit(10, 17.8, "composite_blocks"),) * 24),
+        "a freight train: an electric locomotive and 24 wagons with composite blocks (5 of "
+        "them tank wagons)",
+        (
+            Unit(7, 19.0, "discs"),
+            *(Unit(10, 17.8, "composite_blocks", tank=k % 5 == 2) for k in range(24)),
+        ),
         100.0,
         "A freight train",
     ),
@@ -751,7 +758,7 @@ def point_sound(
 #: How each height's sources are named after the train's source, and what they are.
 PARTS: dict[float, tuple[str, str]] = {
     0.0: ("", "its wheels, bogies, motors and the fans under its floor, at the rail top"),
-    4.0: ("_roof", "its roof: the fans and the pantograph's foot, 4 m up"),
+    4.0: ("_roof", "its roof's fans and pantograph's foot, 4 m up"),
     5.0: ("_pantograph", "its pantograph's head, 5 m up"),
 }
 #: What ``--horn`` lets a train's horn do: stay off, sound its notes in blasts one after
@@ -1150,12 +1157,17 @@ class TrainVehicle(Vehicle):
 
     def feeds(self, args: argparse.Namespace, speed: str) -> dict[str, str]:
         out = {}
+        train = TRAINS[self.train_of(args)]
         for part in self.parts(args):
             if self.horn is not None and part == self.horn.part:
                 chord = ", its notes together" if self.horn_of(args) == "chord" else ""
                 out[part] = f"its horn {self.horn.place}, in blasts{chord}"
                 continue
-            what = PARTS[self.heights()[part]][1]
+            height = self.heights()[part]
+            what = PARTS[height][1]
+            # Sources 3 and 4 (Tabelle 5) ring in tank wagons' bodies alone.
+            if height == SOURCES[3].height_m and any(unit.tank for unit in train.units):
+                what += ", and its tank wagons' bodies there"
             out[part] = f"{self.plays(args, speed)}: {what}" if part == self.name else f"{what}"
         return out
 

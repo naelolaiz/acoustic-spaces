@@ -940,41 +940,43 @@ python passby_demo.py all --train freight   # or sound, scene, walk, video one a
 
 Options: `--train regional` the train (`regional`, an electric locomotive and five
 coaches, 151 m long, at 160 km/h; `s_bahn`, a four-car electric multiple unit, 67 m, at
-120 km/h; `intercity`, the locomotive and twelve coaches, 336 m, at 200 km/h;
-`freight`, the locomotive and 24 wagons with composite brake blocks, 446 m, at 100
-km/h), `--speed` how fast it runs (km/h; by default the train's own above, whatever
-the speed of the example's walk: the Run demo window's **Speed** reads *the train's
-own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in ballast;
-`slab`, slab track; `slab_absorber`, slab track with absorbers; `level_crossing`),
-`--horn off` the train's warning horn (`blasts` or `chord` sounds it, see below), `--indoors off`
-where it is heard (see below), `--step 1` how
-far apart the train is simulated along its walk (m), `--hrtf me.sofa` a measured head,
-`--input train=WAV` a dry recording of yours (`train_roof=WAV` and
-`train_pantograph=WAV` for the sources up on the train, `train_horn=WAV` for its horn).
-The tram has no options of its own but `--indoors`: a low-floor tram with air
-conditioning, 30 m long, on its track set in the street, at the speed of its walk (50
-km/h) unless `--speed` says.
+120 km/h; `intercity`, the locomotive and twelve coaches, 336 m, at 200 km/h; `freight`,
+the locomotive and 24 wagons with composite brake blocks, 5 of them tank wagons, 446 m,
+at 100 km/h), `--speed` how fast it runs (km/h; by default the train's own above,
+whatever the speed of the example's walk: the Run demo window's **Speed** reads *the
+train's own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in
+ballast; `slab`, slab track; `slab_absorber`, slab track with absorbers;
+`level_crossing`), `--horn off` the train's warning horn (`blasts` or `chord` sounds it,
+see below), `--indoors off` where it is heard (see below), `--step 1` how far apart the
+train is simulated along its walk (m), `--hrtf me.sofa` a measured head, `--input
+train=WAV` a dry recording of yours (`train_roof=WAV` and `train_pantograph=WAV` for the
+sources up on the train, `train_horn=WAV` for its horn). The tram has no options of its
+own but `--indoors`: a low-floor tram with air conditioning, 30 m long, on its track set
+in the street, at the speed of its walk (50 km/h) unless `--speed` says.
 
-- **Their sound power** is that of Schall 03 (Germany's method for the noise of
-  railways and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`):
-  for each vehicle unit, from its data sheet (Beiblatt 1 for trains, 2 for trams), each
-  of its sources' A-weighted sound power per metre of track for one unit an hour, per
+- **Their sound power** is that of Schall 03 (Germany's method for the noise of railways
+  and tramways, Anlage 2 of the 16. BImSchV, 2014; `acoustic_spaces.demos.rail`): for
+  each vehicle unit, from its data sheet (Beiblatt 1 for trains, 2 for trams), each of
+  its sources' A-weighted sound power per metre of track for one unit an hour, per
   octave band, at its speed and on its track (equation 1), with the speed factors of
-  Tabelle 6 and 14 and the track's corrections of Tabelle 7 and 15. A unit going by at
-  v km/h once an hour has the sound power of that level plus 10 lg(1000 v) dB. The
-  sources sit at the rail top (rolling noise, the bogies' aerodynamic noise, the fans
-  under the floor, the motors), on the roof, 4 m up (its aerodynamic noise and its
-  fans), and at the pantograph, 5 m up, each radiating louder across the track than
-  along it, by 10 lg(0.22 + 1.27 sin² δ) dB with δ the angle to the track (equation 8;
-  the example's `train.csv`, the street's `tram.csv`). At their speeds on ballast (the
-  tram on its street track):
+  Tabelle 6 and 14 and the track's corrections of Tabelle 7 and 15. A unit going by at v
+  km/h once an hour has the sound power of that level plus 10 lg(1000 v) dB. The sources
+  sit at the rail top (rolling noise, the bogies' aerodynamic noise, the fans under the
+  floor, the motors), 4 m up (on the roof its aerodynamic noise and its fans, and a tank
+  wagon's body, which its rolling noise makes ring), and at the pantograph, 5 m up, each
+  radiating louder across the track than along it, by 10 lg(0.22 + 1.27 sin² δ) dB with
+  δ the angle to the track (equation 8; the example's `train.csv`, the street's
+  `tram.csv`). Schall 03 takes a fifth of a freight train's wagons as tank wagons unless
+  its make-up is known (4.2), so 5 of the freight train's 24 are, every fifth from the
+  third: 4 m up it has 116.4 dB(A) of sound power, its locomotive's roof alone 111.8. At
+  their speeds on ballast (the tram on its street track):
 
   | train | units | length | speed | sound power |
   |---|---|---:|---:|---:|
   | `regional` | locomotive (Fz 7) + 5 coaches (Fz 9) | 151 m | 160 km/h | 130.6 dB(A) |
   | `s_bahn` | electric multiple unit (Fz 5) | 67 m | 120 km/h | 121.7 dB(A) |
   | `intercity` | locomotive + 12 coaches | 336 m | 200 km/h | 136.8 dB(A) |
-  | `freight` | locomotive + 24 wagons (Fz 10) | 446 m | 100 km/h | 131.8 dB(A) |
+  | `freight` | locomotive + 24 wagons (Fz 10), 5 of them tank wagons | 446 m | 100 km/h | 131.9 dB(A) |
   | `tram` | low-floor tram (Fz 21) | 30 m | 50 km/h | 115.0 dB(A) |
 
   The tram's sound power is 16.6 dB(A) over the car's at 50 km/h (CNOSSOS-EU's, 98.4
@@ -1057,10 +1059,10 @@ km/h) unless `--speed` says.
 
   | | regional, 160 km/h | S-Bahn, 120 km/h | intercity, 200 km/h | freight, 100 km/h |
   |---|---:|---:|---:|---:|
-  | 7.5 m | 94.5 (98.5) | 88.7 (90.8) | 97.5 (103.7) | 90.3 (101.6) |
-  | meadow, 25 m | 85.3 (90.6) | 79.6 (82.7) | 88.5 (95.9) | 81.3 (93.4) |
-  | behind the barrier, 25 m | 78.3 (79.3) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (79.6) |
-  | house, 18 m | 92.1 (97.2) | 86.8 (89.5) | 95.1 (102.5) | 88.3 (100.2) |
+  | 7.5 m | 94.5 (98.5) | 88.7 (90.8) | 97.5 (103.7) | 90.5 (101.7) |
+  | meadow, 25 m | 85.3 (90.6) | 79.6 (82.7) | 88.5 (95.9) | 81.7 (93.6) |
+  | behind the barrier, 25 m | 78.3 (79.3) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (82.6) |
+  | house, 18 m | 92.1 (97.2) | 86.8 (89.5) | 95.1 (102.5) | 88.5 (100.3) |
 
   The longer a train, the more its SEL is over its L_Amax: the freight train, 446 m
   long, takes 16 s to pass at 100 km/h, the S-Bahn, 67 m, 2 s at 120 km/h. The barrier,

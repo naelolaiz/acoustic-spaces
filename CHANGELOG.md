@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The pass-by demos' freight train has 5 tank wagons among its 24, Schall 03's share of
+  20 % when a freight train's make-up is not known (4.2), their bodies ringing 4 m up:
+  116.4 dB(A) of sound power there instead of 111.8, 131.9 dB(A) in all instead of
+  131.8. Behind the railway's barrier its SEL goes from 79.6 to 82.6 dB(A); at the other
+  listeners its levels rise by 0.1 to 0.4 dB.
+
 ## 4.1.0
 
 Helicopters flying over, with the sound a source sends each way carried down each early

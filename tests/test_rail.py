@@ -140,6 +140,38 @@ def test_a_trains_points_share_out_its_units_sound_power() -> None:
         np.testing.assert_allclose(10.0 * np.log10(energy), expected)
 
 
+def test_a_fifth_of_the_freight_trains_wagons_are_tank_wagons() -> None:
+    """Schall 03 4.2 (Festlegungen zu Tabelle 5, Zeilen 3 und 4) takes 20 % of a freight
+    train's wagons as tank wagons unless its make-up is known: 5 of the freight train's
+    24 wagons, 20 % within one wagon, spread along it, each with its body ringing 4 m up
+    (sources 3 and 4): 4 m up 116.4 dB(A) of sound power, the locomotive's roof alone
+    111.8, the train 131.9 dB(A) in all. Its first wagon, the TSI's freight wagon in
+    validation/rail_sources.py, is not one. What its roof's source plays says so, and
+    the other trains', which have no tank wagons, do not."""
+    from acoustic_spaces.parameters import a_weighted
+
+    train = rail.TRAINS["freight"]
+    wagons = [unit for unit in train.units if unit.category == 10]
+    tanks = [k for k, unit in enumerate(wagons) if unit.tank]
+    assert len(wagons) == 24 and len(tanks) == 5
+    assert abs(len(tanks) / len(wagons) - 0.20) < 1.0 / len(wagons)
+    assert min(np.diff(tanks)) >= 4 and tanks[0] < 5 and tanks[-1] >= 19
+    assert train.units[1].category == 10 and not train.units[1].tank
+    points = rail.train_points(train, 100.0)
+    roof = [p for p in points if p.height_m == 4.0]
+    assert [p.unit for p in roof] == [0, *(k + 1 for k in tanks)]
+    loco = [p for p in roof if p.unit == 0]
+    assert a_weighted(rail.train_power_db(loco)) == pytest.approx(111.78, abs=0.01)
+    assert a_weighted(rail.train_power_db(roof)) == pytest.approx(116.35, abs=0.01)
+    assert a_weighted(rail.train_power_db(points)) == pytest.approx(131.86, abs=0.01)
+    tanks_there = "and its tank wagons' bodies there"
+    for name in ("freight", "regional"):
+        roofs = rail.TRAIN_VEHICLE.feeds(argparse.Namespace(train=name, horn="off"), "")
+        assert (tanks_there in roofs["train_roof"]) == (name == "freight"), name
+    tram = rail.TRAM_VEHICLE.feeds(argparse.Namespace(horn="off"), "")
+    assert tanks_there not in tram["tram_roof"]
+
+
 def test_a_points_sound_has_its_spectrum_and_its_share_of_the_level() -> None:
     from acoustic_spaces.demos.road import SOUND_RMS
     from acoustic_spaces.synthesis import split_bands
