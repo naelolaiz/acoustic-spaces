@@ -415,6 +415,15 @@
   at 125 Hz and 0.2 dB above where the reflection off the doorway's wall lands away from
   the doorway's sides, by up to 4.3 dB at 63 Hz and 2.3 dB at 125 Hz where it lands on
   one, and no longer step by 2 dB where the reflection crosses a side.
+- `validation/edge_diffraction.py` checks the level on and near an edge's shadow
+  boundary through the whole early stage against the exact solution: in the bands that
+  add in energy (indoors from 250 Hz up) it is 1.73 dB low at 250 Hz and 0.38 dB at 8
+  kHz on the boundary of a right-angled corner, and 2.22 and 0.56 dB on that of a wedge
+  open over 225°, now a known issue in the validation report.
+- Fixed: the exact solutions in `validation/` that the edge diffraction is checked
+  against ran at 343.0 m/s, not at their scenes' 343.2 m/s; the published differences
+  move by up to 0.02 dB, and the terrain ridge's reference, which had not converged, by
+  up to 0.2 dB from 2 kHz up.
 
 ## 4.1.0
 

@@ -149,7 +149,7 @@ follow the terrain: their points stand at the map's height over the ground under
   do not diffract, nor do its own ridges, which bend too little at each grid line: the
   sound over the crests takes their place.
 
-A ridge agrees with the exact solution for the wedge within 0.2 dB, a flat terrain and
+A ridge agrees with the exact solution for the wedge within 0.1 dB, a flat terrain and
 a plane slope with the flat ground and the image source, and a smooth hill over a soft
 ground lets 1.4 to 1.8 dB more over its crest than the thin screen's attenuation (see
 [Validation](validation.md#terrain-against-closed-forms-and-the-exact-wedge)); a
@@ -1457,7 +1457,7 @@ reflections and a diffraction) is left out unless
 `simulation.early.diffraction_reflections` is `both_sides`: by default a path
 reflects before or after the edge, not both. Over a rigid ground that path carries a
 quarter of the sound over a barrier, so without it the barrier's insertion loss comes
-out up to 0.8 dB off from 1 kHz up (mostly too high, 0.7 dB too low at 2 kHz 90 m
+out up to 0.8 dB off from 1 kHz up (mostly too high, 0.8 dB too low at 2 kHz 90 m
 behind) and a few decibels off in the bands below, where the paths interfere; with it
 the engine is within 0.15 dB of the exact solution (see
 [Validation](validation.md#outdoor-results-against-exact-solutions)). Over grass and

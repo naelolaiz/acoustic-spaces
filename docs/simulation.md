@@ -303,11 +303,15 @@ specular path it borders. Across a boundary the level is continuous: the tests c
 in an L-shaped room in millimetre steps, with first-order reflections, and the level
 changes by less than 0.25 dB where specular paths alone drop by more than 5 dB; where a
 reflection off one of the corner's walls ends and the direct sound carries on, by less
-than 0.05 dB. The
-diffraction coefficient matches the exact solutions for a half-plane and for wedges
-(within 0.25 dB), and a thin screen comes within 1.5 dB of Maekawa's chart in the
-tests' geometry (the chart, an empirical one, is itself up to 2.1 dB from the exact
-solution behind a barrier 40 to 90 m away).
+than 0.05 dB. The diffraction coefficient, its terms added in pressure, matches the
+exact solutions for a half-plane and for wedges (within 0.25 dB); where the paths add in
+energy (indoors from 250 Hz up), the level near a shadow boundary is below the exact
+solution: on the boundary of a right-angled corner by 1.7 dB at 250 Hz and 1 dB at 1
+kHz, and more behind blunter edges (2.2 dB at 250 Hz for one open over 225°; see the
+[validation report](validation.md#edge-diffraction-against-the-exact-solution)). A thin
+screen comes within 1.5 dB of Maekawa's chart in the tests' geometry (the chart, an
+empirical one, is itself up to 2.1 dB from the exact solution behind a barrier 40 to 90
+m away).
 
 Behind a thick wall or barrier, whose two corners share its top, no edge sees both the
 source and the listener: `first_order` finds nothing there, or only a way round one
@@ -323,7 +327,7 @@ energy). Against the exact solution (BTM, in the
 [validation report](validation.md#edge-diffraction-against-the-exact-solution)),
 the level over barriers 0.3 to 3 m thick is within 0.3 dB from 500 Hz up, and over two
 screens in a row within 0.45 dB; at 63 and 125 Hz, in pressure, within 0.6 dB over
-the barriers and 0.12 dB over the screens (1.7 and 1.9 dB with the waves in energy).
+the barriers and 0.13 dB over the screens (1.7 and 1.9 dB with the waves in energy).
 
 ```sh
 acoustic-spaces simulate examples/gallery/scene.yaml --out gallery
@@ -358,9 +362,9 @@ left out (`engine.edge_fade` in the
 [API reference](api.md#edge-diffraction)). Against the exact solution, past the end of
 a screen, the corner of a building, a strip 2 m wide and a gap 4 m wide on a hard
 ground, each path with its copy off the ground, the level is within 0.08 dB in every
-band (0.19 dB at 8 kHz on the strip, with or without the fade), where it was up to 7
-dB off without it, and steps between listeners 1 cm apart by no more than the exact
-level does (see the
+band (0.19 dB at 8 kHz on the strip, an error of the exact level's average over too
+few frequencies), where it was up to 7 dB off without it, and steps between listeners
+1 cm apart by no more than the exact level does (see the
 [validation report](validation.md#reflections-that-fade-at-edges-against-the-exact-solution)).
 Walking round the gallery's corner 1 cm at a time, with reflections up to third
 order, the level now steps by at most 0.13 dB in any band, where it stepped by up to
@@ -386,11 +390,11 @@ part is unchanged, since its scattered rays already find their way round corners
 
 `view --paths` and the Blender export draw diffracted paths in their own colour, the
 response's `early.diffracted` marks them, and `simulate` reports how many there are. The
-cost grows with the number of edges and of the paths near them, as each term of the
-fade is a path over its edge: in a hall with 16 edges, the early stage takes 650 ms per
-source and listener on four cores with `first_order` (70 ms without the fade's terms),
-710 ms with `second_order`, which looks at pairs of edges (135 ms), and 55 ms without
-diffraction.
+cost grows with the number of edges and of the paths near them, as each term of the fade
+is a path over its edge: in a hall with 16 edges, the early stage takes 540 ms per
+source and listener on four cores with `first_order`, 630 ms with `second_order`, which
+looks at pairs of edges, and 38 ms without diffraction (see the [validation
+report](validation.md#edge-diffraction-against-the-exact-solution)).
 
 Paths that reflect before or after an edge pair every edge with every plane the source
 or the listener faces, which in a whole city grows with the square of the buildings.
