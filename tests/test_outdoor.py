@@ -265,12 +265,13 @@ def test_the_reflection_at_a_barrier_s_foot_bends_over_it_as_beside_it() -> None
 def test_a_barrier_stops_the_reflection_off_the_ground_where_it_turns(geometry) -> None:
     """A source at (2, 3, 1) and listeners at (8, -3, 1) on either side of a barrier 3 m
     high that turns a corner at (5, 0), or of one that abuts a building's corner there,
-    where the reflection off the ground meets the corner at its foot, or 1 to 3 um
-    aside: the barrier, or the building, stops it there as it does 1 mm either side, and
-    no path of up to the third order is found. The reflection had passed the turning
-    barrier whole there and 1 to 3 um aside, and the other at the corner, as had the
-    reflection off the roof at its corner; paths that reflect at the corner off a wall,
-    the ground or the roof and the wall again had passed 1 to 3 um aside as well."""
+    where the reflection off the ground meets the corner at its foot, or, for listeners 1
+    to 3 um aside, 0.5 to 1.5 um aside: the barrier, or the building, stops it there
+    as it does for listeners 1 mm either side, and no path of up to the third order is
+    found. The reflection had passed the turning barrier whole there and for listeners 1
+    to 3 um aside, and the other at the corner, as had the reflection off the roof at its
+    corner; paths that reflect at the corner off a wall, the ground or the roof and the
+    wall again had passed for listeners 1 to 3 um aside as well."""
     for offset in (-1e-3, -3e-6, -1e-6, 0.0, 1e-6, 3e-6, 1e-3):
         aside = offset / 2**0.5  # level, across the reflection
         scene = outdoor(

@@ -366,19 +366,24 @@
   it passed whole (with image sources twice). In the apartment example the bedroom
   column of a 0.7 m map at x = 8.0 m read 51 dB(A) instead of about 45 like its
   neighbours, and behind a 3 m barrier a listener placed symmetrically to the source got
-  6 to 27 dB more early sound than 1 cm either side.
+  6 to 27 dB more early sound than 1 cm either side. Finding the early reflections takes
+  1.2 to 1.8 times as long in the examples; with edge diffraction the early part takes
+  up to 3 % longer.
 - Fixed: where the wall between two rooms is drawn as two coincident faces, one for each
   room, no early path reflects off both faces at one point any more: from one room into
   the other that path was the direct sound at full level, without the wall's
   transmission loss, and with image sources from the third order on it came back into
   the source's room as the reflection off the wall once more. Behind such a 20 dB wall
-  it had raised the early level at 1 kHz by 9 to 18 dB, and in front of it by 0.05 to
-  0.13 dB up to the third order and 0.4 to 0.6 dB up to the fifth.
-- Fixed: no early path reflects off an opening any more. Those paths carried no energy,
+  it had raised the early level at 1 kHz by 9 to 18 dB, and in front of it, depending on
+  the listener, by about 0.04 to 0.25 dB up to the third order and 0.3 to 0.9 dB up to
+  the fifth, more near the wall.
+- Fixed: no early path reflects off an opening any more; those paths carried no energy,
   but they took the place of other paths with the same image and, with edge diffraction,
-  of the reflection bending round the opening's edge, so levels across a 10 m x 8 m room
-  with a 2 m doorway move by as much as 2.4 dB at 63 Hz, 1.6 dB at 125 Hz and 0.2 dB
-  above, and no longer step by 2 dB where the reflection crosses the doorway's side.
+  of the reflection bending round the opening's edge. With edge diffraction, levels
+  across a 10 m x 8 m room with a 2 m doorway move by as much as 2.4 dB at 63 Hz, 1.6 dB
+  at 125 Hz and 0.2 dB above where the reflection off the doorway's wall lands away from
+  the doorway's sides, by up to 4.3 dB at 63 Hz and 2.3 dB at 125 Hz where it lands on
+  one, and no longer step by 2 dB where the reflection crosses a side.
 
 ## 4.1.0
 

@@ -286,6 +286,22 @@ class TraceModel:
             return np.zeros(len(self.face_plane), dtype=bool)
         return np.all(self.transmission >= 1.0, axis=1)
 
+    @cached_property
+    def plane_spread(self) -> np.ndarray:
+        """(P,) how far (m) a point on a face of each plane may lie from the plane. Faces
+        whose normals and offsets agree within :data:`PLANE_TOLERANCE` make one plane, the
+        plane of the first of them, without lying in it exactly: this is the largest
+        distance of a vertex of the plane's faces from it, plus 16 units in the last place
+        of the model's largest coordinate for the rounding of a height worked out over
+        it (worked out once)."""
+        triangles = self.room.mesh.triangles
+        heights = np.einsum("fvk,fk->fv", triangles, self.plane_normal[self.face_plane])
+        heights = np.abs(heights - self.plane_offset[self.face_plane, None])
+        spread = np.zeros(self.plane_count)
+        np.maximum.at(spread, self.face_plane, heights.max(axis=1, initial=0.0))
+        largest = float(np.abs(triangles).max(initial=0.0))
+        return spread + 16.0 * np.spacing(largest)
+
     @property
     def partition(self) -> np.ndarray:
         """(F,) partitions: faces that let some sound through and reflect some, so a path
