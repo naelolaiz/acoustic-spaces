@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Editor: the Run demo window keeps the options changed in it for the next time it
+  opens, each demo its own (the listeners, the sources' files, what moves and the
+  format per scene file), names them above **Run**, and **Defaults** puts them back.
+- Fixed: a demo given `--hrtf` with a file that is not there is refused before its first
+  step; it failed only when a later step read the file.
 - Fixed: a simulation refused for its memory says how much it would need with each
   setting it names lowered on its own, the least first; it named them without how much
   each saves (more `late.batches` need more memory, not less).

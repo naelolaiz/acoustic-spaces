@@ -675,6 +675,20 @@ def test_a_demo_refuses_an_hrtf_for_another_format(tmp_path: Path) -> None:
     assert caught.value.code == 2  # argparse's own error
 
 
+def test_a_demo_refuses_an_hrtf_file_that_is_not_there(tmp_path: Path) -> None:
+    """``--hrtf`` names a file that must be there, counted from the demo's folder: the
+    run is refused before its first step, not when its simulation reads it."""
+    demo, ran = _demo(tmp_path)
+    args = demo.defaults()
+    args.hrtf = Path("me.sofa")
+    assert demo.check(args) == f"--hrtf: no {tmp_path / 'me.sofa'}"
+    with pytest.raises(SystemExit) as caught:
+        demo.main(["render", "--hrtf", "me.sofa"])
+    assert caught.value.code == 2 and ran == []
+    (tmp_path / "me.sofa").write_bytes(b"")
+    assert demo.check(args) is None
+
+
 def test_a_demo_takes_a_file_for_each_name(tmp_path: Path) -> None:
     """A ``files`` option (``--stem STEM=WAV``) takes a file for each of the names it
     lists, once per name, the paths counted from the demo's folder; a name it does not

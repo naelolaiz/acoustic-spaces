@@ -451,6 +451,9 @@ Editor:
   orchestra demo downloads its tracks itself, as the other demos do their recordings.
 - [x] The listeners a demo plays, picked for a run: `--listeners` in every demo with
   several listeners, and a Listeners list to tick in the Run demo window.
+- [x] The Run demo window keeps the options changed in it for the next time, per demo
+  and, for what names something in a scene, per scene file, with **Defaults** to put
+  them back.
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.
