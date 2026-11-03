@@ -131,7 +131,7 @@ class Pictures:
         self.playing = [s for s in self.sources if s["name"] in set(playing)]
         self.listeners = {item["name"]: item for item in scene["listeners"]}
         self.outline = np.asarray(outline, dtype=float).reshape(-1, 2, 2)
-        # A level the simulation could not give (None: a band without a decay) is left out.
+        # A source whose sound does not reach the listener (None) is left out.
         self.levels = {
             (e["source"], e["listener"]): e["spl_a_db"]
             for e in report["responses"]
@@ -189,8 +189,8 @@ class Pictures:
 
     def levels_of(self, listener: str, t: float | None) -> dict[str, float]:
         """The A-weighted level of each playing source at ``listener`` (dB), as simulated:
-        at ``t`` when something moves, else as the still results give it; a source the
-        simulation gives none for (a response too short for its decay) is left out."""
+        at ``t`` when something moves, else as the still results give it; a source whose
+        sound does not reach the listener (None) is left out."""
         if t is not None and listener in self.along:
             k = self.moment(t)
             values = {name: v[k] for name, v in self.along[listener].items()}
@@ -272,9 +272,8 @@ class Pictures:
 
     def level_at(self, listener: str, t: float | None = None) -> float | None:
         """The A-weighted level of every playing source together (dB), as simulated, at
-        ``t`` when something moves; None when the simulation gives none for one of them
-        (a response too short for its decay), rather than a sum that leaves it out, and
-        when nothing of them is heard."""
+        ``t`` when something moves; a source whose sound does not reach the listener
+        (None) adds nothing, and None when nothing of them is heard."""
         if t is not None and listener in self.along:
             k = self.moment(t)
             values = [
@@ -285,9 +284,7 @@ class Pictures:
         rumble = self.indoors.get("rumble_a_db", {}).get(listener)
         if listener in self.indoors.get("about", {}) and not self.indoors.get("airborne", True):
             values = []  # in the house, the rumble alone
-        elif not values or any(v is None for v in values):
-            return None
-        energy = sum(10.0 ** (v / 10.0) for v in values)
+        energy = sum(10.0 ** (v / 10.0) for v in values if v is not None)
         if rumble is not None:
             energy += 10.0 ** (rumble / 10.0)
         return 10.0 * math.log10(energy) if energy > 0.0 else None

@@ -1116,6 +1116,8 @@ class Material(_Model):
     source: str | None = Field(default=None, description="where the coefficients come from")
     # Notes on the coefficients of a preset or file outside 0 to 1, held to that range.
     _clipped: list[str] = PrivateAttr(default_factory=list)
+    # The scattering entry ``scattering`` named, which validation replaces by its values.
+    _scattering_name: str | None = PrivateAttr(default=None)
 
     @property
     def clipped(self) -> list[str]:
@@ -1173,6 +1175,11 @@ class Material(_Model):
         origin = scattering_origin = None
         # Where coefficients read from data come from, for the note when they are clipped.
         absorption_from = scattering_from = None
+        # Whether the entry gives absorption, scattering values or a source of its own,
+        # which the rest of it may not give (to_data); if not, the file's version, taken
+        # before the file is read.
+        own = isinstance(self.scattering, list) or (self.absorption, self.source) != (None, None)
+        version = None if own else _file_version(self.file)
 
         if self.impedance is not None:
             if self.preset is not None or self.file is not None:
@@ -1210,6 +1217,7 @@ class Material(_Model):
             raise ValueError("entry names a material in a library file: give the file too")
 
         if isinstance(self.scattering, str):
+            self._scattering_name = self.scattering
             entry = _database_entry(self.scattering, "scattering")
             scattering, extrapolated = _from_data(entry.frequencies, entry.coefficients)
             scattering_origin = "scattering: " + _describe(entry.source, extrapolated)
@@ -1251,6 +1259,11 @@ class Material(_Model):
         if self.source is None:
             origins = [o for o in (origin, scattering_origin) if o]
             self.source = "; ".join(origins) or None
+        if not own:
+            # Read from the rest of its entry alone: to_data leaves all three out while
+            # the material and its file stay as they are. In __dict__, not in a field or
+            # private attribute, so that materials are compared without it.
+            self.__dict__["_given"] = (self.model_dump(mode="json", exclude_none=True), version)
         return self
 
     def _transmission(self) -> list[float] | None:
@@ -1270,6 +1283,50 @@ class Material(_Model):
         nothing through."""
         passing = self._transmission()
         return None if passing is None else convert(passing, bands)
+
+    def to_data(self) -> dict:
+        """The material as scene data, as :meth:`Scene.to_data` writes it: its
+        absorption, scattering and source only where they are not what the rest of the
+        entry gives (a preset, a file and entry, an impedance, a transmission, a
+        scattering entry, written by its name, or the default scattering), so that the
+        entry read again has the same values, and with another preset, file or entry the
+        values of that."""
+        data = self.model_dump(mode="json", exclude_none=True)
+        given_by = ("absorption", "scattering", "source")
+        entry = {key: value for key, value in data.items() if key not in given_by}
+        if self._scattering_name is not None:
+            entry["scattering"] = self._scattering_name
+        # A material read from such an entry, unchanged since, and its file too, is what
+        # the entry gives; else the entry is read again to see what it gives.
+        if self.__dict__.get("_given") != (data, _file_version(self.file)):
+            given = _material_of(entry)
+            for key in given_by:
+                # Compared by value: a copy with other values keeps the private attributes.
+                if key in data and (given is None or getattr(given, key) != getattr(self, key)):
+                    entry[key] = data[key]
+                    given = _material_of(entry)
+        return {key: entry[key] for key in data if key in entry}
+
+
+def _material_of(entry: dict) -> Material | None:
+    """The material the scene data ``entry`` gives, or None when it is not one (no
+    absorption, a file no longer there)."""
+    try:
+        return Material.model_validate(entry)
+    except (ValueError, OSError):
+        return None
+
+
+def _file_version(path: Path | None) -> tuple[int, int] | None:
+    """The modification time (ns) and size of the file at ``path``, or None when there
+    is no path or the file cannot be found."""
+    if path is None:
+        return None
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
 
 
 def _read_coefficients(path: Path):
@@ -2461,10 +2518,15 @@ class EarlyStage(_Model):
         description=(
             "outdoors in wind or temperature gradients, the parabolic equation that gives "
             "the sound over the open ground in the low bands and in the shadows: "
-            "narrow_angle (the Green's function one: within 0.1 dB to 1 km in the gradients "
-            "near the ground that make the weather's shadows and focusing) or wide_angle "
-            "(split-step Padé: also sound that a gradient reaching hundreds of metres up "
-            "bends back at up to 40 degrees, over many kilometres; several times the work)"
+            "narrow_angle (the Green's function one, for the gradients near the ground that "
+            "make the weather's shadows and focusing, with the wide-angle one's level where "
+            "the reflection off the ground comes in more than 15 degrees up: in the windy "
+            "preset to 1 km under "
+            "0.1 dB from a fast field program on average and 0.6 dB at most in an octave band "
+            "from 63 to 500 Hz, down to 40 dB under the free field) or "
+            "wide_angle (split-step Padé: also sound that a gradient reaching hundreds of "
+            "metres up bends back at up to 40 degrees, over many kilometres; several times "
+            "the work)"
         ),
     )
     coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(
@@ -2828,14 +2890,24 @@ class Scene(_Model):
     @field_validator("recording", mode="before")
     @classmethod
     def _resolve_recording(cls, value, info: ValidationInfo):
-        """A free recording's name as it is; a file resolved against the scene's folder."""
+        """A free recording's name as it is; a file resolved against the scene's folder.
+        A file need not be there yet (it may be copied in later), unless its name has
+        no suffix, as a free recording's has: then it is a free name mistyped."""
         if value is None or (isinstance(value, str) and value in RECORDING_NAMES):
             return value
         if isinstance(value, str) and not value.strip():
             raise ValueError(f"a recording file, or one of {', '.join(RECORDING_NAMES)}")
         if not isinstance(value, (str, Path)):
             raise ValueError(f"a recording file, or one of {', '.join(RECORDING_NAMES)}")
-        return _resolve_path(Path(value), info)
+        path = _resolve_path(Path(value), info)
+        if not path.suffix and not path.is_file():
+            close = difflib.get_close_matches(str(value), RECORDING_NAMES, n=1)
+            hint = f"; did you mean {close[0]}?" if close else ""
+            raise ValueError(
+                f"{str(value)!r} is no free recording, nor a file there ({path}): a "
+                f"recording file, or one of {', '.join(RECORDING_NAMES)}{hint}"
+            )
+        return path
 
     @property
     def recording_file(self) -> Path | None:
@@ -2887,23 +2959,9 @@ class Scene(_Model):
         if self.long_term is not None and self.geometry.ground is None:
             raise ValueError("long_term is for outdoor scenes (geometry.ground)")
         removed = self.simulation.insertion_loss_of
-        if removed is not None:
-            if self.geometry.ground is None:
-                raise ValueError(
-                    "simulation.insertion_loss_of is for outdoor scenes (geometry.ground): "
-                    "it names their buildings, barriers or vegetation"
-                )
-            parts = self.geometry.part_names()
-            unknown = [name for name in removed if name not in parts]
-            if unknown:
-                known = ", ".join(parts) or "none"
-                raise ValueError(
-                    f"simulation.insertion_loss_of names {unknown[0]!r}, which is no "
-                    f"building, barrier or vegetation of the scene (they are: {known})"
-                )
-            twice = sorted({name for name in removed if removed.count(name) > 1})
-            if twice:
-                raise ValueError(f"simulation.insertion_loss_of names {twice[0]!r} twice")
+        problem = None if removed is None else insertion_loss_problem(self.geometry, removed)
+        if problem is not None:
+            raise ValueError(problem)
         return self
 
     def under(self, given: WeatherClass) -> Scene:
@@ -2960,11 +3018,11 @@ class Scene(_Model):
 
     def to_data(self) -> dict:
         """The scene as plain YAML data, dicts and lists. Settings left unset are left out,
-        apart from those whose null is not their default."""
+        apart from those whose null is not their default, and so are a material's
+        coefficients and source where its preset, file or other settings give them
+        (:meth:`Material.to_data`)."""
         data = self.model_dump(mode="json", exclude_none=True)
-        for name, material in self.materials.items():
-            if material.impedance is not None:  # the impedance gives the absorption
-                data["materials"][name].pop("absorption", None)
+        data["materials"] = {name: m.to_data() for name, m in self.materials.items()}
         if self.simulation.early.coherent_max_band_hz is None:
             data["simulation"]["early"]["coherent_max_band_hz"] = None
         # The open sky's material is added when the scene is read: left out, as written.
@@ -2985,7 +3043,7 @@ class Scene(_Model):
         letters outside ASCII as they are, as the example scenes do; the data are the
         same."""
         data = self.to_data()
-        _map_files(data, file_name)
+        map_files(data, file_name)
         if readable:
             return yaml.dump(data, Dumper=_ReadableDumper, sort_keys=False, allow_unicode=True)
         return yaml.safe_dump(data, sort_keys=False)
@@ -3026,6 +3084,31 @@ class Scene(_Model):
         return list(dict.fromkeys(Path(f) for f in files))
 
 
+def insertion_loss_problem(
+    geometry: Geometry, names: Sequence[str], what: str = "simulation.insertion_loss_of"
+) -> str | None:
+    """What is wrong with ``names`` as what an insertion loss is given for, ``what``
+    naming them in the message: None when they are buildings, barriers or vegetation of
+    this outdoor scene (:meth:`Geometry.part_names`), each named once."""
+    if geometry.ground is None:
+        return (
+            f"{what} is for outdoor scenes (geometry.ground): it names their buildings, "
+            "barriers or vegetation"
+        )
+    parts = geometry.part_names()
+    unknown = [name for name in names if name not in parts]
+    if unknown:
+        known = ", ".join(parts) or "none"
+        return (
+            f"{what} names {unknown[0]!r}, which is no building, barrier or vegetation of "
+            f"the scene (they are: {known})"
+        )
+    twice = sorted({name for name in names if names.count(name) > 1})
+    if twice:
+        return f"{what} names {twice[0]!r} twice"
+    return None
+
+
 def directivity_entries(spec) -> list[dict]:
     """A source's directivity entry as scene data (a dict, or a pattern's name) and, for
     an inline array, its element's entry, and so on down: the entries that can name a
@@ -3037,7 +3120,7 @@ def directivity_entries(spec) -> list[dict]:
     return entries
 
 
-def _map_files(data: dict, change: Callable[[str], str]) -> None:
+def map_files(data: dict, change: Callable[[str], str]) -> None:
     """Replace each file that scene data (:meth:`Scene.to_data`) names by ``change(file)``."""
     geometry = data["geometry"]
     places = [

@@ -34,6 +34,7 @@ then vary from run to run within the noise of the ray count.
 from __future__ import annotations
 
 import math
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -144,11 +145,14 @@ def trial(values: dict) -> tuple[float, float]:
         "first_ray": 1 << 40,
         "split_target": np.zeros(0),
     }
-    # Compile the shader and start the GPU outside the timing.
-    gpu_tracer.trace_stochastic(**(short | {"rays": 64, "max_time": 0.01}))
-    started = time.perf_counter()
-    gpu_tracer.trace_stochastic(**short)
-    on_gpu = time.perf_counter() - started
+    try:
+        # Compile the shader and start the GPU outside the timing.
+        gpu_tracer.trace_stochastic(**(short | {"rays": 64, "max_time": 0.01}), keep=True)
+        started = time.perf_counter()
+        gpu_tracer.trace_stochastic(**short, keep=True)
+        on_gpu = time.perf_counter() - started
+    finally:
+        gpu_tracer.release()  # the run itself may go to the CPU
     started = time.perf_counter()
     _native.trace_stochastic(**short)
     on_cpu = time.perf_counter() - started
@@ -240,23 +244,51 @@ def _key(values: dict) -> tuple:
     )
 
 
-def trace(plan: Plan, values: dict) -> tuple[tuple, Plan]:
+def trace(plan: Plan, values: dict, keep: bool = False) -> tuple[tuple, Plan]:
     """``_native.trace_stochastic(**values)`` where ``plan`` says, and the plan it
-    followed: the CPU, with the GPU's reason, where the GPU declined the rays."""
+    followed: the CPU, with the GPU's reason, where the GPU declined the rays. With
+    ``keep``, the GPU keeps its rays in flight for the next call, until
+    :func:`release`."""
     from acoustic_spaces import _native
     from acoustic_spaces.engine import gpu_tracer
 
     if plan.device == "gpu":
         try:
-            return gpu_tracer.trace_stochastic(**values), plan
+            return gpu_tracer.trace_stochastic(**values, keep=keep), plan
         except gpu_tracer.Unsupported as declined:
+            gpu_tracer.release()
             return _native.trace_stochastic(**values), Plan("cpu", reason=str(declined))
     if plan.device == "both":
-        return _shared(plan, values)
+        return _shared(plan, values, keep)
     return _native.trace_stochastic(**values), plan
 
 
-def _shared(plan: Plan, values: dict) -> tuple[tuple, Plan]:
+def _part_sizes(plan: Plan, count: int, threads: int) -> dict[str, int]:
+    """The rays the CPU and the GPU each take at a time of a call of ``count`` rays
+    they share: about ``CPU_PARTS`` and ``GPU_PARTS`` parts of their share of it at
+    ``plan``'s rates (the CPU's on all its threads but the one that keeps the GPU busy),
+    at least 256 and 4,096 rays, but no more than that share. So the CPU takes its
+    share of a call of few rays too, as the late part calls the tracer once for each
+    batch of rays (``late.batches``)."""
+    cpu_rate = plan.cpu_rate * (threads - 1) / threads if threads > 1 else plan.cpu_rate
+    total = cpu_rate + plan.gpu_rate
+    on_cpu = math.ceil(count * cpu_rate / total)
+    on_gpu = math.ceil(count * plan.gpu_rate / total)
+    return {
+        "cpu": max(1, min(on_cpu, max(256, math.ceil(on_cpu / CPU_PARTS)))),
+        "gpu": max(1, min(on_gpu, max(4096, math.ceil(on_gpu / GPU_PARTS)))),
+    }
+
+
+def release() -> None:
+    """Lets go of what the GPU keeps from one of a run's calls to the next, as the run
+    ends (nothing where the GPU's tracer was never loaded)."""
+    tracer = sys.modules.get("acoustic_spaces.engine.gpu_tracer")
+    if tracer is not None:
+        tracer.release()
+
+
+def _shared(plan: Plan, values: dict, keep: bool = False) -> tuple[tuple, Plan]:
     """The rays of ``values`` shared between the CPU and the GPU: each takes the next
     part as it finishes the one before. A part traced on the CPU carries its own share
     of the energy, so its results (and its expected ray energies) are scaled to the
@@ -268,11 +300,7 @@ def _shared(plan: Plan, values: dict) -> tuple[tuple, Plan]:
     count, first = int(values["rays"]), int(values["first_ray"])
     target = np.asarray(values["split_target"], float)
     threads = _cpu_threads(values)
-    total = plan.cpu_rate + plan.gpu_rate
-    sizes = {
-        "cpu": max(256, math.ceil(count * plan.cpu_rate / total / CPU_PARTS)),
-        "gpu": max(4096, math.ceil(count * plan.gpu_rate / total / GPU_PARTS)),
-    }
+    sizes = _part_sizes(plan, count, threads)
     cursor = [0]
     lock = threading.Lock()
     # The parts' results summed as each comes in (each scaled to the whole run), so the
@@ -330,12 +358,15 @@ def _shared(plan: Plan, values: dict) -> tuple[tuple, Plan]:
                     continue
                 try:
                     part = gpu_tracer.trace_stochastic(
-                        **values | {"rays": hi - lo, "first_ray": first + lo}, total=count
+                        **values | {"rays": hi - lo, "first_ray": first + lo},
+                        total=count,
+                        keep=keep,
                     )
                 except gpu_tracer.Unsupported as reason:
                     declined.append(str(reason))
                     with lock:
                         left.append((lo, hi))
+                    gpu_tracer.release()
                     return
                 add(1.0, part)
                 on_gpu.set()
@@ -370,6 +401,7 @@ __all__ = [
     "Device",
     "Plan",
     "choose",
+    "release",
     "set_trial",
     "trace",
     "trial",

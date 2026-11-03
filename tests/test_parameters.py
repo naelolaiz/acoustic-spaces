@@ -9,10 +9,12 @@ from acoustic_spaces.parameters import (
     PARAMETERS,
     STI_MODULATION_HZ,
     decay_curve,
+    event_levels,
     from_energy,
     from_impulse_response,
     modulation_transfer,
     speech_transmission_index,
+    time_weighted,
 )
 from acoustic_spaces.synthesis import REFERENCE_ENERGY_10M
 
@@ -302,6 +304,63 @@ def test_strength_from_a_broadband_reference(filters: str) -> None:
     np.testing.assert_allclose(p.g, 0.0, atol=0.1)
 
 
+@pytest.mark.parametrize("filters", ["iec", "crossover"])
+def test_bands_above_half_the_sample_rate_have_no_parameters(filters: str) -> None:
+    # At 8 kHz the 8 kHz band (5.62 to 11.2 kHz) holds nothing of its own. The skirt of
+    # its IEC filter let in the 4 kHz band's decay, which gave it a T30 of 1.0 s and a G,
+    # and the STI took it in.
+    from acoustic_spaces.parameters import (
+        ALL_PARAMETERS,
+        echo_criterion,
+        interaural_cross_correlation,
+        sti_from_impulse_response,
+    )
+
+    fs, t60 = 8000, 1.0
+    rng = np.random.default_rng(5)
+    t = np.arange(2 * fs) / fs
+    tail = rng.standard_normal((len(t), 2)) * np.exp(-3.0 * math.log(10.0) * t / t60)[:, None]
+    ir, side = tail[:, 0], tail[:, 1]
+    p = from_impulse_response(
+        ir,
+        fs,
+        REFERENCE_ENERGY_10M,
+        filters=filters,
+        stage=True,
+        lateral=side,
+        directional=np.column_stack([side, side, side]),
+    )
+    for name in ALL_PARAMETERS:
+        assert math.isnan(getattr(p, name)[7]), name
+    # The 4 kHz band (2.82 to 5.62 kHz) is analysed from its part below 4 kHz.
+    assert p.t30[6] == pytest.approx(t60, rel=0.05)
+    assert p.t30_x[6] == pytest.approx(t60, rel=0.05)
+    assert np.isfinite(p.g[:7]).all() and np.isfinite(p.lf[:7]).all()
+    iacc = interaural_cross_correlation(tail, fs, filters=filters)
+    assert np.isnan(iacc["iacc_l"][7]) and np.isfinite(iacc["iacc_l"][:7]).all()
+    assert math.isnan(sti_from_impulse_response(ir, fs, filters=filters))
+    assert 0.0 < sti_from_impulse_response(np.repeat(ir, 2), 2 * fs, filters=filters) < 1.0
+    # At 2 kHz the music criterion's 2 kHz band (from 1.41 kHz up) is gone too.
+    speech, music = (
+        echo_criterion(ir[::4], fs / 4, kind, filters=filters)[0] for kind in ("speech", "music")
+    )
+    assert math.isfinite(speech) and math.isnan(music)
+
+
+@pytest.mark.parametrize("filters", ["iec", "crossover"])
+@pytest.mark.parametrize("fs", [8000, 16_000])
+def test_a_band_that_reaches_past_half_the_sample_rate(filters: str, fs: int) -> None:
+    # It is analysed from its part below half the sample rate, the 4 kHz band at 8 kHz
+    # and the 8 kHz band at 16 kHz, and a broadband reference is taken over that part:
+    # an impulse reads G = 0 in it as in the bands below.
+    ir = np.zeros(fs)
+    ir[fs // 100] = 0.1  # the free-field direct sound at 10 m
+    p = from_impulse_response(ir, fs, REFERENCE_ENERGY_10M, filters=filters)
+    whole = 8 if fs == 16_000 else 7
+    np.testing.assert_allclose(p.g[:whole], 0.0, atol=0.1)
+    assert np.isnan(p.g[whole:]).all()
+
+
 @pytest.mark.parametrize("bands", [1, 24])
 def test_a_reference_for_other_bands_is_refused(bands: int) -> None:
     # 24 third-octave references were cut to their first 8 and taken for octaves; one
@@ -322,7 +381,8 @@ def test_modulation_transfer_of_an_exponential() -> None:
 
 @pytest.mark.parametrize("t60, sti", [(0.5, 0.74), (1.0, 0.59), (2.0, 0.44)])
 def test_sti_of_reverberation_alone(t60: float, sti: float) -> None:
-    # Published values for an exponential decay without noise (Houtgast and Steeneken).
+    # An exponential decay without noise: its m(F) (Houtgast, Steeneken and Plomp, 1980)
+    # gives an STI of 0.7361, 0.5882 and 0.4371 at 0.5, 1 and 2 s.
     energy = np.tile(_exponential(t60, 8.0), (8, 1))
     assert speech_transmission_index(energy, DT) == pytest.approx(sti, abs=0.01)
 
@@ -349,3 +409,71 @@ def test_sti_checks_its_arguments() -> None:
         speech_transmission_index(np.ones((3, 10)), DT)
     # The seven STI bands work as well as the eight octave bands.
     assert speech_transmission_index(energy[1:], DT) == speech_transmission_index(energy, DT)
+
+
+def _slow_flyover(t: np.ndarray, closest_s: float) -> np.ndarray:
+    """The mean square of a point source flying straight past, 1 at its closest (no air
+    absorption), ``1 / (1 + (t / T)^2)`` with T its distance over its speed, through an
+    exponential time weighting of 1 s, exactly: with the kernel exp(-(t - ξ)/τ)/τ split
+    into the poles ±iT, ``(T/τ) Im[-e^(-z) E1(-z)]`` with ``z = (t - iT)/τ``."""
+    from scipy.special import exp1
+
+    z = (np.asarray(t, dtype=float) - 1j * closest_s) / 1.0
+    return closest_s * np.imag(-np.exp(-z) * exp1(-z))
+
+
+def test_slow_time_weighting_and_the_10_db_down_exposure_of_a_flyover() -> None:
+    """A source flying straight 1000 ft past at 160 kt (T = 3.70 s), through IEC
+    61672-1's slow time weighting (τ = 1 s) and as ECAC Doc 29 Volume 2 measures it
+    (glossary: L_Amax slow-weighted; section 4.1, eq. 4-1 and footnote 15: SEL over the
+    10 dB-down time), against the exact weighted level: within 0.001 dB all along,
+    L_ASmax 0.23 dB under the level as it passes, and the SEL between the exact times
+    the slow level is 10 dB under its highest (T (atan(t2/T) - atan(t1/T))) within 0.005
+    dB, 1.0 dB under the whole pass's (πT) and over the SEL between the times the level
+    itself is 10 dB down (2T atan 3)."""
+    from scipy.optimize import brentq, minimize_scalar
+
+    closest = 304.8 / (160.0 * 1852.0 / 3600.0)
+    times = np.arange(-200.0, 200.001, 0.05)
+    levels = 10.0 * np.log10(1.0 / (1.0 + (times / closest) ** 2))
+    grid, level, slow = time_weighted(times, levels)
+    assert grid[0] == times[0] and np.all(np.diff(grid) == pytest.approx(0.01))
+    assert level == pytest.approx(np.interp(grid, times, levels), abs=1e-3)
+    near = np.abs(grid) < 30.0
+    exact = 10.0 * np.log10(_slow_flyover(grid[near], closest))
+    assert np.max(np.abs(slow[near] - exact)) < 1e-3
+    peak = minimize_scalar(
+        lambda t: -_slow_flyover(t, closest), bounds=(0.0, 3.0), method="bounded"
+    )
+    top = float(_slow_flyover(peak.x, closest))
+    event = event_levels(times, levels)
+    assert event.max_db == pytest.approx(10.0 * math.log10(top), abs=1e-3)
+    assert event.max_db == pytest.approx(-0.23, abs=0.005)
+    t1 = brentq(lambda t: _slow_flyover(t, closest) - top / 10.0, -40.0, peak.x)
+    t2 = brentq(lambda t: _slow_flyover(t, closest) - top / 10.0, peak.x, 40.0)
+    assert (event.start_s, event.end_s) == pytest.approx((t1, t2), abs=0.011)
+    exposure = closest * (math.atan(t2 / closest) - math.atan(t1 / closest))
+    assert event.exposure_db == pytest.approx(10.0 * math.log10(exposure), abs=0.005)
+    whole = 10.0 * math.log10(math.pi * closest)
+    assert whole - event.exposure_db == pytest.approx(0.96, abs=0.01)
+    assert event.exposure_db - 10.0 * math.log10(2.0 * closest * math.atan(3.0)) > 0.03
+
+
+def test_time_weighting_keeps_a_steady_level_and_checks_its_input() -> None:
+    """A steady level reads the same through the time weighting, and its exposure over
+    a pass that never falls 10 dB is the whole of it, cut where it starts and ends; a
+    pass with nothing in it has no levels."""
+    times = np.array([0.0, 2.0, 5.0])
+    _, _, slow = time_weighted(times, [60.0, 60.0, 60.0])
+    assert slow == pytest.approx(60.0)
+    event = event_levels(times, [60.0, 60.0, 60.0])
+    assert event.max_db == pytest.approx(60.0)
+    assert event.exposure_db == pytest.approx(60.0 + 10.0 * math.log10(5.0))
+    assert (event.start_s, event.end_s) == pytest.approx((0.0, 5.0))
+    assert event_levels(times, [-np.inf] * 3).max_db == -np.inf
+    with pytest.raises(ValueError, match="each later than the one before"):
+        time_weighted([0.0, 0.0, 1.0], [60.0, 60.0, 60.0])
+    with pytest.raises(ValueError, match="one level a time"):
+        time_weighted(times, [60.0, 60.0])
+    with pytest.raises(ValueError, match="must be positive"):
+        time_weighted(times, [60.0] * 3, time_constant_s=0.0)

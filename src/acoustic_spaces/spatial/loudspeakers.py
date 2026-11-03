@@ -110,10 +110,74 @@ _HORIZON_DEG = 10.0
 _MAX_GAP_DEG = 90.0
 
 
-def _flat_faces(points: np.ndarray) -> list[tuple[int, ...]]:
-    """The points on each face of the convex hull of ``points`` that holds four or more."""
+#: Twice the area of a triangle of points on the unit sphere below which rounding
+#: leaves the direction of its plane loose. Such a triangle has two corners within
+#: ``_CLOSE`` of each other: twice the area is at least the product of its sides over 2,
+#: as its circle on the sphere has a radius of 1 at most.
+_THIN = 1e-5
+_CLOSE = 1.1 * (2.0 * _THIN) ** (1.0 / 3.0)
+
+
+def _triples_to_try(points: np.ndarray, reach: float) -> list[tuple[int, int, int]] | None:
+    """The triples of ``points`` (on or near the unit sphere) in increasing order among
+    which a search over every triple for faces of their convex hull finds all it does,
+    when it holds a triple's points to less than ``reach`` from its plane (well within
+    it) for any triple whose cross product reaches ``_THIN``.
+
+    A plane with every point on one side, as near as that, touches the hull at a corner
+    and holds only the points within ``reach`` of the plane of one of the hull's
+    triangles at that corner (Qhull's), as the others lie further below it: so the
+    triples of the corner's star, it and those points. Thinner triples have two points
+    within ``_CLOSE``, and every triple with two such is tried. None, for every triple
+    to be tried, where the points are not 64-bit floats (whose rounding that takes),
+    where Qhull cannot take them (fewer than four, all on one plane, or not finite), or
+    where it leaves one off the hull or makes a triangle as thin.
+    """
+    from scipy.spatial import ConvexHull, QhullError
+
+    if not isinstance(points, np.ndarray) or points.dtype != np.float64:
+        return None
+    if points.shape[1:] != (3,) or len(points) < 4 or not np.isfinite(points).all():
+        return None
+    try:
+        hull = ConvexHull(points)
+    except QhullError:
+        return None
+    if len(hull.vertices) < len(points):
+        return None
+    faces = hull.simplices
+    a, b, c = (points[faces[:, m]] for m in range(3))
+    normal = np.cross(b - a, c - a)
+    length = np.linalg.norm(normal, axis=1)
+    if length.min() < _THIN:
+        return None
+    normal /= length[:, None]
+    near = np.abs(points @ normal.T - np.einsum("fk,fk->f", normal, a)) < reach
+    triples = set()
+    for corner in range(len(points)):
+        star = np.flatnonzero(near[:, np.any(faces == corner, axis=1)].any(axis=1))
+        triples.update(itertools.combinations(star.tolist(), 3))
+    gaps = np.linalg.norm(points[:, None, :] - points[None, :, :], axis=2)
+    for i, j in zip(*np.nonzero(np.triu(gaps < _CLOSE, 1)), strict=True):
+        for k in range(len(points)):
+            if k != i and k != j:
+                triples.add(tuple(sorted((int(i), int(j), k))))
+    return sorted(triples)
+
+
+def _flat_faces(points: np.ndarray, exhaustive: bool = False) -> list[tuple[int, ...]]:
+    """The points on each face of the convex hull of ``points`` that holds four or more.
+
+    A face's points are those within 1e-9 of the plane of a triple of them with every
+    point on one side of it. The triples tried are those of :func:`_triples_to_try`
+    (rounding moves the direction of a plane by up to about 1e-14 over its cross
+    product, so up to 1e-9 at ``_THIN``), unless ``exhaustive``: then every triple is.
+    """
+    triples = None if exhaustive else _triples_to_try(points, 2e-8)
+    if triples is None:
+        triples = itertools.combinations(range(len(points)), 3)
     faces = set()
-    for i, j, k in itertools.combinations(range(len(points)), 3):
+    for i, j, k in triples:
         normal = np.cross(points[j] - points[i], points[k] - points[i])
         if np.linalg.norm(normal) < 1e-12:
             continue
@@ -124,15 +188,21 @@ def _flat_faces(points: np.ndarray) -> list[tuple[int, ...]]:
     return sorted(faces)
 
 
-def _hull_triangles(points: np.ndarray) -> list[tuple[int, int, int]]:
+def _hull_triangles(points: np.ndarray, exhaustive: bool = False) -> list[tuple[int, int, int]]:
     """Faces of the convex hull of points on the unit sphere around the origin.
 
     Points are nudged a tiny, fixed amount first, so four on one plane give two
-    triangles rather than four overlapping ones.
+    triangles rather than four overlapping ones. A face is a triple of points with
+    every other point on one side of its plane, to 1e-12 times its cross product (so
+    to 1e-7 at ``_THIN``). The triples tried are those of :func:`_triples_to_try`,
+    unless ``exhaustive``: then every triple is.
     """
     nudged = points + 1e-7 * np.random.default_rng(0).standard_normal(points.shape)
+    triples = None if exhaustive else _triples_to_try(nudged, 3e-7)
+    if triples is None:
+        triples = itertools.combinations(range(len(points)), 3)
     faces = []
-    for i, j, k in itertools.combinations(range(len(points)), 3):
+    for i, j, k in triples:
         normal = np.cross(nudged[j] - nudged[i], nudged[k] - nudged[i])
         if np.linalg.norm(normal) < 1e-12:
             continue
