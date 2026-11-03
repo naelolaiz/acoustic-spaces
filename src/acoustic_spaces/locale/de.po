@@ -2052,8 +2052,24 @@ msgstr ""
 "Den Schritt im Hintergrund ausführen; die Meldungen sagen, wie es läuft"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Close without running anything"
-msgstr "Schließen, ohne etwas auszuführen"
+msgid ""
+"Close without running anything; the options changed are kept for next time"
+msgstr ""
+"Schließen, ohne etwas auszuführen; die geänderten Optionen bleiben für das "
+"nächste Mal"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Defaults"
+msgstr "Standardwerte"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Put every option of this demo back where a first run starts it, the command "
+"line's defaults, and forget the ones kept from before"
+msgstr ""
+"Jede Option dieser Demo dorthin zurücksetzen, wo ein erster Durchlauf sie "
+"beginnt, auf die Standardwerte der Befehlszeile, und die zuvor behaltenen "
+"vergessen"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -2114,6 +2130,15 @@ msgstr ""
 #, python-brace-format
 msgid "Cannot run: {reason}"
 msgstr "Ausführen nicht möglich: {reason}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"Changed from the defaults and kept for next time: {options}. Defaults puts "
+"them back."
+msgstr ""
+"Von den Standardwerten geändert und für das nächste Mal behalten: {options}. "
+"Standardwerte setzt sie zurück."
 
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"

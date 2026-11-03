@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Editor: the Run demo window keeps the options changed in it for the next time it
+  opens, each demo its own (the listeners, the sources' files, what moves and the
+  format per scene file), names them above **Run**, and **Defaults** puts them back.
+- Fixed: a demo given `--hrtf` with a file that is not there is refused before its first
+  step; it failed only when a later step read the file.
 - Fixed: one late ray scattered off the ground next to a listener could lift a place of
   an outdoor walk by up to 6.1 dB(A) (the airport's landing heard at approach_2000m),
   and most runs found too little of that scattered sound far from the source. It is now
