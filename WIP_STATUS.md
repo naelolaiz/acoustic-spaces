@@ -70,11 +70,19 @@ Building v1 from `wip/barrier-pe-design.md`, following its one-day plan (section
 - V5 roof: as a roof rises 1 cm the level steps by up to 0.95 dB from 2 kHz up (the roof sits on the PE's grid;
   still air 0.02): the design's guess that the ratio cancels the snap is wrong.
 
+- V5/V6 with 32 at 8 kHz: barrier top 0.020 dB/mm (aim 0.01); line of sight 0.077 dB/cm (still 0.070, aim
+  0.05); a degree's boundary 0.66 dB; roof 1.16 dB/cm (aim 0.1 a cell); barrier end 9.7 dB at 60 m and 24 dB at
+  120 m per 10 cm (aim 1; still air 4.5). Maps behind barriers take 15 to 22 times main's CPU (aim 2), and from
+  1 kHz up show none of the effect until main's coverage onset bug is fixed.
+- Docs, CHANGELOG and roadmap written; tests: barrier and neighbouring outdoor files pass (184).
+
 ## Open
 
-V3 runs (full-wave and started PE finishing, then the engine end to end against main); V1 edge fade, V2;
-the roof-height sweep; the V3-V5 tables in docs/validation.md; CHANGELOG.
+V1 edge fade (5 cm steps) and V2 (ffp, zones, long term, turbulence, outdoor propagation, ground reflection) diffs
+against main are running; the wind examples' early paths are identical to main's (their late parts differ as
+main's own runs do).
 
-## Next
+## Next (follow-ups, not v1)
 
-Fill the tables and the remaining numbers in the docs, then the final report.
+A blend across barrier ends; a roof between the grid's cells; main's coverage onset and leg-shadow rounding bugs
+(own PRs); cheaper 4-8 kHz runs; the still-air two-edge fix (Q3).

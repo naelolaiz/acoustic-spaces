@@ -543,7 +543,8 @@ is an arc of a circle, so its travel time and its length are exact.
   legs, and take the eddies' share of a refraction shadow as the open ground's sound
   does. The paths round a barrier's end or a building's corner, on both sides of it,
   take the open ground's effect in the bands its parabolic equation gives, with their
-  phases in still air. Against a full-wave solution of rigid barriers and blocks in
+  phases in still air, and above those bands keep their straight legs as over an edge.
+  Against a full-wave solution of rigid barriers and blocks in
   wind from 63 to 500 Hz, and against a parabolic equation started behind a rigid
   barrier from its exact field from 125 Hz to 8 kHz, the weather's effect is within
   0.8 dB behind one barrier or building (1.0 dB behind a top 45 degrees up from the
