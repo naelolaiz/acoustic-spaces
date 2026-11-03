@@ -191,16 +191,18 @@ acoustic-spaces demo scene.yaml --moving none   # every walker standing where it
   gain for all, so that the listeners' differences in level are heard as they are.
 - **video**: `tour.wav` hears each listener for `--seconds` (20 by default) while the
   recordings run on, crossfading between them; a recording too short for every listener
-  shares its length out. Each stop is turned up to the loudness (K-weighted) of the
-  loudest, by as much as the still says, the only step that is not the simulation's. The
-  stills show the scene from above, drawn from its own model, with its sources (those
-  that play in colour, with a ray to the listener), the listeners and the one of the
-  moment as a head, and beside it the A-weighted level there of the sources that play,
-  as simulated, when their sound arrives, the reverberation time T30 at mid frequencies
-  (the mean of the 500 Hz and 1 kHz bands) and the nearest source that plays. `--credit`
-  puts a line about the recordings on the stills (who made them, their licence); without
-  it the line gives the free recording's credit, when one plays, and says which source
-  plays which other file.
+  shares its length out. Each stop is turned up to the loudness of the loudest, by 40 dB
+  at most and by as much as the still says, the only step that is not the simulation's:
+  K-weighted, with the channels' powers added up as ITU-R BS.1770-4 adds them (the side
+  surrounds of a loudspeaker layout 1.5 dB up, the LFE left out), an Ambisonics mix
+  measured on its W channel alone. The stills show the scene from above, drawn from its
+  own model, with its sources (those that play in colour, with a ray to the listener),
+  the listeners and the one of the moment as a head, and beside it the A-weighted level
+  there of the sources that play, as simulated, when their sound arrives, the
+  reverberation time T30 at mid frequencies (the mean of the 500 Hz and 1 kHz bands) and
+  the nearest source that plays. `--credit` puts a line about the recordings on the
+  stills (who made them, their licence); without it the line gives the free recording's
+  credit, when one plays, and says which source plays which other file.
 
 **Movement.** Sources and listeners whose [walk](scenes.md#walks) is on move along it
 while the recordings play, all on one clock from their start, as `walkthrough --all`
