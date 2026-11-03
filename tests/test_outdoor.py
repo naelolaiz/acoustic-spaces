@@ -230,9 +230,8 @@ def test_the_reflection_at_a_barrier_s_foot_bends_over_it_as_beside_it() -> None
     barrier stops right at its foot bends over its top there as it does 1 cm either
     side, so the early level of the middle listener, and of one 3 nm farther (the
     barrier then lies nearer to the end of the leg from the source than that leg is
-    tested), lies within 0.1 dB of the mean of theirs in every band. Neither leg had met
-    the barrier at its foot, so the edge diffraction took the reflection for one that
-    reaches the listener and left its terms out: 1.4 to 3.1 dB more."""
+    tested), lies within 0.1 dB of the mean of theirs in every band. The reflection had
+    passed the barrier's foot whole: 6 to 27 dB more."""
     geometry = {
         "ground": {"margin": 20},
         "barriers": [{"name": "screen", "path": [[5, -10], [5, 10]], "height": 3}],
@@ -248,6 +247,39 @@ def test_the_reflection_at_a_barrier_s_foot_bends_over_it_as_beside_it() -> None
         levels.append(10 * np.log10(total_energy(early_paths(Room.from_scene(scene)))))
     beside = (levels[0] + levels[-1]) / 2
     assert np.abs(np.array(levels[1:-1]) - beside).max() < 0.1
+
+
+@pytest.mark.parametrize(
+    "geometry",
+    [
+        {"barriers": [{"name": "screen", "path": [[5, -10], [5, 0], [15, 0]], "height": 3}]},
+        {
+            "buildings": [
+                {"name": "hall", "footprint": [[-5, -10], [5, -10], [5, 0], [-5, 0]], "height": 6}
+            ],
+            "barriers": [{"name": "screen", "path": [[5, 0], [5, 10]], "height": 3}],
+        },
+    ],
+    ids=["turning", "abutting"],
+)
+def test_a_barrier_stops_the_reflection_off_the_ground_where_it_turns(geometry) -> None:
+    """A source at (2, 3, 1) and listeners at (8, -3, 1) on either side of a barrier 3 m
+    high that turns a corner at (5, 0), or of one that abuts a building's corner there,
+    where the reflection off the ground meets the corner at its foot, or 1 to 3 um
+    aside: the barrier, or the building, stops it there as it does 1 mm either side, and
+    no path of up to the third order is found. The reflection had passed the turning
+    barrier whole there and 1 to 3 um aside, and the other at the corner, as had the
+    reflection off the roof at its corner; paths that reflect at the corner off a wall,
+    the ground or the roof and the wall again had passed 1 to 3 um aside as well."""
+    for offset in (-1e-3, -3e-6, -1e-6, 0.0, 1e-6, 3e-6, 1e-3):
+        aside = offset / 2**0.5  # level, across the reflection
+        scene = outdoor(
+            {"ground": {"margin": 20}, **geometry},
+            sources=[(2, 3, 1)],
+            listeners=[(8 + aside, -3 + aside, 1)],
+            early={"method": "image_sources", "max_order": 3, "diffraction": "none"},
+        )
+        assert len(early_paths(Room.from_scene(scene))) == 0
 
 
 def test_inside_corners_of_buildings_do_not_diffract() -> None:

@@ -8,17 +8,25 @@
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
 - Fixed: an early reflection whose point lies exactly on the foot of a wall, partition
-  or barrier standing on the surface it reflects off, and which goes on behind it, now
-  meets it there as it does beside the foot: through it with its transmission loss, or
-  stopped by a rigid one; it passed whole (with image sources twice). In the apartment
-  example a 0.7 m map's bedroom column at x = 8.0 m read 51 dB(A) instead of about 45
-  like its neighbours, and behind a 3 m barrier a listener placed symmetrically to the
-  source got 6 to 27 dB more early sound than 1 cm either side.
-- Fixed: no early path reflects off an opening any more. With edge diffraction those
-  paths, which carried no energy, had stood in for the reflection bending round the
-  opening's edge, so levels throughout a room with a 2 m doorway move by up to 1.8 dB at
-  63 Hz, 1.5 dB at 125 Hz and 0.2 dB above, and no longer step by 2 dB where the
-  reflection crosses the doorway's side.
+  or barrier standing on the surface it reflects off (in a corner too, or where such
+  walls meet), and which goes on behind it, now meets it there as it does just to one
+  side of the point: through it with its transmission loss, or stopped by a rigid one;
+  it passed whole (with image sources twice). In the apartment example the bedroom
+  column of a 0.7 m map at x = 8.0 m read 51 dB(A) instead of about 45 like its
+  neighbours, and behind a 3 m barrier a listener placed symmetrically to the source got
+  6 to 27 dB more early sound than 1 cm either side.
+- Fixed: where the wall between two rooms is drawn as two coincident faces, one for each
+  room, no early path reflects off both faces at one point any more: from one room into
+  the other that path was the direct sound at full level, without the wall's
+  transmission loss, and with image sources from the third order on it came back into
+  the source's room as the reflection off the wall once more. Behind such a 20 dB wall
+  it had raised the early level at 1 kHz by 9 to 18 dB, and in front of it by 0.05 to
+  0.13 dB up to the third order and 0.4 to 0.6 dB up to the fifth.
+- Fixed: no early path reflects off an opening any more. Those paths carried no energy,
+  but they took the place of other paths with the same image and, with edge diffraction,
+  of the reflection bending round the opening's edge, so levels across a 10 m x 8 m room
+  with a 2 m doorway move by as much as 2.4 dB at 63 Hz, 1.6 dB at 125 Hz and 0.2 dB
+  above, and no longer step by 2 dB where the reflection crosses the doorway's side.
 
 ## 4.1.0
 
