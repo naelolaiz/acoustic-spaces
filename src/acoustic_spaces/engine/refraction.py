@@ -71,7 +71,8 @@ _GRAZE_FLOATS = 4.0
 _AGREEMENT = 1e-2
 #: Where the width from the range less its singular parts cannot be had, the width from
 #: the range itself is taken only where it changes by no more than this share of it from
-#: rays half as far apart: its error is about 1.3 times that change, half a dB at most.
+#: rays half as far apart; for a ray that turns in the air, that from the rays a small
+#: step either side is taken instead of the fitted one where the two differ by more.
 _ALONE = 1e-1
 #: The width from the range less its singular parts is taken over one from the range
 #: itself that it disagrees with, or alone, only where it changes by no more than this
@@ -885,10 +886,10 @@ class Rays:
         chosen = self._choose(new, raw, sin_s * sin_r, capped, steady)
         if chosen is None:
             return None
-        if chosen is raw:
-            tube = distance * abs(raw[0]) * sin_s * sin_r
-        else:
+        if chosen is new:
             tube = distance * abs(chosen[0])
+        else:
+            tube = distance * abs(chosen[0]) * sin_s * sin_r
         launch = math.copysign(math.acos(min(p * self.cs, 1.0)), 1.0 if branch.up else -1.0)
         arrival = math.copysign(
             math.acos(min(p * float(self.profile.speed(zr)), 1.0)),
@@ -921,7 +922,9 @@ class Rays:
         """The one of two the tube of a ray takes: ``new``, (its width from its range less
         its singular parts, the same from rays half as far apart: a callable), and
         ``raw``, (the slope of its range itself, the same from rays half as far apart: a
-        callable, how many floats of p apart its rays are), a width once times ``sines``,
+        callable, how many floats of p apart its rays are, and where it is fitted over
+        rays that turn about the ray, the same three from the rays a small step either
+        side, else None), a width once times ``sines``,
         the ray's sines at both ends multiplied; None where either cannot be had. How
         much each changes from rays half as far apart stands for its error, as a share
         of the width (or of ``capped``, the width at which the level is capped, where
@@ -931,8 +934,10 @@ class Rays:
         unless they agree, ``raw`` only where it changes by no more than ``_AGREEMENT``
         where the ray was taken at a fold or a steep crossing (``steady``) or its rays
         lie ``_FEW_FLOATS`` floats of p apart or fewer, else by no more than ``_ALONE``
-        where there is no ``new``; and ``new`` alone only where it changes by no more
-        than ``_STABLE``. None where neither can be taken."""
+        where there is no ``new``, there from the rays a small step either side where
+        those lie more than ``_FEW_FLOATS`` floats apart and the fitted slope differs
+        from theirs by more than ``_ALONE``; and ``new`` alone only where it changes by
+        no more than ``_STABLE``. None where neither can be taken."""
 
         def change(estimate, scale=1.0):
             again = estimate[1]()
@@ -958,6 +963,10 @@ class Rays:
             bound = _AGREEMENT
         elif new is None:
             bound = _ALONE
+            local = raw[3]
+            if local is not None and local[2] > _FEW_FLOATS:
+                if not abs(raw[0] - local[0]) * sines <= bound * max(abs(raw[0] * sines), capped):
+                    raw = local
         else:
             return raw
         if not change(raw, sines) <= bound * max(abs(raw[0] * sines), capped):
@@ -972,8 +981,9 @@ class Rays:
         over half, a quarter or an eighth of that span, the first over which they all
         reach the listener; else from the rays ``ps`` either side. That slope, the same
         from rays half as far apart (a callable, None from it where they would lie fewer
-        than ``_HALF_FLOATS`` floats of p apart) and how many floats of p apart the rays
-        are; None where the rays either side do not reach the listener."""
+        than ``_HALF_FLOATS`` floats of p apart), how many floats of p apart the rays
+        are, and for a fitted slope the same three from the rays ``ps`` (else None); None
+        where the rays either side do not reach the listener."""
         if not np.all(np.isfinite(out[:, 0])):
             return None
         top = 1.0 / max(self.cs, float(self.profile.speed(zr)))
@@ -983,14 +993,27 @@ class Rays:
                 break
             slope = self._raw_fit(zr, p, branch, span, top)
             if slope is not None and span < _HALF_FLOATS * _TURN_RAYS * float(np.spacing(p)):
-                return slope, lambda: None, span / float(np.spacing(p))
+                return (
+                    slope,
+                    lambda: None,
+                    span / float(np.spacing(p)),
+                    self._local(zr, p, branch, out, ps),
+                )
             if slope is not None:
                 return (
                     slope,
                     lambda span=span: self._raw_fit(zr, p, branch, 0.5 * span, top),
                     (span / float(np.spacing(p))),
+                    self._local(zr, p, branch, out, ps),
                 )
             span *= 0.5
+        return (*self._local(zr, p, branch, out, ps), None)
+
+    def _local(self, zr, p, branch, out, ps):
+        """The slope in p of the range of the ray with parameter ``p`` along ``branch``
+        from the rays ``ps`` a step either side (``out`` their distances), the same from
+        rays half as far apart (a callable, None from it where they would lie fewer than
+        ``_HALF_FLOATS`` floats of p apart) and how many floats of p apart the rays are."""
         h = 0.5 * float(ps[2] - ps[1])
 
         def half_step():

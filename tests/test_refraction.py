@@ -1102,6 +1102,41 @@ def test_the_levels_of_rays_in_a_duct_through_air_3_8e_12_off_level() -> None:
     _assert_on_the_listener(profile, 1.2, 1.3, 1000.0, found)
 
 
+def test_the_level_of_a_ray_that_turns_just_under_air_level_but_for_a_hair() -> None:
+    """Upwind of a table whose wind rises from 1.609 m/s at the ground to 1.873 m/s at
+    0.23 m, holds there to 0.35 m (1.3e-11 m/s more), falls to 1.827 m/s at 1.17 m and
+    stays between 1.824 and 1.830 m/s up to 4.3 m, then rises to 1.870 m/s at 4.87 m and
+    2.46 m/s at 51.7 m (15 C), between a source 26.68 m and a listener 1 um higher and
+    2666.3 m apart: the one ray leaves going down, crosses the air whose speed changes by
+    1.1e-10 m/s per metre from 0.23 to 0.35 m up almost level and turns back up 0.19 m
+    above the ground; the ranges of rays that turn a little higher grow without bound.
+    Against the exact range of the profile, its level over free field at its length is
+    -13.251 dB; it is found, at that level to 0.05 dB, and reaches the listener."""
+    rows = [
+        [0.0, 15.0, 1.609],
+        [0.1079, 15.0, 1.7190481183040909],
+        [0.2297, 15.0, 1.8730965701257702],
+        [0.3476, 15.0, 1.873096570138857],
+        [1.1727, 15.0, 1.8272922145800337],
+        [1.2228, 15.0, 1.8263528372808842],
+        [1.7875, 15.0, 1.8265131353829955],
+        [1.8526, 15.0, 1.8247728427730359],
+        [2.6495, 15.0, 1.8249833614040154],
+        [2.6941, 15.0, 1.827546875399252],
+        [2.8196, 15.0, 1.827546875399252],
+        [3.0504, 15.0, 1.827894024124376],
+        [3.4506, 15.0, 1.8292313089550494],
+        [4.2952, 15.0, 1.829231308942329],
+        [4.8699, 15.0, 1.8696592625129773],
+        [51.7, 15.0, 2.4600799228198786],
+    ]
+    profile = Profile.of(Atmosphere.model_validate({"table": rows}), 15.0, np.array([-1.0, 0.0]))
+    found = Rays(profile, 26.68).eigenrays(26.680001, 2666.3, 2)
+    assert len(found) == 1
+    assert _level(found, 0) == pytest.approx(-13.251, abs=0.05)
+    _assert_on_the_listener(profile, 26.68, 26.680001, 2666.3, found)
+
+
 @pytest.mark.parametrize(("g", "angle"), [(0.1, 5.0), (-0.1, -3.0), (0.02, 30.0)])
 def test_the_compiled_tracer_follows_the_arcs(g, angle) -> None:
     native = pytest.importorskip("acoustic_spaces._native")

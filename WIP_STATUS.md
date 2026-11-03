@@ -4,7 +4,7 @@ This branch fixes the level spikes of curved early paths that turn at, or very n
 listener's height (the aircraft landing spike traced on 2026-11-03), and makes the eigenray search in
 `engine/refraction.py` find rays near level and near profile corners without accepting false ones.
 
-## State (2026-11-03, 22:00 Madrid)
+## State (2026-11-04, 00:30 Madrid)
 
 - Committed: `2795571` (the first fix: the sine of a ray at a turning end is exactly 0) and the merge of main `b23f98a`.
 - This commit snapshots the uncommitted work of three fix-and-review rounds plus the fourth round in progress:
@@ -23,8 +23,16 @@ listener's height (the aircraft landing spike traced on 2026-11-03), and makes t
   turning-slope fit unguarded (levels off by up to 43 dB where head is right); the `_GRAZE_SHARE` slack lets
   false roots through (exact misses 0.3-0.5 m); the fallback differences at other points than head; on the
   presets the fit is worse than head on 23 rays above -20 dB (up to 0.30 dB, 0.89 dB near a caustic).
-  Round 5 is in progress in this snapshot. If it is rejected too, the plan is to ship only the first fix
-  (`2795571`) with the remaining misses documented.
+- Round 5 (this snapshot) fixed round 4's blocker and majors. Its review found no false eigenray that head lacks
+  and confirmed tests, lint and documented numbers, but rejected it for one major and two minors:
+  - on the sampled presets, rays that leave and arrive at nearly the same height and turn once in the air take
+    the width that is exact for the sampled profile; against the smooth profile they are 0.13 to 0.33 dB
+    further off than main (end to end, clear_night 12 m at 300 m: +0.235 dB against main's -0.069 dB);
+  - three new-only roots miss the listener by 33 to 760 times the tolerance in exact arithmetic (levels right
+    to 0.003 dB);
+  - two direct rays in nearly level air that main finds are dropped.
+- Options put to the owner: ship this state with those documented, one more round to restore main's width on
+  the presets, or ship only the first fix (`2795571`), which the first review found free of regressions.
 - Minors open from round 3: rays with both ends 1 mm from a level-layer edge at 400 m (0.3 dB), equal-height
   preset rays at 10-80 m (window slide, up to 0.16 dB), the 600 m caustic carve-out and "within 0.74 dB" in
   `docs/outdoor.md`, version history in new test docstrings.

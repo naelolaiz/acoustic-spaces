@@ -502,19 +502,21 @@ is an arc of a circle, so its travel time and its length are exact.
   where the first cannot be had and the second changes by no more than 0.1 %; else the
   first, but only where it changes by no more than 1 % for a path that steps over the
   distance or where the rays either side lie 300 floating-point numbers of horizontal
-  slowness apart or fewer, and by no more than 10 % where the second gives none. A path
-  neither way gives so is left out. Where the speed is the same at every height between
-  the source's and the listener's, the direct path is the straight line. Against the
-  smooth profiles of the `windy` preset downwind and of `clear_night`, from sources 1 and
-  4 m up to listeners 0.5 to 12 m up, the levels of the paths 150 and 300 m away,
-  straight or off the ground up to twice, are within 3.6 dB, four in five of them within
-  0.1 dB (1.8 dB where they are 8 dB or more over a straight path's, nearer a caustic),
-  and those 600 m away in `windy` within 3.3 dB, nine in ten within 0.1 dB (1.9 dB nearer
-  a caustic). Where neighbouring rays cross (a caustic) the level is capped at 10 dB over
-  a straight path's, and each caustic delays the phase by a quarter period. Against an
-  independent ray tracer on the smooth profile of the `windy` preset downwind, the levels
-  of three such paths 100 and 300 m away are within 0.05 dB (the tests allow 0.2 dB); no
-  such check is made near a caustic.
+  slowness apart or fewer, and by no more than 10 % where the second gives none, there,
+  for a ray that turns back in the air, from the ranges of the rays either side rather
+  than the fit where the two differ by more than 10 % and those rays lie more than 300
+  such numbers apart. A path neither way gives so is left out. Where the speed is the
+  same at every height between the source's and the listener's, the direct path is the
+  straight line. Against the smooth profiles of the `windy` preset downwind and of
+  `clear_night`, from sources 1 and 4 m up to listeners 0.5 to 12 m up, the levels of the
+  paths 150 and 300 m away, straight or off the ground up to twice, are within 3.6 dB,
+  four in five of them within 0.1 dB (1.8 dB where they are 8 dB or more over a straight
+  path's, nearer a caustic), and those 600 m away in `windy` within 3.3 dB, nine in ten
+  within 0.1 dB (1.9 dB nearer a caustic). Where neighbouring rays cross (a caustic) the
+  level is capped at 10 dB over a straight path's, and each caustic delays the phase by a
+  quarter period. Against an independent ray tracer on the smooth profile of the `windy`
+  preset downwind, the levels of three such paths 100 and 300 m away are within 0.05 dB
+  (the tests allow 0.2 dB); no such check is made near a caustic.
 - **In the bands up to 500 Hz** rays fail over the ground, as the profiles change most
   within a wavelength of it, where the direct sound and its reflection meet. There the
   sound over the open ground comes from a parabolic equation (the Green's function
