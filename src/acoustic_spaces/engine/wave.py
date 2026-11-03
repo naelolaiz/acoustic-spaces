@@ -289,8 +289,11 @@ class WaveResponse:
 
         key = (float(sample_rate), int(n))
         if key not in self._cache:
-            # Where the run starts, in samples from emission.
-            start = int(round(self.delay_s * sample_rate)) - int(round(self.lead_s * sample_rate))
+            # Where the run starts, in samples from emission, rounded once, so within half
+            # a sample of its time at any sample_rate (lead_s need not be a whole number
+            # of samples at a rate other than the run's: 16 steps at 2000 Hz are 352.8
+            # samples at 44.1 kHz).
+            start = int(round((self.delay_s - self.lead_s) * sample_rate))
             before = max(0, -start)
             out = np.zeros((before + n, 4))
             # Impulse responses scale with the sample period: an impulse of height a at

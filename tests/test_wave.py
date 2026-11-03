@@ -637,6 +637,35 @@ def test_a_run_from_before_emission_lines_up_with_a_delayed_one() -> None:
     np.testing.assert_allclose(early.field(FS, n), late.field(FS, n + shift)[shift:], atol=1e-12)
 
 
+@pytest.mark.parametrize("delay", [192.55 / FS, 1200.52 / FS])
+def test_a_run_from_before_emission_lands_within_half_a_sample_at_another_rate(
+    delay: float,
+) -> None:
+    """At a rate where the lead is not a whole number of samples (16 steps at 44100 / 22
+    Hz, the 125 Hz band's grid of a 44.1 kHz scene, are 383.13 samples at 48 kHz), a run
+    fed a delay shorter or longer than its lead lands where one that starts at emission,
+    fed the delay less the lead, does: within half a sample of its time (0.42 and 0.39
+    samples early here; with the delay and the lead rounded apart, 0.58 and 0.61 samples
+    late)."""
+    rate = 44100 / 22
+    lead, n, whole = 16 / rate, 24_000, 9600
+    signals = np.random.default_rng(1).standard_normal((300, 4))
+    gain = np.ones(2)
+    field = WaveResponse(rate, signals, 2, 0.2, lead_s=lead).fed(gain, delay).field(FS, n)
+    later = WaveResponse(rate, signals, 2, 0.2).fed(gain, delay - lead)
+    np.testing.assert_allclose(field, later.field(FS, n), rtol=0, atol=1e-12)
+    # The run placed exactly: fed a whole number of samples, then moved by the rest.
+    placed = WaveResponse(rate, signals, 2, 0.2).fed(gain, whole / FS).field(FS, 4 * n)
+    f = np.fft.rfftfreq(4 * n)  # cycles per sample
+    turn = np.exp(-2j * np.pi * f * ((delay - lead) * FS - whole))
+    spectrum = np.fft.rfft(placed, axis=0) * turn[:, None]
+    exact = np.fft.irfft(spectrum, 4 * n, axis=0)[:n]
+    slope = np.fft.irfft(spectrum * (2j * np.pi * f)[:, None], 4 * n, axis=0)[:n]
+    # field(t) = exact(t - late) ~ exact(t) - late * slope(t), in samples.
+    late = -np.sum((field - exact) * slope) / np.sum(slope**2)
+    assert abs(late) < 0.5
+
+
 def test_velocity_is_in_step_with_the_pressure() -> None:
     # A plane wave from -x crosses the probe and its neighbours one and two cells away
     # (1 / COURANT steps a cell): X = -W sample by sample, not half a step ahead of it.
@@ -712,8 +741,9 @@ def test_first_order_field_matches_a_point_source(scheme: str) -> None:
     (the spherical wave; Kinsler et al., Fundamentals of Acoustics), so 10 log10(1 + 1 /
     (k r)^2) at the band's centre. Within 0.06 dB (0.040 dB at most here). Second-order
     differences fall 0.35 dB (19-point) and 0.31 dB (7-point) short along the axis in the
-    125 Hz band, and with the trapezoidal rule's gain left in 0.15 and 0.075 dB; a
-    Courant number 1.5 times off is 3.5 dB."""
+    125 Hz band; with the trapezoidal rule's gain left in, the fourth-order ones fall up
+    to 0.15 and 0.075 dB short in that band over the three directions. A Courant number
+    1.5 times off is 3.5 dB."""
     room = _free_room((4.0,), max_band_hz=125, box=(24.0, 20.0, 20.0))
     c = room.speed_of_sound()
     source = np.array(room.scene.sources[0].position)
@@ -1054,8 +1084,9 @@ def test_open_models_absorb_at_the_grid_edge(tmp_path: Path, monkeypatch) -> Non
         )
     pressure = responses[0].signals[:, 0]
     rate = responses[0].rate
-    # The sound leaves: little is left after 150 ms.
-    late = pressure[int(0.15 * rate) :]
+    # The sound leaves: little is left 150 ms after emission (the run starts lead_s
+    # before it).
+    late = pressure[round((0.15 + responses[0].lead_s) * rate) :]
     assert np.sum(late**2) < 1e-2 * np.sum(pressure**2)
 
 
@@ -1476,7 +1507,8 @@ def test_a_speed_of_sound_that_grows_with_height_bends_the_sound_as_the_rays_do(
     # Air warming from 10 to 130 °C over 60 m (the speed of sound from 337 to 402 m/s)
     # bends the sound down, and cooling as much bends it up: the direct sound arrives
     # from 5 degrees above or below, as the eigenrays do (the 7-point stencil, slower
-    # along the grid's axes, bends it some 5 % more).
+    # along the grid's axes, bends it 4.6 % more as the air warms and 0.9 % more as it
+    # cools).
     elevations = []
     for table in ([[0, 10, 0], [60, 130, 0]], [[0, 130, 0], [60, 10, 0]]):
         room = _warming(table)
@@ -1514,7 +1546,8 @@ def test_a_speed_of_sound_that_grows_with_height_bends_the_sound_as_the_rays_do(
         field = np.fft.irfft(
             np.fft.rfft(wave.signals, 4 * n, axis=0) * gain[:, None], 4 * n, axis=0
         )
-        arrival = int(round(eigenrays.time[0] * wave.rate))
+        # In samples of the run, which starts lead_s before emission.
+        arrival = int(round(eigenrays.time[0] * wave.rate)) + round(wave.lead_s * wave.rate)
         w, x, y, z = field[arrival - int(0.008 * wave.rate) : arrival + int(0.008 * wave.rate)].T
         intensity = np.array([w @ x, w @ y, w @ z])  # towards where the sound comes from
         elevation = math.degrees(math.atan2(intensity[2], math.hypot(*intensity[:2])))
