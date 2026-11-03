@@ -9,8 +9,8 @@ up to 845 m away, how its turbulence compares with a parabolic equation through 
 eddies, how its rays through vegetation compare with a separate particle simulation,
 how its wave solver in wind and temperature compares with a parabolic equation, how
 the weather's effect behind barriers and buildings compares with a full-wave solution,
-and how much of a block's time the real-time convolver needs. It ends with the known issues and
-what has not been validated yet.
+and how much of a block's time the real-time convolver needs. It ends with the known
+issues and what has not been validated yet.
 
 ## Checks against theory, on every change
 
@@ -2871,10 +2871,10 @@ over a roughness of 5 cm, 5 or 10 m/s 10 m up, towards the listener or the sourc
   building a rigid ring block; the wind blows through them; 63 to 500 Hz, over rigid
   ground and over grass (Miki's impedance, 200 kPa s/m²). It checks itself: over
   open rigid ground it is within 0.002 dB of the exact field of the source and its
-  image, with a ring barrier in still air within -0.10 to +0.03 dB of a straight barrier's
-  four paths (the uniform theory of diffraction) at 125 and 250 Hz, and over open
-  ground in 5 m/s of wind within 0.25 dB of the engine's parabolic equation at each
-  frequency of the 125 Hz band.
+  image; a ring barrier in still air is -0.10 to +0.03 dB from a straight barrier's
+  four paths (the uniform theory of diffraction) at 125 and 250 Hz; and over open
+  ground in 5 m/s of wind it is within 0.25 dB of the engine's parabolic equation at
+  each frequency of the 125 Hz band.
 - **A parabolic equation started behind the barrier** from the exact field of a rigid
   straight barrier over rigid ground (the four paths), 1 m behind it (within 0.18 dB
   of those paths in still air), and marched in a wind that blows behind the barrier
@@ -2921,9 +2921,9 @@ allowed; 0.62 at 500 Hz 120 m behind the near barrier upwind, over rigid ground)
 0.74 dB in 10 m/s (0.8 allowed); behind a top 45 degrees up from the source within
 0.98 dB in 10 m/s at 250 Hz over rigid ground (0.6 allowed), 60 degrees up 0.54 dB.
 Behind two barriers 10 m apart it is off by up to 1.68 dB at 125 Hz (1.7 allowed) and
-1.63 dB in the other bands (1.0 allowed): the equation marches away from the source
-only, so nothing reflects between them. No listener of these cases is deeper than
-25 dB below still air.
+1.63 dB in the other bands (1.0 allowed); the equation marches away from the source
+only, so nothing reflects between the barriers in it. No listener of these cases is
+deeper than 25 dB below still air.
 
 **Against the started parabolic equation.** The engine's weather effect less the
 reference's, the largest difference (dB) over the listeners where the reference is
@@ -3005,17 +3005,20 @@ source 1 m up over hard ground and a barrier 4 m high 15 m away across the way:
 | the wind, from none to 0.01 m/s (0.1 m/s) | 0.024 (0.24) | | 0.2 at 0.1 m/s |
 | the barrier's top, 1 mm higher (listeners 40 and 60 m away) | 0.020 | 0.006 | 0.01 |
 | a listener 40 m away, 1 cm higher through the line of sight over the top | 0.077 | 0.070 | 0.05 |
-| a building's roof 25 to 37 m away, 1 cm higher, from 6 to 6.3 m | ROOFCM | 0.023 | 0.1 a cell |
-| a listener behind a slanted barrier, 0.01 degrees round across a degree's boundary | BINDEG | 0.018 | |
+| a building's roof 25 to 37 m away, 1 cm higher, from 6 to 6.3 m | 1.16 | 0.023 | 0.1 a cell |
+| a listener behind a slanted barrier, 0.01 degrees round across a degree's boundary | 0.66 | 0.018 | |
 | a listener 2 cm further, where the parabolic equation starts (a 1.5 m barrier 2 m from a source 0.5 m up) | 0.24 | 0.16 | |
 | a listener 10 cm across the shadow boundary of a barrier's end, 60 and 120 m away | 9.7 and 24 | 4.5 | 1 |
 
 The wind's effect grows in proportion to the wind (500 Hz, 100 m away and 4 m up),
-with no step as it starts. ROOFTEXT The degree's boundary and the barrier's end are
-the plane's two dimensions (see
-[What is not modelled yet](outdoor.md#what-is-not-modelled-yet)); at the end the paths over the
-top take the barrier's effect on one side and the paths round it the open ground's on
-both, and still air steps there too, where the paths over the top end with the barrier.
+with no step as it starts. The roof sits on the parabolic equation's grid, so as it
+rises the weather's effect behind it, which changes with its height, steps from one
+cell to the next: 0.15 dB at 500 Hz, up to 1.16 dB from 2 kHz up. The degree's
+boundary and the barrier's end come from the plane's two dimensions (see
+[What is not modelled yet](outdoor.md#what-is-not-modelled-yet)): at the end the
+paths over the top take the barrier's effect on one side and the paths round it the
+open ground's on both, and still air steps there too, where the paths over the top end
+with the barrier.
 
 ## Levels over a long term
 
@@ -4184,7 +4187,7 @@ Results:
   air steps by 4.5 dB at most, at 63 Hz (see
   [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
 - **A building's height in wind.** The parabolic equation puts a roof on its grid, so
-  as a roof rises the weather's effect behind it steps at each cell: by up to ROOFSTEP
+  as a roof rises the weather's effect behind it steps at each cell: by up to 1.2
   dB a centimetre from 2 kHz up, against 0.02 dB in still air (see
   [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
 - **Coverage maps behind barriers in wind** leave out the early sound that arrives

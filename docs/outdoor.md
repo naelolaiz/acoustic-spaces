@@ -617,10 +617,10 @@ air, a scene's late rays take about three times as long, and coverage maps about
 times, the parabolic equation running for each point; `simulation.performance.threads`
 shares the work out over the cores. Behind barriers and buildings the parabolic
 equation runs in every band, in the weather and in still air, for each degree of
-direction: a pair of runs 160 m out takes about 9 s of CPU, nearly all of it at 4 and 8
-kHz, and a coverage map behind two barriers or a building 10 to 16 times as long as
-with straight legs (96 points over grass in 8 m/s of wind: 150 to 160 s instead of 10
-to 16). The places of a walking source share the parabolic
+direction: a pair of runs 160 m out takes about 12 s of CPU, nine tenths of it at 4
+and 8 kHz, and a coverage map behind two barriers or a building 15 to 22 times as long
+as with straight legs (96 points over grass in 8 m/s of wind: 210 to 230 s instead of
+10 to 15). The places of a walking source share the parabolic
 equation's runs where they stand at one height over one ground and neither the weather
 nor the ground has zones: a run from one place serves the listeners of every other that
 the sound goes the same way to, each reached by a last step of its own, so that it gets
@@ -1474,6 +1474,9 @@ equation leaves out:
   bands: where a listener crosses the shadow boundary of a barrier's end the level
   steps, 10 cm across it, by up to 9.7 dB 60 m from the source and 24 dB 120 m away
   (see [Validation](validation.md#known-issues)).
+- **A roof on the equation's grid.** A roof stands at the nearest of the equation's
+  heights, so as a building rises the level behind it steps from one to the next, by
+  up to 1.2 dB from 2 kHz up.
 - **Buildings in the wide-angle equation** (at steep points, or with
   `parabolic_equation: wide_angle`) are two screens at their walls: up to 1.4 dB in the
   wind's effect behind a building 60 m deep at 500 Hz in 10 m/s.
