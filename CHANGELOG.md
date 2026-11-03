@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed: a simulation refused for its memory says how much it would need with each
+  setting it names lowered on its own, the least first; it named them without how much
+  each saves (more `late.batches` need more memory, not less).
 - Fixed: one late ray scattered off the ground next to a listener could lift a place of
   an outdoor walk by up to 6.1 dB(A) (the airport's landing heard at approach_2000m),
   and most runs found too little of that scattered sound far from the source. It is now

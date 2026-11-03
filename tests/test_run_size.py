@@ -123,8 +123,49 @@ def test_the_bands_are_grouped_as_the_tracer_groups_them(method) -> None:
 def test_a_simulation_too_large_for_the_memory_is_refused(monkeypatch) -> None:
     room = Room.from_yaml(SHOEBOX)
     monkeypatch.setattr(run_size, "machine_memory", lambda: MiB)
-    with pytest.raises(ValueError, match=r"more than this computer's 1 MiB; lower simulation"):
+    with pytest.raises(ValueError, match=r"more than this computer's 1 MiB; it would need about"):
         simulate(room)
+
+
+def test_a_refusal_gives_what_each_setting_lowered_would_need() -> None:
+    """Each setting the message names comes with the memory the run would need with it
+    lowered on its own, the least first; more batches need more memory, not less, as
+    each batch fills arrays as long as the response."""
+    room = Room.from_yaml(SHOEBOX)
+    scene = room.scene
+    settings = scene.simulation.model_copy(
+        update={"late": scene.simulation.late.model_copy(update={"batches": 10})}
+    )
+    sources = [s for s in scene.sources if s.in_use]
+    listeners = [s for s in scene.listeners if s.in_use]
+    sources = [sources[0], sources[0].model_copy(update={"name": "copy"})]
+    listeners = [listeners[0], listeners[0].model_copy(update={"name": "copy"})]
+
+    def need(settings=settings, sources=sources, listeners=listeners, **late) -> float:
+        if late:
+            settings = settings.model_copy(update={"late": settings.late.model_copy(update=late)})
+        return run_size.simulation_need(room, settings, sources, listeners, 4).bytes
+
+    expected = sorted(
+        [
+            (
+                need(settings.model_copy(update={"ir_length_s": settings.ir_length_s / 2})),
+                f"simulation.ir_length_s {settings.ir_length_s / 2:g}",
+            ),
+            (
+                need(directions=settings.late.directions // 2),
+                f"simulation.late.directions {settings.late.directions // 2}",
+            ),
+            (need(batches=1), "simulation.late.batches 1 (no standard errors)"),
+            (need(listeners=listeners[:1]), "1 of the 2 listeners"),
+            (need(sources=sources[:1]), "1 of the 2 sources (a walk's places count as sources)"),
+        ]
+    )
+    sizes = [f"{run_size._size(size)} with {label}" for size, label in expected]
+    advice = run_size.simulation_need(room, settings, sources, listeners, 4).advice
+    assert advice == "it would need about " + ", ".join(sizes[:-1]) + " or " + sizes[-1]
+    assert all(size < need() for size, _ in expected)
+    assert need(batches=1) < need(batches=2) < need() < need(batches=20)
 
 
 def test_a_map_too_fine_for_the_memory_is_refused(monkeypatch) -> None:
