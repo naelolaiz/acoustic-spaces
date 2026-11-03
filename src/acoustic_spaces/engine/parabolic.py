@@ -483,9 +483,11 @@ class _Ground:
         )
         self.plain = ~self.image
         self.normal = np.where(rigid, 1.0, (safe - 1.0) / (safe + 1.0))
-        reflection = (kz[None, :] * safe[:, None] - ka[:, None]) / (
-            kz[None, :] * safe[:, None] + ka[:, None]
-        )
+        # (Rigid rows take 1, where on a coarse grid kz may meet -ka.)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            reflection = (kz[None, :] * safe[:, None] - ka[:, None]) / (
+                kz[None, :] * safe[:, None] + ka[:, None]
+            )
         self.reflection = np.where(
             rigid[:, None], 1.0, np.where(self.image[:, None], 0.0, reflection)
         )
