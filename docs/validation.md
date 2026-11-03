@@ -2792,8 +2792,8 @@ the long term and L_den (5 dB in the evening, 10 at night), in dB(A):
 | | downwind | upwind | still | inversion | day | evening | night | long term | L_den |
 |---|---|---|---|---|---|---|---|---|---|
 | 50 m | 46.5 | 36.6 | 47.4 | 47.7 | 45.6 | 46.1 | 46.8 | 46.1 | 53.0 |
-| 100 m | 43.1 | 21.6 | 38.9 | 40.6 | 39.7 | 39.9 | 40.2 | 39.9 | 46.5 |
-| 200 m | 33.6 | 10.5 | 26.3 | 36.1 | 29.3 | 31.8 | 33.9 | 31.8 | 39.8 |
+| 100 m | 42.9 | 21.6 | 38.9 | 40.6 | 39.5 | 39.8 | 40.1 | 39.8 | 46.4 |
+| 200 m | 33.5 | 10.5 | 26.3 | 36.1 | 29.2 | 31.8 | 33.9 | 31.7 | 39.8 |
 | 400 m | 22.2 | -2.8 | 12.0 | 28.5 | 17.5 | 22.7 | 25.8 | 22.7 | 31.4 |
 | 800 m | 12.2 | -20.2 | -1.6 | 17.7 | 7.2 | 12.0 | 15.0 | 12.0 | 20.7 |
 
@@ -2808,18 +2808,18 @@ clear nights bring, and takes the long-term level from it as L_LT = L_DW - C_met
 C_met = C_0 (1 - 10 (h_s + h_r) / d_p) beyond d_p = 10 (h_s + h_r) and 0 nearer, where
 C_0 lies between 0 and 5 dB by the local weather statistics. The engine's C_met is the
 A-weighted level in the favourable classes (downwind and the inversion, combined by
-their shares of the whole day) less the long-term level. With C_0 fitted to it at 3.38
+their shares of the whole day) less the long-term level. With C_0 fitted to it at 3.37
 dB, within the standard's range:
 
 | distance | engine | ISO 9613-2 | difference |
 |---|---|---|---|
-| 50 m | 0.94 | 1.69 | -0.76 |
-| 100 m | 2.25 | 2.54 | -0.29 |
-| 200 m | 3.13 | 2.96 | +0.17 |
-| 400 m | 3.43 | 3.17 | +0.26 |
-| 800 m | 3.49 | 3.28 | +0.21 |
+| 50 m | 0.94 | 1.69 | -0.75 |
+| 100 m | 2.21 | 2.53 | -0.32 |
+| 200 m | 3.12 | 2.95 | +0.17 |
+| 400 m | 3.43 | 3.16 | +0.27 |
+| 800 m | 3.49 | 3.27 | +0.22 |
 
-The engine's correction follows the standard's shape within 0.76 dB, the most at 50 m,
+The engine's correction follows the standard's shape within 0.75 dB, the most at 50 m,
 where the standard's formula is only a step past d_p = 25 m and the ground's own
 pattern still differs from one weather to the next. This is a check of plausibility,
 not of accuracy: the standard's correction is an empirical fit, and the engine's comes

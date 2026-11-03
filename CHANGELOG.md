@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed: the level of a curved ray that turns within millimetres of the listener's or
+  the source's height jumped by several dB from one centimetre to the next (1.4 dB too
+  loud 6.45 m up, 150 m from a source 1 m up in 0.17 m/s per metre). A rounding error
+  where it turns, a sine of 1.5e-8 there instead of 0, moved the ranges its spreading is
+  worked out from.
 - Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
   University and the University of Iceland, and described as a KEMAR dummy head with one
   of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.

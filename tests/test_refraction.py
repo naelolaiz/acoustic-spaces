@@ -177,6 +177,26 @@ def test_the_level_of_rays_that_turn_in_the_air() -> None:
         assert level == pytest.approx(reference, abs=0.2)
 
 
+@pytest.mark.parametrize(
+    ("g", "zs", "lowest", "highest"), [(0.17, 1.0, 6.3, 6.6), (-0.17, 10.0, 4.4, 4.8)]
+)
+def test_the_level_of_a_ray_that_turns_next_to_the_listener(g, zs, lowest, highest) -> None:
+    """In c = 340 + g z the rays are arcs of circles centred 340 / |g| = 2000 m below
+    the ground (above it where g < 0). 150 m from a source 1 m up in 0.17/s, a listener
+    6.3 to 6.6 m up is 0.01 to 4.4 mm below the top of the direct ray's arc; from 10 m
+    up in -0.17/s, one 4.4 to 4.8 m up is 0.09 to 8.8 mm above its bottom. Either way
+    the ray's level over a straight path's is -0.016 dB (-0.0154 to -0.0163), from the
+    ray tube of the arc in closed form. With the ray's sine where it turns taken from
+    p (1 / p), which rounds short of 1, its level jumped by up to 7 dB from one
+    centimetre to the next."""
+    rays = Rays(linear(g), zs)
+    for zr in np.arange(lowest, highest + 0.005, 0.01):
+        found = rays.eigenrays(zr, 150.0, 0)
+        assert len(found) == 1
+        level = 10 * math.log10(found.spreading[0] * found.length[0] ** 2)
+        assert level == pytest.approx(-0.016, abs=0.05)
+
+
 @pytest.mark.parametrize(("g", "angle"), [(0.1, 5.0), (-0.1, -3.0), (0.02, 30.0)])
 def test_the_compiled_tracer_follows_the_arcs(g, angle) -> None:
     native = pytest.importorskip("acoustic_spaces._native")

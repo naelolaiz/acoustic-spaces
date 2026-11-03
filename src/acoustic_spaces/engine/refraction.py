@@ -137,13 +137,19 @@ def _sine(p: np.ndarray, c: np.ndarray) -> np.ndarray:
     return np.sqrt(np.maximum((1.0 - pc) * (1.0 + pc), 0.0))
 
 
-def _piece(p, ca, cb, dz):
+def _piece(p, ca, cb, dz, turns_a=False, turns_b=False):
     """The horizontal distance, travel time and length of a ray with parameter ``p``
     through a piece of a layer ``dz`` (>= 0) high, from speed ``ca`` at its bottom to
     ``cb`` at its top (linear between), where the ray never turns (p c <= 1): exact for
     an arc of a circle, written to stay accurate for straight rays and at turning
-    points."""
-    sa, sb = _sine(p, ca), _sine(p, cb)
+    points. Where ``turns_a`` (``turns_b``) the ray turns at the bottom (top) and its
+    sine there is 0: from p (1 / p), which rounds to 1 - 1.1e-16 for one ray in six,
+    it would be 1.5e-8 and move the range (by 6e-5 m 150 m away in 0.17 m/s per
+    metre) as much as the ranges of the neighbouring rays that give the spreading
+    (:meth:`Rays._ray`) differ by where the ray turns within millimetres of the
+    listener's or the source's height."""
+    sa = np.where(turns_a, 0.0, _sine(p, ca))
+    sb = np.where(turns_b, 0.0, _sine(p, cb))
     gdz = cb - ca
     total = np.maximum(sa + sb, 1e-300)
     width = p * (ca + cb) / total
@@ -165,7 +171,6 @@ def _segment(profile: Profile, p, layer, lo, hi):
     p = np.asarray(p, dtype=float)
     lo, hi = np.broadcast_arrays(np.asarray(lo, dtype=float), np.asarray(hi, dtype=float))
     c_lo = c0 + slope * (lo - base)
-    c_hi = c0 + slope * (hi - base)
     limit = 1.0 / np.maximum(p, 1e-300)
     # Where the speed reaches 1 / p the ray turns: only the side of the layer below
     # that speed is reachable.
@@ -173,16 +178,26 @@ def _segment(profile: Profile, p, layer, lo, hi):
         turn = base + (limit - c0) / np.where(slope != 0.0, slope, 1.0)
     rising = slope > 0.0
     falling = slope < 0.0
-    top = np.where(rising & (c_hi > limit), np.minimum(hi, turn), hi)
-    bottom = np.where(falling & (c_lo > limit), np.maximum(lo, turn), lo)
+    # Compared in height, not speed: a piece up to a turning height worked out as
+    # ``turn`` is (:class:`_Fan`) turns there, though the speed there may round below
+    # 1 / p.
+    to_turn = rising & (hi >= turn)
+    from_turn = falling & (lo <= turn)
+    top = np.where(to_turn, np.minimum(hi, turn), hi)
+    bottom = np.where(from_turn, np.maximum(lo, turn), lo)
     open_ = (top > bottom) & ~((slope == 0.0) & (c_lo > limit))
-    cb = np.where(rising & (c_hi > limit), limit, c0 + slope * (top - base))
-    ca = np.where(falling & (c_lo > limit), limit, c0 + slope * (bottom - base))
+    cb = np.where(to_turn, limit, c0 + slope * (top - base))
+    ca = np.where(from_turn, limit, c0 + slope * (bottom - base))
     # Closed pieces: any speeds the ray could have, for the formulas to stay finite.
     ca, cb = np.where(open_, ca, 0.0), np.where(open_, cb, 0.0)
     dz = np.where(open_, top - bottom, 0.0)
     dx, dt, ds = _piece(
-        np.where(open_, p, 0.0), np.where(open_, ca, 1.0), np.where(open_, cb, 1.0), dz
+        np.where(open_, p, 0.0),
+        np.where(open_, ca, 1.0),
+        np.where(open_, cb, 1.0),
+        dz,
+        open_ & from_turn,
+        open_ & to_turn,
     )
     return np.where(open_[..., None], np.stack([dx, dt, ds], axis=-1), 0.0)
 
