@@ -606,6 +606,19 @@ def test_a_reflection_at_the_foot_of_a_doorway_s_side_passes_the_doorway(
             np.testing.assert_allclose(energy, beside[1], rtol=1e-3)
 
 
+# The middle listener of the rooms above (x = 7.5), 1 to 3 um from it along their middle
+# line or off it, and 1 mm either side.
+_IN_CORNERS = (
+    (7.499, 2.0, 1.2),
+    *((7.5 + offset, 2.0, 1.2) for offset in (-3e-6, -2e-6, -1.5e-6, -1e-6, 0.0)),
+    *((7.5 + offset, 2.0, 1.2) for offset in (1.5e-6, 2e-6, 3e-6)),
+    (7.5, 2.0, 1.2 - 1.4e-6),
+    (7.5, 2.0, 1.2 + 1.8e-6),
+    (7.5, 2.0 + 1.5e-6, 1.2 - 1.5e-6),
+    (7.501, 2.0, 1.2),
+)
+
+
 @pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
 def test_a_reflection_in_a_corner_at_a_partition_s_foot_passes_through_it(
     tmp_path: Path, method: str
@@ -619,21 +632,57 @@ def test_a_reflection_in_a_corner_at_a_partition_s_foot_passes_through_it(
     1 kHz."""
     obj = _coupled(tmp_path / "rooms.obj", 5, 5, 4, 3)
     levels = []
-    for listener in (
-        (7.499, 2.0, 1.2),
-        *((7.5 + offset, 2.0, 1.2) for offset in (-3e-6, -2e-6, -1.5e-6, -1e-6, 0.0)),
-        *((7.5 + offset, 2.0, 1.2) for offset in (1.5e-6, 2e-6, 3e-6)),
-        (7.5, 2.0, 1.2 - 1.4e-6),
-        (7.5, 2.0, 1.2 + 1.8e-6),
-        (7.5, 2.0 + 1.5e-6, 1.2 - 1.5e-6),
-        (7.501, 2.0, 1.2),
-    ):
+    for listener in _IN_CORNERS:
         room = _partitioned(
             obj, [2.5, 2.0, 1.2], listener, max_order=3, method=method, diffraction="first_order"
         )
         levels.append(10 * np.log10(total_energy(early_paths(room))))
     beside = (levels[0] + levels[-1]) / 2
     assert np.abs(np.array(levels[1:-1]) - beside).max() < 0.01
+
+
+@pytest.mark.parametrize("faces", [1, 2], ids=["one-face", "two-faces"])
+@pytest.mark.parametrize("bend", [1e-6, 4e-6], ids=["1um", "4um"])
+def test_a_reflection_at_the_foot_of_a_bent_partition_passes_it_as_a_flat_one(
+    tmp_path: Path, bend: float, faces: int
+) -> None:
+    """The rooms and listeners above, with the partition's corner (5, 4, 3) moved ``bend``
+    along x, the partition drawn as one face or as two (one facing each room, with the same
+    triangles): each face's two triangles make one plane, the first's, which the second
+    leaves by up to ``bend``. Each listener's paths pass the partition as with it flat:
+    the same orders and crossings, and the early level within 0.01 dB in every band.
+    Heights taken over the first triangle's plane alone had let reflected paths pass the
+    partition whole for 9 of the 13 listeners with the corner moved 1 um and for 11 with
+    it moved 4 um: up to 24 dB more."""
+
+    def rooms(name: str, moved: float) -> Path:
+        side = ((5, 0, 0), (5, 4, 0), (5 + moved, 4, 3), (5, 0, 3))
+        partition = [side, (side[0], side[3], side[2], side[1])][:faces]
+        groups = {
+            "room1": _box(0, 5, 4, 3, skip=("x1",)),
+            "room2": _box(5, 10, 4, 3, skip=("x0",)),
+            "partition": partition,
+        }
+        return _write(tmp_path / name, groups)
+
+    found = []
+    for obj in (rooms("flat.obj", 0.0), rooms("bent.obj", bend)):
+        found.append([])
+        for listener in _IN_CORNERS:
+            room = _partitioned(
+                obj,
+                [2.5, 2.0, 1.2],
+                listener,
+                max_order=3,
+                method="image_sources",
+                diffraction="first_order",
+            )
+            paths = early_paths(room)
+            kinds = sorted(zip(paths.order.tolist(), paths.crossings.tolist(), strict=True))
+            found[-1].append((kinds, 10 * np.log10(total_energy(paths))))
+    for (flat_kinds, flat_level), (kinds, level) in zip(*found, strict=True):
+        assert kinds == flat_kinds
+        np.testing.assert_allclose(level, flat_level, rtol=0, atol=0.01)
 
 
 # Cross-sections (y, z) of rooms along x: with side walls leaning in at 56 degrees to
@@ -811,6 +860,249 @@ def test_a_reflection_where_partitions_meet_passes_through_them(
                 and np.allclose(side[key][1], energy, rtol=1e-3, atol=0)
                 for side in (one_side, other_side)
             ), key
+
+
+_STEM_END = 5 + 4 / math.tan(math.radians(75))  # where the stem below meets the wall y = 0
+
+
+def _place(groups, moved):
+    """``groups`` with each corner (x, y, z) in ``moved`` moved by the vector (um) given
+    for it, in every face it is a corner of."""
+
+    def place(corner):
+        for at, by in moved.items():
+            if np.allclose(corner, at, rtol=0, atol=1e-9):
+                return tuple(c + 1e-6 * b for c, b in zip(corner, by, strict=True))
+        return corner
+
+    return {name: [tuple(map(place, quad)) for quad in quads] for name, quads in groups.items()}
+
+
+def _tee(path: Path, moved) -> Path:
+    """A 10 x 8 x 3 m room parted at y = 4 by a partition in two faces (x 0 to 5 and 5 to
+    10) and, where y < 4, by a stem from (5, 4) at 75 degrees to it to the wall y = 0 at
+    x = ``_STEM_END``; the floor and the ceiling each in three pieces (y > 4, and either
+    side of the stem), all but the partitions in group room1. The corners in ``moved``
+    are moved (see ``_place``)."""
+    x = _STEM_END
+    floors = []
+    for z in (0, 3):
+        floors += [
+            ((0, 4, z), (10, 4, z), (10, 8, z), (0, 8, z)),
+            ((0, 0, z), (x, 0, z), (5, 4, z), (0, 4, z)),
+            ((x, 0, z), (10, 0, z), (10, 4, z), (5, 4, z)),
+        ]
+    walls = [_across_x(0, 0, 4), _across_x(0, 4, 8), _across_x(10, 0, 4), _across_x(10, 4, 8)]
+    walls += [_across_y(0, 0, x), _across_y(0, x, 10), _across_y(8, 0, 10)]
+    stem = ((5, 4, 0), (x, 0, 0), (x, 0, 3), (5, 4, 3))
+    groups = {
+        "room1": floors + walls,
+        "partition": [_across_y(4, 0, 5), _across_y(4, 5, 10), stem],
+    }
+    return _write(path, _place(groups, moved))
+
+
+def _lean_to(path: Path, moved) -> Path:
+    """A 10 x 6 m room under a roof rising from 2 m high at y = 0 to 5 m at y = 6, parted
+    at x = 5 by a partition up to the roof; the floor, the roof and the walls y = 0 and
+    y = 6 each in two pieces (x 0 to 5 and 5 to 10), all but the partition in group
+    room1. The corners in ``moved`` are moved (see ``_place``)."""
+    ends = (
+        ((0, 0, 2), (0, 6, 5), (0, 6, 0), (0, 0, 0)),
+        ((10, 0, 0), (10, 6, 0), (10, 6, 5), (10, 0, 2)),
+    )
+    walls = []
+    for (x0, x1), end in zip(((0, 5), (5, 10)), ends, strict=True):
+        walls += [
+            ((x0, 6, 0), (x1, 6, 0), (x1, 0, 0), (x0, 0, 0)),
+            ((x0, 0, 2), (x1, 0, 2), (x1, 6, 5), (x0, 6, 5)),
+            ((x0, 0, 0), (x1, 0, 0), (x1, 0, 2), (x0, 0, 2)),
+            ((x0, 6, 5), (x1, 6, 5), (x1, 6, 0), (x0, 6, 0)),
+            end,
+        ]
+    groups = {"room1": walls, "partition": [((5, 0, 0), (5, 6, 0), (5, 6, 5), (5, 0, 2))]}
+    return _write(path, _place(groups, moved))
+
+
+@pytest.mark.parametrize(
+    ("room", "moved", "corner", "source", "listener"),
+    [
+        (
+            "tee",
+            {
+                (5, 4, 0): (-0.8, -0.4, 0.4),
+                (5, 4, 3): (-0.1, -1.0, 0.0),
+                (_STEM_END, 0, 0): (-0.6, -0.4, 0.7),
+                (_STEM_END, 0, 3): (0.5, 0.3, 0.8),
+                (10, 4, 0): (-0.9, -0.2, -0.4),
+            },
+            (_STEM_END, 0, 0),
+            (4.59618, 2.261071, 1.654931),
+            (5.955446, 2.128288, 1.306465),
+        ),
+        (
+            "tee",
+            {
+                (5, 4, 3): (-0.5, -4.0, 0.1),
+                (10, 4, 3): (1.6, 2.2, 3.0),
+                (10, 8, 0): (1.0, 3.7, 1.0),
+                (10, 8, 3): (3.7, -1.3, 1.0),
+            },
+            (5, 4, 3),
+            (9.814034, 6.789543, 2.720039),
+            (1.948614, 0.697341, 2.822548),
+        ),
+        (
+            "tee",
+            {
+                (0, 8, 0): (-0.7156, -0.3065, 0.6277),
+                (5, 4, 0): (-0.8082, -0.3831, 0.4472),
+                (10, 4, 0): (-0.9067, -0.1676, -0.3871),
+                (10, 8, 0): (0.2496, 0.9343, 0.2545),
+            },
+            (5, 4, 0),
+            (4.813290556, 3.12104762, 0.438841995),
+            (3.285374497, 5.904772596, 1.251639105),
+        ),
+        (
+            "lean-to",
+            {
+                (0, 0, 2): (-0.3856, 0.7937, -0.4705),
+                (0, 6, 0): (-0.2397, -0.7002, -0.6725),
+                (0, 6, 5): (-0.5257, 0.4974, 0.6901),
+                (5, 0, 2): (0.8505, -0.2658, -0.4539),
+                (5, 6, 5): (-0.8844, 0.0179, -0.4665),
+            },
+            (5, 6, 5),
+            (6.383165524, 5.021858042, 0.831056316),
+            (3.579157776, 3.176864985, 1.626674097),
+        ),
+    ],
+    ids=["stem-foot-1um", "ceiling-4um", "floor-1um", "lean-to-1um"],
+)
+def test_a_reflection_where_moved_partitions_meet_passes_them(
+    tmp_path: Path, room, moved, corner, source, listener
+) -> None:
+    """The room of ``_tee`` or ``_lean_to`` with a few corners moved about 1 um, or about
+    4 um, so that faces lie up to 1.8 um (stem-foot), 5.0 um (ceiling), 2.1 um (floor)
+    or 3.0 um (lean-to) off the planes they are merged into, and a source and a listener
+    either side of a partition. For the listener and for listeners 0.01 to 3 um to
+    either side of it on two lines across the way to a corner, the early level in each
+    band is no more than 3 dB above the higher of those for listeners 0.2 mm to either
+    side (here at most 1.9 dB above it). For some of them a path reflects off the stem,
+    the wall y = 0 and the floor within 2.0 um of the corner where they meet
+    (stem-foot); off the stem and the floor within 3.3 um of the corner where they meet
+    the partition (floor); off the wall y = 6, the roof and the wall again within 1.2 um
+    of the corner where they meet the partition (lean-to). For two of them (ceiling),
+    the leg to the ceiling of a path off the wall y = 8 and the ceiling meets the
+    partition 6.7 and 6.9 um from the corner where the partition and the stem meet the
+    ceiling.
+    Counting a reflection point as on a plane the path reflects off wherever it lay
+    within the spread of that plane's faces had let the stem-foot path pass the stem
+    whole; taking that hit on the partition as the reflection off the ceiling (within
+    1 um of the plane of a face of the ceiling, more than 1 um below the ceiling's plane)
+    had let the ceiling path pass the partition whole; counting the floor among the
+    surfaces met where the floor path reflects off the stem (on the partition, 1.1 um
+    above the floor's plane and 0.45 um above the plane of the floor's faces there) only
+    where that lay within 1 um of the floor's plane had let it pass the partition whole;
+    and taking the lean-to path's reflection point on the wall as on the roof as well
+    only where it lay within 1 um of the roof's plane (it lies 1.3 um from it, and
+    0.03 um from the plane of the roof's face there) had let it pass the partition
+    whole: 12, 11, 19 and 12 dB more."""
+    obj = {"tee": _tee, "lean-to": _lean_to}[room](tmp_path / "room.obj", moved)
+    listener = np.array(listener)
+    toward = (listener - corner) / np.linalg.norm(listener - corner)
+    across = np.cross(toward, (0.3, 0.2, 1.0))
+    across /= np.linalg.norm(across)
+    offsets = [-3, -2, -1, -0.5, -0.1, -0.01, 0, 0.01, 0.1, 0.5, 1, 2, 3]
+    for aside in (across, np.cross(toward, across)):
+        levels = []
+        for offset in (-2e-4, *(1e-6 * k for k in offsets), 2e-4):
+            room_ = _partitioned(
+                obj,
+                list(source),
+                listener + offset * aside,
+                max_order=3,
+                method="image_sources",
+                diffraction="none",
+            )
+            levels.append(10 * np.log10(total_energy(early_paths(room_))))
+        levels = np.array(levels)
+        assert np.all(levels[1:-1] <= np.maximum(levels[0], levels[-1]) + 3.0)
+
+
+def _door_in_corner(path: Path, moved) -> Path:
+    """Rooms from x = 0 to 5 and on to 10 (4 x 3 m), each with its own floor, ceiling and
+    walls y = 0 and y = 4 (group room1); the partition at x = 5 between them with a
+    doorway 1 m wide and 2 m high (group opening) in its corner with the wall y = 0. The
+    corners in ``moved`` are moved (see ``_place``)."""
+    walls = []
+    for x0, x1 in ((0, 5), (5, 10)):
+        walls += [
+            ((x0, 0, 0), (x1, 0, 0), (x1, 4, 0), (x0, 4, 0)),
+            ((x0, 0, 3), (x1, 0, 3), (x1, 4, 3), (x0, 4, 3)),
+            _across_y(0, x0, x1),
+            _across_y(4, x0, x1),
+        ]
+    walls += [_across_x(0, 0, 4), _across_x(10, 0, 4)]
+    groups = {
+        "room1": walls,
+        "partition": [_across_x(5, 1, 4), ((5, 0, 2), (5, 1, 2), (5, 1, 3), (5, 0, 3))],
+        "opening": [((5, 0, 0), (5, 1, 0), (5, 1, 2), (5, 0, 2))],
+    }
+    return _write(path, _place(groups, moved))
+
+
+def test_a_reflection_where_a_moved_doorway_meets_a_wall_is_kept(tmp_path: Path) -> None:
+    """The rooms of ``_door_in_corner`` with seven corners moved about 1 um, so that faces
+    lie up to 1.8 um off the planes they are merged into. A path from the source off the
+    wall y = 4, the floor and the wall y = 0 reflects off the wall y = 0 1.008 m up, within
+    2.2 um of the side of the doorway (39 to 140 um for the listeners 0.2 mm aside), and
+    goes on through the doorway. For a listener there and for listeners 0.01 to 3 um to
+    either side of it on two lines across the way to (5, 0, 2.5), and 0.2 mm to either
+    side, the early level in each band lies within 3 dB of that for the same listener
+    with no corners moved (here within 0.6 dB). For one of them the leg from the
+    listener meets the doorway 0.54 um from its side, 0.03 um behind the wall's plane,
+    which makes it the reflection off the wall, and 0.54 um in front of the plane of the
+    wall's face there. Taking the nearer of those two planes for the side the point lies
+    on had lost the path for that listener (8.7 dB less), and taking the wall's plane
+    alone had lost it for all of them (15 dB less)."""
+    moved = {
+        (0, 0, 0): (0.9692, 0.0684, -0.2366),
+        (0, 0, 3): (0.3723, 0.2731, 0.887),
+        (0, 4, 0): (0.4942, 0.5483, 0.6746),
+        (0, 4, 3): (-0.9031, 0.4279, -0.036),
+        (5, 0, 0): (-0.6068, 0.7266, -0.3223),
+        (5, 0, 2): (0.8505, -0.2658, -0.4539),
+        (5, 4, 0): (-0.8082, -0.3831, 0.4472),
+    }
+    source, listener = (
+        (4.209597275, 0.287821272, 2.674231899),
+        (5.305782243, 2.983614199, 2.432594281),
+    )
+    objs = [
+        _door_in_corner(tmp_path / name, by)
+        for name, by in (("moved.obj", moved), ("flat.obj", {}))
+    ]
+    listener = np.array(listener)
+    toward = (listener - (5, 0, 2.5)) / np.linalg.norm(listener - (5, 0, 2.5))
+    across = np.cross(toward, (0.3, 0.2, 1.0))
+    across /= np.linalg.norm(across)
+    offsets = [-3, -2, -1, -0.5, -0.1, -0.01, 0, 0.01, 0.1, 0.5, 1, 2, 3]
+    for aside in (across, np.cross(toward, across)):
+        for offset in (-2e-4, *(1e-6 * k for k in offsets), 2e-4):
+            levels = []
+            for obj in objs:
+                room = _partitioned(
+                    obj,
+                    list(source),
+                    listener + offset * aside,
+                    max_order=3,
+                    method="image_sources",
+                    diffraction="none",
+                )
+                levels.append(10 * np.log10(total_energy(early_paths(room))))
+            np.testing.assert_allclose(levels[0], levels[1], rtol=0, atol=3.0)
 
 
 def test_diffraction_bends_round_a_doorway(tmp_path: Path) -> None:
