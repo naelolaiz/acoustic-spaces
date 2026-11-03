@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed: one late ray scattered off the ground next to a listener could lift a place of
+  an outdoor walk by up to 6.1 dB(A) (the airport's landing heard at approach_2000m),
+  and most runs found too little of that scattered sound far from the source. It is now
+  shared between the rays and 16384 directions gathered from each listener, by how
+  densely each finds it (`stochastic_energy(gather=...)`, each batch with its share): on
+  that landing the late part lifts a place by 0.2 dB(A) at most, the aircraft
+  validation's highest unweighted level far out falls by up to 0.7 dB, and BRAS's CR1,
+  CR2 and CR4 move by 0.04 JND at most.
 - Fixed: a ground reflection near where two grounds meet (a runway in a meadow) weighs
   each by the exact area of its Fresnel zone it covers, and a zone at the ground's edge
   goes on past it; the shares were counted on 96 points, so a pass-by's level stepped by

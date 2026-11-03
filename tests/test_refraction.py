@@ -449,10 +449,12 @@ def test_sources_alike_share_the_parabolic_equation_s_runs(monkeypatch) -> None:
 
 def test_uniform_rows_trace_the_late_rays_as_straight_ones(monkeypatch) -> None:
     """The compiled tracer's bent rays, in an atmosphere where they go straight, give
-    the straight tracer's late energy: the same ray paths, times and losses."""
+    the straight tracer's late energy: the same ray paths, times and losses (without the
+    listeners' gather of the first reflections, which bent rays leave to the rain)."""
     pytest.importorskip("acoustic_spaces._native")
     scene = field(None, ((60.0, 0.0, 1.5), (-30.0, 10.0, 3.0)))
     room = Room.from_scene(scene)
+    monkeypatch.setattr(late, "FIRST_GATHER", 0)
     straight = simulate(room)
     c = room.speed_of_sound()
 
