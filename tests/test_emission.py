@@ -55,6 +55,10 @@ def test_what_an_emission_needs() -> None:
         Mixture(np.ones((1, 10)), np.ones((1, len(azimuth), 1)), RATE)
     with pytest.raises(ValueError, match="finite"):
         Mixture(np.full((1, 10), np.nan), np.ones((len(elevation), len(azimuth), 1)), RATE)
+    with pytest.raises(ValueError, match="at least one sample"):
+        Mixture(np.ones((1, 0)), np.ones((len(elevation), len(azimuth), 1)), RATE)
+    with pytest.raises(ValueError, match="sample rate"):
+        Mixture(np.ones((1, 10)), np.ones((len(elevation), len(azimuth), 1)), 0)
 
 
 def _periodic(**kw) -> Periodic:
@@ -131,10 +135,62 @@ def test_a_periodic_sound_on_average_and_in_bands() -> None:
     # 100 Hz is in the second octave band.
     assert energy[0, 1] / energy[1, 1] == pytest.approx(9.0, rel=1e-3)
     np.testing.assert_allclose(sent.scaled(3.0).averaged(), 3.0 * sent.averaged(), atol=1e-12)
-    # As pascals 1 m away, its sound power: the bands share it out.
+    # As pascals 1 m away, its sound power, all in the 125 Hz octave (89.1 to 178 Hz).
     watts = 10.0 ** (sent.sound_power_db(1.2, 343.0) / 10.0) * 1e-12
     assert watts.sum() == pytest.approx(4.0 * np.pi * power / (1.2 * 343.0), rel=1e-3)
     assert np.argmax(watts) == 1
+
+
+def test_the_bands_are_iec_61260_bands() -> None:
+    """The sound power is in IEC 61260-1's bands, as ideal filters between the base-10
+    band edges: the exact mid-band frequency times G^(-1/2b) and G^(1/2b), G = 10^(3/10)
+    (IEC 61260-1:2014), so the 63 Hz octave runs from 44.7 to 89.1 Hz
+    and the 8 kHz one from 5.62 to 11.2 kHz. A tone of 1 Pa amplitude 1 m away, sent
+    alike every way, has 4π m² (0.5 Pa²) / (ρc) of sound power: all of it in the band
+    it lies in, none in a band beside it, and none in any band below 44.7 Hz or above
+    11.2 kHz. The auralization's crossovers would share 89 and 90 Hz about evenly
+    between the two lowest octaves and keep 20 Hz and 11.3 kHz in the outer ones."""
+    elevation, azimuth = _grid(10.0)
+    rho, c = 1.2, 343.0
+    one = 4.0 * np.pi * 0.5 / (rho * c)
+    t = np.arange(RATE) / RATE  # one second: whole hertz fall on the FFT's bins
+    octaves = ((20, None), (44, None), (45, 0), (63, 0), (89, 0), (90, 1), (5_600, 6))
+    octaves += ((5_700, 7), (11_200, 7), (11_300, None))
+    thirds = ((44, None), (45, 0), (89, 2), (90, 3), (11_200, 23), (11_300, None))
+    for bands, cases in (("octave", octaves), ("third_octave", thirds)):
+        for hz, band in cases:
+            tone = np.sin(2.0 * np.pi * hz * t)[None, :]
+            sent = Mixture(tone, np.ones((len(elevation), len(azimuth), 1)), RATE)
+            watts = 10.0 ** (sent.sound_power_db(rho, c, bands) / 10.0) * 1e-12
+            expected = np.zeros(len(watts))
+            if band is not None:
+                expected[band] = one
+            np.testing.assert_allclose(watts, expected, rtol=1e-9, atol=1e-9 * one)
+
+
+def test_a_rotor_s_blade_passing_is_below_the_63_hz_octave() -> None:
+    """A rotor's tones at its blade passing frequency, 19.7 Hz, and its harmonics: the
+    first two, below 44.7 Hz, are in none of the IEC octaves, though louder ahead; the
+    third and the fourth (59.1 and 78.8 Hz), sent alike every way, are the 63 Hz
+    octave's sound power and make its directivity even all round; the fifth (98.5 Hz)
+    is the 125 Hz octave's."""
+    elevation, azimuth = _grid(10.0)
+    ahead = 1.0 + 0.8 * _from_angles(azimuth[None, :], elevation[:, None])[..., 0]
+    amplitudes = (1.0, 0.8, 0.5, 0.3, 0.2)
+    t = np.arange(64) / 64
+    table = sum(
+        (ahead[..., None] if k < 2 else 1.0) * a * np.cos(2.0 * np.pi * (k + 1) * t)
+        for k, a in enumerate(amplitudes)
+    )
+    sent = Periodic(table, 1.0 / 19.7, RATE, RATE)
+    rho, c = 1.2, 343.0
+    watts = 10.0 ** (sent.sound_power_db(rho, c) / 10.0) * 1e-12
+    expected = np.zeros(8)
+    expected[0] = 4.0 * np.pi * (0.5**2 + 0.3**2) / 2.0 / (rho * c)
+    expected[1] = 4.0 * np.pi * 0.2**2 / 2.0 / (rho * c)
+    np.testing.assert_allclose(watts, expected, rtol=1e-9, atol=1e-9 * expected[1])
+    energy = sent.directivity().energy([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]])
+    np.testing.assert_allclose(energy[:, 0], 1.0, rtol=1e-9)
 
 
 def test_a_sum_of_emissions() -> None:

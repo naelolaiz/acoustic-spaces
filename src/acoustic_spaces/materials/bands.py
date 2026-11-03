@@ -57,6 +57,16 @@ def exact_centres(resolution: Resolution = "octave") -> np.ndarray:
     return 1000.0 * 10.0 ** (step * k)
 
 
+def exact_limits(resolution: Resolution = "octave") -> tuple[np.ndarray, np.ndarray]:
+    """Lower and upper band-edge frequencies (Hz, base 10, IEC 61260-1) of the bands at
+    ``resolution``: each exact mid-band frequency over and times G^(1/2) for octaves,
+    G^(1/6) for third octaves, G = 10^(3/10). Each band's upper edge is the next one's
+    lower edge: the 63 Hz octave runs from 44.7 to 89.1 Hz, the 8 kHz one to 11.2 kHz."""
+    centre = exact_centres(resolution)
+    half = 10.0 ** (0.15 / BANDS_PER_OCTAVE[resolution])
+    return centre / half, centre * half
+
+
 def band_limits(resolution: Resolution = "octave") -> tuple[np.ndarray, np.ndarray]:
     """Lower and upper edges (Hz) of each band: its nominal centre over and times
     2^(1/2) for octaves, 2^(1/6) for third octaves."""
@@ -200,6 +210,7 @@ __all__ = [
     "convert",
     "crossover_frequencies",
     "exact_centres",
+    "exact_limits",
     "finer_than_octaves",
     "gain_levels",
     "octave_of",

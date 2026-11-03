@@ -31,7 +31,14 @@ download of the database.
 from __future__ import annotations
 
 from . import anp, atmosphere, performance, source
-from .noise import Event, SegmentLevels, event, impedance_db, segment_levels
+from .noise import (
+    Event,
+    NpdExtrapolationWarning,
+    SegmentLevels,
+    event,
+    impedance_db,
+    segment_levels,
+)
 from .path import Segment, Track, flight_path
 from .tables import (
     Aircraft,
@@ -48,6 +55,7 @@ __all__ = [
     "Aircraft",
     "Event",
     "NpdCurves",
+    "NpdExtrapolationWarning",
     "ProfilePoint",
     "Segment",
     "SegmentLevels",

@@ -339,6 +339,7 @@ def _trace_map(rays: int, **changes):
         low=np.array([0.7]),
         high=np.array([0.8]),
         volume=np.array([0.2 * 0.2 * 0.1]),
+        map_room=np.full(1, -1, dtype=np.int64),
         onset=np.array([0.5 / 343.0]),
         covered_time=np.zeros(1),
         fine_step=1e-4,
@@ -403,10 +404,21 @@ def test_trace_map_skips_what_the_early_part_covers() -> None:
     assert 0 < after.sum() < _trace_map(20_000)[0].sum()
 
 
+def test_trace_map_counts_the_rays_of_a_points_room_alone() -> None:
+    # Every ray stays in the source's room 0: a point in room 1 gets none of them, one in
+    # room 0 or in any (-1) all of them, ray for ray.
+    anywhere, *_ = _trace_map(20_000, source_room=0)
+    own, *_ = _trace_map(20_000, source_room=0, map_room=np.zeros(1, dtype=np.int64))
+    other, *_ = _trace_map(20_000, source_room=0, map_room=np.ones(1, dtype=np.int64))
+    assert anywhere.sum() > 0.0 and other.sum() == 0.0
+    np.testing.assert_array_equal(own, anywhere)
+
+
 @pytest.mark.parametrize(
     "change, message",
     [
         ({"origin": np.zeros(3)}, "origin must be"),
+        ({"map_room": np.zeros(2, dtype=np.int64)}, "bad map"),
         ({"low": np.zeros(0), "high": np.zeros(0), "volume": np.zeros(0)}, "no map points"),
         ({"volume": np.zeros(1)}, "bad map"),
         ({"high": np.array([0.7])}, "bad map"),

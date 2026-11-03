@@ -6,6 +6,7 @@ import pytest
 from acoustic_spaces.geometry import (
     RoomMesh,
     check_mesh,
+    checks,
     clean_mesh,
     load_mesh,
     points_inside,
@@ -514,6 +515,36 @@ def test_faces_are_split_where_an_edge_runs_past_a_corner(sliver: bool) -> None:
     assert report.volume_m3 == pytest.approx(144.0)
     assert report.surface_area_m2 == pytest.approx(180.0)
     assert len(cleaned.faces) == 4 + 10 + 2  # each wall's bottom face split in two
+
+
+def test_an_edge_runs_past_many_corners_whatever_the_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The floor is cut into 40 strips across its length, the walls along it are not:
+    # each wall's bottom edge runs past 39 corners and turns into a fan of 40 faces. The
+    # search for them goes through its (edge, corner) pairs in blocks; blocks of 5
+    # pairs give the same model as one block.
+    box = _box(8, 6, 3)
+    xs = np.linspace(0, 8, 41)[1:-1]
+    vertices = np.vstack([box.vertices, [[x, 0, 0] for x in xs], [[x, 6, 0] for x in xs]])
+    front = [0, *range(8, 47), 1]
+    back = [3, *range(47, 86), 2]
+    floor = [
+        f
+        for k in range(40)
+        for f in ([front[k], front[k + 1], back[k + 1]], [front[k], back[k + 1], back[k]])
+    ]
+    faces = np.vstack([floor, box.faces[2:]])
+    mesh = RoomMesh(vertices, faces, np.zeros(len(faces)), box.labels)
+    cleaned, _, _ = clean_mesh(mesh)
+    report = check_mesh(cleaned)
+    assert report.closed and report.inconsistent_edges == 0 and report.normals_inward
+    assert report.volume_m3 == pytest.approx(144.0)
+    assert len(cleaned.faces) == 80 + 10 + 2 * 39  # the two walls' bottom faces fanned
+    monkeypatch.setattr(checks, "_PAIRS_PER_BLOCK", 5)
+    blocked, _, _ = clean_mesh(mesh)
+    assert np.array_equal(blocked.faces, cleaned.faces)
+    assert np.array_equal(blocked.vertices, cleaned.vertices)
 
 
 def test_a_face_is_split_where_its_edge_runs_past_three_faces() -> None:

@@ -16,21 +16,24 @@ acoustic-spaces map examples/concert_hall/scene.yaml --spacing 0.5 --json map.js
 ![Coverage map of the speech transmission index in the lecture hall example, seen from above](images/coverage.png)
 
 The map covers the surfaces named in `coverage.surfaces` (by default those whose names
-contain "audience", else the floor; [outdoors](outdoor.md), the ground, leaving out
-the points inside buildings) with square columns `spacing` metres wide, with a
-point at the listening `height` above the surface in each (above its top, when a
-slab's underside is in the same group); a balcony over the stalls gets a second level
-of points. Columns along a slanted wall keep the part over the surface, in every room of
-a model that holds several (with the sound that passes between them). The early part is
-exact at every point, as at a listener. The late part comes from one ray tracing run per
-source in which every ray adds its path length through a slab of air around each point
-(a track-length estimate), so a map of hundreds of points costs about as much as a few
+contain "audience", else the floor; [outdoors](outdoor.md), the ground, leaving out the
+points inside buildings) with square columns `spacing` metres wide, with a point at the
+listening `height` above the surface in each (above its top, when a slab's underside is
+in the same group); a balcony over the stalls gets a second level of points. Columns
+along a slanted wall keep the part over the surface. A model that holds several rooms is
+mapped in every room (with the sound that passes between them), and a column that a wall
+between two rooms crosses gets a point on each side that holds at least a fifth of it.
+The early part is exact at every point, as at a listener. The late part comes from one
+ray tracing run per source in which every ray adds its path length through a slab of air
+around each point (a track-length estimate), counting only the rays in the point's room
+and only the part of the slab in its air: what lies past a wall, in the next room or
+inside a building is left out. A map of hundreds of points costs about as much as a few
 listeners: the concert hall example (480 points, two sources, 50,000 rays per band)
 takes about a minute on 4 cores. In the shoebox example, full simulations at three of
-the map's points give G within 0.3 dB of the map and T30 within 5 % from 125 Hz to
-4 kHz (the tests, with one seed); at other points and seeds T30 strays further now and
-then, as both carry the late rays' noise. With the statistical late method
-each point gets the late part a listener there would, and G agrees within 0.01 dB.
+the map's points give G within 0.3 dB of the map and T30 within 5 % from 125 Hz to 4 kHz
+(the tests, with one seed); at other points and seeds T30 strays further now and then,
+as both carry the late rays' noise. With the statistical late method each point gets the
+late part a listener there would, and G agrees within 0.01 dB.
 
 Each source radiates its sound power per band (its `level_db`, `spectrum`, `gain_db`
 and `eq_db`; see [Sources and directivity](scenes.md#sources-and-directivity)), which sets the
@@ -66,3 +69,13 @@ c80 = both.value("c80", band=4)  # one value per point, 1 kHz
 plot_map(both, "c80.png", parameter="c80", room=result.room)
 show_room(result.room, coverage=both, parameter="sti")
 ```
+
+Maps do not run the wave solver: whatever `simulation.wave` says, their lowest bands
+come from the early paths, in pressure up to `simulation.early.coherent_max_band_hz`
+(see [Low frequencies](simulation.md#low-frequencies-early-reflections-in-pressure)),
+and the rays. For a small room's modes, put listeners where they matter and run them
+with the [wave solver](simulation.md#low-frequencies-the-wave-solver). Nor do maps give
+ISO 3382-3's quantities for open-plan offices (D2,S, Lp,A,S,4m, the distraction distance
+rD and the privacy and comfort distances); listeners on a line from an omnidirectional
+source with the standard's speech spectrum and level give the A-weighted level and the
+STI they are read from (see [Simulation](simulation.md)).
