@@ -53,7 +53,7 @@ the monitors is the scene's, and the feed files are what each loudspeaker plays.
 bars), with a 1 s crossfade. Each listener's mix is shifted
 earlier by the time the sound system takes to reach them (0.1 s at the mix position,
 0.4 s at the far end), so that the beat carries on across the cut; the caption gives
-that time and the level there against the loudest listener's. On stage it is 7 to 20
+that time and the level there against the loudest listener's. On stage it is 6 to 18
 dB(A) louder than in the audience, too much to hear both in one video, so each stop is
 turned up to the loudness of the loudest one (K-weighted, as loudness meters weigh it)
 and its caption says by how much; the mixes in demo/seats keep one gain for all.

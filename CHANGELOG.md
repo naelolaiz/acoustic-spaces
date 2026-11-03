@@ -20,6 +20,14 @@
 - Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
   University and the University of Iceland, and described as a KEMAR dummy head with one
   of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.
+- Fixed: the helicopter demo's `flight` lengthened the responses by the helicopter's
+  farthest distance, which the simulation already adds outdoors, so they ran 6.1 s, not
+  4.0 s; its walk at the mix position takes 121 s, not 174 s, at the same level (L_Amax
+  81.5 dB(A), 81.6 before).
+- Docs: the stadium, helicopter and lakeside demos' numbers and pictures come from new
+  runs with the BS.1770 meters: on stage it is 6 to 18 dB(A) louder than in the audience
+  (7 to 20 before), and the lake's weather lifts the bedroom window 5.3 to 6.0 dB over
+  three runs (7.1 before).
 - Docs: G of responses written with `simulate --normalize` takes the reference energy
   0.01 × `ir_gain`² (from `parameters.json`), and the JNDs of T20, T30 and C50 are
   ISO 3382-1's of EDT and C80 taken by analogy; Barron's total and the first batch of
