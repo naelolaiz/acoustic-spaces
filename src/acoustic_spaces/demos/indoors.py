@@ -157,25 +157,31 @@ def with_fronts(room, points: dict[str, tuple[float, float, float]]):
     """``room`` (a :class:`~acoustic_spaces.room.Room`) with a listener more at each of
     ``points`` (:func:`fronts`, by the name of the listener each is for): a copy of that
     listener standing there, named :func:`front_name`; ``room`` itself when there are
-    none. SystemExit when one is not in the open air (inside a building across the
-    street, say), or a listener of ``room`` has its name already."""
+    none. A listener of ``room`` with that name standing there (the example's own,
+    ticked off, so that the editor shows it) gives way to the copy. SystemExit when one
+    is not in the open air (inside a building across the street, say), or a listener of
+    ``room`` has its name and stands elsewhere."""
     from acoustic_spaces.room import Room
 
     if not points:
         return room
     scene = room.scene
-    taken = {lis.name for lis in scene.listeners}
+    taken = {lis.name: lis for lis in scene.listeners}
     extra = []
     for lis in scene.listeners:
         if lis.name not in points:
             continue
         name = front_name(lis.name)
-        if name in taken:
-            raise SystemExit(
-                f"error: a listener is called {name!r}, the name of the point {FRONT_M:g} m "
-                f"in front of the wall {lis.name!r} stands in front of; rename it"
-            )
         place = tuple(float(v) for v in points[lis.name])
+        if name in taken:
+            own = tuple(float(v) for v in taken[name].position)
+            if math.dist(own, place) > FACADE_TOLERANCE_M:
+                raise SystemExit(
+                    f"error: the listener {name!r} has the name of the point {FRONT_M:g} m "
+                    f"in front of the wall {lis.name!r} stands in front of, but stands "
+                    f"{math.dist(own, place):.2f} m from it; move it there or rename it"
+                )
+            place = own
         extra.append(lis.model_copy(update={"name": name, "position": place, "walk": None}))
     # The points' own problems; the scene's others are the scene's to tell.
     theirs = tuple(f"listener {lis.name!r} " for lis in extra)
@@ -186,7 +192,8 @@ def with_fronts(room, points: dict[str, tuple[float, float, float]]):
             f"error: EN ISO 12354-3 takes a room's level outdoors {FRONT_M:g} m in front of "
             f"its wall, but there {'; '.join(problems)}; move the listener in front of it"
         )
-    listeners = [*scene.listeners, *extra]
+    added = {lis.name for lis in extra}
+    listeners = [*(lis for lis in scene.listeners if lis.name not in added), *extra]
     return Room.from_scene(scene.model_copy(update={"listeners": listeners}), reuse=room)
 
 

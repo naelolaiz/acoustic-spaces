@@ -267,10 +267,11 @@ def test_a_room_takes_its_level_outdoors_2_m_in_front_of_its_wall() -> None:
     """EN ISO 12354-3 takes a room's level outdoors, L_1,2m, 2 m in front of its façade.
     The street's balcony stands 1 m in front of the offices: their room's point is 1 m
     farther out, square to the wall, at the balcony's height, a listener more, the
-    balcony's copy, at no other listener's place and in the open air. The pavement and
-    the railway's house_18m stand 2 m out and are their own points, simulated no more.
-    In front of a wall at an angle the point is square to it too; one inside a building
-    is refused."""
+    balcony's copy, at no other listener's place and in the open air: in place of the
+    example's own point there, ticked off, which a listener of its name elsewhere may not
+    stand for. The pavement and the railway's house_18m stand 2 m out and are their own
+    points, simulated no more. In front of a wall at an angle the point is square to it
+    too; one inside a building is refused."""
     from acoustic_spaces import Room, Scene
     from acoustic_spaces.examples import example_path
 
@@ -292,14 +293,24 @@ def test_a_room_takes_its_level_outdoors_2_m_in_front_of_its_wall() -> None:
     assert indoors.with_fronts(street, {}) is street
     room = indoors.with_fronts(street, points)
     *kept, added = room.scene.listeners
-    assert kept == list(street.scene.listeners)
+    ticked = next(lis for lis in street.scene.listeners if lis.name == "balcony_2m")
+    assert not ticked.in_use
+    assert kept == [lis for lis in street.scene.listeners if lis is not ticked]
     own = next(lis for lis in kept if lis.name == "balcony")
     assert added.name == "balcony_2m" and added.orientation == own.orientation
+    assert added.in_use and added.position == ticked.position
     assert added.position == pytest.approx((5.0, -4.0, 10.0), abs=1e-12)
     assert min(math.dist(lis.position, added.position) for lis in kept) == pytest.approx(1.0)
     assert room.problems() == []
     with pytest.raises(SystemExit, match="inside building 'houses'"):
         indoors.with_fronts(street, {"pavement": (0.0, 7.0, 1.6)})
+    moved = [
+        lis.model_copy(update={"position": (6.0, -4.0, 10.0)}) if lis is ticked else lis
+        for lis in street.scene.listeners
+    ]
+    elsewhere = Room.from_scene(street.scene.model_copy(update={"listeners": moved}))
+    with pytest.raises(SystemExit, match="'balcony_2m' .* stands 1.00 m from it"):
+        indoors.with_fronts(elsewhere, points)
 
 
 def test_the_ground_shakes_a_room_from_behind_its_listener() -> None:
