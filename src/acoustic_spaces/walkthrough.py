@@ -80,7 +80,7 @@ from acoustic_spaces.render import (
     resample,
     through_eddies,
 )
-from acoustic_spaces.room import Room
+from acoustic_spaces.room import Room, every_left_out
 from acoustic_spaces.scene.model import Orientation
 from acoustic_spaces.scene.model import Simulation as SimulationSettings
 
@@ -389,9 +389,10 @@ def simulate_walk(
     """Simulate the responses along a walk: ``name`` walks (by default the only
     listener or source with a walk), placed every ``step_m``.
 
-    A walking listener hears every source; a walking source is heard at ``listener``
-    (by default the scene's only listener), with the other sources standing still. The
-    walk must go slower than sound.
+    A walking listener hears every source in use; a walking source is heard at
+    ``listener``, even one left out (``enabled: false``), by default the only listener
+    in use, with the other sources in use standing still. The walk must go slower than
+    sound.
 
     The late part is traced every ``late_step_m`` (see the module's description), or at
     every place with ``late_step_m=None`` or the statistical late method. ``settings``
@@ -422,9 +423,19 @@ def simulate_walk(
     else:
         listeners = [lis for lis in scene.listeners if lis.in_use]
         if listener is not None:
-            listeners = [lis for lis in scene.listeners if lis.name == listener]
+            # Named, it hears the walk even when left out, and is checked as in use.
+            listeners = [
+                lis.model_copy(update={"enabled": None})
+                for lis in scene.listeners
+                if lis.name == listener
+            ]
             if not listeners:
                 raise ValueError(f"no listener named {listener!r}")
+        elif not listeners:
+            raise ValueError(
+                f"{every_left_out('listener')}: name the one to hear the walk at "
+                "(--listener, listener)"
+            )
         elif len(listeners) != 1:
             raise ValueError(f"pick a listener: {', '.join(lis.name for lis in listeners)}")
         others = [s for s in scene.sources if s.name != item.name]

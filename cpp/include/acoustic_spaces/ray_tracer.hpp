@@ -25,6 +25,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "acoustic_spaces/atmosphere.hpp"
@@ -1567,8 +1568,12 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         }
     });
 
-    StochasticResult total = make_result();
-    for (const auto &p : partial) {
+    // The first thread's copy takes the others' sums, each freed once added, so the run
+    // holds no copy more than its threads'. The same sums as from zero: a copy only ever
+    // adds to its zeros, so it holds no negative zero, and 0 + x is x.
+    StochasticResult total = std::move(partial[0]);
+    for (std::size_t w = 1; w < partial.size(); ++w) {
+        StochasticResult &p = partial[w];
         for (std::size_t i = 0; i < total.energy.size(); ++i) total.energy[i] += p.energy[i];
         for (std::size_t i = 0; i < total.directional.size(); ++i) {
             total.directional[i] += p.directional[i];
@@ -1583,6 +1588,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         for (std::size_t i = 0; i < total.moments.size(); ++i) total.moments[i] += p.moments[i];
         total.escaped_rays += p.escaped_rays;
         total.traced_rays += p.traced_rays;
+        p = StochasticResult{};
     }
     return total;
 }

@@ -2,6 +2,7 @@
 runs refused or warned about for it."""
 
 import os
+import runpy
 from pathlib import Path
 
 import numpy as np
@@ -96,18 +97,18 @@ def test_the_tracers_memory_takes_the_computers_cores_and_devices(monkeypatch) -
     for cores in (2, 16, 128):
         monkeypatch.setattr(os, "cpu_count", lambda cores=cores: cores)
         on_cpu = [_call(small, threads) for threads in (1, cores, 4 * cores, 0)]
-        # The results, the first batch's and a copy per thread.
-        assert on_cpu[0] == 3 * small
-        assert on_cpu[1:] == [(2 + min(cores, budget // small)) * small] * 3
+        # The first batch's sums and a copy per thread, the first of which is the result.
+        assert on_cpu[0] == 2 * small
+        assert on_cpu[1:] == [(1 + min(cores, budget // small)) * small] * 3
         # Results larger than the budget: one copy, whatever the threads.
         large = 2 * budget
-        assert _call(large, cores) == _call(large, 1) == 3 * large
+        assert _call(large, cores) == _call(large, 1) == 2 * large
         on_gpu = _call(small, cores, ("cpu", "gpu"))
         assert on_gpu == max(on_cpu[1], small + run_memory(10_000, 8, small))
         assert _call(small, cores, ("cpu", "gpu", "both")) >= on_gpu
     # Band by band: the joined arrays, and a band's own at a time.
     monkeypatch.setattr(os, "cpu_count", lambda: 4)
-    assert _call(8 * small, 4, groups=8) == 8 * small + (2 + 4) * small
+    assert _call(8 * small, 4, groups=8) == 8 * small + (1 + 4) * small
 
 
 @pytest.mark.parametrize("method", ["vector", "random"])
@@ -145,3 +146,26 @@ def test_the_editor_notes_a_run_over_half_the_memory(monkeypatch) -> None:
     assert len(notes) == 1 and "over half of this computer's" in notes[0]
     monkeypatch.setattr(run_size, "machine_memory", lambda: int(3 * need.bytes))
     assert not [w for w in room.warnings() if "of memory" in w]
+
+
+def _peaks_can_be_reset() -> bool:
+    try:
+        Path("/proc/self/clear_refs").write_text("5")
+    except OSError:
+        return False
+    return True
+
+
+@pytest.mark.skipif(not _peaks_can_be_reset(), reason="needs Linux's /proc/self/clear_refs")
+def test_the_memory_script_runs(monkeypatch, capsys) -> None:
+    script = Path(__file__).resolve().parent.parent / "validation" / "late_memory.py"
+    monkeypatch.setattr("sys.argv", ["late_memory.py", "--parts", "late", "--lengths", "0.5"])
+    runpy.run_path(str(script), run_name="__main__")
+    rows = [line for line in capsys.readouterr().out.splitlines() if line.startswith("| shoebox")]
+    cells = [[cell.strip() for cell in row.strip("|").split("|")] for row in rows]
+    assert [(row[2], row[3]) for row in cells] == [
+        (f"{method} scattering", threads)
+        for method in ("vector", "random")
+        for threads in "1 4 64".split()
+    ]
+    assert all(float(row[4]) > 0 and float(row[5]) > 0 for row in cells)

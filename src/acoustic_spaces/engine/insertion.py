@@ -29,13 +29,17 @@ from acoustic_spaces.engine.simulate import simulate as simulate_stage
 from acoustic_spaces.parameters import A_WEIGHTING_DB, a_weighted
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene import Coverage, Scene
-from acoustic_spaces.scene.model import Simulation
+from acoustic_spaces.scene.model import Simulation, insertion_loss_problem
 
 
 def _names(room: Room, settings: Simulation, without: Sequence[str] | None) -> list[str]:
+    """What to take away, checked as a scene checks ``insertion_loss_of`` before
+    anything runs: this outdoor scene's buildings, barriers or vegetation, each once."""
     names = list(settings.insertion_loss_of or []) if without is None else list(without)
-    if names and room.outdoor is None:
-        raise ValueError("an insertion loss is for outdoor scenes (geometry.ground)")
+    what = "simulation.insertion_loss_of" if without is None else "without"
+    problem = insertion_loss_problem(room.scene.geometry, names, what) if names else None
+    if problem is not None:
+        raise ValueError(problem)
     return names
 
 

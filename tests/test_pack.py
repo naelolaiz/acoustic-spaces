@@ -3,6 +3,7 @@
 import json
 import shutil
 import struct
+import sys
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,7 +14,7 @@ import trimesh
 import yaml
 
 from acoustic_spaces import __version__
-from acoustic_spaces.audio import write_wav
+from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.cli import main
 from acoustic_spaces.pack import MANIFEST_FILE, SCENE_FILE, pack, unpack
 from acoustic_spaces.room import Room
@@ -197,6 +198,150 @@ def test_a_file_naming_one_outside_its_folder_cannot_be_packed(tmp_path: Path) -
     assert not (tmp_path / "out.zip").exists()
 
 
+def _scene_playing(project: Path, signals: list[str]) -> Path:
+    """A box whose sources play ``signals`` (paths from ``project``, written here)."""
+    for i, signal in enumerate(signals):
+        wav = (project / signal).resolve()
+        wav.parent.mkdir(parents=True, exist_ok=True)
+        write_wav(wav, np.full(480, 0.1 * (i + 1)), 48000)
+    data = {
+        "name": "Names",
+        "geometry": {"box": [4.0, 3.0, 2.5]},
+        "materials": {"m": {"absorption": [0.2] * 8}},
+        "default_material": "m",
+        "sources": [
+            {"name": f"s{i}", "position": [1.0 + 0.2 * i, 1.0, 1.0], "signal": signal}
+            for i, signal in enumerate(signals)
+        ],
+        "listeners": [{"name": "l", "position": [3.0, 2.0, 1.2]}],
+    }
+    path = project / "scene.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    return path
+
+
+def _apart(folder: Path, *names: str) -> bool:
+    """Whether the file system of ``folder`` holds files of these names apart."""
+    probe = folder / "names-probe"
+    probe.mkdir()
+    for name in names:
+        (probe / name).touch()
+    apart = len(list(probe.iterdir())) == len(names)
+    shutil.rmtree(probe)
+    return apart
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows holds no ':' in a file name")
+def test_a_name_a_pack_cannot_hold_is_refused_when_packing(tmp_path: Path) -> None:
+    """unpack refuses ':' and '\\' in a name on every system, so pack refuses such a
+    name before it writes anything, naming the file. A folder of the packer's own
+    naming (under external/) is given a name a pack holds."""
+    project = tmp_path / "project"
+    for signal in ("take 1: hall.wav", "back\\slash.wav"):
+        path = _scene_playing(project, [signal])
+        with pytest.raises(ValueError, match=r"cannot go in a pack as .*rename the file"):
+            pack(Scene.from_yaml(path), tmp_path / "out.zip", base_dir=project)
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["project"]
+    path = _scene_playing(project, ["../take: 2/a.wav"])
+    zipped = tmp_path / "out.zip"
+    packed = pack(Scene.from_yaml(path), zipped, base_dir=project)
+    assert [name for name, _bytes in packed.files] == ["external/take- 2/a.wav"]
+    assert unpack(zipped, tmp_path / "unpacked").scene.is_file()
+
+
+def test_names_that_differ_only_in_case_are_refused_or_kept_apart(tmp_path: Path) -> None:
+    """Two files whose names differ only in case would be one file unpacked on Windows
+    or macOS, and a source would play the other's signal: pack refuses them, naming
+    both. Folders of the packer's naming are kept apart where case does not count."""
+    if not _apart(tmp_path, "Take.wav", "take.wav"):
+        pytest.skip("this file system holds no two names that differ only in case")
+    project = tmp_path / "project"
+    path = _scene_playing(project, ["Take.wav", "take.wav"])
+    where = "only in case: unpacked on Windows or macOS, one would take the other's place"
+    with pytest.raises(ValueError, match=rf"Take.wav and .*take.wav would go .*{where}"):
+        pack(Scene.from_yaml(path), tmp_path / "out.zip", base_dir=project)
+    assert not (tmp_path / "out.zip").exists()
+    path = _scene_playing(project, ["../Snd/a.wav", "../snd/a.wav", "PACK.json"])
+    zipped = tmp_path / "out.zip"
+    packed = pack(Scene.from_yaml(path), zipped, base_dir=project)
+    assert sorted(name for name, _bytes in packed.files) == [
+        "external/Snd/a.wav",
+        "external/project/PACK.json",
+        "external/snd-2/a.wav",
+    ]
+    unpacked = Room.from_yaml(unpack(zipped, tmp_path / "unpacked").scene)
+    signals = [read_wav(source.signal)[0][0, 0] for source in unpacked.scene.sources]
+    np.testing.assert_allclose(signals, [0.1, 0.2, 0.3], atol=1e-4)
+
+
+ENCODED = "the way a letter is encoded (é as one character, or as e and an accent)"
+
+
+@pytest.mark.parametrize(
+    ("names", "difference"),
+    [
+        # é as one character (NFC), and as e and a combining accent (NFD).
+        (["\u00e9.wav", "e\u0301.wav"], ENCODED),
+        # Full case folding: ß is ss. NTFS upper-cases ß to itself.
+        (["stra\u00dfe.wav", "strasse.wav"], "case"),
+        # ΐ, and Ϊ with an accent: their folds are one name once put in NFD again.
+        (["\u0390.wav", "\u03aa\u0301.wav"], f"case and in {ENCODED}"),
+    ],
+    ids=["encoding", "sharp-s", "case-and-encoding"],
+)
+def test_names_macos_takes_for_one_are_refused_saying_how(tmp_path, names, difference) -> None:
+    """APFS takes names of one canonical caseless form (The Unicode Standard, D145: NFD
+    after full case folding, then NFD) for one, where NTFS keeps these apart: pack
+    refuses them, saying what they differ in and that macOS would unpack them as one."""
+    if not _apart(tmp_path, *names):
+        pytest.skip("this file system takes these names for one")
+    project = tmp_path / "project"
+    path = _scene_playing(project, names)
+    with pytest.raises(ValueError) as error:
+        pack(Scene.from_yaml(path), tmp_path / "out.zip", base_dir=project)
+    first, second = (project.resolve() / name for name in names)
+    assert str(error.value) == (
+        f"{first} and {second} would go in a pack as {names[0]!r} and {names[1]!r}, which "
+        f"differ only in {difference}: unpacked on macOS, one would take the other's "
+        "place; rename one"
+    )
+    assert not (tmp_path / "out.zip").exists()
+
+
+def test_a_folder_of_the_packers_naming_takes_no_files_name(tmp_path: Path) -> None:
+    """A folder of the packer's naming under external/ takes no file's name there:
+    unpacked, the second could not be written on any system."""
+    project = tmp_path / "project"
+    path = _scene_playing(project, ["external/a.wav", "../a.wav/x.wav"])
+    zipped = tmp_path / "out.zip"
+    packed = pack(Scene.from_yaml(path), zipped, base_dir=project)
+    assert sorted(name for name, _bytes in packed.files) == [
+        "external/a.wav",
+        "external/a.wav-2/x.wav",
+    ]
+    unpacked = Room.from_yaml(unpack(zipped, tmp_path / "unpacked").scene)
+    signals = [read_wav(source.signal)[0][0, 0] for source in unpacked.scene.sources]
+    np.testing.assert_allclose(signals, [0.1, 0.2], atol=1e-4)
+
+
+def test_a_file_and_a_folder_whose_names_differ_only_in_case_are_refused(tmp_path) -> None:
+    """A file a and a folder A cannot be unpacked side by side on Windows or macOS: pack
+    refuses them, naming both."""
+    if not _apart(tmp_path, "a", "A"):
+        pytest.skip("this file system holds no two names that differ only in case")
+    project, zipped = tmp_path / "project", tmp_path / "out.zip"
+    path = _scene_playing(project, ["a", "A/b.wav"])
+    with pytest.raises(ValueError) as error:
+        pack(Scene.from_yaml(path), zipped, base_dir=project)
+    assert str(error.value) == (
+        f"{project.resolve() / 'a'} would go in a pack as 'a', and "
+        f"{project.resolve() / 'A' / 'b.wav'} as "
+        "'A/b.wav', in a folder 'A', a name that differs from the file's only in case: "
+        "unpacked on Windows or macOS, a file and a folder would have one name; rename one"
+    )
+    assert not zipped.exists()
+
+
 def test_pack_refuses_what_cannot_run(tmp_path: Path, capsys) -> None:
     data = yaml.safe_load((EXAMPLES / "shoebox" / "scene.yaml").read_text(encoding="utf-8"))
     data["geometry"]["file"] = str(EXAMPLES / "shoebox" / "shoebox.obj")
@@ -213,6 +358,17 @@ def test_pack_refuses_what_cannot_run(tmp_path: Path, capsys) -> None:
     assert main(["pack", shoebox, str(tmp_path / "out.zip")]) == 0
     assert main(["pack", str(tmp_path / "out.zip"), str(tmp_path / "again.zip")]) == 1
     assert "is a pack already" in capsys.readouterr().err
+
+
+def test_pack_help_lists_what_a_pack_holds(capsys) -> None:
+    """pack --help names every kind of file Scene.files() puts in a pack, the sources'
+    signals and the scene's recording among them."""
+    with pytest.raises(SystemExit):
+        main(["pack", "--help"])
+    text = " ".join(capsys.readouterr().out.split())
+    for kind in ("model", "terrain", "buildings map", "material", "directivity"):
+        assert kind in text
+    assert "the files sources play, the scene's recording and HRTFs" in text
 
 
 def _rewrite(zipped: Path, change) -> None:
