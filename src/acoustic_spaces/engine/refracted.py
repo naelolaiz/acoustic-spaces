@@ -105,13 +105,17 @@ MAX_GROUND_BOUNCES = 10
 #: Behind barriers and buildings the parabolic equation runs in every band with them
 #: inside (:meth:`Refraction._barrier`). From this band (centre, Hz) up its height step
 #: is BARRIER_COARSE times the solver's own: a quarter wavelength in the narrow-angle
-#: equation (a tenth below it), which changes the weather's effect by 0.03 dB or less
-#: at 1 to 8 kHz and costs 2 to 5 times less.
+#: equation (a tenth below it), which costs 2 to 2.5 times less and changes the
+#: weather's effect by up to 0.2 dB at 1 to 8 kHz behind barriers and a building over
+#: grass and rigid ground, 25 to 150 m away, but up to 0.3 dB at 1 and 2 kHz and 2.7 dB
+#: at 4 and 8 kHz 11 m behind a top 60 degrees up from the source.
 BARRIER_COARSE_FROM_HZ = 1000
 BARRIER_COARSE = 0.4
 #: From this band (centre, Hz) up those runs take BARRIER_SAMPLES_HIGH frequencies an
-#: octave (8 below, as everywhere): with 8, the weather's effect behind a screen is off
-#: by up to 0.85 dB at 4 and 8 kHz.
+#: octave (8 below, as everywhere). Against 32, the weather's effect at 4 and 8 kHz is
+#: off by up to 0.5 dB over grass and 1.8 dB over rigid ground in those places, and up
+#: to 6.4 dB where the ground's interference fringes fall in step with the frequencies
+#: (27 degrees up from the source, 25 m away, over rigid ground).
 BARRIER_DENSE_FROM_HZ = 4000
 BARRIER_SAMPLES_HIGH = 16
 #: Their absorbing layer starts at least this many times higher than the highest top
@@ -733,9 +737,9 @@ class Refraction:
 
     # -- legs --------------------------------------------------------------------------
 
-    def _legs(self, paths: EarlyReflections, plain: np.ndarray | None = None) -> EarlyReflections:
+    def _legs(self, paths: EarlyReflections) -> EarlyReflections:
         """``paths`` with each straight leg's travel time in the atmosphere, and its
-        shadow's attenuation but in the bands ``plain`` (bands,) bool."""
+        shadow's attenuation."""
         energy = paths.energy.copy()
         delay = paths.delay_s.copy()
         for i, points in enumerate(paths.points):
@@ -745,8 +749,6 @@ class Refraction:
                 g, t = self._leg(a, b)
                 gain *= g
                 shift += t
-            if plain is not None:
-                gain = np.where(plain, 1.0, gain)
             energy[i] *= gain
             delay[i] += shift
         return dataclasses.replace(paths, energy=energy, delay_s=delay)

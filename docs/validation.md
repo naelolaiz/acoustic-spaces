@@ -7,8 +7,9 @@ measurements in two real rooms, how edge diffraction, reflections fading at edge
 the reflection off a porous ground compare with the exact solution, how sound outdoors compares with measurements
 up to 845 m away, how its turbulence compares with a parabolic equation through random
 eddies, how its rays through vegetation compare with a separate particle simulation,
-how its wave solver in wind and temperature compares with a parabolic equation, and how
-much of a block's time the real-time convolver needs. It ends with the known issues and
+how its wave solver in wind and temperature compares with a parabolic equation, how
+the weather's effect behind barriers and buildings compares with a full-wave solution,
+and how much of a block's time the real-time convolver needs. It ends with the known issues and
 what has not been validated yet.
 
 ## Checks against theory, on every change
@@ -2853,6 +2854,56 @@ and bends it a little the whole way instead. That is the cost of the equivalent 
 take (Nord2000, Harmonoise), and the reason the bands up to 500 Hz, and up to 2 kHz in
 a shadow, come from the parabolic equation, which goes through the zones.
 
+## Barriers and buildings in wind against a full-wave solution
+
+`validation/barrier_wind.py` checks the weather's effect behind barriers and buildings
+(see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)): the
+level in the weather less the level in still air, which the engine takes from its
+parabolic equation with the barriers and buildings inside (a barrier lets nothing
+through below its top, a roof is a rigid floor) and puts on the paths it finds in still
+air. Two references are written for the script, and the wind is a logarithmic profile
+over a roughness of 5 cm, 5 or 10 m/s 10 m up, towards the listener or the source:
+
+- **A full-wave solution**: the Helmholtz equation round a source on an axis, in air
+  whose speed of sound changes with height, solved by coupled modes stepping in range
+  (Evans 1983): exact in range, a twentieth of the shortest wavelength in height, a
+  perfectly matched layer on top. Barriers are thin rigid rings round the source and a
+  building a rigid ring block; the wind blows through them; 63 to 500 Hz, over rigid
+  ground and over grass (Miki's impedance, 200 kPa s/m²). It checks itself: over
+  open rigid ground it is within SELF_TWO dB of the exact field of the source and its
+  image, with a ring barrier in still air within SELF_RING dB of a straight barrier's
+  four paths (the uniform theory of diffraction) at 125 and 250 Hz, and over open
+  ground in 5 m/s of wind within SELF_PE dB of the engine's parabolic equation at each
+  frequency of the 125 Hz band.
+- **A parabolic equation started behind the barrier** from the exact field of a rigid
+  straight barrier over rigid ground (the four paths), 1 m behind it (within STARTER dB
+  of those paths in still air), and marched in a wind that blows behind the barrier
+  only (the engine's equation is given the same), 125 Hz to 8 kHz (from 4 kHz up to
+  100 m only): the `windy` preset downwind and upwind, `clear_night` and `sunny_day`,
+  barriers 3 and 6 m high 20 and 50 m from a source 1 m up, listeners 50, 100 and 200 m
+  away, 1.5 and 4 m up.
+
+The full-wave cases (source 1 m up unless given; listeners 1.5 m up unless given):
+
+| case | on the way | listeners (m away) |
+|---|---|---|
+| near | barrier 15 m away, 4 m high | 30, 60, 120; 60 at 4 m up |
+| far | barrier 100 m away, 4 m high | 110, 130; 130 at 4 m up |
+| rail | source 0.5 m up, barrier 4 m away, 3 m high | 25, 50, 100 |
+| steep 45 and 60 | source 0.5 m up, barrier 4 m away, 4.5 and 7.43 m high (its top 45 and 60 degrees up from the source) | 15, 30, 60 |
+| roof | building 40 to 52 m away, 6 m high | 80, 150 |
+| two | barriers 45 and 55 m away, 8 m high | 100, 150 |
+
+FULL_WAVE_TABLE
+
+STARTED_TABLE
+
+ENGINE_TABLE
+
+CONVERGENCE_TABLE
+
+CONTINUITY_TABLE
+
 ## Levels over a long term
 
 `validation/long_term.py` checks how the engine combines weather classes and the
@@ -3962,7 +4013,8 @@ its peak (single precision).
 ## Known issues
 
 A review of the code on 25 October 2026 found these, but for the one about barriers,
-which the checks against the exact solution found. Each one was checked against the
+which the checks against the exact solution found, and those about barriers in wind
+and a leg's shadow, which their checks found. Each one was checked against the
 code; the numbers come from the tests or scripts named, and a number from a one-off
 check says so. They are open items on the [roadmap](roadmap.md).
 The edge fade's own are listed in
@@ -4012,6 +4064,26 @@ Results:
   hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from
   500 Hz up, and off by up to 9.9 dB below (see
   [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
+- **A barrier's end in wind.** Behind a barrier the paths in the plane take the
+  barrier's effect and those round its end the open ground's, so where a listener
+  crosses the shadow boundary of the end the level steps: 10 cm across it, by up to
+  7.7 dB 60 m from the source and 24 dB 120 m away in the `windy` preset, from 500 Hz
+  up, where still air steps by 4.5 dB at most, at 63 Hz (see
+  [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
+- **Behind barriers in wind at 4 and 8 kHz** the effect comes from 16 frequencies an
+  octave, which against 32 is off by up to 0.5 dB over grass and 1.8 dB over rigid
+  ground, and by 6.4 dB where the rigid ground's interference fringes fall in step with
+  the frequencies (25 m from the source, 27 degrees up).
+- **Coverage maps behind barriers in wind** leave out the early sound that arrives
+  before the straight line's time where no path is clear, in the bands they add in
+  energy (1 to 8 kHz outdoors), and the wind brings sound over a barrier sooner: 130 m
+  behind two barriers in 8 m/s of wind a map reads 1 kHz 16.8 dB lower than the
+  listener at that point (a one-off check).
+- **A leg from a ground reflection a rounding error above the ground** (10⁻¹⁶ m) has no
+  refraction shadow, its shadow's start then being 10²⁸⁴ m out: 120 m upwind of a
+  source in the `windy` preset, as a listener moves 10 cm past a barrier's end the
+  path reflected off the ground round it lifts the level by up to 65 dB at 8 kHz (a
+  one-off check).
 
 Models:
 
@@ -4075,6 +4147,11 @@ Files and runs:
   changes over the scene is checked against a parabolic equation marched through the
   zones, not against measurements, and a zone's border is a step (see
   [Weather zones](#weather-zones-against-a-crank-nicholson-parabolic-equation)).
+  Barriers and buildings in wind are checked against a full-wave solution and a
+  parabolic equation started from the exact field, both in the vertical plane with the
+  wind blowing through the barrier, not against measurements, wind-tunnel data or
+  Nord2000's screen cases (see
+  [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   Levels over a long term are checked against the formulas they come from and against
   ISO 9613-2's meteorological correction, not against long-term measurements, and are
   only as good as the weather classes and shares given to them (see
@@ -4153,6 +4230,7 @@ python validation/terrain.py --json terrain.json
 python validation/ffp.py --json ffp.json
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
+python validation/barrier_wind.py --json barrier_wind.json   # HOURS; --quick: fewer bands
 python validation/long_term.py --json long_term.json
 python validation/doppler.py --json doppler.json
 python validation/rotorcraft.py --json rotorcraft.json

@@ -46,13 +46,23 @@ Building v1 from `wip/barrier-pe-design.md`, following its one-day plan (section
   up to 69 dB). Still air (main's, unchanged): up to 4.5 dB at 63 Hz, where the paths over the top end with
   the barrier.
 
+- Measured so far (V4-V6): a quarter-wavelength grid from 1 kHz is within 0.3 dB of a tenth's at 1-2 kHz
+  and 0.2 dB at 4-8 kHz, but 2.7 dB at 4-8 kHz 11 m behind a top 60 degrees up; 16 samples an octave at 4-8 kHz
+  are off by up to 1.8 dB against 32 over rigid ground (6.4 dB where the ground's fringes fall in step with the
+  frequencies). Continuity: a breath of wind 0.024 dB at 0.01 m/s (linear in the wind); top height 0.007 dB/mm
+  up to 4 kHz, 0.09 dB/mm at 8 kHz (a smooth slope); line of sight 0.077 dB/cm (still air 0.070); a degree's
+  boundary behind a slanted barrier up to 0.7 dB; no step at the parabolic equation's minimum range. Coverage
+  maps behind two barriers or a building take 10 to 16 times as long as on main (target 2).
+- Found on main, left for their own PRs: coverage maps drop early paths that arrive before the straight
+  line's time where no path is clear (bands added in energy), so a map behind barriers in wind misses most of
+  the weather's effect from 1 kHz up; a leg from a ground reflection a rounding error (1e-16 m) above the ground
+  gets no refraction shadow (shadow_start returns 1e284 m), which steps the level by up to 65 dB at 8 kHz.
+
 ## Open
 
-V3 runs (full-wave cases, started PE 125 Hz-8 kHz, then the engine end to end); V1 (still air bit-identical:
-edge diffraction JSON identical so far, others running); V2; V4 convergence; V5 continuity; V6 map time;
-docs and CHANGELOG. Found while measuring V5: in still air main's level steps by up to 4.2 dB (63 Hz) where a
-listener crosses the shadow boundary of a barrier's end, because the paths over the top vanish there.
+V3 runs (full-wave and started PE finishing, then the engine end to end against main); V1 edge fade, V2;
+the roof-height sweep; the V3-V5 tables in docs/validation.md; CHANGELOG.
 
 ## Next
 
-Collect V3, run V4-V6, write the docs.
+Fill the tables and the remaining numbers in the docs, then the final report.

@@ -549,8 +549,8 @@ is an arc of a circle, so its travel time and its length are exact.
   FWLIMIT (see
   [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   Nearer than 1.5 times the source's and the listener's heights added, where an object
-  of a model file stands in the way, or where no path lies in the plane, the paths go
-  over the edges as above.
+  of a model file stands in the way, where the source or the listener stands on a
+  building, or where no path lies in the plane, the paths go over the edges as above.
 - **The direct sound's time** in the results is when the bent direct sound arrives:
   sooner downwind, later upwind (the time along the ground in the shadow).
 - **The late rays** follow their arcs through the layers, in chords that stray at most
@@ -613,7 +613,12 @@ is an arc of a circle, so its travel time and its length are exact.
 Bending takes time: the `open_air_stage` example runs in 3 s instead of 0.2 s in still
 air, a scene's late rays take about three times as long, and coverage maps about six
 times, the parabolic equation running for each point; `simulation.performance.threads`
-shares the work out over the cores. The places of a walking source share the parabolic
+shares the work out over the cores. Behind barriers and buildings the parabolic
+equation runs in every band, in the weather and in still air, for each degree of
+direction: a pair of runs 160 m out takes about 9 s of CPU, nearly all of it at 4 and 8
+kHz, and a coverage map behind two barriers or a building 10 to 16 times as long as
+with straight legs (96 points over grass in 8 m/s of wind: 150 to 160 s instead of 10
+to 16). The places of a walking source share the parabolic
 equation's runs where they stand at one height over one ground and neither the weather
 nor the ground has zones: a run from one place serves the listeners of every other that
 the sound goes the same way to, each reached by a last step of its own, so that it gets
@@ -1459,11 +1464,14 @@ equation leaves out:
   reflects between two barriers (up to 1.7 dB at 125 Hz with two barriers 10 m apart)
   or back towards the source.
 - **The third dimension.** The equation runs in the vertical plane along the way,
-  rounded to a degree, so a barrier is a ring round the source; how obliquely the way
-  crosses it changes the level in still air by 0.4 to 0.9 dB from 0 to 45 degrees
-  (Aballéa et al. 2007), which the ratio cancels in part. The paths round an end take
-  the open ground's effect, not their own, and only in its bands: where a listener
-  crosses the shadow boundary of a barrier's end the level steps by up to ENDSTEP.
+  rounded to a degree, so a barrier is a ring round the source, and behind a slanted
+  barrier the level steps by up to 0.7 dB where the way turns from one degree to the
+  next; how obliquely the way crosses it changes the level in still air by 0.4 to
+  0.9 dB from 0 to 45 degrees (Aballéa et al. 2007), which the ratio cancels in part.
+  The paths round an end take the open ground's effect, not their own, and only in its
+  bands: where a listener crosses the shadow boundary of a barrier's end the level
+  steps, 10 cm across it, by up to 7.7 dB 60 m from the source and 24 dB 120 m away
+  (see [Validation](validation.md#known-issues)).
 - **Buildings in the wide-angle equation** (at steep points, or with
   `parabolic_equation: wide_angle`) are two screens at their walls: up to 1.4 dB in the
   wind's effect behind a building 60 m deep at 500 Hz in 10 m/s.
