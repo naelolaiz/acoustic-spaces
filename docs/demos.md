@@ -1040,7 +1040,7 @@ in the street, at the speed of its walk (50 km/h) unless `--speed` says.
   dB(A) at the railway's house (86.8 dB(A) outdoors, 47.1 in the room). That level is
   the listener's own where it stands 2 m out, as `house_18m` and the pavement do;
   nearer, where the wall's reflection makes the 63 to 250 Hz bands louder or quieter,
-  the vehicle is simulated once more, as one more listener (`balcony_2m`), at the point
+  the vehicle is simulated once more, as one more listener (`balcony_2m`, the street example's, ticked off), at the point
   2 m in front of the wall, square to it, at the listener's height: for the balcony, 1 m
   out from it. The room hears the listener's sound through the window, each octave band
   changed at each moment by as much as the level 2 m out is over the listener's. The
