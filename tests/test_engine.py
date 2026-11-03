@@ -236,7 +236,7 @@ def test_batches_trace_the_same_rays() -> None:
 
 def test_standard_errors_match_the_spread_over_seeds() -> None:
     # The jackknife over one run's batches against the spread of 30 runs with other
-    # seeds, from 125 Hz to 4 kHz (with 60 runs the ratios came within 0.91 to 1.18).
+    # seeds, from 125 Hz to 4 kHz (with 60 runs the ratios came within 0.90 to 1.17).
     values, errors = [], []
     for seed in range(30):
         room = _diffuse_box({"late": {"rays": 2000}, "ir_length_s": 1.0, "seed": seed})

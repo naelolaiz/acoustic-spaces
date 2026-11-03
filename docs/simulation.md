@@ -28,6 +28,14 @@ or in a corner. Sound that bends round edges is added to them (see
     clear, the sphere of a listener closer than 5.6 cm to a surface (an opening or
     an outdoor scene's sky too) is under a tenth of that size and catches a hundredth
     of the rays or fewer, which the scene's warnings say.
+    With rays that go straight (no wind or temperature gradient), the scattered sound
+    of each reflection straight from the source is also found from the listener's
+    side: 16384 directions from each listener, turned at random by the seed, find the
+    surfaces it sees, and the rays and those directions share that sound by how
+    densely each finds it (the balance heuristic of multiple importance sampling): the
+    rays near the source, the listener's directions near the listener. The expected
+    energy is the same, but a ray that lands next to a listener (above grass, an
+    aircraft overhead) brings it no burst of scattered sound.
   - `secondary_sources`: all reflected energy radiates that way, as in ODEON's late
     method. Much smoother tails, but it treats specular energy as diffuse: in the
     example box (smooth walls, absorbing ceiling) EDT comes out about 20 % shorter.
@@ -53,11 +61,14 @@ or in a corner. Sound that bends round edges is added to them (see
   from 125 Hz to 4 kHz and suggests more rays when it is over half a JND;
   `parameters.json` holds them all (`standard_errors`), and the editor shows each in
   the results table's tips, amber over half a JND. The early paths and the wave solver's
-  bands do not depend on the seed and add none; the parameters from the directions the
-  late energy arrives from (LF, LFC, LJ, the decay times along the listener's axes) get
-  none. Over 60 seeds in a diffuse box (2,000 rays), the root mean square of the
-  standard errors of EDT, T30, C80 and G came within 0.91 to 1.18 of the spread between
-  the runs from 125 Hz to 4 kHz, and within 0.7 to 1.4 over 20 seeds in the shoebox
+  bands do not depend on the seed and add none. Each batch takes its share of the
+  listeners' gather of the first reflections' scattered sound (every tenth of its
+  directions with 10 batches), so the standard errors hold its error too (over a
+  ground plane, in 10 ms slots, 1.1 to 1.4 times its spread between seeds at the
+  median). The parameters from the directions the late energy arrives from (LF, LFC,
+  LJ, the decay times along the listener's axes) get none. Over 60 seeds in a diffuse box (2,000 rays), the root mean square of the
+  standard errors of EDT, T30, C80 and G came within 0.90 to 1.17 of the spread between
+  the runs from 125 Hz to 4 kHz, and within 0.8 to 1.7 over 20 seeds in the shoebox
   example at its 50,000 rays. With few
   rays in a room whose late tail rides on a few rays, one strong arrival (a ray through
   the listener's sphere long after the rest) comes in some runs and not in others: the
@@ -694,7 +705,8 @@ simulation:
   kinds of scattering, the scattering of a surface's size, air absorption, the early
   stage's paths left out, arrival directions, the weight window, and outdoors the rays
   bent by [wind and temperature](outdoor.md#wind-and-temperature), those through
-  [vegetation](outdoor.md#vegetation) and the open sky). Rays start where
+  [vegetation](outdoor.md#vegetation) and the open sky); the listeners' side of the
+  first reflections' scattered sound is found on the CPU. Rays start where
   the CPU's do, then draw random numbers of their own, in single precision, so the two
   agree statistically, not ray for ray. The tests trace main's stored runs on the GPU
   and check that they land within the spread of the CPU's own results over seeds. The

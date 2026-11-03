@@ -269,6 +269,13 @@ Outdoor acoustics, in steps:
   40 dB of free field, where the narrow-angle one strays by 3 to 20 dB; in the weather
   presets within 0.04 dB on average (the narrow-angle one 0.11). Three to four times
   the work; without it nothing changes.
+- [x] The scattered sound of the reflections straight from the source found from each
+  listener too, shared with the late rays by how densely each finds it: an aircraft
+  overhead no longer brings a listener above grass bursts of it from the few rays that
+  land nearby.
+- [ ] The same where the rays bend in wind or a temperature gradient, scatter in plants
+  before they reflect, or reach the listeners as secondary sources: there the
+  scattered sound near a listener still comes from the few rays that land nearby.
 
 Sources:
 

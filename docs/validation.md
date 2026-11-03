@@ -43,11 +43,20 @@ request and checks:
   30 seeds of a diffuse box) of EDT, T30, C80 and G against the spread of the
   parameters between the runs, from 125 Hz to 4 kHz: their ratio held within 0.6 to
   1.6 band by band and 0.8 to 1.25 on average (over 60 seeds, the root mean square of
-  the standard errors came within 0.91 to 1.18 of the spread); and they follow a
+  the standard errors came within 0.90 to 1.17 of the spread); and they follow a
   source's feed and new absorption (re-weighted) along with the rest;
 - a response's decay times and ratios read the same however loud it is (20 gains, to
   1e-9): the decay curve starts at 0 dB exactly, so EDT's fit always starts at the
   onset;
+- the scattered sound of the reflections straight from the source, shared between the
+  rays and the listeners' gather (`tests/test_first_gather.py`), on ground 400 m
+  across: against its integral within 0.2 % for an aircraft 305 m up and 300 m off
+  (over 24 seeds the shared runs spread by 0.08 % of it, the rays' alone by 86 %, and
+  these averaged half of it), and within the noise of 32 seeds for a source 30 m up
+  and one 5 cm above the ground; the same as the rays' alone within the noise through
+  plants, from a source turned to the ground, per face group and arrival direction,
+  and in two rooms through a partition and a doorway; each batch with its share of the
+  gather's directions; on the GPU as on the CPU;
 - the late part's last slots: the same rays traced 50 ms longer give the same echogram
   up to the end, where a ray's time runs out as it crosses a listener's sphere: with
   and without the rain on the CPU, without it on the GPU, and with rays bent by the
@@ -3561,12 +3570,12 @@ engine departing and 5,000 lb arriving:
 
 | distance | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| 200 ft (61 m) | 99.8 (102.5) | 104.0 (104.0) | 95.7 (98.4) | 100.0 (101.8) |
+| 200 ft (61 m) | 99.8 (102.5) | 104.0 (104.0) | 95.8 (98.4) | 100.0 (101.8) |
 | 400 ft (122 m) | 94.2 (95.4) | 100.2 (100.2) | 90.1 (91.2) | 96.1 (98.0) |
 | 630 ft (192 m) | 90.2 (90.6) | 97.5 (97.4) | 86.0 (86.5) | 93.3 (95.2) |
-| 1000 ft (305 m) | 85.6 (85.8) | 94.5 (94.4) | 81.5 (81.6) | 90.4 (92.1) |
-| 2000 ft (610 m) | 78.1 (78.2) | 89.5 (89.3) | 74.2 (74.0) | 85.6 (87.0) |
-| 4000 ft (1219 m) | 69.9 (70.0) | 83.7 (83.6) | 66.2 (65.9) | 80.0 (81.4) |
+| 1000 ft (305 m) | 85.7 (85.8) | 94.5 (94.4) | 81.5 (81.6) | 90.4 (92.1) |
+| 2000 ft (610 m) | 78.2 (78.2) | 89.5 (89.3) | 74.2 (74.0) | 85.6 (87.0) |
+| 4000 ft (1219 m) | 69.7 (70.0) | 83.7 (83.6) | 66.1 (65.9) | 80.0 (81.4) |
 
 (dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The engine's
 pass is measured as Doc 29 defines its levels (Volume 2's glossary, section 4.1 and its
@@ -3574,29 +3583,28 @@ footnote 15): L_ASmax is the highest of its A-weighted level through a sound lev
 meter's slow time weighting, and the SEL is taken over the time that level is within 10
 dB of it. The source is made to the NPD curves' L_Amax 1000 ft away, raised by the 0.29
 dB the slow time weighting takes off a point source's loudest moment there, and the
-engine gives it back within 0.2 dB. Nearer, the NPD curves' L_Amax grows faster than one
+engine gives it back within 0.1 dB. Nearer, the NPD curves' L_Amax grows faster than one
 point source's with one spectrum: at 200 ft the engine reads 2.8 dB (departure) and 2.6
 dB (arrival) under them. With no time weighting, the highest level of the places is 2.0
-dB over L_ASmax at 200 ft, 1.0 dB at 400 ft and 0.6 to 0.9 dB farther out, and the SEL
-of the whole walk is 0.4 to 0.5 dB over the 10 dB-down one. The departure's SEL is
+dB over L_ASmax at 200 ft, 1.0 dB at 400 ft, 0.6 dB at 630 ft and less farther out (0.3
+dB at 1000 ft, under 0.1 dB at 4000 ft), and the SEL of the whole walk is 0.35 to 0.46
+dB over the 10 dB-down one. The departure's SEL is
 within 0.3 dB of its NPD curves, the arrival's 1.4 to 1.9 dB under: JETW's arrival
 curves have SEL - L_Amax = 10 lg(πd/V) within 0.22 dB out to 1000 ft, the SEL of a point
 source's whole pass over its level as it passes, with no time weighting and in air that
 absorbs nothing. Measured as Doc 29 defines its levels, that source's SEL - L_ASmax is
 1.0 dB more at 200 ft and 0.7 dB less at 1000 ft, and the air takes more off; the
 departure's curves are 1.9 to 2.2 dB under 10 lg(πd/V). Volume 3's aircraft are
-hypothetical, and its arrival curves seem not to follow those definitions. Farther out
-the grass's scattered sound comes from the few late rays that land near the microphone,
-so it changes with their seed.
+hypothetical, and its arrival curves seem not to follow those definitions.
 
 **The airport's flights.** The demo's departure and arrival, simulated every 20 m at
 each listener, their level following their thrust:
 
 | listener | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| departure_4km | 87.1 (87.2) | 95.9 (96.0) | 49.9 (43.1) | 64.1 (60.7) |
-| lateral_450m | 85.0 (85.1) | 95.5 (94.5) | 43.1 (54.4) | 57.3 (68.8) |
-| approach_2000m | 51.9 (54.8) | 67.7 (68.6) | 90.6 (91.5) | 96.9 (98.8) |
+| departure_4km | 87.2 (87.2) | 96.0 (96.0) | 49.9 (43.1) | 64.1 (60.7) |
+| lateral_450m | 85.1 (85.1) | 95.5 (94.5) | 43.1 (54.4) | 57.3 (68.8) |
+| approach_2000m | 51.9 (54.8) | 67.8 (68.6) | 90.6 (91.5) | 96.9 (98.8) |
 
 (dB(A); Doc 29's in brackets.) Where the jet is heard rolling, the walk starts or ends
 less than 10 dB under its L_ASmax, so its SEL there is over less than the 10 dB-down
@@ -3607,7 +3615,7 @@ off its lateral attenuation, 10.9 dB at grazing for a listener ahead of a landin
 or behind a take-off roll, from measurements and so averaged over their weather, and
 behind a take-off roll adds its start-of-roll directivity (5.1 dB down at
 approach_2000m). The engine reckons the scene's ground in still air: the hard runway
-reflects the sound back up, so the arrival's roll-out is 6.8 dB over Doc 29 at
+reflects the sound back up, so the arrival's roll-out is 6.7 dB over Doc 29 at
 departure_4km, 2.4 km ahead of it along the runway, while the meadow takes much of it
 away from 250 Hz up, so it is 11.3 dB under at lateral_450m, 1 km away across the grass
 (at 250 Hz the roll-out's end is 14 dB quieter there than at departure_4km); the
@@ -3991,6 +3999,11 @@ Results:
   the nine outdoor examples, when this was found, put it at hundredths of a decibel at
   most, in a band's response and in the lateral figures of eight behind LF, LFC and
   LG. Impulse responses add the paths in pressure without it.
+- **Scattered sound near a listener in bent air.** Where the rays bend in wind or a
+  temperature gradient, scatter in plants before they reflect, or reach the listeners
+  as secondary sources, the scattered sound of a reflection near a listener comes from
+  the few rays that land there, not from the listener's own gather: a run with a far
+  source over grass has bursts of it that change with the seed.
 - **Paths over two edges take no reflections.** With `second_order` a path over two
   edges reflects nowhere before, between or after them, so behind a thick barrier on a
   hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from

@@ -150,6 +150,7 @@ _FIELDS = (
     ("medium_at", "u"),
     ("wind_x", "f"),
     ("wind_y", "f"),
+    ("gather_ratio", "f"),
 )
 _TYPES = {"u": "u32", "i": "i32", "f": "f32"}
 
@@ -1331,9 +1332,20 @@ fn detectors(origin: vec3<f32>, along: vec3<f32>, segment: f32, rate: f32, path:
     }
 }
 
+// The rain's share of the scattered sound of a reflection straight from the source,
+// against the listeners' gather (as the CPU's rain_share, ray_tracer.hpp): the rays land
+// there cos_in / r_in^2 densely, the gather's directions run.gather_ratio cos_out /
+// r_out^2.
+fn rain_share(cos_in: f32, r_in: f32, cos_out: f32, r_out: f32) -> f32 {
+    let rays = cos_in * r_out * r_out;
+    let gathered = run.gather_ratio * cos_out * r_in * r_in;
+    return rays / max(rays + gathered, 1e-30);
+}
+
 // The rain from the reflection at ray.pos (normal n towards the ray's side) to every
-// listener that sees it.
-fn rain(n: vec3<f32>) {
+// listener that sees it; from a reflection straight from the source (`first`), the
+// share the gather leaves it.
+fn rain(n: vec3<f32>, first: bool) {
     let specular = (run.flags & SPECULAR_RAIN) != 0u;
     let bending = (run.flags & ATMOSPHERE) != 0u;
     let origin = ray.pos + n * run.offset;
@@ -1367,11 +1379,15 @@ fn rain(n: vec3<f32>) {
         if (planted) {
             depth_tau(origin, toward, gap);
         }
+        var kept = 1.0;
+        if (first) {
+            kept = rain_share(-dot(n, ray.dir), ray.travelled, dot(n, v) / gap, gap);
+        }
         for (var b = 0u; b < BANDS; b++) {
             if (specular) {
                 counted[b] = reflected[b] * select(1.0, 1.0 - alone[b], covered);
             } else {
-                counted[b] = scattered[b];
+                counted[b] = scattered[b] * kept;
             }
             if (planted) {
                 counted[b] *= exp(-tau[b]);
@@ -1940,6 +1956,8 @@ fn advance(n_in: u32) -> bool {
     ray.away = n;
     ray.leaving = 1u;
     ray.order += 1;
+    // Straight from the source: the first reflection, of a ray the plants left alone.
+    let first = run.gather_ratio > 0.0 && ray.order == 1 && alone[0] > 0.0;
     let sizes = (run.flags & SIZES) != 0u && ray.order >= run.size_from_order;
     var f_width = 0.0;
     var f_length = 0.0;
@@ -1974,7 +1992,7 @@ fn advance(n_in: u32) -> bool {
     add_fixed(COUNTERS + 4u * window, mean / f32(BANDS) * run.window_scale);
     add_one(COUNTERS + 4u * window + 2u);
     if ((run.flags & (DIFFUSE_RAIN | SPECULAR_RAIN)) != 0u) {
-        rain(n);
+        rain(n, first);
     }
     if (peak < ray.cutoff) {
         return false;
@@ -2408,6 +2426,7 @@ class GpuTracer:
         ground: float = 0.0,
         chord_sagitta: float = 0.02,
         plants=None,
+        gather_ratio: float = 0.0,
     ) -> tuple:
         """Traces the rays ``starts`` (directions and the source's energy weights, as
         ``_native.ray_starts`` gives them for the streams from ``first_ray`` on), each
@@ -2575,6 +2594,7 @@ class GpuTracer:
             # A window takes an addition at every reflection of every ray: 2**40 all
             # together for each reflection per ray.
             "window_scale": 2.0**_FRACTION / (loudest * rays),
+            "gather_ratio": gather_ratio,
             **in_air,
             **greenery,
         }
@@ -2828,6 +2848,7 @@ def trace_stochastic(
     plant_scattering=None,
     plant_asymmetry=None,
     plant_upright=None,
+    gather_ratio=0.0,
     *,
     total: int | None = None,
     keep: bool = False,
@@ -2847,6 +2868,12 @@ def trace_stochastic(
         raise Unsupported("the GPU tracer does not let sound through surfaces")
     if groups:
         raise Unsupported("the GPU tracer does not count reflections per face group")
+    gather_ratio = float(gather_ratio)
+    if not 0.0 <= gather_ratio < math.inf:
+        raise Unsupported("the GPU tracer shares the rain with a gather of finite ratio only")
+    bending = _atmosphere_rows(atmosphere, wind_direction)
+    if gather_ratio > 0.0 and (not diffuse_rain or specular_rain or bending is not None):
+        raise ValueError("gather_ratio needs diffuse rain alone, in still air")
     bands = len(np.asarray(air))
     starts = _native.ray_starts(
         np.ascontiguousarray(directivity_a, dtype=np.float64),
@@ -2857,7 +2884,6 @@ def trace_stochastic(
         int(first_ray),
         int(seed),
     )
-    bending = _atmosphere_rows(atmosphere, wind_direction)
     declined = outdoors_declined(bending is not None, plants is not None)
     if declined:
         raise Unsupported(declined)
@@ -2905,6 +2931,7 @@ def trace_stochastic(
             bands,
             on_gpu.centre,
         ),
+        gather_ratio=gather_ratio,
     )
     moments = np.zeros((len(np.atleast_2d(receivers)), 0, bands, 0))
     return energy, directional, moments, escaped, ray_energy, reflections, traced
