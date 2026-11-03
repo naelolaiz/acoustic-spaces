@@ -10,13 +10,20 @@ from acoustic_spaces.engine import CoverageResult, coverage_map, map_grid
 from acoustic_spaces.engine.coverage import (
     ROOM_MAP_PARAMETERS,
     TIME_STEP,
+    _in_room,
     _point_values,
     audience_surfaces,
 )
+from acoustic_spaces.engine.insertion import bare_room
+from acoustic_spaces.engine.late import stochastic_map_energy
+from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.parameters import speech_transmission_index
 from acoustic_spaces.scene import Coverage
+from acoustic_spaces.viz import _level_image
 
-SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
+EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+SHOEBOX = EXAMPLES / "shoebox" / "scene.yaml"
+APARTMENT = EXAMPLES / "apartment" / "scene.yaml"
 
 
 def _shoebox(**changes) -> Room:
@@ -48,14 +55,169 @@ def test_grid_columns_off_the_edge_count_part_of_their_volume() -> None:
     assert grid.index.shape[:2] == (4, 6)
     assert grid.origin == pytest.approx((-0.5, 0.0))
     edge = np.isin(grid.columns[:, 0], [0, 5])
-    np.testing.assert_allclose(grid.volume[edge], 0.6 * 1.5**2 * 1.0)
+    # 1 m of the end columns' 1.5 m lies in the room.
+    np.testing.assert_allclose(grid.volume[edge], 2 / 3 * 1.5**2 * 1.0, rtol=0.01)
     np.testing.assert_allclose(grid.volume[~edge], 1.5**2 * 1.0)
     # The 3D view cuts the end columns into fifths: 3 of 5 across, all 5 along.
     corners, owner = grid.tiles()
     counts = np.bincount(owner, minlength=len(grid))
     assert set(counts[edge]) == {15} and set(counts[~edge]) == {1}
     sides = np.ptp(corners[:, :, 0], axis=1) * np.ptp(corners[:, :, 1], axis=1)
-    assert sides.sum() == pytest.approx(grid.volume.sum() / 1.0)  # slabs 1 m thick
+    assert sides.sum() == pytest.approx(grid.cover.sum() * (1.5 / 5) ** 2)
+
+
+def _share(grid, rectangles) -> np.ndarray:
+    """The part of each point's column in the union of ``rectangles`` (x0, y0, x1, y1)
+    that do not overlap, less those with a negative sign: (sign, x0, y0, x1, y1)."""
+    x0 = grid.origin[0] + grid.columns[:, 0] * grid.cell
+    y0 = grid.origin[1] + grid.columns[:, 1] * grid.cell
+    area = np.zeros(len(grid))
+    for sign, a0, b0, a1, b1 in rectangles:
+        across = np.clip(np.minimum(x0 + grid.cell, a1) - np.maximum(x0, a0), 0.0, None)
+        along = np.clip(np.minimum(y0 + grid.cell, b1) - np.maximum(y0, b0), 0.0, None)
+        area += sign * across * along
+    return area / grid.cell**2
+
+
+@pytest.mark.parametrize("spacing", [1.25, 1.5])
+def test_grid_slabs_count_the_part_of_their_column_in_the_room(spacing: float) -> None:
+    # The 8 m by 6 m floor in columns that overhang its walls: at 1.25 m the end
+    # columns hold 0.7 of theirs, those along the sides 0.9 and the corners 0.63. The
+    # volume each slab's track lengths are spread over is that part (each cut edge
+    # within half of one of 24 samples across the column).
+    grid = map_grid(_shoebox(), spacing=spacing)
+    thickness = grid.high - grid.low
+    used = grid.volume / (spacing**2 * thickness)
+    exact = _share(grid, [(1, 0.0, 0.0, 8.0, 6.0)])
+    assert np.any(exact < 0.95)
+    np.testing.assert_allclose(used, exact, atol=1 / 24)
+
+
+def test_grid_slabs_leave_out_buildings() -> None:
+    # The street example in 3 m columns, 22 of which reach into one of its two
+    # buildings (rectangles from above, 9 m and 15 m high), whose ground under them goes
+    # on: no ray goes in, so their slabs count the open air alone.
+    room = Room.from_yaml(EXAMPLES / "street" / "scene.yaml")
+    grid = map_grid(room, spacing=3.0, height=1.5)
+    blocks = [
+        (-1, *footprint.min(axis=0), *footprint.max(axis=0))
+        for _name, footprint, _roof in room.outdoor.buildings
+    ]
+    ground = (1, *room.report.bounds_min[:2], *room.report.bounds_max[:2])
+    exact = _share(grid, [ground, *blocks])
+    straddling = _share(grid, [(-sign, *rest) for sign, *rest in blocks]) > 0.0
+    assert straddling.sum() == 22 and exact[straddling].min() == pytest.approx(0.5)
+    used = grid.volume / (grid.cell**2 * (grid.high - grid.low))
+    np.testing.assert_allclose(used, exact, atol=1 / 24)
+    # The run without the houses for their insertion loss shares the points, and its
+    # rays fill the columns where the houses stood.
+    houses = _share(grid, [(1, *rest) for _sign, *rest in blocks[:1]]) > 0.0
+    bare = _in_room(bare_room(room, [room.outdoor.buildings[0][0]]), grid)
+    np.testing.assert_allclose(bare.volume[houses], grid.cell**2 * (grid.high - grid.low)[houses])
+    np.testing.assert_array_equal(
+        bare.volume[~houses & straddling], grid.volume[~houses & straddling]
+    )
+
+
+def _apartment(transmission: bool = True) -> Room:
+    """The apartment example, or without its materials that let sound through."""
+    data = Scene.from_yaml(APARTMENT).model_dump(mode="json", exclude_none=True)
+    if not transmission:
+        for name in ("wall", "closed", "open"):
+            del data["materials"][name]
+        data["assignments"].update(partition="plaster", door="plaster")
+    room = Room.from_scene(Scene.model_validate(data, context={"base_dir": APARTMENT.parent}))
+    assert (room.face_transmission() is None) != transmission
+    return room
+
+
+def _late_energy(room: Room, surfaces: list[str], spacing: float):
+    """The map grid and the late energy (points, bands) the rays bring each point."""
+    model = TraceModel.from_room(room)
+    c = room.speed_of_sound()
+    source = np.array(room.scene.sources[0].position)
+    grid = map_grid(room, surfaces, spacing=spacing)
+    found = stochastic_map_energy(
+        model,
+        source,
+        grid,
+        np.linalg.norm(grid.points - source, axis=1) / c,
+        rays=3000,
+        max_time=0.5,
+        speed_of_sound=c,
+        air=room.air_attenuation(model.bands),
+        seed=1,
+        threads=2,
+    )
+    return grid, found.energy.sum(axis=2)
+
+
+def _level(energy: np.ndarray, these: np.ndarray, those: np.ndarray) -> float:
+    """The mean energy of points ``these`` over that of ``those``, in dB."""
+    return 10 * math.log10(energy[these].mean() / energy[those].mean())
+
+
+def test_a_column_across_a_wall_between_rooms_gets_a_point_in_each() -> None:
+    # The apartment in 0.7 m columns: those from x = 4.85 m cross the partition at 5 m,
+    # with the bedroom's late energy 31 dB below the living room's at 1 kHz. The
+    # bedroom's points there get the bedroom's, as its next column does, the living
+    # room's 0.15 m its own point with the living room's. Counting both rooms' rays over
+    # the whole column read 24 dB too high at 1 kHz in the bedroom.
+    room = _apartment()
+    grid, energy = _late_energy(room, ["living_floor", "bedroom_floor"], 0.7)
+    x = grid.points[:, 0].round(2)
+    bands = slice(1, 7)  # 125 Hz to 4 kHz, the bedroom's sound mostly at the bottom
+    late = energy[:, bands].sum(axis=1)
+    assert abs(_level(late, x == 5.2, x == 5.9)) < 1.0
+    assert abs(_level(energy[:, 4], x == 4.92, x == 4.5)) < 1.0
+    living, bedroom = room.room_of([[2.5, 3.2, 1.1], [7.5, 1.5, 0.7]])
+    assert set(grid.room[x == 4.92]) == {living} and set(grid.room[x == 5.2]) == {bedroom}
+    assert set(grid.room[x < 4.9]) == {living} and set(grid.room[x > 5.0]) == {bedroom}
+    np.testing.assert_array_equal(grid.level, 0)  # one floor
+    # Away from the outer walls the bedroom's points hold 0.55 m of 0.7 m.
+    inner = (x == 5.2) & (grid.points[:, 1] > 1.0) & (grid.points[:, 1] < 3.0)
+    used = grid.volume[inner] / (0.7**2 * (grid.high - grid.low)[inner])
+    np.testing.assert_allclose(used, 0.55 / 0.7, atol=1 / 24)
+
+
+def test_a_map_of_one_room_leaves_out_the_next() -> None:
+    # The bedroom alone in 0.7 m columns: the first reaches 0.1 m into the much louder
+    # living room, whose rays its slabs counted (22 dB too high at 1 kHz).
+    grid, energy = _late_energy(_apartment(), ["bedroom_floor"], 0.7)
+    late = energy[:, 1:7].sum(axis=1)
+    assert abs(_level(late, grid.columns[:, 0] == 0, grid.columns[:, 0] == 1)) < 1.0
+
+
+def test_a_wall_that_lets_nothing_through_keeps_each_rooms_rays() -> None:
+    # Without the partition's and the door's transmission the bedroom hears nothing, not
+    # even at the points of the columns that cross into the living room.
+    room = _apartment(transmission=False)
+    grid, energy = _late_energy(room, ["living_floor", "bedroom_floor"], 0.7)
+    x = grid.points[:, 0].round(2)
+    assert np.all(energy[x > 5.0] == 0.0)
+    assert abs(_level(energy[:, 4], x == 4.92, x == 4.5)) < 1.0
+
+
+def test_a_map_image_shows_each_rooms_part_of_a_column_with_its_own_point() -> None:
+    # The apartment's 4 m deep floor in 0.7 m columns, drawn in fifths where the wall
+    # between the rooms at x = 5 m crosses them (x 4.85 to 5.55 m): each fifth shows the
+    # point of its room. In the first and last rows the living room's fifths over the
+    # floor are 4 of 25, too few for a point of their own: they stay blank rather than
+    # show the bedroom's point.
+    room = Room.from_yaml(APARTMENT)
+    living, bedroom = room.room_of([[2.5, 3.2, 1.1], [7.5, 1.5, 0.7]])
+    grid = map_grid(room, ["living_floor", "bedroom_floor"], spacing=0.7)
+    image = _level_image(grid, grid.room.astype(float), np.arange(len(grid)))
+    x = grid.origin[0] + (np.arange(image.shape[1]) + 0.5) * grid.cell / 5
+    y = grid.origin[1] + (np.arange(image.shape[0]) + 0.5) * grid.cell / 5
+    over = (y > 0.0) & (y < 4.0)
+    floor = image[over]
+    assert set(floor[:, (x > 5.0) & (x < 5.55)].ravel()) == {bedroom}
+    near = floor[:, np.isclose(x, 4.92)].ravel()  # the living room's fifths
+    rows = (y[over] > 0.6) & (y[over] < 3.4)  # the second to fifth rows of columns
+    assert rows.sum() == 20
+    np.testing.assert_array_equal(near[rows], living)
+    assert np.isnan(near[~rows]).all()
 
 
 def test_grid_puts_a_balcony_over_the_stalls(tmp_path: Path) -> None:

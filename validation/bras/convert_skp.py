@@ -20,9 +20,17 @@ per BRAS material (``mat_CR2_plaster`` and so on). Along the way:
 
 openskp 1.4.0 reads CR1 to CR3; it cannot read CR4 as it is, where each loudspeaker's
 text label is anchored to the loudspeaker's component, and :func:`_anchored_texts` mends
-that. CR1 with its door at 4.1 degrees reads without the laboratory's wall at
-y = -3.65 m, which the model with the door at 30.4 degrees has; ``--fill-from`` takes the
-triangles that close such a hole from another model of the same room:
+that. In CR1 with its door at 30.4 degrees the door leaf runs into the wall at its hinge,
+which leaves the model without an inside; ``--join-door-leaf`` joins the leaf to the
+wall and the floor it stands against (:func:`join_door_leaf`, which needs this package
+installed):
+
+    python validation/bras/convert_skp.py ".../rooms/CR1_DoorAngle3.skp" \
+        validation/bras/CR1_DoorAngle3/CR1_DoorAngle3.obj --join-door-leaf
+
+CR1 with its door at 4.1 degrees reads without the laboratory's wall at y = -3.65 m,
+which the model with the door at 30.4 degrees has; ``--fill-from`` takes the triangles
+that close such a hole from another model of the same room:
 
     python validation/bras/convert_skp.py ".../rooms/CR1_DoorAngle1.skp" \
         validation/bras/CR1_DoorAngle1/CR1_DoorAngle1.obj \
@@ -39,6 +47,33 @@ import numpy as np
 
 WELD_M = 0.012
 MIN_AREA_M2 = 1e-10
+#: The corners (metres) of the door leaf of CR1 with the door at 30.4 degrees, after
+#: welding, and of the wall it hangs on, which :func:`join_door_leaf` joins. The leaf is
+#: a slab 30 mm thick (paintedConcrete) from the reverberation chamber's floor (z 0.05 m)
+#: up to z 2.22 m, with a box 75 mm thick (tablesEquipment) on its inner side up to
+#: z 2.19 m. The chamber's face of the wall is the plane x = 0.570738 m.
+DOOR_LEAF = {
+    "jamb": (0.570738, -0.012, 0.05),  # the foot of the doorway's side on the hinge side
+    "jamb top": (0.570738, -0.012, 2.195),  # its top, under the lintel
+    "hinge": (0.570738, 0.042612, 0.05),  # where the slab's hinge end crosses the wall's face
+    "slab in wall": (0.546766, 0.028547, 0.05),  # the slab's hinge corner, in the wall
+    "slab in wall top": (0.546766, 0.028547, 2.22),
+    "slab outer top": (0.572641, 0.043728, 2.22),  # its outer hinge corner, at the top
+    "slab end": (1.367114, -1.310418, 0.05),  # the slab's free end, outer side
+    "slab end inner": (1.341239, -1.325599, 0.05),
+    "slab end inner top": (1.341239, -1.325599, 2.22),
+    "box hinge": (0.583281, -0.033691, 0.05),  # the box's ends at the slab's inner face
+    "box end": (1.306909, -1.267086, 0.05),
+    "box hinge top": (0.58776, -0.031063, 2.19),  # the same at the top, inside the slab
+    "box end top": (1.311389, -1.264458, 2.19),
+    "box hinge outer": (0.523072, -0.069016, 0.05),  # the box's outer side
+    "box end outer": (1.2467, -1.30241, 0.05),
+}
+#: Corners closer than this (metres) to those of :data:`DOOR_LEAF` are its corners.
+DOOR_LEAF_TOLERANCE_M = 1e-5
+#: Corners closer than this (metres) to a plane lie in it (openskp reads them in single
+#: precision, to within 0.3 micrometres).
+IN_PLANE_M = 1e-6
 
 
 def _anchored_texts() -> None:
@@ -222,6 +257,167 @@ def fill_from(corners: np.ndarray, triangles: np.ndarray, names: list[str], othe
     return triangles, names
 
 
+def join_door_leaf(corners: np.ndarray, triangles: np.ndarray, names: list[str]):
+    """Join the door leaf of CR1 with the door at 30.4 degrees to the wall and the floor
+    it stands against, so that the model has an inside.
+
+    In BRAS's model the slab's hinge end runs 24 mm into the wall, its faces crossing
+    the wall's face with no edge in common; the floor under the leaf is drawn; and the
+    box stands 5.2 mm into the slab, with no face on that side. Here the leaf becomes
+    part of the solid around the rooms, as a door leaf in its frame is, and the air
+    around it stays as the model has it:
+
+    - the slab ends at the wall's face, between the doorway's side and where its hinge
+      end crosses the face, 55 mm along it: the part inside the wall goes, and so does
+      the wall's face where the slab meets it. The slab's outer corner at the top, 1.9
+      mm in front of the wall, moves 2.2 mm along the hinge end onto the face, as
+      welding moved the one at its foot; its inner face meets the doorway's side, 0.3 mm
+      from where it crosses the wall's face, as at its foot;
+    - the floor under the leaf goes, and the slab's inner face where the box covers it;
+    - the box's top corners on the slab's side move 5.2 mm onto the slab's face, as
+      welding moved those at its foot, which takes off only what lay inside the slab.
+
+    Returns the corners, triangles and names.
+    """
+    from acoustic_spaces.geometry.outdoor import in_polygon
+    from acoustic_spaces.geometry.triangulate import triangulate_polygon
+
+    def corner(name: str) -> int:
+        gap = np.linalg.norm(corners - DOOR_LEAF[name], axis=1)
+        if gap.min() > DOOR_LEAF_TOLERANCE_M:
+            raise SystemExit(
+                f"no corner at the door leaf's {name} {DOOR_LEAF[name]}: "
+                "is this BRAS's CR1_DoorAngle3.skp?"
+            )
+        return int(gap.argmin())
+
+    jamb, jamb_top, hinge = corner("jamb"), corner("jamb top"), corner("hinge")
+    in_wall, in_wall_top = corner("slab in wall"), corner("slab in wall top")
+    outer_top, end = corner("slab outer top"), corner("slab end")
+    end_inner, end_inner_top = corner("slab end inner"), corner("slab end inner top")
+    box_hinge, box_end = corner("box hinge"), corner("box end")
+    box_hinge_top, box_end_top = corner("box hinge top"), corner("box end top")
+    box_hinge_outer, box_end_outer = corner("box hinge outer"), corner("box end outer")
+    wall_x, floor_z = corners[jamb, 0], corners[jamb, 2]
+    a, d = corners[in_wall], corners[end_inner]
+    crossing = a[1] + (wall_x - a[0]) / (d[0] - a[0]) * (d[1] - a[1])
+    print(
+        f"  the slab's hinge corner, {1000 * (wall_x - a[0]):.1f} mm behind the wall's face, "
+        "goes; its inner face meets the doorway's side "
+        f"{1000 * abs(corners[jamb, 1] - crossing):.1f} mm from where it crosses the face"
+    )
+
+    # The faces the joined leaf does not have: those with a corner inside the wall, the
+    # slab's hinge end and its inner face (made anew below).
+    inner = {jamb, in_wall, in_wall_top, end_inner, end_inner_top}
+    inner_was = corners[
+        next(t for t in triangles.tolist() if set(t) == {jamb, end_inner, end_inner_top})
+    ]
+    slab = names[next(f for f, t in enumerate(triangles.tolist()) if set(t) <= inner)]
+    drop = np.array(
+        [
+            in_wall in t or {hinge, in_wall_top, outer_top} <= set(t) or set(t) <= inner
+            for t in triangles.tolist()
+        ]
+    )
+    corners = corners.copy()
+    corners[in_wall_top, :2] = corners[jamb, :2]  # the slab's inner hinge corner at the top
+    for moved, onto, what in (
+        (outer_top, hinge, "the slab's outer hinge corner at the top"),
+        (box_hinge_top, box_hinge, "the box's top corner at the slab's face, hinge end"),
+        (box_end_top, box_end, "the box's top corner at the slab's face, free end"),
+    ):
+        before = corners[moved].copy()
+        corners[moved, :2] = corners[onto, :2]
+        print(f"  {what} moves {1000 * np.linalg.norm(corners[moved] - before):.1f} mm")
+    jamb_up, hinge_up = in_wall_top, outer_top  # now above the jamb's foot and the hinge
+    tri = corners[triangles]
+
+    def in_plane(axis: int, value: float) -> np.ndarray:
+        return np.all(np.abs(tri[:, :, axis] - value) < IN_PLANE_M, axis=1)
+
+    # The floor under the leaf: the footprint of the slab and the box together.
+    footprint = corners[
+        [jamb, box_hinge, box_hinge_outer, box_end_outer, box_end, end_inner, end, hinge], :2
+    ]
+    under = in_plane(2, floor_z) & in_polygon(tri.mean(axis=1)[:, :2], footprint) & ~drop
+    area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    x, y = footprint.T
+    covered = 0.5 * abs(x @ np.roll(y, -1) - y @ np.roll(x, -1))
+    if abs(area[under].sum() - covered) > 1e-3:
+        raise SystemExit(
+            f"the floor under the door leaf is {area[under].sum():.4f} m2, "
+            f"its footprint {covered:.4f} m2"
+        )
+    drop |= under
+
+    def facing(loop: list[int], like: np.ndarray) -> list[list[int]]:
+        """The polygon ``loop`` in triangles that face as the triangle ``like`` does."""
+        made = [[loop[i] for i in t] for t in triangulate_polygon(corners[loop])]
+        p = corners[made[0]]
+        if np.cross(p[1] - p[0], p[2] - p[0]) @ np.cross(like[1] - like[0], like[2] - like[0]) < 0:
+            made = [t[::-1] for t in made]
+        return made
+
+    def holds(face: int, point: int) -> bool:
+        """Whether the corner ``point`` lies inside the face, seen along x."""
+        (ay, az), (by, bz), (cy, cz) = tri[face][:, 1:]
+        py, pz = corners[point, 1:]
+        turns = [
+            (qy - oy) * (pz - oz) - (qz - oz) * (py - oy)
+            for (oy, oz), (qy, qz) in (
+                ((ay, az), (by, bz)),
+                ((by, bz), (cy, cz)),
+                ((cy, cz), (ay, az)),
+            )
+        ]
+        return all(t > 0 for t in turns) or all(t < 0 for t in turns)
+
+    # The wall's face round where the slab meets it, made anew: its outline, from the
+    # doorway's side down to the floor and along it to the hinge, goes round the slab's
+    # end instead.
+    wall = [
+        f
+        for f in np.flatnonzero(in_plane(0, wall_x) & ~drop)
+        if {jamb, jamb_top, hinge} & set(triangles[f].tolist())
+        or holds(f, jamb_up)
+        or holds(f, hinge_up)
+    ]
+    sides = defaultdict(list)
+    for t in triangles[wall].tolist():
+        for k in range(3):
+            sides[tuple(sorted((t[k], t[k - 1])))].append(t)
+    ends = defaultdict(list)
+    for (p, q), faces in sides.items():
+        if len(faces) == 1:
+            ends[p].append(q)
+            ends[q].append(p)
+    outline = [jamb_top, jamb]
+    while True:
+        step = [q for q in ends[outline[-1]] if q != outline[-2]][0]
+        if step == jamb_top:
+            break
+        outline.append(step)
+    if outline[2] != hinge:
+        raise SystemExit("the wall's face does not run from the doorway's side to the hinge")
+    added = facing([jamb_top, jamb_up, hinge_up, *outline[2:]], tri[wall[0]])
+    added_names = [names[wall[0]]] * len(added)
+    drop[wall] = True
+    # The slab's inner face, round the box.
+    inner_face = [
+        jamb, box_hinge, box_hinge_top, box_end_top, box_end,
+        end_inner, end_inner_top, jamb_up, jamb_top,
+    ]  # fmt: skip
+    made = facing(inner_face, inner_was)
+    added += made
+    added_names += [slab] * len(made)
+    kept = np.flatnonzero(~drop)
+    triangles = np.vstack([triangles[kept], np.array(added, dtype=triangles.dtype)])
+    names = [names[i] for i in kept] + added_names
+    print(f"  {int(drop.sum())} triangles of the leaf, the floor and the wall become {len(added)}")
+    return corners, triangles, names
+
+
 def write_obj(path: Path, source: str, corners: np.ndarray, triangles, names) -> None:
     used, index = np.unique(triangles, return_inverse=True)
     triangles = index.reshape(-1, 3) + 1
@@ -245,10 +441,18 @@ def main() -> None:
     parser.add_argument(
         "--fill-from", type=Path, help="an OBJ of the same room whose triangles close holes here"
     )
+    parser.add_argument(
+        "--join-door-leaf",
+        action="store_true",
+        help="CR1_DoorAngle3.skp: join the door leaf to the wall and floor it stands against",
+    )
     args = parser.parse_args()
     corners, triangles, names = read_skp(args.skp)
     corners, triangles = weld(corners, triangles)
     triangles, names = tidy(corners, triangles, names)
+    if args.join_door_leaf:
+        print("joining the door leaf to the wall and the floor:")
+        corners, triangles, names = join_door_leaf(corners, triangles, names)
     if args.fill_from:
         triangles, names = fill_from(corners, triangles, names, args.fill_from)
     write_obj(args.obj, args.skp.name, corners, triangles, names)
