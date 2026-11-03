@@ -703,8 +703,8 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
                     Matrix scattering, InArray air, Matrix surface_size, InArray band_hz,
                     bool vector_scattering, int size_from_order, Matrix transmission,
                     FaceRooms face_room, std::int64_t source_room, InArray origin, double cell,
-                    MapIndex point, InArray low, InArray high, InArray volume, InArray onset,
-                    InArray covered_time, double fine_step, std::size_t fine_bins,
+                    MapIndex point, InArray low, InArray high, InArray volume, Indices map_room,
+                    InArray onset, InArray covered_time, double fine_step, std::size_t fine_bins,
                     double coarse_step, std::size_t rays, double max_time,
                     double speed_of_sound, int covered_order, std::uint64_t seed,
                     std::size_t threads, double window_time_step, std::uint64_t first_ray,
@@ -740,6 +740,7 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
     map.low = to_vector(low);
     map.high = to_vector(high);
     map.volume = to_vector(volume);
+    map.room.assign(map_room.data(), map_room.data() + map_room.shape(0));
     map.onset = to_vector(onset);
     map.covered_time = to_vector(covered_time);
     map.fine_step = fine_step;
@@ -921,6 +922,8 @@ NB_MODULE(_native, m) {
              "Per ray, whether any face lies within t_max of its origin (ignoring face "
              "ignore[i]).")
         .def_prop_ro("scale", &as::Bvh::scale)
+        .def_prop_ro("min_distance", &as::Bvh::min_distance,
+                     "Hits closer than this to a ray's origin are not reported.")
         .def("layout", &bvh_layout,
              "The tree as flat arrays (see Bvh::layout in bvh.hpp), for tracing elsewhere: "
              "boxes (nodes x 6), first, count, faces and triangles (faces x 9).");
@@ -1071,7 +1074,7 @@ NB_MODULE(_native, m) {
           nb::arg("vector_scattering"), nb::arg("size_from_order"), nb::arg("transmission"),
           nb::arg("face_room"), nb::arg("source_room"), nb::arg("origin"), nb::arg("cell"),
           nb::arg("point"), nb::arg("low"), nb::arg("high"), nb::arg("volume"),
-          nb::arg("onset"), nb::arg("covered_time"), nb::arg("fine_step"),
+          nb::arg("map_room"), nb::arg("onset"), nb::arg("covered_time"), nb::arg("fine_step"),
           nb::arg("fine_bins"), nb::arg("coarse_step"), nb::arg("rays"), nb::arg("max_time"),
           nb::arg("speed_of_sound"), nb::arg("covered_order"), nb::arg("seed"),
           nb::arg("threads"), nb::arg("window_time_step"), nb::arg("first_ray"),
@@ -1088,6 +1091,7 @@ NB_MODULE(_native, m) {
           "rays, ray_energy[window], reflections[window], traced rays). point (ny x nx x "
           "layers) holds the map point of each column of width cell from origin (x, y), "
           "-1 for none; each point is a slab of air from low to high (z) of the given "
-          "volume. Bins count from each point's onset: fine_bins of fine_step, then "
-          "coarse_step. Other arguments as for trace_stochastic.");
+          "volume, which counts the rays in its map_room alone (-1: in any). Bins count "
+          "from each point's onset: fine_bins of fine_step, then coarse_step. Other "
+          "arguments as for trace_stochastic.");
 }

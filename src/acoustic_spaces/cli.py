@@ -45,6 +45,8 @@ MAP_PARAMETER_NAMES = (
     "insertion_loss_a",
     "long_term",
     "rating_level",
+    "long_term_insertion_loss",
+    "long_term_insertion_loss_a",
 )
 #: What the commands that read a scene take.
 SCENE_HELP = "path to a scene YAML file, or a pack of one (.zip, see pack)"
@@ -1381,7 +1383,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
     grid = result.grid
     band = OCTAVE_BANDS_HZ.index(args.band)
     band_text = f"{args.band} Hz" if args.band < 1000 else f"{args.band // 1000} kHz"
-    levels = grid.index.shape[2]
+    levels = int(grid.level.max()) + 1
     print(
         f"\n{len(grid)} map points {grid.cell:g} m apart, {settings.height:g} m above the "
         f"audience surfaces" + (f", on {levels} levels" if levels > 1 else "")
@@ -2455,7 +2457,8 @@ def _add_reference_arguments(group, side: str = "") -> None:
         type=float,
         metavar="REFERENCE_ENERGY",
         help=f"energy of a broadband impulse response of {source} at 10 m in free field, "
-        "for G (0.01 for responses made by acoustic-spaces)",
+        "for G (0.01 for responses made by acoustic-spaces; 0.01 * ir_gain^2 for those "
+        "written with --normalize, ir_gain from their parameters.json)",
     )
     ref.add_argument(
         f"{option}free-field", metavar="WAV", help=f"free-field response of {source}, for G"
@@ -2583,7 +2586,7 @@ def build_parser() -> argparse.ArgumentParser:
         "(default: list the sets)",
     )
     hrtf.add_argument(
-        "--member", help="which head of a set that holds several (for example subj_K.sofa)"
+        "--member", help="which file of a set that holds several (for example subj_K.sofa)"
     )
     hrtf.add_argument("--folder", help="where to keep the sets (default: the user's data folder)")
     hrtf.add_argument("--url", help="download any other SOFA file, saved under the name")
@@ -2776,7 +2779,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     simulate.add_argument("--hrtf", metavar="SOFA", help="HRTF file for binaural output")
     simulate.add_argument(
-        "--normalize", action="store_true", help="scale all responses to a -1 dBFS peak"
+        "--normalize",
+        action="store_true",
+        help="scale all responses by one gain to a -1 dBFS peak (ir_gain in parameters.json)",
     )
     simulate.add_argument(
         "--plot", action="store_true", help="save echogram and decay plots (needs viz extra)"

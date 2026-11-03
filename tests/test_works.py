@@ -269,16 +269,20 @@ def test_the_works_demo_says_what_is_wrong(tmp_path) -> None:
 def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monkeypatch) -> None:
     """--indoors, mono: at the pavement and the balcony, 2 and 1 m in front of the
     houses and the offices, the works' sound comes through the window as much under
-    its sound outdoors as their levels through the façade say, within 2 dB (their
-    tones, the alarm's 1.2 kHz beeps and the engines' firing, fall where they fall in
-    the octave bands, near a crossover between two bands' gains: 0.06 to 1.6 dB
-    measured); the rumble has the energy its level gives in the engine's units (to 0.05
-    dB), the breaker's and the dumper's vibration at their distances from the
-    building, their energies added, no adjustment for the building, 50 dB under in
-    dB(A); the two together are the sum of their energies. The garden, in front of no
-    wall, hears them outdoors. What is felt at each is the ground's vibration, a
-    shaker track. Another --indoors mixes again, and the video refuses mixes made for
-    another."""
+    its sound outdoors as their levels 2 m in front of the wall through the façade say
+    (EN ISO 12354-3; the balcony's simulated at the point 1 m farther out, a scene of
+    its own, the pavement's its own), within 2 dB (their tones, the alarm's 1.2 kHz
+    beeps and the engines' firing, fall where they fall in the octave bands, near a
+    crossover between two bands' gains: 0.06 to 1.6 dB measured): it is the listener's
+    own sound, each band changed by the façade's level difference and by as much as the
+    works are louder 2 m out (to 1e-4 in energy), and the stills give the rooms' levels
+    from there (L_1,2m - D_2m,nT); the rumble has the energy its level gives in the
+    engine's units (to 0.05 dB), the breaker's and the dumper's vibration at their
+    distances from the building, their energies added, no adjustment for the building,
+    50 dB under in dB(A); the two together are the sum of their energies. The garden, in
+    front of no wall, hears them outdoors. What is felt at each is the ground's
+    vibration, a shaker track. Another --indoors mixes again, and the video refuses
+    mixes made for another."""
     pytest.importorskip("PIL")
     from acoustic_spaces import Scene, vibration
     from acoustic_spaces.demos import audio, indoors, load, pipeline, scene_pictures
@@ -314,7 +318,12 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     loudest = max(s.sound_power_db for s in scene.sources if s.in_use)
     sources = {s.name: s for s in scene.sources}
     report = pipeline.read_json(work / "results" / pipeline.PARAMETERS)
-    fronts = indoors.facings(scene, [listener.name for listener in scene.listeners])
+    out = pipeline.read_json(work / "results_2m" / pipeline.PARAMETERS)
+    (front,) = Scene.from_yaml(folder / "scene_works_2m.yaml").listeners
+    assert front.name == "balcony_2m"
+    assert front.position == pytest.approx((5.0, -4.0, 10.0), abs=1e-12)
+    assert {r["listener"] for r in out["responses"]} == {"balcony_2m"}
+    fronts = indoors.facings(scene, [lis.name for lis in scene.listeners if lis.in_use])
     assert {k: v and v.name for k, v in fronts.items()} == {
         "pavement": "houses",
         "balcony": "offices",
@@ -331,7 +340,7 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
         )
 
     felt = math.nan
-    for listener in scene.listeners:
+    for listener in (lis for lis in scene.listeners if lis.in_use):
         name, here = listener.name, np.asarray(listener.position[:2])
         facing = fronts[name]
         if facing is None:
@@ -342,13 +351,27 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
             continue
         levels = [r for r in report["responses"] if r["listener"] == name]
         outside = sum(10.0 ** (a_weighted(r["spl_db"]) / 10.0) for r in levels)
+        there = [r for r in out["responses"] if r["listener"] == f"{name}_2m"] or levels
+        assert len(there) == len(levels) == 4
         inside = sum(
-            10.0 ** (a_weighted(np.add(r["spl_db"], HOUSE.indoor_db())) / 10.0) for r in levels
+            10.0 ** (a_weighted(np.add(r["spl_db"], HOUSE.indoor_db())) / 10.0) for r in there
         )
         told = 10.0 * math.log10(outside / inside)
         window = heard["works"][1][name]
         drop = 10.0 * math.log10(a_energy(outdoors[name]) / a_energy(window))
         assert drop == pytest.approx(told, abs=2.0), name
+        # The listener's own sound, each octave band changed by the façade's level
+        # difference and by as much as the works, their energies added, are louder 2 m
+        # in front of the wall than at the listener: the balcony's 1 m farther out.
+        totals = [
+            10.0 * np.log10(np.sum([10.0 ** (np.asarray(r["spl_db"]) / 10.0) for r in rows], 0))
+            for rows in (there, levels)
+        ]
+        shift = totals[0] - totals[1]
+        assert bool(np.any(np.abs(shift) > 0.5)) == (name == "balcony"), (name, shift)
+        house = indoors.House(airborne=True, rumble=False)
+        through = house.heard(outdoors[name][:, None], RATE, shift)[:, 0]
+        assert a_energy(window) == pytest.approx(a_energy(through), rel=1e-4), name
         vdb = vibration_at(lambda s, f=facing: f.distances([s.position])[0])
         seat = heard["works_and_rumble"][0]["seats"][name]
         assert seat["vibration_vdb"] == pytest.approx(vdb, abs=0.01)
@@ -388,6 +411,16 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     )
     level = 10.0 * math.log10(inside + 10.0 ** (seat["rumble_a_db"] / 10.0))
     assert first == "pavement" and lines[0] == f"{level:.0f} dB(A) here, as simulated"
+    # The rooms' levels the stills give: each source's 2 m in front of the wall, less the
+    # façade's level difference; the balcony's from the point 1 m farther out.
+    given = {(r["listener"], r["source"]): r["spl_db"] for r in report["responses"]}
+    given |= {(r["listener"], r["source"]): r["spl_db"] for r in out["responses"]}
+    for entry in drawn[-1].report["responses"]:
+        name = entry["listener"]
+        if fronts[name] is not None:
+            at = indoors.front_name(name) if name == "balcony" else name
+            room = np.add(given[(at, entry["source"])], HOUSE.indoor_db())
+            np.testing.assert_allclose(entry["spl_db"], room, atol=0.006, err_msg=name)
     shaking = indoors.shaking_line(seat["vibration_vdb"], True, seat["rumble_a_db"])
     assert shaking in lines
     assert "Inside the houses here, through a closed window (EN ISO 12354-3)" in lines
@@ -408,7 +441,9 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
 
 def test_the_rumble_indoors_needs_something_that_shakes_the_ground(tmp_path) -> None:
     """With the breaker and the dumper left out, nothing shakes the ground: --indoors
-    rumble says so, --indoors works hears the rest through the window."""
+    rumble says so, --indoors works hears the rest through the window, once the level
+    2 m in front of the offices, 1 m out from the balcony, is simulated; without the
+    balcony at once."""
     import yaml
 
     folder = _street(tmp_path)
@@ -423,4 +458,9 @@ def test_the_rumble_indoors_needs_something_that_shakes_the_ground(tmp_path) -> 
     with pytest.raises(SystemExit, match="nothing that plays shakes it"):
         works.houses(args)
     args.indoors = "works"
+    args.work = folder / "demo_works"
+    with pytest.raises(SystemExit, match="no simulation in"):
+        works.houses(args)
+    data["listeners"] = [each for each in data["listeners"] if each["name"] != "balcony"]
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     assert works.houses(args) is not None

@@ -134,9 +134,10 @@ def _gain() -> np.ndarray:
     return np.sin(0.5 * np.pi * rise) ** 2 * np.sin(0.5 * np.pi * fall) ** 2
 
 
-def spectrum(x: np.ndarray, rate: float) -> np.ndarray:
-    """The frequency response at FREQS of the response x sampled at rate (Hz)."""
-    return np.exp(-2j * np.pi * np.outer(FREQS, np.arange(len(x)) / rate)) @ x
+def spectrum(x: np.ndarray, rate: float, lead_s: float = 0.0) -> np.ndarray:
+    """The frequency response at FREQS of the response x sampled at rate (Hz), which
+    starts lead_s (s) before emission."""
+    return np.exp(-2j * np.pi * np.outer(FREQS, np.arange(len(x)) / rate - lead_s)) @ x
 
 
 def in_band(response: np.ndarray, times: np.ndarray, delay: float = 0.0) -> np.ndarray:
@@ -181,7 +182,7 @@ def check_free_field() -> list[dict]:
     # The grid's own error, the same with and without wind: still air against the exact
     # field.
     for (name, (x, y, z)), response in zip(listeners.items(), still, strict=True):
-        calm[name] = spectrum(response.signals[:, 0], response.rate)
+        calm[name] = spectrum(response.signals[:, 0], response.rate, response.lead_s)
         r = math.sqrt(x * x + y * y + (z - ZS) ** 2)
         times = r / c + np.arange(-0.03, 0.05, STEP)
         got = in_band(calm[name], times)
@@ -203,7 +204,7 @@ def check_free_field() -> list[dict]:
             r = math.sqrt(x * x + y * y + (z - ZS) ** 2)
             tau, r_star = convected(c, WIND, x, y, z - ZS)
             times = tau + np.arange(-0.03, 0.05, STEP)
-            a = in_band(spectrum(response.signals[:, 0], response.rate), times)
+            a = in_band(spectrum(response.signals[:, 0], response.rate, response.lead_s), times)
             b = in_band(calm[name], times, tau - r / c) * r / r_star
             row = {
                 "wind": wind_model,
@@ -288,12 +289,12 @@ def check_facade() -> list[dict]:
     times = arrival + np.arange(-0.03, 0.03, STEP)
     # The still air's facade sound moved by the exact change of its arrival: the windy
     # run's lag behind it is the error.
-    expected = in_band(spectrum(calm.signals[:, 0], calm.rate), times, change)
+    expected = in_band(spectrum(calm.signals[:, 0], calm.rate, calm.lead_s), times, change)
     rows = []
     for wind_model in WIND_MODELS:
         started = time.perf_counter()
         (response,), info = _run(_scene(listeners, WIND, wind_model, True), length, wind_model)
-        got = in_band(spectrum(response.signals[:, 0], response.rate), times)
+        got = in_band(spectrum(response.signals[:, 0], response.rate, response.lead_s), times)
         error = 1e3 * _lag(got, expected, 1.0 / STEP)
         moved = 1e3 * change + error
         row = {

@@ -34,14 +34,15 @@ or in a corner. Sound that bends round edges is added to them (see
   - `detector`: classic ray tracing, everything counted by the sphere.
 
   In rooms with absorption in one place and smooth walls, most late energy rides on
-  the few rays that keep clear of the absorber, and the tail breaks up where those
-  run out. With `splitting` (on by default), a first tenth of the rays measures how
-  much energy a ray usually carries over time; the rest are split into copies when
-  they carry more than 4 times that and thinned out by Russian roulette when they
-  carry less than a quarter (a weight window). The expected result is unchanged; with
-  random scattering, the example box's late tail (0.5 to 2.5 s) misses a 1-million-ray
-  reference by 0.5 to 2 dB per band instead of 1 to 8 dB at 100k rays (1 to 4 dB
-  instead of 4 to 17 dB at 10k), for about 1.5 times the run time.
+  the few rays that keep clear of the absorber, and the tail breaks up where those run
+  out. With `splitting` (on by default), a first tenth of the rays (at least 1,000, or
+  half of them when there are fewer than 2,000) measures how much energy a ray usually
+  carries over time; the rest are split into copies when they carry more than 4 times
+  that and thinned out by Russian roulette when they carry less than a quarter (a
+  weight window). The expected result is unchanged; with random scattering, the
+  example box's late tail (0.5 to 2.5 s) misses a 1-million-ray reference by 0.5 to 2
+  dB per band instead of 1 to 8 dB at 100k rays (1 to 4 dB instead of 4 to 17 dB at
+  10k), for about 1.5 times the run time.
 
   The rays are traced in `batches` (10 by default), each with the random streams of
   its share of the rays: the same rays as at once, so the same result but for rounding
@@ -68,15 +69,17 @@ or in a corner. Sound that bends round edges is added to them (see
 
   Nearly all of the run time goes into ray queries: which surface a ray meets next,
   and whether each listener can see a reflection (see [Performance](#performance)).
-- `statistical`: the reflected energy of Barron's revised theory, an exponential
-  decay at the Eyring reverberation time T from the direct sound on, less what the
-  early paths carry. Early paths end `transition_ms` after the direct sound (by
-  default the mixing time, the square root of the volume of the listener's room in
-  milliseconds), so the late part holds the scattered share of every early
-  reflection, the orders above `max_order` before the transition and everything after
-  it. The total is Barron's, c T / (13.8 V) for a unit source: the Sabine form 4 / A
-  with Eyring's absorption area, which reads 0.2 dB above the classical
-  4 (1 - α) / (α S) at a mean absorption of 0.1 and 0.8 dB above at 0.3.
+- `statistical`: the reflected energy of Barron's revised theory, an exponential decay
+  at the Eyring reverberation time T from the direct sound on, less what the early
+  paths carry. Early paths end `transition_ms` after the direct sound (by default the
+  mixing time, the square root of the volume of the listener's room in milliseconds),
+  so the late part holds the scattered share of every early reflection, the orders
+  above `max_order` before the transition and everything after it. The total is
+  Barron's, c T / (13.8 V) e^(-13.8 t_d / T) for a unit source whose direct sound
+  arrives at t_d (Barron and Lee's 31200 T / V e^(-0.04 r / T) where the direct sound
+  is 100 / r²): the Sabine form 4 / A with Eyring's absorption area and the same
+  exponential, which reads 0.2 dB above the classical 4 (1 - α) / (α S) at a mean
+  absorption of 0.1 and 0.8 dB above at 0.3.
 
 The two parts hand over by reflection order by default. Set `transition_ms` to
 keep early paths only that long after the direct sound.
@@ -128,10 +131,16 @@ The directions the sound arrives from give more of them:
 - T30 of figures of eight facing forward, left and up from the listener: where sound
   keeps running between two hard walls, the decay along that axis is longer.
 - STI and STIPA (IEC 60268-16) and U50, at the level the source's `level_db` gives and
-  the background noise of `coverage.noise_db`, as the coverage maps take them (NaN,
-  like G, when a band from 125 Hz up is undefined); and the echo criteria of Dietsch
-  and Kraak for speech and music, from the response filtered to the 1 kHz octave for
-  speech and to the two octaves about 1.4 kHz (0.7 to 2.8 kHz) for music.
+  the background noise of `coverage.noise_db`, as the coverage maps take them (NaN, like
+  G, when a band from 125 Hz up is undefined); and the echo criteria of Dietsch and
+  Kraak for speech and music, from the response filtered to the 1 kHz octave for speech
+  and to the two octaves about 1.4 kHz (0.7 to 2.8 kHz) for music. ISO 3382-3's
+  quantities for open-plan offices are not computed (the spatial decay rate D2,S, the
+  speech level at 4 m Lp,A,S,4m, the distraction distance rD and the privacy and comfort
+  distances): listeners on a line from an omnidirectional source given the standard's
+  normal speech spectrum as its `level_db` per band (57.4 dB(A) at 1 m in free field)
+  give the A-weighted level and the STI, with `coverage.noise_db` as the background
+  noise, to read them from.
 
 The echogram adds the arrivals in energy, as ODEON and CATT do, except the early
 reflections in the lowest bands, which add in pressure (see
@@ -440,7 +449,9 @@ simulation:
   scatter about the echogram's (see [Turbulence](outdoor.md#turbulence)).
 - The late part still adds in energy: its rays stand for many paths with random phases.
   So do the points of a line or surface source, which are uncorrelated.
-- With the wave solver up to the same band or higher, its bands take their place.
+- At a listener, the wave solver's bands take their place when it runs up to the same
+  band or higher. Coverage maps do not run it, and keep the paths in pressure whatever
+  `simulation.wave` says (see [Coverage maps](coverage-maps.md)).
 
 ```sh
 python examples/listening_room/bass.py
@@ -517,8 +528,16 @@ simulation:
   With `wind: moving` (`simulate --wave-wind moving`) the air moves instead, so that
   sound a building sends back towards the source goes against the wind; it costs three
   to four times as much and runs on the CPU.
-- The listener records the pressure and its gradient, so the low end keeps its
-  direction in Ambisonics, binaural and loudspeaker outputs (to first order).
+- The listener records the pressure and its gradient, so the low end keeps its direction
+  in Ambisonics, binaural and loudspeaker outputs (to first order). Near the source what
+  a listener records depends on where the source lies within its cell, as the source and
+  each point the listener samples spread over the eight cells round them, weighted
+  trilinearly (a cell is 0.2 m on the grid up to the 125 Hz band). Over 18 source
+  positions across a cell and the grid's 26 axis and diagonal directions, with either
+  stencil and in every wave band (the direct sound's band energy over its first 50 ms),
+  the pressure was up to 4.1 dB off a point source's one cell away, 1.8 dB two cells
+  away, 0.78 dB three and 0.55 dB from four cells on, and the gradient's ratio to it up
+  to 8.3, 7.0, 1.7 and 0.63 dB, and 0.18 dB from eight cells on.
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177
   Hz for 125), through the same crossovers the impulse response synthesis uses. The
   parameters of those bands come from it too.
@@ -789,14 +808,16 @@ within 2 % on reverberation time from 500 Hz to 4 kHz and within one JND on clar
 and a chamber music hall and an auditorium within about one JND on clarity and 6 to
 10 % and 12 to 21 % long on reverberation time (from 250 and 125 Hz to 4 kHz), which
 comes within about one JND once their absorption is fitted with this package's own
-rays. In two-room diffuse theory the model of two coupled rooms joins them 10 to 16
-times less strongly than the real rooms are joined, and IACC_L comes within one JND of binaural responses in 19 to 26 of
-30 values per room. Edge diffraction
+rays. In two-room diffuse theory BRAS's two coupled rooms are joined by about 1 m² more
+than their model from 250 Hz to 2 kHz, with the door ajar (10 to 16 times the model's
+slit) and open alike, and IACC_L comes within one JND of binaural responses in 19 to 26
+of 30 values per room. Edge diffraction
 is checked against the exact solutions for a half-plane and for wedges, against
 Maekawa's chart, and over two edges against the exact BTM solution. The
 wave solver matches the frequencies of a box's modes within 0.25 % and their decay rates
 within 2 % with walls whose admittance changes with frequency, the reflection and
-absorption of walls, and the free-field level within 0.35 dB, and round an open model
+absorption of walls, and the free-field level within 0.35 dB (0.55 dB over the source's
+positions within a cell), and round an open model
 what comes back from the grid's edge is 67 dB down or more. Sound
 through a partition reaches the level behind it that diffuse-field theory gives within
 0.3 dB, and coupled rooms decay in the two slopes of the two-room model.

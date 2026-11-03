@@ -415,6 +415,7 @@ def _map(native, data, split: str | None) -> dict:
         low,
         low + 0.8,
         np.full(nx * ny, cell * cell * 0.8),
+        np.full(nx * ny, -1, np.int64),
         onset,
         onset + 0.02,
         1e-3,

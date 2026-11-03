@@ -3,8 +3,8 @@
 # rail top), 25 m away over the meadow, 2 m in front of a house's wall 20 m from the
 # track, and 25 m away on the other side behind a noise barrier 3 m high, 4 m from the
 # track, which the trains' sound comes over and round (`first_order` diffraction follows
-# it). The line source along the track is its traffic
-# on average: one regional train an hour at 160 km/h, its sound power per metre Schall
+# it). The line source along the track is its traffic on average: one regional train an
+# hour at 160 km/h, its sound power per metre and its directivity round the track Schall
 # 03's (Germany's method for the noise of railways, 2014), all of it at the rail top. A
 # train runs past at 160 km/h, its pitch falling as it goes by (Doppler): three sources
 # along one walk, at the rail top, on the roof and at the pantograph, Schall 03's
@@ -48,13 +48,19 @@ assignments:
 sources:
   # The track's traffic on average over an hour: one regional train (an electric
   # locomotive and five coaches) at 160 km/h, Schall 03's sound power per metre of
-  # track along 300 m, at the rail top, 0.2 m above the ballast.
+  # track along 300 m, at the rail top, 0.2 m above the ballast. It has the trains'
+  # directivity round the track (line.csv: round the line's left axis, along which it
+  # lies) and so their 0.28 dB more sound power, the directivity's mean. Its points are
+  # 2.5 m apart, under half their distance from the nearest listener, Schall 03's guide
+  # for its pieces of track: in a free field the listeners hear the sum Schall 03 takes
+  # over the line within 0.01 dB(A).
   - name: line
     position: [0, 0, 0.2]
     orientation: {yaw: -90}
     line_m: 300
-    spacing_m: 10
-    level_db: [94.6, 91.7, 91.5, 95.5, 98.8, 97.9, 92.9, 77.8]
+    spacing_m: 2.5
+    level_db: [94.9, 92.0, 91.8, 95.8, 99.1, 98.2, 93.2, 78.0]
+    directivity: {file: line.csv}
   # A regional train at 160 km/h: the sound power of its front point at each height
   # (the locomotive's first bogie, its roof, its pantograph), Schall 03's, with its
   # directivity round the track (train.csv); the demo plays the train's other points

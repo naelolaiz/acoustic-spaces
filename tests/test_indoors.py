@@ -58,6 +58,51 @@ def test_the_house_hears_each_band_through_the_facade() -> None:
         assert np.allclose(10 * np.log10(after / before), facade.HOUSE.indoor_db(), atol=0.1)
 
 
+#: How much louder each octave band is 2 m in front of a wall than at a listener nearer
+#: it, at two moments of a pass (dB): the street's balcony, 1 m out, sees up to 3.7 dB
+#: either way at 63 to 250 Hz.
+SHIFTS_DB = ((2.0, -1.0, -0.5, 0.3, 0.1, 0.0, 0.0, 0.0), (-4.4, 3.7, 1.0, -0.6, 0.2, 0.1, 0.0, 0.0))
+
+
+def test_the_room_hears_the_level_2_m_in_front_of_its_wall() -> None:
+    """EN ISO 12354-3 takes a room's level outdoors 2 m in front of its façade (L_1,2m).
+    Noise heard at a listener nearer the wall: in the room each octave band's energy is
+    changed by the façade's level difference and by how much louder the band is 2 m out
+    than at the listener, within 0.15 dB, all along or moment by moment, though that
+    steps by 8 dB from 63 to 125 Hz. That shift is read from the passes at the two
+    places, the point 2 m out's levels taken at the listener's times linearly in energy,
+    and none where the listener hears nothing."""
+    from acoustic_spaces.synthesis import split_bands
+    from acoustic_spaces.walkthrough import PassBy
+
+    x = np.random.default_rng(3).standard_normal((RATE * 8, 2))
+    house = indoors.House(airborne=True, rumble=False)
+    first, then = (np.asarray(s) for s in SHIFTS_DB)
+
+    def change_db(y: np.ndarray, k: int, part: slice) -> np.ndarray:
+        before = np.sum(split_bands(x[:, k], RATE)[:, part] ** 2, axis=1)
+        after = np.sum(split_bands(y[:, k], RATE)[:, part] ** 2, axis=1)
+        return 10.0 * np.log10(after / before) - facade.HOUSE.indoor_db()
+
+    steady = house.heard(x, RATE, first)
+    for k in range(2):
+        np.testing.assert_allclose(change_db(steady, k, slice(None)), first, atol=0.15)
+    moving = house.heard(x, RATE, np.array([first, first, then, then]), [0.0, 3.99, 4.01, 8.0])
+    half, edge = RATE * 4, RATE // 2
+    for k in range(2):
+        np.testing.assert_allclose(change_db(moving, k, slice(edge, half - edge)), first, atol=0.15)
+        np.testing.assert_allclose(change_db(moving, k, slice(half + edge, -edge)), then, atol=0.15)
+    # The shift between two passes, the point 2 m out heard 5 ms later.
+    times = np.array([0.0, 1.0, 2.0])
+    levels = np.array([[60.0] * 8, [70.0] * 8, [-np.inf] * 8])
+    there = np.array([[63.0] * 8, [66.0] * 8, [66.0] * 8])
+    heard = PassBy("tram", "balcony", times, levels, levels[:, 0])
+    front = PassBy("tram", "balcony_2m", times + 0.005, there, there[:, 0])
+    shift = indoors.front_shift_db(heard, front)
+    between = 10.0 * math.log10(0.995 * 10.0**6.6 + 0.005 * 10.0**6.3)
+    np.testing.assert_allclose(shift, np.outer([3.0, between - 70.0, 0.0], np.ones(8)))
+
+
 def test_a_curve_goes_on_past_where_the_manual_draws_it() -> None:
     """Extended, a base curve is the manual's from 10 to 300 ft, holds its 10 ft value
     nearer, and farther falls on as it falls at 300 ft, without a step; unextended it
@@ -215,6 +260,56 @@ def test_a_listener_0_5_to_2_m_in_front_of_a_wall_is_in_its_house() -> None:
     assert facing is not None and facing.wall == (0.0, 6.0)
     away = facing.distances([(0.0, 0.0), (-40.0, 6.0), (0.0, 10.0)])
     np.testing.assert_allclose(away, [6.0, 40.0, 4.0])
+
+
+def test_a_room_takes_its_level_outdoors_2_m_in_front_of_its_wall() -> None:
+    """EN ISO 12354-3 takes a room's level outdoors, L_1,2m, 2 m in front of its façade.
+    The street's balcony stands 1 m in front of the offices: their room's point is 1 m
+    farther out, square to the wall, at the balcony's height, a listener more, the
+    balcony's copy, at no other listener's place and in the open air: in place of the
+    example's own point there, ticked off, which a listener of its name elsewhere may not
+    stand for. The pavement and the railway's house_18m stand 2 m out and are their own
+    points, simulated no more. In front of a wall at an angle the point is square to it
+    too; one inside a building is refused."""
+    from acoustic_spaces import Room, Scene
+    from acoustic_spaces.examples import example_path
+
+    street = Room.from_yaml(example_path("street"))
+    found = indoors.facings(street.scene, ["pavement", "balcony", "garden"])
+    balcony, pavement = found["balcony"], found["pavement"]
+    assert balcony is not None and pavement is not None
+    assert not balcony.at_front and pavement.at_front
+    assert balcony.front((5.0, -5.0, 10.0)) == pytest.approx((5.0, -4.0, 10.0), abs=1e-12)
+    assert pavement.front((0.0, 4.0, 1.6)) == pytest.approx((0.0, 4.0, 1.6), abs=1e-12)
+    slanted = indoors.Facing("house", (1.0, 1.0), 1.0)
+    assert slanted.front((1.6, 1.8, 1.5)) == pytest.approx((2.2, 2.6, 1.5), abs=1e-12)
+    points = indoors.fronts(street.scene, found)
+    assert list(points) == ["balcony"]
+    assert points["balcony"] == pytest.approx((5.0, -4.0, 10.0), abs=1e-12)
+    railway = Scene.from_yaml(example_path("railway"))
+    everyone = [lis.name for lis in railway.listeners]
+    assert indoors.fronts(railway, indoors.facings(railway, everyone)) == {}
+    assert indoors.with_fronts(street, {}) is street
+    room = indoors.with_fronts(street, points)
+    *kept, added = room.scene.listeners
+    ticked = next(lis for lis in street.scene.listeners if lis.name == "balcony_2m")
+    assert not ticked.in_use
+    assert kept == [lis for lis in street.scene.listeners if lis is not ticked]
+    own = next(lis for lis in kept if lis.name == "balcony")
+    assert added.name == "balcony_2m" and added.orientation == own.orientation
+    assert added.in_use and added.position == ticked.position
+    assert added.position == pytest.approx((5.0, -4.0, 10.0), abs=1e-12)
+    assert min(math.dist(lis.position, added.position) for lis in kept) == pytest.approx(1.0)
+    assert room.problems() == []
+    with pytest.raises(SystemExit, match="inside building 'houses'"):
+        indoors.with_fronts(street, {"pavement": (0.0, 7.0, 1.6)})
+    moved = [
+        lis.model_copy(update={"position": (6.0, -4.0, 10.0)}) if lis is ticked else lis
+        for lis in street.scene.listeners
+    ]
+    elsewhere = Room.from_scene(street.scene.model_copy(update={"listeners": moved}))
+    with pytest.raises(SystemExit, match="'balcony_2m' .* stands 1.00 m from it"):
+        indoors.with_fronts(elsewhere, points)
 
 
 def test_the_ground_shakes_a_room_from_behind_its_listener() -> None:
@@ -439,6 +534,76 @@ def test_the_railway_demo_hears_the_train_and_its_rumble_indoors(tmp_path, monke
     assert "parts" not in alone and "pitch_semitones" not in alone
     assert alone["sel_a_db"] == pytest.approx(parts["rumble"]["sel_a_db"], abs=0.01)
     assert len(added[-1]) == 1
+
+
+def test_the_offices_room_takes_the_tram_2_m_in_front_of_their_wall(tmp_path, monkeypatch) -> None:
+    """--indoors tram at the street's balcony, 1 m in front of the offices: each part of
+    the tram is simulated once more at the point 2 m in front of their wall, at the
+    balcony's height, and the room's levels are that point's less the façade's level
+    difference (EN ISO 12354-3's L_1,2m - D_2m,nT), not the balcony's own; its sound is
+    the balcony's, changed band by band at each moment by how much louder it is there."""
+    import yaml
+    from test_works import _street
+
+    from acoustic_spaces import walkthrough
+    from acoustic_spaces.demos import load, pipeline
+
+    folder = _street(tmp_path)
+    data = yaml.safe_load((folder / "scene.yaml").read_text(encoding="utf-8"))
+    for each in data["sources"]:
+        if each["name"].startswith("tram"):
+            z = each["position"][2]
+            each["position"] = [-10, 0, z]
+            each["walk"]["to"] = [[20, 0, z]]
+    (folder / "scene.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    simulated, outside = [], []
+    real_walk, real_through = walkthrough.simulate_walk, indoors.House.through
+
+    def simulate_walk(room, name, **kwargs):
+        at = next(lis for lis in room.scene.listeners if lis.name == kwargs["listener"])
+        simulated.append((name, at.name, at.position))
+        return real_walk(room, name, **kwargs)
+
+    def through(self, passing):
+        outside.append(passing)
+        return real_through(self, passing)
+
+    shifts, real_heard = [], indoors.House.heard
+
+    def heard_in(self, wet, rate, shift_db=None, times=None):
+        shifts.append((shift_db, times))
+        return real_heard(self, wet, rate, shift_db, times)
+
+    monkeypatch.setattr(walkthrough, "simulate_walk", simulate_walk)
+    monkeypatch.setattr(indoors.House, "through", through)
+    monkeypatch.setattr(indoors.House, "heard", heard_in)
+    demo = load(folder / "passby_demo.py").at(folder)
+    common = ["--vehicle", "tram", "--step", "4", "--format", "mono", "--listeners", "balcony"]
+    assert demo.main(["sound", *common]) == 0 and demo.main(["scene", *common]) == 0
+    assert demo.main(["walk", *common, "--indoors", "tram"]) == 0
+    assert [(part, at) for part, at, _ in simulated] == [
+        ("tram", "balcony"),
+        ("tram", "balcony_2m"),
+        ("tram_roof", "balcony"),
+        ("tram_roof", "balcony_2m"),
+    ]
+    for _, at, position in simulated:
+        wanted = (5.0, -4.0, 10.0) if at == "balcony_2m" else (5.0, -5.0, 10.0)
+        assert position == pytest.approx(wanted, abs=1e-12)
+    heard = pipeline.read_json(folder / "demo" / "walk" / "walk.json")["listeners"]["balcony"]
+    assert heard["inside"] == "offices"
+    for part, passing in zip(("tram", "tram_roof"), outside, strict=True):
+        assert passing.listener == "balcony_2m"
+        room = real_through(indoors.House(airborne=True, rumble=False), passing)
+        np.testing.assert_allclose(room.levels, passing.levels + facade.HOUSE.indoor_db())
+        assert heard["parts"][part]["sel_a_db"] == pytest.approx(room.exposure_a, abs=0.01)
+    # The balcony's own sound comes in, each octave band changed at each moment by as much
+    # as it is louder 2 m out, which the wall's reflection makes differ at 63 to 250 Hz.
+    assert len(shifts) == 2
+    for shift, times in shifts:
+        assert shift is not None and times is not None
+        assert np.shape(shift) == (len(times), 8)
+        assert np.max(np.abs(np.asarray(shift)[:, :3])) > 0.5
 
 
 def test_the_tram_has_indoors_and_the_street_s_other_vehicles_not() -> None:

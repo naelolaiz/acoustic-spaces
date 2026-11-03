@@ -353,17 +353,20 @@ struct StochasticSettings {
 };
 
 // A coverage map: a regular grid of columns in x and y over the audience area. Each
-// column holds up to `layers` map points (a balcony above the stalls), each a slab of
-// air between low and high (z). Every leg of every ray adds its track length through a
-// slab over the slab's volume, a track-length estimate of the energy there, whatever
-// the reception mode; the receivers above are not needed.
+// column holds up to `layers` map points (a balcony above the stalls, the rooms on either
+// side of a wall that crosses it), each a slab of air between low and high (z). Every
+// leg of every ray adds its track length through a slab over the slab's volume, a
+// track-length estimate of the energy there, whatever the reception mode; the receivers
+// above are not needed. A point with a room counts the legs of rays in that room alone
+// (with StochasticScene::face_room, or one room the rays never leave: source_room).
 struct MapGrid {
     double x0 = 0.0, y0 = 0.0;  // corner of column (0, 0), m
     double cell = 1.0;          // column width, m
     std::size_t nx = 0, ny = 0, layers = 1;
     std::vector<std::int64_t> point;    // ny x nx x layers: map point index, -1 for none
     std::vector<double> low, high;      // per point: the slab's bottom and top, m
-    std::vector<double> volume;         // per point: the slab's volume inside the room, m^3
+    std::vector<double> volume;         // per point: the slab's volume in its room's air, m^3
+    std::vector<std::int64_t> room;     // per point: the room it lies in, -1 for any
     std::vector<double> onset;          // per point: arrival of the direct sound, s
     std::vector<double> covered_time;   // per point, as StochasticSettings::covered_time
     // Time bins count from each point's onset: fine_bins of fine_step, then coarse_step.
@@ -389,7 +392,7 @@ struct MapGrid {
         const std::size_t n = points();
         if (!(cell > 0.0) || !(fine_step > 0.0) || !(coarse_step > 0.0) || layers == 0 ||
             point.size() != nx * ny * layers || high.size() != n || volume.size() != n ||
-            onset.size() != n || covered_time.size() != n) {
+            room.size() != n || onset.size() != n || covered_time.size() != n) {
             return false;
         }
         for (std::size_t m = 0; m < n; ++m) {
@@ -742,13 +745,15 @@ struct Accumulator {
     double map_bottom = 0.0, map_top = 0.0;
 
     // Adds a leg that leaves `pos` along `dir` (unit) for `length` metres, `travelled`
-    // metres from the source at `pos`, to every map slab it passes through. A chord of a
-    // bent ray adds `rate` to travelled per metre, and the air absorbs from `path` on,
-    // `stretch` metres per metre of chord (path negative: as travelled).
+    // metres from the source at `pos`, to every map slab it passes through, of a point in
+    // the ray's `room` (RayState::room) or in any. A leg ends at a face: it lies in one room.
+    // A chord of a bent ray adds `rate` to travelled per metre, and the air absorbs from
+    // `path` on, `stretch` metres per metre of chord (path negative: as travelled).
     // Through plants, `track` (from pos along dir) weights the bands at each point.
     void add_map(const Vec3 &pos, const Vec3 &dir, double length, double travelled,
-                 const double *energy, const double *alone, int order, double rate = 1.0,
-                 double path = -1.0, double stretch = 1.0, const Track *track = nullptr) {
+                 const double *energy, const double *alone, int order, std::int64_t room,
+                 double rate = 1.0, double path = -1.0, double stretch = 1.0,
+                 const Track *track = nullptr) {
         const MapGrid &map = scene.map;
         constexpr double kFlat = 1e-12;
         const double inf = std::numeric_limits<double>::infinity();
@@ -798,6 +803,7 @@ struct Accumulator {
                 const std::int64_t m = map.point[column + layer];
                 if (m < 0) continue;
                 const auto k = static_cast<std::size_t>(m);
+                if (room >= 0 && map.room[k] >= 0 && map.room[k] != room) continue;
                 double a = t, b = t_out;
                 if (std::abs(dir.z) < kFlat) {
                     if (pos.z < map.low[k] || pos.z > map.high[k]) continue;
@@ -1176,7 +1182,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         }
                         if (has_map) {
                             acc.add_map(pos, dir, segment, travelled, energy.data(), alone.data(),
-                                        order, 1.0, -1.0, 1.0, plant_track);
+                                        order, room, 1.0, -1.0, 1.0, plant_track);
                         }
                         if (scatter_at < inf ? scatter_at > left : hit.found() && hit.t > left) {
                             break;  // in the overrun
@@ -1231,8 +1237,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                             plant_track);
                                 }
                                 if (has_map) {
-                                    acc.add_map(chord.start, along, segment, travelled, energy.data(),
-                                                alone.data(), order, rate, path, stretch, plant_track);
+                                    acc.add_map(chord.start, along, segment, travelled,
+                                                energy.data(), alone.data(), order, room, rate,
+                                                path, stretch, plant_track);
                                 }
                                 if (scatter_at < inf) {
                                     // It scatters in the plants, going the ray's way there.

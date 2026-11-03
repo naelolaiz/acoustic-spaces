@@ -67,7 +67,8 @@ class HrtfSet:
         return f"{self.title} — {self.ears}; {self.licence}; {self.size_mb:g} MB"
 
 
-#: Viking v2 holds one file per head, so the subjects are the members to choose from.
+#: Viking v2 holds one file per pair of pinnae, so the subjects are the members to choose
+#: from.
 _VIKING = tuple(f"subj_{letter}.sofa" for letter in "ABCDEFGHIJKLMNOPQRSTZ")
 
 #: The sets on offer. Each is a free licence and a direct download.
@@ -98,15 +99,15 @@ SETS: tuple[HrtfSet, ...] = (
     HrtfSet(
         name="viking",
         title="The Viking HRTF dataset v2",
-        ears="one of 20 people, and a dummy head (Z)",
+        ears="a KEMAR dummy head with one of 20 pairs of replica pinnae, or none (Z)",
         licence="CC BY 4.0",
-        credit="Spagnol, Miccini and Unnthorsson, Reykjavík University",
+        credit="Spagnol, Miccini and Unnthórsson (Aalborg University, University of Iceland)",
         page="https://doi.org/10.5281/zenodo.4160401",
         url="https://zenodo.org/api/records/4160401/files/HRTFs.zip/content",
         size_mb=58.4,
-        note="1513 directions, 48 kHz, 128 taps; one file per head, A by default",
+        note="1513 directions, 48 kHz, 128 taps; one file per pair of pinnae, A by default",
         members=_VIKING,
-        choice="head",
+        choice="pinnae",
     ),
 )
 

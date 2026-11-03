@@ -217,6 +217,13 @@ listeners:
   - name: garden
     position: [28, 14, 1.6]
     orientation: {yaw: -90}
+  # Where the offices behind the balcony take their level outdoors, 2 m in front of
+  # their wall (EN ISO 12354-3), which the road works' demo and the tram's with
+  # --indoors simulate.
+  - name: balcony_2m
+    enabled: false
+    position: [5, -4, 10]
+    orientation: {yaw: 90}
 simulation:
   early: {method: ray_tracing, max_order: 3, diffraction: first_order}
   late: {method: stochastic_ray_tracing}
