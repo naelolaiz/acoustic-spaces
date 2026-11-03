@@ -485,6 +485,66 @@ def test_fresnel_shares() -> None:
     assert shares[0, -1, 1] == pytest.approx(1.0)
 
 
+def _sampled_shares(layout: Layout, before, at, after, wavelength: float) -> np.ndarray:
+    """The shares of the Fresnel zone as a dense even sampling of its ellipse gives them,
+    each point past the extent taking the ground at the extent's edge."""
+    centre, axes = _fresnel_ellipses(
+        np.array([before], float),
+        np.array([at], float),
+        np.array([after], float),
+        np.zeros(1),
+        np.array([wavelength]),
+    )
+    side = np.linspace(-1.0, 1.0, 701)
+    disk = np.stack(np.meshgrid(side, side), axis=-1).reshape(-1, 2)
+    disk = disk[np.sum(disk**2, axis=1) <= 1.0]
+    points = centre[0, 0] + disk @ axes[0, 0].T
+    x0, y0, x1, y1 = layout.extent
+    points = np.clip(points, [x0 + 1e-6, y0 + 1e-6], [x1 - 1e-6, y1 - 1e-6])
+    part = layout.zone_at(points) + 1
+    return np.array([np.mean(part == p) for p in range(1 + len(layout.zones))])
+
+
+def test_a_fresnel_zones_shares_are_its_areas_and_change_smoothly() -> None:
+    # A runway beside a meadow, heard near grazing incidence from far down the runway:
+    # its Fresnel zone, hundreds of metres long, takes in more of the runway as the
+    # source rolls along it. Its share is the area it covers, so it grows smoothly,
+    # where a sampling of the zone grows it in steps.
+    runway = np.array([[0, -22.5], [3000, -22.5], [3000, 22.5], [0, 22.5]], dtype=float)
+    layout = Layout((-4500, -1000, 7000, 1000), 0.0, 900.0, (), (("runway", runway),))
+    listener = np.array([-2000.0, 0.0, 1.2])
+    wavelength = C / 250.0
+    shares = []
+    for x in np.arange(300.0, 340.0, 0.5):
+        source = np.array([x, 0.0, 1.0])
+        at = source + source[2] / (source[2] + listener[2]) * (listener - source)
+        at[2] = 0.0
+        shares.append(layout.fresnel_shares([source], [at], [listener], [wavelength])[0, 0, 1])
+        if x in (300.0, 320.0):
+            sampled = _sampled_shares(layout, source, at, listener, wavelength)
+            assert shares[-1] == pytest.approx(sampled[1], abs=2e-3)
+    steps = np.diff(shares)
+    assert 0.0 < shares[0] < shares[-1] < 0.5
+    assert np.all(steps > 0.0) and steps.max() < 3.0 * steps.mean()
+
+
+def test_a_zone_at_the_extents_edge_goes_on_past_it() -> None:
+    # A lawn along the extent's far side: a Fresnel zone reaching past the extent there
+    # lies on the lawn, as the ground goes on past the extent as it is at its edge, and
+    # one reaching past its corner as well.
+    lawn = np.array([[60, -50], [100, -50], [100, 50], [60, 50]], dtype=float)
+    layout = Layout((-100, -50, 100, 50), 0.0, 30.0, (), (("lawn", lawn),))
+    wavelength = C / 63.0
+    for at in ([97.0, 0.0, 0.0], [97.0, -47.0, 0.0], [61.0, 0.0, 0.0]):
+        before = np.array(at) + [-6.0, 1.0, 1.5]
+        after = np.array(at) + [6.0, -1.0, 1.5]
+        shares = layout.fresnel_shares([before], [at], [after], [wavelength])[0, 0]
+        assert shares == pytest.approx(
+            _sampled_shares(layout, before, at, after, wavelength), abs=2e-3
+        )
+    assert shares[0] > 0.1  # the last, across the lawn's edge in the extent: shared
+
+
 def test_a_reflection_mixes_the_grounds_round_it() -> None:
     # The reflection point lies at x = -2: the road's edge moves past it.
     grass, asphalt = {"impedance": "grass"}, {"impedance": "asphalt"}

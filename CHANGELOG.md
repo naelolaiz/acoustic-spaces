@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: a ground reflection near where two grounds meet (a runway in a meadow) weighs
+  each by the exact area of its Fresnel zone it covers, and a zone at the ground's edge
+  goes on past it; the shares were counted on 96 points, so a pass-by's level stepped by
+  up to 1.75 dB as the reflection crossed the runway's edge.
+- Fixed: the pass-by graphs' time labels are at least 60 px apart (every 10 s for the
+  airport's flights); they were every 2 s and overlapped.
+
 - Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
   University and the University of Iceland, and described as a KEMAR dummy head with one
   of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.
