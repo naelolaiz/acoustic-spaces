@@ -191,14 +191,18 @@ class DemoJob(SimulationJob):
         folder.mkdir(parents=True, exist_ok=True)
         self._say(self.demo.command(self.step, self.args))
         # The command the window showed, with paths in full; unbuffered, so its lines
-        # arrive as it writes them rather than at the end.
+        # arrive as it writes them rather than at the end. Its output passes as UTF-8,
+        # whatever the system's code page (on Windows a pipe takes the ANSI code page,
+        # which may lack the letters of a folder's name); a byte that is no UTF-8 (from
+        # ffmpeg, which writes into the same pipe) reads as a replacement character.
         process = self._process = subprocess.Popen(
             self.argv,
             cwd=folder,
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
         )
         try:

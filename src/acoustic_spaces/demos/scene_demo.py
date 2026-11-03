@@ -73,6 +73,7 @@ from acoustic_spaces.demos import (
     pipeline,
 )
 from acoustic_spaces.demos.audio import (
+    channel_weights,
     channels_rms,
     decoded,
     gated_rms,
@@ -538,15 +539,16 @@ def moving_done(
 
 def levels_along(movement, source, listener: str) -> list[float | None]:
     """The A-weighted level (dB) of ``source`` (a scene source) at ``listener`` at each
-    moment of ``movement``, as simulated; None at a moment whose response is too short
-    for its decay."""
+    moment of ``movement``, as simulated, as a still listener's and a pass-by's are
+    (:meth:`~acoustic_spaces.engine.response.Response.levels_or_held`); None at a
+    moment where none of its sound arrives."""
     from acoustic_spaces.parameters import a_weighted
 
     power = source.power_db("octave")
     levels: list[float | None] = []
     for k in range(len(movement.times)):
         response = movement.result[movement.key(source.name, listener, k)]
-        level = float(a_weighted(response.levels(power)))
+        level = float(a_weighted(response.levels_or_held(power)))
         levels.append(round(level, 2) if math.isfinite(level) else None)
     return levels
 
@@ -604,8 +606,8 @@ def render_moving(args: argparse.Namespace, moving: list[str], demo: Demo | None
             "listener": name,
             "lag_s": 0.0,
             "arrival_s": arrival,
-            "rms_db": level_db(x, rate),
-            "loudness_db": loudness_db(x, rate),
+            "rms_db": level_db(x, rate, channel_weights(fmt)),
+            "loudness_db": loudness_db(x, rate, channel_weights(fmt)),
             "length_s": len(x) / rate,
             "moves": moves,
         }

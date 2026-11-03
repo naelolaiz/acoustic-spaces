@@ -144,15 +144,14 @@ def demos_for(scene: str | Path | None) -> list[tuple[Demo, argparse.Namespace]]
 def starting_arguments(demo: Demo) -> argparse.Namespace:
     """Every option of ``demo`` (already at its :func:`work_base`) at its default, with
     the paths filled in: what the demo writes goes under that folder, what it reads
-    comes from the example when the folder has no copy of it."""
+    comes from the example when the folder has no copy of it
+    (:meth:`~acoustic_spaces.demos.Demo.default_path`)."""
     args = demo.resolved(demo.defaults())
     for option in demo.options:
         if option.kind != "file" or option.default is None:
             continue
         if not Path(getattr(args, option.name)).exists():
-            beside = demo.script.parent / option.default
-            if beside.exists():
-                setattr(args, option.name, beside)
+            setattr(args, option.name, demo.default_path(option))
     return args
 
 
@@ -205,8 +204,10 @@ class PathField(QWidget):
         from acoustic_spaces.gui.hrtf_dialog import HrtfDialog
 
         dialog = HrtfDialog(self)
-        if dialog.exec() and dialog.path is not None:
-            self.edit.setText(str(dialog.path))
+        accepted, path = dialog.exec(), dialog.path
+        dialog.deleteLater()
+        if accepted and path is not None:
+            self.edit.setText(str(path))
 
     def _browse(self) -> None:
         start = self.edit.text() or str(Path.home())

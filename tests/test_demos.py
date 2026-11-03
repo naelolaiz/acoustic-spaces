@@ -4,6 +4,8 @@ measures, the recordings it fetches, and the pipeline from the mixes to the vide
 from __future__ import annotations
 
 import argparse
+import http.client
+import io
 import os
 import tarfile
 import zipfile
@@ -11,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
 from acoustic_spaces import fetch
 from acoustic_spaces.audio import read_wav, write_wav
@@ -67,6 +70,106 @@ def test_levels_are_gated_and_weighted() -> None:
     assert audio.loudness_db(quiet, RATE) > audio.level_db(quiet, RATE) - 6.0
 
 
+#: ITU-R BS.1770-4's K weighting at 48 kHz (Annex 1, Tables 1 and 2): the +4 dB shelf
+#: and the high-pass, each (b0, b1, b2), (1, a1, a2).
+K_SHELF_48K = (
+    (1.53512485958697, -2.69169618940638, 1.19839281085285),
+    (1.0, -1.69065929318241, 0.73248077421585),
+)
+K_HIGH_PASS_48K = ((1.0, -2.0, 1.0), (1.0, -1.99004745483398, 0.99007225036621))
+
+
+def test_the_k_weighting_is_bs1770s() -> None:
+    """At 48 kHz the K weighting lifts 1 kHz and 4 kHz as the filters of ITU-R BS.1770-4
+    (Annex 1, Tables 1 and 2) do, +0.70 and +3.97 dB, within 0.1 dB: its +4 dB shelf at
+    1.5 kHz is there and lifts (missing, 4 kHz would read 0 dB; turned over, -3.9)."""
+    rate = 48_000
+    for hz in (1000.0, 4000.0):
+        z = np.exp(-2j * np.pi * hz / rate)
+        response = 1.0
+        for b, a in (K_SHELF_48K, K_HIGH_PASS_48K):
+            response *= np.polyval(b[::-1], z) / np.polyval(a[::-1], z)
+        want = audio.db(float(abs(response)))
+        x = _tone(2.0, hz, rate)
+        got = audio.db(audio.gated_rms(audio.k_weighted(x, rate), rate)) - audio.db(
+            audio.gated_rms(x, rate)
+        )
+        assert got == pytest.approx(want, abs=0.1), hz
+        assert want == pytest.approx(0.70 if hz == 1000.0 else 3.97, abs=0.01)
+
+
+def test_the_meters_add_up_the_channels_powers() -> None:
+    """The meters add up the channels' mean squares, as ITU-R BS.1770-4 eq. 2 does (G = 1
+    for left and right): two channels alike read 3.01 dB above one alone, as two unlike
+    ones of the same power do, and the right one 0.5 ms late (sound from a side at the
+    ears) reads as both alike, where the mean of the two did not."""
+    rng = np.random.default_rng(5)
+    left, other = rng.standard_normal((2, 4 * RATE)) * 0.05
+    other *= np.sqrt(np.mean(left**2) / np.mean(other**2))  # the same power
+    late = np.r_[np.zeros(RATE // 2000), left[: -(RATE // 2000)]]
+    for meter in (audio.level_db, audio.loudness_db):
+        alike = meter(np.stack([left, left], axis=1), RATE)
+        assert alike - meter(left, RATE) == pytest.approx(3.01, abs=0.01), meter.__name__
+        unlike = meter(np.stack([left, other], axis=1), RATE)
+        assert unlike == pytest.approx(alike, abs=0.1), meter.__name__
+        assert meter(np.stack([left, late], axis=1), RATE) == pytest.approx(alike, abs=0.05)
+    with pytest.raises(ValueError, match="one weight per channel"):
+        audio.level_db(np.stack([left, left], axis=1), RATE, np.ones(3))
+
+
+def test_the_meters_weigh_loudspeakers_by_where_they_stand_and_ambisonics_on_w(
+    tmp_path: Path,
+) -> None:
+    """Loudspeakers weigh as ITU-R BS.1770-4 weighs them (Annex 3, Table 4): 1.41 less
+    than 30 degrees above or below the horizon and 60 to 120 degrees to a side, so a 5.0
+    surround (110 degrees) reads 10 lg 1.41 = +1.49 dB above a front speaker playing the
+    same; 1 elsewhere, and the LFE is left out (Annex 1). An AmbiX mix reads as its W, the
+    sound pressure, from wherever the sound comes: the mean of W and X was silent for a
+    plane wave from behind."""
+    from acoustic_spaces.spatial import Ambisonics, Loudspeakers, from_angles
+    from acoustic_spaces.spatial import real_spherical_harmonics as harmonics
+
+    noise = np.random.default_rng(6).standard_normal(4 * RATE) * 0.05
+    surround = pipeline.weights_of("5.0")
+    assert surround is not None
+    np.testing.assert_allclose(surround, audio.channel_weights(Loudspeakers.layout("5.0")))
+    front, side = np.zeros((len(noise), 5)), np.zeros((len(noise), 5))
+    front[:, 0], side[:, 3] = noise, noise  # L at 30 degrees, Ls at 110
+    for meter in (audio.level_db, audio.loudness_db):
+        louder = meter(side, RATE, surround) - meter(front, RATE, surround)
+        assert louder == pytest.approx(10.0 * np.log10(1.41), abs=0.01)
+    np.testing.assert_allclose(pipeline.weights_of("5.1"), [1, 1, 1, 0, 1.41, 1.41])
+    # 7.0.4: the side surrounds at 90 degrees weigh, the rear ones at 135 and the height
+    # layer at 30 degrees up do not.
+    np.testing.assert_allclose(pipeline.weights_of("7.0.4"), [1, 1, 1, 1, 1, 1.41, 1.41] + [1] * 4)
+    assert pipeline.weights_of("binaural") is None and pipeline.weights_of("mono") is None
+    # A layout of the scene's own, at the edges of Table 4's side.
+    edges = [(60, 0), (59, 0), (120, 0), (121, 0), (-100, 0), (250, 0), (90, 29), (90, -30)]
+    speakers = [{"name": f"s{k}", "azimuth": a, "elevation": e} for k, (a, e) in enumerate(edges)]
+    scene = tmp_path / "scene.yaml"
+    room = {
+        "geometry": {"box": [4, 3, 2.5]},
+        "materials": {"plaster": {"absorption": [0.1] * 8}},
+        "sources": [{"name": "s", "position": [1, 1, 1.5]}],
+        "listeners": [{"name": "a", "position": [3, 2, 1.2]}],
+    }
+    outputs = [{"format": "loudspeakers", "speakers": speakers}]
+    scene.write_text(yaml.safe_dump(room | {"outputs": outputs}), encoding="utf-8")
+    own = pipeline.weights_of("speakers", scene)
+    np.testing.assert_allclose(own, [1.41, 1, 1.41, 1, 1.41, 1.41, 1.41, 1])
+    with pytest.raises(ValueError, match="give the scene"):
+        pipeline.weights_of("speakers")
+    # AmbiX: a plane wave from ahead, a side, behind and above reads as W alone.
+    w = audio.level_db(noise, RATE)
+    for order in (1, 3):
+        weights = pipeline.weights_of(f"ambix{order}")
+        np.testing.assert_allclose(weights, audio.channel_weights(Ambisonics(order)))
+        for azimuth, elevation in ((0, 0), (90, 0), (180, 0), (0, 90)):
+            gains = harmonics(order, from_angles(azimuth, elevation))[0]
+            mix = noise[:, None] * gains[None, :]
+            assert audio.level_db(mix, RATE, weights) == pytest.approx(w, abs=1e-6)
+
+
 def test_two_channels_are_gated_together() -> None:
     """A recording's two channels are gated on their summed power, as BS.1770 gates
     several channels: the right one pausing while the left plays counts its pause, as
@@ -109,6 +212,17 @@ def test_quiet_moment_finds_the_gap_near_a_time() -> None:
     assert 6.0 <= audio.quiet_moment(env, 0.1, 7.0, 3.0) <= 8.5
     assert audio.quiet_moment(env, 0.1, 2.0, 0.0) == pytest.approx(2.0, abs=0.3)
     assert audio.mmss(0.0) == "0:00" and audio.mmss(125.3) == "2:05"
+
+
+def test_the_envelope_of_a_signal_shorter_than_its_window_is_its_rms() -> None:
+    """A signal shorter than the envelope's 0.5 s window gives one value, its RMS, and an
+    empty one silence, where both raised an IndexError."""
+    short = _tone(0.25, 1000.0)
+    np.testing.assert_allclose(audio.envelope(short, RATE), [np.sqrt(np.mean(short**2))])
+    assert audio.envelope(np.zeros(0), RATE).tolist() == [0.0]
+    assert audio.envelope(np.zeros((10, 2)), RATE).tolist() == [0.0]
+    window = _tone(0.5, 1000.0)
+    np.testing.assert_allclose(audio.envelope(window, RATE), [np.sqrt(np.mean(window**2))])
 
 
 def test_resampled_keeps_the_tone(tmp_path: Path) -> None:
@@ -209,6 +323,94 @@ def test_a_remote_block_cut_short_every_time_fails(monkeypatch) -> None:
     with pytest.raises(OSError, match="came 9 long, 5 times"):
         remote.read(10)
     assert asked.count("bytes=0-99") == fetch.RETRIES
+
+
+def test_a_download_cut_short_is_refused_and_removed(tmp_path: Path) -> None:
+    """A server that announces 1000 bytes and sends 500: http.client ends the body
+    without an error, so the download counts the bytes. It fails and leaves neither the
+    file nor its .part, so that a SOFA set or a recording is not kept with a hole in it.
+    The whole body, or one sent without a length, still downloads."""
+    import http.server
+    import threading
+
+    sent = {"length": "1000", "body": b"x" * 500}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:  # quiet
+            pass
+
+        def do_GET(self) -> None:  # noqa: N802  http.server's name
+            self.send_response(200)
+            if sent["length"]:
+                self.send_header("Content-Length", sent["length"])
+            self.end_headers()
+            self.wfile.write(sent["body"])
+            self.close_connection = True
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_address[1]}/ears.sofa"
+    path = tmp_path / "ears.sofa"
+    try:
+        with pytest.raises(OSError, match="after 500 of 1000 bytes"):
+            fetch.download(url, path)
+        assert not path.exists()
+        assert not path.with_name("ears.sofa.part").exists()
+        sent["body"] = b"x" * 1000
+        assert fetch.download(url, path).stat().st_size == 1000
+        sent.update(length="", body=b"y" * 700)
+        assert fetch.download(url, path).read_bytes() == b"y" * 700
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def _http_response(raw: bytes) -> http.client.HTTPResponse:
+    """The response http.client reads from a server that sent ``raw`` and closed."""
+
+    class Socket:
+        def makefile(self, mode: str) -> io.BytesIO:
+            return io.BytesIO(raw)
+
+    response = http.client.HTTPResponse(Socket(), method="GET")
+    response.begin()
+    return response
+
+
+def test_a_body_cut_short_that_http_client_raises_for_is_an_os_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """http.client raises IncompleteRead, which is no OSError, for a body sent in chunks
+    that ends before its last (empty) chunk, and for a body of a length announced that
+    is read whole and ends short. A download fails with an OSError then, as callers
+    expect (``hrtf download`` catches OSError), and removes its .part file; a block of a
+    remote archive cut short so is asked for again, RETRIES times, then fails with one."""
+    head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+    whole = head + b"10\r\n0123456789abcdef\r\n0\r\n\r\n"
+    sent = {"raw": head + b"10\r\n0123456789abcdef\r\n10\r\n01234"}
+    asked: list[str | None] = []
+
+    def urlopen(url, headers=None, timeout=fetch.TIMEOUT):
+        asked.append((headers or {}).get("Range"))
+        return _http_response(sent["raw"])
+
+    monkeypatch.setattr(fetch, "urlopen", urlopen)
+    url, path = "https://example.org/ears.sofa", tmp_path / "ears.sofa"
+    with pytest.raises(OSError, match=r"ears.sofa: the download ended before its last chunk"):
+        fetch.download(url, path)
+    assert sorted(tmp_path.iterdir()) == []
+    sent["raw"] = whole
+    assert fetch.download(url, path).read_bytes() == b"0123456789abcdef"
+    first = b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-0/100\r\n"
+    sent["raw"] = first + b"Content-Length: 1\r\n\r\nx"
+    remote = fetch.RangeFile("https://example.org/takes.zip")
+    sent["raw"] = first.replace(b"0-0", b"0-99") + b"Content-Length: 100\r\n\r\n" + b"y" * 30
+    asked.clear()
+    with pytest.raises(OSError, match="bytes 0-99 came 30 long, 5 times"):
+        remote.read(10)
+    assert asked == ["bytes=0-99"] * fetch.RETRIES
 
 
 def test_a_remote_file_is_read_in_blocks_of_the_size_asked(monkeypatch) -> None:
@@ -624,6 +826,38 @@ def test_an_examples_script_runs_as_a_demo_of_one_step(tmp_path: Path) -> None:
     assert scripts_of("shoebox") == [] and scripts_of("measurement") == []
 
 
+def test_a_caption_leaves_out_a_path_at_its_default_where_the_demo_runs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The stills' caption (``names_only``, as ``pictures.settings_lines`` takes it)
+    gives the options a run was given, a path by its name, and leaves out a path at its
+    default. The editor runs a demo away from its script (a copy of the example) in the
+    copy's folder and gives it every path in full: the orchestra demo's ``--zips``, at
+    its default the folder the demo runs in (``.``), has no name to go by, and the
+    caption still says every option is at its default, as in the example's own folder;
+    a folder of the user's own is given by its name."""
+    demo = demo_for("orchestra")
+    assert demo is not None and demo.option("zips").default == Path(".")
+    copy = tmp_path / "copy of orchestra"
+    copy.mkdir()
+    moved = demo.at(copy)
+    argv = moved.run_argv("all", moved.resolved(moved.defaults()))
+    assert argv[argv.index("--zips") + 1] == str(copy)
+    monkeypatch.chdir(copy)  # where the editor runs it
+    # The process parses its command line as the script's own Demo.main does.
+    values = demo.resolved(demo.parser().parse_args(argv[2:]))
+    assert values.zips == copy and values.work == copy / "demo"
+    assert demo.arguments(values, names_only=True) == []
+    assert demo.command("all", values, names_only=True) == "python orchestra_demo.py all"
+    values.zips = tmp_path / "downloads"
+    assert demo.arguments(values, names_only=True) == ["--zips", "downloads"]
+    # In the example's own folder, wherever the command is typed.
+    monkeypatch.chdir(tmp_path)
+    assert demo.arguments(demo.resolved(demo.defaults()), names_only=True) == []
+    values.zips = copy
+    assert demo.arguments(values, names_only=True) == ["--zips", "copy of orchestra"]
+
+
 # --------------------------------------------------------------------------- the mixes
 
 
@@ -730,6 +964,37 @@ def test_the_mixes_keep_one_gain_and_are_measured(tmp_path: Path, monkeypatch) -
     os.utime(mixes[0].simulation.results / pipeline.PARAMETERS, (later + 20, later + 20))
     pipeline.render_mixes(mixes, folder, args)
     assert made == ["near", "far"]
+
+
+@pytest.mark.parametrize(
+    ("fmt", "near", "far", "far_db"),
+    [
+        # AmbiX (ACN: W, Y, Z, X): a plane wave from ahead and the same from behind, which
+        # the mean of the channels read as silence; on W alone both read the same.
+        ("ambix1", [1.0, 0.0, 0.0, 1.0], [1.0, 0.0, 0.0, -1.0], 0.0),
+        # 5.0 (L, R, C, Ls, Rs): the same sound in L and in Ls, which BS.1770-4 weighs
+        # 1.41 (Annex 3, table 4): 10 lg 1.41 = 1.49 dB louder.
+        ("5.0", [1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0, 0.0], 1.4922),
+    ],
+)
+def test_the_mixes_are_measured_by_how_their_format_weighs_its_channels(
+    tmp_path: Path, monkeypatch, fmt: str, near: list, far: list, far_db: float
+) -> None:
+    """``render_mixes`` hands the meters the weights of the mixes' format
+    (``weights_of``, ITU-R BS.1770-4 eq. 2): AmbiX on W, loudspeakers by where they
+    stand."""
+    mixes, folder, _made = _mixes(tmp_path, monkeypatch)
+    pans = {"near": np.array(near), "far": np.array(far)}
+
+    def auralize(results, feeds, listener, label, out, equal_power=False) -> None:
+        audio.write(out, _tone(2.0, 1000.0, gain=0.25)[:, None] * pans[listener], RATE)
+
+    monkeypatch.setattr(pipeline, "auralize", auralize)
+    seats = pipeline.render_mixes(mixes, folder, argparse.Namespace(format=fmt, hrtf=None))
+    levels = {key: seat["rms_db"] for key, seat in seats["seats"].items()}
+    assert levels["far"] - levels["near"] == pytest.approx(far_db, abs=0.01)
+    x = audio.read(folder / f"near.{fmt}.wav")[0]  # as kept, in 32-bit floats
+    assert levels["near"] == pytest.approx(audio.level_db(x[:, :1], RATE), abs=1e-5)
 
 
 def test_mixes_through_other_hrtfs_are_made_again(tmp_path: Path, monkeypatch) -> None:
@@ -889,6 +1154,17 @@ def test_a_tour_crossfades_its_stops_and_ends_at_full_scale(tmp_path: Path) -> N
     assert pipeline.gains_of(seats, ["near", "far"]) == {"near": 0.0, "far": 0.0}
 
 
+def test_a_tour_turns_a_stop_up_by_40_db_at_most() -> None:
+    """A stop far quieter than the loudest is turned up by MOST_GAIN_DB (40 dB) at most,
+    and a silent one (at the meters' floor, -240 dB) not at all: it has no loudness to
+    match."""
+    levels = {"loud": -10.0, "quieter": -40.0, "far": -75.0, "silent": audio.db(0.0)}
+    seats = {"seats": {k: {"rms_db": v - 8.0, "loudness_db": v} for k, v in levels.items()}}
+    gains = pipeline.gains_of(seats, list(levels))
+    assert gains == {"loud": 0.0, "quieter": 30.0, "far": 40.0, "silent": 0.0}
+    assert pipeline.MOST_GAIN_DB == 40.0
+
+
 def test_a_tour_crossfade_keeps_the_power_however_alike_the_two_mixes_are(
     tmp_path: Path,
 ) -> None:
@@ -969,6 +1245,31 @@ def test_a_shaker_tour_keeps_each_stops_level_and_its_power_across_the_cuts(
         assert audio.db(float(np.mean(out[cut, 0] ** 2)) / expected) / 2.0 == pytest.approx(
             0.0, abs=0.3
         )
+
+
+def test_the_video_is_made_in_a_folder_named_with_an_apostrophe(tmp_path: Path) -> None:
+    """The list of stills the concat demuxer reads quotes each path with its apostrophes
+    escaped as a shell escapes them, so ffmpeg makes the MP4 in a work folder such as
+    O'Brien's, where it stopped with exit status 254."""
+    import shutil
+
+    pytest.importorskip("PIL")
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("needs ffmpeg")
+    from PIL import Image
+
+    folder = tmp_path / "o'brien's demo"
+    audio.write(folder / "tour.wav", audio.stereo(_tone(1.0)), RATE)
+    pipeline.video(
+        folder,
+        [("near", 0.5), ("far", 0.5)],
+        lambda k: Image.new("RGB", (64, 36), (10, 10 * k, 10)),
+        folder / "tour.wav",
+        spectrum_box=(0, 20, 64, 16),
+    )
+    listed = (folder / "stills" / "stills.txt").read_text(encoding="utf-8").splitlines()[0]
+    assert listed.endswith("/o'\\''brien'\\''s demo/stills/00_near.png'")
+    assert (folder / "tour.mp4").stat().st_size > 0
 
 
 def test_the_video_writes_the_stills_and_the_chapters(tmp_path: Path) -> None:
@@ -1202,9 +1503,9 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
     from acoustic_spaces.demos import scene_pictures
     from acoustic_spaces.scene import Scene
 
-    # What each still says: the level of the sources that play, all of them or none
-    # (a response too short for a level gives None), and T30 at mid frequencies, the
-    # mean of the 500 Hz and 1 kHz bands when both are there.
+    # What each still says: the level of the sources that play, to which one whose
+    # sound does not arrive (None) adds nothing, none where nothing is heard; and T30 at
+    # mid frequencies, the mean of the 500 Hz and 1 kHz bands when both are there.
     levels = {("talker", "seat-a"): None, ("radio", "seat-a"): 70.0, ("fan", "seat-b"): None}
     t30 = {("talker", "seat-b"): [1.0, 2.0], ("radio", "seat-b"): [1.0, None]}
     made = {
@@ -1233,12 +1534,25 @@ def test_a_demo_of_any_scene_plays_its_sources(tmp_path: Path, monkeypatch, caps
         playing=["talker", "radio"],
     )
     assert drawing.title("seat-b") == ("seat-b", "Listener 2 of 2")
-    assert drawing.level_at("seat-a") is None
+    assert drawing.level_at("seat-a") == pytest.approx(70.0)
+    assert drawing.lines(0)[0] == "70 dB(A) here, as simulated"
     seat_b = drawing.lines(1)
     assert seat_b[0] == "73 dB(A) here, as simulated"
     assert "Reverberation time T30 1.5 s (mean of 500 Hz and 1 kHz)" in seat_b
     assert "Turned up 6 dB here so you can hear it" in seat_b
-    assert not any("dB(A)" in str(line) for line in drawing.lines(0))
+    made["responses"] = [
+        {**e, "spl_a_db": None} if e["listener"] == "seat-a" else e for e in made["responses"]
+    ]
+    silent = scene_pictures.Pictures(
+        Scene.from_yaml(scene).to_data(),
+        np.zeros((0, 2, 2)),
+        made,
+        seats["seats"],
+        stops,
+        playing=["talker", "radio"],
+    )
+    assert silent.level_at("seat-a") is None
+    assert not any("dB(A)" in str(line) for line in silent.lines(0))
     first, run = pictures.settings_lines(DEMO.at(scene.parent), args, {}, report)
     assert first.startswith("Simulated: early reflections traced to order 1 with 500 rays")
     assert "stochastic ray tracing for the late sound, 500 rays per band" in first
