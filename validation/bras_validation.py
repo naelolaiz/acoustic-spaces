@@ -1,7 +1,7 @@
 """Validation against measured rooms: the coupled rooms, seminar room, chamber music hall
 and auditorium of BRAS.
 
-    python validation/bras_validation.py [--scenes CR1_DoorAngle1 CR2 CR3 CR4]
+    python validation/bras_validation.py [--scenes CR1_DoorAngle1 CR1_DoorAngle3 CR2 CR3 CR4]
                                          [--materials fitted]
                                          [--rays 50000] [--diffraction first_order]
                                          [--bands octave] [--json results.json]
@@ -424,7 +424,9 @@ def plot(result: dict, path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--scenes", nargs="+", default=["CR1_DoorAngle1", "CR2", "CR3", "CR4"])
+    parser.add_argument(
+        "--scenes", nargs="+", default=["CR1_DoorAngle1", "CR1_DoorAngle3", "CR2", "CR3", "CR4"]
+    )
     parser.add_argument("--materials", choices=["fitted", "initial"], default="fitted")
     parser.add_argument("--rays", type=int, help="late rays (default: the scene's)")
     parser.add_argument("--diffraction", choices=["none", "direct", "first_order"])

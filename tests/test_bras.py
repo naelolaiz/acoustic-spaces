@@ -15,12 +15,17 @@ pytestmark = pytest.mark.skipif(not BRAS.is_dir(), reason="needs the source chec
 
 # The sizes BRAS gives for its models (3 Surface descriptions/_descr/mat_CRx.txt). The
 # conversion merges a 1 cm strip in CR3, which moves it by 0.2 m2 and 0.15 m3. For CR1
-# BRAS gives each room's volume (121.4 and 102.3 m3; the doorway between them adds
-# 1.7 m3) and the area of each material, which add up to 378.84 m2.
+# BRAS gives each room's volume (121.4 and 102.3 m3; the doorway between them adds 1.81
+# m3, less the door leaf: with the door at 4.1 degrees its slab, 0.10 m3, as its box is
+# open on the slab's side; at 30.4 degrees slab and box, 0.31 m3), and the area of each
+# material in the model with the door at 30.4 degrees, 378.84 m2 in all. Joining that
+# model's leaf to the wall and floor (convert_skp.py) takes off the 3.51 m2 the leaf
+# covers, 3.06 m2 of them the slab's face under the box.
 @pytest.mark.parametrize(
     ("name", "volume_m3", "area_m2", "pairs"),
     [
         ("CR1_DoorAngle1", 225.4, 378.84, 4),
+        ("CR1_DoorAngle3", 225.2, 375.31, 4),
         ("CR2", 146.1, 202.53, 10),
         ("CR3", 3330.6, 2763.0, 10),
         ("CR4", 8656.5, 5851.3, 10),
