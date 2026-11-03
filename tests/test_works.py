@@ -323,7 +323,7 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
     assert front.name == "balcony_2m"
     assert front.position == pytest.approx((5.0, -4.0, 10.0), abs=1e-12)
     assert {r["listener"] for r in out["responses"]} == {"balcony_2m"}
-    fronts = indoors.facings(scene, [listener.name for listener in scene.listeners])
+    fronts = indoors.facings(scene, [lis.name for lis in scene.listeners if lis.in_use])
     assert {k: v and v.name for k, v in fronts.items()} == {
         "pavement": "houses",
         "balcony": "offices",
@@ -340,7 +340,7 @@ def test_the_works_demo_hears_the_works_and_their_rumble_indoors(tmp_path, monke
         )
 
     felt = math.nan
-    for listener in scene.listeners:
+    for listener in (lis for lis in scene.listeners if lis.in_use):
         name, here = listener.name, np.asarray(listener.position[:2])
         facing = fronts[name]
         if facing is None:
