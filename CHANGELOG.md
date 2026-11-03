@@ -18,6 +18,18 @@
   -> seat: encoding the video, 12.1 of 60.0 s`, in place of ffmpeg's frame counter.
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: the demos' meters (`level_db`, `loudness_db`) add up a mix's channel powers as
+  ITU-R BS.1770-4 does (side surrounds weighted 1.41, the LFE left out) and read
+  Ambisonics on W alone; they averaged the channels first. Stored levels of binaural and
+  microphone-pair mixes rise by 3.0 to about 6.4 dB with how unlike the two channels
+  are, so captions' "dB(A) against the loudest" and tour gains move by up to about
+  3.5 dB; an order-1 AmbiX plane wave reads 6.0 dB higher (from behind it read silent),
+  a 5.0 front speaker alone 14.0 dB higher, and one-channel mono mixes do not move.
+- A tour turns a stop up by 40 dB at most, and a silent one not at all; a silent stop
+  got the whole difference to the loudest, over 200 dB.
+- Fixed: a still tour's video is made in a work folder whose path holds an apostrophe,
+  where ffmpeg stopped with exit status 254, and `demos.audio.envelope` gives a signal
+  shorter than its 0.5 s window its RMS (an empty one 0) instead of raising IndexError.
 - Fixed: the gallery walk demo stopped, after downloading the talk, when a talker's
   take was shorter than the walk and the turn (F4's, 36 s); the guide now says it again
   from its start, 2 s after it ends. Its walk and turn are made again for another
