@@ -659,8 +659,10 @@ at 128 KiB, that run grew by 124 MiB against the estimate's 118).
 
 A run that would need more memory than the computer has (or than its container may
 use: on Linux, the lowest limit on the process's control groups and on those above
-them) is refused before it starts, with a message that says what to lower, and the
-editor's messages (`Room.warnings()`) note one that would need more than half of it. A
+them) is refused before it starts, with a message that gives what a simulation would
+need with each setting lowered on its own (more `late.batches` need more, not less),
+and the editor's messages (`Room.warnings()`) note one that would need more than half
+of it. A
 map is checked again once its first source point is traced, with the early paths found
 there at every point, which grow with the points too (`workshop`'s map: 311 MiB of early
 paths beside 495 MiB of late energy). The editor's note counts a map's late part only.
