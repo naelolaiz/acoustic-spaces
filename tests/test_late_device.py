@@ -1,6 +1,9 @@
 """Where the late stage traces its rays: the choice of device, ``auto``'s trial and the
 CPU and the GPU sharing the rays. None of these needs a GPU: test_gpu.py traces on one."""
 
+import math
+import os
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -253,6 +256,23 @@ def test_the_trial_times_both_devices(reference, monkeypatch) -> None:
     assert calls[1][1:] == calls[2][1:] == (ray_device.TRIAL_RAYS, 0.4, 1 << 40)
 
 
+def test_a_trial_the_gpu_declines_lets_go_of_its_rays_in_flight(reference, monkeypatch) -> None:
+    """The warm-up keeps the GPU's rays in flight for the timed call; the trial lets go
+    of them whether or not that call declines, as the run then goes to the CPU."""
+    calls = []
+
+    def on_gpu(**values):
+        calls.append(values["keep"])
+        if len(calls) > 1:
+            raise gpu_tracer.Unsupported("the GPU's buffers cannot hold this run's results")
+
+    monkeypatch.setattr(gpu_tracer, "trace_stochastic", on_gpu)
+    monkeypatch.setattr(gpu_tracer, "release", lambda: calls.append("released"))
+    with pytest.raises(gpu_tracer.Unsupported):
+        ray_device.trial(_arguments(reference, "vector"))
+    assert calls == [True, True, "released"]
+
+
 @pytest.mark.parametrize("name", ["vector", "vector_split", "secondary"])
 def test_shared_rays_add_up_to_one_run(reference, monkeypatch, name) -> None:
     """With every share traced on the CPU (the GPU declining them), sharing gives what
@@ -283,7 +303,7 @@ def test_shared_rays_on_both_devices_add_up_to_one_run(reference, monkeypatch, n
 
     taken: list[int] = []
 
-    def on_gpu(*, total, **values):
+    def on_gpu(*, total, keep=False, **values):
         taken.append(values["rays"])
         share = values["rays"] / total
         target = np.asarray(values["split_target"]) * (total / values["rays"])
@@ -293,7 +313,7 @@ def test_shared_rays_on_both_devices_add_up_to_one_run(reference, monkeypatch, n
         return tuple(part)
 
     monkeypatch.setattr(gpu_tracer, "trace_stochastic", on_gpu)
-    # Enough rays for parts on both: the GPU's are 4096 rays at least.
+    # Enough rays for several parts on each.
     values = _arguments(reference, name) | {"rays": 20_000}
     plan = ray_device.Plan("both", cpu_rate=1.0, gpu_rate=1.0)
     found, followed = ray_device.trace(plan, values)
@@ -305,6 +325,33 @@ def test_shared_rays_on_both_devices_add_up_to_one_run(reference, monkeypatch, n
         np.testing.assert_allclose(
             late_results(found)[key], value, rtol=1e-6, atol=1e-300, err_msg=key
         )
+
+
+@pytest.mark.parametrize("count", [500, 4_500, 45_000])
+def test_each_device_takes_its_share_of_every_call(reference, monkeypatch, count) -> None:
+    """A call of few rays, as each batch of the late part makes, is shared by the
+    devices' rates too: the GPU takes no more than its share at a time, so a CPU as fast
+    traces the other half however few the rays."""
+    monkeypatch.setattr(os, "cpu_count", lambda: 5)
+    taken: dict[str, list[int]] = {"cpu": [], "gpu": []}
+
+    def tracer(device: str, seconds: float):
+        def trace(*, total=None, **values):
+            taken[device].append(values["rays"])
+            time.sleep(seconds)
+            arrays = np.zeros(3), np.zeros(0), np.zeros(0)
+            return *arrays, 0, np.zeros(2), np.zeros(2), values["rays"]
+
+        return trace
+
+    monkeypatch.setattr(_native, "trace_stochastic", tracer("cpu", 0.0))
+    monkeypatch.setattr(gpu_tracer, "trace_stochastic", tracer("gpu", 0.05))
+    values = _arguments(reference, "vector") | {"rays": count, "threads": 5}
+    # As fast on the four CPU threads beside the one that keeps the GPU busy.
+    plan = ray_device.Plan("both", cpu_rate=5.0, gpu_rate=4.0)
+    found, followed = ray_device.trace(plan, values)
+    assert followed == plan and found[-1] == sum(taken["cpu"]) + sum(taken["gpu"]) == count
+    assert max(taken["gpu"], default=0) <= math.ceil(count / 2) <= sum(taken["cpu"]) + 1
 
 
 def test_a_run_the_gpu_declines_says_where_it_went(reference, machine, monkeypatch) -> None:

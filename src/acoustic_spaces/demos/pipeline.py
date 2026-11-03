@@ -18,6 +18,7 @@ through a spherical head cannot pass for one through the listener's own ears.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import math
 import os
@@ -146,6 +147,47 @@ def output_label(args: argparse.Namespace) -> str:
     return hrtf_label(getattr(args, "format", "binaural"), getattr(args, "hrtf", None))
 
 
+def output_named(label: str, outputs: Sequence = ()):
+    """The output (``scene.Output``) that ``label`` (``--format``) names: the first of
+    ``outputs`` (a scene's) whose format (``ambisonics``) or label (``ambix3``, ``5.0``,
+    ``binaural-me``, as ``simulate`` writes it) it is; else the format with its
+    defaults (``mono``, ``binaural``, ``ambisonics`` of order 1), ``ambix<order>`` or a
+    named layout (``5.0``, ``7.0.4``...). ValueError for any other."""
+    from acoustic_spaces.scene import Output
+    from acoustic_spaces.spatial import LAYOUTS, MAX_ORDER, from_output
+
+    for output in outputs:
+        if output.format == "binaural":
+            named = hrtf_label("binaural", output.hrtf)  # without reading the SOFA file
+        else:
+            named = from_output(output).label
+        if label in (output.format, named):
+            return output
+    if label in ("mono", "binaural", "ambisonics"):
+        return Output.model_validate(label)
+    if label in LAYOUTS:
+        return Output(format="loudspeakers", layout=label)
+    order = label.removeprefix("ambix")
+    if order != label and order.isascii() and order.isdigit() and int(order) <= MAX_ORDER:
+        return Output(format="ambisonics", order=int(order))
+    if label == "loudspeakers":
+        raise ValueError(
+            "loudspeakers needs a layout: give one (" + ", ".join(LAYOUTS) + ") or give "
+            "the scene a loudspeaker output"
+        )
+    raise ValueError(
+        f"unknown format {label!r}: give mono, binaural, ambisonics, ambix0 to "
+        f"ambix{MAX_ORDER}, a layout ({', '.join(LAYOUTS)}) or the format of an output of "
+        "the scene"
+    )
+
+
+def scene_hrtf(outputs: Sequence) -> Path | None:
+    """The HRTFs (a SOFA file) that the binaural output of a scene (its ``outputs``)
+    names, or None."""
+    return next((o.hrtf for o in outputs if o.format == "binaural" and o.hrtf), None)
+
+
 def label_text(label: str | None) -> str:
     """An output (:func:`output_label`) in words, as mixes are made: ``binaural through
     a spherical head model``, ``binaural through the HRTFs of me`` (``binaural-me``, the
@@ -160,11 +202,55 @@ def label_text(label: str | None) -> str:
     return f"as {label}"
 
 
+def output_arg(label: str) -> str | None:
+    """How ``simulate --output`` spells the output a mix label (``--format``) names:
+    ``ambisonics:3`` for ``ambix3``, ``loudspeakers:5.0`` for the layout ``5.0``; None
+    for ``speakers``, a layout of the scene's own, which only the scene's outputs can
+    name; any other as it is (``binaural``, ``mono``)."""
+    from acoustic_spaces.spatial import LAYOUTS
+
+    order = label.removeprefix("ambix")
+    if order != label and order.isascii() and order.isdigit():
+        return f"ambisonics:{order}"
+    if label in LAYOUTS:
+        return f"loudspeakers:{label}"
+    return None if label == "speakers" else label
+
+
+def weights_of(label: str, scene: Path | None = None) -> np.ndarray | None:
+    """The weights of the channels of a mix of the output ``label`` (as the results
+    label their outputs, :func:`output_label`) in the meters (:func:`audio.channel_weights`):
+    of AmbiX (``ambix<order>``), of a named loudspeaker layout, or of ``speakers``, the
+    layout of the scene's own (``scene``, the scene file); None (every channel weighs 1)
+    for the rest, mono, binaural and microphones."""
+    from acoustic_spaces.spatial import LAYOUTS, Ambisonics, Loudspeakers
+
+    if label.startswith("ambix") and label.removeprefix("ambix").isdigit():
+        return audio.channel_weights(Ambisonics(int(label.removeprefix("ambix"))))
+    if label in LAYOUTS:
+        return audio.channel_weights(Loudspeakers.layout(label))
+    if label == "speakers":  # the label of a layout of the scene's own (Loudspeakers.name)
+        from acoustic_spaces.scene import Scene
+        from acoustic_spaces.spatial import from_output
+
+        outputs = [] if scene is None else Scene.from_yaml(scene).outputs
+        own = next((o for o in outputs if o.speakers is not None), None)
+        if own is None:
+            raise ValueError(
+                f"the mixes are of the output {label!r}, a layout of a scene's own, but "
+                f"{scene or 'no scene'} has none: give the scene the mixes were simulated from"
+            )
+        return audio.channel_weights(from_output(own))
+    return None
+
+
 def simulate_argv(simulation: Simulation, hrtf: str | Path | None = None) -> list[str]:
-    """The arguments of ``acoustic-spaces simulate`` for a simulation."""
+    """The arguments of ``acoustic-spaces simulate`` for a simulation, its output as
+    ``--output`` spells it (:func:`output_arg`)."""
     argv = ["simulate", str(simulation.scene), "--out", str(simulation.results)]
-    if simulation.output:
-        argv += ["--output", simulation.output]
+    output = output_arg(simulation.output) if simulation.output else None
+    if output:
+        argv += ["--output", output]
     if hrtf:
         argv += ["--hrtf", str(hrtf)]
     return argv
@@ -392,7 +478,8 @@ def render_mixes(
     """Every mix as ``folder/<key>.<format>.wav``, with one gain for all (the loudest
     peak at -1 dBFS), and ``folder/seats.json``: the rate, the format, the output
     (``label``, :func:`output_label`), the gain and each mix's ``lag_s`` (when its sound
-    arrives), ``rms_db`` (gated, A-weighted), ``loudness_db`` (K-weighted),
+    arrives), ``rms_db`` (gated, A-weighted), ``loudness_db`` (K-weighted), each the sum
+    of the mix's channel powers as BS.1770 adds them (:func:`weights_of`),
     ``relative_db`` (against the loudest), length and the ``inputs`` it played.
     ``inputs`` (``--input``) replaces the feeds of the sources it names
     (:func:`with_inputs`). ``post`` changes each mix as it is made, before the
@@ -447,6 +534,7 @@ def render_mixes(
     gain = 10.0 ** (-1.0 / 20.0) / max(peaks.values())
     info: dict[str, dict] = {}
     lags: dict[tuple, float] = {}
+    meters = {s: weights_of(label, s) for s in {mix.simulation.scene for mix in mixes}}
     for mix in mixes:
         out = path_of(mix)
         x = audio.read(out)[0] * (gain / old_gain if keep[mix.key] else gain)
@@ -460,8 +548,8 @@ def render_mixes(
         info[mix.key] = {
             "listener": mix.listener,
             "lag_s": lags[where],
-            "rms_db": audio.level_db(x, rate),
-            "loudness_db": audio.loudness_db(x, rate),
+            "rms_db": audio.level_db(x, rate, meters[mix.simulation.scene]),
+            "loudness_db": audio.loudness_db(x, rate, meters[mix.simulation.scene]),
             "length_s": len(x) / rate,
             **mix.info,
         }
@@ -521,6 +609,48 @@ class TourStop:
         return self.at + self.length
 
 
+def ears_of(
+    label: str, rate: int, scene: str | Path | None = None
+) -> Callable[[np.ndarray], np.ndarray]:
+    """How the tour hears a mix of the format ``label`` (``--format``, as ``seats.json``
+    keeps it) at ``rate``: a function of the mix (samples, channels) that gives it at the
+    two ears. One channel plays in both and two as they are (binaural, a stereo
+    microphone pair, the stereo layout); more are decoded to the ears
+    (:func:`~acoustic_spaces.spatial.decoder.binaural_filters`), Ambisonics through the
+    binaural decoder of its order and a loudspeaker layout as virtual speakers, through
+    the HRTFs the binaural output of ``scene`` (its file) names, or the spherical head
+    model. The format is the scene's output of that format or label, or the one the
+    label names (:func:`output_named`)."""
+    from acoustic_spaces.render import Convolver
+
+    @functools.cache
+    def decoder() -> tuple[str, np.ndarray]:
+        from acoustic_spaces.scene import Scene
+        from acoustic_spaces.spatial import Binaural, from_output, read_sofa
+        from acoustic_spaces.spatial.decoder import binaural_filters
+
+        outputs = Scene.from_yaml(scene).outputs if scene is not None else []
+        fmt = from_output(output_named(label, outputs))
+        hrtf = scene_hrtf(outputs)
+        heard = Binaural(None if hrtf is None else read_sofa(hrtf))
+        return fmt.label, binaural_filters(fmt, heard.at(rate))
+
+    def ears(x: np.ndarray) -> np.ndarray:
+        if x.ndim == 1 or x.shape[1] <= 2:
+            return audio.stereo(x)
+        name, filters = decoder()
+        if x.shape[1] != filters.shape[1]:
+            raise ValueError(
+                f"a mix of {label} has {x.shape[1]} channels, and {name} has "
+                f"{filters.shape[1]}: mix the stops again"
+            )
+        # Each channel through its own pair of responses, summed per ear, in 32-bit
+        # floats as the tour is written; a new convolver, so no mix hears the last.
+        return Convolver(filters, 4096).run(x).astype(np.float64)
+
+    return ears
+
+
 def tour_audio(
     stops: Sequence[TourStop],
     folder: Path,
@@ -529,9 +659,12 @@ def tour_audio(
     crossfade_s: float = 1.0,
     fade_out_s: float = 4.0,
     peak_db: float | None = -1.0,
+    scene: str | Path | None = None,
     kind: str | None = None,
 ) -> np.ndarray:
-    """The tour as stereo: each stop's mix shifted earlier by its arrival (``lag_s`` in
+    """The tour at the two ears: each stop's mix as the ears hear it (:func:`ears_of`,
+    Ambisonics and loudspeaker mixes decoded through the HRTFs of ``scene``, the scene's
+    file, or the spherical head model) shifted earlier by its arrival (``lag_s`` in
     ``seats``) so the music runs on across a cut, turned up as the stop is, crossfades
     of ``crossfade_s`` centred on the cuts between joined stops, a quarter sine
     (:func:`~acoustic_spaces.render.crossfaded`: the power runs on, however alike the
@@ -546,9 +679,11 @@ def tour_audio(
     ramp = np.sin(np.linspace(0.0, np.pi / 2, 2 * half))
     joined = [stops[k].joined_after and stops[k + 1].joined_before for k in range(len(stops) - 1)]
     previous: np.ndarray | None = None  # the stop before, when it is joined to this one
+    ears = ears_of(fmt, rate, scene)
     for k, stop in enumerate(stops):
         seat = seats["seats"][stop.key]
-        x = audio.stereo(audio.read(folder / f"{stop.key}.{kind or fmt}.wav")[0])
+        x = audio.read(folder / f"{stop.key}.{kind or fmt}.wav")[0]
+        x = audio.stereo(x) if kind else ears(x)
         offset = round((stop.at - stop.start) * rate)  # the mix's start in the tour
         x = audio.shifted(x, round(seat.get("lag_s", 0.0) * rate) - offset, length)
         if kind is None:
@@ -598,17 +733,28 @@ def picked_tour(tour: Sequence[tuple], keep: Callable[[tuple], bool]) -> list[tu
     return out
 
 
+#: The most a tour turns a stop up by (dB): a stop further than that under the loudest
+#: is turned up by this much and stays quieter by the rest, rather than having its faint
+#: remains and its noise raised all the way.
+MOST_GAIN_DB = 40.0
+
+
 def gains_of(seats: dict, keys: Sequence[str]) -> dict[str, float]:
     """The gain (dB) each mix of a tour plays at: up to the loudness of the loudest one,
     K-weighted (``loudness_db``), not A-weighted as the levels are: the bass, which the A
     weighting all but leaves out, is heard, and far places and the back of a stage keep
-    little else. Mixes measured before ``loudness_db`` was kept fall back on ``rms_db``."""
+    little else. Mixes measured before ``loudness_db`` was kept fall back on ``rms_db``.
+    No stop is turned up by more than :data:`MOST_GAIN_DB`, and a silent one (at the
+    meters' floor, ``audio.db(0)``, -240 dB) not at all: it has no loudness to match."""
     levels = {}
     for key in keys:
         seat = seats["seats"][key]
         levels[key] = seat.get("loudness_db", seat["rms_db"])
-    top = max(levels.values())
-    return {key: top - level for key, level in levels.items()}
+    top, silent = max(levels.values()), audio.db(0.0)
+    return {
+        key: 0.0 if level <= silent else min(top - level, MOST_GAIN_DB)
+        for key, level in levels.items()
+    }
 
 
 def missing_mixes(seats: dict, keys: Sequence[str], hint: str) -> None:
@@ -644,7 +790,10 @@ def video(
     for k, (name, duration) in enumerate(frames):
         path = stills / f"{k:02d}_{name}.png"
         draw(k).convert("RGB").save(path, optimize=True)
-        lines += [f"file '{path.resolve().as_posix()}'", f"duration {duration:.3f}"]
+        # Quoted for the concat demuxer, as a shell quotes: ' ends the quote, \' is an
+        # apostrophe, and ' starts it again.
+        quoted = path.resolve().as_posix().replace("'", "'\\''")
+        lines += [f"file '{quoted}'", f"duration {duration:.3f}"]
     lines.append(lines[-2])  # the concat demuxer needs the last picture again
     (stills / "stills.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"wrote {len(frames)} stills to {stills}")
@@ -798,6 +947,7 @@ def _encode(progress, length_s: float, shown: Callable[[float], str] | None) -> 
 
 __all__ = [
     "INPUTS",
+    "MOST_GAIN_DB",
     "PARAMETERS",
     "SEATS",
     "SPECTRUM_BOX",
@@ -809,25 +959,30 @@ __all__ = [
     "arrival_s",
     "auralize",
     "credited",
+    "ears_of",
     "gains_of",
     "hrtf_label",
     "label_text",
     "input_feed",
     "labels_of",
     "missing_mixes",
+    "output_arg",
     "output_label",
+    "output_named",
     "outputs_of",
     "picked_tour",
     "read_json",
     "render_mixes",
     "response_rate",
     "responses_of",
+    "scene_hrtf",
     "seats_of",
     "simulate_argv",
     "simulate_command",
     "simulated",
     "tour_audio",
     "video",
+    "weights_of",
     "with_inputs",
     "write_json",
     "write_scene",

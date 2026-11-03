@@ -18,19 +18,24 @@ acoustic-spaces pack hall/scene.yaml hall.zip
 ```
 
 writes the scene and every file it names: its model, terrain, buildings map, material
-libraries and coefficient files, directivity files, the WAV files sources play and HRTFs,
-with the files those name in turn (a `.gltf` model's buffers and images, a loudspeaker
-array's element data). It lists what went in and their sizes. Files under the scene's folder keep their place
-relative to it; files elsewhere go under `external/<their folder>/`. The scene file in
-the pack names them all relatively, so the pack runs wherever it is unpacked. The
-editor does the same from **File > Pack for another computer**, also for a scene not yet
-saved. The zip is written as `hall.zip.part` and takes the name only once it is
-complete, so a pack that fails leaves an earlier `hall.zip` as it was.
+libraries and coefficient files, directivity files, the WAV files sources play, the
+scene's recording file and HRTFs, with the files those name in turn (a `.gltf` model's
+buffers and images, a loudspeaker array's element data). It lists what went in and their
+sizes. Files under the scene's folder keep their place relative to it; files elsewhere
+go under `external/<their folder>/`. The scene file in the pack names them all
+relatively, so the pack runs wherever it is unpacked. The editor does the same from
+**File > Pack for another computer**, also for a scene not yet saved. The zip is written
+as `hall.zip.part` and takes the name only once it is complete, so a pack that fails
+leaves an earlier `hall.zip` as it was.
 
-A scene with problems (a listener outside the room, surfaces without a material) is
-not packed, as `simulate` would not run it either; warnings are shown. A file that
-names one outside its own folder (`../shared/element.csv` in an array's YAML) cannot
-keep its place in a pack: move that file next to it.
+A scene with problems (a listener outside the room, surfaces without a material) is not
+packed, as `simulate` would not run it either; warnings are shown. A file that names one
+outside its own folder (`../shared/element.csv` in an array's YAML) cannot keep its
+place in a pack: move that file next to it. A file whose name holds `:` or `\`, which
+Windows refuses and unpacking refuses everywhere, is not packed, nor are two files, or a
+file and a folder, whose names macOS or Windows take for one: names that differ only in
+case (on macOS also `straße` and `strasse`), or in the way a letter is encoded (é as one
+character, or as e and an accent, which macOS alone takes for one). Rename them.
 
 Every command that reads a scene takes a pack in its place: `simulate`, `map`,
 `validate`, `inspect`, `calibrate`, `walkthrough`, `export`, `view`, `animate` and

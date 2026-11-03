@@ -189,7 +189,7 @@ output through a SOFA file is written as `binaural-<file name>`
 (`talker__seat-a.binaural-kemar.wav` for `kemar.sofa`), so that it and the spherical head's can be written together; `--format
 binaural` finds it when it is the only binaural one. Dry signals are mixed down to
 mono, as sources are points, and resampled to the response's rate. The results are
-32-bit float WAV files; `--normalize` scales them to a -1 dBFS peak.
+32-bit float WAV files (RF64 past 4 GiB); `--normalize` scales them to a -1 dBFS peak.
 
 `play` convolves in real time on the sound card (it needs the `measure` extra). The
 compiled convolver adds no latency beyond one `--block` of frames (256 by default, 5.3
@@ -248,8 +248,9 @@ These anechoic recordings are free to download, and each one tests something dif
   Pätynen, Pulkki and Lokki, 2008; free for academic research; MP3, PCM on request):
   orchestral excerpts recorded one instrument at a time.
 
-The commands read WAV files only (16, 24 or 32-bit PCM, or float), so convert AIFF, FLAC
-or MP3 first, for example with `ffmpeg -i note.aiff -c:a pcm_f32le note.wav`. A dry file
+The commands read WAV files only (16, 24 or 32-bit PCM, or float; RF64 and BW64 too),
+so convert AIFF, FLAC or MP3 first, for example with
+`ffmpeg -i note.aiff -c:a pcm_f32le note.wav`. A dry file
 at another rate is resampled to the response's, with a note. A file with several
 channels is averaged to mono, so split a multitrack file into one file per source
 first; channels that are present but silent also lower the level (the BRAS files have
@@ -314,14 +315,15 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
   tests). Every place's late part is drawn from the same random sequence, so the tails
   that cross fade differ only in their level and decay, not in their noise. Once the
   walk is over, the walker stays where it ends for as long as the signals last.
-- A walking listener hears every source; a walking source is heard at `--listener`,
-  with the other sources where they stand. `--format` takes the formats of `simulate
-  --output` (by default the scene's first output, or binaural with `--hrtf`, which is
-  for binaural only) and `--video` saves the room, the path and the walker going along
-  it, with an arrow and its yaw for the way it faces, as a GIF or an MP4 (both with the
-  viz extra) at `--fps`. An MP4 carries the sound when the format has one or two
-  channels (mono, stereo, binaural) and then lasts as long as the sound; with more
-  channels, play the WAV alongside it.
+- A walking listener hears every source in use; a walking source is heard at
+  `--listener`, even one left out (`enabled: false`), by default the only listener in
+  use, with the other sources in use where they stand. `--format` takes the formats of
+  `simulate --output` (by default the scene's first output, or binaural with `--hrtf`,
+  which is for binaural only) and `--video` saves the room, the path and the walker
+  going along it, with an arrow and its yaw for the way it faces, as a GIF or an MP4
+  (both with the viz extra) at `--fps`. An MP4 carries the sound when the format has one
+  or two channels (mono, stereo, binaural) and then lasts as long as the sound; with
+  more channels, play the WAV alongside it.
 - A walker faces the way it goes (unless its walk says `face_forward: false`) and
   turns through each corner at 90 degrees per second. The gallery's visitor has the
   guide behind it all down the long arm, and at the corner turns over a second towards
