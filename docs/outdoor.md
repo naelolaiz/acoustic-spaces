@@ -1421,7 +1421,7 @@ reflections and a diffraction) is left out unless
 `simulation.early.diffraction_reflections` is `both_sides`: by default a path
 reflects before or after the edge, not both. Over a rigid ground that path carries a
 quarter of the sound over a barrier, so without it the barrier's insertion loss comes
-out up to 0.8 dB off from 1 kHz up (mostly too high, 0.7 dB too low at 2 kHz 90 m
+out up to 0.8 dB off from 1 kHz up (mostly too high, 0.8 dB too low at 2 kHz 90 m
 behind) and a few decibels off in the bands below, where the paths interfere; with it
 the engine is within 0.15 dB of the exact solution (see
 [Validation](validation.md#outdoor-results-against-exact-solutions)). Over grass and

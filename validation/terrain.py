@@ -66,6 +66,10 @@ from acoustic_spaces.materials import OCTAVE_BANDS_HZ  # noqa: E402
 SIZE, SPACING = 101, 10.0
 SLOPE = 0.6
 RIDGE_X = 500.0
+#: The ridge's exact solution is integrated over this much of its edge either way (m),
+#: with this step du (edge_diffraction.btm_first): its positions are 22 to 68 m from the
+#: edge, where the default, 40 m with du = 0.004, leaves it up to 0.2 dB off from 2 kHz up.
+RIDGE_HALF_LENGTH, RIDGE_DU = 160.0, 0.001
 
 
 def heights(fn) -> list[list[float]]:
@@ -221,7 +225,14 @@ def check_ridge() -> list[dict]:
         paths = early_paths(room)
         assert (paths.edge == CREST).all() and len(paths) == 1, paths.edge
         distance = float(np.linalg.norm(np.subtract(listener, source)))
-        btm = band_level(btm_first(edge, np.array(source), np.array(listener)), distance)
+        pressure = btm_first(
+            edge,
+            np.array(source),
+            np.array(listener),
+            du=RIDGE_DU,
+            half_length=RIDGE_HALF_LENGTH,
+        )
+        btm = band_level(pressure, distance)
         level = _level(room, source, listener)
         name = (
             f"{source[0]:g}, {source[2]:.1f} to {listener[0]:g}, {listener[1]:g}, {listener[2]:.1f}"

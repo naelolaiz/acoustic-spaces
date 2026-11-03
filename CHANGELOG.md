@@ -7,6 +7,15 @@
   place being simulated has them, on the walks the run simulates (`Demo.walks`).
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- `validation/edge_diffraction.py` checks the level on and near an edge's shadow
+  boundary through the whole early stage against the exact solution: in the bands that
+  add in energy (indoors from 250 Hz up) it is 1.73 dB low at 250 Hz and 0.38 dB at 8
+  kHz on the boundary of a right-angled corner, and 2.22 and 0.56 dB on that of a wedge
+  open over 225°, now a known issue in the validation report.
+- Fixed: the exact solutions in `validation/` that the edge diffraction is checked
+  against ran at 343.0 m/s, not at their scenes' 343.2 m/s; the published differences
+  move by up to 0.02 dB, and the terrain ridge's reference, which had not converged, by
+  up to 0.2 dB from 2 kHz up.
 
 ## 4.1.0
 
