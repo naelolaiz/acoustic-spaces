@@ -210,8 +210,8 @@ def late_call(
     from acoustic_spaces import _native
 
     def cpu(workers: int) -> float:
-        copies = min(workers, max(1, int(_native.COPY_MEMORY // max(group, 1.0))))
-        return (1 + copies) * group
+        # The first thread's copy takes the others' sums and is the call's result.
+        return min(workers, max(1, int(_native.COPY_MEMORY // max(group, 1.0)))) * group
 
     peaks = [cpu(workers)]
     if "gpu" in devices or "both" in devices:

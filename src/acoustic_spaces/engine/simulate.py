@@ -27,7 +27,7 @@ from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.turbulence import Eddies
 from acoustic_spaces.geometry import distance_to_surface
 from acoustic_spaces.parameters import RoomParameters
-from acoustic_spaces.room import Room
+from acoustic_spaces.room import Room, every_left_out
 from acoustic_spaces.scene import Scene
 from acoustic_spaces.scene.model import Simulation as SimulationSettings
 from acoustic_spaces.spatial.directions import fibonacci_sphere
@@ -155,7 +155,7 @@ def _pick(items, names, kind):
     if names is None:
         used = [item for item in items if item.in_use]
         if items and not used:
-            raise ValueError(f"every {kind} is left out (enabled: false)")
+            raise ValueError(every_left_out(kind))
         return used
     by_name = {item.name: item for item in items}
     missing = [n for n in names if n not in by_name]
@@ -469,9 +469,13 @@ def simulate(
     """Simulate the room's impulse responses as set in ``scene.simulation``.
 
     ``room`` may be a :class:`Room`, a :class:`Scene` or a scene file. ``sources`` and
-    ``listeners`` pick names from the scene (all by default). ``threads`` overrides
+    ``listeners`` pick names from the scene, simulated even when left out
+    (``enabled: false``); by default, those in use. ``threads`` overrides
     ``simulation.performance.threads`` (0 uses every core). Raises ``ValueError`` if
-    :meth:`Room.problems` reports anything or there is no listener to simulate.
+    :meth:`Room.problems` reports anything (it checks the sources and listeners in use,
+    not those left out, named or not; every source, or every listener, left out is a
+    problem when they are not named), if a name is not the scene's, or if there is no
+    listener to simulate.
 
     ``groups`` (the group of each face, or -1;
     :func:`~acoustic_spaces.engine.reweight.face_groups`) keeps in each response the
@@ -494,7 +498,11 @@ def simulate(
     of a walking source, which would otherwise each run the equation anew.
     """
     room = _as_room(room)
-    problems = room.problems()
+    # Sources or listeners named are simulated even when left out.
+    unnamed = [
+        kind for kind, names in (("sources", sources), ("listeners", listeners)) if names is None
+    ]
+    problems = room.problems(in_use=unnamed)
     if problems:
         raise ValueError("; ".join(problems))
     scene = room.scene
