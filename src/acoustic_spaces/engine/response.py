@@ -18,9 +18,12 @@ from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, band_centres, resol
 
 #: The synthesized late part is smoothed over 10 ms from this long after the direct sound.
 SMOOTH_AFTER_S = 0.05
-#: Stage support is given for listeners at most this far from the source (m); ISO 3382-1
-#: measures it at 1 m.
-STAGE_DISTANCE_M = 1.5
+#: Stage support is measured this far from the source (m): ISO 3382-1:2009, annex C (after
+#: Gade's ST1). It is given only for listeners within ``STAGE_TOLERANCE_M`` of it: its
+#: first 10 ms hold the direct sound, whose energy goes as 1 / r^2, so a listener r m away
+#: reads it up to 20 lg r dB off, 0.9 dB at 0.9 m and 0.8 dB at 1.1 m.
+STAGE_DISTANCE_M = 1.0
+STAGE_TOLERANCE_M = 0.1
 
 
 @dataclass
@@ -323,8 +326,9 @@ class Response:
 
         Those of a figure of eight with its null on the source (LF, LFC, LJ) and the
         decay times of figures of eight along the listener's axes come from the
-        directions the energy arrives from; stage support only for a listener within
-        ``STAGE_DISTANCE_M`` of the source. IACC needs a binaural response:
+        directions the energy arrives from; stage support only for a listener 0.9 to
+        1.1 m from the source (``STAGE_DISTANCE_M`` and ``STAGE_TOLERANCE_M``), as the
+        standard measures it 1 m away. IACC needs a binaural response:
         :func:`~acoustic_spaces.parameters.interaural_cross_correlation`. Outdoors (with
         :attr:`free_field`), G of a band that does not decay as a room's does is that of
         the energy the response holds.
@@ -348,11 +352,18 @@ class Response:
             self.time_step,
             self.direct_delay_s,
             reference_energy=self._reference(),  # free field at 10 m
-            stage=(self.direct_delay_s - self.feed_delay_s) * self.speed_of_sound
-            <= STAGE_DISTANCE_M,
+            stage=self._at_stage_distance(),
             open_air=self.free_field is not None,
             **directions,
         )
+
+    def _at_stage_distance(self) -> bool:
+        """Whether the listener is close enough to 1 m from the source for stage support:
+        the direct sound's path (its time, the feed's delay taken off) within
+        ``STAGE_TOLERANCE_M`` of ``STAGE_DISTANCE_M``, to a nanometre, which a distance
+        taken through a delay and back can miss by."""
+        distance = (self.direct_delay_s - self.feed_delay_s) * self.speed_of_sound
+        return abs(distance - STAGE_DISTANCE_M) <= STAGE_TOLERANCE_M + 1e-9
 
     def standard_errors(self) -> iso3382.RoomParameters | None:
         """The standard error of each of :meth:`parameters` from the late rays' batches
@@ -431,6 +442,27 @@ class Response:
         elif power.shape != (len(OCTAVE_BANDS_HZ),):
             raise ValueError("give the sound power in all or per octave band")
         return power + params.g + 10.0 * math.log10(1.0 / (4.0 * math.pi * 100.0))
+
+    def levels_or_held(
+        self,
+        level_db: float | Sequence[float] = 94.0,
+        parameters: iso3382.RoomParameters | None = None,
+    ) -> np.ndarray:
+        """:meth:`levels`, but in a band whose G is undefined (the few rays that reach a
+        far place may carry no energy in it, or too little of its decay to read), the
+        level of the energy the response holds from the direct sound's arrival, as
+        outdoors: -inf where none arrives. The level a listener is given in
+        ``simulate``'s report, the editor's results, the demos' captions and each place
+        of :func:`~acoustic_spaces.walkthrough.pass_by`; the coverage maps and
+        :meth:`speech` leave such a band undefined."""
+        params = self.parameters() if parameters is None else parameters
+        if not np.isfinite(params.g).all():
+            energy = self.octave_energy()
+            first = min(int(self.direct_delay_s / self.time_step), energy.shape[1] - 1)
+            with np.errstate(divide="ignore"):
+                held = 10.0 * np.log10(energy[:, first:].sum(axis=1) / self._reference())
+            params = dataclasses.replace(params, g=np.where(np.isfinite(params.g), params.g, held))
+        return self.levels(level_db, params)
 
     def speech(
         self,

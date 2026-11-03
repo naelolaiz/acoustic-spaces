@@ -58,7 +58,15 @@ from acoustic_spaces.demos import (
     listeners_option,
     pipeline,
 )
-from acoustic_spaces.demos.audio import gated_rms, level_db, loudness_db, mono, read, resampled
+from acoustic_spaces.demos.audio import (
+    channel_weights,
+    gated_rms,
+    level_db,
+    loudness_db,
+    mono,
+    read,
+    resampled,
+)
 from acoustic_spaces.demos.audio import write as write_wav
 
 #: The source of the examples that drives past.
@@ -1207,8 +1215,8 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
         seats[name] = {
             "listener": name,
             "lag_s": 0.0,
-            "rms_db": level_db(mix, rate),
-            "loudness_db": loudness_db(mix, rate),
+            "rms_db": level_db(mix, rate, channel_weights(fmt)),
+            "loudness_db": loudness_db(mix, rate, channel_weights(fmt)),
             "length_s": len(mix) / rate,
         }
     label = pipeline.output_label(args)
@@ -1344,7 +1352,9 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     seats = pipeline.seats_of(folder, demo.command("walk", args), args)
     facts = heard_only(args, facts, demo.command("walk", args))
     stops = stops_of(facts, seats, demo.command("walk", args))
-    audio = pipeline.tour_audio(stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0)
+    audio = pipeline.tour_audio(
+        stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0, scene=args.scene
+    )
     write_wav(args.work / "tour.wav", audio, seats["rate"])
     print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
     if facts.get("shaker"):

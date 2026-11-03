@@ -213,7 +213,7 @@ def combine(spec: LongTerm, runs: dict[str, SimulationResult], scene: Scene) -> 
     for key in runs[names[0]].responses:
         power = sources[key[0]].power_db("octave") if key[0] in sources else 94.0
         responses = [runs[name].responses[key] for name in names]
-        per_class = np.array([r.levels(power) for r in responses])  # (classes, bands)
+        per_class = np.array([r.levels_or_held(power) for r in responses])  # (classes, bands)
         per_period = period_levels(per_class, shares)
         mean = mean_level(per_period, hours)
         period_a = a_weighted(per_period)
@@ -224,13 +224,15 @@ def combine(spec: LongTerm, runs: dict[str, SimulationResult], scene: Scene) -> 
         if all(r.free_field is not None for r in responses):
             # The free field of each class (the air differs with the ground's
             # temperature), combined the same way.
-            free = per_class - np.array([r.relative_to_free_field() for r in responses])
+            with np.errstate(invalid="ignore"):  # NaN in a band no sound arrives in
+                free = per_class - np.array([r.relative_to_free_field() for r in responses])
             free_mean = mean_level(period_levels(free, shares), hours)
             out.re_free_field[key] = mean - free_mean
             out.re_free_field_a[key] = float(a_weighted(mean) - a_weighted(free_mean))
         losses = [runs[name].insertion_loss.get(key) for name in names]
         if all(loss is not None for loss in losses):
-            bare = mean_level(period_levels(per_class + np.array(losses), shares), hours)
+            with np.errstate(invalid="ignore"):  # NaN in a band no sound arrives in
+                bare = mean_level(period_levels(per_class + np.array(losses), shares), hours)
             out.insertion_loss[key] = bare - mean
             out.insertion_loss_a[key] = float(a_weighted(bare) - a_weighted(mean))
     return out

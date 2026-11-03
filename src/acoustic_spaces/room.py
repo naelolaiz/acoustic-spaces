@@ -8,14 +8,19 @@ sanity-checked before any ray is traced.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 import numpy as np
 
-from acoustic_spaces.air import energy_attenuation_per_m, speed_of_sound
+from acoustic_spaces.air import (
+    STATED_F_OVER_P,
+    energy_attenuation_per_m,
+    speed_of_sound,
+    stated_pressures_kpa,
+)
 from acoustic_spaces.directivity import (
     FAR_FIELD_HZ,
     Directivity,
@@ -51,6 +56,12 @@ ON_SURFACE_M = MERGE_TOLERANCE_M
 #: of the smallest one sized for the room (``late.RADIUS_RANGE``) catches a hundredth of
 #: the rays or fewer: a listener that close to a surface gets a noisy late part.
 NEAR_SURFACE_SHARE = 0.1
+
+
+def every_left_out(kind: str) -> str:
+    """The problem of a scene whose every ``kind`` (source, listener) is left out with
+    ``enabled: false``, for a run that takes those in use."""
+    return f"every {kind} is left out (enabled: false)"
 
 
 def _label_text(label: tuple[str, ...]) -> str:
@@ -335,10 +346,18 @@ class Room:
             out[_label_text(self.mesh.labels[label_id])] = float(areas[mask].sum())
         return out
 
-    def problems(self) -> list[str]:
+    def problems(self, in_use: Collection[str] = ("sources", "listeners")) -> list[str]:
         """Issues that would make a simulation wrong; fix these first. Sources and
-        listeners left out (``enabled: false``) are not checked."""
-        out = []
+        listeners left out (``enabled: false``) are not checked, but every one of them
+        left out is a problem for the kinds in ``in_use``: those a run takes as the scene
+        has them in use, rather than by name (a map takes no listeners)."""
+        out = [
+            every_left_out(kind[:-1])
+            for kind in ("sources", "listeners")
+            if kind in in_use
+            and getattr(self.scene, kind)
+            and not any(item.in_use for item in getattr(self.scene, kind))
+        ]
         unassigned = self.unassigned_labels()
         if unassigned:
             listed = ", ".join(f"{name} ({area:.1f} m2)" for name, area in unassigned.items())
@@ -452,6 +471,7 @@ class Room:
             out.append(f"assignment {key!r} matches no name in the geometry")
         for name, material in self.scene.materials.items():
             out.extend(f"material {name!r}: {note}" for note in material.clipped)
+        out.extend(self._air_pressure())
         out.extend(self._near_arrays())
         out.extend(self._near_surfaces())
         out.extend(self._unheard_microphones())
@@ -460,6 +480,22 @@ class Room:
         out.extend(self._run_size())
         out.extend(self._wave_grid())
         return out
+
+    def _air_pressure(self) -> list[str]:
+        """A pressure at which some band's frequency over pressure leaves the range
+        ISO 9613-1:1993 (clause 7) states the air absorption's accuracy for."""
+        bands = self.scene.simulation.bands
+        pressure = self.scene.air.pressure_kpa
+        low, high = stated_pressures_kpa(bands)
+        if low <= pressure <= high:
+            return []
+        kind = "octave" if bands == "octave" else "third-octave"
+        least, most = STATED_F_OVER_P
+        return [
+            f"air.pressure_kpa is {pressure:g} kPa: ISO 9613-1:1993 (clause 7) states the "
+            f"accuracy of the air absorption for {least:g} to {most:g} Hz/Pa of frequency "
+            f"over pressure, which in {kind} bands is {low:.3g} to {high:.4g} kPa"
+        ]
 
     def _unheard_microphones(self) -> list[str]:
         """Listeners with a pattern in a scene whose outputs leave out mono, the only one
