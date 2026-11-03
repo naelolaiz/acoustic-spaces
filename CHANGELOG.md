@@ -173,10 +173,10 @@
 - Fixed: the wave solver's figures of eight (X, Y and Z: the low end's direction in
   spatial outputs, and LF, LFC and LJ) came out 0.2 to 0.5 dB weak in the highest band;
   a fourth-order gradient and the velocity integral's gain divided out bring them within
-  0.06 dB of a point source's 2 and 4 m away (0.12 dB with the 7-point stencil). Within
-  three cells of the source they now depend more on where it lies in its cell (0.5 m
-  away along a grid axis 0.5 to 6.1 dB lower at 63 Hz), and at seat-a in the shoebox
-  example LJ rises by 0.14 and 0.49 dB at 63 and 125 Hz.
+  0.04 dB of a point source's 4 m away along a grid axis or a diagonal, with either
+  stencil. Within three cells of the source they now depend more on where it lies in its
+  cell (0.5 m away along a grid axis 0.5 to 6.1 dB lower at 63 Hz), and at seat-a in the
+  shoebox example LJ rises by 0.14 and 0.49 dB at 63 and 125 Hz.
 - Outdoor models make the wave solver's grid once per source instead of twice: a grid
   without the matched layer (with `scheme: auto` the isotropic stencil's), made only to
   find that the sky lets the sound out, is gone (the street example's set-up at 63 Hz
