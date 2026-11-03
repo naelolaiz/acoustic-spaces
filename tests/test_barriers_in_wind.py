@@ -158,7 +158,7 @@ def test_the_paths_in_the_plane_take_the_weather_s_effect(runs) -> None:
     its energy too) and comes as much sooner as the first of them."""
     still = early_paths(scene(atmosphere=None))
     windy = early_paths(scene())
-    assert len(windy) == len(still) and np.all(windy.edge >= 0)
+    assert np.all(windy.edge >= 0)
     # Over the top (the plane's y = 0), not round the ends.
     plane = [i for i in range(len(still)) if abs(still.points[i][-2][1]) < 1e-6]
     assert len(plane) >= 4  # the four paths over the top, off the ground or not
@@ -173,9 +173,10 @@ def test_the_paths_in_the_plane_take_the_weather_s_effect(runs) -> None:
 
 
 def test_the_paths_round_an_end_take_the_open_ground_s_effect_on_both_sides(runs) -> None:
-    """Listeners either side of the shadow boundary of the barrier's end: the path
-    round the end takes the weather's effect over the open ground (2 here) in the bands
-    of the open ground's parabolic equation, on both sides, and its leg's shadow only
+    """Listeners either side of the shadow boundary of the barrier's end: the paths
+    round the end take the weather's effect over the open ground (2 here) in the bands
+    of the open ground's parabolic equation, on both sides, delayed alike there (so that
+    they keep their phases in still air), and their legs' own times and shadows only
     above them."""
     barrier = {"name": "screen", "path": [[15, -20], [15, 0]], "height": 4}
     listeners = ((60.0, -1.0, 1.5), (60.0, 1.0, 1.5))
@@ -191,12 +192,19 @@ def test_the_paths_round_an_end_take_the_open_ground_s_effect_on_both_sides(runs
             for i in range(len(a))
             if any(np.allclose(c[:2], [15.0, 0.0]) for c in a.points[i][1:-1])
         ]
-        assert ends, name
+        assert len(ends) >= 2, name  # off the ground or not
+        shifts, times = [], []
         for i in ends:
-            j = int(np.flatnonzero(b.distance_m == a.distance_m[i])[0])
-            np.testing.assert_allclose(b.energy[j, open_bands], 2.0 * a.energy[i, open_bands])
-            # Downwind the leg has no shadow above them.
-            np.testing.assert_allclose(b.energy[j, ~open_bands], a.energy[i, ~open_bands])
+            rows = np.flatnonzero(b.distance_m == a.distance_m[i])
+            energy = b.energy[rows].sum(axis=0)
+            np.testing.assert_allclose(energy[open_bands], 2.0 * a.energy[i, open_bands])
+            # Downwind the legs have no shadow above them.
+            np.testing.assert_allclose(energy[~open_bands], a.energy[i, ~open_bands])
+            low = rows[b.energy[rows][:, open_bands].sum(axis=1) > 0.0]
+            high = rows[b.energy[rows][:, ~open_bands].sum(axis=1) > 0.0]
+            shifts.append(float(b.delay_s[low[0]] - a.delay_s[i]))
+            times.append(float(b.delay_s[high[0]] - a.delay_s[i]))
+        assert np.ptp(shifts) < 1e-12 and np.ptp(times) > 1e-5
 
 
 def test_a_breath_of_wind_behind_a_barrier_is_still_air() -> None:

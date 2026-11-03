@@ -34,6 +34,18 @@ Building v1 from `wip/barrier-pe-design.md`, following its one-day plan (section
   effect, with an acceptance table. The full-wave solution reproduces design A's numbers to 0.01 dB (near
   screen, rigid ground, 125 Hz); the engine's error there is 0.03-0.08 dB (A: 0.06-0.09). Full runs going.
 
+- Changed from the design (D7): the paths round ends keep their phases in still air in the open ground's
+  bands, delayed by one shared shift (the first of them's), times the open ground's effect; their legs' own
+  times and shadows apply only above those bands. With each leg's own time kept there (the design), the
+  weather changed how the pair round an end (off the ground and not) adds up a second time, on top of the
+  open ground's effect, which already holds it: at a barrier end's shadow boundary 120 m downwind the level
+  stepped by 13.7 dB at 500 Hz per 0.1 m; now 5.8 dB (main: 16.8; still air: 0.8).
+- Barrier-end continuity (V5) misses its 1 dB target: per 0.1 m across an end's shadow boundary, 60 and 120 m
+  behind a 4 m barrier, up to 5.8 dB downwind and 24 dB upwind (2 kHz, deep in the shadow) in the open
+  ground's bands, and up to 21 dB above them, where the paths round the end keep main's straight legs (main:
+  up to 69 dB). Still air (main's, unchanged): up to 4.5 dB at 63 Hz, where the paths over the top end with
+  the barrier.
+
 ## Open
 
 V3 runs (full-wave cases, started PE 125 Hz-8 kHz, then the engine end to end); V1 (still air bit-identical:

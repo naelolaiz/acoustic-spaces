@@ -405,7 +405,10 @@ class Refraction:
             request.part = 0
         # The paths round the ends of barriers and the corners of buildings, and over
         # other edges, take the weather's effect on the open ground (that of the
-        # listener's own way) where the parabolic equation gives the sound over it.
+        # listener's own way) where the parabolic equation gives the sound over it:
+        # there they keep their phases in still air, delayed as much as the first of
+        # them (the effect holds how the weather changes their sum), and their legs'
+        # own times and shadows in the bands above.
         ends = [i for i in bent if paths.edge[i] >= 0] if request is not None else []
         if ends:
             bent = [i for i in bent if paths.edge[i] < 0]
@@ -413,7 +416,17 @@ class Refraction:
             out.append(self._legs(paths[np.array(sorted(bent))]))
         if ends:
             plain = request.open_bands if isinstance(request, _Barrier) else request.bands
-            out.append(self._legs(paths[np.array(sorted(ends))], plain=plain))
+            rows = paths[np.array(sorted(ends))]
+            if not plain.all():
+                legs = self._legs(rows)
+                out.append(dataclasses.replace(legs, energy=np.where(plain, 0.0, legs.energy)))
+            first = rows.points[int(np.argmin(rows.delay_s))]
+            shift = sum(self._leg(a, b)[1] for a, b in zip(first[:-1], first[1:], strict=True))
+            out.append(
+                dataclasses.replace(
+                    rows, energy=np.where(plain, rows.energy, 0.0), delay_s=rows.delay_s + shift
+                )
+            )
             request.ends = len(out) - 1
         return out, request
 
