@@ -224,16 +224,18 @@ def check_wave() -> dict:
     grass, c = run({"impedance": "grass"})
     rigid, _ = run({"absorption": [0.0] * 8, "scattering": 0.0})
     rate = grass.rate
+    lead = round(grass.lead_s * rate)  # the runs start that many samples before emission
     r1, r2 = math.hypot(r, zr - zs), math.hypot(r, zr + zs)
-    # Up to 25 ms after the reflection, before anything off the grid's edges arrives.
+    # From emission up to 25 ms after the reflection, before anything off the grid's
+    # edges arrives.
     n = int(rate * (r2 / c + 0.025))
     window = np.ones(n)
     taper = int(rate * 0.008)
     window[-taper:] = 0.5 * (1.0 + np.cos(np.linspace(0.0, np.pi, taper)))
     size = 1 << 16
     f = np.fft.rfftfreq(size, 1.0 / rate)
-    over = np.fft.rfft(grass.signals[:n, 0] * window, size)
-    under = np.fft.rfft(rigid.signals[:n, 0] * window, size)
+    over = np.fft.rfft(grass.signals[lead : lead + n, 0] * window, size)
+    under = np.fft.rfft(rigid.signals[lead : lead + n, 0] * window, size)
     print(
         f"The wave solver over grass over a rigid ground, {r:g} m, "
         f"heights {zs:g} and {zr:g} m (dB)\n"

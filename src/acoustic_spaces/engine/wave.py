@@ -123,9 +123,11 @@ LAYER_DAMPING = 0.5
 #: away), and the rays' response stays.
 LOW_EDGE_HZ = OCTAVE_BANDS_HZ[0] / (2.0 * math.sqrt(2.0))
 #: Length of the source's low-pass (taps; odd), which keeps the grid free of the
-#: frequencies it cannot carry.
+#: frequencies it cannot carry, and its cutoff (of the grid's sample rate) with the
+#: 7-point stencil; it scales with the stencil's Courant number (0.3 with the 19-point
+#: one), so that the top of the highest band lies as far below it with either.
 _LOW_PASS_TAPS = 33
-_LOW_PASS_CUTOFF = 0.2  # of the grid's sample rate
+_LOW_PASS_CUTOFF = 0.2
 #: Runs of more cell updates than this (a few seconds' work) report their progress.
 _LONG_RUN = 2e9
 
@@ -217,16 +219,24 @@ def band_grid(
     return BandGrid(band, speed_of_sound / (courant * rate), rate)
 
 
+def _cutoff(courant: float) -> float:
+    """The source's low-pass cutoff (of the grid's sample rate) on the grid of the
+    stencil whose Courant number is ``courant``."""
+    return _LOW_PASS_CUTOFF * courant / COURANT
+
+
 def source_signal(rate: float, cell: float, courant: float = COURANT) -> tuple[np.ndarray, int]:
     """What the source adds to the grid on each step, and its delay in steps.
 
     An impulse, low-passed (so the grid carries no frequencies it cannot) and
     high-passed twice (so it leaves no air in the room), scaled so that in free field the
-    pressure at r metres is that impulse over r.
+    pressure at r metres is that impulse over r. ``courant`` is the stencil's Courant
+    number, which sets the low-pass's cutoff too (:func:`_cutoff`).
     """
     half = _LOW_PASS_TAPS // 2
     k = np.arange(-half, half + 1)
-    low = 2 * _LOW_PASS_CUTOFF * np.sinc(2 * _LOW_PASS_CUTOFF * k) * np.blackman(_LOW_PASS_TAPS)
+    cutoff = _cutoff(courant)
+    low = 2 * cutoff * np.sinc(2 * cutoff * k) * np.blackman(_LOW_PASS_TAPS)
     low /= low.sum()
     length = max(3, int(round(HIGH_PASS_S * rate)))
     window = np.hanning(length + 2)[1:-1]
@@ -242,8 +252,8 @@ class WaveResponse:
     solver.
 
     ``signals`` holds the run at ``rate``: the pressure and the first-order directional
-    parts (samples, 4), AmbiX W, X, Y and Z in room coordinates, from emission on. Only
-    the frequencies of the wave bands count.
+    parts (samples, 4), AmbiX W, X, Y and Z in room coordinates, from ``lead_s`` before
+    emission on. Only the frequencies of the wave bands count.
     """
 
     rate: float
@@ -254,6 +264,9 @@ class WaveResponse:
     cell: float
     #: How many bands the whole response has: 8 octave or 24 third-octave bands.
     total_bands: int = len(OCTAVE_BANDS_HZ)
+    #: How long before emission ``signals`` start (s): the source's pulse is centred on
+    #: emission, so a listener near the source hears it start before then.
+    lead_s: float = 0.0
     #: The energy gain of each wave band from the source's feed, or None for none.
     band_gain: np.ndarray | None = None
     #: How long after emission the source starts playing (s).
@@ -269,30 +282,34 @@ class WaveResponse:
     def _amplitudes(self) -> np.ndarray:
         return np.ones(self.bands) if self.band_gain is None else np.sqrt(self.band_gain)
 
-    def _resampled(self, sample_rate: float, n: int) -> np.ndarray:
-        """The run at ``sample_rate``, n samples long (n, 4), from emission; still
-        broadband."""
+    def _resampled(self, sample_rate: float, n: int) -> tuple[np.ndarray, int]:
+        """The run at ``sample_rate`` (before + n, 4), still broadband, and ``before``:
+        how many of its samples come before emission (those of the run that do)."""
         from acoustic_spaces.render import resample
 
         key = (float(sample_rate), int(n))
         if key not in self._cache:
-            out = np.zeros((n, 4))
-            start = min(int(round(self.delay_s * sample_rate)), n)
+            # Where the run starts, in samples from emission.
+            start = int(round(self.delay_s * sample_rate)) - int(round(self.lead_s * sample_rate))
+            before = max(0, -start)
+            out = np.zeros((before + n, 4))
             # Impulse responses scale with the sample period: an impulse of height a at
             # one rate is a * rate / sample_rate at another.
-            x = resample(self.signals, self.rate, sample_rate)[: n - start]
-            out[start : start + len(x)] = x * (self.rate / sample_rate)
-            self._cache = {key: out}
+            x = resample(self.signals, self.rate, sample_rate)[: max(0, n - start)]
+            out[before + start : before + start + len(x)] = x * (self.rate / sample_rate)
+            self._cache = {key: (out, before)}
         return self._cache[key]
 
     def field(self, sample_rate: float, n: int) -> np.ndarray:
-        """The first-order sound field (n, 4) of the wave bands together: W, X, Y, Z."""
-        run = self._resampled(sample_rate, n)
-        n_fft = synthesis.fft_size(n, sample_rate)
+        """The first-order sound field (n, 4) of the wave bands together, from emission:
+        W, X, Y, Z. The bands' filters take the run before emission too, and what they
+        spread to before emission is left out, as it is of the rays' sound."""
+        run, before = self._resampled(sample_rate, n)
+        n_fft = synthesis.fft_size(len(run), sample_rate)
         gains = wave_gains(n_fft, sample_rate, self.bands, self.total_bands)
         gain = (gains * self._amplitudes()[:, None]).sum(axis=0)
         spectrum = np.fft.rfft(run, n_fft, axis=0) * gain[:, None]
-        return np.fft.irfft(spectrum, n_fft, axis=0)[:n]
+        return np.fft.irfft(spectrum, n_fft, axis=0)[before : before + n]
 
     def high_pass(self, signals: np.ndarray, sample_rate: float, late: bool = False) -> np.ndarray:
         """``signals`` (n, channels) without the frequencies the wave bands cover, which
@@ -323,18 +340,21 @@ class WaveResponse:
         from acoustic_spaces.parameters import band_filter_gains
 
         out = np.zeros((self.bands, slots))
-        lead = int(round(synthesis._PAD_S * self.rate))
-        n_fft = synthesis.fft_size(len(self.signals) + lead, self.rate)
+        pad = int(round(synthesis._PAD_S * self.rate))
+        n_fft = synthesis.fft_size(len(self.signals) + pad, self.rate)
         gains = band_filter_gains(n_fft, self.rate, self.total_bands)[: self.bands]
         weights = np.full(gains.shape[1], 2.0)
         weights[0] = weights[-1] = 1.0
-        time = (np.arange(len(self.signals) + lead) - lead) / self.rate + self.delay_s
+        # Each sample's time from emission (whole steps counted first, so that a sample
+        # on a slot's edge falls in the same slot whatever the lead).
+        lead = int(round(self.lead_s * self.rate))
+        time = (np.arange(len(self.signals) + pad) - pad - lead) / self.rate + self.delay_s
         slot = np.maximum(time / time_step, 0).astype(np.int64)
         amplitude = self._amplitudes()
         keep = slot < slots
-        padded = np.concatenate([np.zeros(lead), self.signals[:, 0]])
+        padded = np.concatenate([np.zeros(pad), self.signals[:, 0]])
         if axis is not None:
-            figure8 = np.concatenate([np.zeros(lead), self.signals[:, 1:] @ axis])
+            figure8 = np.concatenate([np.zeros(pad), self.signals[:, 1:] @ axis])
         for b, gain in enumerate(gains):
             pressure = _filter(padded, gain, n_fft)
             share = float((gain**2 * weights).sum() / n_fft)
@@ -520,12 +540,16 @@ class _Weather:
         return speeds.reshape(-1), fx.reshape(-1), fy.reshape(-1)
 
 
+#: Points each listener takes the pressure at (see :func:`_probe_points`).
+_PROBES = 13
+
+
 def _probe_points(listener: np.ndarray, cell: float) -> np.ndarray:
-    """The listener and a point one cell to either side along each axis."""
-    offsets = np.vstack(
-        [np.zeros(3), np.repeat(np.eye(3), 2, axis=0) * np.tile([1, -1], 3)[:, None]]
-    )
-    return listener[None, :] + cell * offsets
+    """The listener, the points one cell to either side of it along each axis (+x, -x,
+    +y, -y, +z, -z), then those two cells to either side, in the same order:
+    :data:`_PROBES` points."""
+    steps = np.repeat(np.eye(3), 2, axis=0) * np.tile([1, -1], 3)[:, None]
+    return listener[None, :] + cell * np.vstack([np.zeros(3), steps, 2 * steps])
 
 
 def _in_sight(bvh, listeners: np.ndarray, probes: np.ndarray) -> np.ndarray:
@@ -548,15 +572,24 @@ def _in_sight(bvh, listeners: np.ndarray, probes: np.ndarray) -> np.ndarray:
 
 
 def _first_order(
-    probes: np.ndarray, found: Sequence[bool], name: str, courant: float = COURANT
+    probes: np.ndarray,
+    found: Sequence[bool],
+    name: str,
+    courant: float = COURANT,
+    cutoff: float = _LOW_PASS_CUTOFF,
 ) -> np.ndarray:
-    """W, X, Y, Z (samples, 4) from the pressure at the listener and round it.
+    """W, X, Y, Z (samples, 4) from the pressure at the listener and round it, at the
+    :func:`_probe_points` (``probes``, one row each).
 
-    X, Y and Z are c times the time integral of the pressure gradient (central
-    differences, or one-sided ones where a point is not ``found``: out of the air, or
-    across a surface from the listener), by the trapezoidal rule so that they fall on
-    the pressure's samples: X = -rho c u_x, against the particle velocity, so that it
-    points towards the sound (as in AmbiX). ``courant`` is the Courant number of the
+    X, Y and Z are c times the time integral of the pressure gradient: X = -rho c u_x,
+    against the particle velocity, so that it points towards the sound (as in AmbiX).
+    The gradient is a central difference of fourth order over two cells either side,
+    (8 (p(h) - p(-h)) - (p(2h) - p(-2h))) / 12h, of second order where a point two cells
+    away is not ``found`` (out of the air, or across a surface from the listener), and
+    one-sided where a point one cell away is not. The integral is the trapezoidal rule,
+    so that it falls on the pressure's samples, with the rule's gain, (wT/2) / tan(wT/2),
+    divided out up to ``cutoff`` (of the sample rate), the source's low-pass's cutoff:
+    above it the source gives next to nothing. ``courant`` is the Courant number of the
     speed of sound at the listener.
     """
     if not found[0]:
@@ -567,6 +600,8 @@ def _first_order(
         plus, minus = 1 + 2 * axis, 2 + 2 * axis
         if found[plus] and found[minus]:
             difference = 0.5 * (probes[plus] - probes[minus])
+            if found[plus + 6] and found[minus + 6]:
+                difference = difference * (4 / 3) - (probes[plus + 6] - probes[minus + 6]) / 12
         elif found[plus]:
             difference = probes[plus] - probes[0]
         elif found[minus]:
@@ -574,6 +609,13 @@ def _first_order(
         else:
             continue
         out[:, 1 + axis] = courant * (np.cumsum(difference) - 0.5 * difference)
+    n_fft = 1 << int(math.ceil(math.log2(2 * len(out) + 1)))
+    turn = np.pi * np.fft.rfftfreq(n_fft)  # wT / 2
+    gain = np.ones(len(turn))
+    below = (turn > 0) & (turn <= np.pi * cutoff)
+    gain[below] = np.tan(turn[below]) / turn[below]
+    spectrum = np.fft.rfft(out[:, 1:], n_fft, axis=0) * gain[:, None]
+    out[:, 1:] = np.fft.irfft(spectrum, n_fft, axis=0)[: len(out)]
     return out
 
 
@@ -805,14 +847,20 @@ def wave_responses(
     h = grid.cell
     signal, delay = source_signal(grid.rate, h, courant)
     samples = int(math.ceil(length_s * grid.rate))
-    steps = samples + delay  # the source's term on step n stands for its value at time n
+    # The run starts `lead` steps before emission, where the source's pulse starts (or a
+    # little before, so that the lead is a whole number of the output's samples), and
+    # keeps all of it: a listener within `delay` steps' travel of the source hears it
+    # start before emission.
+    whole = max(1, round(grid.rate / sample_rate))  # steps per output sample, at least 1
+    lead = -(-delay // whole) * whole
+    steps = lead + samples  # the source's term on step n stands for its value at step n
     drive = np.zeros(steps, np.float32)
-    drive[: min(len(signal), steps)] = signal[:steps]
+    drive[lead - delay : lead - delay + len(signal)] = signal[: steps - lead + delay]
     # Before any step: a listener outside the source's air, or a source closed in. A
     # point round a listener counts only where the listener sees it.
     found = [solver.probe_found(p) for p in range(len(probes))]
     found = (np.array(found) & _in_sight(bvh, listeners, probes)).tolist()
-    missing = [listener for i, listener in enumerate(names) if not found[7 * i]]
+    missing = [listener for i, listener in enumerate(names) if not found[_PROBES * i]]
     if missing:
         air, volume = solver.air_cells * h**3, model.room.volume_m3
         if volume and air < 0.1 * volume:
@@ -851,7 +899,6 @@ def wave_responses(
             if c:
                 say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
             recorded[:, bounds[c] : bounds[c + 1]] = stepper.run(drive[bounds[c] : bounds[c + 1]])
-    run = recorded[:, delay:][:, :samples]
     info: dict[str, float] = {
         "wave_cells": float(solver.air_cells),
         "wave_cell_m": h,
@@ -882,14 +929,15 @@ def wave_responses(
     )
     responses = []
     for i, listener in enumerate(names):
-        part = slice(7 * i, 7 * i + 7)
+        part = slice(_PROBES * i, _PROBES * (i + 1))
         local = courant  # the Courant number at the listener
         if weather is not None:
             # In moving air the still air's (the wind's share of the gradient is left out).
             here = weather.still_at(listeners[i]) if moving else weather.at(listeners[i])[0]
             local *= float(here) / (courant * h * grid.rate)
-        signals = _first_order(run[part], found[part], listener, local)
-        responses.append(WaveResponse(grid.rate, signals, bands, h, total))
+        # X, Y and Z from the first step on, where the grid is still at rest.
+        signals = _first_order(recorded[part], found[part], listener, local, _cutoff(courant))
+        responses.append(WaveResponse(grid.rate, signals, bands, h, total, lead / grid.rate))
     return responses, info
 
 

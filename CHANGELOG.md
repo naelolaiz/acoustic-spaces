@@ -12,8 +12,25 @@
   low end of Ambisonics, binaural and loudspeaker outputs and LF and LFC in the wave
   bands came out wrong there; it now takes it on the listener's side. 0.1 m in front of
   a rigid screen the figure of eight facing it falls from 0.6 to 6.2 dB below the
-  pressure in the 63 Hz band with the 7-point stencil (from 0.4 dB above to 14.9 dB
+  pressure in the 63 Hz band with the 7-point stencil (from 0.4 dB above to 14.7 dB
   below with the 19-point one), as in front of a solid block.
+- Fixed: the wave solver's responses started at emission, though the source's pulse is
+  centred on it, so listeners within 16 time steps' travel of the source (2.7 m on the
+  default grid) lost the pulse's start; they now keep it. 0.5 m from the source the
+  direct sound falls by up to 0.4 dB at 63 Hz and the figures of eight's ratio to it
+  moves by up to 1.4 dB; from 2 m on nothing moves by more than 0.01 dB.
+- Fixed: the wave solver's source cut off at a fifth of the grid's sample rate with
+  either stencil, which took up to 1.6 dB off the top of the highest band with the
+  19-point stencil (whose time step is 1.5 times as long) at 5 cells per wavelength; the
+  cutoff now scales with the time step (that band rises there by up to 0.13 dB, and by
+  0.003 dB at most at the default 8 cells per wavelength).
+- Fixed: the wave solver's figures of eight (X, Y and Z: the low end's direction in
+  spatial outputs, and LF, LFC and LJ) came out 0.2 to 0.5 dB weak in the highest band;
+  a fourth-order gradient and the velocity integral's gain divided out bring them within
+  0.06 dB of a point source's 2 and 4 m away (0.12 dB with the 7-point stencil). Within
+  three cells of the source they now depend more on where it lies in its cell (0.5 m
+  away along a grid axis 0.5 to 6.1 dB lower at 63 Hz), and at seat-a in the shoebox
+  example LJ rises by 0.14 and 0.49 dB at 63 and 125 Hz.
 - Outdoor models make the wave solver's grid once per source instead of twice: a grid
   without the matched layer (with `scheme: auto` the isotropic stencil's), made only to
   find that the sky lets the sound out, is gone (the street example's set-up at 63 Hz

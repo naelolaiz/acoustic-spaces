@@ -204,11 +204,17 @@ request and checks:
   of the grid's theory from 30 to 250 Hz); admittances fitted to four kinds of material
   (within 0.01 of their absorption in every band, passive); the free-field level of the
   63 Hz band (within 0.3 dB of the rays), the arrival time and direction of the direct
-  sound and the strength of its first-order field against a point source's (within 0.6
-  dB at 2 and 4 m, with either stencil), the gradient at a listener just in front of a
-  thin screen taken on the listener's side, as in front of a solid block (within 1 dB),
-  open models and thin screens (stable, and the sound leaves), the matched layer round
-  an open model (what comes back 40 dB down or more, against a grid too large for
+  sound and the strength of its first-order field against a point source's (within 0.06
+  dB 4 m away along a grid axis, a face diagonal and a body diagonal, with either
+  stencil), the part of the source's pulse before emission kept for a listener near the
+  source (the direct sound's band energies 0.5 and 1 m away within 0.01 dB whatever the
+  source's low-pass), the source flat to the top of the highest band at 5 cells per
+  wavelength (within 0.05 dB), the gradient's second-order and one-sided differences
+  where a point two cells or one cell from the listener is missing (exactly), the
+  gradient at a listener just in front of a thin screen and at one 1.5 cells in front of
+  it, taken on the listeners' side, as in front of a solid block (within 1 dB and 0.5
+  dB), open models and thin screens (stable, and the sound leaves), the matched layer
+  round an open model (what comes back 40 dB down or more, against a grid too large for
   anything to come back; stable for 9,500 steps), one run for bands with their own
   absorption, and the level of the late part across the crossover to the rays (flat
   within 1 dB in sixth octaves);
@@ -3699,15 +3705,21 @@ reflection, which the grid returns whole at every frequency:
 | 7-point: wave solver | 0.030 | 0.022 | 0.022 | 0.037 | 0.075 | 0.136 | 0.254 | 0.353 | 0.540 | 0.566 |
 | 19-point: normal-incidence absorption, fitted admittance | 0.030 | 0.022 | 0.022 | 0.037 | 0.072 | 0.143 | 0.268 | 0.346 | 0.532 | 0.659 |
 | 19-point: the grid's theory | 0.030 | 0.022 | 0.022 | 0.036 | 0.072 | 0.142 | 0.262 | 0.338 | 0.509 | 0.651 |
-| 19-point: wave solver | 0.030 | 0.022 | 0.022 | 0.037 | 0.072 | 0.142 | 0.263 | 0.339 | 0.509 | 0.651 |
+| 19-point: wave solver | 0.030 | 0.023 | 0.022 | 0.037 | 0.073 | 0.140 | 0.265 | 0.341 | 0.507 | 0.647 |
 
-(Each stencil has its own time step, so its own fit.) The wave solver matches the
-grid's theory (a plane wave on the grid, the wall half a cell past the last cell
-centres) within 0.005 with the 7-point stencil and within 0.001 with the 19-point one,
-from 30 to 720 Hz. That half cell takes a little of the absorption away as the
-wavelength shortens: within 0.015 (7-point) and 0.009 (19-point) of the fitted
-admittance's below 360 Hz, 0.027 and 0.023 less at 500 Hz with 14 cells per
-wavelength. The fit does not correct for it.
+(Each stencil has its own time step, so its own fit.) The wave solver matches the grid's
+theory (a plane wave on the grid, the wall half a cell past the last cell centres)
+within 0.005 with the 7-point stencil and within 0.007 with the 19-point one, from 30 to
+720 Hz. Most of the 19-point stencil's difference is the analysis's: its source reaches
+up to waves near the most the grid carries, which travel slowly enough for the windows
+that cut out the incident wave and end the runs to cut them. The rigid end, which the
+grid returns whole, measures up to 1.1 % from 1 below 500 Hz and 1.3 % at 707 Hz (0.24 %
+below 500 Hz with the source's low-pass at 0.2 of the sample rate instead of 0.3), and
+with the runs low-passed to 0.15 of the sample rate before the windows the difference
+falls to 0.003. The half cell between the last cell centres and the wall takes a little
+of the absorption away as the wavelength shortens: within 0.015 (7-point) and 0.013
+(19-point) of the fitted admittance's below 360 Hz, 0.027 and 0.025 less at 500 Hz with
+14 cells per wavelength. The fit does not correct for it.
 
 **Open models.** Round a model whose air reaches the edge of the grid, the grid grows
 by a perfectly matched layer (split-field, its damping growing as the square of the
@@ -3738,11 +3750,17 @@ the grid's set-up, where 2.0.0 ran one per band. Timed on its own, the same grid
 2.9 s with the walls' six branches and in 1.9 s with constant walls: the branches cost
 about 50 % more than a run with constant walls, and save three runs.
 
-**Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's
-energy in the 63 and 125 Hz bands at 1 to 8 m is within 0.2 dB of the free-field level
-the rays give with the 19-point stencil (−0.07 to +0.04 dB at 63 Hz, +0.05 to +0.20 dB
-at 125 Hz), and within 0.35 dB with the 7-point one (−0.05 to −0.13 dB at 63 Hz, −0.16
-to −0.33 dB at 125 Hz).
+**Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's energy
+in the 63 and 125 Hz bands at 1 to 8 m along x from the source is within 0.2 dB of the
+free-field level the rays give with the 19-point stencil (−0.05 to +0.04 dB at 63 Hz,
++0.05 to +0.20 dB at 125 Hz), and within 0.35 dB with the 7-point one (−0.05 to −0.13 dB
+at 63 Hz, −0.16 to −0.33 dB at 125 Hz). That is for one place of the source within its
+cell: the source covers the eight cells round it, weighted trilinearly (see
+[Simulation](simulation.md#low-frequencies-the-wave-solver)). Over 18 places within a
+cell, with listeners at the same distances along the grid's 26 axes and diagonals (in a
+34 m cube, so that no reflection comes sooner after the direct sound than here), the
+19-point stencil gives −0.09 to +0.11 dB at 63 Hz and −0.19 to +0.35 dB at 125 Hz, the
+7-point one −0.15 to +0.11 dB and −0.55 to +0.24 dB.
 
 **A whole room.** A 7 x 5 x 3 m box with 15 % absorption on every surface, simulated
 with the wave solver switched on at its default settings (the 63 and 125 Hz bands,
