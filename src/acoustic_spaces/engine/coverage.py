@@ -878,8 +878,9 @@ def coverage_map(
     share their points (:func:`~acoustic_spaces.engine.insertion.coverage_map`).
     """
     room = _as_room(room)
-    # Listeners play no part in a map.
-    problems = [p for p in room.problems() if not p.startswith("listener ")]
+    # Listeners play no part in a map; sources named are mapped even when left out.
+    problems = room.problems(in_use=("sources",) if sources is None else ())
+    problems = [p for p in problems if not p.startswith("listener ")]
     if problems:
         raise ValueError("; ".join(problems))
     scene = room.scene

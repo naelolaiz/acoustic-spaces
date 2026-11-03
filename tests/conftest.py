@@ -1,3 +1,4 @@
+import dataclasses
 import sys
 import types
 
@@ -123,3 +124,17 @@ def skip_without_extra(name: str) -> None:
     missing = next(e.missing_extra for e in list_examples() if e.name == name)
     if missing:
         pytest.skip(f"the {name} example needs the {missing} extra")
+
+
+def silenced(response, bands: list[int]):
+    """``response`` (an engine Response) with no sound in the octave ``bands`` (their
+    indices), as at a far place the few rays reach."""
+    early = dataclasses.replace(response.early, energy=response.early.energy.copy())
+    early.energy[:, bands] = 0.0
+    late, batches = response.late.copy(), response.late_batches.copy()
+    late[bands], batches[:, bands] = 0.0, 0.0
+    directional = response.late_directional.copy()
+    directional[:, bands] = 0.0
+    return dataclasses.replace(
+        response, early=early, late=late, late_batches=batches, late_directional=directional
+    )

@@ -58,7 +58,15 @@ from acoustic_spaces.demos import (
     listeners_option,
     pipeline,
 )
-from acoustic_spaces.demos.audio import gated_rms, level_db, loudness_db, mono, read, resampled
+from acoustic_spaces.demos.audio import (
+    channel_weights,
+    gated_rms,
+    level_db,
+    loudness_db,
+    mono,
+    read,
+    resampled,
+)
 from acoustic_spaces.demos.audio import write as write_wav
 
 #: The source of the examples that drives past.
@@ -164,6 +172,11 @@ class Vehicle:
     sound_file, info_file = CAR_FILE, CAR_INFO
     #: The demo's step that makes its sound.
     sound_step = "sound"
+    #: Whether walk.json and the stills give its pass as a sound level meter with slow
+    #: time weighting reads it too, as an aircraft's is measured for ECAC Doc 29: its
+    #: L_ASmax and its SEL over the 10 dB-down time
+    #: (:attr:`~acoustic_spaces.walkthrough.PassBy.slow_a`).
+    slow_weighted = False
 
     def options(self) -> list[Option]:
         """The options of its own, for the step that makes its sound."""
@@ -1175,6 +1188,10 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
             "leq_a_db": round(level.equivalent_a, 2),
             "closest_m": round(float(distances.min()), 2),
         }
+        if vehicle.slow_weighted:
+            slow = level.slow_a
+            heard[name]["max_as_db"] = round(slow.max_db, 2)
+            heard[name]["sel_10db_down_a_db"] = round(slow.exposure_db, 2)
         if any(part != indoors.RUMBLE for part in heard_parts):
             heard[name]["pitch_semitones"] = round(
                 pitch_change(points, position, None if vehicle.timed else speed, c), 3
@@ -1207,8 +1224,8 @@ def walk(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> No
         seats[name] = {
             "listener": name,
             "lag_s": 0.0,
-            "rms_db": level_db(mix, rate),
-            "loudness_db": loudness_db(mix, rate),
+            "rms_db": level_db(mix, rate, channel_weights(fmt)),
+            "loudness_db": loudness_db(mix, rate, channel_weights(fmt)),
             "length_s": len(mix) / rate,
         }
     label = pipeline.output_label(args)
@@ -1344,7 +1361,9 @@ def video(demo: Demo, args: argparse.Namespace, vehicle: Vehicle = THE_CAR) -> N
     seats = pipeline.seats_of(folder, demo.command("walk", args), args)
     facts = heard_only(args, facts, demo.command("walk", args))
     stops = stops_of(facts, seats, demo.command("walk", args))
-    audio = pipeline.tour_audio(stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0)
+    audio = pipeline.tour_audio(
+        stops, folder, seats, crossfade_s=0.0, fade_out_s=0.0, scene=args.scene
+    )
     write_wav(args.work / "tour.wav", audio, seats["rate"])
     print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
     if facts.get("shaker"):

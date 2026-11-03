@@ -10,6 +10,7 @@ their recordings this way and the editor its HRTF sets.
 
 from __future__ import annotations
 
+import http.client
 import io
 import os
 import shutil
@@ -102,6 +103,10 @@ class RangeFile(io.RawIOBase):
                         data = response.read()
                     if len(data) == b - a + 1:
                         break
+                # How http.client ends a body cut short when it reads it whole: no
+                # OSError, but a block arriving short all the same.
+                except http.client.IncompleteRead as exc:
+                    data = exc.partial
                 except OSError:
                     if attempt == RETRIES - 1:
                         raise
@@ -137,7 +142,8 @@ def open_zip(url: str, block: int = RangeFile.BLOCK) -> zipfile.ZipFile:
     return zipfile.ZipFile(io.BufferedReader(RangeFile(url, block), 1 << 20))
 
 
-def _copy(source, target, total: int | None, progress: Progress | None) -> None:
+def _copy(source, target, total: int | None, progress: Progress | None) -> int:
+    """Copy ``source`` to ``target`` in chunks: the bytes copied."""
     done = 0
     while True:
         chunk = source.read(CHUNK)
@@ -147,17 +153,33 @@ def _copy(source, target, total: int | None, progress: Progress | None) -> None:
         done += len(chunk)
         if progress is not None:
             progress(done, total)
+    return done
 
 
 def download(url: str, path: str | Path, progress: Progress | None = None) -> Path:
-    """Download ``url`` to ``path`` (its folders made), through a ``.part`` file."""
+    """Download ``url`` to ``path`` (its folders made), through a ``.part`` file. A body
+    shorter than the length the server announced, or sent in chunks and cut short
+    before the last, is refused with an ``OSError`` and its ``.part`` file removed, so
+    that a download cut short leaves no file that looks whole."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     part = path.with_name(path.name + ".part")
     try:
         with urlopen(url) as response, part.open("wb") as target:
             length = response.headers.get("Content-Length")
-            _copy(response, target, int(length) if length else None, progress)
+            total = int(length) if length else None
+            try:
+                done = _copy(response, target, total, progress)
+            # How http.client ends a body sent in chunks cut short: no OSError.
+            except http.client.IncompleteRead:
+                raise OSError(
+                    f"{url}: the download ended before its last chunk; try again"
+                ) from None
+            # http.client ends a body of a length announced cut short without an error,
+            # and reads one sent in chunks by its chunks, whatever Content-Length says.
+            chunked = response.headers.get("Transfer-Encoding") is not None
+            if total is not None and not chunked and done != total:
+                raise OSError(f"{url}: the download ended after {done} of {total} bytes; try again")
     except BaseException:
         part.unlink(missing_ok=True)
         raise

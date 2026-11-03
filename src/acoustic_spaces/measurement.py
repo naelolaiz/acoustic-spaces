@@ -141,7 +141,11 @@ def deconvolve(
 
     ``recording`` is (samples,) or (samples, channels), starting when playback started.
     Each repeat is deconvolved and the repeats are averaged. ``length_s`` defaults to
-    the silence after each sweep. ``reference`` replaces the generated sweep, for
+    the silence after each sweep, and a longer one is cut. With repeats, it is cut to
+    the silence: the next sweep's harmonic distortion lands right after it. With one
+    sweep, it is cut to the recording's length less the sweep's, beyond which the
+    recording lacks the response's high frequencies; for a recording as long as the
+    excitation, that is the silence too. ``reference`` replaces the generated sweep, for
     instance with a loopback recording of one sweep: (samples,) or (samples, 1), as
     :func:`~acoustic_spaces.audio.read_wav` gives a mono file.
     """
@@ -153,12 +157,16 @@ def deconvolve(
         excitation = excitation[:, 0]
     if excitation.ndim != 1:
         raise ValueError("the reference must have one channel: (samples,) or (samples, 1)")
-    length = int(round((sweep.silence_s if length_s is None else length_s) * sweep.sample_rate))
-    length = max(1, min(length, sweep.period - int(sweep.harmonic_delay_s(2) * sweep.sample_rate)))
-
     needed = sweep.period * sweep.repeats
     if len(recording) < needed:
         recording = np.pad(recording, ((0, needed - len(recording)), (0, 0)))
+    # The next sweep's harmonic n lands L ln n before its linear response, a period on:
+    # at a lag of the silence for n = f_stop / f_start, later for lower n. A response
+    # holds frequency f up to a lag L ln(f / f_start) before the recording ends, its
+    # whole band up to a sweep's length before.
+    end = sweep.period if sweep.repeats > 1 else len(recording)
+    length = int(round((sweep.silence_s if length_s is None else length_s) * sweep.sample_rate))
+    length = max(1, min(length, end - sweep.sweep_length))
     n_fft = 1 << int(math.ceil(math.log2(len(recording) + len(excitation))))
     x = np.fft.rfft(excitation, n_fft)
     power = np.abs(x) ** 2
