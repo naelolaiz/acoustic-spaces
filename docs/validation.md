@@ -1526,21 +1526,21 @@ loss over the bands. Each pair is at 535 m / 845 m, in dB:
 | case | weather | overall, measured | published model | this package | mean difference, published model | this package |
 |---|---|---|---|---|---|---|
 | 1 | light downwind | 22.6 / 27.5 | 21.6 / 26.6 | 23.3 / 28.9 | 1.8 / 3.2 | 1.7 / 2.3 |
-| 2 | light downwind | 22.2 / 26.7 | 21.6 / 26.8 | 23.3 / 28.9 | 1.6 / 2.8 | 1.9 / 2.7 |
+| 2 | light downwind | 22.2 / 26.7 | 21.6 / 26.8 | 23.4 / 28.9 | 1.6 / 2.8 | 1.9 / 2.7 |
 | 3 | cross/downwind | 20.8 / 26.5 | 21.4 / 26.8 | 23.1 / 28.7 | 1.8 / 2.7 | 2.2 / 2.7 |
 | 4 | cross/downwind | 20.6 / 26.3 | 21.3 / 26.9 | 23.1 / 28.6 | 2.0 / 2.7 | 2.3 / 2.6 |
 | 5 | cross/upwind | 21.0 / 26.6 | 21.0 / 25.9 | 23.0 / 28.3 | 1.9 / 2.5 | 2.0 / 2.3 |
 | 6 | cross/upwind | 20.6 / 25.7 | 20.9 / 26.0 | 22.9 / 28.2 | 1.7 / 2.8 | 2.4 / 2.7 |
 | 7 | light upwind | 21.9 / 26.2 | 20.7 / 24.9 | 22.7 / 27.7 | 2.0 / 2.2 | 2.2 / 2.2 |
 | 8 | light upwind | 22.2 / 27.0 | 20.5 / 25.1 | 22.7 / 27.9 | 2.2 / 2.2 | 2.3 / 2.1 |
-| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.8 | 3.2 / 8.3 | 2.0 / 2.6 |
+| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.8 | 3.2 / 8.3 | 1.9 / 2.6 |
 | 10 | strong upwind | 23.1 / 27.2 | 19.9 / 50.0 | 22.1 / 27.9 | 3.1 / 7.7 | 2.0 / 2.5 |
 
 In the eight cases other than strong upwind (light winds, and cross winds in cases 3 to
 6), this package is about as close to the measurements as the authors' model: 1.7 to 2.4 dB per band on average at 535 m, 2.1 to 2.7 dB at 845
 m, against their 1.6 to 2.2 and 2.2 to 3.2 dB; the spread of the measurements over the
 five minutes is 1 to 3 dB. From 80 to 160 Hz this package loses more than was
-measured, 2.6 to 6.1 dB on average over those bands at 845 m and up to 4.2 dB at 535 m,
+measured, 2.6 to 6.0 dB on average over those bands at 845 m and up to 4.2 dB at 535 m,
 which puts its overall loss at 845 m 0.9 to 2.6 dB above the measured one. With the
 same inputs the authors' model loses 3.4 to 5.2 dB less than this package in those
 bands, from 4.3 dB less to 1.3 dB more than was measured. This package's parabolic
@@ -1564,11 +1564,11 @@ to 980 and 1230 m from those 119 and 167 m up (the script prints this for every 
 with a shadow), so only the lowest one is in shadow there, and the loss stays within
 about 1 dB of the measured one overall.
 
-The data gives no measure of the eddies. With `--turbulence moderate` the overall
-losses drop by up to 0.4 dB at 845 m and 0.2 dB at 535 m, as the eddies fill the ground
-dip a little; the mean differences move by 0.3 dB at most, better at 845 m in the nine
-other cases and 0.2 dB worse in case 8. In cases 9 and 10 the overall loss at 845 m comes to
-27.5 dB, against 27.4 and 27.2 measured.
+The data gives no measure of the eddies. With `--turbulence moderate` the overall losses
+drop by up to 0.4 dB at 845 m and 0.2 dB at 535 m, as the eddies fill the ground dip a
+little; the mean differences move by 0.3 dB at most, better at 845 m in the nine other
+cases and 0.2 dB worse in case 8. In cases 9 and 10 the overall loss at 845 m comes to
+27.4 and 27.5 dB, against 27.4 and 27.2 measured.
 
 ## Turbulence against a parabolic equation through random eddies
 
@@ -1791,26 +1791,24 @@ early paths alone lose (the leaves' extinction):
 | | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.03 | 0.27 | 0.59 | spread over seeds |
 
 The standard's table is empirical, for the foliage of whole woods, so this compares
-magnitudes rather than checking against an exact answer. Leaves 5 cm wide at 0.1 m²
-per m³, about a wood's trunk space with some foliage in it, take about what the table
-gives at 4 kHz (3.0 to 3.5 dB against 4.5) and more at 8 kHz (8.6 to 10.2 against 6); below
-1 kHz they take next to nothing, where the table's 1 to 3 dB are the standard's
-allowance for the whole wood, not what leaves scatter. The loss rises far more
-steeply with frequency than the table, and with the leaves' area and width, as
-measurements in dense foliage do (Aylor 1972 measured the loss through reeds and corn
-rising by several decibels per octave above 500 Hz): a leaf scatters once its size
-nears the wavelength, so wider
-leaves take hold at lower frequencies, and leaves 2 cm wide hardly matter below
+magnitudes rather than checking against an exact answer. Leaves 5 cm wide at 0.1 m² per
+m³, about a wood's trunk space with some foliage in it, take about what the table gives
+at 4 kHz (3.0 to 3.5 dB against 4.5) and more at 8 kHz (8.6 to 10.2 against 6); below 1
+kHz they take next to nothing, where the table's 1 to 2.5 dB are the standard's
+allowance for the whole wood, not what leaves scatter. The loss rises far more steeply
+with frequency than the table, and with the leaves' area and width, as measurements in
+dense foliage do (Aylor 1972 measured the loss through reeds and corn rising by several
+decibels per octave above 500 Hz): a leaf scatters once its size nears the wavelength,
+so wider leaves take hold at lower frequencies, and leaves 2 cm wide hardly matter below
 8 kHz. What the leaves scatter comes back as late sound, so a listener loses far less
-than the early paths do (the extinction row): with 1 m² per m³ the early paths lose
-165 dB at 8 kHz and the listener 40 to 44, the rest arriving scattered. Behind
-dense leaves at 4 and 8 kHz what arrives is the rare ray that slips through, so the
-level takes many rays to settle: with 100,000 rays (`--rays 100000`) it swings by up to
-22 dB from one seed to another at 8 kHz, with 10 million the seeds agree within
-1.7 dB. No measurement of a known leaf area and width was available to check
-against; the bridge between the disc's two limits, the discs standing in for real
-leaves, which flex and hang in clumps, and the single phase function per band are
-the model's assumptions.
+than the early paths do (the extinction row): with 1 m² per m³ the early paths lose 165
+dB at 8 kHz and the listener 40 to 44, the rest arriving scattered. Behind dense leaves
+at 4 and 8 kHz what arrives is the rare ray that slips through, so the level takes many
+rays to settle: with 100,000 rays (`--rays 100000`) it swings by up to 22 dB from one
+seed to another at 8 kHz, with 10 million the seeds agree within 1.7 dB. No measurement
+of a known leaf area and width was available to check against; the bridge between the
+disc's two limits, the discs standing in for real leaves, which flex and hang in clumps,
+and the single phase function per band are the model's assumptions.
 
 ## The wave solver in wind and temperature against a parabolic equation
 
@@ -2489,14 +2487,50 @@ Each band of the wide-angle equation marches a grid of twenty points per wavelen
 its highest frequency in steps of three wavelengths, ten tridiagonal solves a step,
 where the narrow-angle one takes a pair of Fourier transforms a step on a grid half as
 fine, in steps of five wavelengths: three to four times the work, all of it in the
-bands the parabolic equation gives. The narrow-angle equation's step is not converged
-for a high source (a one-off check): for one 30 m up, 180 m away, a step an eighth as
-long moves the 100 Hz band by up to 0.8 dB, so a level can also move by up to about
-0.75 dB with the other listeners in its direction, whose ranges break the run's steps;
-the wide-angle equation is converged at its step, and the helicopter's scenes use it.
-Neither equation is checked against measurements
+bands the parabolic equation gives. Neither equation is checked against measurements
 in strong refraction, and neither is combined with a terrain yet (see
 [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
+
+**Steep sound.** The narrow-angle equation's phase shift at each step strays for sound
+that comes in steeply, and its step is not converged: each step also adds an error at
+the ground that shrinks with the height step, not the range step, so on its grid of
+heights shorter steps add up more of it. From 1 m up to 1.5 m up, 200 m downwind in the
+`windy` preset over grass, the 63 Hz band is 0.21 dB under the fast field program in
+steps of five wavelengths, 0.21 dB over it in steps of one and 0.93 dB over it in steps
+a 32nd as long. So in wind or temperature gradients, with the narrow-angle equation too,
+the listeners that the reflection off the ground reaches more than 15 degrees up get the
+wide-angle equation's level (in still air the narrow-angle one is exact but at the
+ground and keeps them). Against the program in the `windy` preset downwind and upwind
+over grass, from sources 5, 10, 30 and 120 m up to a listener 1.5 m up and from 1.5 m up
+to 30 m up, from 1.5 times their heights added (10 m at least) to 1 km away, where the
+level is above -15 dB re free field, the mean (largest) difference in dB:
+
+| bands | 15° or flatter, narrow-angle | steeper, narrow-angle | steeper, narrow-angle, half its step | steeper, wide-angle |
+|---|---|---|---|---|
+| octaves, 63 to 500 Hz | 0.09 (0.56) | 0.10 (0.46) | 0.09 (0.37) | 0.01 (0.05) |
+| third octaves, 50 to 250 Hz, sources 10 to 120 m up | 0.15 (0.90) | 0.23 (1.65) | 0.15 (0.90) | 0.03 (0.09) |
+
+A quarter of the narrow-angle step leaves the steep points 0.10 (0.40) and 0.18 (0.59)
+dB off. In 17 cases outside that set (`clear_night`, `sunny_day` with 3 m/s of wind, and
+5 and 10 m/s of wind down- and upwind; over grass and over a ground of 2000 kPa s/m²;
+sources 20 to 60 m up, listeners 1.5 and 4 m up; the 63 and 125 Hz octaves and the third
+octaves from 80 to 160 Hz) the steep points' octave bands are 0.16 (0.87) dB off with
+the narrow-angle equation, 0.17 (0.91) dB at half its step and 0.03 (0.10) dB with the
+wide-angle one, their third octaves 0.41 (2.67), 0.33 (2.18) and 0.04 (0.32) dB. In
+those cases the narrow-angle equation is about as far off just under 15 degrees, from 10
+to 15 degrees up: 0.12 (1.23) dB per octave band and 0.35 (3.02) dB per third octave. So
+the level jumps at 15 degrees by the narrow-angle equation's error there: in the 27
+geometries of both sets, per octave band from 63 to 500 Hz by 0.12 dB on average and up
+to 0.89 dB (125 Hz, from 60 m up to 4 m up, upwind in 10 m/s of wind over the hard
+ground), per third octave from 50 to 500 Hz by 0.26 dB and up to 2.2 dB, where the level
+is above -15 dB re free field; at the five largest jumps in each kind of band the
+wide-angle side is within 0.31 dB of the program and the narrow-angle side up to 2.2 dB
+off. Other listeners in the same direction, whose ranges break a run's steps, move a
+steep level by less than 0.001 dB, the wide-angle equation being converged at its step,
+and a flatter one as before, by up to 0.53 dB per third octave from 50 to 500 Hz and 0.17
+dB per octave band (a source 30 m up, downwind in the `windy` preset, listeners 47 m to 1
+km away). The steep listeners' bands take the wide-angle equation's work, about four times
+the narrow-angle one's.
 
 ## Terrain against closed forms and the exact wedge
 
@@ -2973,25 +3007,26 @@ places' band levels:
 
 | band | rendered | responses | pass-by | early part alone: rendered | responses |
 |---|---|---|---|---|---|
-| 63 Hz | -25.88 | -25.90 | -26.13 | -25.90 | -25.92 |
-| 125 Hz | -27.58 | -27.55 | -27.70 | -27.62 | -27.64 |
-| 250 Hz | -32.16 | -32.10 | -32.30 | -32.31 | -32.31 |
-| 500 Hz | -34.85 | -34.92 | -34.05 | -34.98 | -34.91 |
+| 63 Hz | -25.87 | -25.90 | -26.13 | -25.90 | -25.92 |
+| 125 Hz | -27.54 | -27.55 | -27.70 | -27.62 | -27.64 |
+| 250 Hz | -32.13 | -32.10 | -32.30 | -32.31 | -32.31 |
+| 500 Hz | -34.87 | -34.92 | -34.05 | -34.98 | -34.91 |
 | 1 kHz | -29.52 | -29.53 | -29.64 | -29.56 | -29.59 |
 | 2 kHz | -30.18 | -30.19 | -30.28 | -30.21 | -30.23 |
 | 4 kHz | -30.76 | -30.77 | -30.68 | -30.78 | -30.79 |
 | 8 kHz | -31.81 | -31.81 | -31.85 | -31.82 | -31.82 |
 
 The sound keeps the energy of the responses to within 0.07 dB in every band, with its
-late part and without. The late part is crossfaded by weights that add up to one, drawn
-from one random sequence for every place; the responses here are drawn from the same
-one, as otherwise their late parts' chance correlation with the early sound would differ
-by up to 0.25 dB in a band (a one-off check). The pass-by's band levels are within 0.25
-dB of the sound, 0.8 dB in the 500 Hz band, where the ground's dip falls: the pass-by
-takes the places' band levels, averaged over each band, where the sound is read through
-band filters, whose skirts fill a dip (a cause not checked separately). For a car at 30
-m/s over this grass with 94 dB of sound power, the listener has L_Amax 61.4 dB(A) 2.03 s
-into the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A) over 4 s.
+late part and without. The late part is crossfaded by weights that add up to one, as
+the car sends its sound, drawn from one random sequence for every place; the responses
+here are drawn from the same one, as otherwise their late parts' chance correlation with
+the early sound would differ by up to 0.25 dB in a band (a one-off check). The pass-by's
+band levels are within 0.26 dB of the sound, 0.8 dB in the 500 Hz band, where the
+ground's dip falls: the pass-by takes the places' band levels, averaged over each band,
+where the sound is read through band filters, whose skirts fill a dip (a cause not
+checked separately). For a car at 30 m/s over this grass with 94 dB of sound power, the
+listener has L_Amax 61.4 dB(A) 2.03 s into the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A)
+over 4 s.
 
 **What it leaves out.** The engine's source is quasi-static, as the field it is
 compared with: a moving source's convective amplification is left out (taking its
@@ -3116,14 +3151,17 @@ certification's overflight (below). 48 sections instead of 24 changed the levels
 under 0.06 dB.
 
 **The certified level.** The AS350 B3 at its maximum mass of 2,250 kg flying the
-overflight of ICAO Annex 16, chapter 11 (14 CFR part 36, appendix J): level, 150 m
-over a microphone 1.2 m above grass, at 0.9 V_H, in still air at 25 °C and 70 %
-humidity at sea level. Its type certificate data sheet for noise (EASA.R.008) gives
-no speed; V_H is taken as Airbus's fast cruise speed, 136 kt, so 63.0 m/s. The direct
-sound and the ground's reflection (Weyl and van der Pol's, with Miki's impedance of
-200 kPa s/m²), each heard at the time it left the helicopter with the air's absorption
-(ISO 9613-1), A-weighted; the slow time weighting finds the points 10 dB under the
-most, and the sound exposure level is the energy between them:
+overflight of ICAO Annex 16, chapter 11 (14 CFR part 36, appendix J): level, 150 m over
+a microphone 1.2 m above grass, at 0.9 V_H, in still air at 25 °C and 70 % humidity at
+sea level. The main rotor turns at 394 rpm, the most in powered flight of the AS350 B3
+with the Arriel 2B engine (its type certificate data sheet, EASA.R.008, 9.1): the rotor
+speed appendix J flies (J36.3(c), J36.105(c)(2)) for that variant's noise record, D73,
+which certifies 84.6 dB(A) at 2,250 kg. The type certificate data sheet for noise
+(EASA.R.008) gives no airspeed; V_H is taken as Airbus's fast cruise speed, 136 kt, so
+63.0 m/s. The direct sound and the ground's reflection (Weyl and van der Pol's, with
+Miki's impedance of 200 kPa s/m²), each heard at the time it left the helicopter with
+the air's absorption (ISO 9613-1), A-weighted; the slow time weighting finds the points
+10 dB under the most, and the sound exposure level is the energy between them:
 
 | part | SEL | L_ASmax | 10 dB down for |
 |---|---|---|---|
@@ -3143,20 +3181,19 @@ That is with Pegg's broadband noise, the default. With each blade section's own
 | main rotor's broadband noise | 68.6 dB(A) | 62.2 dB(A) | 8.4 s |
 | tail rotor's broadband noise | 44.3 dB(A) | 37.4 dB(A) | 10.2 s |
 
-With Pegg's noise the model is 3.4 dB louder than the certified level, nearly all of
-it Pegg's broadband noise of the main rotor; with the blade sections' own it is 4.5
-dB quieter, nearly all of it the tail rotor's tones, the main rotor's broadband noise
-19 dB under Pegg's. Self-noise is the noise of a blade in a smooth flow: it leaves out
-the blades cutting through the wake of those ahead and through turbulence, which a
-full-size rotor in flight makes and which Pegg's fit to measured rotors holds. Pegg's
-method is a correlation of the 1970s' measurements: in his own example the band of the
-broadband peak (315 Hz) comes out 5.3 dB over the level measured there, though a tone
-of the tail rotor in that band is over it alone; the bands where only the broadband
-noise counts have no measured level in the report. The tones leave out the loads that
-change round the turn, which make a rotor's lower harmonics in forward flight louder
-than steady loads do. Some of the AS350 B3's inputs are assumed (the main blades' chord
-and twist, the tail rotor's speed, chord and thickness, V_H); `AS350_B3`'s source code
-says which.
+With Pegg's noise the model is 3.4 dB louder than the certified level, nearly all of it
+Pegg's broadband noise of the main rotor; with the blade sections' own it is 4.5 dB
+quieter, nearly all of it the tail rotor's tones, the main rotor's broadband noise 19 dB
+under Pegg's. Self-noise is the noise of a blade in a smooth flow: it leaves out the
+blades cutting through the wake of those ahead and through turbulence, which a full-size
+rotor in flight makes and which Pegg's fit to measured rotors holds. Pegg's method is a
+correlation of the 1970s' measurements: in his own example the band of the broadband
+peak (315 Hz) comes out 5.3 dB over the level measured there, though a tone of the tail
+rotor in that band is over it alone; the bands where only the broadband noise counts
+have no measured level in the report. The tones leave out the loads that change round
+the turn, which make a rotor's lower harmonics in forward flight louder than steady
+loads do. Some of the AS350 B3's inputs are assumed (the main blades' chord and twist,
+the tail rotor's chord and thickness, V_H); `AS350_B3`'s source code says which.
 
 ## Sirens and road vehicles against their rules
 
@@ -3522,47 +3559,59 @@ path's segments. The late rays are seeded, so a run gives these numbers.
 NPD curves' speed, over a microphone 1.2 m above grass, at 15,000 lb of thrust an
 engine departing and 5,000 lb arriving:
 
-| distance | departure: L_Amax | SEL | arrival: L_Amax | SEL |
+| distance | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| 200 ft (61 m) | 101.5 (102.5) | 104.1 (104.0) | 97.5 (98.4) | 100.0 (101.8) |
-| 400 ft (122 m) | 95.0 (95.4) | 100.3 (100.2) | 90.9 (91.2) | 96.2 (98.0) |
-| 630 ft (192 m) | 90.6 (90.6) | 97.6 (97.4) | 86.5 (86.5) | 93.5 (95.2) |
-| 1000 ft (305 m) | 86.0 (85.8) | 94.6 (94.4) | 81.9 (81.6) | 90.6 (92.1) |
-| 2000 ft (610 m) | 78.7 (78.2) | 89.6 (89.3) | 74.8 (74.0) | 85.7 (87.0) |
-| 4000 ft (1219 m) | 70.1 (70.0) | 83.8 (83.6) | 66.4 (65.9) | 80.1 (81.4) |
+| 200 ft (61 m) | 99.8 (102.5) | 104.0 (104.0) | 95.7 (98.4) | 100.0 (101.8) |
+| 400 ft (122 m) | 94.2 (95.4) | 100.2 (100.2) | 90.1 (91.2) | 96.1 (98.0) |
+| 630 ft (192 m) | 90.2 (90.6) | 97.5 (97.4) | 86.0 (86.5) | 93.3 (95.2) |
+| 1000 ft (305 m) | 85.6 (85.8) | 94.5 (94.4) | 81.5 (81.6) | 90.4 (92.1) |
+| 2000 ft (610 m) | 78.1 (78.2) | 89.5 (89.3) | 74.2 (74.0) | 85.6 (87.0) |
+| 4000 ft (1219 m) | 69.9 (70.0) | 83.7 (83.6) | 66.2 (65.9) | 80.0 (81.4) |
 
-(dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The source is
-made to the NPD curves' L_Amax 1000 ft away, which the engine gives back within 0.3 dB.
-Nearer, the NPD curves' L_Amax grows faster than one point source's with one spectrum:
-at 200 ft it is 0.9 dB (departure) and 0.8 dB (arrival) over it, so the engine reads 1.0
-and 0.9 dB under there. The arrival's SEL is 1.3 to 1.8 dB under its NPD curves, the
-departure's within 0.3 dB: JETW's arrival curves have SEL - L_Amax = 10 lg(πd/V) within
-0.22 dB out to 1000 ft, a point source's with no air absorption, where the departure's
-are 1.9 to 2.2 dB less, as the engine's point source in the air gives for both. Farther
-out the grass's scattered sound comes from the few late rays that land near the
-microphone, so it changes with their seed.
+(dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The engine's
+pass is measured as Doc 29 defines its levels (Volume 2's glossary, section 4.1 and its
+footnote 15): L_ASmax is the highest of its A-weighted level through a sound level
+meter's slow time weighting, and the SEL is taken over the time that level is within 10
+dB of it. The source is made to the NPD curves' L_Amax 1000 ft away, raised by the 0.29
+dB the slow time weighting takes off a point source's loudest moment there, and the
+engine gives it back within 0.2 dB. Nearer, the NPD curves' L_Amax grows faster than one
+point source's with one spectrum: at 200 ft the engine reads 2.8 dB (departure) and 2.6
+dB (arrival) under them. With no time weighting, the highest level of the places is 2.0
+dB over L_ASmax at 200 ft, 1.0 dB at 400 ft and 0.6 to 0.9 dB farther out, and the SEL
+of the whole walk is 0.4 to 0.5 dB over the 10 dB-down one. The departure's SEL is
+within 0.3 dB of its NPD curves, the arrival's 1.4 to 1.9 dB under: JETW's arrival
+curves have SEL - L_Amax = 10 lg(πd/V) within 0.22 dB out to 1000 ft, the SEL of a point
+source's whole pass over its level as it passes, with no time weighting and in air that
+absorbs nothing. Measured as Doc 29 defines its levels, that source's SEL - L_ASmax is
+1.0 dB more at 200 ft and 0.7 dB less at 1000 ft, and the air takes more off; the
+departure's curves are 1.9 to 2.2 dB under 10 lg(πd/V). Volume 3's aircraft are
+hypothetical, and its arrival curves seem not to follow those definitions. Farther out
+the grass's scattered sound comes from the few late rays that land near the microphone,
+so it changes with their seed.
 
 **The airport's flights.** The demo's departure and arrival, simulated every 20 m at
 each listener, their level following their thrust:
 
-| listener | departure: L_Amax | SEL | arrival: L_Amax | SEL |
+| listener | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| departure_4km | 87.4 (87.2) | 96.1 (96.0) | 49.6 (43.1) | 64.1 (60.7) |
-| lateral_450m | 85.0 (85.1) | 95.4 (94.5) | 43.0 (54.4) | 57.1 (68.8) |
-| approach_2000m | 52.0 (54.8) | 67.6 (68.6) | 91.2 (91.5) | 97.1 (98.8) |
+| departure_4km | 87.1 (87.2) | 95.9 (96.0) | 49.9 (43.1) | 64.1 (60.7) |
+| lateral_450m | 85.0 (85.1) | 95.5 (94.5) | 43.1 (54.4) | 57.3 (68.8) |
+| approach_2000m | 52.1 (54.8) | 67.8 (68.6) | 90.6 (91.5) | 96.9 (98.8) |
 
-(dB(A); Doc 29's in brackets.) Where the jet is heard in the air, they agree within
-0.9 dB but for the arrival's SEL, 1.7 dB under as its NPD curves have it. Where it is
-heard rolling on the runway they part, as the two reckon sound running along the
-ground differently. Doc 29 takes off its lateral attenuation, 10.9 dB at grazing for
-a listener ahead of a landing roll or behind a take-off roll, from measurements and so
-averaged over their weather, and behind a take-off roll adds its start-of-roll
-directivity (5.1 dB down at approach_2000m). The engine reckons the scene's ground in
-still air: the hard runway reflects the sound back up, so the arrival's roll-out is
-6.5 dB over Doc 29 at departure_4km, 2.4 km ahead of it along the runway, while the
-meadow takes much of it away from 250 Hz up, so it is 11.4 dB under at lateral_450m, 1
-km away across the grass (at 250 Hz the roll-out's end is 14 dB quieter there than
-at departure_4km); the departure's take-off roll is 2.7 dB under at approach_2000m.
+(dB(A); Doc 29's in brackets.) Where the jet is heard rolling, the walk starts or ends
+less than 10 dB under its L_ASmax, so its SEL there is over less than the 10 dB-down
+time. Where the jet is heard in the air, they agree within 1.0 dB but for the arrival's
+SEL, 1.9 dB under as its NPD curves have it. Where it is heard rolling on the runway
+they part, as the two reckon sound running along the ground differently. Doc 29 takes
+off its lateral attenuation, 10.9 dB at grazing for a listener ahead of a landing roll
+or behind a take-off roll, from measurements and so averaged over their weather, and
+behind a take-off roll adds its start-of-roll directivity (5.1 dB down at
+approach_2000m). The engine reckons the scene's ground in still air: the hard runway
+reflects the sound back up, so the arrival's roll-out is 6.8 dB over Doc 29 at
+departure_4km, 2.4 km ahead of it along the runway, while the meadow takes much of it
+away from 250 Hz up, so it is 11.3 dB under at lateral_450m, 1 km away across the grass
+(at 250 Hz the roll-out's end is 14 dB quieter there than at departure_4km); the
+departure's take-off roll is 2.7 dB under at approach_2000m.
 
 ## Ground-borne vibration against the FTA's manual
 
@@ -4102,6 +4151,7 @@ python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/outdoor_gpu.py   # the outdoor examples on each device: levels and centre times
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
+python validation/late_memory.py   # the late part's memory against its estimate (Linux)
 python validation/bras_validation.py --json bras.json --plots docs/validation
 python validation/bras_validation.py --materials initial --plots docs/validation
 python validation/bras_validation.py --bands third_octave --json bras_third.json

@@ -86,7 +86,8 @@ AZIMUTH_STEP_DEG = 1.0
 #: The parabolic equation's runs go side by side in at most this much memory (bytes).
 WAVE_MEMORY_BYTES = 1 << 30
 #: With weather zones, the weathers' shares along a way are rounded to this, so that
-#: ways alike share their rays (a share of 0.005 of a 5 m/s wind is 0.025 m/s).
+#: ways alike share their rays (a share of 0.005 of a 5 m/s wind is 0.025 m/s), and
+#: divided by their sum (:meth:`Refraction.profile`).
 MIX_STEP = 0.005
 #: The grounds along the parabolic equation's way are looked up this often (m).
 GROUND_STEP_M = 0.25
@@ -215,10 +216,14 @@ class Refraction:
 
     def profile(self, key) -> Profile:
         """The profile of ``key``: the wind's cosine to the way (:meth:`_key`), or with
-        weather zones the mix of the weathers along it (:meth:`_mix`)."""
+        weather zones the mix of the weathers along it (:meth:`_mix`), its shares divided
+        by their sum: rounded one by one, they can add up to 1 +/- 0.005 or further off,
+        which would scale the still air's speed of sound by as much."""
         if key not in self._profiles:
             if isinstance(key, tuple):
-                self._profiles[key] = self.weather.profile(np.array(key[0]), np.array(key[1]))
+                a, b = np.array(key[0]), np.array(key[1])
+                total = float(a.sum())
+                self._profiles[key] = self.weather.profile(a / total, b / total)
             else:
                 self._profiles[key] = Profile(
                     self._nodes, self._still_speed + key * self._wind_speed
@@ -608,7 +613,8 @@ class Refraction:
                         level > 0.0, factor[:, :coherent] / np.where(level > 0.0, level, 1.0), 1.0
                     )
         if coherent:
-            # Each caustic delays the phase by a quarter period.
+            # Each caustic advances the phase by a quarter period: a factor j, time going
+            # as exp(j omega t), in which a delay tau is exp(-j omega tau).
             spectrum *= (1j ** found.caustics[index])[:, None, None]
         departure = np.array([_departure(r[1]) for r in rows])
         travelled = np.array([found.length[r[0]] for r in rows])
@@ -911,8 +917,8 @@ def solve(plans: list[Planned]) -> list[dict[int, np.ndarray]]:
 
         ranges = np.array([m.range for m in needing])
         heights = np.array([m.height for m in needing])
-        # The wide-angle equation's frequencies share the threads the runs leave.
-        more = {"threads": share} if refraction.wide_angle else {}
+        # The wide-angle equation's frequencies (the narrow-angle one's at steep points)
+        # share the threads the runs leave.
         return solver.march(
             refraction.frequencies[band],
             speed,
@@ -923,7 +929,7 @@ def solve(plans: list[Planned]) -> list[dict[int, np.ndarray]]:
             top,
             speed_at=speed_at,
             independent=alone,
-            **more,
+            threads=share,
         )
 
     # The runs side by side, as many as the threads and the memory allow.

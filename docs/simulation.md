@@ -126,8 +126,11 @@ The directions the sound arrives from give more of them:
   source, and the level of the late lateral sound, which envelops the listener.
 - IACC early and late (annex B), from the binaural response when the scene writes one
   (through the spherical head or a SOFA file; the first, if it writes several).
-- Stage support ST early (Gade's ST1) and ST late (annex C) for listeners within 1.5 m
-  of a source, where musicians hear themselves and each other.
+- Stage support ST early (Gade's ST1) and ST late (annex C), how well musicians hear
+  themselves and each other, for listeners 0.9 to 1.1 m from a source; elsewhere they
+  are empty. The standard measures them 1 m from the source, and the direct sound in
+  their first 10 ms changes them by up to 20 lg r dB at r metres: 0.9 dB at most within
+  that span, 6 dB at 0.5 m.
 - T30 of figures of eight facing forward, left and up from the listener: where sound
   keeps running between two hard walls, the decay along that axis is longer.
 - STI and STIPA (IEC 60268-16) and U50, at the level the source's `level_db` gives and
@@ -637,9 +640,9 @@ worst of the CPU, the GPU and the two together. So the memory grows with
 and their points, and the map points (`coverage.spacing`). On the CPU the rays cost
 time, not memory. The 10 batches of the default add about an eighth to the late part's
 memory with 64 arrival directions: in the estimate, the late part of `stadium_concert`
-at 8 s went from 901 to 1,019 MiB and `orchestra`'s at 6 s from 669 to 759 MiB; measured
-on 4 threads, the whole runs went from 887 to 1,020 MiB and from 729 to 820 MiB.
-`orchestra`'s grew as estimated, `stadium_concert`'s by 15 MiB more, as the batches' many
+at 8 s went from 896 to 1,014 MiB and `orchestra`'s at 6 s from 668 to 758 MiB; measured
+on 4 threads, the whole runs went from 890 to 1,020 MiB and from 724 to 815 MiB.
+`orchestra`'s grew as estimated, `stadium_concert`'s by 11 MiB more, as the batches' many
 smaller arrays leave the memory allocator more to hold (with glibc's mmap threshold fixed
 at 128 KiB, that run grew by 124 MiB against the estimate's 118).
 
@@ -659,17 +662,17 @@ a room of many facets with edge diffraction, where the edge fade keeps the piece
 the waves round the edges in single precision: about 17 million at the third listener of
 BRAS CR3 in third-octave bands. Its run peaks at 10.0 GiB (11.8 GiB in third-octave
 bands), nearly all of it at one listener: the edge fade hands it back before the next,
-and in third-octave bands each listener's starts from less than 0.9 GiB. On the CPU
-the estimate came within 1 MiB of the late part's measured peak in `shoebox` at 1, 4
-and 64 threads (4 cores), with
-responses of 30 to 480 s and both kinds of scattering. Whole runs, counted from the
-memory the process held before them, came near it or a little above: `stadium_concert`
-at 8 s (19 sources, 12 listeners) at 1,020 MiB against 1,019, `orchestra` at 6 s at
-820 MiB against 759 (887 against 901 and 729 against 669 in one batch). Traced on a
-software GPU (SwiftShader's Vulkan), the late
-part peaked 60 to 100 MiB above the GPU's estimate, the driver's own. With both, the
-estimate takes the CPU's part and the GPU's at their peaks at once, which those runs
-never reached: up to 1.5 times what they used.
+and in third-octave bands each listener's starts from less than 0.9 GiB.
+`python validation/late_memory.py` measures the estimate against what runs take (on
+Linux): on the CPU it came within 2 MiB of the late part's peak in `shoebox` at 1, 4 and
+64 threads (4 cores), with responses of 30 to 480 s and both kinds of scattering. Whole
+runs, counted from the memory the process held before them, came near it or a little
+above: `stadium_concert` at 8 s (19 sources, 12 listeners) at 1,020 MiB against 1,014,
+`orchestra` at 6 s at 815 MiB against 758 (890 against 896 and 724 against 668 in one
+batch). Traced on a software GPU (SwiftShader's Vulkan) at 120 s, the late part peaked
+59 to 66 MiB above the GPU's estimate, the driver's own; with both, at 30 and 120 s, 58
+to 117 MiB above the estimate, which takes the CPU's part and the GPU's at their peaks
+at once.
 
 ### The late stage on a GPU
 

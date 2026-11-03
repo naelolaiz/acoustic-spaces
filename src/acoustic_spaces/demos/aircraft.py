@@ -95,6 +95,7 @@ class Aircraft(Vehicle):
     sound_file, info_file = SOUND_FILE, INFO_FILE
     sound_step = "aircraft"
     steady = "Doc 29 flies it as its procedure says"
+    slow_weighted = True
 
     def __init__(self, operation: str, script: str = "flight_demo.py") -> None:
         if operation not in PROCEDURES:
@@ -188,7 +189,9 @@ class Aircraft(Vehicle):
         maximum, spectrum = self.curves()
         top = max(flown.powers)
         air = example.air
-        thirds = doc29_source.sound_power_db(maximum, spectrum, top, air.temperature_c)
+        thirds = doc29_source.sound_power_db(
+            maximum, spectrum, top, air.temperature_c, air.humidity_percent, air.pressure_kpa
+        )
         plane = _data()[0]
         level = power_levels(thirds.tolist(), "octave") + doc29_source.below_offset_db(
             plane.installation

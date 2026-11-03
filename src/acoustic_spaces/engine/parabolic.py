@@ -42,10 +42,22 @@ import numpy as np
 
 #: Height steps per wavelength.
 STEPS_PER_WAVELENGTH = 10
-#: Range step in wavelengths, at least RANGE_STEP_MIN_M (finer changes nothing: within
-#: 0.25 dB of steps of a wavelength at 2 kHz, 0.4 dB at 63 Hz, in 5 m/s of wind).
+#: Range step in wavelengths, at least RANGE_STEP_MIN_M. The march does not converge as
+#: it shrinks: each step also adds an error at the ground that shrinks with the height
+#: step, not the range step, so on this grid shorter steps add up more of it. In the
+#: ``windy`` preset downwind over grass, from 1 m up to 1.5 m up 200 m away, the 63 Hz
+#: band is 0.21 dB under the fast field program (``validation/ffp.py``) at this step,
+#: 0.21 dB over it at a wavelength and 0.93 dB over it at a 32nd of this step.
 RANGE_STEP_WAVELENGTHS = 5.0
 RANGE_STEP_MIN_M = 1.2
+#: In wind or temperature gradients the phase shift taken at each step strays for sound
+#: that comes in steeply, at any step. The points that the reflection off the ground
+#: reaches more steeply than STEEP_DEG (degrees from the horizontal) get the wide-angle
+#: equation's field (:mod:`~acoustic_spaces.engine.wide_angle`): in the ``windy`` preset
+#: their octave bands are within 0.05 dB of the fast field program, where this equation
+#: is up to 0.46 dB off (0.56 dB at the flatter points; docs/validation.md, "Steep
+#: sound").
+STEEP_DEG = 15.0
 #: The pole of the ground's reflection factor is left to the field continued below the
 #: ground within this many sample spacings below the real axis (where that field stays
 #: bounded) and above it (where it grows with depth). The sampled reflection factor
@@ -74,6 +86,7 @@ def march(
     screen=None,
     speed_at=None,
     independent: bool = False,
+    threads: int = 1,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
@@ -93,7 +106,72 @@ def march(
     shorter last step. Unless ``independent``, the march goes on from there, so that the
     ranges asked for break up each other's steps; ``independent`` takes each one's last
     step off to the side, so that each range gets what a march to it alone gives, whatever
-    else is asked for (the places of a walk sharing a run, say)."""
+    else is asked for (the places of a walk sharing a run, say).
+
+    In wind or temperature gradients the points the reflection off the ground reaches
+    more steeply than STEEP_DEG are given by the wide-angle equation
+    (:func:`acoustic_spaces.engine.wide_angle.march`, on ``threads`` threads); the others
+    get what the march to all the points gives."""
+    ranges = np.asarray(ranges, dtype=float)
+    heights = np.asarray(heights, dtype=float)
+    common = (frequencies, speed, impedance, zs)
+    steep = zs + heights > math.tan(math.radians(STEEP_DEG)) * ranges
+    if not steep.any() or not _refracting(frequencies, speed, speed_at, top, ranges.max()):
+        return _march(*common, ranges, heights, top, screen, speed_at, independent)
+    from acoustic_spaces.engine import wide_angle  # which imports this module
+
+    out = np.zeros((len(np.atleast_1d(frequencies)), len(ranges)), dtype=complex)
+    if not steep.all():
+        # The flat points' march, with the steep points among them breaking its steps as
+        # they would without the wide-angle equation; those beyond the last flat one
+        # change nothing.
+        before = ranges <= ranges[~steep].max()
+        out[:, before] = _march(
+            *common, ranges[before], heights[before], top, screen, speed_at, independent
+        )
+    out[:, steep] = wide_angle.march(
+        *common,
+        ranges[steep],
+        heights[steep],
+        top,
+        screen=screen,
+        speed_at=speed_at,
+        threads=threads,
+        independent=independent,
+    )
+    return out
+
+
+def _refracting(frequencies, speed, speed_at, top: float, reach: float) -> bool:
+    """Whether the march goes through air that bends sound: a speed of sound that changes
+    with height on its grid, or from the source's along the way out to ``reach`` (m),
+    ``speed_at`` read every half metre."""
+    f = np.atleast_1d(np.asarray(frequencies, dtype=float))
+    c0 = float(np.asarray(speed(np.array([0.0])))[0])
+    n, dz, _ = _grid(f, c0, top)
+    found = [speed]
+    if speed_at is not None:
+        for r in np.arange(0.0, float(reach) + 1.0, 0.5):
+            there = speed_at(float(r))
+            if all(there is not seen for seen in found):
+                found.append(there)
+    z = np.arange(n) * dz
+    return any(bool(np.any(np.asarray(each(z)) != c0)) for each in found)
+
+
+def _march(
+    frequencies,
+    speed,
+    impedance,
+    zs: float,
+    ranges: np.ndarray,
+    heights: np.ndarray,
+    top: float,
+    screen,
+    speed_at,
+    independent: bool,
+) -> np.ndarray:
+    """:func:`march` by the narrow-angle equation alone."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
@@ -220,10 +298,14 @@ def _grid(f: np.ndarray, c0: float, top: float) -> tuple[int, float, float]:
 
 def footprint(frequencies, c0: float, top: float) -> int:
     """About the memory (bytes) :func:`march` takes for ``frequencies`` under an
-    absorbing layer from ``top`` in air of speed ``c0`` on the ground."""
+    absorbing layer from ``top`` in air of speed ``c0`` on the ground: the narrow-angle
+    march's, or the wide-angle one's for steep points after it, the larger, whether or
+    not a run has steep points."""
+    from acoustic_spaces.engine import wide_angle
+
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     n = _grid(f, c0, top)[0]
-    return 24 * len(f) * 2 * n * 16
+    return max(24 * len(f) * 2 * n * 16, wide_angle.footprint(f, c0, top))
 
 
 class _Ground:

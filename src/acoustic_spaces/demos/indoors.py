@@ -573,12 +573,14 @@ class StillHouses:
                 pass
             elif not self.house.airborne:
                 entry["spl_a_db"] = None
-            elif bands is not None and all(v is not None for v in bands):
-                levels = np.asarray(bands, dtype=float) + indoor
-                entry["spl_db"] = [round(float(v), 2) for v in levels]
-                entry["spl_a_db"] = round(a_weighted(levels), 2)
+            elif bands is not None:
+                # A band no sound arrives in outdoors (None) gets none inside either.
+                levels = np.array([-np.inf if v is None else v for v in bands]) + indoor
+                level = a_weighted(levels)
+                entry["spl_db"] = [round(float(v), 2) if np.isfinite(v) else None for v in levels]
+                entry["spl_a_db"] = round(level, 2) if np.isfinite(level) else None
             else:
-                # A band unknown outdoors leaves the level inside unknown too.
+                # Without its levels per band outdoors, none inside either.
                 entry["spl_db"] = None
                 entry["spl_a_db"] = None
             responses.append(entry)

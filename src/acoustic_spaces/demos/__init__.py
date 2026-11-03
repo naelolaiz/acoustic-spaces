@@ -389,7 +389,12 @@ def common_options(work: str = "demo") -> list[Option]:
     and ``--no-mp4``."""
     return [
         Option("work", "folder for everything the demo writes", Path(work), "folder"),
-        Option("format", "output format the mixes take", "binaural"),
+        Option(
+            "format",
+            "output format the mixes take (binaural, mono, ambix3, 5.0...); the tour decodes "
+            "Ambisonics and loudspeaker mixes to the two ears",
+            "binaural",
+        ),
         Option(
             "hrtf",
             "binaural mixes through this SOFA file of HRTFs, your own or measured, instead of "
@@ -490,6 +495,27 @@ class Demo:
         arguments count from there."""
         return replace(self, _folder=Path(folder))
 
+    @property
+    def in_place(self) -> bool:
+        """Whether the demo's command line counts relative paths, given or at their
+        default, from the folder it runs in: a demo run as a module, which counts them
+        from the working folder, or a script in its own folder. Moved elsewhere
+        (:meth:`at`), a demo's script counts them from its own folder; an example's
+        script that is no demo (:attr:`stepless`) counts them from the working folder,
+        where the editor runs it, but its default scene is the one beside it. Either
+        way, :meth:`arguments` gives it every path that has a default, in full."""
+        return self.module is not None or self.folder == self.script.parent
+
+    def default_path(self, option: Option) -> Path:
+        """Where the path ``option`` names at its default: in the folder the demo runs in,
+        or for a file it reads that the folder has no copy of, the example's beside the
+        script."""
+        path = self.folder / option.default
+        beside = self.script.parent / option.default
+        if option.kind == "file" and not path.exists() and beside.exists():
+            return beside
+        return path
+
     def step(self, name: str) -> Step:
         for step in self.steps:
             if step.name == name:
@@ -518,15 +544,24 @@ class Demo:
         relative_to: Path | None = None,
     ) -> list[str]:
         """The options of ``args`` that differ from their defaults, as a command line
-        (``["--hrtf", "me.sofa"]``): what :meth:`command` shows and the editor runs.
+        (``["--hrtf", "me.sofa"]``): what :meth:`command` shows and the editor runs. A
+        script moved out of its folder (not :attr:`in_place`, which says where it would
+        count its paths from) is given every path that has a default, in full, even one
+        at its default or left empty (its :meth:`default_path`).
         ``names_only`` gives a path by its file name, for a caption, and leaves out a
-        path named as its default is, wherever it lies; ``relative_to`` gives a path
-        under that folder relative to it."""
+        path named as its default is, wherever it lies, or at its default counted from
+        the working folder, where the editor runs a moved script (a folder whose default
+        is ``.`` has no name of its own); ``relative_to`` gives a path under that folder
+        relative to it."""
+        moved = not names_only and not self.in_place
         argv: list[str] = []
         lead: list[str] = []
         for option in self.options:
             value = getattr(args, option.name, option.default) if args is not None else None
-            if value is None or value == option.default:
+            given = moved and option.kind in PATH_KINDS and option.default is not None
+            if given:  # in full, counted from the folder the demo runs in
+                value = self.default_path(option) if value is None else self.folder / value
+            elif value is None or value == option.default:
                 continue
             if option.kind in MAP_KINDS:
                 for name, file in value.items():
@@ -538,10 +573,13 @@ class Demo:
                         shown = str(file)
                     argv += [option.option, f"{name}={shown}"]
                 continue
-            if option.kind in PATH_KINDS and option.default is not None:
+            if option.kind in PATH_KINDS and option.default is not None and not given:
                 if Path(value) == self.folder / option.default:  # the default, resolved
                     continue
-                if names_only and Path(value).name == Path(option.default).name:
+                if names_only and (
+                    Path(value).name == Path(option.default).name
+                    or Path(value).resolve() == (Path.cwd() / option.default).resolve()
+                ):
                     continue
             if option.kind == "flag":
                 argv.append(option.option)
@@ -565,11 +603,14 @@ class Demo:
         their defaults (``python church_demo.py scene``, or for a demo with a
         :attr:`program`, ``acoustic-spaces demo scene.yaml feeds``); ``names_only`` as
         :meth:`arguments` takes it. Paths in the folder the command runs in are given
-        relative to it where the command reads them so: a demo run as a module, or a
-        script run in its own folder."""
-        here = self.module is not None or self.folder == self.script.parent
+        relative to it where the command reads them so (:attr:`in_place`: a demo run as
+        a module, or a script run in its own folder). A script moved out of its folder
+        is shown as the editor runs it (:meth:`run_argv`): by its full path, with every
+        path in full."""
+        if not self.in_place and not names_only:
+            return "python " + shell_line(self.run_argv(step, args)[1:])
         argv = self.arguments(
-            args, names_only=names_only, relative_to=self.folder if here else None
+            args, names_only=names_only, relative_to=self.folder if self.in_place else None
         )
         if self.program is None:
             named = "" if self.stepless else f" {step}"
@@ -586,7 +627,8 @@ class Demo:
     def run_argv(self, step: str, args: argparse.Namespace | None = None) -> list[str]:
         """What the editor runs for ``step``: this Python on the script (or with ``-m`` on
         the demo's :attr:`module`), the step and the options that differ from their
-        defaults, paths in full so that it runs from any folder."""
+        defaults (every path, for a script moved out of its folder: :meth:`arguments`),
+        paths in full so that it runs from any folder."""
         start = ["-m", self.module] if self.module else [str(self.script)]
         values = self.resolved(args) if args is not None else None
         named = [] if self.stepless else [step]

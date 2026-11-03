@@ -30,7 +30,7 @@ sources:
   - name: departure
     position: [0, 0, 1]
     orientation: {yaw: 0, pitch: 0, roll: 0}
-    level_db: [142.3, 150.1, 151.8, 148.6, 148.0, 150.4, 148.3, 144.2]
+    level_db: [142.6, 150.4, 152.1, 148.9, 148.3, 150.7, 148.5, 144.5]
     directivity: {file: jetw.csv}
     walk:
       doppler: true
@@ -69,7 +69,7 @@ sources:
     enabled: false
     position: [-4000, 0, 224.8294]
     orientation: {yaw: 0, pitch: -3, roll: 0}
-    level_db: [131.7, 141.8, 138.7, 139.5, 138.7, 137.2, 138.9, 138.2]
+    level_db: [131.9, 142.1, 139.0, 139.8, 139.0, 137.5, 139.2, 138.5]
     directivity: {file: jetw.csv}
     walk:
       doppler: true

@@ -538,6 +538,13 @@ class YamlPanel(QWidget):
         else:
             self._status()
 
+    def files_moved(self, old: Scene, new: Scene) -> None:
+        """The scene ``old`` became ``new``, the same scene with copies of its files (an
+        example saved elsewhere): text shown for ``old`` holds for ``new``, as
+        :meth:`apply` names the copies in place of the files the save copied."""
+        if self._scene is old:
+            self._scene = new
+
     def revert(self) -> None:
         """Show the scene as it is, dropping the edits to the text; the view stays at
         the same lines."""
@@ -593,8 +600,10 @@ class YamlPanel(QWidget):
                 ),
                 [],
             )
-        if not self.edited() or (self.in_step() and data == load_yaml(self._shown)):
-            self.revert()  # only the layout or comments changed
+        if not self.edited() or (
+            self.document.scene is self._scene and data == load_yaml(self._shown)
+        ):
+            self.revert()  # only the layout or comments changed (the folder may have)
             return True
 
         def change(current: dict) -> None:
@@ -602,7 +611,8 @@ class YamlPanel(QWidget):
             current.update(data)
 
         try:
-            self.document.edit(_("edit scene YAML"), change)
+            # Relative paths in the text are relative to the folder it was shown for.
+            self.document.edit(_("edit scene YAML"), change, base_dir=self._folder)
         except EditError as exc:
             lines = []
             cause = exc.__cause__
@@ -660,7 +670,8 @@ class YamlPanel(QWidget):
         if not self.on_show and not self._refusal:
             return  # brought up to date when it shows
         lines = list(self._refusal)
-        changed = not self.in_step()
+        # The scene, not only its folder (a save elsewhere), changed since.
+        changed = self.document.scene is not self._scene
         if not lines:
             if self.edited() and changed:
                 lines.append(

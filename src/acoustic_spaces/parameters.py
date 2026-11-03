@@ -27,7 +27,10 @@ Where the response has them (see :data:`MORE_PARAMETERS`), also:
 
 :func:`speech_transmission_index` gives the STI of IEC 60268-16 from the same energies,
 or STIPA, :func:`useful_to_detrimental` U50, and :func:`echo_criterion` the echo
-criteria of Dietsch and Kraak from an impulse response.
+criteria of Dietsch and Kraak from an impulse response. :func:`time_weighted` gives a
+level over time through IEC 61672-1's exponential time weighting, and
+:func:`event_levels` a sound event's maximum time-weighted level and its sound exposure
+level over its 10 dB-down time.
 
 A response that stops before it has decayed loses the energy of its missing tail and
 reads too short; the tail is estimated from the last part of the decay and added back
@@ -41,7 +44,7 @@ import functools
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import numpy as np
 
@@ -559,6 +562,96 @@ def c_weighted(levels_db: Sequence[float] | np.ndarray) -> float:
         return float(10.0 * np.log10(np.sum(10.0 ** (levels / 10.0))))
 
 
+#: The time constant (s) of IEC 61672-1's slow time weighting, S.
+SLOW_S = 1.0
+#: How far apart (s) :func:`time_weighted` works the time-weighted level out by default.
+TIME_WEIGHTING_STEP_S = 0.01
+
+
+def time_weighted(
+    times: Sequence[float] | np.ndarray,
+    levels_db: Sequence[float] | np.ndarray,
+    time_constant_s: float = SLOW_S,
+    step_s: float = TIME_WEIGHTING_STEP_S,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """A level ``levels_db`` (dB) heard at ``times`` (s, increasing) through IEC
+    61672-1's exponential time weighting of time constant ``time_constant_s`` (the slow
+    time weighting S by default), as a sound level meter reads it: the mean square at
+    each moment t, 10^(L/10), weighted by exp(-(t - ξ)/τ)/τ over every earlier moment
+    ξ. Between the given times the mean square goes linearly in time; before the first
+    it is taken to have stood at its first value. Returns the times of a uniform grid
+    ``step_s`` apart from the first time to the last, the level there, and the
+    time-weighted level there (dB), worked out exactly for a mean square linear from
+    one grid time to the next."""
+    from scipy.signal import lfilter, lfilter_zi
+
+    t = np.asarray(times, dtype=float)
+    if t.ndim != 1 or len(t) < 2 or not np.all(np.diff(t) > 0.0):
+        raise ValueError("give two times or more, each later than the one before")
+    if time_constant_s <= 0.0 or step_s <= 0.0:
+        raise ValueError(
+            f"the time constant ({time_constant_s} s) and the step ({step_s} s) must be positive"
+        )
+    level = np.asarray(levels_db, dtype=float)
+    if level.shape != t.shape:
+        raise ValueError(f"give one level a time: {level.size} levels at {len(t)} times")
+    count = int(math.floor((t[-1] - t[0]) / step_s + 1e-9)) + 1
+    grid = t[0] + step_s * np.arange(count)
+    square = np.interp(grid, t, 10.0 ** (level / 10.0))
+    # τ y' = x - y over a step h with x linear from x0 to x1, a = exp(-h/τ):
+    # y1 = a y0 + x1 - a x0 - (x1 - x0) (τ/h) (1 - a).
+    a = math.exp(-step_s / time_constant_s)
+    c = time_constant_s / step_s * (1.0 - a)
+    b = [1.0 - c, c - a]
+    weighted = lfilter(b, [1.0, -a], square, zi=lfilter_zi(b, [1.0, -a]) * square[0])[0]
+    with np.errstate(divide="ignore"):
+        return grid, 10.0 * np.log10(square), 10.0 * np.log10(np.maximum(weighted, 0.0))
+
+
+class EventLevels(NamedTuple):
+    """The levels of a sound event, from :func:`event_levels`."""
+
+    #: The highest time-weighted level (dB): L_ASmax, A-weighted and slow.
+    max_db: float
+    #: The sound exposure level (dB) over the time the time-weighted level is within the
+    #: chosen drop of its highest: SEL over the 10 dB-down time.
+    exposure_db: float
+    #: When that time starts and ends (s, as the times given).
+    start_s: float
+    end_s: float
+
+
+def event_levels(
+    times: Sequence[float] | np.ndarray,
+    levels_db: Sequence[float] | np.ndarray,
+    time_constant_s: float = SLOW_S,
+    down_db: float = 10.0,
+    step_s: float = TIME_WEIGHTING_STEP_S,
+) -> EventLevels:
+    """The maximum level and the sound exposure level of a level ``levels_db`` (dB)
+    heard at ``times`` (s), as ECAC Doc 29 measures an aircraft's (Volume 2, its
+    glossary and section 4.1): the highest level through the time weighting of
+    ``time_constant_s`` (slow by default, :func:`time_weighted`), and the sound exposure
+    (the mean square integrated over time with no time weighting, IEC 61672-1), as a
+    level held for 1 s, from the first to the last time the time-weighted level is
+    within ``down_db`` of that highest: the "10 dB-down" time of eq. 4-1, which the NPD
+    curves' SEL is taken over (footnote 15). Doc 29's eq. 4-2 integrates its L_A(t),
+    which its glossary has slow-weighted; over a flyover's 10 dB-down time that differs
+    from the sound exposure by under 0.01 dB. Where a pass starts or ends within
+    ``down_db`` of its highest, that time is cut there: ``start_s`` or ``end_s`` is its
+    first or last time."""
+    grid, level, weighted = time_weighted(times, levels_db, time_constant_s, step_s)
+    top = int(np.argmax(weighted))
+    if not np.isfinite(weighted[top]):
+        return EventLevels(-math.inf, -math.inf, float(grid[0]), float(grid[-1]))
+    inside = np.flatnonzero(weighted >= weighted[top] - down_db)
+    first, last = int(inside[0]), int(inside[-1])
+    square = 10.0 ** (level[first : last + 1] / 10.0)
+    exposure = float(np.sum(square[1:] + square[:-1])) * step_s / 2.0
+    exposure_db = 10.0 * math.log10(exposure) if exposure > 0.0 else -math.inf
+    return EventLevels(float(weighted[top]), exposure_db, float(grid[first]), float(grid[last]))
+
+
 #: Speech that talks: male or female.
 Talker = Literal["male", "female"]
 #: The long-term spectrum of speech (IEC 60268-16:2011, table A.2): octave-band levels
@@ -604,7 +697,8 @@ def _modulation_kernel(slots: int, time_step: float, frequencies: tuple[float, .
 
 
 def _masking_slope_db(level: np.ndarray) -> np.ndarray:
-    """Level-dependent auditory masking of the next band up (IEC 60268-16, A.2.3)."""
+    """Level-dependent auditory masking of the next band up (IEC 60268-16:2020, A.4.2,
+    table A.2)."""
     return np.select(
         [level < 63.0, level < 67.0, level < 100.0],
         [0.5 * level - 65.0, 1.8 * level - 146.9, 0.5 * level - 59.8],
@@ -741,12 +835,15 @@ def echo_criterion(
     steepest rise of ts over the window, in units of the window. An echo makes ts jump:
     listeners hear one where EC exceeds 1.0 for speech or 1.8 for music (half of them;
     0.9 and 1.5 for a tenth).
-    NaN for a response shorter than the window.
+    NaN for a response shorter than the window, or with a band at or above half
+    ``sample_rate``.
     """
     if kind not in ECHO_CRITERIA:
         raise ValueError(f"unknown echo criterion {kind!r}; use 'speech' or 'music'")
     exponent, window, bands, _ = ECHO_CRITERIA[kind]
     ir = _mono(ir)
+    if _beyond_nyquist(sample_rate)[[OCTAVE_BANDS_HZ.index(f) for f in bands]].any():
+        return math.nan, math.nan
     # The filters' ringing ahead of the direct sound counts, at its own (negative)
     # times, or the direct sound would weigh half of what an echo does.
     lead = int(round(_FILTER_LEAD_S * sample_rate))
@@ -812,6 +909,23 @@ def octave_midbands() -> np.ndarray:
     nominal = np.array(OCTAVE_BANDS_HZ, dtype=float)
     k = np.round(np.log(nominal / 1000.0) / math.log(OCTAVE_RATIO))
     return 1000.0 * OCTAVE_RATIO**k
+
+
+def _octave_band_edges() -> tuple[np.ndarray, np.ndarray]:
+    """Lower and upper edges (Hz) of the IEC 61260-1 octave filters, fm G^(-1/2) and
+    fm G^(1/2) of the exact mid-band frequencies (:func:`octave_midbands`), where those
+    filters are 3 dB down: 5623 Hz between the 4 and 8 kHz bands, where
+    :func:`~acoustic_spaces.materials.bands.band_limits` gives the nominal 5657 Hz (the
+    crossover filters' edge)."""
+    mid = octave_midbands()
+    return mid / OCTAVE_RATIO**0.5, mid * OCTAVE_RATIO**0.5
+
+
+def _beyond_nyquist(sample_rate: float) -> np.ndarray:
+    """(bands,) whether each octave band's lower edge is at or above half
+    ``sample_rate``: a response at that rate holds nothing of the band's own, only what
+    its filter's skirt lets in of the bands below."""
+    return _octave_band_edges()[0] >= 0.5 * sample_rate
 
 
 def octave_filter_gains(n_fft: int, sample_rate: float, order: int = FILTER_ORDER) -> np.ndarray:
@@ -977,11 +1091,13 @@ def _from_onset(
     ir: np.ndarray, sample_rate: float, filters: str, start: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """Octave bands of ``ir`` (bands, samples) from sample ``start`` on, and before it,
-    with the ringing the zero-phase filters spread ahead of the response."""
+    with the ringing the zero-phase filters spread ahead of the response. The bands at
+    or above half the sample rate are silent."""
     # Zero-phase filters ring before an impulse as much as after it. Room is made for
     # that ringing, and everything before the onset counts as arriving with it.
     lead = int(round(_FILTER_LEAD_S * sample_rate))
     bands = octave_bands(np.concatenate([np.zeros(lead), ir]), sample_rate, filters)
+    bands[_beyond_nyquist(sample_rate)] = 0.0
     return bands[:, lead + start :], bands[:, : lead + start]
 
 
@@ -1004,7 +1120,11 @@ def band_decay(
     """Filter ``ir`` into octave bands and, with ``noise``, find each band's noise floor.
 
     ``ir`` is (samples,) or (samples, 1), as :func:`~acoustic_spaces.audio.read_wav`
-    gives a mono file. The bands start at its onset, or at sample ``start``.
+    gives a mono file. The bands start at its onset, or at sample ``start``. A band
+    whose lower edge (its exact mid-band frequency over 10^0.15, where its IEC 61260-1
+    filter is 3 dB down: 5623 Hz for 8 kHz) is at or above half the sample rate holds
+    nothing of its own, and has no energy here; one that reaches past it holds its part
+    below it.
     """
     ir = _mono(ir)
     start = onset(ir) if start is None else int(start)
@@ -1080,6 +1200,12 @@ def from_impulse_response(
     estimated (ISO 3382-1, 5.3.4); decay times whose range does not clear the noise by
     10 dB (EDT 20 dB, T20 35 dB, T30 45 dB) are NaN.
 
+    Every parameter is NaN in a band whose lower edge (as :func:`band_decay` gives it)
+    is at or above half ``sample_rate``, as the response holds nothing of its own there (at
+    8 kHz, the 8 kHz band). A band that reaches past it is analysed from its part below
+    it (at 8 kHz the 4 kHz band, at 16 kHz the 8 kHz band); a broadband
+    ``reference_energy`` is taken over the same part.
+
     With ``stage``, ``st_early`` and ``st_late`` as well, for a response measured 1 m
     from the source. ``lateral`` is the response of a figure of eight with its null on
     the source, measured with ``ir`` and at the same sensitivity on its axis, for
@@ -1144,7 +1270,11 @@ def sti_from_impulse_response(
     """STI, or with ``stipa`` STIPA, of the room alone from a mono impulse response:
     from its octave bands (125 Hz to 8 kHz) from the onset on, with ``noise`` cut where
     they sink into the background noise and the noise taken off, as
-    :func:`from_impulse_response` takes them."""
+    :func:`from_impulse_response` takes them. NaN when one of those bands lies at or
+    above half ``sample_rate`` (at a sample rate below 11.25 kHz, the 8 kHz band
+    does)."""
+    if _beyond_nyquist(sample_rate)[1:].any():
+        return math.nan
     decay = band_decay(ir, sample_rate, filters=filters, noise=noise)
     width = max(1, int(round(_STI_SLOT_S * sample_rate)))
     slots = -(-decay.energy.shape[1] // width)
@@ -1164,7 +1294,8 @@ def interaural_cross_correlation(
     The interaural cross-correlation coefficient (ISO 3382-1, annex B) is the largest
     magnitude of the normalised cross-correlation of the two ears' responses within
     1 ms either way; ``iacc_e`` takes them from the direct sound's arrival at the nearer
-    ear to 80 ms later, ``iacc_l`` from there to the end.
+    ear to 80 ms later, ``iacc_l`` from there to the end. NaN in a band at or above
+    half ``sample_rate``.
     """
     binaural = np.asarray(binaural, dtype=float)
     if binaural.ndim != 2 or binaural.shape[1] != 2:
@@ -1220,18 +1351,23 @@ __all__ = [
     "PARAMETERS",
     "STIPA_MODULATION_HZ",
     "STI_BANDS_HZ",
+    "SLOW_S",
     "SPEECH_SPECTRUM_DB",
     "STI_MODULATION_HZ",
+    "TIME_WEIGHTING_STEP_S",
+    "EventLevels",
     "RoomParameters",
     "SpeechParameters",
     "Talker",
     "decay_curve",
     "echo_criterion",
+    "event_levels",
     "from_energy",
     "interaural_cross_correlation",
     "modulation_transfer",
     "speech_transmission_index",
     "sti_from_impulse_response",
+    "time_weighted",
     "useful_to_detrimental",
     "BandDecay",
     "FILTER_ORDER",

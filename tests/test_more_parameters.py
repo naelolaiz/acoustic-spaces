@@ -3,10 +3,12 @@ stage support, directional decay, STIPA, U50 and the echo criteria, against resp
 whose values are known."""
 
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
 
+from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.compare import compare_parameters
 from acoustic_spaces.engine.early import EarlyReflections
@@ -265,7 +267,53 @@ def test_stage_support_only_near_the_source() -> None:
     assert delayed.parameters().st_early == pytest.approx(np.full(8, -10.0))
 
 
+def test_stage_support_only_1_m_from_the_source() -> None:
+    """ISO 3382-1:2009, annex C (after Gade's ST1) measures stage support 1 m from the
+    source. The direct sound in its first 10 ms goes as 1 / r^2, so it is given only from
+    0.9 to 1.1 m, where that moves it by 20 lg r, at most 0.9 dB. From 0.95 to 1.05 m,
+    Gade's average over 250 Hz to 2 kHz of ST_early and ST_late rises by 0.62 to 0.85 dB
+    over seeds 1 to 10 (0.87 dB for the direct sound alone; the floor's reflection, also
+    in those 10 ms, changes less, and the later windows by the rays' noise)."""
+    shoebox = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
+    data = Scene.from_yaml(shoebox).model_dump(mode="json")
+    data["geometry"]["file"] = str(shoebox.parent / data["geometry"]["file"])
+    talker = np.array(data["sources"][0]["position"])
+    distances = [0.5, 0.85, 0.95, 1.05, 1.15, 1.5]
+    data["listeners"] = [
+        {"name": f"{r} m", "position": (talker + [r, 0.0, 0.0]).tolist()} for r in distances
+    ]
+    room = Room.from_scene(Scene.model_validate(data))
+    settings = room.scene.simulation.model_copy(deep=True)
+    settings.late.rays, settings.ir_length_s, settings.seed = 5_000, 1.0, 1
+    settings.performance.threads = 2
+    result = simulate(room, settings=settings)
+    st = {r: result["talker", f"{r} m"].parameters() for r in distances}
+    for r in (0.5, 0.85, 1.15, 1.5):
+        assert np.isnan(st[r].st_early).all() and np.isnan(st[r].st_late).all()
+    # 250 Hz to 2 kHz, Gade's average: the nearer listener has the stronger direct sound.
+    middle = slice(2, 6)
+    for name in ("st_early", "st_late"):
+        change = np.mean(getattr(st[1.05], name)[middle] - getattr(st[0.95], name)[middle])
+        assert 0.4 < change < 1.0, (name, change)
+
+
 # -- speech -----------------------------------------------------------------------------
+
+
+#: IEC 60268-16:2020, annex A, 125 Hz to 8 kHz: the weighting factors of male speech
+#: (table A.1), the absolute speech reception threshold (table A.3, dB) and the
+#: modulation frequencies (Hz, A.1.4).
+ALPHA = np.array([0.085, 0.127, 0.230, 0.233, 0.309, 0.224, 0.173])
+BETA = np.array([0.085, 0.078, 0.065, 0.011, 0.047, 0.095])
+THRESHOLD_DB = (46.0, 27.0, 12.0, 6.5, 7.5, 8.0, 12.0)
+MODULATION_HZ = np.array(
+    [0.63, 0.8, 1.0, 1.25, 1.6, 2.0, 2.5, 3.15, 4.0, 5.0, 6.3, 8.0, 10.0, 12.5]
+)  # fmt: skip
+
+
+def _exponential_mtf(t60: float, f: np.ndarray) -> np.ndarray:
+    """m(F) of an exponential decay (Houtgast, Steeneken and Plomp, 1980)."""
+    return 1.0 / np.sqrt(1.0 + (2.0 * np.pi * f * t60 / 13.8) ** 2)
 
 
 def _transmission(m: np.ndarray) -> np.ndarray:
@@ -273,19 +321,92 @@ def _transmission(m: np.ndarray) -> np.ndarray:
     return (snr + 15.0) / 30.0
 
 
+def _sti(mti: np.ndarray) -> float:
+    """The STI of the MTI of each band (IEC 60268-16:2020, A.2.1)."""
+    return float(ALPHA @ mti - BETA @ np.sqrt(mti[:-1] * mti[1:]))
+
+
+def _masking_db(level: float) -> float:
+    """What a band at ``level`` (dB) masks of the next band up, re its own intensity
+    (IEC 60268-16:2020, A.4.2, table A.2)."""
+    if level < 63.0:
+        return 0.5 * level - 65.0
+    if level < 67.0:
+        return 1.8 * level - 146.9
+    if level < 100.0:
+        return 0.5 * level - 59.8
+    return -10.0
+
+
 @pytest.mark.parametrize("t60", [0.3, 1.0, 2.5])
 def test_stipa_of_an_exponential_decay(t60: float) -> None:
     # An exponential decay has m(F) = 1 / sqrt(1 + (2 pi F T / 13.8)^2) (Houtgast).
     t = np.arange(int(5 * t60 / DT)) * DT
     energy = np.repeat(np.exp(-6.0 * math.log(10.0) * t / t60)[None, :], 8, axis=0)
-    alpha = np.array([0.085, 0.127, 0.230, 0.233, 0.309, 0.224, 0.173])
-    beta = np.array([0.085, 0.078, 0.065, 0.011, 0.047, 0.095])
     f = np.array(iso3382.STIPA_MODULATION_HZ)
-    mti = _transmission(1.0 / np.sqrt(1.0 + (2.0 * np.pi * f * t60 / 13.8) ** 2)).mean(axis=1)
-    expected = alpha @ mti - beta @ np.sqrt(mti[:-1] * mti[1:])
+    expected = _sti(_transmission(_exponential_mtf(t60, f)).mean(axis=1))
     stipa = speech_transmission_index(energy, DT, stipa=True)
     assert stipa == pytest.approx(expected, abs=0.002)
     assert stipa == pytest.approx(speech_transmission_index(energy, DT), abs=0.01)
+
+
+@pytest.mark.parametrize(
+    "speech_db, noise_db",
+    [
+        ((65, 45, 65, 45, 65, 45, 65), None),  # maskers from 63 to 67 dB
+        ((85, 65, 85, 65, 85, 65, 85), None),  # from 67 to 100 dB
+        ((85, 65, 85, 65, 85, 65, 85), 55.0),  # the noise masks as well
+        ((105, 85, 105, 85, 105, 85, 105), None),  # from 100 dB on
+        ((50, 30, 20, 15, 15, 15, 20), None),  # 3 to 8 dB over the reception threshold
+    ],
+)
+def test_sti_with_auditory_masking(speech_db: tuple[float, ...], noise_db: float | None) -> None:
+    """IEC 60268-16:2020, A.2.3 and A.2.4: the room's m(F) is lowered by the noise,
+    S / (S + N), and by I / (I + I_am + I_rt), where I is the band's speech and noise,
+    I_am what the band below masks of it (A.4.2, table A.2) and I_rt the reception
+    threshold (A.4.3, table A.3). Loud bands under quiet ones make the masking count, and
+    quiet speech the threshold."""
+    t60 = 1.0
+    t = np.arange(int(8 * t60 / DT)) * DT
+    energy = np.repeat(np.exp(-6.0 * math.log(10.0) * t / t60)[None, :], 7, axis=0)
+    speech = 10.0 ** (np.array(speech_db) / 10.0)
+    noise = 0.0 if noise_db is None else 10.0 ** (noise_db / 10.0)
+    room = _exponential_mtf(t60, MODULATION_HZ)
+    mti = []
+    for k in range(7):
+        intensity = speech[k] + noise
+        below = speech[k - 1] + noise if k else 0.0
+        masked = below * 10.0 ** (_masking_db(10.0 * math.log10(below)) / 10.0) if k else 0.0
+        threshold = 10.0 ** (THRESHOLD_DB[k] / 10.0)
+        noisy = room * speech[k] / intensity
+        mti.append(_transmission(noisy * intensity / (intensity + masked + threshold)).mean())
+    expected = _sti(np.array(mti))
+    got = speech_transmission_index(energy, DT, signal_db=speech_db, noise_db=noise_db)
+    assert got == pytest.approx(expected, abs=1e-3)
+
+
+@pytest.mark.parametrize(
+    "t60",
+    [(0.5,) * 8, (1.0,) * 8, (2.0,) * 8, (3.0, 2.0, 1.6, 1.3, 1.0, 0.8, 0.6, 0.5)],
+    ids=["0.5 s", "1 s", "2 s", "per band"],
+)
+def test_sti_of_an_impulse_response_that_decays_exponentially(t60: tuple[float, ...]) -> None:
+    """IEC 60268-16:2020, A.3.2: the STI from the MTF of each octave band, here that of an
+    exponential decay. Each band holds a tone at a multiple of 62.5 Hz, so that what its
+    energy ripples at (the tones' beats and twice their frequencies) lies at 62.5 Hz or
+    more, also over 1 ms slots: far above the modulation frequencies. With one decay
+    time in every band the STI is the MTI: 0.736, 0.588 and 0.437 at 0.5, 1 and 2 s
+    (0.74, 0.59 and 0.44 rounded)."""
+    tones = (62.5, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0)
+    t = np.arange(int(2.5 * max(t60) * FS)) / FS
+    ir = sum(
+        np.exp(-3.0 * math.log(10.0) * t / t60_band) * np.cos(2.0 * np.pi * f * t)
+        for f, t60_band in zip(tones, t60, strict=True)
+    )
+    mti = np.array(
+        [_transmission(_exponential_mtf(band, MODULATION_HZ)).mean() for band in t60[1:]]
+    )
+    assert iso3382.sti_from_impulse_response(ir, FS) == pytest.approx(_sti(mti), abs=0.002)
 
 
 def test_u50_is_c50_without_noise_and_drops_with_it() -> None:
