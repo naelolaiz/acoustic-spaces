@@ -985,12 +985,12 @@ def test_a_reflection_where_moved_partitions_meet_passes_them(
 ) -> None:
     """The room of ``_tee`` or ``_lean_to`` with a few corners moved about 1 um, or about
     4 um, so that faces lie up to 1.8 um (stem-foot), 5.0 um (ceiling), 2.1 um (floor)
-    or 3.0 um (lean-to) off the planes they are merged into, and a source and a listener
+    or 3.1 um (lean-to) off the planes they are merged into, and a source and a listener
     either side of a partition. For the listener and for listeners 0.01 to 3 um to
     either side of it on two lines across the way to a corner, the early level in each
     band is no more than 3 dB above the higher of those for listeners 0.2 mm to either
     side (here at most 1.9 dB above it). For some of them a path reflects off the stem,
-    the wall y = 0 and the floor within 2.0 um of the corner where they meet
+    the wall y = 0 and the floor within 2.1 um of the corner where they meet
     (stem-foot); off the stem and the floor within 3.3 um of the corner where they meet
     the partition (floor); off the wall y = 6, the roof and the wall again within 1.2 um
     of the corner where they meet the partition (lean-to). For two of them (ceiling),

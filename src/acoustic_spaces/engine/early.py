@@ -593,9 +593,12 @@ def find_paths(
             plane = seqs[:, j]
             # A reflection point on an edge already lies on the next plane too: the path
             # reflects off both at the same point (a corner), so there is nothing to trace.
-            corner = valid & (np.abs(_height_near(model, current, plane, tolerance)) <= tolerance)
-            if j == k - 1:
-                corner[:] = False
+            corner = np.zeros(n, dtype=bool)
+            if j < k - 1:
+                corner[valid] = (
+                    np.abs(_height_near(model, current[valid], plane[valid], tolerance))
+                    <= tolerance
+                )
             trace = valid & ~corner
             start = current
             delta = chain[j + 1] - current
