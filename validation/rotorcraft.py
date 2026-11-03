@@ -25,12 +25,15 @@ worked example and the certified noise level of the helicopter it describes.
 - **The certified level.** The AS350 B3 at 2,250 kg flying the overflight of ICAO Annex
   16 chapter 11 (14 CFR 36 appendix J): level at 150 m over a microphone 1.2 m above
   grass (Miki's impedance, 200 kPa s/m²), at 0.9 V_H (V_H taken as Airbus's fast cruise
-  speed, 136 kt: 63.0 m/s), 25 °C, 70 % humidity, sea level. The direct sound and the
-  ground's reflection (Weyl and van der Pol), each with the air's absorption, heard at
-  the time it left the helicopter, A-weighted, with the slow time weighting to find the
-  10 dB down points; its sound exposure level against the certified 84.6 dB(A) (EASA
-  type certificate data sheet for noise EASA.R.008), each part of the sound alone too,
-  with the broadband noise by each model.
+  speed, 136 kt: 63.0 m/s), 25 °C, 70 % humidity, sea level, its main rotor at 394 rpm:
+  the most in powered flight with the Arriel 2B engine (EASA type certificate data
+  sheet R.008, 9.1), the rotor speed appendix J flies (J36.3(c), J36.105(c)(2)) for that
+  variant's noise record, D73. The direct sound and the ground's reflection (Weyl and
+  van der Pol), each with the air's absorption, heard at the time it left the
+  helicopter, A-weighted, with the slow time weighting to find the 10 dB down points;
+  its sound exposure level against the certified 84.6 dB(A) (D73 in EASA's type
+  certificate data sheet for noise EASA.R.008), each part of the sound alone too, with
+  the broadband noise by each model.
 """
 
 from __future__ import annotations
