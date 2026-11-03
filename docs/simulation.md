@@ -391,9 +391,9 @@ part is unchanged, since its scattered rays already find their way round corners
 `view --paths` and the Blender export draw diffracted paths in their own colour, the
 response's `early.diffracted` marks them, and `simulate` reports how many there are. The
 cost grows with the number of edges and of the paths near them, as each term of the fade
-is a path over its edge: in a hall with 16 edges, the early stage takes 478 ms per
-source and listener on four cores with `first_order`, 524 ms with `second_order`, which
-looks at pairs of edges, and 36 ms without diffraction (see the [validation
+is a path over its edge: in a hall with 16 edges, the early stage takes 540 ms per
+source and listener on four cores with `first_order`, 630 ms with `second_order`, which
+looks at pairs of edges, and 38 ms without diffraction (see the [validation
 report](validation.md#edge-diffraction-against-the-exact-solution)).
 
 Paths that reflect before or after an edge pair every edge with every plane the source

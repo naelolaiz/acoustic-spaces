@@ -1122,10 +1122,10 @@ the corners of edges (see [Known issues](#known-issues)).
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
-sight, takes 36 ms per source and listener on four cores without diffraction (23
-paths), 478 ms with `first_order` (995 paths) and 524 ms with `second_order` (1,010
-paths), the mean of three runs after a first one, with nothing else running on the
-machine. The terms that make the other specular paths fade at the edges (next section)
+sight, takes 38 ms per source and listener on four cores without diffraction (23
+paths), 540 ms with `first_order` (995 paths) and 630 ms with `second_order` (1,010
+paths): the median of four timings, each the mean of three runs after a first one,
+with nothing else running on the machine. The terms that make the other specular paths fade at the edges (next section)
 give most of the paths, as each term is a path over its edge, and so is each product of
 terms. In a one-off check when they were written, on a run where the early stage took
 650 ms with `first_order` and 710 ms with `second_order`, they took about 580 ms of the
