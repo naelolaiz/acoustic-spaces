@@ -42,11 +42,11 @@ def test_the_examples_helicopter_is_its_rotors_model() -> None:
     table = read_directivity_csv(path.parent / "helicopter.csv")
     np.testing.assert_allclose(table.table, sent.directivity().table, rtol=2e-3)
     # Each blade section's own noise is quieter than Pegg's fit to measured rotors:
-    # 124.3 dB(A) of sound power against 133.1, the tones in both.
+    # 123.83 dB(A) of sound power in the IEC octaves against 132.95, the tones in both.
     args.broadband = "bpm"
     by_sections = HELICOPTER_VEHICLE.info(args, scene, 63.0 * 3.6)
-    assert by_sections["sound_power_a_db"] == pytest.approx(124.3, abs=0.05)
-    assert info["sound_power_a_db"] == pytest.approx(133.1, abs=0.05)
+    assert by_sections["sound_power_a_db"] == pytest.approx(123.83, abs=0.05)
+    assert info["sound_power_a_db"] == pytest.approx(132.95, abs=0.05)
     facts = HELICOPTER_VEHICLE.facts(args, by_sections)
     assert "Brooks, Pope and Marcolini" in HELICOPTER_VEHICLE.credit(facts)
 
@@ -189,7 +189,8 @@ def _concert(folder: Path, stadium, length_s: float, rate: int = 16_000) -> dict
             "length_s": len(x) / rate,
             "relative_db": -6.02 * k,
         }
-    concert = {"rate": rate, "format": "binaural", "gain": 0.25, "seats": seats}
+    concert = {"rate": rate, "format": "binaural", "label": "binaural", "gain": 0.25}
+    concert["seats"] = seats
     pipeline.write_json(work / "seats" / pipeline.SEATS, concert)
     return concert
 
@@ -293,6 +294,9 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
         assert crossed["seats"][listener]["lag_s"] == concert["seats"][listener]["lag_s"]
     assert demo.step("mix").done(demo.resolved(args))
     assert not demo.step("mix").done(demo.resolved(argparse.Namespace(**vars(args) | {"at": 5.0})))
+    # Through other HRTFs than these mixes (and the concert's): made again, not done.
+    kemar = argparse.Namespace(**vars(args) | {"hrtf": "kemar.sofa"})
+    assert crossed["label"] == "binaural" and not demo.step("mix").done(demo.resolved(kemar))
     with pytest.raises(SystemExit, match="give --at 1 or later"):
         demo.main(["mix", "--step", "8", "--at", "0.2"])
 

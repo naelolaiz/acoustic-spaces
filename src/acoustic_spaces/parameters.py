@@ -1073,11 +1073,12 @@ def from_impulse_response(
     ``ir`` is (samples,) or (samples, 1); an empty or silent one has every parameter
     NaN. ``reference_energy`` is the energy of the same source at 10 m in free field: per
     band (as from :func:`free_field_reference`), or that of a broadband impulse, which
-    for responses made by this package is 0.01. ``filters`` picks the band filters
-    (see :func:`octave_bands`). With ``noise``, each band is cut where it sinks into the
-    background noise, the noise is subtracted and the decay beyond the cut estimated
-    (ISO 3382-1, 5.3.4); decay times whose range does not clear the noise by 10 dB
-    (EDT 20 dB, T20 35 dB, T30 45 dB) are NaN.
+    for responses made by this package is 0.01 (0.01 * ir_gain**2 for those written
+    with ``normalize``, ``ir_gain`` in their ``parameters.json``). ``filters`` picks the
+    band filters (see :func:`octave_bands`). With ``noise``, each band is cut where it
+    sinks into the background noise, the noise is subtracted and the decay beyond the cut
+    estimated (ISO 3382-1, 5.3.4); decay times whose range does not clear the noise by
+    10 dB (EDT 20 dB, T20 35 dB, T30 45 dB) are NaN.
 
     With ``stage``, ``st_early`` and ``st_late`` as well, for a response measured 1 m
     from the source. ``lateral`` is the response of a figure of eight with its null on

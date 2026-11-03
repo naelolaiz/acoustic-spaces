@@ -28,6 +28,9 @@ SPEED_STEP_M_S = 10.0
 #: section 3.6.7, and how low a source may be over the runway (m), section 3.5.
 NEAREST_POINTS_M = 10.0
 LOWEST_SOURCE_M = 1.0
+#: How near two consecutive points of a ground track may be before the later one goes
+#: (m): a walk's places one above the other have one point in plan.
+SAME_PLAN_POINT_M = 1e-6
 
 
 @dataclass(frozen=True)
@@ -69,8 +72,17 @@ class Track:
     @classmethod
     def through(cls, points: Sequence[tuple[float, float]], origin: tuple[float, float]) -> Track:
         """The track through ``points`` measured from ``origin``, a point on it (the
-        start of roll or the landing threshold)."""
-        pts = tuple((float(x), float(y)) for x, y in points)
+        start of roll or the landing threshold); a point within
+        :data:`SAME_PLAN_POINT_M` of the one before it is left out."""
+        pts: list[tuple[float, float]] = []
+        for point in points:
+            x, y = (float(v) for v in point)
+            if not pts or math.hypot(x - pts[-1][0], y - pts[-1][1]) > SAME_PLAN_POINT_M:
+                pts.append((x, y))
+        if len(pts) < 2:
+            raise ValueError(
+                f"a ground track needs two points more than {SAME_PLAN_POINT_M:g} m apart"
+            )
         lengths = np.hypot(*np.diff(np.asarray(pts), axis=0).T)
         best, along = math.inf, 0.0
         walked = 0.0
@@ -81,7 +93,7 @@ class Track:
             if off < best:
                 best, along = off, walked + t * length
             walked += float(length)
-        return cls(points=pts, start_m=-along)
+        return cls(points=tuple(pts), start_m=-along)
 
     @property
     def node_distances(self) -> np.ndarray:
@@ -89,25 +101,39 @@ class Track:
         lengths = np.hypot(*np.diff(np.asarray(self.points), axis=0).T)
         return self.start_m + np.concatenate(([0.0], np.cumsum(lengths)))
 
+    @staticmethod
+    def _legs(nodes: np.ndarray) -> np.ndarray:
+        """The legs that have a length, each by its first point's index, of a track
+        whose points are ``nodes`` along it (m)."""
+        legs = np.flatnonzero(np.diff(nodes) > 0.0)
+        if len(legs) == 0:
+            raise ValueError("a ground track needs two points apart")
+        return legs
+
     def extended(self, first_m: float, last_m: float) -> Track:
         """The track reaching back to ``first_m`` and on to ``last_m`` at least, its
-        first and last legs made longer if they must be (section 3.6.6)."""
+        first and last legs made longer if they must be (section 3.6.6), the way the
+        first and last that have a length go."""
         s = self.node_distances
+        legs = self._legs(s)
         pts = [np.asarray(p, dtype=float) for p in self.points]
         start = self.start_m
         if first_m < s[0]:
-            ahead = pts[1] - pts[0]
+            ahead = pts[legs[0] + 1] - pts[legs[0]]
             pts[0] = pts[0] - ahead / np.hypot(*ahead) * (s[0] - first_m)
             start = first_m
         if last_m > s[-1]:
-            ahead = pts[-1] - pts[-2]
+            ahead = pts[legs[-1] + 1] - pts[legs[-1]]
             pts[-1] = pts[-1] + ahead / np.hypot(*ahead) * (last_m - s[-1])
         return Track(points=tuple((float(x), float(y)) for x, y in pts), start_m=start)
 
     def at(self, s: float) -> tuple[float, float]:
-        """The point of the track ``s`` along it (m)."""
+        """The point of the track ``s`` along it (m), on the leg that holds it, or on
+        from the first or last leg that has a length before or after the track."""
         nodes = self.node_distances
-        i = int(np.clip(np.searchsorted(nodes, s) - 1, 0, len(nodes) - 2))
+        legs = self._legs(nodes)
+        # The leg with nodes[i] < s <= nodes[i + 1] has a length.
+        i = int(np.clip(np.searchsorted(nodes, s) - 1, legs[0], legs[-1]))
         f = (s - nodes[i]) / (nodes[i + 1] - nodes[i])
         a, b = np.asarray(self.points[i]), np.asarray(self.points[i + 1])
         x, y = a + f * (b - a)
