@@ -315,14 +315,15 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
   tests). Every place's late part is drawn from the same random sequence, so the tails
   that cross fade differ only in their level and decay, not in their noise. Once the
   walk is over, the walker stays where it ends for as long as the signals last.
-- A walking listener hears every source; a walking source is heard at `--listener`,
-  with the other sources where they stand. `--format` takes the formats of `simulate
-  --output` (by default the scene's first output, or binaural with `--hrtf`, which is
-  for binaural only) and `--video` saves the room, the path and the walker going along
-  it, with an arrow and its yaw for the way it faces, as a GIF or an MP4 (both with the
-  viz extra) at `--fps`. An MP4 carries the sound when the format has one or two
-  channels (mono, stereo, binaural) and then lasts as long as the sound; with more
-  channels, play the WAV alongside it.
+- A walking listener hears every source in use; a walking source is heard at
+  `--listener`, even one left out (`enabled: false`), by default the only listener in
+  use, with the other sources in use where they stand. `--format` takes the formats of
+  `simulate --output` (by default the scene's first output, or binaural with `--hrtf`,
+  which is for binaural only) and `--video` saves the room, the path and the walker
+  going along it, with an arrow and its yaw for the way it faces, as a GIF or an MP4
+  (both with the viz extra) at `--fps`. An MP4 carries the sound when the format has one
+  or two channels (mono, stereo, binaural) and then lasts as long as the sound; with
+  more channels, play the WAV alongside it.
 - A walker faces the way it goes (unless its walk says `face_forward: false`) and
   turns through each corner at 90 degrees per second. The gallery's visitor has the
   guide behind it all down the long arm, and at the corner turns over a second towards

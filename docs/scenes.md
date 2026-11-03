@@ -217,7 +217,7 @@ meet without closing, and the report names them. From Python,
 Each entry in `materials` takes coefficients from one of:
 
 - `preset: <id>`: the built-in database (`acoustic-spaces materials` lists it);
-- `file: <csv>`: a table of centre frequencies, absorption and optionally
+- `file: <csv>`: a table of rising centre frequencies in Hz, absorption and optionally
   scattering, one row each, at any band resolution (the layout the
   [BRAS](https://doi.org/10.14279/depositonce-6726.3) benchmark uses);
 - `file: <library>` with `entry: <name>`: a material of a CATT-Acoustic or ODEON
@@ -575,13 +575,15 @@ sources:
   read as it is; another format (FLAC, MP3, M4A...) needs ffmpeg on the PATH.
   `channel` picks what of it the source plays: `left`, `right`, or `mono`, both
   mixed down; without a channel it is mixed down to mono.
-- The scene's `recording` is the file a source with a `channel` and no `signal`
-  plays: a file relative to the scene's folder, or the name of one of the free
-  recordings (`spicy_funk_cake`, `great_british_summer`, `potassium`, `speech_male`,
-  `speech_female`; see [a demo of any scene](demos.md#a-demo-of-any-scene)), which
-  the demo downloads the first time and keeps for every scene. Left and right are the
-  recording's, so the loudspeaker on the audience's left plays `left`. A source with
-  neither a signal nor a channel is silent in the demo. The simulation reads neither.
+- The scene's `recording` is the file a source with a `channel` and no `signal` plays: a
+  file relative to the scene's folder, or the name of one of the free recordings
+  (`spicy_funk_cake`, `great_british_summer`, `potassium`, `speech_male`,
+  `speech_female`; see [a demo of any scene](demos.md#a-demo-of-any-scene)), which the
+  demo downloads the first time and keeps for every scene. A name without a suffix must
+  be a free recording's or a file that is there, so a mistyped free name is refused.
+  Left and right are the recording's, so the loudspeaker on the audience's left plays
+  `left`. A source with neither a signal nor a channel is silent in the demo. The
+  simulation reads neither.
 - `simulate` reports the sound pressure level per octave band and A-weighted
   (`spl_db` and `spl_a_db` in `parameters.json`), the editor's results show it per
   band, and `inspect` lists each source's sound power. In free field, the level 4 m from
@@ -652,8 +654,10 @@ listeners:
 - `enabled: false` leaves a source or listener out of `simulate`, `map`, `walk` (the
   sources that do not walk) and the scene's checks, as if it were not there, but keeps
   it in the scene; the others get the same responses as in a run of all, since seeds
-  follow the scene's order. Named on the command line (`--source`), it is simulated
-  all the same. `inspect` marks it "left out".
+  follow the scene's order. Named on the command line (`--source`), it is simulated all
+  the same. `inspect` marks it "left out". With every source, or every listener, left
+  out, `validate`, `pack`, `simulate` and the editor refuse the scene, as there is
+  nothing to run (a map needs no listener).
 - In the editor's scene tree each source, listener and group has a tick (in
   simulations or left out, saved as `enabled: false`) and an eye that shows or hides
   it in the 3D view and the plan. Hiding is how the editor shows the scene, not part
@@ -737,9 +741,13 @@ simulation:
 ```
 
 - `air` sets the speed of sound and the air absorption per band (ISO 9613-1), for the
-  rays, the wave solver and the statistical reverberation times alike. Outdoors,
-  `temperature_c` is the temperature at the ground, and an `atmosphere` changes it with
-  height (see [Wind and temperature](outdoor.md#wind-and-temperature)).
+  rays, the wave solver and the statistical reverberation times alike. ISO 9613-1:1993
+  states the absorption's accuracy (±10 % to ±50 %, as the humidity goes) for any
+  humidity and temperature a scene takes, but only for frequency over pressure from
+  0.0004 to 10 Hz/Pa: a pressure outside 0.794 to 157.7 kPa in octave bands (1 to 125.3
+  kPa in third-octave bands) is warned about. Outdoors, `temperature_c` is the
+  temperature at the ground, and an `atmosphere` changes it with height (see [Wind and
+  temperature](outdoor.md#wind-and-temperature)).
 - Outdoors, `ir_length_s` counts from the latest direct sound of the run, as sources
   and listeners can stand far apart (see [Outdoor scenes](outdoor.md#what-the-simulation-does-outdoors)).
 - A response that ends before the room has decayed is extended by its fitted decay
