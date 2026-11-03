@@ -45,6 +45,7 @@ from __future__ import annotations
 import functools
 import math
 import threading
+import weakref
 
 import numpy as np
 
@@ -54,6 +55,11 @@ from acoustic_spaces.engine.gpu_rays import BVH_WGSL, T_MIN, pack_tree
 
 class Unsupported(ValueError):
     """The GPU tracer does not do what a run asks for; the CPU's does."""
+
+
+#: The tracers that keep their buffer of rays in flight from one call to the next.
+_keeping: weakref.WeakSet = weakref.WeakSet()
+_keeping_lock = threading.Lock()
 
 
 #: Threads per workgroup; workgroups per dispatch dimension WebGPU always allows.
@@ -2305,13 +2311,48 @@ class GpuTracer:
             size=4 * _COUNTERS, usage=usage.MAP_READ | usage.COPY_DST
         )
         self._limit = int(device.limits["max-storage-buffer-binding-size"])
-        # One run at a time: the uniforms and counters are shared.
+        # The rays in flight, kept from one call to the next where a call asks to keep
+        # them (a late part makes one for each batch and band), so that each does not
+        # make and clear its own: no call reads a ray before it wrote it. Until release().
+        self._state = None
+        # One run at a time: the uniforms, counters and rays in flight are shared.
         self._busy = threading.Lock()
 
-    def trace(self, **arguments) -> tuple:
-        """Traces rays (see :meth:`_trace` for the arguments), one run at a time."""
+    def trace(self, keep: bool = False, **arguments) -> tuple:
+        """Traces rays (see :meth:`_trace` for the arguments), one run at a time. With
+        ``keep``, keeps its buffer of rays in flight for the next call, until
+        :meth:`release`."""
         with self._busy:
-            return self._trace(**arguments)
+            try:
+                return self._trace(**arguments)
+            finally:
+                if not keep:
+                    self._let_go()
+
+    def release(self) -> None:
+        """Lets go of the rays in flight it keeps from one call to the next."""
+        with self._busy:
+            self._let_go()
+
+    def _let_go(self) -> None:
+        if self._state is not None:
+            self._state.destroy()
+            self._state = None
+        with _keeping_lock:
+            _keeping.discard(self)
+
+    def _rays_in_flight(self, size: int):
+        """The buffer of rays in flight, ``size`` bytes at least: the one kept from the
+        call before where it is as large."""
+        if self._state is None or self._state.size < size:
+            if self._state is not None:
+                self._state.destroy()
+            self._state = None
+            wgpu = gpu._wgpu("ray tracing")
+            self._state = self._device.create_buffer(size=size, usage=wgpu.BufferUsage.STORAGE)
+            with _keeping_lock:
+                _keeping.add(self)
+        return self._state
 
     def _atmosphere(self, bending, ground: float, sagitta: float) -> tuple[list, dict]:
         """The atmosphere's words for the scene (nodes, then its tables) and the run's
@@ -2462,23 +2503,27 @@ class GpuTracer:
 
         usage = wgpu.BufferUsage
         start_words = np.hstack([dirs, energies]).astype(np.float32).view(np.uint32)
+        state = 8 * most * record
         buffers = [
             self._uniform,
             self._nodes,
             self._triangles,
             device.create_buffer_with_data(data=scene, usage=usage.STORAGE),
             device.create_buffer_with_data(data=start_words, usage=usage.STORAGE),
-            device.create_buffer(size=8 * most * record, usage=usage.STORAGE),
+            self._rays_in_flight(state),
             device.create_buffer(
                 size=4 * tally_words, usage=usage.STORAGE | usage.COPY_SRC | usage.COPY_DST
             ),
         ]
         tallies = buffers[-1]
+        # The rays in flight bound as large as this run's, whatever the buffer kept.
+        sizes = [b.size for b in buffers]
+        sizes[5] = state
         group = device.create_bind_group(
             layout=_bindings(),
             entries=[
-                {"binding": i, "resource": {"buffer": b, "offset": 0, "size": b.size}}
-                for i, b in enumerate(buffers)
+                {"binding": i, "resource": {"buffer": b, "offset": 0, "size": size}}
+                for i, (b, size) in enumerate(zip(buffers, sizes, strict=True))
             ],
         )
         r_min = float(radius.min(initial=1.0))
@@ -2712,6 +2757,15 @@ def tracer(bvh) -> GpuTracer:
     return GpuTracer(bvh)
 
 
+def release() -> None:
+    """Lets go of the rays in flight that GPU tracers keep from one call to the next
+    (calls with ``keep``), as a run's late part ends."""
+    with _keeping_lock:
+        kept = list(_keeping)
+    for each in kept:
+        each.release()
+
+
 def run_memory(rays: int, bands: int, results: float) -> float:
     """Bytes a run of ``rays`` rays in ``bands`` bands takes on the GPU and off it, for
     results (the energy and directional arrays, in 64-bit floats) of ``results`` bytes:
@@ -2776,10 +2830,14 @@ def trace_stochastic(
     plant_upright=None,
     *,
     total: int | None = None,
+    keep: bool = False,
 ) -> tuple:
     """As ``acoustic_spaces._native.trace_stochastic``, on the GPU. ``total`` (default
     ``rays``) is the number of rays the source's energy is shared between, for tracing
-    part of a run's rays here and the rest elsewhere. Raises :class:`Unsupported` for
+    part of a run's rays here and the rest elsewhere. With ``keep``, the GPU keeps its
+    buffer of rays in flight for the next call, until :func:`release`, as a run's late
+    part does; without, the call makes and lets go of its own. Raises
+    :class:`Unsupported` for
     what only the CPU traces: transmission into a room (see :func:`passes_sound`), face
     groups, and vegetation of more media than :data:`MAX_MEDIA`."""
     from acoustic_spaces import _native
@@ -2805,6 +2863,7 @@ def trace_stochastic(
         raise Unsupported(declined)
     on_gpu = tracer(bvh)
     energy, directional, escaped, ray_energy, reflections, traced = on_gpu.trace(
+        keep=keep,
         source=source,
         starts=starts,
         total=int(rays) if total is None else int(total),
@@ -2856,6 +2915,7 @@ __all__ = [
     "MAX_SPANS",
     "GpuTracer",
     "Unsupported",
+    "release",
     "run_memory",
     "trace_stochastic",
     "tracer",

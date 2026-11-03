@@ -53,8 +53,8 @@ PLOT_SIZE = (720, 480)
 #: the sound pressure level at the source's sound power; the rest show only where the
 #: response gives them: outdoors the level relative to free field, the insertion loss of
 #: what the run was also made without and the level over a long term (weather classes),
-#: then those of ISO 3382-1 that need directions (stage support needs a listener near
-#: the source).
+#: then those of ISO 3382-1 that need directions (stage support needs a listener 0.9 to
+#: 1.1 m from the source).
 ROWS = [
     ("edt", N_("EDT (s)"), "{:.2f}"),
     ("t20", N_("T20 (s)"), "{:.2f}"),
@@ -146,12 +146,12 @@ ROW_TIPS = {
         "80 ms, which surrounds the listener"
     ),
     "st_early": N_(
-        "Early stage support (dB), for a listener within 1.5 m of the source: "
+        "Early stage support (dB), for a listener 0.9 to 1.1 m from the source: "
         "the energy from 20 to 100 ms over that of the first 10 ms, how well musicians hear "
         "each other"
     ),
     "st_late": N_(
-        "Late stage support (dB), for a listener within 1.5 m of the source: the "
+        "Late stage support (dB), for a listener 0.9 to 1.1 m from the source: the "
         "energy from 100 to 1000 ms over that of the first 10 ms, how much of the room "
         "musicians hear"
     ),
@@ -570,7 +570,7 @@ class ResultsPanel(QWidget):
         sources = {s.name: s for s in self.result.room.scene.sources}
         source = sources.get(response.source)
         power = 94.0 if source is None else source.power_db("octave")
-        spl = response.levels(power, parameters)
+        spl = response.levels_or_held(power, parameters)
         nan = np.full(len(OCTAVE_BANDS_HZ), np.nan)
         for row, (name, _label, template) in enumerate(ROWS):
             if name == "spl":
