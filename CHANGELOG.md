@@ -145,6 +145,12 @@
 - The GPU tracer keeps its buffer of rays in flight (up to 46 MiB for one band, 88 MiB
   for eight) through a late part, instead of making and clearing it for each of the
   part's calls (160 per source with the defaults).
+- Fixed: a WAV file over 4 GiB (16 channels for 24 minutes at 48 kHz, say) is written
+  as RF64 (EBU Tech 3306); it failed after the whole render. RF64 and BW64 files are
+  read too.
+- A loudspeaker layout with height finds the faces of its hull among the triples around
+  each corner of scipy's Qhull hull, with the same gains: 96 speakers in 0.12 s instead
+  of 7.5 s.
 
 ## 4.1.0
 
