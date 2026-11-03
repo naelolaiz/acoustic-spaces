@@ -579,7 +579,7 @@ wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and vi
   houses). The breeze and the cool air bend the sound down to the water, which gives it
   back almost whole. `scene_still.yaml` is the same scene with no atmosphere.
 - **What it gives.** At the bedroom window the evening's weather makes the song 7.1 dB(A)
-  louder than still air would, in the garden 5.3 dB; behind the stage, upwind, it is
+  louder than still air would, in the garden 4.9 dB; behind the stage, upwind, it is
   0.5 dB quieter, and on the boat 1.0 dB quieter. The window gains most: what the
   weather bends down comes in off the water as well as straight, and the house's wall
   beside the window gives back each of those again.

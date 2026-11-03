@@ -473,13 +473,34 @@ is an arc of a circle, so its travel time and its length are exact.
   curved paths from the source to the listener, straight there or off the ground up to
   ten times. Downwind there may be several where still air has one; in the shadow there
   are none. Each comes in with its own travel time and angle, at a level set by how far
-  its neighbouring rays spread apart (1/R² for a straight path), fitted over the rays
-  that turn back in the air a few layers above and below it, as the layers' corners
-  would otherwise make it jump. Where neighbouring rays cross (a caustic) the level is
-  capped at 10 dB over a straight path's, and each caustic delays the phase by a
-  quarter period. Against an independent ray tracer on the smooth profile of the
-  `windy` preset downwind, the levels of three such paths 100 and 300 m away are within
-  0.05 dB (the tests allow 0.2 dB); no such check is made near a caustic.
+  its neighbouring rays spread apart (1/R² for a straight path). The parts of that
+  spread that grow without bound where the ray runs level at the source, the listener,
+  the ground or a corner of the profile, or through a layer whose speed does not change
+  with height, come from the arcs in closed form; the corners are a table's rows and the
+  edges of the layers whose speed does not change with height, to rounding (above 1 km
+  among them). Where the rounding of those parts could move the spread by more than
+  0.01 % (they grow large in a gradient too weak to tell from level), it comes from the
+  ranges alone; so too where it would come from rays a small step either side, rounding
+  moves the gradients of the layers they cross or their horizontal slownesses lie fewer
+  than 300 floating-point numbers from the ray's, and rays a quarter as far either side
+  give one more than 0.1 % apart. Where the speed is the same at every height between
+  the source's and the listener's, the direct path is the straight line. For a ray that
+  turns back in the air the rest is fitted over the rays that turn a few layers above
+  and below it, none flatter than the one that leaves the source level, as the gentle
+  corners where a smooth profile is sampled would otherwise make it jump. Where that
+  would take rays flatter than it, the rest comes first from rays a small step either
+  side, if at each gentle corner they cross the speed is at least that at either end and
+  the sine of the ray's elevation at least 0.9 of the lesser of its sines at its ends,
+  and else from that fit. Against the smooth profiles of the `windy` preset downwind and
+  of `clear_night`, from sources 1 and 4 m up to listeners 0.5 to 12 m up, the levels of
+  the paths 150 and 300 m away, straight or off the ground up to twice, are within
+  0.18 dB where they are less than 8 dB over a straight path's (1.4 dB nearer a
+  caustic), and those 600 m away in `windy` within 0.34 dB (1.75 dB nearer a caustic).
+  Where neighbouring rays cross (a caustic) the level is capped at 10 dB over a straight
+  path's, and each caustic delays the phase by a quarter period. Against an independent
+  ray tracer on the smooth profile of the `windy` preset downwind, the levels of three
+  such paths 100 and 300 m away are within 0.05 dB (the tests allow 0.2 dB); no such
+  check is made near a caustic.
 - **In the bands up to 500 Hz** rays fail over the ground, as the profiles change most
   within a wavelength of it, where the direct sound and its reflection meet. There the
   sound over the open ground comes from a parabolic equation (the Green's function
@@ -1034,7 +1055,7 @@ The level in each class is as accurate as the simulation in that weather (see [H
 simulation bends sound](#how-the-simulation-bends-sound)). The combination is the
 standards' formula, exact to rounding; over grass, the correction it gives from the
 classes favourable to propagation to the long-term level follows ISO 9613-2's within
-0.8 dB, with a C_0 of 3.4 dB, inside the standard's 0 to 5 dB (see
+0.74 dB, with a C_0 of 3.4 dB, inside the standard's 0 to 5 dB (see
 [Validation](validation.md#levels-over-a-long-term)).
 
 ## Passing vehicles

@@ -2145,6 +2145,7 @@ def _atmosphere_tables(rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     # The grazing ray goes on up through node i + 1 while cb < c0, from the ground on.
     rising = np.logical_and.accumulate(cb < c0, axis=1)
     sa = np.sqrt(np.maximum(1.0 - (p * ca) ** 2, 0.0))
+    sa[:, 0] = 0.0  # horizontal at the ground, where p c0 can round short of 1
     sb = np.sqrt(np.maximum(1.0 - (p * cb) ** 2, 0.0))
     with np.errstate(divide="ignore", invalid="ignore"):
         step = np.where(rising, p * (ca + cb) * dz / (sa + sb), 0.0)

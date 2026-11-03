@@ -53,7 +53,14 @@ from acoustic_spaces.engine import parabolic, run_size, wide_angle
 from acoustic_spaces.engine.coherent import ground_factors, reflection_phases
 from acoustic_spaces.engine.early import _EDGE_TOLERANCE, EarlyReflections, _face_at
 from acoustic_spaces.engine.model import TraceModel, _ground_faces, source_weights
-from acoustic_spaces.engine.refraction import CHORD_SAGITTA_M, Profile, Rays, _sine, node_heights
+from acoustic_spaces.engine.refraction import (
+    CHORD_SAGITTA_M,
+    Profile,
+    Rays,
+    _sine,
+    node_heights,
+    table_heights,
+)
 from acoustic_spaces.engine.shadow import equivalent_radius, shadow_start
 from acoustic_spaces.engine.turbulence import Eddies
 from acoustic_spaces.engine.weather import Weather
@@ -171,6 +178,7 @@ class Refraction:
         self.centres = np.asarray(model.band_hz, dtype=float)
         z = node_heights(self.atmosphere)
         self._nodes = z
+        self._rows = table_heights(self.atmosphere)
         self._still_speed = np.asarray(self.atmosphere.sound_speed(z, self.ground_c), dtype=float)
         self._wind_speed = np.asarray(self.atmosphere.wind_speed(z), dtype=float)
         self.windy = bool(np.any(self._wind_speed != 0.0))
@@ -181,6 +189,7 @@ class Refraction:
         self.zoned = self.weather is not None
         if self.zoned:
             self._nodes = self.weather.nodes
+            self._rows = self.weather.rows
             self.windy = self.windy or bool(np.any(self.weather.wind != 0.0))
         self._weather = (self.atmosphere.model_dump_json(), self.ground_c)
         self._profiles: dict[float, Profile] = {}
@@ -221,7 +230,7 @@ class Refraction:
                 self._profiles[key] = self.weather.profile(np.array(key[0]), np.array(key[1]))
             else:
                 self._profiles[key] = Profile(
-                    self._nodes, self._still_speed + key * self._wind_speed
+                    self._nodes, self._still_speed + key * self._wind_speed, self._rows
                 )
         return self._profiles[key]
 
@@ -906,8 +915,8 @@ def solve(plans: list[Planned]) -> list[dict[int, np.ndarray]]:
 
         def impedance(r):
             beta = refraction._admittance(face_at(r))[band]
-            with np.errstate(divide="ignore"):
-                return np.where(beta == 0.0, np.inf, 1.0 / np.conj(beta))
+            rigid = beta == 0.0
+            return np.where(rigid, np.inf, 1.0 / np.conj(np.where(rigid, 1.0, beta)))
 
         ranges = np.array([m.range for m in needing])
         heights = np.array([m.height for m in needing])

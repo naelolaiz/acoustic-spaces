@@ -2216,17 +2216,17 @@ program runs without it, a difference of the path lengths only, under 0.01 dB he
 | | -0.05 | -0.05 | -0.04 | -0.07 | +0.04 | engine - ffp |
 | | +0.00 | +0.06 | -0.04 | -0.68 | +0.04 | through the filters |
 | 200 m | 6.21 | 2.97 | -5.67 | -6.00 | 2.28 | ffp, dB |
-| | -0.04 | -0.04 | -0.05 | -0.07 | -0.23 | engine - ffp |
-| | +0.03 | +0.09 | -0.27 | -0.69 | -0.23 | through the filters |
+| | -0.04 | -0.04 | -0.05 | -0.07 | -0.12 | engine - ffp |
+| | +0.03 | +0.09 | -0.27 | -0.69 | -0.12 | through the filters |
 | 500 m | 9.03 | 1.29 | -2.98 | -2.74 | 5.07 | ffp, dB |
-| | -0.03 | -0.04 | -0.06 | -0.05 | -1.78 | engine - ffp |
-| | +0.12 | -0.19 | -0.12 | -0.82 | -1.78 | through the filters |
+| | -0.03 | -0.04 | -0.06 | -0.05 | -1.76 | engine - ffp |
+| | +0.12 | -0.19 | -0.12 | -0.82 | -1.76 | through the filters |
 | 1 km | 6.79 | 1.37 | 1.43 | 1.55 | 6.63 | ffp, dB |
-| | +0.03 | -0.05 | -0.04 | -0.11 | +0.48 | engine - ffp |
-| | -0.22 | -0.15 | +0.12 | -0.19 | +0.48 | through the filters |
+| | +0.03 | -0.05 | -0.04 | -0.11 | +0.55 | engine - ffp |
+| | -0.22 | -0.15 | +0.12 | -0.19 | +0.55 | through the filters |
 | 2 km | 5.93 | 5.97 | -0.51 | 4.14 | 4.18 | ffp, dB |
-| | -0.02 | +0.07 | -0.53 | -0.75 | -0.77 | engine - ffp |
-| | -0.32 | +0.34 | -1.32 | -0.45 | -0.77 | through the filters |
+| | -0.02 | +0.07 | -0.53 | -0.75 | -0.76 | engine - ffp |
+| | -0.32 | +0.34 | -1.32 | -0.45 | -0.76 | through the filters |
 
 **case 3, upward refraction 0.1/s**
 
@@ -2256,17 +2256,17 @@ program runs without it, a difference of the path lengths only, under 0.01 dB he
 | | -0.05 | -0.05 | -0.04 | -0.06 | +0.04 | engine - ffp |
 | | +0.00 | +0.06 | -0.04 | -0.68 | +0.04 | through the filters |
 | 200 m | 6.21 | 2.97 | -5.67 | -6.00 | 2.28 | ffp, dB |
-| | -0.04 | -0.04 | -0.05 | -0.07 | -0.23 | engine - ffp |
-| | +0.03 | +0.09 | -0.27 | -0.69 | -0.23 | through the filters |
+| | -0.04 | -0.04 | -0.05 | -0.07 | -0.12 | engine - ffp |
+| | +0.03 | +0.09 | -0.27 | -0.69 | -0.12 | through the filters |
 | 500 m | 9.03 | 1.29 | -2.98 | -2.74 | 5.07 | ffp, dB |
-| | -0.03 | -0.03 | -0.06 | -0.05 | -1.78 | engine - ffp |
-| | +0.12 | -0.18 | -0.12 | -0.82 | -1.78 | through the filters |
+| | -0.03 | -0.03 | -0.06 | -0.05 | -1.76 | engine - ffp |
+| | +0.12 | -0.18 | -0.12 | -0.82 | -1.76 | through the filters |
 | 1 km | 6.74 | 1.38 | 1.43 | 1.55 | 6.63 | ffp, dB |
-| | +0.04 | -0.04 | -0.04 | -0.11 | +0.48 | engine - ffp |
-| | -0.21 | -0.14 | +0.13 | -0.19 | +0.48 | through the filters |
+| | +0.04 | -0.04 | -0.04 | -0.11 | +0.55 | engine - ffp |
+| | -0.21 | -0.14 | +0.13 | -0.19 | +0.55 | through the filters |
 | 2 km | 3.80 | -1.16 | -2.85 | -5.93 | 1.15 | ffp, dB |
-| | -0.07 | +0.01 | -0.09 | +0.44 | -0.97 | engine - ffp |
-| | -0.42 | -0.16 | -0.00 | -0.46 | -0.97 | through the filters |
+| | -0.07 | +0.01 | -0.09 | +0.44 | -0.95 | engine - ffp |
+| | -0.42 | -0.16 | -0.00 | -0.46 | -0.95 | through the filters |
 
 **-0.1/s up to 100 m**
 
@@ -2306,7 +2306,7 @@ free field (0.21 dB with the gradient stopping at 100 m, at 500 Hz), and within 
 at 1 km with the gradient stopping at 100 m (250 Hz,
 44 dB down, where the pure tones above show the parabolic equation straying deep in
 the shadow); the comparison stops 60 dB down. The 1 kHz band comes from the rays: within
-0.5 dB but for 1.8 dB at 500 m downwind, under a caustic, where ray theory is least
+0.55 dB but for 1.8 dB at 500 m downwind, under a caustic, where ray theory is least
 reliable and the engine caps the level (see
 [Outdoor scenes](outdoor.md#how-the-simulation-bends-sound)), and 1 dB at 2 km, where
 the bent paths crowd.
@@ -2821,10 +2821,10 @@ the long term and L_den (5 dB in the evening, 10 at night), in dB(A):
 
 | | downwind | upwind | still | inversion | day | evening | night | long term | L_den |
 |---|---|---|---|---|---|---|---|---|---|
-| 50 m | 46.5 | 36.6 | 47.4 | 47.7 | 45.6 | 46.1 | 46.8 | 46.1 | 53.0 |
-| 100 m | 42.9 | 21.6 | 38.9 | 40.6 | 39.5 | 39.8 | 40.1 | 39.8 | 46.4 |
-| 200 m | 33.5 | 10.5 | 26.3 | 36.1 | 29.2 | 31.8 | 33.9 | 31.7 | 39.8 |
-| 400 m | 22.2 | -2.8 | 12.0 | 28.5 | 17.5 | 22.7 | 25.8 | 22.7 | 31.4 |
+| 50 m | 46.6 | 36.6 | 47.4 | 47.6 | 45.7 | 46.1 | 46.8 | 46.1 | 53.0 |
+| 100 m | 42.8 | 21.6 | 38.9 | 40.6 | 39.5 | 39.8 | 40.1 | 39.8 | 46.4 |
+| 200 m | 33.4 | 10.5 | 26.3 | 36.2 | 29.2 | 31.8 | 34.0 | 31.8 | 39.8 |
+| 400 m | 22.2 | -2.8 | 12.0 | 28.5 | 17.5 | 22.7 | 25.8 | 22.7 | 31.5 |
 | 800 m | 12.2 | -20.2 | -1.6 | 17.7 | 7.2 | 12.0 | 15.0 | 12.0 | 20.7 |
 
 **The arithmetic.** The script works the period levels, the long-term levels and L_den
@@ -2843,13 +2843,13 @@ dB, within the standard's range:
 
 | distance | engine | ISO 9613-2 | difference |
 |---|---|---|---|
-| 50 m | 0.94 | 1.69 | -0.75 |
-| 100 m | 2.21 | 2.53 | -0.32 |
-| 200 m | 3.12 | 2.95 | +0.17 |
+| 50 m | 0.95 | 1.69 | -0.74 |
+| 100 m | 2.20 | 2.53 | -0.33 |
+| 200 m | 3.13 | 2.95 | +0.17 |
 | 400 m | 3.43 | 3.16 | +0.27 |
 | 800 m | 3.49 | 3.27 | +0.22 |
 
-The engine's correction follows the standard's shape within 0.75 dB, the most at 50 m,
+The engine's correction follows the standard's shape within 0.74 dB, the most at 50 m,
 where the standard's formula is only a step past d_p = 25 m and the ground's own
 pattern still differs from one weather to the next. This is a check of plausibility,
 not of accuracy: the standard's correction is an empirical fit, and the engine's comes
