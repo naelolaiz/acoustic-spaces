@@ -1870,6 +1870,35 @@ def _vegetation_plan(ax, room: Room) -> None:
             ax.add_patch(Polygon(shape.outline, closed=True, **style))
 
 
+def _level_image(grid, values: np.ndarray, on: np.ndarray) -> np.ndarray:
+    """The ``values`` of the map points ``on`` (one level) as an image over the grid's
+    columns, rows along y. Where a wall between rooms splits a column, or a point in a
+    model of several rooms covers only part of its column (the rest may be in the next
+    room, with too little of it there for a point of its own), the image has a pixel for
+    each of the column's sub-squares
+    (:attr:`~acoustic_spaces.engine.coverage.MapGrid.cover`), each with the value of
+    the point over it, and none where no point is."""
+    ny, nx = grid.index.shape[:2]
+    ix, iy = grid.columns[on, 0], grid.columns[on, 1]
+    shown = np.full((ny, nx), np.nan)
+    shown[iy, ix] = values[on]
+    count = np.bincount(iy * nx + ix, minlength=nx * ny)
+    part = (grid.room[on] >= 0) & ~grid.cover[on].all(axis=1)
+    split = on[(count[iy * nx + ix] > 1) | part]
+    if len(split) == 0:
+        return shown
+    side = math.isqrt(grid.cover.shape[1])
+    fine = np.repeat(np.repeat(shown, side, axis=0), side, axis=1)
+    for k in split:
+        x, y = grid.columns[k] * side
+        fine[y : y + side, x : x + side] = np.nan
+    for k in split:
+        sub = np.flatnonzero(grid.cover[k])
+        x, y = grid.columns[k] * side
+        fine[y + sub % side, x + sub // side] = values[k]
+    return fine
+
+
 def plot_map(
     coverage: CoverageMap,
     path: str | Path | None = None,
@@ -1887,7 +1916,8 @@ def plot_map(
 
     grid = coverage.grid
     values, title = map_values(coverage, parameter, band)
-    ny, nx, levels = grid.index.shape
+    ny, nx = grid.index.shape[:2]
+    levels = int(grid.level.max()) + 1
     lo, hi = _limits(values)
     x0, y0 = grid.origin
     extent = (x0, x0 + nx * grid.cell, y0, y0 + ny * grid.cell)
@@ -1921,12 +1951,9 @@ def plot_map(
     image = None
     for level, ax in enumerate(axes):
         _dark(ax, grid=False)
-        index = grid.index[:, :, level]
-        shown = np.full(index.shape, np.nan)
-        has = index >= 0
-        shown[has] = values[index[has]]
+        on = np.flatnonzero(grid.level == level)
         image = ax.imshow(
-            np.ma.masked_invalid(shown),
+            np.ma.masked_invalid(_level_image(grid, values, on)),
             origin="lower",
             extent=extent,
             cmap=MAP_COLOURS,
@@ -1938,8 +1965,7 @@ def plot_map(
         image.set_clip_path(PathPatch(outline, transform=ax.transData))
         if label_cells:
             size = max(5.0, min(9.0, 60.0 / max(nx, ny)))
-            for iy, ix in zip(*np.nonzero(has), strict=True):
-                k = index[iy, ix]
+            for k in on:
                 value = values[k]
                 text = info.format.format(value) if np.isfinite(value) else "–"
                 cx, cy = grid.points[k, :2]
@@ -1970,7 +1996,7 @@ def plot_map(
         ax.set_xlabel(_("x (m)"))
         ax.set_ylabel(_("y (m)"))
         if levels > 1:
-            heights = grid.surface[index[has]]
+            heights = grid.surface[on]
             ax.set_title(
                 _("level {number}, floor at about {height:.1f} m").format(
                     number=level + 1, height=np.median(heights)

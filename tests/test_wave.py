@@ -126,8 +126,10 @@ def _courant(stencil: int) -> float:
     return COURANT if stencil == 7 else ISOTROPIC_COURANT
 
 
-def _drive(rate: float, cell: float, steps: int) -> np.ndarray:
-    signal, _ = source_signal(rate, cell)
+def _drive(rate: float, cell: float, steps: int, stencil: int = 7) -> np.ndarray:
+    """The source's term on each of ``steps`` steps of the ``stencil``-point grid, as
+    wave_responses gives it."""
+    signal, _ = source_signal(rate, cell, _courant(stencil))
     out = np.zeros(steps, np.float32)
     out[: len(signal)] = signal[:steps]
     return out
@@ -223,6 +225,28 @@ def test_wave_gains_start_below_the_lowest_band() -> None:
 
 
 @STENCILS
+def test_source_is_flat_to_the_top_of_the_highest_band(stencil: int) -> None:
+    """On the coarsest grid the schema allows (5 points per wavelength), the source's
+    low-pass leaves the highest wave band whole with either stencil: from half the band's
+    top up to it, within 0.05 dB (0.023 dB at most). The 19-point grid's time step is 1.5
+    times the 7-point one's for the same cell, so the band's top lies 1.5 times higher in
+    its sample rate, and the low-pass's cutoff with it; with the 7-point stencil's cutoff
+    it fell 0.6 to 1.6 dB by the top."""
+    courant = _courant(stencil)
+    for total in (8, 24):
+        per_octave = total // 8
+        for band in range(per_octave - 1, 4 * per_octave, per_octave):  # each max_band_hz
+            grid = band_grid(band, FS, C, 5.0, total, courant)
+            signal, _ = source_signal(grid.rate, grid.cell, courant)
+            n_fft = 1 << 18
+            f = np.fft.rfftfreq(n_fft, 1.0 / grid.rate)
+            spectrum = np.abs(np.fft.rfft(signal, n_fft))
+            top = band_top(band, total)
+            level = 20 * np.log10(spectrum[(f >= top / 2) & (f <= top)] / spectrum[f >= top / 2][0])
+            assert np.abs(level).max() < 0.05, (total, band)
+
+
+@STENCILS
 def test_rigid_box_rings_at_its_modes(stencil: int) -> None:
     size = (2.0, 1.5, 1.0)
     solver, rate = _solver(
@@ -235,7 +259,7 @@ def test_rigid_box_rings_at_its_modes(stencil: int) -> None:
     assert solver.air_cells == 20 * 15 * 10
     assert not solver.open
     steps = int(4 * rate)
-    pressure = solver.run(_drive(rate, 0.1, steps))[0]
+    pressure = solver.run(_drive(rate, 0.1, steps, stencil))[0]
     n_fft = 1 << 18
     spectrum = np.abs(np.fft.rfft(pressure, n_fft))
     f = np.fft.rfftfreq(n_fft, 1.0 / rate)
@@ -262,7 +286,7 @@ def test_isotropic_stencil_disperses_less() -> None:
             (5.84, 0.17, 0.12),
             stencil=stencil,
         )
-        pressure = solver.run(_drive(rate, h, int(3 * rate)))[0]
+        pressure = solver.run(_drive(rate, h, int(3 * rate), stencil))[0]
         n_fft = 1 << 20
         spectrum = np.abs(np.fft.rfft(pressure * np.hanning(len(pressure)), n_fft))
         f = np.fft.rfftfreq(n_fft, 1.0 / rate)
@@ -351,7 +375,7 @@ def test_isotropic_stencil_stays_stable_in_a_slanted_room() -> None:
         stencil=19,
     )
     assert 2000 < solver.air_cells < 1.6 * 1.3 * 1.1 / 0.1**3  # the room's, not the cube's
-    pressure = solver.run(_drive(rate, 0.1, 30_000))
+    pressure = solver.run(_drive(rate, 0.1, 30_000, 19))
     tenth = pressure.shape[1] // 10
     levels = [np.mean(pressure[:, k * tenth : (k + 1) * tenth] ** 2) for k in range(10)]
     assert np.all(np.isfinite(pressure))
@@ -416,7 +440,7 @@ def test_duct_end_reflects_as_its_admittance_says(beta: float, stencil: int) -> 
     solver, rate = _solver(size, admittances, (10.0, 0.3, 0.3), (30.0, 0.3, 0.3), stencil=stencil)
     steps = int(0.45 * rate)
     signal, delay = source_signal(rate, 0.1)
-    pressure = solver.run(_drive(rate, 0.1, steps))[0]
+    pressure = solver.run(_drive(rate, 0.1, steps, stencil))[0]
     # 40 to 200 Hz, then the incident and reflected waves gated with Hann windows.
     n_fft = 1 << 14
     f = np.fft.rfftfreq(n_fft, 1.0 / rate)
@@ -463,7 +487,7 @@ def test_air_meets_the_inner_face_of_a_thin_wall(stencil: int) -> None:
     )
     steps = int(0.45 * rate)
     _, delay = source_signal(rate, 0.1)
-    pressure = solver.run(_drive(rate, 0.1, steps))[0]
+    pressure = solver.run(_drive(rate, 0.1, steps, stencil))[0]
     n_fft = 1 << 14
     f = np.fft.rfftfreq(n_fft, 1.0 / rate)
     gain = np.clip((f - 40) / 20, 0, 1) * np.clip((200 - f) / 50, 0, 1)
@@ -489,7 +513,8 @@ def test_free_field_level_matches_the_rays() -> None:
         energy = response.energy()
         t = np.arange(energy.shape[1]) * response.time_step
         direct = energy[:, t < (d + 6.5) / C].sum(axis=1) * 4 * math.pi * d * d
-        assert 10 * math.log10(direct[0]) == pytest.approx(0.0, abs=1.0)
+        # The wave solver: -0.24, -0.15 and -0.01 dB at 1, 2 and 4 m.
+        assert 10 * math.log10(direct[0]) == pytest.approx(0.0, abs=0.3)
         assert 10 * math.log10(direct[1]) == pytest.approx(0.0, abs=0.1)  # rays
 
 
@@ -541,30 +566,123 @@ def test_direct_sound_arrives_on_time() -> None:
         speed_of_sound=c,
     )
     wave = responses[0]
-    signal, delay = source_signal(wave.rate, wave.cell)
+    signal, delay = source_signal(wave.rate, wave.cell, ISOTROPIC_COURANT)
+    lead = round(wave.lead_s * wave.rate)  # the run starts that many steps before emission
     n_fft = 1 << 14
     f = np.fft.rfftfreq(n_fft, 1.0 / wave.rate)
     band = np.clip((f - 25) / 10, 0, 1) * np.clip((100 - f) / 20, 0, 1)
     spectrum = np.fft.rfft(wave.signals[:, 0], n_fft) * np.conj(np.fft.rfft(signal, n_fft))
-    # Lags either way: the arrival can come within the source's delay of emission.
     correlation = np.roll(np.fft.irfft(spectrum * band**2, n_fft), n_fft // 2)
     peak = int(np.argmax(correlation[: n_fft // 2 + 200]))
     y0, y1, y2 = correlation[peak - 1 : peak + 2]
-    arrival = delay + peak - n_fft // 2 + 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2)
+    arrival = delay - lead + peak - n_fft // 2 + 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2)
     assert arrival == pytest.approx(4.0 / c * wave.rate, abs=0.25)
 
 
+def test_a_listener_near_the_source_hears_all_of_its_pulse(monkeypatch) -> None:
+    """The source's pulse is centred on emission and starts 16 steps before it (3.7 m of
+    travel on the 7-point grid of the 63 Hz band), so a listener nearer than that hears
+    part of it before emission: the run keeps that part. The direct sound's energy in the
+    band, the pressure's and the figure of eight's facing the source, then does not
+    depend on the source's low-pass, which shapes only frequencies far above the band:
+    its cutoff from 0.2 to 0.3 of the grid's sample rate moves them by less than 0.01 dB
+    (0.004 dB at most) at 0.5 and 1 m. Cut at emission, they moved by 0.04 to 0.22 dB
+    and 0.5 to 0.7 dB."""
+    from acoustic_spaces.engine import wave as wave_module
+
+    distances = (0.5, 1.0)
+    room = _free_room(distances)
+    c = room.speed_of_sound()
+    source = np.array(room.scene.sources[0].position)
+    step, slots = 1e-3, 40
+    levels = []
+    for cutoff in (0.2, 0.3):
+        monkeypatch.setattr(wave_module, "_LOW_PASS_CUTOFF", cutoff)
+        responses, _ = wave_responses(
+            TraceModel.from_room(room),
+            source,
+            [source + [d, 0.0, 0.0] for d in distances],
+            [f"r{d}" for d in distances],
+            max_band_hz=63,
+            length_s=0.04,
+            sample_rate=FS,
+            speed_of_sound=c,
+            scheme="standard",
+        )
+        for d, wave in zip(distances, responses, strict=True):
+            direct = np.arange(slots) * step < (d + 6.5) / c  # before the first reflection
+            omni = wave.energy(step, slots)[0, direct].sum()
+            eight = wave.energy(step, slots, axis=np.array([-1.0, 0.0, 0.0]))[0, direct].sum()
+            levels.append(10 * np.log10([omni, eight]))
+    np.testing.assert_allclose(levels[:2], levels[2:], atol=0.01)
+
+
+def test_a_run_from_before_emission_lines_up_with_a_delayed_one() -> None:
+    """A wave response whose run starts before emission (its lead) is one whose run starts
+    at emission, earlier by the lead: fed a delay, it is that response fed the delay
+    less the lead, in its field and in its energy per band and slot. Without a feed, its
+    field from emission is what the bands' filters make of the whole run, the part
+    before emission too: the field of the run starting at emission, from the lead on."""
+    rate, lead, n = 2000.0, 0.008, 9000
+    signals = np.random.default_rng(1).standard_normal((300, 4))
+    gain = np.ones(2)
+    early = WaveResponse(rate, signals, 2, 0.2, lead_s=lead)
+    late = WaveResponse(rate, signals, 2, 0.2)
+    a, b = early.fed(gain, 0.05), late.fed(gain, 0.05 - lead)
+    np.testing.assert_allclose(a.field(FS, n), b.field(FS, n), rtol=0, atol=1e-12)
+    step = 1e-3 * math.sqrt(2)  # no slot's edge on a sample
+    for axis in (None, np.array([0.6, 0.0, 0.8])):
+        np.testing.assert_allclose(a.energy(step, 60, axis), b.energy(step, 60, axis), rtol=1e-9)
+    shift = round(lead * FS)
+    np.testing.assert_allclose(early.field(FS, n), late.field(FS, n + shift)[shift:], atol=1e-12)
+
+
 def test_velocity_is_in_step_with_the_pressure() -> None:
-    # A plane wave from -x crosses the probe and its neighbours one cell away (1 / COURANT
-    # steps): X = -W sample by sample, not half a step ahead of it.
+    # A plane wave from -x crosses the probe and its neighbours one and two cells away
+    # (1 / COURANT steps a cell): X = -W sample by sample, not half a step ahead of it.
     t = np.arange(400.0)
     shift = 1.0 / COURANT
-    probes = np.zeros((7, len(t)))
-    for k, delay in ((0, 0.0), (1, shift), (2, -shift)):
-        probes[k] = np.exp(-(((t - 200.0 - delay) / 16.0) ** 2))
-    field = _first_order(probes, [True] * 7, "l")
+    probes = np.zeros((13, len(t)))
+    for k, cells in ((0, 0), (1, 1), (2, -1), (7, 2), (8, -2)):
+        probes[k] = np.exp(-(((t - 200.0 - cells * shift) / 16.0) ** 2))
+    field = _first_order(probes, [True] * 13, "l")
     np.testing.assert_allclose(field[:, 1], -field[:, 0], atol=0.01)
     assert not np.any(field[:, 2:])
+
+
+def test_velocity_falls_back_to_the_points_it_has() -> None:
+    """Along an axis the gradient is the fourth-order central difference over two cells
+    either side, the second-order one over one cell where a point two cells away is not
+    found, and the one-sided difference to the listener where a point one cell away is
+    not; a point not found never counts (its row is noise here). With no gain divided out
+    (cutoff 0), X is c times the trapezoidal rule's integral of that difference, exactly."""
+    t = np.arange(400.0)
+    shift = 1.0 / COURANT
+    p = np.zeros((13, len(t)))
+    for k, cells in ((0, 0), (1, 1), (2, -1), (7, 2), (8, -2)):
+        p[k] = np.exp(-(((t - 200.0 - cells * shift) / 16.0) ** 2))
+    fourth = (8 * (p[1] - p[2]) - (p[7] - p[8])) / 12
+    second = 0.5 * (p[1] - p[2])
+    cases = {
+        (): fourth,
+        (7,): second,
+        (8,): second,
+        (7, 8): second,
+        (1,): p[0] - p[2],
+        (1, 7): p[0] - p[2],
+        (2,): p[1] - p[0],
+        (2, 8): p[1] - p[0],
+        (1, 2): np.zeros(len(t)),
+    }
+    noise = np.random.default_rng(2).standard_normal(len(t))
+    for missing, difference in cases.items():
+        probes, found = p.copy(), [True] * 13
+        for k in missing:
+            probes[k], found[k] = noise, False
+        field = _first_order(probes, found, "l", cutoff=0.0)
+        expected = COURANT * (np.cumsum(difference) - 0.5 * difference)
+        np.testing.assert_allclose(field[:, 1], expected, rtol=0, atol=1e-12, err_msg=str(missing))
+        assert not np.any(field[:, 2:])
 
 
 def test_first_order_field_points_to_the_source() -> None:
@@ -584,6 +702,112 @@ def test_first_order_field_points_to_the_source() -> None:
     ambisonics = response.spatial_impulse_response(Ambisonics(1), FS)
     low = response.wave.field(FS, len(ambisonics))
     assert np.dot(ambisonics[:n, 3], low[:n, 0]) < 0
+
+
+@pytest.mark.parametrize("scheme", ["isotropic", "standard"])
+def test_first_order_field_matches_a_point_source(scheme: str) -> None:
+    """The direct sound's figure of eight facing the source over its pressure, in energy,
+    per wave band, 4 m from the source along a grid axis, a face diagonal and a body
+    diagonal: a point source's particle velocity is p / (rho c) times 1 + 1 / (j k r)
+    (the spherical wave; Kinsler et al., Fundamentals of Acoustics), so 10 log10(1 + 1 /
+    (k r)^2) at the band's centre. Within 0.06 dB (0.040 dB at most here). Second-order
+    differences fall 0.35 dB (19-point) and 0.31 dB (7-point) short along the axis in the
+    125 Hz band, and with the trapezoidal rule's gain left in 0.15 and 0.075 dB; a
+    Courant number 1.5 times off is 3.5 dB."""
+    room = _free_room((4.0,), max_band_hz=125, box=(24.0, 20.0, 20.0))
+    c = room.speed_of_sound()
+    source = np.array(room.scene.sources[0].position)
+    directions = np.array([[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [1.0, 1.0, 1.0]])
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    responses, info = wave_responses(
+        TraceModel.from_room(room),
+        source,
+        source + 4.0 * directions,
+        ["axis", "face", "body"],
+        max_band_hz=125,
+        length_s=0.05,
+        sample_rate=FS,
+        speed_of_sound=c,
+        scheme=scheme,
+    )
+    assert info["wave_stencil"] == (19 if scheme == "isotropic" else 7)
+    step, slots = 1e-3, 50
+    direct = np.arange(slots) * step < 0.045  # before the first reflection (at 52 ms)
+    for towards, wave in zip(directions, responses, strict=True):
+        omni = wave.energy(step, slots)[:, direct].sum(axis=1)
+        eight = wave.energy(step, slots, axis=-towards)[:, direct].sum(axis=1)
+        for band, centre in enumerate((63, 125)):
+            kr = 2 * math.pi * centre * 4.0 / c
+            expected = 10 * math.log10(1 + 1 / kr**2)
+            assert 10 * math.log10(eight[band] / omni[band]) == pytest.approx(expected, abs=0.06)
+
+
+@pytest.mark.parametrize("scheme", ["standard", "isotropic"])
+def test_velocity_takes_no_difference_across_a_thin_screen(tmp_path: Path, scheme: str) -> None:
+    """A listener 0.1 m in front of a rigid screen with air behind it: the point a cell
+    from the listener towards the screen lies across it, in air of its own, so the
+    gradient there is a one-sided difference, as in front of a block with the same front
+    face (rigid, so the velocity normal to it falls as the listener nears it). X / W in
+    the 63 Hz band within 1 dB of the block's; taken across the screen, it was 6 dB
+    (7-point) and 15 dB (19-point) above it. A listener 1.5 cells in front of the screen
+    has the point a cell towards it in front and the point two cells towards it across,
+    so its gradient is of second order there, as in front of the block: within 0.5 dB of
+    the block's (0.2 dB at most here); taken across the screen to fourth order, it was
+    2.2 dB (7-point) and 2.3 dB (19-point) above it."""
+    room_mesh, block = box_mesh((10.0, 8.0, 4.0)), box_mesh((1.0, 6.0, 3.0))
+    screens = {
+        "thin": (
+            [[5.0, 1.0, 0.0], [5.0, 7.0, 0.0], [5.0, 7.0, 3.0], [5.0, 1.0, 3.0]],
+            [[0, 1, 2, 3]],
+        ),
+        "block": (block.vertices + [5.0, 1.0, 0.0], block.faces),
+    }
+    source, listener = np.array([2.0, 4.03, 1.51]), np.array([4.9, 4.03, 1.51])
+    ratios: dict[str, list[float]] = {}
+    for name, (corners, faces) in screens.items():
+        n = len(room_mesh.vertices)
+        lines = [f"v {x} {y} {z}" for x, y, z in [*room_mesh.vertices, *corners]]
+        lines += ["g room", *(f"f {' '.join(str(i + 1) for i in f)}" for f in room_mesh.faces)]
+        lines += ["g screen", *(f"f {' '.join(str(n + i + 1) for i in f)}" for f in faces)]
+        obj = tmp_path / f"{name}.obj"
+        obj.write_text("\n".join(lines) + "\n")
+        room = Room.from_scene(
+            Scene.model_validate(
+                {
+                    "geometry": {"file": str(obj)},
+                    "materials": {
+                        "a": {"absorption": [0.6] * 8, "scattering": 0.0},
+                        "hard": {"absorption": [0.02] * 8, "scattering": 0.0},
+                    },
+                    "assignments": {"room": "a", "screen": "hard"},
+                    "sources": [{"name": "s", "position": source.tolist()}],
+                    "listeners": [{"name": "l", "position": listener.tolist()}],
+                }
+            )
+        )
+        c = room.speed_of_sound()
+        grid = band_grid(0, FS, c, courant=COURANT if scheme == "standard" else ISOTROPIC_COURANT)
+        farther = np.array([5.0 - 1.5 * grid.cell, 4.03, 1.51])
+        waves, info = wave_responses(
+            TraceModel.from_room(room),
+            source,
+            [listener, farther],
+            ["l", "farther"],
+            max_band_hz=63,
+            length_s=0.15,
+            sample_rate=FS,
+            speed_of_sound=c,
+            scheme=scheme,
+        )
+        h = info["wave_cell_m"]
+        assert listener[0] + h > 5.0  # the point a cell towards the screen is past it
+        assert farther[0] + h < 5.0 < farther[0] + 2 * h  # in front of it; two cells, past
+        ratios[name] = []
+        for wave in waves:
+            x = wave.energy(1e-3, 150, axis=np.array([1.0, 0.0, 0.0]))[0].sum()
+            ratios[name].append(10 * math.log10(x / wave.energy(1e-3, 150)[0].sum()))
+    assert ratios["thin"][0] == pytest.approx(ratios["block"][0], abs=1.0)
+    assert ratios["thin"][1] == pytest.approx(ratios["block"][1], abs=0.5)
 
 
 def test_hybrid_tail_is_flat_across_the_crossover() -> None:
@@ -835,6 +1059,58 @@ def test_open_models_absorb_at_the_grid_edge(tmp_path: Path, monkeypatch) -> Non
     assert np.sum(late**2) < 1e-2 * np.sum(pressure**2)
 
 
+def test_outdoor_models_make_only_the_grid_with_the_layer(monkeypatch) -> None:
+    """Outdoors the sky is an opening, so the grid is open unless the source is shut in:
+    auto and standard make the standard stencil's grid with the matched layer and no
+    other (a grid without it, made to find the model open, went unused). Only where
+    that grid is closed (a source in a hut) do they make the one without it, as in a
+    closed room: auto the isotropic stencil's. The isotropic stencil is refused
+    outdoors before any grid is made, for a source shut in too."""
+    made: list[tuple[int, int]] = []
+
+    class Counted(_native.WaveSolver):
+        def __init__(self, *args) -> None:
+            super().__init__(*args)
+            made.append((args[16], args[13]))  # stencil, layer
+
+    monkeypatch.setattr(_native, "WaveSolver", Counted)
+    room = _windy_ground(0.0, "effective")
+    for scheme in ("auto", "standard"):
+        made.clear()
+        _, info, _ = _windy_run(room, "effective", scheme=scheme)
+        assert info["wave_open"] == 1.0 and made == [(7, LAYER_CELLS)]
+    hut = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {
+                    "ground": {"extent": [[-10, -6], [10, 6]], "sky": 5},
+                    "buildings": [
+                        {
+                            "name": "hut",
+                            "footprint": [[-3, -3], [3, -3], [3, 3], [-3, 3]],
+                            "height": 4,
+                        }
+                    ],
+                },
+                "materials": {"m": {"absorption": [0.2] * 8, "scattering": 0.0}},
+                "default_material": "m",
+                "sources": [{"name": "s", "position": [0, 0, 1.5]}],
+                "listeners": [{"name": "in", "position": [1.2, 0.7, 1.4]}],
+            }
+        )
+    )
+    for scheme, stencil in (("auto", 19), ("standard", 7)):
+        made.clear()
+        _, info, _ = _windy_run(hut, "effective", scheme=scheme)
+        assert "wave_open" not in info and info["wave_stencil"] == stencil
+        assert made == [(7, LAYER_CELLS), (stencil, 0)]
+    for outdoors in (room, hut):
+        made.clear()
+        with pytest.raises(ValueError, match="outdoors the isotropic stencil is not available"):
+            _windy_run(outdoors, "effective", scheme="isotropic")
+        assert made == []
+
+
 def test_bands_with_their_own_absorption_share_one_run() -> None:
     def room(low: float) -> Room:
         return Room.from_scene(
@@ -949,7 +1225,7 @@ def test_duct_end_reflects_as_its_frequency_dependent_admittance_says(stencil: i
             branches=far,
             stencil=stencil,
         )
-        return solver.run(_drive(rate, 0.1, int(0.6 * rate)))[0], rate
+        return solver.run(_drive(rate, 0.1, int(0.6 * rate), stencil))[0], rate
 
     reference, rate = run(200.0, None)
     incident = np.where(np.arange(len(reference)) / rate < 0.48, reference, 0.0)
@@ -1119,7 +1395,7 @@ def test_one_speed_of_sound_everywhere_changes_nothing(stencil: int) -> None:
             stencil=stencil,
             speed=speed,
         )
-        return solver.run(_drive(rate, 0.1, 800))
+        return solver.run(_drive(rate, 0.1, 800, stencil))
 
     assert np.array_equal(run(lambda centres: np.ones(len(centres))), run(None))
 
@@ -1138,7 +1414,7 @@ def test_a_slower_speed_of_sound_arrives_later_as_loud() -> None:
             speed=None if ratio == 1.0 else lambda centres: np.full(len(centres), ratio),
         )
         field = _first_order(
-            solver.run(_drive(rate, 0.1, int(0.03 * rate))), [True] * 7, "l", COURANT * ratio
+            solver.run(_drive(rate, 0.1, int(0.03 * rate))), [True] * 13, "l", COURANT * ratio
         )
         signal, delay = source_signal(rate, 0.1)
         arrival = 2.0 / (C * ratio) * rate + delay
@@ -1267,7 +1543,7 @@ def test_air_that_moves_nowhere_changes_nothing(stencil: int) -> None:
             flow=flow,
         )
         assert solver.flowing == (flow is not None)
-        return solver.run(_drive(rate, 0.1, 800))
+        return solver.run(_drive(rate, 0.1, 800, stencil))
 
     still = lambda centres: (np.zeros(len(centres)), np.zeros(len(centres)))  # noqa: E731
     assert np.array_equal(run(still), run(None))
@@ -1410,7 +1686,9 @@ def _windy_ground(wind: float, model: str, temperature=None) -> Room:
     return Room.from_scene(Scene.model_validate(data))
 
 
-def _windy_run(room: Room, wind: str, per_wavelength: float = 8.0, device="cpu"):
+def _windy_run(
+    room: Room, wind: str, per_wavelength: float = 8.0, device="cpu", scheme: str = "auto"
+):
     said = []
     responses, info = wave_responses(
         TraceModel.from_room(room),
@@ -1424,6 +1702,7 @@ def _windy_run(room: Room, wind: str, per_wavelength: float = 8.0, device="cpu")
         points_per_wavelength=per_wavelength,
         wind=wind,
         device=device,
+        scheme=scheme,
         say=said.append,
         label="s",
     )
@@ -1494,7 +1773,8 @@ def test_a_grid_too_big_is_refused_before_its_weather_is_made(monkeypatch, wind)
     for name in ("ratios", "moving_fields"):
         monkeypatch.setattr(wave_module._Weather, name, lambda *_, name=name: made.append(name))
     monkeypatch.setattr(wave_module, "MAX_CELLS", 1_000)
-    with pytest.raises(ValueError, match=r"cells \(at most 1,000\); lower max_band_hz"):
+    # Outdoors, the grid with the matched layer, the only one made there.
+    with pytest.raises(ValueError, match=r"cells with the matched layer round this open model"):
         _windy_run(_windy_ground(15.0, wind), wind)
     assert made == []
 

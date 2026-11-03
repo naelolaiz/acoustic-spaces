@@ -2,8 +2,8 @@
 
 The audience surfaces, picked by name, are covered with square columns ``spacing``
 metres wide. Each column holds a map point at listening ``height`` above the surface
-(two or more where surfaces lie above each other, such as a balcony over the stalls),
-with a slab of air around it. For every source:
+(two or more where surfaces lie above each other, such as a balcony over the stalls, or
+where a wall between rooms crosses it), with a slab of air around it. For every source:
 
 - the direct sound and the specular reflections up to ``simulation.early.max_order``
   are found exactly at each point, as at a listener;
@@ -34,7 +34,7 @@ from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine import run_size
-from acoustic_spaces.engine.coherent import coherent_energy
+from acoustic_spaces.engine.coherent import band_count, coherent_energy
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel, free_field_energy
 from acoustic_spaces.engine.refracted import direct_times, refraction_for
@@ -47,12 +47,11 @@ from acoustic_spaces.engine.simulate import (
     _seed,
     _transition,
     check_late_method,
-    coherent_bands,
     response_length,
 )
 from acoustic_spaces.engine.turbulence import Eddies
 from acoustic_spaces.geometry import points_inside
-from acoustic_spaces.geometry.outdoor import GROUND
+from acoustic_spaces.geometry.outdoor import GROUND, Layout, in_polygon
 from acoustic_spaces.i18n import N_
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.materials.bands import to_octaves
@@ -73,6 +72,13 @@ _LAYER_GAP = 1.5
 _MAX_THICKNESS = 1.0
 #: Lowest slab bottom above the surface (m).
 _ABOVE_SURFACE = 0.05
+#: Samples per column side for the part of a slab in the air of its point's room.
+_AIR_SAMPLES = 24
+#: Most of those samples looked at in one go.
+_AIR_CHUNK = 2**18
+#: The way the first face under a point is looked for: down, tilted a little so that it
+#: runs along no wall.
+_DOWN = np.array([0.0123, 0.0071, -1.0]) / np.linalg.norm([0.0123, 0.0071, -1.0])
 
 
 class MapParameter(NamedTuple):
@@ -191,23 +197,33 @@ class MapGrid:
 
     origin: tuple[float, float]
     cell: float
-    #: (ny, nx, layers) point index of each column and layer, -1 for none.
+    #: (ny, nx, slots) the points of each column, by level and then by room, -1 for none.
     index: np.ndarray
-    #: (n, 3) the points, at listening height above the column's centre.
+    #: (n, 3) the points, at listening height above the column's centre, or above the
+    #: middle of their part of the column when the centre is not in it.
     points: np.ndarray
     #: (n, 2) column (x, y) of each point.
     columns: np.ndarray
     #: (n,) height of the surface under each point (m).
     surface: np.ndarray
     #: (n,) bottom and top of each point's slab of air (m), and the volume of the slab
-    #: inside the room (m^3).
+    #: in the air of the point's room, outside buildings (m^3).
     low: np.ndarray
     high: np.ndarray
     volume: np.ndarray
     #: (m, 3, 2) the surfaces under the map seen from above: x, y of their triangles.
     footprint: np.ndarray
-    #: (n, 25) which fifths of the column, by x then y, lie over the surfaces.
+    #: (n, 25) which fifths of the column, by x then y, lie over the surfaces (in the
+    #: point's room, where the model holds several).
     cover: np.ndarray
+    #: (n,) the room each point lies in (an index into ``Room.room_volumes``) where the
+    #: model holds several, else -1. A point's slab counts the rays in its room alone.
+    room: np.ndarray
+    #: (n,) the level of each point in its column, from 0 at the lowest surface under it
+    #: (the stalls; a balcony above them is 1). Where a wall between rooms crosses a
+    #: column, it holds a point on each side that holds at least a fifth of it, on the
+    #: same level.
+    level: np.ndarray
 
     def __len__(self) -> int:
         return len(self.points)
@@ -224,8 +240,9 @@ class MapGrid:
 
     def tiles(self) -> tuple[np.ndarray, np.ndarray]:
         """Squares at the points' height over the part of each column above the
-        surfaces: (m, 4, 3) corners and the point each belongs to. A column only partly
-        over them is cut into fifths along each side."""
+        surfaces (in the point's room): (m, 4, 3) corners and the point each belongs to.
+        A column only partly over them, or split between rooms, is cut into fifths along
+        each side."""
         full = self.cover.all(axis=1)
         whole = self.squares()[full]
         owner = [np.flatnonzero(full)]
@@ -321,7 +338,8 @@ def map_grid(
     """Map points ``spacing`` metres apart, ``height`` metres above the named surfaces
     (default: :func:`audience_surfaces`). Only faces that can be walked on count, not
     walls, and only points inside the room are kept (outdoors, in the open air: not
-    inside a building)."""
+    inside a building). Where the model holds several rooms, a column that a wall
+    between them crosses gets a point in each that holds at least a fifth of it."""
     if not (height > 0 and spacing > 0):
         raise ValueError("height and spacing must be positive")
     mesh = room.mesh
@@ -330,6 +348,10 @@ def map_grid(
     # Centre the grid on the surfaces.
     origin = lo - 0.5 * (np.array([nx, ny]) * spacing - (hi - lo))
     step = spacing / _SAMPLES
+    thickness = min(spacing, _MAX_THICKNESS)
+    closed = room.report.closed
+    several = len(room.room_volumes) > 1
+    air = _Air(room) if closed or several else None
 
     # Every sub-sample of every column with the height of each surface above or below it.
     hits_x, hits_y, hits_z = [], [], []
@@ -363,108 +385,234 @@ def map_grid(
         raise ValueError("the map surfaces are too small for the spacing; use a smaller one")
     sx, sy, sz = (np.concatenate(v) for v in (hits_x, hits_y, hits_z))
 
+    # With several rooms, the room each sub-sample lies in, at the middle of a slab over it.
+    where = np.full(len(sz), -1, dtype=np.int64)
+    if several and air is not None:
+        middle = sz + max(height, _ABOVE_SURFACE + thickness / 2)
+        across = origin + (np.column_stack([sx, sy]) + 0.5) * step
+        where = air.rooms(np.column_stack([across, middle]))
+
     centre = _SAMPLES // 2
     column = (sy // _SAMPLES) * nx + sx // _SAMPLES
     order = np.argsort(column, kind="stable")
-    sx, sy, sz, column = sx[order], sy[order], sz[order], column[order]
+    sx, sy, sz, where, column = sx[order], sy[order], sz[order], where[order], column[order]
     starts = np.flatnonzero(np.r_[True, column[1:] != column[:-1]])
     ends = np.r_[starts[1:], len(column)]
 
-    # Per column, each level of surface under it (stalls, a balcony above them, ...):
-    # its height, the part of the column over it, and where the point goes across:
-    # the column's centre, or the middle of the part over the surface when the centre
-    # is not over it (columns along a slanted wall). A slab whose top and underside
-    # are in one group is walked on at its top.
-    rows: list[tuple[int, int, int, float, float, float, float]] = []
+    # Per column, each level of surface under it (stalls, a balcony above them, ...),
+    # and with several rooms each room's part of it: its height, the part of the column
+    # over it, and where the point goes across: the column's centre, or the middle of
+    # the part over the surface when the centre is not over it (columns along a slanted
+    # wall or a wall between rooms). A slab whose top and underside are in one group is
+    # walked on at its top.
+    rows: list[tuple[int, int, int, int, float, float, float, float]] = []
     covers: list[np.ndarray] = []
     for s, e in zip(starts, ends, strict=True):
         ix, iy = int(sx[s] // _SAMPLES), int(sy[s] // _SAMPLES)
-        sub_x, sub_y, z = sx[s:e] % _SAMPLES, sy[s:e] % _SAMPLES, sz[s:e]
+        sub_x, sub_y, z, w = sx[s:e] % _SAMPLES, sy[s:e] % _SAMPLES, sz[s:e], where[s:e]
         z_sorted = np.sort(z)
         breaks = np.flatnonzero(np.diff(z_sorted) > _LAYER_GAP)
         bottoms = z_sorted[np.r_[0, breaks + 1]]
         tops = z_sorted[np.r_[breaks, len(z_sorted) - 1]]
         for k, (bottom, top) in enumerate(zip(bottoms, tops, strict=True)):
-            on = (z >= bottom) & (z <= top)
-            key, z_on = sub_x[on] * _SAMPLES + sub_y[on], z[on]
-            sub = np.unique(key)
-            at_centre = on & (sub_x == centre) & (sub_y == centre)
-            if at_centre.any():
-                px, py, height_at = centre + 0.5, centre + 0.5, float(z[at_centre].max())
-            else:
-                px = float(np.mean(sub // _SAMPLES)) + 0.5
-                py = float(np.mean(sub % _SAMPLES)) + 0.5
-                height_at = float(np.mean([z_on[key == q].max() for q in sub]))
-            if len(sub) < _MIN_COVER * _SAMPLES**2:
-                continue  # a sliver: too few rays would cross its slab
-            x = origin[0] + (ix + px / _SAMPLES) * spacing
-            y = origin[1] + (iy + py / _SAMPLES) * spacing
-            rows.append((ix, iy, k, height_at, len(sub) / _SAMPLES**2, x, y))
-            cover = np.zeros(_SAMPLES**2, dtype=bool)
-            cover[sub] = True
-            covers.append(cover)
+            level_on = (z >= bottom) & (z <= top)
+            # The parts in no room (in a wall) get no point.
+            for r in np.unique(w[level_on]) if several else [-1]:
+                if several and r < 0:
+                    continue
+                on = level_on & (w == r) if several else level_on
+                key, z_on = sub_x[on] * _SAMPLES + sub_y[on], z[on]
+                sub = np.unique(key)
+                at_centre = on & (sub_x == centre) & (sub_y == centre)
+                if at_centre.any():
+                    px, py, height_at = centre + 0.5, centre + 0.5, float(z[at_centre].max())
+                else:
+                    px = float(np.mean(sub // _SAMPLES)) + 0.5
+                    py = float(np.mean(sub % _SAMPLES)) + 0.5
+                    height_at = float(np.mean([z_on[key == q].max() for q in sub]))
+                if len(sub) < _MIN_COVER * _SAMPLES**2:
+                    continue  # a sliver: too few rays would cross its slab
+                x = origin[0] + (ix + px / _SAMPLES) * spacing
+                y = origin[1] + (iy + py / _SAMPLES) * spacing
+                rows.append((ix, iy, k, int(r), height_at, len(sub) / _SAMPLES**2, x, y))
+                cover = np.zeros(_SAMPLES**2, dtype=bool)
+                cover[sub] = True
+                covers.append(cover)
 
     if not rows:
         raise ValueError("the map surfaces are too small for the spacing; use a smaller one")
-    thickness = min(spacing, _MAX_THICKNESS)
-    ix, iy, layer = (np.array([r[i] for r in rows], dtype=np.int64) for i in range(3))
-    surface, fraction, px, py = (np.array([r[i] for r in rows]) for i in range(3, 7))
+    ix, iy, layer, in_room = (np.array([r[i] for r in rows], dtype=np.int64) for i in range(4))
+    surface, fraction, px, py = (np.array([r[i] for r in rows]) for i in range(4, 8))
     points = np.column_stack([px, py, surface + height])
     low = np.maximum(points[:, 2] - thickness / 2, surface + _ABOVE_SURFACE)
     high = low + thickness
 
     keep = np.ones(len(points), dtype=bool)
-    if room.report.closed:
+    if closed:
         keep = np.asarray(points_inside(mesh, points), dtype=bool)
+    if several and air is not None:
+        keep &= air.rooms(points) == in_room  # not in the corner of the next room
     if room.outdoor is not None:
         keep &= np.array([b is None for b in room.outdoor.building_at(points)], dtype=bool)
     if not keep.any():
         raise ValueError("no map point lies inside the room; check height and surfaces")
     cover = np.array(covers)
-    ix, iy, layer, surface, fraction, points, low, high, cover = (
-        v[keep] for v in (ix, iy, layer, surface, fraction, points, low, high, cover)
+    ix, iy, layer, in_room, surface, fraction, points, low, high, cover = (
+        v[keep] for v in (ix, iy, layer, in_room, surface, fraction, points, low, high, cover)
     )
-    # A slab counts the part of it inside the room: past the edge of the surfaces it
-    # may go on over a stage or an aisle, or end at a wall.
-    inside = fraction.copy()
-    partial = np.flatnonzero(fraction < 1.0)
-    if room.report.closed and len(partial):
-        g = (np.arange(_SAMPLES) + 0.5) / _SAMPLES
-        gx, gy = (v.ravel() for v in np.meshgrid(g, g, indexing="ij"))
-        samples = np.stack(
-            [
-                np.column_stack(
-                    [
-                        origin[0] + (ix[k] + gx) * spacing,
-                        origin[1] + (iy[k] + gy) * spacing,
-                        np.full(len(gx), 0.5 * (low[k] + high[k])),
-                    ]
-                )
-                for k in partial
-            ]
-        )
-        share = points_inside(mesh, samples.reshape(-1, 3)).reshape(len(partial), -1).mean(axis=1)
-        inside[partial] = np.maximum(share, fraction[partial])
-    # Renumber the layers of each column from 0 after dropping points.
-    layers = int(layer.max()) + 1
-    index = np.full((ny, nx, layers), -1, dtype=np.int64)
+    if not several:
+        in_room = np.full(len(points), -1, dtype=np.int64)
+    columns = np.column_stack([ix, iy])
+    volume = _slab_volumes(room, air, origin, spacing, columns, low, high, in_room, fraction)
+    # Number the levels of each column from 0 after dropping points; each point takes
+    # the first free slot of its column, by level and then by room.
+    cell = iy * nx + ix
+    pairs, which = np.unique(cell * (int(layer.max()) + 1) + layer, return_inverse=True)
+    owner = pairs // (int(layer.max()) + 1)
+    level = (np.arange(len(pairs)) - np.searchsorted(owner, owner))[which.reshape(-1)]
+    slots = int(np.bincount(cell).max())
+    index = np.full((ny, nx, slots), -1, dtype=np.int64)
     for k in range(len(points)):
         slot = int(np.flatnonzero(index[iy[k], ix[k]] < 0)[0])
         index[iy[k], ix[k], slot] = k
-    layers = int((index >= 0).sum(axis=2).max())
     return MapGrid(
         origin=(float(origin[0]), float(origin[1])),
         cell=float(spacing),
-        index=np.ascontiguousarray(index[:, :, :layers]),
+        index=index,
         points=points,
-        columns=np.column_stack([ix, iy]),
+        columns=columns,
         surface=surface,
         low=low,
         high=high,
-        volume=spacing**2 * inside * (high - low),
+        volume=volume,
         footprint=np.ascontiguousarray(tri[:, :, :2]),
         cover=cover,
+        room=in_room,
+        level=level.astype(np.int64),
     )
+
+
+def _in_room(room: Room, grid: MapGrid) -> MapGrid:
+    """``grid`` with the rooms of its points and the air in their slabs those of
+    ``room``: another run of the scene the grid was laid out in, such as one without
+    some of its buildings, shares its points."""
+    several = len(room.room_volumes) > 1
+    air = _Air(room) if room.report.closed or several else None
+    in_room = np.full(len(grid), -1, dtype=np.int64)
+    if several and air is not None:
+        in_room = air.rooms(grid.points)
+    volume = _slab_volumes(
+        room,
+        air,
+        np.asarray(grid.origin),
+        grid.cell,
+        grid.columns,
+        grid.low,
+        grid.high,
+        in_room,
+        grid.cover.mean(axis=1),
+    )
+    return dataclasses.replace(grid, room=in_room, volume=volume)
+
+
+class _Air:
+    """Which room points lie in: that of the side facing them of the first face under
+    them, since whatever lies between a point and that face is in one room.
+    :meth:`~acoustic_spaces.room.Room.room_of` finds the same from the solid angles of
+    the faces, at a far greater cost per point."""
+
+    def __init__(self, room: Room) -> None:
+        from acoustic_spaces import _native
+
+        mesh = room.mesh
+        self.bvh = _native.Bvh(mesh.vertices, mesh.faces)
+        # The side of each face that a ray going down meets: the back where its normal
+        # points down.
+        self.side = (mesh.face_normals() @ _DOWN > 0.0).astype(np.int64)
+        self.face_room = room.face_room
+
+    def rooms(self, points: np.ndarray) -> np.ndarray:
+        """(n,) the room (an index into ``Room.room_volumes``) each point lies in, or -1
+        for none: outside the model or in a solid."""
+        points = np.ascontiguousarray(points, dtype=np.float64).reshape(-1, 3)
+        n = len(points)
+        _, face = self.bvh.intersect(
+            points, np.tile(_DOWN, (n, 1)), np.full(n, np.inf), np.full(n, -1, dtype=np.int64)
+        )
+        out = np.full(n, -1, dtype=np.int64)
+        hit = face >= 0
+        out[hit] = self.face_room[face[hit], self.side[face[hit]]]
+        return out
+
+
+def _slab_volumes(
+    room: Room,
+    air: _Air | None,
+    origin: np.ndarray,
+    spacing: float,
+    columns: np.ndarray,
+    low: np.ndarray,
+    high: np.ndarray,
+    in_room: np.ndarray,
+    fraction: np.ndarray,
+) -> np.ndarray:
+    """(n,) the volume of each slab (between ``low`` and ``high`` over its column of
+    ``columns``) that the rays reach (m^3), from samples across the column at the slab's
+    middle: in the model's air (with ``in_room`` >= 0, in that room), outside every
+    building. Past the edge of the surfaces a slab may go on over a stage or an aisle,
+    or end at a wall; each edge of its part may be off by half a sample. In a model that
+    is not closed, where the inside is unknown, the part of the column over the surfaces
+    (``fraction``) stands for it; so it does where no sample is in the air of the
+    point's room (a sliver of it at the slab's middle)."""
+    g = (np.arange(_AIR_SAMPLES) + 0.5) / _AIR_SAMPLES
+    gx, gy = (v.ravel() for v in np.meshgrid(g, g, indexing="ij"))
+    corner = origin + columns * spacing
+    middle = 0.5 * (low + high)
+    share = np.ones(len(columns))
+    count = max(1, _AIR_CHUNK // len(gx))
+    for first in range(0, len(columns), count):
+        part = slice(first, first + count)
+        n = len(corner[part])
+        samples = np.stack(
+            [
+                corner[part, 0, None] + gx * spacing,
+                corner[part, 1, None] + gy * spacing,
+                np.broadcast_to(middle[part, None], (n, len(gx))),
+            ],
+            axis=-1,
+        ).reshape(-1, 3)
+        ok = np.ones((n, len(gx)), dtype=bool)
+        if air is not None:
+            found = air.rooms(samples).reshape(n, -1)
+            wanted = in_room[part, None]
+            ok = np.where(wanted >= 0, found == wanted, found >= 0)
+        if room.outdoor is not None:
+            ok &= ~_in_buildings(room.outdoor, samples.reshape(n, -1, 3), corner[part], spacing)
+        share[part] = ok.mean(axis=1)
+    if not room.report.closed:
+        share = np.minimum(share, fraction)
+    share = np.where(share > 0.0, share, fraction)
+    return spacing**2 * share * (high - low)
+
+
+def _in_buildings(
+    outdoor: Layout, samples: np.ndarray, corner: np.ndarray, spacing: float
+) -> np.ndarray:
+    """(n, s) whether each of ``samples`` (n, s, 3), s points across each of n columns
+    ``spacing`` wide whose corners of least x and y are ``corner`` (n, 2), all at one
+    height in a column, lies in a building, as :meth:`~Layout.building_at` finds. Each
+    building is tested only on the columns that reach into the box round its footprint
+    seen from above, and only below its roof."""
+    out = np.zeros(samples.shape[:2], dtype=bool)
+    for _name, footprint, roof in outdoor.buildings:
+        reach = (corner < footprint.max(axis=0)) & (corner + spacing > footprint.min(axis=0))
+        over = np.flatnonzero(reach.all(axis=1) & (samples[:, 0, 2] < roof))
+        if len(over) == 0:
+            continue
+        xyz = samples[over].reshape(-1, 3)
+        inside = in_polygon(xyz[:, :2], footprint) & (xyz[:, 2] > outdoor.ground_at(xyz))
+        out[over] |= inside.reshape(len(over), -1)
+    return out
 
 
 @dataclass
@@ -753,9 +901,11 @@ def _trace_part(
     candidates = _candidates(
         model, position, sim.early.method, sim.early.max_order, sim.early.rays, threads
     )
-    # Indoors a line's or a surface's points add in energy; outdoors each point's own
-    # paths add in pressure, for the ground dip.
-    coherent = coherent_bands(sim, model.absorption.shape[1])
+    # Maps do not run the wave solver, so the lowest bands add in pressure up to
+    # coherent_max_band_hz whatever simulation.wave says. Indoors a line's or a
+    # surface's points add in energy; outdoors each point's own paths add in pressure,
+    # for the ground dip.
+    coherent = band_count(sim.early.coherent_max_band_hz, model.absorption.shape[1])
     coherent = coherent if single or room.outdoor is not None else 0
     diffraction = edges.diffraction(
         sim.early.diffraction,
@@ -874,8 +1024,13 @@ def coverage_map(
     all sources together, each source's sound arrives ``delay_ms`` later. Outdoors,
     every point also has its level relative to free field (``re_free_field``).
 
+    Maps do not run the wave solver: whatever ``simulation.wave`` says, the lowest bands
+    come from the early paths, in pressure up to ``early.coherent_max_band_hz``, and
+    the rays.
+
     ``grid`` takes the place of the one the settings give, so that two runs of a scene
-    share their points (:func:`~acoustic_spaces.engine.insertion.coverage_map`).
+    share their points (:func:`~acoustic_spaces.engine.insertion.coverage_map`); the
+    rooms its points lie in and the air in their slabs are those of ``room``.
     """
     room = _as_room(room)
     # Listeners play no part in a map; sources named are mapped even when left out.
@@ -895,6 +1050,8 @@ def coverage_map(
     if grid is None:
         run_size.check(map_size(room, settings, sim, chosen, threads))
         grid = map_grid(room, settings.surfaces, height=settings.height, spacing=settings.spacing)
+    else:
+        grid = _in_room(room, grid)
     say(f"Map: {len(grid)} points, {grid.cell:g} m apart")
     model = TraceModel.from_room(room, sim)
     edges = _Edges(model)

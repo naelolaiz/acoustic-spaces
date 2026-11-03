@@ -30,7 +30,9 @@ over the edge (the term on the lit side where the path is found, on the dark sid
 it is not), so that both together make the product.
 
 A path that is not found is followed where one event stops it and an edge of what stops
-it explains that, on the dark side of its boundary: a leg blocked by a face of the edge,
+it explains that, on the dark side of its boundary: a leg blocked by a face of the edge
+(where the path crosses the face right at a point of reflection, as at the foot of a
+barrier standing on the ground it reflects off, the leg that crosses the face's plane),
 or a point of reflection past the edge of its face. Where a point of reflection lies
 past the end of its plane's faces at an edge that stands on one of them (a corner of the
 room on the floor; not a wall as high as a roof elsewhere in the plane), the face of the
@@ -111,7 +113,13 @@ from acoustic_spaces.engine.diffraction import (
     boundary_angles,
     wedge_prefactor,
 )
-from acoustic_spaces.engine.early import EarlyReflections, _face_at, assemble_paths
+from acoustic_spaces.engine.early import (
+    _EDGE_TOLERANCE,
+    EarlyReflections,
+    _crossed_at,
+    _face_at,
+    assemble_paths,
+)
 from acoustic_spaces.engine.model import size_scattering
 
 #: Kinds of event: a leg of a path passes an edge, or the path reflects near the edge of
@@ -303,7 +311,9 @@ class EdgeFade:
                 start, arriving, np.full(len(rows), 2.0 * step), np.full(len(rows), -1)
             )
             plane = seqs[rows, j - 1]
-            on = (hit >= 0) & (model.face_plane[np.maximum(hit, 0)] == plane)
+            safe = np.maximum(hit, 0)
+            # Openings are holes: a reflection point in one is off its faces.
+            on = (hit >= 0) & (model.face_plane[safe] == plane) & ~model.transparent[safe]
             for i in np.flatnonzero((hit >= 0) & ~on):  # another face right there
                 hit[i] = _face_at(model, plane[i], points[rows[i], j], self.tolerance)
                 on[i] = hit[i] >= 0
@@ -334,6 +344,48 @@ class EdgeFade:
                 )
                 blocked[at, j] = np.where(face >= 0, model.face_plane[np.maximum(face, 0)], -2)
                 stop_at[at, j] = points[at, j] + where[:, None] * direction[at, j]
+        # A face crossed right where the path reflects off its faces, which neither leg
+        # meets (a barrier standing on the ground where the path reflects off it), stops
+        # or passes the path there as find_paths has it, on the leg that crosses its plane.
+        counted = (~model.transparent)[:, None]
+        arriving = np.zeros(n, dtype=np.int64)  # the leg that arrives at reflection j's point
+        for j in range(1, k + 1):
+            if j > 1:  # a leg of no length: the next reflection lies in the same corner
+                arriving = np.where(length[:, j - 1] > self.tolerance, j - 1, arriving)
+            at_point = np.arange(k)
+            at_point = (at_point >= arriving[:, None]) & (at_point < j)  # its reflections
+            rows = np.flatnonzero(
+                possible
+                & (length[:, j] > self.tolerance)
+                & np.all(~at_point | (faces >= 0), axis=1)
+            )
+            a = arriving[rows]
+            # The legs above meet no face this near to the point: the one arriving is
+            # tested to 1e-9 of its length short of it, the one leaving from the
+            # intersection test's least distance on.
+            near = np.column_stack(
+                [1e-9 * length[rows, a], np.full(len(rows), model.bvh.min_distance)]
+            )
+            share, crossings, face, arrives = _crossed_at(
+                model,
+                np.where(at_point[rows], seqs[rows], -1),
+                points[rows, a],
+                points[rows, j],
+                points[rows, j + 1],
+                _EDGE_TOLERANCE * self.d.size,
+                counted,
+                near,
+            )
+            passing = np.any(share > 0.0, axis=1)
+            crossed[rows] += np.where(passing, crossings[:, 0], 0)
+            stop = ~passing
+            leg = np.where(arrives, a, j)
+            # The face is the first solid one on the leg leaving the point, the last on
+            # the one arriving.
+            stop &= ~arrives | (blocked[rows, leg] == -1)
+            at, leg = rows[stop], leg[stop]
+            blocked[at, leg] = model.face_plane[face[stop]]
+            stop_at[at, leg] = points[at, j]
         # The events that stop each path: its blocked legs and its reflections off their
         # faces. One leg alone, or one reflection with no leg blocked: that event. More,
         # in at most two runs (no reflection on its face between the events of a run):
@@ -2015,8 +2067,11 @@ def _towards(model, point, image, planes, fallback):
 
 def _nearest_face(model, plane: int, point: np.ndarray) -> int:
     """The face of ``plane`` nearest to ``point`` in it: the one ``point`` lies least far
-    outside of (by its distance beyond the triangle's sides)."""
-    candidates = np.flatnonzero(model.face_plane == plane)
+    outside of (by its distance beyond the triangle's sides). Openings are holes: one is
+    taken only where the plane has no other face."""
+    candidates = np.flatnonzero((model.face_plane == plane) & ~model.transparent)
+    if len(candidates) == 0:
+        candidates = np.flatnonzero(model.face_plane == plane)
     tri = model.room.mesh.triangles[candidates]
     a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
     n = np.cross(b - a, c - a)

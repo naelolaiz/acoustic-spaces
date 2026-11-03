@@ -13,7 +13,9 @@ from scipy.linalg import expm
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.cli import main
 from acoustic_spaces.engine import TraceModel, coverage_map
+from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.diffraction import find_edges
+from acoustic_spaces.engine.edge_fade import _nearest_face
 from acoustic_spaces.engine.particles import trace_particles
 from acoustic_spaces.engine.simulate import early_paths
 from acoustic_spaces.parameters import decay_curve
@@ -82,7 +84,7 @@ def _write(path: Path, groups) -> Path:
     for name, quads in groups.items():
         lines.append(f"g {name}")
         for quad in quads:
-            lines += ["v " + " ".join(f"{c:g}" for c in p) for p in quad]
+            lines += ["v " + " ".join(f"{c:.15g}" for c in p) for p in quad]
             lines.append(f"f {n + 1} {n + 2} {n + 3} {n + 4}")
             n += 4
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -463,6 +465,352 @@ def test_paths_through_three_partitions_are_not_lost(tmp_path: Path) -> None:
     np.testing.assert_allclose(responses[1].energy(), responses[0].energy(), rtol=1e-9)
 
 
+def _partitioned(obj: Path, source, listener, sized: bool = True, **early) -> Room:
+    """The rooms ``obj`` (groups room1 and room2) with a 30 dB partition between them
+    and any opening in it (group opening), all their faces absorbing 10 % and scattering
+    nothing, nor for their size unless ``sized``."""
+    materials = {
+        "wall": _flat(0.1, scattering=0.0),
+        "partition": _flat(0.1, scattering=0.0, transmission_loss=30),
+        "door": {"transmission": 1},
+    }
+    assignments = {"room1": "wall", "room2": "wall", "partition": "partition", "opening": "door"}
+    scene = _scene(
+        obj,
+        materials,
+        assignments,
+        {"l": list(listener)},
+        source=source,
+        early=early,
+        scattering={"from_size": sized},
+    )
+    return Room.from_scene(scene)
+
+
+@pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
+def test_a_reflection_at_the_foot_of_a_partition_passes_through_it(
+    tmp_path: Path, method: str
+) -> None:
+    """Listeners 3 m behind a 30 dB partition, as in the apartment example's bedroom,
+    where the reflection off the floor lies on the partition's foot (x = 8), or less
+    than the tolerances away: the reflection passes the partition once, as 1 mm either
+    side, and the early paths' energy is theirs. At x = 8 it had passed the foot whole,
+    and with image sources a second time as off the partition, the floor and the
+    partition at that point: 20 to 24 dB more."""
+    obj = _coupled(tmp_path / "rooms.obj", 5, 5, 4, 3)
+    # The floor reflection at x = 2.5 + (x - 2.5) / 2.2. Just short of x = 8 the leg to
+    # the listener meets the partition within the early stage's tolerance of the floor,
+    # where the partition counts as the floor; just past it the leg to the source meets
+    # the partition nearer than the intersection test's least distance, then farther.
+    xs = (7.999, 8.0 - 1e-6, 8.0, 8.0 + 1e-8, 8.0 + 3e-7, 8.0 + 1e-6, 8.001)
+    energy, floor, orders = [], [], []
+    for x in xs:
+        paths = early_paths(
+            _partitioned(
+                obj, [2.5, 1.0, 1.0], [x, 2.0, 1.2], max_order=3, method=method, diffraction="none"
+            )
+        )
+        energy.append(paths.energy.sum(axis=0))
+        orders.append(np.bincount(paths.order).tolist())
+        (on_floor,) = [
+            i for i in np.flatnonzero(paths.order == 1) if abs(paths.points[i][1][2]) < 1e-5
+        ]
+        assert paths.crossings[on_floor] == 1
+        floor.append(paths.energy[on_floor])
+    assert all(counts == orders[0] for counts in orders)
+    for found in (energy, floor):
+        ends = (found[0] + found[-1]) / 2
+        np.testing.assert_allclose(found, np.broadcast_to(ends, (len(xs), 8)), rtol=1e-3)
+
+
+def test_a_partition_drawn_as_one_face_for_each_room_is_one_partition(tmp_path: Path) -> None:
+    """The partition above drawn as two coincident faces, one facing each room: the early
+    paths are those of the partition drawn as one face, with the same crossings and
+    energy, for listeners behind it (where the reflection off the floor lies on its
+    foot, or 1 um either side, or away from it) and in the source's room. A path that
+    reflected off both faces at one point had gone through the partition whole, as the
+    direct sound, or, from the third order on, come back as the reflection off it once
+    more, and the reflection at the foot had passed whole: at 1 kHz 22 to 26 dB more
+    behind the partition and 0.05 to 0.11 dB more in the source's room. Counting both
+    faces at the foot, the reflection there would pass the partition twice. No surface
+    scatters for its size here: of the paths with one image (as off the partition on
+    either side and through it) the two drawings keep different ones, whose surfaces
+    scatter differently for their size."""
+    quad = ((5, 0, 0), (5, 4, 0), (5, 4, 3), (5, 0, 3))
+    one = _coupled(tmp_path / "one.obj", 5, 5, 4, 3)
+    groups = {
+        "room1": _box(0, 5, 4, 3, skip=("x1",)),
+        "room2": _box(5, 10, 4, 3, skip=("x0",)),
+        "partition": [quad, quad[::-1]],
+    }
+    two = _write(tmp_path / "two.obj", groups)
+    for listener in (
+        (8.0 - 1e-6, 2.0, 1.2),
+        (8.0, 2.0, 1.2),
+        (8.0 + 1e-6, 2.0, 1.2),
+        (7.3, 3.1, 1.7),
+        (3.5, 3.0, 1.5),
+        (1.0, 3.0, 1.6),
+    ):
+        found = []
+        for obj in (one, two):
+            room = _partitioned(
+                obj,
+                [2.5, 1.0, 1.0],
+                listener,
+                sized=False,
+                max_order=3,
+                method="image_sources",
+                diffraction="none",
+            )
+            paths = early_paths(room)
+            order = np.lexsort((paths.energy[:, 4], paths.distance_m))
+            found.append((paths.order[order], paths.crossings[order], paths.energy[order]))
+        (orders, crossings, energy), (orders_two, crossings_two, energy_two) = found
+        np.testing.assert_array_equal(orders_two, orders)
+        np.testing.assert_array_equal(crossings_two, crossings)
+        np.testing.assert_allclose(energy_two, energy, rtol=1e-9)
+
+
+def test_a_reflection_at_the_foot_of_a_doorway_s_side_passes_the_doorway(
+    tmp_path: Path,
+) -> None:
+    """Listeners behind the partition above with a doorway in it, from y = 1.5 to 2.5 m,
+    where the reflection off the floor lies on the foot of either side of the doorway,
+    or 1 um or 1 mm aside: on the partition's foot the reflection passes the partition
+    (once), in the doorway it passes whole, and right at the doorway's side, past the
+    end of the partition's face, it passes whole as well. On the partition's foot it had
+    passed whole too."""
+    obj = _coupled(tmp_path / "door.obj", 5, 5, 4, 3, opening=(1.5, 2.5, 0.0, 2.0))
+    for side, into in ((1.5, 1.0), (2.5, -1.0)):
+        floor = {}
+        for offset in (-1e-3, -1e-6, 0.0, 1e-6, 1e-3):
+            # The floor reflection at y = 2 + (y - 2) / 2.2.
+            listener = (8.0, 2.0 + 2.2 * (side + into * offset - 2.0), 1.2)
+            room = _partitioned(
+                obj,
+                [2.5, 2.0, 1.0],
+                listener,
+                max_order=1,
+                method="image_sources",
+                diffraction="none",
+            )
+            paths = early_paths(room)
+            (on_floor,) = [
+                i for i in np.flatnonzero(paths.order == 1) if abs(paths.points[i][1][2]) < 1e-5
+            ]
+            floor[offset] = (paths.crossings[on_floor], paths.energy[on_floor])
+        for offset, (crossings, energy) in floor.items():
+            beside = floor[-1e-3 if offset < 0 else 1e-3]
+            assert crossings == beside[0] == (1 if offset < 0 else 0)
+            np.testing.assert_allclose(energy, beside[1], rtol=1e-3)
+
+
+@pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
+def test_a_reflection_in_a_corner_at_a_partition_s_foot_passes_through_it(
+    tmp_path: Path, method: str
+) -> None:
+    """The rooms above with the source and the listeners on their middle line, all as
+    high: for the middle listener (x = 7.5), or 1 to 3 um from it along the line or off
+    it, the reflections off the floor or the ceiling and a side wall lie in their corner
+    right where the partition stands in it, or less than 3 um from it, and pass the
+    partition there as 1 mm either side, so that the early level lies within 0.01 dB of
+    the mean of theirs in every band. They had passed it whole: 14 to 28 dB more at
+    1 kHz."""
+    obj = _coupled(tmp_path / "rooms.obj", 5, 5, 4, 3)
+    levels = []
+    for listener in (
+        (7.499, 2.0, 1.2),
+        *((7.5 + offset, 2.0, 1.2) for offset in (-3e-6, -2e-6, -1.5e-6, -1e-6, 0.0)),
+        *((7.5 + offset, 2.0, 1.2) for offset in (1.5e-6, 2e-6, 3e-6)),
+        (7.5, 2.0, 1.2 - 1.4e-6),
+        (7.5, 2.0, 1.2 + 1.8e-6),
+        (7.5, 2.0 + 1.5e-6, 1.2 - 1.5e-6),
+        (7.501, 2.0, 1.2),
+    ):
+        room = _partitioned(
+            obj, [2.5, 2.0, 1.2], listener, max_order=3, method=method, diffraction="first_order"
+        )
+        levels.append(10 * np.log10(total_energy(early_paths(room))))
+    beside = (levels[0] + levels[-1]) / 2
+    assert np.abs(np.array(levels[1:-1]) - beside).max() < 0.01
+
+
+# Cross-sections (y, z) of rooms along x: with side walls leaning in at 56 degrees to
+# the floor and out at 108; leaning at 60 degrees, parallel; upright.
+_LEANING = ((0, 0), (4, 0), (5, 3), (2, 3))
+_SLANTED = ((0, 0), (4, 0), (4 + 3**0.5, 3), (3**0.5, 3))
+_UPRIGHT = ((0, 0), (4, 0), (4, 3), (0, 3))
+
+
+def _turned(y: float, z: float) -> float:
+    """Where a partition turned and leaning stands across rooms along x."""
+    return 5 - 0.3 * y - 0.25 * z
+
+
+def _along_x(path: Path, section, partition) -> Path:
+    """Two rooms along x, 10 m in all, with the cross-section ``section``, its floor from
+    the first corner to the second, and between them the partition at x =
+    ``partition``(y, z)."""
+
+    def across(x):
+        return [(x(y, z), y, z) for y, z in section]
+
+    def sides(a, b):
+        return [(a[i - 1], b[i - 1], b[i], a[i]) for i in range(len(section))]
+
+    end, middle, other_end = across(lambda y, z: 0.0), across(partition), across(lambda y, z: 10.0)
+    groups = {
+        "room1": [*sides(end, middle), end],
+        "room2": [*sides(middle, other_end), other_end],
+        "partition": [middle],
+    }
+    return _write(path, groups)
+
+
+@pytest.mark.parametrize(
+    ("section", "partition", "source", "sides", "corner", "distance"),
+    [
+        (_LEANING, _turned, (0.6, 3.5, 1.6), (0, 3, 0), 0, 2.5),
+        (_LEANING, _turned, (1.8, 3.7, 1.0), (3, 0, 3), 0, 2.5),
+        (_LEANING, _turned, (1.2, 2.0, 1.1), (1,), 1, 2.5),
+        (_LEANING, _turned, (2.8, 3.9, 2.0), (0,), 1, 2.5),
+        (_SLANTED, lambda y, z: 5.0, (2.4, 3.246, 1.152), (3, 0, 3), 0, 0.75),
+        (_SLANTED, lambda y, z: 5.0, (3.571, 3.599, 2.098), (1, 2, 1), 2, 0.75),
+        (_UPRIGHT, lambda y, z: 5.0, (4.535, 2.951, 2.267), (2, 1), 2, 0.75),
+    ],
+    ids=[
+        "floor-in-floor",
+        "in-floor-in",
+        "out",
+        "floor",
+        "wall-floor-wall",
+        "wall-ceiling-wall",
+        "upright",
+    ],
+)
+def test_a_reflection_in_a_leaning_corner_at_a_partition_s_foot_passes_through_it(
+    tmp_path: Path, section, partition, source, sides, corner, distance
+) -> None:
+    """Listeners ``distance`` from a corner of the partition's foot or top (``corner``
+    of ``section``) in rooms with leaning walls or upright ones, on the line from the
+    source's image in the planes of its ``sides`` through it, where the reflection off
+    them lies right in the corner, or 1 to 3 um aside: the reflection passes the
+    partition there as 1 mm either side, so that the early energy lies within 0.01 dB of
+    the range of theirs in every band. Off the floor and the wall leaning in, in their
+    56 degree corner, a path that reflects off one of them twice had passed it whole, as
+    had one reflection off a single surface in the 108 degree corner: 13 to 16 dB more
+    at 1 kHz. In rooms whose side walls lean at 60 degrees, paths that reflect off a
+    wall, the floor or the ceiling and the wall again in their 60 degree corner, and in
+    the upright rooms one off the ceiling and a wall, had passed it there and 1 to 3 um
+    aside: 17 to 28 dB more at 1 kHz."""
+    image = np.array(source, dtype=float)
+    for side in sides:
+        (y0, z0), (y1, z1) = section[side], section[(side + 1) % len(section)]
+        normal = np.array([0.0, z0 - z1, y1 - y0]) / np.hypot(z0 - z1, y1 - y0)
+        image -= 2 * ((image - (0.0, y0, z0)) @ normal) * normal
+    y, z = section[corner]
+    corner = np.array([partition(y, z), y, z])
+    way = (corner - image) / np.linalg.norm(corner - image)
+    aside = np.cross(way, [1.0, 0.3, 0.25])
+    aside /= np.linalg.norm(aside)
+    obj = _along_x(tmp_path / "rooms.obj", section, partition)
+    levels = []
+    for offset in (-1e-3, -3e-6, -2e-6, -1.5e-6, -1e-6, 0.0, 1e-6, 1.5e-6, 2e-6, 3e-6, 1e-3):
+        listener = corner + distance * way + offset * aside
+        room = _partitioned(
+            obj, list(source), listener, max_order=3, method="image_sources", diffraction="none"
+        )
+        levels.append(10 * np.log10(early_paths(room).energy.sum(axis=0)))
+    low, high = np.minimum(levels[0], levels[-1]), np.maximum(levels[0], levels[-1])
+    assert np.all(np.array(levels[1:-1]) > low - 0.01)
+    assert np.all(np.array(levels[1:-1]) < high + 0.01)
+
+
+def _across_x(x: float, y0: float, y1: float) -> tuple:
+    """A wall 3 m high across x at ``x``, from ``y0`` to ``y1``."""
+    return ((x, y0, 0), (x, y1, 0), (x, y1, 3), (x, y0, 3))
+
+
+def _across_y(y: float, x0: float, x1: float) -> tuple:
+    """A wall 3 m high across y at ``y``, from ``x0`` to ``x1``."""
+    return ((x0, y, 0), (x1, y, 0), (x1, y, 3), (x0, y, 3))
+
+
+def _parted(path: Path, partitions) -> Path:
+    """A 9.5 x 8.5 x 3 m space parted at x = 5 and y = 4, each part with its own floor and
+    ceiling (group room1) and walls (room2), and the walls ``partitions`` between them."""
+    halves = ((0, 5), (5, 9.5)), ((0, 4), (4, 8.5))
+    floors = [
+        ((x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z))
+        for x0, x1 in halves[0]
+        for y0, y1 in halves[1]
+        for z in (0, 3)
+    ]
+    walls = [_across_x(x, y0, y1) for x in (0, 9.5) for y0, y1 in halves[1]]
+    walls += [_across_y(y, x0, x1) for y in (0, 8.5) for x0, x1 in halves[0]]
+    return _write(path, {"room1": floors, "room2": walls, "partition": partitions})
+
+
+@pytest.mark.parametrize(
+    ("partitions", "order"),
+    [
+        ([_across_x(5, 0, 4), _across_y(4, 5, 9.5)], 3),
+        ([_across_x(5, 0, 4), _across_x(5, 4, 8.5), _across_y(4, 5, 9.5)], 3),
+        ([_across_x(5, 0, 4), _across_x(5, 4, 8.5), _across_y(4, 0, 5), _across_y(4, 5, 9.5)], 1),
+    ],
+    ids=["L", "T", "cross"],
+)
+def test_a_reflection_where_partitions_meet_passes_through_them(
+    tmp_path: Path, partitions, order: int
+) -> None:
+    """A source at (2, 6, 1.5) and listeners at (8, 2, 1.5) in the parts of a space across
+    partitions meeting at x = 5, y = 4, where the reflections off the floor and the
+    ceiling lie right on the line where they meet, or 1 to 3 um aside: each reflected
+    path passes the partitions there as it does 1 mm to one side, with the same
+    crossings and energy, and those found 1 mm to both sides are found. The listener's
+    part is a bedroom in the corner of an L-shaped room, or one beside a wall going on
+    (a T, met first by the leg from the listener), or one of four around a cross, for which
+    only the reflections of the first order are taken: the legs of later ones pass the
+    line where the partitions meet, as the direct sound does, and a leg there counts one
+    of the partitions only. The space is 9.5 x 8.5 m, not 10 x 8, about whose middle the
+    source and the listener lie: there the legs between opposite walls pass the line as
+    well. The reflections had passed both walls of the bedroom whole, at the line and 1
+    to 3 um aside, and the T at the line and to the side where it counts one wall; at
+    the cross they had passed one wall 1 to 3 um aside and both at the line."""
+    source, listener = (2.0, 6.0, 1.5), np.array([8.0, 2.0, 1.5])
+    aside = np.array([2.0, 3.0, 0.0]) / 13**0.5  # level, across the path
+    obj = _parted(tmp_path / "parted.obj", partitions)
+    found = []
+    for offset in (-1e-3, -3e-6, -1e-6, 0.0, 1e-6, 3e-6, 1e-3):
+        room = _partitioned(
+            obj,
+            list(source),
+            listener + offset * aside,
+            max_order=order,
+            method="image_sources",
+            diffraction="none",
+        )
+        planes = TraceModel.from_room(room).face_plane
+        paths = early_paths(room)
+        found.append(
+            {
+                tuple(planes[paths.faces[i]].tolist()): (paths.crossings[i], paths.energy[i])
+                for i in np.flatnonzero(paths.order > 0)
+            }
+        )
+    one_side, other_side = found[0], found[-1]
+    for here in found[1:-1]:
+        assert set(one_side) & set(other_side) <= set(here)
+        for key, (crossings, energy) in here.items():
+            assert any(
+                key in side
+                and side[key][0] == crossings
+                and np.allclose(side[key][1], energy, rtol=1e-3, atol=0)
+                for side in (one_side, other_side)
+            ), key
+
+
 def test_diffraction_bends_round_a_doorway(tmp_path: Path) -> None:
     # The opening is a hole for diffraction: its sides and lintel are free edges of the
     # partition, and sound bends round them to a listener out of sight in the next room.
@@ -487,6 +835,88 @@ def test_diffraction_bends_round_a_doorway(tmp_path: Path) -> None:
     room = Room.from_scene(closed)
     assert not np.any(find_edges(TraceModel.from_room(room)).wedge == 2.0)
     assert len(early_paths(room)) == 0
+
+
+@pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
+def test_no_path_reflects_off_an_opening(tmp_path: Path, method: str) -> None:
+    """An opening reflects nothing: where the reflection off the wall would lie in the
+    doorway, no path reflects there. It had been found with no energy."""
+    obj = _coupled(tmp_path / "door.obj", 4, 6, 4, 3, opening=(1.5, 2.5, 0.0, 2.0))
+    scene = _scene(
+        obj,
+        {"wall": _flat(0.1, scattering=0.0), "door": {"transmission": 1}},
+        {"room1": "wall", "room2": "wall", "partition": "wall", "opening": "door"},
+        {"l": [2.0, 2.0, 1.0]},  # the reflection off x = 4 at y = 2.09, z = 1.26
+        early={"max_order": 2, "method": method, "diffraction": "none"},
+    )
+    room = Room.from_scene(scene)
+    transparent = TraceModel.from_room(room).transparent
+    paths = early_paths(room)
+    assert np.any(paths.order > 0)
+    assert not any(transparent[faces].any() for faces in paths.faces)
+
+
+def _doorway(path: Path) -> Path:
+    """A 10 x 8 x 3 m room with a doorway from x = 4 to 6, as high as the room, in its
+    wall y = 0; the floor and the ceiling in three pieces that meet the doorway's
+    sides."""
+    xs = [0.0, 4.0, 6.0, 10.0]
+    width, height = 8.0, 3.0
+    groups: dict[str, list] = {"walls": [], "door": [], "floor": [], "ceiling": []}
+    for x0, x1, name in zip(xs[:-1], xs[1:], ("walls", "door", "walls"), strict=True):
+        groups[name].append(((x0, 0, 0), (x1, 0, 0), (x1, 0, height), (x0, 0, height)))
+        groups["floor"].append(((x0, 0, 0), (x0, width, 0), (x1, width, 0), (x1, 0, 0)))
+        groups["ceiling"].append(
+            ((x0, 0, height), (x1, 0, height), (x1, width, height), (x0, width, height))
+        )
+    groups["walls"] += [
+        ((0, width, 0), (0, width, height), (10, width, height), (10, width, 0)),
+        ((0, 0, 0), (0, 0, height), (0, width, height), (0, width, 0)),
+        ((10, 0, 0), (10, width, 0), (10, width, height), (10, 0, height)),
+    ]
+    return _write(path, groups)
+
+
+def test_no_step_where_a_reflection_crosses_a_doorway_s_side(tmp_path: Path) -> None:
+    """Where the reflection off the wall crosses the side of a doorway in it, from the
+    doorway onto the wall 2 mm along, the level steps by less than 0.1 dB in every band:
+    the edge diffraction bends the reflection round the doorway's side on both sides
+    of it. The reflection off the doorway, found with no energy, had taken the place of
+    that term on the doorway's side: 2.0 dB at 63 Hz and 0.1 to 0.6 dB above."""
+    obj = _doorway(tmp_path / "doorway.obj")
+    levels = []
+    for x in (7.999, 8.001):  # the reflection at x = 3 + (x - 3) * 0.6
+        scene = _scene(
+            obj,
+            {"hard": _flat(0.05, scattering=0.05), "open": {"transmission": 1}},
+            {"walls": "hard", "floor": "hard", "ceiling": "hard", "door": "open"},
+            {"l": [x, 2.0, 1.5]},
+            source=[3.0, 3.0, 1.5],
+            early={"max_order": 3, "diffraction": "first_order"},
+        )
+        levels.append(10 * np.log10(total_energy(early_paths(Room.from_scene(scene)))))
+    assert np.abs(levels[1] - levels[0]).max() < 0.1
+
+
+def test_the_face_nearest_to_a_point_in_a_doorway_is_the_wall_beside_it(
+    tmp_path: Path,
+) -> None:
+    """The edge fade gives a reflection off its faces, next to the leg that stops its
+    path, the face of its plane nearest to the point. In a doorway that is the wall
+    beside it, as an opening reflects nothing; it had been the doorway, which the point
+    lies in and which absorbs all sound."""
+    scene = _scene(
+        _doorway(tmp_path / "doorway.obj"),
+        {"hard": _flat(0.05), "open": {"transmission": 1}},
+        {"walls": "hard", "floor": "hard", "ceiling": "hard", "door": "open"},
+        {"l": [5.0, 4.0, 1.5]},
+    )
+    model = TraceModel.from_room(Room.from_scene(scene))
+    point = np.array([5.5, 0.0, 1.5])
+    plane = model.face_plane[np.flatnonzero(model.transparent)[0]]
+    face = _nearest_face(model, plane, point)
+    assert not model.transparent[face]
+    assert model.room.mesh.triangles[face][:, 0].min() == 6.0  # the wall from x = 6 on
 
 
 def test_particles_and_the_wave_solver_pass_openings(tmp_path: Path) -> None:

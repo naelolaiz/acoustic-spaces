@@ -672,9 +672,10 @@ def stochastic_map_energy(
 ) -> MapEnergy:
     """Energy over a coverage map (a :class:`~acoustic_spaces.engine.coverage.MapGrid`)
     by stochastic ray tracing: every leg of every ray counts its track length through
-    each point's slab of air. ``onset`` is the arrival of the direct sound at each point
-    (s); ``covered_order``, ``covered_time`` (per point), ``splitting`` and the rest are
-    as for :func:`stochastic_energy`."""
+    each point's slab of air, where the model holds several rooms only that of a ray in
+    the point's room. ``onset`` is the arrival of the direct sound at each point (s);
+    ``covered_order``, ``covered_time`` (per point), ``splitting`` and the rest are as
+    for :func:`stochastic_energy`."""
     from acoustic_spaces import _native
 
     n = len(grid.points)
@@ -687,6 +688,9 @@ def stochastic_map_energy(
         directivity, orientation, model.absorption.shape[1]
     )
     face_room, source_room, level, own = _rooms(model, source, air, grid.points)
+    if model.transmission is None and len(model.room_volumes) > 1:
+        # Nothing lets sound through: every ray stays in the source's room.
+        source_room = int(model.room.room_of(np.asarray(source, float)[None])[0])
     bent = bending(model)
 
     def run(band: slice, count: int):
@@ -713,6 +717,7 @@ def stochastic_map_energy(
                 np.ascontiguousarray(grid.low, dtype=np.float64),
                 np.ascontiguousarray(grid.high, dtype=np.float64),
                 np.ascontiguousarray(grid.volume, dtype=np.float64),
+                np.ascontiguousarray(grid.room, dtype=np.int64),
                 onset,
                 covered,
                 MAP_FINE_STEP,

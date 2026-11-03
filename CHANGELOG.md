@@ -313,6 +313,72 @@
   third-octave bands) is warned about.
 - `pack --help` and the docs list the files sources play and the scene's recording among
   the files a pack holds.
+- Fixed: a coverage-map column that a wall between two rooms crosses had one point,
+  whose slab counted the rays of both rooms; each room's part of it that holds at least
+  a fifth of it now gets a point that counts that room's rays alone. Mapped 0.7 m apart,
+  the apartment example's bedroom points next to the partition read 65 dB(A); they now
+  read 43 to 49 dB(A), 43.8 dB(A) where a listener simulated there gets 43.8 dB(A).
+- Fixed: a map slab's volume counted the part of its column in the room in fifths, and
+  all of it where the column reached into a building; it now counts the part in the air
+  of its room, from 24 by 24 samples. Mapped 1.25 or 1.5 m apart, the shoebox example's
+  edge columns move by 0.2 to 0.5 dB(A); in the street example mapped 3 m apart, 12
+  columns of its canyon that reach into a building rise by 0.1 to 1.1 dB(A) for its
+  traffic (up to 2 dB at 1 kHz).
+- Fixed: coverage maps of scenes with the wave solver on, which maps do not run, add the
+  early paths in pressure up to `coherent_max_band_hz` as documented, rather than in
+  energy. In the `room_modes` example's map G rises by 1.8 dB on average at 63 Hz and
+  1.2 dB at 125 Hz (up to 4.7 and 3.5 dB), C50 and C80 by up to 7.6 and 6.6 dB, and EDT
+  falls by up to 31 %; the bands from 250 Hz up do not move.
+- Fixed: the wave solver took the pressure gradient across a thin surface with air
+  behind it (a screen, a balcony's front) at a listener within a grid cell of it, so the
+  low end of Ambisonics, binaural and loudspeaker outputs and LF and LFC in the wave
+  bands came out wrong there; it now takes it on the listener's side. 0.1 m in front of
+  a rigid screen the figure of eight facing it falls from 0.6 to 6.2 dB below the
+  pressure in the 63 Hz band with the 7-point stencil (from 0.4 dB above to 14.7 dB
+  below with the 19-point one), as in front of a solid block.
+- Fixed: the wave solver's responses started at emission, though the source's pulse is
+  centred on it, so listeners within 16 time steps' travel of the source (2.7 m on the
+  default grid) lost the pulse's start; they now keep it. 0.5 m from the source the
+  direct sound falls by up to 0.4 dB at 63 Hz and the figures of eight's ratio to it
+  moves by up to 1.4 dB; from 2 m on nothing moves by more than 0.01 dB.
+- Fixed: the wave solver's source cut off at a fifth of the grid's sample rate with
+  either stencil, which took up to 1.6 dB off the top of the highest band with the
+  19-point stencil (whose time step is 1.5 times as long) at 5 cells per wavelength; the
+  cutoff now scales with the time step (that band rises there by up to 0.13 dB, and by
+  0.003 dB at most at the default 8 cells per wavelength).
+- Fixed: the wave solver's figures of eight (X, Y and Z: the low end's direction in
+  spatial outputs, and LF, LFC and LJ) came out 0.2 to 0.5 dB weak in the highest band;
+  a fourth-order gradient and the velocity integral's gain divided out bring them within
+  0.04 dB of a point source's 4 m away along a grid axis or a diagonal, with either
+  stencil. Within three cells of the source they now depend more on where it lies in its
+  cell (0.5 m away along a grid axis 0.5 to 6.1 dB lower at 63 Hz), and at seat-a in the
+  shoebox example LJ rises by 0.14 and 0.49 dB at 63 and 125 Hz.
+- Outdoor models make the wave solver's grid once per source instead of twice: a grid
+  without the matched layer (with `scheme: auto` the isotropic stencil's), made only to
+  find that the sky lets the sound out, is gone (the street example's set-up at 63 Hz
+  takes 2.4 s instead of 6.9 s on two threads), with the same results. The isotropic
+  stencil is now refused outdoors before any grid is made, also for a source shut in a
+  building, which used to run.
+- Fixed: an early reflection whose point lies exactly on the foot of a wall, partition
+  or barrier standing on the surface it reflects off (in a corner too, or where such
+  walls meet), and which goes on behind it, now meets it there as it does just to one
+  side of the point: through it with its transmission loss, or stopped by a rigid one;
+  it passed whole (with image sources twice). In the apartment example the bedroom
+  column of a 0.7 m map at x = 8.0 m read 51 dB(A) instead of about 45 like its
+  neighbours, and behind a 3 m barrier a listener placed symmetrically to the source got
+  6 to 27 dB more early sound than 1 cm either side.
+- Fixed: where the wall between two rooms is drawn as two coincident faces, one for each
+  room, no early path reflects off both faces at one point any more: from one room into
+  the other that path was the direct sound at full level, without the wall's
+  transmission loss, and with image sources from the third order on it came back into
+  the source's room as the reflection off the wall once more. Behind such a 20 dB wall
+  it had raised the early level at 1 kHz by 9 to 18 dB, and in front of it by 0.05 to
+  0.13 dB up to the third order and 0.4 to 0.6 dB up to the fifth.
+- Fixed: no early path reflects off an opening any more. Those paths carried no energy,
+  but they took the place of other paths with the same image and, with edge diffraction,
+  of the reflection bending round the opening's edge, so levels across a 10 m x 8 m room
+  with a 2 m doorway move by as much as 2.4 dB at 63 Hz, 1.6 dB at 125 Hz and 0.2 dB
+  above, and no longer step by 2 dB where the reflection crosses the doorway's side.
 
 ## 4.1.0
 

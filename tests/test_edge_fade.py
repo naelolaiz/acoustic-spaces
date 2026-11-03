@@ -318,6 +318,26 @@ def test_no_step_round_the_gallery_corner(gallery: Room, x: float, y: float, ban
     assert abs(levels[1] - levels[0]) < 0.1
 
 
+def test_a_path_missed_at_the_foot_of_the_gallery_s_wall_4(gallery: Room) -> None:
+    """For the listener round the gallery's corner, as anywhere on the line x = 4 m 1.6 m
+    high, a path off the floor and wall_6 that the early stage does not find reflects
+    off the floor (as the image method places it) right at the foot of wall_4, where the
+    floor's face stops. That face goes on only inside, so the leg arriving there is the
+    one that crosses wall_4's plane, as for a listener 1 um farther from wall_6, where
+    the reflection lies on the face; the level lies within 0.01 dB of the levels 1 um
+    either side in every band. Taking the leg leaving it, as where the reflection lies
+    past the face, gave 1.0 dB less at 63 Hz."""
+    scene = gallery.scene
+    listener = next(item for item in scene.listeners if item.name == "round the corner")
+    levels = []
+    for x in (4.0 - 1e-6, 4.0, 4.0 + 1e-6):
+        moved = listener.model_copy(update={"position": (x, 15.0, 1.6)})
+        room = Room.from_scene(scene.model_copy(update={"listeners": [moved]}), reuse=gallery)
+        levels.append(10 * np.log10(total_energy(early_paths(room))))
+    assert np.abs(levels[1] - levels[0]).max() < 0.01
+    assert np.abs(levels[1] - levels[2]).max() < 0.01
+
+
 def test_the_waves_keep_the_edge_fade_s_pieces_as_they_come(gallery: Room, monkeypatch) -> None:
     """The edge fade leaves out the pieces with nothing in them before it keeps their
     pressure, so that the waves keep the others as they come: they left those out by
