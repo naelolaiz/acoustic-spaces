@@ -69,7 +69,7 @@ RIDGE_X = 500.0
 #: The ridge's exact solution is integrated over this much of its edge either way (m),
 #: with this step du (edge_diffraction.btm_first): its positions are 22 to 68 m from the
 #: edge, where the default, 40 m with du = 0.004, leaves it up to 0.2 dB off from 2 kHz up.
-RIDGE_HALF_LENGTH, RIDGE_DU = 160.0, 0.001
+RIDGE_HALF_LENGTH, RIDGE_DU = 320.0, 0.001
 
 
 def heights(fn) -> list[list[float]]:

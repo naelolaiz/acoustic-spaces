@@ -181,7 +181,7 @@ Outdoor acoustics, in steps:
   wedge per crest with both slopes' reflections in its terms, the equivalent edge and
   thick-screen factor for a rounded top, and the nearest crest's wave in sight, so the
   level is continuous across the edge of a hill's shadow; the late rays bounce off the
-  triangles. A ridge is within 0.2 dB of the exact wedge in every band, a flat terrain
+  triangles. A ridge is within 0.1 dB of the exact wedge in every band, a flat terrain
   and a slope give the flat ground's and the image's paths, a smooth hill over soft
   ground lets 1.4 to 1.8 dB more past than the thin screen (its crest is a wedge open
   wider than a half-plane), over rigid ground the flanks' reflections add. Scenes

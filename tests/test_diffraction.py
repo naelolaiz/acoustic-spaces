@@ -191,12 +191,16 @@ def test_wedges_match_the_exact_solution(n: float) -> None:
 
 
 def test_the_exact_solution_runs_at_the_engines_speed_of_sound(tmp_path: Path) -> None:
-    """validation/edge_diffraction.py evaluates BTM at the wave numbers the engine has
-    in its scenes, whose air is at the default 20 °C."""
+    """validation/edge_diffraction.py evaluates BTM at the speed of sound of its scenes,
+    whose air is at the default 20 °C, and at the wave numbers of the engine's band
+    frequencies at that speed."""
     room = edge_diffraction._room(
         tmp_path, "screen", edge_diffraction.screen_quads(), (-5, 0, -2), (5, 0, -1)
     )
-    assert edge_diffraction.C == pytest.approx(room.speed_of_sound(), rel=1e-12)
+    c = room.speed_of_sound()
+    assert edge_diffraction.C == pytest.approx(c, rel=1e-12)
+    frequencies = edge_diffraction.band_frequencies()[0].ravel()
+    np.testing.assert_allclose(edge_diffraction.K, 2.0 * np.pi * frequencies / c, rtol=1e-12)
 
 
 def test_the_bands_in_energy_are_low_on_a_shadow_boundary(tmp_path: Path) -> None:

@@ -1170,9 +1170,9 @@ band, at most 0.20 dB at 8 kHz past the screen's end, but for 8 kHz on the strip
 it is 0.06 dB and the exact level's 0.13 dB. There the exact level is the one off: its
 average over 96 frequencies swings round one over 768 by up to 0.19 dB near y = -1 m,
 which makes the strip's 0.19 dB at 8 kHz in the table, and steps by 0.03 dB where it
-stepped by 0.13 dB; at the listeners checked the engine is within 0.0001 dB of the
-average over 768. Without the fade the level stepped by up to 8.6 dB past the screen's
-end, 7.6 dB past the corner and 9.2 dB past the gap's ends. At the corner with
+stepped by 0.13 dB; at every fourth listener along the line the engine is within 0.001
+dB of the average over 768. Without the fade the level stepped by up to 8.6 dB past the
+screen's end, 7.6 dB past the corner and 9.2 dB past the gap's ends. At the corner with
 `first_order` the fade changes the level by less than 0.001 dB: where the edge
 diffraction already bends a path, the fade leaves out the terms it adds. On the strip
 with `first_order` the edge diffraction bends the reflection off the strip, and the fade
@@ -2605,20 +2605,20 @@ and on a 5 m grid gives the same reflection.
 **A ridge**, two slopes of 0.6 meeting at 241.9 degrees, with the source on one slope
 and the listener in its shadow on the other, against the Biot-Tolstoy-Medwin solution
 for the rigid wedge ([Edge diffraction](#edge-diffraction-against-the-exact-solution)),
-integrated along 320 m of the edge, per octave band; the engine's path is the wedge of
+integrated along 640 m of the edge, per octave band; the engine's path is the wedge of
 the string pulled taut over the profile, with the reflections off both slopes in its
 four terms:
 
 | source, listener (m over the slopes) | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
 |---|---|---|---|---|---|---|---|---|---|
-| 2.0 at 30 m before, 1.5 at 30 m behind | -11.27 | -14.21 | -17.21 | -20.21 | -23.22 | -26.23 | -29.24 | -32.26 | exact, dB |
-| | +0.00 | +0.00 | +0.00 | +0.00 | -0.00 | +0.00 | -0.00 | +0.00 | engine - exact |
-| 1.0 at 40 m before, 4.0 at 60 m behind | -13.32 | -16.28 | -19.28 | -22.29 | -25.30 | -28.32 | -31.32 | -34.33 | exact, dB |
-| | +0.00 | +0.00 | +0.00 | +0.00 | -0.00 | +0.01 | +0.00 | -0.00 | engine - exact |
+| 2.0 at 30 m before, 1.5 at 30 m behind | -11.27 | -14.21 | -17.21 | -20.21 | -23.22 | -26.23 | -29.24 | -32.25 | exact, dB |
+| | +0.00 | +0.00 | +0.00 | +0.00 | -0.00 | +0.00 | +0.00 | +0.00 | engine - exact |
+| 1.0 at 40 m before, 4.0 at 60 m behind | -13.32 | -16.28 | -19.28 | -22.29 | -25.30 | -28.31 | -31.32 | -34.33 | exact, dB |
+| | +0.00 | +0.00 | +0.00 | -0.00 | -0.00 | +0.00 | -0.00 | +0.00 | engine - exact |
 | 3.0 at 20 m before, 1.5 at 40 m behind, 30 m aside | -9.81 | -12.72 | -15.71 | -18.72 | -21.73 | -24.74 | -27.75 | -30.76 | exact, dB |
 | | +0.09 | +0.09 | +0.09 | +0.09 | +0.09 | +0.09 | +0.09 | +0.09 | engine - exact |
 
-The engine agrees within 0.01 dB for the first two pairs and is 0.09 dB high in every
+The engine agrees within 0.005 dB for the first two pairs and is 0.09 dB high in every
 band for the third. A ridge sampled on a grid is the exact wedge, which sits at the
 crest with no width and has the slopes for its faces; the uniform theory's four terms, a
 high-frequency form of the exact solution, come that close to it here. The third pair is

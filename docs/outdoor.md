@@ -149,7 +149,7 @@ follow the terrain: their points stand at the map's height over the ground under
   do not diffract, nor do its own ridges, which bend too little at each grid line: the
   sound over the crests takes their place.
 
-A ridge agrees with the exact solution for the wedge within 0.2 dB, a flat terrain and
+A ridge agrees with the exact solution for the wedge within 0.1 dB, a flat terrain and
 a plane slope with the flat ground and the image source, and a smooth hill over a soft
 ground lets 1.4 to 1.8 dB more over its crest than the thin screen's attenuation (see
 [Validation](validation.md#terrain-against-closed-forms-and-the-exact-wedge)); a
