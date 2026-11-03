@@ -32,7 +32,7 @@ tour moves every 8 bars of the tempo given, and the video credits the file by it
 unless `--credit` says what to show. The editor runs the same steps from Simulation >
 Run demo…
 
-From the audience to the far shore the sound drops by 24 to 25 dB(A), too much to
+From the audience to the far shore the sound drops by about 25 dB(A), too much to
 hear the far places in a video. So each stop of the tour is brought to the same loudness
 (K-weighted, as loudness meters weigh it) as the audience's, and its caption says how
 much quieter it really is. The window in still air keeps the gain of the window in the
@@ -96,7 +96,8 @@ CHANNELS = {"main_left": 0, "main_right": 1, "subs": "mono"}
 #: The scene's listener behind the stage, as far upwind as the park reaches, left out of
 #: its own simulations.
 UPWIND = "behind_stage"
-#: How long the responses run: the far shore hears the stage 1.6 s late.
+#: How long the responses run past the latest direct sound, the far shore's, 1.6 s late:
+#: outdoors the simulation counts ``ir_length_s`` from there (5.2 s in all).
 IR_LENGTH_S = 3.5
 
 #: The default tour: listener, weather ("evening" or "still") and how many phrases it
