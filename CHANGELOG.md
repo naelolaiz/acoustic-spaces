@@ -3,14 +3,13 @@
 ## Unreleased
 
 - Fixed: a curved ray's level near where it runs level at the listener, the source, the
-  ground, a corner of the profile (a table's row, or the edge of a layer whose speed
-  does not change with height) or through such a layer came out several dB off, 20 dB
-  and more at worst, as its spread came from neighbouring rays' ranges, which change
-  ever faster there; those parts of the range are now taken in closed form, which also
-  finds many such rays that were missed, and the direct ray through air whose speed does
-  not change with height is the straight one. Neither a ground that absorbs nothing (in
-  the parabolic equation) nor a layer whose speed changes by less than 5.6e-9 m/s per
-  metre sets off a RuntimeWarning any more.
+  ground, a table's row or the edge of a layer whose speed does not change with height
+  came out several dB off, 20 dB and more at worst, and many such rays were missed; the
+  parts of its spread that grow without bound there are now taken in closed form where
+  that proves the steadier way, a ray whose spread no way gives steadily is left out, and
+  the direct ray through air whose speed does not change with height is the straight one.
+  Neither a ground that absorbs nothing (in the parabolic equation) nor a layer whose
+  speed changes by less than 5.6e-9 m/s per metre sets off a RuntimeWarning any more.
 - Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
   University and the University of Iceland, and described as a KEMAR dummy head with one
   of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.

@@ -4,7 +4,7 @@ This branch fixes the level spikes of curved early paths that turn at, or very n
 listener's height (the aircraft landing spike traced on 2026-11-03), and makes the eigenray search in
 `engine/refraction.py` find rays near level and near profile corners without accepting false ones.
 
-## State (2026-11-03, evening)
+## State (2026-11-03, 22:00 Madrid)
 
 - Committed: `2795571` (the first fix: the sine of a ray at a turning end is exactly 0) and the merge of main `b23f98a`.
 - This commit snapshots the uncommitted work of three fix-and-review rounds plus the fourth round in progress:
@@ -17,6 +17,14 @@ listener's height (the aircraft landing spike traced on 2026-11-03), and makes t
   because `_graze` and the 1/(p g) singular parts scale as 1/|g|. Round 4 (in progress here) decides "level"
   by what the arithmetic can resolve, bounds `_graze`, falls back to the raw range where a singular part is
   ill-conditioned, and adds regression tests for the float32 row, dw = 1e-8 and a 1-ulp step.
+- Round 4 decided "level" by what the arithmetic resolves, bounded `_graze` and added a fallback to the raw
+  range. Its review REJECTED it again: stretches that are nearly but not exactly level (gradients about 1e-3
+  relative off the trend, wind steps of 1e-12 to 1e-8 m/s) with rays turning in the air go through the
+  turning-slope fit unguarded (levels off by up to 43 dB where head is right); the `_GRAZE_SHARE` slack lets
+  false roots through (exact misses 0.3-0.5 m); the fallback differences at other points than head; on the
+  presets the fit is worse than head on 23 rays above -20 dB (up to 0.30 dB, 0.89 dB near a caustic).
+  Round 5 is in progress in this snapshot. If it is rejected too, the plan is to ship only the first fix
+  (`2795571`) with the remaining misses documented.
 - Minors open from round 3: rays with both ends 1 mm from a level-layer edge at 400 m (0.3 dB), equal-height
   preset rays at 10-80 m (window slide, up to 0.16 dB), the 600 m caustic carve-out and "within 0.74 dB" in
   `docs/outdoor.md`, version history in new test docstrings.
