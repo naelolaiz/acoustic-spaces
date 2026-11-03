@@ -107,8 +107,9 @@ class Layout:
         (bands,) m. The Fresnel zone is where a path through the ground is at most
         :data:`FRESNEL_PATH_DIFFERENCE` wavelengths longer than the reflected one: an
         ellipse round the reflection point, small at high frequencies and near normal
-        incidence, long near grazing incidence. Past the extent, the ground goes on as
-        it is at its edge."""
+        incidence, long near grazing incidence. Each share is the exact area of the
+        ellipse that the zone covers, so that it changes smoothly as the reflection
+        moves. Past the extent, the ground goes on as it is at its edge."""
         before, at, after = (np.atleast_2d(np.asarray(p, dtype=float)) for p in (before, at, after))
         wavelength = np.asarray(wavelength, dtype=float)
         n, bands = len(at), len(wavelength)
@@ -124,19 +125,21 @@ class Layout:
         end = np.vstack([b for _, b in edges])
         reach = np.linalg.norm(axes, axis=-2).max(axis=-1)  # (n, bands) the longest semi-axis
         near = _segment_distance(centre.reshape(-1, 2), start, end).reshape(n, bands) < reach
+        near &= np.abs(np.linalg.det(axes)) > 0.0
         rows, columns = np.nonzero(near)
         if len(rows) == 0:
             return out
-        x0, y0, x1, y1 = self.extent
-        samples = centre[rows, columns, None, :] + np.einsum(
-            "kij,sj->ksi", axes[rows, columns], _DISK
-        )  # (k, S, 2)
-        samples = np.clip(samples, [x0, y0], [x1, y1]).reshape(-1, 2)
-        part = (self.zone_at(samples) + 1).reshape(len(rows), len(_DISK))
+        # Each zone's pieces in the frame where the ellipse is the unit disk.
+        inverse = np.linalg.inv(axes[rows, columns])  # (k, 2, 2)
+        middle = centre[rows, columns]  # (k, 2)
         shares = np.zeros((len(rows), out.shape[2]))
-        for p in range(out.shape[2]):
-            shares[:, p] = np.mean(part == p, axis=1)
-        out[rows, columns] = shares
+        for p, (_, polygon) in enumerate(self.zones, start=1):
+            for piece in _continued(polygon, self.extent):
+                inside = np.einsum("kij,kvj->kvi", inverse, piece[None] - middle[:, None])
+                shares[:, p] += _disk_area(inside) / math.pi
+        shares = np.clip(shares, 0.0, 1.0)
+        shares[:, 0] = np.clip(1.0 - shares[:, 1:].sum(axis=1), 0.0, 1.0)
+        out[rows, columns] = shares / shares.sum(axis=1, keepdims=True)
         return out
 
     def building_at(self, points: np.ndarray) -> list[str | None]:
@@ -376,16 +379,64 @@ def vegetation_shapes(
     return tuple(shapes)
 
 
-def _sunflower(count: int) -> np.ndarray:
-    """(count, 2) points spread evenly over the unit disk, each standing for an equal
-    area of it."""
-    k = np.arange(count)
-    angle = k * np.pi * (3.0 - np.sqrt(5.0))
-    return np.sqrt((k + 0.5) / count)[:, None] * np.column_stack([np.cos(angle), np.sin(angle)])
+#: How far past the extent (m) a zone that reaches its edge goes on, for the share of a
+#: Fresnel zone past the extent: farther than any Fresnel zone reaches.
+_BEYOND_M = 1e7
 
 
-#: The points of a Fresnel zone looked up in the zones to share it out, on the unit disk.
-_DISK = _sunflower(96)
+def _continued(polygon: np.ndarray, extent) -> list[np.ndarray]:
+    """``polygon`` (a zone cut to ``extent``) and the parts of the plane past the extent
+    where its ground goes on, the ground going on past the extent as it is at its edge:
+    a strip out from each of its edges along a side of the extent, and a quadrant out
+    from each of its corners at a corner of the extent."""
+    x0, y0, x1, y1 = extent
+    tolerance = 1e-9 * max(x1 - x0, y1 - y0)
+    far = _BEYOND_M
+    pieces = [polygon]
+    sides = ((0, x0, -1.0), (0, x1, 1.0), (1, y0, -1.0), (1, y1, 1.0))
+    for a, b in zip(polygon, np.roll(polygon, -1, axis=0), strict=True):
+        for axis, bound, way in sides:
+            if abs(a[axis] - bound) <= tolerance and abs(b[axis] - bound) <= tolerance:
+                out = np.zeros(2)
+                out[axis] = way * far
+                pieces.append(np.array([a, b, b + out, a + out]))
+    for corner in polygon:
+        ways = [way for axis, bound, way in sides if abs(corner[axis] - bound) <= tolerance]
+        if len(ways) == 2:
+            dx, dy = ways[0] * far, ways[1] * far
+            x, y = corner
+            pieces.append(np.array([[x, y], [x + dx, y], [x + dx, y + dy], [x, y + dy]]))
+    return pieces
+
+
+def _disk_area(polygon: np.ndarray) -> np.ndarray:
+    """(k,) the area of the unit disk that each of ``k`` simple polygons (k, n, 2) covers:
+    over each edge, the triangle it makes with the disk's centre where the edge is inside
+    the disk and the sector of the disk between its ends where it is outside."""
+    a = polygon
+    d = np.roll(polygon, -1, axis=1) - a
+    length2 = np.sum(d * d, axis=-1)
+    safe = np.maximum(length2, 1e-300)
+    # Where the edge's line comes closest to the centre, and where it enters and leaves.
+    t = np.where(length2 > 0.0, -np.sum(a * d, axis=-1) / safe, 0.0)
+    closest = a + t[..., None] * d
+    gap2 = np.sum(closest * closest, axis=-1)
+    meets = (gap2 < 1.0) & (length2 > 0.0)
+    half = np.sqrt(np.clip(1.0 - gap2, 0.0, None) / safe)
+    enter = np.where(meets, np.clip(t - half, 0.0, 1.0), 0.0)
+    leave = np.where(meets, np.clip(t + half, 0.0, 1.0), 0.0)
+    p = a + enter[..., None] * d
+    q = a + leave[..., None] * d
+    b = a + d
+
+    def cross(u, v):
+        return u[..., 0] * v[..., 1] - u[..., 1] * v[..., 0]
+
+    def sector(u, v):
+        return 0.5 * np.arctan2(cross(u, v), np.sum(u * v, axis=-1))
+
+    signed = sector(a, p) + 0.5 * cross(p, q) + sector(q, b)
+    return np.abs(signed.sum(axis=-1))
 
 
 def _fresnel_ellipses(before, at, after, ground, wavelength):

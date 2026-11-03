@@ -3596,7 +3596,7 @@ each listener, their level following their thrust:
 |---|---:|---:|---:|---:|
 | departure_4km | 87.1 (87.2) | 95.9 (96.0) | 49.9 (43.1) | 64.1 (60.7) |
 | lateral_450m | 85.0 (85.1) | 95.5 (94.5) | 43.1 (54.4) | 57.3 (68.8) |
-| approach_2000m | 52.1 (54.8) | 67.8 (68.6) | 90.6 (91.5) | 96.9 (98.8) |
+| approach_2000m | 51.9 (54.8) | 67.7 (68.6) | 90.6 (91.5) | 96.9 (98.8) |
 
 (dB(A); Doc 29's in brackets.) Where the jet is heard rolling, the walk starts or ends
 less than 10 dB under its L_ASmax, so its SEL there is over less than the 10 dB-down
@@ -3611,7 +3611,7 @@ reflects the sound back up, so the arrival's roll-out is 6.8 dB over Doc 29 at
 departure_4km, 2.4 km ahead of it along the runway, while the meadow takes much of it
 away from 250 Hz up, so it is 11.3 dB under at lateral_450m, 1 km away across the grass
 (at 250 Hz the roll-out's end is 14 dB quieter there than at departure_4km); the
-departure's take-off roll is 2.7 dB under at approach_2000m.
+departure's take-off roll is 2.9 dB under at approach_2000m.
 
 ## Ground-borne vibration against the FTA's manual
 

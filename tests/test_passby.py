@@ -300,6 +300,26 @@ def test_the_credit_of_a_vehicle_with_a_siren_fits_its_stills(vehicle) -> None:
     assert line == credit
 
 
+@pytest.mark.parametrize(
+    ("span_s", "step_s"), [(10.8, 2.0), (30.0, 5.0), (104.0, 10.0), (600.0, 50.0)]
+)
+def test_the_graphs_time_axis_keeps_its_labels_apart(span_s: float, step_s: float) -> None:
+    """A car's pass labels every 2 s, a long pass (an aircraft's, 104 s) every 10 s, so
+    that the labels never crowd each other, nor the widest of them overlap."""
+    pytest.importorskip("PIL")
+    from PIL import Image, ImageDraw
+
+    from acoustic_spaces.demos.passby_pictures import GRAPH_BOX, time_step
+    from acoustic_spaces.demos.pictures import SIZE, font
+
+    width = GRAPH_BOX[2]
+    step = time_step(span_s, width)
+    assert step == step_s
+    draw = ImageDraw.Draw(Image.new("RGB", SIZE))
+    widest = draw.textlength(f"{span_s:.0f} s", font=font("Regular", 16))
+    assert step * width / span_s > widest + 10.0
+
+
 @pytest.mark.parametrize("example", ["roadside", "street"])
 def test_a_vehicles_own_options_matter_with_it_alone(example: str) -> None:
     """The options of some of the vehicles alone (the police car's siren, what the fire
