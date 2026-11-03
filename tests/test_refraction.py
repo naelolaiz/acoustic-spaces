@@ -3,9 +3,11 @@
 import importlib
 import itertools
 import math
+import sys
 import time
 import warnings
 from decimal import Decimal, localcontext
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -14,7 +16,9 @@ from scipy.optimize import brentq
 from test_ground import exact_reflection
 
 from acoustic_spaces import Room, Scene, simulate
+from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.parabolic import march
+from acoustic_spaces.engine.refracted import refraction_for
 from acoustic_spaces.engine.refraction import Profile, Rays, node_heights
 from acoustic_spaces.engine.shadow import shadow_start
 from acoustic_spaces.examples import example_path
@@ -1137,6 +1141,44 @@ def test_the_level_of_a_ray_that_turns_just_under_air_level_but_for_a_hair() -> 
     _assert_on_the_listener(profile, 26.68, 26.680001, 2666.3, found)
 
 
+def test_each_caustic_advances_the_phase_by_a_quarter_period() -> None:
+    """A ray past a fold caustic leads one that has touched none by a quarter period:
+    stationary phase on the Airy integral gives it exp(-i pi/4) against exp(i pi/4) with
+    time as exp(-i omega t), so a factor j with time as exp(j omega t), as the early
+    paths have it (a delay tau being exp(-j omega tau); a quarter-period delay would be
+    -j). Downwind of a source 2 m up, 200 m away 1.5 m up over a ground that reflects
+    everything in phase, some of the paths off the ground touch a caustic."""
+    source, listener = np.array([0.0, 0.0, 2.0]), np.array([200.0, 0.0, 1.5])
+    scene = Scene.model_validate(
+        {
+            "name": "downwind",
+            "geometry": {"ground": {"extent": [[-50.0, -20.0], [250.0, 20.0]], "sky": 20.0}},
+            "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+            "assignments": {"ground": "hard"},
+            "atmosphere": {"preset": "windy"},
+            "sources": [{"name": "s", "position": list(source)}],
+            "listeners": [{"name": "l", "position": list(listener)}],
+        }
+    )
+    room = Room.from_scene(scene)
+    refraction = refraction_for(
+        TraceModel.from_room(room),
+        source,
+        speed_of_sound=room.speed_of_sound(),
+        air=np.zeros(8),
+        coherent=2,
+    )
+    rays = refraction.rays(refraction._towards(np.array([1.0, 0.0])))  # the wind's way
+    found = rays.eigenrays(1.5, 200.0, 2)
+    assert set(found.caustics.tolist()) == {0, 1}
+    ones = np.ones(8)
+    corners = np.array([source[:2], listener[:2]])
+    paths, drawn, _ = refraction._curved(rays, found, 1.5, corners, (), listener, ones, ones)
+    assert drawn.all()
+    turn = np.broadcast_to((1j**found.caustics)[:, None, None], paths.spectrum.shape)
+    np.testing.assert_allclose(paths.spectrum, turn, rtol=0, atol=1e-12)
+
+
 @pytest.mark.parametrize(("g", "angle"), [(0.1, 5.0), (-0.1, -3.0), (0.02, 30.0)])
 def test_the_compiled_tracer_follows_the_arcs(g, angle) -> None:
     native = pytest.importorskip("acoustic_spaces._native")
@@ -1213,6 +1255,93 @@ def test_the_parabolic_equation_starts_wide(f) -> None:
     r1, r2 = math.hypot(r, height - 5.0), math.hypot(r, height + 5.0)
     exact = abs(np.exp(1j * k * r1) / r1 + np.exp(1j * k * r2) / r2)
     assert 20 * math.log10(abs(pressure) / exact) == pytest.approx(0.0, abs=0.2)
+
+
+def _windy(h) -> np.ndarray:
+    """The ``windy`` preset's effective speed of sound downwind (m/s) at heights h (m)."""
+    windy = Atmosphere.model_validate({"preset": "windy", "wind": {"direction_deg": 0}})
+    heights = np.atleast_1d(np.asarray(h, dtype=float))
+    return np.asarray(windy.sound_speed(heights, 20.0, np.array([1.0, 0.0])), dtype=float)
+
+
+def _band_db(pressure: np.ndarray, ranges: np.ndarray, zs: float, zr: float) -> np.ndarray:
+    """The level over the free field's (dB) of the band's slices ``pressure`` (F, n)."""
+    return 10 * np.log10(np.mean(np.abs(pressure) ** 2, axis=0) * np.hypot(ranges, zs - zr) ** 2)
+
+
+@pytest.mark.parametrize("independent", [True, False])
+def test_steep_sound_in_wind_against_the_fast_field_program(independent) -> None:
+    """The phase shift the narrow-angle equation takes at each step (the split step of
+    Salomons 2001, app. H) strays for sound that comes in steeply, at any step: from a
+    source 30 m up in the ``windy`` preset downwind over grass, the 100 Hz third-octave
+    band 47 to 117 m away (the reflection 34 to 15 degrees up) is up to 1.01 dB from the
+    fast field program (validation/ffp.py) at the full step (0.91 dB in one march) and
+    0.45 dB in steps half as long (0.35 dB). The wide-angle equation, which takes these
+    points, is within 0.1 dB of it at every point."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
+    import ffp
+
+    from acoustic_spaces.engine.diffraction import band_frequencies
+
+    f = band_frequencies(bands="third_octave")[0][3]
+    z = np.conj(surface_impedance(f, 200.0))
+    zs, zr = 30.0, 1.5
+    ranges = np.array([47.0, 53.0, 59.0, 66.0, 74.0, 83.0, 93.0, 104.0, 117.0])
+    heights = np.full(len(ranges), zr)
+    pressure = march(f, _windy, lambda r: z, zs, ranges, heights, 50.0, independent=independent)
+    reference = [ffp.pressure(fi, _windy, zs, ranges, zr, zi) for fi, zi in zip(f, z, strict=True)]
+    difference = _band_db(pressure, ranges, zs, zr) - _band_db(np.array(reference), ranges, zs, zr)
+    assert np.max(np.abs(difference)) < 0.1
+
+
+def test_flat_sound_and_still_air_keep_the_narrow_angle_equation(monkeypatch) -> None:
+    """Points the reflection reaches at 15 degrees or flatter get what the narrow-angle
+    march to all the points gives, bit for bit, whatever steep points share the run; in
+    wind the steep points get what the wide-angle equation gives them on its own, and in
+    still air, where a step is exact but at the ground, they keep the narrow-angle march,
+    as they do through weather zones all of still air, but not one windy zone among them.
+    Shorter steps are no closer: from 1 m up to 1.5 m up 200 m away, downwind in the
+    ``windy`` preset over grass, the 63 Hz band is within 0.3 dB of the wide-angle
+    equation at the full step (0.21 dB under the fast field program), and more than 0.6 dB
+    over it at a 32nd of the step on the same heights (0.93 dB over the program)."""
+    from acoustic_spaces.engine import parabolic, wide_angle
+    from acoustic_spaces.engine.diffraction import band_frequencies
+
+    f = band_frequencies()[0][0]
+    z = np.conj(surface_impedance(f, 200.0))
+    still = lambda h: np.full(np.shape(h), C)  # noqa: E731
+    # 6 m up 20 m away the reflection comes in 19 degrees up.
+    ranges, heights = np.array([20.0, 50.0, 200.0]), np.array([6.0, 1.5, 1.5])
+    flat = np.array([False, True, True])
+    for speed in (_windy, still):
+        for independent in (True, False):
+            args = (f, speed, lambda r: z, 1.0, ranges, heights, 30.0)
+            new = march(*args, independent=independent)
+            with monkeypatch.context() as m:
+                m.setattr(parabolic, "STEEP_DEG", 90.0)  # no point steep
+                narrow = march(*args, independent=independent)
+            assert np.array_equal(new[:, flat], narrow[:, flat])
+            assert np.array_equal(new[:, ~flat], narrow[:, ~flat]) == (speed is still)
+            if speed is _windy:
+                steep = (f, speed, lambda r: z, 1.0, ranges[~flat], heights[~flat], 30.0)
+                alone = wide_angle.march(*steep, independent=independent)
+                assert np.array_equal(new[:, ~flat], alone)
+    calm = lambda h: np.full(np.shape(h), C)  # noqa: E731
+    for zones, kept in (((still, calm), True), ((still, _windy), False)):
+        args = (f, still, lambda r: z, 1.0, ranges, heights, 30.0)
+        zoned = {"speed_at": lambda r, zones=zones: zones[int(r // 25.0) % 2]}
+        new = march(*args, **zoned)
+        with monkeypatch.context() as m:
+            m.setattr(parabolic, "STEEP_DEG", 90.0)
+            narrow = march(*args, **zoned)
+        assert np.array_equal(new[:, flat], narrow[:, flat])
+        assert np.array_equal(new[:, ~flat], narrow[:, ~flat]) == kept
+    args = (f, _windy, lambda r: z, 1.0, ranges[2:], heights[2:], 30.0)
+    wide = _band_db(wide_angle.march(*args), ranges[2:], 1.0, 1.5)[0]
+    assert abs(_band_db(march(*args), ranges[2:], 1.0, 1.5)[0] - wide) < 0.3
+    monkeypatch.setattr(parabolic, "RANGE_STEP_WAVELENGTHS", parabolic.RANGE_STEP_WAVELENGTHS / 32)
+    monkeypatch.setattr(parabolic, "RANGE_STEP_MIN_M", parabolic.RANGE_STEP_MIN_M / 32)
+    assert _band_db(march(*args), ranges[2:], 1.0, 1.5)[0] - wide > 0.6
 
 
 # -- simulations -----------------------------------------------------------------------
@@ -1293,10 +1422,12 @@ def test_sources_alike_share_the_parabolic_equation_s_runs(monkeypatch) -> None:
 
 def test_uniform_rows_trace_the_late_rays_as_straight_ones(monkeypatch) -> None:
     """The compiled tracer's bent rays, in an atmosphere where they go straight, give
-    the straight tracer's late energy: the same ray paths, times and losses."""
+    the straight tracer's late energy: the same ray paths, times and losses (without the
+    listeners' gather of the first reflections, which bent rays leave to the rain)."""
     pytest.importorskip("acoustic_spaces._native")
     scene = field(None, ((60.0, 0.0, 1.5), (-30.0, 10.0, 3.0)))
     room = Room.from_scene(scene)
+    monkeypatch.setattr(late, "FIRST_GATHER", 0)
     straight = simulate(room)
     c = room.speed_of_sound()
 
@@ -1586,6 +1717,37 @@ def test_weather_zones_in_a_scene() -> None:
         at[0] < plain_weather.at(np.array([[200.0, 0.0, 15.0]]))[0]
         and at[1] == plain_weather.at(np.array([[-200.0, 0.0, 15.0]]))[0]
     )
+
+
+def test_the_shares_of_three_weathers_add_up_to_one() -> None:
+    """Three weathers each under a third of a 300 m way: rounded one by one, the shares
+    come to 0.335 each, 1.005 in all, which took the still air's speed 0.5 % too fast
+    and brought the direct sound 4.3 ms early. Divided by their sum, they give the
+    exact mean profile, each weather weighted by its share of the way."""
+    from acoustic_spaces.engine.refracted import MIX_STEP
+    from acoustic_spaces.engine.weather import Weather
+
+    def band(x0: float, x1: float) -> list[list[float]]:
+        return [[x0, -100.0], [x1, -100.0], [x1, 100.0], [x0, 100.0]]
+
+    scene = zoned(
+        [
+            {"name": "lee", "polygon": band(100.0, 200.0), "wind": {"speed_m_s": 2.0}},
+            {"name": "lake", "polygon": band(200.0, 300.0), "temperature_c": 15.0},
+        ],
+        listeners=((300.0, 0.0, 1.5), (299.0, 0.0, 1.5)),
+    )
+    weather = Weather(scene.atmosphere, scene.air.temperature_c, (-400.0, -50.0, 400.0, 50.0))
+    a, _ = weather.shares([[0.0, 0.0], [300.0, 0.0]])
+    assert np.round(a / MIX_STEP).sum() * MIX_STEP == pytest.approx(1.005)
+    # Each weather a third, the winds all blowing along the way.
+    exact = Profile(weather.nodes, weather.still.mean(axis=0) + weather.wind.mean(axis=0))
+    expected = Rays(exact, 2.0).eigenrays(1.5, 300.0, 0).time[0]
+    result = simulate(Room.from_scene(scene))
+    assert result["s", "l0"].direct_delay_s == pytest.approx(expected, abs=1e-5)
+    # A metre farther, the sound comes about 1 m / c later, not earlier.
+    later = result["s", "l0"].direct_delay_s - result["s", "l1"].direct_delay_s
+    assert later == pytest.approx(1.0 / exact.c[0], rel=0.05)
 
 
 def test_inspect_names_the_weather_zones(tmp_path, capsys) -> None:

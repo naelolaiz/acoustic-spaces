@@ -2032,8 +2032,23 @@ msgid "Run the step in the background; the messages say how it goes"
 msgstr "Voert de stap op de achtergrond uit; de meldingen zeggen hoe het gaat"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Close without running anything"
-msgstr "Sluit zonder iets uit te voeren"
+msgid ""
+"Close without running anything; the options changed are kept for next time"
+msgstr ""
+"Sluit zonder iets uit te voeren; de gewijzigde opties blijven voor de "
+"volgende keer"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Defaults"
+msgstr "Standaardwaarden"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Put every option of this demo back where a first run starts it, the command "
+"line's defaults, and forget the ones kept from before"
+msgstr ""
+"Zet elke optie van deze demo terug waar een eerste uitvoering haar begint, "
+"de standaardwaarden van de opdrachtregel, en vergeet de eerder bewaarde"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -2094,6 +2109,15 @@ msgstr ""
 #, python-brace-format
 msgid "Cannot run: {reason}"
 msgstr "Kan niet uitvoeren: {reason}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"Changed from the defaults and kept for next time: {options}. Defaults puts "
+"them back."
+msgstr ""
+"Gewijzigd ten opzichte van de standaardwaarden en bewaard voor de volgende "
+"keer: {options}. Standaardwaarden zet ze terug."
 
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"
@@ -6836,23 +6860,23 @@ msgstr ""
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
-"Early stage support (dB), for a listener within 1.5 m of the source: the "
+"Early stage support (dB), for a listener 0.9 to 1.1 m from the source: the "
 "energy from 20 to 100 ms over that of the first 10 ms, how well musicians "
 "hear each other"
 msgstr ""
-"Vroege podiumondersteuning (dB) voor een ontvanger binnen 1.5 m van de bron: "
-"de verhouding van de energie van 20 tot 100 ms tot die van de eerste 10 ms, "
-"die aangeeft hoe goed musici elkaar horen"
+"Vroege podiumondersteuning (dB) voor een ontvanger op 0.9 tot 1.1 m van de "
+"bron: de verhouding van de energie van 20 tot 100 ms tot die van de eerste "
+"10 ms, die aangeeft hoe goed musici elkaar horen"
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
-"Late stage support (dB), for a listener within 1.5 m of the source: the "
+"Late stage support (dB), for a listener 0.9 to 1.1 m from the source: the "
 "energy from 100 to 1000 ms over that of the first 10 ms, how much of the "
 "room musicians hear"
 msgstr ""
-"Late podiumondersteuning (dB) voor een ontvanger binnen 1.5 m van de bron: "
-"de verhouding van de energie van 100 tot 1000 ms tot die van de eerste 10 "
-"ms, die aangeeft hoeveel van de ruimte musici horen"
+"Late podiumondersteuning (dB) voor een ontvanger op 0.9 tot 1.1 m van de "
+"bron: de verhouding van de energie van 100 tot 1000 ms tot die van de eerste "
+"10 ms, die aangeeft hoeveel van de ruimte musici horen"
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""

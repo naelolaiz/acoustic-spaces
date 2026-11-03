@@ -1,6 +1,6 @@
 """The fast field program (validation/ffp.py) and the 1995 benchmark script
 (validation/benchmark_1995.py): the reference the engine's outdoor sound in wind and
-temperature gradients is compared with."""
+temperature gradients is compared with, the shadow zone's residue series among it."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
+from scipy.special import ai_zeros, airy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
 
@@ -16,7 +18,9 @@ import benchmark_1995  # noqa: E402
 import ffp  # noqa: E402
 from ground_reflection import exact_reflection, field  # noqa: E402
 
+from acoustic_spaces.engine import refracted  # noqa: E402
 from acoustic_spaces.engine.parabolic import march  # noqa: E402
+from acoustic_spaces.engine.shadow import mode_roots, residue_pressure, rigid_roots  # noqa: E402
 from acoustic_spaces.materials.ground import PRESETS, surface_impedance  # noqa: E402
 
 
@@ -77,9 +81,38 @@ def test_the_fast_field_program_and_the_parabolic_equation_agree_in_wind() -> No
     np.testing.assert_allclose(level(finer, ranges), level(reference, ranges), atol=0.02)
 
 
-def test_a_listener_at_the_source_height_is_refused() -> None:
-    import pytest
+def test_the_residue_series_matches_the_fast_field_program() -> None:
+    """The creeping waves of upward refraction (engine/shadow.py; Pierce 1981, sec. 9-3):
+    the zeros of Ai' against SciPy's, the engine's own first one among them; the roots of
+    Ai'(s) = q Ai(s) over grounds of admittance; and the residue series against the fast
+    field program in a profile of k**2 linear in height, of radius 10 km, from 5 m up to
+    1 m up 400 and 900 m away at 200 Hz, over a rigid ground and the benchmark's
+    (Delany and Bazley, 200 kPa s/m²): within 0.1 dB and 1 degree, down to 24 dB under
+    the free field."""
+    np.testing.assert_allclose(rigid_roots(60), ai_zeros(60)[1], rtol=0, atol=1e-10)
+    assert refracted._FIRST_MODE == pytest.approx(rigid_roots(1)[0], rel=0, abs=1e-14)
+    q = np.array([0.0, 0.5 - 0.3j, 2.0 + 1.0j, 5.0 - 5.0j])
+    s = mode_roots(q, 20)
+    ai, aip, _, _ = airy(s)
+    assert np.abs(aip / ai - q[:, None]).max() < 1e-10
+    assert all(len(np.unique(np.round(roots, 6))) == 20 for roots in s)  # none twice
+    radius, f, c0 = 10_000.0, 200.0, benchmark_1995.C0
+    speed = lambda z: c0 / np.sqrt(1.0 + 2.0 * np.maximum(z, 0.0) / radius)  # noqa: E731
+    zs, zr, ranges = benchmark_1995.ZS, benchmark_1995.ZR, np.array([400.0, 900.0])
+    k = np.array([2.0 * math.pi * f / c0])
+    level = benchmark_1995.free_field_db
+    for z in (None, complex(benchmark_1995.impedance_of(f))):
+        reference = ffp.pressure(f, speed, zs, ranges, zr, z, top=600.0)
+        beta = np.array([0.0 if z is None else 1.0 / z])
+        series = np.array([residue_pressure(k, beta, radius, zs, zr, r)[0] for r in ranges])
+        # The series' unit source is exp(ikR) / (4 pi R), the program's exp(ikR) / R.
+        series *= 4.0 * math.pi
+        np.testing.assert_allclose(level(series, ranges), level(reference, ranges), atol=0.1)
+        np.testing.assert_allclose(np.angle(series / reference), 0.0, atol=math.radians(1.0))
+    assert level(reference, ranges)[-1] < -20.0  # deep in the shadow over the grass
 
+
+def test_a_listener_at_the_source_height_is_refused() -> None:
     with pytest.raises(ValueError, match="height"):
         ffp.pressure(100.0, lambda z: np.full(np.shape(z), 343.0), 2.0, [50.0], 2.0)
 

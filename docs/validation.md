@@ -43,11 +43,20 @@ request and checks:
   30 seeds of a diffuse box) of EDT, T30, C80 and G against the spread of the
   parameters between the runs, from 125 Hz to 4 kHz: their ratio held within 0.6 to
   1.6 band by band and 0.8 to 1.25 on average (over 60 seeds, the root mean square of
-  the standard errors came within 0.91 to 1.18 of the spread); and they follow a
+  the standard errors came within 0.90 to 1.17 of the spread); and they follow a
   source's feed and new absorption (re-weighted) along with the rest;
 - a response's decay times and ratios read the same however loud it is (20 gains, to
   1e-9): the decay curve starts at 0 dB exactly, so EDT's fit always starts at the
   onset;
+- the scattered sound of the reflections straight from the source, shared between the
+  rays and the listeners' gather (`tests/test_first_gather.py`), on ground 400 m
+  across: against its integral within 0.2 % for an aircraft 305 m up and 300 m off
+  (over 24 seeds the shared runs spread by 0.08 % of it, the rays' alone by 86 %, and
+  these averaged half of it), and within the noise of 32 seeds for a source 30 m up
+  and one 5 cm above the ground; the same as the rays' alone within the noise through
+  plants, from a source turned to the ground, per face group and arrival direction,
+  and in two rooms through a partition and a doorway; each batch with its share of the
+  gather's directions; on the GPU as on the CPU;
 - the late part's last slots: the same rays traced 50 ms longer give the same echogram
   up to the end, where a ray's time runs out as it crosses a listener's sphere: with
   and without the rain on the CPU, without it on the GPU, and with rays bent by the
@@ -166,18 +175,22 @@ request and checks:
   convolution against direct convolution (float32 and float64 precision), resampling
   of tones within 1e-3 of the exact signal up to 15 kHz with nothing above the new
   Nyquist frequency left, and playback through a simulated sound card block by block;
-- edge diffraction: the UTD coefficient against Sommerfeld's exact solution for a
-  rigid half-plane (to 1e-8, also exactly on the shadow and reflection boundaries) and
-  against the exact eigenmode series for wedges open over 225° to 315° (within
-  0.25 dB); a thin screen against Maekawa's chart (within 1.5 dB), the same from either
-  side; and the early level across the shadow boundary of an L-shaped room, in
-  millimetre steps, continuous within 0.25 dB with first-order reflections where
-  specular paths alone drop by more than 5 dB, and across the boundary of a reflection
-  off one of the corner's walls within 0.05 dB; over a 1 m thick barrier, the path
-  over both corners against the exact BTM solution (within 1 dB, and 0.2 dB from
-  500 Hz up, the same both ways round), and the level as the source and the listener
-  rise through the plane of its top, continuous within 1 dB (0.1 dB from 1 kHz up); a
-  thin screen's diffracted wave in its lit zone, all four terms of the UTD within 0.2 %;
+- edge diffraction: the UTD coefficient against Sommerfeld's exact solution for a rigid
+  half-plane (to 1e-8, also exactly on the shadow and reflection boundaries) and against
+  the exact eigenmode series for wedges open over 225° to 315° (within 0.25 dB); a thin
+  screen against Maekawa's chart (within 1.5 dB), the same from either side; and the
+  early level across the shadow boundary of an L-shaped room, in millimetre steps,
+  continuous within 0.25 dB with first-order reflections where specular paths alone drop
+  by more than 5 dB, and across the boundary of a reflection off one of the corner's
+  walls within 0.05 dB; over a 1 m thick barrier, the path over both corners against the
+  exact BTM solution (within 1 dB, and 0.2 dB from 500 Hz up, the same both ways round),
+  and the level as the source and the listener rise through the plane of its top,
+  continuous within 1 dB (0.1 dB from 1 kHz up); a thin screen's diffracted wave in its
+  lit zone, all four terms of the UTD within 0.2 %; and through `early_paths`, next to
+  the shadow boundary of a thin screen, of a right-angled corner and of a wedge open
+  over 225°, against BTM: the bands that add in energy on the boundary as low as the
+  [known issues](#known-issues) give (within 0.02 dB), and those in pressure within 0.08
+  dB;
 - early reflections in pressure at low frequencies: an impulse response and the
   echogram it came from in a 7.3 x 5.1 x 3 m box without edge diffraction, early part
   alone, G within 0.02 dB, C50 within 0.05 dB and Ts within 0.3 ms at 63 and 125 Hz
@@ -192,20 +205,31 @@ request and checks:
   surface and half a turn off an absorbing one at grazing incidence; and a thin
   screen's diffracted wave, with all four terms of the UTD added in pressure, to
   1e-9;
-- the wave solver, with both stencils where both apply: the modes of a rigid box
-  (within 0.6 Hz), both stencils' modes along a tube at 12, 8 and 5 cells per
-  wavelength as slow as their dispersion relation along an axis says (within 2e-5,
-  the 19-point stencil's error less than half the 7-point one's), the 19-point
-  stencil stable for 30,000 steps in a rotated room with a cube and a screen in it,
-  both stencils' highest modes 2⁻¹⁶ inside the stability limit (kicked, within
-  1.1 × 256 times the kick over 20,000 steps, rounded as the update rounds),
-  the reflection off the end
-  of a duct for four admittances (within 0.005, and below 0.05 for a matched end, and
-  off the inner face of a wall thinner than a cell), and off an end whose admittance
-  resonates (within 0.012 of the grid's theory from 30 to 250 Hz); admittances fitted to
-  four kinds of material (within 0.01 of their absorption in every band, passive); the
-  free-field level of the 63 Hz band (within 1 dB of the rays), the arrival time and
-  direction of the direct sound, open models and thin screens (stable, and the sound
+- the wave solver, with both stencils where both apply: the modes of a rigid box (within
+  0.6 Hz), both stencils' modes along a tube at 12, 8 and 5 cells per wavelength as slow
+  as their dispersion relation along an axis says (within 2e-5, the 19-point stencil's
+  error less than half the 7-point one's), the 19-point stencil stable for 30,000 steps
+  in a rotated room with a cube and a screen in it, both stencils' highest modes 2⁻¹⁶
+  inside the stability limit (kicked, within 1.1 × 256 times the kick over 20,000 steps,
+  rounded as the update rounds), the reflection off the end of a duct for four
+  admittances (within 0.005, and below 0.05 for a matched end, and off the inner face of
+  a wall thinner than a cell), and off an end whose admittance resonates (within 0.012
+  of the grid's theory from 30 to 250 Hz); admittances fitted to four kinds of material
+  (within 0.01 of their absorption in every band, passive); the free-field level of the
+  63 Hz band (within 0.3 dB of the rays), the arrival time and direction of the direct
+  sound and the strength of its first-order field against a point source's (within 0.06
+  dB 4 m away along a grid axis, a face diagonal and a body diagonal, with either
+  stencil), the part of the source's pulse before emission kept for a listener near the
+  source (the direct sound's band energies 0.5 and 1 m away within 0.01 dB whatever the
+  source's low-pass), a run that starts before emission lined up with one that starts
+  at emission and is fed a delay shorter by the lead (the same field and energy per band
+  and slot, exactly; at a rate where the lead is not a whole number of samples, the same
+  field, within half a sample of its time), the source flat to the top of the highest
+  band at 5 cells per wavelength (within 0.05 dB), the gradient's second-order and
+  one-sided differences where a point two cells or one cell from the listener is
+  missing (exactly), the gradient at a listener just in front of a thin screen and at
+  one 1.5 cells in front of it, taken on the listeners' side, as in front of a solid
+  block (within 1 dB and 0.5 dB), open models and thin screens (stable, and the sound
   leaves), the matched layer round an open model (what comes back 40 dB down or more,
   against a grid too large for anything to come back; stable for 9,500 steps), one run
   for bands with their own absorption, and the level of the late part across the
@@ -985,14 +1009,15 @@ is exact far from the edge (within 0.03 dB). Levels are in dB re the direct soun
 free field over the same distance, the energy averaged over the engine's eight
 frequencies in each octave band; sources and listeners are in metres from the edge.
 
-Over a thin screen (first order), the engine's UTD is within 0.9 dB of BTM at 63 Hz
-and 0.06 dB from 1 kHz up; Maekawa's chart reads up to 1.2 dB high:
+Over a thin screen (first order), with the listener 28° to 33° into its shadow, the
+engine's UTD is within 0.9 dB of BTM at 63 Hz and 0.06 dB from 1 kHz up; Maekawa's chart
+reads up to 1.2 dB high:
 
 | thin screen, engine - BTM (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| (-5, 0, -2) to (5, 0, -1), BTM -8.4 to -27.2 dB | -0.50 | -0.27 | -0.12 | -0.05 | -0.01 | -0.00 | +0.00 | +0.00 |
-| (-2, 0, -0.2) to (6, 0, -3), BTM -6.9 to -24.6 dB | -0.77 | -0.46 | -0.24 | -0.11 | -0.04 | -0.01 | -0.00 | +0.00 |
-| (-3, -1, -1) to (3, 2, -0.5), BTM -6.3 to -23.2 dB | -0.89 | -0.56 | -0.32 | -0.15 | -0.06 | -0.02 | -0.00 | +0.00 |
+| (-5, 0, -2) to (5, 0, -1), BTM -8.4 to -27.2 dB | -0.50 | -0.27 | -0.13 | -0.05 | -0.02 | -0.00 | -0.00 | +0.00 |
+| (-2, 0, -0.2) to (6, 0, -3), BTM -6.9 to -24.6 dB | -0.77 | -0.46 | -0.24 | -0.11 | -0.04 | -0.01 | -0.00 | -0.00 |
+| (-3, -1, -1) to (3, 2, -0.5), BTM -6.3 to -23.2 dB | -0.89 | -0.56 | -0.32 | -0.16 | -0.06 | -0.02 | -0.01 | -0.00 |
 
 Over two edges (`second_order`): a block of width w with its top at z = 0, from
 x = 0 to w, and two thin screens in a row. Each pair of positions is in line across the
@@ -1000,37 +1025,69 @@ edges and obliquely (the second from (-6, -2, -0.3) to (w + 2, 3, -4)):
 
 | over two edges, engine - BTM (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| block 0.3 m, (-3, 0, -1) to (3.3, 0, -1.5) | -1.72 | -1.25 | -0.67 | -0.14 | +0.19 | +0.30 | +0.24 | +0.14 |
-| block 0.3 m, oblique | -0.65 | -0.30 | -0.19 | -0.16 | -0.13 | -0.09 | -0.07 | -0.07 |
-| block 1 m, (-3, 0, -1) to (4, 0, -1.5) | -0.55 | -0.28 | -0.04 | +0.12 | +0.16 | +0.13 | +0.06 | +0.03 |
-| block 1 m, oblique | -0.38 | -0.28 | -0.19 | -0.12 | -0.08 | -0.06 | -0.05 | -0.03 |
-| block 3 m, (-3, 0, -1) to (6, 0, -1.5) | -0.20 | -0.07 | +0.02 | +0.05 | +0.05 | +0.03 | +0.01 | +0.01 |
-| block 3 m, oblique | -0.28 | -0.19 | -0.13 | -0.08 | -0.06 | -0.04 | -0.02 | -0.03 |
-| two screens 1 m apart | -1.86 | -1.23 | -0.74 | -0.37 | -0.12 | +0.00 | +0.01 | +0.02 |
-| two screens 2 m apart, the second 0.4 m higher | -1.29 | -0.92 | -0.65 | -0.44 | -0.29 | -0.18 | -0.10 | -0.04 |
+| block 0.3 m, (-3, 0, -1) to (3.3, 0, -1.5) | -1.72 | -1.26 | -0.67 | -0.15 | +0.19 | +0.29 | +0.23 | +0.13 |
+| block 0.3 m, oblique | -0.65 | -0.31 | -0.19 | -0.16 | -0.14 | -0.10 | -0.07 | -0.08 |
+| block 1 m, (-3, 0, -1) to (4, 0, -1.5) | -0.56 | -0.28 | -0.04 | +0.12 | +0.16 | +0.12 | +0.06 | +0.03 |
+| block 1 m, oblique | -0.38 | -0.28 | -0.19 | -0.13 | -0.08 | -0.06 | -0.05 | -0.03 |
+| block 3 m, (-3, 0, -1) to (6, 0, -1.5) | -0.21 | -0.07 | +0.01 | +0.05 | +0.04 | +0.02 | +0.01 | +0.00 |
+| block 3 m, oblique | -0.28 | -0.20 | -0.13 | -0.09 | -0.06 | -0.04 | -0.02 | -0.03 |
+| two screens 1 m apart | -1.86 | -1.23 | -0.74 | -0.37 | -0.12 | -0.00 | +0.01 | +0.01 |
+| two screens 2 m apart, the second 0.4 m higher | -1.30 | -0.92 | -0.65 | -0.44 | -0.30 | -0.18 | -0.11 | -0.05 |
 
 The levels themselves run from -9 dB at 63 Hz to -42 dB at 8 kHz. Adding its waves in
-energy, the engine is low at low frequencies where the edges are close together, as over
-a thin screen: the waves of an edge add in energy near their boundaries, where the exact
-solution adds them with their phases. In the 63 and 125 Hz bands the engine adds them in
-pressure by default (`simulation.early.coherent_max_band_hz`, see [Simulation](simulation.md#low-frequencies-early-reflections-in-pressure)), the four
+energy, the engine is low: up to 1.9 dB at 63 Hz where the edges are close together, as
+over a thin screen, and near a shadow boundary in every band. The waves of an edge add
+in energy near their boundaries, where the exact solution adds them with their phases.
+At a shadow boundary the source is at (-5, 0, -2) and the listener at (5, 0, 1.999), 1
+mm into the shadow of a thin screen, of a right-angled corner (the block above, 300 m
+wide) or of a wedge open over 225° (the same block with its front face sloping down at
+45° towards the source), or at (5, 0, 1), 10.5° into it; the whole early stage
+(`early_paths` with the default settings but `coherent_max_band_hz: null`, so that every
+band adds in energy, and the air's absorption over the direct distance taken off)
+against BTM averaged over 96 frequencies in each band:
+
+| at a shadow boundary, engine in energy - BTM (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| thin screen, on the boundary, BTM -4.5 to -5.9 dB | -1.29 | -0.95 | -0.69 | -0.50 | -0.36 | -0.25 | -0.18 | -0.13 |
+| thin screen, 10.5° into the shadow, BTM -5.7 to -18.5 dB | -0.99 | -0.68 | -0.45 | -0.28 | -0.15 | -0.08 | -0.03 | -0.02 |
+| right-angled corner, on the boundary, BTM -1.8 to -5.6 dB | -2.54 | -2.15 | -1.73 | -1.32 | -0.98 | -0.72 | -0.52 | -0.38 |
+| right-angled corner, 10.5° into the shadow, BTM -2.1 to -16.3 dB | -1.96 | -1.50 | -1.05 | -0.66 | -0.37 | -0.18 | -0.07 | -0.03 |
+| wedge open over 225°, on the boundary, BTM 0.3 to -5.3 dB | -3.02 | -2.65 | -2.22 | -1.79 | -1.38 | -1.04 | -0.77 | -0.56 |
+| wedge open over 225°, 10.5° into the shadow, BTM 0.0 to -15.2 dB | -2.13 | -1.61 | -1.12 | -0.71 | -0.40 | -0.19 | -0.08 | -0.03 |
+
+On the boundary the term of the incident wave continues the direct sound almost wholly,
+and the terms of the reflections off the edge's faces, which arrive with it, are part of
+the edge's diffracted wave: the two waves add in energy, and their cross term is lost.
+Indoors the paths add in energy from 250 Hz up by default, so there the level on the
+shadow boundary of a right-angled corner is 1.73 dB low at 250 Hz, 0.98 dB at 1 kHz and
+0.38 dB at 8 kHz; behind the blunter wedge open over 225° it is 2.22, 1.38 and 0.56 dB
+low, and behind the thin screen 0.69, 0.36 and 0.13 dB (see [Known
+issues](#known-issues)). In the 63 and 125 Hz bands the engine adds them in pressure by
+default (`simulation.early.coherent_max_band_hz`, see
+[Simulation](simulation.md#low-frequencies-early-reflections-in-pressure)), the four
 terms of each coefficient and the paths' waves with their phases, and there it is within
-0.05 dB of BTM over the thin screen and within 0.25 dB over two edges, but for the 0.3 m
-block in line (0.6 dB):
+0.05 dB of BTM over the thin screen, 0.08 dB at the shadow boundaries and 0.25 dB over
+two edges, but for the 0.3 m block in line (0.6 dB):
 
 | engine in pressure - BTM (dB) | 63 | 125 |
 |---|---:|---:|
 | thin screen, (-5, 0, -2) to (5, 0, -1) | +0.02 | +0.01 |
 | thin screen, (-2, 0, -0.2) to (6, 0, -3) | +0.03 | +0.01 |
 | thin screen, (-3, -1, -1) to (3, 2, -0.5) | +0.04 | +0.02 |
+| thin screen, on the shadow boundary (`early_paths`) | -0.01 | -0.01 |
+| thin screen, 10.5° into the shadow (`early_paths`) | +0.02 | +0.01 |
+| right-angled corner, on the shadow boundary (`early_paths`) | -0.00 | -0.01 |
+| right-angled corner, 10.5° into the shadow (`early_paths`) | +0.06 | +0.03 |
+| wedge open over 225°, on the shadow boundary (`early_paths`) | +0.02 | -0.01 |
+| wedge open over 225°, 10.5° into the shadow (`early_paths`) | +0.08 | +0.03 |
 | block 0.3 m, in line | -0.61 | -0.50 |
 | block 0.3 m, oblique | +0.12 | +0.24 |
-| block 1 m, in line | +0.11 | +0.12 |
-| block 1 m, oblique | +0.14 | +0.06 |
-| block 3 m, in line | +0.23 | +0.16 |
+| block 1 m, in line | +0.11 | +0.11 |
+| block 1 m, oblique | +0.13 | +0.06 |
+| block 3 m, in line | +0.22 | +0.16 |
 | block 3 m, oblique | +0.08 | +0.04 |
-| two screens 1 m apart | -0.11 | -0.12 |
-| two screens 2 m apart, the second 0.4 m higher | +0.03 | -0.00 |
+| two screens 1 m apart | -0.11 | -0.13 |
+| two screens 2 m apart, the second 0.4 m higher | +0.03 | -0.01 |
 
 The textbook UTD for two edges, with the second edge's distance parameter for a
 wave from a line, was up to 6 dB low there; the engine takes it from the curvature of
@@ -1055,7 +1112,7 @@ engine's steps:
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | largest step, engine | 2.82 | 1.81 | 1.37 | 0.50 | 0.28 | 0.27 | 0.10 | 0.15 |
 | largest step, BTM | 0.00 | 0.01 | 0.02 | 0.06 | 0.04 | 0.07 | 0.10 | 0.15 |
-| largest difference, engine - BTM | 1.83 | 0.99 | 1.06 | 0.41 | 0.21 | 0.22 | 0.04 | 0.08 |
+| largest difference, engine - BTM | 1.83 | 0.99 | 1.06 | 0.41 | 0.21 | 0.22 | 0.05 | 0.08 |
 
 The path over the top edge still touches it 8 cm from the corner there, but its term is
 dropped as the direct sound it borders appears: a term counts only while the specular
@@ -1065,10 +1122,10 @@ the corners of edges (see [Known issues](#known-issues)).
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
-sight, takes 36 ms per source and listener on four cores without diffraction (23
-paths), 478 ms with `first_order` (995 paths) and 524 ms with `second_order` (1,010
-paths), the mean of three runs after a first one, with nothing else running on the
-machine. The terms that make the other specular paths fade at the edges (next section)
+sight, takes 38 ms per source and listener on four cores without diffraction (23
+paths), 540 ms with `first_order` (995 paths) and 630 ms with `second_order` (1,010
+paths): the median of four timings, each the mean of three runs after a first one,
+with nothing else running on the machine. The terms that make the other specular paths fade at the edges (next section)
 give most of the paths, as each term is a path over its edge, and so is each product of
 terms. In a one-off check when they were written, on a run where the early stage took
 650 ms with `first_order` and 710 ms with `second_order`, they took about 580 ms of the
@@ -1106,28 +1163,32 @@ largest difference from it along each line, in dB:
 
 | largest difference from the exact level (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| screen end, `direct`, with the fade | 0.04 | 0.02 | 0.01 | 0.01 | 0.02 | 0.01 | 0.01 | 0.00 |
-| without | 5.90 | 5.79 | 5.29 | 3.78 | 5.24 | 4.43 | 3.71 | 3.72 |
-| building corner, `direct`, with the fade | 0.08 | 0.05 | 0.02 | 0.02 | 0.02 | 0.01 | 0.02 | 0.04 |
-| without | 5.93 | 5.85 | 5.52 | 4.11 | 5.21 | 4.48 | 3.64 | 3.52 |
-| building corner, `first_order`, with the fade | 0.08 | 0.05 | 0.02 | 0.02 | 0.02 | 0.01 | 0.02 | 0.04 |
-| without | 0.08 | 0.05 | 0.02 | 0.02 | 0.02 | 0.01 | 0.02 | 0.04 |
-| 2 m strip, `direct`, with the fade | 0.02 | 0.01 | 0.01 | 0.01 | 0.01 | 0.01 | 0.02 | 0.19 |
-| without | 0.90 | 0.54 | 0.96 | 1.70 | 0.19 | 0.64 | 0.40 | 0.46 |
-| 2 m strip, `first_order`, with the fade | 0.02 | 0.01 | 0.01 | 0.01 | 0.01 | 0.01 | 0.02 | 0.19 |
-| without | 0.41 | 0.27 | 0.29 | 0.13 | 0.02 | 0.02 | 0.02 | 0.19 |
-| 4 m gap, `direct`, with the fade | 0.03 | 0.02 | 0.01 | 0.01 | 0.02 | 0.01 | 0.01 | 0.01 |
-| without | 7.01 | 5.57 | 5.25 | 3.68 | 6.05 | 4.45 | 3.92 | 3.72 |
+| screen end, `direct`, with the fade | 0.04 | 0.02 | 0.01 | 0.01 | 0.01 | 0.00 | 0.01 | 0.01 |
+| without | 5.90 | 5.79 | 5.30 | 3.77 | 5.26 | 4.43 | 3.72 | 3.72 |
+| building corner, `direct`, with the fade | 0.08 | 0.05 | 0.02 | 0.01 | 0.01 | 0.01 | 0.02 | 0.04 |
+| without | 5.93 | 5.85 | 5.52 | 4.11 | 5.22 | 4.48 | 3.64 | 3.52 |
+| building corner, `first_order`, with the fade | 0.08 | 0.05 | 0.02 | 0.01 | 0.01 | 0.01 | 0.02 | 0.04 |
+| without | 0.08 | 0.05 | 0.02 | 0.01 | 0.01 | 0.01 | 0.02 | 0.04 |
+| 2 m strip, `direct`, with the fade | 0.02 | 0.01 | 0.01 | 0.00 | 0.00 | 0.00 | 0.01 | 0.19 |
+| without | 0.90 | 0.54 | 0.97 | 1.71 | 0.18 | 0.64 | 0.41 | 0.45 |
+| 2 m strip, `first_order`, with the fade | 0.02 | 0.01 | 0.01 | 0.00 | 0.00 | 0.00 | 0.01 | 0.19 |
+| without | 0.42 | 0.27 | 0.29 | 0.14 | 0.01 | 0.01 | 0.01 | 0.19 |
+| 4 m gap, `direct`, with the fade | 0.03 | 0.02 | 0.01 | 0.00 | 0.01 | 0.00 | 0.00 | 0.01 |
+| without | 7.01 | 5.57 | 5.25 | 3.67 | 6.05 | 4.45 | 3.92 | 3.71 |
 
 With the fade the level changes from one listener to the next as the exact level does:
 the largest step along each line is the same as the exact level's to 0.01 dB in every
 band, at most 0.20 dB at 8 kHz past the screen's end, but for 8 kHz on the strip, where
-it is 0.06 dB and the exact level's 0.12 dB. Without it the level stepped by up to
-8.6 dB past the screen's end, 7.6 dB past the corner and 9.2 dB past the gap's ends. At
-the corner with `first_order` the fade changes the level by less than 0.001 dB: where
-the edge diffraction already bends a path, the fade leaves out the terms it adds. On the
-strip with `first_order` the edge diffraction bends the reflection off the strip, and
-the fade adds its copy off the ground (0.4 dB at 63 Hz).
+it is 0.06 dB and the exact level's 0.13 dB. There the exact level is the one off: its
+average over 96 frequencies swings round one over 768 by up to 0.19 dB near y = -1 m,
+which makes the strip's 0.19 dB at 8 kHz in the table, and steps by 0.03 dB where it
+stepped by 0.13 dB; at every fourth listener along the line the engine is within 0.001
+dB of the average over 768. Without the fade the level stepped by up to 8.6 dB past the
+screen's end, 7.6 dB past the corner and 9.2 dB past the gap's ends. At the corner with
+`first_order` the fade changes the level by less than 0.001 dB: where the edge
+diffraction already bends a path, the fade leaves out the terms it adds. On the strip
+with `first_order` the edge diffraction bends the reflection off the strip, and the fade
+adds its copy off the ground (0.4 dB at 63 Hz).
 
 Behind a barrier 3 m high on a rigid ground (a thin screen across x = 0), with the
 source at (-4, 0, 0.5) and a listener at x = 4 m rising from 1 to 8 m 1 cm at a time,
@@ -1138,8 +1199,8 @@ changes nothing (less than 0.001 dB):
 
 | barrier on a rigid ground, `first_order` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| largest difference, `one_side` | 2.20 | 3.00 | 2.62 | 0.89 | 0.79 | 0.67 | 0.75 | 0.72 |
-| largest difference, `both_sides` | 0.04 | 0.02 | 0.02 | 0.01 | 0.02 | 0.05 | 0.03 | 0.05 |
+| largest difference, `one_side` | 2.20 | 2.98 | 2.60 | 0.89 | 0.80 | 0.67 | 0.76 | 0.73 |
+| largest difference, `both_sides` | 0.03 | 0.02 | 0.03 | 0.01 | 0.03 | 0.05 | 0.04 | 0.05 |
 | largest step, `both_sides` | 0.06 | 0.14 | 0.12 | 0.05 | 0.09 | 0.15 | 0.20 | 0.16 |
 | largest step, exact | 0.06 | 0.14 | 0.12 | 0.05 | 0.09 | 0.15 | 0.21 | 0.16 |
 
@@ -1161,9 +1222,9 @@ level:
 
 | thick barrier, `second_order` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| listener 0.5 m up | -9.85 | -6.96 | +3.03 | -5.66 | -5.53 | -5.17 | -5.07 | -5.41 |
-| 1.5 m up | -5.05 | -0.27 | -0.48 | -3.21 | -2.43 | -2.13 | -2.17 | -2.41 |
-| 2.5 m up | -1.09 | -5.48 | +3.84 | -2.54 | -2.10 | -1.88 | -1.74 | -1.90 |
+| listener 0.5 m up | -9.85 | -6.96 | +3.01 | -5.66 | -5.54 | -5.18 | -5.08 | -5.40 |
+| 1.5 m up | -5.06 | -0.27 | -0.49 | -3.20 | -2.44 | -2.14 | -2.17 | -2.41 |
+| 2.5 m up | -1.09 | -5.48 | +3.83 | -2.53 | -2.11 | -1.89 | -1.75 | -1.90 |
 
 A path over two edges takes no reflection off the ground, so of the four paths over
 the barrier the engine has one: 1.7 to 5.7 dB low from 500 Hz up, and up to 9.9 dB low
@@ -1518,21 +1579,21 @@ loss over the bands. Each pair is at 535 m / 845 m, in dB:
 | case | weather | overall, measured | published model | this package | mean difference, published model | this package |
 |---|---|---|---|---|---|---|
 | 1 | light downwind | 22.6 / 27.5 | 21.6 / 26.6 | 23.3 / 28.9 | 1.8 / 3.2 | 1.7 / 2.3 |
-| 2 | light downwind | 22.2 / 26.7 | 21.6 / 26.8 | 23.3 / 28.9 | 1.6 / 2.8 | 1.9 / 2.7 |
+| 2 | light downwind | 22.2 / 26.7 | 21.6 / 26.8 | 23.4 / 28.9 | 1.6 / 2.8 | 1.9 / 2.7 |
 | 3 | cross/downwind | 20.8 / 26.5 | 21.4 / 26.8 | 23.1 / 28.7 | 1.8 / 2.7 | 2.2 / 2.7 |
 | 4 | cross/downwind | 20.6 / 26.3 | 21.3 / 26.9 | 23.1 / 28.6 | 2.0 / 2.7 | 2.3 / 2.6 |
 | 5 | cross/upwind | 21.0 / 26.6 | 21.0 / 25.9 | 23.0 / 28.3 | 1.9 / 2.5 | 2.0 / 2.3 |
 | 6 | cross/upwind | 20.6 / 25.7 | 20.9 / 26.0 | 22.9 / 28.2 | 1.7 / 2.8 | 2.4 / 2.7 |
 | 7 | light upwind | 21.9 / 26.2 | 20.7 / 24.9 | 22.7 / 27.7 | 2.0 / 2.2 | 2.2 / 2.2 |
 | 8 | light upwind | 22.2 / 27.0 | 20.5 / 25.1 | 22.7 / 27.9 | 2.2 / 2.2 | 2.3 / 2.1 |
-| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.8 | 3.2 / 8.3 | 2.0 / 2.6 |
+| 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.8 | 3.2 / 8.3 | 1.9 / 2.6 |
 | 10 | strong upwind | 23.1 / 27.2 | 19.9 / 50.0 | 22.1 / 27.9 | 3.1 / 7.7 | 2.0 / 2.5 |
 
 In the eight cases other than strong upwind (light winds, and cross winds in cases 3 to
 6), this package is about as close to the measurements as the authors' model: 1.7 to 2.4 dB per band on average at 535 m, 2.1 to 2.7 dB at 845
 m, against their 1.6 to 2.2 and 2.2 to 3.2 dB; the spread of the measurements over the
 five minutes is 1 to 3 dB. From 80 to 160 Hz this package loses more than was
-measured, 2.6 to 6.1 dB on average over those bands at 845 m and up to 4.2 dB at 535 m,
+measured, 2.6 to 6.0 dB on average over those bands at 845 m and up to 4.2 dB at 535 m,
 which puts its overall loss at 845 m 0.9 to 2.6 dB above the measured one. With the
 same inputs the authors' model loses 3.4 to 5.2 dB less than this package in those
 bands, from 4.3 dB less to 1.3 dB more than was measured. This package's parabolic
@@ -1556,11 +1617,11 @@ to 980 and 1230 m from those 119 and 167 m up (the script prints this for every 
 with a shadow), so only the lowest one is in shadow there, and the loss stays within
 about 1 dB of the measured one overall.
 
-The data gives no measure of the eddies. With `--turbulence moderate` the overall
-losses drop by up to 0.4 dB at 845 m and 0.2 dB at 535 m, as the eddies fill the ground
-dip a little; the mean differences move by 0.3 dB at most, better at 845 m in the nine
-other cases and 0.2 dB worse in case 8. In cases 9 and 10 the overall loss at 845 m comes to
-27.5 dB, against 27.4 and 27.2 measured.
+The data gives no measure of the eddies. With `--turbulence moderate` the overall losses
+drop by up to 0.4 dB at 845 m and 0.2 dB at 535 m, as the eddies fill the ground dip a
+little; the mean differences move by 0.3 dB at most, better at 845 m in the nine other
+cases and 0.2 dB worse in case 8. In cases 9 and 10 the overall loss at 845 m comes to
+27.4 and 27.5 dB, against 27.4 and 27.2 measured.
 
 ## Turbulence against a parabolic equation through random eddies
 
@@ -1783,26 +1844,24 @@ early paths alone lose (the leaves' extinction):
 | | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.03 | 0.27 | 0.59 | spread over seeds |
 
 The standard's table is empirical, for the foliage of whole woods, so this compares
-magnitudes rather than checking against an exact answer. Leaves 5 cm wide at 0.1 m²
-per m³, about a wood's trunk space with some foliage in it, take about what the table
-gives at 4 kHz (3.0 to 3.5 dB against 4.5) and more at 8 kHz (8.6 to 10.2 against 6); below
-1 kHz they take next to nothing, where the table's 1 to 3 dB are the standard's
-allowance for the whole wood, not what leaves scatter. The loss rises far more
-steeply with frequency than the table, and with the leaves' area and width, as
-measurements in dense foliage do (Aylor 1972 measured the loss through reeds and corn
-rising by several decibels per octave above 500 Hz): a leaf scatters once its size
-nears the wavelength, so wider
-leaves take hold at lower frequencies, and leaves 2 cm wide hardly matter below
+magnitudes rather than checking against an exact answer. Leaves 5 cm wide at 0.1 m² per
+m³, about a wood's trunk space with some foliage in it, take about what the table gives
+at 4 kHz (3.0 to 3.5 dB against 4.5) and more at 8 kHz (8.6 to 10.2 against 6); below 1
+kHz they take next to nothing, where the table's 1 to 2.5 dB are the standard's
+allowance for the whole wood, not what leaves scatter. The loss rises far more steeply
+with frequency than the table, and with the leaves' area and width, as measurements in
+dense foliage do (Aylor 1972 measured the loss through reeds and corn rising by several
+decibels per octave above 500 Hz): a leaf scatters once its size nears the wavelength,
+so wider leaves take hold at lower frequencies, and leaves 2 cm wide hardly matter below
 8 kHz. What the leaves scatter comes back as late sound, so a listener loses far less
-than the early paths do (the extinction row): with 1 m² per m³ the early paths lose
-165 dB at 8 kHz and the listener 40 to 44, the rest arriving scattered. Behind
-dense leaves at 4 and 8 kHz what arrives is the rare ray that slips through, so the
-level takes many rays to settle: with 100,000 rays (`--rays 100000`) it swings by up to
-22 dB from one seed to another at 8 kHz, with 10 million the seeds agree within
-1.7 dB. No measurement of a known leaf area and width was available to check
-against; the bridge between the disc's two limits, the discs standing in for real
-leaves, which flex and hang in clumps, and the single phase function per band are
-the model's assumptions.
+than the early paths do (the extinction row): with 1 m² per m³ the early paths lose 165
+dB at 8 kHz and the listener 40 to 44, the rest arriving scattered. Behind dense leaves
+at 4 and 8 kHz what arrives is the rare ray that slips through, so the level takes many
+rays to settle: with 100,000 rays (`--rays 100000`) it swings by up to 22 dB from one
+seed to another at 8 kHz, with 10 million the seeds agree within 1.7 dB. No measurement
+of a known leaf area and width was available to check against; the bridge between the
+disc's two limits, the discs standing in for real leaves, which flex and hang in clumps,
+and the single phase function per band are the model's assumptions.
 
 ## The wave solver in wind and temperature against a parabolic equation
 
@@ -1936,17 +1995,17 @@ Maekawa's chart for reference:
 
 | listener | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
 |---|---|---|---|---|---|---|---|---|---|
-| 2 m behind | 8.84 | 11.09 | 13.67 | 16.49 | 19.44 | 22.43 | 25.43 | 28.44 | exact, dB |
-| | -0.01 | -0.00 | +0.00 | +0.00 | +0.00 | +0.01 | +0.02 | +0.07 | engine - exact |
+| 2 m behind | 8.84 | 11.08 | 13.67 | 16.49 | 19.43 | 22.42 | 25.43 | 28.44 | exact, dB |
+| | -0.01 | +0.00 | +0.01 | +0.01 | +0.01 | +0.01 | +0.02 | +0.07 | engine - exact |
 | | +0.22 | +0.06 | -0.05 | -0.15 | -0.23 | -0.29 | -0.33 | -0.35 | Maekawa - exact |
-| 10 m behind | 8.32 | 10.06 | 12.16 | 14.63 | 17.38 | 20.30 | 23.28 | 26.28 | exact, dB |
-| | -0.01 | -0.01 | -0.00 | +0.00 | +0.00 | +0.00 | +0.01 | +0.03 | engine - exact |
+| 10 m behind | 8.32 | 10.06 | 12.16 | 14.63 | 17.38 | 20.29 | 23.28 | 26.28 | exact, dB |
+| | -0.01 | -0.00 | +0.00 | +0.00 | +0.01 | +0.01 | +0.01 | +0.03 | engine - exact |
 | | -1.14 | -1.35 | -1.43 | -1.47 | -1.54 | -1.62 | -1.68 | -1.71 | Maekawa - exact |
-| 40 m behind | 8.16 | 9.69 | 11.58 | 13.87 | 16.50 | 19.35 | 22.31 | 25.30 | exact, dB |
-| | -0.01 | -0.00 | -0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.02 | engine - exact |
+| 40 m behind | 8.16 | 9.69 | 11.58 | 13.87 | 16.49 | 19.34 | 22.30 | 25.30 | exact, dB |
+| | -0.01 | -0.00 | +0.00 | +0.00 | +0.00 | +0.01 | +0.01 | +0.03 | engine - exact |
 | | -1.49 | -1.72 | -1.80 | -1.82 | -1.86 | -1.93 | -2.00 | -2.05 | Maekawa - exact |
-| 90 m behind | 8.12 | 9.61 | 11.46 | 13.70 | 16.30 | 19.13 | 22.09 | 25.08 | exact, dB |
-| | -0.00 | -0.00 | -0.00 | +0.00 | +0.00 | +0.00 | +0.01 | +0.02 | engine - exact |
+| 90 m behind | 8.12 | 9.61 | 11.46 | 13.70 | 16.30 | 19.13 | 22.08 | 25.08 | exact, dB |
+| | -0.00 | -0.00 | +0.00 | +0.00 | +0.00 | +0.01 | +0.01 | +0.03 | engine - exact |
 | | -1.55 | -1.79 | -1.87 | -1.88 | -1.92 | -1.99 | -2.06 | -2.11 | Maekawa - exact |
 
 The engine agrees within 0.07 dB. Maekawa's chart is within 2.1 dB, giving less loss
@@ -1964,26 +2023,26 @@ interference over the band exactly, and the row repeats the one above it). First
 
 | listener | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
 |---|---|---|---|---|---|---|---|---|---|
-| 2 m behind | 14.21 | 11.15 | 23.60 | 10.22 | 19.58 | 22.62 | 24.84 | 28.15 | exact, dB |
-| | -0.57 | +0.23 | -2.11 | +0.38 | +0.01 | +0.00 | +0.04 | +0.15 | engine - exact |
-| | -0.02 | -0.06 | -0.06 | -0.02 | +0.01 | +0.00 | +0.04 | +0.15 | through the filters |
-| | +0.00 | +0.00 | +0.00 | +0.01 | -0.01 | -0.00 | -0.01 | -0.01 | without the barrier |
-| 10 m behind | 6.31 | 13.90 | 25.19 | 14.78 | 9.06 | 22.29 | 22.66 | 25.94 | exact, dB |
-| | +0.05 | -0.05 | -2.22 | -0.05 | +0.01 | +0.00 | +0.04 | +0.07 | engine - exact |
-| | -0.04 | -0.08 | -0.03 | -0.04 | +0.01 | +0.00 | +0.04 | +0.07 | through the filters |
-| | +0.00 | +0.00 | +0.00 | +0.01 | +0.00 | -0.00 | +0.00 | -0.02 | without the barrier |
-| 40 m behind | 4.41 | 8.42 | 18.06 | 18.55 | 18.19 | 15.47 | 21.19 | 24.47 | exact, dB |
-| | +0.03 | +0.08 | -0.51 | +0.18 | +0.00 | +0.01 | +0.00 | +0.05 | engine - exact |
-| | -0.04 | -0.07 | -0.07 | -0.06 | +0.00 | +0.01 | +0.00 | +0.05 | through the filters |
-| | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.01 | -0.01 | -0.01 | without the barrier |
-| 90 m behind | 4.17 | 7.93 | 16.66 | 12.67 | 20.67 | 24.87 | 16.25 | 23.53 | exact, dB |
-| | +0.03 | +0.08 | -0.60 | +0.25 | +0.01 | +0.01 | +0.02 | +0.06 | engine - exact |
-| | -0.04 | -0.07 | -0.06 | -0.04 | +0.01 | +0.01 | +0.02 | +0.06 | through the filters |
-| | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | +0.01 | -0.01 | without the barrier |
+| 2 m behind | 14.20 | 11.15 | 23.58 | 10.23 | 19.56 | 22.62 | 24.84 | 28.16 | exact, dB |
+| | -0.57 | +0.23 | -2.09 | +0.37 | +0.03 | +0.01 | +0.05 | +0.14 | engine - exact |
+| | -0.02 | -0.06 | -0.05 | -0.03 | +0.03 | +0.01 | +0.05 | +0.14 | through the filters |
+| | -0.00 | +0.00 | +0.00 | +0.00 | -0.00 | -0.00 | -0.00 | -0.01 | without the barrier |
+| 10 m behind | 6.30 | 13.89 | 25.20 | 14.79 | 9.06 | 22.30 | 22.66 | 25.94 | exact, dB |
+| | +0.05 | -0.04 | -2.24 | -0.06 | +0.01 | +0.00 | +0.04 | +0.07 | engine - exact |
+| | -0.04 | -0.07 | -0.04 | -0.04 | +0.01 | +0.00 | +0.04 | +0.07 | through the filters |
+| | -0.00 | +0.00 | +0.00 | +0.00 | +0.00 | -0.00 | -0.00 | -0.01 | without the barrier |
+| 40 m behind | 4.41 | 8.41 | 18.05 | 18.54 | 18.19 | 15.47 | 21.17 | 24.46 | exact, dB |
+| | +0.03 | +0.08 | -0.50 | +0.19 | -0.00 | +0.00 | +0.02 | +0.06 | engine - exact |
+| | -0.04 | -0.06 | -0.06 | -0.06 | -0.00 | +0.00 | +0.02 | +0.06 | through the filters |
+| | -0.00 | +0.00 | +0.00 | +0.00 | -0.00 | -0.00 | -0.00 | -0.00 | without the barrier |
+| 90 m behind | 4.16 | 7.93 | 16.65 | 12.67 | 20.65 | 24.89 | 16.26 | 23.52 | exact, dB |
+| | +0.03 | +0.08 | -0.60 | +0.25 | +0.02 | -0.01 | +0.02 | +0.07 | engine - exact |
+| | -0.03 | -0.06 | -0.06 | -0.04 | +0.02 | -0.01 | +0.02 | +0.07 | through the filters |
+| | -0.00 | +0.00 | +0.00 | +0.00 | -0.00 | -0.00 | -0.00 | -0.00 | without the barrier |
 
 Read alike, the engine is within 0.15 dB of the exact solution at every listener and
-band (0.08 dB up to 500 Hz, 0.15 dB at 8 kHz, 0.04 dB elsewhere), and without the
-barrier (the direct sound and its reflection, added in pressure) within 0.02 dB. The
+band (0.07 dB up to 500 Hz, 0.14 dB at 8 kHz, 0.05 dB elsewhere), and without the
+barrier (the direct sound and its reflection, added in pressure) within 0.01 dB. The
 2 dB at 250 Hz near the barrier is what the band filters let in from the bands beside
 a deep interference dip, as a measured response read through the same filters would
 show, not a gap in the model.
@@ -1994,17 +2053,17 @@ sound over it, is left out:
 
 | listener | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
 |---|---|---|---|---|---|---|---|---|---|
-| 2 m behind | -2.31 | +1.46 | -3.87 | +0.89 | +0.34 | +0.30 | +0.51 | +0.54 | engine - exact |
-| | -1.77 | +1.17 | -1.81 | +0.49 | +0.34 | +0.30 | +0.51 | +0.54 | through the filters |
-| 10 m behind | +0.92 | -1.66 | -5.03 | +0.88 | +0.53 | +0.43 | +0.65 | +0.54 | engine - exact |
-| | +0.83 | -1.69 | -2.84 | +0.89 | +0.53 | +0.43 | +0.65 | +0.54 | through the filters |
-| 40 m behind | +1.70 | +0.71 | -2.69 | +1.78 | +0.41 | +0.27 | +0.71 | +0.61 | engine - exact |
-| | +1.64 | +0.56 | -2.26 | +1.53 | +0.41 | +0.27 | +0.71 | +0.61 | through the filters |
-| 90 m behind | +1.85 | +1.05 | -2.42 | +1.74 | -0.52 | -0.74 | +0.77 | +0.67 | engine - exact |
-| | +1.78 | +0.91 | -1.88 | +1.46 | -0.52 | -0.74 | +0.77 | +0.67 | through the filters |
+| 2 m behind | -2.31 | +1.46 | -3.85 | +0.88 | +0.36 | +0.30 | +0.52 | +0.53 | engine - exact |
+| | -1.76 | +1.17 | -1.81 | +0.48 | +0.36 | +0.30 | +0.52 | +0.53 | through the filters |
+| 10 m behind | +0.93 | -1.65 | -5.05 | +0.87 | +0.53 | +0.43 | +0.65 | +0.54 | engine - exact |
+| | +0.83 | -1.68 | -2.85 | +0.89 | +0.53 | +0.43 | +0.65 | +0.54 | through the filters |
+| 40 m behind | +1.71 | +0.72 | -2.68 | +1.78 | +0.40 | +0.26 | +0.72 | +0.62 | engine - exact |
+| | +1.64 | +0.57 | -2.25 | +1.54 | +0.40 | +0.26 | +0.72 | +0.62 | through the filters |
+| 90 m behind | +1.85 | +1.06 | -2.41 | +1.74 | -0.50 | -0.75 | +0.76 | +0.68 | engine - exact |
+| | +1.79 | +0.91 | -1.88 | +1.46 | -0.50 | -0.75 | +0.76 | +0.68 | through the filters |
 
 Without that path the insertion loss comes out 0.3 to 0.8 dB too high from 1 kHz up,
-but for 1 and 2 kHz 90 m behind, where it is 0.5 and 0.7 dB too low; in the bands
+but for 1 and 2 kHz 90 m behind, where it is 0.5 and 0.8 dB too low; in the bands
 below, where the four paths interfere, it is up to 3 dB off either way read through
 the filters (5 dB against the exact band averages). Over grass and other soft grounds, whose
 reflections near grazing are weaker, the path left out should carry less, but no
@@ -2481,14 +2540,50 @@ Each band of the wide-angle equation marches a grid of twenty points per wavelen
 its highest frequency in steps of three wavelengths, ten tridiagonal solves a step,
 where the narrow-angle one takes a pair of Fourier transforms a step on a grid half as
 fine, in steps of five wavelengths: three to four times the work, all of it in the
-bands the parabolic equation gives. The narrow-angle equation's step is not converged
-for a high source (a one-off check): for one 30 m up, 180 m away, a step an eighth as
-long moves the 100 Hz band by up to 0.8 dB, so a level can also move by up to about
-0.75 dB with the other listeners in its direction, whose ranges break the run's steps;
-the wide-angle equation is converged at its step, and the helicopter's scenes use it.
-Neither equation is checked against measurements
+bands the parabolic equation gives. Neither equation is checked against measurements
 in strong refraction, and neither is combined with a terrain yet (see
 [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
+
+**Steep sound.** The narrow-angle equation's phase shift at each step strays for sound
+that comes in steeply, and its step is not converged: each step also adds an error at
+the ground that shrinks with the height step, not the range step, so on its grid of
+heights shorter steps add up more of it. From 1 m up to 1.5 m up, 200 m downwind in the
+`windy` preset over grass, the 63 Hz band is 0.21 dB under the fast field program in
+steps of five wavelengths, 0.21 dB over it in steps of one and 0.93 dB over it in steps
+a 32nd as long. So in wind or temperature gradients, with the narrow-angle equation too,
+the listeners that the reflection off the ground reaches more than 15 degrees up get the
+wide-angle equation's level (in still air the narrow-angle one is exact but at the
+ground and keeps them). Against the program in the `windy` preset downwind and upwind
+over grass, from sources 5, 10, 30 and 120 m up to a listener 1.5 m up and from 1.5 m up
+to 30 m up, from 1.5 times their heights added (10 m at least) to 1 km away, where the
+level is above -15 dB re free field, the mean (largest) difference in dB:
+
+| bands | 15° or flatter, narrow-angle | steeper, narrow-angle | steeper, narrow-angle, half its step | steeper, wide-angle |
+|---|---|---|---|---|
+| octaves, 63 to 500 Hz | 0.09 (0.56) | 0.10 (0.46) | 0.09 (0.37) | 0.01 (0.05) |
+| third octaves, 50 to 250 Hz, sources 10 to 120 m up | 0.15 (0.90) | 0.23 (1.65) | 0.15 (0.90) | 0.03 (0.09) |
+
+A quarter of the narrow-angle step leaves the steep points 0.10 (0.40) and 0.18 (0.59)
+dB off. In 17 cases outside that set (`clear_night`, `sunny_day` with 3 m/s of wind, and
+5 and 10 m/s of wind down- and upwind; over grass and over a ground of 2000 kPa s/m²;
+sources 20 to 60 m up, listeners 1.5 and 4 m up; the 63 and 125 Hz octaves and the third
+octaves from 80 to 160 Hz) the steep points' octave bands are 0.16 (0.87) dB off with
+the narrow-angle equation, 0.17 (0.91) dB at half its step and 0.03 (0.10) dB with the
+wide-angle one, their third octaves 0.41 (2.67), 0.33 (2.18) and 0.04 (0.32) dB. In
+those cases the narrow-angle equation is about as far off just under 15 degrees, from 10
+to 15 degrees up: 0.12 (1.23) dB per octave band and 0.35 (3.02) dB per third octave. So
+the level jumps at 15 degrees by the narrow-angle equation's error there: in the 27
+geometries of both sets, per octave band from 63 to 500 Hz by 0.12 dB on average and up
+to 0.89 dB (125 Hz, from 60 m up to 4 m up, upwind in 10 m/s of wind over the hard
+ground), per third octave from 50 to 500 Hz by 0.26 dB and up to 2.2 dB, where the level
+is above -15 dB re free field; at the five largest jumps in each kind of band the
+wide-angle side is within 0.31 dB of the program and the narrow-angle side up to 2.2 dB
+off. Other listeners in the same direction, whose ranges break a run's steps, move a
+steep level by less than 0.001 dB, the wide-angle equation being converged at its step,
+and a flatter one as before, by up to 0.53 dB per third octave from 50 to 500 Hz and 0.17
+dB per octave band (a source 30 m up, downwind in the `windy` preset, listeners 47 m to 1
+km away). The steep listeners' bands take the wide-angle equation's work, about four times
+the narrow-angle one's.
 
 ## Terrain against closed forms and the exact wedge
 
@@ -2519,27 +2614,27 @@ TC05 and TC06 (the plane's slope and height and the equivalent heights of the so
 the receivers over it, to the tables' two decimals), and that the same ground on a 10 m
 and on a 5 m grid gives the same reflection.
 
-**A ridge**, two slopes of 0.6 meeting at 241.9 degrees, with the source on one slope and
-the listener in its shadow on the other, against the Biot-Tolstoy-Medwin solution for the
-rigid wedge ([Edge diffraction](#edge-diffraction-against-the-exact-solution)), per
-octave band; the engine's path is the wedge of the string pulled taut over the profile,
-with the reflections off both slopes in its four terms:
+**A ridge**, two slopes of 0.6 meeting at 241.9 degrees, with the source on one slope
+and the listener in its shadow on the other, against the Biot-Tolstoy-Medwin solution
+for the rigid wedge ([Edge diffraction](#edge-diffraction-against-the-exact-solution)),
+integrated along 640 m of the edge, per octave band; the engine's path is the wedge of
+the string pulled taut over the profile, with the reflections off both slopes in its
+four terms:
 
 | source, listener (m over the slopes) | 63 | 125 | 250 | 500 | 1k | 2k | 4k | 8k | |
 |---|---|---|---|---|---|---|---|---|---|
-| 2.0 at 30 m before, 1.5 at 30 m behind | -11.27 | -14.21 | -17.21 | -20.22 | -23.23 | -26.23 | -29.19 | -32.26 | exact, dB |
-| | +0.00 | +0.00 | +0.00 | +0.00 | +0.00 | -0.00 | -0.06 | +0.00 | engine - exact |
-| 1.0 at 40 m before, 4.0 at 60 m behind | -13.31 | -16.28 | -19.28 | -22.29 | -25.30 | -28.11 | -31.50 | -34.26 | exact, dB |
-| | -0.00 | +0.00 | +0.00 | +0.00 | +0.00 | -0.21 | +0.18 | -0.07 | engine - exact |
-| 3.0 at 20 m before, 1.5 at 40 m behind, 30 m aside | -9.82 | -12.73 | -15.72 | -18.72 | -21.73 | -24.77 | -27.73 | -30.73 | exact, dB |
-| | +0.10 | +0.09 | +0.09 | +0.09 | +0.09 | +0.12 | +0.07 | +0.06 | engine - exact |
+| 2.0 at 30 m before, 1.5 at 30 m behind | -11.27 | -14.21 | -17.21 | -20.21 | -23.22 | -26.23 | -29.24 | -32.25 | exact, dB |
+| | +0.00 | +0.00 | +0.00 | +0.00 | -0.00 | +0.00 | +0.00 | +0.00 | engine - exact |
+| 1.0 at 40 m before, 4.0 at 60 m behind | -13.32 | -16.28 | -19.28 | -22.29 | -25.30 | -28.31 | -31.32 | -34.33 | exact, dB |
+| | +0.00 | +0.00 | +0.00 | -0.00 | -0.00 | +0.00 | -0.00 | +0.00 | engine - exact |
+| 3.0 at 20 m before, 1.5 at 40 m behind, 30 m aside | -9.81 | -12.72 | -15.71 | -18.72 | -21.73 | -24.74 | -27.75 | -30.76 | exact, dB |
+| | +0.09 | +0.09 | +0.09 | +0.09 | +0.09 | +0.09 | +0.09 | +0.09 | engine - exact |
 
-The engine agrees within 0.1 dB up to 1 kHz and 0.21 dB above, where the two slopes'
-reflections interfere with the direct wave within a band. A ridge sampled on a grid is
-the exact wedge, which sits at the crest with no width and has the slopes for its
-faces; the uniform theory's four terms, a high-frequency form of the exact solution,
-come that close to it here. The third pair is oblique, 30 m aside of the plane through the source and
-the crest.
+The engine agrees within 0.005 dB for the first two pairs and is 0.09 dB high in every
+band for the third. A ridge sampled on a grid is the exact wedge, which sits at the
+crest with no width and has the slopes for its faces; the uniform theory's four terms, a
+high-frequency form of the exact solution, come that close to it here. The third pair is
+oblique, 30 m aside of the plane through the source and the crest.
 
 **A smooth hill**, 12 m high with a Gaussian profile 25 m wide at half its height, the
 source and the listener 1.5 m up 40 m before and behind its crest, 2.71 m of path
@@ -2844,7 +2939,7 @@ dB, within the standard's range:
 | distance | engine | ISO 9613-2 | difference |
 |---|---|---|---|
 | 50 m | 0.94 | 1.69 | -0.75 |
-| 100 m | 2.22 | 2.53 | -0.32 |
+| 100 m | 2.21 | 2.53 | -0.32 |
 | 200 m | 3.12 | 2.95 | +0.17 |
 | 400 m | 3.43 | 3.16 | +0.27 |
 | 800 m | 3.49 | 3.27 | +0.22 |
@@ -2965,25 +3060,26 @@ places' band levels:
 
 | band | rendered | responses | pass-by | early part alone: rendered | responses |
 |---|---|---|---|---|---|
-| 63 Hz | -25.88 | -25.90 | -26.13 | -25.90 | -25.92 |
-| 125 Hz | -27.58 | -27.55 | -27.70 | -27.62 | -27.64 |
-| 250 Hz | -32.16 | -32.10 | -32.30 | -32.31 | -32.31 |
-| 500 Hz | -34.85 | -34.92 | -34.05 | -34.98 | -34.91 |
+| 63 Hz | -25.87 | -25.90 | -26.13 | -25.90 | -25.92 |
+| 125 Hz | -27.54 | -27.55 | -27.70 | -27.62 | -27.64 |
+| 250 Hz | -32.13 | -32.10 | -32.30 | -32.31 | -32.31 |
+| 500 Hz | -34.87 | -34.92 | -34.05 | -34.98 | -34.91 |
 | 1 kHz | -29.52 | -29.53 | -29.64 | -29.56 | -29.59 |
 | 2 kHz | -30.18 | -30.19 | -30.28 | -30.21 | -30.23 |
 | 4 kHz | -30.76 | -30.77 | -30.68 | -30.78 | -30.79 |
 | 8 kHz | -31.81 | -31.81 | -31.85 | -31.82 | -31.82 |
 
 The sound keeps the energy of the responses to within 0.07 dB in every band, with its
-late part and without. The late part is crossfaded by weights that add up to one, drawn
-from one random sequence for every place; the responses here are drawn from the same
-one, as otherwise their late parts' chance correlation with the early sound would differ
-by up to 0.25 dB in a band (a one-off check). The pass-by's band levels are within 0.25
-dB of the sound, 0.8 dB in the 500 Hz band, where the ground's dip falls: the pass-by
-takes the places' band levels, averaged over each band, where the sound is read through
-band filters, whose skirts fill a dip (a cause not checked separately). For a car at 30
-m/s over this grass with 94 dB of sound power, the listener has L_Amax 61.4 dB(A) 2.03 s
-into the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A) over 4 s.
+late part and without. The late part is crossfaded by weights that add up to one, as
+the car sends its sound, drawn from one random sequence for every place; the responses
+here are drawn from the same one, as otherwise their late parts' chance correlation with
+the early sound would differ by up to 0.25 dB in a band (a one-off check). The pass-by's
+band levels are within 0.26 dB of the sound, 0.8 dB in the 500 Hz band, where the
+ground's dip falls: the pass-by takes the places' band levels, averaged over each band,
+where the sound is read through band filters, whose skirts fill a dip (a cause not
+checked separately). For a car at 30 m/s over this grass with 94 dB of sound power, the
+listener has L_Amax 61.4 dB(A) 2.03 s into the walk, SEL 61.2 dB(A) and L_Aeq 55.2 dB(A)
+over 4 s.
 
 **What it leaves out.** The engine's source is quasi-static, as the field it is
 compared with: a moving source's convective amplification is left out (taking its
@@ -3108,14 +3204,17 @@ certification's overflight (below). 48 sections instead of 24 changed the levels
 under 0.06 dB.
 
 **The certified level.** The AS350 B3 at its maximum mass of 2,250 kg flying the
-overflight of ICAO Annex 16, chapter 11 (14 CFR part 36, appendix J): level, 150 m
-over a microphone 1.2 m above grass, at 0.9 V_H, in still air at 25 °C and 70 %
-humidity at sea level. Its type certificate data sheet for noise (EASA.R.008) gives
-no speed; V_H is taken as Airbus's fast cruise speed, 136 kt, so 63.0 m/s. The direct
-sound and the ground's reflection (Weyl and van der Pol's, with Miki's impedance of
-200 kPa s/m²), each heard at the time it left the helicopter with the air's absorption
-(ISO 9613-1), A-weighted; the slow time weighting finds the points 10 dB under the
-most, and the sound exposure level is the energy between them:
+overflight of ICAO Annex 16, chapter 11 (14 CFR part 36, appendix J): level, 150 m over
+a microphone 1.2 m above grass, at 0.9 V_H, in still air at 25 °C and 70 % humidity at
+sea level. The main rotor turns at 394 rpm, the most in powered flight of the AS350 B3
+with the Arriel 2B engine (its type certificate data sheet, EASA.R.008, 9.1): the rotor
+speed appendix J flies (J36.3(c), J36.105(c)(2)) for that variant's noise record, D73,
+which certifies 84.6 dB(A) at 2,250 kg. The type certificate data sheet for noise
+(EASA.R.008) gives no airspeed; V_H is taken as Airbus's fast cruise speed, 136 kt, so
+63.0 m/s. The direct sound and the ground's reflection (Weyl and van der Pol's, with
+Miki's impedance of 200 kPa s/m²), each heard at the time it left the helicopter with
+the air's absorption (ISO 9613-1), A-weighted; the slow time weighting finds the points
+10 dB under the most, and the sound exposure level is the energy between them:
 
 | part | SEL | L_ASmax | 10 dB down for |
 |---|---|---|---|
@@ -3135,20 +3234,19 @@ That is with Pegg's broadband noise, the default. With each blade section's own
 | main rotor's broadband noise | 68.6 dB(A) | 62.2 dB(A) | 8.4 s |
 | tail rotor's broadband noise | 44.3 dB(A) | 37.4 dB(A) | 10.2 s |
 
-With Pegg's noise the model is 3.4 dB louder than the certified level, nearly all of
-it Pegg's broadband noise of the main rotor; with the blade sections' own it is 4.5
-dB quieter, nearly all of it the tail rotor's tones, the main rotor's broadband noise
-19 dB under Pegg's. Self-noise is the noise of a blade in a smooth flow: it leaves out
-the blades cutting through the wake of those ahead and through turbulence, which a
-full-size rotor in flight makes and which Pegg's fit to measured rotors holds. Pegg's
-method is a correlation of the 1970s' measurements: in his own example the band of the
-broadband peak (315 Hz) comes out 5.3 dB over the level measured there, though a tone
-of the tail rotor in that band is over it alone; the bands where only the broadband
-noise counts have no measured level in the report. The tones leave out the loads that
-change round the turn, which make a rotor's lower harmonics in forward flight louder
-than steady loads do. Some of the AS350 B3's inputs are assumed (the main blades' chord
-and twist, the tail rotor's speed, chord and thickness, V_H); `AS350_B3`'s source code
-says which.
+With Pegg's noise the model is 3.4 dB louder than the certified level, nearly all of it
+Pegg's broadband noise of the main rotor; with the blade sections' own it is 4.5 dB
+quieter, nearly all of it the tail rotor's tones, the main rotor's broadband noise 19 dB
+under Pegg's. Self-noise is the noise of a blade in a smooth flow: it leaves out the
+blades cutting through the wake of those ahead and through turbulence, which a full-size
+rotor in flight makes and which Pegg's fit to measured rotors holds. Pegg's method is a
+correlation of the 1970s' measurements: in his own example the band of the broadband
+peak (315 Hz) comes out 5.3 dB over the level measured there, though a tone of the tail
+rotor in that band is over it alone; the bands where only the broadband noise counts
+have no measured level in the report. The tones leave out the loads that change round
+the turn, which make a rotor's lower harmonics in forward flight louder than steady
+loads do. Some of the AS350 B3's inputs are assumed (the main blades' chord and twist,
+the tail rotor's chord and thickness, V_H); `AS350_B3`'s source code says which.
 
 ## Sirens and road vehicles against their rules
 
@@ -3514,47 +3612,58 @@ path's segments. The late rays are seeded, so a run gives these numbers.
 NPD curves' speed, over a microphone 1.2 m above grass, at 15,000 lb of thrust an
 engine departing and 5,000 lb arriving:
 
-| distance | departure: L_Amax | SEL | arrival: L_Amax | SEL |
+| distance | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| 200 ft (61 m) | 101.5 (102.5) | 104.1 (104.0) | 97.5 (98.4) | 100.0 (101.8) |
-| 400 ft (122 m) | 95.0 (95.4) | 100.3 (100.2) | 90.9 (91.2) | 96.2 (98.0) |
-| 630 ft (192 m) | 90.6 (90.6) | 97.6 (97.4) | 86.5 (86.5) | 93.5 (95.2) |
-| 1000 ft (305 m) | 86.0 (85.8) | 94.6 (94.4) | 81.9 (81.6) | 90.6 (92.1) |
-| 2000 ft (610 m) | 78.7 (78.2) | 89.6 (89.3) | 74.8 (74.0) | 85.7 (87.0) |
-| 4000 ft (1219 m) | 70.1 (70.0) | 83.8 (83.6) | 66.4 (65.9) | 80.1 (81.4) |
+| 200 ft (61 m) | 99.8 (102.5) | 104.0 (104.0) | 95.8 (98.4) | 100.0 (101.8) |
+| 400 ft (122 m) | 94.2 (95.4) | 100.2 (100.2) | 90.1 (91.2) | 96.1 (98.0) |
+| 630 ft (192 m) | 90.2 (90.6) | 97.5 (97.4) | 86.0 (86.5) | 93.3 (95.2) |
+| 1000 ft (305 m) | 85.7 (85.8) | 94.5 (94.4) | 81.5 (81.6) | 90.4 (92.1) |
+| 2000 ft (610 m) | 78.2 (78.2) | 89.5 (89.3) | 74.2 (74.0) | 85.6 (87.0) |
+| 4000 ft (1219 m) | 69.7 (70.0) | 83.7 (83.6) | 66.1 (65.9) | 80.0 (81.4) |
 
-(dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The source is
-made to the NPD curves' L_Amax 1000 ft away, which the engine gives back within 0.3 dB.
-Nearer, the NPD curves' L_Amax grows faster than one point source's with one spectrum:
-at 200 ft it is 0.9 dB (departure) and 0.8 dB (arrival) over it, so the engine reads 1.0
-and 0.9 dB under there. The arrival's SEL is 1.3 to 1.8 dB under its NPD curves, the
-departure's within 0.3 dB: JETW's arrival curves have SEL - L_Amax = 10 lg(πd/V) within
-0.22 dB out to 1000 ft, a point source's with no air absorption, where the departure's
-are 1.9 to 2.2 dB less, as the engine's point source in the air gives for both. Farther
-out the grass's scattered sound comes from the few late rays that land near the
-microphone, so it changes with their seed.
+(dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The engine's
+pass is measured as Doc 29 defines its levels (Volume 2's glossary, section 4.1 and its
+footnote 15): L_ASmax is the highest of its A-weighted level through a sound level
+meter's slow time weighting, and the SEL is taken over the time that level is within 10
+dB of it. The source is made to the NPD curves' L_Amax 1000 ft away, raised by the 0.29
+dB the slow time weighting takes off a point source's loudest moment there, and the
+engine gives it back within 0.1 dB. Nearer, the NPD curves' L_Amax grows faster than one
+point source's with one spectrum: at 200 ft the engine reads 2.8 dB (departure) and 2.6
+dB (arrival) under them. With no time weighting, the highest level of the places is 2.0
+dB over L_ASmax at 200 ft, 1.0 dB at 400 ft, 0.6 dB at 630 ft and less farther out (0.3
+dB at 1000 ft, under 0.1 dB at 4000 ft), and the SEL of the whole walk is 0.35 to 0.46
+dB over the 10 dB-down one. The departure's SEL is
+within 0.3 dB of its NPD curves, the arrival's 1.4 to 1.9 dB under: JETW's arrival
+curves have SEL - L_Amax = 10 lg(πd/V) within 0.22 dB out to 1000 ft, the SEL of a point
+source's whole pass over its level as it passes, with no time weighting and in air that
+absorbs nothing. Measured as Doc 29 defines its levels, that source's SEL - L_ASmax is
+1.0 dB more at 200 ft and 0.7 dB less at 1000 ft, and the air takes more off; the
+departure's curves are 1.9 to 2.2 dB under 10 lg(πd/V). Volume 3's aircraft are
+hypothetical, and its arrival curves seem not to follow those definitions.
 
 **The airport's flights.** The demo's departure and arrival, simulated every 20 m at
 each listener, their level following their thrust:
 
-| listener | departure: L_Amax | SEL | arrival: L_Amax | SEL |
+| listener | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| departure_4km | 87.4 (87.2) | 96.1 (96.0) | 49.6 (43.1) | 64.1 (60.7) |
-| lateral_450m | 85.0 (85.1) | 95.4 (94.5) | 43.0 (54.4) | 57.1 (68.8) |
-| approach_2000m | 52.0 (54.8) | 67.6 (68.6) | 91.2 (91.5) | 97.1 (98.8) |
+| departure_4km | 87.2 (87.2) | 96.0 (96.0) | 49.9 (43.1) | 64.1 (60.7) |
+| lateral_450m | 85.1 (85.1) | 95.5 (94.5) | 43.1 (54.4) | 57.3 (68.8) |
+| approach_2000m | 51.9 (54.8) | 67.8 (68.6) | 90.6 (91.5) | 96.9 (98.8) |
 
-(dB(A); Doc 29's in brackets.) Where the jet is heard in the air, they agree within
-0.9 dB but for the arrival's SEL, 1.7 dB under as its NPD curves have it. Where it is
-heard rolling on the runway they part, as the two reckon sound running along the
-ground differently. Doc 29 takes off its lateral attenuation, 10.9 dB at grazing for
-a listener ahead of a landing roll or behind a take-off roll, from measurements and so
-averaged over their weather, and behind a take-off roll adds its start-of-roll
-directivity (5.1 dB down at approach_2000m). The engine reckons the scene's ground in
-still air: the hard runway reflects the sound back up, so the arrival's roll-out is
-6.5 dB over Doc 29 at departure_4km, 2.4 km ahead of it along the runway, while the
-meadow takes much of it away from 250 Hz up, so it is 11.4 dB under at lateral_450m, 1
-km away across the grass (at 250 Hz the roll-out's end is 14 dB quieter there than
-at departure_4km); the departure's take-off roll is 2.7 dB under at approach_2000m.
+(dB(A); Doc 29's in brackets.) Where the jet is heard rolling, the walk starts or ends
+less than 10 dB under its L_ASmax, so its SEL there is over less than the 10 dB-down
+time. Where the jet is heard in the air, they agree within 1.0 dB but for the arrival's
+SEL, 1.9 dB under as its NPD curves have it. Where it is heard rolling on the runway
+they part, as the two reckon sound running along the ground differently. Doc 29 takes
+off its lateral attenuation, 10.9 dB at grazing for a listener ahead of a landing roll
+or behind a take-off roll, from measurements and so averaged over their weather, and
+behind a take-off roll adds its start-of-roll directivity (5.1 dB down at
+approach_2000m). The engine reckons the scene's ground in still air: the hard runway
+reflects the sound back up, so the arrival's roll-out is 6.7 dB over Doc 29 at
+departure_4km, 2.4 km ahead of it along the runway, while the meadow takes much of it
+away from 250 Hz up, so it is 11.3 dB under at lateral_450m, 1 km away across the grass
+(at 250 Hz the roll-out's end is 14 dB quieter there than at departure_4km); the
+departure's take-off roll is 2.9 dB under at approach_2000m.
 
 ## Ground-borne vibration against the FTA's manual
 
@@ -3760,15 +3869,21 @@ reflection, which the grid returns whole at every frequency:
 | 7-point: wave solver | 0.030 | 0.022 | 0.022 | 0.037 | 0.075 | 0.136 | 0.254 | 0.353 | 0.540 | 0.566 |
 | 19-point: normal-incidence absorption, fitted admittance | 0.030 | 0.022 | 0.022 | 0.037 | 0.072 | 0.143 | 0.268 | 0.346 | 0.532 | 0.659 |
 | 19-point: the grid's theory | 0.030 | 0.022 | 0.022 | 0.036 | 0.072 | 0.142 | 0.262 | 0.338 | 0.509 | 0.651 |
-| 19-point: wave solver | 0.030 | 0.022 | 0.022 | 0.037 | 0.072 | 0.142 | 0.263 | 0.339 | 0.509 | 0.651 |
+| 19-point: wave solver | 0.030 | 0.023 | 0.022 | 0.037 | 0.073 | 0.140 | 0.265 | 0.341 | 0.507 | 0.647 |
 
-(Each stencil has its own time step, so its own fit.) The wave solver matches the
-grid's theory (a plane wave on the grid, the wall half a cell past the last cell
-centres) within 0.005 with the 7-point stencil and within 0.001 with the 19-point one,
-from 30 to 720 Hz. That half cell takes a little of the absorption away as the
-wavelength shortens: within 0.015 (7-point) and 0.009 (19-point) of the fitted
-admittance's below 360 Hz, 0.027 and 0.023 less at 500 Hz with 14 cells per
-wavelength. The fit does not correct for it.
+(Each stencil has its own time step, so its own fit.) The wave solver matches the grid's
+theory (a plane wave on the grid, the wall half a cell past the last cell centres)
+within 0.005 with the 7-point stencil and within 0.007 with the 19-point one, from 30 to
+720 Hz. Most of the 19-point stencil's difference is the analysis's: its source reaches
+up to waves near the most the grid carries, which travel slowly enough for the windows
+that cut out the incident wave and end the runs to cut them. The rigid end, which the
+grid returns whole, measures up to 1.1 % from 1 below 500 Hz and 1.3 % at 707 Hz (0.24 %
+below 500 Hz with the source's low-pass at 0.2 of the sample rate instead of 0.3), and
+with the runs low-passed to 0.15 of the sample rate before the windows the difference
+falls to 0.003. The half cell between the last cell centres and the wall takes a little
+of the absorption away as the wavelength shortens: within 0.015 (7-point) and 0.013
+(19-point) of the fitted admittance's below 360 Hz, 0.027 and 0.025 less at 500 Hz with
+14 cells per wavelength. The fit does not correct for it.
 
 **Open models.** Round a model whose air reaches the edge of the grid, the grid grows
 by a perfectly matched layer (split-field, its damping growing as the square of the
@@ -3799,11 +3914,17 @@ the grid's set-up, where 2.0.0 ran one per band. Timed on its own, the same grid
 2.9 s with the walls' six branches and in 1.9 s with constant walls: the branches cost
 about 50 % more than a run with constant walls, and save three runs.
 
-**Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's
-energy in the 63 and 125 Hz bands at 1 to 8 m is within 0.2 dB of the free-field level
-the rays give with the 19-point stencil (−0.07 to +0.04 dB at 63 Hz, +0.05 to +0.20 dB
-at 125 Hz), and within 0.35 dB with the 7-point one (−0.05 to −0.13 dB at 63 Hz, −0.16
-to −0.33 dB at 125 Hz).
+**Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's energy
+in the 63 and 125 Hz bands at 1 to 8 m along x from the source is within 0.2 dB of the
+free-field level the rays give with the 19-point stencil (−0.05 to +0.04 dB at 63 Hz,
++0.05 to +0.20 dB at 125 Hz), and within 0.35 dB with the 7-point one (−0.05 to −0.13 dB
+at 63 Hz, −0.16 to −0.33 dB at 125 Hz). That is for one place of the source within its
+cell: the source covers the eight cells round it, weighted trilinearly (see
+[Simulation](simulation.md#low-frequencies-the-wave-solver)). Over 18 places within a
+cell, with listeners at the same distances along the grid's 26 axes and diagonals (in a
+34 m cube, so that no reflection comes sooner after the direct sound than here), the
+19-point stencil gives −0.09 to +0.11 dB at 63 Hz and −0.19 to +0.35 dB at 125 Hz, the
+7-point one −0.15 to +0.11 dB and −0.55 to +0.24 dB.
 
 **A whole room.** A 7 x 5 x 3 m box with 15 % absorption on every surface, simulated
 with the wave solver switched on at its default settings (the 63 and 125 Hz bands,
@@ -3881,12 +4002,11 @@ its peak (single precision).
 
 ## Known issues
 
-A review of the code on 25 October 2026 found these, but for the one about barriers,
-which the checks against the exact solution found. Each one was checked against the
-code; the numbers come from the tests or scripts named, and a number from a one-off
-check says so. They are open items on the [roadmap](roadmap.md).
-The edge fade's own are listed in
-[Known issues of the edge fade](#known-issues-of-the-edge-fade).
+Reviews of the code found these, but for the one about barriers, which the checks
+against the exact solution found. Each one was checked against the code; the numbers
+come from the tests or scripts named, and a number from a one-off check says so. They
+are open items on the [roadmap](roadmap.md). The edge fade's own are listed in [Known
+issues of the edge fade](#known-issues-of-the-edge-fade).
 
 Results:
 
@@ -3922,11 +4042,30 @@ Results:
   the nine outdoor examples, when this was found, put it at hundredths of a decibel at
   most, in a band's response and in the lateral figures of eight behind LF, LFC and
   LG. Impulse responses add the paths in pressure without it.
+- **Scattered sound near a listener in bent air.** Where the rays bend in wind or a
+  temperature gradient, scatter in plants before they reflect, or reach the listeners
+  as secondary sources, the scattered sound of a reflection near a listener comes from
+  the few rays that land there, not from the listener's own gather: a run with a far
+  source over grass has bursts of it that change with the seed.
 - **Paths over two edges take no reflections.** With `second_order` a path over two
   edges reflects nowhere before, between or after them, so behind a thick barrier on a
   hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from
   500 Hz up, and off by up to 9.9 dB below (see
   [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
+- **Near a shadow boundary, in the bands that add in energy.** There the term of the
+  edge's incident wave is part of the direct sound's wave, and the terms of the
+  reflections off the edge's faces, which arrive with it, are part of the edge's
+  diffracted wave, which adds to it in energy: their cross term is lost. On the shadow
+  boundary of a right-angled corner the level is 1.73, 1.32 and 0.98 dB low at 250, 500
+  and 1000 Hz and 0.72, 0.52 and 0.38 dB at 2, 4 and 8 kHz; behind a blunter edge more,
+  2.22, 1.79 and 1.38 dB at 250, 500 and 1000 Hz and 0.56 dB at 8 kHz behind a wedge
+  open over 225°; behind a thin screen less, 0.69, 0.50 and 0.36 dB at 250, 500 and 1000
+  Hz; 10.5° into the shadow, 1.05 dB at 250 Hz behind the corner, 1.12 dB behind the
+  wedge and 0.45 dB behind the screen (see [Edge
+  diffraction](#edge-diffraction-against-the-exact-solution)). These bands add in energy
+  indoors from 250 Hz up by default; in pressure, as the 63 and 125 Hz bands and
+  outdoors every band do by default, the level is within 0.08 dB. Keeping the cross
+  term, weighted by how coherent the terms are over the band, would remove it.
 
 Models:
 
@@ -4082,6 +4221,7 @@ python validation/wave_gpu.py   # needs the gpu extra and a GPU driver
 python validation/late_gpu.py   # the late stage on each device, and its parameters
 python validation/outdoor_gpu.py   # the outdoor examples on each device: levels and centre times
 python validation/rays_gpu.py   # the ray searches alone, and whether both find the same faces
+python validation/late_memory.py   # the late part's memory against its estimate (Linux)
 python validation/bras_validation.py --json bras.json --plots docs/validation
 python validation/bras_validation.py --materials initial --plots docs/validation
 python validation/bras_validation.py --bands third_octave --json bras_third.json

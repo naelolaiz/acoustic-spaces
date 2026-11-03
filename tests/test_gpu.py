@@ -503,6 +503,35 @@ def test_gpu_tracer_meets_the_direct_sound_as_the_cpu_does() -> None:
 
 
 @needs_gpu
+def test_gpu_tracer_shares_the_first_reflections_rain_as_the_cpu_does() -> None:
+    """Ground alone, its specular reflections left to the early stage: all that reaches
+    the listeners is the rain of the first reflection of the rays, the same rays on
+    both, so the share the gather leaves the rain is the same on both. (The GPU's rain
+    starts 1e-5 of the model's size off the ground, the CPU's 1e-7: millimetres here,
+    which take a few tenths of a percent off the height of a listener 1.2 m up, and so
+    off what reaches it.)"""
+    from test_first_gather import _plane
+
+    listeners = [(0.0, 0.0, 1.2), (15.0, 0.0, 1.2), (60.0, 5.0, 1.2)]
+    found = []
+    for ratio in (0.0, 4.0):
+        values = _plane((-50.0, 0.0, 30.0), listeners, 20_000, 2, ratio)
+        on_cpu = _native.trace_stochastic(**values)[0].sum(-1)
+        on_gpu = gpu_tracer.trace_stochastic(**values)[0].sum(-1)
+        np.testing.assert_allclose(on_gpu, on_cpu, rtol=0.01)
+        found.append((on_cpu, on_gpu))
+    # An atmosphere of no rows is still air, on the GPU as on the CPU.
+    empty = {"atmosphere": np.zeros((0, 3)), "wind_direction": np.array([1.0, 0.0])}
+    np.testing.assert_allclose(
+        gpu_tracer.trace_stochastic(**(values | empty))[0].sum(-1), on_cpu, rtol=0.01
+    )
+    # The rays keep less where they land seldom, near the listeners: on both alike.
+    (cpu_all, gpu_all), (cpu_kept, gpu_kept) = found
+    assert np.all(cpu_kept < 0.9 * cpu_all)
+    np.testing.assert_allclose(gpu_kept / gpu_all, cpu_kept / cpu_all, rtol=0.005)
+
+
+@needs_gpu
 def test_gpu_tracer_counts_the_rays_that_escape_as_the_cpu_does() -> None:
     """A 20 m box without a ceiling: as many rays get out on both, within the noise."""
     values = reference_arguments(_native, _reference(), "random_detector")
@@ -571,6 +600,50 @@ def test_gpu_tracer_agrees_with_main_within_the_noise(name: str) -> None:
     z = (found - expected) / np.maximum(noise, 1e-300)
     assert np.abs(z).max() < Z_MAX, np.round(z, 2)
     assert abs(z.mean()) < Z_MEAN, np.round(z, 2)
+
+
+@needs_gpu
+def test_the_gpu_tracer_keeps_its_rays_in_flight_through_a_late_part() -> None:
+    """Calls that ask to keep it make the buffer of rays in flight once and keep it
+    from call to call (the late part makes one for each batch of rays and band), as no
+    call reads a ray it has not written: what a run left in it changes nothing. The
+    late part lets it go as it ends, and the trial before a run too, as the run may go
+    to the CPU; a call that does not ask lets go of its own."""
+    data = _reference()
+    values = reference_arguments(_native, data, "vector")
+    split = reference_arguments(_native, data, "vector_split") | {"bvh": values["bvh"]}
+    tracer = gpu_tracer.tracer(values["bvh"])
+    first = gpu_tracer.trace_stochastic(**values)
+    assert tracer._state is None and tracer not in gpu_tracer._keeping
+    for a, b in zip(first, gpu_tracer.trace_stochastic(**values, keep=True), strict=True):
+        np.testing.assert_array_equal(a, b)
+    kept = tracer._state
+    assert kept is not None and tracer in gpu_tracer._keeping
+    gpu_tracer.trace_stochastic(**split, keep=True)  # its rays and copies left in it
+    again = gpu_tracer.trace_stochastic(**values, keep=True)
+    assert tracer._state is kept
+    for a, b in zip(first, again, strict=True):
+        np.testing.assert_array_equal(a, b)
+    gpu_tracer.release()
+    assert tracer._state is None and not gpu_tracer._keeping
+    ray_device.trial(values)
+    assert tracer._state is None
+
+    room = Room.from_yaml(SHOEBOX)
+    model = TraceModel.from_room(room, room.scene.simulation)
+    found = late.stochastic_energy(
+        model,
+        np.array(room.scene.sources[0].position, float),
+        np.array([listener.position for listener in room.scene.listeners], float),
+        rays=2000,
+        max_time=0.3,
+        time_step=1e-3,
+        speed_of_sound=C,
+        air=room.air_attenuation(model.bands),
+        radius=0.5,
+        device="gpu",
+    )
+    assert found.plan.device == "gpu" and not gpu_tracer._keeping
 
 
 @needs_gpu

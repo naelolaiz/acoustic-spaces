@@ -366,7 +366,8 @@ def check_levels(speed: float = 30.0) -> list[dict]:
     """The energy of white noise through the car's walk over grass, per octave band,
     against the places' own impulse responses and the pass-by's sound exposure level:
     the whole sound, and its early part alone (the late part is crossfaded from place
-    to place by weights that add up to one)."""
+    to place by weights that add up to one, as the car sends its sound, without a
+    Doppler shift)."""
     walked = (X1 - X0) / speed
     room = Room.from_scene(scene("source", speed, "grass"))
     walk = simulate_walk(room, step_m=STEP_M, late_step_m=None)

@@ -142,9 +142,10 @@ def flight_of(helicopter: dict, height_m: float | None) -> dict:
 
 def flight(args) -> None:
     """``--flight`` (scene_flight.yaml) from ``--stadium`` (scene.yaml): the stadium with
-    its helicopter at ``--height``, the ground and the sky widened to take its walk, and
-    the responses as much longer as the helicopter is farther than the stage, so that
-    each keeps the decay after its sound arrives."""
+    its helicopter at ``--height``, the ground and the sky widened to take its walk. The
+    responses keep the scene's ``ir_length_s``: outdoors the simulation counts it from
+    the latest direct sound (:func:`acoustic_spaces.engine.simulate.response_length`), so
+    each keeps the stadium's decay after the helicopter's sound arrives."""
     from acoustic_spaces.air import speed_of_sound
     from acoustic_spaces.scene import Scene
 
@@ -166,16 +167,14 @@ def flight(args) -> None:
     )
     farthest = float(np.linalg.norm(places[:, None, :] - listeners[None, :, :], axis=2).max())
     scene = Scene.from_yaml(args.stadium)  # what the file leaves out at its defaults
-    c = speed_of_sound(scene.air.temperature_c)
-    length = scene.simulation.ir_length_s + farthest / c
-    simulation = data.setdefault("simulation", {})
-    simulation["ir_length_s"] = math.ceil(length * 10.0) / 10.0
+    tail = scene.simulation.ir_length_s
+    length = farthest / speed_of_sound(scene.air.temperature_c) + tail
     data["sources"] = [helicopter if s.get("name") == HELICOPTER else s for s in data["sources"]]
     pipeline.write_scene(args.source, data, FLIGHT_HEADER, args.stadium.parent)
     span = float(np.linalg.norm(np.diff(places, axis=0), axis=1).sum())
     print(
         f"wrote {args.source}: the helicopter {places[:, 2].min():g} m up, {span:g} m over the "
-        f"stadium; responses {simulation['ir_length_s']:g} s long"
+        f"stadium; responses {length:.1f} s long ({tail:g} s past the latest direct sound)"
     )
 
 
@@ -300,12 +299,13 @@ def mix(args) -> None:
     gain = 10.0 ** (-1.0 / 20.0) / peak
     out = args.work / CROSSING
     seats = {}
+    weights = pipeline.weights_of(pipeline.output_label(band), band.scene)
     for key, seat in played.items():
         x = crossed(key, seat) * gain
         write(out / "seats" / f"{key}.{fmt}.wav", x, rate)
         seats[key] = seat | {
-            "rms_db": level_db(x, rate),
-            "loudness_db": loudness_db(x, rate),
+            "rms_db": level_db(x, rate, weights),
+            "loudness_db": loudness_db(x, rate, weights),
             "length_s": len(x) / rate,
         }
     top = max(seat["rms_db"] for seat in seats.values())

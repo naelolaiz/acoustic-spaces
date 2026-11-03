@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 
@@ -277,12 +278,64 @@ class TraceModel:
         if self.transmission is not None:
             self.transmission = np.ascontiguousarray(self.transmission, dtype=np.float64)
 
-    @property
+    @cached_property
     def transparent(self) -> np.ndarray:
-        """(F,) faces that let all sound through in every band: openings."""
+        """(F,) faces that let all sound through in every band: openings (worked out once,
+        as the early stage asks for every reflection point it places)."""
         if self.transmission is None:
             return np.zeros(len(self.face_plane), dtype=bool)
         return np.all(self.transmission >= 1.0, axis=1)
+
+    @cached_property
+    def height_error(self) -> float:
+        """The rounding (m) allowed for in a height over a plane worked out from the
+        model's coordinates: 16 units in the last place of the largest of them."""
+        largest = float(np.abs(self.room.mesh.triangles).max(initial=0.0))
+        return 16.0 * float(np.spacing(largest))
+
+    @cached_property
+    def face_spread(self) -> np.ndarray:
+        """(F,) the largest distance (m) of a vertex of each face from its plane
+        (``face_plane``); 0 where all lie within :attr:`height_error` of it. Faces whose
+        normals and offsets round to the same multiples of :data:`PLANE_TOLERANCE` make
+        one plane, the plane of the first of them, without lying in it exactly (worked out
+        once)."""
+        normal = self.plane_normal[self.face_plane]
+        heights = np.einsum("fvk,fk->fv", self.room.mesh.triangles, normal)
+        heights = np.abs(heights - self.plane_offset[self.face_plane, None]).max(axis=1)
+        return np.where(heights > self.height_error, heights, 0.0)
+
+    @cached_property
+    def plane_spread(self) -> np.ndarray:
+        """(P,) the largest :attr:`face_spread` of each plane's faces (worked out once)."""
+        spread = np.zeros(self.plane_count)
+        np.maximum.at(spread, self.face_plane, self.face_spread)
+        return spread
+
+    @cached_property
+    def face_planes(self) -> tuple[np.ndarray, np.ndarray]:
+        """(F, 3) unit normals and (F,) offsets of the plane each face itself lies in, the
+        normal facing the way of its plane's; its plane's own where its
+        :attr:`face_spread` is 0 (worked out once)."""
+        normal = self.plane_normal[self.face_plane]
+        offset = self.plane_offset[self.face_plane]
+        off = np.flatnonzero(self.face_spread > 0.0)
+        tri = self.room.mesh.triangles[off]
+        own = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+        size = np.linalg.norm(own, axis=1)
+        keep = size > 0.0
+        off, tri, own = off[keep], tri[keep], own[keep] / size[keep, None]
+        own *= np.sign(np.einsum("ij,ij->i", own, normal[off]))[:, None]
+        normal, offset = normal.copy(), offset.copy()
+        normal[off], offset[off] = own, np.einsum("ij,ij->i", own, tri[:, 0])
+        return normal, offset
+
+    @cached_property
+    def face_grids(self) -> dict:
+        """The faces of planes whose faces do not all lie in them, binned in squares by
+        ``_face_grid`` of :mod:`acoustic_spaces.engine.early`, by plane and distance
+        allowed (each worked out when first asked for)."""
+        return {}
 
     @property
     def partition(self) -> np.ndarray:

@@ -28,6 +28,14 @@ or in a corner. Sound that bends round edges is added to them (see
     clear, the sphere of a listener closer than 5.6 cm to a surface (an opening or
     an outdoor scene's sky too) is under a tenth of that size and catches a hundredth
     of the rays or fewer, which the scene's warnings say.
+    With rays that go straight (no wind or temperature gradient), the scattered sound
+    of each reflection straight from the source is also found from the listener's
+    side: 16384 directions from each listener, turned at random by the seed, find the
+    surfaces it sees, and the rays and those directions share that sound by how
+    densely each finds it (the balance heuristic of multiple importance sampling): the
+    rays near the source, the listener's directions near the listener. The expected
+    energy is the same, but a ray that lands next to a listener (above grass, an
+    aircraft overhead) brings it no burst of scattered sound.
   - `secondary_sources`: all reflected energy radiates that way, as in ODEON's late
     method. Much smoother tails, but it treats specular energy as diffuse: in the
     example box (smooth walls, absorbing ceiling) EDT comes out about 20 % shorter.
@@ -53,11 +61,14 @@ or in a corner. Sound that bends round edges is added to them (see
   from 125 Hz to 4 kHz and suggests more rays when it is over half a JND;
   `parameters.json` holds them all (`standard_errors`), and the editor shows each in
   the results table's tips, amber over half a JND. The early paths and the wave solver's
-  bands do not depend on the seed and add none; the parameters from the directions the
-  late energy arrives from (LF, LFC, LJ, the decay times along the listener's axes) get
-  none. Over 60 seeds in a diffuse box (2,000 rays), the root mean square of the
-  standard errors of EDT, T30, C80 and G came within 0.91 to 1.18 of the spread between
-  the runs from 125 Hz to 4 kHz, and within 0.7 to 1.4 over 20 seeds in the shoebox
+  bands do not depend on the seed and add none. Each batch takes its share of the
+  listeners' gather of the first reflections' scattered sound (every tenth of its
+  directions with 10 batches), so the standard errors hold its error too (over a
+  ground plane, in 10 ms slots, 1.1 to 1.4 times its spread between seeds at the
+  median). The parameters from the directions the late energy arrives from (LF, LFC,
+  LJ, the decay times along the listener's axes) get none. Over 60 seeds in a diffuse box (2,000 rays), the root mean square of the
+  standard errors of EDT, T30, C80 and G came within 0.90 to 1.17 of the spread between
+  the runs from 125 Hz to 4 kHz, and within 0.8 to 1.7 over 20 seeds in the shoebox
   example at its 50,000 rays. With few
   rays in a room whose late tail rides on a few rays, one strong arrival (a ray through
   the listener's sphere long after the rest) comes in some runs and not in others: the
@@ -126,15 +137,24 @@ The directions the sound arrives from give more of them:
   source, and the level of the late lateral sound, which envelops the listener.
 - IACC early and late (annex B), from the binaural response when the scene writes one
   (through the spherical head or a SOFA file; the first, if it writes several).
-- Stage support ST early (Gade's ST1) and ST late (annex C) for listeners within 1.5 m
-  of a source, where musicians hear themselves and each other.
+- Stage support ST early (Gade's ST1) and ST late (annex C), how well musicians hear
+  themselves and each other, for listeners 0.9 to 1.1 m from a source; elsewhere they
+  are empty. The standard measures them 1 m from the source, and the direct sound in
+  their first 10 ms changes them by up to 20 lg r dB at r metres: 0.9 dB at most within
+  that span, 6 dB at 0.5 m.
 - T30 of figures of eight facing forward, left and up from the listener: where sound
   keeps running between two hard walls, the decay along that axis is longer.
 - STI and STIPA (IEC 60268-16) and U50, at the level the source's `level_db` gives and
-  the background noise of `coverage.noise_db`, as the coverage maps take them (NaN,
-  like G, when a band from 125 Hz up is undefined); and the echo criteria of Dietsch
-  and Kraak for speech and music, from the response filtered to the 1 kHz octave for
-  speech and to the two octaves about 1.4 kHz (0.7 to 2.8 kHz) for music.
+  the background noise of `coverage.noise_db`, as the coverage maps take them (NaN, like
+  G, when a band from 125 Hz up is undefined); and the echo criteria of Dietsch and
+  Kraak for speech and music, from the response filtered to the 1 kHz octave for speech
+  and to the two octaves about 1.4 kHz (0.7 to 2.8 kHz) for music. ISO 3382-3's
+  quantities for open-plan offices are not computed (the spatial decay rate D2,S, the
+  speech level at 4 m Lp,A,S,4m, the distraction distance rD and the privacy and comfort
+  distances): listeners on a line from an omnidirectional source given the standard's
+  normal speech spectrum as its `level_db` per band (57.4 dB(A) at 1 m in free field)
+  give the A-weighted level and the STI, with `coverage.noise_db` as the background
+  noise, to read them from.
 
 The echogram adds the arrivals in energy, as ODEON and CATT do, except the early
 reflections in the lowest bands, which add in pressure (see
@@ -283,11 +303,15 @@ specular path it borders. Across a boundary the level is continuous: the tests c
 in an L-shaped room in millimetre steps, with first-order reflections, and the level
 changes by less than 0.25 dB where specular paths alone drop by more than 5 dB; where a
 reflection off one of the corner's walls ends and the direct sound carries on, by less
-than 0.05 dB. The
-diffraction coefficient matches the exact solutions for a half-plane and for wedges
-(within 0.25 dB), and a thin screen comes within 1.5 dB of Maekawa's chart in the
-tests' geometry (the chart, an empirical one, is itself up to 2.1 dB from the exact
-solution behind a barrier 40 to 90 m away).
+than 0.05 dB. The diffraction coefficient, its terms added in pressure, matches the
+exact solutions for a half-plane and for wedges (within 0.25 dB); where the paths add in
+energy (indoors from 250 Hz up), the level near a shadow boundary is below the exact
+solution: on the boundary of a right-angled corner by 1.7 dB at 250 Hz and 1 dB at 1
+kHz, and more behind blunter edges (2.2 dB at 250 Hz for one open over 225°; see the
+[validation report](validation.md#edge-diffraction-against-the-exact-solution)). A thin
+screen comes within 1.5 dB of Maekawa's chart in the tests' geometry (the chart, an
+empirical one, is itself up to 2.1 dB from the exact solution behind a barrier 40 to 90
+m away).
 
 Behind a thick wall or barrier, whose two corners share its top, no edge sees both the
 source and the listener: `first_order` finds nothing there, or only a way round one
@@ -303,7 +327,7 @@ energy). Against the exact solution (BTM, in the
 [validation report](validation.md#edge-diffraction-against-the-exact-solution)),
 the level over barriers 0.3 to 3 m thick is within 0.3 dB from 500 Hz up, and over two
 screens in a row within 0.45 dB; at 63 and 125 Hz, in pressure, within 0.6 dB over
-the barriers and 0.12 dB over the screens (1.7 and 1.9 dB with the waves in energy).
+the barriers and 0.13 dB over the screens (1.7 and 1.9 dB with the waves in energy).
 
 ```sh
 acoustic-spaces simulate examples/gallery/scene.yaml --out gallery
@@ -338,9 +362,9 @@ left out (`engine.edge_fade` in the
 [API reference](api.md#edge-diffraction)). Against the exact solution, past the end of
 a screen, the corner of a building, a strip 2 m wide and a gap 4 m wide on a hard
 ground, each path with its copy off the ground, the level is within 0.08 dB in every
-band (0.19 dB at 8 kHz on the strip, with or without the fade), where it was up to 7
-dB off without it, and steps between listeners 1 cm apart by no more than the exact
-level does (see the
+band (0.19 dB at 8 kHz on the strip, an error of the exact level's average over too
+few frequencies), where it was up to 7 dB off without it, and steps between listeners
+1 cm apart by no more than the exact level does (see the
 [validation report](validation.md#reflections-that-fade-at-edges-against-the-exact-solution)).
 Walking round the gallery's corner 1 cm at a time, with reflections up to third
 order, the level now steps by at most 0.13 dB in any band, where it stepped by up to
@@ -366,11 +390,11 @@ part is unchanged, since its scattered rays already find their way round corners
 
 `view --paths` and the Blender export draw diffracted paths in their own colour, the
 response's `early.diffracted` marks them, and `simulate` reports how many there are. The
-cost grows with the number of edges and of the paths near them, as each term of the
-fade is a path over its edge: in a hall with 16 edges, the early stage takes 650 ms per
-source and listener on four cores with `first_order` (70 ms without the fade's terms),
-710 ms with `second_order`, which looks at pairs of edges (135 ms), and 55 ms without
-diffraction.
+cost grows with the number of edges and of the paths near them, as each term of the fade
+is a path over its edge: in a hall with 16 edges, the early stage takes 540 ms per
+source and listener on four cores with `first_order`, 630 ms with `second_order`, which
+looks at pairs of edges, and 38 ms without diffraction (see the [validation
+report](validation.md#edge-diffraction-against-the-exact-solution)).
 
 Paths that reflect before or after an edge pair every edge with every plane the source
 or the listener faces, which in a whole city grows with the square of the buildings.
@@ -439,7 +463,9 @@ simulation:
   scatter about the echogram's (see [Turbulence](outdoor.md#turbulence)).
 - The late part still adds in energy: its rays stand for many paths with random phases.
   So do the points of a line or surface source, which are uncorrelated.
-- With the wave solver up to the same band or higher, its bands take their place.
+- At a listener, the wave solver's bands take their place when it runs up to the same
+  band or higher. Coverage maps do not run it, and keep the paths in pressure whatever
+  `simulation.wave` says (see [Coverage maps](coverage-maps.md)).
 
 ```sh
 python examples/listening_room/bass.py
@@ -516,8 +542,16 @@ simulation:
   With `wind: moving` (`simulate --wave-wind moving`) the air moves instead, so that
   sound a building sends back towards the source goes against the wind; it costs three
   to four times as much and runs on the CPU.
-- The listener records the pressure and its gradient, so the low end keeps its
-  direction in Ambisonics, binaural and loudspeaker outputs (to first order).
+- The listener records the pressure and its gradient, so the low end keeps its direction
+  in Ambisonics, binaural and loudspeaker outputs (to first order). Near the source what
+  a listener records depends on where the source lies within its cell, as the source and
+  each point the listener samples spread over the eight cells round them, weighted
+  trilinearly (a cell is 0.2 m on the grid up to the 125 Hz band). Over 18 source
+  positions across a cell and the grid's 26 axis and diagonal directions, with either
+  stencil, in the 63 and 125 Hz bands (the direct sound's band energy over its first
+  50 ms), the pressure was up to 4.1, 1.8, 0.78 and 0.55 dB off a point source's from
+  one, two, three and four cells away on, and the gradient's ratio to it up to 8.3 (7.5
+  exactly one cell away), 7.0, 1.7 and 0.63 dB, and 0.18 dB from eight cells on.
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177
   Hz for 125), through the same crossovers the impulse response synthesis uses. The
   parameters of those bands come from it too.
@@ -621,16 +655,18 @@ worst of the CPU, the GPU and the two together. So the memory grows with
 and their points, and the map points (`coverage.spacing`). On the CPU the rays cost
 time, not memory. The 10 batches of the default add about an eighth to the late part's
 memory with 64 arrival directions: in the estimate, the late part of `stadium_concert`
-at 8 s went from 901 to 1,019 MiB and `orchestra`'s at 6 s from 669 to 759 MiB; measured
-on 4 threads, the whole runs went from 887 to 1,020 MiB and from 729 to 820 MiB.
-`orchestra`'s grew as estimated, `stadium_concert`'s by 15 MiB more, as the batches' many
+at 8 s went from 896 to 1,014 MiB and `orchestra`'s at 6 s from 668 to 758 MiB; measured
+on 4 threads, the whole runs went from 890 to 1,020 MiB and from 724 to 815 MiB.
+`orchestra`'s grew as estimated, `stadium_concert`'s by 11 MiB more, as the batches' many
 smaller arrays leave the memory allocator more to hold (with glibc's mmap threshold fixed
 at 128 KiB, that run grew by 124 MiB against the estimate's 118).
 
 A run that would need more memory than the computer has (or than its container may
 use: on Linux, the lowest limit on the process's control groups and on those above
-them) is refused before it starts, with a message that says what to lower, and the
-editor's messages (`Room.warnings()`) note one that would need more than half of it. A
+them) is refused before it starts, with a message that gives what a simulation would
+need with each setting lowered on its own (more `late.batches` need more, not less),
+and the editor's messages (`Room.warnings()`) note one that would need more than half
+of it. A
 map is checked again once its first source point is traced, with the early paths found
 there at every point, which grow with the points too (`workshop`'s map: 311 MiB of early
 paths beside 495 MiB of late energy). The editor's note counts a map's late part only.
@@ -643,17 +679,17 @@ a room of many facets with edge diffraction, where the edge fade keeps the piece
 the waves round the edges in single precision: about 17 million at the third listener of
 BRAS CR3 in third-octave bands. Its run peaks at 10.0 GiB (11.8 GiB in third-octave
 bands), nearly all of it at one listener: the edge fade hands it back before the next,
-and in third-octave bands each listener's starts from less than 0.9 GiB. On the CPU
-the estimate came within 1 MiB of the late part's measured peak in `shoebox` at 1, 4
-and 64 threads (4 cores), with
-responses of 30 to 480 s and both kinds of scattering. Whole runs, counted from the
-memory the process held before them, came near it or a little above: `stadium_concert`
-at 8 s (19 sources, 12 listeners) at 1,020 MiB against 1,019, `orchestra` at 6 s at
-820 MiB against 759 (887 against 901 and 729 against 669 in one batch). Traced on a
-software GPU (SwiftShader's Vulkan), the late
-part peaked 60 to 100 MiB above the GPU's estimate, the driver's own. With both, the
-estimate takes the CPU's part and the GPU's at their peaks at once, which those runs
-never reached: up to 1.5 times what they used.
+and in third-octave bands each listener's starts from less than 0.9 GiB.
+`python validation/late_memory.py` measures the estimate against what runs take (on
+Linux): on the CPU it came within 2 MiB of the late part's peak in `shoebox` at 1, 4 and
+64 threads (4 cores), with responses of 30 to 480 s and both kinds of scattering. Whole
+runs, counted from the memory the process held before them, came near it or a little
+above: `stadium_concert` at 8 s (19 sources, 12 listeners) at 1,020 MiB against 1,014,
+`orchestra` at 6 s at 815 MiB against 758 (890 against 896 and 724 against 668 in one
+batch). Traced on a software GPU (SwiftShader's Vulkan) at 120 s, the late part peaked
+59 to 66 MiB above the GPU's estimate, the driver's own; with both, at 30 and 120 s, 58
+to 117 MiB above the estimate, which takes the CPU's part and the GPU's at their peaks
+at once.
 
 ### The late stage on a GPU
 
@@ -675,7 +711,8 @@ simulation:
   kinds of scattering, the scattering of a surface's size, air absorption, the early
   stage's paths left out, arrival directions, the weight window, and outdoors the rays
   bent by [wind and temperature](outdoor.md#wind-and-temperature), those through
-  [vegetation](outdoor.md#vegetation) and the open sky). Rays start where
+  [vegetation](outdoor.md#vegetation) and the open sky); the listeners' side of the
+  first reflections' scattered sound is found on the CPU. Rays start where
   the CPU's do, then draw random numbers of their own, in single precision, so the two
   agree statistically, not ray for ray. The tests trace main's stored runs on the GPU
   and check that they land within the spread of the CPU's own results over seeds. The
@@ -796,7 +833,8 @@ is checked against the exact solutions for a half-plane and for wedges, against
 Maekawa's chart, and over two edges against the exact BTM solution. The
 wave solver matches the frequencies of a box's modes within 0.25 % and their decay rates
 within 2 % with walls whose admittance changes with frequency, the reflection and
-absorption of walls, and the free-field level within 0.35 dB, and round an open model
+absorption of walls, and the free-field level within 0.35 dB (0.55 dB over the source's
+positions within a cell), and round an open model
 what comes back from the grid's edge is 67 dB down or more. Sound
 through a partition reaches the level behind it that diffuse-field theory gives within
 0.3 dB, and coupled rooms decay in the two slopes of the two-room model.

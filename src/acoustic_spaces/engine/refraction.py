@@ -18,7 +18,7 @@ each crossing of the listener's range is refined by bisection. There may be seve
 
 Their level comes from the spreading of neighbouring rays (the ray tube), which is 1/R**2
 in still air and infinite on caustics, where it is capped; each caustic a ray touches
-delays its phase by a quarter period.
+advances its phase by a quarter period (a factor j, time going as exp(j omega t)).
 """
 
 from __future__ import annotations

@@ -27,6 +27,7 @@ from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.refracted import bending
 from acoustic_spaces.engine.vegetation import plant_arguments
+from acoustic_spaces.spatial.rotation import quaternion_matrix
 
 _DECAY = 6.0 * math.log(10.0)  # 60 dB in nepers of energy
 
@@ -40,7 +41,9 @@ BATCH_STEP = 0.01
 #:
 #: - ``diffuse_rain`` (default): the scattered part of each reflection radiates to every
 #:   listener it can see (Lambert); specular rays count when they cross a detector
-#:   sphere. Exact on average; noisier late in rooms with smooth, reflective walls.
+#:   sphere. Exact on average; noisier late in rooms with smooth, reflective walls. In
+#:   still air the first reflections' scattered sound is also gathered from each
+#:   listener (see ``FIRST_GATHER``).
 #: - ``secondary_sources``: all reflected energy radiates that way, as in ODEON's late
 #:   method. Much smoother, but it spreads specular energy as if the field were
 #:   diffuse: in a box with smooth walls EDT came out 20 % shorter than the other modes.
@@ -96,6 +99,12 @@ MIN_FIRST_RAYS = 1000
 #: the moments of those counts (s).
 MAX_GROUPS = 16
 MOMENT_STEP = 0.01
+#: Directions from each listener in which :func:`stochastic_energy` gathers the scattered
+#: sound of the reflections straight from the source, with diffuse rain in still air: a
+#: Fibonacci lattice turned at random (by the seed). The rays' rain keeps that sound
+#: where they land more densely than these directions do, near the source, and the
+#: gather takes it near the listener, where one ray landing would bring a burst.
+FIRST_GATHER = 16384
 
 #: Smallest and largest automatic detector radius (m). Below about 0.5 m the specular
 #: part of the tail in rooms with reflective, smooth walls gets noisy at usual ray counts.
@@ -421,6 +430,14 @@ def _by_band(groups: list[slice], rays: int, run) -> tuple[list[np.ndarray], int
     return joined, escaped, traced
 
 
+def gather_turn(seed: int) -> np.ndarray:
+    """The rotation (3, 3), uniformly at random for ``seed``, that turns the lattice of
+    directions of :func:`stochastic_energy`'s gather: with it every direction is equally
+    likely anywhere, so the gather is unbiased in every time slot, not only in sum."""
+    rng = np.random.default_rng((int(seed) & 0xFFFFFFFFFFFFFFFF, 0x67617468))
+    return np.ascontiguousarray(quaternion_matrix(*rng.normal(size=4)))
+
+
 def _directivity_arrays(directivity: Directivity | None, orientation, bands: int):
     if directivity is None:
         directivity_a, table = np.zeros(0), np.zeros((0, 0, bands))
@@ -493,6 +510,7 @@ def stochastic_energy(
     moment_step: float = MOMENT_STEP,
     device: str | ray_device.Plan = "cpu",
     batches: int = 1,
+    gather: int | None = None,
 ) -> LateEnergy:
     """Energy per listener, band and time slot by stochastic ray tracing.
 
@@ -522,6 +540,14 @@ def stochastic_energy(
     the result's ``batches`` holds the energy as each gives it, in slots of about
     ``BATCH_STEP``, for the standard errors of what comes from it
     (:meth:`~acoustic_spaces.engine.response.Response.standard_errors`).
+
+    With diffuse rain alone (``reception`` diffuse_rain) and rays that go straight, the
+    scattered sound of each reflection straight from the source is shared between the
+    rays' rain and a gather from each listener in ``gather`` directions (None:
+    ``FIRST_GATHER``; 0: the rain keeps it all), as the two would find it most densely
+    (the balance heuristic): the same expected energy, without the burst a ray landing
+    next to a listener brings. The gather runs on the CPU for all bands at once, adding
+    into the traced arrays, its directions dealt out to the batches in turn.
     """
     if reception not in RECEPTION:
         raise ValueError(f"unknown reception {reception!r}; use one of {', '.join(RECEPTION)}")
@@ -547,6 +573,14 @@ def stochastic_energy(
         n_groups = int(face_group.max(initial=-1)) + 1
         if n_groups > MAX_GROUPS:
             raise ValueError(f"at most {MAX_GROUPS} groups of faces, not {n_groups}")
+    if gather is None:
+        gather = FIRST_GATHER
+    gathering = (
+        gather > 0 and diffuse_rain and not specular_rain and not bent and len(listeners) > 0
+    )
+    # Every batch, band group and device traces with the same share, so that the rain's
+    # and the gather's add up to one wherever the rays land.
+    ratio = gather / rays if gathering else 0.0
 
     # Where the rays go, chosen at the first batch.
     plans: list[ray_device.Plan] = []
@@ -595,10 +629,11 @@ def stochastic_energy(
                 "moment_time_step": float(moment_step),
                 **bent,
                 **plant_arguments(model, band),
+                "gather_ratio": ratio,
             }
             if not plans:
                 plans.append(ray_device.choose(device, values))
-            found, plans[0] = ray_device.trace(plans[0], values)
+            found, plans[0] = ray_device.trace(plans[0], values, keep=True)
             energy, directional, moments, *rest = found
             return [energy, directional, moments], *rest
 
@@ -607,9 +642,80 @@ def stochastic_energy(
         )
         return [*arrays, estimates], escaped, traced
 
-    (energy, directional, moments, estimates), escaped, traced = _by_band(
-        band_groups(model), rays, run
-    )
+    try:
+        (energy, directional, moments, estimates), escaped, traced = _by_band(
+            band_groups(model), rays, run
+        )
+    finally:
+        ray_device.release()
+    if gathering:
+        from acoustic_spaces import _native
+
+        first_order, band_table, absorption, scattering, band_air, sizes = _band_arguments(
+            model, air, (directivity_a, table), slice(None)
+        )
+        surface_size, band_hz, _, size_from_order, transmission = sizes
+        arguments = {
+            "bvh": model.bvh,
+            "source": np.asarray(source, dtype=np.float64),
+            "directivity_a": first_order,
+            "orientation": orientation,
+            "directivity_table": band_table,
+            "absorption": absorption,
+            "scattering": scattering,
+            "air": band_air,
+            "surface_size": surface_size,
+            "band_hz": band_hz,
+            "size_from_order": size_from_order,
+            "transmission": transmission,
+            "face_room": face_room,
+            "source_room": source_room,
+            "receivers": listeners,
+            "directions": np.ascontiguousarray(directions.reshape(-1, 3)),
+            "max_time": float(max_time),
+            "time_step": float(time_step),
+            "dir_time_step": DIRECTION_STEP,
+            "speed_of_sound": float(speed_of_sound),
+            "receiver_radius": np.ascontiguousarray(radius),
+            "threads": int(threads),
+            "face_group": face_group,
+            "groups": n_groups,
+            "moment_time_step": float(moment_step),
+            "gather_ratio": ratio,
+            "samples": int(gather),
+            "turn": gather_turn(seed),
+            **plant_arguments(model, slice(None)),
+        }
+        # Added into the traced arrays, so that the gather takes no memory of its own.
+        energy, directional, moments = (
+            np.require(a, np.float64, ("C", "W")) for a in (energy, directional, moments)
+        )
+        # The lattice's directions are dealt out to the batches in turn, so that each
+        # batch's estimate carries the gather's error as well as its rays': what a call
+        # adds to the energy, times the batches, goes into its batch's estimate.
+        parts = estimates.shape[1]
+        slots = np.arange(0, energy.shape[-1], coarse)
+
+        def slot_sums(k: int, factor: float) -> None:
+            # A band at a time, so that the sums take next to no memory of their own.
+            for band in range(energy.shape[1]):
+                summed = np.add.reduceat(energy[:, band], slots, axis=-1)
+                summed *= factor
+                estimates[:, k, band] += summed
+
+        for k in range(max(parts, 1)):
+            if parts:
+                slot_sums(k, -parts)
+            _native.gather_first_scattering(
+                **arguments,
+                energy=energy,
+                directional=directional,
+                moments=moments,
+                first=k,
+                stride=max(parts, 1),
+            )
+            if parts:
+                slot_sums(k, parts)
     return LateEnergy(
         energy=energy,
         time_step=time_step,
@@ -669,9 +775,10 @@ def stochastic_map_energy(
 ) -> MapEnergy:
     """Energy over a coverage map (a :class:`~acoustic_spaces.engine.coverage.MapGrid`)
     by stochastic ray tracing: every leg of every ray counts its track length through
-    each point's slab of air. ``onset`` is the arrival of the direct sound at each point
-    (s); ``covered_order``, ``covered_time`` (per point), ``splitting`` and the rest are
-    as for :func:`stochastic_energy`."""
+    each point's slab of air, where the model holds several rooms only that of a ray in
+    the point's room. ``onset`` is the arrival of the direct sound at each point (s);
+    ``covered_order``, ``covered_time`` (per point), ``splitting`` and the rest are as
+    for :func:`stochastic_energy`."""
     from acoustic_spaces import _native
 
     n = len(grid.points)
@@ -684,6 +791,9 @@ def stochastic_map_energy(
         directivity, orientation, model.absorption.shape[1]
     )
     face_room, source_room, level, own = _rooms(model, source, air, grid.points)
+    if model.transmission is None and len(model.room_volumes) > 1:
+        # Nothing lets sound through: every ray stays in the source's room.
+        source_room = int(model.room.room_of(np.asarray(source, float)[None])[0])
     bent = bending(model)
 
     def run(band: slice, count: int):
@@ -710,6 +820,7 @@ def stochastic_map_energy(
                 np.ascontiguousarray(grid.low, dtype=np.float64),
                 np.ascontiguousarray(grid.high, dtype=np.float64),
                 np.ascontiguousarray(grid.volume, dtype=np.float64),
+                np.ascontiguousarray(grid.room, dtype=np.int64),
                 onset,
                 covered,
                 MAP_FINE_STEP,

@@ -122,31 +122,31 @@ class _Engine:
 # the reflection, not its copy off the ground.
 EXACT = {
     ("screen end", (-4.0, -1.0, 0.5), (4.0, 0.95, 1.5)): [
-        1.61, 0.99, 0.02, -3.03, -8.33, -1.38, -2.43, -2.04,
+        1.61, 0.99, 0.03, -3.02, -8.34, -1.37, -2.43, -2.05,
     ],
     ("screen end", (-4.0, -1.0, 0.5), (4.0, 1.05, 1.5)): [
-        1.47, 0.79, -0.27, -3.43, -9.1, -2.28, -3.85, -4.0,
+        1.47, 0.79, -0.27, -3.42, -9.11, -2.27, -3.85, -4.0,
     ],
     ("screen end", (-4.0, -1.0, 0.5), (4.0, 2.5, 1.5)): [
-        -0.26, -1.76, -3.9, -8.13, -17.77, -11.58, -16.87, -18.47,
+        -0.26, -1.75, -3.9, -8.12, -17.77, -11.58, -16.87, -18.47,
     ],
     ("gap", (-4.0, 0.0, 0.5), (4.0, 3.9, 1.5)): [
-        2.11, 1.03, 0.35, -2.27, -9.42, -0.53, -2.63, -0.92,
+        2.11, 1.03, 0.35, -2.27, -9.43, -0.53, -2.63, -0.91,
     ],
     ("gap", (-4.0, 0.0, 0.5), (4.0, 4.1, 1.5)): [
-        1.87, 0.7, -0.17, -2.95, -10.72, -2.16, -5.08, -4.29,
+        1.87, 0.7, -0.17, -2.94, -10.73, -2.16, -5.08, -4.28,
     ],
     ("corner", (-3.0, 2.0, 0.5), (-4.6, -3.0, 1.5)): [
-        5.69, 5.59, 4.16, -1.91, 4.04, 3.49, 2.8, 3.3,
+        5.68, 5.59, 4.16, -1.9, 4.03, 3.49, 2.81, 3.3,
     ],
     ("corner", (-3.0, 2.0, 0.5), (4.6, -3.0, 1.5)): [
-        3.89, 2.75, 1.34, -1.65, -9.79, -1.19, -4.11, -3.1,
+        3.89, 2.75, 1.34, -1.65, -9.79, -1.19, -4.11, -3.09,
     ],
     ("corner", (-3.0, 2.0, 0.5), (6.5, -3.0, 1.5)): [
-        3.33, 1.91, 0.11, -2.97, -11.73, -6.76, -10.15, -13.23,
+        3.34, 1.91, 0.12, -2.97, -11.72, -6.76, -10.14, -13.22,
     ],
     ("strip", (-4.0, -1.5, 0.5), (-3.0, 2.8031, 1.5)): [
-        4.49, 5.67, 3.73, -3.48, 4.35, 2.29, 3.5, 3.01,
+        4.48, 5.67, 3.74, -3.49, 4.35, 2.29, 3.5, 3.02,
     ],
 }  # fmt: skip
 
@@ -316,6 +316,26 @@ def test_no_step_round_the_gallery_corner(gallery: Room, x: float, y: float, ban
         room = Room.from_scene(scene.model_copy(update={"listeners": [moved]}), reuse=gallery)
         levels.append(10 * np.log10(total_energy(early_paths(room, max_order=3))[band]))
     assert abs(levels[1] - levels[0]) < 0.1
+
+
+def test_a_path_missed_at_the_foot_of_the_gallery_s_wall_4(gallery: Room) -> None:
+    """For the listener round the gallery's corner, as anywhere on the line x = 4 m 1.6 m
+    high, a path off the floor and wall_6 that the early stage does not find reflects
+    off the floor (as the image method places it) right at the foot of wall_4, where the
+    floor's face stops. That face goes on only inside, so the leg arriving there is the
+    one that crosses wall_4's plane, as for a listener 1 um farther from wall_6, where
+    the reflection lies on the face; the level lies within 0.01 dB of the levels 1 um
+    either side in every band. Taking the leg leaving it, as where the reflection lies
+    past the face, gave 1.1 dB less at 63 Hz."""
+    scene = gallery.scene
+    listener = next(item for item in scene.listeners if item.name == "round the corner")
+    levels = []
+    for x in (4.0 - 1e-6, 4.0, 4.0 + 1e-6):
+        moved = listener.model_copy(update={"position": (x, 15.0, 1.6)})
+        room = Room.from_scene(scene.model_copy(update={"listeners": [moved]}), reuse=gallery)
+        levels.append(10 * np.log10(total_energy(early_paths(room))))
+    assert np.abs(levels[1] - levels[0]).max() < 0.01
+    assert np.abs(levels[1] - levels[2]).max() < 0.01
 
 
 def test_the_waves_keep_the_edge_fade_s_pieces_as_they_come(gallery: Room, monkeypatch) -> None:

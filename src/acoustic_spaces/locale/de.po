@@ -2052,8 +2052,24 @@ msgstr ""
 "Den Schritt im Hintergrund ausführen; die Meldungen sagen, wie es läuft"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Close without running anything"
-msgstr "Schließen, ohne etwas auszuführen"
+msgid ""
+"Close without running anything; the options changed are kept for next time"
+msgstr ""
+"Schließen, ohne etwas auszuführen; die geänderten Optionen bleiben für das "
+"nächste Mal"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Defaults"
+msgstr "Standardwerte"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Put every option of this demo back where a first run starts it, the command "
+"line's defaults, and forget the ones kept from before"
+msgstr ""
+"Jede Option dieser Demo dorthin zurücksetzen, wo ein erster Durchlauf sie "
+"beginnt, auf die Standardwerte der Befehlszeile, und die zuvor behaltenen "
+"vergessen"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -2114,6 +2130,15 @@ msgstr ""
 #, python-brace-format
 msgid "Cannot run: {reason}"
 msgstr "Ausführen nicht möglich: {reason}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"Changed from the defaults and kept for next time: {options}. Defaults puts "
+"them back."
+msgstr ""
+"Von den Standardwerten geändert und für das nächste Mal behalten: {options}. "
+"Standardwerte setzt sie zurück."
 
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"
@@ -6871,21 +6896,21 @@ msgstr ""
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
-"Early stage support (dB), for a listener within 1.5 m of the source: the "
+"Early stage support (dB), for a listener 0.9 to 1.1 m from the source: the "
 "energy from 20 to 100 ms over that of the first 10 ms, how well musicians "
 "hear each other"
 msgstr ""
-"Frühes Bühnensupportmaß (dB) für einen Empfänger innerhalb von 1.5 m zur "
+"Frühes Bühnensupportmaß (dB) für einen Empfänger 0.9 bis 1.1 m von der "
 "Quelle: Verhältnis der Energie von 20 bis 100 ms zur Energie der ersten 10 "
 "ms; beschreibt, wie gut Musiker einander hören"
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""
-"Late stage support (dB), for a listener within 1.5 m of the source: the "
+"Late stage support (dB), for a listener 0.9 to 1.1 m from the source: the "
 "energy from 100 to 1000 ms over that of the first 10 ms, how much of the "
 "room musicians hear"
 msgstr ""
-"Spätes Bühnensupportmaß (dB) für einen Empfänger innerhalb von 1.5 m zur "
+"Spätes Bühnensupportmaß (dB) für einen Empfänger 0.9 bis 1.1 m von der "
 "Quelle: Verhältnis der Energie von 100 bis 1000 ms zur Energie der ersten 10 "
 "ms; beschreibt, wie viel Raumschall Musiker hören"
 

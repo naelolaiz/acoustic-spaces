@@ -9,6 +9,8 @@
 //   direction) for the late part of the response, and optionally over a coverage map.
 //   Outdoors its rays may bend in a refracting atmosphere (atmosphere.hpp), and plants
 //   absorb and scatter them (vegetation.hpp).
+// - gather_first_scattering: the scattered sound of the first reflections, gathered from
+//   each receiver, for the share of it trace_stochastic leaves out (gather_ratio).
 //
 // Units: a source of unit energy; results are time-integrated intensity, so the
 // direct sound at distance r contributes 1 / (4 pi r^2).
@@ -24,7 +26,9 @@
 #include <limits>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "acoustic_spaces/atmosphere.hpp"
@@ -308,6 +312,14 @@ struct StochasticSettings {
     // - neither: classic ray tracing, every leg caught by the detector spheres.
     bool diffuse_rain = true;
     bool specular_rain = false;
+    // With diffuse_rain alone, in still air: above 0, the rain of a reflection straight
+    // from the source is shared with gather_first_scattering, which looks for those
+    // reflections from each receiver in gather_ratio times as many directions as there
+    // are rays. Where the rays land densely (near the source) the rain keeps most of it,
+    // where the receiver's directions do (near the receiver) the gather (the balance
+    // heuristic: detail::rain_share), so a ray landing next to a receiver no longer
+    // brings it a burst. 0: the rain keeps it all; infinity: the gather takes it all.
+    double gather_ratio = 0.0;
     // Where a reflected ray goes. Vector-based (ODEON's): in the direction of the
     // specular direction and a Lambert direction added with weights 1 - s and s, s the
     // reflection's scattering coefficient averaged over the bands; the ray keeps all the
@@ -353,17 +365,20 @@ struct StochasticSettings {
 };
 
 // A coverage map: a regular grid of columns in x and y over the audience area. Each
-// column holds up to `layers` map points (a balcony above the stalls), each a slab of
-// air between low and high (z). Every leg of every ray adds its track length through a
-// slab over the slab's volume, a track-length estimate of the energy there, whatever
-// the reception mode; the receivers above are not needed.
+// column holds up to `layers` map points (a balcony above the stalls, the rooms on either
+// side of a wall that crosses it), each a slab of air between low and high (z). Every
+// leg of every ray adds its track length through a slab over the slab's volume, a
+// track-length estimate of the energy there, whatever the reception mode; the receivers
+// above are not needed. A point with a room counts the legs of rays in that room alone
+// (with StochasticScene::face_room, or one room the rays never leave: source_room).
 struct MapGrid {
     double x0 = 0.0, y0 = 0.0;  // corner of column (0, 0), m
     double cell = 1.0;          // column width, m
     std::size_t nx = 0, ny = 0, layers = 1;
     std::vector<std::int64_t> point;    // ny x nx x layers: map point index, -1 for none
     std::vector<double> low, high;      // per point: the slab's bottom and top, m
-    std::vector<double> volume;         // per point: the slab's volume inside the room, m^3
+    std::vector<double> volume;         // per point: the slab's volume in its room's air, m^3
+    std::vector<std::int64_t> room;     // per point: the room it lies in, -1 for any
     std::vector<double> onset;          // per point: arrival of the direct sound, s
     std::vector<double> covered_time;   // per point, as StochasticSettings::covered_time
     // Time bins count from each point's onset: fine_bins of fine_step, then coarse_step.
@@ -389,7 +404,7 @@ struct MapGrid {
         const std::size_t n = points();
         if (!(cell > 0.0) || !(fine_step > 0.0) || !(coarse_step > 0.0) || layers == 0 ||
             point.size() != nx * ny * layers || high.size() != n || volume.size() != n ||
-            onset.size() != n || covered_time.size() != n) {
+            room.size() != n || onset.size() != n || covered_time.size() != n) {
             return false;
         }
         for (std::size_t m = 0; m < n; ++m) {
@@ -496,17 +511,24 @@ inline void pass_partition(RayState &state) {
 // The share of sound per band that travels from `origin` along `dir` (unit) for
 // `length` metres: 1 in the open, the product of the transmission of the faces it
 // crosses; false (and no share) where a face lets nothing through, or, as for a ray,
-// where it would let the sound out into no room (StochasticScene::face_room).
+// where it would let the sound out into no room (StochasticScene::face_room). With
+// `crossed`, also how far along the last face it crosses lies (0: none).
 inline bool passing_share(const StochasticScene &scene, const Vec3 &origin, const Vec3 &dir,
-                          double length, std::int64_t ignore, double *share) {
+                          double length, std::int64_t ignore, double *share,
+                          double *crossed = nullptr) {
     const Bvh &bvh = *scene.bvh;
     const std::size_t bands = scene.bands;
     std::fill(share, share + bands, 1.0);
+    if (crossed != nullptr) *crossed = 0.0;
     if (scene.transmission == nullptr) return !bvh.occluded(origin, dir, length, ignore);
     Vec3 pos = origin;
+    double along = 0.0;
     for (std::size_t k = 0; k <= kMaxCrossings; ++k) {
         const Hit hit = bvh.intersect(pos, dir, length, ignore);
-        if (!hit.found()) return true;
+        if (!hit.found()) {
+            if (crossed != nullptr) *crossed = along;
+            return true;
+        }
         const auto face = static_cast<std::size_t>(hit.face);
         if (scene.face_room != nullptr) {
             const bool from_back = dot(bvh.normal(face), dir) > 0.0;
@@ -521,9 +543,22 @@ inline bool passing_share(const StochasticScene &scene, const Vec3 &origin, cons
         if (!any) return false;
         pos = pos + dir * hit.t;
         length -= hit.t;
+        along += hit.t;
         ignore = hit.face;
     }
     return false;
+}
+
+// The rain's share of the scattered sound of a reflection straight from the source,
+// with gather_ratio `ratio` (StochasticSettings::gather_ratio): the balance heuristic
+// between the rays, which land cos_in / r_in^2 densely there (r_in from the source),
+// and the receiver's gather, ratio cos_out / r_out^2 (r_out from the receiver). The
+// gather takes the rest.
+inline double rain_share(double cos_in, double r_in, double cos_out, double r_out, double ratio) {
+    if (std::isinf(ratio)) return 0.0;
+    const double rays = cos_in * r_out * r_out;
+    const double gathered = ratio * cos_out * r_in * r_in;
+    return rays + gathered > 0.0 ? rays / (rays + gathered) : 1.0;
 }
 
 // A straight piece of a ray through plants: where along it the ray scatters, and how
@@ -675,6 +710,11 @@ struct Accumulator {
     const StochasticScene &scene;
     const StochasticSettings &settings;
     StochasticResult &out;
+    // Where add() sums the receivers' energy, directional energy and moments: out's own
+    // arrays, or arrays of their shapes elsewhere (gather_first_scattering's caller's).
+    double *energy_sum = out.energy.data();
+    double *directional_sum = out.directional.data();
+    double *moment_sum = out.moments.data();
 
     std::size_t nearest_direction(const Vec3 &arrival) const {
         std::size_t best = 0;
@@ -703,8 +743,7 @@ struct Accumulator {
         if (out.moment_terms > 0) {
             const std::size_t mbin = std::min(
                 out.moment_bins - 1, static_cast<std::size_t>(time / settings.moment_time_step));
-            moments = out.moments.data() +
-                      receiver * out.moment_terms * bands * out.moment_bins + mbin;
+            moments = moment_sum + receiver * out.moment_terms * bands * out.moment_bins + mbin;
             const std::size_t groups = scene.groups;
             terms[0] = 1.0;
             std::size_t t = 1 + groups;
@@ -715,14 +754,14 @@ struct Accumulator {
                 }
             }
         }
-        double *row = out.energy.data() + receiver * bands * out.bins;
+        double *row = energy_sum + receiver * bands * out.bins;
         double *drow = nullptr;
         std::size_t dbin = 0;
         if (!scene.directions.empty()) {
             dbin = std::min(out.dir_bins - 1,
                             static_cast<std::size_t>(time / settings.dir_time_step));
             const std::size_t d = nearest_direction(arrival);
-            drow = out.directional.data() +
+            drow = directional_sum +
                    (receiver * scene.directions.size() + d) * bands * out.dir_bins;
         }
         const double absorbing = air_distance < 0.0 ? distance : air_distance;
@@ -742,13 +781,15 @@ struct Accumulator {
     double map_bottom = 0.0, map_top = 0.0;
 
     // Adds a leg that leaves `pos` along `dir` (unit) for `length` metres, `travelled`
-    // metres from the source at `pos`, to every map slab it passes through. A chord of a
-    // bent ray adds `rate` to travelled per metre, and the air absorbs from `path` on,
-    // `stretch` metres per metre of chord (path negative: as travelled).
+    // metres from the source at `pos`, to every map slab it passes through, of a point in
+    // the ray's `room` (RayState::room) or in any. A leg ends at a face: it lies in one room.
+    // A chord of a bent ray adds `rate` to travelled per metre, and the air absorbs from
+    // `path` on, `stretch` metres per metre of chord (path negative: as travelled).
     // Through plants, `track` (from pos along dir) weights the bands at each point.
     void add_map(const Vec3 &pos, const Vec3 &dir, double length, double travelled,
-                 const double *energy, const double *alone, int order, double rate = 1.0,
-                 double path = -1.0, double stretch = 1.0, const Track *track = nullptr) {
+                 const double *energy, const double *alone, int order, std::int64_t room,
+                 double rate = 1.0, double path = -1.0, double stretch = 1.0,
+                 const Track *track = nullptr) {
         const MapGrid &map = scene.map;
         constexpr double kFlat = 1e-12;
         const double inf = std::numeric_limits<double>::infinity();
@@ -798,6 +839,7 @@ struct Accumulator {
                 const std::int64_t m = map.point[column + layer];
                 if (m < 0) continue;
                 const auto k = static_cast<std::size_t>(m);
+                if (room >= 0 && map.room[k] >= 0 && map.room[k] != room) continue;
                 double a = t, b = t_out;
                 if (std::abs(dir.z) < kFlat) {
                     if (pos.z < map.low[k] || pos.z > map.high[k]) continue;
@@ -850,11 +892,15 @@ struct Accumulator {
 
 }  // namespace detail
 
-inline StochasticResult trace_stochastic(const StochasticScene &scene,
-                                         const StochasticSettings &settings) {
+namespace detail {
+
+// Throws std::invalid_argument, its message starting with `name`, for a scene or
+// settings the stochastic tracer cannot run.
+inline void check_stochastic(const StochasticScene &scene, const StochasticSettings &settings,
+                             const std::string &name) {
     if (scene.bvh == nullptr || scene.bands == 0 || scene.bands > kMaxBands ||
         (scene.surface_size != nullptr && scene.band_hz == nullptr)) {
-        throw std::invalid_argument("trace_stochastic: bad scene");
+        throw std::invalid_argument(name + ": bad scene");
     }
     if (settings.rays == 0 || settings.time_step <= 0.0 || settings.max_time <= 0.0 ||
         settings.speed_of_sound <= 0.0 ||
@@ -867,23 +913,78 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     [](double v) { return !(v >= 0.0); }) ||
         (!settings.covered_time.empty() &&
          settings.covered_time.size() != scene.receivers.size()) ||
-        (scene.groups > 0 && !(settings.moment_time_step > 0.0))) {
-        throw std::invalid_argument("trace_stochastic: bad settings");
+        (scene.groups > 0 && !(settings.moment_time_step > 0.0)) ||
+        !(settings.gather_ratio >= 0.0)) {
+        throw std::invalid_argument(name + ": bad settings");
+    }
+    if (settings.gather_ratio > 0.0 &&
+        (!settings.diffuse_rain || settings.specular_rain || scene.atmosphere != nullptr)) {
+        throw std::invalid_argument(name +
+                                    ": gather_ratio needs diffuse rain alone, in still air");
     }
     if (scene.groups > kMaxGroups || (scene.groups > 0 && scene.face_group == nullptr)) {
-        throw std::invalid_argument("trace_stochastic: bad face groups");
+        throw std::invalid_argument(name + ": bad face groups");
     }
+    if (scene.map.points() > 0 && !scene.map.valid()) {
+        throw std::invalid_argument(name + ": bad map");
+    }
+    if (scene.atmosphere != nullptr &&
+        (!scene.atmosphere->valid() || scene.atmosphere->buckets == 0)) {
+        throw std::invalid_argument(name + ": bad atmosphere");
+    }
+    if (scene.vegetation != nullptr && scene.vegetation->bands != scene.bands) {
+        throw std::invalid_argument(name + ": bad vegetation");
+    }
+}
+
+// The moments' terms: 1, each group's n_i and each n_i n_j (i <= j); none without groups.
+inline std::size_t moment_terms(const StochasticScene &scene) {
+    return scene.groups > 0 ? 1 + scene.groups + scene.groups * (scene.groups + 1) / 2 : 0;
+}
+
+// The sizes of the stochastic tracer's results for the scene and settings (bins,
+// dir_bins, windows, map_bins, moment_terms and moment_bins), with no arrays.
+inline StochasticResult result_shape(const StochasticScene &scene,
+                                     const StochasticSettings &settings) {
+    StochasticResult res;
+    res.bins = static_cast<std::size_t>(std::ceil(settings.max_time / settings.time_step));
+    res.dir_bins = static_cast<std::size_t>(std::ceil(settings.max_time / settings.dir_time_step));
+    res.windows =
+        static_cast<std::size_t>(std::ceil(settings.max_time / settings.window_time_step));
+    if (scene.map.points() > 0) res.map_bins = scene.map.bins(settings.max_time);
+    res.moment_terms = moment_terms(scene);
+    res.moment_bins = res.moment_terms > 0 ? static_cast<std::size_t>(std::ceil(
+                                                 settings.max_time / settings.moment_time_step))
+                                           : 0;
+    return res;
+}
+
+// The stochastic tracer's results for the scene and settings, all zero.
+inline StochasticResult zero_result(const StochasticScene &scene,
+                                    const StochasticSettings &settings) {
+    const std::size_t n_rec = scene.receivers.size(), n_dirs = scene.directions.size();
+    const std::size_t bands = scene.bands;
+    StochasticResult res = result_shape(scene, settings);
+    res.energy.assign(n_rec * bands * res.bins, 0.0);
+    if (n_dirs > 0) res.directional.assign(n_rec * n_dirs * bands * res.dir_bins, 0.0);
+    res.ray_energy.assign(res.windows, 0.0);
+    res.reflections.assign(res.windows, 0.0);
+    if (scene.map.points() > 0) {
+        res.map_energy.assign(scene.map.points() * bands * res.map_bins, 0.0);
+    }
+    res.moments.assign(n_rec * res.moment_terms * bands * res.moment_bins, 0.0);
+    return res;
+}
+
+}  // namespace detail
+
+inline StochasticResult trace_stochastic(const StochasticScene &scene,
+                                         const StochasticSettings &settings) {
+    detail::check_stochastic(scene, settings, "trace_stochastic");
     const MapGrid &map = scene.map;
     const bool has_map = map.points() > 0;
-    if (has_map && !map.valid()) throw std::invalid_argument("trace_stochastic: bad map");
     const Atmosphere *atmosphere = scene.atmosphere;
-    if (atmosphere != nullptr && (!atmosphere->valid() || atmosphere->buckets == 0)) {
-        throw std::invalid_argument("trace_stochastic: bad atmosphere");
-    }
     const Vegetation *plants = scene.vegetation;
-    if (plants != nullptr && plants->bands != scene.bands) {
-        throw std::invalid_argument("trace_stochastic: bad vegetation");
-    }
     const Bvh &bvh = *scene.bvh;
     const std::size_t bands = scene.bands;
     const std::size_t n_rec = scene.receivers.size();
@@ -914,8 +1015,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         overrun = std::max(overrun, 0.5 * std::sqrt(2.0 * map.cell * map.cell + height * height));
     }
     overrun *= 2.0;
-    const std::size_t moment_terms =
-        scene.groups > 0 ? 1 + scene.groups + scene.groups * (scene.groups + 1) / 2 : 0;
+    const std::size_t moment_terms = detail::moment_terms(scene);
     const std::size_t moment_bins =
         moment_terms > 0
             ? static_cast<std::size_t>(std::ceil(settings.max_time / settings.moment_time_step))
@@ -936,28 +1036,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                         1, static_cast<std::size_t>(kCopyMemory / copy)));
     }
 
-    auto make_result = [&] {
-        StochasticResult res;
-        res.bins = static_cast<std::size_t>(std::ceil(settings.max_time / settings.time_step));
-        res.dir_bins =
-            static_cast<std::size_t>(std::ceil(settings.max_time / settings.dir_time_step));
-        res.energy.assign(n_rec * bands * res.bins, 0.0);
-        if (n_dirs > 0) res.directional.assign(n_rec * n_dirs * bands * res.dir_bins, 0.0);
-        res.windows =
-            static_cast<std::size_t>(std::ceil(settings.max_time / settings.window_time_step));
-        res.ray_energy.assign(res.windows, 0.0);
-        res.reflections.assign(res.windows, 0.0);
-        if (has_map) {
-            res.map_bins = map.bins(settings.max_time);
-            res.map_energy.assign(map.points() * bands * res.map_bins, 0.0);
-        }
-        res.moment_terms = moment_terms;
-        res.moment_bins = moment_bins;
-        res.moments.assign(n_rec * moment_terms * bands * moment_bins, 0.0);
-        return res;
-    };
     std::vector<StochasticResult> partial(threads);
-    for (auto &p : partial) p = make_result();
+    for (auto &p : partial) p = detail::zero_result(scene, settings);
 
     parallel_for(settings.rays, threads, [&](std::size_t begin, std::size_t end,
                                              std::size_t worker) {
@@ -1176,7 +1256,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         }
                         if (has_map) {
                             acc.add_map(pos, dir, segment, travelled, energy.data(), alone.data(),
-                                        order, 1.0, -1.0, 1.0, plant_track);
+                                        order, room, 1.0, -1.0, 1.0, plant_track);
                         }
                         if (scatter_at < inf ? scatter_at > left : hit.found() && hit.t > left) {
                             break;  // in the overrun
@@ -1231,8 +1311,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                             plant_track);
                                 }
                                 if (has_map) {
-                                    acc.add_map(chord.start, along, segment, travelled, energy.data(),
-                                                alone.data(), order, rate, path, stretch, plant_track);
+                                    acc.add_map(chord.start, along, segment, travelled,
+                                                energy.data(), alone.data(), order, room, rate,
+                                                path, stretch, plant_track);
                                 }
                                 if (scatter_at < inf) {
                                     // It scatters in the plants, going the ray's way there.
@@ -1453,6 +1534,11 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
 
                     if (settings.diffuse_rain || settings.specular_rain) {
                         const Vec3 origin = pos + n * offset;
+                        // A reflection straight from the source (through openings and
+                        // partitions, not plants) shares its rain with the receivers'
+                        // gather (gather_first_scattering).
+                        const bool first =
+                            settings.gather_ratio > 0.0 && order == 1 && alone_before[0] > 0.0;
                         for (std::size_t k = 0; k < n_rec; ++k) {
                             const Vec3 v = scene.receivers[k] - origin;
                             const double dist = std::max(norm(v), settings.receiver_radius[k]);
@@ -1486,12 +1572,17 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 settings.specular_rain && order <= settings.covered_order &&
                                 (settings.covered_time.empty() ||
                                  (travelled + reach) / c <= settings.covered_time[k]);
+                            const double kept =
+                                first ? detail::rain_share(-dot(n, dir), travelled,
+                                                           dot(n, v) / norm(v), norm(v),
+                                                           settings.gather_ratio)
+                                      : 1.0;
                             for (std::size_t b = 0; b < bands; ++b) {
                                 const double radiated =
                                     settings.specular_rain
                                         ? reflected[b] * (covered ? 1.0 - alone[b] : 1.0)
                                         : rain[b];
-                                counted[b] = radiated * share[b];
+                                counted[b] = radiated * share[b] * kept;
                             }
                             acc.add(k, counted.data(), factor, travelled + reach, -toward,
                                     hits.data(), atmosphere == nullptr ? -1.0 : path + norm(v));
@@ -1567,8 +1658,12 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         }
     });
 
-    StochasticResult total = make_result();
-    for (const auto &p : partial) {
+    // The first thread's copy takes the others' sums, each freed once added, so the run
+    // holds no copy more than its threads'. The same sums as from zero: a copy only ever
+    // adds to its zeros, so it holds no negative zero, and 0 + x is x.
+    StochasticResult total = std::move(partial[0]);
+    for (std::size_t w = 1; w < partial.size(); ++w) {
+        StochasticResult &p = partial[w];
         for (std::size_t i = 0; i < total.energy.size(); ++i) total.energy[i] += p.energy[i];
         for (std::size_t i = 0; i < total.directional.size(); ++i) {
             total.directional[i] += p.directional[i];
@@ -1583,8 +1678,164 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         for (std::size_t i = 0; i < total.moments.size(); ++i) total.moments[i] += p.moments[i];
         total.escaped_rays += p.escaped_rays;
         total.traced_rays += p.traced_rays;
+        p = StochasticResult{};
     }
     return total;
+}
+
+// The scattered sound of the reflections straight from the source (through openings and
+// partitions, not plants) that trace_stochastic's rain leaves to the receivers with
+// settings.gather_ratio (above 0): from each receiver, `samples` directions of a
+// Fibonacci lattice turned by `turn` (a rotation, 3 x 3 by rows; a uniformly random
+// one leaves every time bin's estimate unbiased), each standing for 4 pi / samples
+// steradians. Along each it finds the faces the receiver sees, through those that let
+// sound through as the rain's line does, and adds what each sends it: the source's
+// sound landing there straight, the face's scattered share of it radiating as Lambert
+// has it, times the gather's share (1 - detail::rain_share) and the solid angle's patch
+// of face (distance^2 / cosine). It adds into `energy`, `directional` and `moments`,
+// laid out as trace_stochastic's (detail::result_shape), and takes the lattice's
+// directions first, first + stride, ... only, so that `stride` calls (first 0 to
+// stride - 1) add up to the whole lattice. The receivers are shared between threads,
+// each summing its own, so the result does not depend on how many there are.
+inline void gather_first_scattering(const StochasticScene &scene,
+                                    const StochasticSettings &settings, std::size_t samples,
+                                    const double *turn, std::size_t first, std::size_t stride,
+                                    double *energy, double *directional, double *moments) {
+    detail::check_stochastic(scene, settings, "gather_first_scattering");
+    if (samples == 0 || turn == nullptr || !(settings.gather_ratio > 0.0) ||
+        scene.map.points() > 0 || stride == 0 || first >= stride) {
+        throw std::invalid_argument(
+            "gather_first_scattering: needs directions, a turn, a gather_ratio above 0, "
+            "first below stride and no map");
+    }
+    StochasticResult out = detail::result_shape(scene, settings);
+    const Bvh &bvh = *scene.bvh;
+    const Vegetation *plants = scene.vegetation;
+    const std::size_t bands = scene.bands;
+    const std::size_t n_rec = scene.receivers.size();
+    const double c = settings.speed_of_sound;
+    const double max_length = c * settings.max_time;
+    // As far as an arrival may come from and still fall in the last time bin.
+    const double horizon = static_cast<double>(out.bins) * settings.time_step * c;
+    const double offset = 1e-7 * bvh.scale();
+    const double solid = 4.0 * kPi / static_cast<double>(samples);
+    std::vector<Vec3> lattice(samples);
+    for (std::size_t i = 0; i < samples; ++i) {
+        const Vec3 f = fibonacci_sphere(i, samples);
+        lattice[i] = {turn[0] * f.x + turn[1] * f.y + turn[2] * f.z,
+                      turn[3] * f.x + turn[4] * f.y + turn[5] * f.z,
+                      turn[6] * f.x + turn[7] * f.y + turn[8] * f.z};
+    }
+    parallel_for(n_rec, settings.threads, [&](std::size_t begin, std::size_t end, std::size_t) {
+        detail::Accumulator acc{scene, settings, out};
+        acc.energy_sum = energy;
+        acc.directional_sum = directional;
+        acc.moment_sum = moments;
+        std::array<double, kMaxBands> through{}, from_source{}, weights{}, scatter{}, counted{},
+            depth{};
+        std::array<std::uint32_t, kMaxGroups> hits{};
+        std::vector<Vegetation::Span> line_spans;
+        std::vector<double> line_cuts;
+        for (std::size_t k = begin; k < end; ++k) {
+            const Vec3 receiver = scene.receivers[k];
+            const double radius = settings.receiver_radius[k];
+            // What face `f` at x (normal towards the receiver, d metres away along unit
+            // w) sends the receiver, through faces that let `through` of it pass.
+            const auto add = [&](std::size_t f, const Vec3 &x, const Vec3 &normal, double d,
+                                 const Vec3 &w) {
+                const double *alpha = scene.absorption + f * bands;
+                if (std::all_of(alpha, alpha + bands, [](double a) { return !(a < 1.0); })) return;
+                const double cos_out = -dot(normal, w);
+                const Vec3 back = scene.source - x;
+                const double r_in = norm(back);
+                if (!(cos_out > 0.0) || !(r_in > 0.0) || r_in > max_length) return;
+                const double cos_in = dot(normal, back) / r_in;
+                if (!(cos_in > 0.0)) return;  // the source is on the face's other side
+                const Vec3 origin = x + normal * offset;
+                const Vec3 v = receiver - origin;
+                const double gap = norm(v);
+                const double dist = std::max(gap, radius);
+                const double cos_theta = dot(normal, v) / dist;
+                if (!(gap > 0.0) || cos_theta <= 0.0) return;
+                // The source's sound on its straight way there, as a ray's.
+                const Vec3 out_dir = back * (-1.0 / r_in);
+                double crossed = 0.0;
+                if (!detail::passing_share(scene, scene.source, out_dir, r_in - offset, -1,
+                                           from_source.data(), &crossed)) {
+                    return;
+                }
+                scene.directivity.energy_weights(out_dir, bands, weights.data());
+                const double *surface = scene.scattering + f * bands;
+                if (scene.surface_size != nullptr && 1 >= settings.size_from_order) {
+                    // As a ray's leg, from the last face it passed through.
+                    size_scattering(scene.surface_size[2 * f], scene.surface_size[2 * f + 1],
+                                    r_in - crossed, cos_in, c, bands, scene.band_hz, surface,
+                                    scatter.data());
+                } else {
+                    std::copy(surface, surface + bands, scatter.begin());
+                }
+                double any = 0.0;
+                for (std::size_t b = 0; b < bands; ++b) {
+                    counted[b] = weights[b] * from_source[b] * (1.0 - alpha[b]) * scatter[b] *
+                                 through[b];
+                    any += counted[b];
+                }
+                if (!(any > 0.0)) return;
+                if (plants != nullptr) {
+                    plants->depth(scene.source, out_dir, r_in, depth.data(), line_spans,
+                                  line_cuts);
+                    for (std::size_t b = 0; b < bands; ++b) counted[b] *= std::exp(-depth[b]);
+                    plants->depth(origin, v / gap, gap, depth.data(), line_spans, line_cuts);
+                    for (std::size_t b = 0; b < bands; ++b) counted[b] *= std::exp(-depth[b]);
+                }
+                const double share =
+                    1.0 - detail::rain_share(cos_in, r_in, dot(normal, v) / gap, gap,
+                                             settings.gather_ratio);
+                const double factor = cos_in / (4.0 * kPi * r_in * r_in) *
+                                      cos_theta / (kPi * dist * dist) * d * d / cos_out *
+                                      solid * share;
+                hits.fill(0);
+                const std::int64_t group =
+                    scene.groups > 0 ? scene.face_group[f] : std::int64_t{-1};
+                if (group >= 0) hits[static_cast<std::size_t>(group)] = 1;
+                acc.add(k, counted.data(), factor, r_in + dist, v * (-1.0 / gap), hits.data());
+            };
+            // i += stride, stopping at the end however large stride is.
+            for (std::size_t i = first; i < samples;
+                 i = samples - i > stride ? i + stride : samples) {
+                const Vec3 &w = lattice[i];
+                std::fill(through.begin(), through.begin() + bands, 1.0);
+                Vec3 pos = receiver;
+                std::int64_t ignore = -1;
+                double d = 0.0;
+                // The faces the receiver sees this way: the first, and those beyond the
+                // faces that let sound through, as many as the rain's line crosses.
+                for (std::size_t j = 0; j <= kMaxCrossings; ++j) {
+                    const Hit hit = bvh.intersect(pos, w, horizon - d, ignore);
+                    if (!hit.found()) break;
+                    d += hit.t;
+                    pos = pos + w * hit.t;
+                    const auto f = static_cast<std::size_t>(hit.face);
+                    const Vec3 face_normal = bvh.normal(f);
+                    add(f, pos, dot(face_normal, w) > 0.0 ? -face_normal : face_normal, d, w);
+                    if (scene.transmission == nullptr) break;
+                    // The rain's line goes the other way, from the face to the receiver.
+                    if (scene.face_room != nullptr &&
+                        scene.face_room[2 * f + (dot(face_normal, w) < 0.0 ? 0 : 1)] < 0) {
+                        break;
+                    }
+                    const double *tau = scene.transmission + f * bands;
+                    bool any = false;
+                    for (std::size_t b = 0; b < bands; ++b) {
+                        through[b] *= tau[b];
+                        any = any || through[b] > 0.0;
+                    }
+                    if (!any) break;
+                    ignore = hit.face;
+                }
+            }
+        }
+    });
 }
 
 }  // namespace acoustic_spaces

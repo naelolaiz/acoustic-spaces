@@ -7,12 +7,45 @@
   came out several dB off, 20 dB and more at worst, and many such rays were missed; the
   parts of its spread that grow without bound there are now taken in closed form where
   that proves the steadier way, a ray whose spread no way gives steadily is left out, and
-  the direct ray through air whose speed does not change with height is the straight one.
+  the direct ray through air whose speed does not change with height is the straight one
+  (a ray that turns once between ends at about the same height now follows a preset's
+  sampled profile, up to 0.33 dB off its smooth one).
   Neither a ground that absorbs nothing (in the parabolic equation) nor a layer whose
   speed changes by less than 5.6e-9 m/s per metre sets off a RuntimeWarning any more.
+- Editor: the Run demo window keeps the options changed in it for the next time it
+  opens, each demo its own (the listeners, the sources' files, what moves and the
+  format per scene file), names them above **Run**, and **Defaults** puts them back.
+- Fixed: a demo given `--hrtf` with a file that is not there is refused before its first
+  step; it failed only when a later step read the file.
+- Fixed: a simulation refused for its memory says how much it would need with each
+  setting it names lowered on its own, the least first; it named them without how much
+  each saves (more `late.batches` need more memory, not less).
+- Fixed: one late ray scattered off the ground next to a listener could lift a place of
+  an outdoor walk by up to 6.1 dB(A) (the airport's landing heard at approach_2000m),
+  and most runs found too little of that scattered sound far from the source. It is now
+  shared between the rays and 16384 directions gathered from each listener, by how
+  densely each finds it (`stochastic_energy(gather=...)`, each batch with its share): on
+  that landing the late part lifts a place by 0.2 dB(A) at most, the aircraft
+  validation's highest unweighted level far out falls by up to 0.7 dB, and BRAS's CR1,
+  CR2 and CR4 move by 0.04 JND at most.
+- Fixed: a ground reflection near where two grounds meet (a runway in a meadow) weighs
+  each by the exact area of its Fresnel zone it covers, and a zone at the ground's edge
+  goes on past it; the shares were counted on 96 points, so a pass-by's level stepped by
+  up to 1.75 dB as the reflection crossed the runway's edge. The airport's departure heard
+  at approach_2000m reads 0.2 dB(A) lower (L_ASmax 51.9).
+- Fixed: the pass-by graphs' time labels are at least 60 px apart (every 10 s for the
+  airport's flights); they were every 2 s and overlapped.
 - Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
   University and the University of Iceland, and described as a KEMAR dummy head with one
   of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.
+- Fixed: the helicopter demo's `flight` lengthened the responses by the helicopter's
+  farthest distance, which the simulation already adds outdoors, so they ran 6.1 s, not
+  4.0 s; its walk at the mix position takes 121 s, not 174 s, at the same level (L_Amax
+  81.5 dB(A), 81.6 before).
+- Docs: the stadium, helicopter and lakeside demos' numbers and pictures come from new
+  runs with the BS.1770 meters: on stage it is 6 to 18 dB(A) louder than in the audience
+  (7 to 20 before), and the lake's weather lifts the bedroom window 5.3 to 6.0 dB over
+  three runs (7.1 before).
 - Docs: G of responses written with `simulate --normalize` takes the reference energy
   0.01 × `ir_gain`² (from `parameters.json`), and the JNDs of T20, T30 and C50 are
   ISO 3382-1's of EDT and C80 taken by analogy; Barron's total and the first batch of
@@ -26,23 +59,90 @@
   -> seat: encoding the video, 12.1 of 60.0 s`, in place of ffmpeg's frame counter.
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: the demos' meters (`level_db`, `loudness_db`) add up a mix's channel powers as
+  ITU-R BS.1770-4 does (side surrounds weighted 1.41, the LFE left out) and read
+  Ambisonics on W alone; they averaged the channels first. Stored levels of binaural and
+  microphone-pair mixes rise by 3.0 to about 6.4 dB with how unlike the two channels
+  are, so captions' "dB(A) against the loudest" and tour gains move by up to about
+  3.5 dB; an order-1 AmbiX plane wave reads 6.0 dB higher (from behind it read silent),
+  a 5.0 front speaker alone 14.0 dB higher, and one-channel mono mixes do not move.
+- A tour turns a stop up by 40 dB at most, and a silent one not at all; a silent stop
+  got the whole difference to the loudest, over 200 dB.
+- Fixed: a still tour's video is made in a work folder whose path holds an apostrophe,
+  where ffmpeg stopped with exit status 254, and `demos.audio.envelope` gives a signal
+  shorter than its 0.5 s window its RMS (an empty one 0) instead of raising IndexError.
 - Fixed: the gallery walk demo stopped, after downloading the talk, when a talker's
   take was shorter than the walk and the turn (F4's, 36 s); the guide now says it again
   from its start, 2 s after it ends. Its walk and turn are made again for another
   `--hrtf`, where `all` took them as done and the video stopped for want of their sound.
+- Stage support (ST early and late) is given only for listeners 0.9 to 1.1 m from a
+  source, as ISO 3382-1 measures it 1 m away. Given up to 1.5 m at the listener's own
+  distance, it was off by up to 20 lg r (about +3 dB at 1.5 m, -5.5 dB at 0.5 m, 13 to
+  26 dB low at the singers' ears and microphones); those listeners, the orchestra's
+  conductor, the stadium's drummer and the church's listener in the choir (for five of
+  its seven singers) no longer get it.
+- A still listener's level (`spl_db` and `spl_a_db` in `parameters.json`, with the
+  long-term levels, and the editor's results) and the scene demo's captions take
+  `pass_by`'s rule (`Response.levels_or_held`): in a band whose G is undefined, the
+  level of the energy the response holds. Levels that were empty there now have a value;
+  only where no sound arrives they stay empty, and levels given before do not change.
 - Fixed: `all` in the other demos took mixes made through other HRTFs (`--hrtf`) as
   done, and without `--hrtf` a simulation through an HRTF file too, mixing through it;
   their videos now refuse mixes of another `--format` or HRTF. Mixes from before say
   neither, so they are made again.
+- Walks with Doppler keep each place's path filters only while the blocks that use them
+  are rendered, and from three channels on as the paths' shaping and the format's gains:
+  the street example's car walk at the default 0.25 m step holds 0.74 GiB of them
+  instead of up to 23.2 GiB in third-order Ambisonics and 15.9 GiB in 7.0.4, with the
+  same results. `simulate_movement` merges a mover's moments into places in
+  milliseconds, where 4000 moments took 12 s.
+- Walks with Doppler round each path's reading cutoff down to 32 / n of the Nyquist
+  frequency, n the taps it needs on each side, so that the paths share a few tables of
+  taps: a 2 s street pass builds 8 instead of 188 and renders about a fifth faster. The
+  sound changes almost only above 20 kHz (99 % of the difference lies above 20.6 kHz):
+  by about 4 to 7 % of the amplitude of white noise through it, under 0.1 % below
+  20 kHz.
 - A walk as fast as sound or faster now stops with an error without Doppler too, as it
   did with Doppler: it played as places crossfaded one after another, as if shock waves
   did not exist.
+- Fixed: a demo's `tour.wav` and `tour.mp4` of an Ambisonics or loudspeaker mix
+  (`--format ambix3`, `5.0`...) are now decoded to the two ears (the binaural decoder,
+  virtual speakers), through the scene's HRTFs or the spherical head model; they played
+  the first two channels, W and Y as left and right, and nothing of a 5.0 centre.
+  Binaural and mono tours are unchanged.
+- Fixed: `--format` takes an output's label (`ambix3`, `5.0`) everywhere: the demos'
+  simulate step asks `simulate` for it as `--output` spells it (`ambisonics:3`,
+  `loudspeakers:5.0`), and the demos that render the mixes themselves (the demo of any
+  scene when something moves, the pass-by demos, the road works heard `--indoors`) take
+  it too; both stopped on a raw validation error, and a format they do not know now says
+  what to give.
 - The demos' JSON files (walk.json and the others) are strict JSON: a level where
   nothing is heard, as between a horn's blasts, is written null instead of -Infinity,
   which browsers refuse.
+- Fixed: with repeats, `deconvolve` and `measure` cut a response asked for longer than
+  the silence to the silence, as the next sweep's harmonic distortion lands right after
+  it; they cut it at the 2nd harmonic's peak, which let the 3rd and higher (for a
+  loudspeaker adding 0.2 x³ to a -6 dBFS sweep, 0.64 % of the linear peak) and part of
+  the 2nd into the average.
+- Fixed: with one sweep, `deconvolve` cuts a response to the recording's length less the
+  sweep's, past which the response lacks its high frequencies (`measure`: to the
+  silence); the cut was the 2nd harmonic's delay short of the period, whatever the
+  recording's length. A note says when a response comes out shorter than `--length`.
+- Fixed: analysing an impulse response, a band whose lower edge is at or above half the
+  sample rate (the 8 kHz band at sample rates below 11.25 kHz) has no parameters, nor
+  has the STI or IACC there; its filter's skirt over the band below gave it a T30, a G
+  and the rest. `analyze`, `measure`, `compare` and `calibrate` say so, with the band
+  that reaches past half the rate, which is analysed from its part below it.
 - On Windows, a demo whose scene lies on another drive than its example no longer stops
   when it writes a siren's, horn's, train's, helicopter's or aircraft's directivity
   table: the scene names the table in full.
+- Walks with Doppler: a walking source's late part is faded from place to place as its
+  sound is sent, so that it follows the early paths from the same place, not from where
+  the source had got to when it was heard (27 m on for the helicopter overhead). Noise
+  through small cases moves by up to 0.8 dB in 125 ms windows (a 240 m flyover 150 m up,
+  places 4 m apart: L_max +0.4 dB, energy +0.04 dB; the street's car: 0.7, 0.01 and
+  0.04 dB), the validation's pass-by over grass by up to 0.04 dB in a band; walking
+  listeners are unchanged.
 - `emission.Mixture` refuses signals without samples and a sample rate that is not
   positive, which failed later with a division by zero.
 - The road docs say that CNOSSOS-EU's correction for road gradients is left out, that
@@ -117,9 +217,10 @@
   ground it is 0.2 to 0.7 dB(A) louder, 1.0 dB(A) quieter behind the barrier, and the
   example takes 2.3 times as long to simulate.
 - `--indoors` takes a room's level outdoors 2 m in front of its wall, EN ISO 12354-3's
-  L_1,2m, simulating one more listener there where its listener stands nearer: the
-  offices' room behind the street's balcony, 1 m out, moves by up to 2.1 dB at 63 to 250
-  Hz and 0.2 dB(A) for the tram and the road works. No documented number changes.
+  L_1,2m, simulating one more listener there where its listener stands nearer (the
+  street example has it, `balcony_2m`, ticked off): the offices' room behind the
+  street's balcony, 1 m out, moves by up to 2.1 dB at 63 to 250 Hz and 0.2 dB(A) for the
+  tram and the road works. No documented number changes.
 - Walks without Doppler crossfade from one place to the next band by band, corrected by
   how alike the two places sound, so that each octave band's power runs on
   (`acoustic_spaces.render.crossfaded`, shared with the demos' tours). Against the exact
@@ -144,6 +245,200 @@
   joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
   T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
   kHz.
+- With the default narrow-angle parabolic equation, outdoors in wind or temperature
+  gradients, the listeners whose reflection off the ground comes in more than 15° up
+  (near a high source or a high listener) get the wide-angle one's level: against a fast
+  field program, in 17 weathers, grounds and heights, their octave bands are 0.03 dB off
+  on average and 0.10 dB at most (0.16 and 0.87 dB before, for a listener alone), their
+  third octaves 0.04 and 0.32 dB (0.41 and 2.67 dB). No other listener's level moves,
+  and the steep listeners' bands take about four times the work.
+- Doc 29's aircraft are louder in a scene, JETW by 0.29 dB: their NPD L_Amax is read
+  with slow time weighting, so `doc29.source.sound_power_db` now raises the level 1000
+  ft away by what that weighting takes off the NPD curves' own pass (`slow_drop_db`).
+  JETW's sound power goes from 155.7 to 156.0 dB(A) departing and from 145.4 to 145.7
+  dB(A) arriving, and the airport example's sources with it.
+- Pass-by levels as Doc 29 measures them: `PassBy.slow_a` and `parameters.event_levels`
+  give L_ASmax (slow time weighting) and the SEL over the 10 dB-down time, which the
+  flight demo's captions and `validation/aircraft_noise.py` now report. Against JETW's
+  NPD curves the engine's L_ASmax is 2.6 to 2.8 dB under at 200 ft (its quasi-static
+  L_Amax was 0.9 to 1.0 dB under) and within 0.2 dB at 1000 ft; the arrival's SEL is
+  1.4 to 1.9 dB under (was 1.3 to 1.8), the departure's still within 0.3 dB, and the
+  airport's flights move by up to 0.6 dB.
+- The late part's tracer holds one copy of its results fewer, with the same results:
+  its threads' copies, the first taking the others' sums, so on one thread (as for
+  copies over 128 MiB) it holds half as much.
+- Fixed: with `late.device: both`, the CPU traced about 8 % of the rays whatever its
+  speed, as the GPU took 4,096 rays at least of each call of the default 10 batches;
+  each now takes no more than its share of a call.
+- The GPU tracer keeps its buffer of rays in flight (up to 46 MiB for one band, 88 MiB
+  for eight) through a late part, instead of making and clearing it for each of the
+  part's calls (160 per source with the defaults).
+- Fixed: a WAV file over 4 GiB (16 channels for 24 minutes at 48 kHz, say) is written
+  as RF64 (EBU Tech 3306); it failed after the whole render. RF64 and BW64 files are
+  read too.
+- A loudspeaker layout with height finds the faces of its hull among the triples around
+  each corner of scipy's Qhull hull, with the same gains: 96 speakers in 0.12 s instead
+  of 7.5 s.
+- Fixed: `airfoil_noise.thicknesses` gave a lightly tripped boundary layer
+  (`LIGHTLY_TRIPPED`) the heavily tripped suction-side fits instead of the untripped
+  ones of Brooks, Pope and Marcolini's code: a 0.3048 m chord in 71.3 m/s was 1.3 dB too
+  loud in TBL-TE noise at 8 degrees and 3.4 dB too quiet at 12. The helicopter's blades,
+  tripped or not, are unchanged.
+- Docs: the AS350 B3's main rotor turns at 394 rpm, the most in powered flight with its
+  Arriel 2B engine and so the speed appendix J flies; its tail rotor's 2,086 rpm is
+  NASA's, no longer assumed; its tones agree with Farassat's formulation to 7.5 x 10⁻⁶
+  (main rotor) and 1.6 x 10⁻⁵ (tail rotor), not 10⁻⁵.
+- The helicopter demos' `helicopter` and `walk` steps find the rotors' tones and BPM's
+  bands (`rotorcraft.bpm_powers`) once, not for each length: about 7 s faster, 15 s with
+  `--broadband bpm`.
+- Fixed: with weather zones, the shares of a path's way under each weather, rounded one
+  by one, could add up to 1 ± 0.005 (± 0.01 across five weathers), scaling the speed of
+  sound in still air by as much; they are now divided by their sum. Over 300 m across
+  three weathers, a third each, the direct sound arrives at 868.5 ms (was 864.2) and the
+  levels at 1 to 8 kHz rise by 0.1 to 0.3 dB; the lakeside example is unchanged.
+- Docs: each caustic a curved ray touches advances its phase by a quarter period, as the
+  engine has it (a factor j, time going as e^(jωt)), not delays it; a test now holds the
+  sign, another the shadow zone's residue series to the fast field program.
+- Docs: in a belt under 20 m deep the engine's dense foliage takes more than ISO
+  9613-2's table at 63 and 125 Hz (in every band under 10 m) and up to 1.8 dB less at 4
+  and 8 kHz, not a little less throughout; stems 0.3 m across, 0.08 per m², take 0.002
+  dB per metre at 63 Hz (was 0.003).
+- Fixed: an example's demo that the editor's **Run demo…** runs away from the example
+  (in `~/acoustic-spaces/<example>`, or beside a copy saved elsewhere) wrote its scenes,
+  results and work among the example's files, an installed copy's too, and read the
+  example's scene rather than a copy saved as `scene.yaml`; it now gets every path in
+  full, as the Command box shows (`Demo.in_place`).
+- Fixed: the Run demo, particle export, buildings-from-a-map and Download HRTFs windows
+  are deleted once answered, instead of staying behind until the editor closes.
+- Fixed: a demo's messages pass between its process and the editor as UTF-8, so a folder
+  name outside Windows' code page no longer stops the demo.
+- Fixed: another preset, file or entry, or a lower transmission loss, written for a
+  material in the Scene YAML panel or in a scene file the editor saves now gives its
+  coefficients and source; the old ones stayed, and the lower loss was refused as more
+  than the absorption. Scene files and the panel write a material's absorption,
+  scattering and source only where its preset, file, entry or transmission does not give
+  them, and a scattering entry by its name.
+- Fixed: Scene YAML text applied after the scene was saved in another folder names the
+  files it named; it took files of the same name in the new folder, or was refused where
+  there were none.
+- Fixed: an example saved elsewhere names the copies of its sources' signals and its
+  recording, as it does its other files; it named the originals.
+- Fixed: a download cut short (fewer bytes than the server announced) is refused and
+  removed; it was kept as a whole HRTF set or recording, which later runs then used. One
+  sent in chunks and cut short fails with an `OSError` too, as callers expect
+  (`hrtf download` ended with a traceback), and a remote archive's block cut short is
+  asked for again.
+- Fixed: `simulate --without` and `map --without` are checked against the scene before
+  anything runs, as `insertion_loss_of` is: an unknown name failed only after the first
+  run, and a name given twice was taken.
+- Fixed: `pack` refuses a file whose name holds `:` or `\`, which it packed but no
+  computer could unpack, and two files, or a file and a folder, whose names macOS or
+  Windows take for one (differing only in case, or in the way a letter is encoded);
+  folders from outside the scene's folder are named apart from the others regardless of
+  case, and from files.
+- A scene with every source, or every listener, left out (`enabled: false`) is a
+  problem: `validate`, `inspect`, `pack` and the editor's Run (F5) and Pack refuse it,
+  as `simulate` did; runs that name their sources or listeners, walks, which take their
+  walker in any case, and maps, which need no listener, still take it.
+- Fixed: a walking source is heard at a listener left out that the walk names
+  (`walkthrough --listener`), as other runs that name one; with every listener left out
+  and none named, the error says so in place of `pick a listener: `.
+- A coefficient CSV laid out by columns, or with more than three rows, is refused with
+  the layout expected: the first loaded as absorption 1 in every band, the second
+  without its rows past the third. Lines of separators alone (`,,,`, a spreadsheet's
+  empty rows) are skipped.
+- A scene's `recording` without a suffix that is neither a free recording nor a file
+  there (a free name mistyped) is refused, naming the free ones.
+- A scene whose air pressure lies outside the range ISO 9613-1:1993 states the air
+  absorption's accuracy for (0.794 to 157.7 kPa in octave bands, 1 to 125.3 kPa in
+  third-octave bands) is warned about.
+- `pack --help` and the docs list the files sources play and the scene's recording among
+  the files a pack holds.
+- Fixed: a coverage-map column that a wall between two rooms crosses had one point,
+  whose slab counted the rays of both rooms; each room's part of it that holds at least
+  a fifth of it now gets a point that counts that room's rays alone. Mapped 0.7 m apart,
+  the apartment example's bedroom points next to the partition read 65 dB(A); they now
+  read 43 to 49 dB(A), 43.8 dB(A) where a listener simulated there gets 43.8 dB(A).
+- Fixed: a map slab's volume counted the part of its column in the room in fifths, and
+  all of it where the column reached into a building; it now counts the part in the air
+  of its room, from 24 by 24 samples. Mapped 1.25 or 1.5 m apart, the shoebox example's
+  edge columns move by 0.2 to 0.5 dB(A); in the street example mapped 3 m apart, 12
+  columns of its canyon that reach into a building rise by 0.1 to 1.1 dB(A) for its
+  traffic (up to 2 dB at 1 kHz).
+- Fixed: coverage maps of scenes with the wave solver on, which maps do not run, add the
+  early paths in pressure up to `coherent_max_band_hz` as documented, rather than in
+  energy. In the `room_modes` example's map G rises by 1.8 dB on average at 63 Hz and
+  1.2 dB at 125 Hz (up to 4.7 and 3.5 dB), C50 and C80 by up to 7.6 and 6.6 dB, and EDT
+  falls by up to 31 %; the bands from 250 Hz up do not move.
+- Fixed: the wave solver took the pressure gradient across a thin surface with air
+  behind it (a screen, a balcony's front) at a listener within a grid cell of it, so the
+  low end of Ambisonics, binaural and loudspeaker outputs and LF and LFC in the wave
+  bands came out wrong there; it now takes it on the listener's side. 0.1 m in front of
+  a rigid screen the figure of eight facing it falls from 0.6 to 6.2 dB below the
+  pressure in the 63 Hz band with the 7-point stencil (from 0.4 dB above to 14.7 dB
+  below with the 19-point one), as in front of a solid block.
+- Fixed: the wave solver's responses started at emission, though the source's pulse is
+  centred on it, so listeners within 16 time steps' travel of the source (2.7 m on the
+  default grid, 19-point up to 125 Hz, and 5.6 m on a 19-point grid up to 63 Hz) lost
+  the pulse's start; they now keep it. 0.3 to 1.5 m from the source the direct sound
+  moves by -0.87 to +0.16 dB on the default grid and -0.41 to +0.97 dB on the 63 Hz one,
+  and the figures of eight's ratio to it by up to 1.9 and 2.1 dB; from 2 m on, both
+  move by less than 0.01 dB on the default grid and up to 0.1 dB on the 63 Hz one.
+- Fixed: the wave solver's source cut off at a fifth of the grid's sample rate with
+  either stencil, which took up to 1.6 dB off the top of the highest band with the
+  19-point stencil (whose time step is 1.5 times as long) at 5 cells per wavelength; the
+  cutoff now scales with the time step (with the pulse's start kept, that band rises
+  there by up to 0.13 dB in octave bands and 0.49 dB in third-octave bands, and moves by
+  0.0033 dB at most at the default 8 cells per wavelength).
+- Fixed: the wave solver's figures of eight (X, Y and Z: the low end's direction in
+  spatial outputs, and LF, LFC and LJ) came out 0.2 to 0.5 dB weak in the highest band;
+  a fourth-order gradient and the velocity integral's gain divided out bring them within
+  0.04 dB of a point source's 4 m away along a grid axis or a diagonal, with either
+  stencil. Within about 2.5 cells of the source they now depend more on where it lies in
+  its cell; on the grid up to 125 Hz, 0.3 to 0.6 m away along a grid axis, they move by
+  -8.5 to +1.5 dB in the 63 Hz band with the 19-point stencil and -3.1 to +1.4 dB with
+  the 7-point one. With the two fixes above, LJ at seat-a in the shoebox example rises by
+  0.14 and 0.50 dB at 63 and 125 Hz (0.14 and 0.49 dB from this one alone).
+- Outdoor models make the wave solver's grid once per source instead of twice: a grid
+  without the matched layer (with `scheme: auto` the isotropic stencil's), made only to
+  find that the sky lets the sound out, is gone (the street example's set-up at 63 Hz
+  takes 2.4 s instead of 6.9 s on two threads), with the same results. The isotropic
+  stencil is now refused outdoors before any grid is made, also for a source shut in a
+  building, which used to run.
+- Fixed: an early reflection whose point lies exactly on the foot of a wall, partition
+  or barrier standing on the surface it reflects off (in a corner too, or where such
+  walls meet), and which goes on behind it, now meets it there as it does just to one
+  side of the point: through it with its transmission loss, or stopped by a rigid one;
+  it passed whole (with image sources twice). In the apartment example the bedroom
+  column of a 0.7 m map at x = 8.0 m read 51 dB(A) instead of about 45 like its
+  neighbours, and behind a 3 m barrier a listener placed symmetrically to the source got
+  6 to 27 dB more early sound than 1 cm either side. Finding the early reflections takes
+  1.2 to 1.8 times as long in the examples; with edge diffraction the early part takes
+  up to 3 % longer.
+- Fixed: where the wall between two rooms is drawn as two coincident faces, one for each
+  room, no early path reflects off both faces at one point any more: from one room into
+  the other that path was the direct sound at full level, without the wall's
+  transmission loss, and with image sources from the third order on it came back into
+  the source's room as the reflection off the wall once more. Behind such a 20 dB wall
+  it had raised the early level at 1 kHz by 9 to 18 dB, and in front of it, depending on
+  the listener, by about 0.04 to 0.25 dB up to the third order and 0.3 to 0.9 dB up to
+  the fifth, more near the wall.
+- Fixed: no early path reflects off an opening any more; those paths carried no energy,
+  but they took the place of other paths with the same image and, with edge diffraction,
+  of the reflection bending round the opening's edge. With edge diffraction, levels
+  across a 10 m x 8 m room with a 2 m doorway move by as much as 2.4 dB at 63 Hz, 1.6 dB
+  at 125 Hz and 0.2 dB above where the reflection off the doorway's wall lands away from
+  the doorway's sides, by up to 4.3 dB at 63 Hz and 2.3 dB at 125 Hz where it lands on
+  one, and no longer step by 2 dB where the reflection crosses a side.
+- `validation/edge_diffraction.py` checks the level on and near an edge's shadow
+  boundary through the whole early stage against the exact solution: in the bands that
+  add in energy (indoors from 250 Hz up) it is 1.73 dB low at 250 Hz and 0.38 dB at 8
+  kHz on the boundary of a right-angled corner, and 2.22 and 0.56 dB on that of a wedge
+  open over 225°, now a known issue in the validation report.
+- Fixed: the exact solutions in `validation/` that the edge diffraction is checked
+  against ran at 343.0 m/s, not at their scenes' 343.2 m/s; the published differences
+  move by up to 0.02 dB, and the terrain ridge's reference, which had not converged, by
+  up to 0.2 dB from 2 kHz up.
 
 ## 4.1.0
 

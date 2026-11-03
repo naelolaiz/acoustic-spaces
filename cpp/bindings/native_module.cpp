@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <optional>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -41,6 +42,8 @@ using Points = nb::ndarray<const double, nb::shape<-1, 3>, nb::c_contig, nb::dev
 using Faces = nb::ndarray<const std::int64_t, nb::shape<-1, 3>, nb::c_contig, nb::device::cpu>;
 using Matrix = nb::ndarray<const double, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
 using Indices = nb::ndarray<const std::int64_t, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+// Arrays a function adds into, of any shape it checks itself.
+using Sums = nb::ndarray<double, nb::c_contig, nb::device::cpu>;
 
 // Hands a std::vector to NumPy without copying; the array owns the vector.
 template <typename T>
@@ -546,6 +549,25 @@ nb::tuple ray_starts(InArray directivity_a, Matrix orientation, Kernels directiv
                           to_numpy(std::move(weights), {rays, bands}));
 }
 
+// With groups > 0: the group of each face (-1 for none), into the scene.
+void face_groups(const char *name, const Indices &face_group, std::size_t groups,
+                 as::StochasticScene &scene) {
+    if (groups == 0) return;
+    const std::string fn = name;
+    if (groups > as::kMaxGroups || face_group.shape(0) != scene.bvh->face_count()) {
+        throw std::invalid_argument(
+            fn + ": face_group must have one per face, with at most 16 groups");
+    }
+    const auto n = static_cast<std::int64_t>(groups);
+    for (std::size_t i = 0; i < face_group.shape(0); ++i) {
+        if (face_group.data()[i] < -1 || face_group.data()[i] >= n) {
+            throw std::invalid_argument(fn + ": bad face_group");
+        }
+    }
+    scene.face_group = face_group.data();
+    scene.groups = groups;
+}
+
 // Ray count, timing, seed, threads and weight window of a stochastic run.
 as::StochasticSettings stochastic_settings(std::size_t rays, double max_time,
                                            double speed_of_sound, int covered_order,
@@ -591,7 +613,7 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
                            Points atmosphere_rows, InArray wind_direction, double ground,
                            double chord_sagitta, Matrix plants, Matrix plant_outline,
                            Matrix plant_absorption, Matrix plant_scattering,
-                           Matrix plant_asymmetry, Flags plant_upright) {
+                           Matrix plant_asymmetry, Flags plant_upright, double gather_ratio) {
     as::StochasticScene scene =
         stochastic_scene("trace_stochastic", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
@@ -609,20 +631,7 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
     }
     scene.receivers = points(receivers);
     scene.directions = points(directions);
-    if (groups > 0) {
-        if (groups > as::kMaxGroups || face_group.shape(0) != absorption.shape(0)) {
-            throw std::invalid_argument(
-                "trace_stochastic: face_group must have one per face, with at most 16 groups");
-        }
-        const auto n = static_cast<std::int64_t>(groups);
-        for (std::size_t i = 0; i < face_group.shape(0); ++i) {
-            if (face_group.data()[i] < -1 || face_group.data()[i] >= n) {
-                throw std::invalid_argument("trace_stochastic: bad face_group");
-            }
-        }
-        scene.face_group = face_group.data();
-        scene.groups = groups;
-    }
+    face_groups("trace_stochastic", face_group, groups, scene);
 
     as::StochasticSettings settings = stochastic_settings(
         rays, max_time, speed_of_sound, covered_order, seed, threads, window_time_step,
@@ -635,6 +644,7 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
     settings.specular_rain = specular_rain;
     settings.covered_time = to_vector(covered_time);
     settings.moment_time_step = moment_time_step;
+    settings.gather_ratio = gather_ratio;
 
     as::StochasticResult result;
     {
@@ -650,6 +660,97 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
                  {n_rec, result.moment_terms, bands, result.moment_bins}),
         result.escaped_rays, to_numpy(std::move(result.ray_energy), {result.windows}),
         to_numpy(std::move(result.reflections), {result.windows}), result.traced_rays);
+}
+
+// `sums`, checked to have `shape`: its data, which a function adds into.
+double *sums_of(const char *name, const char *what, Sums &sums,
+                const std::vector<std::size_t> &shape) {
+    bool fits = sums.ndim() == shape.size();
+    for (std::size_t i = 0; fits && i < shape.size(); ++i) fits = sums.shape(i) == shape[i];
+    if (!fits) {
+        std::string want;
+        for (std::size_t n : shape) want += (want.empty() ? "" : ", ") + std::to_string(n);
+        throw std::invalid_argument(std::string(name) + ": " + what + " must have shape (" +
+                                    want + ")");
+    }
+    return sums.data();
+}
+
+// The scattered sound of first reflections gathered from each receiver (see
+// as::gather_first_scattering), added into energy, directional and moments (shaped as
+// trace_stochastic's); without them, into zeros returned as trace_stochastic's.
+nb::object gather_first_scattering(
+    const as::Bvh &bvh, InArray source, InArray directivity_a, Matrix orientation,
+    Kernels directivity_table, Matrix absorption, Matrix scattering, InArray air,
+    Matrix surface_size, InArray band_hz, int size_from_order, Matrix transmission,
+    FaceRooms face_room, std::int64_t source_room, Points receivers, Points directions,
+    double max_time, double time_step, double dir_time_step, double speed_of_sound,
+    InArray receiver_radius, std::size_t threads, Indices face_group, std::size_t groups,
+    double moment_time_step, double gather_ratio, std::size_t samples, Matrix turn,
+    Matrix plants, Matrix plant_outline, Matrix plant_absorption, Matrix plant_scattering,
+    Matrix plant_asymmetry, Flags plant_upright, std::optional<Sums> energy,
+    std::optional<Sums> directional, std::optional<Sums> moments, std::size_t first,
+    std::size_t stride) {
+    const char *name = "gather_first_scattering";
+    as::StochasticScene scene =
+        stochastic_scene(name, bvh, source, directivity_a, orientation, directivity_table,
+                         absorption, scattering, air, surface_size, band_hz, transmission,
+                         face_room, source_room);
+    const std::size_t bands = scene.bands;
+    as::Vegetation greenery;
+    if (vegetation(name, bands, plants, plant_outline, plant_absorption, plant_scattering,
+                   plant_asymmetry, plant_upright, greenery)) {
+        scene.vegetation = &greenery;
+    }
+    scene.receivers = points(receivers);
+    scene.directions = points(directions);
+    face_groups(name, face_group, groups, scene);
+    if (turn.shape(0) != 3 || turn.shape(1) != 3) {
+        throw std::invalid_argument("gather_first_scattering: turn must be 3 x 3");
+    }
+    as::StochasticSettings settings;
+    settings.max_time = max_time;
+    settings.time_step = time_step;
+    settings.dir_time_step = dir_time_step;
+    settings.speed_of_sound = speed_of_sound;
+    settings.receiver_radius = to_vector(receiver_radius);
+    settings.size_from_order = size_from_order;
+    settings.moment_time_step = moment_time_step;
+    settings.threads = threads;
+    settings.gather_ratio = gather_ratio;
+    const std::size_t n_rec = scene.receivers.size();
+    const std::size_t n_dirs = scene.directions.size();
+    if (energy.has_value() != directional.has_value() ||
+        energy.has_value() != moments.has_value()) {
+        throw std::invalid_argument(std::string(name) +
+                                    ": give energy, directional and moments, or none");
+    }
+    if (energy.has_value()) {
+        const as::StochasticResult shape = as::detail::result_shape(scene, settings);
+        double *e = sums_of(name, "energy", *energy, {n_rec, bands, shape.bins});
+        double *d =
+            sums_of(name, "directional", *directional, {n_rec, n_dirs, bands, shape.dir_bins});
+        double *m = sums_of(name, "moments", *moments,
+                            {n_rec, shape.moment_terms, bands, shape.moment_bins});
+        {
+            nb::gil_scoped_release release;
+            as::gather_first_scattering(scene, settings, samples, turn.data(), first, stride, e,
+                                        d, m);
+        }
+        return nb::none();
+    }
+    as::StochasticResult result = as::detail::zero_result(scene, settings);
+    {
+        nb::gil_scoped_release release;
+        as::gather_first_scattering(scene, settings, samples, turn.data(), first, stride,
+                                    result.energy.data(), result.directional.data(),
+                                    result.moments.data());
+    }
+    return nb::make_tuple(
+        to_numpy(std::move(result.energy), {n_rec, bands, result.bins}),
+        to_numpy(std::move(result.directional), {n_rec, n_dirs, bands, result.dir_bins}),
+        to_numpy(std::move(result.moments),
+                 {n_rec, result.moment_terms, bands, result.moment_bins}));
 }
 
 // One chord of each of n rays bent by an atmosphere (see atmosphere.hpp): from
@@ -703,8 +804,8 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
                     Matrix scattering, InArray air, Matrix surface_size, InArray band_hz,
                     bool vector_scattering, int size_from_order, Matrix transmission,
                     FaceRooms face_room, std::int64_t source_room, InArray origin, double cell,
-                    MapIndex point, InArray low, InArray high, InArray volume, InArray onset,
-                    InArray covered_time, double fine_step, std::size_t fine_bins,
+                    MapIndex point, InArray low, InArray high, InArray volume, Indices map_room,
+                    InArray onset, InArray covered_time, double fine_step, std::size_t fine_bins,
                     double coarse_step, std::size_t rays, double max_time,
                     double speed_of_sound, int covered_order, std::uint64_t seed,
                     std::size_t threads, double window_time_step, std::uint64_t first_ray,
@@ -740,6 +841,7 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
     map.low = to_vector(low);
     map.high = to_vector(high);
     map.volume = to_vector(volume);
+    map.room.assign(map_room.data(), map_room.data() + map_room.shape(0));
     map.onset = to_vector(onset);
     map.covered_time = to_vector(covered_time);
     map.fine_step = fine_step;
@@ -921,6 +1023,8 @@ NB_MODULE(_native, m) {
              "Per ray, whether any face lies within t_max of its origin (ignoring face "
              "ignore[i]).")
         .def_prop_ro("scale", &as::Bvh::scale)
+        .def_prop_ro("min_distance", &as::Bvh::min_distance,
+                     "Hits closer than this to a ray's origin are not reported.")
         .def("layout", &bvh_layout,
              "The tree as flat arrays (see Bvh::layout in bvh.hpp), for tracing elsewhere: "
              "boxes (nodes x 6), first, count, faces and triangles (faces x 9).");
@@ -1014,7 +1118,7 @@ NB_MODULE(_native, m) {
           nb::arg("plant_absorption").none() = nb::none(),
           nb::arg("plant_scattering").none() = nb::none(),
           nb::arg("plant_asymmetry").none() = nb::none(),
-          nb::arg("plant_upright").none() = nb::none(),
+          nb::arg("plant_upright").none() = nb::none(), nb::arg("gather_ratio") = 0.0,
           "Stochastic ray tracing: (energy[r, band, bin], directional[r, dir, band, bin], "
           "moments[r, term, band, moment bin], escaped rays, ray_energy[window], "
           "reflections[window], traced rays); "
@@ -1046,7 +1150,43 @@ NB_MODULE(_native, m) {
           "bands); plant_upright (one per medium) marks stems, met by the horizontal share "
           "of a ray and scattering it sideways, keeping its slope: with rain, they send "
           "each receiver what the ray's next leg carries through its sphere, averaged over "
-          "the turns.");
+          "the turns. With diffuse rain alone in still air, gather_ratio above 0 leaves "
+          "part of the rain of reflections straight from the source to "
+          "gather_first_scattering, which gathers it from the receivers in gather_ratio "
+          "times as many directions as rays: the rays keep the share where they land "
+          "more densely than those directions (the balance heuristic).");
+
+    m.def("gather_first_scattering", &gather_first_scattering, nb::arg("bvh"),
+          nb::arg("source"), nb::arg("directivity_a"), nb::arg("orientation"),
+          nb::arg("directivity_table"), nb::arg("absorption"), nb::arg("scattering"),
+          nb::arg("air"), nb::arg("surface_size"), nb::arg("band_hz"),
+          nb::arg("size_from_order"), nb::arg("transmission"), nb::arg("face_room"),
+          nb::arg("source_room"), nb::arg("receivers"), nb::arg("directions"),
+          nb::arg("max_time"), nb::arg("time_step"), nb::arg("dir_time_step"),
+          nb::arg("speed_of_sound"), nb::arg("receiver_radius"), nb::arg("threads"),
+          nb::arg("face_group"), nb::arg("groups"), nb::arg("moment_time_step"),
+          nb::arg("gather_ratio"), nb::arg("samples"), nb::arg("turn"),
+          nb::arg("plants").none() = nb::none(), nb::arg("plant_outline").none() = nb::none(),
+          nb::arg("plant_absorption").none() = nb::none(),
+          nb::arg("plant_scattering").none() = nb::none(),
+          nb::arg("plant_asymmetry").none() = nb::none(),
+          nb::arg("plant_upright").none() = nb::none(),
+          nb::arg("energy").noconvert().none() = nb::none(),
+          nb::arg("directional").noconvert().none() = nb::none(),
+          nb::arg("moments").noconvert().none() = nb::none(),
+          nb::arg("first") = 0, nb::arg("stride") = 1,
+          "The scattered sound of the reflections straight from the source that "
+          "trace_stochastic with this gather_ratio (above 0) leaves out, added into energy[r, "
+          "band, bin], directional[r, dir, band, bin] and moments[r, term, band, moment bin] "
+          "(float64, C-contiguous, writable, shaped as trace_stochastic's; anything else is "
+          "refused, not copied) and None returned; without them, into "
+          "zeros returned as (energy, directional, moments). From each receiver, samples "
+          "directions of a Fibonacci lattice turned by turn (3 x 3 rotation; a uniformly "
+          "random one makes the estimate unbiased) find the faces it sees, through those "
+          "that let sound through, and add the share of each one's scattered sound the rays "
+          "leave out; only the lattice's directions first, first + stride, ... are taken, "
+          "so stride calls (first 0 to stride - 1) add up to the whole lattice. The other "
+          "arguments as for trace_stochastic, with diffuse rain alone and no atmosphere.");
 
     m.def("ray_starts", &ray_starts, nb::arg("directivity_a"), nb::arg("orientation"),
           nb::arg("directivity_table"), nb::arg("bands"), nb::arg("rays"), nb::arg("first_ray"),
@@ -1071,7 +1211,7 @@ NB_MODULE(_native, m) {
           nb::arg("vector_scattering"), nb::arg("size_from_order"), nb::arg("transmission"),
           nb::arg("face_room"), nb::arg("source_room"), nb::arg("origin"), nb::arg("cell"),
           nb::arg("point"), nb::arg("low"), nb::arg("high"), nb::arg("volume"),
-          nb::arg("onset"), nb::arg("covered_time"), nb::arg("fine_step"),
+          nb::arg("map_room"), nb::arg("onset"), nb::arg("covered_time"), nb::arg("fine_step"),
           nb::arg("fine_bins"), nb::arg("coarse_step"), nb::arg("rays"), nb::arg("max_time"),
           nb::arg("speed_of_sound"), nb::arg("covered_order"), nb::arg("seed"),
           nb::arg("threads"), nb::arg("window_time_step"), nb::arg("first_ray"),
@@ -1088,6 +1228,7 @@ NB_MODULE(_native, m) {
           "rays, ray_energy[window], reflections[window], traced rays). point (ny x nx x "
           "layers) holds the map point of each column of width cell from origin (x, y), "
           "-1 for none; each point is a slab of air from low to high (z) of the given "
-          "volume. Bins count from each point's onset: fine_bins of fine_step, then "
-          "coarse_step. Other arguments as for trace_stochastic.");
+          "volume, which counts the rays in its map_room alone (-1: in any). Bins count "
+          "from each point's onset: fine_bins of fine_step, then coarse_step. Other "
+          "arguments as for trace_stochastic.");
 }

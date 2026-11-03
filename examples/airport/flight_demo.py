@@ -33,8 +33,10 @@ Each listener hears the jet's direct sound and its reflection off the ground, ea
 through its own delay as it changes, so each shifts in pitch as it passes; the late
 sound is crossfaded from place to place. The jet's sound fades in and out over a second
 where its flight starts and ends. The captions give the level heard at each moment, the
-loudest (L_Amax) and the sound exposure level (SEL) of the pass, as simulated;
-validation/aircraft_noise.py compares them with Doc 29's own sum over the flight.
+loudest (L_Amax) and the sound exposure level (SEL) of the pass, as simulated, and both
+as Doc 29 measures them (L_ASmax through a sound level meter's slow time weighting, the
+SEL over the time it is within 10 dB of that); validation/aircraft_noise.py compares
+them with Doc 29's own sum over the flight.
 """
 
 from __future__ import annotations

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import silenced
 
 from acoustic_spaces import results
 from acoustic_spaces.audio import read_wav, write_wav
@@ -303,3 +304,90 @@ def test_auralize_mixes_the_sources_at_their_power(
     capsys.readouterr()
     np.testing.assert_allclose(mix(), expected, atol=1e-6)
     assert "simulate again" in capsys.readouterr().err
+
+
+def _undefined(response: Response) -> dict[str, Response]:
+    """``response`` with G undefined in a band: no sound in the 8 kHz band; the 1 kHz band
+    a flat tail that does not decay at all, which the A-weighted level turns on; and no
+    sound in any band."""
+    flat = silenced(response, [4])
+    first = int(flat.direct_delay_s / flat.time_step)
+    flat.late[4, first:] = 1e-4
+    return {
+        "no 8 kHz": silenced(response, [7]),
+        "flat 1 kHz": flat,
+        "silent": silenced(response, list(range(8))),
+    }
+
+
+def _held(changed: dict[str, Response], power: np.ndarray) -> dict[str, np.ndarray]:
+    """The levels per band of :func:`_undefined`'s responses: where G is defined, as it
+    gives them; at 8 kHz, none (-inf); at 1 kHz, that of the 1e-4 in each slot from the
+    direct sound on, of which a source of unit power gives 10 lg (G of a unit source at
+    10 m: -31 dB); in the silent response, none in any band."""
+    no_8k = changed["no 8 kHz"].levels(power)
+    no_8k[7] = -np.inf
+    flat = changed["flat 1 kHz"]
+    levels = flat.levels(power)
+    held = 1e-4 * (flat.late.shape[1] - int(flat.direct_delay_s / flat.time_step))
+    levels[4] = power[4] + 10.0 * np.log10(held)
+    return {"no 8 kHz": no_8k, "flat 1 kHz": levels, "silent": np.full(8, -np.inf)}
+
+
+def test_a_band_whose_g_is_undefined_has_the_level_of_the_energy_held(
+    result, tmp_path: Path
+) -> None:
+    """As a pass-by's place: in a band whose G is undefined, the listener's level is that
+    of the energy the response holds from the direct sound on, -inf (null) where none
+    arrives; only where no sound arrives at all is the A-weighted level null."""
+    from acoustic_spaces.parameters import a_weighted
+
+    changed = _undefined(result["talker", "seat-a"])
+    assert np.isnan(changed["no 8 kHz"].parameters().g[7])
+    assert np.isnan(changed["flat 1 kHz"].parameters().g[4])
+    assert np.isnan(changed["silent"].parameters().g).all()
+    responses = {("talker", name): response for name, response in changed.items()}
+    report = write_results(
+        dataclasses.replace(result, responses=responses),
+        tmp_path / "out",
+        [Mono()],
+        sample_rate=16_000,
+    )
+    entries = {e["listener"]: e for e in report["responses"]}
+    power = result.room.scene.sources[0].power_db("octave")
+    for name, levels in _held(changed, power).items():
+        bands = [v if np.isfinite(v) else None for v in levels]
+        assert entries[name]["spl_db"] == pytest.approx(bands, abs=0.006), name
+        if name == "silent":
+            assert entries[name]["spl_a_db"] is None
+        else:
+            assert entries[name]["spl_a_db"] == pytest.approx(a_weighted(levels), abs=0.006)
+
+
+def test_the_scene_demo_s_moving_levels_take_the_same_rule(result) -> None:
+    """The scene demo's captions along a walk give a moment the level a still listener's
+    report does, and none only where no sound arrives."""
+    from types import SimpleNamespace
+
+    from acoustic_spaces.demos.scene_demo import levels_along
+    from acoustic_spaces.parameters import a_weighted
+
+    response = result["talker", "seat-a"]
+    changed = _undefined(response)
+    moments = [response, *changed.values()]
+    movement = SimpleNamespace(
+        times=np.arange(len(moments)),
+        result={("talker", "seat-a", k): r for k, r in enumerate(moments)},
+        key=lambda source, listener, k: (source, listener, k),
+    )
+    source = result.room.scene.sources[0]
+    power = source.power_db("octave")
+    held = _held(changed, power)
+    expected = [
+        a_weighted(levels)
+        for levels in (response.levels(power), held["no 8 kHz"], held["flat 1 kHz"])
+    ]
+    assert levels_along(movement, source, "seat-a") == [
+        *(pytest.approx(v, abs=0.006) for v in expected),
+        None,
+    ]

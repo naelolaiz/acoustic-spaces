@@ -45,6 +45,20 @@ GRAPH_BOX = (MARGIN + 64, 700, 796, 150)
 RANGE_DB = 40.0
 GRID_DB = 10.0
 GRID_S = 2.0
+#: The least room (pixels) between the time axis's labels: where GRID_S would crowd
+#: them (a long pass, an aircraft's), they come every 5, 10, 20, 50... s instead.
+LABEL_GAP_PX = 60.0
+
+
+def time_step(span_s: float, width_px: float) -> float:
+    """How far apart (s) the time axis of a graph ``width_px`` wide over ``span_s`` labels
+    its seconds: :data:`GRID_S`, or the first of 5, 10, 20, 50... s that leaves
+    :data:`LABEL_GAP_PX` between labels."""
+    step, k = GRID_S, 0
+    while step * width_px / max(span_s, 1e-9) < LABEL_GAP_PX:
+        step = GRID_S * (2.5, 5.0, 10.0)[k % 3] * 10.0 ** (k // 3)
+        k += 1
+    return step
 
 
 def levels_of(heard: dict) -> np.ndarray:
@@ -159,8 +173,13 @@ class Pictures(scene_pictures.Pictures):
         lines += [
             f"Loudest {heard['max_a_db']:.1f} dB(A) (L_Amax), {heard['max_s']:.1f} s in",
             f"Sound exposure level {heard['sel_a_db']:.1f} dB(A) (SEL)",
-            f"Closest {heard['closest_m']:.1f} m away",
         ]
+        if "max_as_db" in heard:
+            lines.append(
+                f"As Doc 29 measures it: L_ASmax {heard['max_as_db']:.1f}, SEL "
+                f"{heard['sel_10db_down_a_db']:.1f} dB(A)"
+            )
+        lines.append(f"Closest {heard['closest_m']:.1f} m away")
         if "pitch_semitones" in heard:
             lines.append(
                 f"Its direct sound falls {heard['pitch_semitones']:.1f} semitones (Doppler)"
@@ -212,11 +231,10 @@ class Pictures(scene_pictures.Pictures):
             draw.line([(left, y), (left + width, y)], fill=LINE, width=1)
             text(draw, (left - 10, y), f"{level:.0f}", small, FAINT, "rm")
             level += GRID_DB
-        second = 0.0
-        while second <= self.span:
-            x = at(second, floor)[0]
-            text(draw, (x, top + height + 8), f"{second:.0f} s", small, FAINT, "ma")
-            second += GRID_S
+        step = time_step(self.span, width)
+        for k in range(int(self.span / step + 1e-9) + 1):
+            x = at(k * step, floor)[0]
+            text(draw, (x, top + height + 8), f"{k * step:.0f} s", small, FAINT, "ma")
         points = [at(a, b) for a, b in zip(times, levels, strict=True)]
         if t is None:
             draw.line(points, fill=LISTENER, width=3)
@@ -289,4 +307,4 @@ class Pictures(scene_pictures.Pictures):
         return img
 
 
-__all__ = ["GRAPH_BOX", "PLAN_BOX", "Pictures"]
+__all__ = ["GRAPH_BOX", "PLAN_BOX", "Pictures", "time_step"]

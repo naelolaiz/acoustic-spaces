@@ -26,6 +26,7 @@ from acoustic_spaces.i18n import _
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.pack import is_pack, unpack
 from acoustic_spaces.room import Room
+from acoustic_spaces.scene.model import insertion_loss_problem
 
 #: What the map command can plot (the keys of engine.coverage.MAP_PARAMETERS).
 MAP_PARAMETER_NAMES = (
@@ -112,6 +113,13 @@ def _first_in_use(items) -> str:
     return next(item.name for item in items if item.in_use)
 
 
+def _unnamed(args: argparse.Namespace) -> tuple[str, ...]:
+    """The kinds (sources, listeners) that ``--source`` and ``--listener`` leave to the
+    first in use, as early paths take them."""
+    named = (("sources", args.source), ("listeners", args.listener))
+    return tuple(kind for kind, name in named if name is None)
+
+
 def _unpack(path: str) -> str:
     """Unpack a pack into a folder removed when the command ends; its scene file."""
     folder = tempfile.mkdtemp(prefix="acoustic-spaces-pack-")
@@ -126,13 +134,16 @@ def _unpack(path: str) -> str:
     return str(unpacked.scene)
 
 
-def _print_checks(room: Room, strict: bool = False) -> bool:
+def _print_checks(
+    room: Room, strict: bool = False, in_use: Sequence[str] = ("sources", "listeners")
+) -> bool:
     """Print problems and warnings; return True when there are no problems, nor with
-    ``strict`` warnings."""
+    ``strict`` warnings. ``in_use`` are the kinds the command takes as the scene has
+    them in use, rather than by name (:meth:`Room.problems`)."""
     warnings = room.warnings()
     for warning in warnings:
         print(f"warning: {warning}", file=sys.stderr)
-    problems = room.problems()
+    problems = room.problems(in_use)
     for problem in problems:
         print(f"error: {problem}", file=sys.stderr)
     return not problems and not (strict and warnings)
@@ -774,7 +785,7 @@ def _cmd_view(args: argparse.Namespace) -> int:
     room = _load_room(args.scene)
     if room is None:
         return 1
-    ok = _print_checks(room)
+    ok = _print_checks(room, in_use=_unnamed(args) if args.paths else ())
     paths = leaks = None
     if args.leaks:
         from acoustic_spaces.engine.leaks import find_leaks
@@ -819,7 +830,8 @@ def _cmd_animate(args: argparse.Namespace) -> int:
     from acoustic_spaces.engine import trace_particles
 
     room = _load_room(args.scene)
-    if room is None or not _print_checks(room):
+    # Particles need no listener, and come from the first source when none is in use.
+    if room is None or not _print_checks(room, in_use=()):
         return 1
     try:
         particles = trace_particles(
@@ -885,7 +897,10 @@ def _cmd_export(args: argparse.Namespace) -> int:
     room = _load_room(args.scene)
     if room is None:
         return 1
-    if not _print_checks(room) and (args.paths or args.particles):
+    # Only paths take the first source and listener in use (particles need no listener).
+    if not _print_checks(room, in_use=_unnamed(args) if args.paths else ()) and (
+        args.paths or args.particles
+    ):
         return 1
     scene = room.scene
     paths = particles = None
@@ -1074,6 +1089,16 @@ def _add_without_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _without_named(room: Room, names: Sequence[str] | None) -> bool:
+    """Whether ``--without`` (None: not given) names buildings, barriers or vegetation
+    of this outdoor scene, each once, as ``simulation.insertion_loss_of`` must: an error
+    is printed when not, before anything runs."""
+    problem = None if not names else insertion_loss_problem(room.scene.geometry, names, "--without")
+    if problem is not None:
+        print(f"error: {problem}", file=sys.stderr)
+    return problem is None
+
+
 def _cmd_simulate(args: argparse.Namespace) -> int:
     from acoustic_spaces.engine.long_term import simulate
     from acoustic_spaces.results import REPORT_FILE, results_folder, write_results
@@ -1106,6 +1131,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             **_performance_options(args),
         },
     )
+    if not _without_named(room, args.without):
+        return 1
     settings = _with_coherent(settings, args.coherent_band, room.outdoor is not None)
     if settings is None:
         return 1
@@ -1366,7 +1393,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
             "--noise": ("noise_db", noise),
         },
     )
-    if simulation is None or settings is None:
+    if simulation is None or settings is None or not _without_named(room, args.without):
         return 1
     try:
         result = coverage_map(
@@ -1383,7 +1410,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
     grid = result.grid
     band = OCTAVE_BANDS_HZ.index(args.band)
     band_text = f"{args.band} Hz" if args.band < 1000 else f"{args.band // 1000} kHz"
-    levels = grid.index.shape[2]
+    levels = int(grid.level.max()) + 1
     print(
         f"\n{len(grid)} map points {grid.cell:g} m apart, {settings.height:g} m above the "
         f"audience surfaces" + (f", on {levels} levels" if levels > 1 else "")
@@ -1462,6 +1489,22 @@ def _describe(sweep) -> str:
     )
 
 
+def _note_cut(responses, sweep, length_s: float | None) -> None:
+    """Say so when the responses came out shorter than ``--length`` asked."""
+    rate = sweep.sample_rate
+    if length_s is None or len(responses) >= round(length_s * rate):
+        return
+    why = (
+        "the next sweep's distortion lands right after it"
+        if sweep.repeats > 1
+        else "the recording ends that long after the sweep"
+    )
+    print(
+        f"note: the responses are {len(responses) / rate:.2f} s long, not {length_s:g} s: {why}",
+        file=sys.stderr,
+    )
+
+
 def _cmd_sweep(args: argparse.Namespace) -> int:
     try:
         sweep = _sweep_from(args)
@@ -1514,6 +1557,7 @@ def _cmd_deconvolve(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    _note_cut(responses, sweep, args.length)
     if args.loopback is not None:
         column = _channel_index(args.loopback, responses.shape[1], "loopback channel")
         if column is None:
@@ -1550,6 +1594,34 @@ def _reference_energy(args: argparse.Namespace, sample_rate: int, side: str = ""
     return free_field_reference(data[:, 0], rate, distance, filters=args.filters)
 
 
+def _note_bands(sample_rate: float, what: str = "the response", sti: bool = False) -> None:
+    """Say which octave bands a response at ``sample_rate`` does not hold whole: those
+    above half the rate are left out (and with ``sti``, the STI with them), and one that
+    reaches past it is analysed from its part below it."""
+    from acoustic_spaces.parameters import _band_label, _octave_band_edges
+
+    lower, upper = _octave_band_edges()
+    half = sample_rate / 2.0
+    out = [_band_label(f) for f, low in zip(OCTAVE_BANDS_HZ, lower, strict=True) if low >= half]
+    part = [
+        _band_label(f)
+        for f, low, high in zip(OCTAVE_BANDS_HZ, lower, upper, strict=True)
+        if low < half < high
+    ]
+    said = []
+    if out:
+        many = len(out) > 1
+        said.append(
+            f"the {' and '.join(out)} band{'s lie' if many else ' lies'} above half the "
+            f"sample rate and {'are' if many else 'is'} left out"
+            + (f", and the STI with {'them' if many else 'it'}" if sti else "")
+        )
+    if part:
+        said.append(f"the {part[0]} band is analysed from its part below {half:g} Hz")
+    if said:
+        print(f"note: {what} is at {sample_rate:g} Hz: {'; '.join(said)}", file=sys.stderr)
+
+
 def _analysis(ir, sample_rate: int, args: argparse.Namespace, reference, **more) -> dict:
     """Print and return the parameters of one impulse response; ``more`` are the lateral
     and directional responses for them, and ``iacc`` the IACC of the ears it is one of."""
@@ -1574,12 +1646,12 @@ def _analysis(ir, sample_rate: int, args: argparse.Namespace, reference, **more)
         ranges = [f"{r:6.0f}" if r != float("inf") else f"{'-':>6}" for r in decay.decay_range_db]
         print(f"{'decay range (dB)':<18}" + "".join(ranges))
     print(params.table())
-    speech = {
-        name: sti_from_impulse_response(
+    speech = {}
+    for name in ("sti", "stipa"):
+        value = sti_from_impulse_response(
             ir, sample_rate, filters=args.filters, noise=noise, stipa=name == "stipa"
         )
-        for name in ("sti", "stipa")
-    }
+        speech[name] = value if value == value else None
     echo = {}
     for kind in ECHO_CRITERIA:
         value, at = echo_criterion(ir, sample_rate, kind, filters=args.filters)
@@ -1669,6 +1741,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         return 1
     name = Path(args.ir).name
     report = {"file": name, "bands_hz": list(OCTAVE_BANDS_HZ), "channels": []}
+    _note_bands(sample_rate, name, sti=True)
     for c, title, more in channels:
         print(f"\n{name}, {title}")
         try:
@@ -1742,6 +1815,8 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         filters=args.filters,
         noise=noise,
     )
+    for side, (_, sample_rate, _, _) in sides.items():
+        _note_bands(sample_rate, f"the {side} response")
     report = {}
     for side, (ir, sample_rate, channel, _) in sides.items():
         name, start = Path(getattr(args, side)).name, onset(ir) / sample_rate
@@ -1811,6 +1886,7 @@ def _measured_pair(path: str, args: argparse.Namespace):
     channel = args.channel or 1
     if not 1 <= channel <= data.shape[1]:
         raise ValueError(f"{path} has no channel {channel} (it has {data.shape[1]})")
+    _note_bands(sample_rate, path)
     return from_impulse_response(
         data[:, channel - 1], sample_rate, filters=args.filters, noise=not args.no_noise
     )
@@ -1839,7 +1915,8 @@ def _cmd_calibrate(args: argparse.Namespace) -> int:
     from acoustic_spaces.calibration import calibrate
 
     room = _load_room(args.scene)
-    if room is None or not _print_checks(room):
+    # Calibration simulates the sources and listeners it has measurements for, by name.
+    if room is None or not _print_checks(room, in_use=()):
         return 1
     settings = _override(
         room.scene.simulation,
@@ -1922,6 +1999,7 @@ def _cmd_measure(args: argparse.Namespace) -> int:
     except ImportError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    _note_cut(result.impulse_responses, sweep, args.length)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -1945,6 +2023,7 @@ def _cmd_measure(args: argparse.Namespace) -> int:
     }
     if result.latency_s is not None:
         print(f"latency from the loopback channel: {result.latency_s * 1e3:.2f} ms")
+    _note_bands(sweep.sample_rate, "the measurement", sti=True)
     for k, channel in enumerate(args.input):
         ir = result.impulse_responses[:, k]
         print(f"\ninput {channel}")
@@ -2109,7 +2188,10 @@ def _cmd_walkthrough(args: argparse.Namespace) -> int:
     from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk
 
     room = _load_room(args.scene)
-    if room is None or not _print_checks(room):
+    # A walk takes its walker even when left out, and its scene is checked as it is
+    # simulated; every mover together (--all) takes the sources and listeners in use.
+    in_use = ("sources", "listeners") if args.all_movers else ()
+    if room is None or not _print_checks(room, in_use=in_use):
         return 1
     settings = _override(
         room.scene.simulation,
@@ -2687,8 +2769,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="put a scene and every file it names in one zip, to run on another computer",
         description=(
             "Write a scene and every file it names (model, terrain, buildings map, "
-            "material and directivity files, HRTFs) to one zip file, with the scene file "
-            "naming them relatively. Every command that reads a scene takes the pack in "
+            "material and directivity files, the files sources play, the scene's "
+            "recording and HRTFs) to one zip file, with the scene file naming them "
+            "relatively. Every command that reads a scene takes the pack in "
             "its place, so it runs on a server or a cloud job as it does here. Nothing "
             "is uploaded."
         ),
@@ -2866,7 +2949,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--sweep", required=True, help="the sweep's .json (or the .wav next to it)"
     )
     deconvolve.add_argument("--out", required=True, help="WAV file for the impulse responses")
-    deconvolve.add_argument("--length", type=float, help="response length, s (default: silence)")
+    deconvolve.add_argument(
+        "--length",
+        type=float,
+        help="response length, s (default: the silence; at most that with repeats, and with "
+        "one sweep the recording's length less the sweep's)",
+    )
     deconvolve.add_argument(
         "--loopback", type=int, help="channel of the recording wired to the output (1-based)"
     )
@@ -2977,7 +3065,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     measure.add_argument("--output", type=int, default=1, help="output channel (default 1)")
     measure.add_argument("--loopback", type=int, help="input wired to the output, for latency")
-    measure.add_argument("--length", type=float, help="response length, s (default: silence)")
+    measure.add_argument(
+        "--length", type=float, help="response length, s (default and at most: --silence)"
+    )
     measure.add_argument("--plot", action="store_true", help="save decay plots (needs viz)")
     _add_sweep_arguments(measure)
     _add_analysis_arguments(measure)
@@ -3067,8 +3157,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     walkthrough.add_argument(
         "--listener",
-        help="listener that hears a walking source (default: the only one); with --all, the "
-        "one listener to render",
+        help="listener that hears a walking source, even one left out (default: the only one "
+        "in use); with --all, the one listener to render",
     )
     walkthrough.add_argument(
         "--format",

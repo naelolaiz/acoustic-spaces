@@ -123,6 +123,12 @@ Edge diffraction:
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
+- [ ] Near a shadow boundary, in the bands that add in energy (indoors from 250 Hz), the
+  cross term between the term that continues the geometric wave and the edge's other
+  terms, weighted by how coherent they are over the band: on the boundary of a
+  right-angled corner the level is 1.7 dB low at 250 Hz and 1 dB at 1 kHz, and on that
+  of a wedge open over 225° 2.2 dB at 250 Hz (see
+  [Validation](validation.md#known-issues)).
 
 Parameters:
 
@@ -175,7 +181,7 @@ Outdoor acoustics, in steps:
   wedge per crest with both slopes' reflections in its terms, the equivalent edge and
   thick-screen factor for a rounded top, and the nearest crest's wave in sight, so the
   level is continuous across the edge of a hill's shadow; the late rays bounce off the
-  triangles. A ridge is within 0.2 dB of the exact wedge in every band, a flat terrain
+  triangles. A ridge is within 0.1 dB of the exact wedge in every band, a flat terrain
   and a slope give the flat ground's and the image's paths, a smooth hill over soft
   ground lets 1.4 to 1.8 dB more past than the thin screen (its crest is a wedge open
   wider than a half-plane), over rigid ground the flanks' reflections add. Scenes
@@ -269,6 +275,13 @@ Outdoor acoustics, in steps:
   40 dB of free field, where the narrow-angle one strays by 3 to 20 dB; in the weather
   presets within 0.04 dB on average (the narrow-angle one 0.11). Three to four times
   the work; without it nothing changes.
+- [x] The scattered sound of the reflections straight from the source found from each
+  listener too, shared with the late rays by how densely each finds it: an aircraft
+  overhead no longer brings a listener above grass bursts of it from the few rays that
+  land nearby.
+- [ ] The same where the rays bend in wind or a temperature gradient, scatter in plants
+  before they reflect, or reach the listeners as secondary sources: there the
+  scattered sound near a listener still comes from the few rays that land nearby.
 
 Sources:
 
@@ -407,8 +420,9 @@ Movement:
   against Doc 29's: the airport example's twin jet, flown by Doc 29's Appendix B.
 - [ ] Houses under the airport example's flights, and an aircraft flying over at
   cruise.
-- [ ] The L_Amax of a pass with slow and fast time weighting, as measured, beside the
-  highest quasi-static level the captions give now.
+- [ ] The L_Amax of a pass with fast time weighting, and with slow time weighting in the
+  captions of vehicles other than the aircraft (whose captions give it), as measured,
+  beside the highest quasi-static level the captions give now.
 - [x] Ground-borne vibration from trains, trams and construction plant, and the rumble
   it makes in a building's rooms, by the US FTA's general method: overall levels from
   its curves and tables against its limits and damage criteria, for the railway's
@@ -437,6 +451,9 @@ Editor:
   orchestra demo downloads its tracks itself, as the other demos do their recordings.
 - [x] The listeners a demo plays, picked for a run: `--listeners` in every demo with
   several listeners, and a Listeners list to tick in the Run demo window.
+- [x] The Run demo window keeps the options changed in it for the next time, per demo
+  and, for what names something in a scene, per scene file, with **Defaults** to put
+  them back.
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.
@@ -605,3 +622,7 @@ Next:
 - [ ] A microphone's measured on-axis response and measured patterns (files), as
   sources have.
 - [ ] Spaced pairs whose late parts correlate as real capsules' do at low frequencies.
+- [ ] ISO 3382-3's quantities for open-plan offices on a line of positions, with its
+  normal speech spectrum and the background noise: the spatial decay rate D2,S and
+  Lp,A,S,4m fitted to the speech level against distance, and the distraction, privacy
+  and comfort distances from the STI and the level along the line.

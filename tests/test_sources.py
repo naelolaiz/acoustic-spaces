@@ -361,3 +361,46 @@ def test_sources_and_listeners_left_out() -> None:
     scene.sources[1] = scene.sources[1].model_copy(update={"enabled": False})
     with pytest.raises(ValueError, match="every source is left out"):
         simulate(Room.from_scene(scene))
+
+
+def test_every_source_or_listener_left_out_is_a_problem(tmp_path: Path, capsys) -> None:
+    """A run takes the sources and listeners in use: with every one of a kind left out,
+    validate and pack refuse the scene, as simulate does, before anything runs. Named,
+    one left out runs all the same, and a map needs no listener."""
+    from acoustic_spaces.cli import main
+
+    scene = _shoebox()
+    scene.simulation.late.method = "statistical"
+    scene.simulation.early.max_order = 1
+    scene.sources[0] = scene.sources[0].model_copy(update={"enabled": False})
+    room = Room.from_scene(scene)
+    assert room.problems() == ["every source is left out (enabled: false)"]
+    assert room.problems(in_use=("listeners",)) == []
+    path = tmp_path / "scene.yaml"
+    scene.to_yaml(path)
+    assert main(["validate", str(path)]) == 1
+    assert "error: every source is left out (enabled: false)" in capsys.readouterr().err
+    assert main(["pack", str(path), str(tmp_path / "out.zip")]) == 1
+    assert "every source is left out" in capsys.readouterr().err
+    assert not (tmp_path / "out.zip").exists()
+    talker = scene.sources[0].name
+    assert len(simulate(room, sources=[talker]).responses) == 1
+    assert list(coverage_map(room, settings=Coverage(spacing=3.0), sources=[talker]).maps)
+    seat = scene.listeners[0].name
+    gltf = str(tmp_path / "paths.gltf")
+    args = ["export", str(path), gltf, "--paths", "--max-order", "1"]
+    assert main([*args, "--source", talker, "--listener", seat]) == 0
+    assert main(args) == 1
+    capsys.readouterr()
+
+    scene.sources[0] = scene.sources[0].model_copy(update={"enabled": None})
+    scene.listeners[0] = scene.listeners[0].model_copy(update={"enabled": False})
+    room = Room.from_scene(scene)
+    assert room.problems() == ["every listener is left out (enabled: false)"]
+    scene.to_yaml(path)
+    assert main(["validate", str(path)]) == 1
+    assert "error: every listener is left out (enabled: false)" in capsys.readouterr().err
+    with pytest.raises(ValueError, match="every listener is left out"):
+        simulate(room)
+    assert len(simulate(room, listeners=[seat]).responses) == 1
+    assert list(coverage_map(room, settings=Coverage(spacing=3.0)).maps) == [talker]

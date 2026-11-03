@@ -81,6 +81,15 @@ it is: the video's one gain sets how loud it is heard, and the captions' level a
 stay the scene's voice; the pass-by demos take `--input car=engine.wav`, a dry recording
 played as the car's sound.
 
+`--format` mixes the stops in another output the simulation wrote, by the label
+`simulate` gives it (`ambix3`, `5.0`, `7.0.4`, `mono`...), instead of binaural. The tour
+still plays at the two ears: Ambisonics through the binaural decoder of its order, and a
+loudspeaker layout as virtual speakers, each speaker's channel through the HRTF of its
+direction (the LFE channel, which the simulator leaves silent, left out), both through
+the HRTFs the scene's binaural output names or the spherical head model. A mix of one
+channel plays in both ears, and one of two (a stereo microphone pair, the stereo layout)
+as it is.
+
 In the editor, **Simulation > Run demo…** does the same for the open scene: *This
 scene* (below), and for an example's scene, or a copy of one, the example's own demos
 and its scripts that are no demos. The window shows the options that change what the
@@ -88,7 +97,12 @@ demo plays, at the command line's defaults, the file each source plays, the list
 to play and the walkers that move; **Advanced** holds the step, the paths and the
 command line, to repeat the run in a terminal. A line above **Run** says what the run
 downloads and how much. A scene with changes is saved first, as the demo reads its
-file.
+file. However it closes, the window keeps the options changed in it for the next time,
+each demo its own: a pick from a list, a number, a tick and a file of yours (the HRTFs,
+a song with its credit) for any scene, and what names something in the scene (the
+listeners, the files its sources play, what moves, the format, a tour) for that scene
+file, which also keeps the demo picked; **Defaults** puts them back. The folders and
+files a demo writes and the scenes it reads follow the open scene.
 
 Every still says how its sound was made, at the bottom: the version, the early
 reflections (traced or image sources, their order, diffraction) and the late sound with
@@ -182,16 +196,18 @@ acoustic-spaces demo scene.yaml --moving none   # every walker standing where it
   gain for all, so that the listeners' differences in level are heard as they are.
 - **video**: `tour.wav` hears each listener for `--seconds` (20 by default) while the
   recordings run on, crossfading between them; a recording too short for every listener
-  shares its length out. Each stop is turned up to the loudness (K-weighted) of the
-  loudest, by as much as the still says, the only step that is not the simulation's. The
-  stills show the scene from above, drawn from its own model, with its sources (those
-  that play in colour, with a ray to the listener), the listeners and the one of the
-  moment as a head, and beside it the A-weighted level there of the sources that play,
-  as simulated, when their sound arrives, the reverberation time T30 at mid frequencies
-  (the mean of the 500 Hz and 1 kHz bands) and the nearest source that plays. `--credit`
-  puts a line about the recordings on the stills (who made them, their licence); without
-  it the line gives the free recording's credit, when one plays, and says which source
-  plays which other file.
+  shares its length out. Each stop is turned up to the loudness of the loudest, by 40 dB
+  at most and by as much as the still says, the only step that is not the simulation's:
+  K-weighted, with the channels' powers added up as ITU-R BS.1770-4 adds them (the side
+  surrounds of a loudspeaker layout 1.5 dB up, the LFE left out), an Ambisonics mix
+  measured on its W channel alone. The stills show the scene from above, drawn from its
+  own model, with its sources (those that play in colour, with a ray to the listener),
+  the listeners and the one of the moment as a head, and beside it the A-weighted level
+  there of the sources that play, as simulated, when their sound arrives, the
+  reverberation time T30 at mid frequencies (the mean of the 500 Hz and 1 kHz bands) and
+  the nearest source that plays. `--credit` puts a line about the recordings on the
+  stills (who made them, their licence); without it the line gives the free recording's
+  credit, when one plays, and says which source plays which other file.
 
 **Movement.** Sources and listeners whose [walk](scenes.md#walks) is on move along it
 while the recordings play, all on one clock from their start, as `walkthrough --all`
@@ -244,13 +260,14 @@ python orchestra_demo.py render   # demo/seats: each stop of the tour, binaural 
 python orchestra_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
-Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement take
-equal shares of it), `--listeners conductor,stalls-rear` (each movement at the seats of
-its tour among them, or at all of them when it has none of them), `--zips FOLDER` for a folder with zips downloaded before,
-`--movements 1,2` for `tracks`, `--format` for another output the simulation wrote,
-`--no-mp4` for the audio and stills only. `demo/chapters.txt` lists the stops' times for
-a video description. `all` runs tracks, the simulation, render and video, leaving out
-what is there already.
+Options: `--tour 1:stalls-middle,1:conductor,2:stalls-rear` (the seats of a movement
+take equal shares of it), `--listeners conductor,stalls-rear` (each movement at the
+seats of its tour among them, or at all of them when it has none of them), `--zips
+FOLDER` for a folder with zips downloaded before, `--movements 1,2` for `tracks`,
+`--format` for another output the simulation wrote (the tour [decodes it to two
+ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `demo/chapters.txt`
+lists the stops' times for a video description. `all` runs tracks, the simulation,
+render and video, leaving out what is there already.
 
 - **The cuts.** Within a movement the seat changes at the quietest moment within 10 s of
   each equal share's end (the lowest half-second RMS of the first seat's mix), so the
@@ -310,13 +327,12 @@ python church_demo.py render    # demo/seats: the whole piece at each listener
 python church_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
-Options: `--tour nave-back:0,conductor:25,...` (listener:start in seconds),
-`--listeners nave-back,conductor` (those places alone, in `render` and `video`), `--format`
-for another output the simulation wrote (`ambix3`, `5.0`, ...; the video takes its first
-two channels), `--no-mp4` for the audio
-and stills only. The scene and its simulation go beside the script (`scene_choir.yaml`,
-`results_choir`), the rest to `./demo` (`--work`). `all` runs every step in turn,
-leaving out what is done already.
+Options: `--tour nave-back:0,conductor:25,...` (listener:start in seconds), `--listeners
+nave-back,conductor` (those places alone, in `render` and `video`), `--format` for
+another output the simulation wrote (`ambix3`, `5.0`, ...; the tour [decodes it to two
+ears](#running-a-demo)), `--no-mp4` for the audio and stills only. The scene and its
+simulation go beside the script (`scene_choir.yaml`, `results_choir`), the rest to
+`./demo` (`--work`). `all` runs every step in turn, leaving out what is done already.
 
 - **The choir.** Each singer sang the tune alone in a recording booth, at their own tempo
   and a little off pitch here and there. `feeds` moves each take towards the tune (each
@@ -410,18 +426,19 @@ Software-Entwicklungskit released with their stems.
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert
 python stadium_demo.py music     # the reference mix and 7 stems (WAV, 313 MB to download)
 python stadium_demo.py band      # scene_band.yaml: the scene with the band on the stage
-acoustic-spaces simulate scene_band.yaml --out results_band --output binaural   # ~3 min on 4 cores
+acoustic-spaces simulate scene_band.yaml --out results_band --output binaural   # ~2.5 min on 4 cores
 python stadium_demo.py feeds     # demo/feeds: one WAV per loudspeaker and player
-python stadium_demo.py render    # demo/seats: one binaural WAV per listener (~1 min each)
+python stadium_demo.py render    # demo/seats: one binaural WAV per listener (~30 s each)
 python stadium_demo.py video     # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
 Options: `--song francium` or `rubidium` for `music` and `feeds` (with `--work
 demo_francium` for a folder of its own), `--tour mix_position:1,singer:0.5,east_stand:1`
 (listener:phrases of 8 bars, 0.5 for 4; the last one runs to the end), `--listeners
-mix_position,east_stand` (those listeners alone, in `render` and `video`), `--format` for another output the simulation wrote, `--no-mp4` for the
-audio and stills only. `all` runs music, feeds, render and video; `band` and the
-simulation come before it.
+mix_position,east_stand` (those listeners alone, in `render` and `video`), `--format`
+for another output the simulation wrote (the tour [decodes it to two
+ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `all` runs every
+step in turn, leaving out what is there already (the music, the scene, the simulation).
 
 A song of your own plays in place of the presets: `--music song.wav --bpm 120` for
 `music` and `feeds` (and `all`), the master as a stereo file (WAV, or anything ffmpeg
@@ -458,8 +475,8 @@ music goes to `demo/music/<file name>`, a folder of its own beside the presets',
 - **One gain for all listeners, then each stop turned up.** `render` scales the 12 mixes
   by one gain (the loudest peak at -1 dBFS), so the level differences between places in
   `demo/seats` are the simulation's: on stage, between the monitors and beside the drum
-  kit, it is 7 to 20 dB(A) louder than in the audience, and the mix position is
-  18 dB(A) below the singer's place. That is too much to hear both in one video, so the
+  kit, it is 6 to 18 dB(A) louder than in the audience, and the mix position is
+  16 dB(A) below the singer's place. That is too much to hear both in one video, so the
   tour turns each stop up to the loudness of the loudest one and its caption gives the
   real level and how much it was turned up. Loudness is weighted as loudness meters
   weigh it (K, ITU-R BS.1770), which counts the subwoofers' bass that the A weighting of
@@ -540,22 +557,22 @@ makes is heard.
 acoustic-spaces examples --copy . lakeside_concert && cd lakeside_concert
 python lakeside_demo.py music    # the song (WAV, 56 MB), a signal for each loudspeaker
 python lakeside_demo.py scenes   # scene_demo.yaml, and scene_still.yaml in still air
-acoustic-spaces simulate scene_demo.yaml --out results_demo --output binaural    # ~30 s
-acoustic-spaces simulate scene_still.yaml --out results_still --output binaural  # ~15 s
+acoustic-spaces simulate scene_demo.yaml --out results_demo --output binaural    # ~20 s
+acoustic-spaces simulate scene_still.yaml --out results_still --output binaural  # ~13 s
 python lakeside_demo.py render   # demo/seats: every listener in both weathers
 python lakeside_demo.py video    # demo/tour.wav, demo/stills, demo/tour.mp4, demo/thumbnail.png
 ```
 
-Options: `--song great_british_summer` or `potassium` for `music` (below),
-`--music song.wav --bpm 120` for a song of your own in their place (a stereo file, WAV
-or anything ffmpeg decodes, and its tempo, which the tour's phrases of 8 bars go by;
-nothing is downloaded, and the video credits the file by its name unless `--credit`
-says what to show), `--tour bedroom_window:still:1,audience::2`
-(listener:weather:phrases of 8 bars), `--listeners audience,bedroom_window` (those places
-alone, in both weathers), `--last-phrases` (how long the last stop lasts, 0
-to the end of the song; 2 by default), `--format` for another output the simulation
-wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and video;
-`scenes` and the two simulations come before it.
+Options: `--song great_british_summer` or `potassium` for `music` (below), `--music
+song.wav --bpm 120` for a song of your own in their place (a stereo file, WAV or
+anything ffmpeg decodes, and its tempo, which the tour's phrases of 8 bars go by;
+nothing is downloaded, and the video credits the file by its name unless `--credit` says
+what to show), `--tour bedroom_window:still:1,audience::2` (listener:weather:phrases of
+8 bars), `--listeners audience,bedroom_window` (those places alone, in both weathers),
+`--last-phrases` (how long the last stop lasts, 0 to the end of the song; 2 by default),
+`--format` for another output the simulation wrote (the tour [decodes it to two
+ears](#running-a-demo)), `--no-mp4` for the audio and stills only. `all` runs every
+step in turn, leaving out what is there already (the music, the scenes, the simulations).
 
 - **The sound system.** `scenes` plays, in place of the example's single source (120 dB
   sound power), the example's PA group, left out of its own simulations until ticked: a
@@ -571,27 +588,28 @@ wrote, `--no-mp4` for the audio and stills only. `all` runs music, render and vi
   mids up, their top octave up for the air): at 30 m every octave from 250 Hz to 4 kHz is
   within 1 dB of 1 kHz, 8 kHz 1.5 dB down and 63 and 125 Hz 2 dB up. `scenes` also takes
   in the example's listener 140 m behind the stage, upwind (`behind_stage`, left out as
-  the system is), and lets the responses run 3.5 s, as the far shore hears the stage
-  1.6 s late.
+  the system is), and lets the responses run 3.5 s past the latest direct sound, the far
+  shore's, 1.6 s late (5.2 s in all).
 - **The weather** is the example's: a breeze from the park out over the lake, 2.5 m/s
   10 m up, and two weather zones, the lake's (air 17 °C at the water, a degree warmer
   every 10 m up, and a 3.5 m/s breeze) and the village's (a 1 m/s breeze among the
   houses). The breeze and the cool air bend the sound down to the water, which gives it
   back almost whole. `scene_still.yaml` is the same scene with no atmosphere.
-- **What it gives.** At the bedroom window the evening's weather makes the song 7.1 dB(A)
-  louder than still air would, in the garden 5.0 dB; behind the stage, upwind, it is
-  0.5 dB quieter, and on the boat 1.0 dB quieter. The window gains most: what the
-  weather bends down comes in off the water as well as straight, and the house's wall
-  beside the window gives back each of those again.
-- **How loud.** From the audience to the far shore the sound drops by 24 to 25 dB(A),
+- **What it gives.** At the bedroom window the evening's weather makes the song 5.3 to
+  6.0 dB(A) louder than still air would, in the garden 5.0 to 5.1 dB; behind the stage,
+  upwind, it is 0.5 to 0.7 dB quieter, and on the boat 0.9 dB quieter (three runs, each
+  with rays of its own). The far shore gains most: what the weather bends down comes in
+  off the water as well as straight, and at the window the house's wall gives back each
+  of those again.
+- **How loud.** From the audience to the far shore the sound drops by about 25 dB(A),
   too much to hear the far places in a video, so each stop is turned up to the
   audience's loudness and its caption says how much quieter the place really is, in
   dB(A). The loudness is K-weighted, as meters weigh it, not A-weighted: the far places
   and the back of the stage keep little but bass (the array boxes radiate every way below
   250 Hz and the water gives the low end back whole), which the A weighting all but
   leaves out, so matching dB(A) would put their bass far above the audience's. The window
-  in still air keeps the gain of the window in the evening's weather, so the 7.1 dB is
-  heard.
+  in still air keeps the gain of the window in the evening's weather, so the difference
+  the weather makes is heard.
 - **The cuts.** Each place's mix is shifted earlier by the time the loudest sound takes
   to reach it (the peak of the energy of its responses: 0.09 s in the audience, 1.66 s
   at the window), so that the beat runs on across each 1 s crossfade, every 8 bars.
@@ -1040,7 +1058,7 @@ in the street, at the speed of its walk (50 km/h) unless `--speed` says.
   dB(A) at the railway's house (86.8 dB(A) outdoors, 47.1 in the room). That level is
   the listener's own where it stands 2 m out, as `house_18m` and the pavement do;
   nearer, where the wall's reflection makes the 63 to 250 Hz bands louder or quieter,
-  the vehicle is simulated once more, as one more listener (`balcony_2m`), at the point
+  the vehicle is simulated once more, as one more listener (`balcony_2m`, the street example's, ticked off), at the point
   2 m in front of the wall, square to it, at the listener's height: for the balcony, 1 m
   out from it. The room hears the listener's sound through the window, each octave band
   changed at each moment by as much as the level 2 m out is over the listener's. The
@@ -1187,8 +1205,8 @@ as the scene has it), `--at 180` when it is over the centre
 spot, in seconds into the song as the sound system plays it (by default halfway
 through); `--speed`, `--broadband`, `--step` and `--input helicopter=WAV` as in the
 flyover demo, and `--tour` and `--listeners` as in the stadium demo (the helicopter is
-then simulated at those listeners alone, over the concert's mixes there). At the mix position the walk takes 3.3 minutes on 4
-cores, most of it playing the 301 places through with Doppler, so some 40 for the 12
+then simulated at those listeners alone, over the concert's mixes there). At the mix position the walk takes 2 minutes on 4
+cores, half of it playing the 301 places through with Doppler, so some 25 for the 12
 listeners.
 
 - **The flight.** The stadium's scene has the helicopter, left out of the concert's own
@@ -1200,9 +1218,10 @@ listeners.
   given leave may. Without leave the EU's rules of the air keep a flight by sight (VFR)
   over an open-air assembly of persons 300 m above the highest obstacle within 600 m
   (SERA.5005(f)), here the stadium's roof, 30 m up: `--height 330`. The ground and the
-  sky are widened to take the flight, and the responses are as much longer as the
-  helicopter is farther than the stage (4.1 s against the concert's 2.0 s), so each
-  keeps the stadium's decay after the helicopter's sound arrives.
+  sky are widened to take the flight; the responses run the scene's 2.0 s past the
+  latest direct sound, as every outdoor response does (4.0 s in all, against the
+  concert's 2.7 s), so each keeps the stadium's decay after the helicopter's sound
+  arrives.
 - **The helicopter and its pass** are the flyover demo's steps on that scene:
   `helicopter` its rotors' sound, `scene` the helicopter alone (`scene_overhead.yaml`)
   with the sound power and the directivity of its rotors at 63 m/s through still air
@@ -1210,7 +1229,9 @@ listeners.
   each of the 12 listeners, with Doppler. At the mix position it peaks at about
   81 dB(A) (about 74 from 330 m), where the sound system's loudspeakers, simulated at
   their sound power, give 97 dB(A): it is some 15 dB under the music, heard most in the
-  song's quiet passages. High in the north stand, under the roof, it peaks 10 dB lower.
+  song's quiet passages. High in the north stand, under the roof, it peaks 8 to 11 dB
+  lower (two runs): the sound there is almost all late sound, which a few rays can lift
+  by several decibels at one place.
 - **The mix.** `mix` adds the helicopter's pass at each listener to the concert's mix
   there (`demo/seats`), the helicopter over the centre spot at `--at`. The feeds stand
   for the loudspeakers' sound power, a gated RMS of 0.1 for the loudest one's (the main
@@ -1361,24 +1382,30 @@ listeners it is simulated and heard at.
   most 1 m up.
 - **Its sound** is noise with the octave spectrum of its sound power, which comes from
   its NPD curves and spectral class ([an aircraft in a
-  scene](outdoor.md#aircraft-by-ecac-doc-29)): 155.7 dB(A) at the departure's highest
-  thrust (25,000 lb, at its start of roll) and 145.4 dB(A) at the arrival's (its reverse
+  scene](outdoor.md#aircraft-by-ecac-doc-29)): 156.0 dB(A) at the departure's highest
+  thrust (25,000 lb, at its start of roll) and 145.7 dB(A) at the arrival's (its reverse
   thrust, 10,000 lb), louder and softer as the thrust changes along the flight: the
-  departure's climb thrust 8.0 dB under its start of roll, the arrival's approach 2.3
-  dB under its reverse thrust and the end of its roll-out 3.5 dB under. Its directivity is its engines' installation
-  correction (under the wings), in a table beside the demo's scene
-  (`scene_demo_departure.csv`). `demo/departure/engines.wav` is the made sound, dry, as
-  long as the flight. `--input departure=WAV` plays a dry recording instead, at least as
-  long as the flight, its level following the recording's.
+  departure's climb thrust 8.0 dB under its start of roll, the arrival's approach 2.3 dB
+  under its reverse thrust and the end of its roll-out 3.5 dB under. Its directivity is
+  its engines' installation correction (under the wings), in a table beside the demo's
+  scene (`scene_demo_departure.csv`). `demo/departure/engines.wav` is the made sound,
+  dry, as long as the flight. `--input departure=WAV` plays a dry recording instead, at
+  least as long as the flight, its level following the recording's.
 - **The pass**: the jet every 4 m along its flight at each listener in turn, through
   the direct sound and its reflection off the ground; the late sound is crossfaded from
   place to place. Places 4 m apart follow the exact field of a flyover closely from 100
   m away and more ([validation](validation.md#moving-sources-against-the-exact-field)).
   A flight of 6.5 km is some 1600 places at each listener, which takes a while.
 
-While the jet is in the air, what each listener hears is within 0.9 dB of Doc 29's own
+The captions give the pass's L_Amax, the highest level of the jet's places, each as
+heard with the jet standing there, and its SEL over the whole flight. They also give it
+as Doc 29 measures it: L_ASmax, the highest level through a sound level meter's slow
+time weighting, which lags about a second behind the passing jet, and the SEL over the
+time that level is within 10 dB of its highest.
+
+While the jet is in the air, what each listener hears is within 1.0 dB of Doc 29's own
 sum over the same flight path's segments, but for the arrival's SEL at
-approach_2000m, 1.7 dB under. While it rolls on the runway they part by up to 11.4 dB,
+approach_2000m, 1.9 dB under. While it rolls on the runway they part by up to 11.3 dB,
 as the engine reckons the sound running along the ground in still air over the scene's
 runway and meadow, where Doc 29 takes off an attenuation it has from measurements
 ([the check](validation.md#an-aircraft-in-the-engine-against-doc-29)).
@@ -1386,7 +1413,4 @@ runway and meadow, where Doc 29 takes off an attenuation it has from measurement
 What it leaves out: one aircraft, Volume 3's hypothetical JETW, and no houses. Its
 sound is noise with one spectrum all along, with none of a jet's tones (its fan's, its
 buzz-saw noise), and the NPD curves give no directivity along the flight path but
-behind the take-off roll, so the source has none either. The captions' L_Amax is the
-highest level of the jet's places, each as heard with the jet standing there, with no
-time weighting; Doc 29's is measured with slow time weighting, which would lower a
-point source's loudest moment 200 ft away at 160 kt by 1.8 dB, 0.2 dB at 1000 ft.
+behind the take-off roll, so the source has none either.

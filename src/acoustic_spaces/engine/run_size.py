@@ -210,8 +210,8 @@ def late_call(
     from acoustic_spaces import _native
 
     def cpu(workers: int) -> float:
-        copies = min(workers, max(1, int(_native.COPY_MEMORY // max(group, 1.0))))
-        return (1 + copies) * group
+        # The first thread's copy takes the others' sums and is the call's result.
+        return min(workers, max(1, int(_native.COPY_MEMORY // max(group, 1.0)))) * group
 
     peaks = [cpu(workers)]
     if "gpu" in devices or "both" in devices:
@@ -270,7 +270,90 @@ def simulation_need(
     with a feed of its own, a listener's copy at a time while its response takes it (four
     arrays as large at most). ``groups`` face groups (``simulate(groups=...)``) add
     their moments to each listener's arrays, and batches of rays (``late.batches``)
-    the energy as each gives it."""
+    the energy as each gives it.
+
+    Its advice gives what the run would need with each setting it may lower changed
+    on its own (:func:`_lowered`), the least first."""
+    stochastic = settings.late.method != "statistical"
+    # The same for every setting lowered: the bands' groups and the devices.
+    tracer = (
+        (_band_groups(room, settings), late_devices(settings.late.device)) if stochastic else None
+    )
+
+    def bytes_of(settings: Simulation, sources: Sequence, listeners: Sequence) -> float:
+        return _simulation_bytes(room, settings, sources, listeners, threads, groups, tracer)[0]
+
+    need, what = _simulation_bytes(room, settings, sources, listeners, threads, groups, tracer)
+    options = sorted(
+        (bytes_of(*changed), label) for label, changed in _lowered(settings, sources, listeners)
+    )
+    sizes = [f"{_size(size)} with {label}" for size, label in options]
+    advice = ", ".join(sizes[:-1]) + (" or " if len(sizes) > 1 else "") + sizes[-1]
+    return Need(need, what, f"it would need about {advice}")
+
+
+def _lowered(settings: Simulation, sources: Sequence, listeners: Sequence) -> list:
+    """The settings a simulation's late part may lower, each changed on its own: as
+    (label, (settings, sources, listeners)). ``simulation.ir_length_s`` and
+    ``late.directions`` halved, ``late.batches`` 1, and half the listeners and the
+    sources (the first of them), where there are more than one; a walk's places are
+    sources or listeners of their own."""
+    late = settings.late
+    length = settings.ir_length_s / 2.0
+
+    def with_late(**update) -> Simulation:
+        return settings.model_copy(update={"late": late.model_copy(update=update)})
+
+    found: list = [
+        (
+            f"simulation.ir_length_s {length:g}",
+            (settings.model_copy(update={"ir_length_s": length}), sources, listeners),
+        )
+    ]
+    if late.method != "statistical":
+        if late.directions > 1:
+            fewer = late.directions // 2
+            found.append(
+                (
+                    f"simulation.late.directions {fewer}",
+                    (with_late(directions=fewer), sources, listeners),
+                )
+            )
+        if late.batches > 1:
+            found.append(
+                (
+                    "simulation.late.batches 1 (no standard errors)",
+                    (with_late(batches=1), sources, listeners),
+                )
+            )
+    if len(listeners) > 1:
+        half = len(listeners) // 2
+        found.append(
+            (f"{half} of the {len(listeners)} listeners", (settings, sources, listeners[:half]))
+        )
+    if len(sources) > 1:
+        half = len(sources) // 2
+        found.append(
+            (
+                f"{half} of the {len(sources)} sources (a walk's places count as sources)",
+                (settings, sources[:half], listeners),
+            )
+        )
+    return found
+
+
+def _simulation_bytes(
+    room: Room,
+    settings: Simulation,
+    sources: Sequence,
+    listeners: Sequence,
+    threads: int,
+    groups: int,
+    tracer: tuple[int, tuple[str, ...]] | None,
+) -> tuple[float, str]:
+    """:func:`simulation_need`'s bytes and what they are for; ``tracer`` is how many
+    groups of bands the late tracer traces in and its devices (:func:`late_devices`),
+    None for the statistical late method."""
     from acoustic_spaces.engine.late import BATCH_STEP, DIRECTION_STEP, MOMENT_STEP
     from acoustic_spaces.engine.simulate import TIME_STEP, is_fed, response_length
 
@@ -288,11 +371,11 @@ def simulation_need(
     # Each fed source's responses: its late part copied for a listener at a time.
     feeding = 4.0 / count if any(is_fed(source) for source in sources) else 0.0
     what = f"the late part of a simulation at {count} {noun} ({length:.4g} s long"
-    advice = "lower simulation.ir_length_s, the listeners or the sources"
-    if late.method == "statistical":
+    if tracer is None:
         results = float(count * bands * slots * VALUE_BYTES)
         need = max((held + 1) * results, (len(sources) + feeding) * results)
-        return Need(need, what + ")", advice)
+        return need, what + ")"
+    band_groups, devices = tracer
     directions = late.directions
     values = slots + directions * math.ceil(length / DIRECTION_STEP - 1e-9)
     if groups > 0:
@@ -306,22 +389,18 @@ def simulation_need(
     call = late_call(
         results,
         bands,
-        _band_groups(room, settings),
+        band_groups,
         # Batches traced in runs hold their sums while the next run is traced.
         splitting=late.splitting or late.batches > 1,
         threads=threads,
         rays=late.rays,
-        devices=late_devices(late.device),
+        devices=devices,
         estimates=estimates,
     )
     results += estimates
     what += f", {directions} arrival directions)"
-    advice = (
-        "lower simulation.ir_length_s, simulation.late.directions, simulation.late.batches, "
-        "the listeners or the sources"
-    )
     need = max(held * results + call, (len(sources) + feeding) * results)
-    return Need(need, what, advice)
+    return need, what
 
 
 def map_need(
