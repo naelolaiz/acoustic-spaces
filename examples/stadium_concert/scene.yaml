@@ -277,7 +277,7 @@ sources:
     group: Helicopter
     enabled: false
     position: [-600, 0, 150]
-    level_db: [134.0, 129.5, 130.7, 130.2, 127.0, 125.1, 122.0, 121.6]
+    level_db: [129.8, 129.5, 130.8, 130.2, 126.9, 125.1, 122.0, 120.1]
     directivity: {file: helicopter.csv}
     walk:
       to: [[600, 0, 150]]

@@ -15,20 +15,21 @@ published apart from the models they come from.
   horns (Verordnung über die technischen Anforderungen an Strassenfahrzeuge, SR 741.41,
   annex 11, the values of DIN 14610): their base frequencies, the ratio between them and
   the cycle; the level on the axis 2 m away in a free field, which the rule asks to be
-  116 to 129 dB(A) on the test bench; and the level 7.00 m in front of the police car,
-  0.5, 1.0 and 1.5 m up, its siren 1.5 m up as in the street example, over the street's
-  asphalt, as the engine gives it, which the rule asks to be 100 to 115 dB(A) on the
-  vehicle.
-- **The fire engine.** Its two tones, 3.0 m up, 7.00 m in front of the vehicle every 0.1
-  m from 0.5 to 1.5 m up over asphalt and on the Swiss rule's bench; its air horn, 1.2
-  m up, against the rule for vehicles' horns (Council Directive 70/388/EEC, Annex I): on
-  its bench, 2 m away on its axis in a free field (105 to 118 dB(A)), its band 1800 to
-  3550 Hz there (105 dB(A) at least, and over any component above it), its rise (0.2 s
-  at most) and its level 7 m in front of the vehicle, 0.5 to 1.5 m up (93 dB(A) at
+  116 to 129 dB(A) on the test bench; and the level 7.00 m in front of the police car's
+  siren (taken at the car's front), 0.5, 1.0 and 1.5 m up, its siren 1.5 m up as in the
+  street example, over the street's asphalt, as the engine gives it, which the rule asks
+  to be 100 to 115 dB(A) on the vehicle.
+- **The fire engine.** Its two tones, 3.0 m up, 7.00 m in front of the siren (taken at
+  the vehicle's front) every 0.1 m from 0.5 to 1.5 m up over asphalt and on the Swiss
+  rule's bench; its air horn, 1.2 m up, against the rule for vehicles' horns (Council
+  Directive 70/388/EEC, Annex I): on its bench, 2 m away on its axis in a free field
+  (105 to 118 dB(A)), its band 1800 to 3550 Hz there (105 dB(A) at least, and over any
+  component above it), its rise (0.2 s at most) and its level 7 m in front of the
+  vehicle, 0.5 to 1.5 m up (93 dB(A) at least).
+- **The car's horn.** The street car's pair of disc horns, against the same rule: on its
+  bench (105 to 118 dB(A); Hella gives its S77 110 +/- 3), its band, its rise, and 7 m
+  in front of the car, 0.5 to 1.5 m up, the horn 0.5 m up over asphalt (93 dB(A) at
   least).
-- **The car's horn.** The street car's pair of disc horns, against the same rule: on
-  its bench (105 to 118 dB(A); Hella gives its S77 111), its band, its rise, and 7 m in
-  front of the car, 0.5 to 1.5 m up, the horn 0.5 m up over asphalt (93 dB(A) at least).
 - **The train's horn.** Its two notes against the rule for trains' horns (TSI LOC&PAS,
   Regulation (EU) No 1302/2014, point 4.2.7.2.1: 660 +/- 30 and 370 +/- 20 Hz); each
   note's level 25 m ahead of the train's front on EN 15153-2's open site, the horn

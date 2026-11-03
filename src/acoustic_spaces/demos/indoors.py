@@ -6,12 +6,19 @@ either alone. Every other listener hears the pass outdoors.
 
 The window: each part of the train is simulated and played at the listener in front of
 the house as the pass-by demo plays it (:mod:`acoustic_spaces.demos.passby`), the
-façade's reflection simulated with the rest, then brought indoors band by band by the
-façade's level difference (:data:`acoustic_spaces.facade.HOUSE`, EN ISO 12354-3), from
-the level 2 m in front of it to the room: its levels per octave band, and its sound
-through a zero-phase filter that changes each octave band's energy by as much
-(:func:`~acoustic_spaces.synthesis.matched_gains`). The sound keeps the direction it
-comes from outdoors; the room's own reverberation is not added.
+façade's reflection simulated with the rest. EN ISO 12354-3 takes the room's level from
+the level 2 m in front of the façade, less the façade's level difference
+(:data:`acoustic_spaces.facade.HOUSE`). The façade's reflection, which adds to the sound
+in front of it, changes the low octave bands with the distance from the wall, so where
+the listener does not stand 2 m out, each part is simulated once more at the point 2 m
+in front of the wall, square to it, at the listener's height (:meth:`Facing.front`,
+:func:`with_fronts`). The room's levels per octave band are that point's less the
+façade's level difference. Its sound is the listener's, through a zero-phase filter
+that changes each octave band's energy by the façade's level difference
+(:func:`~acoustic_spaces.synthesis.matched_gains`) and, at each moment, by as much as
+the level 2 m in front of the wall is over the listener's (:meth:`House.heard`). The
+sound keeps the direction it comes from at the listener; the room's own reverberation
+is not added.
 
 The rumble: by the FTA's general method (:mod:`acoustic_spaces.vibration`), the ground
 under the room shakes at each moment as the train's base curve says at the distance in
@@ -66,8 +73,12 @@ STEP_S = 0.05
 #: 1996-2:2017's positions in front of a reflecting façade, 0.5 to 2 m, where its
 #: reflection adds to the sound.
 FACADE_M = (0.5, 2.0)
-#: What the walls' distance may be off by for a listener to stand in front of one (m).
+#: What a wall's distance may be off by for a listener to stand in front of it, or to
+#: stand FRONT_M out (m).
 FACADE_TOLERANCE_M = 1e-6
+#: How far in front of a façade EN ISO 12354-3 takes the level outdoors of the room
+#: behind it, L_1,2m (m).
+FRONT_M = 2.0
 
 
 def choices(noun: str) -> tuple[str, ...]:
@@ -106,6 +117,90 @@ class Facing:
         along its street, but the room is behind the listener."""
         p = np.atleast_2d(np.asarray(points, dtype=float))[:, :2]
         return np.linalg.norm(p - np.asarray(self.wall), axis=1)
+
+    @property
+    def at_front(self) -> bool:
+        """Whether the listener stands FRONT_M in front of the wall (to
+        FACADE_TOLERANCE_M), where the room takes its level outdoors."""
+        return abs(self.distance_m - FRONT_M) <= FACADE_TOLERANCE_M
+
+    def front(self, position) -> tuple[float, float, float]:
+        """Where the room takes its level outdoors (EN ISO 12354-3's L_1,2m) for the
+        listener at ``position``: FRONT_M in front of :attr:`wall`, square to the wall in
+        plan (towards the listener, which stands square in front of it), at the
+        listener's height."""
+        here = np.asarray(position, dtype=float)
+        wall = np.asarray(self.wall, dtype=float)
+        x, y = wall + FRONT_M * (here[:2] - wall) / self.distance_m
+        return float(x), float(y), float(here[2])
+
+
+def front_name(name: str) -> str:
+    """The name of the listener that stands where the room behind the listener ``name``
+    takes its level outdoors (:func:`with_fronts`)."""
+    return f"{name}_2m"
+
+
+def fronts(scene, inside: dict[str, Facing | None]) -> dict[str, tuple[float, float, float]]:
+    """Where the rooms behind the listeners ``inside`` (:func:`facings` of ``scene``)
+    take their level outdoors, for the listeners that do not stand there themselves
+    (:attr:`Facing.at_front`): :meth:`Facing.front` of each one's place, by its name."""
+    where = {lis.name: lis.position for lis in scene.listeners}
+    return {
+        name: house.front(where[name])
+        for name, house in inside.items()
+        if house is not None and not house.at_front
+    }
+
+
+def with_fronts(room, points: dict[str, tuple[float, float, float]]):
+    """``room`` (a :class:`~acoustic_spaces.room.Room`) with a listener more at each of
+    ``points`` (:func:`fronts`, by the name of the listener each is for): a copy of that
+    listener standing there, named :func:`front_name`; ``room`` itself when there are
+    none. SystemExit when one is not in the open air (inside a building across the
+    street, say), or a listener of ``room`` has its name already."""
+    from acoustic_spaces.room import Room
+
+    if not points:
+        return room
+    scene = room.scene
+    taken = {lis.name for lis in scene.listeners}
+    extra = []
+    for lis in scene.listeners:
+        if lis.name not in points:
+            continue
+        name = front_name(lis.name)
+        if name in taken:
+            raise SystemExit(
+                f"error: a listener is called {name!r}, the name of the point {FRONT_M:g} m "
+                f"in front of the wall {lis.name!r} stands in front of; rename it"
+            )
+        place = tuple(float(v) for v in points[lis.name])
+        extra.append(lis.model_copy(update={"name": name, "position": place, "walk": None}))
+    # The points' own problems; the scene's others are the scene's to tell.
+    theirs = tuple(f"listener {lis.name!r} " for lis in extra)
+    alone = Room.from_scene(scene.model_copy(update={"listeners": extra}), reuse=room)
+    problems = [problem for problem in alone.problems() if problem.startswith(theirs)]
+    if problems:
+        raise SystemExit(
+            f"error: EN ISO 12354-3 takes a room's level outdoors {FRONT_M:g} m in front of "
+            f"its wall, but there {'; '.join(problems)}; move the listener in front of it"
+        )
+    listeners = [*scene.listeners, *extra]
+    return Room.from_scene(scene.model_copy(update={"listeners": listeners}), reuse=room)
+
+
+def front_shift_db(heard, front) -> np.ndarray:
+    """(N, 8) how much the level 2 m in front of a façade (``front``, a
+    :class:`~acoustic_spaces.walkthrough.PassBy`) is over the level where the sound is
+    heard (``heard``, another, on the same clock) per octave band at ``heard``'s times,
+    ``front``'s read there linearly in energy (their places a few milliseconds apart,
+    as their direct sounds travel); 0 where either is silent (dB)."""
+    energy = 10.0 ** (np.asarray(front.levels, dtype=float) / 10.0)
+    there = np.stack([np.interp(heard.times, front.times, band) for band in energy.T], axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        shift = 10.0 * np.log10(there) - np.asarray(heard.levels, dtype=float)
+    return np.where(np.isfinite(shift), shift, 0.0)
 
 
 def facing(scene, position) -> Facing | None:
@@ -213,9 +308,9 @@ class House:
         return vibration.indoor_db(self.building, self.floor)
 
     def through(self, passing):
-        """``passing`` (a :class:`~acoustic_spaces.walkthrough.PassBy` outdoors) in the
-        room: each band's level changed by the façade's
-        :meth:`~acoustic_spaces.facade.Facade.indoor_db`."""
+        """The pass in the room whose level outdoors, 2 m in front of the façade, is
+        ``passing`` (a :class:`~acoustic_spaces.walkthrough.PassBy`): each band's level
+        changed by the façade's :meth:`~acoustic_spaces.facade.Facade.indoor_db`."""
         from acoustic_spaces.parameters import a_weighted
         from acoustic_spaces.walkthrough import PassBy
 
@@ -223,13 +318,30 @@ class House:
         levels_a = np.array([a_weighted(row) for row in levels])
         return PassBy(passing.source, passing.listener, passing.times, levels, levels_a)
 
-    def heard(self, wet: np.ndarray, rate: int) -> np.ndarray:
-        """``wet`` (samples, channels), the vehicle's sound outdoors, as the room hears
-        it: through a zero-phase filter that changes each octave band's energy by the
-        façade's gain (:func:`~acoustic_spaces.synthesis.matched_gains`)."""
-        from acoustic_spaces.synthesis import equalized, matched_gains
+    def heard(self, wet: np.ndarray, rate: int, shift_db=None, times=None) -> np.ndarray:
+        """``wet`` (samples, channels), the sound outdoors at a listener, as the room
+        hears it: through a zero-phase filter that changes each octave band's energy by
+        the façade's gain (:func:`~acoustic_spaces.synthesis.matched_gains`) and, where
+        the listener does not stand 2 m in front of the façade, by ``shift_db`` more,
+        the level there over the listener's per octave band (dB): (8,), the same all
+        along, or (N, 8) at ``times`` (s on ``wet``'s clock), the filter's gains matched
+        so at each of them and each band's gain going linearly from one to the next
+        (held before the first and after the last) as
+        :func:`~acoustic_spaces.synthesis.combine_bands` filters the bands."""
+        from acoustic_spaces.synthesis import combine_bands, equalized, matched_gains
 
-        return equalized(wet, rate, matched_gains(self.facade.gains(), rate))
+        gains = self.facade.gains()
+        shift = np.zeros(len(gains)) if shift_db is None else np.asarray(shift_db, dtype=float)
+        if shift.ndim == 1 or not np.any(shift):
+            gains = gains * 10.0 ** (shift.reshape(-1, len(gains))[0] / 20.0)
+            return equalized(wet, rate, matched_gains(gains, rate))
+        matched = np.array([matched_gains(gains * 10.0 ** (row / 20.0), rate) for row in shift])
+        at = np.arange(len(wet)) / rate
+        knots = np.asarray(times, dtype=float)
+        envelope = np.array([np.interp(at, knots, band) for band in matched.T])
+        flat = np.asarray(wet, dtype=float).reshape(len(wet), -1)
+        out = [combine_bands(envelope * flat[:, k][None, :], rate) for k in range(flat.shape[1])]
+        return np.column_stack(out).reshape(np.shape(wet))
 
     def ground_vdb(self, wheels: Wheels, path, where, times) -> np.ndarray:
         """:func:`ground_vdb` with the house's line."""
@@ -338,7 +450,11 @@ class StillHouses:
     window, the rumble the ``plant``'s vibration makes in its room, or both; at the
     others the scene outdoors. ``listeners`` are the listeners' positions, ``loudest_db``
     the sound power of the loudest source that plays (dB re 1 pW), ``fmt`` the mixes'
-    format.
+    format. A room behind a listener that does not stand 2 m out takes its level
+    outdoors 2 m in front of its wall (:meth:`Facing.front`): ``fronts`` has each
+    source's level per octave band there, by listener, and ``shifts_db`` how much the
+    sources that play are louder there than at the listener, per octave band, which the
+    listener's sound is changed by too (:meth:`House.heard`).
 
     The plant's vibration at a house is each machine's level at its distance in plan
     from the room's wall behind the listener (:func:`~acoustic_spaces.vibration.plant_level`, eq.
@@ -356,6 +472,8 @@ class StillHouses:
     inside: dict[str, Facing | None]
     loudest_db: float
     fmt: object
+    fronts: dict[str, dict[str, list | None]] = field(default_factory=dict)
+    shifts_db: dict[str, np.ndarray] = field(default_factory=dict)
 
     def house_of(self, listener: str) -> Facing | None:
         """The house ``listener`` is heard in, or None outdoors."""
@@ -403,7 +521,8 @@ class StillHouses:
         if self.house is None or self.house_of(mix.listener) is None:
             return x
         x = np.atleast_2d(np.asarray(x, dtype=float).T).T
-        out = self.house.heard(x, rate) if self.house.airborne else np.zeros_like(x)
+        shift = self.shifts_db.get(mix.listener)
+        out = self.house.heard(x, rate, shift) if self.house.airborne else np.zeros_like(x)
         if self.house.rumble:
             n = len(x)
             level = self.rumble_a_db(mix.listener)
@@ -428,8 +547,9 @@ class StillHouses:
     def report(self, report: dict) -> dict:
         """``report`` (parameters.json) as heard where each listener is: the responses
         at a listener in a house with their levels per octave band through the window
-        (:meth:`House.through`'s), the A-weighted level from them, none for the rumble
-        alone; the others as they are."""
+        (:meth:`House.through`'s, of the level 2 m in front of its wall: ``fronts``' or
+        the listener's own), the A-weighted level from them, none for the rumble alone;
+        the others as they are."""
         from acoustic_spaces.parameters import a_weighted
 
         if self.house is None:
@@ -438,8 +558,11 @@ class StillHouses:
         responses = []
         for entry in report.get("responses", []):
             entry = dict(entry)
+            listener = str(entry.get("listener"))
             bands = entry.get("spl_db")
-            if self.house_of(str(entry.get("listener"))) is None:
+            if listener in self.fronts:
+                bands = self.fronts[listener].get(str(entry.get("source")))
+            if self.house_of(listener) is None:
                 pass
             elif not self.house.airborne:
                 entry["spl_a_db"] = None
@@ -626,6 +749,7 @@ __all__ = [
     "FACADE_M",
     "FACADE_TOLERANCE_M",
     "FLOOR",
+    "FRONT_M",
     "OFF",
     "PEAK",
     "RUMBLE",
@@ -641,6 +765,9 @@ __all__ = [
     "facing",
     "facings",
     "felt",
+    "front_name",
+    "front_shift_db",
+    "fronts",
     "grid",
     "ground_vdb",
     "help_of",
@@ -651,5 +778,6 @@ __all__ = [
     "shaking_line",
     "third_octave_noise",
     "tour_shaker",
+    "with_fronts",
     "write_shakers",
 ]

@@ -2,11 +2,156 @@
 
 ## Unreleased
 
+- Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
+  University and the University of Iceland, and described as a KEMAR dummy head with one
+  of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.
+- Docs: G of responses written with `simulate --normalize` takes the reference energy
+  0.01 × `ir_gain`² (from `parameters.json`), and the JNDs of T20, T30 and C50 are
+  ISO 3382-1's of EDT and C80 taken by analogy; Barron's total and the first batch of
+  split rays are given as the code has them.
 - Editor: **View > Follow the run** rings the sources and listeners a run's step works
   on, a demo's too, and draws a walking source and the run's other walkers where the
-  place being simulated has them, on the walks the run simulates (`Demo.walks`).
+  place being simulated has them, on the walks the run simulates (`Demo.walks`); while
+  a demo's video is encoded, what the video shows at that moment; a head a demo turns
+  faces as it does then, its arrows and directivity balloon with it.
+- Demos: the video's messages say what it shows at each moment, `stage, car @ 3.40 s
+  -> seat: encoding the video, 12.1 of 60.0 s`, in place of ffmpeg's frame counter.
 - Fixed: the 3D view's names of walkers now move with them in the Movement panel's
   preview; they stayed where each walk starts.
+- Fixed: the gallery walk demo stopped, after downloading the talk, when a talker's
+  take was shorter than the walk and the turn (F4's, 36 s); the guide now says it again
+  from its start, 2 s after it ends. Its walk and turn are made again for another
+  `--hrtf`, where `all` took them as done and the video stopped for want of their sound.
+- Fixed: `all` in the other demos took mixes made through other HRTFs (`--hrtf`) as
+  done, and without `--hrtf` a simulation through an HRTF file too, mixing through it;
+  their videos now refuse mixes of another `--format` or HRTF. Mixes from before say
+  neither, so they are made again.
+- A walk as fast as sound or faster now stops with an error without Doppler too, as it
+  did with Doppler: it played as places crossfaded one after another, as if shock waves
+  did not exist.
+- The demos' JSON files (walk.json and the others) are strict JSON: a level where
+  nothing is heard, as between a horn's blasts, is written null instead of -Infinity,
+  which browsers refuse.
+- On Windows, a demo whose scene lies on another drive than its example no longer stops
+  when it writes a siren's, horn's, train's, helicopter's or aircraft's directivity
+  table: the scene names the table in full.
+- `emission.Mixture` refuses signals without samples and a sample rate that is not
+  positive, which failed later with a division by zero.
+- The road docs say that CNOSSOS-EU's correction for road gradients is left out, that
+  the sirens' levels 7 m in front of a vehicle are taken 7 m from the siren, and that
+  recordings are levelled unweighted; a test holds every coefficient of Table F-1.
+- `doc29.event` warns (`doc29.NpdExtrapolationWarning`) when a segment's power lies so
+  far outside the NPD curves' that their extrapolated level departs more than 5 dB from
+  the nearest curve's (Volume 2 section 4.2); in Volume 3's cases and the airport
+  example's flights it departs 2.3 dB at most.
+- `anp.Database.profile` refuses to fly procedural steps, which give thrust in lb, for
+  an aircraft whose NPD curves are in another power parameter (`Aircraft.power_in_lb`).
+- `doc29.read_fixed_point_profiles` reads a column's unit from round or square brackets
+  (m, ft, feet; m/s, kt, kts, knots) and stops on an unknown or missing one instead of
+  taking metres or m/s. `read_aircraft` and `noise.installation_db` take a lateral
+  directivity by how it starts ("Wing-mounted" is a wing installation); any other is an
+  error, where it gave no installation correction.
+- A walk whose first two places stand one above the other no longer flies the airport's
+  jets to NaN positions: `Track.through` leaves out a point within 1 µm of the one
+  before it, and `Track.at` and `Track.extended` pass over legs of no length.
+- `performance.departure` stops with an error on a climb step without the thrust to
+  climb, with more thrust than weight or into a headwind that leaves it no climb angle
+  (eq. B-21, B-22), instead of flying the profile backwards or failing in `math.asin`.
+- Doc 29's maximum level at a receiver alongside a segment (`doc29.segment_levels`,
+  `doc29.event`) takes the equivalent level path's elevation angle, lateral
+  displacement and depression angle, as the exposure does (Volume 2 section 4.5.5).
+  L_Amax moves by up to 0.064 dB on Volume 3's grids and receptors under the jets'
+  departures, 0.017 dB under PROP's and 0.006 dB under the arrivals (SEL does not move),
+  and the airport example's departure at lateral_450m is 85.1 dB(A) by Doc 29 (was 85.0).
+- Volume 3's impedance adjustment converts its 29.92 inHg with Appendix B2.2's
+  3.38653131 kPa per inHg (`doc29.performance.KPA_PER_INHG`), not 3.386389: its levels
+  rise by 0.0002 dB, the 99 levels at its receptors now within 0.0055 dB of table B-1
+  (was 0.0057 dB).
+- `doc29.segment_levels` and `doc29.event` document their `impedance`, which the caller
+  passes from `doc29.impedance_db` for the aerodrome; its default, 0, is the NPD curves'
+  reference day (25 °C), 0.074 dB under the standard atmosphere at sea level.
+- Docs: JETW's arrival NPD curves give SEL - L_Amax within 0.22 dB of a point source's
+  (not 0.1 dB), Volume 3 Part 2 has no arrivals of PROP, and the NPD curves' microphone
+  height is cited from Volume 2 sections 2.5 and 4.5.4.
+- The pass-by captions average a horn's sound power over 125 ms (the Fast time constant)
+  before each place takes its share, so a short walk step no longer reads the beats
+  between its notes as louder blasts (3 to 5 dB over at 5 cm). The street's car with its
+  horn now peaks at 97.0, 93.9 and 80.5 dB(A) (was 97.1, 94.0 and 81.6), the fire
+  engine at 111.0 dB(A) on the balcony (was 111.1).
+- The pass-by demos fill a train's or tram's sound files a point at a time in 32 bits:
+  the railway example's freight train, 50 points at the rail top for 10.8 s at 48 kHz,
+  takes 104 MB instead of 415 MB.
+- `acoustic_spaces.vibration` raises a ValueError that says what it takes for a speed or
+  a distance from plant that is not a finite number above 0, a land use or a kind of
+  events its tables do not have, and special trackwork that is not a finite 0 m or more
+  away (None for none near). A train's `Unit` raises one for a tank wagon or air
+  conditioning that its category's data sheet does not have, instead of leaving it out.
+- Docs: the TSI table gives each unit's whole pass over Tp, beside EN ISO 3095:2013's own
+  time windows for a coach or a wagon; the glazing's traffic figure is rated from its
+  octaves, 29 - 4 + 9.6 = 34.6 dB; the FTA curves' docs say how `Curve.levels` reads
+  them outside 10 to 300 ft.
+- Fixed: over a terrain, the mean plane the early sound reflects off is the
+  least-squares line of the whole ground profile, as CNOSSOS-EU fits it (ISO/TR
+  17534-4's TC05 and TC06), not of the corners where the terrain's triangles cut the
+  profile, which moved it with the grid. Early levels in sight over uneven ground
+  change, by up to 2.1 dB (1 kHz) at the hillside example's listener on the slope.
+- Models load faster: the search for faces to split at T-junctions is vectorised and
+  gives the same faces (a 2 km terrain builds in 0.3 s instead of 5.4 s).
+- The pass-by demos' freight train has 5 tank wagons among its 24, Schall 03's share of
+  20 % when a freight train's make-up is not known (4.2), their bodies ringing 4 m up:
+  116.4 dB(A) of sound power there instead of 111.8, 131.9 dB(A) in all instead of
+  131.8. Behind the railway's barrier its SEL goes from 79.6 to 82.6 dB(A); at the other
+  listeners its levels rise by 0.1 to 0.4 dB.
+- The railway example's line source has Schall 03's directivity round the track
+  (equation 8, `line.csv`, `acoustic_spaces.demos.rail.directivity("left")`) and so 0.28
+  dB more sound power, its points 2.5 m apart instead of 10 m: in a free field it gives
+  Schall 03's sum within 0.01 dB(A), not 0.2 to 0.4 dB(A) over it. Over the example's
+  ground it is 0.2 to 0.7 dB(A) louder, 1.0 dB(A) quieter behind the barrier, and the
+  example takes 2.3 times as long to simulate.
+- `--indoors` takes a room's level outdoors 2 m in front of its wall, EN ISO 12354-3's
+  L_1,2m, simulating one more listener there where its listener stands nearer: the
+  offices' room behind the street's balcony, 1 m out, moves by up to 2.1 dB at 63 to 250
+  Hz and 0.2 dB(A) for the tram and the road works. No documented number changes.
+- Walks without Doppler crossfade from one place to the next band by band, corrected by
+  how alike the two places sound, so that each octave band's power runs on
+  (`acoustic_spaces.render.crossfaded`, shared with the demos' tours). Against the exact
+  field of a pass-by, pure tones' level misses by at most 2.7 to 4.1 dB instead of 4.2
+  to 7.0 dB, 0.2 to 2.4 dB on average instead of 1.3 to 2.7 dB, and for the train at 4
+  kHz by 12.2 instead of 10.9 dB, where the field's two paths cancel for a moment.
+- Changed: an emission's sound power and directivity (`Emission.sound_power_db`,
+  `directivity`) are now in IEC 61260-1 octaves between their band edges, 44.7 Hz to
+  11.2 kHz, not in the auralization's crossover bands, whose 63 Hz band reached down to
+  0 Hz and whose 8 kHz band up to half the sample rate. The helicopter's `level_db` and
+  `helicopter.csv` are regenerated: in helicopter_flyover 130.7 dB at 63 Hz (was 134.8,
+  with the main rotor's 19.7 and 39.4 Hz tones), 120.2 dB at 8 kHz (121.7) and 132.9
+  dB(A) (133.1); in stadium_concert 129.8 (134.0), 120.1 (121.6) and 132.8 dB(A)
+  (132.9).
+- Maps over a long term gain the long-term insertion loss of what `insertion_loss_of`
+  names (`long_term_insertion_loss`, dB per band, and `long_term_insertion_loss_a`,
+  dB(A)), from the runs with and without it that every class already made. Their other
+  values, `insertion_loss` among them, are the scene's own weather's, and the levels in
+  each class and period and relative to free field over the long term are at listeners
+  only, as the docs now say.
+- BRAS's coupled rooms with the door open by 30.4° join the validation: the conversion
+  joins the door leaf, which ran into the wall in BRAS's model, to the wall and floor.
+  T20 of the chamber's sound in the laboratory comes 11 to 12 % long from 500 Hz to 4
+  kHz.
+- Fixed: a coverage-map column that a wall between two rooms crosses had one point,
+  whose slab counted the rays of both rooms; each room's part of it that holds at least
+  a fifth of it now gets a point that counts that room's rays alone. Mapped 0.7 m apart,
+  the apartment example's bedroom points next to the partition read 65 dB(A); they now
+  read 43 to 49 dB(A), 43.8 dB(A) where a listener simulated there gets 43.8 dB(A).
+- Fixed: a map slab's volume counted the part of its column in the room in fifths, and
+  all of it where the column reached into a building; it now counts the part in the air
+  of its room, from 24 by 24 samples. Mapped 1.25 or 1.5 m apart, the shoebox example's
+  edge columns move by 0.2 to 0.5 dB(A); in the street example mapped 3 m apart, 12
+  columns of its canyon that reach into a building rise by 0.1 to 1.1 dB(A) for its
+  traffic (up to 2 dB at 1 kHz).
+- Fixed: coverage maps of scenes with the wave solver on, which maps do not run, add the
+  early paths in pressure up to `coherent_max_band_hz` as documented, rather than in
+  energy. In the `room_modes` example's map G rises by 1.8 dB on average at 63 Hz and
+  1.2 dB at 125 Hz (up to 4.7 and 3.5 dB), C50 and C80 by up to 7.6 and 6.6 dB, and EDT
+  falls by up to 31 %; the bands from 250 Hz up do not move.
 - Fixed: the wave solver took the pressure gradient across a thin surface with air
   behind it (a screen, a balcony's front) at a listener within a grid cell of it, so the
   low end of Ambisonics, binaural and loudspeaker outputs and LF and LFC in the wave
@@ -1493,10 +1638,11 @@ and the last bits round alike on every platform.
 - `acoustic-spaces hrtf` lists free HRTF sets with their licences and downloads the one
   named into the user's data folder: `ku100` (a Neumann KU100 dummy head, TH Köln,
   CC BY 3.0, 3.4 MB), `kemar` (a KEMAR dummy head, SADIE II, Apache 2.0, 38 MB) and
-  `viking` (one of 20 people or a dummy head, Viking v2, CC BY 4.0, 58.4 MB, one file
-  per head with `--member`). `--url` takes any other SOFA file, `--folder` keeps them
-  elsewhere, and the licence and who measured the set are printed before anything is
-  downloaded. Until now a measured head had to be found and fetched by hand.
+  `viking` (a KEMAR dummy head with one of 20 pairs of replica pinnae or none, Viking v2,
+  CC BY 4.0, 58.4 MB, one file per pair of pinnae with `--member`). `--url` takes any
+  other SOFA file, `--folder` keeps them elsewhere, and the licence and who measured the
+  set are printed before anything is downloaded. Until now a measured head had to be
+  found and fetched by hand.
 
 **Running on another computer**
 
