@@ -300,12 +300,13 @@ def mix(args) -> None:
     gain = 10.0 ** (-1.0 / 20.0) / peak
     out = args.work / CROSSING
     seats = {}
+    weights = pipeline.weights_of(pipeline.output_label(band), band.scene)
     for key, seat in played.items():
         x = crossed(key, seat) * gain
         write(out / "seats" / f"{key}.{fmt}.wav", x, rate)
         seats[key] = seat | {
-            "rms_db": level_db(x, rate),
-            "loudness_db": loudness_db(x, rate),
+            "rms_db": level_db(x, rate, weights),
+            "loudness_db": loudness_db(x, rate, weights),
             "length_s": len(x) / rate,
         }
     top = max(seat["rms_db"] for seat in seats.values())

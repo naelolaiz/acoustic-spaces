@@ -861,6 +861,24 @@ def _band_noises(centres: np.ndarray, samples: int, sample_rate: int, rng) -> np
     return out
 
 
+def bpm_powers(
+    trim: Trim, *, grid_deg: float = 5.0, rotors: tuple[str, ...] = ("main", "tail")
+) -> tuple[np.ndarray, np.ndarray]:
+    """The ``rotors``' broadband noise in a trim by :func:`bpm_bands` on a grid
+    ``grid_deg`` apart in the helicopter's frame: the third-octave bands' centres (Hz)
+    and the rotors' mean square pressures 1 m from the hub, summed, ``(elevations,
+    azimuths, bands)``. They do not depend on how long the noise lasts: :func:`broadband`
+    takes them as ``bands`` to send another length without summing the blades again."""
+    elevation, azimuth = _grid(grid_deg)
+    ways = _from_angles(azimuth[None, :], elevation[:, None])
+    powers = None
+    for which in rotors:
+        centres, part = bpm_bands(trim, which, ways)
+        powers = part if powers is None else powers + part
+    assert powers is not None
+    return centres, powers
+
+
 def broadband(
     trim: Trim,
     *,
@@ -870,15 +888,23 @@ def broadband(
     seed: int = 0,
     rotors: tuple[str, ...] = ("main", "tail"),
     model: str | None = None,
+    bands: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> Mixture:
     """The rotors' broadband noise in a trim, ``samples`` of it, its pattern on a grid
     ``grid_deg`` apart in the helicopter's frame, by the helicopter's ``broadband``
     model or ``model``: "bpm" (:func:`bpm_bands`, a noise in each third-octave band
-    with its level in every direction) or "pegg" (:func:`pegg_broadband`)."""
+    with its level in every direction) or "pegg" (:func:`pegg_broadband`). For "bpm",
+    ``bands`` are the bands' centres and powers that :func:`bpm_powers` gives for this
+    trim, grid and ``rotors``, if already found (their shape is checked, not their trim
+    or rotors); by default they are found here."""
     model = trim.helicopter.broadband if model is None else model
     if model not in BROADBAND_MODELS:
         raise ValueError(f"broadband noise by {' or '.join(BROADBAND_MODELS)}, not {model!r}")
     if model == "pegg":
+        if bands is not None:
+            raise ValueError(
+                "bands are BPM's (bpm_powers): leave them out for Pegg's broadband noise"
+            )
         return pegg_broadband(
             trim,
             samples=samples,
@@ -887,13 +913,17 @@ def broadband(
             seed=seed,
             rotors=rotors,
         )
+    if bands is None:
+        bands = bpm_powers(trim, grid_deg=grid_deg, rotors=rotors)
+    centres, powers = bands
     elevation, azimuth = _grid(grid_deg)
-    ways = _from_angles(azimuth[None, :], elevation[:, None])
-    powers = None
-    for which in rotors:
-        centres, part = bpm_bands(trim, which, ways)
-        powers = part if powers is None else powers + part
-    assert powers is not None
+    shape = (len(elevation), len(azimuth), len(centres))
+    if np.shape(powers) != shape:
+        raise ValueError(
+            f"the bands' powers must be {shape}, each band's in each direction of the grid "
+            f"{grid_deg:g} degrees apart; got {np.shape(powers)}: find them with bpm_powers "
+            "on the same grid"
+        )
     keep = centres * 10.0**-0.05 < sample_rate / 2.0
     signals = _band_noises(centres[keep], samples, sample_rate, np.random.default_rng(seed))
     return Mixture(signals, np.sqrt(powers[..., keep]), sample_rate)
@@ -914,15 +944,18 @@ def emission(
     )
 
 
-#: An Airbus Helicopters AS350 B3 (Ecureuil, sold as the H125) at its maximum mass of
-#: 2,250 kg. From its type certificate (EASA.R.008): the mass, the rotors' diameters
-#: (10.69 m and 1.86 m) and blades (three and two), and the main rotor turning between 375
-#: and 405 turns a minute in powered flight. From NASA's flight tests of an AS350 SD1
-#: (Greenwood, Sim and Boyd, AHS Forum 72, 2016): the drag area (f / A = 0.0071), the
-#: main rotor's speed (394 turns a minute, its tip at 220.6 m/s from their weight
-#: coefficient) and its OA209 blades (9 % thick). Assumed, from no source to hand: the
-#: main blades' chord (0.35 m) and twist (-10 degrees), the tail rotor's speed (2,086
-#: turns a minute, its tip at 203 m/s), chord (0.185 m), thickness (12 %), untwisted
+#: An Airbus Helicopters AS350 B3 (Ecureuil, sold as the H125) with the Arriel 2B engine
+#: at its maximum mass of 2,250 kg. From its type certificate (EASA.R.008): the mass, the
+#: rotors' diameters (10.69 m and 1.86 m) and blades (three and two), and the main rotor
+#: turning between 385 and 394 turns a minute in powered flight (375 and 405 with the
+#: Arriel 2B1 or 2D). From NASA's flight tests of an AS350 SD1 (Greenwood, Sim and Boyd,
+#: AHS Forum 72, 2016; Watts et al., NASA TM-2016-219354, table 1): the drag area
+#: (f = 7.26 ft², 0.674 m², which they give as f / A = 0.0071, a ratio that fits a larger
+#: disc than this one), the main rotor's speed (394 turns a minute, the Arriel 2B's most
+#: in powered flight; its tip at 220.6 m/s from their weight coefficient), the tail
+#: rotor's speed (2,086 turns a minute, its tip at 203 m/s) and the main rotor's OA209
+#: blades (9 % thick). Assumed, from no source to hand: the main blades' chord (0.35 m)
+#: and twist (-10 degrees), the tail rotor's chord (0.185 m), thickness (12 %), untwisted
 #: blades and the way it turns, both rotors' trailing edges (a rotor's default), and its
 #: hub 6.67 m behind the main rotor's shaft (from Airbus's 12.94 m overall with the rotors
 #: turning, less both rotors' radii) and 1 m lower. The main rotor turns clockwise seen
@@ -951,6 +984,7 @@ __all__ = [
     "Rotor",
     "Trim",
     "bpm_bands",
+    "bpm_powers",
     "broadband",
     "emission",
     "pegg_bands",

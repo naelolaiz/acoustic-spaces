@@ -1,9 +1,11 @@
+import os
 from pathlib import Path
 
 import pytest
 import yaml
 from pydantic import ValidationError
 
+from acoustic_spaces.examples import list_examples
 from acoustic_spaces.scene import OCTAVE_BANDS_HZ, Material, Scene
 from acoustic_spaces.scene.model import load_yaml
 
@@ -79,6 +81,165 @@ def test_round_trip_keeps_a_null_that_is_not_the_default(tmp_path: Path) -> None
     scene.to_yaml(tmp_path / "copy.yaml")
     assert Scene.from_yaml(tmp_path / "copy.yaml").simulation.early.coherent_max_band_hz is None
     assert Scene.model_validate(scene.to_data()).simulation.early.coherent_max_band_hz is None
+
+
+def test_every_example_reads_back_as_it_was() -> None:
+    """Written and read again, every example scene is the same scene, with exactly the
+    same coefficients: what the file leaves out of a material, its preset, file, entry,
+    impedance or transmission gives again."""
+    for example in list_examples():
+        scene = Scene.from_yaml(example.path)
+        folder = example.path.resolve().parent
+        again = Scene.model_validate(
+            load_yaml(scene.file_text(folder)), context={"base_dir": folder}
+        )
+        for name, material in scene.materials.items():
+            other = again.materials[name]
+            assert other.absorption == material.absorption, (example.name, name)
+            assert other.scattering == material.scattering, (example.name, name)
+            assert other.source == material.source, (example.name, name)
+            for bands in ("octave", "third_octave"):
+                passing = material.transmission_coefficients(bands)
+                assert other.transmission_coefficients(bands) == passing, (example.name, name)
+        assert again == scene, example.name
+
+
+def _box_with(materials: dict, folder: Path) -> Scene:
+    return Scene.model_validate(
+        {
+            "name": "box",
+            "geometry": {"box": [8.0, 6.0, 3.0]},
+            "materials": materials,
+            "default_material": next(iter(materials)),
+            "sources": [{"name": "talker", "position": [2.0, 3.0, 1.5]}],
+            "listeners": [{"name": "seat", "position": [6.0, 3.0, 1.2]}],
+        },
+        context={"base_dir": folder},
+    )
+
+
+def _coefficient_file(path: Path, alpha: float, scatter: float) -> Path:
+    """A coefficient CSV of one absorption and one scattering value from 125 Hz to 4 kHz."""
+    rows = [[125, 250, 500, 1000, 2000, 4000], [alpha] * 6, [scatter] * 6]
+    path.write_text("".join(",".join(str(v) for v in row) + "\n" for row in rows), "utf-8")
+    return path
+
+
+def test_a_scene_file_leaves_out_what_a_material_s_entry_gives(tmp_path: Path) -> None:
+    """A scene file writes a material's absorption, scattering and source only where its
+    preset, file, entry or transmission does not give them, so another preset, file,
+    entry or transmission written in their place gives its own (the old values stayed,
+    and a lower transmission loss was refused as more than the absorption)."""
+    library = EXAMPLES / "material_libraries" / "catt_materials.geo"
+    _coefficient_file(tmp_path / "a.csv", 0.1, 0.2)
+    _coefficient_file(tmp_path / "b.csv", 0.7, 0.5)
+    materials = {
+        "walls": {"preset": "plasterboard"},
+        "table": {"file": "a.csv"},
+        "library": {"file": str(library), "entry": "carpet"},
+        "partition": {"transmission_loss": 20.0},
+        "own": {"absorption": [0.3] * 8, "scattering": 0.25},
+    }
+    _box_with(materials, tmp_path).to_yaml(tmp_path / "scene.yaml")
+    data = load_yaml((tmp_path / "scene.yaml").read_text(encoding="utf-8"))
+    written = data["materials"]
+    for name in ("walls", "table", "library", "partition"):
+        assert not {"absorption", "scattering", "source"} & set(written[name]), name
+    assert written["own"]["absorption"] == [0.3] * 8
+    assert written["own"]["scattering"] == [0.25] * 8
+    written["walls"]["preset"] = "carpet_thin"
+    written["table"]["file"] = "b.csv"
+    written["library"]["entry"] = "plasterboard"
+    written["partition"]["transmission_loss"] = 10.0
+    again = Scene.model_validate(data, context={"base_dir": tmp_path}).materials
+    alone = {
+        "walls": {"preset": "carpet_thin"},
+        "table": {"file": "b.csv"},
+        "library": {"file": str(library), "entry": "plasterboard"},
+    }
+    for name, entry in alone.items():
+        assert again[name] == Material.model_validate(entry, context={"base_dir": tmp_path})
+    assert again["walls"].absorption[4:] == [0.2, 0.35, 0.4, 0.4]  # carpet_thin, 1-8 kHz
+    assert again["table"].absorption == [0.7] * 8 and again["table"].scattering == [0.5] * 8
+    assert again["table"].source.startswith("file b.csv")
+    assert again["library"].source.startswith("'plasterboard' of catt_materials.geo")
+    assert again["partition"].absorption == pytest.approx([0.1] * 8, rel=1e-12)
+
+
+def test_a_scattering_entry_is_written_by_its_name() -> None:
+    """A material whose scattering names a scattering entry is written with that name, and
+    without the source it gives, so another preset beside it takes its own source (the
+    old one stayed)."""
+    scene = Scene.from_yaml(EXAMPLES / "concert_hall" / "scene.yaml")
+    audience = scene.materials["audience"]
+    written = scene.to_data()["materials"]["audience"]
+    assert written["scattering"] == "theatre_audience" and "source" not in written
+    assert "theatre_audience" in audience.source
+    written["preset"] = "carpet_thin"
+    other = Material.model_validate(written)
+    assert other == Material(preset="carpet_thin", scattering="theatre_audience")
+    assert other.source.startswith("pyroomacoustics materials database: carpet_thin")
+    # Other values than the entry's are written as they are.
+    changed = audience.model_copy(update={"scattering": [0.5] * 8})
+    assert changed.to_data()["scattering"] == [0.5] * 8
+
+
+def test_scene_data_does_not_read_a_material_s_entry_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A scene file leaves out what a material's preset, file and entry, impedance,
+    transmission or scattering entry gives without reading them again (a scene of 200
+    library entries, 50 presets and 20 grounds took 0.5 s to write), and leaves out the
+    same as when it reads them, for these and every example's materials."""
+    import acoustic_spaces.scene.model as model
+
+    library = EXAMPLES / "material_libraries" / "catt_materials.geo"
+    _coefficient_file(tmp_path / "a.csv", 0.1, 0.2)
+    materials = {
+        "walls": {"preset": "plasterboard", "scattering": "theatre_audience"},
+        "table": {"file": "a.csv"},
+        "library": {"file": str(library), "entry": "carpet"},
+        "ground": {"impedance": "grass"},
+        "partition": {"transmission_loss": 20.0},
+    }
+    scene = _box_with(materials, tmp_path)
+    read = []
+    monkeypatch.setattr(model, "_material_of", lambda entry: read.append(entry))
+    written = scene.to_data()["materials"]
+    assert read == []
+    assert written == {
+        "walls": {"preset": "plasterboard", "scattering": "theatre_audience", "audience": False},
+        "table": {"file": str((tmp_path / "a.csv").resolve()), "audience": False},
+        "library": {"file": str(library), "entry": "carpet", "audience": False},
+        "ground": {"impedance": {"preset": "grass", "model": "miki"}, "audience": False},
+        "partition": {"transmission_loss": [20.0] * 8, "audience": False},
+    }
+    written["walls"]["preset"] = "carpet_thin"  # the caller's copy
+    assert scene.to_data()["materials"]["walls"]["preset"] == "plasterboard"
+    monkeypatch.undo()
+    for material in [*scene.materials.values()] + [
+        m for e in list_examples() for m in Scene.from_yaml(e.path).materials.values()
+    ]:
+        fast = material.to_data()
+        material.__dict__.pop("_given", None)  # read the entry again
+        assert list(material.to_data().items()) == list(fast.items())
+
+
+def test_scene_data_sees_a_material_s_file_changed_since_it_was_read(tmp_path: Path) -> None:
+    """A coefficient file rewritten or removed after the scene was read gives other values
+    than the scene's, which the scene file then writes."""
+    csv = _coefficient_file(tmp_path / "a.csv", 0.1, 0.2)
+    scene = _box_with({"table": {"file": "a.csv"}}, tmp_path)
+    assert scene.to_data()["materials"]["table"] == {"file": str(csv.resolve()), "audience": False}
+    # Of the same size: only its modification time tells the change.
+    seen = csv.stat().st_mtime_ns
+    _coefficient_file(csv, 0.7, 0.5)
+    os.utime(csv, ns=(seen, seen + 2_000_000_000))
+    written = scene.to_data()["materials"]["table"]
+    assert written["absorption"] == [0.1] * 8 and written["scattering"] == [0.2] * 8
+    assert written["source"].startswith("file a.csv")
+    csv.unlink()
+    assert scene.to_data()["materials"]["table"] == written
 
 
 def test_orientation_forward() -> None:
@@ -208,6 +369,18 @@ def test_a_scene_names_its_recording_and_each_source_a_channel(tmp_path: Path) -
         data["recording"] = wrong
         with pytest.raises(ValidationError, match="a recording file, or one of"):
             Scene.model_validate(data)
+    # A name without a suffix that is no file is a free one mistyped; a file with a
+    # suffix may come later, and one without is taken when it is there.
+    for wrong, close in (("spicy_funk", "spicy_funk_cake"), ("Speech_Male", "speech_male")):
+        data["recording"] = wrong
+        with pytest.raises(ValidationError, match=f"no free recording.*speech_male.*{close}"):
+            Scene.model_validate(data, context={"base_dir": tmp_path})
+    (tmp_path / "take").write_bytes(b"")
+    data["recording"] = "take"
+    assert (
+        Scene.model_validate(data, context={"base_dir": tmp_path}).recording_file
+        == (tmp_path / "take").resolve()
+    )
     data["recording"], data["sources"][0]["channel"] = None, "centre"
     with pytest.raises(ValidationError, match="channel"):
         Scene.model_validate(data)

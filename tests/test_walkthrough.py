@@ -591,6 +591,30 @@ def test_a_walking_source_is_heard_at_a_listener() -> None:
         render_walk(walked, {"x": np.ones(10)})
 
 
+def test_a_walking_source_is_heard_at_a_listener_named_when_every_one_is_left_out() -> None:
+    """With every listener left out (``enabled: false``), a walking source has none to
+    be heard at by default: the error says so and how to name one. One named is heard
+    at even when left out, and is checked as one in use (inside the room)."""
+    quick = {**QUICK, "early": {"max_order": 1}, "late": {"method": "statistical"}}
+    sources = [{"name": "w", "position": [1.0, 1.0, 1.5], "walk": {"to": [[3.0, 1.0, 1.5]]}}]
+    listeners = [
+        {"name": "l", "position": [4, 4, 1.2], "enabled": False},
+        {"name": "out", "position": [40, 4, 1.2], "enabled": False},
+    ]
+    room = Room.from_scene(_scene(sources=sources, listeners=listeners, simulation=quick))
+    with pytest.raises(ValueError) as error:
+        simulate_walk(room, step_m=1.0)
+    assert str(error.value) == (
+        "every listener is left out (enabled: false): name the one to hear the walk at "
+        "(--listener, listener)"
+    )
+    walked = simulate_walk(room, listener="l", step_m=1.0)
+    assert set(walked.result.responses) == {(name, "l") for name in walked.names}
+    assert len(walked.names) == 3
+    with pytest.raises(ValueError, match=r"listener 'out' at \[40\.0, 4\.0, 1\.2\] .*outside"):
+        simulate_walk(room, listener="out", step_m=1.0)
+
+
 def test_walk_errors() -> None:
     sources = [{"name": "s", "position": [7.0, 5.0, 1.5]}]
     out = _walker({"to": [[9.0, 1.0, 1.5]]})
@@ -821,6 +845,29 @@ def test_cli_walkthrough(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
     assert main([*args, "--video", str(tmp_path / "walk.avi")]) == 1
     err = capsys.readouterr().err
     assert "gif or .mp4" in err and "traced" not in err
+
+
+def test_cli_walkthrough_of_a_walker_left_out(tmp_path: Path, capsys) -> None:
+    """A walk takes its walker even when it is left out (``enabled: false``), the only
+    listener of the scene here; the sources it hears are those in use, and every mover
+    together (--all) takes only those in use."""
+    from acoustic_spaces.audio import write_wav
+
+    quick = {**QUICK, "early": {"max_order": 1}, "late": {"method": "statistical"}}
+    walker = _walker({"to": [[3.0, 1.0, 1.5]], "speed_m_s": 2.0}, enabled=False)
+    source = {"name": "s", "position": [7.0, 5.0, 1.5]}
+    path, dry = tmp_path / "scene.yaml", tmp_path / "dry.wav"
+    write_wav(dry, np.random.default_rng(0).standard_normal((800, 1)) * 0.1, 8000)
+    args = ["walkthrough", str(path), f"s={dry}", "--out", str(tmp_path / "walk.wav")]
+    _scene(sources=[source], listeners=[walker], simulation=quick).to_yaml(path)
+    assert main([*args, "--step", "1"]) == 0
+    assert "w walks for 1.0 s: responses at 3 places" in capsys.readouterr().err
+    assert main([*args, "--all"]) == 1
+    assert "error: every listener is left out (enabled: false)" in capsys.readouterr().err
+    left_out = {**source, "enabled": False}
+    _scene(sources=[left_out], listeners=[walker], simulation=quick).to_yaml(path)
+    assert main([*args, "--step", "1"]) == 1
+    assert "error: every source is left out (enabled: false)" in capsys.readouterr().err
 
 
 def test_cli_walkthrough_of_every_mover(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
