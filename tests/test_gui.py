@@ -3596,9 +3596,18 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
     assert again.kept.text().startswith(
         "Changed from the defaults and kept for next time: Song, HRTFs, Mix again, Listeners."
     )
-    again.buttons.button(QDialogButtonBox.StandardButton.Ok).click()  # Run keeps them too
+    fields["song"].setCurrentText("spicy_funk_cake")  # changed just before Run, which keeps it
+    fields["no_mp4"].setChecked(True)
+    again.buttons.button(QDialogButtonBox.StandardButton.Ok).click()
     assert again.result() == int(QDialog.DialogCode.Accepted)
     again.deleteLater()
+    run = DemoDialog(scene=stadium)
+    assert run.fields["song"].currentText() == "spicy_funk_cake"
+    assert run.fields["no_mp4"].isChecked()
+    run.fields["song"].setCurrentText("francium")
+    run.fields["no_mp4"].setChecked(False)
+    run.reject()
+    run.deleteLater()
 
     # A copy of the stadium elsewhere: the same demo's song, HRTFs and tick, but its own
     # listeners, all of them, and the example's own demo to start on.
@@ -3680,7 +3689,49 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
     assert fields["work"].value() == dialog.demo.folder / "demo"
     assert fields["hrtf"].value() == gone
     assert dialog.problem.text() == f"Cannot run: --hrtf: no {gone}"
+    gone.write_bytes(b"")  # put back and chosen again: the run can go
+    dialog.fields["hrtf"].set_value(None)
+    dialog.fields["hrtf"].set_value(str(gone))
+    assert dialog.problem.text() == ""
     dialog.deleteLater()
+    # A stem the song no longer has is dropped and the others kept; a number more than
+    # its field holds, or none a float can be, is left out.
+    stem = tmp_path / "vocal.wav"
+    write_wav(stem, np.zeros((100, 2)), 8000)
+    i18n.save_setting(
+        DEMO_SETTING,
+        {
+            "demos": {
+                "stadium_concert/stadium": {
+                    "stems": {"lead_vocal": str(stem), "vocal": str(stem)},
+                    "downbeat": 10**400,
+                },
+                "railway/vibration": {"floor": 3_000_000_000, "trains_per_day": 48},
+                "listening_room/bass": {"rays": float("nan")},
+            }
+        },
+    )
+    dialog = DemoDialog(scene=stadium)
+    assert dialog.fields["stems"].value() == {"vocal": stem}
+    assert dialog.fields["downbeat"].value() == 0.0
+    assert "not one of" not in dialog.problem.text()  # refused for no --music only
+    dialog.deleteLater()
+    vibration = DemoDialog(scene=example_path("railway"), start="vibration")
+    assert vibration.fields["floor"].value() == 1
+    assert vibration.fields["trains_per_day"].value() == 48
+    vibration.deleteLater()
+    bass = DemoDialog(scene=example_path("listening_room"))
+    assert bass.demo.name == "bass" and bass.fields["rays"].value() == 20000
+    bass.deleteLater()
+    # A scene never saved keeps what names something in a scene for no file: the line
+    # names only what the next opening shows again.
+    unsaved = DemoDialog(scene=None)
+    unsaved.fields["format"].setText("mono")
+    unsaved.fields["seconds"].setValue(5.0)
+    assert unsaved.kept.text().startswith(
+        "Changed from the defaults and kept for next time: Time per listener."
+    )
+    unsaved.deleteLater()
     i18n.save_setting(
         DEMO_SETTING,
         {
@@ -3735,6 +3786,75 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
     closed.reject()
     assert closed.result() == int(QDialog.DialogCode.Rejected)
     closed.deleteLater()
+
+
+def test_demo_dialog_keeps_the_hrtfs_whatever_the_scene(qapp, monkeypatch, tmp_path: Path) -> None:
+    """The HRTFs kept for a demo stay kept on a scene whose binaural output names the
+    same file, and on one whose format kept for it takes none, where they are left out
+    of its run; a song of your own keeps its credit line with it, for any scene."""
+    import yaml
+
+    from acoustic_spaces import examples, i18n
+    from acoustic_spaces.gui.demo_dialog import DEMO_SETTING, DemoDialog
+
+    monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
+    ears = tmp_path / "ears.sofa"
+    ears.write_bytes(b"")
+    shoebox = example_path("shoebox")
+    data = yaml.safe_load(shoebox.read_text(encoding="utf-8"))
+    data["geometry"]["file"] = str(shoebox.parent / data["geometry"]["file"])
+    scenes = {}
+    own_output = {"format": "binaural", "hrtf": str(ears)}
+    for name, binaural in (("plain", "binaural"), ("own", own_output)):
+        data["outputs"] = ["mono", binaural]
+        scenes[name] = tmp_path / name / "scene.yaml"
+        scenes[name].parent.mkdir()
+        scenes[name].write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    plain = DemoDialog(scene=scenes["plain"])
+    plain.fields["hrtf"].set_value(str(ears))
+    plain.reject()
+    plain.deleteLater()
+    own = DemoDialog(scene=scenes["own"])  # its own HRTFs are the same file: nothing to do
+    assert own.fields["hrtf"].value() == ears and own.kept.isHidden()
+    own.reject()
+    own.deleteLater()
+    assert i18n.setting(DEMO_SETTING)["demos"]["scene"] == {"hrtf": str(ears)}
+    # Mono for the plain scene: no HRTFs in its run, but still kept for the others.
+    plain = DemoDialog(scene=scenes["plain"])
+    assert plain.fields["hrtf"].value() == ears
+    plain.fields["hrtf"].set_value(None)
+    plain.fields["format"].setText("mono")
+    plain.reject()
+    plain.deleteLater()
+    plain = DemoDialog(scene=scenes["plain"])
+    assert plain.fields["format"].text() == "mono" and plain.fields["hrtf"].value() is None
+    assert "--hrtf" not in plain.problem.text() and "--hrtf" not in plain.command.text()
+    assert plain.kept.text().startswith("Changed from the defaults and kept for next time: Format.")
+    plain.reject()
+    plain.deleteLater()
+    assert i18n.setting(DEMO_SETTING)["demos"]["scene"] == {"hrtf": str(ears)}
+    own = DemoDialog(scene=scenes["own"])
+    assert own.fields["format"].text() == "binaural" and own.fields["hrtf"].value() == ears
+    own.deleteLater()
+
+    # The stadium's song of your own, with its credit line, played on a copy of it too.
+    stadium = example_path("stadium_concert")
+    song = tmp_path / "song.wav"
+    write_wav(song, np.zeros((100, 2)), 8000)
+    dialog = DemoDialog(scene=stadium)
+    dialog.fields["music"].set_value(str(song))
+    dialog.fields["bpm"].setText("120")
+    dialog.fields["credit"].setText("My band, CC BY 4.0")
+    dialog.reject()
+    dialog.deleteLater()
+    copy = tmp_path / "my stadium" / "scene.yaml"
+    copy.parent.mkdir()
+    copy.write_text(stadium.read_text(encoding="utf-8"), encoding="utf-8")
+    other = DemoDialog(scene=copy)
+    assert other.fields["music"].value() == song and other.fields["bpm"].text() == "120.0"
+    assert other.fields["credit"].text() == "My band, CC BY 4.0"
+    other.deleteLater()
 
 
 def test_demo_dialog_fits_the_demo_picked(qapp, monkeypatch) -> None:
