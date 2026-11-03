@@ -354,7 +354,7 @@ ellipse where a path through the ground is at most half a wavelength longer than
 reflected path, small at high frequencies and near normal incidence, long near grazing
 incidence. The reflection factor is the sum of each ground's (Q for a ground with an
 impedance, the square root of 1 - absorption for one without), each weighted by the
-share of the Fresnel zone it covers, band by band, as engineering models such as
+share of the Fresnel zone's area it covers, band by band, as engineering models such as
 Nord2000 and Harmonoise weight mixed ground. Past the ground's extent the ground goes on
 as it is at its edge.
 

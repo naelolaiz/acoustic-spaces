@@ -35,9 +35,10 @@ level of its places, each as with the aircraft standing there, heard when its so
 arrives, through the slow time weighting, L_ASmax its highest, and the SEL from when it
 comes within 10 dB of that to when it falls 10 dB under. The highest level of the places
 with no time weighting (L_Amax) and the SEL of the whole walk are reported beside them.
-The late rays are seeded (``SEED``): the grass's scattered sound comes from the rays
-that land near the microphone, few when the aircraft is high, so it changes from place
-to place, and ``--rays`` sets how many there are.
+The late rays are seeded (``SEED``), and ``--rays`` sets how many there are; the
+grass's scattered sound near the microphone is found from the microphone's side
+(:data:`~acoustic_spaces.engine.late.FIRST_GATHER`), not from the few rays that land
+there.
 """
 
 from __future__ import annotations

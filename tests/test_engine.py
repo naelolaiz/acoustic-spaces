@@ -134,11 +134,12 @@ def _box_of_triangles(path: Path, *, bend=0.0, degrees=0.0, decimals=None, quart
 def test_faces_merged_into_one_plane_reflect_as_an_exact_box(
     tmp_path, bend, degrees, decimals, quarters
 ) -> None:
-    """Faces whose normals and offsets agree within the model's plane tolerance make one
-    plane, the plane of the first of them, without lying in it exactly, so a reflection
-    point found on one of the others can lie behind that plane (here by less than 4 um).
-    The check that a path turns back off the planes it reflects off counts such a point
-    as on the plane, and the paths and their energies are those of the exact box.
+    """Faces whose normals and offsets round to the same multiples of the model's plane
+    tolerance make one plane, the plane of the first of them, without lying in it
+    exactly, so a reflection point found on one of the others can lie behind that plane
+    (here by less than 4 um). The check that a path turns back off the planes it
+    reflects off counts such a point as on the plane, and the paths and their energies
+    are those of the exact box.
     Counting it as past the plane dropped 50 of these listeners' 189 paths with a corner
     of the wall x = 8 moved 1 or 4 um out of the room, and 32 with the box, its sides in
     quarters, turned 17 degrees and written with 6 decimals."""
@@ -187,6 +188,76 @@ def test_faces_merged_into_one_plane_reflect_as_an_exact_box(
             * ((1 - alpha) * (1 - scattering)) ** paths.order[:, None]
         )
         np.testing.assert_allclose(paths.energy, expected, rtol=1e-5)
+
+
+def _hall_of_triangles(path: Path, size, turn) -> Path:
+    """A box ``size`` (m) from the origin as an OBJ file, its sides (the same as those of
+    ``_box_of_triangles``) two triangles each, its corners mapped by ``turn`` (3 x 3) and
+    written with 15 significant digits."""
+    L, W, H = size
+    sides = [
+        [(0, 0, 0), (0, W, 0), (L, W, 0), (L, 0, 0)],
+        [(0, 0, H), (L, 0, H), (L, W, H), (0, W, H)],
+        [(0, 0, 0), (L, 0, 0), (L, 0, H), (0, 0, H)],
+        [(0, W, 0), (0, W, H), (L, W, H), (L, W, 0)],
+        [(0, 0, 0), (0, 0, H), (0, W, H), (0, W, 0)],
+        [(L, 0, 0), (L, W, 0), (L, W, H), (L, 0, H)],
+    ]
+    lines = []
+    for n, corners in enumerate(sides):
+        lines += ["v " + " ".join(f"{c:.15g}" for c in turn @ p) for p in np.array(corners, float)]
+        first = 4 * n + 1
+        lines += [f"f {first} {first + 1} {first + 2}", f"f {first} {first + 2} {first + 3}"]
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def test_a_reflection_grazing_a_tilted_floor_is_found(tmp_path) -> None:
+    """A 400 x 10 x 5 m hall turned 10 degrees about the x axis and then 23 about the z
+    axis, so that its floor lies along no axis, written with 15 significant digits, with
+    the source at (1, 5) and listeners at (150, 5.3) and (399, 5.3), all 0.1 um above the
+    floor: each listener gets the reflection off each of the six sides, at the delay of
+    the source's image in it. The reflection point found on the floor lies 1.8e-15 m
+    behind it (from the rounding of the coordinates), farther than the intersection
+    test's least distance times the slope of the legs off the floor (2e-16 to 5.5e-16 m):
+    taking that as the legs crossing the floor had dropped the floor reflection for both
+    listeners."""
+    size = (400.0, 10.0, 5.0)
+    c, s = math.cos(math.radians(10.0)), math.sin(math.radians(10.0))
+    about_x = np.array([[1.0, 0.0, 0.0], [0.0, c, -s], [0.0, s, c]])
+    c, s = math.cos(math.radians(23.0)), math.sin(math.radians(23.0))
+    turn = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]) @ about_x
+    obj = _hall_of_triangles(tmp_path / "hall.obj", size, turn)
+    height = 1e-7
+    source = np.array([1.0, 5.0, height])
+    listeners = np.array([(150.0, 5.3, height), (399.0, 5.3, height)])
+    scene = Scene.model_validate(
+        {
+            "geometry": {"file": str(obj)},
+            "materials": {"m": {"absorption": [0.1] * 8, "scattering": 0.0}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": (turn @ source).tolist()}],
+            "listeners": [
+                {"name": f"l{k}", "position": (turn @ p).tolist()} for k, p in enumerate(listeners)
+            ],
+            "simulation": {"scattering": {"from_size": False}, "ir_length_s": 2.0},
+        }
+    )
+    room = Room.from_scene(scene)
+    images = []
+    for axis in range(3):
+        for side in (0.0, size[axis]):
+            image = source.copy()
+            image[axis] = 2 * side - image[axis]
+            images.append(image)
+    for k, lis in enumerate(listeners):
+        paths = early_paths(
+            room, listener=f"l{k}", max_order=1, method="image_sources", diffraction="none"
+        )
+        np.testing.assert_array_equal(np.bincount(paths.order), [1, 6])
+        distance = np.sort(np.linalg.norm(np.array(images) - lis, axis=1))
+        delay = np.sort(paths.delay_s[paths.order == 1])
+        np.testing.assert_allclose(delay, distance / room.speed_of_sound(), rtol=1e-9)
 
 
 def test_exhaustive_search_has_a_limit() -> None:
@@ -339,7 +410,7 @@ def test_batches_trace_the_same_rays() -> None:
 
 def test_standard_errors_match_the_spread_over_seeds() -> None:
     # The jackknife over one run's batches against the spread of 30 runs with other
-    # seeds, from 125 Hz to 4 kHz (with 60 runs the ratios came within 0.91 to 1.18).
+    # seeds, from 125 Hz to 4 kHz (with 60 runs the ratios came within 0.90 to 1.17).
     values, errors = [], []
     for seed in range(30):
         room = _diffuse_box({"late": {"rays": 2000}, "ir_length_s": 1.0, "seed": seed})

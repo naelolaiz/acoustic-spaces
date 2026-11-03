@@ -341,30 +341,190 @@ def _height_over_plane(model: TraceModel, points: np.ndarray, planes: np.ndarray
     return np.einsum("...k,...k->...", points, normals) - model.plane_offset[planes]
 
 
-def _face_at(model: TraceModel, plane: int, point: np.ndarray, tolerance: float) -> int:
-    """A face of ``plane`` that ``point`` lies on (edges included), or -1; none where the
-    point lies farther from the plane than ``tolerance`` and the plane's spread (see
-    :attr:`TraceModel.plane_spread`). Openings are holes: no point lies on one."""
-    height = abs(model.plane_normal[plane] @ point - model.plane_offset[plane])
-    if height > max(tolerance, model.plane_spread[plane]):
-        return -1
-    candidates = np.flatnonzero((model.face_plane == plane) & ~model.transparent)
-    if len(candidates) == 0:
-        return -1
-    tri = model.room.mesh.triangles[candidates]
+def _height_over_face(model: TraceModel, points: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """The distance (m) of ``points`` (..., 3) from the planes the faces ``faces`` (...)
+    themselves lie in (:attr:`TraceModel.face_planes`), the two broadcast together,
+    negative behind one (against its plane's normal)."""
+    normal, offset = model.face_planes
+    return np.einsum("...k,...k->...", points, normal[faces]) - offset[faces]
+
+
+def _cross(u: np.ndarray, v: np.ndarray) -> np.ndarray:
+    """``np.cross`` of 3-vectors (..., 3), without its overhead."""
+    u0, u1, u2 = u[..., 0], u[..., 1], u[..., 2]
+    v0, v1, v2 = v[..., 0], v[..., 1], v[..., 2]
+    return np.stack([u1 * v2 - u2 * v1, u2 * v0 - u0 * v2, u0 * v1 - u1 * v0], axis=-1)
+
+
+def _over(model: TraceModel, faces: np.ndarray, points: np.ndarray, tolerance: float):
+    """Whether each of ``points`` (p, 3) projected onto the face of ``faces`` (p,) beside
+    it lies on it, edges included to ``tolerance`` (p,)."""
+    mesh = model.room.mesh
+    tri = mesh.vertices[mesh.faces[faces]]
     a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
-    n = np.cross(b - a, c - a)
+    n = _cross(b - a, c - a)
     area2 = np.einsum("ij,ij->i", n, n)
-    # Barycentric coordinates of the point projected onto each triangle.
-    w_a = np.einsum("ij,ij->i", np.cross(c - b, point - b), n) / area2
-    w_b = np.einsum("ij,ij->i", np.cross(a - c, point - c), n) / area2
+    # Barycentric coordinates of the points projected onto the triangles.
+    w_a = np.einsum("ij,ij->i", _cross(c - b, points - b), n) / area2
+    w_b = np.einsum("ij,ij->i", _cross(a - c, points - c), n) / area2
     w_c = 1.0 - w_a - w_b
     edge = np.sqrt(area2) / np.maximum(
         np.linalg.norm(np.stack([b - a, c - b, a - c]), axis=2).max(axis=0), 1e-300
     )  # twice the area over the longest edge: a height of the triangle
     slack = tolerance / np.maximum(edge, 1e-300)
-    inside = np.flatnonzero(np.min(np.stack([w_a, w_b, w_c]), axis=0) >= -slack)
+    return np.minimum(np.minimum(w_a, w_b), w_c) >= -slack
+
+
+def _face_at(
+    model: TraceModel, plane: int, point: np.ndarray, tolerance: float, own: bool = True
+) -> int:
+    """A face of ``plane`` that ``point`` lies on (edges included), or -1: it lies within
+    ``tolerance`` of the plane or, with ``own``, of the face's own plane (see
+    :attr:`TraceModel.face_planes`). Openings are holes: no point lies on one."""
+    height = abs(model.plane_normal[plane] @ point - model.plane_offset[plane])
+    if height > tolerance + (2.0 * model.plane_spread[plane] if own else 0.0):
+        return -1
+    candidates = np.flatnonzero((model.face_plane == plane) & ~model.transparent)
+    if height > tolerance:  # off the plane, but maybe on a face that is not in it
+        normal, offset = model.face_planes
+        near = np.abs(normal[candidates] @ point - offset[candidates]) <= tolerance
+        candidates = candidates[near]
+    if len(candidates) == 0:
+        return -1
+    at = np.broadcast_to(point, (len(candidates), 3))
+    inside = np.flatnonzero(_over(model, candidates, at, tolerance))
     return int(candidates[inside[0]]) if len(inside) else -1
+
+
+#: Points looked up at once in a plane's grid of faces (:func:`_faces_under`).
+_CHUNK = 1024
+#: A face whose box covers more cells of its plane's grid than this is tried for every
+#: point (:func:`_face_grid`).
+_GRID_CELLS = 64
+
+
+def _face_grid(model: TraceModel, plane: int, tolerance: float):
+    """The faces of ``plane`` binned for :func:`_faces_under` (worked out once for each
+    plane and ``tolerance``, in :attr:`TraceModel.face_grids`): each face's box, grown by
+    the room :func:`_over` leaves round its edges (it takes the triangle scaled about its
+    centroid by 1 + 3 ``tolerance`` / its least height, which moves no corner farther
+    along an axis than that 3 ``tolerance`` / least height times the box's largest side)
+    and by ``tolerance`` and twice the plane's spread, then doubled and added the model's
+    rounding (:attr:`TraceModel.height_error`); and a grid of square cells across the two
+    axes the plane faces least, listing the faces whose boxes overlap each (those that
+    overlap more than :data:`_GRID_CELLS` of them, or with no finite box, listed apart,
+    for every point)."""
+    key = (int(plane), float(tolerance))
+    grid = model.face_grids.get(key)
+    if grid is not None:
+        return grid
+    faces = np.flatnonzero(model.face_plane == plane)
+    mesh = model.room.mesh
+    tri = mesh.vertices[mesh.faces[faces]]
+    a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
+    n = _cross(b - a, c - a)
+    longest = np.linalg.norm(np.stack([b - a, c - b, a - c]), axis=2).max(axis=0)
+    least = np.sqrt(np.einsum("ij,ij->i", n, n)) / np.maximum(longest, 1e-300)
+    low, high = tri.min(axis=1), tri.max(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        grow = 3.0 * tolerance / least * (high - low).max(axis=1)
+    grow = np.where(np.isfinite(grow), grow, np.inf)
+    grow = 2.0 * (grow + tolerance + 2.0 * model.plane_spread[plane]) + model.height_error
+    low, high = low - grow[:, None], high + grow[:, None]
+    axes = np.delete(np.arange(3), np.argmax(np.abs(model.plane_normal[plane])))
+    finite = np.isfinite(grow)
+    start, cell, shape = np.zeros(2), 1.0, (0, 0)
+    first = np.zeros(2, dtype=np.int64)
+    listed = np.zeros(0, dtype=np.int64)
+    apart = np.flatnonzero(~finite)
+    if finite.any():
+        start = low[finite][:, axes].min(axis=0)
+        span = high[finite][:, axes].max(axis=0) - start
+        size = (high - low)[finite][:, axes].max(axis=1)
+        cell = max(
+            float(np.median(size)),
+            float(np.sqrt(span[0] * span[1] / (4 * np.count_nonzero(finite)))),
+            float(np.finfo(float).tiny),
+        )
+        shape = tuple(int(x) for x in np.maximum(np.ceil(span / cell), 1))
+        lo = np.clip(np.floor((low[:, axes] - start) / cell), 0, np.array(shape) - 1)
+        hi = np.clip(np.floor((high[:, axes] - start) / cell), 0, np.array(shape) - 1)
+        lo = np.where(finite[:, None], lo, 0).astype(np.int64)
+        count = np.where(finite[:, None], hi, 0).astype(np.int64) - lo + 1
+        cells = count.prod(axis=1)
+        binned = finite & (cells <= _GRID_CELLS)
+        apart = np.flatnonzero(~binned)
+        which = np.flatnonzero(binned)
+        each = np.repeat(which, cells[which])
+        step = np.arange(len(each)) - np.repeat(
+            np.cumsum(cells[which]) - cells[which], cells[which]
+        )
+        at = (lo[each, 0] + step // count[each, 1]) * shape[1] + lo[each, 1] + step % count[each, 1]
+        order = np.argsort(at, kind="stable")
+        listed = each[order]
+        first = np.searchsorted(at[order], np.arange(shape[0] * shape[1] + 1))
+    grid = (faces, low, high, axes, start, cell, shape, first, listed, apart)
+    model.face_grids[key] = grid
+    return grid
+
+
+def _faces_under(model: TraceModel, plane: int, points: np.ndarray, tolerance: float):
+    """Pairs of the ``points`` (m, 3) and faces of ``plane``, as (p,) rows of ``points``
+    and (p,) faces, among which are all those where a point projected onto the face lies
+    on it, edges included to ``tolerance``, within ``tolerance`` and twice the plane's
+    spread of the face's own plane: those whose grown boxes hold the point (see
+    :func:`_face_grid`)."""
+    faces, low, high, axes, start, cell, shape, first, listed, apart = _face_grid(
+        model, plane, tolerance
+    )
+    m = len(points)
+    index = np.floor((points[:, axes] - start) / cell)
+    inside = np.all((index >= 0) & (index < np.array(shape)), axis=1)
+    at = np.where(inside, index[:, 0] * shape[1] + index[:, 1], 0).astype(np.int64)
+    count = np.where(inside, first[at + 1] - first[at], 0)
+    rows = np.repeat(np.arange(m), count)
+    step = np.arange(len(rows)) - np.repeat(np.cumsum(count) - count, count)
+    local = listed[np.repeat(first[at], count) + step]
+    if len(apart):
+        rows = np.concatenate([rows, np.repeat(np.arange(m), len(apart))])
+        local = np.concatenate([local, np.tile(apart, m)])
+    held = np.all((low[local] <= points[rows]) & (points[rows] <= high[local]), axis=1)
+    return rows[held], faces[local[held]]
+
+
+def _height_near(model: TraceModel, points, planes, tolerance: float) -> np.ndarray:
+    """The distance (m) of ``points`` (..., 3) from the planes ``planes`` (...), the two
+    broadcast together, as :func:`_height_over_plane` gives it; but where a plane's faces
+    do not all lie in it (:attr:`TraceModel.plane_spread`) and the point lies within
+    ``tolerance`` and twice that spread of it, the one of least size of that and the
+    point's distances from the own planes (:attr:`TraceModel.face_planes`) of the plane's
+    faces it lies over (edges included to ``tolerance``; of equal ones the first face's):
+    a point on any face of the plane lies on it, and its side is taken from the faces
+    there."""
+    height = _height_over_plane(model, points, planes)
+    spread = model.plane_spread[planes]
+    near = np.nonzero((spread > 0.0) & (np.abs(height) <= tolerance + 2.0 * spread))
+    if len(near[0]) == 0:
+        return height
+    points = np.broadcast_to(points, (*height.shape, 3))[near]
+    planes = np.broadcast_to(planes, height.shape)[near]
+    merged = height[near]
+    normal, offset = model.face_planes
+    for plane in np.unique(planes):
+        on = np.flatnonzero(planes == plane)
+        for part in np.array_split(on, -(-len(on) // _CHUNK)):
+            rows, faces = _faces_under(model, plane, points[part], tolerance)
+            at = points[part][rows]
+            own = np.einsum("ij,ij->i", at, normal[faces]) - offset[faces]
+            over = _over(model, faces, at, tolerance)
+            rows, faces, own = rows[over], faces[over], own[over]
+            order = np.lexsort((faces, np.abs(own), rows))
+            rows, own = rows[order], own[order]
+            least = np.flatnonzero(np.diff(rows, prepend=-1) != 0)
+            rows, own = part[rows[least]], own[least]
+            closer = np.abs(own) < np.abs(merged[rows])
+            height[tuple(i[rows[closer]] for i in near)] = own[closer]
+    return height
 
 
 def find_paths(
@@ -431,11 +591,9 @@ def find_paths(
         first = np.full(n, k - 1, dtype=np.int64)
         for j in range(k - 1, -1, -1):
             plane = seqs[:, j]
-            # A reflection point on an edge already lies on the next plane too (within its
-            # spread, where that is larger than the tolerance): the path reflects off both
-            # at the same point (a corner), so there is nothing to trace.
-            height = np.abs(_height_over_plane(model, current, plane))
-            corner = valid & (height <= np.maximum(tolerance, model.plane_spread[plane]))
+            # A reflection point on an edge already lies on the next plane too: the path
+            # reflects off both at the same point (a corner), so there is nothing to trace.
+            corner = valid & (np.abs(_height_near(model, current, plane, tolerance)) <= tolerance)
             if j == k - 1:
                 corner[:] = False
             trace = valid & ~corner
@@ -454,7 +612,14 @@ def find_paths(
                 rows = np.flatnonzero(trace & hit)
                 planes = np.where(np.arange(j + 1, k) <= first[rows, None], seqs[rows, j + 1 :], -1)
                 turns, share, crossed = _turn(
-                    model, planes, before[rows], start[rows], current[rows], tolerance, counted
+                    model,
+                    planes,
+                    faces[rows, j + 1 :],
+                    before[rows],
+                    start[rows],
+                    current[rows],
+                    tolerance,
+                    counted,
                 )
                 valid[rows] &= turns
                 through[rows] *= share
@@ -481,7 +646,7 @@ def find_paths(
             planes = np.where(np.arange(k) <= first[rows, None], seqs[rows], -1)
             ends = np.broadcast_to(source, (len(rows), 3))
             turns, share, crossed = _turn(
-                model, planes, before[rows], current[rows], ends, tolerance, counted
+                model, planes, faces[rows], before[rows], current[rows], ends, tolerance, counted
             )
             valid[rows] &= turns
             through[rows] *= share
@@ -634,7 +799,9 @@ def _towards_plane(model, start, direction, length, ignore, plane, trace, tolera
     the way (n, bands); and how many of them it crossed of each column of ``counted``
     (F, m), (n, m). A hit on another face exactly where it meets the expected plane
     counts as on the plane (whether the path goes on across that face there,
-    :func:`_turn` says)."""
+    :func:`_turn` says): one within ``tolerance`` of the plane, in which the image the
+    ray heads for is mirrored, not of the own plane of one of its faces (where they do
+    not all lie in the plane, :attr:`TraceModel.plane_spread`)."""
     n = len(start)
     bands = model.absorption.shape[1]
     transparent = model.transparent
@@ -656,7 +823,7 @@ def _towards_plane(model, start, direction, length, ignore, plane, trace, tolera
         remaining[rows] -= t
         on_plane = (model.face_plane[hit] == plane[rows]) & ~transparent[hit]
         for i in np.flatnonzero(~on_plane):
-            other = _face_at(model, plane[rows[i]], position[rows[i]], tolerance)
+            other = _face_at(model, plane[rows[i]], position[rows[i]], tolerance, own=False)
             if other >= 0:
                 hit[i], on_plane[i] = other, True
         face[rows[on_plane]] = hit[on_plane]
@@ -711,29 +878,28 @@ def _crossed_here(model, reflecting, before, point, after, tolerance, near):
     the other side crosses that face; elsewhere the leg arriving where the point lies
     on the side of ``after`` already.
 
-    Each distance from a plane above counts as at least the plane's spread
-    (:attr:`TraceModel.plane_spread`): a point that near the plane may lie on one of its
-    faces."""
+    Distances from a plane are those of :func:`_height_near` (from the faces a point lies
+    over, where they are not all in the plane)."""
     least = model.bvh.min_distance
     planes = np.arange(model.plane_count)
     normals = model.plane_normal
-    spread = model.plane_spread
-    height, below, above = (_height_over_plane(model, p, planes) for p in (point, before, after))
+    height, below, above = _height_near(
+        model, np.stack([point, before, after])[:, None], planes, tolerance
+    )
     arriving = (point - before) / max(np.linalg.norm(point - before), 1e-300)
     leaving = (after - point) / max(np.linalg.norm(after - point), 1e-300)
     arrives = height * above > 0.0
     slope = np.abs(np.where(arrives, normals @ arriving, normals @ leaving))
-    crossing = _on_either_side(below, above, np.maximum(least, spread))
+    crossing = _on_either_side(below, above, least)
     crossing[reflecting] = False
-    reach = np.where(arrives, near[0], near[1]) * slope
-    here = crossing & (np.abs(height) <= np.maximum(reach, spread))
+    here = crossing & (np.abs(height) <= np.where(arrives, near[0], near[1]) * slope)
     none = np.zeros(0, dtype=np.int64), np.zeros(0, dtype=bool)
     if not here.any():
         return none
     # Those right at the point first, so that of coincident planes one of them counts.
     crossed: list[int] = []
     for q in np.concatenate([np.flatnonzero(here), np.flatnonzero(crossing & ~here)]):
-        if abs(height[q]) <= max(tolerance, spread[q]) and all(
+        if abs(height[q]) <= tolerance and all(
             abs(normals[q] @ normals[c]) < 1.0 - PLANE_TOLERANCE for c in crossed
         ):
             crossed.append(int(q))
@@ -741,15 +907,13 @@ def _crossed_here(model, reflecting, before, point, after, tolerance, near):
     # The surfaces the path meets there without crossing them, and the way along them.
     others = [
         q
-        for q in np.flatnonzero(np.abs(height) <= np.maximum(tolerance, spread))
+        for q in np.flatnonzero(np.abs(height) <= tolerance)
         if q not in reflecting
         and all(abs(normals[q] @ normals[c]) < 1.0 - PLANE_TOLERANCE for c in crossed)
         and _face_at(model, q, point, tolerance) >= 0
     ]
     others = np.array(others, dtype=np.int64)
-    others = others[
-        ~_on_either_side(below[others], above[others], np.maximum(tolerance, spread[others]))
-    ]
+    others = others[~_on_either_side(below[others], above[others], tolerance)]
     surfaces = np.concatenate([reflecting, others])
     farther = np.where(
         np.abs(below[surfaces]) >= np.abs(above[surfaces]), below[surfaces], above[surfaces]
@@ -873,14 +1037,14 @@ def _side_reflected(model, reflecting, plane, point, after, tolerance) -> int:
     ``after``, -1 only on the other side, 0 on both or neither. The points tested lie
     ``tolerance`` from ``point`` either way along all of ``reflecting``, as directly off
     ``plane`` as that allows; 0 too where that leaves them no farther from ``plane``
-    than the intersection test's least distance or the plane's spread (as where
-    ``plane`` holds the line the planes meet in)."""
+    than the intersection test's least distance (as where ``plane`` holds the line the
+    planes meet in)."""
     normal = model.plane_normal[plane]
     towards = normal * np.sign(normal @ after - model.plane_offset[plane])
     normals = model.plane_normal[reflecting]
     way = towards - normals.T @ np.linalg.lstsq(normals.T, towards, rcond=None)[0]
     size = np.linalg.norm(way)
-    if tolerance * size <= max(model.bvh.min_distance, model.plane_spread[plane]):
+    if tolerance * size <= model.bvh.min_distance:
         return 0
     way /= size
     return int(_on_faces(model, reflecting, point + tolerance * way)) - int(
@@ -888,9 +1052,10 @@ def _side_reflected(model, reflecting, plane, point, after, tolerance) -> int:
     )
 
 
-def _turn(model, planes, before, point, after, tolerance, counted):
-    """Paths that reflect off ``planes`` (n, r; -1 for none; more than one in a corner)
-    at ``point`` (n, 3), coming from ``before`` (n, 3) and going on to ``after`` (n, 3):
+def _turn(model, planes, faces, before, point, after, tolerance, counted):
+    """Paths that reflect off ``planes`` (n, r; -1 for none; more than one in a corner),
+    off their faces ``faces`` (n, r), at ``point`` (n, 3), coming from ``before`` (n, 3)
+    and going on to ``after`` (n, 3):
     (n,) whether each turns back off every one of those planes, as a reflection does,
     rather than going on across one: in a corner, ``before`` and ``after`` on either
     side of it, both farther than ``tolerance``; anywhere, the leg from the point to
@@ -907,25 +1072,26 @@ def _turn(model, planes, before, point, after, tolerance, counted):
     but one right where it meets the plane (:func:`_towards_plane`), and the point then
     lies in that face's plane.
 
-    Each distance from a plane above counts as at least the plane's spread
-    (:attr:`TraceModel.plane_spread`): a plane's faces need not lie exactly in it, so a
-    point on any of them counts as on the plane, and a leg leaving such a point does
-    not cross the plane."""
+    Sides and distances are those of the plane that each of ``faces`` itself lies in
+    (:attr:`TraceModel.face_planes`; its plane where the face lies in it): the face the
+    leg arriving met, or the face of the plane under the point (:func:`_face_at`) where
+    the leg met another face there or the point is a corner. None within
+    :attr:`TraceModel.height_error` of a plane (the rounding of the model's coordinates)
+    counts as farther than the least distance, as for a leg that runs that close along
+    the plane."""
     least = model.bvh.min_distance
     valid = planes >= 0
     safe = np.maximum(planes, 0)
     normals = model.plane_normal[safe]
-    here, below, above = (
-        _height_over_plane(model, p[:, None], safe) for p in (point, before, after)
-    )
-    spread = model.plane_spread[safe]
+    own = np.where(valid, faces, 0)
+    here, below, above = _height_over_face(model, np.stack([point, before, after])[:, :, None], own)
     corner = np.count_nonzero(valid, axis=1) > 1
-    across = corner[:, None] & _on_either_side(below, above, np.maximum(tolerance, spread))
+    across = corner[:, None] & _on_either_side(below, above, tolerance)
     for end, there in ((before, below), (after, above)):
         way = end - point
         way /= np.maximum(np.linalg.norm(way, axis=1), 1e-300)[:, None]
-        slope = np.abs(np.einsum("nrk,nk->nr", normals, way))
-        across |= _on_either_side(here, there, np.maximum(least * slope, spread))
+        slope = np.abs(np.einsum("nrk,nk->nr", model.face_planes[0][own], way))
+        across |= _on_either_side(here, there, np.maximum(least * slope, model.height_error))
     coincident = np.abs(normals @ normals.transpose(0, 2, 1)) >= 1.0 - PLANE_TOLERANCE
     coincident &= valid[:, :, None] & valid[:, None, :] & (planes[:, :, None] != planes[:, None, :])
     turns = ~np.any(valid & across, axis=1) & ~np.any(coincident, axis=(1, 2))

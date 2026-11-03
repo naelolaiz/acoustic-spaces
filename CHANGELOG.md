@@ -2,9 +2,32 @@
 
 ## Unreleased
 
+- Fixed: one late ray scattered off the ground next to a listener could lift a place of
+  an outdoor walk by up to 6.1 dB(A) (the airport's landing heard at approach_2000m),
+  and most runs found too little of that scattered sound far from the source. It is now
+  shared between the rays and 16384 directions gathered from each listener, by how
+  densely each finds it (`stochastic_energy(gather=...)`, each batch with its share): on
+  that landing the late part lifts a place by 0.2 dB(A) at most, the aircraft
+  validation's highest unweighted level far out falls by up to 0.7 dB, and BRAS's CR1,
+  CR2 and CR4 move by 0.04 JND at most.
+- Fixed: a ground reflection near where two grounds meet (a runway in a meadow) weighs
+  each by the exact area of its Fresnel zone it covers, and a zone at the ground's edge
+  goes on past it; the shares were counted on 96 points, so a pass-by's level stepped by
+  up to 1.75 dB as the reflection crossed the runway's edge. The airport's departure heard
+  at approach_2000m reads 0.2 dB(A) lower (L_ASmax 51.9).
+- Fixed: the pass-by graphs' time labels are at least 60 px apart (every 10 s for the
+  airport's flights); they were every 2 s and overlapped.
 - Fixed: the Viking HRTF set is credited to Spagnol, Miccini and Unnthórsson of Aalborg
   University and the University of Iceland, and described as a KEMAR dummy head with one
   of 20 pairs of replica pinnae, or none; it read Reykjavík University and 20 people.
+- Fixed: the helicopter demo's `flight` lengthened the responses by the helicopter's
+  farthest distance, which the simulation already adds outdoors, so they ran 6.1 s, not
+  4.0 s; its walk at the mix position takes 121 s, not 174 s, at the same level (L_Amax
+  81.5 dB(A), 81.6 before).
+- Docs: the stadium, helicopter and lakeside demos' numbers and pictures come from new
+  runs with the BS.1770 meters: on stage it is 6 to 18 dB(A) louder than in the audience
+  (7 to 20 before), and the lake's weather lifts the bedroom window 5.3 to 6.0 dB over
+  three runs (7.1 before).
 - Docs: G of responses written with `simulate --normalize` takes the reference energy
   0.01 × `ir_gain`² (from `parameters.json`), and the JNDs of T20, T30 and C50 are
   ISO 3382-1's of EDT and C80 taken by analogy; Barron's total and the first batch of

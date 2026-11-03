@@ -287,9 +287,8 @@ def test_the_helicopter_crosses_over_the_concert(tmp_path: Path) -> None:
     assert helicopter["walk"] == {"to": [[600, 0, 150]], "speed_m_s": 63, "doppler": True}
     lower = sibling(folder / "helicopter_demo.py", "helicopter_demo").flight_of(own, 40.0)
     assert lower["position"] == [-600.0, 0.0, 40.0] and lower["walk"]["to"] == [[600.0, 0.0, 40.0]]
-    farthest = max(math.dist((600.0, 0.0, 150.0), lis["position"]) for lis in flown["listeners"])
-    later = math.ceil((0.3 + farthest / speed_of_sound(20.0)) * 10.0) / 10.0
-    assert flown["simulation"]["ir_length_s"] == later
+    # The stadium's length: outdoors the simulation counts it from the latest direct sound.
+    assert flown["simulation"] == stadium_scene["simulation"]
     resolved = demo.resolved(args)
     assert demo.step("flight").done(resolved)
     assert not demo.step("flight").done(argparse.Namespace(**vars(resolved) | {"height": 400.0}))
