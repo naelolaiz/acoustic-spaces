@@ -165,7 +165,7 @@ def houses(args: argparse.Namespace, demo: Demo | None = None) -> indoors.StillH
             f"error: --indoors {choice} hears the rumble of the ground's vibration, but "
             f"nothing that plays shakes it ({shakers} do); try --indoors {NOUN}"
         )
-    names = [lis.name for lis in found.listeners]
+    names = [lis.name for lis in found.listeners if lis.in_use]
     inside = indoors.houses_heard(found, names, house, NOUN, args.scene.name)
     fronts, shifts = {}, {}
     points = front_points(found) if house is not None and house.airborne else {}
@@ -187,7 +187,7 @@ def houses(args: argparse.Namespace, demo: Demo | None = None) -> indoors.StillH
         house,
         str(choice),
         tuple(shaking),
-        {lis.name: _point(lis.position) for lis in found.listeners},
+        {lis.name: _point(lis.position) for lis in found.listeners if lis.in_use},
         inside,
         max(s.sound_power_db for s in playing),
         scene_demo.format_of(args, found),
@@ -228,7 +228,9 @@ def scene(args: argparse.Namespace) -> None:
     print(f"wrote {args.scene}: {', '.join(SOURCES)}")
     room = Room.from_yaml(args.scene)
     points = front_points(room.scene)
-    indoors.with_fronts(room, points)  # SystemExit when one is not in the open air
+    # SystemExit when one is not in the open air; where the example has the point
+    # already (ticked off), its own place.
+    where = {lis.name: lis.position for lis in indoors.with_fronts(room, points).scene.listeners}
     path = front_scene(args)
     if not points:
         path.unlink(missing_ok=True)
@@ -237,8 +239,8 @@ def scene(args: argparse.Namespace) -> None:
     data["name"] = data["name"] + ", 2 m in front of the walls"
     data["listeners"] = [
         {k: v for k, v in listeners[name].items() if k != "walk"}
-        | {"name": indoors.front_name(name), "position": list(point)}
-        for name, point in points.items()
+        | {"name": indoors.front_name(name), "position": list(where[indoors.front_name(name)])}
+        for name in points
     ]
     pipeline.write_scene(
         path,
