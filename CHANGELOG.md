@@ -353,21 +353,26 @@
   below with the 19-point one), as in front of a solid block.
 - Fixed: the wave solver's responses started at emission, though the source's pulse is
   centred on it, so listeners within 16 time steps' travel of the source (2.7 m on the
-  default grid) lost the pulse's start; they now keep it. 0.5 m from the source the
-  direct sound falls by up to 0.4 dB at 63 Hz and the figures of eight's ratio to it
-  moves by up to 1.4 dB; from 2 m on nothing moves by more than 0.01 dB.
+  default grid, 19-point up to 125 Hz, and 5.6 m on a 19-point grid up to 63 Hz) lost
+  the pulse's start; they now keep it. 0.3 to 1.5 m from the source the direct sound
+  moves by -0.87 to +0.16 dB on the default grid and -0.41 to +0.97 dB on the 63 Hz one,
+  and the figures of eight's ratio to it by up to 1.9 and 2.1 dB; from 2 m on, both
+  move by less than 0.01 dB on the default grid and up to 0.1 dB on the 63 Hz one.
 - Fixed: the wave solver's source cut off at a fifth of the grid's sample rate with
   either stencil, which took up to 1.6 dB off the top of the highest band with the
   19-point stencil (whose time step is 1.5 times as long) at 5 cells per wavelength; the
-  cutoff now scales with the time step (that band rises there by up to 0.13 dB, and by
-  0.003 dB at most at the default 8 cells per wavelength).
+  cutoff now scales with the time step (with the pulse's start kept, that band rises
+  there by up to 0.13 dB in octave bands and 0.49 dB in third-octave bands, and moves by
+  0.0033 dB at most at the default 8 cells per wavelength).
 - Fixed: the wave solver's figures of eight (X, Y and Z: the low end's direction in
   spatial outputs, and LF, LFC and LJ) came out 0.2 to 0.5 dB weak in the highest band;
   a fourth-order gradient and the velocity integral's gain divided out bring them within
   0.04 dB of a point source's 4 m away along a grid axis or a diagonal, with either
-  stencil. Within three cells of the source they now depend more on where it lies in its
-  cell (0.5 m away along a grid axis 0.5 to 6.1 dB lower at 63 Hz), and at seat-a in the
-  shoebox example LJ rises by 0.14 and 0.49 dB at 63 and 125 Hz.
+  stencil. Within about 2.5 cells of the source they now depend more on where it lies in
+  its cell; on the grid up to 125 Hz, 0.3 to 0.6 m away along a grid axis, they move by
+  -8.5 to +1.5 dB in the 63 Hz band with the 19-point stencil and -3.1 to +1.4 dB with
+  the 7-point one. With the two fixes above, LJ at seat-a in the shoebox example rises by
+  0.14 and 0.50 dB at 63 and 125 Hz (0.14 and 0.49 dB from this one alone).
 - Outdoor models make the wave solver's grid once per source instead of twice: a grid
   without the matched layer (with `scheme: auto` the isotropic stencil's), made only to
   find that the sky lets the sound out, is gone (the street example's set-up at 63 Hz
@@ -381,19 +386,24 @@
   it passed whole (with image sources twice). In the apartment example the bedroom
   column of a 0.7 m map at x = 8.0 m read 51 dB(A) instead of about 45 like its
   neighbours, and behind a 3 m barrier a listener placed symmetrically to the source got
-  6 to 27 dB more early sound than 1 cm either side.
+  6 to 27 dB more early sound than 1 cm either side. Finding the early reflections takes
+  1.2 to 1.8 times as long in the examples; with edge diffraction the early part takes
+  up to 3 % longer.
 - Fixed: where the wall between two rooms is drawn as two coincident faces, one for each
   room, no early path reflects off both faces at one point any more: from one room into
   the other that path was the direct sound at full level, without the wall's
   transmission loss, and with image sources from the third order on it came back into
   the source's room as the reflection off the wall once more. Behind such a 20 dB wall
-  it had raised the early level at 1 kHz by 9 to 18 dB, and in front of it by 0.05 to
-  0.13 dB up to the third order and 0.4 to 0.6 dB up to the fifth.
-- Fixed: no early path reflects off an opening any more. Those paths carried no energy,
+  it had raised the early level at 1 kHz by 9 to 18 dB, and in front of it, depending on
+  the listener, by about 0.04 to 0.25 dB up to the third order and 0.3 to 0.9 dB up to
+  the fifth, more near the wall.
+- Fixed: no early path reflects off an opening any more; those paths carried no energy,
   but they took the place of other paths with the same image and, with edge diffraction,
-  of the reflection bending round the opening's edge, so levels across a 10 m x 8 m room
-  with a 2 m doorway move by as much as 2.4 dB at 63 Hz, 1.6 dB at 125 Hz and 0.2 dB
-  above, and no longer step by 2 dB where the reflection crosses the doorway's side.
+  of the reflection bending round the opening's edge. With edge diffraction, levels
+  across a 10 m x 8 m room with a 2 m doorway move by as much as 2.4 dB at 63 Hz, 1.6 dB
+  at 125 Hz and 0.2 dB above where the reflection off the doorway's wall lands away from
+  the doorway's sides, by up to 4.3 dB at 63 Hz and 2.3 dB at 125 Hz where it lands on
+  one, and no longer step by 2 dB where the reflection crosses a side.
 
 ## 4.1.0
 

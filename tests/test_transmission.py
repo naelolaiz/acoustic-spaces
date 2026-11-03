@@ -766,18 +766,20 @@ def test_a_reflection_where_partitions_meet_passes_through_them(
 ) -> None:
     """A source at (2, 6, 1.5) and listeners at (8, 2, 1.5) in the parts of a space across
     partitions meeting at x = 5, y = 4, where the reflections off the floor and the
-    ceiling lie right on the line where they meet, or 1 to 3 um aside: each reflected
-    path passes the partitions there as it does 1 mm to one side, with the same
-    crossings and energy, and those found 1 mm to both sides are found. The listener's
+    ceiling lie right on the line where they meet, or, for listeners 1 to 3 um aside,
+    0.5 to 1.5 um aside: each reflected path passes the partitions there as it does for
+    listeners 1 mm to one side, with the same crossings and energy, and those found for
+    listeners 1 mm to both sides are found. The listener's
     part is a bedroom in the corner of an L-shaped room, or one beside a wall going on
     (a T, met first by the leg from the listener), or one of four around a cross, for which
     only the reflections of the first order are taken: the legs of later ones pass the
     line where the partitions meet, as the direct sound does, and a leg there counts one
     of the partitions only. The space is 9.5 x 8.5 m, not 10 x 8, about whose middle the
     source and the listener lie: there the legs between opposite walls pass the line as
-    well. The reflections had passed both walls of the bedroom whole, at the line and 1
-    to 3 um aside, and the T at the line and to the side where it counts one wall; at
-    the cross they had passed one wall 1 to 3 um aside and both at the line."""
+    well. The reflections had passed both walls of the bedroom whole, at the line and
+    for listeners 1 to 3 um aside, and the T at the line and to the side where it counts
+    one wall, and one of its two walls for listeners 1 to 3 um to the other side; at the
+    cross they had passed one wall for listeners 1 to 3 um aside and both at the line."""
     source, listener = (2.0, 6.0, 1.5), np.array([8.0, 2.0, 1.5])
     aside = np.array([2.0, 3.0, 0.0]) / 13**0.5  # level, across the path
     obj = _parted(tmp_path / "parted.obj", partitions)
@@ -879,10 +881,11 @@ def _doorway(path: Path) -> Path:
 
 def test_no_step_where_a_reflection_crosses_a_doorway_s_side(tmp_path: Path) -> None:
     """Where the reflection off the wall crosses the side of a doorway in it, from the
-    doorway onto the wall 2 mm along, the level steps by less than 0.1 dB in every band:
-    the edge diffraction bends the reflection round the doorway's side on both sides
-    of it. The reflection off the doorway, found with no energy, had taken the place of
-    that term on the doorway's side: 2.0 dB at 63 Hz and 0.1 to 0.6 dB above."""
+    doorway onto the wall, the level for listeners 2 mm apart (their reflections 1.2 mm
+    apart) steps by less than 0.1 dB in every band: the edge diffraction bends the
+    reflection round the doorway's side on both sides of it. The reflection off the
+    doorway, found with no energy, had taken the place of that term on the doorway's
+    side: 2.0 dB at 63 Hz and 0.1 to 0.6 dB above."""
     obj = _doorway(tmp_path / "doorway.obj")
     levels = []
     for x in (7.999, 8.001):  # the reflection at x = 3 + (x - 3) * 0.6

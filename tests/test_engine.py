@@ -86,6 +86,109 @@ def test_early_paths_match_analytic_image_sources(method, source, listener) -> N
         assert len(paths.points[k]) == paths.order[k] + 2
 
 
+def _turned(points, degrees: float) -> np.ndarray:
+    """``points`` (..., 3) turned ``degrees`` about the z axis."""
+    c, s = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
+    return np.asarray(points, dtype=float) @ np.array([[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]])
+
+
+def _box_of_triangles(path: Path, *, bend=0.0, degrees=0.0, decimals=None, quarters=False):
+    """The 8 x 6 x 3 m box as an OBJ file, each side two triangles (with ``quarters``, four
+    quarters of two triangles each), with the corner (8, 0, 3) of the wall x = 8 moved
+    ``bend`` m out of the room, turned ``degrees`` about the z axis and written with
+    ``decimals`` (all digits for None)."""
+    L, W, H = SIZE
+    sides = {
+        "floor": [(0, 0, 0), (0, W, 0), (L, W, 0), (L, 0, 0)],
+        "ceiling": [(0, 0, H), (L, 0, H), (L, W, H), (0, W, H)],
+        "y0": [(0, 0, 0), (L, 0, 0), (L, 0, H), (0, 0, H)],
+        "y1": [(0, W, 0), (0, W, H), (L, W, H), (L, W, 0)],
+        "x0": [(0, 0, 0), (0, 0, H), (0, W, H), (0, W, 0)],
+        "x1": [(L, 0, 0), (L, W, 0), (L, W, H), (L + bend, 0, H)],
+    }
+    lines, n = [], 0
+    for name, corners in sides.items():
+        lines.append(f"g {name}")
+        a, b, c, d = np.array(corners, dtype=float)
+        quads = [(a, b, c, d)]
+        if quarters:
+            ab, bc, cd, da, mid = (a + b) / 2, (b + c) / 2, (c + d) / 2, (d + a) / 2, (a + c) / 2
+            quads = [(a, ab, mid, da), (ab, b, bc, mid), (mid, bc, c, cd), (da, mid, cd, d)]
+        for quad in quads:
+            for x, y, z in _turned(quad, degrees):
+                text = [
+                    repr(float(v)) if decimals is None else f"{v:.{decimals}f}" for v in (x, y, z)
+                ]
+                lines.append("v " + " ".join(text))
+            lines += [f"f {n + 1} {n + 2} {n + 3}", f"f {n + 1} {n + 3} {n + 4}"]
+            n += 4
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+@pytest.mark.parametrize(
+    "bend, degrees, decimals, quarters",
+    [(1e-6, 0.0, None, False), (4e-6, 0.0, None, False), (0.0, 17.0, 6, True)],
+    ids=["wall-bent-1um", "wall-bent-4um", "turned-6-decimals"],
+)
+def test_faces_merged_into_one_plane_reflect_as_an_exact_box(
+    tmp_path, bend, degrees, decimals, quarters
+) -> None:
+    """Faces whose normals and offsets agree within the model's plane tolerance make one
+    plane, the plane of the first of them, without lying in it exactly, so a reflection
+    point found on one of the others can lie behind that plane (here by less than 4 um).
+    The check that a path turns back off the planes it reflects off counts such a point
+    as on the plane, and the paths and their energies are those of the exact box.
+    Counting it as past the plane dropped 50 of these listeners' 189 paths with a corner
+    of the wall x = 8 moved 1 or 4 um out of the room, and 32 with the box, its sides in
+    quarters, turned 17 degrees and written with 6 decimals."""
+    obj = _box_of_triangles(
+        tmp_path / "box.obj", bend=bend, degrees=degrees, decimals=decimals, quarters=quarters
+    )
+    source = np.array([2.0, 2.5, 1.5])
+    listeners = np.array(
+        [(2.5006, 0.7697, 1.2667), (6.4096, 2.462, 1.486), (5.4525, 0.506, 1.5067)]
+    )
+    alpha, scattering = 0.1, 0.2
+    scene = Scene.model_validate(
+        {
+            "geometry": {"file": str(obj)},
+            "materials": {"m": {"absorption": [alpha] * 8, "scattering": scattering}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": _turned(source, degrees).tolist()}],
+            "listeners": [
+                {"name": f"l{k}", "position": _turned(p, degrees).tolist()}
+                for k, p in enumerate(listeners)
+            ],
+            "simulation": {"scattering": {"from_size": False}},
+        }
+    )
+    room = Room.from_scene(scene)
+    images = _analytic_images(source, 3)
+    where, orders = np.array(list(images)), np.array(list(images.values()))
+    c, air = room.speed_of_sound(), room.air_attenuation()
+    for k, lis in enumerate(listeners):
+        paths = early_paths(
+            room, listener=f"l{k}", max_order=3, method="image_sources", diffraction="none"
+        )
+        np.testing.assert_array_equal(np.bincount(paths.order), [1, 6, 18, 38])
+        # Each path's image, turned back into the box's own frame, is one image of the box.
+        image = _turned(
+            _turned(lis, degrees) + paths.direction * paths.distance_m[:, None], -degrees
+        )
+        nearest = np.linalg.norm(image[:, None] - where[None], axis=2).argmin(axis=1)
+        assert len(set(nearest.tolist())) == len(paths)
+        np.testing.assert_array_equal(paths.order, orders[nearest])
+        distance = np.linalg.norm(where[nearest] - lis, axis=1)
+        np.testing.assert_allclose(paths.delay_s, distance / c, rtol=1e-6)
+        expected = (
+            np.exp(-np.outer(distance, air))
+            / (4 * math.pi * distance[:, None] ** 2)
+            * ((1 - alpha) * (1 - scattering)) ** paths.order[:, None]
+        )
+        np.testing.assert_allclose(paths.energy, expected, rtol=1e-5)
+
+
 def test_exhaustive_search_has_a_limit() -> None:
     room = Room.from_scene(_scene([0.1] * 8, 0.1, source=(2, 2, 1), listeners=[(5, 4, 1)]))
     model = TraceModel.from_room(room)
