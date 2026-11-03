@@ -11,6 +11,12 @@ from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, Resolution, exact_c
 
 #: Exact octave midband frequencies (base-10 series) for the nominal ``OCTAVE_BANDS_HZ``.
 EXACT_OCTAVE_HZ = tuple(1000.0 * 10.0 ** (0.3 * k) for k in range(-4, 4))
+#: The ratios of frequency to pressure (Hz/Pa) for which ISO 9613-1:1993, clause 7,
+#: states the accuracy of equations 3 to 5, at pressures below 200 kPa: the same in 7.1
+#: to 7.3, which together take in every humidity and temperature a scene can have
+#: (±10 % for a molar concentration of water vapour of 0.05 % to 5 %, ±20 % from 0.005 %
+#: to 0.05 % and above 5 %, ±50 % below 0.005 %).
+STATED_F_OVER_P = (4e-4, 10.0)
 
 
 #: Speed of sound in air at 0 °C (m/s).
@@ -69,6 +75,14 @@ def absorption_db_per_m(
     )
 
 
+def stated_pressures_kpa(bands: Resolution = "octave") -> tuple[float, float]:
+    """The pressures (kPa) at which the frequency-to-pressure ratio of every band lies
+    in the range ISO 9613-1:1993 states its accuracy for (:data:`STATED_F_OVER_P`)."""
+    frequencies = exact_centres(bands)
+    low, high = STATED_F_OVER_P
+    return float(frequencies[-1]) / high / 1e3, float(frequencies[0]) / low / 1e3
+
+
 def energy_attenuation_per_m(
     temperature_c: float = 20.0,
     humidity_percent: float = 50.0,
@@ -89,8 +103,10 @@ def energy_attenuation_per_m(
 __all__ = [
     "EXACT_OCTAVE_HZ",
     "OCTAVE_BANDS_HZ",
+    "STATED_F_OVER_P",
     "absorption_db_per_m",
     "density",
     "energy_attenuation_per_m",
     "speed_of_sound",
+    "stated_pressures_kpa",
 ]

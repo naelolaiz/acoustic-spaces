@@ -413,8 +413,9 @@ Movement:
   against Doc 29's: the airport example's twin jet, flown by Doc 29's Appendix B.
 - [ ] Houses under the airport example's flights, and an aircraft flying over at
   cruise.
-- [ ] The L_Amax of a pass with slow and fast time weighting, as measured, beside the
-  highest quasi-static level the captions give now.
+- [ ] The L_Amax of a pass with fast time weighting, and with slow time weighting in the
+  captions of vehicles other than the aircraft (whose captions give it), as measured,
+  beside the highest quasi-static level the captions give now.
 - [x] Ground-borne vibration from trains, trams and construction plant, and the rumble
   it makes in a building's rooms, by the US FTA's general method: overall levels from
   its curves and tables against its limits and damage criteria, for the railway's

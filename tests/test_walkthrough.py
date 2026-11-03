@@ -298,6 +298,53 @@ def test_several_movers_on_one_clock() -> None:
         simulate_movement(room, step_m=0.0)
 
 
+def test_a_mover_is_one_copy_per_distinct_place(monkeypatch: pytest.MonkeyPatch) -> None:
+    """simulate_movement gives a mover one copy per distinct place, numbered as first
+    seen: a wait at either end of a leg, and the way back to the start, take the copies
+    already made, as comparing each moment with every place so far (np.array_equal,
+    to which -0.0 is 0.0) did."""
+    from acoustic_spaces.walkthrough import Knots
+
+    frames = [
+        {"time_s": 1.0, "position": [3.0, 1.0, 1.5]},
+        {"time_s": 2.0, "position": [3.0, 1.0, 1.5]},
+        {"time_s": 3.0, "position": [1.0, 1.0, 1.5]},
+        {"time_s": 4.0, "position": [1.0, 1.0, 1.5]},
+    ]
+    scene = _scene(
+        sources=[{"name": "s", "position": [7.0, 5.0, 1.5]}],
+        listeners=[_walker({"keyframes": frames})],
+    )
+    plain = Knots.at
+
+    def signed(self, times):  # every other moment facing the same way at -0.0
+        positions, angles = plain(self, times)
+        assert not angles.any()
+        angles = angles.copy()
+        angles[1::2] *= -1.0
+        return positions, angles
+
+    monkeypatch.setattr(Knots, "at", signed)
+    movement = simulate_movement(Room.from_scene(scene), step_m=0.5, late_step_m=None)
+    positions, angles = knots(scene.listeners[0]).at(movement.times)
+    places: list[int] = []
+    at: list[int] = []
+    for k in range(len(movement.times)):
+        for j, first in enumerate(places):
+            if np.array_equal(positions[k], positions[first]) and np.array_equal(
+                angles[k], angles[first]
+            ):
+                at.append(j)
+                break
+        else:
+            at.append(len(places))
+            places.append(k)
+    names = movement.copies["listeners", "w"]
+    seen = list(dict.fromkeys(names))
+    assert [seen.index(name) for name in names] == at == [0, 1, 2, 3, 4, 4, 3, 2, 1, 0, 0]
+    assert seen == [place_name("w", j, movement.times[k]) for j, k in enumerate(places)]
+
+
 def test_a_walk_with_doppler_moves_alone_on_the_clock() -> None:
     """A walk with Doppler moving alone plays in a movement as in a walk of its own: at
     each listener, the same places, each early path through its changing delay and the
@@ -591,6 +638,30 @@ def test_a_walking_source_is_heard_at_a_listener() -> None:
         render_walk(walked, {"x": np.ones(10)})
 
 
+def test_a_walking_source_is_heard_at_a_listener_named_when_every_one_is_left_out() -> None:
+    """With every listener left out (``enabled: false``), a walking source has none to
+    be heard at by default: the error says so and how to name one. One named is heard
+    at even when left out, and is checked as one in use (inside the room)."""
+    quick = {**QUICK, "early": {"max_order": 1}, "late": {"method": "statistical"}}
+    sources = [{"name": "w", "position": [1.0, 1.0, 1.5], "walk": {"to": [[3.0, 1.0, 1.5]]}}]
+    listeners = [
+        {"name": "l", "position": [4, 4, 1.2], "enabled": False},
+        {"name": "out", "position": [40, 4, 1.2], "enabled": False},
+    ]
+    room = Room.from_scene(_scene(sources=sources, listeners=listeners, simulation=quick))
+    with pytest.raises(ValueError) as error:
+        simulate_walk(room, step_m=1.0)
+    assert str(error.value) == (
+        "every listener is left out (enabled: false): name the one to hear the walk at "
+        "(--listener, listener)"
+    )
+    walked = simulate_walk(room, listener="l", step_m=1.0)
+    assert set(walked.result.responses) == {(name, "l") for name in walked.names}
+    assert len(walked.names) == 3
+    with pytest.raises(ValueError, match=r"listener 'out' at \[40\.0, 4\.0, 1\.2\] .*outside"):
+        simulate_walk(room, listener="out", step_m=1.0)
+
+
 def test_walk_errors() -> None:
     sources = [{"name": "s", "position": [7.0, 5.0, 1.5]}]
     out = _walker({"to": [[9.0, 1.0, 1.5]]})
@@ -821,6 +892,29 @@ def test_cli_walkthrough(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
     assert main([*args, "--video", str(tmp_path / "walk.avi")]) == 1
     err = capsys.readouterr().err
     assert "gif or .mp4" in err and "traced" not in err
+
+
+def test_cli_walkthrough_of_a_walker_left_out(tmp_path: Path, capsys) -> None:
+    """A walk takes its walker even when it is left out (``enabled: false``), the only
+    listener of the scene here; the sources it hears are those in use, and every mover
+    together (--all) takes only those in use."""
+    from acoustic_spaces.audio import write_wav
+
+    quick = {**QUICK, "early": {"max_order": 1}, "late": {"method": "statistical"}}
+    walker = _walker({"to": [[3.0, 1.0, 1.5]], "speed_m_s": 2.0}, enabled=False)
+    source = {"name": "s", "position": [7.0, 5.0, 1.5]}
+    path, dry = tmp_path / "scene.yaml", tmp_path / "dry.wav"
+    write_wav(dry, np.random.default_rng(0).standard_normal((800, 1)) * 0.1, 8000)
+    args = ["walkthrough", str(path), f"s={dry}", "--out", str(tmp_path / "walk.wav")]
+    _scene(sources=[source], listeners=[walker], simulation=quick).to_yaml(path)
+    assert main([*args, "--step", "1"]) == 0
+    assert "w walks for 1.0 s: responses at 3 places" in capsys.readouterr().err
+    assert main([*args, "--all"]) == 1
+    assert "error: every listener is left out (enabled: false)" in capsys.readouterr().err
+    left_out = {**source, "enabled": False}
+    _scene(sources=[left_out], listeners=[walker], simulation=quick).to_yaml(path)
+    assert main([*args, "--step", "1"]) == 1
+    assert "error: every source is left out (enabled: false)" in capsys.readouterr().err
 
 
 def test_cli_walkthrough_of_every_mover(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

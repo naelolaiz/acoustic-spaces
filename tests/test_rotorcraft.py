@@ -324,6 +324,11 @@ def test_bpm_broadband_noise_in_its_bands() -> None:
     assert noise.signals.shape == (len(centres), n)
     np.testing.assert_allclose(noise.weights[0, 0], np.sqrt(main[0] + tail[0]))
     np.testing.assert_allclose(np.mean(noise.signals**2, axis=1), 1.0)
+    # The bands found once (bpm_powers) send the same noise.
+    bands = rc.bpm_powers(trim, grid_deg=30.0)
+    again = rc.broadband(trim, samples=n, sample_rate=rate, grid_deg=30.0, bands=bands)
+    np.testing.assert_array_equal(again.signals, noise.signals)
+    np.testing.assert_array_equal(again.weights, noise.weights)
     # The sharp edge sends no bluntness noise; tripping thickens the boundary layers,
     # lowering the noise's peak.
     sharp = dataclasses.replace(MAIN, trailing_edge_m=0.0)
@@ -378,3 +383,14 @@ def test_what_a_rotor_needs() -> None:
         dataclasses.replace(LIGHT, broadband="amiet")
     with pytest.raises(ValueError, match="bpm or pegg, not 'amiet'"):
         rc.broadband(rc.trim(LIGHT, 10.0), samples=10, model="amiet")
+    # BPM's bands found before: not for Pegg's noise, and on the grid the noise is sent on.
+    with pytest.raises(ValueError, match="leave them out for Pegg's"):
+        rc.broadband(rc.trim(LIGHT, 10.0), samples=10, bands=(np.ones(2), np.ones((7, 12, 2))))
+    with pytest.raises(ValueError, match=r"must be \(7, 12, 2\).* got \(13, 24, 2\)"):
+        rc.broadband(
+            rc.trim(LIGHT, 10.0),
+            samples=10,
+            grid_deg=30.0,
+            model="bpm",
+            bands=(np.ones(2), np.ones((13, 24, 2))),
+        )

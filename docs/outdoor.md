@@ -476,10 +476,11 @@ is an arc of a circle, so its travel time and its length are exact.
   its neighbouring rays spread apart (1/R² for a straight path), fitted over the rays
   that turn back in the air a few layers above and below it, as the layers' corners
   would otherwise make it jump. Where neighbouring rays cross (a caustic) the level is
-  capped at 10 dB over a straight path's, and each caustic delays the phase by a
-  quarter period. Against an independent ray tracer on the smooth profile of the
-  `windy` preset downwind, the levels of three such paths 100 and 300 m away are within
-  0.05 dB (the tests allow 0.2 dB); no such check is made near a caustic.
+  capped at 10 dB over a straight path's, and each caustic advances the phase by a
+  quarter period (a factor j, time going as e^(jωt)). Against an independent ray tracer
+  on the smooth profile of the `windy` preset downwind, the levels of three such paths
+  100 and 300 m away are within 0.05 dB (the tests allow 0.2 dB); no such check is made
+  near a caustic.
 - **In the bands up to 500 Hz** rays fail over the ground, as the profiles change most
   within a wavelength of it, where the direct sound and its reflection meet. There the
   sound over the open ground comes from a parabolic equation (the Green's function
@@ -507,17 +508,22 @@ is an arc of a circle, so its travel time and its length are exact.
   for one run of `simulate` or `map`, **Parabolic equation** in the editor). The
   default, `narrow_angle`, takes the refraction as a phase shift at each step, which
   holds for sound within some 15 degrees of the horizontal and a speed of sound close to
-  the ground's. The wide-angle one (split-step Padé, as in Collins' RAM) marches the
-  field with the exact one-way operator, written as a rational function of ten terms,
-  on finite differences of fourth order in height, with the ground's impedance as its
+  the ground's, so the listeners whose reflection off the ground comes in more steeply
+  get the wide-angle one's level: within 0.05 dB of a fast field program per octave band
+  in the `windy` preset (0.09 dB per third octave), where the narrow-angle one is up to
+  0.46 dB off (1.65 dB); flatter, the narrow-angle one is up to 0.56 dB off (0.90 dB),
+  and from 10 to 15 degrees up by up to 1.2 dB (3 dB) in 10 m/s of wind over a hard
+  ground. The wide-angle one (split-step Padé, as in Collins' RAM) marches the field
+  with the exact one-way operator, written as a rational function of ten terms, on
+  finite differences of fourth order in height, with the ground's impedance as its
   boundary and a starting field of the operator's own; it carries sound at up to 45
   degrees from the horizontal through air of any speed. On the benchmark's gradients
   going on to a kilometre up it is within 0.11 dB of the fast field program to 10 km
-  (0.4 dB at 10 Hz 44 dB deep in a shadow) where the narrow-angle one strays by 3 to
-  20 dB, and in the weather presets within 0.02 dB per band on average where the
+  (0.4 dB at 10 Hz 44 dB deep in a shadow) where the narrow-angle one strays by 3 to 20
+  dB, and in the weather presets within 0.02 dB per band on average where the
   narrow-angle one is within 0.08 dB (see
-  [Validation](validation.md#the-wide-angle-parabolic-equation)). It takes three
-  to four times the work, all of it in the bands the parabolic equation gives.
+  [Validation](validation.md#the-wide-angle-parabolic-equation)). It takes three to four
+  times the work, all of it in the bands the parabolic equation gives.
 - **Off façades and barriers** the paths bend the same way, in the vertical plane the
   reflections fold them into, with the wind's mean component over their legs. A path
   that would pass over the wall, or through something on the way, is left out.
@@ -784,10 +790,13 @@ overlap, what fills them adds up.
 
 ISO 9613-2's rates are what dense foliage takes from sound passing through it in all,
 with what it scatters onwards counted in, so the preset absorbs all of it and adds no
-scattered sound. The standard gives them for 20 to 200 m of foliage, a fixed 1 to 3 dB
-for 10 to 20 m and none below; the engine takes the rates per metre at any depth, so a
-belt under 20 m deep loses a little less than the standard says, and it measures the
-depth along the straight path, where the standard takes an arc of 5 km radius.
+scattered sound. The standard gives them for 20 to 200 m of foliage, a fixed 0 to 3 dB
+for 10 to 20 m (none at 63 and 125 Hz, 1 dB from 250 Hz to 2 kHz, 2 and 3 dB at 4 and 8
+kHz) and none below 10 m. The engine takes the rates per metre at any depth: a belt
+under 10 m deep loses 0.02 to 0.12 dB per metre where the standard says nothing, and one
+10 to 20 m deep loses 0.2 to 0.6 dB more than the standard at 63 and 125 Hz, 0.2 to 1.8
+dB less at 4 and 8 kHz and within 0.6 dB of it in between. It measures the depth along
+the straight path, where the standard takes an arc of 5 km radius.
 
 **Leaves** given by their area and width are taken as thin rigid discs of that size,
 turned every way alike, `leaf_area_per_m3` of them per cubic metre. Each scatters as
@@ -815,7 +824,7 @@ there is any, is the better input, as `attenuation` with an `albedo` and an
 **Stems** are upright rigid cylinders. They absorb nothing and scatter, per metre of
 horizontal travel, their number times a cylinder's scattering width: the exact series
 for sound at right angles to its axis (Morse and Ingard 1968), averaged over the band.
-0.08 stems per m² 0.3 m across scatter about 0.003 dB per metre at 63 Hz and 0.2 dB at
+0.08 stems per m² 0.3 m across scatter about 0.002 dB per metre at 63 Hz and 0.2 dB at
 8 kHz. Sound going up or down meets them along its horizontal share only, and they turn
 it sideways, keeping its slope: in the low bands mostly back the way it came, in the
 high bands mostly onwards.
@@ -1076,11 +1085,13 @@ send each way, as an `Emission` for a walk with Doppler (see
   speed and angle of attack from the blades' trimmed pitch (`rotorcraft.pitch`), its
   bands moved by its own Doppler shift. A `Rotor` gives the blades' twist, lift
   slope, trailing edge and tips, and whether their boundary layers are tripped.
-  `rotorcraft.broadband(trim, ..., model="bpm")` picks one model for a call.
-- `AS350_B3` is an Airbus Helicopters AS350 B3 at its maximum mass of 2,250 kg, from
-  its type certificate and NASA's flight tests of the type; its main blades' chord
-  and twist and its tail rotor's speed, chord and thickness are assumed (the source
-  code says which is which).
+  `rotorcraft.broadband(trim, ..., model="bpm")` picks one model for a call. BPM's sum
+  over the blades does not depend on the noise's length: `rotorcraft.bpm_powers` finds
+  it once, for `broadband(..., bands=...)` to send the noise at any length.
+- `AS350_B3` is an Airbus Helicopters AS350 B3 at its maximum mass of 2,250 kg, from its
+  type certificate and NASA's flight tests of the type; its main blades' chord and twist
+  and its tail rotor's chord and thickness are assumed (the source code says which is
+  which).
 
 ```python
 from acoustic_spaces import rotorcraft
@@ -1091,14 +1102,14 @@ sent = rotorcraft.emission(trim, seconds=30.0)  # 48 kHz: tones and broadband no
 sound = render_walk(walk, {"helicopter": sent})  # its walk with doppler: true
 ```
 
-The tones agree with Gutin's formula for a hovering rotor and with Farassat's
-formulation in time, blade point by blade point, to within 10⁻⁵ of the loudest
-harmonic; Pegg's worked example comes out as he gives it, and the airfoil self-noise
-matches the two sample outputs of its authors' code to within 0.01 dB (see
+The tones agree with Gutin's formula for a hovering rotor to within 3 x 10⁻¹⁵, and with
+Farassat's formulation in time, blade point by blade point, to within 7.5 x 10⁻⁶ of the
+loudest harmonic for the AS350 B3's main rotor and 1.6 x 10⁻⁵ for its tail rotor; Pegg's
+worked example comes out as he gives it, and the airfoil self-noise matches the two
+sample outputs of its authors' code to within 0.01 dB (see
 [Validation](validation.md#helicopter-rotors-against-theory-and-a-certified-level)).
-Flying the AS350 B3 over a microphone as its noise certification does, 150 m up at
-63 m/s, the two models fall on either side of the certified 84.6 dB(A) of sound
-exposure:
+Flying the AS350 B3 over a microphone as its noise certification does, 150 m up at 63
+m/s, the two models fall on either side of the certified 84.6 dB(A) of sound exposure:
 
 | broadband noise | sound exposure level | against the certified 84.6 dB(A) | main rotor's broadband alone |
 |---|---|---|---|
@@ -1262,7 +1273,11 @@ at receivers, so a source of a scene that sends the same sound is made from them
   power, with the AIR-1845 attenuation over those 1000 ft added back and the reflection
   off the soft ground the NPD curves are measured over (1.2 m above it) taken out:
   grass, its reflection's energy added to the direct sound's (`sound_power_db`,
-  `ground_gain_db`);
+  `ground_gain_db`). That maximum level is read with a sound level meter's slow time
+  weighting (1 s), which lags behind the passing aircraft and reads its loudest moment
+  low, so the level 1000 ft away is raised by what it takes off the NPD curves' own pass
+  at 160 kt in the scene's air (`slow_drop_db`; 0.29 dB for JETW at 15 °C and 70 %
+  humidity);
 - *its directivity* from its engines' installation correction (eq. 4-15), by the
   depression angle across the flight path, the same in every band; nought straight
   down, where the NPD curves are measured, so the sound power is raised to keep the

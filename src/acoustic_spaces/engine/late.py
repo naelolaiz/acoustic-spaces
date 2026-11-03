@@ -598,7 +598,7 @@ def stochastic_energy(
             }
             if not plans:
                 plans.append(ray_device.choose(device, values))
-            found, plans[0] = ray_device.trace(plans[0], values)
+            found, plans[0] = ray_device.trace(plans[0], values, keep=True)
             energy, directional, moments, *rest = found
             return [energy, directional, moments], *rest
 
@@ -607,9 +607,12 @@ def stochastic_energy(
         )
         return [*arrays, estimates], escaped, traced
 
-    (energy, directional, moments, estimates), escaped, traced = _by_band(
-        band_groups(model), rays, run
-    )
+    try:
+        (energy, directional, moments, estimates), escaped, traced = _by_band(
+            band_groups(model), rays, run
+        )
+    finally:
+        ray_device.release()
     return LateEnergy(
         energy=energy,
         time_step=time_step,
