@@ -63,7 +63,9 @@ def runs(monkeypatch):
 
     def march(frequencies, speed, impedance, zs, ranges, heights, top, **options):
         weather = bool(np.ptp(speed(np.array([0.0, 5.0, 50.0]))) > 0.0)
-        found.append({"weather": weather, "ranges": tuple(ranges), **options})
+        found.append(
+            {"weather": weather, "ranges": tuple(ranges), "frequencies": frequencies, **options}
+        )
         amplitude = math.sqrt(2.0) if weather else 1.0
         return np.full((len(np.atleast_1d(frequencies)), len(ranges)), amplitude, dtype=complex)
 
@@ -147,9 +149,12 @@ def test_one_run_in_the_weather_and_one_in_still_air_for_each_direction(runs) ->
         {(40.0, math.hypot(70.0, 0.4)), (math.hypot(40.0, 20.0),) * 2}
     )
     assert all(run["refracting"] and run["independent"] for run in behind)
-    # From 1 kHz up a quarter wavelength's steps, else a tenth's.
+    # From 1 kHz up a quarter wavelength's steps, else a tenth's; 8 frequencies a band up
+    # to 2 kHz, 16 at 4 kHz and 32 at 8 kHz, where the ground's fringes are densest.
     steps = sorted({run["steps_per_wavelength"] for run in behind})
     assert steps == [4.0, 10.0]
+    samples = {(float(np.min(run["frequencies"])), len(run["frequencies"])) for run in behind}
+    assert [n for _, n in sorted(samples)] == [8, 8, 8, 8, 8, 8, 16, 32]
 
 
 def test_the_paths_in_the_plane_take_the_weather_s_effect(runs) -> None:

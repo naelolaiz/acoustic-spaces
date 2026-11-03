@@ -58,6 +58,18 @@ Building v1 from `wip/barrier-pe-design.md`, following its one-day plan (section
   the weather's effect from 1 kHz up; a leg from a ground reflection a rounding error (1e-16 m) above the ground
   gets no refraction shadow (shadow_start returns 1e284 m), which steps the level by up to 65 dB at 8 kHz.
 
+- Changed from the design (D8): the 8 kHz band behind barriers takes 32 frequencies an octave (4 kHz keeps 16).
+  With 16 the weather's effect was off by up to 1.8 dB over rigid ground and 6.4 dB where the ground's fringes
+  fell in step with the frequencies, and stepped smoothly by 0.09 dB/mm as a barrier's top rose (aliasing: 32 and
+  64 agree there within 0.05 dB); 32 are within 0.18 dB of 64 but 0.51 dB behind a top 60 degrees up. It costs
+  about 1.4 times more per map.
+- V3 done: full wave within 0.62 dB in 5 m/s (limit 0.6) and 0.74 in 10 m/s behind one barrier or building, 0.98
+  behind a top 45 degrees up (limit 0.6), 1.68/1.63 behind two barriers (limits 1.7 at 125 Hz / 1.0); started PE
+  within 0.47 dB (limit 0.6); the engine end to end within 0.08 dB of its PE's error (0.18 at a 60-degree top),
+  where main's straight legs were 1 to 33 dB off.
+- V5 roof: as a roof rises 1 cm the level steps by up to 0.95 dB from 2 kHz up (the roof sits on the PE's grid;
+  still air 0.02): the design's guess that the ratio cancels the snap is wrong.
+
 ## Open
 
 V3 runs (full-wave and started PE finishing, then the engine end to end against main); V1 edge fade, V2;

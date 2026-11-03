@@ -59,9 +59,8 @@ from acoustic_spaces.engine.diffraction import band_frequencies
 from acoustic_spaces.engine.refracted import (
     BARRIER_COARSE,
     BARRIER_COARSE_FROM_HZ,
-    BARRIER_DENSE_FROM_HZ,
     BARRIER_HEADROOM,
-    BARRIER_SAMPLES_HIGH,
+    BARRIER_SAMPLES,
     WAVE_MIN_HEADROOM_M,
     WAVE_TOP_SLOPE,
 )
@@ -132,9 +131,8 @@ STARTED_HIGH_REACH_M = 100.0
 
 def samples(band: int) -> np.ndarray:
     """The frequencies the engine's runs behind barriers take in ``band``."""
-    if CENTRES[band] >= BARRIER_DENSE_FROM_HZ:
-        return band_frequencies(BARRIER_SAMPLES_HIGH)[0][band]
-    return band_frequencies()[0][band]
+    dense = [n for start, n in BARRIER_SAMPLES if CENTRES[band] >= start]
+    return band_frequencies(dense[-1])[0][band] if dense else band_frequencies()[0][band]
 
 
 def engine_levels(band, speed, impedance, zs, at, cut, speed_at=None) -> np.ndarray:
@@ -857,7 +855,7 @@ def main(argv: list[str] | None = None) -> int:
         if full is None and args.full_wave_json:
             with open(args.full_wave_json, encoding="utf-8") as given:
                 full = json.load(given)["full_wave"]
-        names = [n for n in ("near", "far", "rail", "roof") if not args.case or n in args.case]
+        names = [n for n in FULL_WAVE if not args.case or n in args.case]
         results["engine"] = check_engine(names, full or {})
     if args.json:
         with open(args.json, "w", encoding="utf-8") as out:

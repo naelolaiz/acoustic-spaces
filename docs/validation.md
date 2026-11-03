@@ -2870,13 +2870,13 @@ over a roughness of 5 cm, 5 or 10 m/s 10 m up, towards the listener or the sourc
   perfectly matched layer on top. Barriers are thin rigid rings round the source and a
   building a rigid ring block; the wind blows through them; 63 to 500 Hz, over rigid
   ground and over grass (Miki's impedance, 200 kPa s/m²). It checks itself: over
-  open rigid ground it is within SELF_TWO dB of the exact field of the source and its
-  image, with a ring barrier in still air within SELF_RING dB of a straight barrier's
+  open rigid ground it is within 0.002 dB of the exact field of the source and its
+  image, with a ring barrier in still air within -0.10 to +0.03 dB of a straight barrier's
   four paths (the uniform theory of diffraction) at 125 and 250 Hz, and over open
-  ground in 5 m/s of wind within SELF_PE dB of the engine's parabolic equation at each
+  ground in 5 m/s of wind within 0.25 dB of the engine's parabolic equation at each
   frequency of the 125 Hz band.
 - **A parabolic equation started behind the barrier** from the exact field of a rigid
-  straight barrier over rigid ground (the four paths), 1 m behind it (within STARTER dB
+  straight barrier over rigid ground (the four paths), 1 m behind it (within 0.18 dB
   of those paths in still air), and marched in a wind that blows behind the barrier
   only (the engine's equation is given the same), 125 Hz to 8 kHz (from 4 kHz up to
   100 m only): the `windy` preset downwind and upwind, `clear_night` and `sunny_day`,
@@ -2894,15 +2894,128 @@ The full-wave cases (source 1 m up unless given; listeners 1.5 m up unless given
 | roof | building 40 to 52 m away, 6 m high | 80, 150 |
 | two | barriers 45 and 55 m away, 8 m high | 100, 150 |
 
-FULL_WAVE_TABLE
+**Against the full-wave solution.** The engine's weather effect less the solution's,
+the largest difference (dB) over the listeners and the bands 63 to 500 Hz, at the
+engine's own frequencies (the solution's tops on its cells), and the solution's
+effects:
 
-STARTED_TABLE
+| case | ground | 5 m/s downwind | 5 m/s upwind | 10 m/s downwind | the effect |
+|---|---|---:|---:|---:|---|
+| near | rigid | 0.32 | 0.62 | 0.63 | -6.8 to +10.3 |
+| near | grass | 0.29 | 0.57 | 0.46 | -7.3 to +8.3 |
+| far | rigid | 0.38 | 0.43 | 0.67 | -11.6 to +2.8 |
+| far | grass | 0.47 | 0.40 | 0.74 | -7.9 to +10.4 |
+| rail | rigid | 0.25 | 0.38 | 0.27 | -6.4 to +3.6 |
+| rail | grass | 0.21 | 0.35 | 0.25 | -6.1 to +9.5 |
+| steep 45 | rigid | 0.43 | 0.45 | 0.98 | -6.8 to +4.1 |
+| steep 45 | grass | 0.17 | 0.41 | 0.50 | -1.1 to +3.5 |
+| steep 60 | rigid | 0.54 | 0.53 | 0.41 | -7.4 to +6.5 |
+| steep 60 | grass | 0.10 | 0.40 | 0.46 | -1.3 to +3.1 |
+| roof | rigid | 0.15 | 0.23 | 0.32 | -6.1 to +9.7 |
+| roof | grass | 0.40 | 0.21 | 0.51 | -6.8 to +8.1 |
+| two | rigid | 1.00 | 1.68 | 1.49 | -6.7 to +17.3 |
+| two | grass | 0.87 | 0.75 | 1.63 | -4.4 to +5.2 |
 
-ENGINE_TABLE
+Behind one barrier or building the engine is within 0.62 dB in 5 m/s of wind (0.6
+allowed; 0.62 at 500 Hz 120 m behind the near barrier upwind, over rigid ground) and
+0.74 dB in 10 m/s (0.8 allowed); behind a top 45 degrees up from the source within
+0.98 dB in 10 m/s at 250 Hz over rigid ground (0.6 allowed), 60 degrees up 0.54 dB.
+Behind two barriers 10 m apart it is off by up to 1.68 dB at 125 Hz (1.7 allowed) and
+1.63 dB in the other bands (1.0 allowed): the equation marches away from the source
+only, so nothing reflects between them. No listener of these cases is deeper than
+25 dB below still air.
 
-CONVERGENCE_TABLE
+**Against the started parabolic equation.** The engine's weather effect less the
+reference's, the largest difference (dB) over the listeners where the reference is
+within 25 dB of still air, at the engine's own frequencies (16 an octave at 4 kHz and
+8 kHz in this run), and the reference's still air against the four paths it starts
+from:
 
-CONTINUITY_TABLE
+| case | 125 Hz to 2 kHz | 4 and 8 kHz | starting field |
+|---|---:|---:|---:|
+| `windy` downwind, barrier 3 m high 20 m away | 0.27 | 0.28 | 0.06 |
+| `windy` downwind, 6 m high 20 m away | 0.42 | 0.33 | 0.18 |
+| `windy` downwind, 3 m high 50 m away | 0.27 | 0.30 | 0.02 |
+| `windy` upwind, 3 m high 20 m away | 0.42 | 0.25 | 0.06 |
+| `windy` upwind, 3 m high 50 m away | 0.47 | 0.26 | 0.02 |
+| `clear_night`, 3 m high 20 m away | 0.15 | 0.18 | 0.06 |
+| `sunny_day`, 3 m high 20 m away | 0.24 | 0.11 | 0.06 |
+
+The engine is within 0.47 dB everywhere (0.6 allowed). Deeper in the upwind shadow it
+is within 0.81 dB down to 57 dB below still air, but 6.5 and 17.4 dB off at 2 kHz 72
+and 74 dB below.
+
+**The engine end to end.** `simulate`'s early paths (their coherent sum; reflections
+off both sides of an edge) in the wind less in still air, against the full-wave
+solution's effect, over rigid ground with the barriers and the building 1 km long: the
+largest difference (dB) over the listeners and the bands 63 to 500 Hz where the
+solution is within 25 dB of still air, and in brackets the version before this one,
+whose paths kept straight legs over the edges:
+
+| case | 5 m/s downwind | 5 m/s upwind | 10 m/s downwind |
+|---|---:|---:|---:|
+| near | 0.33 (2.43) | 0.66 (3.38) | 0.64 (4.22) |
+| far | 0.41 (10.53) | 0.44 (29.21) | 0.66 (7.99) |
+| rail | 0.26 (5.38) | 0.38 (32.78) | 0.29 (6.09) |
+| steep 45 | 0.44 (0.95) | 0.45 (4.36) | 1.01 (1.73) |
+| steep 60 | 0.53 (1.11) | 0.51 (1.50) | 0.43 (2.09) |
+| roof | 0.15 (1.76) | 0.23 (24.56) | 0.32 (9.68) |
+| two | 1.00 (9.71) | 1.69 (19.69) | 1.53 (17.29) |
+
+End to end the engine's difference from the solution is within 0.08 dB of its
+parabolic equation's alone, 0.18 dB behind the top 60 degrees up (0.15 dB allowed);
+behind the top 45 degrees up it is 1.01 dB off in 10 m/s and behind two barriers
+1.69 dB, as its equation is.
+
+**Convergence.** The engine's runs behind barriers take a quarter wavelength's height
+step from 1 kHz up (a tenth below) and 8 frequencies a band up to 2 kHz, 16 at 4 kHz and
+32 at 8 kHz. The weather's effect from its parabolic equation alone against finer runs,
+the largest difference (dB) over the listeners and both winds of 5 m/s: a tenth's step
+against the quarter's, and 32 frequencies an octave against 8 and 16, 64 against 32.
+`high` is a barrier 3 m high 10 m from a source 1 m up, with listeners 25 m away 10 and
+14 m up and 40 m away 1.5 m up:
+
+| case | ground | step, 1 and 2 kHz | step, 4 and 8 kHz | frequencies, 63 Hz to 2 kHz | 4 kHz | 8 kHz |
+|---|---|---:|---:|---:|---:|---:|
+| near | rigid | 0.09 | 0.02 | 0.22 | 0.04 | 0.04 |
+| near | grass | 0.07 | 0.01 | 0.08 | 0.07 | 0.03 |
+| rail | rigid | 0.16 | 0.03 | 0.13 | 0.06 | 0.13 |
+| rail | grass | 0.18 | 0.09 | 0.08 | 0.10 | 0.18 |
+| roof | rigid | 0.06 | 0.05 | 0.22 | 0.04 | 0.03 |
+| roof | grass | 0.08 | 0.09 | 0.12 | 0.03 | 0.02 |
+| steep 60 | rigid | 0.28 | 0.97 | 0.53 | 0.18 | 0.51 |
+| steep 60 | grass | 0.23 | 2.74 | 0.40 | 0.21 | 0.13 |
+| high | rigid | 0.07 | 0.21 | 0.11 | 0.02 | 0.05 |
+| high | grass | 0.04 | 0.03 | 0.09 | 0.02 | 0.02 |
+
+The quarter wavelength's step costs 2 to 2.5 times less than the tenth's and holds
+within 0.2 dB but 11 m behind the top 60 degrees up, where it is 2.7 dB off at 4 and
+8 kHz. The ground's interference fringes behind a barrier are dense in frequency: at
+8 kHz 16 frequencies an octave were off by up to 1.8 dB over rigid ground and 6.4 dB at
+`high`'s listener 14 m up, where the fringes fell in step with them, which is why the
+8 kHz band takes 32, within 0.18 dB of 64 but 0.51 dB 11 m behind the steepest top.
+
+**Continuity.** How much the level steps as one thing changes a little, end to end
+(`simulate`, the coherent sum of the early paths), the most in any band, in the
+`windy` preset down- and upwind and in still air (a one-off check). The scene: a
+source 1 m up over hard ground and a barrier 4 m high 15 m away across the way:
+
+| what changes | in the wind (dB) | in still air (dB) | aim (dB) |
+|---|---:|---:|---:|
+| the wind, from none to 0.01 m/s (0.1 m/s) | 0.024 (0.24) | | 0.2 at 0.1 m/s |
+| the barrier's top, 1 mm higher (listeners 40 and 60 m away) | 0.020 | 0.006 | 0.01 |
+| a listener 40 m away, 1 cm higher through the line of sight over the top | 0.077 | 0.070 | 0.05 |
+| a building's roof 25 to 37 m away, 1 cm higher, from 6 to 6.3 m | ROOFCM | 0.023 | 0.1 a cell |
+| a listener behind a slanted barrier, 0.01 degrees round across a degree's boundary | BINDEG | 0.018 | |
+| a listener 2 cm further, where the parabolic equation starts (a 1.5 m barrier 2 m from a source 0.5 m up) | 0.24 | 0.16 | |
+| a listener 10 cm across the shadow boundary of a barrier's end, 60 and 120 m away | 9.7 and 24 | 4.5 | 1 |
+
+The wind's effect grows in proportion to the wind (500 Hz, 100 m away and 4 m up),
+with no step as it starts. ROOFTEXT The degree's boundary and the barrier's end are
+the plane's two dimensions (see
+[What is not modelled yet](outdoor.md#what-is-not-modelled-yet)); at the end the paths over the
+top take the barrier's effect on one side and the paths round it the open ground's on
+both, and still air steps there too, where the paths over the top end with the barrier.
 
 ## Levels over a long term
 
@@ -4067,13 +4180,13 @@ Results:
 - **A barrier's end in wind.** Behind a barrier the paths in the plane take the
   barrier's effect and those round its end the open ground's, so where a listener
   crosses the shadow boundary of the end the level steps: 10 cm across it, by up to
-  7.7 dB 60 m from the source and 24 dB 120 m away in the `windy` preset, from 500 Hz
-  up, where still air steps by 4.5 dB at most, at 63 Hz (see
+  9.7 dB 60 m from the source and 24 dB 120 m away in the `windy` preset, where still
+  air steps by 4.5 dB at most, at 63 Hz (see
   [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
-- **Behind barriers in wind at 4 and 8 kHz** the effect comes from 16 frequencies an
-  octave, which against 32 is off by up to 0.5 dB over grass and 1.8 dB over rigid
-  ground, and by 6.4 dB where the rigid ground's interference fringes fall in step with
-  the frequencies (25 m from the source, 27 degrees up).
+- **A building's height in wind.** The parabolic equation puts a roof on its grid, so
+  as a roof rises the weather's effect behind it steps at each cell: by up to ROOFSTEP
+  dB a centimetre from 2 kHz up, against 0.02 dB in still air (see
+  [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
 - **Coverage maps behind barriers in wind** leave out the early sound that arrives
   before the straight line's time where no path is clear, in the bands they add in
   energy (1 to 8 kHz outdoors), and the wind brings sound over a barrier sooner: 130 m
@@ -4230,7 +4343,7 @@ python validation/terrain.py --json terrain.json
 python validation/ffp.py --json ffp.json
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
-python validation/barrier_wind.py --json barrier_wind.json   # HOURS; --quick: fewer bands
+python validation/barrier_wind.py --json barrier_wind.json   # about 4 h; --quick: fewer bands
 python validation/long_term.py --json long_term.json
 python validation/doppler.py --json doppler.json
 python validation/rotorcraft.py --json rotorcraft.json

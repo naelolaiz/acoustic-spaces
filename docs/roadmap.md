@@ -276,8 +276,8 @@ Outdoor acoustics, in steps:
   field (`validation/barrier_wind.py`). Still air and the open ground are as before.
 - [ ] Barriers in wind, next: the barrier's own wind; a blend of the barrier's and the
   open ground's effects across a barrier's end, where the level steps; maps that keep
-  the early sound arriving before the straight line's time; and runs at 4 and 8 kHz
-  that cost less and sample the ground's fringes better (see
+  the early sound arriving before the straight line's time; a roof between the
+  equation's cells; and runs at 4 and 8 kHz that cost less (see
   [Known issues](validation.md#known-issues)).
 - [ ] A leg from a ground reflection a rounding error above the ground takes the
   shadow of one from the ground (see [Known issues](validation.md#known-issues)).

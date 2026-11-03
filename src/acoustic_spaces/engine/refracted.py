@@ -111,13 +111,14 @@ MAX_GROUND_BOUNCES = 10
 #: at 4 and 8 kHz 11 m behind a top 60 degrees up from the source.
 BARRIER_COARSE_FROM_HZ = 1000
 BARRIER_COARSE = 0.4
-#: From this band (centre, Hz) up those runs take BARRIER_SAMPLES_HIGH frequencies an
-#: octave (8 below, as everywhere). Against 32, the weather's effect at 4 and 8 kHz is
-#: off by up to 0.5 dB over grass and 1.8 dB over rigid ground in those places, and up
-#: to 6.4 dB where the ground's interference fringes fall in step with the frequencies
-#: (27 degrees up from the source, 25 m away, over rigid ground).
-BARRIER_DENSE_FROM_HZ = 4000
-BARRIER_SAMPLES_HIGH = 16
+#: From each band (centre, Hz) up, those runs take this many frequencies an octave (8
+#: below, as everywhere). The ground's interference fringes behind a barrier are dense
+#: in frequency: at 8 kHz 16 an octave left the weather's effect off by up to 1.8 dB
+#: over rigid ground 25 to 100 m away and 6.4 dB where the fringes fell in step with the
+#: frequencies (27 degrees up from the source, 25 m away); 32 are within 0.18 dB of 64
+#: there and over grass, but 0.51 dB 11 m behind a top 60 degrees up, and at 4 kHz 16
+#: are within 0.21 dB of 32.
+BARRIER_SAMPLES = ((4000, 16), (8000, 32))
 #: Their absorbing layer starts at least this many times higher than the highest top
 #: on the way.
 BARRIER_HEADROOM = 1.5
@@ -976,14 +977,15 @@ class Refraction:
 
     def _samples(self, band: int, barrier: bool) -> np.ndarray:
         """The frequencies (Hz) a run of the parabolic equation takes in ``band``: those
-        of the early paths, or behind barriers ``BARRIER_SAMPLES_HIGH`` an octave from
-        ``BARRIER_DENSE_FROM_HZ`` up."""
-        if not barrier or self.centres[band] < BARRIER_DENSE_FROM_HZ * 0.999:
+        of the early paths, or behind barriers as many an octave as ``BARRIER_SAMPLES``
+        gives from its bands up."""
+        dense = [n for start, n in BARRIER_SAMPLES if self.centres[band] >= start * 0.999]
+        if not barrier or not dense:
             return self.frequencies[band]
         from acoustic_spaces.engine.diffraction import band_frequencies
         from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE
 
-        per_band = math.ceil(BARRIER_SAMPLES_HIGH / BANDS_PER_OCTAVE[self.model.bands])
+        per_band = math.ceil(dense[-1] / BANDS_PER_OCTAVE[self.model.bands])
         return band_frequencies(per_band, self.model.bands)[0][band]
 
     def _admittance_at(self, face: int, band: int, frequencies: np.ndarray) -> np.ndarray:

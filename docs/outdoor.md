@@ -546,7 +546,9 @@ is an arc of a circle, so its travel time and its length are exact.
   phases in still air. Against a full-wave solution of rigid barriers and blocks in
   wind from 63 to 500 Hz, and against a parabolic equation started behind a rigid
   barrier from its exact field from 125 Hz to 8 kHz, the weather's effect is within
-  FWLIMIT (see
+  0.8 dB behind one barrier or building (1.0 dB behind a top 45 degrees up from the
+  source, 1.7 dB behind two barriers 10 m apart) and 0.5 dB, where the sound is
+  within 25 dB of its level in still air (see
   [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   Nearer than 1.5 times the source's and the listener's heights added, where an object
   of a model file stands in the way, where the source or the listener stands on a
@@ -1461,8 +1463,8 @@ equation leaves out:
   much it screens by 3 dB or more (Salomons 1999; Aballéa et al. 2007), and Nord2000
   parts by up to 6.5 dB from a parabolic equation that leaves it out (Plovsing 2006).
 - **Sound going back.** The equation marches away from the source only: nothing
-  reflects between two barriers (up to 1.7 dB at 125 Hz with two barriers 10 m apart)
-  or back towards the source.
+  reflects between two barriers or back towards the source. Behind two barriers 10 m
+  apart the weather's effect is up to 1.7 dB off from 63 to 500 Hz.
 - **The third dimension.** The equation runs in the vertical plane along the way,
   rounded to a degree, so a barrier is a ring round the source, and behind a slanted
   barrier the level steps by up to 0.7 dB where the way turns from one degree to the
@@ -1470,14 +1472,15 @@ equation leaves out:
   0.9 dB from 0 to 45 degrees (Aballéa et al. 2007), which the ratio cancels in part.
   The paths round an end take the open ground's effect, not their own, and only in its
   bands: where a listener crosses the shadow boundary of a barrier's end the level
-  steps, 10 cm across it, by up to 7.7 dB 60 m from the source and 24 dB 120 m away
+  steps, 10 cm across it, by up to 9.7 dB 60 m from the source and 24 dB 120 m away
   (see [Validation](validation.md#known-issues)).
 - **Buildings in the wide-angle equation** (at steep points, or with
   `parabolic_equation: wide_angle`) are two screens at their walls: up to 1.4 dB in the
   wind's effect behind a building 60 m deep at 500 Hz in 10 m/s.
 - **Objects of a model file** are not in the equation: where one stands in the way the
   paths go over the edges with straight legs.
-- **Deep shadows.** Deeper than 25 dB below still air the effect is off by up to 10 dB.
+- **Deep shadows.** Deeper than 25 dB below still air the effect is off by up to 0.8 dB
+  down to 57 dB below, and 17 dB at 74 dB below (2 kHz, upwind).
 
 The levels in still air the effect multiplies keep their own errors (see
 [Validation](validation.md#known-issues)). The standards' corrections for the weather
