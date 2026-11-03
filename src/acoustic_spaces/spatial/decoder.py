@@ -1,10 +1,12 @@
-"""Binaural decoding of Ambisonics: filters that turn the AmbiX channels of a sound
-field into the signals at the two ears.
+"""Binaural decoding: filters that turn the AmbiX channels of a sound field into the
+signals at the two ears (:func:`binaural_decoder`), or the channels of a loudspeaker
+layout, each speaker heard as a virtual one (:func:`binaural_filters` gives the filters
+of either format).
 
-The filters fit the HRTF of every measured direction with the spherical harmonics up to
-the order (least squares, ``"ls"``). Low orders cannot follow the fast changes of the
-HRTF's phase with direction at high frequencies, and least squares then loses level
-and spaciousness; above a cutoff (the order times 600 Hz, after Schörkhuber,
+The Ambisonics filters fit the HRTF of every measured direction with the spherical
+harmonics up to the order (least squares, ``"ls"``). Low orders cannot follow the fast
+changes of the HRTF's phase with direction at high frequencies, and least squares then
+loses level and spaciousness; above a cutoff (the order times 600 Hz, after Schörkhuber,
 Zaunschirm and Höldrich 2018) the magnitude least squares decoder (``"magls"``, the
 default) fits only the magnitudes and keeps the phase that varies smoothly from the bin
 below.
@@ -13,11 +15,16 @@ below.
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from acoustic_spaces.spatial.ambisonics import MAX_ORDER, real_spherical_harmonics
+from acoustic_spaces.spatial.ambisonics import MAX_ORDER, Ambisonics, real_spherical_harmonics
 from acoustic_spaces.spatial.hrtf import HRTF
+from acoustic_spaces.spatial.loudspeakers import Loudspeakers
+
+if TYPE_CHECKING:
+    from acoustic_spaces.spatial.render import Format
 
 #: Decoding methods.
 DECODERS = ("magls", "ls")
@@ -57,8 +64,27 @@ def binaural_decoder(order: int, hrtf: HRTF, method: str = "magls") -> np.ndarra
     return np.ascontiguousarray(out)
 
 
+def binaural_filters(fmt: Format, hrtf: HRTF, method: str = "magls") -> np.ndarray:
+    """Filters (taps, channels, 2) from the channels of ``fmt`` to the left and right
+    ear, at the HRTF's sample rate, so that a signal in ``fmt`` is heard as it plays:
+    for :class:`~acoustic_spaces.spatial.Ambisonics`, :func:`binaural_decoder` of its
+    order; for :class:`~acoustic_spaces.spatial.Loudspeakers`, each speaker as a virtual
+    one, the HRTF of its direction (:meth:`HRTF.interpolate`), and the LFE channel, which
+    the renders leave silent, as nothing."""
+    if isinstance(fmt, Ambisonics):
+        return binaural_decoder(fmt.order, hrtf, method)
+    if isinstance(fmt, Loudspeakers):
+        out = np.zeros((hrtf.taps, fmt.channels, 2))
+        mains = [k for k, speaker in enumerate(fmt.speakers) if not speaker.lfe]
+        out[:, mains] = hrtf.interpolate(fmt.directions()[mains]).transpose(2, 0, 1)
+        return out
+    raise ValueError(
+        f"{fmt.label}: only Ambisonics and loudspeaker layouts are decoded to the two ears"
+    )
+
+
 def _power_of_two(n: int) -> int:
     return 1 << int(math.ceil(math.log2(n)))
 
 
-__all__ = ["DECODERS", "MAGLS_HZ_PER_ORDER", "binaural_decoder"]
+__all__ = ["DECODERS", "MAGLS_HZ_PER_ORDER", "binaural_decoder", "binaural_filters"]

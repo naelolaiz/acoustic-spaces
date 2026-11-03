@@ -79,7 +79,8 @@ def test_the_increments_and_the_revised_npd_curves_are_volume_2s() -> None:
 
 def test_the_source_gives_its_npd_level_1000_ft_under_it() -> None:
     """The sound power taken back out to 1000 ft (spherical spreading, the AIR-1845
-    atmosphere, the soft ground's reflection) is the NPD curves' maximum level there at
+    atmosphere, the soft ground's reflection) is the NPD curves' maximum level there,
+    raised by what the slow time weighting takes off it (:func:`slow_drop_db`), at
     every power of the curves, and has the spectral class's shape; the ground adds from
     nearly 3 dB at the bottom (|Q| near 1) to under 0.5 dB at the top."""
     jet = volume3.aircraft()["JETW"]
@@ -92,6 +93,7 @@ def test_the_source_gives_its_npd_level_1000_ft_under_it() -> None:
     for operation, name in (("D", jet.departure_spectrum), ("A", jet.approach_spectrum)):
         curves = npd[("JETW", "LAmax", operation)]
         spectrum = np.asarray(classes[name].levels)
+        drop = source.slow_drop_db(classes[name])
         for power in curves.powers:
             power_db = source.sound_power_db(curves, classes[name], power)
             at = (
@@ -101,10 +103,46 @@ def test_the_source_gives_its_npd_level_1000_ft_under_it() -> None:
                 + gain
             )
             level = 10.0 * math.log10(np.sum(10.0 ** ((at + weights) / 10.0)))
-            assert level == pytest.approx(float(curves.level(power, atmosphere.REFERENCE_M)))
+            npd_level = float(curves.level(power, atmosphere.REFERENCE_M))
+            assert level == pytest.approx(npd_level + drop)
             assert np.ptp(at - spectrum) == pytest.approx(0.0, abs=1e-9)
         change = source.power_change_db(curves, curves.powers, curves.powers[-1])
         assert change[-1] == 0.0 and np.all(np.diff(change) > 0.0)
+
+
+def test_the_slow_drop_is_the_npd_pass_through_a_slow_meter() -> None:
+    """What the slow time weighting takes off the loudest moment of the NPD curves' pass
+    (Volume 2's glossary: L_Amax is slow-weighted; IEC 61672-1's S, τ = 1 s), worked
+    out here without :func:`~acoustic_spaces.parameters.time_weighted`: JETW's spectral
+    classes 1000 ft right under it at 160 kt in air at 15 °C and 70 %, each third octave
+    spreading spherically and losing the air's attenuation over its path, and the
+    meter's reading at each moment t the integral over the pass of its A-weighted mean
+    square at each moment it is heard, exp(-(t - ξ)/τ)/τ times it, summed in the time
+    the sound leaves the aircraft (dξ = (1 + (dr/dt)/c) dt). It is 0.29 dB for both,
+    more than the 0.24 dB of a source in air that absorbs nothing, as the air takes more
+    off the longer paths before and after the loudest moment."""
+    from acoustic_spaces.air import speed_of_sound
+
+    classes = volume3.spectral_classes()
+    jet = volume3.aircraft()["JETW"]
+    h, v, c = atmosphere.REFERENCE_M, noise.REFERENCE_SPEED_M_S, speed_of_sound(15.0)
+    rates = atmosphere.band_attenuation_db(h, 15.0, 70.0) / h
+    sent = np.linspace(-80.0, 80.0, 160_001)
+    r = np.hypot(h, v * sent)
+    heard = sent + r / c
+    stretch = 1.0 + v * v * sent / r / c
+    for name in (jet.departure_spectrum, jet.approach_spectrum):
+        levels = np.asarray(classes[name].levels) + np.asarray(atmosphere.A_WEIGHTING_DB)
+        bands = levels - 20.0 * np.log10(r / h)[:, None] - np.outer(r - h, rates)
+        square = np.sum(10.0 ** (bands / 10.0), axis=1)
+        meter = []
+        for t in h / c + np.arange(0.0, 2.0, 0.01):
+            before = heard <= t
+            kernel = np.exp(-(t - heard[before])) * stretch[before] * square[before]
+            meter.append(np.trapezoid(kernel, sent[before]))
+        expected = 10.0 * math.log10(square.max() / max(meter))
+        assert source.slow_drop_db(classes[name]) == pytest.approx(expected, abs=0.002), name
+        assert 0.28 < expected < 0.30
 
 
 @pytest.mark.parametrize("installation", ["Wing", "Fuselage", "Prop"])

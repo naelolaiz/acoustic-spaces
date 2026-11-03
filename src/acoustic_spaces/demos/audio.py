@@ -3,7 +3,9 @@ lining signals up, and the moments between phrases.
 
 Levels are gated in the manner of a loudness meter, though not to the letter of ITU-R
 BS.1770 (:func:`gated_rms` says how): over the 400 ms blocks that are playing, so that a
-pause or a fade does not pull a level down. ``a_weighted`` gives the dB(A) the captions
+pause or a fade does not pull a level down. The meters (:func:`level_db`,
+:func:`loudness_db`) add up the channels' powers as BS.1770 does, each weighted by where
+it plays from (:func:`channel_weights`). ``a_weighted`` gives the dB(A) the captions
 state, ``k_weighted`` the loudness the tours match their stops by: the K weighting keeps
 the bass that the A weighting all but leaves out, which far places and the back of a
 stage keep little else of.
@@ -54,12 +56,14 @@ def db(level: float) -> float:
 
 
 def gated_rms(x: np.ndarray, rate: int) -> float:
-    """RMS over the 400 ms blocks that are playing: louder than 70 dB below the loudest
-    block, then than 20 dB below the mean of those. BS.1770 gates alike but differently
-    in the details: its blocks overlap by 75 %, its first gate is at -70 LUFS, absolute,
-    and its second 10 LU below the mean. No weighting is applied here; the callers
-    weight first."""
-    return _gated(mono(x)[:, None], rate)
+    """RMS of ``x`` mixed down to mono (:func:`mono`, the mean of its channels, as a feed
+    made of it plays) over the 400 ms blocks that are playing: louder than 70 dB below
+    the loudest block, then than 20 dB below the mean of those. BS.1770 gates alike but
+    differently in the details: its blocks overlap by 75 %, its first gate is at -70
+    LUFS, absolute, and its second 10 LU below the mean. No weighting is applied here;
+    the callers weight first. The meters (:func:`level_db`, :func:`loudness_db`) do not
+    mix down: they add up the channels' powers."""
+    return _gated(mono(x)[:, None], rate, np.ones(1))
 
 
 def channels_rms(x: np.ndarray, rate: int) -> float:
@@ -67,18 +71,22 @@ def channels_rms(x: np.ndarray, rate: int) -> float:
     over the 400 ms blocks in which they play, gated on the channels' summed power as
     BS.1770 gates several channels (and as :func:`gated_rms` gates one), so that a
     channel that pauses while the others play counts its pause. The level that the
-    left and right channels of one recording share one gain from."""
-    return _gated(np.atleast_2d(np.asarray(x, dtype=float).T).T, rate)
+    left and right channels of one recording share one gain from: the mean of the
+    channels' powers, so that two channels alike give the level of one (the meters,
+    :func:`level_db` and :func:`loudness_db`, take BS.1770's sum instead)."""
+    x = np.atleast_2d(np.asarray(x, dtype=float).T).T
+    return _gated(x, rate, np.full(x.shape[1], 1.0 / x.shape[1]))
 
 
-def _gated(x: np.ndarray, rate: int) -> float:
-    """The RMS (samples, channels) over the blocks :func:`gated_rms` keeps, the gates on
-    the mean over the channels of each block's mean square."""
+def _gated(x: np.ndarray, rate: int, weights: np.ndarray) -> float:
+    """The root of the mean squares of the channels of ``x`` (samples, channels), each
+    times its weight (``weights``, one per channel) and added up, over the blocks
+    :func:`gated_rms` keeps, the gates on that weighted sum in each block."""
     block = int(0.4 * rate)
     n = len(x) // block
     if n == 0:
-        return float(np.sqrt(np.mean(x**2)))
-    power = (x[: n * block].reshape(n, block, -1) ** 2).mean(axis=(1, 2))
+        return float(np.sqrt(np.mean(x**2, axis=0) @ weights))
+    power = (x[: n * block].reshape(n, block, -1) ** 2).mean(axis=1) @ weights
     on = power[power > 1e-7 * power.max()]
     if on.size == 0:
         return 0.0
@@ -130,15 +138,68 @@ def k_weighted(x: np.ndarray, rate: int) -> np.ndarray:
     return np.fft.irfft(np.fft.rfft(rows, n) * shelf * high_pass, n)[:, : len(x)].T
 
 
-def level_db(x: np.ndarray, rate: int) -> float:
-    """The gated A-weighted level of ``x`` (:func:`gated_rms`), dB re full scale."""
-    return db(gated_rms(a_weighted(x, rate), rate))
+#: ITU-R BS.1770-4's weight G_i of a loudspeaker less than 30 degrees above or below
+#: the horizon and 60 to 120 degrees to one side (Annex 3, Table 4): +1.5 dB.
+SIDE_WEIGHT = 1.41
 
 
-def loudness_db(x: np.ndarray, rate: int) -> float:
-    """The gated K-weighted level of ``x`` (:func:`gated_rms`), dB re full scale: a
-    loudness in the manner of LUFS, not a BS.1770 measurement."""
-    return db(gated_rms(k_weighted(x, rate), rate))
+def channel_weights(fmt) -> np.ndarray | None:
+    """The weight of each channel of the format ``fmt`` (:mod:`acoustic_spaces.spatial`)
+    in the meters' sum of the channels' powers (:func:`level_db`), or None when every
+    channel weighs 1: mono, binaural (the two ears, as BS.1770's left and right) and
+    microphones, one capsule or a pair. Loudspeakers weigh as ITU-R BS.1770-4 weighs
+    them by where they stand (Annex 3, Table 4): :data:`SIDE_WEIGHT` less than 30
+    degrees above or below the horizon and 60 to 120 degrees to a side (the surrounds
+    of 5.0 at 110 degrees, the side surrounds of 7.0 at 90), 1 elsewhere, and 0 for LFE
+    channels, which BS.1770 leaves out (Annex 1). Ambisonics (AmbiX) is measured on W
+    alone, the sound pressure: its other channels feed no loudspeaker but carry the
+    field's gradients, which add to W or take from it by where the sound comes from."""
+    from acoustic_spaces.spatial import Ambisonics, Loudspeakers
+
+    if isinstance(fmt, Ambisonics):
+        return np.eye(fmt.channels)[0]
+    if isinstance(fmt, Loudspeakers):
+
+        def weight(speaker) -> float:
+            if speaker.lfe:
+                return 0.0
+            azimuth = abs((speaker.azimuth + 180.0) % 360.0 - 180.0)
+            side = abs(speaker.elevation) < 30.0 and 60.0 <= azimuth <= 120.0
+            return SIDE_WEIGHT if side else 1.0
+
+        return np.array([weight(s) for s in fmt.speakers])
+    return None
+
+
+def _summed_rms(x: np.ndarray, rate: int, weights: np.ndarray | None) -> float:
+    """The root of the gated sum of the channels' mean squares of ``x`` (samples,
+    channels), each times its weight (``weights``; None weighs each 1)."""
+    x = np.atleast_2d(np.asarray(x, dtype=float).T).T
+    g = np.ones(x.shape[1]) if weights is None else np.asarray(weights, dtype=float)
+    if g.shape != (x.shape[1],):
+        raise ValueError(
+            f"the meters got {g.size} channel weights for {x.shape[1]} channels: give one "
+            "weight per channel (channel_weights of the signal's format)"
+        )
+    return _gated(x, rate, g)
+
+
+def level_db(x: np.ndarray, rate: int, weights: np.ndarray | None = None) -> float:
+    """The gated A-weighted level of ``x`` (samples, channels), dB re full scale, its
+    channels added up as ITU-R BS.1770-4 eq. 2 adds them: the sum of their mean squares,
+    each times its weight G_i (``weights``, :func:`channel_weights` of its format; None
+    weighs each 1), gated on that sum as :func:`gated_rms` gates. So two channels alike
+    read 3.01 dB above one alone, as two unlike channels of the same power do, and a
+    delay between them changes nothing."""
+    return db(_summed_rms(a_weighted(x, rate), rate, weights))
+
+
+def loudness_db(x: np.ndarray, rate: int, weights: np.ndarray | None = None) -> float:
+    """The gated K-weighted level of ``x`` (samples, channels), dB re full scale, its
+    channels' powers added up as :func:`level_db` adds them: BS.1770's loudness without
+    its -0.691 dB and gated as :func:`gated_rms` gates, so a loudness in the manner of
+    LUFS, not a BS.1770 measurement."""
+    return db(_summed_rms(k_weighted(x, rate), rate, weights))
 
 
 def lag_of(x: np.ndarray, reference: np.ndarray, rate: int, most_s: float) -> int:
@@ -163,10 +224,13 @@ def shifted(x: np.ndarray, samples: int, length: int) -> np.ndarray:
 
 
 def envelope(x: np.ndarray, rate: int, step_s: float = 0.1) -> np.ndarray:
-    """RMS of ``x`` over 0.5 s windows every ``step_s``."""
-    m = mono(x)
+    """RMS of ``x`` over 0.5 s windows every ``step_s``; one value, the RMS of all of it,
+    for a signal shorter than one window (0 when it is empty)."""
+    m = mono(x).astype(float)
     step, window = int(step_s * rate), int(0.5 * rate)
-    power = np.cumsum(np.r_[0.0, m.astype(float) ** 2])
+    if len(m) < window:  # one window, cut to the signal: silence when there is none
+        return np.array([float(np.sqrt(np.mean(m**2))) if len(m) else 0.0])
+    power = np.cumsum(np.r_[0.0, m**2])
     starts = np.arange(0, max(1, len(m) - window), step)
     return np.sqrt((power[starts + window] - power[starts]) / window)
 
@@ -211,6 +275,7 @@ def mmss(t: float) -> str:
 __all__ = [
     "a_gain",
     "a_weighted",
+    "channel_weights",
     "db",
     "decoded",
     "envelope",

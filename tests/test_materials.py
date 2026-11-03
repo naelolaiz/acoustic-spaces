@@ -78,6 +78,15 @@ def test_csv_with_header_and_semicolons(tmp_path: Path) -> None:
     assert scatter is None
 
 
+def test_csv_lines_of_separators_alone_are_ignored(tmp_path: Path) -> None:
+    """A spreadsheet writes its empty rows as separators alone (``,,,``): they hold no
+    row, before the table (where the frequencies would be none) or after it (where a
+    fourth row would refuse the table)."""
+    path = tmp_path / "sheet.csv"
+    path.write_text(";;;\n125;250;500\n0.1;0.2;0.3\n0.4;0.5;0.6\n,,\n", encoding="utf-8")
+    assert read_coefficients_csv(path) == ([125, 250, 500], [0.1, 0.2, 0.3], [0.4, 0.5, 0.6])
+
+
 def test_csv_refuses_values_that_are_not_finite(tmp_path: Path) -> None:
     path = tmp_path / "nan.csv"
     path.write_text("125,250\n0.1,nan\n", encoding="utf-8")
@@ -86,6 +95,27 @@ def test_csv_refuses_values_that_are_not_finite(tmp_path: Path) -> None:
     path.write_text("125,inf\n0.1,0.2\n", encoding="utf-8")
     with pytest.raises(ValueError, match=r"nan.csv:1: expected finite numbers"):
         read_coefficients_csv(path)
+
+
+def test_csv_laid_out_in_columns_or_with_more_rows_is_refused(tmp_path: Path) -> None:
+    """A table laid out by columns (frequency, absorption, scattering on each line) has
+    no row of rising frequencies: read as rows, its first line would give absorption
+    1000 at 1 kHz, held to 1 in every band. It is refused with the layout expected, and
+    so is a fourth row, which would be dropped."""
+    columns = tmp_path / "wall.csv"
+    columns.write_text("125,0.10,0.1\n1000,0.20,0.2\n4000,0.30,0.3\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"first row \(125, 0.1, 0.1\) is not one of rising"):
+        read_coefficients_csv(columns)
+    with pytest.raises(ValidationError, match="one row of centre frequencies in Hz, rising"):
+        Material.model_validate({"file": "wall.csv"}, context={"base_dir": tmp_path})
+    for first in ("0,125,250", "125,250,250", "250,125,500"):
+        columns.write_text(f"{first}\n0.1,0.2,0.3\n", encoding="utf-8")
+        with pytest.raises(ValueError, match="not one of rising frequencies"):
+            read_coefficients_csv(columns)
+    more = tmp_path / "more.csv"
+    more.write_text("125,250\n0.1,0.2\n0.3,0.3\n0.5,0.5\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="4 rows of numbers; expected one row of centre"):
+        read_coefficients_csv(more)
 
 
 def test_csv_length_mismatch(tmp_path: Path) -> None:
