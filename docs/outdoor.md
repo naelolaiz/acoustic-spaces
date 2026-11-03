@@ -512,7 +512,10 @@ is an arc of a circle, so its travel time and its length are exact.
   paths 150 and 300 m away, straight or off the ground up to twice, are within 3.6 dB,
   four in five of them within 0.1 dB (1.8 dB where they are 8 dB or more over a straight
   path's, nearer a caustic), and those 600 m away in `windy` within 3.3 dB, nine in ten
-  within 0.1 dB (1.9 dB nearer a caustic). Where neighbouring rays cross (a caustic) the
+  within 0.1 dB (1.9 dB nearer a caustic). A path that leaves and arrives at about the
+  same height and turns once in the air follows the sampled profile exactly, which can be
+  up to 0.33 dB off the smooth one (`clear_night` 12 to 25 m up and 300 to 600 m away,
+  `windy` across the wind). Where neighbouring rays cross (a caustic) the
   level is capped at 10 dB over a straight path's, and each caustic delays the phase by a
   quarter period. Against an independent ray tracer on the smooth profile of the `windy`
   preset downwind, the levels of three such paths 100 and 300 m away are within 0.05 dB
