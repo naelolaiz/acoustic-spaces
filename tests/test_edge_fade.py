@@ -326,7 +326,7 @@ def test_a_path_missed_at_the_foot_of_the_gallery_s_wall_4(gallery: Room) -> Non
     one that crosses wall_4's plane, as for a listener 1 um farther from wall_6, where
     the reflection lies on the face; the level lies within 0.01 dB of the levels 1 um
     either side in every band. Taking the leg leaving it, as where the reflection lies
-    past the face, gave 1.0 dB less at 63 Hz."""
+    past the face, gave 1.1 dB less at 63 Hz."""
     scene = gallery.scene
     listener = next(item for item in scene.listeners if item.name == "round the corner")
     levels = []

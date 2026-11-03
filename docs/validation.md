@@ -212,16 +212,19 @@ request and checks:
   dB 4 m away along a grid axis, a face diagonal and a body diagonal, with either
   stencil), the part of the source's pulse before emission kept for a listener near the
   source (the direct sound's band energies 0.5 and 1 m away within 0.01 dB whatever the
-  source's low-pass), the source flat to the top of the highest band at 5 cells per
-  wavelength (within 0.05 dB), the gradient's second-order and one-sided differences
-  where a point two cells or one cell from the listener is missing (exactly), the
-  gradient at a listener just in front of a thin screen and at one 1.5 cells in front of
-  it, taken on the listeners' side, as in front of a solid block (within 1 dB and 0.5
-  dB), open models and thin screens (stable, and the sound leaves), the matched layer
-  round an open model (what comes back 40 dB down or more, against a grid too large for
-  anything to come back; stable for 9,500 steps), one run for bands with their own
-  absorption, and the level of the late part across the crossover to the rays (flat
-  within 1 dB in sixth octaves);
+  source's low-pass), a run that starts before emission lined up with one that starts
+  at emission and is fed a delay shorter by the lead (the same field and energy per band
+  and slot, exactly; at a rate where the lead is not a whole number of samples, the same
+  field, within half a sample of its time), the source flat to the top of the highest
+  band at 5 cells per wavelength (within 0.05 dB), the gradient's second-order and
+  one-sided differences where a point two cells or one cell from the listener is
+  missing (exactly), the gradient at a listener just in front of a thin screen and at
+  one 1.5 cells in front of it, taken on the listeners' side, as in front of a solid
+  block (within 1 dB and 0.5 dB), open models and thin screens (stable, and the sound
+  leaves), the matched layer round an open model (what comes back 40 dB down or more,
+  against a grid too large for anything to come back; stable for 9,500 steps), one run
+  for bands with their own absorption, and the level of the late part across the
+  crossover to the rays (flat within 1 dB in sixth octaves);
 - the ray tracer against runs stored before its tree was rebuilt
   (`tests/reference/tracer.npz`): the faces and distances the tree finds, the specular
   paths, and every kind of late run on the CPU to single precision, so a change that
