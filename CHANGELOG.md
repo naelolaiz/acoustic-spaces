@@ -123,9 +123,10 @@
   ground it is 0.2 to 0.7 dB(A) louder, 1.0 dB(A) quieter behind the barrier, and the
   example takes 2.3 times as long to simulate.
 - `--indoors` takes a room's level outdoors 2 m in front of its wall, EN ISO 12354-3's
-  L_1,2m, simulating one more listener there where its listener stands nearer: the
-  offices' room behind the street's balcony, 1 m out, moves by up to 2.1 dB at 63 to 250
-  Hz and 0.2 dB(A) for the tram and the road works. No documented number changes.
+  L_1,2m, simulating one more listener there where its listener stands nearer (the
+  street example has it, `balcony_2m`, ticked off): the offices' room behind the
+  street's balcony, 1 m out, moves by up to 2.1 dB at 63 to 250 Hz and 0.2 dB(A) for the
+  tram and the road works. No documented number changes.
 - Walks without Doppler crossfade from one place to the next band by band, corrected by
   how alike the two places sound, so that each octave band's power runs on
   (`acoustic_spaces.render.crossfaded`, shared with the demos' tours). Against the exact
