@@ -1,11 +1,13 @@
 """Levels over a long term outdoors: the scene run in each weather class, combined over
 the classes' shares of each period of the day, and rated as L_den."""
 
+import dataclasses
 import json
 import math
 
 import numpy as np
 import pytest
+from conftest import silenced
 from pydantic import ValidationError
 
 from acoustic_spaces import Room, Scene
@@ -305,6 +307,36 @@ def test_the_insertion_loss_over_a_long_term() -> None:
         long_term.a_weighted(without) - levels.levels_a[key], abs=1e-9
     )
     assert levels.insertion_loss_a[key] > 10.0  # behind the wall
+
+
+def test_a_band_no_sound_arrives_in_takes_the_other_classes() -> None:
+    """In a band where no sound reaches a listener in one weather class (its G
+    undefined), that class's level is none (-inf), as in the report of one run
+    (``Response.levels_or_held``), and the periods' and the long term's levels are the
+    other classes' energy, where they were undefined; the level relative to the free
+    field stays undefined in that band."""
+    scene = field(classes=CLASSES)
+    result = long_term.simulate(Room.from_scene(scene))
+    runs = dict(result.long_term.runs)
+    key = ("s", "down")
+    upwind = runs["upwind"]
+    quiet = silenced(upwind.responses[key], [7])
+    runs["upwind"] = dataclasses.replace(upwind, responses={**upwind.responses, key: quiet})
+    assert np.isnan(quiet.parameters().g[7])
+    levels = long_term.combine(scene.long_term, runs, scene)
+    per_class = levels.class_levels[key]
+    assert per_class[1, 7] == -np.inf
+    np.testing.assert_array_equal(per_class[[0, 2]], result.long_term.class_levels[key][[0, 2]])
+    np.testing.assert_allclose(
+        per_class[1, :7], result.long_term.class_levels[key][1, :7], atol=1e-6
+    )
+    periods = np.array([by_hand(per_class, levels.shares[:, p]) for p in range(3)])
+    np.testing.assert_allclose(levels.period_levels[key], periods, atol=1e-9)
+    assert np.isfinite(levels.levels[key]).all()
+    assert math.isfinite(levels.levels_a[key]) and math.isfinite(levels.rating_level[key])
+    assert (
+        np.isnan(levels.re_free_field[key][7]) and np.isfinite(levels.re_free_field[key][:7]).all()
+    )
 
 
 def test_re_weighting_drops_the_levels_over_a_long_term() -> None:

@@ -12,6 +12,7 @@ import pytest
 
 from acoustic_spaces import facade, vibration
 from acoustic_spaces.demos import indoors
+from acoustic_spaces.parameters import a_weighted
 
 RATE = 16_000
 
@@ -618,8 +619,9 @@ def test_the_tram_has_indoors_and_the_street_s_other_vehicles_not() -> None:
 
 
 def test_a_house_beside_still_plant() -> None:
-    """Plant nearer than 10 ft shakes as it does 10 ft away, not without bound; a level
-    unknown in a band outdoors is unknown in the house too, not the outdoor one."""
+    """Plant nearer than 10 ft shakes as it does 10 ft away, not without bound; a band
+    no sound arrives in outdoors (None) gets none in the house either, and the house's
+    level is that of the other bands through the window, not the outdoor one."""
     from acoustic_spaces.spatial import Mono
 
     breaker = indoors.Plant("breaker", "hoe_ram", (0.0, 0.0, 1.0))
@@ -636,5 +638,12 @@ def test_a_house_beside_still_plant() -> None:
     nearest = vibration.plant_level("hoe_ram", vibration.NEAREST_M)
     assert still.ground_vdb("out") == still.ground_vdb("in") == pytest.approx(nearest)
     report = {"responses": [{"listener": "in", "spl_db": [None] + [50.0] * 7, "spl_a_db": 60.0}]}
+    (entry,) = still.report(report)["responses"]
+    inside = 50.0 + house.facade.indoor_db()[1:]
+    assert entry["spl_db"][0] is None
+    assert entry["spl_db"][1:] == pytest.approx(inside, abs=0.006)
+    assert entry["spl_a_db"] == pytest.approx(a_weighted([-np.inf, *inside]), abs=0.006)
+    # Without levels per band outdoors, none in the house.
+    report = {"responses": [{"listener": "in", "spl_db": None, "spl_a_db": 60.0}]}
     (entry,) = still.report(report)["responses"]
     assert entry["spl_a_db"] is None and entry["spl_db"] is None

@@ -18,7 +18,10 @@ place to place along the walk:
   walking listener, at the moment it is there. Between the places a cubic through
   them gives the delay at every sample, and the signal is read through it with a
   windowed sinc (Kaiser, 32 zero crossings each side) whose cutoff falls with the
-  shift, so a raised pitch does not alias.
+  shift, so a raised pitch does not alias: 0.97 of the Nyquist frequency over the
+  most the path raises the pitch (as a ratio), rounded down to 32 / n of the Nyquist
+  frequency, n the taps it then needs on each side, so that the paths share a few
+  tables of taps.
 - **The filter.** What else the path does to the sound (the air, the ground's
   reflection, a diffracting edge, the source's directivity, the direction it arrives
   from in the output format, and in turbulence how the eddies delay its other bands
@@ -67,6 +70,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
+from scipy.special import i0
 
 from acoustic_spaces import synthesis
 from acoustic_spaces.emission import Emission
@@ -243,21 +247,22 @@ def hermite(x: np.ndarray, y: np.ndarray, at: np.ndarray, *, hold: bool = True) 
 
 def _reach(cutoff: float) -> int:
     """How far the reading sinc for ``cutoff`` (share of Nyquist) reaches back from the
-    sample before the position, and on from it."""
-    return int(math.ceil(_ZEROS / cutoff))
+    sample before the position, and on from it: n for the cutoff 32 / n itself, which a
+    division rounds to just over n for some (32 / (32 / 49) is 49.000000000000007)."""
+    return int(math.ceil(_ZEROS / cutoff - 1e-9))
 
 
-@functools.lru_cache(maxsize=8)
+@functools.lru_cache(maxsize=16)
 def _table(cutoff: float) -> tuple[np.ndarray, int]:
     """The reading sinc's taps (phases, taps) for ``cutoff`` (share of Nyquist), and how
-    far it reaches back from the sample before the position: kept for the last few
-    cutoffs, as a path's signals are read one after another with its own."""
+    far it reaches back from the sample before the position: kept for the last 16
+    cutoffs, which :func:`render` rounds so that a walk's paths share a few."""
     reach = _reach(cutoff)
     offsets = np.arange(-reach + 1, reach + 1)
     frac = np.arange(_PHASES) / _PHASES
     t = offsets[None, :] - frac[:, None]
     half = _ZEROS / cutoff
-    window = np.i0(_BETA * np.sqrt(np.clip(1.0 - (t / half) ** 2, 0.0, 1.0))) / np.i0(_BETA)
+    window = i0(_BETA * np.sqrt(np.clip(1.0 - (t / half) ** 2, 0.0, 1.0))) / i0(_BETA)
     taps = cutoff * np.sinc(cutoff * t) * window
     taps.flags.writeable = False
     return taps, reach
@@ -291,11 +296,20 @@ def read(dry: np.ndarray, positions: np.ndarray, cutoff: float) -> np.ndarray:
     return out
 
 
+#: From this many channels on, a place's filters are kept as its paths' shaping (paths,
+#: bins) and the format's gains (paths, channels), each path's (channels, bins) formed
+#: when it is used: fewer bytes than every channel's spectrum.
+_SHAPING_FROM = 3
+
+
 class Filters:
     """The filters of the paths at each place (and, in turbulence, each moment of the
-    eddies): (paths, channels, bins) spectra on one FFT grid, kept for the places in
-    use. With the source's ``directivity`` and ``axes`` (its frame at each place), the
-    directivity is taken out of them."""
+    eddies): each path's (channels, bins) spectra on one FFT grid. A place's are kept
+    while the blocks that take them are read (:meth:`plan`): at the ears, for a
+    pattern that changes with frequency and in fewer than :data:`_SHAPING_FROM`
+    channels as every path's spectra, otherwise as the paths' shaping and the format's
+    gains. With the source's ``directivity`` and ``axes`` (its frame at each place),
+    the directivity is taken out of them."""
 
     def __init__(
         self,
@@ -322,24 +336,56 @@ class Filters:
         self.gusts = gusts
         self.seed = seed
         self.cache: OrderedDict = OrderedDict()
+        # Whether the filters are kept as the paths' shaping and the format's gains.
+        self.shaped = fmt.channels >= _SHAPING_FROM
+        # The keys of the filters each block is the last to take (:meth:`plan`).
+        self.ends: dict[int, list[tuple[int, int]]] = {}
         self.size = 8
         self.roots: OrderedDict = OrderedDict()
         self.moves: OrderedDict = OrderedDict()
-        # The paths at a moment, which :meth:`moved` and :meth:`at` both read, and the
+        # The paths at a moment, which :meth:`moved` and :meth:`row` both read, and the
         # angles of the paths' own phases at a place, the same at every moment.
         self.moments: OrderedDict = OrderedDict()
         self.angles: OrderedDict = OrderedDict()
 
-    def at(self, k: int, moment: int = 0) -> np.ndarray:
+    def plan(self, uses: dict[tuple[int, int], tuple[int, int]]) -> None:
+        """Keeps the filters of each place at each moment, key (place, moment), from
+        the first block that takes them to the last, ``uses`` {key: (first, last)}; and
+        sizes the caches of the paths' eddies, own phases, moments and moves from the
+        places in use at once and four more (``size``; twice that with gusts, whose
+        blocks each take two moments): the eddies and own phases keep ``size``, the
+        moments twice and the moves 64 times as many."""
+        self.ends = {}
+        spans: dict[int, tuple[int, int]] = {}
+        for key, (first, last) in uses.items():
+            self.ends.setdefault(last, []).append(key)
+            was = spans.get(key[0], (first, last))
+            spans[key[0]] = (min(was[0], first), max(was[1], last))
+        at_once = 0
+        if spans:
+            firsts = np.sort([first for first, _ in spans.values()])
+            lasts = np.sort([last for _, last in spans.values()])
+            at_once = int(
+                np.max(np.searchsorted(firsts, firsts, "right") - np.searchsorted(lasts, firsts))
+            )
+        self.size = (2 if self.gusts is not None else 1) * (at_once + 4)
+
+    def done(self, j: int) -> None:
+        """Lets go of the filters block ``j`` is the last to take."""
+        for key in self.ends.pop(j, ()):
+            self.cache.pop(key, None)
+
+    def row(self, k: int, moment: int, row: int) -> np.ndarray:
+        """(channels, bins) the filter of path ``row`` at place ``k`` and ``moment``."""
         key = (k, moment)
-        if key in self.cache:
-            self.cache.move_to_end(key)
-            return self.cache[key]
-        spectra = self._spectra(k, moment)
-        self.cache[key] = spectra
-        while len(self.cache) > self.size:
-            self.cache.popitem(last=False)
-        return spectra
+        kept = self.cache.get(key)
+        if kept is None:
+            kept = self._spectra(k, moment)
+            self.cache[key] = kept
+        if isinstance(kept, tuple):
+            shaping, gains = kept
+            return (shaping[row] * gains[row][:, None]).astype(np.complex64)
+        return kept[row]
 
     def _place_roots(self, k: int) -> list:
         """The eddies' :meth:`~acoustic_spaces.engine.early.EarlyReflections.wander_roots`
@@ -403,7 +449,11 @@ class Filters:
             self.moves.popitem(last=False)
         return out
 
-    def _spectra(self, k: int, moment: int) -> np.ndarray:
+    def _spectra(self, k: int, moment: int) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+        """(paths, channels, bins) the filters at place ``k`` and ``moment``
+        (complex64); or from :data:`_SHAPING_FROM` channels on, where the format's gains
+        do not change with frequency, the paths' shaping (paths, bins) and the gains
+        (paths, channels), whose product :meth:`row` takes path by path."""
         from acoustic_spaces.spatial.directions import to_head
         from acoustic_spaces.spatial.microphone import Microphone
         from acoustic_spaces.spatial.render import Binaural
@@ -437,10 +487,14 @@ class Filters:
             ears = np.fft.rfft(ears, self.n_fft, axis=-1)
             ears *= np.exp(2j * np.pi * self.cycles * onsets[..., None])
             spectra = shaping[:, None, :] * ears
-        elif isinstance(self.fmt, Microphone):  # its pattern may change with frequency
+        elif isinstance(self.fmt, Microphone) and self.fmt.a is not None:
+            # A pattern that changes with frequency.
             spectra = shaping[:, None, :] * self.fmt.spectral_gains(heads, gains)
         else:
-            spectra = shaping[:, None, :] * self.fmt.gains(heads)[:, :, None]
+            channels = self.fmt.gains(heads)
+            if self.shaped:
+                return shaping, channels
+            spectra = shaping[:, None, :] * channels[:, :, None]
         return spectra.astype(np.complex64)
 
 
@@ -623,14 +677,10 @@ def render(
             ways = np.zeros((len(times), 3))
             for k in heard:
                 ways[k] = leaving[k][track.rows[k]] @ frames[k]
-        readings.append(_Reading(track, heard, j0, j1, 0.97 / max(speed, 1.0), ways, onsets))
-    # The places in use at once: for a walking source, those the paths' different
-    # delays reach back to.
-    spread = 2
-    if source_walks and len(times) > 1:
-        delays = np.concatenate([r.track.delays[r.heard] for r in readings] or [np.zeros(1)])
-        interval = max(float(np.min(np.diff(times))), 1e-9)
-        spread += int(math.ceil(float(np.ptp(delays)) / interval))
+        # The cutoff 0.97 / speed rounded down to 32 / n, n the taps it needs on each
+        # side, so that the paths share a few tables (:func:`_table`).
+        cutoff = _ZEROS / _reach(0.97 / max(speed, 1.0))
+        readings.append(_Reading(track, heard, j0, j1, cutoff, ways, onsets))
     filters = Filters(
         responses,
         fmt,
@@ -642,7 +692,6 @@ def render(
         directivity if emission is not None else None,
         frames,
     )
-    filters.size = 2 * (min(spread, len(times)) + 4)
     turbulent = any(r.early.wander is not None for r in responses)
     window = np.sin(np.pi * np.arange(2 * hop) / (2 * hop)) ** 2
     begin, end = (0, length) if span is None else (max(int(span[0]), 0), int(span[1]))
@@ -651,6 +700,15 @@ def render(
     # blocks that reach samples begin to end, and ``out`` from block j_lo's first.
     j_lo = max((begin + half - n_fft) // hop + 1, 0)
     j_hi = min(-(-(end + half) // hop) + 1, blocks)
+    # The first and last block that takes each place's filters at each moment, so each
+    # is worked out once and kept no longer.
+    uses: dict[tuple[int, int], tuple[int, int]] = {}
+    for reading in readings:
+        for j in range(max(reading.first, j_lo), min(reading.last + 1, j_hi)):
+            for place, moment, _ in _parts(reading.track, j * hop / rate, gusts):
+                first, last_j = uses.get((place, moment), (j, j))
+                uses[place, moment] = (min(first, j), max(last_j, j))
+    filters.plan(uses)
     base = (j_lo - 1) * hop
     out = np.zeros((max(j_hi - j_lo + 2, 0) * hop + n_fft + most, fmt.channels))
     # Fewer blocks at once with more signals, which each read every path's delays.
@@ -699,6 +757,7 @@ def render(
                         continue
                     part = np.fft.rfft(piece, n_fft, axis=0).T * spectrum
                     totals[i] = part if totals[i] is None else totals[i] + part
+            filters.done(j)
             for (lag, _), total in zip(signals, totals, strict=True):
                 if total is None:
                     continue
@@ -743,20 +802,21 @@ def _moved(filters: Filters, track: Track, t: np.ndarray, gusts) -> np.ndarray:
     return out
 
 
-def _filter_at(filters: Filters, track: Track, centre: float, gusts) -> np.ndarray | None:
-    """(channels, bins) the track's filter at time ``centre`` (s): between the places on
-    either side in proportion to how near they are (none where it is not heard), and
-    in turbulence between the moments on either side."""
+def _parts(track: Track, centre: float, gusts) -> list[tuple[int, int, float]]:
+    """The places and moments the track's filter at time ``centre`` (s) is taken
+    between, each (place, moment, weight): the places on either side in proportion to
+    how near they are (only those it is heard from), and in turbulence the moments on
+    either side."""
     received = track.received
     last = len(received) - 1
     j = int(np.searchsorted(received, centre, side="right")) - 1
     if j < 0:
-        parts = [(0, 1.0)]
+        places = [(0, 1.0)]
     elif j >= last:
-        parts = [(last, 1.0)]
+        places = [(last, 1.0)]
     else:
         w = (centre - received[j]) / (received[j + 1] - received[j])
-        parts = [(j, 1.0 - w), (j + 1, w)]
+        places = [(j, 1.0 - w), (j + 1, w)]
     if gusts is None:
         moments = [(0, 1.0)]
     else:
@@ -765,15 +825,23 @@ def _filter_at(filters: Filters, track: Track, centre: float, gusts) -> np.ndarr
         m1 = min(m0 + 1, gusts.count - 1)
         w = min(max(m - m0, 0.0), 1.0)
         moments = [(m0, 1.0 - w), (m1, w)] if m1 != m0 else [(m0, 1.0)]
+    return [
+        (k, m, wk * wm)
+        for k, wk in places
+        if wk > 0.0 and track.present[k]
+        for m, wm in moments
+        if wm > 0.0
+    ]
+
+
+def _filter_at(filters: Filters, track: Track, centre: float, gusts) -> np.ndarray | None:
+    """(channels, bins) the track's filter at time ``centre`` (s): between the places on
+    either side in proportion to how near they are (none where it is not heard), and
+    in turbulence between the moments on either side (:func:`_parts`)."""
     out = None
-    for k, wk in parts:
-        if wk <= 0.0 or not track.present[k]:
-            continue
-        for m, wm in moments:
-            if wm <= 0.0:
-                continue
-            spectrum = filters.at(k, m)[track.rows[k]] * (wk * wm)
-            out = spectrum if out is None else out + spectrum
+    for k, m, weight in _parts(track, centre, gusts):
+        spectrum = filters.row(k, m, track.rows[k]) * weight
+        out = spectrum if out is None else out + spectrum
     return out
 
 

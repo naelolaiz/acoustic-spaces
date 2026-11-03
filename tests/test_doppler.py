@@ -3,6 +3,7 @@ the paths followed from place to place, the sound against the exact field of a p
 source and listener, and the pass-by levels (:func:`acoustic_spaces.walkthrough.pass_by`)."""
 
 import dataclasses
+import functools
 import math
 import sys
 from collections import OrderedDict
@@ -341,6 +342,119 @@ def test_the_caches_change_nothing(short, monkeypatch: pytest.MonkeyPatch, fmt) 
     anew = render_walk(walk, {"s": dry}, fmt)
     assert np.max(np.abs(kept)) > 0.0
     assert np.array_equal(kept, anew)
+
+
+def test_each_filter_is_worked_out_once_and_kept_while_in_use(
+    short, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A walk with Doppler works out the filters of each place (at each moment of the
+    eddies) once, and keeps them only from the first block that takes them to the
+    last: a walk whose first two knots are 1 ms apart kept every place's (17 here),
+    and keeps 3 at most."""
+    made: list[tuple[int, int]] = []
+    most = [0]
+    spectra = dp.Filters._spectra
+
+    def counted(self, k: int, moment: int):
+        made.append((k, moment))
+        most[0] = max(most[0], len(self.cache) + 1)
+        return spectra(self, k, moment)
+
+    monkeypatch.setattr(dp.Filters, "_spectra", counted)
+    data = short.scene("source", 30.0, "hard").model_dump(mode="json", exclude_none=True)
+    walk = data["sources"][0]["walk"]
+    del walk["to"], walk["speed_m_s"]
+    walk["keyframes"] = [
+        {"time_s": 0.001, "position": [short.X0 + 0.03, 0.0, short.ZS]},
+        {"time_s": 1.0, "position": [short.X1, 0.0, short.ZS]},
+    ]
+    keyed = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=None)
+    assert np.diff(keyed.points.times)[0] == pytest.approx(0.001)
+    render_walk(keyed, {"s": _noise(1.0)}, Mono())
+    assert sorted(made) == [(k, 0) for k in range(17)] and len(keyed.names) == 17
+    assert most[0] == 3
+    # In turbulence, at two moments at once.
+    data = short.scene("source", 30.0, "grass").model_dump(mode="json", exclude_none=True)
+    data["atmosphere"] = {"turbulence": "strong"}
+    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=4.0)
+    made.clear()
+    most[0] = 0
+    render_walk(walk, {"s": _noise(0.6)}, Mono())
+    assert len(made) == len(set(made)) and len({moment for _, moment in made}) > 1
+    assert most[0] <= 6
+
+
+@pytest.mark.parametrize(
+    "fmt", [Ambisonics(order=3), Loudspeakers.layout("7.0.4")], ids=["ambix3", "7.0.4"]
+)
+def test_filters_kept_as_shaping_and_gains_are_the_channels_spectra(
+    short, monkeypatch: pytest.MonkeyPatch, fmt
+) -> None:
+    """From three channels on, a place's filters are kept as the paths' shaping
+    (complex128, one row per path) and the format's gains (one per path and channel):
+    an eighth of the bytes of every channel's spectra in third-order Ambisonics. Each
+    path's filter formed from them is, bit for bit, its row of every channel's
+    spectra."""
+    walk = simulate_walk(
+        Room.from_scene(short.scene("source", 30.0, "hard")), step_m=4.0, late_step_m=None
+    )
+    responses = [walk.result[name, "l"] for name in walk.names]
+    n_fft = 1 << 15
+    kept = dp.Filters(responses, fmt, RATE, n_fft, n_fft // 4, None, None)
+    monkeypatch.setattr(dp, "_SHAPING_FROM", fmt.channels + 1)
+    whole = dp.Filters(responses, fmt, RATE, n_fft, n_fft // 4, None, None)
+    for k in range(len(responses)):
+        spectra = whole._spectra(k, 0)
+        shaping, gains = kept._spectra(k, 0)
+        paths = len(responses[k].early)
+        assert paths > 1 and spectra.shape == (paths, fmt.channels, n_fft // 2 + 1)
+        assert shaping.shape == (paths, n_fft // 2 + 1) and shaping.dtype == np.complex128
+        assert gains.shape == (paths, fmt.channels)
+        for row in range(paths):
+            assert np.array_equal(kept.row(k, 0, row), spectra[row])
+    assert np.array_equal(kept.row(0, 0, 1), whole.row(0, 0, 1))
+
+
+def test_the_paths_share_a_reading_table_for_each_reach(
+    short, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each path is read with a sinc cut off at 0.97 of Nyquist over the most its pitch
+    rises, rounded down to the lowest cutoff with as many taps, so no lower than a share
+    1 / n of it, n the taps on each side: the paths share one table of taps for each n
+    (the car's direct sound and the ground's reflection had one each)."""
+    readings: list = []
+    reading = dp._Reading
+
+    def kept(*args):
+        readings.append(reading(*args))
+        return readings[-1]
+
+    built: list[float] = []
+    build = dp._table.__wrapped__
+
+    def table(cutoff: float):
+        built.append(cutoff)
+        return build(cutoff)
+
+    monkeypatch.setattr(dp, "_Reading", kept)
+    monkeypatch.setattr(dp, "_table", functools.lru_cache(maxsize=16)(table))
+    walk = simulate_walk(
+        Room.from_scene(short.scene("source", 30.0, "hard")), step_m=1.0, late_step_m=None
+    )
+    render_walk(walk, {"s": _noise(1.2)}, Mono())
+    assert len(readings) >= 2
+    for each in readings:
+        heard = each.heard
+        rises = np.max(
+            1.0 - np.diff(each.track.delays[heard]) / np.diff(each.track.received[heard])
+        )
+        cutoff = 0.97 / max(rises, 1.0)
+        assert cutoff * (1.0 - 1.0 / dp._reach(cutoff)) < each.cutoff <= cutoff
+    assert len(built) == len({dp._reach(cutoff) for cutoff in built}) >= 1
+    # 32 / (32 / n) rounds to just over n for some n: their cutoff still takes n taps.
+    for n in (33, 46, 49, 98, 103, 107, 196, 392):
+        assert dp._reach(dp._ZEROS / dp._reach(dp._ZEROS / n)) == n
+        assert dp._reach(dp._ZEROS / n * (1.0 - 1e-6)) == n + 1
 
 
 def test_sounds_that_follow_the_walker_are_heard_as_its_own_later(short) -> None:

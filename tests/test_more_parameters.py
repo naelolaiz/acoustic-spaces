@@ -3,10 +3,12 @@ stage support, directional decay, STIPA, U50 and the echo criteria, against resp
 whose values are known."""
 
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
 
+from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.compare import compare_parameters
 from acoustic_spaces.engine.early import EarlyReflections
@@ -263,6 +265,36 @@ def test_stage_support_only_near_the_source() -> None:
     # A source fed 10 ms late is still 1 m away.
     delayed = near.fed(np.zeros(8), 0.010)
     assert delayed.parameters().st_early == pytest.approx(np.full(8, -10.0))
+
+
+def test_stage_support_only_1_m_from_the_source() -> None:
+    """ISO 3382-1:2009, annex C (after Gade's ST1) measures stage support 1 m from the
+    source. The direct sound in its first 10 ms goes as 1 / r^2, so it is given only from
+    0.9 to 1.1 m, where that moves it by 20 lg r, at most 0.9 dB. From 0.95 to 1.05 m,
+    Gade's average over 250 Hz to 2 kHz of ST_early and ST_late rises by 0.62 to 0.85 dB
+    over seeds 1 to 10 (0.87 dB for the direct sound alone; the floor's reflection, also
+    in those 10 ms, changes less, and the later windows by the rays' noise)."""
+    shoebox = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
+    data = Scene.from_yaml(shoebox).model_dump(mode="json")
+    data["geometry"]["file"] = str(shoebox.parent / data["geometry"]["file"])
+    talker = np.array(data["sources"][0]["position"])
+    distances = [0.5, 0.85, 0.95, 1.05, 1.15, 1.5]
+    data["listeners"] = [
+        {"name": f"{r} m", "position": (talker + [r, 0.0, 0.0]).tolist()} for r in distances
+    ]
+    room = Room.from_scene(Scene.model_validate(data))
+    settings = room.scene.simulation.model_copy(deep=True)
+    settings.late.rays, settings.ir_length_s, settings.seed = 5_000, 1.0, 1
+    settings.performance.threads = 2
+    result = simulate(room, settings=settings)
+    st = {r: result["talker", f"{r} m"].parameters() for r in distances}
+    for r in (0.5, 0.85, 1.15, 1.5):
+        assert np.isnan(st[r].st_early).all() and np.isnan(st[r].st_late).all()
+    # 250 Hz to 2 kHz, Gade's average: the nearer listener has the stronger direct sound.
+    middle = slice(2, 6)
+    for name in ("st_early", "st_late"):
+        change = np.mean(getattr(st[1.05], name)[middle] - getattr(st[0.95], name)[middle])
+        assert 0.4 < change < 1.0, (name, change)
 
 
 # -- speech -----------------------------------------------------------------------------

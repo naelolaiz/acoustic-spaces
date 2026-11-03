@@ -17,14 +17,15 @@ say), it prints the short usage instead, with the reason.
 
 The editor works on the same scene files as the command line.
 
-- **File > Open example** opens the bundled rooms, in the groups of
-  [Example scenes](examples.md). Saving one asks where to keep your copy and takes the
-  files it uses along (its model, terrain, tables, directivities, and the patterns its
-  array files name); an example whose model needs an extra that is not installed is
-  greyed out, and its tip says how to install it. **New box room**, **New
-  room from a floor plan**, **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF,
-  IFC, Collada or SketchUp) and **New outdoor scene** (a meadow 200 m across, to build
-  on; see [Outdoor scenes](#outdoor-scenes)) start from scratch. For an IFC model, the
+- **File > Open example** opens the bundled rooms, in the groups of [Example
+  scenes](examples.md). Saving one asks where to keep your copy and takes along the
+  files it uses from the example's folder (its model, terrain, map of buildings,
+  material files, directivities with the patterns their array files name, the sources'
+  signals, its recording and HRTFs); an example whose model needs an extra that is not
+  installed is greyed out, and its tip says how to install it. **New box room**, **New
+  room from a floor plan**, **New from model file** (OBJ, STL, PLY, OFF, glTF, DXF, IFC,
+  Collada or SketchUp) and **New outdoor scene** (a meadow 200 m across, to build on;
+  see [Outdoor scenes](#outdoor-scenes)) start from scratch. For an IFC model, the
   geometry's form picks one room of the building (**IFC room**) or every element.
 - The **Plan** tab, next to the 3D view, shows the room from above and draws rooms (see
   below).
@@ -149,10 +150,12 @@ The editor works on the same scene files as the command line.
 - **Messages** shows warnings in amber and errors in red; so does the scene's own form
   for its problems and warnings.
 - **View > Scene YAML** shows the scene as YAML text that follows every edit. Edited
-  text is applied with **Apply** (Ctrl+Return), checked as every other change is, in
-  one step that **Undo** takes back; text the checks refuse stays as typed, with the
-  reason. The text is made from the scene, not read from its file, so the file's
-  comments do not show (Save does not keep them either).
+  text is applied with **Apply** (Ctrl+Return), checked as every other change is, in one
+  step that **Undo** takes back; text the checks refuse stays as typed, with the reason.
+  The text is made from the scene, not read from its file, so the file's comments do not
+  show (Save does not keep them either). A material's absorption, scattering and source
+  show only where its preset, file or other settings do not give them, so another preset
+  or file written there brings its own.
 - Runs, coverage maps, tunings and exports go on in the background, with **Cancel** in
   the status bar.
 - **View > Follow the run** (on by default) rings, in the 3D view and the plan, the
