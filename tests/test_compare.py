@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import math
 
@@ -10,6 +11,7 @@ from acoustic_spaces.compare import (
     compare_impulse_responses,
     compare_parameters,
 )
+from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import (
     ALL_PARAMETERS,
     PARAMETERS,
@@ -160,6 +162,30 @@ def test_the_reasons_of_both_sides_are_given() -> None:
         "the simulated response decays by less than 20 dB; "
         "the measured decay does not reach -35 dB for T30"
     )
+
+
+def test_a_band_above_half_the_sample_rate_is_missing_for_that() -> None:
+    """Given the sample rates, a band with no parameter at all that lies above half its
+    response's rate is missing for that, not for a short decay."""
+    measured = _parameters(1.0)
+    high = np.arange(len(OCTAVE_BANDS_HZ)) == 7
+    measured = dataclasses.replace(
+        measured, **{n: np.where(high, np.nan, getattr(measured, n)) for n in PARAMETERS}
+    )
+    # The 8 kHz band starts at 5623 Hz, above half of 11025 Hz.
+    c = compare_parameters(_parameters(1.0), measured, measured_rate=11_025)
+    assert c["t30"].missing[7] == (
+        "the measured response, at 11025 Hz, holds nothing above 5512.5 Hz"
+    )
+    assert c["t30"].missing[6] is None
+    plain = compare_parameters(_parameters(1.0), measured)
+    assert plain["t30"].missing[7] == "the measured response decays by less than 20 dB"
+    # Impulse responses carry their rates.
+    c = compare_impulse_responses(_tones(1.0, 48_000), 48_000, _tones(1.0, 11_025), 11_025)
+    assert c["t30"].missing[7] == (
+        "the measured response, at 11025 Hz, holds nothing above 5512.5 Hz"
+    )
+    assert c["t30"].compared == 7
 
 
 def test_the_report_is_plain_json() -> None:

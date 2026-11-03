@@ -3,6 +3,7 @@ the paths followed from place to place, the sound against the exact field of a p
 source and listener, and the pass-by levels (:func:`acoustic_spaces.walkthrough.pass_by`)."""
 
 import dataclasses
+import functools
 import math
 import sys
 from collections import OrderedDict
@@ -16,13 +17,20 @@ from acoustic_spaces import doppler as dp
 from acoustic_spaces.cli import main
 from acoustic_spaces.directivity import _grid
 from acoustic_spaces.emission import Mixture
+from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.render import convolve, gusts_for
 from acoustic_spaces.scene.model import Walk
 from acoustic_spaces.spatial import Ambisonics, Binaural, Loudspeakers, Mono
 from acoustic_spaces.spatial.directions import fibonacci_sphere
 from acoustic_spaces.spatial.hrtf import HRTF
 from acoustic_spaces.spatial.microphone import first_order, xy
-from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_movement, simulate_walk
+from acoustic_spaces.walkthrough import (
+    crossfade_weights,
+    pass_by,
+    render_walk,
+    simulate_movement,
+    simulate_walk,
+)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
 
@@ -196,6 +204,75 @@ def test_a_walker_that_stands_still_is_a_convolution_at_the_ears() -> None:
         assert _error_db(wet[:, ear], ref[:, ear]) < -45.0
 
 
+def _late_only(walker: str, monkeypatch: pytest.MonkeyPatch):
+    """The short pass-by of a walking ``walker``, 1 m between places, each with its own
+    late part, and the early paths left out of its renders: the walk and each place's
+    late part as it plays it (the response without its early paths)."""
+    walk = simulate_walk(
+        Room.from_scene(reference.scene(walker, 30.0, "grass")), step_m=1.0, late_step_m=None
+    )
+    monkeypatch.setattr(dp, "render", lambda *args, **kwargs: 0.0)
+    seed = walk.result.settings.seed
+    irs = []
+    for name in walk.names:
+        r = walk.result[(name, "l") if walker == "source" else ("s", name)]
+        r = dataclasses.replace(r, early=EarlyReflections.empty(r.bands))
+        irs.append(r.spatial_impulse_response(Mono(), RATE, seed)[:, 0])
+    return walk, irs
+
+
+def test_a_walking_source_sends_its_late_part_from_where_it_is(short, monkeypatch) -> None:
+    """A walking source's late part is that of the place it sends its sound from, as its
+    early paths are (heard at the retarded time): a click sent while the source is at a
+    place gives that place's late part, from the moment it was sent. Faded from place to
+    place as it was heard instead, it was the late part of the places the source had
+    gone on to: here off by 38 % of the place's late part's rms amplitude."""
+    walk, irs = _late_only("source", monkeypatch)
+    times = walk.points.times
+    k = len(times) // 2
+    sent = round(times[k] * RATE)
+    assert crossfade_weights(times, [sent / RATE])[k, 0] == 1.0
+    # Its late part arrives once the source has gone more than half-way to the next.
+    assert walk.result[walk.names[k], "l"].direct_delay_s > (times[k + 1] - times[k]) / 2
+    click = np.zeros(RATE)
+    click[sent] = 1.0
+    wet = render_walk(walk, {"s": click}, Mono())[:, 0]
+    expected = np.zeros_like(wet)
+    expected[sent : sent + len(irs[k])] = irs[k][: len(wet) - sent]
+    assert _error_db(wet, expected) < -100.0
+
+
+def test_a_walking_source_with_one_late_part_everywhere_plays_it(short, monkeypatch) -> None:
+    """The places' weights, read as the sound is sent, add up to one: with the same
+    response at every place, a walking source's late part is the signal through it."""
+    walk, irs = _late_only("source", monkeypatch)
+    responses = walk.result.responses
+    for name in walk.names[1:]:
+        responses[name, "l"] = responses[walk.names[0], "l"]
+    dry = _noise(1.5)
+    wet = render_walk(walk, {"s": dry}, Mono())[:, 0]
+    expected = convolve(dry, irs[0])
+    assert np.max(np.abs(wet[len(expected) :]), initial=0.0) == 0.0
+    np.testing.assert_allclose(
+        wet[: len(expected)], expected, rtol=0.0, atol=1e-12 * np.abs(expected).max()
+    )
+
+
+def test_a_walking_listener_hears_the_late_part_of_where_it_is(short, monkeypatch) -> None:
+    """A walking listener hears, at each moment, the late part of the place it is at:
+    the sound through each place's late part, faded from place to place as it is
+    heard."""
+    walk, irs = _late_only("listener", monkeypatch)
+    dry = _noise(1.0)
+    wet = render_walk(walk, {"s": dry}, Mono())[:, 0]
+    weights = crossfade_weights(walk.points.times, np.arange(len(wet)) / RATE)
+    expected = np.zeros_like(wet)
+    for weight, ir in zip(weights, irs, strict=True):
+        heard = convolve(dry, ir)[: len(wet)]
+        expected[: len(heard)] += weight[: len(heard)] * heard
+    np.testing.assert_allclose(wet, expected, rtol=0.0, atol=1e-12 * np.abs(expected).max())
+
+
 def _delays_hrtf(onsets: np.ndarray, taps: int = 64) -> HRTF:
     """Ears that only delay: each measured direction of a Fibonacci lattice a unit pulse
     at its ``onsets`` (directions, 2) samples."""
@@ -341,6 +418,119 @@ def test_the_caches_change_nothing(short, monkeypatch: pytest.MonkeyPatch, fmt) 
     anew = render_walk(walk, {"s": dry}, fmt)
     assert np.max(np.abs(kept)) > 0.0
     assert np.array_equal(kept, anew)
+
+
+def test_each_filter_is_worked_out_once_and_kept_while_in_use(
+    short, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A walk with Doppler works out the filters of each place (at each moment of the
+    eddies) once, and keeps them only from the first block that takes them to the
+    last: a walk whose first two knots are 1 ms apart kept every place's (17 here),
+    and keeps 3 at most."""
+    made: list[tuple[int, int]] = []
+    most = [0]
+    spectra = dp.Filters._spectra
+
+    def counted(self, k: int, moment: int):
+        made.append((k, moment))
+        most[0] = max(most[0], len(self.cache) + 1)
+        return spectra(self, k, moment)
+
+    monkeypatch.setattr(dp.Filters, "_spectra", counted)
+    data = short.scene("source", 30.0, "hard").model_dump(mode="json", exclude_none=True)
+    walk = data["sources"][0]["walk"]
+    del walk["to"], walk["speed_m_s"]
+    walk["keyframes"] = [
+        {"time_s": 0.001, "position": [short.X0 + 0.03, 0.0, short.ZS]},
+        {"time_s": 1.0, "position": [short.X1, 0.0, short.ZS]},
+    ]
+    keyed = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=None)
+    assert np.diff(keyed.points.times)[0] == pytest.approx(0.001)
+    render_walk(keyed, {"s": _noise(1.0)}, Mono())
+    assert sorted(made) == [(k, 0) for k in range(17)] and len(keyed.names) == 17
+    assert most[0] == 3
+    # In turbulence, at two moments at once.
+    data = short.scene("source", 30.0, "grass").model_dump(mode="json", exclude_none=True)
+    data["atmosphere"] = {"turbulence": "strong"}
+    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=4.0)
+    made.clear()
+    most[0] = 0
+    render_walk(walk, {"s": _noise(0.6)}, Mono())
+    assert len(made) == len(set(made)) and len({moment for _, moment in made}) > 1
+    assert most[0] <= 6
+
+
+@pytest.mark.parametrize(
+    "fmt", [Ambisonics(order=3), Loudspeakers.layout("7.0.4")], ids=["ambix3", "7.0.4"]
+)
+def test_filters_kept_as_shaping_and_gains_are_the_channels_spectra(
+    short, monkeypatch: pytest.MonkeyPatch, fmt
+) -> None:
+    """From three channels on, a place's filters are kept as the paths' shaping
+    (complex128, one row per path) and the format's gains (one per path and channel):
+    an eighth of the bytes of every channel's spectra in third-order Ambisonics. Each
+    path's filter formed from them is, bit for bit, its row of every channel's
+    spectra."""
+    walk = simulate_walk(
+        Room.from_scene(short.scene("source", 30.0, "hard")), step_m=4.0, late_step_m=None
+    )
+    responses = [walk.result[name, "l"] for name in walk.names]
+    n_fft = 1 << 15
+    kept = dp.Filters(responses, fmt, RATE, n_fft, n_fft // 4, None, None)
+    monkeypatch.setattr(dp, "_SHAPING_FROM", fmt.channels + 1)
+    whole = dp.Filters(responses, fmt, RATE, n_fft, n_fft // 4, None, None)
+    for k in range(len(responses)):
+        spectra = whole._spectra(k, 0)
+        shaping, gains = kept._spectra(k, 0)
+        paths = len(responses[k].early)
+        assert paths > 1 and spectra.shape == (paths, fmt.channels, n_fft // 2 + 1)
+        assert shaping.shape == (paths, n_fft // 2 + 1) and shaping.dtype == np.complex128
+        assert gains.shape == (paths, fmt.channels)
+        for row in range(paths):
+            assert np.array_equal(kept.row(k, 0, row), spectra[row])
+    assert np.array_equal(kept.row(0, 0, 1), whole.row(0, 0, 1))
+
+
+def test_the_paths_share_a_reading_table_for_each_reach(
+    short, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each path is read with a sinc cut off at 0.97 of Nyquist over the most its pitch
+    rises, rounded down to the lowest cutoff with as many taps, so no lower than a share
+    1 / n of it, n the taps on each side: the paths share one table of taps for each n
+    (the car's direct sound and the ground's reflection had one each)."""
+    readings: list = []
+    reading = dp._Reading
+
+    def kept(*args):
+        readings.append(reading(*args))
+        return readings[-1]
+
+    built: list[float] = []
+    build = dp._table.__wrapped__
+
+    def table(cutoff: float):
+        built.append(cutoff)
+        return build(cutoff)
+
+    monkeypatch.setattr(dp, "_Reading", kept)
+    monkeypatch.setattr(dp, "_table", functools.lru_cache(maxsize=16)(table))
+    walk = simulate_walk(
+        Room.from_scene(short.scene("source", 30.0, "hard")), step_m=1.0, late_step_m=None
+    )
+    render_walk(walk, {"s": _noise(1.2)}, Mono())
+    assert len(readings) >= 2
+    for each in readings:
+        heard = each.heard
+        rises = np.max(
+            1.0 - np.diff(each.track.delays[heard]) / np.diff(each.track.received[heard])
+        )
+        cutoff = 0.97 / max(rises, 1.0)
+        assert cutoff * (1.0 - 1.0 / dp._reach(cutoff)) < each.cutoff <= cutoff
+    assert len(built) == len({dp._reach(cutoff) for cutoff in built}) >= 1
+    # 32 / (32 / n) rounds to just over n for some n: their cutoff still takes n taps.
+    for n in (33, 46, 49, 98, 103, 107, 196, 392):
+        assert dp._reach(dp._ZEROS / dp._reach(dp._ZEROS / n)) == n
+        assert dp._reach(dp._ZEROS / n * (1.0 - 1e-6)) == n + 1
 
 
 def test_sounds_that_follow_the_walker_are_heard_as_its_own_later(short) -> None:

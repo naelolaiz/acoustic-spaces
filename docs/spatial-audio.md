@@ -189,7 +189,7 @@ output through a SOFA file is written as `binaural-<file name>`
 (`talker__seat-a.binaural-kemar.wav` for `kemar.sofa`), so that it and the spherical head's can be written together; `--format
 binaural` finds it when it is the only binaural one. Dry signals are mixed down to
 mono, as sources are points, and resampled to the response's rate. The results are
-32-bit float WAV files; `--normalize` scales them to a -1 dBFS peak.
+32-bit float WAV files (RF64 past 4 GiB); `--normalize` scales them to a -1 dBFS peak.
 
 `play` convolves in real time on the sound card (it needs the `measure` extra). The
 compiled convolver adds no latency beyond one `--block` of frames (256 by default, 5.3
@@ -248,8 +248,9 @@ These anechoic recordings are free to download, and each one tests something dif
   Pätynen, Pulkki and Lokki, 2008; free for academic research; MP3, PCM on request):
   orchestral excerpts recorded one instrument at a time.
 
-The commands read WAV files only (16, 24 or 32-bit PCM, or float), so convert AIFF, FLAC
-or MP3 first, for example with `ffmpeg -i note.aiff -c:a pcm_f32le note.wav`. A dry file
+The commands read WAV files only (16, 24 or 32-bit PCM, or float; RF64 and BW64 too),
+so convert AIFF, FLAC or MP3 first, for example with
+`ffmpeg -i note.aiff -c:a pcm_f32le note.wav`. A dry file
 at another rate is resampled to the response's, with a note. A file with several
 channels is averaged to mono, so split a multitrack file into one file per source
 first; channels that are present but silent also lower the level (the BRAS files have
@@ -314,14 +315,15 @@ acoustic-spaces walkthrough scene.yaml guide=speech.wav --out walk.wav --video w
   tests). Every place's late part is drawn from the same random sequence, so the tails
   that cross fade differ only in their level and decay, not in their noise. Once the
   walk is over, the walker stays where it ends for as long as the signals last.
-- A walking listener hears every source; a walking source is heard at `--listener`,
-  with the other sources where they stand. `--format` takes the formats of `simulate
-  --output` (by default the scene's first output, or binaural with `--hrtf`, which is
-  for binaural only) and `--video` saves the room, the path and the walker going along
-  it, with an arrow and its yaw for the way it faces, as a GIF or an MP4 (both with the
-  viz extra) at `--fps`. An MP4 carries the sound when the format has one or two
-  channels (mono, stereo, binaural) and then lasts as long as the sound; with more
-  channels, play the WAV alongside it.
+- A walking listener hears every source in use; a walking source is heard at
+  `--listener`, even one left out (`enabled: false`), by default the only listener in
+  use, with the other sources in use where they stand. `--format` takes the formats of
+  `simulate --output` (by default the scene's first output, or binaural with `--hrtf`,
+  which is for binaural only) and `--video` saves the room, the path and the walker
+  going along it, with an arrow and its yaw for the way it faces, as a GIF or an MP4
+  (both with the viz extra) at `--fps`. An MP4 carries the sound when the format has one
+  or two channels (mono, stereo, binaural) and then lasts as long as the sound; with
+  more channels, play the WAV alongside it.
 - A walker faces the way it goes (unless its walk says `face_forward: false`) and
   turns through each corner at 90 degrees per second. The gallery's visitor has the
   guide behind it all down the long arm, and at the corner turns over a second towards
@@ -432,8 +434,10 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
 - The late part is crossfaded from place to place by weights that add up to one, its
   pitch unshifted: the places' tails, drawn from one random sequence, are alike (in a
   shoebox room, neighbouring places 25 cm apart, each traced, correlate by 0.97 or more
-  in every band, a one-off check), so its power runs on. Outdoors it is far below the
-  early sound.
+  in every band, a one-off check), so its power runs on. A walking source's sound goes
+  from one place's late part to the next's as it is sent, so that each place's late part
+  follows its early paths at the retarded time; a walking listener hears the late part
+  of the place it is at. Outdoors it is far below the early sound.
 - Against the exact field of a source passing 10 m from a listener over a hard ground,
   the sound is within 45 dB of it at 30 m/s, with places 1 m apart, and its level within
   0.04 dB at every moment; a train at 80 m/s is within 38 dB and 0.42 dB at 4 kHz.
@@ -488,7 +492,7 @@ the SEL over the time the level is within 10 dB of it (`parameters.event_levels`
 for any level over time). In a band where a place's G is undefined, as where the few
 rays that reach a far place carry no energy in it, the place's level is that of the
 energy its response holds, as outdoors (-inf where none arrives). Through the walk's
-sound over grass, each band's energy came within 0.25 dB of them, 0.8 dB in the band of
+sound over grass, each band's energy came within 0.26 dB of them, 0.8 dB in the band of
 the ground's dip, where the band levels are averages over the band and the sound is read
 through band filters, whose skirts fill a dip (see
 [Validation](validation.md#moving-sources-against-the-exact-field)).

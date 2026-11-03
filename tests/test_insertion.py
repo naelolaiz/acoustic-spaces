@@ -185,6 +185,35 @@ def test_a_scene_without_its_parts() -> None:
         insertion.simulate(Scene.from_yaml(SHOEBOX), without=["wall"])
 
 
+def test_without_is_checked_before_anything_runs(tmp_path, capsys) -> None:
+    """--without names what simulation.insertion_loss_of would, and is refused as it is
+    (an unknown name, a name given twice) before the first run, not after it; so is
+    ``without`` given to the engine."""
+    scene = field(barriers=[WALL], coverage={"spacing": 10.0, "height": 1.5, "rays": 200})
+    path = tmp_path / "field.yaml"
+    scene.to_yaml(path)
+    out = tmp_path / "out"
+    for names, message in (
+        (["gate"], "error: --without names 'gate', which is no building, barrier or "
+         "vegetation of the scene (they are: wall)"),
+        (["wall", "wall"], "error: --without names 'wall' twice"),
+    ):  # fmt: skip
+        for command in (["simulate", str(path), "--out", str(out)], ["map", str(path)]):
+            assert main([*command, "--without", *names]) == 1
+            err = capsys.readouterr().err
+            assert message in err
+            assert "Insertion loss" not in err
+        assert not out.exists()
+    for names, message in (
+        (["gate"], "without names 'gate', which is no"),
+        (["wall"] * 2, "twice"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            insertion.simulate(scene, without=names)
+        with pytest.raises(ValueError, match=message):
+            insertion.coverage_map(scene, without=names)
+
+
 def test_a_barrier_s_insertion_loss_over_an_absorbing_ground() -> None:
     """Without the barrier the level is that of free field, so the barrier's insertion
     loss is its level relative to free field with the sign turned; a barrier that is not
@@ -345,8 +374,6 @@ def test_the_command_line(tmp_path, capsys) -> None:
     assert "re free field" in text and "insertion loss of wall" in text
     report = json.loads((out / "parameters.json").read_text())
     assert report["removed"] == ["wall"] and "insertion_loss_a_db" in report["responses"][0]
-    assert main(["simulate", str(path), "--out", str(out), "--without", "gate"]) == 1
-    assert "no building, barrier or vegetation is named 'gate'" in capsys.readouterr().err
     plot = tmp_path / "map.png"
     args = ["map", str(path), "--parameter", "insertion_loss_a", "--plot", str(plot)]
     assert main(args) == 1
