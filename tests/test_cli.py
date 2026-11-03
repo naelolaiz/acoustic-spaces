@@ -871,6 +871,71 @@ def test_compare_reports_missing_bands(tmp_path: Path, capsys: pytest.CaptureFix
     assert c80["missing"] == ["the measured response decays by less than 20 dB"] * 8
 
 
+def test_bands_above_half_the_sample_rate_are_left_out_with_a_reason(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+    import math
+
+    import numpy as np
+
+    from acoustic_spaces.audio import write_wav
+    from acoustic_spaces.parameters import octave_midbands
+
+    # At 8 kHz: a tone at each mid-band frequency below 4 kHz, decaying in 1 s. The
+    # 8 kHz band, from 5.62 kHz up, got a T30, a G and a share in the STI from its
+    # filter's skirt over the 4 kHz band.
+    fs = 8000
+    t = np.arange(2 * fs) / fs
+    tones = sum(np.cos(2 * np.pi * f * t + 0.7 * b) for b, f in enumerate(octave_midbands()[:7]))
+    write_wav(tmp_path / "low.wav", 0.1 * tones * np.exp(-3.0 * math.log(10.0) * t), fs)
+    report = tmp_path / "low.json"
+    args = ["analyze", str(tmp_path / "low.wav"), "--reference-energy", "0.01"]
+    assert main([*args, "--json", str(report)]) == 0
+    assert capsys.readouterr().err == (
+        "note: low.wav is at 8000 Hz: the 8 kHz band lies above half the sample rate and is "
+        "left out, and the STI with it; the 4 kHz band is analysed from its part below "
+        "4000 Hz\n"
+    )
+    text = report.read_text(encoding="utf-8")
+    assert "NaN" not in text  # not JSON
+    channel = json.loads(text)["channels"][0]
+    assert channel["speech"] == {"sti": None, "stipa": None}
+    parameters = channel["parameters"]
+    assert parameters["t30"][7] is None and parameters["g"][7] is None
+    assert parameters["t30"][6] == pytest.approx(1.0, rel=0.02)
+
+    _decay_wav(tmp_path / "sim.wav", 1.0, 48_000)
+    args = ["compare", str(tmp_path / "sim.wav"), str(tmp_path / "low.wav")]
+    assert main([*args, "--simulated-reference-energy", "0.01"]) == 0
+    captured = capsys.readouterr()
+    assert captured.err.startswith("note: the measured response is at 8000 Hz: the 8 kHz band")
+    assert (
+        "  EDT, T20, T30, C50, C80, D50, Ts, G at 8 kHz: "
+        "the measured response, at 8000 Hz, holds nothing above 4000 Hz"
+    ) in captured.out.splitlines()
+
+
+def test_deconvolve_cuts_a_response_longer_than_the_silence(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from acoustic_spaces.audio import read_wav
+
+    sweep = tmp_path / "sweep.wav"
+    main(["sweep", str(sweep), "--duration", "1", "--silence", "0.5", "--repeats", "2"])
+    _write_recording(sweep, tmp_path / "recording.wav")
+    capsys.readouterr()
+    ir = tmp_path / "ir.wav"
+    args = ["deconvolve", str(tmp_path / "recording.wav"), "--sweep", str(sweep)]
+    assert main([*args, "--out", str(ir), "--length", "2"]) == 0
+    assert capsys.readouterr().err == (
+        "note: the responses are 0.50 s long, not 2 s: "
+        "the next sweep's distortion lands right after it\n"
+    )
+    data, fs = read_wav(ir)
+    assert data.shape == (fs // 2, 2)
+
+
 def test_compare_reports_errors(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _decay_wav(tmp_path / "ir.wav", 1.0, 48_000, length=0.5)
     _decay_wav(tmp_path / "ff44.wav", 1.0, 44_100, length=0.1)

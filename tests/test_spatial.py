@@ -154,6 +154,120 @@ def test_vbap_between_and_outside_speakers() -> None:
     assert Loudspeakers.layout("5.1").channel_mask() == 0x3F
 
 
+def _domes() -> dict[str, tuple[Speaker, ...]]:
+    """Layouts with height: rings of speakers in line (many faces of four on one
+    plane) and staggered, an even spread, two in one direction, two alone, and a ring
+    in one plane through the listener."""
+
+    def rings(spec, stagger):
+        return tuple(
+            Speaker(f"r{r}s{k}", (k * 360 / n + stagger * 180 / n * (r % 2)) % 360 - 180, el)
+            for r, (el, n) in enumerate(spec)
+            for k in range(n)
+        )
+
+    k = np.arange(30)
+    spread = tuple(
+        Speaker(f"s{i}", float(az), float(el))
+        for i, (az, el) in enumerate(
+            zip(
+                np.degrees(k * np.pi * (3 - np.sqrt(5))) % 360 - 180,
+                np.degrees(np.arcsin(1 - (k + 0.5) / 30 * 1.3)),
+                strict=True,
+            )
+        )
+    )
+    return {
+        "in line": rings([(0, 8), (30, 8), (60, 4)], 0),
+        "staggered": rings([(-30, 6), (0, 12), (35, 8), (70, 4)], 1),
+        "spread": spread,
+        "twice one way": (Speaker("a", 0), Speaker("b", 0), Speaker("c", 120), Speaker("d", 0, 60)),
+        "two high": (Speaker("a", 0, 30), Speaker("b", 180, 30)),  # too few for Qhull
+        "upright ring": tuple(
+            Speaker(f"m{e}", 0 if e < 90 else 180, min(e, 180 - e))
+            for e in (-90, 0, 45, 90, 135, 180)
+        ),
+        # Six on a ring but one, a hair off it, so that thin triples find faces too.
+        "just off a ring": tuple(
+            Speaker(f"s{i}", az, el)
+            for i, (az, el) in enumerate(
+                [(-125, 60), (-30, 60), (-25, 60), (50, 60), (60, 60), (51, 60 - 1e-8)]
+                + [(0, 0), (90, 0), (180, 0), (-90, 0)]
+            )
+        ),
+        "two nearly as one": (
+            *(Speaker(n, az) for n, az in (("L", 30), ("R", -30), ("Ls", 110), ("Rs", -110))),
+            Speaker("C", 0, 30),
+            Speaker("C2", 1e-4, 30),
+            Speaker("T", 0, 60),
+            Speaker("B", 180, -20),
+        ),
+        "not finite": (
+            *(Speaker(f"h{az}", az) for az in (0, 90, 180, -90)),
+            Speaker("x", math.nan, 45),
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "5.0.4",
+        "7.1.4",
+        "in line",
+        "staggered",
+        "spread",
+        "twice one way",
+        "two high",
+        "upright ring",
+        "just off a ring",
+        "two nearly as one",
+        "not finite",
+    ],
+)
+def test_vbap_hull_from_qhull_pans_as_the_search_over_every_triple(name, monkeypatch) -> None:
+    """The faces of a layout's hull come from the triples around each corner of Qhull's
+    hull: the same faces, and so the same gains to the last bit, as trying every triple
+    of speakers."""
+    from acoustic_spaces.spatial import loudspeakers
+
+    speakers = LAYOUTS[name] if name in LAYOUTS else _domes()[name]
+    fast = Loudspeakers(speakers, name)
+    monkeypatch.setattr(loudspeakers, "_triples_to_try", lambda *_args, **_kwargs: None)
+    every = Loudspeakers(speakers, name)
+    assert [face for _, face in fast._bases] == [face for _, face in every._bases]
+    directions = fibonacci_sphere(2000)
+    np.testing.assert_array_equal(fast.gains(directions), every.gains(directions))
+
+
+def test_vbap_hull_of_a_large_dome_comes_from_qhull() -> None:
+    """A dome of 200 speakers: its hull from the triples around each corner of Qhull's
+    (a few thousand), not from every triple of points (some 1.3 million, each tried
+    against every point)."""
+    from acoustic_spaces.spatial import loudspeakers
+
+    k = np.arange(200)
+    points = from_angles(
+        np.degrees(k * np.pi * (3 - np.sqrt(5))) % 360 - 180,
+        np.degrees(np.arcsin(1 - (k + 0.5) / 200 * 1.3)),
+    )
+    assert len(loudspeakers._triples_to_try(points, 2e-8)) < 50 * len(points)
+    triangles = loudspeakers._hull_triangles(points)
+    assert len(triangles) == 2 * len(points) - 4  # every point a corner of the hull
+
+
+def test_vbap_hull_of_points_not_in_64_bit_floats_tries_every_triple() -> None:
+    """Points in integers or 32-bit floats go to the search over every triple, as the
+    triples tried otherwise hang on the rounding of 64-bit floats."""
+    from acoustic_spaces.spatial import loudspeakers
+
+    cube = np.array([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)])
+    for points in (cube, cube.astype(np.float32) / np.float32(np.sqrt(3))):
+        assert loudspeakers._triples_to_try(points, 2e-8) is None
+        faces = loudspeakers._flat_faces(points)
+        assert len(faces) == 6 and faces == loudspeakers._flat_faces(points, exhaustive=True)
+
+
 def test_spherical_head_delays_and_shadows_the_far_ear() -> None:
     head = spherical_head(FS)
     left = head.nearest(from_angles(90.0, 0.0)[None])[0]

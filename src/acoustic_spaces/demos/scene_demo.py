@@ -135,9 +135,7 @@ def _current(scene: str | Path | None) -> Scene | None:
 def _scene_hrtf(scene: str | Path | None) -> Path | None:
     """The HRTFs the binaural output of the scene names, or None."""
     found = _current(scene)
-    if found is None:
-        return None
-    return next((o.hrtf for o in found.outputs if o.format == "binaural" and o.hrtf), None)
+    return None if found is None else pipeline.scene_hrtf(found.outputs)
 
 
 def recording_of(scene: Scene) -> Path | None:
@@ -507,13 +505,12 @@ def render(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> 
 
 def format_of(args: argparse.Namespace, scene: Scene):
     """The format the moving mixes take: the scene's output of ``--format`` (as its
-    simulation renders it), through ``--hrtf`` when given."""
-    from acoustic_spaces.scene import Output
+    simulation renders it; by its format, ``ambisonics``, or its label, ``ambix3``), or
+    the one ``--format`` names (:func:`~acoustic_spaces.demos.pipeline.output_named`),
+    through ``--hrtf`` when given. ValueError for a format it does not know."""
     from acoustic_spaces.spatial import from_output
 
-    output = next((o for o in scene.outputs if o.format == args.format), None)
-    if output is None:
-        output = Output.model_validate(args.format)
+    output = pipeline.output_named(args.format, scene.outputs)
     if args.hrtf and output.format == "binaural":
         output = output.model_copy(update={"hrtf": Path(args.hrtf)})
     return from_output(output)
@@ -539,15 +536,16 @@ def moving_done(
 
 def levels_along(movement, source, listener: str) -> list[float | None]:
     """The A-weighted level (dB) of ``source`` (a scene source) at ``listener`` at each
-    moment of ``movement``, as simulated; None at a moment whose response is too short
-    for its decay."""
+    moment of ``movement``, as simulated, as a still listener's and a pass-by's are
+    (:meth:`~acoustic_spaces.engine.response.Response.levels_or_held`); None at a
+    moment where none of its sound arrives."""
     from acoustic_spaces.parameters import a_weighted
 
     power = source.power_db("octave")
     levels: list[float | None] = []
     for k in range(len(movement.times)):
         response = movement.result[movement.key(source.name, listener, k)]
-        level = float(a_weighted(response.levels(power)))
+        level = float(a_weighted(response.levels_or_held(power)))
         levels.append(round(level, 2) if math.isfinite(level) else None)
     return levels
 
@@ -689,6 +687,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         seats,
         crossfade_s=min(CROSSFADE_S, stops[0].length / 2),
         fade_out_s=min(FADE_OUT_S, stops[-1].length / 2),
+        scene=args.scene,
     )
     write(work / "tour.wav", audio, seats["rate"])
     print(f"wrote {work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")

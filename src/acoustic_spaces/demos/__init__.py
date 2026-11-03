@@ -389,7 +389,12 @@ def common_options(work: str = "demo") -> list[Option]:
     and ``--no-mp4``."""
     return [
         Option("work", "folder for everything the demo writes", Path(work), "folder"),
-        Option("format", "output format the mixes take", "binaural"),
+        Option(
+            "format",
+            "output format the mixes take (binaural, mono, ambix3, 5.0...); the tour decodes "
+            "Ambisonics and loudspeaker mixes to the two ears",
+            "binaural",
+        ),
         Option(
             "hrtf",
             "binaural mixes through this SOFA file of HRTFs, your own or measured, instead of "

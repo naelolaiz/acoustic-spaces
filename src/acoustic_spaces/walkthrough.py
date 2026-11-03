@@ -29,10 +29,12 @@ At walking speed there is no Doppler shift (it is under half a percent, 8 cents)
 walk with ``doppler: true`` (a car, a train, an aircraft) plays each early path through
 a delay that changes as the walker goes (:mod:`acoustic_spaces.doppler`), so the pitch
 of each shifts as it does on its way; the late part is crossfaded by weights that add
-up to one (:func:`crossfade_weights`), which keep the power of tails this alike, and
-:func:`pass_by` gives the level over time, its maximum and the sound exposure level.
-Outdoors in turbulence the early sound flickers along the walk as in
-:func:`~acoustic_spaces.render.auralize`, through the same eddies from place to place.
+up to one (:func:`crossfade_weights`), which keep the power of tails this alike, a
+walking source's as its sound is sent and a walking listener's as it is heard; and
+:func:`pass_by` gives the level over time, its maximum and the sound exposure level,
+also as a sound level meter's slow time weighting reads them. Outdoors in turbulence
+the early sound flickers along the walk as in :func:`~acoustic_spaces.render.auralize`,
+through the same eddies from place to place.
 
 A walk may instead give ``keyframes``: where the walker is and how it faces at given
 times after its start, between which it moves and turns evenly, so that it can wait,
@@ -70,6 +72,7 @@ import numpy as np
 from acoustic_spaces.emission import Emission
 from acoustic_spaces.engine.simulate import SimulationResult, simulate
 from acoustic_spaces.materials.bands import resolution_of
+from acoustic_spaces.parameters import EventLevels, event_levels
 from acoustic_spaces.render import (
     _as_2d,
     convolve,
@@ -657,16 +660,13 @@ def simulate_movement(
         # One copy per distinct place: the same while it stands still.
         places: list[int] = []  # the moment each place was first seen at
         at: list[int] = []  # each moment's place
+        # Each place by its position and angles, as floats: -0.0 is 0.0.
+        seen: dict[tuple[float, ...], int] = {}
         for k in range(len(times)):
-            for j, first in enumerate(places):
-                if np.array_equal(positions[k], positions[first]) and np.array_equal(
-                    angles[k], angles[first]
-                ):
-                    at.append(j)
-                    break
-            else:
-                at.append(len(places))
+            j = seen.setdefault((*positions[k].tolist(), *angles[k].tolist()), len(places))
+            if j == len(places):
                 places.append(k)
+            at.append(j)
         names = tuple(place_name(item.name, j, times[first]) for j, first in enumerate(places))
         copies[kind, item.name] = tuple(names[j] for j in at)
         added[kind] += [
@@ -1117,7 +1117,8 @@ def _doppler(
     """Adds to ``out`` the mono ``signal`` (or the sound the source sends each way)
     heard along a walk with Doppler, through ``keys`` (the pair's response in ``result``
     at each place, the walker there at ``times`` and ``positions``; ``source_walks``
-    when the walker is the source): the late parts crossfaded from place to place, the
+    when the walker is the source): the late parts crossfaded from place to place (a
+    walking source's sound as it is sent, a walking listener's as it is heard), the
     early paths each through its own changing delay
     (:func:`acoustic_spaces.doppler.render`); and each of ``followers`` (lag, signal)
     the same way, ``lag`` samples later."""
@@ -1145,13 +1146,23 @@ def _doppler(
             chosen = dataclasses.replace(chosen, early=EarlyReflections.empty(chosen.bands))
             late[keys[k]] = chosen.spatial_impulse_response(fmt, rate, seed)
         ir = late[keys[k]]
-        first = max(begin - len(ir) + 1, 0)
         for lag, played in [(0, signal), *followers]:
-            piece = played[first:end]
-            if len(piece) == 0 or begin + lag >= length:
-                continue
-            wet = convolve(piece, ir)[begin - first : end - first]
-            wet = (weight[: len(wet)] * wet)[: length - begin - lag]
+            if source_walks:
+                # A walking source: what it sends while at the place, through all of
+                # the place's late part, heard after its early paths from there.
+                piece = played[begin:end]
+                piece = piece * weight[: len(piece), 0]
+                if len(piece) == 0 or begin + lag >= length:
+                    continue
+                wet = convolve(piece, ir)[: length - begin - lag]
+            else:
+                # A walking listener: what reaches the place while it is there.
+                first = max(begin - len(ir) + 1, 0)
+                piece = played[first:end]
+                if len(piece) == 0 or begin + lag >= length:
+                    continue
+                wet = convolve(piece, ir)[begin - first : end - first]
+                wet = (weight[: len(wet)] * wet)[: length - begin - lag]
             out[begin + lag : begin + lag + len(wet)] += wet
     responses = [result[key] for key in keys]
     steps = np.linalg.norm(np.diff(np.asarray(positions, dtype=float), axis=0), axis=1)
@@ -1265,6 +1276,16 @@ class PassBy:
         :attr:`duration_s`."""
         return self.exposure_a - 10.0 * math.log10(max(self.duration_s, 1e-12))
 
+    @property
+    def slow_a(self) -> EventLevels:
+        """The pass as a sound level meter reads an aircraft's for ECAC Doc 29
+        (:func:`~acoustic_spaces.parameters.event_levels`): the A-weighted level through
+        IEC 61672-1's slow time weighting (1 s), its mean square going linearly in time
+        from one place's :attr:`times` to the next; its highest, L_ASmax (``max_db``),
+        and the sound exposure level over the time it is within 10 dB of that, the
+        "10 dB-down" time (``exposure_db``, from ``start_s`` to ``end_s``)."""
+        return event_levels(self.times, self.levels_a)
+
 
 def _exposure(times: np.ndarray, levels: np.ndarray) -> np.ndarray:
     """10 lg of the integral over ``times`` (trapezoids) of 10^(L/10), per column."""
@@ -1276,29 +1297,14 @@ def _exposure(times: np.ndarray, levels: np.ndarray) -> np.ndarray:
         return 10.0 * np.log10(energy)
 
 
-def _place_levels(response, power) -> np.ndarray:
-    """A place's sound pressure level per octave band (dB) of a source of sound power
-    ``power``. In a band whose G is undefined (the few rays that reach a far place may
-    carry no energy in it, or too little of its decay to read), the level of the energy
-    the response holds from the direct sound's arrival, as outdoors: -inf where none
-    arrives."""
-    params = response.parameters()
-    if not np.isfinite(params.g).all():
-        energy = response.octave_energy()
-        first = min(int(response.direct_delay_s / response.time_step), energy.shape[1] - 1)
-        with np.errstate(divide="ignore"):
-            held = 10.0 * np.log10(energy[:, first:].sum(axis=1) / response._reference())
-        params = dataclasses.replace(params, g=np.where(np.isfinite(params.g), params.g, held))
-    return response.levels(power, params)
-
-
 def pass_by(walk: WalkResponses, source: str | None = None) -> PassBy:
     """The level along ``walk`` at its listener (a walking source) or of ``source`` (a
     walking listener; by default the only source): each place's level, of the source's
     sound power, at the time it is heard (quasi-static: as with the source standing
     there), with its maximum, the sound exposure level and the equivalent level. In a
     band where a place's G is undefined (no sound arrives in it, or its decay cannot be
-    read), the place's level is that of the energy its response holds, as outdoors."""
+    read), the place's level is that of the energy its response holds, as outdoors
+    (:meth:`~acoustic_spaces.engine.response.Response.levels_or_held`)."""
     from acoustic_spaces.parameters import a_weighted
 
     result = walk.result
@@ -1327,7 +1333,7 @@ def pass_by(walk: WalkResponses, source: str | None = None) -> PassBy:
     times = np.asarray(walk.points.times, dtype=float)
     if walk.kind == "sources":
         times = times + np.array([r.direct_delay_s for r in responses])
-    levels = np.array([_place_levels(r, p) for r, p in zip(responses, power, strict=True)])
+    levels = np.array([r.levels_or_held(p) for r, p in zip(responses, power, strict=True)])
     levels_a = np.array([a_weighted(row) for row in levels])
     return PassBy(source, listener, times, levels, levels_a)
 

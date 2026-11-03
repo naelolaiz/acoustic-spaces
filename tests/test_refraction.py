@@ -2,7 +2,9 @@
 
 import importlib
 import math
+import sys
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -280,6 +282,93 @@ def test_the_parabolic_equation_starts_wide(f) -> None:
     r1, r2 = math.hypot(r, height - 5.0), math.hypot(r, height + 5.0)
     exact = abs(np.exp(1j * k * r1) / r1 + np.exp(1j * k * r2) / r2)
     assert 20 * math.log10(abs(pressure) / exact) == pytest.approx(0.0, abs=0.2)
+
+
+def _windy(h) -> np.ndarray:
+    """The ``windy`` preset's effective speed of sound downwind (m/s) at heights h (m)."""
+    windy = Atmosphere.model_validate({"preset": "windy", "wind": {"direction_deg": 0}})
+    heights = np.atleast_1d(np.asarray(h, dtype=float))
+    return np.asarray(windy.sound_speed(heights, 20.0, np.array([1.0, 0.0])), dtype=float)
+
+
+def _band_db(pressure: np.ndarray, ranges: np.ndarray, zs: float, zr: float) -> np.ndarray:
+    """The level over the free field's (dB) of the band's slices ``pressure`` (F, n)."""
+    return 10 * np.log10(np.mean(np.abs(pressure) ** 2, axis=0) * np.hypot(ranges, zs - zr) ** 2)
+
+
+@pytest.mark.parametrize("independent", [True, False])
+def test_steep_sound_in_wind_against_the_fast_field_program(independent) -> None:
+    """The phase shift the narrow-angle equation takes at each step (the split step of
+    Salomons 2001, app. H) strays for sound that comes in steeply, at any step: from a
+    source 30 m up in the ``windy`` preset downwind over grass, the 100 Hz third-octave
+    band 47 to 117 m away (the reflection 34 to 15 degrees up) is up to 1.01 dB from the
+    fast field program (validation/ffp.py) at the full step (0.91 dB in one march) and
+    0.45 dB in steps half as long (0.35 dB). The wide-angle equation, which takes these
+    points, is within 0.1 dB of it at every point."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
+    import ffp
+
+    from acoustic_spaces.engine.diffraction import band_frequencies
+
+    f = band_frequencies(bands="third_octave")[0][3]
+    z = np.conj(surface_impedance(f, 200.0))
+    zs, zr = 30.0, 1.5
+    ranges = np.array([47.0, 53.0, 59.0, 66.0, 74.0, 83.0, 93.0, 104.0, 117.0])
+    heights = np.full(len(ranges), zr)
+    pressure = march(f, _windy, lambda r: z, zs, ranges, heights, 50.0, independent=independent)
+    reference = [ffp.pressure(fi, _windy, zs, ranges, zr, zi) for fi, zi in zip(f, z, strict=True)]
+    difference = _band_db(pressure, ranges, zs, zr) - _band_db(np.array(reference), ranges, zs, zr)
+    assert np.max(np.abs(difference)) < 0.1
+
+
+def test_flat_sound_and_still_air_keep_the_narrow_angle_equation(monkeypatch) -> None:
+    """Points the reflection reaches at 15 degrees or flatter get what the narrow-angle
+    march to all the points gives, bit for bit, whatever steep points share the run; in
+    wind the steep points get what the wide-angle equation gives them on its own, and in
+    still air, where a step is exact but at the ground, they keep the narrow-angle march,
+    as they do through weather zones all of still air, but not one windy zone among them.
+    Shorter steps are no closer: from 1 m up to 1.5 m up 200 m away, downwind in the
+    ``windy`` preset over grass, the 63 Hz band is within 0.3 dB of the wide-angle
+    equation at the full step (0.21 dB under the fast field program), and more than 0.6 dB
+    over it at a 32nd of the step on the same heights (0.93 dB over the program)."""
+    from acoustic_spaces.engine import parabolic, wide_angle
+    from acoustic_spaces.engine.diffraction import band_frequencies
+
+    f = band_frequencies()[0][0]
+    z = np.conj(surface_impedance(f, 200.0))
+    still = lambda h: np.full(np.shape(h), C)  # noqa: E731
+    # 6 m up 20 m away the reflection comes in 19 degrees up.
+    ranges, heights = np.array([20.0, 50.0, 200.0]), np.array([6.0, 1.5, 1.5])
+    flat = np.array([False, True, True])
+    for speed in (_windy, still):
+        for independent in (True, False):
+            args = (f, speed, lambda r: z, 1.0, ranges, heights, 30.0)
+            new = march(*args, independent=independent)
+            with monkeypatch.context() as m:
+                m.setattr(parabolic, "STEEP_DEG", 90.0)  # no point steep
+                narrow = march(*args, independent=independent)
+            assert np.array_equal(new[:, flat], narrow[:, flat])
+            assert np.array_equal(new[:, ~flat], narrow[:, ~flat]) == (speed is still)
+            if speed is _windy:
+                steep = (f, speed, lambda r: z, 1.0, ranges[~flat], heights[~flat], 30.0)
+                alone = wide_angle.march(*steep, independent=independent)
+                assert np.array_equal(new[:, ~flat], alone)
+    calm = lambda h: np.full(np.shape(h), C)  # noqa: E731
+    for zones, kept in (((still, calm), True), ((still, _windy), False)):
+        args = (f, still, lambda r: z, 1.0, ranges, heights, 30.0)
+        zoned = {"speed_at": lambda r, zones=zones: zones[int(r // 25.0) % 2]}
+        new = march(*args, **zoned)
+        with monkeypatch.context() as m:
+            m.setattr(parabolic, "STEEP_DEG", 90.0)
+            narrow = march(*args, **zoned)
+        assert np.array_equal(new[:, flat], narrow[:, flat])
+        assert np.array_equal(new[:, ~flat], narrow[:, ~flat]) == kept
+    args = (f, _windy, lambda r: z, 1.0, ranges[2:], heights[2:], 30.0)
+    wide = _band_db(wide_angle.march(*args), ranges[2:], 1.0, 1.5)[0]
+    assert abs(_band_db(march(*args), ranges[2:], 1.0, 1.5)[0] - wide) < 0.3
+    monkeypatch.setattr(parabolic, "RANGE_STEP_WAVELENGTHS", parabolic.RANGE_STEP_WAVELENGTHS / 32)
+    monkeypatch.setattr(parabolic, "RANGE_STEP_MIN_M", parabolic.RANGE_STEP_MIN_M / 32)
+    assert _band_db(march(*args), ranges[2:], 1.0, 1.5)[0] - wide > 0.6
 
 
 # -- simulations -----------------------------------------------------------------------

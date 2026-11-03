@@ -26,6 +26,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from acoustic_spaces import parameters as iso3382
 from acoustic_spaces.audio import read_wav, write_wav
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
@@ -191,7 +193,7 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
             mono = response.impulse_response(sample_rate)
         power = sources[source].power_db("octave") if source in sources else 94.0
         talker = sources[source].talker if source in sources else "male"
-        spl = response.levels(power, params)
+        spl = response.levels_or_held(power, params)
         entry = {
             "source": source,
             "listener": listener,
@@ -208,17 +210,22 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
         errors = response.standard_errors()
         if errors is not None:
             entry["standard_errors"] = errors.as_dict()
+        # In a band no sound arrives in (spl -inf), neither the level in free field nor
+        # the level without what was left out can be read back from spl: their
+        # A-weighted values are then NaN (null).
         if response.free_field is not None:
             relative = response.relative_to_free_field()
             entry["re_free_field_db"] = [_plain(v) for v in relative]
-            entry["re_free_field_a_db"] = _plain(
-                iso3382.a_weighted(spl) - iso3382.a_weighted(spl - relative)
-            )
+            with np.errstate(invalid="ignore"):
+                free = spl - relative
+            entry["re_free_field_a_db"] = _plain(iso3382.a_weighted(spl) - iso3382.a_weighted(free))
         loss = result.insertion_loss.get((source, listener))
         if loss is not None:
             entry["insertion_loss_db"] = [_plain(v) for v in loss]
+            with np.errstate(invalid="ignore"):
+                bare = spl + loss
             entry["insertion_loss_a_db"] = _plain(
-                iso3382.a_weighted(spl + loss) - iso3382.a_weighted(spl)
+                iso3382.a_weighted(bare) - iso3382.a_weighted(spl)
             )
         if long_term is not None and (source, listener) in long_term.levels:
             entry["long_term"] = _long_term_entry(long_term, (source, listener))

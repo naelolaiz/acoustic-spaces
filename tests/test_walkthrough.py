@@ -298,6 +298,53 @@ def test_several_movers_on_one_clock() -> None:
         simulate_movement(room, step_m=0.0)
 
 
+def test_a_mover_is_one_copy_per_distinct_place(monkeypatch: pytest.MonkeyPatch) -> None:
+    """simulate_movement gives a mover one copy per distinct place, numbered as first
+    seen: a wait at either end of a leg, and the way back to the start, take the copies
+    already made, as comparing each moment with every place so far (np.array_equal,
+    to which -0.0 is 0.0) did."""
+    from acoustic_spaces.walkthrough import Knots
+
+    frames = [
+        {"time_s": 1.0, "position": [3.0, 1.0, 1.5]},
+        {"time_s": 2.0, "position": [3.0, 1.0, 1.5]},
+        {"time_s": 3.0, "position": [1.0, 1.0, 1.5]},
+        {"time_s": 4.0, "position": [1.0, 1.0, 1.5]},
+    ]
+    scene = _scene(
+        sources=[{"name": "s", "position": [7.0, 5.0, 1.5]}],
+        listeners=[_walker({"keyframes": frames})],
+    )
+    plain = Knots.at
+
+    def signed(self, times):  # every other moment facing the same way at -0.0
+        positions, angles = plain(self, times)
+        assert not angles.any()
+        angles = angles.copy()
+        angles[1::2] *= -1.0
+        return positions, angles
+
+    monkeypatch.setattr(Knots, "at", signed)
+    movement = simulate_movement(Room.from_scene(scene), step_m=0.5, late_step_m=None)
+    positions, angles = knots(scene.listeners[0]).at(movement.times)
+    places: list[int] = []
+    at: list[int] = []
+    for k in range(len(movement.times)):
+        for j, first in enumerate(places):
+            if np.array_equal(positions[k], positions[first]) and np.array_equal(
+                angles[k], angles[first]
+            ):
+                at.append(j)
+                break
+        else:
+            at.append(len(places))
+            places.append(k)
+    names = movement.copies["listeners", "w"]
+    seen = list(dict.fromkeys(names))
+    assert [seen.index(name) for name in names] == at == [0, 1, 2, 3, 4, 4, 3, 2, 1, 0, 0]
+    assert seen == [place_name("w", j, movement.times[k]) for j, k in enumerate(places)]
+
+
 def test_a_walk_with_doppler_moves_alone_on_the_clock() -> None:
     """A walk with Doppler moving alone plays in a movement as in a walk of its own: at
     each listener, the same places, each early path through its changing delay and the

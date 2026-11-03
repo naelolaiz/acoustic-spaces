@@ -1489,6 +1489,22 @@ def _describe(sweep) -> str:
     )
 
 
+def _note_cut(responses, sweep, length_s: float | None) -> None:
+    """Say so when the responses came out shorter than ``--length`` asked."""
+    rate = sweep.sample_rate
+    if length_s is None or len(responses) >= round(length_s * rate):
+        return
+    why = (
+        "the next sweep's distortion lands right after it"
+        if sweep.repeats > 1
+        else "the recording ends that long after the sweep"
+    )
+    print(
+        f"note: the responses are {len(responses) / rate:.2f} s long, not {length_s:g} s: {why}",
+        file=sys.stderr,
+    )
+
+
 def _cmd_sweep(args: argparse.Namespace) -> int:
     try:
         sweep = _sweep_from(args)
@@ -1541,6 +1557,7 @@ def _cmd_deconvolve(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    _note_cut(responses, sweep, args.length)
     if args.loopback is not None:
         column = _channel_index(args.loopback, responses.shape[1], "loopback channel")
         if column is None:
@@ -1577,6 +1594,34 @@ def _reference_energy(args: argparse.Namespace, sample_rate: int, side: str = ""
     return free_field_reference(data[:, 0], rate, distance, filters=args.filters)
 
 
+def _note_bands(sample_rate: float, what: str = "the response", sti: bool = False) -> None:
+    """Say which octave bands a response at ``sample_rate`` does not hold whole: those
+    above half the rate are left out (and with ``sti``, the STI with them), and one that
+    reaches past it is analysed from its part below it."""
+    from acoustic_spaces.parameters import _band_label, _octave_band_edges
+
+    lower, upper = _octave_band_edges()
+    half = sample_rate / 2.0
+    out = [_band_label(f) for f, low in zip(OCTAVE_BANDS_HZ, lower, strict=True) if low >= half]
+    part = [
+        _band_label(f)
+        for f, low, high in zip(OCTAVE_BANDS_HZ, lower, upper, strict=True)
+        if low < half < high
+    ]
+    said = []
+    if out:
+        many = len(out) > 1
+        said.append(
+            f"the {' and '.join(out)} band{'s lie' if many else ' lies'} above half the "
+            f"sample rate and {'are' if many else 'is'} left out"
+            + (f", and the STI with {'them' if many else 'it'}" if sti else "")
+        )
+    if part:
+        said.append(f"the {part[0]} band is analysed from its part below {half:g} Hz")
+    if said:
+        print(f"note: {what} is at {sample_rate:g} Hz: {'; '.join(said)}", file=sys.stderr)
+
+
 def _analysis(ir, sample_rate: int, args: argparse.Namespace, reference, **more) -> dict:
     """Print and return the parameters of one impulse response; ``more`` are the lateral
     and directional responses for them, and ``iacc`` the IACC of the ears it is one of."""
@@ -1601,12 +1646,12 @@ def _analysis(ir, sample_rate: int, args: argparse.Namespace, reference, **more)
         ranges = [f"{r:6.0f}" if r != float("inf") else f"{'-':>6}" for r in decay.decay_range_db]
         print(f"{'decay range (dB)':<18}" + "".join(ranges))
     print(params.table())
-    speech = {
-        name: sti_from_impulse_response(
+    speech = {}
+    for name in ("sti", "stipa"):
+        value = sti_from_impulse_response(
             ir, sample_rate, filters=args.filters, noise=noise, stipa=name == "stipa"
         )
-        for name in ("sti", "stipa")
-    }
+        speech[name] = value if value == value else None
     echo = {}
     for kind in ECHO_CRITERIA:
         value, at = echo_criterion(ir, sample_rate, kind, filters=args.filters)
@@ -1696,6 +1741,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         return 1
     name = Path(args.ir).name
     report = {"file": name, "bands_hz": list(OCTAVE_BANDS_HZ), "channels": []}
+    _note_bands(sample_rate, name, sti=True)
     for c, title, more in channels:
         print(f"\n{name}, {title}")
         try:
@@ -1769,6 +1815,8 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         filters=args.filters,
         noise=noise,
     )
+    for side, (_, sample_rate, _, _) in sides.items():
+        _note_bands(sample_rate, f"the {side} response")
     report = {}
     for side, (ir, sample_rate, channel, _) in sides.items():
         name, start = Path(getattr(args, side)).name, onset(ir) / sample_rate
@@ -1838,6 +1886,7 @@ def _measured_pair(path: str, args: argparse.Namespace):
     channel = args.channel or 1
     if not 1 <= channel <= data.shape[1]:
         raise ValueError(f"{path} has no channel {channel} (it has {data.shape[1]})")
+    _note_bands(sample_rate, path)
     return from_impulse_response(
         data[:, channel - 1], sample_rate, filters=args.filters, noise=not args.no_noise
     )
@@ -1950,6 +1999,7 @@ def _cmd_measure(args: argparse.Namespace) -> int:
     except ImportError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    _note_cut(result.impulse_responses, sweep, args.length)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -1973,6 +2023,7 @@ def _cmd_measure(args: argparse.Namespace) -> int:
     }
     if result.latency_s is not None:
         print(f"latency from the loopback channel: {result.latency_s * 1e3:.2f} ms")
+    _note_bands(sweep.sample_rate, "the measurement", sti=True)
     for k, channel in enumerate(args.input):
         ir = result.impulse_responses[:, k]
         print(f"\ninput {channel}")
@@ -2898,7 +2949,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--sweep", required=True, help="the sweep's .json (or the .wav next to it)"
     )
     deconvolve.add_argument("--out", required=True, help="WAV file for the impulse responses")
-    deconvolve.add_argument("--length", type=float, help="response length, s (default: silence)")
+    deconvolve.add_argument(
+        "--length",
+        type=float,
+        help="response length, s (default: the silence; at most that with repeats, and with "
+        "one sweep the recording's length less the sweep's)",
+    )
     deconvolve.add_argument(
         "--loopback", type=int, help="channel of the recording wired to the output (1-based)"
     )
@@ -3009,7 +3065,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     measure.add_argument("--output", type=int, default=1, help="output channel (default 1)")
     measure.add_argument("--loopback", type=int, help="input wired to the output, for latency")
-    measure.add_argument("--length", type=float, help="response length, s (default: silence)")
+    measure.add_argument(
+        "--length", type=float, help="response length, s (default and at most: --silence)"
+    )
     measure.add_argument("--plot", action="store_true", help="save decay plots (needs viz)")
     _add_sweep_arguments(measure)
     _add_analysis_arguments(measure)

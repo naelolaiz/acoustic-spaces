@@ -917,8 +917,8 @@ def solve(plans: list[Planned]) -> list[dict[int, np.ndarray]]:
 
         ranges = np.array([m.range for m in needing])
         heights = np.array([m.height for m in needing])
-        # The wide-angle equation's frequencies share the threads the runs leave.
-        more = {"threads": share} if refraction.wide_angle else {}
+        # The wide-angle equation's frequencies (the narrow-angle one's at steep points)
+        # share the threads the runs leave.
         return solver.march(
             refraction.frequencies[band],
             speed,
@@ -929,7 +929,7 @@ def solve(plans: list[Planned]) -> list[dict[int, np.ndarray]]:
             top,
             speed_at=speed_at,
             independent=alone,
-            **more,
+            threads=share,
         )
 
     # The runs side by side, as many as the threads and the memory allow.
