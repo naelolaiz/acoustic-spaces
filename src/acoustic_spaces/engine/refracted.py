@@ -29,6 +29,14 @@ shadow zone, where no ray arrives, the parabolic equation gives the sound in the
 up to :data:`SHADOW_WAVE_MAX_BAND_HZ`, and above it the shadow deepens with frequency as
 it does over the octave below.
 
+Where the listener's way, seen from above, crosses a barrier or a building
+(:meth:`Refraction._barrier`), the paths in the vertical plane through the source and
+the listener keep their levels in still air, and in every band the weather changes them
+by the ratio of the parabolic equation's sound marched through it to that marched
+through still air, both with the barriers and buildings on the way inside (the
+``obstacles`` of :func:`~acoustic_spaces.engine.parabolic.march`). The paths round a
+barrier's end or a building's corner take the open ground's ratio in its bands.
+
 The late stage's rays bend too: the compiled tracer follows each one along its arcs
 through the layers, in chords (:func:`bending` gives it the atmosphere).
 

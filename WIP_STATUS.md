@@ -29,11 +29,18 @@ Building v1 from `wip/barrier-pe-design.md`, following its one-day plan (section
   ground's run on the same steps). The engine's weather effect equals design A's prototype on the same cut to
   0.01 dB in all eight bands. Tests: `tests/test_barriers_in_wind.py` (5).
 
+- Step 6 coded: `validation/barrier_wind.py` ports the full-wave mode matching (Evans 1983) and the started
+  PE (from the exact four-path field behind a rigid screen), plus the engine end to end against the full-wave
+  effect, with an acceptance table. The full-wave solution reproduces design A's numbers to 0.01 dB (near
+  screen, rigid ground, 125 Hz); the engine's error there is 0.03-0.08 dB (A: 0.06-0.09). Full runs going.
+
 ## Open
 
-Validation script (`validation/barrier_wind.py`), docs and CHANGELOG; V1-V6. Test suites of the neighbours
-(refraction, outdoor, long-term, insertion loss, turbulence, fast field program) running.
+V3 runs (full-wave cases, started PE 125 Hz-8 kHz, then the engine end to end); V1 (still air bit-identical:
+edge diffraction JSON identical so far, others running); V2; V4 convergence; V5 continuity; V6 map time;
+docs and CHANGELOG. Found while measuring V5: in still air main's level steps by up to 4.2 dB (63 Hz) where a
+listener crosses the shadow boundary of a barrier's end, because the paths over the top vanish there.
 
 ## Next
 
-Port the full-wave mode matching and the started PE into `validation/barrier_wind.py` and run them.
+Collect V3, run V4-V6, write the docs.

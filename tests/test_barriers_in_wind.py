@@ -8,6 +8,7 @@ import pytest
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import parabolic, refracted
+from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.simulate import early_paths
 
 WINDY = {"preset": "windy", "wind": {"direction_deg": 0}}
@@ -206,7 +207,5 @@ def test_a_breath_of_wind_behind_a_barrier_is_still_air() -> None:
     levels = []
     for atmosphere in (None, breath):
         result = simulate(Room.from_scene(scene(atmosphere=atmosphere, listeners=listeners)))
-        levels.append(
-            [10 * np.log10(result["s", f"l{k}"].early.energy.sum(axis=0)) for k in range(2)]
-        )
+        levels.append([10 * np.log10(total_energy(result["s", f"l{k}"].early)) for k in range(2)])
     np.testing.assert_allclose(levels[1], levels[0], atol=0.02)
