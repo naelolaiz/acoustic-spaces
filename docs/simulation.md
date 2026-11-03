@@ -533,10 +533,10 @@ simulation:
   each point the listener samples spread over the eight cells round them, weighted
   trilinearly (a cell is 0.2 m on the grid up to the 125 Hz band). Over 18 source
   positions across a cell and the grid's 26 axis and diagonal directions, with either
-  stencil and in every wave band (the direct sound's band energy over its first 50 ms),
-  the pressure was up to 4.1 dB off a point source's one cell away, 1.8 dB two cells
-  away, 0.78 dB three and 0.55 dB from four cells on, and the gradient's ratio to it up
-  to 8.3, 7.0, 1.7 and 0.63 dB, and 0.18 dB from eight cells on.
+  stencil, in the 63 and 125 Hz bands (the direct sound's band energy over its first
+  50 ms), the pressure was up to 4.1, 1.8, 0.78 and 0.55 dB off a point source's from
+  one, two, three and four cells away on, and the gradient's ratio to it up to 8.3 (7.5
+  exactly one cell away), 7.0, 1.7 and 0.63 dB, and 0.18 dB from eight cells on.
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177
   Hz for 125), through the same crossovers the impulse response synthesis uses. The
   parameters of those bands come from it too.
