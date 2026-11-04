@@ -131,6 +131,11 @@ BARRIER_COARSE = 0.4
 #: at 4 kHz 16 are within 0.21 dB of 32 (``validation/barrier_wind.py --only
 #: convergence``).
 BARRIER_SAMPLES = ((4000, 16), (8000, 32))
+#: Behind barriers, the frequencies of the bands that take more of them
+#: (``BARRIER_SAMPLES``) march in this many groups, each on the grid and in the steps of
+#: its own highest: marched together on the highest's, the lowest of an octave take
+#: four times the work they need, a band as a whole 2.2 times; in four groups 1.4 times.
+BARRIER_GROUPS = 4
 #: Their absorbing layer starts at least this many times higher than the highest top
 #: on the way.
 BARRIER_HEADROOM = 1.5
@@ -1591,20 +1596,37 @@ def solve(plans: list[Planned]) -> list[dict]:
                     )
                 extra["refracting"] = refracting
         # The wide-angle equation's frequencies (the narrow-angle one's at steep points)
-        # share the threads the runs leave.
-        return solver.march(
-            frequencies,
-            job.speed,
-            impedance,
-            refraction.zs,
-            ranges,
-            heights,
-            job.top,
-            speed_at=job.speed_at,
-            independent=job.alone,
-            threads=share,
-            **extra,
-        )
+        # share the threads the runs leave. Behind barriers the dense bands' frequencies
+        # march in groups, each on the grid and in the steps of its own highest.
+        groups = [np.arange(len(frequencies))]
+        if job.barrier and dense:
+            groups = np.array_split(groups[0], min(BARRIER_GROUPS, len(frequencies)))
+        out = []
+        for group in groups:
+            if len(groups) == 1:
+                at = impedance
+            else:
+
+                def at(r, group=group):
+                    value = np.broadcast_to(impedance(r), (len(frequencies),))
+                    return value[group]
+
+            out.append(
+                solver.march(
+                    frequencies[group],
+                    job.speed,
+                    at,
+                    refraction.zs,
+                    ranges,
+                    heights,
+                    job.top,
+                    speed_at=job.speed_at,
+                    independent=job.alone,
+                    threads=share,
+                    **extra,
+                )
+            )
+        return out[0] if len(out) == 1 else np.concatenate(out, axis=0)
 
     # The runs side by side, as many as the threads and the memory allow.
     biggest = max(

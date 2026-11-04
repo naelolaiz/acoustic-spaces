@@ -174,9 +174,12 @@ kept).
   (fails before: it raised). The map has not yet been rerun.
 - Cost, measured (one thread): four listeners 6 to 20 m up and one 1.5 m up behind a 4 m barrier, 8 m/s:
   229 s CPU, of it the wide-angle equation 191 s at 8 kHz and 24 s at 4 kHz (narrow 6.4 s at 8 kHz).
-  Next to try: marching a band's frequencies in groups on their own grids and steps (the lowest of an
-  octave are marched on the highest's: about 1.5 times the work with four groups, 2.2 times with one
-  group), for the runs behind barriers only, so that main's runs stay bit-identical.
+- **Frequency groups** (`BARRIER_GROUPS` = 4 in `engine/refracted.py`): behind barriers, the bands with
+  more samples (4 and 8 kHz, `BARRIER_SAMPLES`) march their frequencies in four groups, each on the grid
+  and in the steps of its own highest (the runs of main and the other bands are unchanged). The steep
+  probe above: 229 -> 171 s CPU (wide-angle 8 kHz 191 -> 139 s, 4 kHz 24 -> 18 s; narrow 8 kHz 6.4 ->
+  5.1 s); every band of the five listeners within 0.01 dB of before. Still to measure: the
+  convergence checks (`--only convergence`) and the started cases at 4-8 kHz, and a map's cost.
 - Reruns still going: `--only full_wave --case two --band 500 --wind -5` (ring and plane), then
   `--case roof --wind -5`, both on the 60 m domain, for the open items below.
 - `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).
