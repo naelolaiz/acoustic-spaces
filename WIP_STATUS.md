@@ -136,6 +136,49 @@ Two reviews rejected v1. Fixes so far (each with a test that fails before it):
   and the script's acceptance passes on the merged runs. Along a plane the full-wave effect is within 0.14 dB
   of the ring's (two barriers; 0.13 behind one).
 
+## Continued on `claude/acoustic-215-7khv20` (2026-11-04)
+
+This branch is `claude/project-thread-jd2ksn-barrier-pe` with main merged in (#215, the turning-ray fix,
+and the rest). Conflicts were in CHANGELOG.md, docs/validation.md (the known issues' intro and list) and
+`engine/refracted.py` (the runs' impedance: both the dense samples' admittance and main's rigid guard
+kept).
+
+- After the merge: `tests/test_parabolic_obstacles.py` and `tests/test_barriers_in_wind.py` 26 passed;
+  the outdoor files (refraction, native, diffraction, ffp, first_gather, turbulence, vegetation, wave,
+  coverage, insertion, long_term, outdoor, parabolic*, grazing, ground, edge_fade) 517 passed, 1 skipped
+  (matplotlib), all with `-W error`, before the two changes below.
+- **The roof between the grid's cells** (`parabolic._march`, new `parabolic.roof_share`). The march over
+  a roof no longer puts the rigid floor on a height step: the field is mirrored about the roof's own
+  height (the even extension shifted by exp(-2 i kz d), d the roof's height over the sample under it),
+  that sample weighed by the share of its cell above the roof, as the ground's is. The front face zeroes
+  the samples wholly below the roof; at the back face the field takes the roof's share. Measured with
+  the engine's runs behind barriers (`samples`, grid and top as `validation/barrier_wind.py`
+  `engine_levels`), a building 25 to 37 m away, roof 6.00 to 6.08 m, listeners 60 m and 120 m 1.5 m up
+  and 120 m 4 m up, `windy` preset:
+  - weather's effect, largest step per cm: before 0.10/0.14 dB at 2 kHz, 0.04 dB at 8 kHz downwind,
+    0.18 dB at 8 kHz upwind; now 0.05 dB at 2 kHz, 0.03 dB at 8 kHz down, 0.155 dB at 8 kHz up
+    (0.028 dB per mm there: smooth, no step); 500 Hz 0.094 -> 0.021 dB.
+  - the full-wave roof case of the test (125 Hz, 40-52 m, roof 6.0087 m): error -0.007/+0.037 dB
+    (5 m/s) and -0.004/-0.121 dB (-5 m/s), within the test's 0.2 dB; the test passes.
+  - end to end (`simulate`, 1 cm steps from 6.0 to 6.3 m): still air (before) up to 0.021 dB a cm; the
+    wind runs, before and after, were still running when this was pushed (probe:
+    `roof_end_to_end.py` in the session's scratchpad, not committed).
+- **A listener or map point on a barrier's line or a building's wall** (seen from above, within
+  `ON_OBSTACLE_M` = 1 um) made the runs behind barriers raise "the parabolic equation gave no sound in
+  still air" (the march takes a listener at an obstacle's range past it, where nothing gets through
+  below its top), which stopped a whole coverage map: two 4 m barriers 40 and 60 m from the source over
+  grass, 8 m/s, map spacing 12 m, a point 58 m out along 313.6 degrees on the first one. Now such a
+  listener keeps main's rule, and a whole degree's run with an obstacle at the listener's range counts
+  for nothing for it (`refracted._at`). Not yet covered by a test; the map has not yet been rerun.
+- Cost, measured (one thread): four listeners 6 to 20 m up and one 1.5 m up behind a 4 m barrier, 8 m/s:
+  229 s CPU, of it the wide-angle equation 191 s at 8 kHz and 24 s at 4 kHz (narrow 6.4 s at 8 kHz).
+  Next to try: marching a band's frequencies in groups on their own grids and steps (the lowest of an
+  octave are marched on the highest's: about 1.5 times the work with four groups, 2.2 times with one
+  group), for the runs behind barriers only, so that main's runs stay bit-identical.
+- Reruns still going: `--only full_wave --case two --band 500 --wind -5` (ring and plane), then
+  `--case roof --wind -5`, both on the 60 m domain, for the open items below.
+- `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).
+
 ## Open
 
 - Reruns going on the 60 m domain (upwind, 5 m/s): two barriers at 500 Hz (ring and plane) and the roof over

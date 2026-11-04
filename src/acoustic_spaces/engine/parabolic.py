@@ -131,9 +131,9 @@ def march(
 
     ``obstacles`` (near, far, top) (m) stand across the way, ``top`` m above the ground:
     a thin screen at ``near`` where ``far`` is ``near``, otherwise a building from
-    ``near`` to ``far`` along the way with its rigid roof at ``top`` (rounded to a height
-    step). ``steps_per_wavelength`` sets the height step at the highest frequency (the
-    wide-angle equation's in proportion)."""
+    ``near`` to ``far`` along the way with its rigid roof at ``top``, between the height
+    steps where it falls. ``steps_per_wavelength`` sets the height step at the highest
+    frequency (the wide-angle equation's in proportion)."""
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
     common = (frequencies, speed, impedance, zs)
@@ -198,6 +198,15 @@ def open_share(z: np.ndarray, top: float) -> np.ndarray:
     low = np.maximum(z - 0.5 * dz, 0.0)
     high = z + 0.5 * dz
     return np.clip((high - top) / (high - low), 0.0, 1.0)
+
+
+def roof_share(z: np.ndarray, roof: float) -> np.ndarray:
+    """(n,) the share of each height step's cell on the grid of heights ``z`` (m) that
+    lies above a rigid roof ``roof`` m up: the sample under the roof's mirror plane
+    counts for the share of its cell above it (half a cell with the roof on it), the
+    way the ground's sample does."""
+    dz = float(z[1] - z[0])
+    return np.clip((z + 0.5 * dz - roof) / dz, 0.0, 1.0)
 
 
 def _obstacles(obstacles) -> tuple[tuple[float, float, float], ...]:
@@ -292,33 +301,37 @@ def _march(
         _starter(ka[:, None] * (z - zs)) + here.normal[:, None] * _starter(ka[:, None] * (z + zs))
     )
     key = here.key
-    floor = 0  # the height step of the roof the field marches over, or 0 over the ground
-    roofs: dict[tuple[int, float], tuple] = {}
+    roof = 0.0  # the height (m) of the roof the field marches over, or 0 over the ground
+    roofs: dict[tuple[float, float], tuple] = {}
 
     def over_roof(psi: np.ndarray, r: float, dr: float) -> np.ndarray:
-        # A step over a rigid roof at height step ``floor``: the march on the heights
-        # from there up, reflecting off it as off a rigid ground.
+        # A step over a rigid roof ``roof`` m up, between the grid's samples: the march
+        # on the heights from the sample under it up, reflecting off it as off a rigid
+        # ground (the field mirrored about it, each sample weighed by the share of its
+        # cell above it, as a screen's are).
+        floor = int(roof / dz)
         part = n - floor
-        if (floor, dr) not in roofs:
+        if (roof, dr) not in roofs:
             if len(roofs) > 4:
                 roofs.clear()
             heights_kz = 2.0 * math.pi * np.fft.fftfreq(2 * part, d=dz)
             up = np.sqrt((ka[:, None] ** 2 - heights_kz[None, :] ** 2).astype(complex))
             up = np.where(up.imag < 0.0, -up, up)
-            roofs[(floor, dr)] = (
+            roofs[(roof, dr)] = (
                 np.exp(0.5j * dr * delta[:, floor:]),
                 np.exp(1j * dr * (up - ka[:, None])),
+                np.exp(-2j * heights_kz * (roof - z[floor])),
                 (-np.arange(2 * part)) % (2 * part),
+                roof_share(z[floor:], roof),
             )
-        half, propagate, flip = roofs[(floor, dr)]
+        half, propagate, mirror, flip, share = roofs[(roof, dr)]
         if screen is not None:
             half = half * np.exp(0.5j * ka[:, None] * screen(r, dr, z[floor:])[None, :])
         screened = half * psi[:, floor:]
         tilted_roof = np.zeros((len(f), 2 * part), dtype=complex)
-        tilted_roof[:, :part] = screened
-        tilted_roof[:, 0] *= 0.5
+        tilted_roof[:, :part] = share[None, :] * screened
         spectrum = np.fft.fft(tilted_roof, axis=1) * dz
-        field = np.fft.ifft((spectrum + spectrum[:, flip]) * propagate, axis=1) / dz
+        field = np.fft.ifft((spectrum + mirror * spectrum[:, flip]) * propagate, axis=1) / dz
         out = np.zeros_like(psi)
         out[:, floor:] = half * field[:, :part]
         return out
@@ -338,7 +351,7 @@ def _march(
                 delta = (k - ka[:, None]) + 1j * LAYER_STRENGTH * depth**2
                 steps.clear()
                 roofs.clear()
-        if floor:
+        if roof > 0.0:
             return over_roof(psi, r, dr)
         half, propagate = stepping(dr)
         if screen is not None:
@@ -374,32 +387,36 @@ def _march(
         return half * psi_next
 
     # Where the march meets the obstacles: (range, what: "screen" its top (m), "roof" or
-    # "behind" a roof's height step).
+    # "behind" a roof's height (m)).
     events = []
+    highest = (n - 2) * dz
     for near, far, top_at in obstacles:
         if far == near:
             events.append((near, "screen", top_at))
-        elif int(round(top_at / dz)) > 0:
-            events.append((near, "roof", min(int(round(top_at / dz)), n - 2)))
-            events.append((far, "behind", min(int(round(top_at / dz)), n - 2)))
+        else:
+            events.append((near, "roof", min(top_at, highest)))
+            events.append((far, "behind", min(top_at, highest)))
     events.sort(key=lambda e: e[0])
-    roofs_over: list[int] = []  # the roofs the march is over (height steps)
+    roofs_over: list[float] = []  # the roofs the march is over (m)
 
     def meet(psi: np.ndarray, event) -> np.ndarray:
-        # The field just past an obstacle the march has reached: above a screen's top,
-        # or above the highest roof it is over.
-        nonlocal floor
+        # The field just past an obstacle the march has reached: above a screen's top
+        # (each sample weighed by the share of its cell above it), above the highest
+        # roof it is over, or above the roof it has just left.
+        nonlocal roof
         _, what, value = event
         if what == "screen":
             return psi * open_share(z, value)[None, :]
         if what == "roof":
+            # The march over the roof weighs the sample under it itself.
             roofs_over.append(value)
-        else:
-            roofs_over.remove(value)
-        floor = max(roofs_over, default=0)
-        psi = psi.copy()
-        psi[:, :floor] = 0.0
-        return psi
+            roof = max(roofs_over)
+            psi = psi.copy()
+            psi[:, : int(roof / dz)] = 0.0
+            return psi
+        roofs_over.remove(value)
+        roof = max(roofs_over, default=0.0)
+        return psi * roof_share(z, value)[None, :]
 
     for index in order:
         goal = ranges[index]
@@ -513,4 +530,4 @@ class _Ground:
             self.fade[row] = 0.5 * (1.0 + np.cos(math.pi * t))
 
 
-__all__ = ["footprint", "march", "open_share"]
+__all__ = ["footprint", "march", "open_share", "roof_share"]

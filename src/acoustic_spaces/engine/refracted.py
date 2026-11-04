@@ -134,6 +134,10 @@ BARRIER_SAMPLES = ((4000, 16), (8000, 32))
 #: Their absorbing layer starts at least this many times higher than the highest top
 #: on the way.
 BARRIER_HEADROOM = 1.5
+#: A listener this close (m) to a barrier's line or a building's wall, seen from above,
+#: stands on it: the parabolic equation takes it past it, where nothing below its top
+#: gets through, so main's rule applies there.
+ON_OBSTACLE_M = 1e-6
 #: A run along a whole degree counts fully for a listener behind barriers while the last
 #: of them along it stands at least this share as far before the listener as along its
 #: own way, and less as it comes nearer (:meth:`Refraction._cuts_for`).
@@ -843,14 +847,15 @@ class Refraction:
         straight way, seen from above, crosses no barrier or building, an object of the
         model file stands in it, the source or the listener stands on a building, the
         listener is nearer than the open ground's parabolic equation goes
-        (``WAVE_MIN_RANGE``), the paths have no order, or none lies in the plane."""
+        (``WAVE_MIN_RANGE``), stands on a barrier's line or a building's wall seen from
+        above (``ON_OBSTACLE_M``), the paths have no order, or none lies in the plane."""
         layout = self.layout
         if not layout.barriers and not layout.buildings:
             return None
         if self.max_order < 1 or reach < WAVE_MIN_RANGE * (self.zs + zr):
             return None
         own = self._above(layout.obstacles_along(self.source[:2], towards, reach))
-        if not own:
+        if not own or _at(own, reach):
             return None
         ends = np.array([self.source[:2], listener[:2]])
         if any(in_polygon(ends, footprint).any() for _, footprint, _ in layout.buildings):
@@ -890,9 +895,10 @@ class Refraction:
         the ``BARRIER_BLEND`` round the halfway direction, so that the effect changes
         smoothly from one to the next. A direction counts for nothing where more or
         fewer obstacles stand short of the listener along it than along its own way, or
-        the listener would be under a building's roof there, and for less where the
-        last of them stands nearer the listener than ``BARRIER_CLOSE`` times as far as
-        along its own way (a listener close behind a slanting barrier or wall); the
+        the listener would be under a building's roof or on a barrier or a wall there,
+        and for less where the last of them stands nearer the listener than
+        ``BARRIER_CLOSE`` times as far as along its own way (a listener close behind a
+        slanting barrier or wall); the
         listener's own way, in a run of its own, takes the weight they lose."""
         angle = math.degrees(math.atan2(towards[1], towards[0]))
         lower = math.floor(angle / AZIMUTH_STEP_DEG)
@@ -906,7 +912,7 @@ class Refraction:
             azimuth = (n * AZIMUTH_STEP_DEG) % 360.0
             cut = self._cut(azimuth)
             short = [o for o in cut if o[0] < reach]
-            if len(short) != len(own):
+            if len(short) != len(own) or _at(cut, reach):
                 continue
             fit = (reach - max(far for _, far, _ in short)) / (BARRIER_CLOSE * behind)
             weight *= min(max(fit, 0.0), 1.0)
@@ -1664,6 +1670,13 @@ def _on_edges(edges, point: np.ndarray, tolerance: float) -> np.ndarray:
     along = np.clip(np.einsum("ij,ij->i", point - edges.start, edges.direction), 0.0, edges.length)
     closest = edges.start + edges.direction * along[:, None]
     return np.flatnonzero(np.linalg.norm(point - closest, axis=1) <= tolerance)
+
+
+def _at(cut: tuple, reach: float) -> bool:
+    """Whether a barrier or a building's wall of ``cut`` ((near, far, top)) stands within
+    ``ON_OBSTACLE_M`` of ``reach`` m along the way: the march there gives a listener the
+    field past it, none below its top."""
+    return any(min(abs(near - reach), abs(far - reach)) <= ON_OBSTACLE_M for near, far, _ in cut)
 
 
 def _departure(points: np.ndarray) -> np.ndarray:
