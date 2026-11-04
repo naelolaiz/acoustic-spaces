@@ -596,7 +596,7 @@ step in turn, leaving out what is there already (the music, the scenes, the simu
   houses). The breeze and the cool air bend the sound down to the water, which gives it
   back almost whole. `scene_still.yaml` is the same scene with no atmosphere.
 - **What it gives.** At the bedroom window the evening's weather makes the song 5.3 to
-  6.0 dB(A) louder than still air would, in the garden 5.3 to 5.4 dB; behind the stage,
+  6.0 dB(A) louder than still air would, in the garden 5.0 to 5.1 dB; behind the stage,
   upwind, it is 0.5 to 0.7 dB quieter, and on the boat 0.9 dB quieter (three runs, each
   with rays of its own). The far shore gains most: what the weather bends down comes in
   off the water as well as straight, and at the window the house's wall gives back each

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Fixed: a curved ray's level near where it runs level at the listener, the source, the
+  ground, a table's row or the edge of a layer whose speed does not change with height
+  came out several dB off, 20 dB and more at worst, and many such rays were missed; the
+  parts of its spread that grow without bound there are now taken in closed form where
+  that proves the steadier way, a ray whose spread no way gives steadily is left out, and
+  the direct ray through air whose speed does not change with height is the straight one
+  (a ray that turns once between ends at about the same height now follows a preset's
+  sampled profile, up to 0.33 dB off its smooth one).
+  Neither a ground that absorbs nothing (in the parabolic equation) nor a layer whose
+  speed changes by less than 5.6e-9 m/s per metre sets off a RuntimeWarning any more.
 - Editor: the Run demo window keeps the options changed in it for the next time it
   opens, each demo its own (the listeners, the sources' files, what moves and the
   format per scene file), names them above **Run**, and **Defaults** puts them back.

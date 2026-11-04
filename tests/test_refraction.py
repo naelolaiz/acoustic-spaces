@@ -1,14 +1,18 @@
 """Wind and temperature outdoors: the atmosphere, curved rays, the parabolic equation."""
 
 import importlib
+import itertools
 import math
 import sys
 import time
+import warnings
+from decimal import Decimal, localcontext
 from pathlib import Path
 
 import numpy as np
 import pytest
 from pydantic import ValidationError
+from scipy.optimize import brentq
 from test_ground import exact_reflection
 
 from acoustic_spaces import Room, Scene, simulate
@@ -170,8 +174,7 @@ def test_downwind_more_paths_upwind_a_shadow() -> None:
 def test_the_level_of_rays_that_turn_in_the_air() -> None:
     """Against an independent ray tracer (fourth-order Runge-Kutta in 2 cm steps) on the
     smooth profile, 5 m/s of wind 10 m up, from 5 m up to 1.5 m up downwind: the level
-    over a straight path's (dB). Taken from the layers' local slopes alone, the 300 m
-    paths came out 2.2 dB too low."""
+    over a straight path's (dB)."""
     windy = Atmosphere.model_validate({"preset": "windy"})
     rays = Rays(Profile.of(windy, 20.0, np.array([1.0, 0.0])), 5.0)
     for distance, bounces, reference in ((100.0, 0, -1.34), (300.0, 0, -3.76), (300.0, 1, -3.07)):
@@ -179,6 +182,963 @@ def test_the_level_of_rays_that_turn_in_the_air() -> None:
         i = list(found.ground_bounces).index(bounces)
         level = 10 * math.log10(found.spreading[i] * found.length[i] ** 2)
         assert level == pytest.approx(reference, abs=0.2)
+
+
+def _level(found, i: int = 0) -> float:
+    """A ray's level over free field at its length (dB)."""
+    return 10 * math.log10(found.spreading[i] * found.length[i] ** 2)
+
+
+@pytest.mark.parametrize(
+    ("g", "zs", "lowest", "highest", "reference"),
+    [
+        (0.17, 1.0, 6.3, 6.6, -0.016),
+        (-0.17, 10.0, 4.4, 4.8, -0.016),
+        (0.17, 1.0, 3.6, 4.0, -0.010),
+        (-0.17, 10.0, 6.0, 6.4, -0.012),
+    ],
+)
+def test_the_level_of_a_ray_that_turns_next_to_the_listener(
+    g, zs, lowest, highest, reference
+) -> None:
+    """In c = 340 + g z the rays are arcs of circles centred 340 / |g| = 2000 m below
+    the ground (above it where g < 0). 150 m from a source 1 m up in 0.17/s, a listener
+    6.3 to 6.6 m up is 0.01 to 4.4 mm below the top of the direct ray's arc, one 3.6 to
+    4.0 m up 0.30 to 0.41 m below it; from 10 m up in -0.17/s, one 4.4 to 4.8 m up is
+    0.09 to 8.8 mm above its bottom, one 6.0 to 6.4 m up 0.12 to 0.19 m above it. The
+    ray's level over free field at its length, from the ray tube of the arc in closed
+    form, is -0.016 dB (-0.0154 to -0.0163) next to the turn, -0.010 dB (-0.0097 to
+    -0.0106) and -0.012 dB (-0.0120 to -0.0128) further off."""
+    rays = Rays(linear(g), zs)
+    for zr in np.arange(lowest, highest + 0.005, 0.01):
+        found = rays.eigenrays(zr, 150.0, 0)
+        assert len(found) == 1
+        assert _level(found) == pytest.approx(reference, abs=0.005)
+
+
+@pytest.mark.parametrize(("g", "zs", "reference"), [(0.17, 1.0, -0.0162), (-0.17, 10.0, -0.0164)])
+def test_the_level_of_a_ray_that_grazes_the_listener_or_the_source(g, zs, reference) -> None:
+    """150 m from a source zs up in c = 340 + g z, the direct ray turns at the
+    listener's height where that is 6.614 m (0.17/s, from 1 m up) or 4.355 m (-0.17/s,
+    from 10 m up). For listeners 0.0001 to 1 mm either side of it the ray's level over
+    free field at its length is -0.0162 and -0.0164 dB, from the arc in closed form (to
+    0.0001 dB). With the source there and the listener at zs it is (c_s / c_r)^2 higher,
+    +0.0081 and +0.0082 dB, for sources 0.0001 to 3 mm either side, within 0.24 mm of
+    which the ray leaves the source flatter than the first rays the search launches."""
+    zc = -340.0 / g
+    graze = zc + math.copysign(math.hypot(150.0, zs - zc), g)
+    for offset in (1e-7, 1e-6, 1e-5, 1e-4, 1e-3, -1e-7, -1e-6, -1e-5, -1e-4, -1e-3):
+        found = Rays(linear(g), zs).eigenrays(graze + offset, 150.0, 0)
+        assert len(found) == 1
+        assert _level(found) == pytest.approx(reference, abs=0.002)
+    for offset in (1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 3e-3, -1e-7, -1e-6, -1e-5, -1e-4, -1e-3, -3e-3):
+        source = graze + offset
+        found = Rays(linear(g), source).eigenrays(zs, 150.0, 0)
+        assert len(found) == 1
+        louder = 20 * math.log10((340.0 + g * source) / (340.0 + g * zs))
+        assert _level(found) == pytest.approx(reference + louder, abs=0.002)
+
+
+@pytest.mark.parametrize(("g", "zs"), [(0.01, 1.0), (-0.01, 10.0)])
+def test_rays_that_graze_the_listener_or_the_source_in_a_weak_gradient(g, zs) -> None:
+    """The same in 0.01/s (from 1 m up, the ray turning 1.331 m up) and -0.01/s (from
+    10 m up, 9.669 m up), for listeners 0.01 um to 1 mm and sources 0.01 um to 0.01 mm
+    either side: one ray, at p^3 c_s^2 |g| L^2 / (X s_s) over free field at its length L
+    (-0.00006 dB; with the source there and the listener at zs, (c_s / c_r)^2 higher),
+    from the arc in closed form. Near there the range changes by more than the search's
+    tolerance from one float of p to the next (as the square root of how far p is from
+    grazing), and a ray leaving the source within 0.1 mm of it is flatter than the first
+    one the search launches."""
+    zc = -340.0 / g
+    graze = zc + math.copysign(math.hypot(150.0, zs - zc), g)
+
+    def level(z_end: float, z_turn: float) -> float:
+        p = 1.0 / (340.0 + g * z_turn)
+        c = 340.0 + g * z_end
+        length = math.acos(p * c) / (p * abs(g))
+        return 10 * math.log10(
+            p**3 * c * c * abs(g) * length**2 / (150.0 * math.sqrt(1 - (p * c) ** 2))
+        )
+
+    offsets = [k * 10.0**e for e in range(-8, -2) for k in (1, -1)]
+    for offset in offsets:
+        found = Rays(linear(g), zs).eigenrays(graze + offset, 150.0, 0)
+        assert len(found) == 1
+        assert _level(found) == pytest.approx(level(zs, graze), abs=0.0005)
+    for offset in offsets[:-4]:
+        found = Rays(linear(g), graze + offset).eigenrays(zs, 150.0, 0)
+        assert len(found) == 1
+        louder = 20 * math.log10((340.0 + g * (graze + offset)) / (340.0 + g * zs))
+        assert _level(found) == pytest.approx(level(zs, graze + offset) + louder, abs=0.0005)
+
+
+def test_the_level_of_a_ray_that_grazes_the_ground() -> None:
+    """In c = 340 - 0.17 z, 300 m from a source 1 m up, the ray off the ground grazes it
+    for a listener 14.06 m up. For listeners 14.20 to 14.23 m up it meets the ground
+    0.016 to 0.020 degrees from the horizontal, at -22.398, -22.090, -21.803 and
+    -21.534 dB over free field at its length, from the arc in closed form. For listeners
+    14.07 to 14.18 m up, both that ray (-35.657 to -23.087 dB) and the one that turns
+    just above the ground (+0.012 dB) leave the source either side of the ray that runs
+    level at the ground, within 1.2e-5 of its p, between the same two rays the search
+    launches, where the range turns back."""
+    rays = Rays(linear(-0.17), 1.0)
+    for zr, reference in ((14.20, -22.398), (14.21, -22.090), (14.22, -21.803), (14.23, -21.534)):
+        found = rays.eigenrays(zr, 300.0, 1)
+        off_ground = [i for i in range(len(found)) if found.ground_bounces[i] == 1]
+        assert len(off_ground) == 1
+        assert _level(found, off_ground[0]) == pytest.approx(reference, abs=0.05)
+    for zr, reference in ((14.07, -35.657), (14.10, -28.135), (14.13, -25.526), (14.18, -23.087)):
+        found = rays.eigenrays(zr, 300.0, 1)
+        assert sorted(found.ground_bounces) == [0, 1]
+        for i in range(2):
+            expected = reference if found.ground_bounces[i] else 0.012
+            assert _level(found, i) == pytest.approx(expected, abs=0.002)
+
+
+def test_the_levels_of_rays_in_a_preset_against_its_smooth_profile() -> None:
+    """Against the ray tube of the smooth profile (its ray equations and their
+    variations integrated numerically) of the `windy` preset downwind at 20 C, from a
+    source 1 m up to a listener 8.5 m up and 600 m away: the direct ray, the ray off the
+    ground and the two that turn back down after it have levels over free field at their
+    lengths of -4.927, -4.751, 3.199 and 3.488 dB; the layers' are within 0.2 dB of them."""
+    windy = Atmosphere.model_validate({"preset": "windy"})
+    found = Rays(Profile.of(windy, 20.0, np.array([1.0, 0.0])), 1.0).eigenrays(8.5, 600.0, 1)
+    levels = sorted(_level(found, i) for i in range(len(found)))
+    assert levels == pytest.approx([-4.927, -4.751, 3.199, 3.488], abs=0.2)
+
+
+def test_the_level_of_a_ray_from_a_level_layer() -> None:
+    """In c = 340 m/s up to 2 m and 340 + 0.17 (z - 2) above, 150 m from a source 1 m
+    up, the ray to a listener 5.0 to 6.15 m up goes straight up to 2 m and turns 11 cm to
+    8 mm above the listener. Its range is p c0 (2 - zs) / s0 + (s0 + sr) / (p g), s0 and
+    sr its sines at 2 m and at the listener, and its level over free field at its
+    length, from that in closed form, +0.65 to +0.48 dB."""
+    z = np.union1d(node_heights(None), [2.0])
+    rays = Rays(Profile(z, 340.0 + 0.17 * np.maximum(z - 2.0, 0.0)), 1.0)
+
+    def level(zr: float) -> float:
+        cr = 340.0 + 0.17 * (zr - 2.0)
+
+        def sine(p, c):
+            return math.sqrt(1.0 - (p * c) ** 2)
+
+        def distance(p):
+            return p * 340.0 / sine(p, 340.0) + (sine(p, 340.0) + sine(p, cr)) / (p * 0.17)
+
+        p = brentq(lambda q: distance(q) - 150.0, 0.9 / cr, (1.0 - 1e-15) / cr, xtol=1e-20)
+        s0, sr = sine(p, 340.0), sine(p, cr)
+        slope = 340.0 / s0**3 - (1.0 / s0 + 1.0 / sr) / (p * p * 0.17)
+        length = 1.0 / s0 + (math.acos(p * 340.0) + math.acos(p * cr)) / (p * 0.17)
+        return 10 * math.log10(p * 340.0**2 / (150.0 * abs(slope) * s0 * sr) * length**2)
+
+    for zr in np.arange(5.0, 6.155, 0.05):
+        found = rays.eigenrays(zr, 150.0, 0)
+        assert len(found) == 1
+        assert _level(found) == pytest.approx(level(zr), abs=0.002)
+
+
+@pytest.mark.parametrize("above", [0.05, 0.4])
+def test_the_level_of_a_ray_from_next_to_a_corner_of_the_profile(above) -> None:
+    """In c = 340 + 0.17 z up to the node at 6.291 m and a gradient of 0.05 or 0.4/s
+    above it, a row of the profile there (as a table's), sources 0.1 um below and above
+    that node, listeners 1 m up 0.5 and 2 m beyond the 145.6 m where the ray that turns
+    at the node comes down to them: the ray leaves the source almost level and turns
+    just above the node, passing it once or twice besides. Its range is the sum of
+    k s / (p g) over the source, the node and the listener, s its sine there and g the
+    gradient each side, and its level over free field at its length, from that in closed
+    form, -7.71 to -7.57 dB (0.05/s) and +7.68 to +6.56 dB (0.4/s); the layers' are
+    within 0.005 dB of it."""
+    z = node_heights(None)
+    zn = float(z[np.argmin(np.abs(z - 6.29))])
+    c = 340.0 + 0.17 * np.minimum(z, zn) + above * np.maximum(z - zn, 0.0)
+    profile = Profile(z, c, rows=np.array([zn]))
+
+    def level(zs: float, distance: float) -> float:
+        def speed(h):
+            return 340.0 + 0.17 * min(h, zn) + above * max(h - zn, 0.0)
+
+        def sine(p, h):
+            return math.sqrt(max(1.0 - (p * speed(h)) ** 2, 0.0))
+
+        # (k, height, gradient): the range is the sum of k s / (p g).
+        if zs < zn:
+            terms = [(1, zs, 0.17), (-2, zn, 0.17), (2, zn, above), (1, 1.0, 0.17)]
+        else:
+            terms = [(1, zs, above), (1, zn, above), (-1, zn, 0.17), (1, 1.0, 0.17)]
+        p = brentq(
+            lambda q: sum(k * sine(q, h) / (q * g) for k, h, g in terms) - distance,
+            0.99 / speed(zn),
+            1.0 / speed(zn),
+            xtol=1e-22,
+        )
+        slope = -sum(k / (sine(p, h) * g) for k, h, g in terms) / (p * p)
+        angle = {h: math.acos(min(p * speed(h), 1.0)) for h in (zs, zn, 1.0)}
+        if zs < zn:
+            arcs = abs(angle[zs] - angle[zn]) + abs(angle[zn] - angle[1.0])
+            length = arcs / (p * 0.17) + 2 * angle[zn] / (p * above)
+        else:
+            arcs = abs(angle[zn] - angle[1.0])
+            length = (angle[zs] + angle[zn]) / (p * above) + arcs / (p * 0.17)
+        spreading = p * speed(zs) ** 2 / (distance * abs(slope) * sine(p, zs) * sine(p, 1.0))
+        return 10 * math.log10(spreading * length**2)
+
+    graze = math.sqrt((zn + 2000.0) ** 2 - 2001.0**2)
+    for beyond in (0.5, 2.0):
+        for zs in (zn - 1e-7, zn + 1e-7):
+            found = Rays(profile, zs).eigenrays(1.0, graze + beyond, 0)
+            turned = [i for i in range(len(found)) if found.launch[i] > 0.0]
+            assert len(turned) == 1
+            assert _level(found, turned[0]) == pytest.approx(level(zs, graze + beyond), abs=0.005)
+
+
+def test_the_level_of_rays_that_turn_next_to_a_table_s_rows() -> None:
+    """A table of no wind up to 2 m, then 3, 6 and 8 m/s at 10, 50 and 200 m (15 C), whose
+    gradient changes sharply at its rows. 150 m downwind from a source 1 m up, the rays
+    to listeners 0.75 m up turn 1.80 and 0.18 m above the 2 m row, those to listeners
+    5.75 and 7.75 m up 3.1 and 1.6 m below the 10 m row, and the one to a listener
+    9.75 m up 5 um above it. Against the exact range of the profile (linear between its
+    nodes: its layers' arcs summed in closed form, differentiated at high precision),
+    their levels over free field at their lengths are +2.802, +2.810, +0.401, +0.290 and
+    -35.217 dB."""
+    table = [[0.0, 15.0, 0.0], [2.0, 15.0, 0.0], [10.0, 15.0, 3.0], [50.0, 15.0, 6.0]]
+    atmosphere = Atmosphere.model_validate({"table": [*table, [200.0, 15.0, 8.0]]})
+    rays = Rays(Profile.of(atmosphere, 15.0, np.array([1.0, 0.0])), 1.0)
+    for zr, references in (
+        (0.75, (2.802, 2.810)),
+        (5.75, (0.401,)),
+        (7.75, (0.290,)),
+        (9.75, (-35.217,)),
+    ):
+        found = rays.eigenrays(zr, 150.0, 0)
+        turned = [i for i in np.argsort(found.p) if found.launch[i] > 0.0]
+        assert len(turned) == len(references)
+        for i, reference in zip(turned, references, strict=True):
+            assert _level(found, i) == pytest.approx(reference, abs=0.02)
+
+
+def _on(found, up: bool, arrives_up: bool, cycle: int) -> list[int]:
+    """The rays of ``found`` on one branch."""
+    return [
+        i
+        for i, b in enumerate(found.branch)
+        if (b.up, b.arrives_up, b.cycle) == (up, arrives_up, cycle)
+    ]
+
+
+def _exact_range(profile, zs: float, zr: float, p: float, branch, ground: bool) -> Decimal:
+    """The range of the ray with parameter ``p`` along ``branch`` from a source at ``zs``
+    to the height ``zr`` (off the ground where ``ground``, else turning low in the air),
+    summed over the layers of ``profile`` (straight between its nodes, level above the
+    last) in closed form to 40 digits."""
+    with localcontext() as context:
+        context.prec = 40
+        z = [Decimal(float(h)) for h in profile.z]
+        c = [Decimal(float(v)) for v in profile.c]
+        p, zs, zr = Decimal(float(p)), Decimal(float(zs)), Decimal(float(zr))
+
+        def pieces(a, b):
+            # each layer's part between a and b: its ends and the speeds there
+            for j in range(len(z)):
+                last = j == len(z) - 1
+                lo, hi = max(a, z[j]), (b if last else min(b, z[j + 1]))
+                if lo < hi:
+                    g = 0 if last else (c[j + 1] - c[j]) / (z[j + 1] - z[j])
+                    yield lo, hi, c[j] + g * (lo - z[j]), c[j] + g * (hi - z[j])
+
+        def turn(pieces):
+            # where the ray runs level, the first piece of ``pieces`` it does so in
+            for lo, hi, a, b in pieces:
+                if p * max(a, b) >= 1:
+                    return lo + (1 / p - a) * (hi - lo) / (b - a) if a != b else lo
+            return None
+
+        def leg(a, b):
+            total = Decimal(0)
+            for lo, hi, ca, cb in pieces(a, b):
+                sa = max(1 - (p * ca) ** 2, Decimal(0)).sqrt()
+                sb = max(1 - (p * cb) ** 2, Decimal(0)).sqrt()
+                total += (
+                    p * ca * (hi - lo) / sa if ca == cb else (sa - sb) * (hi - lo) / (p * (cb - ca))
+                )
+            return total
+
+        events = branch.lower_events + branch.upper_turns
+        if not events:
+            return leg(min(zs, zr), max(zs, zr))
+        low = z[0] if ground else turn(reversed(list(pieces(z[0], min(zs, zr)))))
+        high = turn(pieces(max(zs, zr), max(zs, zr) + 10**6)) if branch.upper_turns else None
+        first = leg(zs, high) if branch.up else leg(low, zs)
+        last = leg(low, zr) if branch.arrives_up else leg(zr, high)
+        return first + (events - 1) * leg(low, high) + last if events > 1 else first + last
+
+
+def _assert_on_the_listener(
+    profile, zs: float, zr: float, distance: float, found, straight: tuple[int, ...] = ()
+) -> None:
+    """Each ray of ``found`` but those ``straight`` (along air whose speed does not change
+    with height) reaches the listener: by the exact range of ``profile``
+    (:func:`_exact_range`) at its p, it lands within the tolerance (1e-6 of the distance)
+    of the listener, or the range crosses the distance within three floats of its p (a
+    steep crossing)."""
+    for i, branch in enumerate(found.branch):
+        if i in straight:
+            continue
+        ps = [float(found.p[i])]
+        for _ in range(3):
+            ps = [float(np.nextafter(ps[0], 0.0)), *ps, float(np.nextafter(ps[-1], 1.0))]
+        ground = bool(found.ground[i])
+        misses = [
+            float(_exact_range(profile, zs, zr, q, branch, ground) - Decimal(distance)) for q in ps
+        ]
+        crosses = any((a < 0) != (b < 0) for a, b in itertools.pairwise(misses))
+        assert abs(misses[3]) <= 1e-6 * (1 + distance) or crosses, (branch, misses[3])
+
+
+#: No wind up to 2 m, then 3, 6 and 8 m/s at 10, 50 and 200 m (15 C).
+_CALM_BELOW = [
+    [0.0, 15.0, 0.0],
+    [2.0, 15.0, 0.0],
+    [10.0, 15.0, 3.0],
+    [50.0, 15.0, 6.0],
+    [200.0, 15.0, 8.0],
+]
+
+
+@pytest.mark.parametrize("rise", [0.0, 2.2e-16, 1e-9, 1e-6, 1e-4])
+def test_the_direct_ray_through_level_air_is_straight(rise) -> None:
+    """In uniform air, and in a table's level layer (no wind up to 2 m), the direct ray
+    150 m from a source 1.5 m up to a listener 0 to 0.1 mm higher is the straight one, at
+    length / c and at the level of free field, and the only one on its branch. Its
+    slowness lies within 2e-13 of a level ray's, where one float's step moves its range
+    by centimetres, or the nearest float is a level ray's."""
+    atmosphere = Atmosphere.model_validate({"table": _CALM_BELOW})
+    for profile in (Profile.uniform(C), Profile.of(atmosphere, 15.0, np.array([1.0, 0.0]))):
+        zs = 1.5
+        zr = zs + rise
+        found = Rays(profile, zs).eigenrays(zr, 150.0, 0)
+        direct = _on(found, True, True, 0) + _on(found, False, False, 0)
+        assert len(direct) == 1
+        i = direct[0]
+        length = math.hypot(150.0, zr - zs)
+        assert found.length[i] == pytest.approx(length, rel=1e-12)
+        assert found.time[i] == pytest.approx(length / float(profile.speed(zs)), rel=1e-12)
+        assert found.launch[i] == pytest.approx(math.atan2(zr - zs, 150.0), abs=1e-15)
+        assert _level(found, i) == pytest.approx(0.0, abs=1e-9)
+        assert not found.capped[i]
+
+
+@pytest.mark.parametrize("zs", [2.0, 2.0 - 1e-9])
+@pytest.mark.parametrize("distance", [150.0, 300.0])
+def test_a_source_over_level_air_has_no_fold_below(zs, distance) -> None:
+    """Upwind of a table with no wind up to 2 m and 3 m/s at 10 m (15 C), from a source
+    on the 2 m row to a listener 6.25 m up: the air slows above the row, so no ray
+    leaving the source reaches the listener directly beyond the 87.7 m of the one leaving
+    level, and below the row, in level air, none turns. The one ray is the ground's,
+    straight down and back up to the row, then an arc: its range, time and level over
+    free field at its length are in closed form. So too from 1 nm under the row, where a
+    direct ray would run level through that nanometre to within 1e-22 of grazing, finer
+    than a float resolves (at -94 and -102 dB)."""
+    profile = Profile.of(
+        Atmosphere.model_validate({"table": _CALM_BELOW}), 15.0, np.array([-1.0, 0.0])
+    )
+    c0 = float(profile.speed(2.0))
+    g = (float(profile.speed(10.0)) - c0) / 8.0
+    zr = 6.25
+    cr = c0 + g * (zr - 2.0)
+
+    def sine(p, c):
+        return math.sqrt(1.0 - (p * c) ** 2)
+
+    def reach(p):
+        return (zs + 2.0) * p * c0 / sine(p, c0) + (sine(p, c0) - sine(p, cr)) / (p * g)
+
+    p = brentq(lambda q: reach(q) - distance, 0.9 / c0, (1.0 - 1e-16) / c0, xtol=1e-22)
+    s0, sr = sine(p, c0), sine(p, cr)
+    slope = (zs + 2.0) * c0 / s0**3 + (1.0 / sr - 1.0 / s0) / (p * p * g)
+    length = (zs + 2.0) / s0 + abs(math.acos(p * c0) - math.acos(p * cr)) / (p * abs(g))
+    time = (zs + 2.0) / (c0 * s0) + (math.acosh(1.0 / (p * c0)) - math.acosh(1.0 / (p * cr))) / g
+    level = 10 * math.log10(p * c0**2 / (distance * abs(slope) * s0 * sr) * length**2)
+    found = Rays(profile, zs).eigenrays(zr, distance, 1)
+    assert list(found.ground_bounces) == [1]
+    assert found.p[0] == pytest.approx(p, rel=1e-12)
+    assert found.time[0] == pytest.approx(time, rel=1e-9)
+    assert _level(found) == pytest.approx(level, abs=0.002)
+
+
+@pytest.mark.parametrize(
+    ("zs", "zr", "distance", "references"),
+    [(5.0, 1.25, 150.0, (-7.475, -3.309)), (10.0, 0.75, 300.0, (-11.065, -8.073))],
+)
+def test_rays_down_into_level_air(zs, zr, distance, references) -> None:
+    """Upwind of a table with no wind up to 2 m and 3 m/s at 10 m (15 C), from a source 5
+    or 10 m up to a listener 1.25 or 0.75 m up in the calm air under 2 m: against the
+    exact range of the profile (linear between its nodes: its layers' arcs summed in
+    closed form, differentiated at high precision), the levels over free field at their
+    lengths of the direct ray and the one off the ground are those given (dB). Among the
+    rays launched is the one that runs level in the calm air, some 1e300 m long, which
+    the search takes in without an overflow."""
+    profile = Profile.of(
+        Atmosphere.model_validate({"table": _CALM_BELOW}), 15.0, np.array([-1.0, 0.0])
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        found = Rays(profile, zs).eigenrays(zr, distance, 1)
+    assert len(found) == 2
+    for branch, reference in zip(((False, False, 0), (False, True, 0)), references, strict=True):
+        (i,) = _on(found, *branch)
+        assert _level(found, i) == pytest.approx(reference, abs=0.02)
+
+
+_WIND_ROW = [[0.0, 15.0, 0.0], [10.0, 15.0, 4.0], [100.0, 15.0, 8.0]]
+_WARM_ROWS = [[0, 10, 0], [1, 12, 0], [2, 13, 0], [4, 13.5, 0], [10, 13.6, 0], [50, 12, 0]]
+
+
+@pytest.mark.parametrize(
+    ("table", "zs", "distance", "references"),
+    [
+        (_WIND_ROW, 12.0, 340.0, (-6.118, -5.837)),
+        (_WIND_ROW, 12.0, 360.0, (-6.098, -5.862)),
+        (_WARM_ROWS, 4.0, 150.0, (-14.181, -14.171)),
+        (_WARM_ROWS, 4.0, 300.0, (-11.184, -11.176)),
+    ],
+)
+def test_the_level_of_rays_that_turn_just_above_the_source(table, zs, distance, references) -> None:
+    """Downwind of a table of wind (4 m/s at its 10 m row, 8 at 100 m) from a source 12 m
+    up, and in one of temperatures alone (13.5 C at its 4 m row, 13.6 C at 10 m and 12 C at
+    50 m, 10 to 13 C below) from a source on that row, the rays to a listener 1.5 m up
+    turn 0.09 to 0.31 m and 0.2 mm to 0.15 m above the source, with rows of the table
+    between the ends. Against the exact range of the profile (linear between its nodes:
+    its layers' arcs summed in closed form, differentiated at high precision), the levels
+    over free field at their lengths of the direct ray and the one off the ground are
+    those given (dB)."""
+    rays = Rays(
+        Profile.of(Atmosphere.model_validate({"table": table}), 15.0, np.array([1.0, 0.0])), zs
+    )
+    found = rays.eigenrays(1.5, distance, 1)
+    assert len(found) == 2
+    for branch, reference in zip(((True, False, 0), (True, True, 1)), references, strict=True):
+        (i,) = _on(found, *branch)
+        assert _level(found, i) == pytest.approx(reference, abs=0.05)
+
+
+@pytest.mark.parametrize(
+    ("zs", "zr", "distance", "references"),
+    [
+        (10.4, 5.0, 150.0, {(True, False, 0): -13.412, (True, True, 1): -13.380}),
+        (10.4 - 1e-5, 5.0, 150.0, {(True, False, 0): -13.475, (True, True, 1): -19.239}),
+        (
+            1.0,
+            10.4,
+            300.0,
+            {
+                (True, False, 0): -10.457,
+                (False, False, 1): -10.452,
+                (True, True, 1): -10.402,
+                (True, False, 1): -13.428,
+            },
+        ),
+        (
+            1.0,
+            10.4 - 1e-5,
+            300.0,
+            {
+                (True, False, 0): -10.470,
+                (False, False, 1): -10.468,
+                (True, True, 1): -13.023,
+                (True, False, 1): -18.529,
+            },
+        ),
+    ],
+)
+def test_the_level_of_rays_with_an_end_on_one_of_two_close_rows(
+    zs, zr, distance, references
+) -> None:
+    """A table of no wind up to its 10 m row, then 2 and 4 m/s at 10.4 and 100 m (15 C),
+    downwind: from a source on the 10.4 m row or 10 um under it to a listener 5 m up
+    150 m away, and from a source 1 m up to a listener there 300 m away, the rays turn
+    0.16 mm to 0.36 m above that row. Against the exact range of the profile (as above),
+    their levels over free field at their lengths are those given (dB), by branch."""
+    table = [[0, 15, 0], [10, 15, 0], [10.4, 15, 2], [100, 15, 4]]
+    profile = Profile.of(Atmosphere.model_validate({"table": table}), 15.0, np.array([1.0, 0.0]))
+    found = Rays(profile, zs).eigenrays(zr, distance, 1)
+    assert len(found) == len(references)
+    for branch, reference in references.items():
+        (i,) = _on(found, *branch)
+        assert _level(found, i) == pytest.approx(reference, abs=0.02)
+
+
+def _straight_rays(found, zs: float, zr: float, distance: float) -> None:
+    """``found`` holds the ray off the ground and, where ``zs`` and ``zr`` differ, the
+    direct ray, at their straight lengths and the level of free field."""
+    bounces = sorted(found.ground_bounces)
+    assert bounces == [1] or bounces == [0, 1]
+    assert bounces == [0, 1] or zs == zr
+    for i, n in enumerate(found.ground_bounces):
+        assert found.length[i] == pytest.approx(
+            math.hypot(distance, zr - zs * (1 - 2 * n)), rel=1e-9
+        )
+        assert _level(found, i) == pytest.approx(0.0, abs=0.005)
+
+
+@pytest.mark.parametrize("direction", [1.0, -1.0])
+@pytest.mark.parametrize(
+    "rows",
+    [
+        *(
+            [[0.0, 15.0, 2.0], [10.0, 15.0, 2.0 + dw], [12.0, 15.0, 2.0 + dw], [60.0, 15.0, 5.0]]
+            for dw in (1e-10, 1e-8, 1e-6)
+        ),
+        [[0.0, 15.0, float(np.float32(2.3))], [10.0, 15.0, 2.3], [60.0, 15.0, 5.0]],
+    ],
+)
+def test_rays_through_air_level_but_for_a_hair(rows, direction) -> None:
+    """Tables of 2 m/s of wind at the ground and 1e-10 to 1e-6 m/s more at 10 m, or of
+    2.3 m/s held at the ground as a 32-bit float (5e-8 m/s less) and at 10 m as a 64-bit
+    one, then 5 m/s at 60 m (15 C), downwind and upwind: below 10 m the gradient is
+    1e-7/s or less, too weak for neighbouring floats of a ray's slowness to tell apart.
+    100 m from a source 1 or 5 m up to a listener 1, 3 or 5 m up, the rays are the one off
+    the ground and, between ends at different heights, the direct one, at their straight
+    lengths and the level of free field (to 0.005 dB, as the exact range of the profile
+    gives); between ends at one height the direct ray, level to within 1e-8 rad, is not
+    resolved."""
+    atmosphere = Atmosphere.model_validate({"table": rows})
+    profile = Profile.of(atmosphere, 15.0, np.array([direction, 0.0]))
+    for zs, zr in ((1.0, 1.0), (5.0, 5.0), (1.0, 3.0)):
+        _straight_rays(Rays(profile, zs).eigenrays(zr, 100.0, 2), zs, zr, 100.0)
+
+
+@pytest.mark.parametrize(("zs", "zr", "distance"), [(5.0, 5.0, 100.0), (4.0, 6.0, 200.0)])
+def test_rays_through_a_step_of_one_float_in_level_air(zs, zr, distance) -> None:
+    """In c = 340 m/s up to 5 m, the next float above it (5.7e-14 m/s more) from 5 to
+    10 m and 0.05/s more above 10 m, from a source 5 or 4 m up to a listener 5 or 6 m up,
+    100 or 200 m away: the rays are those of uniform air below 10 m, as above."""
+    z = np.union1d(node_heights(None), [10.0])
+    step = np.nextafter(340.0, np.inf)
+    profile = Profile(z, np.where(z < 5.0, 340.0, step + 0.05 * np.maximum(z - 10.0, 0.0)))
+    _straight_rays(Rays(profile, zs).eigenrays(zr, distance, 2), zs, zr, distance)
+
+
+@pytest.mark.parametrize(
+    ("table", "height", "references"),
+    [
+        (
+            _CALM_BELOW,
+            1.999,
+            {
+                (True, False, 0): (-12.108, 0.000),
+                (True, True, 1): (-12.907, 0.435),
+                (False, True, 1): (-13.966, 0.979),
+                (True, False, 1): (0.954, 0.980),
+                (True, True, 2): (2.795, 2.810),
+            },
+        ),
+        (
+            [[0.0, 15.0, 0.0], [3.0, 15.0, 2.0], [6.0, 15.0, 2.0], [20.0, 15.0, 5.0]],
+            3.001,
+            {
+                (True, False, 0): (1.387, 1.416),
+                (False, True, 0): (1.414,),
+                (True, True, 1): (3.557, 3.821),
+            },
+        ),
+    ],
+)
+def test_the_level_of_rays_that_run_almost_level_through_level_air(
+    table, height, references
+) -> None:
+    """Downwind of a table with no wind up to 2 m (as above), and of one with 2 m/s from 3
+    to 6 m (none at the ground, 5 m/s at 20 m), 15 C, from a source to a listener 1 mm
+    under the top of the calm air or 1 mm over the bottom of the steady wind, 400 m away:
+    some rays turn just beyond that edge, crossing the millimetre of level air within
+    1e-5 rad of the horizontal, most of their range p c dz / s. Against the exact range
+    of the profile (as above), the levels over free field at their lengths of the rays
+    on these branches are those given (dB)."""
+    profile = Profile.of(Atmosphere.model_validate({"table": table}), 15.0, np.array([1.0, 0.0]))
+    found = Rays(profile, height).eigenrays(height, 400.0, 2)
+    for branch, levels in references.items():
+        on = _on(found, *branch)
+        assert sorted(_level(found, i) for i in on) == pytest.approx(levels, abs=0.002)
+
+
+@pytest.mark.parametrize(
+    ("preset", "height", "distance"),
+    [
+        ("windy", 1.5, 10.0),
+        ("windy", 12.0, 30.0),
+        ("clear_night", 4.0, 10.0),
+        ("clear_night", 4.0, 30.0),
+        ("clear_night", 4.0, 50.0),
+    ],
+)
+def test_the_level_of_a_ray_between_ends_at_one_height(preset, height, distance) -> None:
+    """Downwind in the windy and clear-night presets (15 C), between a source and a
+    listener 1.5, 4 or 12 m up and 10 to 50 m apart, the direct ray turns 0.3 to 9 cm
+    above them, in the layer they are in: against the exact range of the profile (as
+    above), its level over free field at its length is 0.000 dB (to 0.001)."""
+    profile = Profile.of(Atmosphere.model_validate({"preset": preset}), 15.0, np.array([1.0, 0.0]))
+    found = Rays(profile, height).eigenrays(height, distance, 0)
+    assert len(found) == 1
+    assert _level(found) == pytest.approx(0.0, abs=0.002)
+
+
+@pytest.mark.parametrize(
+    ("preset", "near", "under", "distance", "reference"),
+    [
+        ("windy", 6.3, 0.0, 26.3, 0.000),
+        ("windy", 4.0, 1e-3, 10.0, -0.043),
+        ("clear_night", 12.0, 0.0, 20.0, 0.000),
+    ],
+)
+def test_the_level_of_a_ray_between_ends_just_under_a_node(
+    preset, near, under, distance, reference
+) -> None:
+    """As above, between ends a float or 1 mm under the profile's node nearest 6.3, 4 or
+    12 m: the direct ray turns 0.3 to 3.6 cm above them, in the layer above the node.
+    Against the exact range of the profile (as above), its level over free field at its
+    length is that given (dB)."""
+    profile = Profile.of(Atmosphere.model_validate({"preset": preset}), 15.0, np.array([1.0, 0.0]))
+    node = float(profile.z[np.argmin(np.abs(profile.z - near))])
+    height = float(np.nextafter(node, 0.0)) - under
+    found = Rays(profile, height).eigenrays(height, distance, 0)
+    assert len(found) == 1
+    assert _level(found) == pytest.approx(reference, abs=0.002)
+
+
+@pytest.mark.parametrize("weak", ["line", "table"])
+def test_the_level_of_rays_in_a_gradient_of_1e_8_per_second(weak) -> None:
+    """In c = 340 m/s - 1e-8 z, and downwind of the table above with 1e-7 m/s more wind at
+    10 m than at the ground (15 C), between a source and a listener 1 m up and 1 km
+    apart: the ray off the ground leaves within 0.002 rad of the horizontal, where the
+    parts of its range singular at its ends and at the ground (7e7 m and more) carry
+    the rounding of their sines, 4e-3 m all told, and the nearest ray to run level in a
+    level layer (above 1 km, or 10 to 12 m up in the table, neither of which it reaches)
+    is 6e-9 s/m away in slowness. Against the exact range of the profile (as above), its
+    level over free field at its length is 0.000 dB, and in the table those of the
+    direct rays that turn 15.7 and 20.1 m up are 7.204 and 7.208 dB."""
+    if weak == "line":
+        z = node_heights(None)
+        profile, direct = Profile(z, 340.0 - 1e-8 * z), []
+    else:
+        rows = [
+            [0.0, 15.0, 2.0],
+            [10.0, 15.0, 2.0000001],
+            [12.0, 15.0, 2.0000001],
+            [60.0, 15.0, 5.0],
+        ]
+        profile = Profile.of(Atmosphere.model_validate({"table": rows}), 15.0, np.array([1.0, 0.0]))
+        direct = [7.204, 7.208]
+    found = Rays(profile, 1.0).eigenrays(1.0, 1000.0, 2)
+    off = [i for i in range(len(found)) if found.ground_bounces[i] == 1]
+    assert len(off) == 1
+    assert _level(found, off[0]) == pytest.approx(0.0, abs=0.002)
+    levels = sorted(_level(found, i) for i in _on(found, True, False, 0))
+    assert levels[len(levels) - len(direct) :] == pytest.approx(direct, abs=0.002)
+
+
+def test_the_levels_of_rays_over_rows_1e_8_m_s_apart() -> None:
+    """Downwind of the table above with 1e-8 m/s more wind at 10 m than at the ground
+    instead (15 C), from a source 10 m up to a listener 1 m up and 1 km away: a direct
+    ray and one off the ground turn 26 to 28 m up, another two 12.7 to 13 m up, and two
+    go down within 0.011 rad of the horizontal, one of them off the ground. Against the
+    exact range of the profile (as above), their levels over free field at their lengths
+    are 1.817, 2.313, 1.830, 2.324, 0.000 and 0.000 dB (to 0.02 dB)."""
+    rows = [[0.0, 15.0, 2.0], [10.0, 15.0, 2.00000001], [12.0, 15.0, 2.00000001], [60.0, 15.0, 5.0]]
+    profile = Profile.of(Atmosphere.model_validate({"table": rows}), 15.0, np.array([1.0, 0.0]))
+    found = Rays(profile, 10.0).eigenrays(1.0, 1000.0, 2)
+    levels = sorted(_level(found, i) for i in range(len(found)))
+    assert levels == pytest.approx([0.0, 0.0, 1.817, 1.830, 2.313, 2.324], abs=0.02)
+
+
+def test_the_level_of_a_ray_that_crosses_a_row_almost_level() -> None:
+    """Downwind of a table of no wind at the ground, 3 m/s at 10 m, none at 10.3 m and
+    4 m/s at 100 m (15 C), from a source 1 m up to a listener 10.75 m up and 150 m away:
+    the direct ray crosses the row at 10 m, the fastest air below the listener, within
+    0.001 rad of the horizontal. Against the exact range of the profile (as above), its
+    level over free field at its length is -21.226 dB, and that of the ray off the ground
+    -9.023 dB."""
+    rows = [[0.0, 15.0, 0.0], [10.0, 15.0, 3.0], [10.3, 15.0, 0.0], [100.0, 15.0, 4.0]]
+    profile = Profile.of(Atmosphere.model_validate({"table": rows}), 15.0, np.array([1.0, 0.0]))
+    found = Rays(profile, 1.0).eigenrays(10.75, 150.0, 1)
+    assert list(found.ground_bounces) == [0, 1]
+    assert [_level(found, 0), _level(found, 1)] == pytest.approx([-21.226, -9.023], abs=0.002)
+
+
+@pytest.mark.parametrize("direction", [1.0, -1.0])
+def test_the_levels_of_rays_below_rows_1e_10_m_s_apart(direction) -> None:
+    """Downwind and upwind of a table of 2 m/s of wind at the ground, 1e-10 m/s more at
+    10 and 12 m and 5 m/s at 60 m (15 C), from a source 1 m up to a listener 3 m up and
+    1 km away: the direct ray and the one off the ground, which stay below 10 m, are at
+    the level of free field (to 0.005 dB), as the exact range of the profile gives."""
+    rows = [
+        [0.0, 15.0, 2.0],
+        [10.0, 15.0, 2.0000000001],
+        [12.0, 15.0, 2.0000000001],
+        [60.0, 15.0, 5.0],
+    ]
+    profile = Profile.of(
+        Atmosphere.model_validate({"table": rows}), 15.0, np.array([direction, 0.0])
+    )
+    found = Rays(profile, 1.0).eigenrays(3.0, 1000.0, 2)
+    low = [i for i, b in enumerate(found.branch) if b.cycle == 0 and b.arrives_up]
+    assert sorted(found.ground_bounces[low]) == [0, 1]
+    assert [_level(found, i) for i in low] == pytest.approx([0.0, 0.0], abs=0.005)
+
+
+@pytest.mark.parametrize("rise", [3e-12, 1e-10, 1e-9])
+def test_the_levels_of_rays_through_air_1e_12_to_1e_9_off_level(rise) -> None:
+    """Downwind of a table of no wind at the ground, 2 m/s at 2 m, 3e-12, 1e-10 or
+    1e-9 m/s more at 2.5 m and 5 m/s at 20 m (15 C), between a source and a listener
+    2.2 m up and 300 m apart, in the layer whose gradient is that much off level: two
+    direct rays turn in the air above 2.5 m, and two pairs of rays off the ground that
+    leave and arrive going the same way turn there before or after it. Against the exact
+    range of the profile, the levels over free field at their lengths of the direct
+    rays, the ray off the ground and those pairs are 0.230, 0.245, 1.187, 1.710 (twice)
+    and 1.888 (twice) dB; theirs are within 0.02 dB, and every ray found reaches the
+    listener."""
+    rows = [[0.0, 15.0, 0.0], [2.0, 15.0, 2.0], [2.5, 15.0, 2.0 + rise], [20.0, 15.0, 5.0]]
+    profile = Profile.of(Atmosphere.model_validate({"table": rows}), 15.0, np.array([1.0, 0.0]))
+    found = Rays(profile, 2.2).eigenrays(2.2, 300.0, 1)
+    rays = [i for i, b in enumerate(found.branch) if b.cycle == 0 or b.up == b.arrives_up]
+    levels = sorted(_level(found, i) for i in rays)
+    assert levels == pytest.approx([0.230, 0.245, 1.187, 1.710, 1.710, 1.888, 1.888], abs=0.02)
+    _assert_on_the_listener(profile, 2.2, 2.2, 300.0, found)
+
+
+def test_the_levels_of_rays_between_ends_on_a_node_near_a_caustic() -> None:
+    """In the `clear_night` preset (15 C), from a source on the profile's node nearest
+    4.7 m to a listener 1e-12 m above it and 437.3 m away, the rays off the ground that
+    leave and arrive going the same way turn 5.08 m up. Against the smooth profile's ray
+    tube (its ray equations and their variations integrated numerically), their level
+    over free field at their lengths is 8.201 dB; theirs are within 0.1 dB of it."""
+    profile = Profile.of(Atmosphere.model_validate({"preset": "clear_night"}), 15.0, None)
+    node = float(profile.z[np.argmin(np.abs(profile.z - 4.7))])
+    found = Rays(profile, node).eigenrays(node + 1e-12, 437.3, 1)
+    turning = [i for i, b in enumerate(found.branch) if b.up == b.arrives_up]
+    assert len(turning) == 2
+    assert [_level(found, i) for i in turning] == pytest.approx([8.201, 8.201], abs=0.1)
+
+
+@pytest.mark.parametrize(
+    ("g", "c0", "zs", "zr", "distance"),
+    [
+        (-5.22718109404673e-12, 345.607, 24.901651974979007, 24.90265197497901, 709.9),
+        (-3.688596948245909e-09, 338.079, 0.12607498764233685, 0.13544249376408263, 2952.7),
+        (-1.565474885763014e-11, 332.254, 28.6, 28.6001, 41.9),
+        (-1.7956537118736916e-10, 336.091, 0.12707498664233685, 0.12697498664233686, 130.1),
+    ],
+)
+def test_the_levels_of_rays_that_leave_almost_level_in_a_weak_gradient(
+    g, c0, zs, zr, distance
+) -> None:
+    """In c = c0 + g z, g from -4e-9 to -5e-12/s, between a source and a listener 1 mm,
+    9 mm and 0.1 mm higher or 0.1 mm lower and 710, 2953, 42 and 130 m away: the direct
+    ray leaves 1.4e-6, 3.2e-6 and 2.4e-6 rad above or 7.7e-7 rad below the horizontal,
+    where neighbouring floats of p give ranges 0.054, 0.043, 0.001 and 0.032 m apart,
+    more than the tolerance (1e-6 of the distance), and no float of p takes it within the
+    tolerance of the listener. Against the exact range of the profile, the direct ray and
+    the one off the ground are at the level of free field at their lengths (to 0.002 dB);
+    the one off the ground is found, every ray found reaches the listener, and each is at
+    that level to 0.05 dB."""
+    z = node_heights(None)
+    profile = Profile(z, c0 + g * z)
+    found = Rays(profile, zs).eigenrays(zr, distance, 2)
+    assert sorted(found.ground_bounces).count(1) == 1
+    _assert_on_the_listener(profile, zs, zr, distance, found)
+    assert [_level(found, i) for i in range(len(found))] == pytest.approx(
+        [0.0] * len(found), abs=0.05
+    )
+
+
+def test_the_levels_of_rays_between_ends_either_side_of_a_row_in_level_air() -> None:
+    """Downwind of a table whose wind is 1.8 m/s from 29.276 to 40.4 m and 4.8e-8 m/s
+    less from there up to 140.1 m, where the air cools from 19.73 to 18.98 C (20.3 C at
+    the ground), from a source 1 um above the row at 40.4 m to a listener 99 um below
+    it and 13.6 m away: the gradient is -4e-9/s below the row and -4.4e-3/s above, and
+    the direct ray leaves 9e-6 rad below the horizontal, where neighbouring floats of p
+    give ranges 4e-5 m apart, more than the tolerance. Against the exact range of the
+    profile, the levels over free field at their lengths of the direct ray and of the
+    one off the ground are -0.835 and +0.015 dB; the one off the ground is found, every
+    ray found reaches the listener, and each is at its level to 0.05 dB."""
+    rows = [
+        [0.0, 20.3, 0.99],
+        [0.27, 19.73, 0.99],
+        [28.9, 19.73, 0.9900000095367432],
+        [29.276, 19.73, 1.8],
+        [40.4, 19.73, 1.7999999523162842],
+        [140.1, 18.98, 1.7999999523162842],
+    ]
+    profile = Profile.of(Atmosphere.model_validate({"table": rows}), 20.3, np.array([1.0, 0.0]))
+    found = Rays(profile, 40.400000999999996).eigenrays(40.39990099999999, 13.6, 2)
+    off = [i for i in range(len(found)) if found.ground_bounces[i] == 1]
+    assert len(off) == 1
+    _assert_on_the_listener(profile, 40.400000999999996, 40.39990099999999, 13.6, found)
+    for i in range(len(found)):
+        expected = 0.015 if found.ground_bounces[i] else -0.835
+        assert _level(found, i) == pytest.approx(expected, abs=0.05)
+
+
+def test_the_levels_of_rays_between_ends_just_under_the_top_of_level_air() -> None:
+    """Downwind of a table whose wind is 1.03 m/s up to 5.3 m and 4.78 m/s at 7 m, where
+    the air is 23.2 C at the ground, 7.6e-7 C warmer from 1.544 to 3.97 m and 22.91 C
+    from 5.3 m up, between a source and a listener 3.969 m up, 1 mm under the top of the
+    layer whose speed does not change with height, and 2259.1 m apart: the direct ray runs
+    straight along the layer, at the level of free field. Against the exact range of the
+    profile, the levels over free field at their lengths of the other rays, by the way
+    they leave and arrive and their passes off the ground, are those listed; every ray
+    found but the straight one reaches the listener, and each is at its level to
+    0.05 dB."""
+    rows = [
+        [0.0, 23.2, 1.03],
+        [1.544, 23.200000762939453, 1.03],
+        [3.97, 23.200000762939453, 1.03],
+        [5.3, 22.91, 1.03],
+        [7.009, 22.91, 4.78],
+    ]
+    profile = Profile.of(Atmosphere.model_validate({"table": rows}), 23.2, np.array([1.0, 0.0]))
+    height = 3.9690000000000003
+    found = Rays(profile, height).eigenrays(height, 2259.1, 2)
+    references = {
+        (True, True, 0): 0.0,
+        (False, True, 0): 0.0002,
+        (True, False, 0): 0.3608,
+        (True, True, 1): 0.2839,
+        (False, False, 1): 0.2839,
+        (False, True, 1): 0.2241,
+        (True, False, 1): 0.5755,
+        (True, True, 2): 0.4448,
+        (False, False, 2): 0.4448,
+        (True, False, 2): 0.6594,
+    }
+    straight = _on(found, True, True, 0)
+    assert len(straight) == 1
+    assert found.length[straight[0]] == 2259.1
+    for i, b in enumerate(found.branch):
+        expected = references[(b.up, b.arrives_up, b.cycle)]
+        assert _level(found, i) == pytest.approx(expected, abs=0.05)
+    _assert_on_the_listener(profile, height, height, 2259.1, found, tuple(straight))
+
+
+def test_the_level_of_a_ray_between_ends_on_the_bottom_of_level_air() -> None:
+    """Upwind of a table of 2 m/s of wind at the ground, 2.001 m/s at 10 and 12 m and
+    5 m/s at 60 m (15 C), between a source and a listener 10 m up, at the bottom of the
+    level air, and 50 m apart: the direct ray below it leaves 7e-6 rad below the
+    horizontal and turns 9e-5 m below them, 8e-14 s/m in slowness from the ray that runs
+    level in the level air, which it never enters. Against the exact range of the profile
+    (as above), its level over free field at its length is 0.000 dB (to 0.002 dB)."""
+    rows = [[0.0, 15.0, 2.0], [10.0, 15.0, 2.001], [12.0, 15.0, 2.001], [60.0, 15.0, 5.0]]
+    profile = Profile.of(Atmosphere.model_validate({"table": rows}), 15.0, np.array([-1.0, 0.0]))
+    found = Rays(profile, 10.0).eigenrays(10.0, 50.0, 2)
+    below = [i for i in _on(found, False, True, 0) if found.ground_bounces[i] == 0]
+    assert len(below) == 1
+    assert _level(found, below[0]) == pytest.approx(0.0, abs=0.002)
+
+
+def test_the_levels_of_rays_that_turn_back_in_a_warm_layer_2_km_away() -> None:
+    """At 53 degrees to a table's wind (0.6 of it along the way), 2.96 m/s up to 141.8 m
+    (3.9e-7 m/s more from 63.4 m) and 2.79 m/s from 188.9 m, where the air is 19.1 C up
+    to 63.4 m, 20.93 C at 71.1 m and 20.02 C from 141.8 m, between a source 5.06 m and a
+    listener 0.58 m up and 2134.3 m apart: a ray straight down to the listener and one
+    off the ground turn back in the warm layer, where the width from the ranges of the
+    rays either side changes by 2 % from rays half as far apart and the other way gives
+    none. Against the exact range of the profile, the levels over free field at their
+    lengths of all the rays, by the way they leave and arrive and their passes off the
+    ground, are those listed; every ray found reaches the listener, and each is at its
+    level to 0.15 dB."""
+    rows = [
+        [0.0, 19.1, 2.96],
+        [63.4, 19.1, 2.960000388607037],
+        [71.1, 20.93, 2.960000388607037],
+        [141.8, 20.02, 2.960000388607037],
+        [188.934, 20.02, 2.79],
+        [247.2, 20.02, 2.7899999618530273],
+    ]
+    profile = Profile.of(Atmosphere.model_validate({"table": rows}), 19.1, np.array([0.6, 0.8]))
+    zs, zr = 5.062836911282339, 0.5767738159927351
+    found = Rays(profile, zs).eigenrays(zr, 2134.3, 2)
+    references = {
+        (False, False, 0): 0.0,
+        (False, True, 0): 0.0,
+        (True, False, 0): 1.6281,
+        (True, True, 1): 1.6506,
+        (False, False, 1): 1.8379,
+        (False, True, 1): 1.8633,
+    }
+    assert sorted((b.up, b.arrives_up, b.cycle) for b in found.branch) == sorted(references)
+    for i, b in enumerate(found.branch):
+        expected = references[(b.up, b.arrives_up, b.cycle)]
+        assert _level(found, i) == pytest.approx(expected, abs=0.15)
+    _assert_on_the_listener(profile, zs, zr, 2134.3, found)
+
+
+def test_the_levels_of_rays_in_a_duct_through_air_3_8e_12_off_level() -> None:
+    """Upwind of a table whose wind is 1.377 m/s up to 1.56 cm, 1.391 m/s at 1.124 m and
+    3.8e-12 m/s less at 1.438 m, 1.390 m/s at 1.836 m and 3.68 m/s at 20.56 m (15 C),
+    between a source 1.2 m and a listener 1.3 m up, in the layer that far off level, and
+    1000 m apart. Against the exact range of the profile, the levels over free field at
+    their lengths of the direct rays that leave and arrive going up, leave going down and
+    arrive going up, and leave going up and arrive going down are 0.000, 0.120 and
+    0.784 dB, and that of the ray off the ground that arrives going up -40.03 dB, whose
+    width from the ranges of the rays either side changes by more than itself from rays
+    half as far apart, where the other way gives none. Those direct rays are found and
+    each is at its level to 0.05 dB, as is the ray off the ground where it is found, and
+    every ray found reaches the listener."""
+    rows = [
+        [0.0, 15.0, 1.377],
+        [0.0156, 15.0, 1.377],
+        [1.1244, 15.0, 1.3910851851131807],
+        [1.4384, 15.0, 1.3910851851131807 - 3.839e-12],
+        [1.836, 15.0, 1.3897448975807714],
+        [20.56, 15.0, 3.6814268499198146],
+    ]
+    profile = Profile.of(Atmosphere.model_validate({"table": rows}), 15.0, np.array([-1.0, 0.0]))
+    found = Rays(profile, 1.2).eigenrays(1.3, 1000.0, 2)
+    for way, expected in (
+        ((True, True, 0), 0.0),
+        ((False, True, 0), 0.120),
+        ((True, False, 0), 0.784),
+    ):
+        direct = [i for i in _on(found, *way) if found.ground_bounces[i] == 0]
+        assert len(direct) == 1
+        assert _level(found, direct[0]) == pytest.approx(expected, abs=0.05)
+    for i in _on(found, False, True, 0):
+        if found.ground_bounces[i] == 1:
+            assert _level(found, i) == pytest.approx(-40.03, abs=0.05)
+    _assert_on_the_listener(profile, 1.2, 1.3, 1000.0, found)
+
+
+def test_the_level_of_a_ray_that_turns_just_under_air_level_but_for_a_hair() -> None:
+    """Upwind of a table whose wind rises from 1.609 m/s at the ground to 1.873 m/s at
+    0.23 m, holds there to 0.35 m (1.3e-11 m/s more), falls to 1.827 m/s at 1.17 m and
+    stays between 1.824 and 1.830 m/s up to 4.3 m, then rises to 1.870 m/s at 4.87 m and
+    2.46 m/s at 51.7 m (15 C), between a source 26.68 m and a listener 1 um higher and
+    2666.3 m apart: the one ray leaves going down, crosses the air whose speed changes by
+    1.1e-10 m/s per metre from 0.23 to 0.35 m up almost level and turns back up 0.19 m
+    above the ground; the ranges of rays that turn a little higher grow without bound.
+    Against the exact range of the profile, its level over free field at its length is
+    -13.251 dB; it is found, at that level to 0.05 dB, and reaches the listener."""
+    rows = [
+        [0.0, 15.0, 1.609],
+        [0.1079, 15.0, 1.7190481183040909],
+        [0.2297, 15.0, 1.8730965701257702],
+        [0.3476, 15.0, 1.873096570138857],
+        [1.1727, 15.0, 1.8272922145800337],
+        [1.2228, 15.0, 1.8263528372808842],
+        [1.7875, 15.0, 1.8265131353829955],
+        [1.8526, 15.0, 1.8247728427730359],
+        [2.6495, 15.0, 1.8249833614040154],
+        [2.6941, 15.0, 1.827546875399252],
+        [2.8196, 15.0, 1.827546875399252],
+        [3.0504, 15.0, 1.827894024124376],
+        [3.4506, 15.0, 1.8292313089550494],
+        [4.2952, 15.0, 1.829231308942329],
+        [4.8699, 15.0, 1.8696592625129773],
+        [51.7, 15.0, 2.4600799228198786],
+    ]
+    profile = Profile.of(Atmosphere.model_validate({"table": rows}), 15.0, np.array([-1.0, 0.0]))
+    found = Rays(profile, 26.68).eigenrays(26.680001, 2666.3, 2)
+    assert len(found) == 1
+    assert _level(found, 0) == pytest.approx(-13.251, abs=0.05)
+    _assert_on_the_listener(profile, 26.68, 26.680001, 2666.3, found)
 
 
 def test_each_caustic_advances_the_phase_by_a_quarter_period() -> None:
@@ -244,6 +1204,19 @@ def test_the_compiled_tracer_follows_the_arcs(g, angle) -> None:
         assert end[0, 2] == pytest.approx(height, abs=1e-6)
         exact = (math.atanh(math.sin(theta0)) - math.atanh(math.sin(theta))) / g
         assert time == pytest.approx(exact, rel=1e-9)
+
+
+def test_the_gpu_tracer_s_shadow_follows_the_arc_that_grazes_the_ground() -> None:
+    """The GPU tracer's table of how far from where it touches the ground the ray that
+    grazes it reaches each height, in c = 331.3 - 0.1 z: sqrt(2 R z - z^2), R = 3313 m,
+    to 1e-9: the ray's sine is 0 where it grazes the ground, not taken from p (1 / 331.3),
+    whose product with the speed there rounds short of 1."""
+    from acoustic_spaces.engine.gpu_tracer import _atmosphere_tables
+
+    z = node_heights(None)
+    reach, _ = _atmosphere_tables(np.column_stack([z, 331.3 - 0.1 * z, np.zeros_like(z)]))
+    radius = 331.3 / 0.1
+    np.testing.assert_allclose(reach[0, 1:], np.sqrt(2 * radius * z[1:] - z[1:] ** 2), rtol=1e-9)
 
 
 # -- the parabolic equation ------------------------------------------------------------
@@ -517,6 +1490,20 @@ def test_the_parabolic_equation_s_bands_read_back_as_computed() -> None:
     )
     read = response.relative_to_free_field()[:wave_bands]
     np.testing.assert_allclose(read, computed, atol=0.02)
+
+
+def test_the_parabolic_equation_over_a_ground_that_absorbs_nothing() -> None:
+    """A ground absorbing nothing has an admittance of 0 and an infinite impedance: the
+    parabolic equation's bands (63 to 500 Hz) over it, 100 m downwind and upwind, come
+    within 0.05 dB of those over a ground absorbing 0.001."""
+    levels = []
+    for absorption in (0.0, 0.001):
+        data = field({"preset": "windy"}, ((100.0, 0.0, 1.5), (-100.0, 0.0, 1.5))).model_dump()
+        data["materials"]["lawn"] = {"absorption": [absorption] * 8, "scattering": 0.0}
+        result = simulate(Room.from_scene(Scene.model_validate(data)))
+        energy = [result["s", key].early.energy[:, :4].sum(axis=0) for key in ("l0", "l1")]
+        levels.append(10.0 * np.log10(energy))
+    np.testing.assert_allclose(levels[0], levels[1], atol=0.05)
 
 
 # -- weather zones -----------------------------------------------------------------------
