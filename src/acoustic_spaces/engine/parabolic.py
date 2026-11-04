@@ -101,6 +101,7 @@ def march(
     obstacles=(),
     refracting: bool | None = None,
     steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
+    layer_m: float = LAYER_MIN_M,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
@@ -133,7 +134,8 @@ def march(
     a thin screen at ``near`` where ``far`` is ``near``, otherwise a building from
     ``near`` to ``far`` along the way with its rigid roof at ``top``, between the height
     steps where it falls. ``steps_per_wavelength`` sets the height step at the highest
-    frequency (the wide-angle equation's in proportion)."""
+    frequency (the wide-angle equation's in proportion), ``layer_m`` the absorbing
+    layer's least thickness (:func:`layer`)."""
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
     common = (frequencies, speed, impedance, zs)
@@ -154,6 +156,7 @@ def march(
             independent,
             obstacles,
             steps_per_wavelength,
+            layer_m,
         )
     from acoustic_spaces.engine import wide_angle  # which imports this module
 
@@ -173,6 +176,7 @@ def march(
             independent,
             obstacles,
             steps_per_wavelength,
+            layer_m,
         )
     out[:, steep] = wide_angle.march(
         *common,
@@ -187,6 +191,7 @@ def march(
         steps_per_wavelength=wide_angle.STEPS_PER_WAVELENGTH
         * steps_per_wavelength
         / STEPS_PER_WAVELENGTH,
+        layer_m=layer_m,
     )
     return out
 
@@ -253,6 +258,7 @@ def _march(
     independent: bool,
     obstacles: tuple = (),
     steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
+    layer_m: float = LAYER_MIN_M,
 ) -> np.ndarray:
     """:func:`march` by the narrow-angle equation alone, past ``obstacles`` (as
     :func:`_obstacles` gives them)."""
@@ -262,11 +268,12 @@ def _march(
     c0 = float(np.asarray(speed(np.array([0.0])))[0])
     ka = 2.0 * math.pi * f / c0  # (F,)
     shortest = c0 / f.max()
-    n, dz, thickness = _grid(f, c0, top, steps_per_wavelength)
+    n, dz, thickness = _grid(f, c0, top, steps_per_wavelength, layer_m)
+    strength = layer(f, c0, layer_m)[1]
     z = np.arange(n) * dz
     k = 2.0 * math.pi * f[:, None] / np.asarray(speed(z), dtype=float)[None, :]
     depth = np.clip((z - top) / thickness, 0.0, 1.0)
-    delta = (k - ka[:, None]) + 1j * LAYER_STRENGTH * depth**2  # (F, n)
+    delta = (k - ka[:, None]) + 1j * strength * depth**2  # (F, n)
 
     kz = 2.0 * math.pi * np.fft.fftfreq(2 * n, d=dz)
     vertical = np.sqrt((ka[:, None] ** 2 - kz[None, :] ** 2).astype(complex))
@@ -348,7 +355,7 @@ def _march(
             if there is not current:
                 current = there
                 k = 2.0 * math.pi * f[:, None] / np.asarray(current(z), dtype=float)[None, :]
-                delta = (k - ka[:, None]) + 1j * LAYER_STRENGTH * depth**2
+                delta = (k - ka[:, None]) + 1j * strength * depth**2
                 steps.clear()
                 roofs.clear()
         if roof > 0.0:
@@ -449,13 +456,27 @@ def _starter(x: np.ndarray) -> np.ndarray:
     return (1.4467 - 0.4201 * x**2) * np.exp(-(x**2) / 3.0512)
 
 
+def layer(f: np.ndarray, c0: float, least_m: float = LAYER_MIN_M) -> tuple[float, float]:
+    """The absorbing layer's thickness (m) and strength (1/m at its top) for the
+    frequencies ``f``: LAYER_WAVELENGTHS of the longest wavelength, at least ``least_m``
+    (LAYER_MIN_M by default), and as strong as it takes for sound to lose as much
+    crossing it as in the default layer (strength times thickness kept)."""
+    span = LAYER_WAVELENGTHS * c0 / float(np.min(f))
+    thickness = max(span, least_m)
+    return thickness, LAYER_STRENGTH * max(span, LAYER_MIN_M) / thickness
+
+
 def _grid(
-    f: np.ndarray, c0: float, top: float, steps_per_wavelength: float = STEPS_PER_WAVELENGTH
+    f: np.ndarray,
+    c0: float,
+    top: float,
+    steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
+    layer_m: float = LAYER_MIN_M,
 ) -> tuple[int, float, float]:
     """The heights' count and spacing, and the absorbing layer's thickness, for the
     frequencies ``f`` under an absorbing layer from ``top``."""
     dz = c0 / f.max() / steps_per_wavelength
-    thickness = max(LAYER_WAVELENGTHS * c0 / f.min(), LAYER_MIN_M)
+    thickness = layer(f, c0, layer_m)[0]
     return int(2 ** math.ceil(math.log2((top + thickness) / dz))), dz, thickness
 
 

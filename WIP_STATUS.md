@@ -217,6 +217,16 @@ kept).
   filled from the runs before them and are not changed by these rows.
 - `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).
 
+- **Optimization being checked: a thinner absorbing layer behind barriers.** Both equations now take
+  `layer_m` (`parabolic.layer`): the layer's least thickness, its strength raised so that strength times
+  thickness, and so the sound's loss across it, stays the default's; the default (20 m) is bit-identical
+  to before. At 4 and 8 kHz the 20 m layer is half or more of the heights marched (8 kHz, top 21.5 m:
+  wide-angle 10860 heights where 5626 reach the top). Not used by the engine yet: running
+  `layer_check.py` (scratchpad), the convergence cases at 2, 4 and 8 kHz with 20, 10 and 5 m against
+  60 m, the weather's effect and the still level; it goes in only where no worse than 20 m.
+- Running too: the map behind two barriers (8 m/s, 12 m spacing) on this branch and on main, by band and
+  solver, after the fix for points on a barrier's line.
+
 ## Open
 
 - (Done on `claude/acoustic-215-7khv20`, see above.) Reruns on the 60 m domain (upwind, 5 m/s): two
