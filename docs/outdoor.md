@@ -677,7 +677,7 @@ effect is within 25 dB of still air), the weather's effect is off by, in dB (mea
 in ten, largest), and a coverage map of 140 points over grass behind two barriers in
 8 m/s takes, on one core:
 
-| `barrier_frequencies` | 4 kHz | 8 kHz | the map | against main's straight legs |
+| `barrier_frequencies` | 4 kHz | 8 kHz | the map | against straight legs |
 |---|---|---|---|---|
 | 32 (the default) | 0.05, 0.10, 0.25 | 0.04, 0.09, 0.51 | 457 s | 12 times |
 | 16 | 0.05, 0.10, 0.25 | 0.51, 1.0, 6.4 | 291 s | 7.7 times |

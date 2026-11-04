@@ -145,7 +145,7 @@ def barrier_samples(at_8k: int = 32) -> tuple[tuple[int, int], ...]:
 BARRIER_HEADROOM = 1.5
 #: A listener this close (m) to a barrier's line or a building's wall, seen from above,
 #: stands on it: the parabolic equation takes it past it, where nothing below its top
-#: gets through, so main's rule applies there.
+#: gets through, so the paths over it keep straight legs there.
 ON_OBSTACLE_M = 1e-6
 #: A run along a whole degree counts fully for a listener behind barriers while the last
 #: of them along it stands at least this share as far before the listener as along its

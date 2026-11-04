@@ -440,7 +440,7 @@ def test_a_listener_beside_a_building_takes_the_open_ground_s_effect(towards) ->
     np.testing.assert_allclose(effects[0][:4], effects[1][:4], atol=0.7)
 
 
-def test_a_listener_on_a_barrier_s_line_keeps_main_s_rule() -> None:
+def test_a_listener_on_a_barrier_s_line_keeps_straight_legs() -> None:
     """A listener (or a map point) on a barrier's line seen from above, 58 m from the
     source exactly: the parabolic equation would take it past the barrier, where nothing
     below its top gets through, in the weather and in still air alike; it keeps the
