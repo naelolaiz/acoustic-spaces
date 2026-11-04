@@ -162,8 +162,12 @@ kept).
     (5 m/s) and -0.004/-0.121 dB (-5 m/s), within the test's 0.2 dB; the test passes.
   - end to end (`simulate`, the early paths' coherent sum, 1 cm steps from 6.0 to 6.3 m, listeners 60 and
     120 m away 1.5 m up, 5 m off the axis, second-order diffraction): before, still air up to 0.021 dB a
-    cm, `windy` downwind 0.07/0.08/0.12/0.08/0.50/0.13/0.07/0.05 dB from 63 Hz to 8 kHz; after, still
-    running when this was pushed (probe `roof_end_to_end.py`, in the session's scratchpad).
+    cm, `windy` downwind 0.07/0.08/0.12/0.08/0.50/0.13/0.07/0.05 dB and upwind
+    0.06/0.08/0.06/0.16/0.39/0.07/0.15/0.16 dB from 63 Hz to 8 kHz; after, downwind
+    0.01/0.01/0.02/0.02/0.13/0.04/0.10/0.04 dB and upwind 0.005/0.005/0.02/0.03/0.10/0.05/0.14/0.14 dB
+    (still air unchanged, 0.007 to 0.021 dB). `docs/validation.md` (the continuity table: 1.16 dB) and
+    the known issue "A building's height in wind" (1.2 dB a cm) still give the old numbers, measured at
+    other listeners: to re-measure there and update.
 - **A listener or map point on a barrier's line or a building's wall** (seen from above, within
   `ON_OBSTACLE_M` = 1 um) made the runs behind barriers raise "the parabolic equation gave no sound in
   still air" (the march takes a listener at an obstacle's range past it, where nothing gets through
