@@ -227,9 +227,9 @@ def test_the_paths_in_the_plane_take_the_weather_s_effect(runs) -> None:
 def test_the_paths_round_an_end_take_the_open_ground_s_effect_on_both_sides(runs) -> None:
     """Listeners either side of the shadow boundary of the barrier's end: the paths
     round the end take the weather's effect over the open ground (2 here) in the bands
-    of the open ground's parabolic equation, on both sides, delayed alike there (so that
-    they keep their phases in still air), and their legs' own times and shadows only
-    above them."""
+    of the open ground's parabolic equation, on both sides, delayed alike there (their
+    phases changing as the open ground's field does, not at all here), and their legs'
+    own times and shadows only above them."""
     barrier = {"name": "screen", "path": [[15, -20], [15, 0]], "height": 4}
     listeners = ((60.0, -1.0, 1.5), (60.0, 1.0, 1.5))
     still = Room.from_scene(scene(atmosphere=None, listeners=listeners, barriers=[barrier]))
@@ -411,3 +411,30 @@ def test_the_sound_starts_with_the_paths_over_the_barrier_where_they_come_sooner
 
     onset = refracted.direct_times(np.array([0.1, 0.1]), [over(0.098), over(0.102)])
     np.testing.assert_array_equal(onset, [0.098, 0.1])
+
+
+@pytest.mark.parametrize("towards", [0.0, 180.0])
+def test_a_listener_beside_a_building_takes_the_open_ground_s_effect(towards) -> None:
+    """A listener in the open 3 m beside a building's wall, 60 m from the source down-
+    and upwind: the paths round the building's corners change with the weather as the
+    open ground's field along their way does, at each frequency, so that with the direct
+    sound they take the open ground's effect (within 0.7 dB from 63 to 500 Hz)."""
+    building = {"name": "h", "footprint": [[30, 0], [40, 0], [40, 10], [30, 10]], "height": 6}
+    weather = {"preset": "windy", "wind": {"direction_deg": towards}}
+    listeners = ((60.0, -3.0, 1.5),)
+    effects = []
+    for buildings in ((building,), ()):
+        levels = []
+        for atmosphere in (None, weather):
+            room = Room.from_scene(
+                scene(
+                    atmosphere=atmosphere,
+                    listeners=listeners,
+                    barriers=(),
+                    buildings=buildings,
+                    diffraction="second_order",
+                )
+            )
+            levels.append(10 * np.log10(total_energy(early_paths(room, listener="l0"))))
+        effects.append(levels[1] - levels[0])
+    np.testing.assert_allclose(effects[0][:4], effects[1][:4], atol=0.7)

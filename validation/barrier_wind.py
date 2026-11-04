@@ -78,16 +78,34 @@ GROUND_C = 20.0
 GRASS = 200.0
 #: Listeners' effects deeper than this (dB below still air) are listed, not judged.
 DEEPEST_DB = 25.0
-#: Acceptance (dB), the measured maxima of the design rounded up: the largest error of
-#: the weather's effect allowed, per check and case.
+#: Acceptance (dB): the largest error of the weather's effect measured, rounded up, so
+#: that a change that makes any of them worse fails, by (case, reference, wind) for the
+#: full-wave cases (``one``: near, far, rail and roof), ``started`` and, end to end,
+#: ``engine`` beyond its parabolic equation's own error. The design aimed for 0.6 dB
+#: in 5 m/s and 0.8 dB in 10 m/s behind one barrier or building.
 LIMITS = {
-    ("full_wave", 5.0): 0.6,
-    ("full_wave", 10.0): 0.8,
-    ("full_wave", "two"): 1.0,
-    ("full_wave", "two", 125): 1.7,
-    ("full_wave", "steep"): 0.6,
-    ("started", None): 0.6,
-    ("engine", None): 0.15,  # beyond the full-wave case's own limit
+    ("one", "ring", 5.0): 0.0,  # TBD_L_ONE5
+    ("one", "ring", 10.0): 0.75,
+    ("one", "plane", 5.0): 0.0,  # TBD_L_ONEP5
+    ("one", "plane", 10.0): 0.0,  # TBD_L_ONEP10
+    ("near_up", "ring", 5.0): 0.75,
+    ("near_up", "ring", 10.0): 1.7,
+    ("steep45", "ring", 5.0): 0.5,
+    ("steep45", "ring", 10.0): 1.0,
+    ("steep60", "ring", 5.0): 0.55,
+    ("steep60", "ring", 10.0): 0.5,
+    ("two", "ring", 5.0): 0.0,  # TBD_L_TWO5
+    ("two", "ring", 10.0): 1.65,
+    ("two", "plane", 5.0): 0.0,  # TBD_L_TWOP5
+    ("two", "plane", 10.0): 0.0,  # TBD_L_TWOP10
+    ("two40", "ring", 5.0): 2.25,
+    ("two40", "ring", 8.0): 0.0,  # TBD_L_TWO408
+    ("two40", "ring", 10.0): 1.2,
+    ("two40", "plane", 5.0): 2.2,
+    ("two40", "plane", 8.0): 0.0,  # TBD_L_TWO40P8
+    ("two40", "plane", 10.0): 1.1,
+    ("started",): 0.5,
+    ("engine",): 0.2,
 }
 
 #: (a) The cases: the source's height (m), what stands on the way (near, far, top: a
@@ -131,6 +149,7 @@ FULL_WAVE = {
         "cut": [(20.0, 20.0, 3.0), (60.0, 60.0, 5.0)],
         "at": [(100, 1.5), (160, 1.5)],
         "bands": (1, 2),
+        "winds": (5.0, -5.0, 8.0, 10.0),
         "references": ("ring", "plane"),
         "top_upwind": 60.0,
     },

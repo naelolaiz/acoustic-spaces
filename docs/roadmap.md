@@ -279,8 +279,10 @@ Outdoor acoustics, in steps:
 - [ ] Barriers in wind, next: the barrier's own wind; a blend of the barrier's and the
   open ground's effects across a barrier's end, where the level steps; the paths round
   ends checked against a reference in three dimensions; the wide-angle equation behind
-  barriers upwind in strong wind, where the narrow-angle one comes out low; a roof
-  between the equation's cells; and runs at 4 and 8 kHz that cost less (see
+  barriers upwind in strong wind, where the narrow-angle one comes out low; the sound
+  going back and forth between two barriers, which a one-way equation leaves out; a
+  roof between the equation's cells; and runs at 4 and 8 kHz, and at steep points,
+  that cost less (see
   [Known issues](validation.md#known-issues)).
 - [ ] A leg from a ground reflection a rounding error above the ground takes the
   shadow of one from the ground (see [Known issues](validation.md#known-issues)).

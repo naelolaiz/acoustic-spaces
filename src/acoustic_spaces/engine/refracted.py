@@ -215,6 +215,7 @@ class _Way:
     height: float
     top: float  # the runs' absorbing layer
     bands: np.ndarray  # (bands,) bool
+    shift: float  # the delay (s) its paths took on, the first of them's along its legs
 
 
 @dataclass
@@ -953,11 +954,11 @@ class Refraction:
         same edges reflect off the ground; for each such way, the open ground's runs
         of the parabolic equation along it, unfolded round the edges (its length seen
         from above, the wind's component along it as the lengths of its legs weigh
-        it), give its paths the weather's effect in the open ground's bands for it, in
-        which they keep their phases in still air, delayed as much as the first of them
-        (the effect holds how the weather changes their sum), and above them their legs'
-        own times and shadows (:meth:`_legs`). At an end's shadow boundary its way is
-        the listener's own, so its paths take the effect the direct sound takes there.
+        it), change its paths in the open ground's bands for it as the weather changes
+        the field along it (:meth:`_place_ends`), delayed as much as the first of them,
+        and above them give them their legs' own times and shadows (:meth:`_legs`). At
+        an end's shadow boundary its way is the listener's own, so its paths change as
+        the direct sound does there.
         Paths round the same edges none of which reflects off the ground keep their
         legs' (their partners off the ground left out, the ratio over the ground
         holds no longer). Returns the paths taken (indices), those above the bands and
@@ -994,12 +995,17 @@ class Refraction:
             index = np.array([at[i] for i in found])
             inside[index] = bands
             delay[index] += shift
-            requested.append(_Way(index, key, azimuth, length, zr, top, bands))
+            requested.append(_Way(index, key, azimuth, length, zr, top, bands, shift))
         legs = self._legs(part)
         high = None
         if not inside.all():
             high = dataclasses.replace(legs, energy=np.where(inside, 0.0, legs.energy))
-        low = dataclasses.replace(part, energy=np.where(inside, part.energy, 0.0), delay_s=delay)
+        low = dataclasses.replace(
+            part,
+            energy=np.where(inside, part.energy, 0.0),
+            delay_s=delay,
+            spectrum=None if part.spectrum is None else part.spectrum.copy(),
+        )
         return chosen, high, low, _Ends(listener=k, part=-1, ways=requested)
 
     def _round(self, paths: EarlyReflections, i: int) -> tuple | None:
@@ -1151,14 +1157,31 @@ class Refraction:
         plane.delay_s += request.shift
 
     def _place_ends(self, request: _Ends, pressures: dict, parts: list) -> None:
-        """The paths of ``request`` round ends and corners scaled, in the bands of each
-        way, by the open ground's weather effect along it: the ratio of its runs' band
-        energies (``pressures``, by (the way's id, "wind" or "still"))."""
+        """The paths of ``request`` round ends and corners changed, in the bands of each
+        way, as the open ground's field along it changes in the weather: in the coherent
+        bands their pressures, at each frequency, by the ratio of its runs' pressures
+        (``pressures``, by (the way's id, "wind" or "still", "pressure")), less the delay
+        they took on, so that together they change as that field does, its ground's
+        fringes and its travel time with it; in the others their energies by the ratio
+        of its runs' band energies (by (the way's id, "wind" or "still"))."""
         part = parts[request.listener][request.part]
+        coherent = 0 if part.spectrum is None else part.spectrum.shape[1]
         for way in request.ways:
             bands = np.flatnonzero(way.bands)
             ratio = _ratio(pressures[(id(way), "wind")], pressures[(id(way), "still")])
-            part.energy[np.ix_(way.rows, bands)] *= ratio[bands][None, :]
+            rows = way.rows
+            for band in bands:
+                wind = pressures.get((id(way), "wind", "pressure"))
+                still = pressures.get((id(way), "still", "pressure"))
+                if band >= coherent or wind is None or not np.all(still[band] != 0.0):
+                    part.energy[rows, band] *= ratio[band]
+                    continue
+                change = wind[band] / still[band]  # (M,)
+                gain = float(np.mean(np.abs(change) ** 2))
+                part.energy[rows, band] *= gain
+                if gain > 0.0:
+                    turn = np.exp(2j * np.pi * self.frequencies[band] * way.shift)
+                    part.spectrum[rows, band] *= (change * turn / math.sqrt(gain))[None, :]
 
     # -- the parabolic equation --------------------------------------------------------
 
@@ -1602,6 +1625,13 @@ def solve(plans: list[Planned]) -> list[dict]:
             else:
                 energy = out[p].setdefault((id(m), slot), np.zeros(job.refraction.bands))
                 energy[job.band] = np.mean(np.abs(value) ** 2)
+                if isinstance(m, _Way):
+                    # The pressures too, time as exp(j omega t), as the early paths have it.
+                    shape = job.refraction.frequencies.shape
+                    pressure = out[p].setdefault(
+                        (id(m), slot, "pressure"), np.zeros(shape, dtype=complex)
+                    )
+                    pressure[job.band] = np.conj(value)
     return out
 
 

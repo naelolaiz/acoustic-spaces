@@ -117,6 +117,19 @@ Two reviews rejected v1. Fixes so far (each with a test that fails before it):
   degree (40 runs a band instead of 36) and the open ground's runs along each way round an end (88 a band
   instead of 36, 16 s of 286).
 
+- Paths round ends (review round 1, continued): in the bands added coherently they now change at each
+  frequency by the ratio of their way's runs' pressures in the weather and in still air (less the delay
+  they take on), not by the energy ratio with their phases in still air, so that they keep in step with the
+  direct sound's parabolic equation. 3 m beside a building's wall 60 m downwind the weather's effect was
+  -1.84/-6.73 dB at 250/500 Hz against the open ground's +1.88/-0.14; now +1.63/-0.30 (within 0.7 dB from
+  63 to 500 Hz down- and upwind; a test). 10 cm across a barrier end's shadow boundary 60 m downwind the
+  500 Hz step went from 4.95 to 0.19 dB; 120 m upwind at 1 and 2 kHz (23 to 65 dB below still air) it is
+  15 and 27 dB, the open side now taking the open ground's deep shadow (main's 1e-16 leg bug kept it lit).
+- Two barriers 40 m apart in 8 m/s: the effect is 4.95 dB off (ring) and 4.91 (plane) at 250 Hz over rigid
+  ground (the review's 4.92); added to the validation's winds.
+- Point cost at steep points: three or four listeners 6 to 20 m up behind a barrier or a building take
+  about 120 s of CPU in 8 m/s (0.2 to 0.6 s in still air), nearly all of it in the wide-angle equation.
+
 ## Open
 
 Nothing for v1 beyond review. V1 and V2 hold: the still-air scripts (edge diffraction, insertion loss, terrain,

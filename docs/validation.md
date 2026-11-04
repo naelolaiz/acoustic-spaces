@@ -2940,17 +2940,17 @@ within 25 dB of still air, at the engine's own frequencies (16 an octave at 4 kH
 
 | case | 125 Hz to 2 kHz | 4 and 8 kHz | starting field |
 |---|---:|---:|---:|
-| `windy` downwind, barrier 3 m high 20 m away | 0.27 | 0.28 | 0.06 |
-| `windy` downwind, 6 m high 20 m away | 0.42 | 0.33 | 0.18 |
+| `windy` downwind, barrier 3 m high 20 m away | 0.27 | 0.27 | 0.06 |
+| `windy` downwind, 6 m high 20 m away | 0.42 | 0.17 | 0.18 |
 | `windy` downwind, 3 m high 50 m away | 0.27 | 0.30 | 0.02 |
 | `windy` upwind, 3 m high 20 m away | 0.42 | 0.25 | 0.06 |
 | `windy` upwind, 3 m high 50 m away | 0.47 | 0.26 | 0.02 |
 | `clear_night`, 3 m high 20 m away | 0.15 | 0.18 | 0.06 |
 | `sunny_day`, 3 m high 20 m away | 0.24 | 0.11 | 0.06 |
 
-The engine is within 0.47 dB everywhere (0.6 allowed). Deeper in the upwind shadow it
-is within 0.81 dB down to 57 dB below still air, but 6.5 and 17.4 dB off at 2 kHz 72
-and 74 dB below.
+The engine is within 0.47 dB everywhere (0.5 allowed). Deeper in the upwind shadow,
+where the effect is listed but not bounded, it is within 0.81 dB down to 57 dB below
+still air, but 6.5 and 17.4 dB off at 2 kHz 72 and 74 dB below.
 
 **The engine end to end.** `simulate`'s early paths (their coherent sum; reflections
 off both sides of an edge) in the wind less in still air, against the full-wave
@@ -3017,7 +3017,8 @@ source 1 m up over hard ground and a barrier 4 m high 15 m away across the way:
 | a building's roof 25 to 37 m away, 1 cm higher, from 6 to 6.3 m | 1.16 | 0.023 | 0.1 a cell |
 | a listener 60 and 120 m away behind a barrier slanted at 63 degrees to the way, 0.01 degrees round, from 0.40 to 0.60 degrees | 0.017 | 0.018 | |
 | a listener 2 cm further, where the parabolic equation starts (a 1.5 m barrier 2 m from a source 0.5 m up) | 0.24 | 0.16 | |
-| a listener 10 cm across the shadow boundary of a barrier's end, 60 and 120 m away | 9.7 and 24 | 4.5 | 1 |
+| a listener 10 cm across the shadow boundary of a barrier's end, 60 and 120 m away | 7.7 and 27 | 4.5 | 1 |
+| a listener 2 mm across the line of an end below the line of sight seen from above (a barrier 1 m high 30 m away), 100 and 200 m away | 37 | 8.2 | |
 
 The wind's effect grows in proportion to the wind (500 Hz, 100 m away and 4 m up),
 with no step as it starts. The roof sits on the parabolic equation's grid, so as it
@@ -4192,14 +4193,17 @@ Results:
   [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
 - **A barrier's end in wind.** Behind a barrier the paths in the plane take the
   barrier's effect and those round its end the open ground's, so where a listener
-  crosses the shadow boundary of the end the level steps: 10 cm across it, by up to
-  9.7 dB 60 m from the source and 24 dB 120 m away in the `windy` preset, where still
-  air steps by 4.5 dB at most, at 63 Hz. Where the end stands below the line of sight
-  (a barrier 1 m high 30 m from a source 1 m up), a listener 100 or 200 m away
-  crossing the end's line seen from above goes from the barrier's effect to the open
-  ground's sound: 2 mm across it the level steps by up to 11.6 dB downwind at 500 Hz
-  and 1 kHz, and upwind by 12 and 37 dB at 4 and 8 kHz, 49 to 97 dB below still air,
-  where straight legs over the edge step by up to 5.4 and 11.2 dB (see
+  crosses the shadow boundary of the end the level steps: 10 cm across it in the
+  `windy` preset, in the open ground's bands about as in still air (up to 5.0 dB at
+  63 Hz, against 4.5), but by 4.8 dB at 500 Hz 120 m upwind (0.8 in still air) and by
+  15 and 27 dB at 1 and 2 kHz there, 23 to 65 dB below still air; above those bands,
+  where the paths round the end keep straight legs, by up to 7.7 dB 60 m from the
+  source and 21 dB 120 m away. Where the end stands below the line of sight (a barrier
+  1 m high 30 m from a source 1 m up), a listener 100 or 200 m away crossing the end's
+  line seen from above goes from the barrier's effect to the open ground's sound: 2 mm
+  across it the level steps by up to 4 dB from 63 to 500 Hz, as in still air, but by
+  11.6 dB downwind at 1 kHz, and upwind by 12 and 37 dB at 4 and 8 kHz, 49 to 97 dB
+  below still air, where straight legs over the edge step by up to 5.4 and 11.2 dB (see
   [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
 - **A building's height in wind.** The parabolic equation puts a roof on its grid, so
   as a roof rises the weather's effect behind it steps at each cell: by up to 1.2
