@@ -438,3 +438,16 @@ def test_a_listener_beside_a_building_takes_the_open_ground_s_effect(towards) ->
             levels.append(10 * np.log10(total_energy(early_paths(room, listener="l0"))))
         effects.append(levels[1] - levels[0])
     np.testing.assert_allclose(effects[0][:4], effects[1][:4], atol=0.7)
+
+
+def test_a_listener_on_a_barrier_s_line_keeps_main_s_rule() -> None:
+    """A listener (or a map point) on a barrier's line seen from above, 58 m from the
+    source exactly: the parabolic equation would take it past the barrier, where nothing
+    below its top gets through, in the weather and in still air alike; it keeps the
+    open ground's rule instead of raising."""
+    wall = {"name": "wall", "path": [[40, -50], [40, 50]], "height": 4}
+    room = Room.from_scene(
+        scene(listeners=((40.0, -42.0, 1.5),), barriers=(wall,), extent=((-10, -60), (90, 60)))
+    )
+    levels = 10 * np.log10(total_energy(early_paths(room, listener="l0")))
+    assert np.all(np.isfinite(levels))

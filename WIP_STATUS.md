@@ -160,16 +160,18 @@ kept).
     (0.028 dB per mm there: smooth, no step); 500 Hz 0.094 -> 0.021 dB.
   - the full-wave roof case of the test (125 Hz, 40-52 m, roof 6.0087 m): error -0.007/+0.037 dB
     (5 m/s) and -0.004/-0.121 dB (-5 m/s), within the test's 0.2 dB; the test passes.
-  - end to end (`simulate`, 1 cm steps from 6.0 to 6.3 m): still air (before) up to 0.021 dB a cm; the
-    wind runs, before and after, were still running when this was pushed (probe:
-    `roof_end_to_end.py` in the session's scratchpad, not committed).
+  - end to end (`simulate`, the early paths' coherent sum, 1 cm steps from 6.0 to 6.3 m, listeners 60 and
+    120 m away 1.5 m up, 5 m off the axis, second-order diffraction): before, still air up to 0.021 dB a
+    cm, `windy` downwind 0.07/0.08/0.12/0.08/0.50/0.13/0.07/0.05 dB from 63 Hz to 8 kHz; after, still
+    running when this was pushed (probe `roof_end_to_end.py`, in the session's scratchpad).
 - **A listener or map point on a barrier's line or a building's wall** (seen from above, within
   `ON_OBSTACLE_M` = 1 um) made the runs behind barriers raise "the parabolic equation gave no sound in
   still air" (the march takes a listener at an obstacle's range past it, where nothing gets through
   below its top), which stopped a whole coverage map: two 4 m barriers 40 and 60 m from the source over
   grass, 8 m/s, map spacing 12 m, a point 58 m out along 313.6 degrees on the first one. Now such a
   listener keeps main's rule, and a whole degree's run with an obstacle at the listener's range counts
-  for nothing for it (`refracted._at`). Not yet covered by a test; the map has not yet been rerun.
+  for nothing for it (`refracted._at`). Test: `test_a_listener_on_a_barrier_s_line_keeps_main_s_rule`
+  (fails before: it raised). The map has not yet been rerun.
 - Cost, measured (one thread): four listeners 6 to 20 m up and one 1.5 m up behind a 4 m barrier, 8 m/s:
   229 s CPU, of it the wide-angle equation 191 s at 8 kHz and 24 s at 4 kHz (narrow 6.4 s at 8 kHz).
   Next to try: marching a band's frequencies in groups on their own grids and steps (the lowest of an
