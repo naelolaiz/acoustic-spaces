@@ -174,15 +174,20 @@ kept).
   (fails before: it raised). The map has not yet been rerun.
 - Cost, measured (one thread): four listeners 6 to 20 m up and one 1.5 m up behind a 4 m barrier, 8 m/s:
   229 s CPU, of it the wide-angle equation 191 s at 8 kHz and 24 s at 4 kHz (narrow 6.4 s at 8 kHz).
-- **Frequency groups** (`BARRIER_GROUPS` = 4 in `engine/refracted.py`): behind barriers, the bands with
-  more samples (4 and 8 kHz, `BARRIER_SAMPLES`) march their frequencies in four groups, each on the grid
-  and in the steps of its own highest (the runs of main and the other bands are unchanged). The steep
-  probe above: 229 -> 171 s CPU (wide-angle 8 kHz 191 -> 139 s, 4 kHz 24 -> 18 s; narrow 8 kHz 6.4 ->
-  5.1 s); every band of the five listeners within 0.01 dB of before. `validation/barrier_wind.py` groups
-  its engine runs the same way (`grouped`, `march_grouped`); its convergence reference (a tenth of a
-  wavelength) stays ungrouped. The run-counting test counts the groups. The barrier test files: 27
-  passed. Still to measure: the convergence check at 4-8 kHz (running, before and after), the started
-  cases at 4-8 kHz, and a map's cost.
+- **Tried and taken out: frequency groups.** Behind barriers, the 4 and 8 kHz bands marched their
+  frequencies in four groups, each on the grid and in the steps of its own highest (the lowest of an
+  octave are marched on the highest's). The steep probe above went from 229 to 171 s CPU (wide-angle
+  8 kHz 191 -> 139 s), its levels within 0.01 dB; but the convergence check at 4-8 kHz
+  (`--only convergence --band 4000 --band 8000`, the validation's runs grouped as the engine's, the
+  tenth-wavelength reference not) got worse 11 m behind the top 60 degrees up (`steep60`): grid error
+  at 4 kHz upwind over grass -2.19 -> -3.52 dB, over rigid ground -0.97 -> -1.85 dB; at 8 kHz downwind
+  over rigid ground +0.16 -> -0.82 dB; and the 32-against-64 samples error at 8 kHz there +0.17 -> -1.91
+  dB (the grid's error now steps from one group to the next across the band). Elsewhere (near, rail,
+  roof, high) within about 0.1 dB of before but for rail upwind at 8 kHz (-1.22/-1.49 dB samples at its
+  100 m listener). That listener is on the narrow-angle grid, which the groups make coarser at each
+  group's lower frequencies. Reverted (engine, validation, test). Cheaper ways still open: groups
+  keeping the band's grid of heights and changing only the range step; or the wide-angle equation's
+  absorbing layer (`LAYER_MIN_M` 20 m is most of the grid at 8 kHz) for the runs behind barriers.
 - Reruns still going: `--only full_wave --case two --band 500 --wind -5` (ring and plane), then
   `--case roof --wind -5`, both on the 60 m domain, for the open items below.
 - `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).
