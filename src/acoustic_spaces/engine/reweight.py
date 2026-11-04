@@ -80,7 +80,7 @@ def groups_of(room) -> tuple[np.ndarray, list[str]] | None:
 def _without_absorption(scene) -> dict:
     data = scene.model_dump()
     for material in data["materials"].values():
-        for key in ("absorption", "source", "preset", "file"):
+        for key in ("absorption", "source", "preset", "file", "uncertainty"):
             material.pop(key, None)
     return data
 

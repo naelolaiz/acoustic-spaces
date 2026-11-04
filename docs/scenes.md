@@ -245,6 +245,28 @@ by having the same name as a material, or through `default_material`. Names matc
 whatever their case (`brick_rough` names SketchUp's `Brick_Rough`), though a name
 written the same way wins over one in another case.
 
+`uncertainty` says how far a material's absorption may be off: a standard uncertainty
+(`distribution: normal`, the default) or a tolerance of plus or minus the value
+(`distribution: uniform`), in absorption coefficient units, one value or one per octave
+band, with an optional `source`. A material's bands are taken as moving together, and
+the materials as independent of one another.
+
+```yaml
+materials:
+  plaster:
+    absorption: [0.02, 0.02, 0.02, 0.03, 0.04, 0.05, 0.05, 0.05]
+    uncertainty: {absorption: 0.02, source: lab report}
+```
+
+`acoustic_spaces.engine.uncertainty.material_spread` gives the spread this leads to in
+each listener's ISO 3382-1 parameters: the mean, standard uncertainty and 95 % coverage
+interval of many draws of the absorption, a Monte Carlo propagation as GUM Supplement 1
+(JCGM 101:2008) describes. Each draw re-weights the traced run instead of tracing again,
+so the run must be simulated with the materials' face groups
+(`acoustic_spaces.engine.reweight.groups_of`, then `simulate(..., groups=...)`), in
+octave bands, with stochastic ray tracing for the late part and without the wave solver.
+The spread counts the absorption only, not the scattering, the seed or the method.
+
 ### Material libraries of CATT-Acoustic and ODEON
 
 Materials kept for CATT-Acoustic or ODEON can be used as they are. `file` names the
