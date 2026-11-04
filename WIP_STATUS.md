@@ -207,13 +207,18 @@ kept).
   rigid -5.63/+7.70, -0.88/-0.18 (the same as the direct run); ring grass -1.02/-4.43, -0.65/-0.36; plane
   rigid -5.72/+7.66, -0.79/-0.14; plane grass -1.08/-4.49, -0.59/-0.31. All within their limits (ring 1.7,
   plane 1.65), below the largest errors the tables give, so `LIMITS` and the tables stay.
-- Running: `--case roof --wind -5` (60 m domain), four parts.
+- **Done: the roof, 5 m/s upwind, 60 m domain** (ring; with the roof between the grid's cells; effect at
+  80/150 m, then error, dB): rigid 63 Hz -0.50/-1.70, -0.02/+0.03; 125 Hz -0.10/-2.15, -0.00/-0.12;
+  250 Hz +1.19/-1.46, +0.03/-0.21; 500 Hz +2.79/+3.31, +0.03/+0.02; grass 63 Hz -0.38/-1.27, -0.03/+0.02;
+  125 Hz +0.18/-0.81, -0.06/-0.14; 250 Hz +0.61/+1.42, -0.15/-0.24; 500 Hz -1.13/-6.74, +0.03/-0.16. Largest
+  0.24 dB (limit 0.65). With this, the reruns the "Open" list below names are done; the docs' tables were
+  filled from the runs before them and are not changed by these rows.
 - `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).
 
 ## Open
 
-- Reruns going on the 60 m domain (upwind, 5 m/s): two barriers at 500 Hz (ring and plane) and the roof over
-  grass; the tables and limits are from the runs done so far.
+- (Done on `claude/acoustic-215-7khv20`, see above.) Reruns on the 60 m domain (upwind, 5 m/s): two
+  barriers at 500 Hz (ring and plane) and the roof over grass.
 - Otherwise nothing for v1 beyond review. V1 and V2 hold: the still-air scripts (edge diffraction, insertion
   loss, terrain, edge fade at 5 cm steps) and the wind scripts (ffp, zones, long term, turbulence, outdoor
   propagation, ground reflection) write the same JSON as main but for timings; the examples' early paths are
