@@ -217,15 +217,28 @@ kept).
   filled from the runs before them and are not changed by these rows.
 - `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).
 
-- **Optimization being checked: a thinner absorbing layer behind barriers.** Both equations now take
-  `layer_m` (`parabolic.layer`): the layer's least thickness, its strength raised so that strength times
-  thickness, and so the sound's loss across it, stays the default's; the default (20 m) is bit-identical
-  to before. At 4 and 8 kHz the 20 m layer is half or more of the heights marched (8 kHz, top 21.5 m:
-  wide-angle 10860 heights where 5626 reach the top). Not used by the engine yet: running
-  `layer_check.py` (scratchpad), the convergence cases at 2, 4 and 8 kHz with 20, 10 and 5 m against
-  60 m, the weather's effect and the still level; it goes in only where no worse than 20 m.
-- Running too: the map behind two barriers (8 m/s, 12 m spacing) on this branch and on main, by band and
-  solver, after the fix for points on a barrier's line.
+- **Tried and taken out: a thinner absorbing layer behind barriers.** Both equations took `layer_m`, the
+  layer's least thickness, its strength raised to keep strength times thickness (the sound's loss across
+  it); at 4 and 8 kHz the 20 m layer is half or more of the heights marched (8 kHz, top 21.5 m: wide-angle
+  10860 heights where 5626 reach the top). Against a 60 m layer of the same loss, on the convergence cases
+  at 2, 4 and 8 kHz (rigid ground and grass, +-5 m/s), the weather's effect moved further off with a
+  thinner one: 5 m by up to 5.4 dB (near, grass, -5 m/s, 8 kHz, 120 m; 20 m: 0.001 dB), 10 m by up to
+  2.4 dB (steep60, rigid, +5 m/s, 4 kHz). Reverted.
+  - Found on the way: the default 20 m layer itself is up to 1.18 dB off the 60 m one in the weather's
+    effect, and 2.76 dB in the still level, at steep60's first listener (15 m, 11 m behind the top 60
+    degrees up; 2 to 8 kHz, both grounds), elsewhere within 0.26 dB: part of that case's known error
+    (grid convergence 2.2 dB at 4 kHz) is sound sent steeply up off the top that the layer sends back.
+    A thicker layer for steep runs behind barriers would take it out, at a cost: a follow-up.
+- **The map that stopped** (two 4 m barriers 40 and 60 m away over grass, 8 m/s, 12 m spacing, 140 points)
+  now runs: 457 s CPU on one thread against main's 38 s (12 times), 407 s of it in the parabolic
+  equation, the narrow-angle one at 8 kHz 294 s in 74 runs and at 4 kHz 62 s.
+- **Tried and taken out: a compact grid behind barriers.** The narrow-angle equation rounds its heights up
+  to a power of two (8192 for that map at 8 kHz, where about 4200 reach the absorbing layer's top);
+  rounding up only to a fast transform's length instead saved a quarter of the CPU on the convergence
+  cases (290 -> 228 s) but moved the results: the weather's effect by up to 0.14 dB 120 m behind the near
+  barrier upwind at 1-4 kHz, and behind the top 60 degrees up by up to 3.9 dB, the still level by up to
+  13.6 dB (8 kHz, grass, upwind). The heights above the layer are part of what absorbs the sound sent
+  steeply up off a high top. Not committed.
 
 ## Open
 

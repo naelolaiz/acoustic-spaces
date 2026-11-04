@@ -50,7 +50,7 @@ import math
 
 import numpy as np
 
-from acoustic_spaces.engine.parabolic import LAYER_MIN_M, layer
+from acoustic_spaces.engine.parabolic import LAYER_MIN_M, LAYER_STRENGTH, LAYER_WAVELENGTHS
 
 #: Height steps per wavelength.
 STEPS_PER_WAVELENGTH = 20
@@ -77,15 +77,14 @@ def march(
     independent: bool = False,
     obstacles=(),
     steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
-    layer_m: float = LAYER_MIN_M,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
     source) and ``heights`` (n,, m above it), from a source at height ``zs``, under the
     effective speed of sound ``speed(z)``: as :func:`acoustic_spaces.engine.parabolic.march`,
-    with the same ``impedance``, ``top``, ``screen``, ``speed_at``, ``independent``,
-    ``obstacles`` and ``layer_m``, on ``threads`` threads, ``steps_per_wavelength``
-    height steps a wavelength at the highest frequency. The self-starter reaches the first step, or the
+    with the same ``impedance``, ``top``, ``screen``, ``speed_at``, ``independent`` and
+    ``obstacles``, on ``threads`` threads, ``steps_per_wavelength`` height steps a
+    wavelength at the highest frequency. The self-starter reaches the first step, or the
     nearest range or obstacle if that is nearer; ``independent`` starts each range
     nearer than a step on its own. A building here is two thin screens at its roof's
     height, its front face and its back face."""
@@ -97,10 +96,9 @@ def march(
     heights = np.asarray(heights, dtype=float)
     c0 = float(np.asarray(speed(np.array([0.0])))[0])
     ka = 2.0 * math.pi * f / c0  # (F,)
-    n, dz, thickness = _grid(f, c0, top, steps_per_wavelength, layer_m)
-    strength = layer(f, c0, layer_m)[1]
+    n, dz, thickness = _grid(f, c0, top, steps_per_wavelength)
     z = np.arange(n) * dz
-    absorbing = 1j * strength * np.clip((z - top) / thickness, 0.0, 1.0) ** 2
+    absorbing = 1j * LAYER_STRENGTH * np.clip((z - top) / thickness, 0.0, 1.0) ** 2
     step = RANGE_STEP_WAVELENGTHS * c0 / f.max()
     threads = max(int(threads), 1)
 
@@ -306,16 +304,12 @@ def _operators(f, ka, speed, absorbing, zg, dz) -> tuple[np.ndarray, np.ndarray]
 
 
 def _grid(
-    f: np.ndarray,
-    c0: float,
-    top: float,
-    steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
-    layer_m: float = LAYER_MIN_M,
+    f: np.ndarray, c0: float, top: float, steps_per_wavelength: float = STEPS_PER_WAVELENGTH
 ) -> tuple[int, float, float]:
     """The heights' count and spacing, and the absorbing layer's thickness, for the
     frequencies ``f`` under an absorbing layer from ``top``."""
     dz = c0 / f.max() / steps_per_wavelength
-    thickness = layer(f, c0, layer_m)[0]
+    thickness = max(LAYER_WAVELENGTHS * c0 / f.min(), LAYER_MIN_M)
     return int(math.ceil((top + thickness) / dz)) + 1, dz, thickness
 
 
