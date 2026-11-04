@@ -37,8 +37,9 @@ with the top's height (a zero-field, or Kirchhoff, screen: Salomons 1994, J. Aco
 Am. 95, 3109). A building's front face does the same at its roof's height; over the roof
 the field marches on the heights from the roof up, over a rigid floor there, and behind
 its back face the field below the roof starts from nothing. Such a screen lets through
-less than a rigid one does (1 to 7 dB less 2 to 120 m behind it), by an amount that
-hangs on the geometry and hardly on the weather.
+less than a rigid one does (0.7 to 7.4 dB less 2 to 90 m behind it, up to 11 dB 3 to
+10 m behind it steeply below its top), by an amount that hangs on the geometry and hardly
+on the weather.
 
 The frequencies of one band are marched together, on the grid and in the steps of the
 highest, under the absorbing layer of the lowest.

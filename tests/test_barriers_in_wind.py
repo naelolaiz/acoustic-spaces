@@ -392,28 +392,22 @@ def test_a_way_that_touches_a_building_s_corner_from_outside_meets_nothing() -> 
     assert layout.obstacles_along(np.zeros(2), d, 400.0) == []
 
 
-def test_a_map_counts_the_paths_that_come_before_the_straight_line_s_time() -> None:
-    """Behind barriers in wind no path is clear, so a map's points start at the straight
-    line's time; the paths over the barriers come sooner downwind and count with the
-    direct sound, in the bands added in energy too."""
-    from acoustic_spaces.engine.coverage import TIME_STEP, _part_curve
+def test_the_sound_starts_with_the_paths_over_the_barrier_where_they_come_sooner() -> None:
+    """Behind barriers in wind no path is clear; downwind the paths over them come sooner
+    than the straight line's time, and the response (a map's point too, whose bands
+    added in energy begin there) starts with the first of them; upwind, at the straight
+    line's time."""
     from acoustic_spaces.engine.early import EarlyReflections
 
-    energy = np.arange(1.0, 9.0)[None, :]
-    early = EarlyReflections(
-        order=np.ones(1, dtype=np.int64),
-        delay_s=np.array([0.1 - 2.5 * TIME_STEP]),
-        distance_m=np.array([34.0]),
-        direction=np.array([[-1.0, 0.0, 0.0]]),
-        energy=energy,
-    )
-    part = refracted_part(onset=np.array([0.1]), early=[early])
-    curve = _part_curve(part, None, 0, 0.1, 4, 0.1 + 4 * TIME_STEP, 8)
-    np.testing.assert_allclose(curve.sum(axis=1), energy[0])
-    np.testing.assert_allclose(curve[:, 0], energy[0])
+    def over(delay):
+        return EarlyReflections(
+            order=np.zeros(2, dtype=np.int64),
+            delay_s=np.array([delay, delay + 0.003]),
+            distance_m=np.array([34.0, 35.0]),
+            direction=np.array([[-1.0, 0.0, 0.0]] * 2),
+            energy=np.ones((2, 8)),
+            edge=np.array([3, 3]),
+        )
 
-
-def refracted_part(**fields):
-    from acoustic_spaces.engine.coverage import _Part
-
-    return _Part(late=None, **fields)
+    onset = refracted.direct_times(np.array([0.1, 0.1]), [over(0.098), over(0.102)])
+    np.testing.assert_array_equal(onset, [0.098, 0.1])

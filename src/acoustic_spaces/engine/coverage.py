@@ -780,11 +780,8 @@ def _part_curve(
     out = np.zeros((bands, slots))
     paths = part.early[k]
     delays, energy = paths.delay_s, paths.energy
-    # What arrives before the direct sound counts with it, as at a listener: behind
-    # barriers in wind no path is clear, the onset is the straight line's time, and the
-    # paths over them come sooner downwind.
-    idx = np.maximum(np.floor((delays - start) / TIME_STEP + 1e-9).astype(np.int64), 0)
-    keep = idx < slots
+    idx = np.floor((delays - start) / TIME_STEP + 1e-9).astype(np.int64)
+    keep = (idx >= 0) & (idx < slots)
     coherent = paths.coherent_bands
     for b in range(coherent, bands):
         np.add.at(out[b], idx[keep], energy[keep, b])

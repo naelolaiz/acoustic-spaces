@@ -34,8 +34,11 @@ Where the listener's way, seen from above, crosses a barrier or a building
 the listener keep their levels in still air, and in every band the weather changes them
 by the ratio of the parabolic equation's sound marched through it to that marched
 through still air, both with the barriers and buildings on the way inside (the
-``obstacles`` of :func:`~acoustic_spaces.engine.parabolic.march`). The paths round a
-barrier's end or a building's corner take the open ground's ratio in its bands.
+``obstacles`` of :func:`~acoustic_spaces.engine.parabolic.march`), along the whole
+degrees either side of the way (:meth:`Refraction._cuts_for`). The paths round a
+barrier's end or a building's corner alone, where one of them reflects off the ground,
+take the open ground's ratio along their own way round the edges in its bands
+(:meth:`Refraction._ends`).
 
 The late stage's rays bend too: the compiled tracer follows each one along its arcs
 through the layers, in chords (:func:`bending` gives it the atmosphere).
@@ -122,12 +125,13 @@ BARRIER_SAMPLES = ((4000, 16), (8000, 32))
 #: Their absorbing layer starts at least this many times higher than the highest top
 #: on the way.
 BARRIER_HEADROOM = 1.5
-#: A run along a bin's direction counts fully for a listener behind barriers while the
-#: last of them there stands at least this share as far before the listener as along its
+#: A run along a whole degree counts fully for a listener behind barriers while the last
+#: of them along it stands at least this share as far before the listener as along its
 #: own way, and less as it comes nearer (:meth:`Refraction._cuts_for`).
 BARRIER_CLOSE = 0.5
 #: Over this share of the step between two whole degrees, round the halfway direction,
-#: a listener behind barriers takes both runs, weighed linearly (one alone elsewhere).
+#: a listener behind barriers takes both runs' effects, in dB, weighed linearly by its
+#: direction (the nearest alone elsewhere).
 BARRIER_BLEND = 0.5
 #: The first root of Ai' (the first creeping mode over a rigid ground).
 _FIRST_MODE = -1.0187929716474710
@@ -1716,13 +1720,16 @@ def bending(model: TraceModel) -> dict:
 def direct_times(times: np.ndarray, paths: list[EarlyReflections]) -> np.ndarray:
     """(n,) when the direct sound reaches each listener along its bent path: the earliest
     of its ``paths`` that neither reflects nor goes round an edge, sooner downwind and
-    later upwind than along the straight line; ``times``, the straight line's, where
-    there is none (behind a building)."""
+    later upwind than along the straight line; where there is none (behind a barrier or
+    a building), ``times``, the straight line's, or the earliest path's where it comes
+    sooner (over the barrier downwind)."""
     out = np.array(times, dtype=float)
     for k, found in enumerate(paths):
         clear = (found.order == 0) & ~found.diffracted
         if clear.any():
             out[k] = float(found.delay_s[clear].min())
+        elif len(found):
+            out[k] = min(out[k], float(found.delay_s.min()))
     return out
 
 

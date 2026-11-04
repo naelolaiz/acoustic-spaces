@@ -92,9 +92,20 @@ Two reviews rejected v1. Fixes so far (each with a test that fails before it):
   ground, with a partner off the ground, take the open ground's effect, now along their own way round the
   edges (its length seen from above); others keep their straight legs. Corner rows behind touching buildings
   upwind: +6.8 dB at 1 kHz before, now -0.3 (straight legs +0.1); a crate of the model file: as main again.
-- Maps count early paths that arrive before the onset in its slot (they were dropped in the bands added in
-  energy).
+- Maps: the direct sound's time behind barriers is the earliest path's where it comes sooner than the straight
+  line's (no clear path), so maps keep the paths over a barrier that the wind brings sooner. 130 m behind two
+  barriers in 8 m/s of wind the map read 1 to 8 kHz 17.7 to 22.2 dB below the point; now +0.6 to +13.5 dB, the
+  same as in still air (+0.6, +1.3, +3.8, +13.5 at 1, 2, 4, 8 kHz: main's own map against point behind
+  barriers), and the weather's effect is the same in the map and at the point.
 - A line touching a footprint's corner from outside no longer makes a zero-length building.
+- A degree's boundary behind a slanted barrier (60 and 120 m): 0.66 dB per 0.01 degree before, now 0.017
+  (still air 0.018).
+- Validation script (uncommitted runs going): a plane (line-source, straight screens) full-wave reference next
+  to the ring; case two40 (3 m at 20 m, 5 m at 60 m) on both; case near_up (60 m domain, 5 and 10 m/s
+  upwind to 200 m); a domain self-check (30 m domain: 0.00 dB at 120 m, 10.5 dB at 200 m in 5 m/s upwind;
+  60 m within 0.02 dB of 90 m but 1.24 dB at 200 m in 10 m/s); `--band`, `--wind`, `--reference`,
+  `--only convergence`; started 8 kHz rows rerun with 32 frequencies. near_up 250 Hz rigid in 10 m/s upwind:
+  -0.71, -1.05 dB at 60 and 120 m (the narrow-angle bias the review found).
 
 ## Open
 

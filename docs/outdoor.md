@@ -535,27 +535,41 @@ is an arc of a circle, so its travel time and its length are exact.
   ground, and over the tops across it) keep their levels in still air, and in every
   band the weather changes them by its effect in a parabolic equation with the barriers
   and buildings on the way inside: the band energy marched through the weather over
-  that marched through still air, both from the source along the way's direction
-  rounded to a degree. Inside it a barrier lets nothing through below its top
-  (Salomons 1994), which leaves the level behind it 1 to 7 dB below a rigid one's, and
-  a roof is a rigid floor over which the field goes on; the ratio cancels most of that.
-  These paths arrive as much sooner or later as the first of them would along its
-  legs, and take the eddies' share of a refraction shadow as the open ground's sound
-  does. The paths round a barrier's end or a building's corner, on both sides of it,
-  take the open ground's effect in the bands its parabolic equation gives, with their
-  phases in still air, and above those bands keep their straight legs as over an edge.
-  Against a full-wave solution of rigid barriers and blocks in
-  wind from 63 to 500 Hz, and against a parabolic equation started behind a rigid
-  barrier from its exact field from 125 Hz to 8 kHz, the weather's effect is within
-  0.8 dB behind one barrier or building (1.0 dB behind a top 45 degrees up from the
-  source, 1.7 dB behind two barriers 10 m apart) and 0.5 dB, where the sound is
-  within 25 dB of its level in still air (see
+  that marched through still air, both from the source along whole degrees of
+  direction. A listener takes the nearest whole degree's effect, and near halfway
+  between two both, weighed in dB by its direction, so that the effect changes
+  smoothly as it moves round; a degree along which more or fewer barriers and buildings
+  stand short of the listener than along its own way, or the listener would be under a
+  roof, counts for nothing, one whose last barrier stands nearer the listener than half
+  as far as along its own way for less, and the listener's own way takes what they lose.
+  Inside the equation a barrier lets nothing through below its top (Salomons 1994),
+  which leaves the level behind it 0.7 to 7.4 dB below a rigid one's 2 to 90 m behind
+  (up to 11 dB 3 to 10 m behind, steeply below the top), and a roof is a rigid floor
+  over which the field goes on; the ratio cancels most of that. These paths arrive as
+  much sooner or later as the first of them would along its legs, and take the eddies'
+  share of a refraction shadow as the open ground's sound does. The paths round a
+  barrier's end or a building's corner alone, off nothing but the ground, where one of
+  them reflects off the ground, take the open ground's effect along their own way round
+  the edges (its length seen from above, the wind's component along it) in the bands
+  its parabolic equation gives, with their phases in still air; above those bands, and
+  round other edges (over a top and round an end at once, a model file's objects), the
+  paths keep their straight legs as over an edge. Against a full-wave solution of rigid
+  barriers and blocks in wind from 63 to 500 Hz, and against a parabolic equation
+  started behind a rigid barrier from its exact field from 125 Hz to 8 kHz, the
+  weather's effect is within {{ONE5}} dB behind one barrier or building in 5 m/s of
+  wind and {{ONE10}} dB downwind in 10 m/s, where the sound is within 25 dB of its level
+  in still air; upwind in 10 m/s it comes out {{UP10}} (the narrow-angle
+  equation's), behind a top 45 degrees up from the source it is within 1.0 dB, behind
+  two barriers 10 m apart within 1.7 dB and 40 m apart {{TWO40}}, and behind the
+  started barrier within 0.5 dB (see
   [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   Nearer than 1.5 times the source's and the listener's heights added, where an object
   of a model file stands in the way, where the source or the listener stands on a
   building, or where no path lies in the plane, the paths go over the edges as above.
 - **The direct sound's time** in the results is when the bent direct sound arrives:
-  sooner downwind, later upwind (the time along the ground in the shadow).
+  sooner downwind, later upwind (the time along the ground in the shadow); where
+  nothing clears the way, the earliest path's where it comes sooner than the straight
+  line's (over a barrier downwind).
 - **The late rays** follow their arcs through the layers, in chords that stray at most
   2 cm from them, reflect where they meet a surface, and leave the scene once they are
   bent up out of it. The energy they rain onto listeners goes straight, in the time of
@@ -1465,16 +1479,29 @@ equation leaves out:
   parts by up to 6.5 dB from a parabolic equation that leaves it out (Plovsing 2006).
 - **Sound going back.** The equation marches away from the source only: nothing
   reflects between two barriers or back towards the source. Behind two barriers 10 m
-  apart the weather's effect is up to 1.7 dB off from 63 to 500 Hz.
-- **The third dimension.** The equation runs in the vertical plane along the way,
-  rounded to a degree, so a barrier is a ring round the source, and behind a slanted
-  barrier the level steps by up to 0.7 dB where the way turns from one degree to the
-  next; how obliquely the way crosses it changes the level in still air by 0.4 to
-  0.9 dB from 0 to 45 degrees (Aballéa et al. 2007), which the ratio cancels in part.
-  The paths round an end take the open ground's effect, not their own, and only in its
-  bands: where a listener crosses the shadow boundary of a barrier's end the level
-  steps, 10 cm across it, by up to 9.7 dB 60 m from the source and 24 dB 120 m away
-  (see [Validation](validation.md#known-issues)).
+  apart the weather's effect is up to 1.7 dB off from 63 to 500 Hz; 40 m apart
+  {{TWO40LONG}}.
+- **Steep angles upwind.** The narrow-angle equation is exact only near the
+  horizontal: in 10 m/s of wind upwind the effect comes out {{UP10LONG}}.
+- **The third dimension.** The equation runs in vertical planes along whole degrees, so
+  a barrier is a ring round the source; how obliquely the way crosses it changes the
+  level in still air by 0.4 to 0.9 dB from 0 to 45 degrees (Aballéa et al. 2007), which
+  the ratio cancels in part. Against a run along the listener's own way the blend of two
+  degrees is within 0.9 dB 120 m behind a barrier at 18 degrees to the way and 1.8 dB
+  within 3 m behind a wall at 45 degrees. The paths round an end take the open ground's
+  effect along their way, not the barrier's, and only in its bands: where a listener
+  crosses the shadow boundary of a barrier's end the level steps, 10 cm across it, by
+  up to 9.7 dB 60 m from the source and 24 dB 120 m away. Where the end stands below
+  the line of sight, a listener crossing the end's line seen from above (its way
+  crossing the barrier on one side, and on the other the open ground's sound) steps by
+  up to 11.6 dB downwind at 500 Hz and 1 kHz 100 to 200 m away, and upwind by 12 and 37
+  dB at 4 and 8 kHz, 49 to 97 dB below still air; the straight legs stepped by up to
+  5.4 and 11.2 dB (see [Validation](validation.md#known-issues)). Listeners in the open whose paths go round
+  an end or a corner change from the straight legs of the version before these runs:
+  100 m upwind 5 m beside a barrier's end by up to 3.7 dB at 63 and 125 Hz and 0.3 dB
+  from 1 kHz up, and 1 cm to 30 cm beside a building's wall 60 m downwind from -15.4 to
+  +4.5 dB at 250 Hz and from -3.9 to +8.4 dB at 500 Hz; no reference in three
+  dimensions checks them.
 - **A roof on the equation's grid.** A roof stands at the nearest of the equation's
   heights, so as a building rises the level behind it steps from one to the next, by
   up to 1.2 dB from 2 kHz up.
@@ -1483,8 +1510,8 @@ equation leaves out:
   wind's effect behind a building 60 m deep at 500 Hz in 10 m/s.
 - **Objects of a model file** are not in the equation: where one stands in the way the
   paths go over the edges with straight legs.
-- **Deep shadows.** Deeper than 25 dB below still air the effect is off by up to 0.8 dB
-  down to 57 dB below, and 17 dB at 74 dB below (2 kHz, upwind).
+- **Deep shadows.** Deeper than 25 dB below still air the effect is not bounded: in the
+  checks it is off by up to {{DEEP}}.
 
 The levels in still air the effect multiplies keep their own errors (see
 [Validation](validation.md#known-issues)). The standards' corrections for the weather
