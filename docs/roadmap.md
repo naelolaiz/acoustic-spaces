@@ -282,7 +282,8 @@ Outdoor acoustics, in steps:
   field (`validation/barrier_wind.py`); the paths round a barrier's end or a building's
   corner take the open ground's effect along their own way, for listeners in the open
   too. Still air is as before.
-- [ ] Barriers in wind, next: the barrier's own wind; a blend of the barrier's and the
+- [ ] Barriers in wind, next: the barrier's own wind; the sound the eddies scatter over
+  a barrier's top into its shadow; a blend of the barrier's and the
   open ground's effects across a barrier's end, where the level steps; the paths round
   ends checked against a reference in three dimensions; the wide-angle equation behind
   barriers upwind in strong wind, where the narrow-angle one comes out low; the sound

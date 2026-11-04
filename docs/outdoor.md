@@ -811,8 +811,11 @@ C_v² / c0² (Ostashev and Wilson 2015).
   source 2 m and the listener 1.5 m up, and deep in those shadows the engine is within
   about 1 dB of it on average, 3.5 dB at most; the shadows of other heights and profiles
   follow the same formula, untested. A barrier's or a building's own shadow takes
-  nothing from the eddies; behind one, in a refraction shadow, the paths in the plane
-  through the source and the listener take the open ground's share.
+  nothing from the eddies: the sound they scatter over its top into it, which limits a
+  barrier's insertion loss at high frequencies, is not modelled. Behind one, in a
+  refraction shadow, each path in the plane through the source and the listener takes
+  the open ground's share of its own energy, which the barrier has already lowered, so
+  the eddies' share comes down by the barrier's loss too.
 - **An impulse response is one moment of the eddies.** Each path is delayed at random,
   band by band, as the eddies have it at that moment (the seed draws it), so the levels
   of a response scatter about the echogram's average, the more the stronger the eddies
