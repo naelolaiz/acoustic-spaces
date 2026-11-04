@@ -64,6 +64,7 @@ from acoustic_spaces.engine.diffraction import band_frequencies
 from acoustic_spaces.engine.refracted import (
     BARRIER_COARSE,
     BARRIER_COARSE_FROM_HZ,
+    BARRIER_GROUPS,
     BARRIER_HEADROOM,
     BARRIER_SAMPLES,
     WAVE_MIN_HEADROOM_M,
@@ -203,6 +204,28 @@ def samples(band: int) -> np.ndarray:
     return band_frequencies(dense[-1])[0][band] if dense else band_frequencies()[0][band]
 
 
+def grouped(band: int, f: np.ndarray) -> int:
+    """How many groups the engine's runs behind barriers march the frequencies ``f`` of
+    ``band`` in (``BARRIER_GROUPS`` where the band takes more samples)."""
+    dense = any(CENTRES[band] >= start for start, _ in BARRIER_SAMPLES)
+    return min(BARRIER_GROUPS, len(f)) if dense else 1
+
+
+def march_grouped(groups: int, f, speed, impedance, *args, **kwargs) -> np.ndarray:
+    """:func:`parabolic.march` at the frequencies ``f`` in ``groups`` groups, each on the
+    grid and in the steps of its own highest, as the engine's runs behind barriers."""
+    out = []
+    for group in np.array_split(np.arange(len(f)), groups):
+        at = impedance
+        if impedance is not None and groups > 1:
+
+            def at(r, group=group):
+                return np.broadcast_to(np.asarray(impedance(r)), (len(f),))[group]
+
+        out.append(parabolic.march(f[group], speed, at, *args, **kwargs))
+    return np.concatenate(out, axis=0)
+
+
 def engine_levels(band, speed, impedance, zs, at, cut, speed_at=None) -> np.ndarray:
     """(n,) the band level (dB over free field) of the engine's parabolic equation with
     ``cut`` inside, at the points ``at`` (range, height), as its runs behind barriers
@@ -218,7 +241,8 @@ def engine_levels(band, speed, impedance, zs, at, cut, speed_at=None) -> np.ndar
     )
     coarse = CENTRES[band] >= BARRIER_COARSE_FROM_HZ
     steps = parabolic.STEPS_PER_WAVELENGTH * (BARRIER_COARSE if coarse else 1.0)
-    p = parabolic.march(
+    p = march_grouped(
+        grouped(band, f),
         f,
         speed,
         impedance,
@@ -985,9 +1009,10 @@ CONVERGENCE = {
 CONVERGENCE_WINDS = (5.0, -5.0)
 
 
-def weather_effect(f, u, ground_name, case, steps) -> np.ndarray:
+def weather_effect(f, u, ground_name, case, steps, groups: int = 1) -> np.ndarray:
     """(n,) the engine's parabolic equation's weather effect (dB) at ``case``'s
-    listeners at the frequencies ``f``, with a grid of ``steps`` a wavelength."""
+    listeners at the frequencies ``f``, with a grid of ``steps`` a wavelength, marched
+    in ``groups`` groups of frequencies."""
     impedance = None
     if ground_name == "grass":
         z = grass_impedance(f)
@@ -1004,7 +1029,8 @@ def weather_effect(f, u, ground_name, case, steps) -> np.ndarray:
             WAVE_TOP_SLOPE * ranges.max(),
             BARRIER_HEADROOM * max(t for _, _, t in case["cut"]),
         )
-        p = parabolic.march(
+        p = march_grouped(
+            groups,
             f,
             speed,
             impedance,
@@ -1023,8 +1049,9 @@ def weather_effect(f, u, ground_name, case, steps) -> np.ndarray:
 
 def check_convergence(names, quick: bool, only_bands=None) -> dict:
     """The engine's weather effect from its parabolic equation alone, against finer
-    runs: from 1 kHz up a tenth of a wavelength's grid against its quarter, and in each
-    band its frequencies against 32 an octave (64 where it takes 32)."""
+    runs: from 1 kHz up a tenth of a wavelength's grid (its frequencies marched
+    together, on the highest's grid) against its quarter (in the engine's groups), and in
+    each band its frequencies against 32 an octave (64 where it takes 32)."""
     print("(d) Convergence: the engine's effect less a finer run's (dB)")
     out: dict = {"grid": {}, "samples": {}}
     bands = (3, 5, 7) if quick else range(8)
@@ -1040,15 +1067,14 @@ def check_convergence(names, quick: bool, only_bands=None) -> dict:
                     f = samples(band)
                     coarse = CENTRES[band] >= BARRIER_COARSE_FROM_HZ
                     steps = fine * (BARRIER_COARSE if coarse else 1.0)
-                    own = weather_effect(f, u, ground_name, case, steps)
+                    own = weather_effect(f, u, ground_name, case, steps, grouped(band, f))
                     key = f"{name} {ground_name} {CENTRES[band]} Hz {u:+g} m/s"
                     if coarse:
                         finer = weather_effect(f, u, ground_name, case, fine)
                         out["grid"][key] = (own - finer).tolist()
                     count = max(32, 2 * len(f))
-                    denser = weather_effect(
-                        band_frequencies(count)[0][band], u, ground_name, case, steps
-                    )
+                    many = band_frequencies(count)[0][band]
+                    denser = weather_effect(many, u, ground_name, case, steps, grouped(band, many))
                     out["samples"][key] = {"count": len(f), "against": count}
                     out["samples"][key]["error_db"] = (own - denser).tolist()
                     grid = out["grid"].get(key)
