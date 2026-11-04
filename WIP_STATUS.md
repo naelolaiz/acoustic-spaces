@@ -256,6 +256,12 @@ kept).
   291 and 172 s, against main's 38 s 12, 7.7 and 4.5 times. In `docs/outdoor.md` (a table after the
   cost paragraph) and the field's description.
 
+- Checks at `d11fa1c`: the command-line and outdoor test files (cli, refraction, diffraction, coverage,
+  insertion, long_term, outdoor, parabolic*, barriers_in_wind, ffp, turbulence, ground, edge_fade,
+  first_gather, vegetation, wave, grazing, native) 580 passed, 1 skipped (matplotlib); scene and code
+  tests 338 passed, 53 skipped (PIL); all with `-W error`. `ruff check` and `ruff format --check` clean
+  but for `wip/prototypes/`; `tools/catalog.py check` clean.
+
 ## Open
 
 - (Done on `claude/acoustic-215-7khv20`, see above.) Reruns on the 60 m domain (upwind, 5 m/s): two
