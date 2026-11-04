@@ -1487,7 +1487,7 @@ equation leaves out:
   a barrier is a ring round the source; how obliquely the way crosses it changes the
   level in still air by 0.4 to 0.9 dB from 0 to 45 degrees (Aballéa et al. 2007), which
   the ratio cancels in part. Against a run along the listener's own way the blend of two
-  degrees is within 0.9 dB 120 m behind a barrier at 18 degrees to the way and 1.8 dB
+  degrees is within 0.9 dB 120 m behind a barrier at 14 degrees to the way and 1.8 dB
   within 3 m behind a wall at 45 degrees. The paths round an end take the open ground's
   effect along their way, not the barrier's, and only in its bands: where a listener
   crosses the shadow boundary of a barrier's end the level steps, 10 cm across it, by
@@ -1495,13 +1495,10 @@ equation leaves out:
   the line of sight, a listener crossing the end's line seen from above (its way
   crossing the barrier on one side, and on the other the open ground's sound) steps by
   up to 11.6 dB downwind at 500 Hz and 1 kHz 100 to 200 m away, and upwind by 12 and 37
-  dB at 4 and 8 kHz, 49 to 97 dB below still air; the straight legs stepped by up to
-  5.4 and 11.2 dB (see [Validation](validation.md#known-issues)). Listeners in the open whose paths go round
-  an end or a corner change from the straight legs of the version before these runs:
-  100 m upwind 5 m beside a barrier's end by up to 3.7 dB at 63 and 125 Hz and 0.3 dB
-  from 1 kHz up, and 1 cm to 30 cm beside a building's wall 60 m downwind from -15.4 to
-  +4.5 dB at 250 Hz and from -3.9 to +8.4 dB at 500 Hz; no reference in three
-  dimensions checks them.
+  dB at 4 and 8 kHz, 49 to 97 dB below still air, where straight legs over the edge
+  step by up to 5.4 and 11.2 dB (see [Validation](validation.md#known-issues)). No reference in three
+  dimensions checks the paths round ends and corners, for listeners behind a barrier
+  or in the open beside it.
 - **A roof on the equation's grid.** A roof stands at the nearest of the equation's
   heights, so as a building rises the level behind it steps from one to the next, by
   up to 1.2 dB from 2 kHz up.

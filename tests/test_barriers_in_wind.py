@@ -302,7 +302,7 @@ def test_a_listener_close_behind_a_slanting_wall_takes_the_effect_behind_it(fiel
 
 
 def test_the_effect_changes_smoothly_from_one_degree_s_run_to_the_next(field, scaled):
-    """Behind a barrier at 18 degrees to the way, 120 m out, where the barrier stands
+    """Behind a barrier at 14 degrees to the way, 120 m out, where the barrier stands
     farther along each whole degree: either side of 4.5 degrees the weather's effect is
     the same, halfway between those along 4 and 5 degrees (in dB); along 4.2 degrees, the
     run along 4 degrees alone."""

@@ -1,8 +1,9 @@
 """Barriers and buildings in wind: the engine's parabolic equation with them inside,
 against two references written apart from the engine.
 
-    python validation/barrier_wind.py [--only full_wave|started|engine] [--case NAME]
-                                      [--quick] [--json results.json]
+    python validation/barrier_wind.py [--only full_wave|started|engine|convergence]
+        [--case NAME] [--band HZ] [--wind M_S] [--reference ring|plane] [--quick]
+        [--full-wave-json results.json] [--json results.json]
 
 Behind a barrier or a building in wind the engine keeps each path's level in still air
 and multiplies it, in each octave band, by the weather's effect G = E_wind / E_still: the
@@ -17,8 +18,10 @@ these checks measure how far it does.
   blocks, solved by stepwise coupled modes in range (Evans 1983, J. Acoust. Soc. Am.
   74, 188): exact in range (Hankel functions), finite volumes in height (cell centres)
   with a perfectly matched layer on top. No paraxial approximation, rigid screens, the
-  wind everywhere, rigid ground and grass (Miki, 200 kPa s/m2), 63 to 500 Hz. The
-  engine's effect against its effect (each the level in the weather less that in
+  wind everywhere, rigid ground and grass (Miki, 200 kPa s/m2), 63 to 500 Hz. Where a
+  case says, also along a plane (``plane``: a line source, straight screens and blocks,
+  exponentials in range), where nothing focuses what goes back between two screens.
+  The engine's effect against its effect (each the level in the weather less that in
   still air), per band at each listener.
 - ``started``: a split-step parabolic equation of its own (the exact square-root
   propagator, rigid ground as an even field), started 1 m behind a rigid straight
@@ -30,14 +33,16 @@ these checks measure how far it does.
 - ``engine``: :func:`acoustic_spaces.simulate`'s early paths end to end (a straight
   barrier or building 1 km long, rigid ground, reflections off both sides of an edge)
   in the wind and in still air, the difference against ``full_wave``'s effect.
+- ``convergence``: the engine's parabolic equation alone, its grid and its frequencies
+  against finer ones.
 
 Each check also tests itself: the full-wave solution against the exact two-path field
 over open rigid ground, against the engine's parabolic equation over open ground in
-wind, and with a ring screen in still air against a straight screen's four paths; the
-started equation's still air against the four paths it starts from.
-Acceptance, per band, at listeners 10 m or more behind the obstacles, where the
-reference's effect is 25 dB or less (deeper shadows are listed, not judged):
-:data:`LIMITS`.
+wind, with a screen in still air against a straight screen's four paths, and on its
+domain against a taller one deep in an upwind shadow; the started equation's still air
+against the four paths it starts from.
+Acceptance, per band, at the listeners where the reference's effect is 25 dB or less
+(deeper shadows are listed, not judged): :data:`LIMITS`.
 """
 
 from __future__ import annotations
@@ -88,7 +93,8 @@ LIMITS = {
 #: (a) The cases: the source's height (m), what stands on the way (near, far, top: a
 #: screen where near is far), the listeners (range, height); where given, the
 #: full-wave domain's height under its absorbing layer (``top``, default
-#: :data:`FULL_WAVE_TOP_M`), the winds (default :data:`WINDS`), the bands (indices of
+#: :data:`FULL_WAVE_TOP_M`; ``top_upwind`` upwind, where the sound comes down from high up
+#: in the shadow), the winds (default :data:`WINDS`), the bands (indices of
 #: :data:`CENTRES`, default 63 to 500 Hz) and the references: ``ring`` round an axis
 #: (the default), ``plane`` along a plane (:func:`full_wave`).
 FULL_WAVE = {
@@ -98,16 +104,27 @@ FULL_WAVE = {
         "at": [(30, 1.5), (60, 1.5), (120, 1.5), (60, 4)],
         "references": ("ring", "plane"),
     },
-    "far": {"zs": 1.0, "cut": [(100.0, 100.0, 4.0)], "at": [(110, 1.5), (130, 1.5), (130, 4)]},
+    "far": {
+        "zs": 1.0,
+        "cut": [(100.0, 100.0, 4.0)],
+        "at": [(110, 1.5), (130, 1.5), (130, 4)],
+        "top_upwind": 60.0,
+    },
     "rail": {"zs": 0.5, "cut": [(4.0, 4.0, 3.0)], "at": [(25, 1.5), (50, 1.5), (100, 1.5)]},
     "steep45": {"zs": 0.5, "cut": [(4.0, 4.0, 4.5)], "at": [(15, 1.5), (30, 1.5), (60, 1.5)]},
     "steep60": {"zs": 0.5, "cut": [(4.0, 4.0, 7.43)], "at": [(15, 1.5), (30, 1.5), (60, 1.5)]},
-    "roof": {"zs": 1.0, "cut": [(40.0, 52.0, 6.0)], "at": [(80, 1.5), (150, 1.5)]},
+    "roof": {
+        "zs": 1.0,
+        "cut": [(40.0, 52.0, 6.0)],
+        "at": [(80, 1.5), (150, 1.5)],
+        "top_upwind": 60.0,
+    },
     "two": {
         "zs": 1.0,
         "cut": [(45.0, 45.0, 8.0), (55.0, 55.0, 8.0)],
         "at": [(100, 1.5), (150, 1.5)],
         "references": ("ring", "plane"),
+        "top_upwind": 60.0,
     },
     "two40": {
         "zs": 1.0,
@@ -115,6 +132,7 @@ FULL_WAVE = {
         "at": [(100, 1.5), (160, 1.5)],
         "bands": (1, 2),
         "references": ("ring", "plane"),
+        "top_upwind": 60.0,
     },
     "near_up": {
         "zs": 1.0,
@@ -519,6 +537,13 @@ def case_options(case: dict, quick: bool, filters: dict):
     return bands, winds, references
 
 
+def domain_of(case: dict, u: float) -> float:
+    """The full-wave domain's height (m) under its absorbing layer for ``case`` in a
+    wind of ``u`` (negative: upwind)."""
+    top = case.get("top", FULL_WAVE_TOP_M)
+    return case.get("top_upwind", top) if u < 0 else top
+
+
 def check_full_wave(names, quick: bool, filters: dict | None = None, own: bool = True) -> dict:
     """The engine's weather effect against the full-wave solution's (rigid ground and
     grass, 63 to 500 Hz unless the case says, the winds of :data:`WINDS` unless it
@@ -530,8 +555,8 @@ def check_full_wave(names, quick: bool, filters: dict | None = None, own: bool =
     for name in names:
         case = FULL_WAVE[name]
         zs, at = case["zs"], case["at"]
-        top = case.get("top", FULL_WAVE_TOP_M)
         bands, winds, references = case_options(case, quick, filters)
+        tops = {u: domain_of(case, u) for u in winds}
         for reference_name in references:
             plane = reference_name == "plane"
             for ground_name in ("rigid", "grass"):
@@ -542,13 +567,17 @@ def check_full_wave(names, quick: bool, filters: dict | None = None, own: bool =
                     impedance = None if ground is None else (lambda r, z=ground: z)
                     cut = snapped(case["cut"], band)
                     still = uniform(float(wind(0.0)(np.array([0.0]))[0]))
-                    reference_still = full_wave_levels(band, still, zs, at, cut, ground, top, plane)
+                    reference_still = {
+                        top: full_wave_levels(band, still, zs, at, cut, ground, top, plane)
+                        for top in sorted(set(tops.values()))
+                    }
                     engine_still = engine_levels(band, still, impedance, zs, at, cut)
                     for u in winds:
                         speed = wind(u)
+                        top = tops[u]
                         reference = (
                             full_wave_levels(band, speed, zs, at, cut, ground, top, plane)
-                            - reference_still
+                            - reference_still[top]
                         )
                         engine = engine_levels(band, speed, impedance, zs, at, cut) - engine_still
                         key = f"{name} {ground_name} {CENTRES[band]} Hz {u:+g} m/s"
@@ -565,7 +594,7 @@ def check_full_wave(names, quick: bool, filters: dict | None = None, own: bool =
                             "reference_effect_db": reference.tolist(),
                             "engine_effect_db": engine.tolist(),
                             "error_db": (engine - reference).tolist(),
-                            "reference_still_db": reference_still.tolist(),
+                            "reference_still_db": reference_still[top].tolist(),
                             "engine_still_db": engine_still.tolist(),
                         }
                         print(
@@ -928,7 +957,7 @@ def check_engine(names, full: dict, quick: bool = False, filters: dict | None = 
 
 
 #: (d) The cases (as :data:`FULL_WAVE`'s), and ``high``: listeners high and close
-#: behind a barrier, where the engine's march takes its steep split.
+#: behind a barrier, the sound reaching them steeply.
 CONVERGENCE = {
     **{name: FULL_WAVE[name] for name in ("near", "rail", "roof", "steep60")},
     "high": {"zs": 1.0, "cut": [(10.0, 10.0, 3.0)], "at": [(25, 10.0), (25, 14.0), (40, 1.5)]},

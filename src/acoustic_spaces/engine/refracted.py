@@ -451,7 +451,8 @@ class Refraction:
                 out.append(self._off_walls(listener, zr, paths, rows, planes, ratio, cutoff))
         if barrier is not None:
             plane, request = barrier
-            bent = [i for i in bent if i not in set(plane)]
+            taken = set(plane)
+            bent = [i for i in bent if i not in taken]
             out.insert(0, paths[np.array(plane)])
             request.part = 0
         asked = [] if request is None else [request]
@@ -462,7 +463,8 @@ class Refraction:
             ends = self._ends(k, listener, zr, paths, bent, cutoff, towards)
         if ends is not None:
             chosen, high, low, request_ends = ends
-            bent = [i for i in bent if i not in set(chosen)]
+            taken = set(chosen)
+            bent = [i for i in bent if i not in taken]
         if bent:
             out.append(self._legs(paths[np.array(sorted(bent))]))
         if ends is not None:

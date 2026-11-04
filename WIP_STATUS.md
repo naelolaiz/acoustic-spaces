@@ -85,9 +85,9 @@ Two reviews rejected v1. Fixes so far (each with a test that fails before it):
   under a roof, and less where the last one stands nearer than half as far as on its own way; the
   listener's own way takes the weight lost. A zero still-air energy raises. Behind a 45-degree wall 0.7 m
   behind it the level stepped by 25 to 72 dB within 1.5 m; now within the still air's own changes (2 dB).
-  At a whole degree's halfway direction behind a barrier at 18 degrees the step was 2.35 dB downwind and 3
+  At a whole degree's halfway direction behind a barrier at 14 degrees to the way the step was 2.35 dB downwind and 3
   dB upwind; now 0.03 dB per 0.01 degree. Against the listener's own way: within 0.9 dB (120 m behind the
-  18-degree barrier), 1.8 dB within 3 m behind a 45-degree wall.
+  14-degree barrier), 1.8 dB within 3 m behind a 45-degree wall.
 - Paths round ends: only those round barriers' ends and buildings' corners alone, off nothing but the
   ground, with a partner off the ground, take the open ground's effect, now along their own way round the
   edges (its length seen from above); others keep their straight legs. Corner rows behind touching buildings
@@ -104,8 +104,18 @@ Two reviews rejected v1. Fixes so far (each with a test that fails before it):
   to the ring; case two40 (3 m at 20 m, 5 m at 60 m) on both; case near_up (60 m domain, 5 and 10 m/s
   upwind to 200 m); a domain self-check (30 m domain: 0.00 dB at 120 m, 10.5 dB at 200 m in 5 m/s upwind;
   60 m within 0.02 dB of 90 m but 1.24 dB at 200 m in 10 m/s); `--band`, `--wind`, `--reference`,
-  `--only convergence`; started 8 kHz rows rerun with 32 frequencies. near_up 250 Hz rigid in 10 m/s upwind:
-  -0.71, -1.05 dB at 60 and 120 m (the narrow-angle bias the review found).
+  `--only convergence`; started 8 kHz rows rerun with 32 frequencies (all within 0.30 dB). Upwind in 10 m/s
+  (near_up, 60 m domain) the engine's effect is 0.2 to 1.7 dB low where judged (1.0 to 1.4 at 250 Hz 120 and
+  200 m away, the narrow-angle bias the review found); in 5 m/s within 0.71 dB. Two barriers 40 m apart: the
+  plane reference agrees with the ring within 0.1 dB in the effect (0.08 dB in still air), so the ring does
+  not focus here; the engine is off by up to 2.2 dB (250 Hz, 5 m/s downwind, rigid). Upwind rows of far,
+  roof, two and two40 (listeners 130 to 160 m away) rerun on a 60 m domain (30 m: +1.0 dB at 150 m, 552 Hz).
+  Convergence reproduced by the script (8 kHz grid now with 32 frequencies: 2.2 dB at 4 kHz behind the 60
+  degree top). End to end within 0.18 dB of the PE's own error.
+- Cost (coverage maps, 96 points, threads=1, CPU under the same load): main 13.4/12.3/9.5 s, before these
+  fixes 232/227/236 s, now 295/260/259 s (22, 21 and 27 times main): the blend's runs along one more whole
+  degree (40 runs a band instead of 36) and the open ground's runs along each way round an end (88 a band
+  instead of 36, 16 s of 286).
 
 ## Open
 

@@ -273,11 +273,14 @@ Outdoor acoustics, in steps:
   through the source and the listener take the weather's effect from the parabolic
   equation run in every band with the barriers and buildings inside, checked against a
   full-wave solution and a parabolic equation started from a rigid barrier's exact
-  field (`validation/barrier_wind.py`). Still air and the open ground are as before.
+  field (`validation/barrier_wind.py`); the paths round a barrier's end or a building's
+  corner take the open ground's effect along their own way, for listeners in the open
+  too. Still air is as before.
 - [ ] Barriers in wind, next: the barrier's own wind; a blend of the barrier's and the
-  open ground's effects across a barrier's end, where the level steps; maps that keep
-  the early sound arriving before the straight line's time; a roof between the
-  equation's cells; and runs at 4 and 8 kHz that cost less (see
+  open ground's effects across a barrier's end, where the level steps; the paths round
+  ends checked against a reference in three dimensions; the wide-angle equation behind
+  barriers upwind in strong wind, where the narrow-angle one comes out low; a roof
+  between the equation's cells; and runs at 4 and 8 kHz that cost less (see
   [Known issues](validation.md#known-issues)).
 - [ ] A leg from a ground reflection a rounding error above the ground takes the
   shadow of one from the ground (see [Known issues](validation.md#known-issues)).
