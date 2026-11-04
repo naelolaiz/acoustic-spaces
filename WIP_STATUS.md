@@ -192,8 +192,10 @@ kept).
   group's lower frequencies. Reverted (engine, validation, test). Cheaper ways still open: groups
   keeping the band's grid of heights and changing only the range step; or the wide-angle equation's
   absorbing layer (`LAYER_MIN_M` 20 m is most of the grid at 8 kHz) for the runs behind barriers.
-- Reruns still going: `--only full_wave --case two --band 500 --wind -5` (ring and plane), then
-  `--case roof --wind -5`, both on the 60 m domain, for the open items below.
+- Reruns not done: `--only full_wave --case two --band 500 --wind -5` (ring and plane), then
+  `--case roof --wind -5`, both on the 60 m domain, were stopped at this session's two-hour limit for
+  a background job before the first row printed (the 500 Hz ring run over rigid ground alone takes
+  longer than that here, on 4 cores shared with other runs). They need a longer-lived machine.
 - `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).
 
 ## Open
