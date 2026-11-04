@@ -923,6 +923,7 @@ def test_demo_scripts_take_an_hrtf(tmp_path: Path) -> None:
     other formats are left alone; and asked for mixes before the
     scene and the simulation exist, a demo says which step writes the scene."""
     sofa = tmp_path / "me.sofa"
+    sofa.write_bytes(b"")  # there, as the check asks
     plain = argparse.Namespace(format="binaural", hrtf=None)
     own = argparse.Namespace(format="binaural", hrtf=sofa)
     assert pipeline.output_label(plain) == "binaural"

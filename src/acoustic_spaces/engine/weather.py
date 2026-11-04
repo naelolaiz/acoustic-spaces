@@ -28,7 +28,7 @@ import math
 
 import numpy as np
 
-from acoustic_spaces.engine.refraction import Profile, node_heights
+from acoustic_spaces.engine.refraction import Profile, node_heights, table_heights
 from acoustic_spaces.geometry import UNIT_SCALE
 from acoustic_spaces.geometry.builders import plan_problem
 from acoustic_spaces.geometry.outdoor import clip_polygon, in_polygon
@@ -51,9 +51,14 @@ class Weather:
         weathers = atmosphere.weathers()
         grounds = atmosphere.ground_temperatures(float(ground_c))
         nodes = np.zeros(0)
+        rows = np.zeros(0)
         for weather in weathers:
             nodes = np.union1d(nodes, node_heights(weather))
+            rows = np.union1d(rows, table_heights(weather))
         self.nodes = nodes
+        #: The heights of the rows of the weathers' tables: the profiles' ``rows``
+        #: (:class:`~acoustic_spaces.engine.refraction.Profile`).
+        self.rows = rows
         self.still = np.array(
             [w.sound_speed(nodes, g) for w, g in zip(weathers, grounds, strict=True)], dtype=float
         )  # (K, N)
@@ -127,7 +132,7 @@ class Weather:
         weighted by its share."""
         a = np.asarray(a, dtype=float)
         b = np.asarray(b, dtype=float)
-        return Profile(self.nodes, a @ self.still + b @ self.wind)
+        return Profile(self.nodes, a @ self.still + b @ self.wind, self.rows)
 
     def along(self, start: np.ndarray, direction: np.ndarray, reach: float):
         """A function giving, at a distance along ``direction`` (2,, unit) from

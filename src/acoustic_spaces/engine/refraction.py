@@ -23,6 +23,7 @@ advances its phase by a quarter period (a factor j, time going as exp(j omega t)
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass, field
 
@@ -47,6 +48,39 @@ _RANGE_TOLERANCE = 1e-6
 #: a height goes as the square root of how far they are from that: at most 2.4 times
 #: the last step to the end).
 _EDGE_REACH = 4.0
+#: Turning heights (m) within this of each other count as the same: a ray at the end of
+#: a branch's reach that turns at the listener's height ends two branches
+#: (:meth:`Rays._folds`), and rays a float of p apart that turn at the same heights hold
+#: no jump of the range between them (:meth:`Rays._bisect`).
+_SAME_TURN_M = 1e-6
+#: The most :meth:`Rays._graze` allows a ray taken at a fold or at a steep crossing to
+#: miss the listener by, as a share of the distance: the most in a gradient weak enough
+#: that neighbouring floats of p could hold any range between them.
+_GRAZE_SHARE = 1e-4
+#: A ray taken at a fold or at a steep crossing lies within this many floats of p of a
+#: ray that runs level at the source's or the listener's height: only there do
+#: neighbouring floats of p hold ranges further apart than the tolerance, the range going
+#: as the square root of how far p is from there, and not by the rounding of the range.
+_GRAZE_FLOATS = 4.0
+#: The widths of a ray's tube from its range less its singular parts and from its range
+#: itself agree where they differ by no more than this share of the width
+#: (:meth:`Rays._choose`). The latter changes too much to be taken over the former where
+#: it changes by more, from rays half as far apart; and, unless they agree, where its
+#: rays lie ``_FEW_FLOATS`` floats of p apart or fewer or the ray is taken at a fold or a
+#: steep crossing, to be taken at all.
+_AGREEMENT = 1e-2
+#: Where the width from the range less its singular parts cannot be had, the width from
+#: the range itself is taken only where it changes by no more than this share of it from
+#: rays half as far apart; for a ray that turns in the air, that from the rays a small
+#: step either side is taken instead of the fitted one where the two differ by more.
+_ALONE = 1e-1
+#: The width from the range less its singular parts is taken over one from the range
+#: itself that it disagrees with, or alone, only where it changes by no more than this
+#: share of it from rays half as far apart.
+_STABLE = 1e-3
+#: Rays half as far apart as others count as new ones only where those lie at least this
+#: many floats of p apart (from one ray to the next): else they round to the same floats.
+_HALF_FLOATS = 4.0
 #: The most a ray tube focuses: a caustic's level is capped at this many times the
 #: spherical spreading over the path's length (10 dB).
 CAUSTIC_CAP = 10.0
@@ -57,32 +91,85 @@ _MAX_CYCLES = 40
 _CAUSTIC_SAMPLES = 10
 #: The greatest sagitta (m) of a chord drawn for an arc of a ray.
 CHORD_SAGITTA_M = 0.02
-#: A ray that turns in the air has its tube's width fitted over rays whose turning
-#: points lie up to this many of the profile's layers above and below its own, and this
-#: many rays across them: in a profile linear between nodes, the range of such rays
-#: wiggles as their turning points cross the nodes, and its derivative there is up to
-#: twice the smooth profile's.
+#: A ray that turns in the air has the slope of its range, less the parts singular at
+#: its ends and the ground, fitted over rays whose turning points lie up to this many of
+#: the profile's layers above and below its own, and this many rays across them, the
+#: span halved up to this many times until all keep to its branch: in a profile linear
+#: between nodes, the range of such rays wiggles as their turning points cross the
+#: nodes, and its derivative grows without bound as a turning point nears a node where
+#: the gradient changes (as one over the square root of the height between them),
+#: though the smooth profile's stays finite.
 _TURN_LAYERS = 2.0
 _TURN_RAYS = 9
+_TURN_HALVINGS = 8
+#: The step in p, relative, of the slope of a ray's range less its singular parts where
+#: no rays turning about its own are fitted (that range is smooth in p).
+_SMOOTH_STEP = 1e-6
+#: The rays a ray's tube is fitted over keep within this share of the way from it to
+#: the nearest ray that runs level in a level layer of the profile: the range of the
+#: rays that cross such a layer, p c dz / s through it, grows without bound there.
+_LEVEL_SHARE = 1.0 / 16.0
+#: The most the rounding of the parts of a ray's range singular at its ends may move
+#: the width of its tube, as a share of it, for the tube to be worked out from the range
+#: less them (:meth:`Rays._width`); else from the range itself.
+_WIDTH_ROUNDING = 1e-4
+#: Where the layers a ray's neighbours cross depart from their trend, the most the width
+#: of its tube from rays a small step either side may differ from that from rays a
+#: quarter of that step either side, as a share of it, for it to be taken (else it comes
+#: from the range itself): the parts, from the trend, then leave some of the range's own
+#: singularity about the rays that run level at their heights.
+_LOOSE_AGREEMENT = 1e-3
+#: Where the rays a small step either side of a ray lie fewer than this many floats
+#: from its parameter p, its tube comes from them only where rays a quarter as far
+#: either side agree (as ``_LOOSE_AGREEMENT``): the slope of the range from rays N
+#: floats either side can carry up to about 1/N of it in rounding.
+_FEW_FLOATS = 300
+#: Speeds at the profile's nodes within this many units in the last place of each
+#: other count as the same, and nodes this close to a line as on it: the rounding of
+#: the speeds worked out at the nodes (:attr:`Profile.trend`).
+_ROUNDING_ULPS = 16.0
 
 
 @dataclass(frozen=True)
 class Profile:
     """The effective speed of sound (m/s) along one horizontal direction, linear in
     height between nodes ``z`` (m above the ground, from 0, increasing) and constant
-    above the last."""
+    above the last. ``rows`` are the heights (m) of those nodes where the profile itself
+    is linear between (a table's rows), not sampled from a smooth one."""
 
     z: np.ndarray
     c: np.ndarray
+    rows: np.ndarray = field(default_factory=lambda: np.zeros(0), repr=False, compare=False)
     #: (N + 1,) dc/dz in each layer, the constant one above the last node with it.
     gradient: np.ndarray = field(init=False, repr=False, compare=False)
+    #: (N + 1,) the gradient of the straight stretch of the profile each layer lies in:
+    #: the layers between two of the ``rows`` whose nodes' speeds lie on one line to
+    #: rounding (``_ROUNDING_ULPS``), as a table's between its rows; 0 where the speed
+    #: changes over the stretch by no more than that rounding (level, to the arithmetic)
+    #: and above the last node. The singular parts of the range take it
+    #: (:meth:`Rays._singular`): the gradients of the layers within a stretch differ by
+    #: their nodes' rounding, which grows without bound against a weak one.
+    trend: np.ndarray = field(init=False, repr=False, compare=False)
+    #: The indices of the nodes that are corners of the profile, where its gradient may
+    #: change by any amount: the ``rows`` and the edges of its level stretches (the top
+    #: of the profile among them).
+    corners: np.ndarray = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         z = np.asarray(self.z, dtype=float)
         c = np.asarray(self.c, dtype=float)
+        rows = np.asarray(self.rows, dtype=float).reshape(-1)
         object.__setattr__(self, "z", z)
         object.__setattr__(self, "c", c)
-        object.__setattr__(self, "gradient", np.append(np.diff(c) / np.diff(z), 0.0))
+        object.__setattr__(self, "rows", rows)
+        gradient = np.append(np.diff(c) / np.diff(z), 0.0)
+        trend = _trend(z, c, np.isin(z, rows))
+        level = trend == 0.0
+        inner = np.arange(1, len(z))
+        corner = (level[inner - 1] != level[inner]) | np.isin(z[inner], rows)
+        object.__setattr__(self, "gradient", gradient)
+        object.__setattr__(self, "trend", trend)
+        object.__setattr__(self, "corners", inner[corner])
 
     @classmethod
     def of(cls, atmosphere, ground_c: float, towards=None) -> Profile:
@@ -90,7 +177,8 @@ class Profile:
         with the air at ``ground_c`` °C on the ground, along the horizontal unit vector
         ``towards`` (2,) (None: the speed of sound in still air)."""
         z = node_heights(atmosphere)
-        return cls(z, np.asarray(atmosphere.sound_speed(z, ground_c, towards), dtype=float))
+        c = np.asarray(atmosphere.sound_speed(z, ground_c, towards), dtype=float)
+        return cls(z, c, table_heights(atmosphere))
 
     @classmethod
     def uniform(cls, speed: float) -> Profile:
@@ -112,9 +200,35 @@ def node_heights(atmosphere) -> np.ndarray:
     """The heights (m) of the nodes the profile of ``atmosphere`` is linear between: the
     geometric spacing, and a table's own heights."""
     z = np.concatenate([[0.0], np.geomspace(_FIRST_NODE_M, _TOP_M, _NODES)])
-    if atmosphere is not None and atmosphere.table is not None:
-        z = np.union1d(z, [row[0] for row in atmosphere.table])
-    return z
+    return np.union1d(z, table_heights(atmosphere))
+
+
+def table_heights(atmosphere) -> np.ndarray:
+    """The heights (m) of the rows of the table of ``atmosphere``, if it has one."""
+    if atmosphere is None or atmosphere.table is None:
+        return np.zeros(0)
+    return np.array([row[0] for row in atmosphere.table], dtype=float)
+
+
+def _trend(z: np.ndarray, c: np.ndarray, breaks: np.ndarray) -> np.ndarray:
+    """(N + 1,) :attr:`Profile.trend` of the speeds ``c`` at the nodes ``z``: from each
+    stretch's first node, as many layers up as leave the nodes between on the line from
+    its speed to its last node's, to rounding, ending at the nodes where ``breaks``."""
+    tolerance = _ROUNDING_ULPS * float(np.spacing(np.max(np.abs(c))))
+    out = np.zeros(len(z))
+    a = 0
+    while a < len(z) - 1:
+        b = a + 1
+        while b < len(z) - 1 and not breaks[b]:
+            share = (z[a + 1 : b + 1] - z[a]) / (z[b + 1] - z[a])
+            line = c[a] + share * (c[b + 1] - c[a])
+            if np.any(np.abs(c[a + 1 : b + 1] - line) > tolerance):
+                break
+            b += 1
+        rise = c[b] - c[a]
+        out[a:b] = rise / (z[b] - z[a]) if abs(rise) > tolerance else 0.0
+        a = b
+    return out
 
 
 def _log_ratio(x: np.ndarray) -> np.ndarray:
@@ -137,13 +251,19 @@ def _sine(p: np.ndarray, c: np.ndarray) -> np.ndarray:
     return np.sqrt(np.maximum((1.0 - pc) * (1.0 + pc), 0.0))
 
 
-def _piece(p, ca, cb, dz):
+def _piece(p, ca, cb, dz, turns_a=False, turns_b=False):
     """The horizontal distance, travel time and length of a ray with parameter ``p``
     through a piece of a layer ``dz`` (>= 0) high, from speed ``ca`` at its bottom to
     ``cb`` at its top (linear between), where the ray never turns (p c <= 1): exact for
     an arc of a circle, written to stay accurate for straight rays and at turning
-    points."""
-    sa, sb = _sine(p, ca), _sine(p, cb)
+    points. Where ``turns_a`` (``turns_b``) the ray turns at the bottom (top) and its
+    sine there is 0: from p (1 / p), which rounds to 1 - 1.1e-16 for one ray in six,
+    it would be 1.5e-8 and move the range (by 6e-5 m 150 m away in 0.17 m/s per
+    metre) as much as the ranges of the neighbouring rays that give the spreading
+    (:meth:`Rays._ray`) differ by where the ray turns within millimetres of the
+    listener's or the source's height."""
+    sa = np.where(turns_a, 0.0, _sine(p, ca))
+    sb = np.where(turns_b, 0.0, _sine(p, cb))
     gdz = cb - ca
     total = np.maximum(sa + sb, 1e-300)
     width = p * (ca + cb) / total
@@ -165,24 +285,39 @@ def _segment(profile: Profile, p, layer, lo, hi):
     p = np.asarray(p, dtype=float)
     lo, hi = np.broadcast_arrays(np.asarray(lo, dtype=float), np.asarray(hi, dtype=float))
     c_lo = c0 + slope * (lo - base)
-    c_hi = c0 + slope * (hi - base)
     limit = 1.0 / np.maximum(p, 1e-300)
     # Where the speed reaches 1 / p the ray turns: only the side of the layer below
-    # that speed is reachable.
-    with np.errstate(divide="ignore", invalid="ignore"):
+    # that speed is reachable (none at all, an infinite height, in a gradient too weak
+    # to bring it there).
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         turn = base + (limit - c0) / np.where(slope != 0.0, slope, 1.0)
     rising = slope > 0.0
     falling = slope < 0.0
-    top = np.where(rising & (c_hi > limit), np.minimum(hi, turn), hi)
-    bottom = np.where(falling & (c_lo > limit), np.maximum(lo, turn), lo)
+    # Compared in height, not speed: a piece up to a turning height worked out as
+    # ``turn`` is (:class:`_Fan`) turns there, though the speed there may round below
+    # 1 / p.
+    to_turn = rising & (hi >= turn)
+    from_turn = falling & (lo <= turn)
+    top = np.where(to_turn, np.minimum(hi, turn), hi)
+    bottom = np.where(from_turn, np.maximum(lo, turn), lo)
     open_ = (top > bottom) & ~((slope == 0.0) & (c_lo > limit))
-    cb = np.where(rising & (c_hi > limit), limit, c0 + slope * (top - base))
-    ca = np.where(falling & (c_lo > limit), limit, c0 + slope * (bottom - base))
+    cb = np.where(to_turn, limit, c0 + slope * (top - base))
+    ca = np.where(from_turn, limit, c0 + slope * (bottom - base))
+    # A piece running level at both ends, a turn and where p c rounds to 1, is no wider
+    # than that rounding in a layer with a gradient: it holds nothing.
+    sa = np.where(from_turn, 0.0, _sine(p, ca))
+    sb = np.where(to_turn, 0.0, _sine(p, cb))
+    open_ &= (slope == 0.0) | (sa + sb > 0.0)
     # Closed pieces: any speeds the ray could have, for the formulas to stay finite.
     ca, cb = np.where(open_, ca, 0.0), np.where(open_, cb, 0.0)
     dz = np.where(open_, top - bottom, 0.0)
     dx, dt, ds = _piece(
-        np.where(open_, p, 0.0), np.where(open_, ca, 1.0), np.where(open_, cb, 1.0), dz
+        np.where(open_, p, 0.0),
+        np.where(open_, ca, 1.0),
+        np.where(open_, cb, 1.0),
+        dz,
+        open_ & from_turn,
+        open_ & to_turn,
     )
     return np.where(open_[..., None], np.stack([dx, dt, ds], axis=-1), 0.0)
 
@@ -214,13 +349,13 @@ class _Fan:
         has_upper = above.any(axis=1)
         first = source + 1 + np.argmax(above, axis=1)
         under = first - 1
-        with np.errstate(divide="ignore", invalid="ignore"):
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
             upper = z[under] + (limit - c[under]) / g[under]
         self.hi = np.where(has_upper, np.maximum(upper, self.zs), np.inf)
         below = blocked[:, : source + 1]
         has_lower = below.any(axis=1)
         last = source - np.argmax(below[:, ::-1], axis=1)
-        with np.errstate(divide="ignore", invalid="ignore"):
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
             lower = z[last] + (limit - c[last]) / g[last]
         self.lo = np.where(has_lower, np.minimum(lower, self.zs), 0.0)
         self.ground = ~has_lower
@@ -323,6 +458,26 @@ def _phase(fan: _Fan, zr: float, up, arrives_up, cycle, heights=None) -> np.ndar
 
 
 @dataclass
+class _Singular:
+    """The parts of the range of the rays along a branch that are singular where they
+    run level at the source, the listener, the ground, a corner of the profile or in a
+    level layer (:meth:`Rays._singular`)."""
+
+    #: (k, c, g, at): the range holds k s / (p g), s a ray's sine at the speed c; at
+    #: "source", "listener" or the height of the ground or the corner, where the part
+    #: is 0 for the rays that do not reach it.
+    terms: list[tuple[float, float, float, str | float]]
+    #: Whether the listener's part is among them: the rays need not reach it.
+    listener: bool
+    #: Whether the ray bounces off the ground, or could: rays that reach it must too.
+    bounce: bool
+    #: (k, c, at): the range holds k p c / s through level layers of speed c, k their
+    #: height, as many times as the ray passes it; 0 for the rays that do not reach
+    #: the height ``at`` in them.
+    legs: list[tuple[float, float, float]]
+
+
+@dataclass
 class Eigenrays:
     """The rays from a source to a listener in a stratified atmosphere, along the
     horizontal direction from the source to the listener (the listener ``range`` m
@@ -358,9 +513,19 @@ class Rays:
         self.cs = float(profile.speed(self.zs))
         u = np.linspace(1.0, 0.0, launch_angles, endpoint=False)[::-1]
         angle = 0.5 * np.pi * u**2  # grazing first, vertical last
-        self.grid = np.cos(angle) / self.cs
-        self.grid[-1] = 0.0
+        grid = np.cos(angle) / self.cs
+        grid[-1] = 0.0
+        # The rays that run level at the source and, where the air is faster there, at
+        # the ground too: a ray's range turns back on either side of them, so two
+        # eigenrays could lie between two of the rays launched, unseen.
+        level = [1.0 / self.cs]
+        if profile.c[0] > self.cs:
+            level.append(1.0 / float(profile.c[0]))
+        self.grid = np.unique(np.concatenate([grid, level]))[::-1]
         self._fan = _Fan(profile, self.grid, self.zs)
+        # The rays that run level in the profile's level layers and stretches (see
+        # _LEVEL_SHARE).
+        self._levels = 1.0 / profile.c[(profile.gradient == 0.0) | (profile.trend == 0.0)]
 
     def eigenrays(
         self, zr: float, distance: float, max_bounces: int, max_time: float = np.inf
@@ -394,14 +559,18 @@ class Rays:
                 # is out of reach there.
                 deeper = 2 * inside - outside
                 if 0 <= deeper < f.shape[1] and finite[kind, deeper]:
-                    last, step = f[kind, inside], f[kind, inside] - f[kind, deeper]
-                    if last * step > 0.0 or abs(last) > _EDGE_REACH * abs(step):
-                        continue
+                    # (The ray that runs level in a level layer reaches some 1e300 m.)
+                    with np.errstate(over="ignore"):
+                        last, step = f[kind, inside], f[kind, inside] - f[kind, deeper]
+                        if last * step > 0.0 or abs(last) > _EDGE_REACH * abs(step):
+                            continue
                 edges.append((kind, cycle, inside, outside, f[kind, inside]))
             if cycle >= 1 and not np.any(f <= 0.0):
                 # The rays only go farther pass after pass: once none of a pass's falls
                 # short of the listener, none after it does.
                 break
+        cycle_count = cycle + 1
+        found, folds = [], []
         if edges:
             kind, cycle, inside, outside, f_in = (np.array(c) for c in zip(*edges, strict=True))
             up, arrives = kinds[kind, 0], kinds[kind, 1]
@@ -413,32 +582,195 @@ class Rays:
                 lows.append(a)
                 highs.append(b)
                 branches.append((int(kind[i]), int(cycle[i])))
-        found = []
+            # Two branches that end on the same ray, where it turns at the listener's
+            # height (to rounding): one arriving before that turn and one after it.
+            ends = _Fan(self.profile, near, self.zs)
+            upper = np.abs(ends.hi - zr) <= np.abs(ends.lo - zr)
+            turning = np.minimum(np.abs(ends.hi - zr), np.abs(ends.lo - zr)) <= _SAME_TURN_M
+            inner = np.nextafter(near, self.grid[inside])
+            for i, j in itertools.combinations(np.flatnonzero(turning), 2):
+                if near[i] == near[j] and up[i] == up[j] and upper[i] == upper[j]:
+                    a = Branch(bool(up[i]), bool(arrives[i]), int(cycle[i]))
+                    b = Branch(bool(up[j]), bool(arrives[j]), int(cycle[j]))
+                    folds.append((float(near[i]), float(inner[i]), a, b, bool(upper[i]), zr))
+        # The same where the ray turns at the source's height, running level there: one
+        # launched up and one down, which turns there once less high up (where the
+        # gradient above the source is positive) or once more low (where the one below
+        # it is negative). The other runs on from the source on its own side, which a
+        # level layer there would carry off level.
+        below, above = self._sides(self.zs, self.profile.trend)
+        p = 1.0 / self.cs
+        for upper, turning, other in ((True, above > 0.0, below), (False, below < 0.0, above)):
+            if not turning or other == 0.0:
+                continue
+            for c in range(cycle_count):
+                for arrives in (True, False):
+                    a = Branch(True, arrives, c)
+                    if upper:
+                        lowest, highest = a.lower_events, a.upper_turns - 1
+                    else:
+                        lowest, highest = a.lower_events + 1, a.upper_turns
+                    if highest >= 0 and lowest - highest == int(arrives):
+                        b = Branch(False, arrives, highest)
+                        folds.append((p, float(np.nextafter(p, 0.0)), a, b, upper, self.zs))
+        found += [(q, b, True) for q, b in self._folds(zr, distance, folds)]
         if branches:
             kind, cycle = (np.array(c) for c in zip(*branches, strict=True))
-            roots = self._bisect(
+            roots, steady = self._bisect(
                 zr, distance, kinds[kind, 0], kinds[kind, 1], cycle, np.array(lows), np.array(highs)
             )
             for i, root in enumerate(roots):
                 if np.isfinite(root):
                     branch = Branch(bool(kinds[kind[i], 0]), bool(kinds[kind[i], 1]), int(cycle[i]))
-                    found.append((float(root), branch))
-        return self._describe(zr, distance, found, max_bounces, max_time)
+                    found.append((float(root), branch, bool(steady[i])))
+        straight = None
+        if self._level_between(zr):
+            # Through level air the direct ray is straight: in closed form, where the
+            # search could not tell its p from the next float's when it runs almost
+            # level (the range then changes by more than the tolerance between them).
+            found = [(q, b, f) for q, b, f in found if b.cycle or b.up != b.arrives_up]
+            straight = self._straight(zr, distance)
+        return self._describe(zr, distance, found, max_bounces, max_time, straight)
+
+    def _sides(self, height: float, g: np.ndarray) -> tuple[float, float]:
+        """The gradients ``g`` (per layer: the profile's own or its trend) just below and
+        just above ``height`` (the same inside a layer; on the ground, the one above for
+        both, as off a mirror)."""
+        j = int(self.profile.layer(height))
+        below = g[j - 1] if j > 0 and height == self.profile.z[j] else g[j]
+        return float(below), float(g[j])
+
+    def _level_between(self, zr: float) -> bool:
+        """Whether the profile is level (its speed the same) at every height between the
+        source's and ``zr``, or, where they are the same, on one side of it."""
+        low, high = min(self.zs, zr), max(self.zs, zr)
+        if low == high:
+            return 0.0 in self._sides(low, self.profile.gradient)
+        first = int(self.profile.layer(low))
+        last = int(np.searchsorted(self.profile.z, high, side="left")) - 1
+        return bool(np.all(self.profile.gradient[first : last + 1] == 0.0))
+
+    def _straight(self, zr: float, distance: float) -> dict:
+        """The straight direct ray through level air to a listener at height ``zr``
+        ``distance`` m away (:meth:`_ray`'s description)."""
+        rise = zr - self.zs
+        length = math.hypot(distance, rise)
+        angle = math.atan2(rise, distance)
+        up = rise >= 0.0
+        return {
+            "p": distance / (length * self.cs),
+            "branch": Branch(up, up, 0),
+            "launch": angle,
+            "arrival": angle,
+            "time": length / self.cs,
+            "length": length,
+            "spreading": 1.0 / length**2,
+            "caustics": 0,
+            "ground": False,
+            "bounces": np.zeros(0),
+            "capped": False,
+        }
 
     def _edge(self, zr, up, arrives_up, cycle, inside, outside) -> np.ndarray:
         """The ray parameters closest to ``outside`` from ``inside`` (arrays) for which
         the branches still reach the listener."""
-        for _ in range(_BISECTIONS // 2):
+        for _ in range(_BISECTIONS):
+            if np.all(np.abs(outside - inside) <= np.spacing(np.maximum(inside, outside))):
+                break
             middle = 0.5 * (inside + outside)
             ok = np.isfinite(self._range(zr, middle, up, arrives_up, cycle))
             inside = np.where(ok, middle, inside)
             outside = np.where(ok, outside, middle)
         return inside
 
-    def _bisect(self, zr, distance, up, arrives_up, cycle, lo, hi) -> np.ndarray:
+    def _folds(self, zr, distance, folds) -> list[tuple[float, Branch]]:
+        """The eigenrays at folds (p, inner, a, b, upper, end): branches ``a`` and ``b``
+        that end on the same ray, with parameter p, where it turns at the height ``end``
+        of the source or the listener (high up if ``upper``, else low), if one turns
+        there once more than the other. Their ranges run on from one into the other
+        there: where they cross the listener's between ``inner``, the next float of p
+        towards the rays they hold, and p, the eigenray is the one of those rays that
+        comes nearest. The range may change there by more than the tolerance from one
+        float to the next, as the square root of how far p is from grazing the end, but
+        by no more than :meth:`_graze` allows, and never by ``_GRAZE_SHARE`` of the
+        distance: a bigger step is no fold (a branch that runs off level in a level layer
+        instead, its range without bound). Only where p lies within ``_GRAZE_FLOATS``
+        floats of the ray that runs level at that end (:meth:`_grazing`)."""
+        pairs, ends = [], []
+        for p, inner, a, b, upper, end in folds:
+            turns = [(br.upper_turns, br.lower_events) for br in (a, b)]
+            if upper:
+                once = turns[0][1] == turns[1][1] and abs(turns[0][0] - turns[1][0]) == 1
+            else:
+                once = turns[0][0] == turns[1][0] and abs(turns[0][1] - turns[1][1]) == 1
+            if once:
+                pairs += [(inner, a), (p, a), (p, b), (inner, b)]
+                ends.append((p, inner, max(a.cycle, b.cycle), end))
+        if not pairs:
+            return []
+        ps = np.array([q for q, _ in pairs])
+        up, arrives, cycle = (
+            np.array(c)
+            for c in zip(*((b.up, b.arrives_up, b.cycle) for _, b in pairs), strict=True)
+        )
+        f = (self._range(zr, ps, up, arrives, cycle) - distance).reshape(-1, 4)
+        found = []
+        for n, row in enumerate(f):
+            p, inner, most, end = ends[n]
+            if not self._grazing(np.array(p), (end,)):
+                continue
+            bound = _RANGE_TOLERANCE * (1.0 + distance)
+            bound += min(float(self._graze(zr, p, inner, most, end)), _GRAZE_SHARE * distance)
+            if not np.all(np.isfinite(row)):
+                continue
+            sign = np.signbit(row) & (row != 0.0)
+            with np.errstate(over="ignore"):
+                steps = np.abs(np.diff(row))
+            if np.any(sign[:-1] != sign[1:]) and np.all(steps <= bound):
+                found.append(pairs[4 * n + int(np.argmin(np.abs(row)))])
+        return [(float(q), b) for q, b in found]
+
+    def _graze(self, zr, p, q, cycle, fold=None) -> np.ndarray:
+        """The most the range of rays along branches of ``cycle`` passes can change from
+        the rays with parameter ``p`` to those with ``q`` (neighbouring floats, arrays)
+        by its parts singular where they graze the source's or the listener's height: k
+        |s(p) - s(q)| / (p g) at either, s their sines there, g the profile's trend there
+        (:attr:`Profile.trend`; the gentler side's at a node, none where it is level),
+        k the most times a ray can reach that height or turn at it. At the end ``fold``
+        (its height), where the rays turn, no less than the change over one float of p
+        from grazing it. Without bound as g nears 0: its callers cap it at
+        ``_GRAZE_SHARE`` of the distance."""
+        p, q = np.asarray(p, dtype=float), np.asarray(q, dtype=float)
+        k = 2.0 * (2.0 * np.asarray(cycle, dtype=float) + 3.0)
+        out = np.zeros(np.broadcast(p, q, k).shape)
+        flat = np.minimum(p, q)
+        for height in (self.zs, zr):
+            slopes = [abs(g) for g in self._sides(height, self.profile.trend) if g != 0.0]
+            if not slopes:
+                continue
+            c = float(self.profile.speed(height))
+            change = np.abs(_sine(p, c) - _sine(q, c))
+            if fold is not None and height == fold:
+                change = np.maximum(change, np.sqrt(2.0 * np.spacing(flat) / flat))
+            out = out + k * change / (flat * min(slopes))
+        return out
+
+    def _grazing(self, p, heights) -> np.ndarray:
+        """Whether rays with parameters ``p`` (an array) lie within ``_GRAZE_FLOATS``
+        floats of p of a ray that runs level at one of ``heights`` where the profile's
+        trend is not level on both sides of it (:meth:`_graze`)."""
+        out = np.zeros(np.shape(p), dtype=bool)
+        for height in heights:
+            if any(g != 0.0 for g in self._sides(height, self.profile.trend)):
+                level = 1.0 / float(self.profile.speed(height))
+                out |= np.abs(p - level) <= _GRAZE_FLOATS * np.spacing(p)
+        return out
+
+    def _bisect(self, zr, distance, up, arrives_up, cycle, lo, hi):
         """The ray parameters where the branches (``up``, ``arrives_up``, ``cycle``)
-        reach ``distance``, each between ``lo`` and ``hi``; nan where the range jumps
-        there instead."""
+        reach ``distance``, each between ``lo`` and ``hi`` (nan where the range jumps
+        there instead), and whether each was taken at a steep crossing, missing by more
+        than the tolerance."""
         f_lo = self._range(zr, lo, up, arrives_up, cycle) - distance
         f_hi = self._range(zr, hi, up, arrives_up, cycle) - distance
         # The Illinois method: false position, halving the weight of an end that stays.
@@ -456,25 +788,43 @@ class Rays:
             lo, f_lo = np.where(low, mid, lo), np.where(low, f, f_lo)
             hi, f_hi = np.where(low, hi, mid), np.where(low, f_hi, f)
             side = np.where(low, 1, -1)
-            if np.all((np.abs(f) <= 1e-12 * (1.0 + distance)) | (hi - lo <= 1e-15 * hi)):
+            if np.all((np.abs(f) <= 1e-12 * (1.0 + distance)) | (hi - lo <= np.spacing(hi))):
                 break
-        f_lo = self._range(zr, lo, up, arrives_up, cycle) - distance
-        f_hi = self._range(zr, hi, up, arrives_up, cycle) - distance
+        fans = [_Fan(self.profile, q, self.zs) for q in (lo, hi)]
+        f_lo, f_hi = (_phase(fan, zr, up, arrives_up, cycle)[:, 0] - distance for fan in fans)
         nearer = np.abs(f_lo) <= np.abs(f_hi)
         root = np.where(nearer, lo, hi)
         miss = np.where(nearer, np.abs(f_lo), np.abs(f_hi))
-        # A jump of the range is no crossing.
-        return np.where(miss <= _RANGE_TOLERANCE * (1.0 + distance), root, np.nan)
+        # A jump of the range is no crossing. But near where a ray grazes an end in a
+        # weak gradient the range may change by more than the tolerance from one float
+        # of p to the next (as the square root of how far p is from there): a crossing
+        # between neighbouring floats whose rays turn at the same heights is one where
+        # it misses by no more than its parts singular there change (:meth:`_graze`),
+        # by no more than _GRAZE_SHARE of the distance, and within _GRAZE_FLOATS floats
+        # of p of the ray that runs level at an end (:meth:`_grazing`).
+        tolerance = _RANGE_TOLERANCE * (1.0 + distance)
+        steady = (hi - lo <= np.spacing(hi)) & (fans[0].ground == fans[1].ground)
+        for a, b in ((fans[0].lo, fans[1].lo), (fans[0].hi, fans[1].hi)):
+            with np.errstate(invalid="ignore"):
+                steady &= (a == b) | (np.abs(a - b) <= _SAME_TURN_M)
+        steady &= miss <= tolerance + np.minimum(
+            self._graze(zr, lo, hi, cycle), _GRAZE_SHARE * distance
+        )
+        steady &= self._grazing(root, (self.zs, zr))
+        found = miss <= tolerance
+        return np.where(found | steady, root, np.nan), steady & ~found
 
     def _range(self, zr, p, up, arrives_up, cycle) -> np.ndarray:
         fan = _Fan(self.profile, np.asarray(p, dtype=float), self.zs)
         return _phase(fan, zr, up, arrives_up, cycle)[:, 0]
 
-    def _describe(self, zr, distance, found, max_bounces, max_time) -> Eigenrays:
+    def _describe(self, zr, distance, found, max_bounces, max_time, straight=None) -> Eigenrays:
         rows = []
-        for p, branch in found:
-            rows.append(self._ray(zr, distance, p, branch))
+        for p, branch, steady in found:
+            rows.append(self._ray(zr, distance, p, branch, steady))
         rows = [r for r in rows if r is not None]
+        if straight is not None:
+            rows.append(straight)
         rows = [r for r in rows if r["time"] <= max_time]
         rows = [r for r in rows if not r["ground"] or len(r["bounces"]) <= max_bounces]
         # The same ray found from two branches that meet (where its lower event turns
@@ -505,40 +855,51 @@ class Rays:
             capped=np.array([r["capped"] for r in kept], dtype=bool),
         )
 
-    def _ray(self, zr, distance, p, branch) -> dict | None:
-        # A step small against how far the ray is from grazing at either end, where its
-        # range changes fastest.
+    def _ray(self, zr, distance, p, branch, steady=False) -> dict | None:
+        # Rays a step either side, small against how far the ray is from grazing at
+        # either end, where its range changes fastest.
         top = 1.0 / max(self.cs, float(self.profile.speed(zr)))
         step = 1e-4 * max(min(p, top - p), 1e-12 * top)
-        ps = np.array([p, p - step, p + step])
-        ps = np.clip(ps, 0.0, 1.0 / self.cs)
+        ps = np.clip(np.array([p, p - step, p + step]), 0.0, 1.0 / self.cs)
         fan = _Fan(self.profile, ps, self.zs)
         out = _phase(fan, zr, branch.up, branch.arrives_up, branch.cycle)
-        if not np.all(np.isfinite(out[:, 0])):
+        if not np.isfinite(out[0, 0]):
             return None
         x, t, s = out[0]
-        slope = (out[2, 0] - out[1, 0]) / (ps[2] - ps[1])
+        ground = bool(fan.ground[0])
         turns = []
         if branch.upper_turns:
             turns.append(float(fan.hi[0]))
-        if branch.lower_events and not fan.ground[0]:
+        if branch.lower_events and not ground:
             turns.append(float(fan.lo[0]))
-        if turns:
-            slope = self._turning_slope(zr, p, branch, turns, top, slope)
         sin_s = float(_sine(p, self.cs))
         sin_r = float(_sine(p, float(self.profile.speed(zr))))
+        # The width of the tube at which its level is capped.
+        capped = p * self.cs**2 * float(s) ** 2 / (CAUSTIC_CAP * distance)
+        # The tube's width, |dr/dp| sin_s sin_r, from the range itself and from the range
+        # less the parts of it that are singular where the ray grazes an end or the
+        # ground (a square root of how far it is from grazing there, which no
+        # difference of neighbouring rays follows), those parts' slopes added back.
+        raw = self._raw_slope(zr, p, branch, turns, out, ps)
+        parts = self._singular(zr, p, branch, ground, float(fan.lo[0]), float(fan.hi[0]))
+        new = self._width(zr, distance, p, branch, turns, parts, fan, float(s), capped)
+        chosen = self._choose(new, raw, sin_s * sin_r, capped, steady)
+        if chosen is None:
+            return None
+        if chosen is new:
+            tube = distance * abs(chosen[0])
+        else:
+            tube = distance * abs(chosen[0]) * sin_s * sin_r
         launch = math.copysign(math.acos(min(p * self.cs, 1.0)), 1.0 if branch.up else -1.0)
         arrival = math.copysign(
             math.acos(min(p * float(self.profile.speed(zr)), 1.0)),
             1.0 if branch.arrives_up else -1.0,
         )
-        tube = distance * abs(slope) * sin_s * sin_r
         free = 1.0 / max(s, 1e-12) ** 2
         spreading = p * self.cs**2 / tube if tube > 0.0 else np.inf
         capped = not spreading <= CAUSTIC_CAP * free
         if capped:
             spreading = CAUSTIC_CAP * free
-        ground = bool(fan.ground[0])
         bounces = np.zeros(0)
         if ground and branch.lower_events:
             bounces = self._events(fan, branch)
@@ -556,11 +917,441 @@ class Rays:
             "capped": capped,
         }
 
-    def _turning_slope(self, zr, p, branch, turns, top, slope) -> float:
-        """dr/dp of a ray with parameter ``p`` along ``branch`` that turns in the air at
-        the heights ``turns``, fitted over the rays whose turning points lie
-        ``_TURN_LAYERS`` layers about its own (``slope``, the local one, where they do
-        not all reach the listener the same way)."""
+    @staticmethod
+    def _choose(new, raw, sines, capped, steady):
+        """The one of two the tube of a ray takes: ``new``, (its width from its range less
+        its singular parts, the same from rays half as far apart: a callable), and
+        ``raw``, (the slope of its range itself, the same from rays half as far apart: a
+        callable, how many floats of p apart its rays are, and where it is fitted over
+        rays that turn about the ray, the same three from the rays a small step either
+        side, else None), a width once times ``sines``,
+        the ray's sines at both ends multiplied; None where either cannot be had. How
+        much each changes from rays half as far apart stands for its error, as a share
+        of the width (or of ``capped``, the width at which the level is capped, where
+        that is more). Where they agree to ``_AGREEMENT``, the one that changes less;
+        else ``new`` only where it changes by no more than ``_STABLE`` and a tenth of how
+        far they differ and ``raw`` by more than ``_AGREEMENT``; else ``raw``. But,
+        unless they agree, ``raw`` only where it changes by no more than ``_AGREEMENT``
+        where the ray was taken at a fold or a steep crossing (``steady``) or its rays
+        lie ``_FEW_FLOATS`` floats of p apart or fewer, else by no more than ``_ALONE``
+        where there is no ``new``, there from the rays a small step either side where
+        those lie more than ``_FEW_FLOATS`` floats apart and the fitted slope differs
+        from theirs by more than ``_ALONE``; and ``new`` alone only where it changes by
+        no more than ``_STABLE``. None where neither can be taken."""
+
+        def change(estimate, scale=1.0):
+            again = estimate[1]()
+            if again is None or not np.isfinite(again):
+                return np.inf
+            return abs(again - estimate[0]) * scale
+
+        if new is not None and raw is None:
+            return new if change(new) <= _STABLE * max(abs(new[0]), capped) else None
+        if new is not None:
+            width = raw[0] * sines
+            gap = abs(new[0] - width)
+            moved, shaky = change(new), change(raw, sines)
+            if gap <= _AGREEMENT * max(abs(width), abs(new[0]), capped):
+                return new if moved < shaky else raw
+            if moved <= min(0.1 * gap, _STABLE * max(abs(new[0]), capped)) and (
+                shaky > _AGREEMENT * max(abs(width), capped)
+            ):
+                return new
+        if raw is None:
+            return None
+        if steady or raw[2] <= _FEW_FLOATS:
+            bound = _AGREEMENT
+        elif new is None:
+            bound = _ALONE
+            local = raw[3]
+            if local is not None and local[2] > _FEW_FLOATS:
+                if not abs(raw[0] - local[0]) * sines <= bound * max(abs(raw[0] * sines), capped):
+                    raw = local
+        else:
+            return raw
+        if not change(raw, sines) <= bound * max(abs(raw[0] * sines), capped):
+            return None
+        return raw
+
+    def _raw_slope(self, zr, p, branch, turns, out, ps):
+        """The slope in p of the range itself of the ray with parameter ``p`` along
+        ``branch`` (``out`` its distance, time and length and those of the rays ``ps`` a
+        step either side): where it turns in the air at the heights ``turns``, fitted
+        over the rays whose turning points lie ``_TURN_LAYERS`` layers about its own, or
+        over half, a quarter or an eighth of that span, the first over which they all
+        reach the listener; else from the rays ``ps`` either side. That slope, the same
+        from rays half as far apart (a callable, None from it where they would lie fewer
+        than ``_HALF_FLOATS`` floats of p apart), how many floats of p apart the rays
+        are, and for a fitted slope the same three from the rays ``ps`` (else None); None
+        where the rays either side do not reach the listener."""
+        if not np.all(np.isfinite(out[:, 0])):
+            return None
+        top = 1.0 / max(self.cs, float(self.profile.speed(zr)))
+        span = self._turn_span(p, turns) if turns else 0.0
+        for _ in range(4):
+            if span <= 0.0:
+                break
+            slope = self._raw_fit(zr, p, branch, span, top)
+            if slope is not None and span < _HALF_FLOATS * _TURN_RAYS * float(np.spacing(p)):
+                return (
+                    slope,
+                    lambda: None,
+                    span / float(np.spacing(p)),
+                    self._local(zr, p, branch, out, ps),
+                )
+            if slope is not None:
+                return (
+                    slope,
+                    lambda span=span: self._raw_fit(zr, p, branch, 0.5 * span, top),
+                    (span / float(np.spacing(p))),
+                    self._local(zr, p, branch, out, ps),
+                )
+            span *= 0.5
+        return (*self._local(zr, p, branch, out, ps), None)
+
+    def _local(self, zr, p, branch, out, ps):
+        """The slope in p of the range of the ray with parameter ``p`` along ``branch``
+        from the rays ``ps`` a step either side (``out`` their distances), the same from
+        rays half as far apart (a callable, None from it where they would lie fewer than
+        ``_HALF_FLOATS`` floats of p apart) and how many floats of p apart the rays are."""
+        h = 0.5 * float(ps[2] - ps[1])
+
+        def half_step():
+            if h < _HALF_FLOATS * float(np.spacing(p)):
+                return None
+            qs = np.clip(np.array([p - 0.5 * h, p + 0.5 * h]), 0.0, 1.0 / self.cs)
+            r = self._range(zr, qs, branch.up, branch.arrives_up, branch.cycle)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                return float((r[1] - r[0]) / (qs[1] - qs[0]))
+
+        local = (out[2, 0] - out[1, 0]) / (ps[2] - ps[1])
+        return float(local), half_step, h / float(np.spacing(p))
+
+    def _singular(self, zr, p, branch, ground, lo, hi) -> _Singular:
+        """The parts of the range of rays along ``branch`` that are singular where they
+        graze the source's height, the listener's, the ground (if the ray with parameter
+        ``p`` bounces off it, ``ground``, or could: too flat to reach it) and the
+        profile's corners. In a layer of gradient g the distance up from a speed ca to
+        cb is (sa - sb) / (p g), sa and sb the sines there, so the range holds k s / (p
+        g) of each such height, s a ray's sine there: g the profile's trend there
+        (:attr:`Profile.trend`), that of the stretch the ray goes through there, the one
+        above or below it at a node, as the ray leaves or reaches it; at a corner the ray
+        passes, 1 / g that of the stretch above less that of the one below, each time it
+        passes. A level stretch adds none of these. Through each layer whose speed does
+        not change at all with height, between the heights ``lo`` and ``hi`` the ray
+        stays between, it goes p c dz / s (dz how high, as many times as it passes it),
+        which grows without bound as p nears 1 / c (see ``_LEVEL_SHARE``)."""
+        z, c, trend = self.profile.z, self.profile.c, self.profile.trend
+        terms = []
+        listener = False
+        for end, height, upward, k in (
+            ("source", self.zs, branch.up, 1.0 if branch.up else -1.0),
+            ("listener", zr, not branch.arrives_up, 1.0 - 2.0 * branch.arrives_up),
+        ):
+            j = int(self.profile.layer(height))
+            j -= 1 if j > 0 and height == z[j] and not upward else 0
+            speed = float(self.profile.speed(height))
+            if trend[j] != 0.0:
+                terms.append((k, speed, float(trend[j]), end))
+                listener = listener or end == "listener"
+        flat = _sine(p, c[0]) == 0.0 and trend[0] != 0.0
+        bounce = bool(branch.lower_events) and (ground or flat)
+        if bounce and trend[0] != 0.0:
+            # Each way down to the ground and back up covers s0 / (p g) of the lowest
+            # layer: 0 for a ray that turns before it, as for one that turns in it.
+            terms.append((2.0 * branch.lower_events, float(c[0]), float(trend[0]), 0.0))
+        for node in self.profile.corners:
+            height = float(z[node])
+            below, above = trend[node - 1], trend[node]
+            inverse = (1.0 / above if above else 0.0) - (1.0 / below if below else 0.0)
+            passes = self._passes(zr, branch, height)
+            if passes and inverse:
+                terms.append((float(passes), float(c[node]), 1.0 / inverse, height))
+        legs = []
+        for j in np.flatnonzero(self.profile.gradient == 0.0):
+            bottom = max(float(z[j]), lo)
+            top = min(float(z[j + 1]) if j + 1 < len(z) else np.inf, hi)
+            if top <= bottom:
+                continue
+            cuts = sorted({bottom, top} | {h for h in (self.zs, zr) if bottom < h < top})
+            for a, b in itertools.pairwise(cuts):
+                middle = 0.5 * (a + b)
+                passes = self._passes(zr, branch, middle) if np.isfinite(b) else 0
+                if passes:
+                    legs.append((passes * (b - a), float(c[j]), middle))
+        return _Singular(terms, listener, bounce, legs)
+
+    def _rounding(self) -> float:
+        """How far apart two of the profile's speeds may lie and be the same to rounding
+        (``_ROUNDING_ULPS``)."""
+        return _ROUNDING_ULPS * float(np.spacing(np.max(np.abs(self.profile.c))))
+
+    def _passes(self, zr, branch, height) -> int:
+        """How many times a ray along ``branch`` that reaches ``height`` passes it, its
+        turns lying beyond it (leaving or reaching it at the source or the listener does
+        not count)."""
+        segments = branch.segments()
+        if len(segments) == 1:
+            return int(min(self.zs, zr) < height < max(self.zs, zr))
+        first = height > self.zs if segments[0][0] else height < self.zs
+        last = height < zr if segments[-1][0] else height > zr
+        return len(segments) - 2 + int(first) + int(last)
+
+    def _keeps(self, fan: _Fan, branch: Branch, parts: _Singular) -> bool:
+        """Whether the rays of ``fan`` along ``branch`` hold the singular ``parts`` of the
+        ray they were spread about: those that reach the ground (their sine there not 0)
+        bounce off it if it does, and not if it does not."""
+        if not branch.lower_events:
+            return True
+        reaching = _sine(fan.p, self.profile.c[0]) > 0.0
+        return bool(np.all(fan.ground[reaching] == parts.bounce))
+
+    def _smooth_range(self, zr, ps, branch, parts: _Singular):
+        """The ranges of rays with parameters ``ps`` along ``branch`` less their singular
+        ``parts`` (:meth:`_singular`), and their fan. The rays need not leave the
+        source or reach the listener where it holds a part: the fan stops them where
+        they turn, where that part is 0, which carries on the rest smoothly."""
+        fan = _Fan(self.profile, ps, self.zs)
+        a, b, h, finite, reach = _heights(fan, zr)
+        if parts.listener:
+            reach = np.ones_like(reach)
+        r = _phase(fan, zr, branch.up, branch.arrives_up, branch.cycle, (a, b, h, finite, reach))
+        r = r[:, 0]
+        for k, c, g, at in parts.terms:
+            part = k * _sine(fan.p, c) / (fan.p * g)
+            if not isinstance(at, str):
+                part = np.where((fan.lo <= at) & (at <= fan.hi), part, 0.0)
+            r = r - part
+        for k, c, at in parts.legs:
+            sine = _sine(fan.p, c)
+            reached = (fan.lo <= at) & (at <= fan.hi) & (sine > 0.0)
+            r = r - np.where(reached, k * fan.p * c / np.where(reached, sine, 1.0), 0.0)
+        return r, fan
+
+    def _width(self, zr, distance, p, branch, turns, parts, fan, length, capped):
+        """The width of the tube of the ray with parameter ``p`` along ``branch`` (the
+        first of ``fan``, ``length`` m long), which turns in the air at the heights
+        ``turns``, and the same from rays half as far apart (a callable): the slope of
+        its range less its singular ``parts``, times its sines at both ends, those parts'
+        slopes added back. The slope is fitted (:meth:`_turning_slope`) where the ray
+        turns in the air, else, or where no fit can be had, from rays a small step either
+        side (:meth:`_local_width`). Where the rays it would be fitted over would pass
+        the ray that leaves the source level, it comes from rays a small step either side
+        first, and from the fit (over those rays slid down in p) only where they give
+        none, if at each gentle corner they cross (:meth:`_step`) the speed is at least
+        that at either end and the ray's sine at least 0.9 of the lesser of its own at
+        its ends. None where no rays about it keep to its branch, or where the rounding
+        of the parts could move the width by more than ``_WIDTH_ROUNDING`` of it (or of
+        the width at which its level is capped): parts that dwarf the range, in a weak
+        gradient, or where rays a step and a quarter step either side disagree
+        (:meth:`_local_width`); the tube then comes from the range itself
+        (:meth:`_choose`)."""
+        gap = float(np.min(np.abs(self._levels - p), initial=np.inf))
+        sin_s = float(_sine(p, self.cs))
+        sin_r = float(_sine(p, float(self.profile.speed(zr))))
+        near = bool(turns) and p + self._turn_span(p, turns) > 1.0 / self.cs
+        if near:
+            # Rays a small step either side follow a gentle corner as it is, where the
+            # fit spreads it as over the smooth profile the corners are sampled from;
+            # but the fit, slid to one side of the ray, does not follow one just past
+            # both its ends on the way to its turn, where it runs nearly as level as
+            # there.
+            _, gentle, _ = self._step(zr, p, branch, parts)
+            c = self.profile.c[gentle]
+            past = c >= max(self.cs, float(self.profile.speed(zr))) - self._rounding()
+            near = bool(np.all(past & (_sine(p, c) >= 0.9 * min(sin_s, sin_r))))
+
+        def local():
+            return self._local_width(zr, distance, p, branch, parts, fan, length, capped)
+
+        def back(fit):
+            return (
+                None if fit is None else self._added_back(zr, distance, p, parts, fan, length, *fit)
+            )
+
+        def fitted(fit):
+            width = back(fit)
+            if width is None:
+                return None
+            if fit[1] < _HALF_FLOATS * _TURN_RAYS * float(np.spacing(p)):
+                return width, lambda: None
+            # The same over rays half as far apart.
+            return width, lambda: back(
+                self._turning_slope(zr, p, branch, turns, parts, gap, 0.5 * fit[1], 1)
+            )
+
+        if near:
+            ways = [local, lambda: fitted(self._turning_slope(zr, p, branch, turns, parts, gap))]
+        else:
+            fit = self._turning_slope(zr, p, branch, turns, parts, gap) if turns else None
+            ways = [local if fit is None else lambda: fitted(fit)]
+        for way in ways:
+            width = way()
+            if width is not None:
+                return width
+        return None
+
+    def _local_width(self, zr, distance, p, branch, parts, fan, length, capped):
+        """The width of the tube of the ray with parameter ``p`` (:meth:`_width`) from
+        rays a small step either side (:meth:`_local_slope`), and the same from rays half
+        as far (a callable, None from it where they would lie fewer than
+        ``_HALF_FLOATS`` floats of p apart); where the layers they cross depart from
+        their trend (:meth:`_crossed`), or they lie fewer than ``_FEW_FLOATS`` floats
+        from it, only where rays a quarter of that step either side give it to
+        ``_LOOSE_AGREEMENT`` of it (or of ``capped``, the width at which its level is
+        capped). None where it cannot be had."""
+        step, _, loose = self._step(zr, p, branch, parts)
+        few = step < _FEW_FLOATS * float(np.spacing(p))
+
+        def at(h):
+            fit = self._local_slope(zr, p, branch, parts, h)
+            return (
+                None if fit is None else self._added_back(zr, distance, p, parts, fan, length, *fit)
+            )
+
+        width = at(step)
+        if width is None:
+            return None
+        if loose or few:
+            quarter = at(0.25 * step)
+            if quarter is None:
+                return None
+            if abs(quarter - width) > _LOOSE_AGREEMENT * max(abs(width), capped):
+                return None
+        if step < _HALF_FLOATS * float(np.spacing(p)):
+            return width, lambda: None
+        return width, lambda: at(0.5 * step)
+
+    def _local_slope(self, zr, p, branch, parts: _Singular, h):
+        """The slope in p of the range of a ray with parameter ``p`` along ``branch``
+        less its singular ``parts``, from rays a step ``h`` either side, and how far in p
+        they lie; None where they do not keep to its branch."""
+        if not h > 0.0:
+            return None
+        # Central, or from the steeper side where the flatter ray could not leave the
+        # source (p c_s > 1).
+        central = p + h <= 1.0 / self.cs
+        steps = np.array([-1.0, 1.0]) if central else np.array([-2.0, -1.0, 0.0])
+        # (As the floats they round to: a step may be only a few of them.)
+        ps = p + h * steps
+        smooth, pair = self._smooth_range(zr, ps, branch, parts)
+        if not (
+            ps[-1] > ps[0] and np.all(np.isfinite(smooth)) and self._keeps(pair, branch, parts)
+        ):
+            return None
+        if central:
+            return (smooth[1] - smooth[0]) / (ps[1] - ps[0]), h
+        # The derivative at p of the parabola through them.
+        return float(np.polyfit((ps - p) / h, smooth, 2)[1] / h), 0.25 * h
+
+    def _added_back(self, zr, distance, p, parts: _Singular, fan, length, slope, span):
+        """The width of the tube of the ray with parameter ``p`` (:meth:`_width`) from
+        the ``slope`` of its range less its singular ``parts``, found from rays within
+        ``span`` in p of it; None where the rounding of the parts could move it by more
+        than ``_WIDTH_ROUNDING`` of it."""
+        sin_s = float(_sine(p, self.cs))
+        sin_r = float(_sine(p, float(self.profile.speed(zr))))
+        width = slope * sin_s * sin_r
+        lo, hi = float(fan.lo[0]), float(fan.hi[0])
+        sizes, backs = distance, 0.0
+        for k, c, g, at in parts.terms:
+            # A part k s / (p g) has the slope -k / (s p^2 g), s the sine at its height:
+            # times sin_s sin_r, the source's or the listener's own sine cancels; 0 where
+            # the ray turns just short of the ground or the corner, and so is its slope.
+            sine = sin_s if at == "source" else sin_r if at == "listener" else float(_sine(p, c))
+            sizes += abs(k * sine / (p * g))
+            if at == "source":
+                back = k * sin_r / (g * p * p)
+            elif at == "listener":
+                back = k * sin_s / (g * p * p)
+            elif lo <= at <= hi and sine > 0.0:
+                back = k * sin_s * sin_r / (sine * p * p * g)
+            else:
+                back = 0.0
+            width -= back
+            backs += abs(back)
+        for k, c, _ in parts.legs:
+            # A leg k p c / s through a level layer has the slope k c / s^3.
+            sine = float(_sine(p, c))
+            if sine == 0.0:
+                return None
+            sizes += k * p * c / sine
+            back = k * c * sin_s * sin_r / sine**3
+            width += back
+            backs += abs(back)
+        eps = float(np.finfo(float).eps)
+        rounding = 64.0 * eps * sizes / span * sin_s * sin_r + 8.0 * eps * backs
+        capped = p * self.cs**2 * length**2 / (CAUSTIC_CAP * distance)
+        return width if rounding <= _WIDTH_ROUNDING * max(abs(width), capped) else None
+
+    def _crossed(self, zr, p, branch, step):
+        """The level layers (a mask over them) and the gentle corners (nodes where the
+        trend changes that are not corners, so hold no part) that rays along ``branch``
+        up to 2 steps (``_SMOOTH_STEP``) steeper or 1 flatter than the one with
+        parameter ``p`` cross on their way to the listener (not those level layers they
+        only touch, at an end), and whether the gradient of any other layer they cross
+        departs from its trend by more than 1e-6 of it (by the rounding of the speeds at
+        its nodes, in a stretch too weak for it)."""
+        ps = np.array([max(p - 2.0 * step, 0.5 * p), min(p + step, 1.0 / self.cs)])
+        fan = _Fan(self.profile, ps, self.zs)
+        lower = float(np.min(fan.lo)) if branch.lower_events else min(self.zs, zr)
+        upper = float(np.max(fan.hi)) if branch.upper_turns else max(self.zs, zr)
+        z, gradient, trend = self.profile.z, self.profile.gradient, self.profile.trend
+        above = np.append(z[1:], np.inf)
+        crossed = (z <= upper) & (above >= lower)
+        flat = crossed & ((gradient == 0.0) | (trend == 0.0))
+        sloped = crossed & ~flat
+        loose = np.abs(gradient[sloped] - trend[sloped]) > 1e-6 * np.abs(trend[sloped])
+        # A level layer they only touch, at an end, holds none of their range.
+        level = flat & (z < upper) & (above > lower)
+        inner = np.arange(1, len(z))
+        bends = inner[
+            (trend[inner] != trend[inner - 1]) & (z[inner] >= lower) & (z[inner] <= upper)
+        ]
+        return level, np.setdiff1d(bends, self.profile.corners), bool(np.any(loose))
+
+    def _step(self, zr, p, branch, parts: _Singular):
+        """The step in p to rays either side of the one with parameter ``p`` along
+        ``branch`` (``_SMOOTH_STEP`` of it, or less: 1e-4 of the way to the nearest ray
+        that runs level in a level layer they cross, and a tenth of that to the nearest
+        that runs level at a gentle corner they cross, at a corner of its singular
+        ``parts`` between the heights of its ends, or at the height of any of them where
+        the layers they cross depart from their trend), those gentle corners and whether
+        they do (:meth:`_crossed`)."""
+        step = _SMOOTH_STEP * p
+        c = self.profile.c
+        # Rays flatter than the one that runs level at a corner between the ends turn
+        # short of it, so never reach the far end.
+        lower, upper = min(self.zs, zr), max(self.zs, zr)
+        between = np.array(
+            [
+                1.0 / speed - p
+                for _, speed, _, at in parts.terms
+                if not isinstance(at, str) and lower < at < upper
+            ]
+        )
+        # (Rays a smaller step away cross no more of them.)
+        for _ in range(2):
+            level, gentle, loose = self._crossed(zr, p, branch, step)
+            singular = np.concatenate([1.0 / c[gentle] - p, between[between != 0.0]])
+            if loose:
+                # The parts, from the trend, then leave some of the range's own about
+                # where the ray runs level there.
+                ends = np.array([1.0 / speed - p for _, speed, _, _ in parts.terms])
+                singular = np.concatenate([singular, ends[ends != 0.0]])
+            room = min(
+                1e-4 * float(np.min(np.abs(1.0 / c[level] - p), initial=np.inf)),
+                0.1 * float(np.min(np.abs(singular), initial=np.inf)),
+            )
+            if room >= step:
+                break
+            step = room
+        return step, gentle, loose
+
+    def _turn_span(self, p, turns) -> float:
+        """The span of p over which the turning points of rays about the one with
+        parameter ``p`` that turns at the heights ``turns`` move ``_TURN_LAYERS`` of the
+        profile's layers either way."""
         z, g = self.profile.z, self.profile.gradient
         width = 0.0
         for height in turns:
@@ -568,18 +1359,43 @@ class Rays:
             if j < len(z) - 1:
                 # The turning height moves by c / (p g) per unit of p, c being 1 / p.
                 width = max(width, _TURN_LAYERS * (z[j + 1] - z[j]) * p * p * abs(g[j]))
-        for _ in range(4):
+        return width
+
+    def _turning_slope(self, zr, p, branch, turns, parts: _Singular, gap, span=None, tries=None):
+        """The slope in p of the range of a ray with parameter ``p`` along ``branch``
+        that turns in the air at the heights ``turns``, less its singular ``parts``, and
+        the half-width in p of the rays it is fitted over: those whose turning points lie
+        ``_TURN_LAYERS`` layers about its own, or fewer, as many as keep to its branch
+        (:meth:`_keeps`) and to ``_LEVEL_SHARE`` of the ``gap`` in p to the nearest ray
+        that runs level in a level layer, and slid down in p where they would pass the
+        ray that leaves the source level; None where none do."""
+        width = self._turn_span(p, turns) if span is None else span
+        top = 1.0 / self.cs
+        for _ in range(_TURN_HALVINGS if tries is None else tries):
             if width <= 0.0:
                 break
             ps = p + width * np.linspace(-1.0, 1.0, _TURN_RAYS)
-            if ps[0] > 0.0 and ps[-1] <= top:
-                fan = _Fan(self.profile, ps, self.zs)
-                r = _phase(fan, zr, branch.up, branch.arrives_up, branch.cycle)[:, 0]
-                if np.all(np.isfinite(r)):
-                    # The derivative at the middle of a parabola fitted through them.
-                    return float(np.polyfit((ps - p) / width, r, 2)[1] / width)
+            # None flatter than the ray that leaves the source level.
+            ps = np.minimum(ps - max(ps[-1] - top, 0.0), top)
+            if ps[0] > 0.0 and width <= _LEVEL_SHARE * gap:
+                r, fan = self._smooth_range(zr, ps, branch, parts)
+                if np.all(np.isfinite(r)) and self._keeps(fan, branch, parts):
+                    # The derivative at p of a parabola fitted through them.
+                    return float(np.polyfit((ps - p) / width, r, 2)[1] / width), width
             width *= 0.5
-        return slope
+        return None
+
+    def _raw_fit(self, zr, p, branch, span, top) -> float | None:
+        """The slope in p of the range itself of the ray with parameter ``p`` along
+        ``branch``, fitted over rays up to ``span`` either side of it, none flatter than
+        ``top``; None where they do not all reach the listener."""
+        ps = p + span * np.linspace(-1.0, 1.0, _TURN_RAYS)
+        if ps[0] > 0.0 and ps[-1] <= top:
+            r = self._range(zr, ps, branch.up, branch.arrives_up, branch.cycle)
+            if np.all(np.isfinite(r)):
+                # The derivative at the middle of a parabola fitted through them.
+                return float(np.polyfit((ps - p) / span, r, 2)[1] / span)
+        return None
 
     def _events(self, fan: _Fan, branch: Branch) -> np.ndarray:
         """Horizontal distances from the source of the lower events of the first ray of
@@ -637,6 +1453,8 @@ class Rays:
         ground bounces and turns among them."""
         p = rays.p[index]
         branch = rays.branch[index]
+        if not branch.cycle and branch.up == branch.arrives_up and self._level_between(zr):
+            return np.array([[0.0, self.zs], [rays.range, zr]])
         fan = _Fan(self.profile, np.array([p]), self.zs)
         lo, hi = float(fan.lo[0]), float(fan.hi[0])
         segments = branch.segments()
@@ -695,4 +1513,5 @@ __all__ = [
     "Profile",
     "Rays",
     "node_heights",
+    "table_heights",
 ]

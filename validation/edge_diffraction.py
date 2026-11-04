@@ -26,6 +26,10 @@ half-plane, which is exact far from the edge, and the engine against it:
 - a thick barrier (two right-angled corners 0.3, 1 and 3 m apart, sharing the top face),
   second order: the engine against BTM, at two pairs of positions, one of them oblique;
 - two thin screens in a row, second order;
+- a thin screen, a right-angled corner and a wedge open over 225 degrees, first order,
+  with the listener on the shadow boundary and 10.5 degrees into the shadow: the whole
+  early stage (``early_paths``) with every band added in energy and as by default,
+  against BTM;
 - the corner of a thin screen, first order: the listener walks past where the direct
   sound comes round one edge while the path over the other still touches it, against
   BTM over both edges, each ending at the corner;
@@ -34,10 +38,12 @@ half-plane, which is exact far from the edge, and the engine against it:
 - the cost of the early stage with each mode, in a hall with alcoves.
 
 Every comparison is of the energy in each octave band, averaged over the engine's eight
-frequencies in the band, relative to the direct sound in free field over the same
-distance. The engine's levels are given twice: with its paths and the terms of their
-coefficients added in energy, and in the 63 and 125 Hz bands in pressure, as the
-engine adds them there by default (``simulation.early.coherent_max_band_hz``).
+frequencies in the band (BTM's at a shadow boundary over 96), relative to the direct
+sound in free field over the same distance. The engine's levels are given twice: with
+its paths and the terms of their coefficients added in energy, and in the 63 and 125 Hz
+bands in pressure, as the engine adds them there by default
+(``simulation.early.coherent_max_band_hz``). BTM takes the engine's speed of sound in
+the scenes' air, at 20 °C.
 """
 
 from __future__ import annotations
@@ -52,6 +58,7 @@ from pathlib import Path
 import numpy as np
 
 from acoustic_spaces import Room, Scene
+from acoustic_spaces.air import speed_of_sound
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import early_paths
 from acoustic_spaces.engine.coherent import total_energy
@@ -59,7 +66,8 @@ from acoustic_spaces.engine.diffraction import EdgeDiffraction, band_frequencies
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 
-C = 343.0
+#: The engine's speed of sound (m/s) in the scenes here, whose air is at the default 20 °C.
+C = speed_of_sound(20.0)
 #: Half the length of the edges integrated over (m), and of the screens and barriers.
 HALF_LENGTH = 40.0
 #: The surfaces' extent in the engine's models (m): far enough for their other edges to
@@ -96,14 +104,15 @@ class Edge:
         return np.linalg.norm(w, axis=-1), theta, z
 
 
-def _samples(centre: float, du: float, taper: float = 0.3):
-    """Points along an edge, z = centre + 0.05 sinh(u) for u in steps of ``du``, and
-    their lengths, tapered to nothing over the last ``taper`` of each half."""
-    top = math.asinh(HALF_LENGTH / 0.05)
+def _samples(centre: float, du: float, taper: float = 0.3, half: float = HALF_LENGTH):
+    """Points along an edge, z = centre + 0.05 sinh(u) for u in steps of ``du`` up to
+    ``half`` either way, and their lengths, tapered to nothing over the last ``taper`` of
+    each half."""
+    top = math.asinh(half / 0.05)
     u = np.arange(-top, top + 0.5 * du, du)
     z = 0.05 * np.sinh(u)
     dz = 0.05 * np.cosh(u) * du
-    x = np.clip((np.abs(z) / HALF_LENGTH - (1.0 - taper)) / taper, 0.0, 1.0)
+    x = np.clip((np.abs(z) / half - (1.0 - taper)) / taper, 0.0, 1.0)
     return centre + z, dz * np.cos(0.5 * np.pi * x) ** 2
 
 
@@ -122,13 +131,21 @@ def _beta(nu, argument, theta_s, theta_r):
 
 
 def btm_first(
-    edge: Edge, source, receiver, k=K, du: float = 0.004, ends=(-np.inf, np.inf)
+    edge: Edge,
+    source,
+    receiver,
+    k=K,
+    du: float = 0.004,
+    ends=(-np.inf, np.inf),
+    half_length: float = HALF_LENGTH,
 ) -> np.ndarray:
-    """The diffracted pressure at ``receiver``, per wave number; over the part of the
-    edge between ``ends`` (positions along it from its origin), where it ends there."""
+    """The diffracted pressure at ``receiver``, per wave number, integrated over
+    ``half_length`` either way of where the shortest path touches the edge in steps of
+    ``du`` (see :func:`_samples`); over the part of the edge between ``ends`` (positions
+    along it from its origin), where it ends there."""
     rs, ts, zs = edge.frame(source)
     rr, tr, zr = edge.frame(receiver)
-    z, dz = _samples(zs + (zr - zs) * rs / (rs + rr), du)
+    z, dz = _samples(zs + (zr - zs) * rs / (rs + rr), du, half=half_length)
     if np.isfinite(ends).any():  # each piece cut to the ends: past them, nothing
         lower, upper = np.maximum(z - dz / 2, ends[0]), np.minimum(z + dz / 2, ends[1])
         keep = upper > lower
@@ -182,16 +199,18 @@ def btm_second(
 
 
 def band_level(pressure: np.ndarray, distance: float) -> np.ndarray:
-    """Octave band energies of ``pressure`` (per wave number) in dB re the direct sound
-    over ``distance`` in free field."""
-    energy = (np.abs(pressure) ** 2).reshape(FREQUENCIES.shape).mean(axis=1)
+    """Octave band energies of ``pressure`` (per wave number, band by band, as many in
+    each) in dB re the direct sound over ``distance`` in free field."""
+    energy = (np.abs(pressure) ** 2).reshape(len(FREQUENCIES), -1).mean(axis=1)
     return 10.0 * np.log10(energy * distance**2)
 
 
 # -- the engine -----------------------------------------------------------------------
 
 
-def _room(folder: Path, name: str, quads: list, source, receiver) -> Room:
+def _room(folder: Path, name: str, quads: list, source, receiver, simulation=None) -> Room:
+    """A room of rigid ``quads`` with one source and one listener, with the scene's
+    ``simulation`` settings where given."""
     lines, faces = [], []
     for quad in quads:
         base = len(lines)
@@ -199,17 +218,16 @@ def _room(folder: Path, name: str, quads: list, source, receiver) -> Room:
         faces.append("f " + " ".join(str(base + i + 1) for i in range(4)))
     obj = folder / f"{name}.obj"
     obj.write_text("\n".join(lines + ["g surfaces"] + faces) + "\n")
-    return Room.from_scene(
-        Scene.model_validate(
-            {
-                "geometry": {"file": str(obj)},
-                "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
-                "default_material": "hard",
-                "sources": [{"name": "s", "position": list(map(float, source))}],
-                "listeners": [{"name": "l", "position": list(map(float, receiver))}],
-            }
-        )
-    )
+    scene = {
+        "geometry": {"file": str(obj)},
+        "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+        "default_material": "hard",
+        "sources": [{"name": "s", "position": list(map(float, source))}],
+        "listeners": [{"name": "l", "position": list(map(float, receiver))}],
+    }
+    if simulation is not None:
+        scene["simulation"] = simulation
+    return Room.from_scene(Scene.model_validate(scene))
 
 
 def screen_quads(x: float = 0.0, top: float = 0.0) -> list:
@@ -217,15 +235,18 @@ def screen_quads(x: float = 0.0, top: float = 0.0) -> list:
     return [[(x, -EXTENT, -EXTENT), (x, EXTENT, -EXTENT), (x, EXTENT, top), (x, -EXTENT, top)]]
 
 
-def barrier_quads(width: float) -> list:
-    """A block from x = 0 to ``width`` with its top at z = 0, open underneath."""
-    a, b, h = EXTENT, width, -EXTENT
+def barrier_quads(width: float, run: float = 0) -> list:
+    """A block from x = 0 to ``width`` with its top at z = 0, open underneath, its front
+    face falling from the top's edge at x = 0 to z = -EXTENT at x = -``run``: upright for
+    ``run`` 0, and at 45 degrees for ``run`` EXTENT, that edge then open over 225
+    degrees."""
+    a, b, h, r = EXTENT, width, -EXTENT, -run
     return [
         [(0, -a, 0), (b, -a, 0), (b, a, 0), (0, a, 0)],
-        [(0, -a, h), (0, -a, 0), (0, a, 0), (0, a, h)],
+        [(r, -a, h), (0, -a, 0), (0, a, 0), (r, a, h)],
         [(b, -a, h), (b, a, h), (b, a, 0), (b, -a, 0)],
-        [(0, -a, h), (b, -a, h), (b, -a, 0), (0, -a, 0)],
-        [(0, a, h), (0, a, 0), (b, a, 0), (b, a, h)],
+        [(r, -a, h), (b, -a, h), (b, -a, 0), (0, -a, 0)],
+        [(r, a, h), (0, a, 0), (b, a, 0), (b, a, h)],
     ]
 
 
@@ -386,6 +407,57 @@ def second_order(folder: Path) -> list[dict]:
     return rows
 
 
+def shadow_boundary(folder: Path) -> list[dict]:
+    """First order at the shadow boundary of a thin screen, of a right-angled corner
+    (the block, 300 m wide) and of a wedge open over 225 degrees (the block with its
+    front face at 45 degrees), with the source 5 m in front of the edge and 2 m below it
+    and the listener 5 m behind it, on the boundary (1 mm into the shadow) and 10.5
+    degrees into the shadow: the whole early stage (``early_paths`` with the default
+    settings), with every band added in energy (``coherent_max_band_hz: null``) and as
+    by default (63 and 125 Hz in pressure), against BTM averaged over 96 frequencies in
+    each band. The engine's levels are re the direct sound in free field in the same air
+    (the air's absorption over the direct distance taken off)."""
+    k = 2.0 * np.pi * band_frequencies(96)[0].ravel() / C
+    source = np.array([-5.0, 0.0, -2.0])
+    cases = (
+        (
+            "thin screen",
+            screen_quads(),
+            Edge([0, 0, 0], [0, 1, 0], [0, 0, -1], [1, 0, 0], 2.0),
+        ),
+        (
+            "right-angled corner",
+            barrier_quads(EXTENT),
+            Edge([0, 0, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1], 1.5),
+        ),
+        (
+            "wedge open over 225 degrees",
+            barrier_quads(EXTENT, run=EXTENT),
+            Edge([0, 0, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1], 1.25),
+        ),
+    )
+    rows = []
+    for name, quads, edge in cases:
+        # The shadow boundary, the line from the source over the edge, is at z = 2.
+        for where, z in (("on the shadow boundary", 1.999), ("10.5 degrees into the shadow", 1.0)):
+            receiver = np.array([5.0, 0.0, z])
+            distance = float(np.linalg.norm(receiver - source))
+            exact = band_level(btm_first(edge, source, receiver, k), distance)
+            row = {"case": name, "where": where, "receiver": receiver.tolist()}
+            row["btm_db"] = exact.tolist()
+            for key, simulation in (
+                ("in_energy", {"early": {"coherent_max_band_hz": None}}),
+                ("default", None),
+            ):
+                room = _room(folder, "boundary", quads, source, receiver, simulation)
+                energy = total_energy(early_paths(room))
+                energy *= np.exp(room.air_attenuation() * distance)
+                level = 10.0 * np.log10(energy * 4.0 * np.pi * distance**2)
+                row[key + "_minus_btm_db"] = (level - exact).tolist()
+            rows.append(row)
+    return rows
+
+
 def crossing(folder: Path) -> dict:
     """Levels as the source rises through the plane of a 1 m thick barrier's top on one
     side, and as the listener does on the other: the largest step between neighbouring
@@ -534,6 +606,13 @@ def main() -> None:
             print(f"| engine in pressure - BTM | {_row(row['in_pressure_minus_btm_db'])} |")
         seconds = max(row["btm_seconds"] for row in results["second_order"])
         print(f"\n(BTM takes up to {seconds:.0f} s per case)")
+
+        results["shadow_boundary"] = shadow_boundary(folder)
+        print(f"\n| at a shadow boundary, level re free field (dB) | {header} |\n{rule}")
+        for row in results["shadow_boundary"]:
+            print(f"| {row['case']}, {row['where']}: BTM | {_row(row['btm_db'])} |")
+            print(f"| engine in energy - BTM | {_row(row['in_energy_minus_btm_db'])} |")
+            print(f"| engine by default - BTM | {_row(row['default_minus_btm_db'])} |")
 
         results["screen_corner"] = corner = screen_corner(folder)
         print(f"\n| a screen's corner, direct (dB) | {header} |\n{rule}")

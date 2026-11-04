@@ -97,7 +97,12 @@ demo plays, at the command line's defaults, the file each source plays, the list
 to play and the walkers that move; **Advanced** holds the step, the paths and the
 command line, to repeat the run in a terminal. A line above **Run** says what the run
 downloads and how much. A scene with changes is saved first, as the demo reads its
-file.
+file. However it closes, the window keeps the options changed in it for the next time,
+each demo its own: a pick from a list, a number, a tick and a file of yours (the HRTFs,
+a song with its credit) for any scene, and what names something in the scene (the
+listeners, the files its sources play, what moves, the format, a tour) for that scene
+file, which also keeps the demo picked; **Defaults** puts them back. The folders and
+files a demo writes and the scenes it reads follow the open scene.
 
 Every still says how its sound was made, at the bottom: the version, the early
 reflections (traced or image sources, their order, diffraction) and the late sound with
@@ -591,7 +596,7 @@ step in turn, leaving out what is there already (the music, the scenes, the simu
   houses). The breeze and the cool air bend the sound down to the water, which gives it
   back almost whole. `scene_still.yaml` is the same scene with no atmosphere.
 - **What it gives.** At the bedroom window the evening's weather makes the song 5.3 to
-  6.0 dB(A) louder than still air would, in the garden 5.3 to 5.4 dB; behind the stage,
+  6.0 dB(A) louder than still air would, in the garden 5.0 to 5.1 dB; behind the stage,
   upwind, it is 0.5 to 0.7 dB quieter, and on the boat 0.9 dB quieter (three runs, each
   with rays of its own). The far shore gains most: what the weather bends down comes in
   off the water as well as straight, and at the window the house's wall gives back each

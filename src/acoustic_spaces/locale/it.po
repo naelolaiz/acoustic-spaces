@@ -2041,8 +2041,23 @@ msgid "Run the step in the background; the messages say how it goes"
 msgstr "Esegue il passo in secondo piano; i messaggi dicono come procede"
 
 #: acoustic_spaces/gui/demo_dialog.py
-msgid "Close without running anything"
-msgstr "Chiude senza eseguire nulla"
+msgid ""
+"Close without running anything; the options changed are kept for next time"
+msgstr ""
+"Chiude senza eseguire nulla; le opzioni cambiate restano per la prossima "
+"volta"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid "Defaults"
+msgstr "Predefiniti"
+
+#: acoustic_spaces/gui/demo_dialog.py
+msgid ""
+"Put every option of this demo back where a first run starts it, the command "
+"line's defaults, and forget the ones kept from before"
+msgstr ""
+"Riporta ogni opzione di questa demo dove la inizia una prima esecuzione, i "
+"valori predefiniti della riga di comando, e dimentica quelle tenute da prima"
 
 #: acoustic_spaces/gui/demo_dialog.py
 msgid ""
@@ -2102,6 +2117,15 @@ msgstr ""
 #, python-brace-format
 msgid "Cannot run: {reason}"
 msgstr "Impossibile eseguire: {reason}"
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"Changed from the defaults and kept for next time: {options}. Defaults puts "
+"them back."
+msgstr ""
+"Cambiate rispetto ai valori predefiniti e tenute per la prossima volta: "
+"{options}. Predefiniti le ripristina."
 
 #: acoustic_spaces/gui/document.py
 msgid "no file to save to; give a path"

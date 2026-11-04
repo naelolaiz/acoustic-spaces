@@ -23,13 +23,23 @@ The Movement box lists the sources and listeners of the scene that have a walk, 
 when they move in the run. This scene's ticks start as Moves sets them in the scene and
 can be changed for one run (``--moving``); an example's demo shows what it moves. Edit
 movement… closes the window and opens the Movement panel on the walker.
+
+However the window closes, it keeps the options changed from where a first run starts
+them, in the user's settings (:func:`~acoustic_spaces.i18n.setting`), and opens with
+them again, each demo with its own (:func:`keeps` says which options): a pick from a
+list, a number, a tick and a file of the user's (the HRTFs) whatever the scene, and what
+names something in the scene (its listeners, the files its sources play, what moves,
+the format, a tour) for that scene file, which also keeps the demo picked. A line above
+Run lists them, and Defaults puts the demo's options back.
 """
 
 from __future__ import annotations
 
 import argparse
+import math
 import os
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
@@ -56,6 +66,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from acoustic_spaces import i18n
 from acoustic_spaces.demos import (
     MAP_KINDS,
     NO_MOVERS,
@@ -74,6 +85,22 @@ from acoustic_spaces.i18n import _, ngettext
 HOME_FOLDER = "acoustic-spaces"
 #: The step the window starts on: every step, leaving out what is done already.
 ALL = "all"
+#: The user's setting (:func:`~acoustic_spaces.i18n.setting`) that keeps the options
+#: changed in the window for the next time it opens: ``{"demos": {demo: {option:
+#: value}}, "scenes": {scene file: {"demo": the demo picked, "demos": {demo: {option:
+#: value}}}}}``, demos by :func:`demo_key`, values as JSON (:func:`saved_value`).
+DEMO_SETTING = "editor_run_demo"
+#: How many scene files the setting keeps their own options for, the latest closed.
+KEPT_SCENES = 20
+#: The kinds of option whose value names something in the scene (its listeners, the
+#: sources a file plays for, what moves, an output's label, a tour's stops): kept per
+#: scene file (:func:`per_scene`). The others (a pick from a list, a number, a tick, a
+#: file of the user's) are kept per demo, whatever the scene.
+SCENE_KINDS = ("text", "listeners", "inputs", "movers")
+#: What :func:`restored` gives for a kept value the option does not take.
+NOT_TAKEN: Any = object()
+#: The largest number a number field holds, either way (:func:`field_for`).
+NUMBER_RANGE = 1_000_000
 
 
 def writable(folder: Path, name: str) -> Path:
@@ -153,6 +180,181 @@ def starting_arguments(demo: Demo) -> argparse.Namespace:
         if not Path(getattr(args, option.name)).exists():
             setattr(args, option.name, demo.default_path(option))
     return args
+
+
+def demo_key(demo: Demo) -> str:
+    """How the settings name ``demo``: its example and name (``stadium_concert/align``,
+    as two examples have an ``align``), or its name alone for the demo of any scene."""
+    return f"{demo.example}/{demo.name}" if demo.example else demo.name
+
+
+def scene_key(scene: str | Path | None) -> str | None:
+    """How the settings name the scene file ``scene``: its full path; None for none."""
+    return None if scene is None else str(Path(scene).resolve())
+
+
+def keeps(demo: Demo, option: Option) -> bool:
+    """Whether the window keeps ``option`` of ``demo`` for the next time it opens: every
+    option but the folders and files the demo writes, the example's files it reads and
+    the scene it plays, which follow where the scene is."""
+    if option.kind in ("path", "folder"):
+        return False
+    if option.kind == "file":
+        return option.default is None and option is not reads_scene(demo)
+    return True
+
+
+def per_scene(demo: Demo, option: Option) -> bool:
+    """Whether the window keeps ``option`` of ``demo`` per scene file: one of a kind
+    that names something in a scene (:data:`SCENE_KINDS`), except the credit line of a
+    song of the user's (``--credit`` beside ``--music``), which goes with the song."""
+    if option.kind not in SCENE_KINDS:
+        return False
+    return not (option.name == "credit" and any(o.name == "music" for o in demo.options))
+
+
+def saved_value(demo: Demo, option: Option, value: Any) -> Any:
+    """``value`` (as :func:`value_of` gives it) as the settings keep it: JSON data, with
+    paths in full, counted from the folder ``demo`` runs in."""
+    if value is None:
+        return None
+    if option.kind in MAP_KINDS:
+        return {str(name): str(demo.folder / file) for name, file in value.items()}
+    if option.kind in PATH_KINDS:
+        return str(demo.folder / value)  # a path in full stays as it is
+    return value
+
+
+def restored(option: Option, data: Any) -> Any:
+    """The value of ``option`` that ``data`` (kept as :func:`saved_value` writes it) gives,
+    or :data:`NOT_TAKEN` for one the option does not take: a song or a stem no longer
+    offered, a number of the wrong kind or more than its field holds, a settings file
+    edited by hand."""
+    kind = option.kind
+    if kind == "flag":
+        return data if isinstance(data, bool) else NOT_TAKEN
+    if kind in MAP_KINDS:
+        if data is None:
+            return None
+        if not isinstance(data, dict):
+            return NOT_TAKEN
+        if not all(isinstance(n, str) and isinstance(f, str) and f for n, f in data.items()):
+            return NOT_TAKEN
+        if kind == "files":  # the names the option lists, the others dropped
+            data = {name: file for name, file in data.items() if name in option.choices}
+        return {name: Path(file) for name, file in data.items()} or NOT_TAKEN
+    if option.choices:  # a list to pick from, which always holds a value
+        return data if isinstance(data, str) and data in option.choices else NOT_TAKEN
+    if kind in ("int", "float"):
+        if data is None:  # given none: its unset text, or an empty field
+            return None if option.unset or option.default is None else NOT_TAKEN
+        if isinstance(data, bool) or not isinstance(data, (int, float)):
+            return NOT_TAKEN
+        if kind == "int" and not isinstance(data, int):
+            return NOT_TAKEN
+        if option.default is not None or option.unset:  # a field of numbers, not text
+            lowest = 0 if option.unset else -NUMBER_RANGE
+            if not lowest <= data <= NUMBER_RANGE:
+                return NOT_TAKEN
+        try:
+            number = data if kind == "int" else float(data)
+        except OverflowError:
+            return NOT_TAKEN
+        return number if kind == "int" or math.isfinite(number) else NOT_TAKEN
+    if data is None:
+        return None
+    if not isinstance(data, str):
+        return NOT_TAKEN
+    if kind == "file":
+        return Path(data) if data else NOT_TAKEN
+    return data
+
+
+def _demo_setting() -> dict:
+    """The setting :data:`DEMO_SETTING`, with its two tables there and tables."""
+    data = i18n.setting(DEMO_SETTING)
+    data = data if isinstance(data, dict) else {}
+    tables = {name: data.get(name) for name in ("demos", "scenes")}
+    return {name: table if isinstance(table, dict) else {} for name, table in tables.items()}
+
+
+def _scene_entry(setting: dict, scene: str | None) -> dict:
+    entry = setting["scenes"].get(scene) if scene is not None else None
+    return entry if isinstance(entry, dict) else {}
+
+
+def kept_options(demo: Demo, scene: str | None) -> dict[str, Any]:
+    """The options of ``demo`` the window kept (:func:`keeps`), by name, at the values
+    it kept them: those of a kind that names something in a scene
+    (:func:`per_scene`) as kept for the scene file ``scene`` (:func:`scene_key`;
+    none for None), the others as kept for the demo. A value the option does not take
+    (:func:`restored`) is left out."""
+    setting = _demo_setting()
+    key = demo_key(demo)
+    own = setting["demos"].get(key)
+    named = _scene_entry(setting, scene).get("demos")
+    named = named.get(key) if isinstance(named, dict) else None
+    values: dict[str, Any] = {}
+    for option in demo.options:
+        table = named if per_scene(demo, option) else own
+        if not keeps(demo, option) or not isinstance(table, dict) or option.name not in table:
+            continue
+        value = restored(option, table[option.name])
+        if value is not NOT_TAKEN:
+            values[option.name] = value
+    return values
+
+
+def kept_demo(scene: str | None) -> str | None:
+    """The name of the demo the window showed when it last closed on the scene file
+    ``scene`` (:func:`scene_key`), or None."""
+    picked = _scene_entry(_demo_setting(), scene).get("demo")
+    return picked if isinstance(picked, str) else None
+
+
+def keep_options(
+    demo: Demo, scene: str | None, values: dict[str, Any], picked: str | None = None
+) -> None:
+    """Keep ``values`` (the options of ``demo`` changed from their start, by name, as
+    :func:`saved_value` gives them) for the next time the window opens; the others are
+    forgotten. Those of a kind that names something in a scene go with the scene file
+    ``scene`` (none kept for None), as does ``picked``, the demo picked; the setting
+    keeps the :data:`KEPT_SCENES` scene files closed last. Not written where the user's
+    settings cannot be: what the window keeps is a convenience, not the run's."""
+    setting = _demo_setting()
+    key = demo_key(demo)
+    by_kind = {
+        named: {
+            name: value
+            for name, value in values.items()
+            if per_scene(demo, demo.option(name)) == named
+        }
+        for named in (False, True)
+    }
+    if by_kind[False]:
+        setting["demos"][key] = by_kind[False]
+    else:
+        setting["demos"].pop(key, None)
+    if scene is not None:
+        scenes = setting["scenes"]
+        entry = _scene_entry(setting, scene)
+        scenes.pop(scene, None)
+        named = entry.get("demos")
+        named = named if isinstance(named, dict) else {}
+        if by_kind[True]:
+            named[key] = by_kind[True]
+        else:
+            named.pop(key, None)
+        entry["demos"] = named
+        if picked is not None:
+            entry["demo"] = picked
+        scenes[scene] = entry  # the latest last
+        while len(scenes) > KEPT_SCENES:
+            del scenes[next(iter(scenes))]
+    try:
+        i18n.save_setting(DEMO_SETTING, setting)
+    except OSError:
+        pass
 
 
 class PathField(QWidget):
@@ -716,7 +918,9 @@ def field_for(option: Option, tip: str) -> QWidget:
         return combo
     if option.kind in ("int", "float") and (option.default is not None or option.unset):
         number = (
-            int_spin(-1_000_000, 1_000_000) if option.kind == "int" else spin(-1e6, 1e6, 2, 0.5)
+            int_spin(-NUMBER_RANGE, NUMBER_RANGE)
+            if option.kind == "int"
+            else spin(-NUMBER_RANGE, NUMBER_RANGE, 2, 0.5)
         )
         if option.unit:
             number.setSuffix(f" {option.unit}")
@@ -754,6 +958,22 @@ def value_of(option: Option, widget: QWidget):
     return int(value) if option.kind == "int" else float(value)
 
 
+def show_value(option: Option, widget: QWidget, value: Any) -> None:
+    """Put ``value`` (as :func:`value_of` gives it) in the field ``widget`` of ``option``;
+    a list keeps its pick where the value is none of its choices."""
+    if isinstance(widget, (PathField, InputsField, MovementBox, ListenersField)):
+        widget.set_value(value)
+    elif isinstance(widget, QCheckBox):
+        widget.setChecked(bool(value))
+    elif isinstance(widget, QComboBox):
+        if value in option.choices:
+            widget.setCurrentText(str(value))
+    elif isinstance(widget, QLineEdit):
+        widget.setText("" if value is None else str(value))
+    else:  # a number; none is its unset text, at the lowest
+        widget.setValue(widget.minimum() if value is None else value)
+
+
 class DemoDialog(QDialog):
     """Which demo to run and how. :meth:`chosen` gives the demo (in the folder it runs
     in), the step and the arguments OK asked for."""
@@ -769,20 +989,30 @@ class DemoDialog(QDialog):
     ) -> None:
         """``scene`` is the open scene's file, ``unsaved`` whether it has changes the
         file lacks; ``demos`` (the examples' demos at their folders, for tests) replaces
-        the scene's; ``start`` names the demo to start on (by default the example's own
-        demo when the scene has one, else *This scene*)."""
+        the scene's; ``start`` names the demo to start on (by default the one on show
+        when the window last closed on the scene, else the example's own demo when the
+        scene has one, else *This scene*)."""
         super().__init__(parent)
         self.setWindowTitle(_("Run demo"))
+        #: The scene file as the settings name it, for what the window keeps per scene.
+        self.scene_key = scene_key(scene) if demos is None else None
         if demos is not None:
             pairs = [(d.at(work_base(d)), None) for d in demos]
         else:
             pairs = demos_for(scene)
-            if start is None:  # the example's own demo, after This scene
-                start = pairs[min(1, len(pairs) - 1)][0].name
+            names = [demo.name for demo, _args in pairs]
+            if start is None:  # as last left, or the example's own demo after This scene
+                start = kept_demo(self.scene_key)
+                if start not in names:
+                    start = names[min(1, len(names) - 1)]
         self.demos = [demo for demo, _args in pairs]
         self.starts = {demo.name: args for demo, args in pairs if args is not None}
         self.unsaved = unsaved or (demos is None and scene is None)
         self.fields: dict[str, QWidget] = {}
+        #: The demo whose options the form shows, and the arguments it started at.
+        self.shown: Demo | None = None
+        self.start_args = self.opened_args = argparse.Namespace()
+        self.kept_values: dict[str, Any] = {}
         #: What Edit movement… asked for: the walker's kind and name (empty for none).
         self.edit_request: tuple[str, str] | None = None
         # The form scrolls where the screen is too small for it, rather than squeezing
@@ -899,21 +1129,36 @@ class DemoDialog(QDialog):
         self.problem = QLabel()
         self.problem.setWordWrap(True)
         layout.addWidget(self.problem)
+        # The options kept for next time, Advanced's among them: whatever is open.
+        self.kept = QLabel()
+        self.kept.setWordWrap(True)
+        layout.addWidget(self.kept)
         layout.addStretch(1)  # a taller window leaves the room above the buttons
         self.scroll = scrolled(body)
         outer = QVBoxLayout(self)
         outer.addWidget(self.scroll)
 
         self.buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+            | QDialogButtonBox.StandardButton.RestoreDefaults
         )
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText(_("Run"))
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setToolTip(
             _("Run the step in the background; the messages say how it goes")
         )
         self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setToolTip(
-            _("Close without running anything")
+            _("Close without running anything; the options changed are kept for next time")
         )
+        self.defaults = self.buttons.button(QDialogButtonBox.StandardButton.RestoreDefaults)
+        self.defaults.setText(_("Defaults"))
+        self.defaults.setToolTip(
+            _(
+                "Put every option of this demo back where a first run starts it, the "
+                "command line's defaults, and forget the ones kept from before"
+            )
+        )
+        self.defaults.clicked.connect(self._defaults)
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         outer.addWidget(self.buttons)
@@ -943,9 +1188,54 @@ class DemoDialog(QDialog):
         return self.demos[max(self.picker.currentIndex(), 0)]
 
     def _chose_demo(self) -> None:
-        """Build the form of the demo on show: its steps and every option at its
-        default."""
-        demo = self.demo
+        """Another demo picked: keep the options of the one left, and show this one's as
+        the window kept them."""
+        if self.shown is not None:
+            self.remember(self.shown)
+        self._build(self.demo)
+
+    def _defaults(self) -> None:
+        """Defaults: the options of the demo on show where a first run starts them; on
+        closing, the window forgets those it kept."""
+        self._build(self.demo, kept=False)
+
+    def _kept_over(
+        self, demo: Demo, start: argparse.Namespace, kept: dict[str, Any]
+    ) -> argparse.Namespace:
+        """``start`` with the options ``kept`` for ``demo`` (:func:`kept_options`),
+        leaving out listeners and walkers the scene no longer has, a tick list kept with
+        none of its names left (back to the scene's own), and HRTFs where the format
+        kept for the scene is not binaural, which takes none."""
+        args = argparse.Namespace(**vars(start))
+        for name, value in kept.items():
+            setattr(args, name, value)
+        if getattr(args, "hrtf", None) and getattr(args, "format", "binaural") != "binaural":
+            args.hrtf = None
+        walkers = [name for _kind, name, _on in self.movement.walkers]
+        for option in demo.options:
+            value = getattr(args, option.name, None)
+            if value is None or option.kind not in ("listeners", "movers"):
+                continue
+            if option.kind == "movers":
+                names = moving_names(value)
+                known = walkers
+            else:
+                names = listener_names(value)
+                known = self._listeners(demo, args) or names
+            left = [name for name in names if name in known]
+            if option.kind == "movers" and not names:
+                left = [NO_MOVERS]  # nothing moves, as kept
+            setattr(args, option.name, ",".join(left) if left else getattr(start, option.name))
+        return args
+
+    def _build(self, demo: Demo, kept: bool = True) -> None:
+        """Build the form of ``demo``: its steps, and every option where a first run
+        starts it, or with ``kept`` as the window kept it."""
+        start = self.starts.get(demo.name) or starting_arguments(demo)
+        #: The options kept for the demo, and the arguments the form opened with.
+        self.kept_values = kept_options(demo, self.scene_key) if kept else {}
+        args = self._kept_over(demo, start, self.kept_values) if kept else start
+        self.shown, self.start_args, self.opened_args = demo, start, args
         self.about.setText(demo.description)
         self.step.blockSignals(True)
         self.step.clear()
@@ -963,7 +1253,6 @@ class DemoDialog(QDialog):
             layout.setContentsMargins(0, 0, 0, 0)
         self.fields = {}
         self._rows: dict[str, QFormLayout] = {}
-        args = self.starts.get(demo.name) or starting_arguments(demo)
         self._show_movement(demo, args)
         reads = reads_scene(demo)
         for option in demo.options:
@@ -972,8 +1261,8 @@ class DemoDialog(QDialog):
                 continue
             tip = option.description
             widget = field_for(option, tip)
+            show_value(option, widget, getattr(args, option.name, option.default))
             if isinstance(widget, (PathField, InputsField, ListenersField)):
-                widget.set_value(getattr(args, option.name))
                 widget.changed.connect(self._refresh)
             elif isinstance(widget, QLineEdit):
                 widget.textChanged.connect(self._refresh)
@@ -1097,6 +1386,80 @@ class DemoDialog(QDialog):
             problem = _("save the scene first (File > Save): the demo reads it from its file")
         self.problem.setText(_("Cannot run: {reason}").format(reason=problem) if problem else "")
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(problem is None)
+        kept = ", ".join(self._kept_labels(demo, args))
+        self.kept.setText(
+            _(
+                "Changed from the defaults and kept for next time: {options}. Defaults puts "
+                "them back."
+            ).format(options=kept)
+            if kept
+            else ""
+        )
+        self.kept.setVisible(bool(kept))
+
+    def _changed(self, demo: Demo, args: argparse.Namespace) -> dict[str, Any]:
+        """The options of ``demo`` the window keeps (:func:`keeps`) that ``args`` gives
+        otherwise than where the form started them, by name, as the settings keep them;
+        an option kept for the demo, whatever the scene, and left as the form opened it
+        stays as kept, even where it is this scene's start or held back for it, as HRTFs
+        are beside a format that takes none, emptied or not. A file left empty is not
+        kept: a run then takes the scene's own, if any, as at its start."""
+        changed = {}
+        binaural = getattr(args, "format", "binaural") == "binaural"
+        for option in demo.options:
+            if not keeps(demo, option):
+                continue
+            value = saved_value(demo, option, getattr(args, option.name, None))
+            opened = saved_value(demo, option, getattr(self.opened_args, option.name, None))
+            held = option.name == "hrtf" and value is None and not binaural
+            if (
+                option.name in self.kept_values
+                and not per_scene(demo, option)
+                and (value == opened or held)
+            ):
+                changed[option.name] = saved_value(demo, option, self.kept_values[option.name])
+            elif option.kind == "file" and value is None:
+                continue
+            elif value != saved_value(demo, option, getattr(self.start_args, option.name, None)):
+                changed[option.name] = value
+        return changed
+
+    def _kept_labels(self, demo: Demo, args: argparse.Namespace) -> list[str]:
+        """The labels of the options the window keeps (:func:`keeps`) that ``args``
+        gives otherwise than where the form started them and that the next opening on
+        the scene shows so, in the form's order: not an empty file, what names
+        something in a scene without a scene file, a value the option cannot take back
+        (a tempo that is no number), or no listener at all."""
+        labels = []
+        for option in demo.options:
+            if not keeps(demo, option):
+                continue
+            value = saved_value(demo, option, getattr(args, option.name, None))
+            if value == saved_value(demo, option, getattr(self.start_args, option.name, None)):
+                continue
+            if (option.kind == "file" and value is None) or (
+                per_scene(demo, option) and self.scene_key is None
+            ):
+                continue
+            if restored(option, value) is NOT_TAKEN or (option.kind == "listeners" and not value):
+                continue
+            labels.append(_("Movement") if option.kind == "movers" else _(option.label))
+        return labels
+
+    # -- what the window keeps ------------------------------------------------------
+
+    def remember(self, demo: Demo, picked: bool = False) -> None:
+        """Keep the options of ``demo``, the demo the form shows, changed from where it
+        started them (:func:`keep_options`), and with ``picked`` that it was on show."""
+        changed = self._changed(demo, self.arguments())
+        keep_options(demo, self.scene_key, changed, demo.name if picked else None)
+
+    def done(self, result: int) -> None:
+        """Closed (Run, Cancel or Edit movement…): the options and the demo on show kept
+        for the next time the window opens on the scene."""
+        if self.shown is not None:
+            self.remember(self.shown, picked=True)
+        super().done(result)
 
     @staticmethod
     def _summary(demo: Demo, args: argparse.Namespace) -> str | None:
@@ -1158,7 +1521,7 @@ class DemoDialog(QDialog):
     def arguments(self) -> argparse.Namespace:
         """The options as the fields hold them, those that do not matter with the
         others (hidden, :attr:`Option.only`) at their defaults."""
-        demo = self.demo
+        demo = self.shown or self.demo  # whose fields they are, while another is picked
         values = {name: value_of(demo.option(name), w) for name, w in self.fields.items()}
         for name in values:
             option = demo.option(name)
@@ -1173,14 +1536,26 @@ class DemoDialog(QDialog):
 
 __all__ = [
     "ALL",
+    "DEMO_SETTING",
+    "KEPT_SCENES",
+    "SCENE_KINDS",
     "DemoDialog",
     "InputsField",
     "ListenersField",
     "MovementBox",
     "PathField",
+    "demo_key",
     "demos_for",
     "field_for",
+    "keep_options",
+    "keeps",
+    "kept_demo",
+    "kept_options",
     "reads_scene",
+    "restored",
+    "saved_value",
+    "scene_key",
+    "show_value",
     "starting_arguments",
     "value_of",
     "walk_text",

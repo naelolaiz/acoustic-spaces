@@ -1,4 +1,5 @@
 import math
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +27,10 @@ from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.reweight import groups_of, reweighted_result
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.scene.model import EarlyStage
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
+
+import edge_diffraction  # noqa: E402
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
 
@@ -180,6 +185,44 @@ def test_wedges_match_the_exact_solution(n: float) -> None:
         exact = _wedge(kr, phi, phi0, n)
         error_db = 20 * np.log10(np.abs(_utd(kr, phi, phi0, n)) / np.abs(exact))
         assert np.abs(error_db).max() < 0.25
+
+
+# -- against the exact solution through the whole early stage --------------------------
+
+
+def test_the_exact_solution_runs_at_the_engines_speed_of_sound(tmp_path: Path) -> None:
+    """validation/edge_diffraction.py evaluates BTM at the speed of sound of its scenes,
+    whose air is at the default 20 °C, and at the wave numbers of the engine's band
+    frequencies at that speed."""
+    room = edge_diffraction._room(
+        tmp_path, "screen", edge_diffraction.screen_quads(), (-5, 0, -2), (5, 0, -1)
+    )
+    c = room.speed_of_sound()
+    assert edge_diffraction.C == pytest.approx(c, rel=1e-12)
+    frequencies = edge_diffraction.band_frequencies()[0].ravel()
+    np.testing.assert_allclose(edge_diffraction.K, 2.0 * np.pi * frequencies / c, rtol=1e-12)
+
+
+def test_the_bands_in_energy_are_low_on_a_shadow_boundary(tmp_path: Path) -> None:
+    """On the shadow boundary of a thin screen, of a right-angled corner and of a wedge
+    open over 225 degrees, the bands that add in energy lose the cross term between the
+    direct sound's wave and the edge's diffracted wave: through ``early_paths`` they are
+    as far below the exact solution (BTM, Svensson, Fred and Vanderkooy, J. Acoust. Soc.
+    Am. 106, 1999) as the validation report's known issues say, the blunter the edge the
+    more; the 63 and 125 Hz bands, in pressure by default, are within 0.08 dB there and
+    10.5 degrees into the shadow. A change that keeps the cross term moves these, and
+    the report with them."""
+    rows = {(row["case"], row["where"]): row for row in edge_diffraction.shadow_boundary(tmp_path)}
+    on = "on the shadow boundary"
+    screen = rows["thin screen", on]["in_energy_minus_btm_db"]
+    corner = rows["right-angled corner", on]["in_energy_minus_btm_db"]
+    wedge = rows["wedge open over 225 degrees", on]["in_energy_minus_btm_db"]
+    np.testing.assert_allclose(screen[2:5], [-0.69, -0.50, -0.36], atol=0.02)
+    np.testing.assert_allclose(corner[2:], [-1.73, -1.32, -0.98, -0.72, -0.52, -0.38], atol=0.02)
+    np.testing.assert_allclose([*wedge[2:5], wedge[7]], [-2.22, -1.79, -1.38, -0.56], atol=0.02)
+    for row in rows.values():
+        assert np.abs(row["default_minus_btm_db"][:2]).max() < 0.08
+        assert row["default_minus_btm_db"][2:] == row["in_energy_minus_btm_db"][2:]
 
 
 # -- edges ----------------------------------------------------------------------------

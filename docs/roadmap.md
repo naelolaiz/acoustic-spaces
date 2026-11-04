@@ -123,6 +123,12 @@ Edge diffraction:
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
+- [ ] Near a shadow boundary, in the bands that add in energy (indoors from 250 Hz), the
+  cross term between the term that continues the geometric wave and the edge's other
+  terms, weighted by how coherent they are over the band: on the boundary of a
+  right-angled corner the level is 1.7 dB low at 250 Hz and 1 dB at 1 kHz, and on that
+  of a wedge open over 225° 2.2 dB at 250 Hz (see
+  [Validation](validation.md#known-issues)).
 
 Parameters:
 
@@ -175,7 +181,7 @@ Outdoor acoustics, in steps:
   wedge per crest with both slopes' reflections in its terms, the equivalent edge and
   thick-screen factor for a rounded top, and the nearest crest's wave in sight, so the
   level is continuous across the edge of a hill's shadow; the late rays bounce off the
-  triangles. A ridge is within 0.2 dB of the exact wedge in every band, a flat terrain
+  triangles. A ridge is within 0.1 dB of the exact wedge in every band, a flat terrain
   and a slope give the flat ground's and the image's paths, a smooth hill over soft
   ground lets 1.4 to 1.8 dB more past than the thin screen (its crest is a wedge open
   wider than a half-plane), over rigid ground the flanks' reflections add. Scenes
@@ -462,6 +468,9 @@ Editor:
   orchestra demo downloads its tracks itself, as the other demos do their recordings.
 - [x] The listeners a demo plays, picked for a run: `--listeners` in every demo with
   several listeners, and a Listeners list to tick in the Run demo window.
+- [x] The Run demo window keeps the options changed in it for the next time, per demo
+  and, for what names something in a scene, per scene file, with **Defaults** to put
+  them back.
 - [x] The background task in the status bar says what runs, with Cancel beside
   it; messages that can be shown or hidden by level, filtered by item or words, and
   cleared, every other one shaded.

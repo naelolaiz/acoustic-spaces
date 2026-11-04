@@ -680,6 +680,8 @@ class Demo:
                 if isinstance(value, bool) or not isinstance(value, (int, float)):
                     return f"{option.option}: a number, not {value!r}"
         resolved = self.resolved(args)
+        if getattr(args, "hrtf", None) and not Path(resolved.hrtf).is_file():
+            return f"--hrtf: no {resolved.hrtf}"
         inputs = getattr(resolved, "inputs", None) or {}
         if inputs and self.plays is not None:
             fed = self.plays(resolved)

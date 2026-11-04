@@ -149,7 +149,7 @@ follow the terrain: their points stand at the map's height over the ground under
   do not diffract, nor do its own ridges, which bend too little at each grid line: the
   sound over the crests takes their place.
 
-A ridge agrees with the exact solution for the wedge within 0.2 dB, a flat terrain and
+A ridge agrees with the exact solution for the wedge within 0.1 dB, a flat terrain and
 a plane slope with the flat ground and the image source, and a smooth hill over a soft
 ground lets 1.4 to 1.8 dB more over its crest than the thin screen's attenuation (see
 [Validation](validation.md#terrain-against-closed-forms-and-the-exact-wedge)); a
@@ -473,14 +473,31 @@ is an arc of a circle, so its travel time and its length are exact.
   curved paths from the source to the listener, straight there or off the ground up to
   ten times. Downwind there may be several where still air has one; in the shadow there
   are none. Each comes in with its own travel time and angle, at a level set by how far
-  its neighbouring rays spread apart (1/R² for a straight path), fitted over the rays
-  that turn back in the air a few layers above and below it, as the layers' corners
-  would otherwise make it jump. Where neighbouring rays cross (a caustic) the level is
-  capped at 10 dB over a straight path's, and each caustic advances the phase by a
-  quarter period (a factor j, time going as e^(jωt)). Against an independent ray tracer
-  on the smooth profile of the `windy` preset downwind, the levels of three such paths
-  100 and 300 m away are within 0.05 dB (the tests allow 0.2 dB); no such check is made
-  near a caustic.
+  its neighbouring rays spread apart (1/R² for a straight path). That spread comes from
+  the ranges of the rays either side (for a ray that turns back in the air, fitted over
+  the rays that turn a few layers above and below it, as the gentle corners where a
+  smooth profile is sampled would otherwise make it jump), or, where the ray runs level
+  at the source, the listener, the ground or a corner of the profile, or through a layer
+  whose speed does not change with height, with the parts that grow without bound there
+  taken from the arcs in closed form. Each is worked out again from rays half as far
+  apart, and rules on how much each changes pick one; a path neither gives steadily is
+  left out. Where the speed is the same at every height between the source's and the
+  listener's, the direct path is the straight line. Against the smooth profiles of the
+  `windy` preset downwind and of `clear_night`, from sources 1 and 4 m up to listeners
+  0.5 to 12 m up, the levels of the paths 150 and 300 m away, straight or off the ground
+  up to twice, are within 3.6 dB, four in five of them within 0.1 dB (1.8 dB where they
+  are 8 dB or more over a straight path's, nearer a caustic), and those 600 m away in
+  `windy` within 3.3 dB, nine in ten within 0.1 dB (1.9 dB nearer a caustic). A path
+  that leaves and arrives at about the same height and turns once in the air follows the
+  sampled profile exactly, which can be up to 0.33 dB off the smooth one (`clear_night`
+  12 to 25 m up and 300 to 600 m away, `windy` across the wind). Where the air at the
+  source or the listener is nearly level, rounding can rarely leave out a direct path or
+  take one that arrives up to 4 cm from the listener, at its level to 0.003 dB. Where
+  neighbouring rays cross (a caustic) the level is capped at 10 dB over a straight
+  path's, and each caustic advances the phase by a quarter period (a factor j, time
+  going as e^(jωt)). Against an independent ray tracer on the smooth profile of the
+  `windy` preset downwind, the levels of three such paths 100 and 300 m away are within
+  0.05 dB (the tests allow 0.2 dB); no such check is made near a caustic.
 - **In the bands up to 500 Hz** rays fail over the ground, as the profiles change most
   within a wavelength of it, where the direct sound and its reflection meet. There the
   sound over the open ground comes from a parabolic equation (the Green's function
@@ -1559,7 +1576,7 @@ reflections and a diffraction) is left out unless
 `simulation.early.diffraction_reflections` is `both_sides`: by default a path
 reflects before or after the edge, not both. Over a rigid ground that path carries a
 quarter of the sound over a barrier, so without it the barrier's insertion loss comes
-out up to 0.8 dB off from 1 kHz up (mostly too high, 0.7 dB too low at 2 kHz 90 m
+out up to 0.8 dB off from 1 kHz up (mostly too high, 0.8 dB too low at 2 kHz 90 m
 behind) and a few decibels off in the bands below, where the paths interfere; with it
 the engine is within 0.15 dB of the exact solution (see
 [Validation](validation.md#outdoor-results-against-exact-solutions)). Over grass and

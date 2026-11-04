@@ -127,7 +127,9 @@ struct Atmosphere {
                 const double ca = speed(i, along), cb = speed(i + 1, along);
                 // The grazing ray turns back down before the next node, or never rises.
                 if (!(cb < c0)) break;
-                const double sa = std::sqrt(std::max(1.0 - (p * ca) * (p * ca), 0.0));
+                // Horizontal at the ground, where p c0 can round short of 1.
+                const double sa =
+                    i == 0 ? 0.0 : std::sqrt(std::max(1.0 - (p * ca) * (p * ca), 0.0));
                 const double sb = std::sqrt(std::max(1.0 - (p * cb) * (p * cb), 0.0));
                 x += p * (ca + cb) * (height[i + 1] - height[i]) / (sa + sb);
                 row[i + 1] = x;
