@@ -5143,6 +5143,32 @@ msgstr ""
 "zurückbeugen; ein Mehrfaches an Aufwand)"
 
 #: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count}, off by up to {error:g} dB at 8 kHz"
+msgstr "{count}, bis zu {error:g} dB Abweichung bei 8 kHz"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors behind barriers and buildings in wind or temperature gradients, the "
+"frequencies an octave the parabolic equation takes at 8 kHz (at 4 kHz no "
+"more than 16, below 4 kHz always 8). Fewer take less time and leave the "
+"weather's effect there further off. Against 64, in the validation cases, it "
+"is off by up to 0.51 dB at 8 kHz with 32; 6.4 dB with 16; 9.6 dB at 4 kHz "
+"and 14 dB at 8 kHz with 8. A coverage map behind two barriers took 12, 7.7 "
+"and 4.5 times as long as with straight legs. This comes on top of the "
+"parabolic equation's own error"
+msgstr ""
+"Im Freien hinter Schallschirmen und Gebäuden bei Wind oder "
+"Temperaturgradienten: die Frequenzen je Oktave, die die parabolische "
+"Gleichung bei 8 kHz nimmt (bei 4 kHz höchstens 16, unter 4 kHz immer 8). "
+"Weniger brauchen weniger Zeit und geben die Wirkung des Wetters dort "
+"ungenauer wieder. Gegenüber 64 weicht sie in den Validierungsfällen um bis "
+"zu 0,51 dB bei 8 kHz mit 32 ab; 6,4 dB mit 16; 9,6 dB bei 4 kHz und 14 dB "
+"bei 8 kHz mit 8. Eine Rasterkarte hinter zwei Schallschirmen dauerte 12-, "
+"7,7- und 4,5-mal so lange wie mit geraden Teilwegen. Das kommt zum eigenen "
+"Fehler der parabolischen Gleichung hinzu"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
@@ -5179,6 +5205,10 @@ msgstr "Reflexionen über eine Kante"
 #: acoustic_spaces/gui/inspector.py
 msgid "Parabolic equation"
 msgstr "Parabolische Gleichung"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Frequencies behind barriers"
+msgstr "Frequenzen hinter Schallschirmen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "In pressure up to"

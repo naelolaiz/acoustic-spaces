@@ -14,7 +14,8 @@
   1.0 dB off behind a top 45 degrees up, 1.64 dB low upwind in 10 m/s and 1.73 and 4.95 dB
   off behind two barriers 10 and 40 m apart (`validation/barrier_wind.py`); coverage
   maps behind barriers in wind take 12 to 27 times as long;
-  `simulation.early.barrier_frequencies` (8, 16 or 32, the default) takes fewer
+  `simulation.early.barrier_frequencies` (8, 16 or 32, the default; **Frequencies behind
+  barriers** in the editor) takes fewer
   frequencies an octave at 4 and 8 kHz behind barriers, for less time and a weather's
   effect further off there, by as much as `docs/outdoor.md` gives for each.
 - Fixed: a curved ray's level near where it runs level at the listener, the source, the
