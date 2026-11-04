@@ -131,6 +131,15 @@ BARRIER_COARSE = 0.4
 #: at 4 kHz 16 are within 0.21 dB of 32 (``validation/barrier_wind.py --only
 #: convergence``).
 BARRIER_SAMPLES = ((4000, 16), (8000, 32))
+
+
+def barrier_samples(at_8k: int = 32) -> tuple[tuple[int, int], ...]:
+    """``BARRIER_SAMPLES`` with ``at_8k`` frequencies an octave at 8 kHz (8, 16 or 32,
+    ``simulation.early.barrier_frequencies``) and at 4 kHz no more: 8 takes the early
+    paths' frequencies in every band."""
+    return tuple((start, min(n, at_8k)) for start, n in BARRIER_SAMPLES if min(n, at_8k) > 8)
+
+
 #: Their absorbing layer starts at least this many times higher than the highest top
 #: on the way.
 BARRIER_HEADROOM = 1.5
@@ -261,9 +270,11 @@ class Refraction:
         threads: int = 0,
         wide_angle: bool = False,
         edges=None,
+        barrier_frequencies: int = 32,
     ) -> None:
         from acoustic_spaces.engine.diffraction import band_frequencies
 
+        self.barrier_samples = barrier_samples(barrier_frequencies)
         room = model.room
         self.model = model
         self.atmosphere = room.scene.atmosphere
@@ -1204,9 +1215,9 @@ class Refraction:
 
     def _samples(self, band: int, barrier: bool) -> np.ndarray | None:
         """The frequencies (Hz) a run of the parabolic equation behind barriers takes in
-        ``band`` (``barrier``), as many an octave as ``BARRIER_SAMPLES`` gives from its
+        ``band`` (``barrier``), as many an octave as ``barrier_samples`` gives from its
         bands up; None for those of the early paths."""
-        dense = [n for start, n in BARRIER_SAMPLES if self.centres[band] >= start * 0.999]
+        dense = [n for start, n in self.barrier_samples if self.centres[band] >= start * 0.999]
         if not barrier or not dense:
             return None
         from acoustic_spaces.engine.diffraction import band_frequencies

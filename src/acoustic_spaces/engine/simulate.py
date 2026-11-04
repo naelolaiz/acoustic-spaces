@@ -340,6 +340,7 @@ def early_paths(
             max_order=order,
             threads=threads,
             wide_angle=cfg.parabolic_equation == "wide_angle",
+            barrier_frequencies=cfg.barrier_frequencies,
             edges=None if found is None else found.edges,
         )
         if refraction is not None:
@@ -647,6 +648,7 @@ def simulate(
             max_order=early_cfg.max_order,
             threads=threads,
             wide_angle=early_cfg.parabolic_equation == "wide_angle",
+            barrier_frequencies=early_cfg.barrier_frequencies,
             edges=None if diffraction is None else diffraction.edges,
         )
         if refraction is not None:

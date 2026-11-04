@@ -451,3 +451,13 @@ def test_a_listener_on_a_barrier_s_line_keeps_main_s_rule() -> None:
     )
     levels = 10 * np.log10(total_energy(early_paths(room, listener="l0")))
     assert np.all(np.isfinite(levels))
+
+
+@pytest.mark.parametrize(("chosen", "counts"), [(32, [16, 32]), (16, [16, 16]), (8, [8, 8])])
+def test_the_frequencies_at_4_and_8_khz_behind_barriers_can_be_fewer(runs, chosen, counts):
+    """``simulation.early.barrier_frequencies`` sets how many frequencies an octave the
+    runs behind barriers take at 8 kHz, and at 4 kHz no more than 16; below, 8."""
+    simulate(Room.from_scene(scene(barrier_frequencies=chosen)))
+    behind = [run for run in runs if run.get("obstacles")]
+    samples = {(float(np.min(run["frequencies"])), len(run["frequencies"])) for run in behind}
+    assert [n for _, n in sorted(samples)] == [8] * 6 + counts

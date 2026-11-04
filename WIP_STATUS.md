@@ -245,6 +245,13 @@ kept).
   go, at the results' expense and so for the owner to weigh: fewer frequencies at 8 kHz (D8 chose 32),
   a coarser grid there, or rays from 4 kHz up.
 
+- **New setting `simulation.early.barrier_frequencies`** (8, 16 or 32; default 32, as before): the
+  frequencies an octave the runs behind barriers in wind take at 8 kHz, at 4 kHz no more than 16
+  (`refracted.barrier_samples`; 8 takes the early paths' 8 everywhere). Scene file only (no editor control
+  or command-line flag, to keep it small). Test: `test_the_frequencies_at_4_and_8_khz_behind_barriers_can_be_fewer`.
+  Measuring each choice's error against 64 an octave on the convergence cases (running:
+  `samples_check.py` in the scratchpad); the docs get those numbers when they are in.
+
 ## Open
 
 - (Done on `claude/acoustic-215-7khv20`, see above.) Reruns on the 60 m domain (upwind, 5 m/s): two
