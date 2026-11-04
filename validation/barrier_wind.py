@@ -48,8 +48,10 @@ Acceptance, per band, at the listeners where the reference's effect is 25 dB or 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import os
 import sys
 import time
 import warnings
@@ -530,9 +532,42 @@ def full_wave_levels(band, speed, zs, at, cut, ground, top=None, plane=False) ->
     energy = []
     for k, fk in enumerate(f):
         z = None if ground is None else ground[k]
-        p = full_wave(fk, speed, zs, at, top, cut, z, h, plane)
+        p = _cached_full_wave(fk, speed, zs, at, top, cut, z, h, plane)
+        if p is None:
+            energy.append(np.full(len(at), np.nan))
+            continue
         energy.append(np.abs(p / free(2 * math.pi * fk / c0, distance, plane)) ** 2)
     return 10 * np.log10(np.mean(energy, axis=0))
+
+
+#: Where :func:`full_wave` keeps each solution it finds (``--cache``), and which of them
+#: this run finds (``--part K/N``: the K-th of every N, counted in the order they are
+#: asked for; the others are taken from the cache or left out). None: all, kept nowhere.
+CACHE: dict = {"dir": None, "part": None, "count": 0, "skipped": 0}
+
+
+def _cached_full_wave(fk, speed, zs, at, top, cut, z, h, plane):
+    """:func:`full_wave` at one frequency, through :data:`CACHE`; None where this part
+    leaves it to another."""
+    index = CACHE["count"]
+    CACHE["count"] += 1
+    path = None
+    if CACHE["dir"] is not None:
+        heights = np.linspace(0.0, top, 61)
+        key = repr((float(fk), float(zs), list(at), float(top), list(cut), z, float(h), plane))
+        digest = hashlib.sha1(key.encode() + np.asarray(speed(heights), float).tobytes())
+        path = os.path.join(CACHE["dir"], digest.hexdigest() + ".npy")
+        if os.path.exists(path):
+            return np.load(path)
+    part = CACHE["part"]
+    if part is not None and index % part[1] != part[0]:
+        CACHE["skipped"] += 1
+        return None
+    p = full_wave(fk, speed, zs, at, top, cut, z, h, plane)
+    if path is not None:
+        np.save(path + ".tmp.npy", p)
+        os.replace(path + ".tmp.npy", path)
+    return p
 
 
 def snapped(cut, band: int):
@@ -1126,8 +1161,24 @@ def main(argv: list[str] | None = None) -> int:
         help="(a), (c): this full-wave reference only",
     )
     parser.add_argument("--full-wave-json", help="(c): the full-wave results to compare with")
+    parser.add_argument(
+        "--cache", help="(a): keep each full-wave solution in this directory, and take them from it"
+    )
+    parser.add_argument(
+        "--part",
+        help="(a), with --cache: find only the K-th of every N full-wave solutions (K/N, K from "
+        "0), so that N runs side by side share the work; a last run without it reports",
+    )
     parser.add_argument("--json", help="write the results to this JSON file")
     args = parser.parse_args(argv)
+    if args.cache:
+        os.makedirs(args.cache, exist_ok=True)
+        CACHE["dir"] = args.cache
+    if args.part:
+        if not args.cache:
+            parser.error("--part needs --cache")
+        k, n = (int(v) for v in args.part.split("/"))
+        CACHE["part"] = (k, n)
     results: dict = {}
     filters = {"bands": args.band, "winds": args.wind, "references": args.reference}
     if args.only in (None, "full_wave"):
@@ -1147,6 +1198,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.only in (None, "convergence"):
         names = [n for n in CONVERGENCE if not args.case or n in args.case]
         results["convergence"] = check_convergence(names, args.quick, args.band)
+    if CACHE["part"] is not None:
+        found = CACHE["count"] - CACHE["skipped"]
+        print(f"part {args.part}: {found} of {CACHE['count']} full-wave solutions in {args.cache}")
+        return 0
     if args.json:
         with open(args.json, "w", encoding="utf-8") as out:
             json.dump(results, out, indent=1)

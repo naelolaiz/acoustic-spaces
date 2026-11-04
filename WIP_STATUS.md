@@ -196,8 +196,13 @@ kept).
   `--case roof --wind -5`, both on the 60 m domain, were stopped at this session's two-hour limit for
   a background job after one row: two barriers, ring, rigid ground, 500 Hz, 5 m/s upwind, effect
   -5.63/+7.70 dB at 100/150 m, error -0.88/-0.18 dB (within its limit, 1.7 dB; 6818 s on 4 cores shared
-  with other runs). Grass, the plane reference and the roof upwind are still to run, on a longer-lived
-  machine.
+  with other runs). Grass, the plane reference and the roof upwind are still to run.
+- `validation/barrier_wind.py --cache DIR --part K/N` splits the full-wave check: each full-wave solution
+  (one frequency, in the wind or in still air) is kept in DIR, a run with `--part K/N` finds only the K-th
+  of every N, and a last run with the same options and `--cache DIR` but no `--part` reports from the
+  cache (checked: two parts and the report give the direct run's row exactly, rail, 63 Hz, -5 m/s).
+  The reruns go that way, eight parts of `--case two --band 500 --wind -5` and four of `--case roof
+  --wind -5`, four at a time with `OMP_NUM_THREADS=1`.
 - `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).
 
 ## Open
