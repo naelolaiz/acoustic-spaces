@@ -194,8 +194,10 @@ kept).
   absorbing layer (`LAYER_MIN_M` 20 m is most of the grid at 8 kHz) for the runs behind barriers.
 - Reruns not done: `--only full_wave --case two --band 500 --wind -5` (ring and plane), then
   `--case roof --wind -5`, both on the 60 m domain, were stopped at this session's two-hour limit for
-  a background job before the first row printed (the 500 Hz ring run over rigid ground alone takes
-  longer than that here, on 4 cores shared with other runs). They need a longer-lived machine.
+  a background job after one row: two barriers, ring, rigid ground, 500 Hz, 5 m/s upwind, effect
+  -5.63/+7.70 dB at 100/150 m, error -0.88/-0.18 dB (within its limit, 1.7 dB; 6818 s on 4 cores shared
+  with other runs). Grass, the plane reference and the roof upwind are still to run, on a longer-lived
+  machine.
 - `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).
 
 ## Open
