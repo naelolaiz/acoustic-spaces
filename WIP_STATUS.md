@@ -78,9 +78,10 @@ Building v1 from `wip/barrier-pe-design.md`, following its one-day plan (section
 
 ## Open
 
-V1 edge fade (5 cm steps) and V2 (ffp, zones, long term, turbulence, outdoor propagation, ground reflection) diffs
-against main are running; the wind examples' early paths are identical to main's (their late parts differ as
-main's own runs do).
+Nothing for v1 beyond review. V1 and V2 hold: the still-air scripts (edge diffraction, insertion loss, terrain,
+edge fade at 5 cm steps) and the wind scripts (ffp, zones, long term, turbulence, outdoor propagation, ground
+reflection) write the same JSON as main but for timings; the examples' early paths are identical to main's, their
+late parts differing as main's own runs do.
 
 ## Next (follow-ups, not v1)
 
