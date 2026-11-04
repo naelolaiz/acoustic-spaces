@@ -239,6 +239,11 @@ kept).
   barrier upwind at 1-4 kHz, and behind the top 60 degrees up by up to 3.9 dB, the still level by up to
   13.6 dB (8 kHz, grass, upwind). The heights above the layer are part of what absorbs the sound sent
   steeply up off a high top. Not committed.
+- Checked, no gain: the narrow-angle step is its two transforms over the grid (32 frequencies by 16384
+  heights at 8 kHz: 18 ms with numpy's FFT, 19.5 ms with scipy's); with the grid, the steps and the
+  frequencies kept, nothing of size is left to save without moving the results. What cost could still
+  go, at the results' expense and so for the owner to weigh: fewer frequencies at 8 kHz (D8 chose 32),
+  a coarser grid there, or rays from 4 kHz up.
 
 ## Open
 
