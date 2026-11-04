@@ -1071,8 +1071,7 @@ class Refraction:
         building's."""
         if self._laid is None:
             mesh = self.model.room.mesh
-            ours = {"buildings", "barriers"}
-            laid = np.array([bool(ours & set(label)) for label in mesh.labels] or [False])
+            laid = np.array([_kind(label) in _LAID for label in mesh.labels] or [False])
             faces = laid[mesh.face_labels]
             edge = self._edge_set().face
             self._laid = faces[edge[:, 0]] & faces[edge[:, 1]]
@@ -1103,6 +1102,11 @@ class Refraction:
         if len(faces) and not np.all(self.flat[faces]):
             return False
         edges = self._edge_set()
+        # Only the barriers' and buildings' edges: the parabolic equation's runs leave the
+        # model file's objects out.
+        laid = self._laid_edges()
+        if not laid[paths.edge[i]]:
+            return False
         if not self._across(edges, np.array([paths.edge[i]]), towards, reach)[0]:
             return False
         # Any other corner on an edge (the second of two) lies on one across the plane.
@@ -1112,7 +1116,7 @@ class Refraction:
             if (
                 len(on)
                 and paths.edge[i] not in on
-                and not self._across(edges, on, towards, reach).any()
+                and not (self._across(edges, on, towards, reach) & laid[on]).any()
             ):
                 return False
         return True
@@ -1141,8 +1145,9 @@ class Refraction:
         the source to ``listener``."""
         if self._objects is None:
             mesh = self.model.room.mesh
-            built = {GROUND, SKY, "buildings", "barriers"}
-            laid = np.array([bool(built & set(label)) for label in mesh.labels] or [True])
+            laid = np.array(
+                [_kind(label) in _LAID or tuple(label) in _OPEN for label in mesh.labels] or [True]
+            )
             self._objects = ~laid[mesh.face_labels]
         if not self._objects.any():
             return False
@@ -1674,6 +1679,18 @@ def _ratio(wind: np.ndarray, still: np.ndarray) -> np.ndarray:
     """(bands,) the weather's effect: the energies ``wind`` over ``still`` (1 where both
     are none)."""
     return np.where(still > 0.0, wind / np.where(still > 0.0, still, 1.0), 1.0)
+
+
+#: The kinds of the faces the parabolic equation's runs hold: barriers and buildings.
+_LAID = frozenset({"barriers", "buildings"})
+#: The labels of the ground and the sky.
+_OPEN = frozenset({(GROUND,), (SKY,)})
+
+
+def _kind(label) -> str | None:
+    """The kind of the faces of ``label``, its last part, as the outdoor geometry writes
+    it (a building's or a barrier's own name, or a model file's, may be anything)."""
+    return label[-1] if len(label) else None
 
 
 def _on_edges(edges, point: np.ndarray, tolerance: float) -> np.ndarray:
