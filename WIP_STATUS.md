@@ -178,8 +178,11 @@ kept).
   more samples (4 and 8 kHz, `BARRIER_SAMPLES`) march their frequencies in four groups, each on the grid
   and in the steps of its own highest (the runs of main and the other bands are unchanged). The steep
   probe above: 229 -> 171 s CPU (wide-angle 8 kHz 191 -> 139 s, 4 kHz 24 -> 18 s; narrow 8 kHz 6.4 ->
-  5.1 s); every band of the five listeners within 0.01 dB of before. Still to measure: the
-  convergence checks (`--only convergence`) and the started cases at 4-8 kHz, and a map's cost.
+  5.1 s); every band of the five listeners within 0.01 dB of before. `validation/barrier_wind.py` groups
+  its engine runs the same way (`grouped`, `march_grouped`); its convergence reference (a tenth of a
+  wavelength) stays ungrouped. The run-counting test counts the groups. The barrier test files: 27
+  passed. Still to measure: the convergence check at 4-8 kHz (running, before and after), the started
+  cases at 4-8 kHz, and a map's cost.
 - Reruns still going: `--only full_wave --case two --band 500 --wind -5` (ring and plane), then
   `--case roof --wind -5`, both on the 60 m domain, for the open items below.
 - `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).

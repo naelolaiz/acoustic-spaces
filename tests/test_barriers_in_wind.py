@@ -189,19 +189,25 @@ def test_one_run_in_the_weather_and_one_in_still_air_for_each_direction(runs) ->
     # Per band, in the weather and in still air: one run along 0 degrees (the first two
     # listeners), one along 1 degree (the second), and one along each of 26 and 27
     # degrees for the two mirrored listeners (the same wind along their ways and the
-    # same cut).
-    assert len(weather) == len(still) == 4 * 8
+    # same cut); at 4 and 8 kHz each in four groups of frequencies.
+    groups = refracted.BARRIER_GROUPS
+    assert len(weather) == len(still) == 4 * (6 + 2 * groups)
     far, mirrored = math.hypot(70.0, 0.4), math.hypot(40.0, 20.0)
     assert sorted({run["ranges"] for run in weather}) == sorted(
         {(40.0, far), (far,), (mirrored, mirrored)}
     )
     assert all(run["refracting"] and run["independent"] for run in behind)
     # From 1 kHz up a quarter wavelength's steps, else a tenth's; 8 frequencies a band up
-    # to 2 kHz, 16 at 4 kHz and 32 at 8 kHz, where the ground's fringes are densest.
+    # to 2 kHz, 16 at 4 kHz and 32 at 8 kHz, where the ground's fringes are densest, those
+    # two in groups of 4 and 8 from the lowest up.
     steps = sorted({run["steps_per_wavelength"] for run in behind})
     assert steps == [4.0, 10.0]
     samples = {(float(np.min(run["frequencies"])), len(run["frequencies"])) for run in behind}
-    assert [n for _, n in sorted(samples)] == [8, 8, 8, 8, 8, 8, 16, 32]
+    assert [n for _, n in sorted(samples)] == [8] * 6 + [16 // groups] * groups + [
+        32 // groups
+    ] * groups
+    for run in behind:
+        assert np.all(np.diff(run["frequencies"]) > 0.0)
 
 
 def test_the_paths_in_the_plane_take_the_weather_s_effect(runs) -> None:
