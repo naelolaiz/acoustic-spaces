@@ -47,6 +47,14 @@ class Spread:
     coverage: float
     draws: int
 
+    def as_dict(self) -> dict:
+        """Plain values, with None for undefined ones (JSON friendly)."""
+        return {
+            "draws": self.draws,
+            "coverage": self.coverage,
+            **{part: getattr(self, part).as_dict() for part in ("mean", "standard", "low", "high")},
+        }
+
 
 def absorption_draws(scene, materials: Sequence[str], draws: int, seed: int) -> np.ndarray:
     """(draws, materials, bands) the absorption of ``materials`` in each draw: each

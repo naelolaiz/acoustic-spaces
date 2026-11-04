@@ -266,6 +266,11 @@ so the run must be simulated with the materials' face groups
 (`acoustic_spaces.engine.reweight.groups_of`, then `simulate(..., groups=...)`), in
 octave bands, with stochastic ray tracing for the late part and without the wave solver.
 The spread counts the absorption only, not the scattering, the seed or the method.
+`acoustic-spaces simulate` does this itself when a material on the surfaces has an
+uncertainty: it prints the largest standard uncertainty in JNDs from 125 Hz to 4 kHz,
+with its 95 % interval, and `parameters.json` holds them all (`absorption_spread`; 400
+draws, `--spread-draws` for another number). With settings that cannot re-weight
+(third-octave bands, say) it warns and leaves the spread out.
 
 ### Material libraries of CATT-Acoustic and ODEON
 

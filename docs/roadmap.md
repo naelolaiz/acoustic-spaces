@@ -137,9 +137,8 @@ Parameters:
   limits.
 - [x] Error estimates, step 1: a material's absorption uncertainty, and the spread it
   leads to in the room parameters by Monte Carlo (GUM Supplement 1), re-weighting the
-  traced run.
-- [ ] Error estimates, next steps: the spread in `simulate`'s output and the editor's
-  results; the number of draws chosen as GUM Supplement 1's adaptive procedure does;
+  traced run, in `simulate`'s output and `parameters.json`.
+- [ ] Error estimates, next steps: the spread in the editor's results; the number of draws chosen as GUM Supplement 1's adaptive procedure does;
   default uncertainties for built-in materials; the scattering's uncertainty; levels,
   STI and maps; convergence checks; the method's own error from the validation.
 

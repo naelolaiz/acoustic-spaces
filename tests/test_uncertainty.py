@@ -101,3 +101,32 @@ def test_the_spread_of_the_parameters_follows_the_absorption_s():
     plain = _box(None)
     with pytest.raises(ValueError, match="no material"):
         material_spread(result, plain, face_group, materials, draws=10)
+
+
+def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+):
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(_box({"absorption": 0.02, "source": "lab"}).to_data()))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300", "--spread-draws", "12"]
+    assert main(args) == 0
+    stdout = capsys.readouterr().out
+    assert "spread from the absorption uncertainty (12 draws): at most" in stdout
+    entry = json.loads((out / "parameters.json").read_text())["responses"][0]
+    spread = entry["absorption_spread"]
+    assert spread["draws"] == 12 and spread["coverage"] == 0.95
+    assert spread["standard"]["t30"][3] > 0.0
+    assert spread["low"]["t30"][3] < entry["parameters"]["t30"][3] < spread["high"]["t30"][3]
+    # Third-octave bands do not re-weight: the run goes on without the spread.
+    assert main([*args, "--bands", "third_octave"]) == 0
+    captured = capsys.readouterr()
+    assert "warning: no spread" in captured.err
+    entry = json.loads((out / "parameters.json").read_text())["responses"][0]
+    assert "absorption_spread" not in entry
