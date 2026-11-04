@@ -110,17 +110,19 @@ MAX_GROUND_BOUNCES = 10
 #: is BARRIER_COARSE times the solver's own: a quarter wavelength in the narrow-angle
 #: equation (a tenth below it), which costs 2 to 2.5 times less and changes the
 #: weather's effect by up to 0.2 dB at 1 to 8 kHz behind barriers and a building over
-#: grass and rigid ground, 25 to 150 m away, but up to 0.3 dB at 1 and 2 kHz and 2.7 dB
-#: at 4 and 8 kHz 11 m behind a top 60 degrees up from the source.
+#: grass and rigid ground, 25 to 150 m away, but up to 0.3 dB at 1 and 2 kHz and 2.2 dB
+#: at 4 and 8 kHz 11 m behind a top 60 degrees up from the source
+#: (``validation/barrier_wind.py --only convergence``).
 BARRIER_COARSE_FROM_HZ = 1000
 BARRIER_COARSE = 0.4
 #: From each band (centre, Hz) up, those runs take this many frequencies an octave (8
 #: below, as everywhere). The ground's interference fringes behind a barrier are dense
 #: in frequency: at 8 kHz 16 an octave left the weather's effect off by up to 1.8 dB
 #: over rigid ground 25 to 100 m away and 6.4 dB where the fringes fell in step with the
-#: frequencies (27 degrees up from the source, 25 m away); 32 are within 0.18 dB of 64
-#: there and over grass, but 0.51 dB 11 m behind a top 60 degrees up, and at 4 kHz 16
-#: are within 0.21 dB of 32.
+#: frequencies (27 degrees up from the source, 25 m away; a one-off check); 32 are within
+#: 0.18 dB of 64 there and over grass, but 0.51 dB 11 m behind a top 60 degrees up, and
+#: at 4 kHz 16 are within 0.21 dB of 32 (``validation/barrier_wind.py --only
+#: convergence``).
 BARRIER_SAMPLES = ((4000, 16), (8000, 32))
 #: Their absorbing layer starts at least this many times higher than the highest top
 #: on the way.

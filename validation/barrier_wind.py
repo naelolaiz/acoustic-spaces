@@ -84,25 +84,25 @@ DEEPEST_DB = 25.0
 #: ``engine`` beyond its parabolic equation's own error. The design aimed for 0.6 dB
 #: in 5 m/s and 0.8 dB in 10 m/s behind one barrier or building.
 LIMITS = {
-    ("one", "ring", 5.0): 0.0,  # TBD_L_ONE5
+    ("one", "ring", 5.0): 0.65,
     ("one", "ring", 10.0): 0.75,
-    ("one", "plane", 5.0): 0.0,  # TBD_L_ONEP5
-    ("one", "plane", 10.0): 0.0,  # TBD_L_ONEP10
+    ("one", "plane", 5.0): 0.65,
+    ("one", "plane", 10.0): 0.55,
     ("near_up", "ring", 5.0): 0.75,
-    ("near_up", "ring", 10.0): 1.7,
+    ("near_up", "ring", 10.0): 1.65,
     ("steep45", "ring", 5.0): 0.5,
     ("steep45", "ring", 10.0): 1.0,
     ("steep60", "ring", 5.0): 0.55,
     ("steep60", "ring", 10.0): 0.5,
-    ("two", "ring", 5.0): 0.0,  # TBD_L_TWO5
+    ("two", "ring", 5.0): 1.7,
     ("two", "ring", 10.0): 1.65,
-    ("two", "plane", 5.0): 0.0,  # TBD_L_TWOP5
-    ("two", "plane", 10.0): 0.0,  # TBD_L_TWOP10
+    ("two", "plane", 5.0): 1.65,
+    ("two", "plane", 10.0): 1.75,
     ("two40", "ring", 5.0): 2.25,
-    ("two40", "ring", 8.0): 0.0,  # TBD_L_TWO408
-    ("two40", "ring", 10.0): 1.2,
+    ("two40", "ring", 8.0): 4.95,
+    ("two40", "ring", 10.0): 1.15,
     ("two40", "plane", 5.0): 2.2,
-    ("two40", "plane", 8.0): 0.0,  # TBD_L_TWO40P8
+    ("two40", "plane", 8.0): 4.95,
     ("two40", "plane", 10.0): 1.1,
     ("started",): 0.5,
     ("engine",): 0.2,

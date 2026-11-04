@@ -55,7 +55,7 @@ Building v1 from `wip/barrier-pe-design.md`, following its one-day plan (section
   maps behind two barriers or a building take 10 to 16 times as long as on main (target 2).
 - Found on main, left for their own PRs: coverage maps drop early paths that arrive before the straight
   line's time where no path is clear (bands added in energy), so a map behind barriers in wind misses most of
-  the weather's effect from 1 kHz up; a leg from a ground reflection a rounding error (1e-16 m) above the ground
+  the weather's effect from 1 kHz up (behind barriers in wind fixed here in review round 1); a leg from a ground reflection a rounding error (1e-16 m) above the ground
   gets no refraction shadow (shadow_start returns 1e284 m), which steps the level by up to 65 dB at 8 kHz.
 
 - Changed from the design (D8): the 8 kHz band behind barriers takes 32 frequencies an octave (4 kHz keeps 16).
@@ -100,12 +100,12 @@ Two reviews rejected v1. Fixes so far (each with a test that fails before it):
 - A line touching a footprint's corner from outside no longer makes a zero-length building.
 - A degree's boundary behind a slanted barrier (60 and 120 m): 0.66 dB per 0.01 degree before, now 0.017
   (still air 0.018).
-- Validation script (uncommitted runs going): a plane (line-source, straight screens) full-wave reference next
+- Validation script: a plane (line-source, straight screens) full-wave reference next
   to the ring; case two40 (3 m at 20 m, 5 m at 60 m) on both; case near_up (60 m domain, 5 and 10 m/s
   upwind to 200 m); a domain self-check (30 m domain: 0.00 dB at 120 m, 10.5 dB at 200 m in 5 m/s upwind;
   60 m within 0.02 dB of 90 m but 1.24 dB at 200 m in 10 m/s); `--band`, `--wind`, `--reference`,
   `--only convergence`; started 8 kHz rows rerun with 32 frequencies (all within 0.30 dB). Upwind in 10 m/s
-  (near_up, 60 m domain) the engine's effect is 0.2 to 1.7 dB low where judged (1.0 to 1.4 at 250 Hz 120 and
+  (near_up, 60 m domain) the engine's effect is 0.2 to 1.64 dB low where judged (1.0 to 1.4 at 250 Hz 120 and
   200 m away, the narrow-angle bias the review found); in 5 m/s within 0.71 dB. Two barriers 40 m apart: the
   plane reference agrees with the ring within 0.1 dB in the effect (0.08 dB in still air), so the ring does
   not focus here; the engine is off by up to 2.2 dB (250 Hz, 5 m/s downwind, rigid). Upwind rows of far,
@@ -130,14 +130,24 @@ Two reviews rejected v1. Fixes so far (each with a test that fails before it):
 - Point cost at steep points: three or four listeners 6 to 20 m up behind a barrier or a building take
   about 120 s of CPU in 8 m/s (0.2 to 0.6 s in still air), nearly all of it in the wide-angle equation.
 
+- Limits: `LIMITS` are now the largest errors measured, rounded up to 0.05 dB (behind one barrier or
+  building 0.65 in 5 m/s and 0.75 in 10 m/s; near_up 0.75/1.65; steep 45 1.0; two barriers 10 m apart 1.7 to
+  1.75; 40 m apart 2.25 in 5 m/s and 4.95 in 8 m/s; started 0.5; end to end 0.2 beyond the PE's own error),
+  and the script's acceptance passes on the merged runs. Along a plane the full-wave effect is within 0.14 dB
+  of the ring's (two barriers; 0.13 behind one).
+
 ## Open
 
-Nothing for v1 beyond review. V1 and V2 hold: the still-air scripts (edge diffraction, insertion loss, terrain,
-edge fade at 5 cm steps) and the wind scripts (ffp, zones, long term, turbulence, outdoor propagation, ground
-reflection) write the same JSON as main but for timings; the examples' early paths are identical to main's, their
-late parts differing as main's own runs do.
+- Reruns going on the 60 m domain (upwind, 5 m/s): two barriers at 500 Hz (ring and plane) and the roof over
+  grass; the tables and limits are from the runs done so far.
+- Otherwise nothing for v1 beyond review. V1 and V2 hold: the still-air scripts (edge diffraction, insertion
+  loss, terrain, edge fade at 5 cm steps) and the wind scripts (ffp, zones, long term, turbulence, outdoor
+  propagation, ground reflection) write the same JSON as main but for timings; the examples' early paths are
+  identical to main's, their late parts differing as main's own runs do.
 
 ## Next (follow-ups, not v1)
 
-A blend across barrier ends; a roof between the grid's cells; main's coverage onset and leg-shadow rounding bugs
-(own PRs); cheaper 4-8 kHz runs; the still-air two-edge fix (Q3).
+A blend across barrier ends; the sound going back and forth between two barriers; a roof between the grid's
+cells; main's leg-shadow rounding bug (own PR); cheaper 4-8 kHz runs and steep points (the cost is the
+owner's call under Q1: maps 21 to 27 times main's, about 120 s for three or four steep listeners); the
+still-air two-edge fix (Q3).

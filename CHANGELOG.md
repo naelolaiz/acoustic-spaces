@@ -5,13 +5,15 @@
 - Behind barriers and buildings in wind or a temperature gradient the paths in the
   vertical plane through the source and the listener take the weather's effect from
   the parabolic equation run in every band with the barriers and buildings inside, and
-  the paths round a barrier's end or a building's corner the open ground's along their
-  own way, for listeners in the open too ({{OPENSIZE}}); they kept straight legs, so a
-  barrier screened as much downwind as in still air. Against a full-wave solution from
-  63 to 500 Hz the effect is within {{ONE5}} dB behind one barrier or building in 5 m/s
-  of wind and {{ONE10}} dB downwind in 10 m/s, {{UP10SHORT}} upwind in 10 m/s
-  (`validation/barrier_wind.py`); coverage maps behind barriers in wind take {{MAPX}}
-  times as long.
+  those round a barrier's end or a building's corner change as the open ground's field
+  along their own way does, for listeners in the open too (by up to 4 dB 3 to 5 m
+  beside them, 17 dB a centimetre beside a building's wall, where straight legs left a
+  dip); they kept straight legs, so a barrier screened as much downwind as in still
+  air. From 63 to 500 Hz the effect is within 0.71 dB of a full-wave solution behind
+  one barrier or building in 5 m/s of wind and 0.74 dB downwind in 10 m/s, but up to
+  1.0 dB off behind a top 45 degrees up, 1.64 dB low upwind in 10 m/s and 1.73 and 4.95 dB
+  off behind two barriers 10 and 40 m apart (`validation/barrier_wind.py`); coverage
+  maps behind barriers in wind take 21 to 27 times as long.
 - Fixed: a simulation refused for its memory says how much it would need with each
   setting it names lowered on its own, the least first; it named them without how much
   each saves (more `late.batches` need more memory, not less).

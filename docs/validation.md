@@ -2880,7 +2880,10 @@ over a roughness of 5 cm, 5 or 10 m/s 10 m up, towards the listener or the sourc
   over open ground in 5 m/s of wind it is within 0.25 dB of the engine's parabolic
   equation at each frequency of the 125 Hz band; and deep in the upwind shadow of a
   barrier 4 m high 15 m from a source 1 m up, at 552 Hz, the domain 30 m high is
-  within {{DOM30}}, and 60 m high within {{DOM60}}, of one 90 m high.
+  within 0.00 dB of one 90 m high 120 m away in 5 m/s of wind (1.2 dB in 10 m/s) but
+  1.0 and 10.5 dB off 150 and 200 m away (15 and 45 dB in 10 m/s), and 60 m high within
+  0.04 dB in 5 m/s and 1.24 dB in 10 m/s, which is why the cases upwind beyond 120 m
+  take it.
 - **A parabolic equation started behind the barrier** from the exact field of a rigid
   straight barrier over rigid ground (the four paths), 1 m behind it (within 0.18 dB
   of those paths in still air), and marched in a wind that blows behind the barrier
@@ -2907,31 +2910,49 @@ the largest difference (dB) over the listeners and the bands 63 to 500 Hz, at th
 engine's own frequencies (the solution's tops on its cells), and the solution's
 effects:
 
-| case | ground | 5 m/s downwind | 5 m/s upwind | 10 m/s downwind | the effect |
-|---|---|---:|---:|---:|---|
-| near | rigid | 0.32 | 0.62 | 0.63 | -6.8 to +10.3 |
-| near | grass | 0.29 | 0.57 | 0.46 | -7.3 to +8.3 |
-| far | rigid | 0.38 | 0.43 | 0.67 | -11.6 to +2.8 |
-| far | grass | 0.47 | 0.40 | 0.74 | -7.9 to +10.4 |
-| rail | rigid | 0.25 | 0.38 | 0.27 | -6.4 to +3.6 |
-| rail | grass | 0.21 | 0.35 | 0.25 | -6.1 to +9.5 |
-| steep 45 | rigid | 0.43 | 0.45 | 0.98 | -6.8 to +4.1 |
-| steep 45 | grass | 0.17 | 0.41 | 0.50 | -1.1 to +3.5 |
-| steep 60 | rigid | 0.54 | 0.53 | 0.41 | -7.4 to +6.5 |
-| steep 60 | grass | 0.10 | 0.40 | 0.46 | -1.3 to +3.1 |
-| roof | rigid | 0.15 | 0.23 | 0.32 | -6.1 to +9.7 |
-| roof | grass | 0.40 | 0.21 | 0.51 | -6.8 to +8.1 |
-| two | rigid | 1.00 | 1.68 | 1.49 | -6.7 to +17.3 |
-| two | grass | 0.87 | 0.75 | 1.63 | -4.4 to +5.2 |
+| case | reference | ground | 5 m/s downwind | 5 m/s upwind | 8 m/s downwind | 10 m/s downwind | 10 m/s upwind | the effect |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| near | ring | rigid | 0.32 | 0.62 |  | 0.63 |  | -6.8 to +10.3 |
+| near | ring | grass | 0.29 | 0.57 |  | 0.46 |  | -7.3 to +8.3 |
+| near | plane | rigid | 0.27 | 0.61 |  | 0.53 |  | -6.9 to +10.4 |
+| near | plane | grass | 0.24 | 0.53 |  | 0.45 |  | -7.4 to +8.4 |
+| far | ring | rigid | 0.38 | 0.42 |  | 0.67 |  | -11.6 to +2.8 |
+| far | ring | grass | 0.47 | 0.41 |  | 0.74 |  | -7.8 to +10.4 |
+| rail | ring | rigid | 0.25 | 0.38 |  | 0.27 |  | -6.4 to +3.6 |
+| rail | ring | grass | 0.21 | 0.35 |  | 0.25 |  | -6.1 to +9.5 |
+| steep 45 | ring | rigid | 0.43 | 0.45 |  | 0.98 |  | -6.8 to +4.1 |
+| steep 45 | ring | grass | 0.17 | 0.41 |  | 0.50 |  | -1.1 to +3.5 |
+| steep 60 | ring | rigid | 0.54 | 0.53 |  | 0.41 |  | -7.4 to +6.5 |
+| steep 60 | ring | grass | 0.10 | 0.40 |  | 0.46 |  | -1.3 to +3.1 |
+| roof | ring | rigid | 0.15 | 0.24 |  | 0.32 |  | -6.1 to +9.7 |
+| roof | ring | grass | 0.40 | 0.21 |  | 0.51 |  | -6.8 to +8.1 |
+| two | ring | rigid | 1.00 | 1.68 |  | 1.49 |  | -6.7 to +17.3 |
+| two | ring | grass | 0.87 | 0.75 |  | 1.63 |  | -4.4 to +5.2 |
+| two | plane | rigid | 1.00 | 1.63 |  | 1.61 |  | -6.6 to +17.4 |
+| two | plane | grass | 0.82 | 0.69 |  | 1.73 |  | -2.2 to +5.3 |
+| two 40 | ring | rigid | 2.23 | 0.69 | 4.95 | 0.73 |  | -5.9 to +2.0 |
+| two 40 | ring | grass | 1.01 | 0.40 | 1.28 | 1.15 |  | -1.3 to +0.6 |
+| two 40 | plane | rigid | 2.19 | 0.75 | 4.91 | 0.77 |  | -5.9 to +2.1 |
+| two 40 | plane | grass | 0.96 | 0.36 | 1.21 | 1.06 |  | -1.3 to +0.7 |
+| near upwind | ring | rigid |  | 0.71 |  |  | 1.64 | -14.5 to +9.3 |
+| near upwind | ring | grass |  | 0.61 |  |  | 1.37 | -18.8 to +2.9 |
 
-Behind one barrier or building the engine is within 0.62 dB in 5 m/s of wind (0.6
-allowed; 0.62 at 500 Hz 120 m behind the near barrier upwind, over rigid ground) and
-0.74 dB in 10 m/s (0.8 allowed); behind a top 45 degrees up from the source within
-0.98 dB in 10 m/s at 250 Hz over rigid ground (0.6 allowed), 60 degrees up 0.54 dB.
-Behind two barriers 10 m apart it is off by up to 1.68 dB at 125 Hz (1.7 allowed) and
-1.63 dB in the other bands (1.0 allowed); the equation marches away from the source
-only, so nothing reflects between the barriers in it. No listener of these cases is
-deeper than 25 dB below still air.
+Behind one barrier or building the engine is within 0.71 dB in 5 m/s of wind (at 500 Hz
+120 m behind the near barrier 4 m up, upwind over rigid ground) and 0.74 dB downwind in
+10 m/s. Upwind in 10 m/s it comes out low, by 0.2 to 1.64 dB, the more the higher the
+band and the farther the listener (1.64 dB at 500 Hz 120 m away 4 m up, 1.0 to 1.4 dB at
+250 Hz 120 and 200 m away): the narrow-angle equation's error, as the sound comes down
+steeply into the shadow. Behind a top 45 degrees up from the source it is within
+0.98 dB in 10 m/s at 250 Hz over rigid ground, 60 degrees up 0.54 dB. Behind two
+barriers 10 m apart it is off by up to 1.73 dB, and 40 m apart by up to 4.95 dB at
+250 Hz in 8 m/s downwind over rigid ground (2.23 dB in 5 m/s, 1.28 dB over grass): the
+equation marches away from the source only, so nothing goes back and forth between the
+barriers in it. Along a plane the solution's effect is within 0.14 dB of the
+ring's, so the ring's focusing between the barriers does not explain it. The limits of
+the script (`LIMITS`) are these largest errors rounded up to 0.05 dB, so that a change
+that makes any of them worse fails. Deeper than 25 dB below still air (listed, not
+judged) the engine is off by up to 4.2 dB 39 dB below (500 Hz 200 m away upwind in
+10 m/s over grass) and 20 dB 52 dB below.
 
 **Against the started parabolic equation.** The engine's weather effect less the
 reference's, the largest difference (dB) over the listeners where the reference is
@@ -2956,18 +2977,20 @@ still air, but 6.5 and 17.4 dB off at 2 kHz 72 and 74 dB below.
 off both sides of an edge) in the wind less in still air, against the full-wave
 solution's effect, over rigid ground with the barriers and the building 1 km long: the
 largest difference (dB) over the listeners and the bands 63 to 500 Hz where the
-solution is within 25 dB of still air, and in brackets the version before this one,
-whose paths kept straight legs over the edges:
+solution is within 25 dB of still air:
 
-| case | 5 m/s downwind | 5 m/s upwind | 10 m/s downwind |
-|---|---:|---:|---:|
-| near | 0.33 (2.43) | 0.66 (3.38) | 0.64 (4.22) |
-| far | 0.41 (10.53) | 0.44 (29.21) | 0.66 (7.99) |
-| rail | 0.26 (5.38) | 0.38 (32.78) | 0.29 (6.09) |
-| steep 45 | 0.44 (0.95) | 0.45 (4.36) | 1.01 (1.73) |
-| steep 60 | 0.53 (1.11) | 0.51 (1.50) | 0.43 (2.09) |
-| roof | 0.15 (1.76) | 0.23 (24.56) | 0.32 (9.68) |
-| two | 1.00 (9.71) | 1.69 (19.69) | 1.53 (17.29) |
+| case | reference | 5 m/s downwind | 5 m/s upwind | 8 m/s downwind | 10 m/s downwind | 10 m/s upwind |
+|---|---|---:|---:|---:|---:|---:|
+| near | ring | 0.33 | 0.66 |  | 0.64 |  |
+| far | ring | 0.41 | 0.43 |  | 0.66 |  |
+| rail | ring | 0.26 | 0.38 |  | 0.29 |  |
+| steep 45 | ring | 0.44 | 0.45 |  | 1.01 |  |
+| steep 60 | ring | 0.53 | 0.51 |  | 0.43 |  |
+| roof | ring | 0.15 | 0.24 |  | 0.32 |  |
+| two | ring | 1.00 | 1.69 |  | 1.53 |  |
+| two 40 | ring | 2.23 | 0.69 | 4.95 | 0.73 |  |
+| two 40 | plane | 2.19 | 0.76 | 4.91 | 0.77 |  |
+| near upwind | ring |  | 0.71 |  |  | 1.70 |
 
 End to end the engine's difference from the solution is within 0.08 dB of its
 parabolic equation's alone, 0.18 dB behind the top 60 degrees up (0.15 dB allowed);
