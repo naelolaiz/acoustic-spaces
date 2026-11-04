@@ -20,12 +20,14 @@ def scene(
     barriers=({"name": "screen", "path": [[15, -20], [15, 20]], "height": 4},),
     buildings=(),
     file=None,
+    extent=((-60.0, -60.0), (90.0, 60.0)),
+    ir_length_s=0.3,
     **early,
 ) -> Scene:
     """A source 1 m up over hard ground, a barrier 15 m away across the x axis, and
     listeners."""
     geometry = {
-        "ground": {"extent": [[-60.0, -60.0], [90.0, 60.0]], "sky": 20.0},
+        "ground": {"extent": [list(corner) for corner in extent], "sky": 20.0},
         "barriers": list(barriers),
         "buildings": list(buildings),
     }
@@ -47,7 +49,7 @@ def scene(
                 **early,
             },
             "late": {"rays": 200},
-            "ir_length_s": 0.3,
+            "ir_length_s": ir_length_s,
         },
     }
     if atmosphere is not None:
@@ -70,6 +72,48 @@ def runs(monkeypatch):
         return np.full((len(np.atleast_1d(frequencies)), len(ranges)), amplitude, dtype=complex)
 
     monkeypatch.setattr(parabolic, "march", march)
+    return found
+
+
+@pytest.fixture
+def field(monkeypatch):
+    """The parabolic equation's runs, not run: each gives, at every listener of its, the
+    pressure ``field.wind(obstacles, range)`` in the weather (sqrt(2) by default) and 1 in
+    still air, both 0 under a roof (a building's stretch over the listener's range)."""
+
+    class Field:
+        wind = staticmethod(lambda obstacles, r: math.sqrt(2.0))
+
+    def march(frequencies, speed, impedance, zs, ranges, heights, top, **options):
+        weather = bool(np.ptp(speed(np.array([0.0, 5.0, 50.0]))) > 0.0)
+        obstacles = options.get("obstacles", ())
+        values = []
+        for r in ranges:
+            if any(near < r < far for near, far, _ in obstacles):
+                values.append(0.0)
+            else:
+                values.append(Field.wind(obstacles, r) if weather else 1.0)
+        rows = len(np.atleast_1d(frequencies))
+        return np.tile(np.array(values, dtype=complex), (rows, 1))
+
+    monkeypatch.setattr(parabolic, "march", march)
+    return Field
+
+
+@pytest.fixture
+def scaled(monkeypatch):
+    """By listener (index), the factor (bands,) the runs behind barriers scaled the
+    energy of its paths in the plane by."""
+    found = {}
+    place = refracted.Refraction._place_barrier
+
+    def spy(self, request, energies, parts):
+        plane = parts[request.listener][request.part]
+        before = plane.energy.sum(axis=0)
+        place(self, request, energies, parts)
+        found[request.listener] = plane.energy.sum(axis=0) / before
+
+    monkeypatch.setattr(refracted.Refraction, "_place_barrier", spy)
     return found
 
 
@@ -135,18 +179,21 @@ def test_who_asks_for_the_runs_behind_barriers(runs, asked, tmp_path) -> None:
 
 
 def test_one_run_in_the_weather_and_one_in_still_air_for_each_direction(runs) -> None:
-    # Two listeners in one degree's direction, two mirrored across the wind's.
+    # A listener on a whole degree's direction (0), one between 0 and 1 degree, and two
+    # mirrored across the wind's, between 26 and 27 degrees either side.
     listeners = ((40.0, 0.0, 1.5), (70.0, 0.4, 1.5), (40.0, 20.0, 1.5), (40.0, -20.0, 1.5))
     simulate(Room.from_scene(scene(listeners=listeners)))
     behind = [run for run in runs if run.get("obstacles")]
     weather = [run for run in behind if run["weather"]]
     still = [run for run in behind if not run["weather"]]
-    # Per band: one run in the weather along the axis (two listeners), one for the two
-    # mirrored listeners (the same wind along their ways and the same cut); still air,
-    # one for the cut along the axis and one for the cut of both mirrored.
-    assert len(weather) == len(still) == 2 * 8
+    # Per band, in the weather and in still air: one run along 0 degrees (the first two
+    # listeners), one along 1 degree (the second), and one along each of 26 and 27
+    # degrees for the two mirrored listeners (the same wind along their ways and the
+    # same cut).
+    assert len(weather) == len(still) == 4 * 8
+    far, mirrored = math.hypot(70.0, 0.4), math.hypot(40.0, 20.0)
     assert sorted({run["ranges"] for run in weather}) == sorted(
-        {(40.0, math.hypot(70.0, 0.4)), (math.hypot(40.0, 20.0),) * 2}
+        {(40.0, far), (far,), (mirrored, mirrored)}
     )
     assert all(run["refracting"] and run["independent"] for run in behind)
     # From 1 kHz up a quarter wavelength's steps, else a tenth's; 8 frequencies a band up
@@ -222,3 +269,151 @@ def test_a_breath_of_wind_behind_a_barrier_is_still_air() -> None:
         result = simulate(Room.from_scene(scene(atmosphere=atmosphere, listeners=listeners)))
         levels.append([10 * np.log10(total_energy(result["s", f"l{k}"].early)) for k in range(2)])
     np.testing.assert_allclose(levels[1], levels[0], atol=0.02)
+
+
+def test_a_listener_close_behind_a_slanting_wall_takes_the_effect_behind_it(field, scaled):
+    """Behind a barrier and a building's back wall at 45 degrees to the way, 0.7 to 1.3 m
+    behind them: along the nearest whole degree the barrier stands beyond the listener,
+    or the listener would be under the roof. The weather's effect is the one behind them
+    (2 here), not the open ground's (5) nor none (1, the still air under a roof)."""
+
+    def wind(obstacles, r):
+        return math.sqrt(2.0 if any(far < r for _, far, _ in obstacles) else 5.0)
+
+    field.wind = wind
+    angle = math.radians(-0.49)
+    listeners = [(r * math.cos(angle), r * math.sin(angle), 1.5) for r in (129.6, 130.0, 130.2)]
+    slanting = {"name": "b", "path": [[120, -10], [140, 10]], "height": 6}
+    building = {"name": "h", "footprint": [[100, -10], [120, -10], [140, 10], [100, 10]]}
+    for barriers, buildings in (([slanting], []), ([], [{**building, "height": 6}])):
+        scaled.clear()
+        found = scene(
+            listeners=listeners,
+            barriers=barriers,
+            buildings=buildings,
+            extent=((-20.0, -60.0), (160.0, 60.0)),
+            ir_length_s=0.6,
+            diffraction="second_order",
+        )
+        simulate(Room.from_scene(found))
+        assert sorted(scaled) == [0, 1, 2]
+        for factor in scaled.values():
+            np.testing.assert_allclose(factor, 2.0, rtol=1e-9)
+
+
+def test_the_effect_changes_smoothly_from_one_degree_s_run_to_the_next(field, scaled):
+    """Behind a barrier at 18 degrees to the way, 120 m out, where the barrier stands
+    farther along each whole degree: either side of 4.5 degrees the weather's effect is
+    the same, halfway between those along 4 and 5 degrees (in dB); along 4.2 degrees, the
+    run along 4 degrees alone."""
+
+    def wind(obstacles, r):
+        return math.sqrt(2.0 ** (obstacles[0][0] / 10.0)) if obstacles else 1.0
+
+    field.wind = wind
+    barrier = {"name": "b", "path": [[-20, -15], [160, 45]], "height": 3}
+    angles = (4.2, 4.4999, 4.5001)
+    listeners = [
+        (120 * math.cos(math.radians(a)), 120 * math.sin(math.radians(a)), 1.5) for a in angles
+    ]
+    simulate(
+        Room.from_scene(
+            scene(
+                listeners=listeners,
+                barriers=[barrier],
+                extent=((-30.0, -40.0), (170.0, 60.0)),
+                ir_length_s=0.6,
+            )
+        )
+    )
+
+    def crossing(degrees):
+        # Where the way along ``degrees`` meets the barrier (x = 3 y + 25).
+        a = math.radians(degrees)
+        return 25.0 / (math.cos(a) - 3.0 * math.sin(a))
+
+    halfway = 2.0 ** ((crossing(4.0) + crossing(5.0)) / 20.0)
+    np.testing.assert_allclose(scaled[0], 2.0 ** (crossing(4.0) / 10.0), rtol=1e-6)
+    np.testing.assert_allclose(scaled[1], halfway, rtol=1e-3)
+    np.testing.assert_allclose(scaled[2], halfway, rtol=1e-3)
+
+
+def test_paths_over_the_edges_of_a_model_file_s_objects_keep_their_legs(runs, tmp_path):
+    """A listener in the open beside a crate of the model file, downwind: the paths over
+    the crate's edges keep their energy in still air (their straight legs have no shadow
+    downwind), not the open ground's effect (2 here)."""
+    crate = tmp_path / "crate.obj"
+    corners = [(x, y, z) for z in (0, 2) for y in (-1, 1) for x in (24, 26)]
+    sides = [(1, 2, 4, 3), (5, 6, 8, 7), (1, 2, 6, 5), (3, 4, 8, 7), (1, 3, 7, 5), (2, 4, 8, 6)]
+    crate.write_text(
+        "g crate\n"
+        + "".join(f"v {x} {y} {z}\n" for x, y, z in corners)
+        + "".join("f " + " ".join(map(str, s)) + "\n" for s in sides)
+    )
+    listeners = ((40.0, 3.0, 1.5),)
+    still = early_paths(scene(atmosphere=None, listeners=listeners, barriers=(), file=crate))
+    windy = early_paths(scene(listeners=listeners, barriers=(), file=crate))
+    over = np.flatnonzero(still.edge >= 0)
+    assert len(over) >= 2
+    for i in over:
+        rows = np.flatnonzero(windy.distance_m == still.distance_m[i])
+        np.testing.assert_allclose(windy.energy[rows].sum(axis=0), still.energy[i], rtol=1e-12)
+
+
+def test_the_paths_round_an_end_take_the_effect_along_their_own_way(runs):
+    """Behind the middle of a barrier 40 m long, the open ground's runs for the paths round
+    each end go as far as their way round it, seen from above (not the listener's 60 m)."""
+    simulate(Room.from_scene(scene(listeners=((60.0, 0.0, 4.0),))))
+    open_ground = {r for run in runs if not run.get("obstacles") for r in run["ranges"]}
+    way = math.hypot(15.0, 20.0) + math.hypot(45.0, 20.0)
+    assert any(abs(r - way) < 1e-9 for r in open_ground)
+    assert not any(abs(r - 60.0) < 1e-9 for r in open_ground)
+
+
+def test_a_way_that_touches_a_building_s_corner_from_outside_meets_nothing() -> None:
+    """A line through a corner of a footprint that lies to one side of it, where the two
+    crossings there come out a rounding error apart."""
+    from acoustic_spaces.geometry.outdoor import Layout
+
+    turn, out = 1.9050292966180866, 96.16459900132378
+    width, depth = 2.2063752752244827, 4.628016878024163
+    d = np.array([math.cos(turn), math.sin(turn)])
+    n = np.array([-d[1], d[0]])
+    corner = out * d
+    footprint = np.array(
+        [
+            corner,
+            corner + d * width - n * depth,
+            corner - n * 2 * depth,
+            corner - d * width - n * depth,
+        ]
+    )
+    layout = Layout((-500, -500, 500, 500), 0.0, 50.0, (("b", footprint, 6.0),), ())
+    assert layout.obstacles_along(np.zeros(2), d, 400.0) == []
+
+
+def test_a_map_counts_the_paths_that_come_before_the_straight_line_s_time() -> None:
+    """Behind barriers in wind no path is clear, so a map's points start at the straight
+    line's time; the paths over the barriers come sooner downwind and count with the
+    direct sound, in the bands added in energy too."""
+    from acoustic_spaces.engine.coverage import TIME_STEP, _part_curve
+    from acoustic_spaces.engine.early import EarlyReflections
+
+    energy = np.arange(1.0, 9.0)[None, :]
+    early = EarlyReflections(
+        order=np.ones(1, dtype=np.int64),
+        delay_s=np.array([0.1 - 2.5 * TIME_STEP]),
+        distance_m=np.array([34.0]),
+        direction=np.array([[-1.0, 0.0, 0.0]]),
+        energy=energy,
+    )
+    part = refracted_part(onset=np.array([0.1]), early=[early])
+    curve = _part_curve(part, None, 0, 0.1, 4, 0.1 + 4 * TIME_STEP, 8)
+    np.testing.assert_allclose(curve.sum(axis=1), energy[0])
+    np.testing.assert_allclose(curve[:, 0], energy[0])
+
+
+def refracted_part(**fields):
+    from acoustic_spaces.engine.coverage import _Part
+
+    return _Part(late=None, **fields)

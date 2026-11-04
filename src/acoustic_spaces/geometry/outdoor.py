@@ -156,18 +156,23 @@ class Layout:
         roof's height)."""
         origin = np.asarray(origin, dtype=float)[:2]
         direction = np.asarray(direction, dtype=float)[:2]
+        tolerance = 1e-9 * max(reach, 1.0)
         out = []
         for _, line in self.barriers:
             found = []
             crossed = line_crossings(origin, direction, reach, line[:, :2], closed=False)
             for t, segment, u in crossed:
                 # Through a corner of its path, once.
-                if not any(abs(t - near) <= 1e-9 * max(reach, 1.0) for near, _, _ in found):
+                if not any(abs(t - near) <= tolerance for near, _, _ in found):
                     z = line[segment, 2] + u * (line[segment + 1, 2] - line[segment, 2])
                     found.append((t, t, float(z)))
             out += found
         for _, footprint, roof in self.buildings:
-            found = sorted({t for t, _, _ in line_crossings(origin, direction, reach, footprint)})
+            # Through a corner, or touching one from outside, once.
+            found = []
+            for t in sorted(t for t, _, _ in line_crossings(origin, direction, reach, footprint)):
+                if not found or t - found[-1] > tolerance:
+                    found.append(t)
             stops = [0.0, *found, float(reach)]
             start = None
             for a, b in zip(stops[:-1], stops[1:], strict=True):

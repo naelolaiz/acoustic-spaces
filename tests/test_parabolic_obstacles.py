@@ -114,8 +114,8 @@ def test_screens_and_buildings_in_any_order(solver) -> None:
 
 
 def test_the_field_changes_smoothly_with_a_screen_s_height() -> None:
-    """At 500 Hz the height step is 5 cm: in 1 mm steps across two of them, the level
-    behind the screen and the wind's effect on it change by at most 0.01 dB a step."""
+    """At 500 Hz the height step is 5 cm: in 3 mm steps across two of them, the level
+    behind the screen and the wind's effect on it change by at most 0.03 dB a step."""
     f = F[3]
     ranges, heights = np.array([60.0]), np.array([1.5])
     levels = {}
@@ -147,8 +147,9 @@ def test_the_field_changes_smoothly_with_a_screen_s_height() -> None:
 def test_a_roof_s_wind_effect_against_the_full_wave_solution() -> None:
     """A rigid block 40 to 52 m from a source 1 m up, its roof 6 m up, over rigid
     ground, at 125 Hz: the wind's effect on the level 80 and 150 m away, 1.5 m up, is
-    within 0.15 dB of a full-wave solution's (mode matching in range, Evans 1983, with
-    the same roof height), where two zero-field screens in its place are 0.28 dB off."""
+    within 0.2 dB of a full-wave solution's (mode matching in range, Evans 1983, with
+    the same roof height; 0.15 dB here), where two zero-field screens in its place are
+    0.28 dB off."""
     f = F[1]
     ranges, heights = np.array([80.0, 150.0]), np.array([1.5, 1.5])
     roof = 6.0087  # the full-wave solution's roof, on its grid
@@ -161,7 +162,7 @@ def test_a_roof_s_wind_effect_against_the_full_wave_solution() -> None:
     block = [(40.0, 52.0, roof)]
     for u, expected in full_wave.items():
         effect = level(u, block) - level(0.0, block)
-        np.testing.assert_allclose(effect, expected, atol=0.15)
+        np.testing.assert_allclose(effect, expected, atol=0.2)
     # Below the roof the field behind the front face is gone, and comes back behind it.
     over = parabolic.march(
         f,

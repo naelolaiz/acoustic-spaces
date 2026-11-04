@@ -76,6 +76,26 @@ Building v1 from `wip/barrier-pe-design.md`, following its one-day plan (section
   1 kHz up show none of the effect until main's coverage onset bug is fixed.
 - Docs, CHANGELOG and roadmap written; tests: barrier and neighbouring outdoor files pass (184).
 
+## Review round 1 fixes (in progress)
+
+Two reviews rejected v1. Fixes so far (each with a test that fails before it):
+- The cut behind barriers: runs along whole degrees, the nearest alone over the middle half of the step
+  between two, both weighed in dB over the half round the halfway direction; a direction counts for nothing
+  where more or fewer obstacles stand short of the listener than on its own way or the listener would be
+  under a roof, and less where the last one stands nearer than half as far as on its own way; the
+  listener's own way takes the weight lost. A zero still-air energy raises. Behind a 45-degree wall 0.7 m
+  behind it the level stepped by 25 to 72 dB within 1.5 m; now within the still air's own changes (2 dB).
+  At a whole degree's halfway direction behind a barrier at 18 degrees the step was 2.35 dB downwind and 3
+  dB upwind; now 0.03 dB per 0.01 degree. Against the listener's own way: within 0.9 dB (120 m behind the
+  18-degree barrier), 1.8 dB within 3 m behind a 45-degree wall.
+- Paths round ends: only those round barriers' ends and buildings' corners alone, off nothing but the
+  ground, with a partner off the ground, take the open ground's effect, now along their own way round the
+  edges (its length seen from above); others keep their straight legs. Corner rows behind touching buildings
+  upwind: +6.8 dB at 1 kHz before, now -0.3 (straight legs +0.1); a crate of the model file: as main again.
+- Maps count early paths that arrive before the onset in its slot (they were dropped in the bands added in
+  energy).
+- A line touching a footprint's corner from outside no longer makes a zero-length building.
+
 ## Open
 
 Nothing for v1 beyond review. V1 and V2 hold: the still-air scripts (edge diffraction, insertion loss, terrain,
