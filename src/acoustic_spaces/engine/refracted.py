@@ -310,6 +310,8 @@ class Refraction:
             self.windy = self.windy or bool(np.any(self.weather.wind != 0.0))
         self._weather = (self.atmosphere.model_dump_json(), self.ground_c)
         self._profiles: dict[float, Profile] = {}
+        #: The frequencies of each band at so many an octave (:meth:`_samples`).
+        self._dense: dict[int, list] = {}
         self._admittances: dict[int, np.ndarray] = {}
         self._lock = threading.Lock()
         self.threads = run_size.worker_threads(int(threads))
@@ -1229,7 +1231,9 @@ class Refraction:
         from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE
 
         per_band = math.ceil(dense[-1] / BANDS_PER_OCTAVE[self.model.bands])
-        return band_frequencies(per_band, self.model.bands)[0][band]
+        if per_band not in self._dense:
+            self._dense[per_band] = band_frequencies(per_band, self.model.bands)[0]
+        return self._dense[per_band][band]
 
     def _admittance_at(self, face: int, band: int, frequencies: np.ndarray) -> np.ndarray:
         """(M,) the admittance of ``face`` as :meth:`_admittance` gives it, at other
@@ -1433,19 +1437,9 @@ class _Job:
     top: float
     alone: bool
     obstacles: tuple = ()
-    #: Whether the air bends sound (None: as the march finds), or the weather's run
-    #: (speed, speed_at) whose way through the equations a run in still air takes.
-    refracting: object = None
+    #: Whether the air bends sound (None: as the march finds).
+    refracting: bool | None = None
     barrier: bool = False  # with the grid and samples of the runs behind barriers
-
-
-def _uniform(c0: float):
-    """The speed of sound of still air, ``c0`` (m/s) at every height."""
-
-    def speed(z):
-        return np.full(np.shape(z), c0, dtype=float)
-
-    return speed
 
 
 def solve(plans: list[Planned]) -> list[dict]:
@@ -1554,7 +1548,7 @@ def solve(plans: list[Planned]) -> list[dict]:
                 jobs.append(
                     _Job(
                         refraction,
-                        _uniform(c0),
+                        Profile.uniform(c0).speed,
                         None,
                         face_at,
                         band,
@@ -1577,12 +1571,14 @@ def solve(plans: list[Planned]) -> list[dict]:
         coarse = job.barrier and job.refraction.centres[job.band] >= BARRIER_COARSE_FROM_HZ * 0.999
         return solver.STEPS_PER_WAVELENGTH * (BARRIER_COARSE if coarse else 1.0)
 
+    def frequencies_of(job: _Job) -> np.ndarray:
+        found = job.refraction._samples(job.band, job.barrier)
+        return job.refraction.frequencies[job.band] if found is None else found
+
     def run(job: _Job) -> np.ndarray:
         refraction, band = job.refraction, job.band
-        frequencies = refraction._samples(band, job.barrier)
-        dense = frequencies is not None
-        if not dense:
-            frequencies = refraction.frequencies[band]
+        dense = refraction._samples(band, job.barrier) is not None
+        frequencies = frequencies_of(job)
 
         def impedance(r):
             if dense:
@@ -1598,14 +1594,7 @@ def solve(plans: list[Planned]) -> list[dict]:
         if job.obstacles or job.barrier or job.refracting is not None:
             extra = {"obstacles": job.obstacles, "steps_per_wavelength": steps(job)}
             if solver is parabolic:
-                refracting = job.refracting
-                if isinstance(refracting, tuple):
-                    # The way the weather's twin went.
-                    speed, speed_at = refracting
-                    refracting = parabolic._refracting(
-                        frequencies, speed, speed_at, job.top, ranges.max()
-                    )
-                extra["refracting"] = refracting
+                extra["refracting"] = job.refracting
         # The wide-angle equation's frequencies (the narrow-angle one's at steep points)
         # share the threads the runs leave.
         return solver.march(
@@ -1625,11 +1614,7 @@ def solve(plans: list[Planned]) -> list[dict]:
     # The runs side by side, as many as the threads and the memory allow.
     biggest = max(
         solver.footprint(
-            (
-                job.refraction.frequencies[job.band]
-                if job.refraction._samples(job.band, job.barrier) is None
-                else job.refraction._samples(job.band, job.barrier)
-            ),
+            frequencies_of(job),
             job.refraction.c,
             job.top,
             steps(job),
