@@ -7237,6 +7237,16 @@ msgstr ""
 "{tip}: {jnd:.1f} JND, así que el valor puede cambiar de forma perceptible "
 "entre cálculos con otras semillas; más rayos por banda reducen el error"
 
+#. Translators: {u}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"From the materials' absorption uncertainty: standard uncertainty {u}, "
+"{percent} % within {low} to {high} ({count} draws)"
+msgstr ""
+"Por la incertidumbre de absorción de los materiales: incertidumbre típica "
+"{u}, {percent} %: entre {low} y {high} ({count} muestras)"
+
 #. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format
@@ -7587,6 +7597,10 @@ msgstr "La vista 3D no está disponible aquí: {reason}"
 #: acoustic_spaces/gui/viewport.py
 msgid "The 3D view needs a display with OpenGL."
 msgstr "La vista 3D necesita una pantalla con OpenGL."
+
+#: acoustic_spaces/gui/worker.py
+msgid "Drawing the spread from the absorption uncertainty…"
+msgstr "Calculando la dispersión por la incertidumbre de absorción…"
 
 #: acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format

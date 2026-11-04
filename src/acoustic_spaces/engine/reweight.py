@@ -109,9 +109,10 @@ def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequenc
         for key, r in result.responses.items()
     }
     # The runs without the removed parts and in the weather classes are not re-weighted:
-    # their insertion loss and the long-term levels go.
+    # their insertion loss and the long-term levels go, and so does the spread drawn
+    # around the absorption as traced.
     return dataclasses.replace(
-        result, responses=responses, removed=(), insertion_loss={}, long_term=None
+        result, responses=responses, removed=(), insertion_loss={}, long_term=None, spreads={}
     )
 
 

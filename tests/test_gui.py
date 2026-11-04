@@ -3047,6 +3047,27 @@ def _quick_map(document: Document) -> None:
     document.edit("coarse map", lambda data: data.update(coverage={"spacing": 2.0, "rays": 500}))
 
 
+def test_the_absorption_uncertainty_s_spread_shows_in_the_tips(window, qapp) -> None:
+    """A material with an absorption uncertainty gives the run its spread, which each
+    value's tip shows; re-weighted for other absorption, the run has none."""
+    from acoustic_spaces.gui.results_view import ROWS
+
+    _quick(window.document)
+    window.document.edit("1 s", lambda d: d["simulation"].update(ir_length_s=1.0))
+    window.document.edit(
+        "uncertainty",
+        lambda d: d["materials"]["plaster"].update(uncertainty={"absorption": 0.02}),
+    )
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    spread = window.result.spreads[("source", "listener")]
+    assert spread.draws == 400 and np.isfinite(spread.standard.t30[3])
+    rows = [name for name, _label, _template in ROWS]
+    tip = window.results.table.item(rows.index("t30"), 3).toolTip()
+    assert "From the materials' absorption uncertainty: standard uncertainty" in tip
+    assert "95 % within" in tip and "(400 draws)" in tip
+
+
 def test_changing_absorption_re_weights_the_run(window, qapp) -> None:
     _quick(window.document)
     window.run_simulation()

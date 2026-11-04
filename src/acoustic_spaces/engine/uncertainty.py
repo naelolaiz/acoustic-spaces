@@ -111,6 +111,15 @@ def material_spread(
     return out
 
 
+def with_spread(result, scene, face_group, materials, draws: int = DEFAULT_DRAWS, seed: int = 0):
+    """``result`` with its ``spreads`` (:func:`material_spread`), or as it is when no
+    material on the surfaces has an absorption uncertainty."""
+    if all(scene.materials[name].uncertainty is None for name in materials):
+        return result
+    spreads = material_spread(result, scene, face_group, materials, draws=draws, seed=seed)
+    return dataclasses.replace(result, spreads=spreads)
+
+
 def _spread(found: list[RoomParameters], coverage: float) -> Spread:
     names = [f.name for f in dataclasses.fields(RoomParameters)]
     tail = 0.5 * (1.0 - coverage)
@@ -133,4 +142,11 @@ def _spread(found: list[RoomParameters], coverage: float) -> Spread:
     )
 
 
-__all__ = ["DEFAULT_DRAWS", "MAX_ABSORPTION", "Spread", "absorption_draws", "material_spread"]
+__all__ = [
+    "DEFAULT_DRAWS",
+    "MAX_ABSORPTION",
+    "Spread",
+    "absorption_draws",
+    "material_spread",
+    "with_spread",
+]

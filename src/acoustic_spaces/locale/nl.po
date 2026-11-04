@@ -7187,6 +7187,16 @@ msgstr ""
 "berekeningen met andere startwaarden; meer stralen per band maken de fout "
 "kleiner"
 
+#. Translators: {u}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"From the materials' absorption uncertainty: standard uncertainty {u}, "
+"{percent} % within {low} to {high} ({count} draws)"
+msgstr ""
+"Uit de onzekerheid van de absorptie van de materialen: standaardonzekerheid "
+"{u}, {percent} % tussen {low} en {high} ({count} trekkingen)"
+
 #. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format
@@ -7533,6 +7543,10 @@ msgstr "De 3D-weergave is hier niet beschikbaar: {reason}"
 #: acoustic_spaces/gui/viewport.py
 msgid "The 3D view needs a display with OpenGL."
 msgstr "De 3D-weergave vereist een scherm met OpenGL."
+
+#: acoustic_spaces/gui/worker.py
+msgid "Drawing the spread from the absorption uncertainty…"
+msgstr "Spreiding uit de onzekerheid van de absorptie wordt getrokken…"
 
 #: acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format

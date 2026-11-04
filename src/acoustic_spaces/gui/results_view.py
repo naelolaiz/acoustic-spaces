@@ -595,6 +595,7 @@ class ResultsPanel(QWidget):
             self.table.setRowHidden(row, row > 8 and not np.isfinite(values).any())
         self._flag_decays(parameters)
         self._flag_errors(parameters, response)
+        self._spread_in_tips()
 
     def _flag_errors(self, parameters, response) -> None:
         """Each parameter's standard error in its tip, where the late rays were traced
@@ -637,6 +638,36 @@ class ResultsPanel(QWidget):
                         tip=tip,
                         jnd=float(jnd[col]),
                     )
+                item.setToolTip(f"{item.toolTip()}. {tip}")
+
+    def _spread_in_tips(self) -> None:
+        """Each parameter's spread from the materials' absorption uncertainty in its tip,
+        where the run drew it."""
+        spread = self.result.spreads.get(self.pair())
+        if spread is None:
+            return
+        for row, (name, _label, template) in enumerate(ROWS):
+            if not hasattr(spread.standard, name):
+                continue
+            scale = 1e3 if name == "ts" else 1.0
+            parts = [getattr(getattr(spread, p), name) * scale for p in ("standard", "low", "high")]
+            for col, (u, low, high) in enumerate(zip(*parts, strict=True)):
+                item = self.table.item(row, col)
+                if item is None or not np.isfinite(u):
+                    continue
+                tip = fmt(
+                    # Translators: {u}, {low} and {high} are numbers in the parameter's
+                    # unit, {percent} and {count} numbers.
+                    _(
+                        "From the materials' absorption uncertainty: standard uncertainty "
+                        "{u}, {percent} % within {low} to {high} ({count} draws)"
+                    ),
+                    u=number_text(template.format(u)),
+                    low=number_text(template.format(low)),
+                    high=number_text(template.format(high)),
+                    percent=f"{100 * spread.coverage:g}",
+                    count=spread.draws,
+                )
                 item.setToolTip(f"{item.toolTip()}. {tip}")
 
     def _flag_decays(self, parameters) -> None:

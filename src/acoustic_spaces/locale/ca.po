@@ -7176,6 +7176,16 @@ msgstr ""
 "perceptible entre càlculs amb altres llavors; més raigs per banda redueixen "
 "l'error"
 
+#. Translators: {u}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"From the materials' absorption uncertainty: standard uncertainty {u}, "
+"{percent} % within {low} to {high} ({count} draws)"
+msgstr ""
+"Per la incertesa d'absorció dels materials: incertesa típica {u}, {percent} "
+"%: entre {low} i {high} ({count} mostres)"
+
 #. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format
@@ -7526,6 +7536,10 @@ msgstr "La vista 3D no està disponible aquí: {reason}"
 #: acoustic_spaces/gui/viewport.py
 msgid "The 3D view needs a display with OpenGL."
 msgstr "La vista 3D necessita una pantalla amb OpenGL."
+
+#: acoustic_spaces/gui/worker.py
+msgid "Drawing the spread from the absorption uncertainty…"
+msgstr "Calculant la dispersió per la incertesa d'absorció…"
 
 #: acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format

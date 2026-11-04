@@ -1167,9 +1167,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         _remove_if_empty(made)
         return 1
-    spreads = None
     if groups is not None:
-        from acoustic_spaces.engine.uncertainty import DEFAULT_DRAWS, material_spread
+        from acoustic_spaces.engine.uncertainty import DEFAULT_DRAWS, with_spread
 
         draws = DEFAULT_DRAWS if args.spread_draws is None else args.spread_draws
         print(
@@ -1177,9 +1176,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         try:
-            spreads = material_spread(
-                result, room.scene, *groups, draws=draws, seed=settings.seed or 0
-            )
+            result = with_spread(result, room.scene, *groups, draws=draws, seed=settings.seed or 0)
         except ValueError as exc:
             print(f"warning: no spread from the absorption uncertainty: {exc}", file=sys.stderr)
 
@@ -1192,7 +1189,6 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             normalize=args.normalize,
             plots=args.plot,
             progress=lambda message: print(message, file=sys.stderr),
-            spreads=spreads,
         )
     except OSError as exc:
         print(f"error: the results could not be written to {out}: {exc}", file=sys.stderr)

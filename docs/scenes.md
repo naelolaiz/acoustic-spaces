@@ -270,7 +270,8 @@ The spread counts the absorption only, not the scattering, the seed or the metho
 uncertainty: it prints the largest standard uncertainty in JNDs from 125 Hz to 4 kHz,
 with its 95 % interval, and `parameters.json` holds them all (`absorption_spread`; 400
 draws, `--spread-draws` for another number). With settings that cannot re-weight
-(third-octave bands, say) it warns and leaves the spread out.
+(third-octave bands, say) it warns and leaves the spread out. The editor draws it after
+each run as well and gives it in the results table's tips.
 
 ### Material libraries of CATT-Acoustic and ODEON
 
