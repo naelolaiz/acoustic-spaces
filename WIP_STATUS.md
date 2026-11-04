@@ -201,8 +201,13 @@ kept).
   (one frequency, in the wind or in still air) is kept in DIR, a run with `--part K/N` finds only the K-th
   of every N, and a last run with the same options and `--cache DIR` but no `--part` reports from the
   cache (checked: two parts and the report give the direct run's row exactly, rail, 63 Hz, -5 m/s).
-  The reruns go that way, eight parts of `--case two --band 500 --wind -5` and four of `--case roof
-  --wind -5`, four at a time with `OMP_NUM_THREADS=1`.
+  The reruns go that way with `OMP_NUM_THREADS=1`, two at a time (a 500 Hz solution on the 60 m domain
+  takes about 6 GB; four side by side ran out of the session's 16 GB), eight parts of about 34 min.
+- **Done: two barriers, 500 Hz, 5 m/s upwind, 60 m domain** (effect at 100/150 m, then error, dB): ring
+  rigid -5.63/+7.70, -0.88/-0.18 (the same as the direct run); ring grass -1.02/-4.43, -0.65/-0.36; plane
+  rigid -5.72/+7.66, -0.79/-0.14; plane grass -1.08/-4.49, -0.59/-0.31. All within their limits (ring 1.7,
+  plane 1.65), below the largest errors the tables give, so `LIMITS` and the tables stay.
+- Running: `--case roof --wind -5` (60 m domain), four parts.
 - `ruff check .` and `ruff format --check .` flag only `wip/prototypes/` (as before the merge).
 
 ## Open
