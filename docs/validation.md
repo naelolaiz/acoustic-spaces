@@ -3078,16 +3078,19 @@ source 1 m up over hard ground and a barrier 4 m high 15 m away across the way:
 | the wind, from none to 0.01 m/s (0.1 m/s) | 0.024 (0.24) | | 0.2 at 0.1 m/s |
 | the barrier's top, 1 mm higher (listeners 40 and 60 m away) | 0.020 | 0.006 | 0.01 |
 | a listener 40 m away, 1 cm higher through the line of sight over the top | 0.077 | 0.070 | 0.05 |
-| a building's roof 25 to 37 m away, 1 cm higher, from 6 to 6.3 m | 1.16 | 0.023 | 0.1 a cell |
+| a building's roof 25 to 37 m away, 1 cm higher, from 6 to 6.3 m (listeners 60 and 120 m away, 5 m off its middle) | 0.14 | 0.021 | 0.1 a cell |
 | a listener 60 and 120 m away behind a barrier slanted at 63 degrees to the way, 0.01 degrees round, from 0.40 to 0.60 degrees | 0.017 | 0.018 | |
 | a listener 2 cm further, where the parabolic equation starts (a 1.5 m barrier 2 m from a source 0.5 m up) | 0.24 | 0.16 | |
 | a listener 10 cm across the shadow boundary of a barrier's end, 60 and 120 m away | 7.7 and 27 | 4.5 | 1 |
 | a listener 2 mm across the line of an end below the line of sight seen from above (a barrier 1 m high 30 m away), 100 and 200 m away | 37 | 8.2 | |
 
 The wind's effect grows in proportion to the wind (500 Hz, 100 m away and 4 m up),
-with no step as it starts. The roof sits on the parabolic equation's grid, so as it
-rises the weather's effect behind it, which changes with its height, steps from one
-cell to the next: 0.15 dB at 500 Hz, up to 1.16 dB from 2 kHz up. Between two whole
+with no step as it starts. The roof stands at its own height between the parabolic
+equation's cells (the field over it mirrored about that height), so as it rises the
+weather's effect behind it changes smoothly with it: by up to 0.13 dB a centimetre at
+1 kHz downwind and 0.14 dB at 4 to 8 kHz upwind, 0.03 dB a millimetre, and from 63 to
+500 Hz by 0.03 dB at most, about as in still air; on the grid it stepped from one cell
+to the next by up to 0.50 dB at 1 kHz in the same places. Between two whole
 degrees the listener takes both runs' effects, so the level turns smoothly round. The
 barrier's end comes from the plane's two dimensions (see
 [What is not modelled yet](outdoor.md#what-is-not-modelled-yet)): the paths over the
@@ -4267,10 +4270,6 @@ Results:
   across it the level steps by up to 4 dB from 63 to 500 Hz, as in still air, but by
   11.6 dB downwind at 1 kHz, and upwind by 12 and 37 dB at 4 and 8 kHz, 49 to 97 dB
   below still air, where straight legs over the edge step by up to 5.4 and 11.2 dB (see
-  [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
-- **A building's height in wind.** The parabolic equation puts a roof on its grid, so
-  as a roof rises the weather's effect behind it steps at each cell: by up to 1.2
-  dB a centimetre from 2 kHz up, against 0.02 dB in still air (see
   [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
 - **Coverage maps behind barriers** read the high bands higher than a listener at the
   same point: 130 m behind two barriers over grass by 0.6, 1.3, 3.8 and 13.5 dB at 1,

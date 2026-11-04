@@ -165,9 +165,11 @@ kept).
     cm, `windy` downwind 0.07/0.08/0.12/0.08/0.50/0.13/0.07/0.05 dB and upwind
     0.06/0.08/0.06/0.16/0.39/0.07/0.15/0.16 dB from 63 Hz to 8 kHz; after, downwind
     0.01/0.01/0.02/0.02/0.13/0.04/0.10/0.04 dB and upwind 0.005/0.005/0.02/0.03/0.10/0.05/0.14/0.14 dB
-    (still air unchanged, 0.007 to 0.021 dB). `docs/validation.md` (the continuity table: 1.16 dB) and
-    the known issue "A building's height in wind" (1.2 dB a cm) still give the old numbers, measured at
-    other listeners: to re-measure there and update.
+    (still air unchanged, 0.007 to 0.021 dB). The docs now give these: the continuity table's roof row
+    (0.14 dB, naming the listeners, as the one-off check before named none) and its text; the known
+    issue "A building's height in wind", the outdoor limit "A roof on the equation's grid" and the
+    roadmap's "a roof between the equation's cells" are taken out; `docs/outdoor.md` says a listener on
+    a barrier's line or a building's wall keeps the straight legs.
 - **A listener or map point on a barrier's line or a building's wall** (seen from above, within
   `ON_OBSTACLE_M` = 1 um) made the runs behind barriers raise "the parabolic equation gave no sound in
   still air" (the march takes a listener at an obstacle's range past it, where nothing gets through

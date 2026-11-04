@@ -562,7 +562,10 @@ is an arc of a circle, so its travel time and its length are exact.
   Inside the equation a barrier lets nothing through below its top (Salomons 1994),
   which leaves the level behind it 0.7 to 7.4 dB below a rigid one's 2 to 90 m behind
   (up to 11 dB 3 to 10 m behind, steeply below the top), and a roof is a rigid floor
-  over which the field goes on; the ratio cancels most of that. These paths arrive as
+  at its own height, between the equation's heights, over which the field goes on; the
+  ratio cancels most of that. A listener on a barrier's line or a building's wall, seen
+  from above, keeps the paths' straight legs: the equation would take it past them,
+  where nothing gets through below the top. These paths arrive as
   much sooner or later as the first of them would along its legs, and take the eddies'
   share of a refraction shadow as the open ground's sound does. The paths round a
   barrier's end or a building's corner alone, off nothing but the ground, where one of
@@ -1535,9 +1538,6 @@ equation leaves out:
   [Validation](validation.md#known-issues)). No reference in three dimensions checks
   the paths round ends and corners, for listeners behind a barrier or in the open
   beside it.
-- **A roof on the equation's grid.** A roof stands at the nearest of the equation's
-  heights, so as a building rises the level behind it steps from one to the next, by
-  up to 1.2 dB from 2 kHz up.
 - **Buildings in the wide-angle equation** (at steep points, or with
   `parabolic_equation: wide_angle`) are two screens at their walls: up to 1.4 dB in the
   wind's effect behind a building 60 m deep at 500 Hz in 10 m/s.
