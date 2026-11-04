@@ -249,8 +249,12 @@ kept).
   frequencies an octave the runs behind barriers in wind take at 8 kHz, at 4 kHz no more than 16
   (`refracted.barrier_samples`; 8 takes the early paths' 8 everywhere). Scene file only (no editor control
   or command-line flag, to keep it small). Test: `test_the_frequencies_at_4_and_8_khz_behind_barriers_can_be_fewer`.
-  Measuring each choice's error against 64 an octave on the convergence cases (running:
-  `samples_check.py` in the scratchpad); the docs get those numbers when they are in.
+  Measured against 64 an octave on the convergence cases (15 listeners, both grounds, +-5 m/s, where the
+  effect is within 25 dB; mean / nine in ten / largest, dB): 32 (default) 4 kHz 0.05/0.10/0.25, 8 kHz
+  0.04/0.09/0.51; 16: 4 kHz the same, 8 kHz 0.51/1.0/6.35 (high, rigid, +5 m/s); 8: 4 kHz 0.80/1.66/9.61,
+  8 kHz 2.09/3.54/14.0 (near, rigid, -5 m/s). The map behind two barriers (140 points, one core): 457,
+  291 and 172 s, against main's 38 s 12, 7.7 and 4.5 times. In `docs/outdoor.md` (a table after the
+  cost paragraph) and the field's description.
 
 ## Open
 

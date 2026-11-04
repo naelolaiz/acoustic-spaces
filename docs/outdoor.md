@@ -663,7 +663,29 @@ and 8 kHz; a coverage map of 96 points over grass behind two barriers or a build
 8 m/s of wind 260 to 300 s, two thirds of it at 8 kHz; and three or four listeners 6 to
 20 m up 30 to 80 m from the source behind a barrier or a building, where the wide-angle
 equation runs (the sound reaching them steeply), about 120 s, against 0.2 to 0.6 s in
-still air. The places of a walking source share the parabolic
+still air.
+
+Behind barriers and buildings the runs take 32 frequencies an octave at 8 kHz and 16
+at 4 kHz, where the ground's interference fringes are densest; below, 8, as the early
+paths do. `simulation.early.barrier_frequencies` takes fewer, 16 or 8 at 8 kHz (and no
+more than that at 4 kHz), for less time and a weather's effect further off. Against 64
+an octave, at 15 listeners 15 to 150 m away behind barriers (one 15 m from the source,
+one 4 m from a source by a rail line, one with listeners up to 14 m up, one whose top
+is 60 degrees up from the source) and a building, over rigid ground and grass, in 5 m/s
+of wind down- and upwind (`validation/barrier_wind.py`'s convergence cases, where the
+effect is within 25 dB of still air), the weather's effect is off by, in dB (mean, nine
+in ten, largest), and a coverage map of 140 points over grass behind two barriers in
+8 m/s takes, on one core:
+
+| `barrier_frequencies` | 4 kHz | 8 kHz | the map | against main's straight legs |
+|---|---|---|---|---|
+| 32 (the default) | 0.05, 0.10, 0.25 | 0.04, 0.09, 0.51 | 457 s | 12 times |
+| 16 | 0.05, 0.10, 0.25 | 0.51, 1.0, 6.4 | 291 s | 7.7 times |
+| 8 | 0.80, 1.7, 9.6 | 2.1, 3.5, 14 | 172 s | 4.5 times |
+
+These come on top of the parabolic equation's own error (see
+[Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)),
+and the bands below 4 kHz do not change. The places of a walking source share the parabolic
 equation's runs where they stand at one height over one ground and neither the weather
 nor the ground has zones: a run from one place serves the listeners of every other that
 the sound goes the same way to, each reached by a last step of its own, so that it gets
