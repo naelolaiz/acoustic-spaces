@@ -7,7 +7,7 @@ loudspeaker formats.
 
 ![The church example in 3D: the stone nave with its early reflection paths from the altar to the front of the nave, coloured by order up to the third](docs/images/church_paths.png)
 
-**Status: 4.1** (see the [roadmap](docs/roadmap.md) and the
+**Status: 4.2** (see the [roadmap](docs/roadmap.md) and the
 [known issues](docs/validation.md#known-issues)).
 
 ## What it does
@@ -20,13 +20,16 @@ loudspeaker formats.
 - **Simulation**, in octave or third-octave bands: ray-traced early reflections with
   edge diffraction, added in pressure at low frequencies, a stochastic late tail and,
   for the lowest bands, a wave solver, both on the CPU or a GPU; ISO 3382-1 parameters
-  with their standard errors, the STI and echo criteria for every source and listener:
-  [simulation](docs/simulation.md).
+  with their standard errors, the STI and echo criteria for every source and listener,
+  and the parameters' uncertainty from the materials' absorption and the rays by Monte
+  Carlo (GUM Supplement 1): [simulation](docs/simulation.md),
+  [materials' uncertainty](docs/scenes.md#materials).
 - **Outdoors**: the ground and its impedance, terrain, buildings from a map, barriers
-  and trees, wind, temperature and turbulence; road vehicles by CNOSSOS-EU, trains and
-  trams by Schall 03, construction plant from Defra's database, helicopters from their
-  rotors, aircraft by ECAC Doc 29, ground-borne vibration by the US FTA's manual and
-  sound through a closed window by EN ISO 12354-3: [outdoor scenes](docs/outdoor.md).
+  and trees, wind, temperature and turbulence, behind barriers and buildings too; road
+  vehicles by CNOSSOS-EU, trains and trams by Schall 03, construction plant from Defra's
+  database, helicopters from their rotors, aircraft by ECAC Doc 29, ground-borne
+  vibration by the US FTA's manual and sound through a closed window by EN ISO 12354-3:
+  [outdoor scenes](docs/outdoor.md).
 - **Coverage maps** of the parameters and of the speech transmission index over the
   audience: [coverage maps](docs/coverage-maps.md).
 - **Listening**: impulse responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker

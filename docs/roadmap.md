@@ -629,9 +629,6 @@ under Editor):
   auditorium (CR4) beside the seminar room and the hall, G from seat to seat in all four
   with the measured level's 3 dB question reported, IACC of FABIAN's binaural responses
   in three (`validation/bras_binaural.py`), and each run's largest standard error.
-- [x] BRAS's coupled rooms with the door open by 30.4°, whose model had no inside (the
-  door leaf ran 24 mm into the wall at its hinge): the conversion joins the leaf to the
-  wall and floor.
 - [x] Random scattering traced band by band where the bands scatter differently, as
   vector-based scattering is: with one ray for all bands, re-weighted band by band, its
   decays in BRAS were noisy, and in the coupled rooms far too short.
@@ -649,6 +646,15 @@ under Editor):
   power of their category (a truck in the roadside, a bus and a motorcycle in the
   street), and a police car with its siren on; the car's sound power by the 2021
   amendment of CNOSSOS-EU's table, 2.5 dB(A) more at 50 km/h.
+
+Version 4.2.0 (in the sections above: the fade past a thin screen's free ends under
+Edge diffraction, the error estimates under Parameters, barriers and buildings in wind
+(O22) and the scattered sound found from each listener under Outdoor acoustics, and the
+Run demo window's remembered options and the views following a run under Editor):
+
+- [x] BRAS's coupled rooms with the door open by 30.4°, whose model had no inside (the
+  door leaf ran 24 mm into the wall at its hinge): the conversion joins the leaf to the
+  wall and floor.
 
 Next:
 
