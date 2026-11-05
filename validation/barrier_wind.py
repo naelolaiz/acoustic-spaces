@@ -1,7 +1,7 @@
 """Barriers and buildings in wind: the engine's parabolic equation with them inside,
 against two references written apart from the engine.
 
-    python validation/barrier_wind.py [--only full_wave|started|engine|convergence]
+    python validation/barrier_wind.py [--only full_wave|started|engine|convergence|steep]
         [--case NAME] [--band HZ] [--wind M_S] [--reference ring|plane] [--quick]
         [--full-wave-json results.json] [--json results.json]
 
@@ -35,6 +35,9 @@ these checks measure how far it does.
   in the wind and in still air, the difference against ``full_wave``'s effect.
 - ``convergence``: the engine's parabolic equation alone, its grid and its frequencies
   against finer ones.
+- ``steep``: behind a building, the effect where the points cross the angle above which
+  the wide-angle equation runs (the building two thin screens there, no roof), from
+  each equation and the full-wave solution (listed, not judged).
 
 Each check also tests itself: the full-wave solution against the exact two-path field
 over open rigid ground, against the engine's parabolic equation over open ground in
@@ -1098,6 +1101,52 @@ def check_convergence(names, quick: bool, only_bands=None) -> dict:
     return out
 
 
+#: ``steep``: a building 20 to 30 m from a source 1 m up, its roof 8 m up, over rigid
+#: ground in 10 m/s downwind, and listeners 60 m away at these heights (m), either side
+#: of where the sound reaches them more steeply than STEEP_DEG (15.1 m up).
+STEEP_BUILDING = [(20.0, 30.0, 8.0)]
+STEEP_HEIGHTS = (10.0, 12.0, 14.0, 15.0, 15.5, 16.0, 18.0, 20.0, 24.0)
+
+
+def check_steep(quick: bool, only_bands=None) -> dict:
+    """Behind a building, the weather's effect where the points cross the steep angle:
+    as the engine's march gives it (the narrow-angle equation below, with the roof a
+    rigid floor, the wide-angle one above, the building two thin screens), each
+    equation's alone, and the full-wave solution's (rigid block) at 125 and 250 Hz."""
+    print("(e) Steep points behind a building: the weather's effect (dB) by height")
+    at = [(60.0, z) for z in STEEP_HEIGHTS]
+    speed = wind(10.0)
+    still = uniform(float(speed(np.array([0.0]))[0]))
+    bands = (1, 2) if quick else (1, 2, 3, 4, 5)
+    if only_bands:
+        bands = [b for b in bands if CENTRES[b] in only_bands]
+    print("  " + " " * 18 + "".join(f"{z:7g}" for z in STEEP_HEIGHTS) + "  m up")
+    out: dict = {"heights_m": list(STEEP_HEIGHTS)}
+    steep = parabolic.STEEP_DEG
+    for band in bands:
+        row = {}
+        try:
+            for name, angle in (("engine", steep), ("narrow", 90.0), ("wide", 0.0)):
+                parabolic.STEEP_DEG = angle
+                effect = engine_levels(band, speed, None, 1.0, at, STEEP_BUILDING) - (
+                    engine_levels(band, still, None, 1.0, at, STEEP_BUILDING)
+                )
+                row[name] = effect.tolist()
+        finally:
+            parabolic.STEEP_DEG = steep
+        if CENTRES[band] <= 250:
+            cut = snapped(STEEP_BUILDING, band)
+            row["full_wave"] = (
+                full_wave_levels(band, speed, 1.0, at, cut, None)
+                - full_wave_levels(band, still, 1.0, at, cut, None)
+            ).tolist()
+        for name, effect in row.items():
+            label = f"{CENTRES[band]:g} Hz {name}"
+            print(f"  {label:18s}" + "".join(f"{v:+7.2f}" for v in effect), flush=True)
+        out[f"{CENTRES[band]:g} Hz"] = row
+    return out
+
+
 # -- acceptance ------------------------------------------------------------------------
 
 
@@ -1144,7 +1193,9 @@ def acceptance(results: dict) -> bool:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "--only", choices=["full_wave", "started", "engine", "convergence"], help="one check"
+        "--only",
+        choices=["full_wave", "started", "engine", "convergence", "steep"],
+        help="one check",
     )
     parser.add_argument("--case", action="append", help="these cases only (repeatable)")
     parser.add_argument("--quick", action="store_true", help="fewer bands")
@@ -1198,6 +1249,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.only in (None, "convergence"):
         names = [n for n in CONVERGENCE if not args.case or n in args.case]
         results["convergence"] = check_convergence(names, args.quick, args.band)
+    if args.only in (None, "steep"):
+        results["steep"] = check_steep(args.quick, args.band)
     if CACHE["part"] is not None:
         found = CACHE["count"] - CACHE["skipped"]
         print(f"part {args.part}: {found} of {CACHE['count']} full-wave solutions in {args.cache}")

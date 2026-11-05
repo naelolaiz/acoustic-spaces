@@ -563,7 +563,12 @@ is an arc of a circle, so its travel time and its length are exact.
   which leaves the level behind it 0.7 to 7.4 dB below a rigid one's 2 to 90 m behind
   (up to 11 dB 3 to 10 m behind, steeply below the top), and a roof is a rigid floor
   at its own height, between the equation's heights, over which the field goes on; the
-  ratio cancels most of that. A listener on a barrier's line or a building's wall, seen
+  ratio cancels most of that. Where the sound reaches a point more steeply than 15
+  degrees the wide-angle equation runs, in which a building is two thin screens at its
+  roof's height with no roof between them: behind a building in 10 m/s the effect steps
+  by 0.14 to 0.25 dB from 125 Hz to 1 kHz and 0.6 dB at 2 kHz where the points cross that
+  angle ([Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
+  A listener on a barrier's line or a building's wall, seen
   from above, keeps the paths' straight legs: the equation would take it past them,
   where nothing gets through below the top. These paths arrive as
   much sooner or later as the first of them would along its legs, and take the eddies'

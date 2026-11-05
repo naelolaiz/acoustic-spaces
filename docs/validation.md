@@ -3068,6 +3068,16 @@ listener 14 m up, where the fringes fall in step with them (a one-off check), wh
 why the 8 kHz band takes 32, within 0.18 dB of 64 but 0.51 dB 11 m behind the steepest
 top.
 
+**Steep points behind a building.** Where the sound reaches a point more steeply than 15
+degrees the engine's runs take the wide-angle equation, in which a building is two thin
+screens at its roof's height with no roof between them (`--only steep`). 60 m from a
+source 1 m up, behind a building 20 to 30 m away with its roof 8 m up, in 10 m/s
+downwind over rigid ground, the weather's effect steps by 0.24, 0.16, 0.14, 0.25 and
+0.60 dB at 125 Hz to 2 kHz between listeners 15 and 15.5 m up, either side of that
+angle. From 10 to 24 m up it is within 0.31 dB of the full-wave solution's at 125 Hz and
+0.14 dB at 250 Hz; the wide-angle equation alone within 0.09 and 0.15 dB, the
+narrow-angle one within 0.45 and 0.09 dB.
+
 **Continuity.** How much the level steps as one thing changes a little, end to end
 (`simulate`, the coherent sum of the early paths), the most in any band, in the
 `windy` preset down- and upwind and in still air (a one-off check). The scene: a
