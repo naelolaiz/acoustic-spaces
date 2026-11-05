@@ -1155,16 +1155,30 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         from acoustic_spaces.engine import ray_device
 
         ray_device.set_trial(False)
+    groups = _spread_groups(room, settings)
     try:
         result = simulate(
             room,
             settings=settings,
             progress=lambda message: print(message, file=sys.stderr),
+            groups=None if groups is None else groups[0],
         )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         _remove_if_empty(made)
         return 1
+    if groups is not None:
+        from acoustic_spaces.engine.uncertainty import DEFAULT_DRAWS, with_spread
+
+        draws = DEFAULT_DRAWS if args.spread_draws is None else args.spread_draws
+        print(
+            f"the spread from the materials' absorption uncertainty: {draws} draws",
+            file=sys.stderr,
+        )
+        try:
+            result = with_spread(result, room.scene, *groups, draws=draws, seed=settings.seed or 0)
+        except ValueError as exc:
+            print(f"warning: no spread from the absorption uncertainty: {exc}", file=sys.stderr)
 
     try:
         report = write_results(
@@ -1196,6 +1210,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         print(RoomParameters.from_dict(entry["parameters"]).table())
         if "standard_errors" in entry:
             print(_convergence_text(entry, len(response.late_batches)))
+        if "uncertainty" in entry:
+            print(_uncertainty_text(entry))
         print(_level_text(entry))
         for line in _outdoor_lines(entry, result.removed):
             print(line)
@@ -1273,6 +1289,62 @@ def _convergence_text(entry: dict, batches: int) -> str:
             "; more rays (simulation.late.rays) would change the parameters less from seed to seed"
         )
     return text
+
+
+def _spread_groups(room, settings):
+    """The face groups and materials to trace ``room`` with for the spread from its
+    materials' absorption uncertainty, or None, with a warning when some material has
+    one but ``settings`` cannot re-weight."""
+    from acoustic_spaces.engine.reweight import groups_of
+
+    if all(m.uncertainty is None for m in room.scene.materials.values()):
+        return None
+    groups = groups_of(room, settings)
+    if groups is None:
+        print(
+            "warning: no spread from the materials' absorption uncertainty: it needs octave "
+            "bands, stochastic ray tracing for the late part, no wave solver and at most "
+            "a few materials on the surfaces",
+            file=sys.stderr,
+        )
+    return groups
+
+
+def _uncertainty_text(entry: dict) -> str:
+    """One line: the largest combined standard uncertainty from the materials' absorption
+    and the rays in JNDs from 125 Hz to 4 kHz, its budget and its coverage interval."""
+    from acoustic_spaces.compare import SUMMARY_BANDS_HZ, in_jnds
+    from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
+    from acoustic_spaces.parameters import ALL_PARAMETERS, RoomParameters, _band_label, _symbol
+
+    spread = entry["uncertainty"]
+    standard = RoomParameters.from_dict(spread["standard"])
+    jnds = in_jnds(RoomParameters.from_dict(entry["parameters"]), standard)
+    bands = [OCTAVE_BANDS_HZ.index(hz) for hz in SUMMARY_BANDS_HZ]
+    found = [
+        (float(jnds[name][b]), name, b)
+        for name in jnds
+        for b in bands
+        if math.isfinite(jnds[name][b])
+    ]
+    inputs = "the absorption"
+    if spread["batches"]:
+        inputs += f" and the rays ({spread['batches']} batches)"
+    text = f"uncertainty from {inputs}, {spread['draws']} draws: "
+    if not found:
+        return text + "none from 125 Hz to 4 kHz"
+    value, name, band = max(found)
+    unit = f" {ALL_PARAMETERS[name][0]}" if ALL_PARAMETERS[name][0] else ""
+    low, high = spread["low"][name][band], spread["high"][name][band]
+    budget = ""
+    rays = spread["rays"][name][band]
+    if rays is not None:
+        budget = f" (absorption {spread['absorption'][name][band]:.3g}, rays {rays:.3g})"
+    return text + (
+        f"at most {value:.2f} JND from 125 Hz to 4 kHz ({_symbol(name)} at "
+        f"{_band_label(OCTAVE_BANDS_HZ[band])}: u = {getattr(standard, name)[band]:.3g}{unit}"
+        f"{budget}, {100 * spread['coverage']:g} % within {low:.3g} to {high:.3g}{unit})"
+    )
 
 
 def _outdoor_lines(entry: dict, removed) -> list[str]:
@@ -2792,6 +2864,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="override simulation.bands: octave or third-octave bands (parameters stay in octaves)",
     )
     simulate.add_argument("--rays", type=int, help="override simulation.late.rays")
+    simulate.add_argument(
+        "--spread-draws",
+        type=int,
+        default=None,
+        metavar="N",
+        help="draws for the spread from the materials' absorption uncertainty (default 400)",
+    )
     simulate.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     simulate.add_argument(
         "--diffraction", choices=DIFFRACTION_MODES, help="override simulation.early.diffraction"

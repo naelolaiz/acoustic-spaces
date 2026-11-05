@@ -1806,8 +1806,8 @@ class MainWindow(QMainWindow):
         # Count reflections off each material, so that changing absorption afterwards
         # re-weights the run instead of making it out of date.
         self._job_groups = reweight.groups_of(self.document.room)
-        groups = self._job_groups[0] if self._job_groups is not None else None
-        job = SimulationJob(self.document.room, groups=groups)
+        groups, materials = self._job_groups or (None, None)
+        job = SimulationJob(self.document.room, groups=groups, materials=materials)
         job.done.connect(self._done)
         self._start(job, _("Simulating {scene}…").format(scene=self.document.scene.name))
 

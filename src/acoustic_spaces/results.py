@@ -101,6 +101,8 @@ def write_results(
     simulation's levels, which exceed full scale when a listener is closer than 1 m to
     a source (the report's ``peak`` says by how much). ``plots`` adds the echogram and
     direction plots of :mod:`acoustic_spaces.viz` when matplotlib is installed.
+    Each response's spread from its materials' absorption uncertainty, where the result
+    has it (``spreads``), goes into the report too.
 
     The files are written into a hidden folder in ``out`` first and moved into place
     once all of them are, the report last, so that a run that fails or is cancelled
@@ -113,7 +115,13 @@ def write_results(
     staging = Path(tempfile.mkdtemp(prefix=_STAGING, dir=out))
     try:
         report = _write_results(
-            result, staging, formats, sample_rate, normalize, plots, progress or (lambda _: None)
+            result,
+            staging,
+            formats,
+            sample_rate,
+            normalize,
+            plots,
+            progress or (lambda _: None),
         )
         # Into place, the report last: until it is, the folder's report is the one before.
         for path in sorted(staging.iterdir(), key=lambda path: path.name == REPORT_FILE):
@@ -210,6 +218,8 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
         errors = response.standard_errors()
         if errors is not None:
             entry["standard_errors"] = errors.as_dict()
+        if key in result.spreads:
+            entry["uncertainty"] = result.spreads[key].as_dict()
         # In a band no sound arrives in (spl -inf), neither the level in free field nor
         # the level without what was left out can be read back from spl: their
         # A-weighted values are then NaN (null).

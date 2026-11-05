@@ -24,6 +24,14 @@
   2.8 dB), and 10 cm across a barrier end's shadow boundary it steps by 0.42 dB in still
   air (4.5) and, in wind, by 1.0 dB from 63 to 500 Hz (5.0) and 0.91 dB 120 m upwind (27).
   A solid block's edges still stop at its corners.
+- Added: a material's `uncertainty` (a standard uncertainty or a tolerance of its
+  absorption), and `material_spread`, the Monte Carlo spread (GUM Supplement 1) of each
+  listener's room parameters that it leads to, by re-weighting the traced run;
+  `simulate` prints it and writes it into `parameters.json`, and the editor's results
+  give it in their tips.
+- Added: the rays' random error joins the absorption's in the same Monte Carlo, as
+  Student's t from the late batches' standard error, for a combined standard uncertainty
+  and coverage interval with the budget of each input (`uncertainty` in `parameters.json`).
 - Fixed: a curved ray's level near where it runs level at the listener, the source, the
   ground, a table's row or the edge of a layer whose speed does not change with height
   came out several dB off, 20 dB and more at worst, and many such rays were missed; the

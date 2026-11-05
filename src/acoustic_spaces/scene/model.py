@@ -1058,6 +1058,45 @@ class Impedance(_Model):
         return f"{model[self.model]}: " + ", ".join(words)
 
 
+class AbsorptionUncertainty(_Model):
+    """How far a material's absorption coefficients may be off, for the spread of the
+    results that follows (:func:`acoustic_spaces.engine.uncertainty.material_spread`).
+
+    With ``distribution`` normal, ``absorption`` is the standard uncertainty u(alpha), one
+    standard deviation (GUM, JCGM 100:2008, 4.2 and 4.3); with uniform, the half-width a
+    of a tolerance of plus or minus a, whose standard uncertainty is a / sqrt(3) (GUM
+    4.3.7). It is in units of the absorption coefficient (0.05 is plus or minus 0.05, not
+    5 per cent), per octave band or one value for every band. The bands of one material
+    are taken as fully correlated (a material measured high in one band is high in all),
+    the materials as independent of one another."""
+
+    absorption: list[float] | float = Field(
+        description="standard uncertainty (normal) or half-width (uniform), per octave band"
+    )
+    distribution: Literal["normal", "uniform"] = Field(
+        default="normal", description="normal: a standard uncertainty; uniform: a tolerance"
+    )
+    source: str | None = Field(default=None, description="where the uncertainty comes from")
+
+    @field_validator("absorption")
+    @classmethod
+    def _per_octave_band(cls, value: list[float] | float) -> list[float]:
+        values = [float(value)] * len(OCTAVE_BANDS_HZ) if isinstance(value, float | int) else value
+        if len(values) != len(OCTAVE_BANDS_HZ):
+            raise ValueError(
+                f"expected {len(OCTAVE_BANDS_HZ)} absorption uncertainties (octave bands) "
+                "or one for all"
+            )
+        if min(values) < 0.0 or max(values) > 1.0:
+            raise ValueError("an absorption uncertainty lies between 0 and 1")
+        return [float(v) for v in values]
+
+    def standard(self) -> np.ndarray:
+        """(octave bands,) the standard uncertainty u(alpha) of each band."""
+        values = np.asarray(self.absorption, dtype=float)
+        return values / math.sqrt(3.0) if self.distribution == "uniform" else values
+
+
 class Material(_Model):
     """Random-incidence absorption and scattering per octave or third-octave band, and
     the share of sound that passes through.
@@ -1114,6 +1153,13 @@ class Material(_Model):
         ),
     )
     source: str | None = Field(default=None, description="where the coefficients come from")
+    uncertainty: AbsorptionUncertainty | None = Field(
+        default=None,
+        description=(
+            "how far the absorption may be off (a standard uncertainty or a tolerance), "
+            "for the spread of the results"
+        ),
+    )
     # Notes on the coefficients of a preset or file outside 0 to 1, held to that range.
     _clipped: list[str] = PrivateAttr(default_factory=list)
     # The scattering entry ``scattering`` named, which validation replaces by its values.
