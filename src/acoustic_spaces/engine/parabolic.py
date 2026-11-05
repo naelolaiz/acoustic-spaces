@@ -278,6 +278,7 @@ def _march(
     step = max(RANGE_STEP_WAVELENGTHS * shortest, RANGE_STEP_MIN_M)
     r = 0.0
     tilted = np.zeros((len(f), 2 * n), dtype=complex)
+    clean = True  # whether the upper half of ``tilted`` is all zero
     mirrored = np.empty_like(tilted)
     steps: dict[float, tuple] = {}
     current = speed
@@ -365,12 +366,19 @@ def _march(
         screened = np.multiply(half, psi, out=tilted[:, :n])
         # The ground's sample weighs half (the trapezoidal rule), as the reflection
         # adds its mirror image.
+        nonlocal clean
         if here.every_image:
             tilted[:, n] = 0.0
         else:
-            tilted[:, n:] = 0.0
-            tilted[here.plain, 0] *= 0.5
+            if not clean:
+                tilted[:, n:] = 0.0
+                clean = True
+            if here.image.any():
+                tilted[here.plain, 0] *= 0.5
+            else:
+                tilted[:, 0] *= 0.5
         if here.image.any():
+            clean = False
             image = here.image
             on = screened if here.every_image else screened[image]
             inner = here.growth_below * on
@@ -394,14 +402,19 @@ def _march(
         psi_next = field[:, :n]
         surface = here.surface
         if surface.any():
-            amplitude = np.sum(tilted[surface, :n] * here.decay[surface], axis=1) * dz
+            decay = here.decay_surface
+            on = tilted[:, :n] if here.every_surface else tilted[surface, :n]
+            amplitude = np.sum(on * decay, axis=1) * dz
             lift = (
                 2j
                 * here.beta[surface]
                 * amplitude
                 * np.exp(1j * dr * (here.wave[surface] - ka[surface]))
             )
-            psi_next[surface] += lift[:, None] * here.decay[surface]
+            if here.every_surface:
+                psi_next += lift[:, None] * decay
+            else:
+                psi_next[surface] += lift[:, None] * decay
         return half * psi_next
 
     # Where the march meets the obstacles: (range, what: "screen" its top (m), "roof" or
@@ -560,6 +573,8 @@ class _Ground:
             self.fade[row] = 0.5 * (1.0 + np.cos(math.pi * t))
         # What the march takes of the rows ``image`` at every step.
         self.every_image = bool(self.image.all())
+        self.every_surface = bool(self.surface.all())
+        self.decay_surface = self.decay[self.surface]
         self.growth_below = self.growth[self.image]
         self.lift_below = self.scale[self.image, None] * self.shrink[self.image]
         self.fade_below = self.fade[self.image]
