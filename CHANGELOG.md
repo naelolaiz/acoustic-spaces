@@ -47,6 +47,16 @@
 - Editor: the Run demo window keeps the options changed in it for the next time it
   opens, each demo its own (the listeners, the sources' files, what moves and the
   format per scene file), names them above **Run**, and **Defaults** puts them back.
+- Fixed: the editor's material page lowers a transmission loss typed in, and an
+  absorption the transmission gives follows it; it kept the higher one.
+- Fixed: undo past a Save As that copied the scene's files keeps the scene on the
+  copies, instead of going back to the files it left (the package's, for an example).
+- Fixed: `simulate` and `coverage_map` check the sources and listeners they are given by
+  name when those are left out (`enabled: false`) too: one outside the room ran.
+- Fixed: the listening room's `bass.py` reads the scene it is given, the open one from
+  the editor's Run demo window, instead of always the example's.
+- Fixed: a tar archive cut short or damaged raises `OSError`, as other failed downloads
+  do, instead of `tarfile.ReadError`.
 - Fixed: a demo given `--hrtf` with a file that is not there is refused before its first
   step; it failed only when a later step read the file.
 - Fixed: a simulation refused for its memory says how much it would need with each

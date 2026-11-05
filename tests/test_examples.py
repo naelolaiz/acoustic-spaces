@@ -206,7 +206,7 @@ def _script(example: str, name: str):
     return module
 
 
-def test_listening_room_bass(capsys: pytest.CaptureFixture[str]) -> None:
+def test_listening_room_bass(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     bass = _script("listening_room", "bass")
     room = Room.from_yaml(example_path("listening_room"))
     # The early part at 63 Hz: the wall's reflection in phase against the wall, half a
@@ -218,6 +218,12 @@ def test_listening_room_bass(capsys: pytest.CaptureFixture[str]) -> None:
     assert abs(wall - out) < 1.0
     assert bass.main(["--rays", "300"]) == 0
     assert "in pressure up to 125 Hz" in capsys.readouterr().out
+    # The scene it is given, as the editor's Run demo window gives it the open one.
+    copy = room.scene.model_copy(deep=True)
+    copy.sources[0].name = "my own"
+    copy.to_yaml(tmp_path / "scene.yaml")
+    assert bass.main([str(tmp_path / "scene.yaml"), "--rays", "300"]) == 0
+    assert "  my own " in capsys.readouterr().out
 
 
 def _with_left_out(example: str) -> Room:

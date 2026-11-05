@@ -290,6 +290,12 @@ def test_fetch_takes_single_members_out_of_archives(tmp_path: Path) -> None:
     assert read and read[-1] > 0
     with pytest.raises(OSError, match="no takes/missing.txt"):
         fetch.extract_tar(tar_path.as_uri(), {"takes/missing.txt": tmp_path / "no.txt"})
+    # One cut short before the member ends fails as the downloads do, leaving no part.
+    cut = tmp_path / "cut.tar.gz"
+    cut.write_bytes(tar_path.read_bytes()[:-30])
+    with pytest.raises(OSError, match="cut short or damaged"):
+        fetch.extract_tar(cut.as_uri(), {"takes/wanted.txt": tmp_path / "cut" / "take.txt"})
+    assert not list((tmp_path / "cut").glob("*"))
     assert fetch.download(wanted.as_uri(), tmp_path / "whole.txt").read_text("utf-8") == "a take"
     assert fetch.fetch(wanted.as_uri(), tmp_path / "again.txt").exists()
 

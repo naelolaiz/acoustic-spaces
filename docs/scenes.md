@@ -700,7 +700,7 @@ listeners:
   sources that do not walk) and the scene's checks, as if it were not there, but keeps
   it in the scene; the others get the same responses as in a run of all, since seeds
   follow the scene's order. Named on the command line (`--source`), it is simulated all
-  the same. `inspect` marks it "left out". With every source, or every listener, left
+  the same, and checked. `inspect` marks it "left out". With every source, or every listener, left
   out, `validate`, `pack`, `simulate` and the editor refuse the scene, as there is
   nothing to run (a map needs no listener).
 - In the editor's scene tree each source, listener and group has a tick (in

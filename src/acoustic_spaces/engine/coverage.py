@@ -1036,7 +1036,9 @@ def coverage_map(
     """
     room = _as_room(room)
     # Listeners play no part in a map; sources named are mapped even when left out.
-    problems = room.problems(in_use=("sources",) if sources is None else ())
+    problems = room.problems(
+        in_use=("sources",) if sources is None else (), named={"sources": sources or ()}
+    )
     problems = [p for p in problems if not p.startswith("listener ")]
     if problems:
         raise ValueError("; ".join(problems))
