@@ -482,6 +482,15 @@ class Refraction:
             out.insert(0, paths[np.array(plane)])
             request.part = 0
         asked = [] if request is None else [request]
+        # The paths over a barrier's top past its end, where the edge fades them out,
+        # take the weather's effect behind it just inside the end (:meth:`_past_ends`).
+        if barrier is None and bent:
+            for rows, past in self._past_ends(k, listener, zr, paths, bent, cutoff, reach):
+                taken = set(rows)
+                bent = [i for i in bent if i not in taken]
+                out.append(paths[np.array(rows)])
+                past.part = len(out) - 1
+                asked.append(past)
         # The paths round the ends of barriers and the corners of buildings take the
         # weather's effect on the open ground along their own way (:meth:`_ends`).
         ends = None
@@ -974,6 +983,46 @@ class Refraction:
             for near, far, top in found
             if top > self.ground
         )
+
+    def _past_ends(self, k, listener, zr, paths, rows, cutoff, reach):
+        """Of the paths ``rows`` of ``paths``, those over a barrier's or a building's
+        edge that is not vertical, touching its line past one of its ends, where the
+        edge diffraction fades them out (:func:`~acoustic_spaces.engine.diffraction.
+        along_edge`), and reflecting off nothing but the ground: by edge and end, the
+        paths and the request that changes them as the weather changes the sound behind
+        the barrier just inside that end (:meth:`_barrier`, along the way from the source
+        to it), as the paths over the edge just inside it change."""
+        edges = self._edge_set()
+        laid = self._laid_edges()
+        groups: dict[tuple, list[int]] = {}
+        for i in rows:
+            e = int(paths.edge[i])
+            if e < 0 or not laid[e] or abs(float(edges.direction[e][2])) >= 1.0 - 1e-9:
+                continue
+            faces = paths.faces[i] if paths.faces else np.zeros(0, dtype=np.int64)
+            if len(faces) and not np.all(self.flat[faces]):
+                continue
+            for corner in paths.points[i][1:-1]:
+                v = corner - edges.start[e]
+                t = float(v @ edges.direction[e])
+                if np.linalg.norm(v - t * edges.direction[e]) > self.tolerance:
+                    continue
+                if t < -self.tolerance or t > edges.length[e] + self.tolerance:
+                    groups.setdefault((e, int(t > 0.0)), []).append(i)
+                break
+        out = []
+        for (e, end), members in groups.items():
+            inset = min(1e-3, 0.5 * float(edges.length[e]))
+            t = inset if end == 0 else float(edges.length[e]) - inset
+            point = edges.start[e] + t * edges.direction[e]
+            across = point[:2] - self.source[:2]
+            if float(np.linalg.norm(across)) <= 1e-6:
+                continue
+            towards = across / float(np.linalg.norm(across))
+            found = self._barrier(k, listener, towards, reach, zr, paths, [], members, cutoff)
+            if found is not None:
+                out.append(found)
+        return out
 
     def _ends(self, k, listener, zr, paths, rows, cutoff, towards):
         """Of the paths ``rows`` of ``paths``, those round the ends of barriers and the

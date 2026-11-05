@@ -18,6 +18,12 @@
   barriers** in the editor) takes fewer
   frequencies an octave at 4 and 8 kHz behind barriers, for less time and a weather's
   effect further off there, by as much as `docs/outdoor.md` gives for each.
+- A path over the edge of a thin screen now fades out past a free end of the edge, by
+  the part of its Fresnel zone the edge covers as in BTM, instead of stopping there:
+  past a screen's corner the level is within 0.1 dB of the exact solution (it stepped by
+  2.8 dB), and 10 cm across a barrier end's shadow boundary it steps by 0.42 dB in still
+  air (4.5) and, in wind, by 1.0 dB from 63 to 500 Hz (5.0) and 0.91 dB 120 m upwind (27).
+  A solid block's edges still stop at its corners.
 - Added: a material's `uncertainty` (a standard uncertainty or a tolerance of its
   absorption), and `material_spread`, the Monte Carlo spread (GUM Supplement 1) of each
   listener's room parameters that it leads to, by re-weighting the traced run;

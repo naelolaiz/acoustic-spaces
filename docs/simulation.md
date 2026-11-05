@@ -313,6 +313,21 @@ screen comes within 1.5 dB of Maekawa's chart in the tests' geometry (the chart,
 empirical one, is itself up to 2.1 dB from the exact solution behind a barrier 40 to 90
 m away).
 
+A path over the edge of a thin screen takes the part of its Fresnel zone that the edge
+covers, the Fresnel integral from each end as in BTM's integral over a finite edge, so
+near a free end its sound fades to half at the end and out past it, over a few widths of
+the zone, instead of stopping there. Where two such edges meet at a corner (a screen's
+top and its side) they share the fade, and an end that stands on the ground, or on a
+face across the edge, goes on as its image there. Past the corner of a thin screen the
+level is within 0.1 dB of the exact solution and steps as it does, where it stepped by
+2.8 dB (see the
+[validation report](validation.md#edge-diffraction-against-the-exact-solution)). The
+edges of solid wedges still stop at their ends: near a block's corners, where three
+meet, the level steps by up to 2.4 dB at 63 Hz and is up to 2.3 dB from the exact
+solution, and fading them as at a screen's corner put it up to 1.25 dB above it before
+the corner, where stopping is within 0.36 dB. Paths over two edges (`second_order`)
+still stop at the ends.
+
 Behind a thick wall or barrier, whose two corners share its top, no edge sees both the
 source and the listener: `first_order` finds nothing there, or only a way round one
 corner of a doorway. `second_order` follows the shortest path over each pair of edges
@@ -372,9 +387,10 @@ order, the level now steps by at most 0.13 dB in any band, where it stepped by u
 [validation report](validation.md#round-a-corner-indoors), which says what is left).
 Where the edge diffraction bends every path the early stage follows, as with
 `max_order: 0` and `direct` or `max_order: 1` and `first_order`, the fade changes the
-level by less than 0.05 dB. Steps are left at the corners of edges, where the point a
-term diffracts at leaves the end of its edge: driving the `street` example's car past
-the barrier 1 cm at a time, up to 1.42 dB in one band and 0.35 dB(A). And indoors,
+level by less than 0.05 dB. Steps are left where a term still stops at the end of its
+edge, as the fade's terms of reflections that the edge diffraction has no path for do:
+driving the `street` example's car past the barrier 1 cm at a time, up to 1.11 dB in one
+band and 0.55 dB(A). And indoors,
 where paths add in energy from 250 Hz up, the sound bent round edges is kept as waves
 (`engine.clusters` in the [API reference](api.md#edge-diffraction)): a term continues
 its geometric wave as far as it is coherent with it over the band (on the dark side of

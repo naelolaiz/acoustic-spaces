@@ -1553,18 +1553,16 @@ equation leaves out:
   degrees is within 0.9 dB 120 m behind a barrier at 14 degrees to the way and 1.8 dB
   within 3 m behind a wall at 45 degrees. The paths round an end take the open ground's
   effect along their way, not the barrier's, and only in its bands, while those over
-  the top take the barrier's: where a listener crosses the shadow boundary of a
-  barrier's end, 10 cm across it the level steps in those bands about as in still air
-  (up to 5.0 dB at 63 Hz, against 4.5), but by 4.8 dB at 500 Hz 120 m upwind (0.8 in
-  still air) and by 15 and 27 dB at 1 and 2 kHz there, 23 to 65 dB below still air;
-  above them, where the paths round the end keep straight legs, by up to 7.7 dB 60 m
-  from the source and 21 dB 120 m away. Where the end stands below the line of sight
-  (a barrier 1 m high), a listener crossing the end's line seen from above (its way
-  crossing the barrier on one side, and on the other the open ground's sound) steps,
-  2 mm across it, by up to 4 dB from 63 to 500 Hz as in still air, but by up to 11.6 dB
-  downwind at 1 kHz 100 m away, the first band above the open ground's equation, and
-  upwind by 12 and 37 dB at 4 and 8 kHz, 49 to 97 dB below still air, where straight
-  legs over the edge step by up to 5.4 and 11.2 dB (see
+  the top take the barrier's, past the end too as they fade out there: where a
+  listener crosses the shadow boundary of a barrier's end, 10 cm across it the level
+  steps by at most 1.0 dB from 63 to 500 Hz (0.42 dB in still air) and 0.91 dB 120 m
+  upwind, but from 1 kHz up, where the paths round the end keep their legs while the
+  direct sound takes the open ground's refraction, by up to 7.8 dB 60 m downwind and
+  20 dB 120 m away. Where the end stands below the line of sight (a barrier 1 m high), a
+  listener crossing the end's line seen from above (its way crossing the barrier on
+  one side, and on the other the open ground's sound) steps, 2 mm across it, by up to
+  1.2 dB from 63 to 250 Hz (0.02 dB in still air), but by up to 4.8 dB at 500 Hz,
+  10.6 dB downwind at 1 kHz 100 m away and 12.8 dB upwind at 8 kHz (see
   [Validation](validation.md#known-issues)). No reference in three dimensions checks
   the paths round ends and corners, for listeners behind a barrier or in the open
   beside it.
