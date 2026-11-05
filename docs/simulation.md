@@ -387,9 +387,10 @@ order, the level now steps by at most 0.13 dB in any band, where it stepped by u
 [validation report](validation.md#round-a-corner-indoors), which says what is left).
 Where the edge diffraction bends every path the early stage follows, as with
 `max_order: 0` and `direct` or `max_order: 1` and `first_order`, the fade changes the
-level by less than 0.05 dB. Steps are left at the corners of edges, where the point a
-term diffracts at leaves the end of its edge: driving the `street` example's car past
-the barrier 1 cm at a time, up to 1.42 dB in one band and 0.35 dB(A). And indoors,
+level by less than 0.05 dB. Steps are left where a term still stops at the end of its
+edge, as the fade's terms of reflections that the edge diffraction has no path for do:
+driving the `street` example's car past the barrier 1 cm at a time, up to 1.11 dB in one
+band and 0.55 dB(A). And indoors,
 where paths add in energy from 250 Hz up, the sound bent round edges is kept as waves
 (`engine.clusters` in the [API reference](api.md#edge-diffraction)): a term continues
 its geometric wave as far as it is coherent with it over the band (on the dark side of
