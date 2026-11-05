@@ -1808,6 +1808,7 @@ class MainWindow(QMainWindow):
         self._job_groups = reweight.groups_of(self.document.room)
         groups, materials = self._job_groups or (None, None)
         job = SimulationJob(self.document.room, groups=groups, materials=materials)
+        job.traced.connect(self._traced_shown)
         job.done.connect(self._done)
         self._start(job, _("Simulating {scene}…").format(scene=self.document.scene.name))
 
@@ -1933,9 +1934,12 @@ class MainWindow(QMainWindow):
         self.log(_("Dropped the results of the run: its scene is no longer open."), "warning")
         return True
 
-    def _done(self, result) -> None:
-        if self._closed_meanwhile():
-            return
+    def _traced_shown(self, result) -> None:
+        """Show the traced ``result`` while its spread is drawn (``done`` follows)."""
+        if self._job_document is self.document:
+            self._show_result(result)
+
+    def _show_result(self, result) -> None:
         first = self.result is None
         self.result, self._result_scene = result, self._job_scene
         groups = self._job_groups
@@ -1946,6 +1950,12 @@ class MainWindow(QMainWindow):
         self._reweight()  # absorption changed while it ran
         self.results.mark_stale(self._stale(), reweighted=self._reweighted())
         self.docks["results"].raise_()
+        self._draw()
+
+    def _done(self, result) -> None:
+        if self._closed_meanwhile():
+            return
+        self._show_result(result)
         elapsed = time.perf_counter() - self._started
         count = len(result.responses)
         self.log(
@@ -1959,7 +1969,6 @@ class MainWindow(QMainWindow):
                 count=count,
             )
         )
-        self._draw()
 
     def _map_done(self, result) -> None:
         if self._closed_meanwhile():

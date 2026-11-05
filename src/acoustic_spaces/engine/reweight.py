@@ -168,13 +168,19 @@ def reweighted_paths(paths: EarlyReflections, counts: np.ndarray, ratio: np.ndar
 
 
 def turned_paths(
-    paths: EarlyReflections, face_group: np.ndarray, old: np.ndarray, new: np.ndarray
+    paths: EarlyReflections,
+    face_group: np.ndarray,
+    old: np.ndarray,
+    new: np.ndarray,
+    admittance_of=None,
 ) -> EarlyReflections:
     """``paths`` with the phase of each reflection off a group of faces (``face_group``)
     turned, in the bands where they add in pressure, from that of the group's absorption
     ``old`` (groups, bands) to that of ``new``: from the angle each meets its face at
     (:attr:`~acoustic_spaces.engine.early.EarlyReflections.cosines`). Reflections whose
-    phase their face's absorption does not give keep theirs."""
+    phase their face's absorption does not give keep theirs. ``admittance_of`` gives the
+    admittance of an absorption row (:func:`~acoustic_spaces.engine.coherent.
+    absorption_phases`; by default the one fitted to it)."""
     if paths.spectrum is None or len(paths) == 0 or not paths.cosines:
         return paths
     old, new = (np.asarray(a, dtype=float) for a in (old, new))
@@ -192,8 +198,8 @@ def turned_paths(
         return paths
     groups = np.asarray(groups, dtype=np.int64)
     f = sample_frequencies(old.shape[1], paths.spectrum.shape[1])
-    turn = absorption_phases(new[groups], cosines, f) * np.conj(
-        absorption_phases(old[groups], cosines, f)
+    turn = absorption_phases(new[groups], cosines, f, admittance_of) * np.conj(
+        absorption_phases(old[groups], cosines, f, admittance_of)
     )
     spectrum = paths.spectrum.copy()
     np.multiply.at(spectrum, np.asarray(rows), turn)

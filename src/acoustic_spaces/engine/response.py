@@ -259,6 +259,7 @@ class Response:
         face_group: np.ndarray,
         ratio: np.ndarray,
         absorption: tuple[np.ndarray, np.ndarray] | None = None,
+        admittance_of=None,
     ) -> Response:
         """This response for other absorption, without tracing again
         (:mod:`acoustic_spaces.engine.reweight`): ``face_group`` the group of each face
@@ -270,8 +271,9 @@ class Response:
         (``simulate(groups=...)``). Where the early paths add in pressure
         (:mod:`~acoustic_spaces.engine.coherent`), the phase of their reflections
         depends on the absorption too, and turns with it
-        (:func:`~acoustic_spaces.engine.reweight.turned_paths`): that needs
-        ``absorption``, unless no path reflects off a group whose absorption changes."""
+        (:func:`~acoustic_spaces.engine.reweight.turned_paths`, with
+        ``admittance_of`` if given): that needs ``absorption``, unless no path reflects
+        off a group whose absorption changes."""
         from acoustic_spaces.engine import reweight
 
         ratio = np.asarray(ratio, dtype=float)
@@ -294,7 +296,7 @@ class Response:
                     raise ValueError(
                         f"expected the absorption of {groups} groups in {self.bands} bands"
                     )
-                early = reweight.turned_paths(early, face_group, old, new)
+                early = reweight.turned_paths(early, face_group, old, new, admittance_of)
             elif len(counts) and np.any(counts[:, np.any(ratio != 0.0, axis=1)] > 0):
                 raise ValueError(
                     "the early paths add in pressure in the lowest bands, where the phase "

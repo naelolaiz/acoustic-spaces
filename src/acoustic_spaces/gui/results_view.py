@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces.compare import CONVERGED_JND, in_jnds
-from acoustic_spaces.gui.inspector import BAND_LABELS
+from acoustic_spaces.gui.inspector import BAND_LABELS, PRESET_UNCERTAINTIES
 from acoustic_spaces.gui.levels import level_colour
 from acoustic_spaces.gui.numbers import fmt, number_text
 from acoustic_spaces.gui.tips import (
@@ -647,6 +647,17 @@ class ResultsPanel(QWidget):
         if spread is None:
             return
         names = ("standard", "low", "high", "absorption", "rays")
+        assumed = ""
+        if spread.assumed:
+            # One choice for the whole scene (simulation.uncertainty.presets).
+            choice = next(iter(spread.assumed.values()))
+            assumed = fmt(
+                # Translators: {what} is how far the absorption may be off ("plus or minus
+                # 0.1"), {names} the materials' names.
+                _("Built-in materials of unknown source taken at {what}: {names}"),
+                what=_(dict(PRESET_UNCERTAINTIES)[choice]),
+                names=", ".join(spread.assumed),
+            )
         # The method's largest error over edges in each band, which the spread leaves out.
         bounds = list(spread.not_counted.values())
         edges = np.fmax.reduce(np.vstack(bounds), axis=0) if bounds else None
@@ -689,6 +700,8 @@ class ResultsPanel(QWidget):
                         ),
                         **values,
                     )
+                if spread.assumed:
+                    tip += ". " + assumed
                 if edges is not None and np.isfinite(edges[col]):
                     tip += ". " + fmt(
                         # Translators: {db} is a number of decibels.

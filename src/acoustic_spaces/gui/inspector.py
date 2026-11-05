@@ -140,6 +140,13 @@ WAVE_WINDS = [("effective", N_("effective speed of sound")), ("moving", N_("movi
 SCATTERING_METHODS = [("vector", N_("vector")), ("random", N_("random"))]
 RAY_TREES = [("sah", "sah"), ("median", N_("median"))]
 BANDS = [("octave", N_("octave")), ("third_octave", N_("third_octave"))]
+#: simulation.uncertainty.presets' choices: what a built-in material of unknown source
+#: takes as its absorption's uncertainty.
+PRESET_UNCERTAINTIES = [
+    ("tolerance", N_("plus or minus 0.1")),
+    ("iso_12999_2", N_("twice ISO 12999-2")),
+    ("none", N_("none")),
+]
 #: The weathers an outdoor scene starts from: none, a preset, or values of its own.
 WEATHERS = [
     (None, N_("(none)")),
@@ -3649,7 +3656,7 @@ def _device(combo: QComboBox) -> str | None:
 
 class SimulationPage(Page):
     """The early and late stages, scattering, the wave solver, the response length,
-    sample rate, bands and seed."""
+    sample rate, bands and seed, and the built-in materials' uncertainty."""
 
     def __init__(self, document) -> None:
         super().__init__(document)
@@ -3981,6 +3988,23 @@ class SimulationPage(Page):
         response_form.addRow("", self.seed)
         layout.addWidget(response)
 
+        uncertainty = QGroupBox(_("Uncertainty"))
+        uncertainty_form = QFormLayout(uncertainty)
+        self.preset_uncertainty = QComboBox()
+        _fill(self.preset_uncertainty, PRESET_UNCERTAINTIES)
+        self.preset_uncertainty.setToolTip(
+            _(
+                "How far the absorption of a built-in material may be off, for the spread of "
+                "the results after each run, where the material gives no uncertainty of its "
+                "own: the database does not say where its values come from. Plus or minus "
+                "0.1 in every band; twice the reproducibility ISO 12999-2 gives for a "
+                "measurement to ISO 354, larger at low frequencies and for high absorption; "
+                "or none, no spread from them"
+            )
+        )
+        uncertainty_form.addRow(_("Built-in materials"), self.preset_uncertainty)
+        layout.addWidget(uncertainty)
+
         self.insertion_group = QGroupBox(_("Insertion loss"))
         insertion_layout = QVBoxLayout(self.insertion_group)
         self.insertion = QListWidget()
@@ -4009,6 +4033,7 @@ class SimulationPage(Page):
             (self.ray_tree, "performance.ray_tree"),
             (self.bands, "bands"),
             (self.wave_wind, "wave.wind"),
+            (self.preset_uncertainty, "uncertainty.presets"),
         ):
             combo.currentIndexChanged.connect(
                 lambda index, combo=combo, key=key: self._set(key, combo.itemData(index))
@@ -4102,6 +4127,7 @@ class SimulationPage(Page):
             self.sample_rate.addItem(str(s.sample_rate))
         self.sample_rate.setCurrentText(str(s.sample_rate))
         _choose(self.bands, s.bands)
+        _choose(self.preset_uncertainty, s.uncertainty.presets)
         self.auto_transition.setChecked(s.transition_ms is None)
         self.transition.setEnabled(s.transition_ms is not None)
         self.transition.setValue(s.transition_ms or 80.0)

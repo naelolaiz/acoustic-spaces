@@ -92,6 +92,8 @@ def _quick(document: Document) -> None:
         data["simulation"]["seed"] = 1
         data["simulation"].setdefault("late", {})["rays"] = 500
         data["simulation"].setdefault("early", {})["max_order"] = 2
+        # No spread from the built-in materials' default uncertainty.
+        data["simulation"]["uncertainty"] = {"presets": "none"}
 
     document.edit("quick", change)
 
@@ -476,6 +478,26 @@ def test_simulation_job(qapp) -> None:
     job.cancel()
     job.run()  # in this thread: stops at the first stage
     assert cancelled == [1]
+
+
+def test_a_run_shows_before_its_spread_is_drawn(qapp) -> None:
+    """A run of built-in materials gives its traced result first, then the same with the
+    spread from their default absorption uncertainty."""
+    from acoustic_spaces.engine import reweight
+
+    document = Document(box_scene())
+    _quick(document)
+    document.edit("default", lambda d: d["simulation"].pop("uncertainty"))
+    groups, materials = reweight.groups_of(document.room)
+    job = SimulationJob(document.room, groups=groups, materials=materials)
+    shown = []
+    job.traced.connect(lambda result: shown.append(("traced", result)))
+    job.done.connect(lambda result: shown.append(("done", result)))
+    job.run()  # in this thread
+    assert [kind for kind, _result in shown] == ["traced", "done"]
+    (_, traced), (_, done) = shown
+    assert not traced.spreads and set(done.spreads) == set(traced.responses)
+    assert done.spreads[("source", "listener")].assumed == dict.fromkeys(materials, "tolerance")
 
 
 # -- the window -------------------------------------------------------------------------
@@ -2171,6 +2193,21 @@ def test_barrier_frequencies_choice(window) -> None:
     window.select("simulation")
     assert not page.barrier_frequencies.isEnabled()
     assert page.barrier_frequencies.currentData() == 8
+
+
+def test_built_in_materials_uncertainty_choice(window) -> None:
+    """The simulation page picks what the built-in materials of unknown source take as
+    their absorption's uncertainty, plus or minus 0.1 by default."""
+    window.open_example(example_path("shoebox"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    assert page.preset_uncertainty.currentData() == "tolerance"
+    assert page.preset_uncertainty.currentText() == "plus or minus 0.1"
+    assert page.preset_uncertainty.toolTip()
+    page.preset_uncertainty.setCurrentIndex(page.preset_uncertainty.findData("iso_12999_2"))
+    assert window.document.scene.simulation.uncertainty.presets == "iso_12999_2"
+    window.select("simulation")
+    assert page.preset_uncertainty.currentData() == "iso_12999_2"
 
 
 def test_wind_and_temperature_form(window) -> None:

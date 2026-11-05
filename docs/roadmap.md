@@ -143,9 +143,11 @@ Parameters:
   traced run, in `simulate`'s output, `parameters.json` and the editor's results.
 - [x] Error estimates, step 2: the rays' random error in the same Monte Carlo (Student's
   t from the batches' standard error), a combined standard uncertainty and its budget.
+- [x] Error estimates: default uncertainties for the built-in materials, whose source
+  the database does not name (plus or minus 0.1, or twice ISO 12999-2's reproducibility).
 - [ ] Error estimates, next steps: the uncertainty on the editor's material page; the number of draws chosen as GUM Supplement 1's adaptive procedure does;
-  default uncertainties for built-in materials; the scattering's uncertainty; levels,
-  STI and maps; convergence checks; the method's own error from the validation.
+  the scattering's uncertainty; levels, STI and maps; convergence checks; the method's
+  own error from the validation.
 
 Outdoor acoustics, in steps:
 

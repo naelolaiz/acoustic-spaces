@@ -36,6 +36,9 @@ class SimulationJob(QThread):
     progress = Signal(str)
     #: The :class:`acoustic_spaces.engine.SimulationResult`.
     done = Signal(object)
+    #: The result before its spread from the absorption uncertainty is drawn, to show
+    #: meanwhile; ``done`` then carries it with the spread.
+    traced = Signal(object)
     failed = Signal(str)
     cancelled = Signal()
 
@@ -73,10 +76,11 @@ class SimulationJob(QThread):
             progress=self._say,
             groups=self.groups,
         )
-        if self.groups is None or not self.materials:
-            return result
-        from acoustic_spaces.engine.uncertainty import with_spread
+        from acoustic_spaces.engine.uncertainty import has_uncertainty, with_spread
 
+        if not self.materials or not has_uncertainty(self.room.scene, self.materials):
+            return result
+        self.traced.emit(result)
         self._say(_("Drawing the spread from the absorption uncertainty…"))
         seed = (self.settings or self.room.scene.simulation).seed or 0
         return with_spread(result, self.room.scene, self.groups, self.materials, seed=seed)
