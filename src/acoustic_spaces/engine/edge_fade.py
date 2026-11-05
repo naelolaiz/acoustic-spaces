@@ -111,6 +111,7 @@ from acoustic_spaces.engine.diffraction import (
     _reach,
     _waves,
     boundary_angles,
+    near_fading_end,
     wedge_prefactor,
 )
 from acoustic_spaces.engine.early import (
@@ -1343,6 +1344,9 @@ class EdgeFade:
         wavenumber = d.wavenumber[None]  # (1, B, M)
         sin_beta = np.clip(rho_s / r1, 1e-12, 1.0)
         length_param = r1 * r2 / (r1 + r2) * sin_beta**2
+        # Where the edge diffraction's term fades near an end of the edge, it counts
+        # whether the term's path is found or not (join).
+        near, _ = near_fading_end(d.fades[edge], t_k, edges.length[edge], r1, r2, sin_beta, d.k_min)
         rho_r = r2 * sin_beta
         tol = self.tolerance
         never = np.zeros(len(edge), dtype=bool)
@@ -1414,6 +1418,7 @@ class EdgeFade:
             "covered": table["covered"][slot],
             "edge": edge.astype(np.int64),
             "lit": lit[index, column],
+            "near": near[sel],
             "explains": explains,
             "column": column,
             "pressure": own[sel],
@@ -1510,7 +1515,8 @@ class EdgeFade:
         total = np.zeros((len(ids), events, *wavenumber.shape), dtype=complex)
         np.add.at(total, (path, t["at"]), t["pressure"] + t["others"])
         # The edge diffraction adds a term where it bends the event: on the lit side where
-        # the path is found, on the dark side where it is not; and the terms of
+        # the path is found, on the dark side where it is not (and near an end that fades,
+        # either way); and the terms of
         # reflections that cannot be that the fade takes. It does so wherever it has the
         # path over the edge: without its paths, at the event that stops a missed path
         # (at the others its paths over the edge are stopped there too, and where two
@@ -1524,7 +1530,7 @@ class EdgeFade:
         else:
             bent_row = self._has_bent(go["planes"][ids][path], t)
             bent = t["covered"] & (bent_row >= 0)
-        added = bent & (t["lit"] != missed[path])
+        added = bent & ((t["lit"] != missed[path]) | t["near"])
         term = t["pressure"] + t["others"]
         less = added.astype(float)[:, None, None] * t["pressure"]
         less += bent.astype(float)[:, None, None] * t["others"]
@@ -1882,18 +1888,23 @@ class EdgeFade:
         return {"heard": heard, "pressure": self._pages.keep(kept) if len(kept) else kept}
 
     def _bent_index(self, bent: EarlyReflections) -> dict:
-        """The lengths of the paths over each edge in ``bent`` and their rows there, by
-        the edge and the planes the path reflects off."""
+        """The lengths of the paths over each edge in ``bent``, their rows there and
+        their points, by the edge and the planes the path reflects off."""
         index: dict[tuple, list] = {}
         for i in np.flatnonzero(bent.edge >= 0):
             planes = tuple(self.model.face_plane[np.asarray(bent.faces[i], dtype=np.int64)])
-            index.setdefault((int(bent.edge[i]), planes), []).append((bent.distance_m[i], i))
-        return {key: np.array(found).T for key, found in index.items()}
+            index.setdefault((int(bent.edge[i]), planes), []).append(i)
+        return {
+            key: (bent.distance_m[rows], np.array(rows), [bent.points[i] for i in rows])
+            for key, rows in index.items()
+        }
 
     def _has_bent(self, planes: np.ndarray, t: dict) -> np.ndarray:
         """The row in the edge diffraction's paths of the path over the edge of each term
         of ``t`` (with the planes of its path, ``planes``), -1 where it has none: over the
-        same edge, off the same planes but the reflection the term replaces, as long."""
+        same edge, off the same planes but the reflection the term replaces, as long,
+        and over the same point of the edge (where the edge is perpendicular to a plane
+        the path reflects off, the path over the edge's image in the plane is as long)."""
         out = np.full(len(t["edge"]), -1, dtype=np.int64)
         for i in np.flatnonzero(t["covered"]):
             mine = planes[i].tolist()
@@ -1901,9 +1912,15 @@ class EdgeFade:
                 del mine[(t["at"][i] - 1) // 2]
             found = self._bent.get((int(t["edge"][i]), tuple(mine)))
             if found is not None:
-                near = np.flatnonzero(np.abs(found[0] - t["length"][i]) <= self.tolerance)
-                if len(near):
-                    out[i] = int(found[1][near[0]])
+                lengths, rows, points = found
+                # The point over the edge is one of the path's corners (after the
+                # reflection or before it: the term may be of another order of the path's
+                # reflections, as perpendicular planes commute).
+                for j in np.flatnonzero(np.abs(lengths - t["length"][i]) <= self.tolerance):
+                    apart = np.linalg.norm(points[j][1:-1] - t["point"][i], axis=1)
+                    if apart.min() <= self.tolerance:
+                        out[i] = int(rows[j])
+                        break
         return out
 
     def _energy(self, listener, go, k, ids, faces):

@@ -1555,7 +1555,7 @@ equation leaves out:
   effect along their way, not the barrier's, and only in its bands, while those over
   the top take the barrier's, past the end too as they fade out there: where a
   listener crosses the shadow boundary of a barrier's end, 10 cm across it the level
-  steps by at most 1.0 dB from 63 to 500 Hz (0.42 dB in still air) and 0.82 dB 120 m
+  steps by at most 1.0 dB from 63 to 500 Hz (0.42 dB in still air) and 0.91 dB 120 m
   upwind, but from 1 kHz up, where the paths round the end keep their legs while the
   direct sound takes the open ground's refraction, by up to 7.8 dB 60 m downwind and
   20 dB 120 m away. Where the end stands below the line of sight (a barrier 1 m high), a

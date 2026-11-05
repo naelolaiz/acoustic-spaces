@@ -220,6 +220,40 @@ def test_the_street_garden_goes_on_where_a_second_event_stops_a_path(x: float) -
     assert np.abs(after - before).max() < 0.15
 
 
+@pytest.mark.parametrize(
+    ("listener", "x", "most"),
+    [
+        ("garden", 0.0, 0.5),
+        ("garden", 60.01, 0.5),
+        ("pavement", 50.01, 0.5),
+        ("garden", 10.01, 1.0),
+    ],
+)
+def test_the_street_does_not_step_where_the_barrier_s_top_fades(
+    listener: str, x: float, most: float
+) -> None:
+    """Paths over the barrier's top fade out past its ends. Where the edge diffraction's
+    term of a path fades, the fade must leave it out whether its path is found or not
+    (in the garden at x = 0.00 and 60.01 m it counted it again, by up to 2.1 dB at 63
+    and 500 Hz in 1 cm), and must count it on the lit side where the path's reflection
+    lies on another face in the same plane, the houses' façade (on the pavement at
+    x = 50.01 m, 0.95 dB at 63 Hz). Where the car crosses the plane of the houses' end
+    wall, at x = 10.01 m, the fade's path off the plane over the top was taken for the
+    edge diffraction's over the top's image in the plane, which is as long, and taken
+    off as if it were there (1.7 dB at 125 Hz); the sound over the houses' corner dips
+    there anyway, by 0.6 dB at 250 Hz in that centimetre before the fade."""
+    scene = Scene.from_yaml(EXAMPLES / "street" / "scene.yaml")
+    car = next(s for s in scene.sources if s.name == "car")
+    levels = []
+    for at in (x - 0.01, x):
+        moved = car.model_copy(update={"position": (at, -2.0, 0.05), "walk": None})
+        moved = moved.model_copy(update={"enabled": True})
+        paths = early_paths(scene.model_copy(update={"sources": [moved]}), "car", listener)
+        levels.append(10 * np.log10(total_energy(paths)))
+    # But 8 kHz, where a centimetre is a quarter of a wavelength.
+    assert np.abs(levels[1] - levels[0])[:-1].max() < most
+
+
 @pytest.mark.parametrize("y", [6.135, 7.325])
 def test_the_terms_of_a_narrow_face_cancel_in_energy_too(y: float) -> None:
     """Behind the archway's wall, where the reflection off the arch's jamb (40 cm deep)

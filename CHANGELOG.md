@@ -22,7 +22,7 @@
   the part of its Fresnel zone the edge covers as in BTM, instead of stopping there:
   past a screen's corner the level is within 0.1 dB of the exact solution (it stepped by
   2.8 dB), and 10 cm across a barrier end's shadow boundary it steps by 0.42 dB in still
-  air (4.5) and, in wind, by 1.0 dB from 63 to 500 Hz (5.0) and 0.82 dB 120 m upwind (27).
+  air (4.5) and, in wind, by 1.0 dB from 63 to 500 Hz (5.0) and 0.91 dB 120 m upwind (27).
   A solid block's edges still stop at its corners.
 - Fixed: a curved ray's level near where it runs level at the listener, the source, the
   ground, a table's row or the edge of a layer whose speed does not change with height

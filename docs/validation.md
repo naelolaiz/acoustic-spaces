@@ -4298,7 +4298,7 @@ Results:
   the open ground's bands along their way and above them with their legs' own shadows.
   10 cm across the end's shadow boundary in the `windy` preset the level steps by at
   most 1.0 dB from 63 to 500 Hz (0.42 dB in still air), and 120 m upwind by at most
-  0.82 dB in every band, but from 1 kHz up, where the direct sound takes the open
+  0.91 dB in every band, but from 1 kHz up, where the direct sound takes the open
   ground's refraction and the paths round the end their legs', by up to 7.8 dB 60 m
   downwind and 20 dB 120 m downwind, and by 5.2 dB at 4 kHz 60 m upwind. Where the end
   stands below the line of sight (a barrier 1 m high 30 m from a source 1 m up), a

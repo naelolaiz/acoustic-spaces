@@ -677,6 +677,16 @@ def _fade_reach(r1, r2, sin_beta, k_min: float) -> np.ndarray:
     return FADE_REACH * spread / np.maximum(sin_beta, _FADE_MIN_SINE)
 
 
+def near_fading_end(fades, t_k, length, r1, r2, sin_beta, k_min: float):
+    """(C,) whether each path over an edge touches its line within reach of an end that
+    fades (``fades`` (C, 2), :func:`end_fades`), and (C,) that reach
+    (:func:`_fade_reach`). There its terms count whether their paths are found or not."""
+    reach = _fade_reach(r1, r2, sin_beta, k_min)
+    near = (fades[:, 0] > 0.0) & (t_k < reach)
+    near |= (fades[:, 1] > 0.0) & (length - t_k < reach)
+    return near, reach
+
+
 def along_edge(t_k, length, scale, fade, reach, inside=None, closed=None) -> np.ndarray:
     """(C, W, B, M) the share of each path over an edge that the edge, from 0 to
     ``length`` (C,) along its line, gives the path touching the line at ``t_k`` (C,):
@@ -1215,9 +1225,7 @@ class EdgeDiffraction:
         # Near an end that fades, the share of the path the edge gives (along_edge).
         t_k, length = c["t_k"], edges.length[edge]
         fades = self.fades[edge]
-        reach = _fade_reach(r1, r2, sin_beta, self.k_min)
-        near = (fades[:, 0] > 0.0) & (t_k < reach)
-        near |= (fades[:, 1] > 0.0) & (length - t_k < reach)
+        near, reach = near_fading_end(fades, t_k, length, r1, r2, sin_beta, self.k_min)
         if near.any():
             fading = np.flatnonzero(near)
             spread = np.sqrt(k / (np.pi * length_param[fading, None, None]))
@@ -1289,10 +1297,12 @@ class EdgeDiffraction:
         # term continues its geometric wave by c and is part of the diffracted wave by
         # s = sqrt(1 - c^2) (_continued, :mod:`~acoustic_spaces.engine.clusters`); in
         # the others all of it adds in pressure.
-        # Near an end that fades, the incident wave's term also counts on the dark side
-        # where the path round the end was found: it fades out past the end, and the end's
-        # own edge takes the path round it (end_fades).
-        counted = (lit == (found >= 0)) | (near[:, None] & ~lit & (found >= 0))
+        # Near an end that fades, each wave's term counts whether its path is found or not:
+        # it fades out past the end, and the end's own edge takes the path round it
+        # (end_fades), on the dark side where the path round the end is found and on the
+        # lit side where its reflection point leaves the face past the end, or lies on
+        # another face in the face's plane.
+        counted = (lit == (found >= 0)) | near[:, None]
         energy = np.zeros((len(edge), self.wavenumber.shape[0]))
         pressure = (waves * counted[:, :, None, None]).sum(axis=1)
         energy[:, : self.coherent] = np.mean(np.abs(pressure[:, : self.coherent]) ** 2, axis=2)
