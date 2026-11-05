@@ -57,6 +57,8 @@
   the editor's Run demo window, instead of always the example's.
 - Fixed: a tar archive cut short or damaged raises `OSError`, as other failed downloads
   do, instead of `tarfile.ReadError`.
+- Fixed: the lakeside example sets `simulation.seed`, so its demo's weather effect is the
+  same every run; unseeded runs differed by up to 4.2 dB at 125 Hz at the bedroom window.
 - Fixed: a demo given `--hrtf` with a file that is not there is refused before its first
   step; it failed only when a later step read the file.
 - Fixed: a simulation refused for its memory says how much it would need with each
