@@ -232,7 +232,7 @@ class _Way:
 
     rows: np.ndarray  # theirs, of the listener's part of paths round ends
     key: object  # the profile's key along the way
-    azimuth: float  # the listener's direction, rounded (for the grounds' zones)
+    ground: tuple | None  # with ground zones, its grounds (:meth:`Refraction._grounds_round`)
     range: float  # the way's length seen from above
     height: float
     top: float  # the runs' absorbing layer
@@ -427,15 +427,12 @@ class Refraction:
         it and the solver, the weather being the model's."""
         if self.zoned or self.zones:
             return None
-        here = self._ground_face(np.array([[*self.source[:2], self.ground]]))[0]
-        if here < 0:
-            here = int(np.flatnonzero(self.flat)[0])
         return (
             id(self.model),
             self.zs,
             self.ground,
             self.wide_angle,
-            self._admittance(int(here)).tobytes(),
+            self._admittance(self._here()).tobytes(),
         )
 
     # -- one listener ------------------------------------------------------------------
@@ -1007,7 +1004,6 @@ class Refraction:
         inside = np.zeros((len(chosen), self.bands), dtype=bool)
         delay = part.delay_s.copy()
         edges = self._edge_set()
-        azimuth = self._azimuth(towards)
         requested = []
         for way, found in ways.items():
             corners = np.array([self.source[:2], *(edges.start[e][:2] for e in way), listener[:2]])
@@ -1025,7 +1021,8 @@ class Refraction:
             index = np.array([at[i] for i in found])
             inside[index] = bands
             delay[index] += shift
-            requested.append(_Way(index, key, azimuth, length, zr, top, bands, shift))
+            ground = self._grounds_round(corners)
+            requested.append(_Way(index, key, ground, length, zr, top, bands, shift))
         legs = self._legs(part)
         high = None
         if not inside.all():
@@ -1274,23 +1271,58 @@ class Refraction:
                 self._admittances[face] = np.asarray(value, dtype=complex)
             return self._admittances[face]
 
+    def _here(self) -> int:
+        """The face of the ground under the source (the first flat one off the ground)."""
+        here = self._ground_face(np.array([[*self.source[:2], self.ground]]))[0]
+        return int(here) if here >= 0 else int(np.flatnonzero(self.flat)[0])
+
+    def _zone_faces(self, points: np.ndarray) -> np.ndarray:
+        """The faces of the ground's zones at the horizontal ``points`` (n, 2), held to
+        the layout's extent; the source's own (:meth:`_here`) outside every zone."""
+        layout = self.model.room.outdoor
+        x0, y0, x1, y1 = layout.extent
+        found = self.model.part_face[layout.zone_at(np.clip(points, [x0, y0], [x1, y1])) + 1]
+        return np.where(found < 0, self._here(), found)
+
     def _grounds_along(self, direction: np.ndarray, reach: float):
         """A function giving the face of the ground (its material) at a distance along
         ``direction`` from the source, up to ``reach``."""
-        layout = self.model.room.outdoor
-        here = self._ground_face(np.array([[*self.source[:2], self.ground]]))[0]
-        if here < 0:
-            here = int(np.flatnonzero(self.flat)[0])
+        here = self._here()
         if not self.zones or self.model.ground_part is None:
             return lambda r: here
         # The grounds every GROUND_STEP_M along the way, looked up once.
-        x0, y0, x1, y1 = layout.extent
         along = np.arange(0.0, reach + 2.0 * GROUND_STEP_M, GROUND_STEP_M)
-        points = np.clip(self.source[:2] + along[:, None] * direction, [x0, y0], [x1, y1])
-        found = self.model.part_face[layout.zone_at(points) + 1]
-        faces = np.where(found < 0, here, found)
+        faces = self._zone_faces(self.source[:2] + along[:, None] * direction)
         last = len(faces) - 1
         return lambda r: int(faces[min(int(round(r / GROUND_STEP_M)), last)])
+
+    def _grounds_round(self, corners: np.ndarray) -> tuple | None:
+        """With ground zones, the grounds along the horizontal polyline ``corners``
+        (m + 1, 2) unfolded, looked up every GROUND_STEP_M as :meth:`_grounds_along`
+        does along a line: ((step, face), ...) where each begins, so that ways alike
+        share their runs; None without zones."""
+        if not self.zones or self.model.ground_part is None:
+            return None
+        corners = np.asarray(corners, dtype=float)
+        legs = np.diff(corners, axis=0)
+        lengths = np.linalg.norm(legs, axis=1)
+        ends = np.cumsum(lengths)
+        along = np.arange(0.0, ends[-1] + 2.0 * GROUND_STEP_M, GROUND_STEP_M)
+        leg = np.minimum(np.searchsorted(ends, along, side="right"), len(legs) - 1)
+        part = (along - (ends[leg] - lengths[leg])) / np.maximum(lengths[leg], 1e-12)
+        faces = self._zone_faces(corners[leg] + part[:, None] * legs[leg])
+        begins = np.flatnonzero(np.diff(faces, prepend=faces[0] - 1))
+        return tuple((int(i), int(faces[i])) for i in begins)
+
+    def _grounds_on(self, ground: tuple | None):
+        """A function giving the face of the ground at a distance along a way whose
+        grounds are ``ground`` (:meth:`_grounds_round`), the source's own for None."""
+        if ground is None:
+            here = self._here()
+            return lambda r: here
+        starts = np.array([step for step, _ in ground])
+        faces = [face for _, face in ground]
+        return lambda r: faces[int(np.searchsorted(starts, round(r / GROUND_STEP_M), "right")) - 1]
 
     def _place(self, wave: _Wave, pressure: np.ndarray, parts: list, listeners: np.ndarray):
         bands = wave.bands
@@ -1476,8 +1508,7 @@ def solve(plans: list[Planned]) -> list[dict]:
                 behind.setdefault((owner, True, cut.key, azimuth, cut.cut), []).append((p, cut))
         for request in planned.ends:
             for way in request.ways:
-                azimuth = way.azimuth if zones else None
-                behind.setdefault((owner, False, way.key, azimuth, ()), []).append((p, way))
+                behind.setdefault((owner, False, way.key, way.ground, ()), []).append((p, way))
 
     def weather(refraction, key, direction, reach):
         if key is None:
@@ -1489,6 +1520,14 @@ def solve(plans: list[Planned]) -> list[dict]:
     def towards(azimuth: float) -> np.ndarray:
         angle = math.radians(azimuth)
         return np.array([math.cos(angle), math.sin(angle)])
+
+    def grounds(refraction, members, reach):
+        # Behind barriers along the direction of the cut; round ends along the way.
+        first = members[0][1]
+        if isinstance(first, _Way):
+            return None, refraction._grounds_on(first.ground)
+        direction = towards(first.azimuth)
+        return direction, refraction._grounds_along(direction, reach)
 
     jobs: list[_Job] = []
     for (owner, (key, azimuth)), members in groups.items():
@@ -1508,14 +1547,12 @@ def solve(plans: list[Planned]) -> list[dict]:
     # Behind barriers and along the ways round ends: the runs in the weather, and in
     # still air shared by all with the same cut and absorbing layer.
     calm: dict[tuple, list] = {}
-    for (owner, barrier, key, _, cut), members in behind.items():
+    for (owner, barrier, key, ground, cut), members in behind.items():
         refraction = plans[members[0][0]].refraction
-        first = members[0][1]
-        direction = towards(first.azimuth)
         reach = max(m.range for _, m in members)
+        direction, face_at = grounds(refraction, members, reach)
         speed, speed_at = weather(refraction, key, direction, reach)
         top = max(m.top for _, m in members)
-        face_at = refraction._grounds_along(direction, reach)
         for band in range(refraction.bands):
             needing = [(p, m, "wind") for p, m in members if m.bands[band]]
             if needing:
@@ -1535,13 +1572,13 @@ def solve(plans: list[Planned]) -> list[dict]:
                     )
                 )
         c0 = float(np.asarray(speed(np.array([0.0])))[0])
-        ground = first.azimuth if refraction.zones else None
+        if barrier:  # round ends ``ground`` is the way's already
+            ground = members[0][1].azimuth if refraction.zones else None
         calm.setdefault((owner, barrier, c0, cut, top, ground), []).extend(members)
     for (_, barrier, c0, cut, top, _), members in calm.items():
         refraction = plans[members[0][0]].refraction
-        direction = towards(members[0][1].azimuth)
         reach = max(m.range for _, m in members)
-        face_at = refraction._grounds_along(direction, reach)
+        _, face_at = grounds(refraction, members, reach)
         for band in range(refraction.bands):
             needing = [(p, m, "still") for p, m in members if m.bands[band]]
             if needing:

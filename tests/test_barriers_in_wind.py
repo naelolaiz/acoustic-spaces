@@ -22,20 +22,26 @@ def scene(
     file=None,
     extent=((-60.0, -60.0), (90.0, 60.0)),
     ir_length_s=0.3,
+    lawn=None,
     **early,
 ) -> Scene:
-    """A source 1 m up over hard ground, a barrier 15 m away across the x axis, and
-    listeners."""
+    """A source 1 m up over hard ground (grass on the polygon ``lawn``), a barrier 15 m
+    away across the x axis, and listeners."""
     geometry = {
         "ground": {"extent": [list(corner) for corner in extent], "sky": 20.0},
         "barriers": list(barriers),
         "buildings": list(buildings),
     }
+    materials = {"hard": {"absorption": [0.02] * 8, "scattering": 0.0}}
+    if lawn is not None:
+        geometry["ground"]["zones"] = [{"name": "lawn", "polygon": [list(c) for c in lawn]}]
+        materials["grass"] = {"impedance": "grass"}
     if file is not None:
         geometry.update({"file": str(file), "up_axis": "z"})
     data = {
         "geometry": geometry,
-        "materials": {"hard": {"absorption": [0.02] * 8, "scattering": 0.0}},
+        "materials": materials,
+        "assignments": {"lawn": "grass"} if lawn is not None else {},
         "default_material": "hard",
         "sources": [{"name": "s", "position": [0.0, 0.0, 1.0]}],
         "listeners": [{"name": f"l{k}", "position": list(p)} for k, p in enumerate(listeners)],
@@ -368,6 +374,36 @@ def test_the_paths_round_an_end_take_the_effect_along_their_own_way(runs):
     way = math.hypot(15.0, 20.0) + math.hypot(45.0, 20.0)
     assert any(abs(r - way) < 1e-9 for r in open_ground)
     assert not any(abs(r - 60.0) < 1e-9 for r in open_ground)
+
+
+def test_the_paths_round_an_end_take_the_ground_along_their_own_way(monkeypatch) -> None:
+    """Grass on the side of the barrier's end, the listener's own line over hard ground
+    beyond its first 3 m: the open ground's run for the paths round that end takes the
+    grass along its way, unfolded round the end (15 m along it, and 2.3 m past the end),
+    and the hard ground after; the run round the other end, hard ground all along."""
+    found = []
+
+    def march(frequencies, speed, impedance, zs, ranges, heights, top, **options):
+        if not options.get("obstacles"):
+            found.append((max(ranges), [impedance(r) for r in (5.0, 14.0, 40.0)]))
+        return np.ones((len(np.atleast_1d(frequencies)), len(ranges)), dtype=complex)
+
+    monkeypatch.setattr(parabolic, "march", march)
+    lawn = ((-60.0, -0.5), (90.0, -0.5), (90.0, 60.0), (-60.0, 60.0))
+    barrier = {"name": "screen", "path": [[15, -20], [15, 0]], "height": 4}
+    simulate(Room.from_scene(scene(listeners=((60.0, -10.0, 1.5),), barriers=[barrier], lawn=lawn)))
+    beyond = math.hypot(45.0, 10.0)
+    near = [z for reach, z in found if abs(reach - (15.0 + beyond)) < 1e-9]
+    far = [z for reach, z in found if abs(reach - (25.0 + beyond)) < 1e-9]
+    assert near and far
+    hard = far[0][0]
+    for z in far:
+        for at in z:
+            np.testing.assert_allclose(at, hard)
+    for grass, also, rest in near:
+        np.testing.assert_allclose(grass, also)
+        np.testing.assert_allclose(rest, hard)
+        assert not np.allclose(grass, hard)
 
 
 def test_a_way_that_touches_a_building_s_corner_from_outside_meets_nothing() -> None:
