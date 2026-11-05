@@ -102,10 +102,10 @@ def test_a_built_in_material_of_unknown_source_takes_the_scene_s_default():
 
 def test_octave_bands_take_the_mean_of_iso_12999_2_s_third_octaves():
     """sigma_R = m alpha + n (ISO 12999-2:2020, Table 1) in an octave band is the mean of
-    its third octaves' in the table: the 63 Hz octave has its 63 and 80 Hz rows, the
-    8 kHz octave, past the table, takes the 5 kHz row."""
+    its third octaves' in the table, which runs from 100 Hz to 5 kHz as ISO 354 measures:
+    the 63 Hz and 8 kHz octaves, outside it, take its 100 Hz and 5 kHz rows."""
     table = ISO_12999_2_THIRDS
-    assert len(table) == 20 and min(table) == 63 and max(table) == 5000
+    assert len(table) == 18 and min(table) == 100 and max(table) == 5000
     # At alpha = 1, sigma_R from 500 Hz to 5 kHz as Vercammen (ICA 2019, Table 2) gives
     # the standard's: 0.065 0.06 0.055 0.055 0.056 0.055 0.056 (2.5 kHz: 0.056 here,
     # 0.057 there) 0.062 0.07 0.086.
@@ -114,7 +114,7 @@ def test_octave_bands_take_the_mean_of_iso_12999_2_s_third_octaves():
     alpha = np.linspace(0.1, 0.8, 8)
     sigma = octave_reproducibility(alpha)
     rows = {
-        0: (63, 80),
+        0: (100,),
         1: (100, 125, 160),
         4: (800, 1000, 1250),
         6: (3150, 4000, 5000),
@@ -363,3 +363,50 @@ def test_simulate_spreads_a_scene_of_built_in_materials_by_default(
     assert main(args) == 0
     capsys.readouterr()
     assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
+
+
+def test_the_spread_reports_its_draws_and_stops_when_its_progress_raises():
+    """``progress`` hears of each response's draws as they go (the editor's status bar),
+    and what it raises (the editor's Cancel) stops the draws."""
+    scene = _box({"absorption": 0.02})
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    heard: list[str] = []
+    material_spread(result, scene, face_group, materials, draws=60, progress=heard.append)
+    assert heard == [f"the spread: s -> a (1 of 1), draw {k} of 60" for k in (1, 26, 51)]
+
+    class Stop(Exception):
+        pass
+
+    def stop(message: str) -> None:
+        if "draw 26" in message:
+            raise Stop
+
+    with pytest.raises(Stop):
+        material_spread(result, scene, face_group, materials, draws=60, progress=stop)
+
+
+def test_simulate_spread_draws_0_leaves_the_spread_out(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+):
+    """``--spread-draws 0`` simulates without the spread (and so without face groups,
+    which keep the late part off the GPU); 1 is refused before the run."""
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(_box({"absorption": 0.02, "source": "lab"}).to_data()))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300"]
+    assert main([*args, "--spread-draws", "0"]) == 0
+    captured = capsys.readouterr()
+    assert "spread" not in captured.err and "uncertainty from" not in captured.out
+    assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
+    other = tmp_path / "other"
+    assert main([*args[:3], str(other), *args[4:], "--spread-draws", "1"]) == 1
+    assert "--spread-draws: 0 (no spread) or 2 or more" in capsys.readouterr().err
+    assert not other.exists()

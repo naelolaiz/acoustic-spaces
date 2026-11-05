@@ -515,6 +515,32 @@ def test_a_run_shows_before_its_spread_is_drawn(qapp) -> None:
     assert done.spreads[("source", "listener")].assumed == dict.fromkeys(materials, "tolerance")
 
 
+def test_cancel_stops_the_spread_while_it_is_drawn(qapp) -> None:
+    """Cancel stops the draws of the spread (it waited for all 400 before), leaving the
+    traced result shown."""
+    from acoustic_spaces.engine import reweight
+
+    document = Document(box_scene())
+    _quick(document)
+    document.edit("default", lambda d: d["simulation"].pop("uncertainty"))
+    groups, materials = reweight.groups_of(document.room)
+    job = SimulationJob(document.room, groups=groups, materials=materials)
+    heard, ended = [], []
+
+    def heard_of(message: str) -> None:
+        heard.append(message)
+        if "draw 26 of" in message:
+            job.cancel()
+
+    job.progress.connect(heard_of)
+    job.traced.connect(lambda result: ended.append("traced"))
+    job.done.connect(lambda result: ended.append("done"))
+    job.cancelled.connect(lambda: ended.append("cancelled"))
+    job.run()  # in this thread
+    assert ended == ["traced", "cancelled"]
+    assert not any("draw 51 of" in message for message in heard)
+
+
 # -- the window -------------------------------------------------------------------------
 
 

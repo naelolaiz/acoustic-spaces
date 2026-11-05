@@ -16,12 +16,12 @@
   (:func:`set_trial`, ``--no-device-trial``), ``auto`` takes the choice kept for the
   nearest length, or the CPU when there is none.
 
-What only the CPU traces (sound through partitions and openings, the face groups of
-material calibration, vegetation of more media than the GPU keeps) runs there, whatever
-the setting, and so does a run the GPU declines once it has it (one whose results its
-buffers cannot hold, or a ray through more volumes of vegetation at once than its
-tables hold): the plan :func:`trace` returns says so. Outdoors the GPU bends the rays
-in the atmosphere and takes them through vegetation as the CPU does.
+What only the CPU traces (sound through partitions and openings, the face groups that
+re-weight the absorption, vegetation of more media than the GPU keeps) runs there,
+whatever the setting, and so does a run the GPU declines once it has it (one whose
+results its buffers cannot hold, or a ray through more volumes of vegetation at once
+than its tables hold): the plan :func:`trace` returns says so. Outdoors the GPU bends
+the rays in the atmosphere and takes them through vegetation as the CPU does.
 
 The two agree statistically, not ray for ray (the GPU works in single precision and
 draws its own random numbers). With ``cpu`` a run gives the same result every time,
@@ -108,7 +108,10 @@ def _unsupported(values: dict) -> str:
     if passes_sound(values["transmission"], rooms, source_room):
         return "sound through partitions and openings is traced on the CPU"
     if values["groups"]:
-        return "face groups (material calibration) are traced on the CPU"
+        return (
+            "face groups (for re-weighting the absorption: the spread from its uncertainty, "
+            "calibration, the editor's runs) are traced on the CPU"
+        )
     return ""
 
 

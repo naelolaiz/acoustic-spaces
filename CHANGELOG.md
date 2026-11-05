@@ -42,8 +42,8 @@ the editor's Run.
 - Added: a material's `uncertainty` (a standard uncertainty or a tolerance of its
   absorption), and `material_spread`, the Monte Carlo spread (GUM Supplement 1) of each
   listener's room parameters that it leads to, by re-weighting the traced run;
-  `simulate` prints it and writes it into `parameters.json`, and the editor's results
-  give it in their tips.
+  `simulate` prints it and writes it into `parameters.json` (`--spread-draws`, 400 by
+  default, 0 for none), and the editor's results give it in their tips.
 - Added: the rays' random error joins the absorption's in the same Monte Carlo, as
   Student's t from the late batches' standard error, for a combined standard uncertainty
   and coverage interval with the budget of each input (`uncertainty` in `parameters.json`).

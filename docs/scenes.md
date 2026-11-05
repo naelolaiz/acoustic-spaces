@@ -271,14 +271,14 @@ simulation:
 
 `tolerance` is plus or minus 0.1 in every band; `iso_12999_2` is twice the
 reproducibility standard deviation that ISO 12999-2:2020 (Table 1) gives for absorption
-measured to ISO 354, sigma_R = m alpha + n per third octave, as a standard uncertainty
-(an octave band the mean of its third octaves', the 63 Hz octave from the 63 and 80 Hz
-rows, the 8 kHz octave the 5 kHz row's); `none` gives them none. Plus or minus 0.1 is
-much for a hard surface: the shoebox example's painted concrete, 0.01 to 0.02, is drawn
-anywhere from 0 to 0.12, so that example's traced T30 at 1 kHz, 1.28 s, lies near the
-top of its 95 % interval, 0.74 to 1.49 s. ISO 12999-2's reproducibility is largest at low frequencies
-(for alpha = 1, 0.40 at 63 Hz, 0.20 at 125 Hz and 0.055 at 1 kHz), so twice it spreads
-the lowest bands far.
+measured to ISO 354, sigma_R = m alpha + n per third octave from 100 Hz to 5 kHz, as a
+standard uncertainty (an octave band the mean of its third octaves'; the 63 Hz and 8 kHz
+octaves, outside the table, its 100 Hz and 5 kHz rows, which likely understates it at 63
+Hz); `none` gives them none. Plus or minus 0.1 is much for a hard surface: the shoebox
+example's painted concrete, 0.01 to 0.02, is drawn anywhere from 0 to 0.12, so that
+example's traced T30 at 1 kHz, 1.28 s, lies near the top of its 95 % interval, 0.74 to
+1.49 s. ISO 12999-2's reproducibility is largest at low frequencies (for alpha = 1, 0.26
+at 63 Hz, 0.20 at 125 Hz and 0.055 at 1 kHz), so twice it spreads the lowest bands far.
 The spread names the materials that took the default (`assumed`).
 
 `acoustic_spaces.engine.uncertainty.material_spread` gives the uncertainty this leads to
@@ -310,14 +310,15 @@ between fits at nine absorptions of each material over their range rather than a
 of their own: in the shoebox example within 0.15 dB of a fit for each draw at 63 Hz,
 where a fit itself moves by up to 0.19 dB for a change of 0.001.
 `acoustic-spaces simulate` does this itself when a material on the surfaces has an
-uncertainty, its own or a built-in material's: it prints the largest combined standard uncertainty in JNDs from 125 Hz to
-4 kHz, with its budget, 95 % interval and the errors over edges, and `parameters.json` holds them all
-(`uncertainty`; 400 draws, `--spread-draws` for another number). With settings that cannot re-weight
+uncertainty, its own or a built-in material's: it prints the largest combined standard
+uncertainty in JNDs from 125 Hz to 4 kHz, with its budget, 95 % interval and the errors
+over edges, and `parameters.json` holds them all (`uncertainty`; 400 draws,
+`--spread-draws` for another number, 0 for none). With settings that cannot re-weight
 (third-octave bands, say) it leaves the spread out, with a warning when a material gives
-an uncertainty of its own. The editor shows each run's results at once, draws the
-spread after them and gives it in the results table's tips. The draws add to a run: in
-the concert hall example (five built-in materials, six responses) 400 draws took 160 s
-after an 11 s run, over half of it the lowest bands' paths added in pressure for each draw;
+an uncertainty of its own. The editor shows each run's results at once, draws the spread
+after them and gives it in the results table's tips. The draws add to a run: in the
+concert hall example (five built-in materials, six responses) 400 draws took 160 s after
+an 11 s run, over half of it the lowest bands' paths added in pressure for each draw;
 `presets: none` leaves the built-in materials out.
 
 ### Material libraries of CATT-Acoustic and ODEON
