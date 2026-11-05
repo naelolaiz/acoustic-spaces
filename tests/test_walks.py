@@ -39,12 +39,13 @@ def test_the_gallery_walk(span: tuple[float, float]) -> None:
     assert (steps < [0.1, 0.15, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2]).all(), steps
 
 
-@pytest.mark.parametrize("x", [-41.39, -14.04, -0.69, 60.80])
+@pytest.mark.parametrize("x", [-41.39, -14.07, 37.20, 60.80])
 def test_the_street_walk(x: float) -> None:
     """The car 1 cm at a time round the largest steps in the garden's early level, where
-    a path over the barrier's top or a reflection off it reaches an end of the top (a
-    known issue): the step there stands out from the steps either side by at most
-    1.42 dB in a band below 8 kHz and 0.52 dB(A)."""
+    the fade's term of a reflection that the barrier's top cuts off reaches an end of the
+    top (a known issue), and at 60.80 m, where the path over the top fades out past its
+    end: the step there stands out from the steps either side by at most 1.11 dB in a
+    band below 8 kHz and 0.55 dB(A)."""
     street = walks._Street()
     heard = [street.levels(at, ["garden"])[0] for at in np.round(x + np.arange(-3, 3) * 0.01, 2)]
     out = walks._stands_out(np.array(heard))

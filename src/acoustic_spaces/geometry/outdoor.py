@@ -82,6 +82,9 @@ class Layout:
     vegetation: tuple[PlantShape, ...] = ()
     #: The terrain's surface as the mesh has it, in metres; None for flat ground.
     terrain: TerrainSurface | None = None
+    #: Each barrier's name and the line of its top (n, 3): its path, with the height (z)
+    #: of its top at each point.
+    barriers: tuple[tuple[str, np.ndarray], ...] = ()
 
     def ground_at(self, points: np.ndarray) -> np.ndarray:
         """(n,) the ground's height under each point (n, 2 or 3)."""
@@ -141,6 +144,47 @@ class Layout:
         shares[:, 0] = np.clip(1.0 - shares[:, 1:].sum(axis=1), 0.0, 1.0)
         out[rows, columns] = shares / shares.sum(axis=1, keepdims=True)
         return out
+
+    def obstacles_along(
+        self, origin: np.ndarray, direction: np.ndarray, reach: float
+    ) -> list[tuple[float, float, float]]:
+        """(near, far, top) for each barrier and building that the line from ``origin``
+        (2,) along ``direction`` (2,, a unit vector) meets, seen from above, strictly
+        between ``origin`` and ``reach`` m along it, in order: a barrier where the line
+        crosses its path (near and far that distance, top the height (z) of its top
+        there), a building over each stretch of the line inside its footprint (top its
+        roof's height)."""
+        origin = np.asarray(origin, dtype=float)[:2]
+        direction = np.asarray(direction, dtype=float)[:2]
+        tolerance = 1e-9 * max(reach, 1.0)
+        out = []
+        for _, line in self.barriers:
+            found = []
+            crossed = line_crossings(origin, direction, reach, line[:, :2], closed=False)
+            for t, segment, u in crossed:
+                # Through a corner of its path, once.
+                if not any(abs(t - near) <= tolerance for near, _, _ in found):
+                    z = line[segment, 2] + u * (line[segment + 1, 2] - line[segment, 2])
+                    found.append((t, t, float(z)))
+            out += found
+        for _, footprint, roof in self.buildings:
+            # Through a corner, or touching one from outside, once.
+            found = []
+            for t in sorted(t for t, _, _ in line_crossings(origin, direction, reach, footprint)):
+                if not found or t - found[-1] > tolerance:
+                    found.append(t)
+            stops = [0.0, *found, float(reach)]
+            start = None
+            for a, b in zip(stops[:-1], stops[1:], strict=True):
+                inside = bool(in_polygon((origin + 0.5 * (a + b) * direction)[None], footprint)[0])
+                if inside and start is None:
+                    start = a
+                elif not inside and start is not None:
+                    out.append((start, a, float(roof)))
+                    start = None
+            if start is not None:
+                out.append((start, float(reach), float(roof)))
+        return sorted(out)
 
     def building_at(self, points: np.ndarray) -> list[str | None]:
         """The building each point (n, 3) lies in, or None."""
@@ -496,6 +540,26 @@ def in_polygon(points: np.ndarray, polygon: np.ndarray) -> np.ndarray:
     with np.errstate(divide="ignore", invalid="ignore"):
         at = a[:, 0] + (y - a[:, 1]) * (b[:, 0] - a[:, 0]) / (b[:, 1] - a[:, 1])
     return np.count_nonzero(crosses & (x < at), axis=1) % 2 == 1
+
+
+def line_crossings(
+    origin: np.ndarray, direction: np.ndarray, reach: float, points: np.ndarray, closed=True
+) -> list[tuple[float, int, float]]:
+    """Where the line from ``origin`` along ``direction`` (unit, in plan) crosses the
+    polyline ``points`` (n, 2) (closed: a polygon), strictly between 0 and ``reach``
+    along it: (distance along the line, the segment, the share of the segment)."""
+    a = points
+    b = np.roll(points, -1, axis=0) if closed else points[1:]
+    a = a if closed else points[:-1]
+    e = b - a
+    w = a - origin
+    denominator = direction[0] * e[:, 1] - direction[1] * e[:, 0]
+    usable = np.abs(denominator) > 1e-12 * np.maximum(np.linalg.norm(e, axis=1), 1e-300)
+    safe = np.where(usable, denominator, 1.0)
+    t = (w[:, 0] * e[:, 1] - w[:, 1] * e[:, 0]) / safe
+    u = (w[:, 0] * direction[1] - w[:, 1] * direction[0]) / safe
+    hit = usable & (t > 0.0) & (t < reach) & (u >= 0.0) & (u <= 1.0)
+    return [(float(t[k]), int(k), float(u[k])) for k in np.flatnonzero(hit)]
 
 
 def _footprint_problem(name: str, footprint: np.ndarray) -> str | None:
@@ -915,11 +979,12 @@ def outdoor_mesh(geometry, objects: RoomMesh | None = None, scale: float = 1.0):
         mesh = building_mesh(name, footprint, scale * building.height, ground)
         parts.append((f"building {name!r}", mesh))
         buildings.append((name, footprint, ground + scale * building.height))
+    barriers = []
     for name, barrier in zip(geometry.barrier_names(), geometry.barriers or [], strict=True):
         path = scale * np.asarray(barrier.path, dtype=float)
-        parts.append(
-            (f"barrier {name!r}", barrier_mesh(name, path, scale * barrier.height, ground))
-        )
+        mesh = barrier_mesh(name, path, scale * barrier.height, ground)
+        parts.append((f"barrier {name!r}", mesh))
+        barriers.append((name, mesh.vertices[len(mesh.vertices) // 2 :]))
     if objects is not None:
         objects = standing(objects, ground)
         if len(objects.faces) == 0:
@@ -961,7 +1026,9 @@ def outdoor_mesh(geometry, objects: RoomMesh | None = None, scale: float = 1.0):
     mesh = RoomMesh.concatenate(
         [ground_box(extent, ground, sky, zones), *[m for _, m in parts if m is not None]]
     )
-    return mesh, Layout(extent, float(ground), float(sky), tuple(buildings), zones, plants)
+    return mesh, Layout(
+        extent, float(ground), float(sky), tuple(buildings), zones, plants, barriers=tuple(barriers)
+    )
 
 
 def _terrain_mesh(geometry, objects: RoomMesh | None, scale: float, grid: HeightGrid):
@@ -1013,10 +1080,12 @@ def _terrain_mesh(geometry, objects: RoomMesh | None, scale: float, grid: Height
         mesh = building_on_terrain(name, footprint, scale * building.height, surface)
         parts.append((f"building {name!r}", mesh))
         buildings.append((name, footprint, float(mesh.vertices[:, 2].max())))
+    barriers = []
     for name, barrier in zip(geometry.barrier_names(), geometry.barriers or [], strict=True):
         path = scale * np.asarray(barrier.path, dtype=float)
         mesh = barrier_on_terrain(name, path, scale * barrier.height, surface)
         parts.append((f"barrier {name!r}", mesh))
+        barriers.append((name, mesh.vertices[len(mesh.vertices) // 2 :]))
     if objects is not None:
         if objects.vertices[np.unique(objects.faces)][:, 2].min() < surface.lowest - ON_GROUND_M:
             raise ValueError(
@@ -1041,7 +1110,14 @@ def _terrain_mesh(geometry, objects: RoomMesh | None, scale: float, grid: Height
         [terrain_box(surface, sky, zones), *[m for _, m in parts if m is not None]]
     )
     layout = Layout(
-        extent, float(ground), float(sky), tuple(buildings), zones, plants, terrain=surface
+        extent,
+        float(ground),
+        float(sky),
+        tuple(buildings),
+        zones,
+        plants,
+        terrain=surface,
+        barriers=tuple(barriers),
     )
     return mesh, layout
 
@@ -1064,6 +1140,7 @@ __all__ = [
     "clip_polygon",
     "ground_box",
     "in_polygon",
+    "line_crossings",
     "on_ground",
     "outdoor_mesh",
     "standing",

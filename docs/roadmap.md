@@ -115,11 +115,14 @@ Edge diffraction:
   0.57 dB at 63 Hz where they go from hitting the jamb's end face to its far face, a
   face of the end's other corner. This and the fade's other known issues are listed in
   [Validation](validation.md#known-issues-of-the-edge-fade).
-- [ ] Terms at the corners of edges, which the UTD has none for: each term weighted by the
-  part of its Fresnel zone that the edge covers, as BTM's integral over a finite edge
-  has it, and kept where its path appears round the edge's end. Past a thin screen's
-  corner the edge diffraction steps by 2.8 dB at 63 Hz, and along the `street` the
-  level by up to 1.42 dB in a band (0.55 dB(A)).
+- [x] Paths over a thin screen's edge weighted by the part of their Fresnel zone that
+  the edge covers, as BTM's integral over a finite edge has it, and kept past its free
+  ends: past a screen's corner within 0.1 dB of BTM, where they stepped by 2.8 dB.
+- [ ] The same at the corners of solid wedges, where three edges meet: sharing the fade
+  as at a screen's corner came out up to 1.25 dB above BTM at 63 and 125 Hz near a
+  block's corner, so their paths still stop at the ends.
+- [ ] The same for the edge fade's terms and for paths over two edges, which still stop
+  at the ends of their edges (see [Known issues](validation.md#known-issues-of-the-edge-fade)).
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
@@ -283,6 +286,26 @@ Outdoor acoustics, in steps:
   40 dB of free field, where the narrow-angle one strays by 3 to 20 dB; in the weather
   presets within 0.04 dB on average (the narrow-angle one 0.11). Three to four times
   the work; without it nothing changes.
+- [x] O22 Barriers and buildings in wind: behind them the paths in the vertical plane
+  through the source and the listener take the weather's effect from the parabolic
+  equation run in every band with the barriers and buildings inside, checked against a
+  full-wave solution and a parabolic equation started from a rigid barrier's exact
+  field (`validation/barrier_wind.py`); the paths round a barrier's end or a building's
+  corner take the open ground's effect along their own way, for listeners in the open
+  too. Still air is as before.
+- [ ] Barriers in wind, next: the barrier's own wind; the sound the eddies scatter over
+  a barrier's top into its shadow; a blend of the barrier's and the
+  open ground's effects across the line of a barrier's end below the line of sight, and
+  the open ground's refraction for the paths round an end above its equation's bands,
+  where the level steps across the end by up to 20 dB; the paths round ends checked
+  against a reference in three dimensions; a building's rigid roof in the
+  wide-angle equation (the effect steps by 0.6 dB at 2 kHz where the points cross the
+  steep angle behind one in 10 m/s); the wide-angle equation behind barriers upwind in strong wind, where the narrow-angle one comes out low; the sound
+  going back and forth between two barriers, which a one-way equation leaves out; and
+  runs at 4 and 8 kHz, and at steep points, that cost less (see
+  [Known issues](validation.md#known-issues)).
+- [ ] A leg from a ground reflection a rounding error above the ground takes the
+  shadow of one from the ground (see [Known issues](validation.md#known-issues)).
 - [x] The scattered sound of the reflections straight from the source found from each
   listener too, shared with the late rays by how densely each finds it: an aircraft
   overhead no longer brings a listener above grass bursts of it from the few rays that

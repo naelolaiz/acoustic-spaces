@@ -33,6 +33,9 @@ half-plane, which is exact far from the edge, and the engine against it:
 - the corner of a thin screen, first order: the listener walks past where the direct
   sound comes round one edge while the path over the other still touches it, against
   BTM over both edges, each ending at the corner;
+- the corners of a solid block, where three right-angled edges meet, first order: the
+  listener walks past where the paths over its edges reach their ends, against BTM over
+  each edge from end to end;
 - the level as the source rises through the plane of the barrier's top, where the path
   over the far corner alone appears, and as the listener does on the other side;
 - the cost of the early stage with each mode, in a hall with alcoves.
@@ -527,6 +530,108 @@ def screen_corner(folder: Path) -> dict:
     }
 
 
+#: The solid block of :func:`block_corner` (m): x, y and z from and to, open underneath
+#: and reaching far down, so that only the edges of its top and of its upright corners
+#: diffract within the time compared.
+BLOCK = np.array([(0.0, 2.0), (-10.0, 0.0), (-EXTENT, 0.0)])
+
+
+def _block_quads() -> list:
+    (x0, x1), (y0, y1), (z0, z1) = BLOCK
+    return [
+        [(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)],
+        [(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)],
+        [(x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)],
+        [(x0, y1, z0), (x0, y1, z1), (x1, y1, z1), (x1, y1, z0)],
+        [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)],
+    ]
+
+
+def _block_edges() -> list[tuple[Edge, float]]:
+    """The block's edges but those of its open bottom, each a right-angled wedge with
+    its length."""
+    out = []
+    for axis in range(3):
+        a, b = (i for i in range(3) if i != axis)
+        for va, sa in ((BLOCK[a, 0], -1), (BLOCK[a, 1], 1)):
+            for vb, sb in ((BLOCK[b, 0], -1), (BLOCK[b, 1], 1)):
+                if (a == 2 and sa < 0) or (b == 2 and sb < 0):
+                    continue
+                origin = np.zeros(3)
+                origin[axis], origin[a], origin[b] = BLOCK[axis, 0], va, vb
+                direction, along, normal = np.zeros(3), np.zeros(3), np.zeros(3)
+                direction[axis], along[b], normal[a] = 1.0, -sb, sa
+                edge = Edge(origin, direction, along, normal, 1.5)
+                out.append((edge, float(BLOCK[axis, 1] - BLOCK[axis, 0])))
+    return out
+
+
+def _block_geometric(source, receiver) -> np.ndarray:
+    """The direct sound unless the block hides it, and the reflections off its faces."""
+    pressure = np.zeros(len(K), complex)
+    d = receiver - source
+    with np.errstate(divide="ignore", invalid="ignore"):
+        a, b = (BLOCK[:, 0] - source) / d, (BLOCK[:, 1] - source) / d
+    inside = np.where(d == 0.0, (source >= BLOCK[:, 0]) & (source <= BLOCK[:, 1]), True)
+    low = np.max(np.where(d == 0.0, 0.0, np.minimum(a, b)), initial=0.0)
+    high = np.min(np.where(d == 0.0, 1.0, np.maximum(a, b)), initial=1.0)
+    if not (inside.all() and low < high):
+        distance = float(np.linalg.norm(d))
+        pressure += np.exp(-1j * K * distance) / distance
+    for axis, side in ((0, 0), (0, 1), (1, 0), (1, 1), (2, 1)):
+        plane, sign = BLOCK[axis, side], 1.0 if side else -1.0
+        if (source[axis] - plane) * sign <= 0.0 or (receiver[axis] - plane) * sign <= 0.0:
+            continue
+        image = source.copy()
+        image[axis] = 2.0 * plane - source[axis]
+        hit = image + (plane - image[axis]) / (receiver[axis] - image[axis]) * (receiver - image)
+        others = [i for i in range(3) if i != axis]
+        if all(BLOCK[i, 0] <= hit[i] <= BLOCK[i, 1] for i in others):
+            distance = float(np.linalg.norm(receiver - image))
+            pressure += np.exp(-1j * K * distance) / distance
+    return pressure
+
+
+def block_corner(folder: Path, step: float = 0.05) -> list[dict]:
+    """The corners of a solid block, where three right-angled edges meet: the listener
+    walks along y past the block's side, ``step`` at a time, at two heights above its
+    top, past where the paths over its edges reach their ends. The engine (``direct``,
+    every band in pressure) against BTM over each of the block's edges from end to end
+    and the geometric paths; the sound diffracted from one edge to another is left out."""
+    source = np.array([1.0, 3.0, 1.0])
+    edges = _block_edges()
+    ys = np.arange(-8.0, 2.0 + 1e-9, step) + 0.00317  # none exactly on a boundary
+    out = []
+    for height in (0.3, 1.8):
+        found, exact = [], []
+        for y in ys:
+            receiver = np.array([4.0, y, height])
+            room = _room(folder, "block", _block_quads(), source, receiver)
+            found.append(engine(room, "direct", coherent=8)[1])
+            pressure = _block_geometric(source, receiver)
+            for edge, length in edges:
+                if edge.frame(source)[1] > 1.5 * np.pi or edge.frame(receiver)[1] > 1.5 * np.pi:
+                    continue  # one of them is behind the edge's faces
+                pressure = pressure + btm_first(edge, source, receiver, ends=(0.0, length))
+            exact.append(band_level(pressure, float(np.linalg.norm(receiver - source))))
+        found, exact = np.array(found), np.array(exact)
+        difference = np.abs(found - exact)
+        steps = np.abs(np.diff(found, axis=0))
+        out.append(
+            {
+                "height": height,
+                "source": source.tolist(),
+                "line": [[4.0, float(ys[0]), height], [4.0, float(ys[-1]), height]],
+                "largest_difference_db": difference.max(axis=0).tolist(),
+                "largest_difference_at_y": ys[difference.argmax(axis=0)].tolist(),
+                "largest_step_db": steps.max(axis=0).tolist(),
+                "largest_step_at_y": ys[1:][steps.argmax(axis=0)].tolist(),
+                "exact_largest_step_db": np.abs(np.diff(exact, axis=0)).max(axis=0).tolist(),
+            }
+        )
+    return out
+
+
 def alcove_hall() -> Room:
     """A 30 x 20 x 10 m hall with four 3 m alcoves, 2 m deep, along each long wall:
     16 vertical edges that diffract, with the source and the listener in the first and
@@ -619,6 +724,14 @@ def main() -> None:
         print(f"| largest step, engine | {_row(corner['largest_step_db'])} |")
         print(f"| largest step, BTM | {_row(corner['exact_largest_step_db'])} |")
         print(f"| largest difference | {_row(corner['largest_difference_db'])} |")
+
+        results["block_corner"] = block = block_corner(folder)
+        print(f"\n| a block's corners, direct (dB) | {header} |\n{rule}")
+        for row in block:
+            steps = _row(row["largest_step_db"])
+            print(f"| {row['height']} m up: largest step, engine | {steps} |")
+            print(f"| largest step, BTM | {_row(row['exact_largest_step_db'])} |")
+            print(f"| largest difference | {_row(row['largest_difference_db'])} |")
 
         results["crossing"] = crossing(folder)
         print(f"\n| largest step over 1 mm (dB) | {header} |\n{rule}")

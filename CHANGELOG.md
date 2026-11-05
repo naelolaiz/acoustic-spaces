@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Behind barriers and buildings in wind or a temperature gradient the paths in the
+  vertical plane through the source and the listener take the weather's effect from
+  the parabolic equation run in every band with the barriers and buildings inside, and
+  those round a barrier's end or a building's corner change as the open ground's field
+  along their own way does, for listeners in the open too (by up to 4 dB 3 to 5 m
+  beside them, 17 dB a centimetre beside a building's wall, where straight legs left a
+  dip); they kept straight legs, so a barrier screened as much downwind as in still
+  air. From 63 to 500 Hz the effect is within 0.71 dB of a full-wave solution behind
+  one barrier or building in 5 m/s of wind and 0.74 dB downwind in 10 m/s, but up to
+  1.0 dB off behind a top 45 degrees up, 1.64 dB low upwind in 10 m/s and 1.73 and 4.95 dB
+  off behind two barriers 10 and 40 m apart (`validation/barrier_wind.py`); coverage
+  maps behind barriers in wind take 12 to 27 times as long;
+  `simulation.early.barrier_frequencies` (8, 16 or 32, the default; **Frequencies behind
+  barriers** in the editor) takes fewer
+  frequencies an octave at 4 and 8 kHz behind barriers, for less time and a weather's
+  effect further off there, by as much as `docs/outdoor.md` gives for each.
+- A path over the edge of a thin screen now fades out past a free end of the edge, by
+  the part of its Fresnel zone the edge covers as in BTM, instead of stopping there:
+  past a screen's corner the level is within 0.1 dB of the exact solution (it stepped by
+  2.8 dB), and 10 cm across a barrier end's shadow boundary it steps by 0.42 dB in still
+  air (4.5) and, in wind, by 1.0 dB from 63 to 500 Hz (5.0) and 0.91 dB 120 m upwind (27).
+  A solid block's edges still stop at its corners.
 - Added: a material's `uncertainty` (a standard uncertainty or a tolerance of its
   absorption), and `material_spread`, the Monte Carlo spread (GUM Supplement 1) of each
   listener's room parameters that it leads to, by re-weighting the traced run;

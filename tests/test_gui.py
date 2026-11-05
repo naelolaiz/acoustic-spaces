@@ -2156,6 +2156,23 @@ def test_parabolic_equation_choice(window) -> None:
     assert page.parabolic_equation.currentData() == "narrow_angle"
 
 
+def test_barrier_frequencies_choice(window) -> None:
+    """Outdoors in wind the simulation page picks the frequencies an octave behind
+    barriers, each with its largest error at 8 kHz; in still air there is none to pick."""
+    window.open_example(example_path("open_air_stage"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    assert page.barrier_frequencies.isEnabled()
+    assert page.barrier_frequencies.currentData() == 32
+    assert page.barrier_frequencies.currentText() == "32, off by up to 0.51 dB at 8 kHz"
+    page.barrier_frequencies.setCurrentIndex(page.barrier_frequencies.findData(8))
+    assert window.document.scene.simulation.early.barrier_frequencies == 8
+    window.document.edit("still air", lambda data: data.pop("atmosphere"))
+    window.select("simulation")
+    assert not page.barrier_frequencies.isEnabled()
+    assert page.barrier_frequencies.currentData() == 8
+
+
 def test_wind_and_temperature_form(window) -> None:
     window.open_example(example_path("open_air_stage"))
     window.select("scene", None)

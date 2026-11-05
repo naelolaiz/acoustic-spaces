@@ -14,6 +14,7 @@ from acoustic_spaces.engine import edge_fade as edge_fade_module
 from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.diffraction import (
     EdgeDiffraction,
+    along_edge,
     band_frequencies,
     boundary_angles,
     find_edges,
@@ -1000,3 +1001,76 @@ def test_lines_that_meet_turn_the_path_down_quietly() -> None:
         np.array([60.35877251148018, 42.57767948755837, 21.341134114627412]),
     )
     assert not ok[0] and np.isfinite(t1[0]) and np.isfinite(t2[0])
+
+
+# -- the ends of edges ----------------------------------------------------------------
+
+
+def _share(t_k, length, fade, k=2.0, r=10.0):
+    """along_edge for one path touching an edge's line at ``t_k``, both legs ``r`` long
+    and square to it, at wave number ``k``, with no taper."""
+    length_param = r / 2.0
+    scale = np.full((1, 1, 1), np.sqrt(k / (np.pi * length_param)))
+    out = along_edge(
+        np.array([t_k], float),
+        np.array([length], float),
+        scale,
+        np.array([fade], float),
+        np.array([1e9]),
+    )
+    return complex(out[0, 0, 0])
+
+
+def test_a_path_over_an_edge_fades_out_past_its_free_end() -> None:
+    """Well inside, the edge gives a path all of it; at a free end half (the Fresnel
+    integral along the edge from the end on); well past it almost nothing."""
+    assert abs(_share(50.0, 100.0, (1.0, 1.0)) - 1.0) < 0.05
+    assert abs(_share(100.0, 100.0, (1.0, 1.0)) - 0.5) < 0.02
+    assert abs(_share(120.0, 100.0, (1.0, 1.0))) < 0.05
+    # An end that goes on (fade 0) stops the path hard, as an endless edge would.
+    assert abs(_share(99.0, 100.0, (1.0, 0.0)) - 1.0) < 0.02
+    assert abs(_share(101.0, 100.0, (1.0, 0.0))) < 0.02
+
+
+def test_the_fades_of_two_pieces_of_an_edge_add_up_to_the_whole() -> None:
+    """Two collinear pieces, each fading at the end where they meet, give together what
+    the whole edge gives, wherever the path touches the line near the joint."""
+    for t_k in (37.0, 39.5, 40.0, 40.3, 43.0):
+        whole = _share(t_k, 100.0, (1.0, 1.0))
+        pieces = _share(t_k, 40.0, (1.0, 1.0)) + _share(t_k - 40.0, 60.0, (1.0, 1.0))
+        assert pieces == pytest.approx(whole, abs=1e-9)
+
+
+def test_how_a_barrier_s_edges_fade_at_their_ends() -> None:
+    """A barrier's top meets its end edges at corners (1/2), and the ground closes the end
+    edges' feet, where they go on as their images (0)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_barriers_in_wind import scene
+
+    room = Room.from_scene(scene(atmosphere=None))
+    edges = find_edges(TraceModel.from_room(room))
+    upright = np.abs(edges.direction[:, 2]) > 0.99
+    assert upright.sum() == 2 and (~upright).sum() == 1
+    assert np.all(edges.fade[~upright] == 0.5)
+    assert np.all(edges.direction[upright, 2] > 0.0)  # from the foot up
+    assert np.all(edges.fade[upright] == [0.0, 0.5])
+    assert np.all(edges.closed[upright] == [True, False])
+
+
+def test_a_solid_block_s_edges_stop_at_its_corners(tmp_path: Path) -> None:
+    """Three edges of a solid block meet at each corner, where the paths over them stop at
+    the ends as on endless edges (fading them came out up to 1.25 dB above BTM at 63 and
+    125 Hz near the corner), and the faces behind a convex corner close none of them."""
+    x0, x1, y0, y1, z0, z1 = 0.0, 2.0, -10.0, 0.0, -300.0, 0.0  # open underneath
+    quads = [
+        [(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)],
+        [(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)],
+        [(x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)],
+        [(x0, y1, z0), (x0, y1, z1), (x1, y1, z1), (x1, y1, z0)],
+        [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)],
+    ]
+    room = edge_diffraction._room(tmp_path, "box", quads, (1.0, 3.0, 1.0), (4.0, -2.0, 0.3))
+    edges = find_edges(TraceModel.from_room(room))
+    assert (np.isclose(edges.wedge, 1.5).sum(), np.isclose(edges.wedge, 2.0).sum()) == (8, 4)
+    assert np.all(edges.fade == 0.0)
+    assert not np.any(edges.closed)

@@ -30,6 +30,17 @@ from a source 1 m up, 25 to 400 m away, and within 0.45 dB from a wind turbine's
 178 m away, where the sound comes in at 34 degrees (``validation/ground_reflection.py
 --parabolic``).
 
+Barriers and buildings stand in the way as obstacles across the vertical plane. A barrier
+is a thin screen: the march stops at it and keeps of the field only what passes above its
+top, each height step the share of its cell above it, so that the field changes smoothly
+with the top's height (a zero-field, or Kirchhoff, screen: Salomons 1994, J. Acoust. Soc.
+Am. 95, 3109). A building's front face does the same at its roof's height; over the roof
+the field marches on the heights from the roof up, over a rigid floor there, and behind
+its back face the field below the roof starts from nothing. Such a screen lets through
+less than a rigid one does (0.7 to 7.4 dB less 2 to 90 m behind it, up to 11 dB 3 to
+10 m behind it steeply below its top), by an amount that hangs on the geometry and hardly
+on the weather.
+
 The frequencies of one band are marched together, on the grid and in the steps of the
 highest, under the absorbing layer of the lowest.
 """
@@ -87,6 +98,9 @@ def march(
     speed_at=None,
     independent: bool = False,
     threads: int = 1,
+    obstacles=(),
+    refracting: bool | None = None,
+    steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
@@ -111,13 +125,36 @@ def march(
     In wind or temperature gradients the points the reflection off the ground reaches
     more steeply than STEEP_DEG are given by the wide-angle equation
     (:func:`acoustic_spaces.engine.wide_angle.march`, on ``threads`` threads); the others
-    get what the march to all the points gives."""
+    get what the march to all the points gives. ``refracting`` True or False says
+    whether the air bends sound, in place of finding it from ``speed`` and ``speed_at``:
+    two runs that differ in their weather alone then take the same equations.
+
+    ``obstacles`` (near, far, top) (m) stand across the way, ``top`` m above the ground:
+    a thin screen at ``near`` where ``far`` is ``near``, otherwise a building from
+    ``near`` to ``far`` along the way with its rigid roof at ``top``, between the height
+    steps where it falls. ``steps_per_wavelength`` sets the height step at the highest
+    frequency (the wide-angle equation's in proportion)."""
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
     common = (frequencies, speed, impedance, zs)
+    obstacles = _obstacles(obstacles)
     steep = zs + heights > math.tan(math.radians(STEEP_DEG)) * ranges
-    if not steep.any() or not _refracting(frequencies, speed, speed_at, top, ranges.max()):
-        return _march(*common, ranges, heights, top, screen, speed_at, independent)
+    if refracting is None and steep.any():
+        refracting = _refracting(
+            frequencies, speed, speed_at, top, ranges.max(), steps_per_wavelength
+        )
+    if not steep.any() or not refracting:
+        return _march(
+            *common,
+            ranges,
+            heights,
+            top,
+            screen,
+            speed_at,
+            independent,
+            obstacles,
+            steps_per_wavelength,
+        )
     from acoustic_spaces.engine import wide_angle  # which imports this module
 
     out = np.zeros((len(np.atleast_1d(frequencies)), len(ranges)), dtype=complex)
@@ -127,7 +164,15 @@ def march(
         # change nothing.
         before = ranges <= ranges[~steep].max()
         out[:, before] = _march(
-            *common, ranges[before], heights[before], top, screen, speed_at, independent
+            *common,
+            ranges[before],
+            heights[before],
+            top,
+            screen,
+            speed_at,
+            independent,
+            obstacles,
+            steps_per_wavelength,
         )
     out[:, steep] = wide_angle.march(
         *common,
@@ -138,17 +183,53 @@ def march(
         speed_at=speed_at,
         threads=threads,
         independent=independent,
+        obstacles=obstacles,
+        steps_per_wavelength=wide_angle.STEPS_PER_WAVELENGTH
+        * steps_per_wavelength
+        / STEPS_PER_WAVELENGTH,
     )
     return out
 
 
-def _refracting(frequencies, speed, speed_at, top: float, reach: float) -> bool:
+def open_share(z: np.ndarray, top: float) -> np.ndarray:
+    """(n,) the share of each height step's cell (the ground's sample: half a cell) on
+    the grid of heights ``z`` (m) that lies above a thin screen's ``top`` (m)."""
+    dz = float(z[1] - z[0])
+    low = np.maximum(z - 0.5 * dz, 0.0)
+    high = z + 0.5 * dz
+    return np.clip((high - top) / (high - low), 0.0, 1.0)
+
+
+def roof_share(z: np.ndarray, roof: float) -> np.ndarray:
+    """(n,) the share of each height step's cell on the grid of heights ``z`` (m) that
+    lies above a rigid roof ``roof`` m up: the sample under the roof's mirror plane
+    counts for the share of its cell above it (half a cell with the roof on it), the
+    way the ground's sample does."""
+    dz = float(z[1] - z[0])
+    return np.clip((z + 0.5 * dz - roof) / dz, 0.0, 1.0)
+
+
+def _obstacles(obstacles) -> tuple[tuple[float, float, float], ...]:
+    """``obstacles`` as (near, far, top) floats in order along the way, those that stand
+    beyond the source and above the ground."""
+    kept = [(float(a), float(b), float(h)) for a, b, h in obstacles]
+    return tuple(sorted(o for o in kept if o[1] > 0.0 and o[2] > 0.0 and o[1] >= o[0]))
+
+
+def _refracting(
+    frequencies,
+    speed,
+    speed_at,
+    top: float,
+    reach: float,
+    steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
+) -> bool:
     """Whether the march goes through air that bends sound: a speed of sound that changes
     with height on its grid, or from the source's along the way out to ``reach`` (m),
     ``speed_at`` read every half metre."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     c0 = float(np.asarray(speed(np.array([0.0])))[0])
-    n, dz, _ = _grid(f, c0, top)
+    n, dz, _ = _grid(f, c0, top, steps_per_wavelength)
     found = [speed]
     if speed_at is not None:
         for r in np.arange(0.0, float(reach) + 1.0, 0.5):
@@ -170,15 +251,18 @@ def _march(
     screen,
     speed_at,
     independent: bool,
+    obstacles: tuple = (),
+    steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
 ) -> np.ndarray:
-    """:func:`march` by the narrow-angle equation alone."""
+    """:func:`march` by the narrow-angle equation alone, past ``obstacles`` (as
+    :func:`_obstacles` gives them)."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
     c0 = float(np.asarray(speed(np.array([0.0])))[0])
     ka = 2.0 * math.pi * f / c0  # (F,)
     shortest = c0 / f.max()
-    n, dz, thickness = _grid(f, c0, top)
+    n, dz, thickness = _grid(f, c0, top, steps_per_wavelength)
     z = np.arange(n) * dz
     k = 2.0 * math.pi * f[:, None] / np.asarray(speed(z), dtype=float)[None, :]
     depth = np.clip((z - top) / thickness, 0.0, 1.0)
@@ -217,6 +301,40 @@ def _march(
         _starter(ka[:, None] * (z - zs)) + here.normal[:, None] * _starter(ka[:, None] * (z + zs))
     )
     key = here.key
+    roof = 0.0  # the height (m) of the roof the field marches over, or 0 over the ground
+    roofs: dict[tuple[float, float], tuple] = {}
+
+    def over_roof(psi: np.ndarray, r: float, dr: float) -> np.ndarray:
+        # A step over a rigid roof ``roof`` m up, between the grid's samples: the march
+        # on the heights from the sample under it up, reflecting off it as off a rigid
+        # ground (the field mirrored about it, each sample weighed by the share of its
+        # cell above it, as a screen's are).
+        floor = int(roof / dz)
+        part = n - floor
+        if (roof, dr) not in roofs:
+            if len(roofs) > 4:
+                roofs.clear()
+            heights_kz = 2.0 * math.pi * np.fft.fftfreq(2 * part, d=dz)
+            up = np.sqrt((ka[:, None] ** 2 - heights_kz[None, :] ** 2).astype(complex))
+            up = np.where(up.imag < 0.0, -up, up)
+            roofs[(roof, dr)] = (
+                np.exp(0.5j * dr * delta[:, floor:]),
+                np.exp(1j * dr * (up - ka[:, None])),
+                np.exp(-2j * heights_kz * (roof - z[floor])),
+                (-np.arange(2 * part)) % (2 * part),
+                roof_share(z[floor:], roof),
+            )
+        half, propagate, mirror, flip, share = roofs[(roof, dr)]
+        if screen is not None:
+            half = half * np.exp(0.5j * ka[:, None] * screen(r, dr, z[floor:])[None, :])
+        screened = half * psi[:, floor:]
+        tilted_roof = np.zeros((len(f), 2 * part), dtype=complex)
+        tilted_roof[:, :part] = share[None, :] * screened
+        spectrum = np.fft.fft(tilted_roof, axis=1) * dz
+        field = np.fft.ifft((spectrum + mirror * spectrum[:, flip]) * propagate, axis=1) / dz
+        out = np.zeros_like(psi)
+        out[:, floor:] = half * field[:, :part]
+        return out
 
     def advance(psi: np.ndarray, r: float, dr: float) -> np.ndarray:
         # The field a step dr further on from r, as a new array.
@@ -232,6 +350,9 @@ def _march(
                 k = 2.0 * math.pi * f[:, None] / np.asarray(current(z), dtype=float)[None, :]
                 delta = (k - ka[:, None]) + 1j * LAYER_STRENGTH * depth**2
                 steps.clear()
+                roofs.clear()
+        if roof > 0.0:
+            return over_roof(psi, r, dr)
         half, propagate = stepping(dr)
         if screen is not None:
             half = half * np.exp(0.5j * ka[:, None] * screen(r, dr, z)[None, :])
@@ -265,11 +386,51 @@ def _march(
             psi_next[surface] += lift[:, None] * here.decay[surface]
         return half * psi_next
 
+    # Where the march meets the obstacles: (range, what: "screen" its top (m), "roof" or
+    # "behind" a roof's height (m)).
+    events = []
+    highest = (n - 2) * dz
+    for near, far, top_at in obstacles:
+        if far == near:
+            events.append((near, "screen", top_at))
+        else:
+            events.append((near, "roof", min(top_at, highest)))
+            events.append((far, "behind", min(top_at, highest)))
+    events.sort(key=lambda e: e[0])
+    roofs_over: list[float] = []  # the roofs the march is over (m)
+
+    def meet(psi: np.ndarray, event) -> np.ndarray:
+        # The field just past an obstacle the march has reached: above a screen's top
+        # (each sample weighed by the share of its cell above it), above the highest
+        # roof it is over, or above the roof it has just left.
+        nonlocal roof
+        _, what, value = event
+        if what == "screen":
+            return psi * open_share(z, value)[None, :]
+        if what == "roof":
+            # The march over the roof weighs the sample under it itself.
+            roofs_over.append(value)
+            roof = max(roofs_over)
+            psi = psi.copy()
+            psi[:, : int(roof / dz)] = 0.0
+            return psi
+        roofs_over.remove(value)
+        roof = max(roofs_over, default=0.0)
+        return psi * roof_share(z, value)[None, :]
+
     for index in order:
         goal = ranges[index]
-        while goal - r > 1e-9:
-            dr = min(step, goal - r)
-            if independent and dr < step:
+        while True:
+            if events and events[0][0] <= r + 1e-9:
+                psi = meet(psi, events.pop(0))
+                continue
+            if goal - r <= 1e-9:
+                break
+            # The march stops at each obstacle on the way, one at the goal included, and
+            # at the goal.
+            obstacle = bool(events) and events[0][0] <= goal + 1e-9
+            dr = min(step, (events[0][0] if obstacle else goal) - r)
+            if independent and dr < step and not obstacle:
                 break
             psi = advance(psi, r, dr)
             r += dr
@@ -288,15 +449,19 @@ def _starter(x: np.ndarray) -> np.ndarray:
     return (1.4467 - 0.4201 * x**2) * np.exp(-(x**2) / 3.0512)
 
 
-def _grid(f: np.ndarray, c0: float, top: float) -> tuple[int, float, float]:
+def _grid(
+    f: np.ndarray, c0: float, top: float, steps_per_wavelength: float = STEPS_PER_WAVELENGTH
+) -> tuple[int, float, float]:
     """The heights' count and spacing, and the absorbing layer's thickness, for the
     frequencies ``f`` under an absorbing layer from ``top``."""
-    dz = c0 / f.max() / STEPS_PER_WAVELENGTH
+    dz = c0 / f.max() / steps_per_wavelength
     thickness = max(LAYER_WAVELENGTHS * c0 / f.min(), LAYER_MIN_M)
     return int(2 ** math.ceil(math.log2((top + thickness) / dz))), dz, thickness
 
 
-def footprint(frequencies, c0: float, top: float) -> int:
+def footprint(
+    frequencies, c0: float, top: float, steps_per_wavelength: float = STEPS_PER_WAVELENGTH
+) -> int:
     """About the memory (bytes) :func:`march` takes for ``frequencies`` under an
     absorbing layer from ``top`` in air of speed ``c0`` on the ground: the narrow-angle
     march's, or the wide-angle one's for steep points after it, the larger, whether or
@@ -304,8 +469,9 @@ def footprint(frequencies, c0: float, top: float) -> int:
     from acoustic_spaces.engine import wide_angle
 
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
-    n = _grid(f, c0, top)[0]
-    return max(24 * len(f) * 2 * n * 16, wide_angle.footprint(f, c0, top))
+    n = _grid(f, c0, top, steps_per_wavelength)[0]
+    wide = wide_angle.STEPS_PER_WAVELENGTH * steps_per_wavelength / STEPS_PER_WAVELENGTH
+    return max(24 * len(f) * 2 * n * 16, wide_angle.footprint(f, c0, top, wide))
 
 
 class _Ground:
@@ -335,9 +501,11 @@ class _Ground:
         )
         self.plain = ~self.image
         self.normal = np.where(rigid, 1.0, (safe - 1.0) / (safe + 1.0))
-        reflection = (kz[None, :] * safe[:, None] - ka[:, None]) / (
-            kz[None, :] * safe[:, None] + ka[:, None]
-        )
+        # (Rigid rows take 1, where on a coarse grid kz may meet -ka.)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            reflection = (kz[None, :] * safe[:, None] - ka[:, None]) / (
+                kz[None, :] * safe[:, None] + ka[:, None]
+            )
         self.reflection = np.where(
             rigid[:, None], 1.0, np.where(self.image[:, None], 0.0, reflection)
         )
@@ -362,4 +530,4 @@ class _Ground:
             self.fade[row] = 0.5 * (1.0 + np.cos(math.pi * t))
 
 
-__all__ = ["footprint", "march"]
+__all__ = ["footprint", "march", "open_share", "roof_share"]

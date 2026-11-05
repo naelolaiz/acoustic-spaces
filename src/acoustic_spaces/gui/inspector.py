@@ -114,6 +114,10 @@ DIFFRACTION = [
 ]
 DIFFRACTION_REFLECTIONS = [("one_side", N_("one side")), ("both_sides", N_("both sides"))]
 PARABOLIC_EQUATIONS = [("narrow_angle", N_("narrow angle")), ("wide_angle", N_("wide angle"))]
+#: simulation.early.barrier_frequencies' choices, with the largest error of the weather's
+#: effect behind barriers at 8 kHz that each gives against 64 frequencies an octave in
+#: validation/barrier_wind.py's convergence cases (dB; docs/outdoor.md has the table).
+BARRIER_FREQUENCIES = ((32, 0.51), (16, 6.4), (8, 14.0))
 LATE_METHODS = [
     ("stochastic_ray_tracing", N_("stochastic_ray_tracing")),
     ("statistical", N_("statistical")),
@@ -3706,6 +3710,24 @@ class SimulationPage(Page):
                 "steep angles over kilometres; several times the work)"
             )
         )
+        self.barrier_frequencies = QComboBox()
+        for count, error in BARRIER_FREQUENCIES:
+            self.barrier_frequencies.addItem(
+                _("{count}, off by up to {error:g} dB at 8 kHz").format(count=count, error=error),
+                count,
+            )
+        self.barrier_frequencies.setToolTip(
+            _(
+                "Outdoors behind barriers and buildings in wind or temperature gradients, the "
+                "frequencies an octave the parabolic equation takes at 8 kHz (at 4 kHz no "
+                "more than 16, below 4 kHz always 8). Fewer take less time and leave the "
+                "weather's effect there further off. Against 64, in the validation cases, it "
+                "is off by up to 0.51 dB at 8 kHz with 32; 6.4 dB with 16; 9.6 dB at 4 kHz "
+                "and 14 dB at 8 kHz with 8. A coverage map behind two barriers took 12, 7.7 "
+                "and 4.5 times as long as with straight legs. This comes on top of the "
+                "parabolic equation's own error"
+            )
+        )
         self.coherent = QComboBox()
         _fill(self.coherent, [(None, N_("none"))] + [(f, str(f)) for f in COHERENT_BANDS_HZ])
         self.coherent.setToolTip(
@@ -3722,6 +3744,7 @@ class SimulationPage(Page):
         early_form.addRow(_("Diffraction"), self.diffraction)
         early_form.addRow(_("Reflections over an edge"), self.diffraction_reflections)
         early_form.addRow(_("Parabolic equation"), self.parabolic_equation)
+        early_form.addRow(_("Frequencies behind barriers"), self.barrier_frequencies)
         early_form.addRow(_("In pressure up to"), self.coherent)
         layout.addWidget(early)
 
@@ -3995,6 +4018,11 @@ class SimulationPage(Page):
         self.coherent.currentIndexChanged.connect(
             lambda index: self._set("early.coherent_max_band_hz", self.coherent.itemData(index))
         )
+        self.barrier_frequencies.currentIndexChanged.connect(
+            lambda index: self._set(
+                "early.barrier_frequencies", self.barrier_frequencies.itemData(index)
+            )
+        )
         for combo, key in ((self.late_device, "late.device"), (self.wave_device, "wave.device")):
             combo.currentIndexChanged.connect(
                 lambda _index, combo=combo, key=key: self._set(key, _device(combo))
@@ -4041,9 +4069,10 @@ class SimulationPage(Page):
         _choose(self.parabolic_equation, s.early.parabolic_equation)
         # The parabolic equation runs outdoors in wind or temperature gradients only.
         atmosphere = self.document.scene.atmosphere
-        self.parabolic_equation.setEnabled(
-            outdoor and atmosphere is not None and not atmosphere.still
-        )
+        weather = outdoor and atmosphere is not None and not atmosphere.still
+        self.parabolic_equation.setEnabled(weather)
+        _choose(self.barrier_frequencies, s.early.barrier_frequencies)
+        self.barrier_frequencies.setEnabled(weather)
         for row in range(self.coherent.count()):  # the bands above 500 Hz are outdoors only
             value = self.coherent.itemData(row)
             if value is not None and value > INDOOR_COHERENT_MAX_BAND_HZ:

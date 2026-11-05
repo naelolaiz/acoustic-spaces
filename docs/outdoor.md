@@ -547,8 +547,60 @@ is an arc of a circle, so its travel time and its length are exact.
 - **Over an edge** (a roof, the top of a barrier) each leg keeps its straight course and
   takes the travel time of its heights, and past the start of the shadow its level
   falls as a creeping wave's does.
+- **Behind barriers and buildings**, where the listener's way seen from above crosses
+  one, the paths in the vertical plane through the source and the listener (off the
+  ground, and over the tops across it) keep their levels in still air, and in every
+  band the weather changes them by its effect in a parabolic equation with the barriers
+  and buildings on the way inside: the band energy marched through the weather over
+  that marched through still air, both from the source along whole degrees of
+  direction. A listener takes the nearest whole degree's effect, and near halfway
+  between two both, weighed in dB by its direction, so that the effect changes
+  smoothly as it moves round; a degree along which more or fewer barriers and buildings
+  stand short of the listener than along its own way, or the listener would be under a
+  roof, counts for nothing, one whose last barrier stands nearer the listener than half
+  as far as along its own way for less, and the listener's own way takes what they lose.
+  Inside the equation a barrier lets nothing through below its top (Salomons 1994),
+  which leaves the level behind it 0.7 to 7.4 dB below a rigid one's 2 to 90 m behind
+  (up to 11 dB 3 to 10 m behind, steeply below the top), and a roof is a rigid floor
+  at its own height, between the equation's heights, over which the field goes on; the
+  ratio cancels most of that. Where the sound reaches a point more steeply than 15
+  degrees the wide-angle equation runs, in which a building is two thin screens at its
+  roof's height with no roof between them: behind a building in 10 m/s the effect steps
+  by 0.14 to 0.25 dB from 125 Hz to 1 kHz and 0.6 dB at 2 kHz where the points cross that
+  angle ([Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
+  A listener on a barrier's line or a building's wall, seen
+  from above, keeps the paths' straight legs: the equation would take it past them,
+  where nothing gets through below the top. These paths arrive as
+  much sooner or later as the first of them would along its legs, and take the eddies'
+  share of a refraction shadow as the open ground's sound does. The paths round a
+  barrier's end or a building's corner alone, off nothing but the ground, where one of
+  them reflects off the ground, for a listener behind the barrier or in the open beside
+  it alike, change as the open ground's field along their own way round the edges does
+  (its length seen from above, the wind's component along it) in the bands its
+  parabolic equation gives: in the bands added coherently, at each frequency, by the
+  ratio of its pressures in the weather and in still air (their ground's interference
+  and travel time change with it), and in the others by that of its band energies, so
+  that beside a building they take the open ground's effect with the direct sound
+  (within 0.7 dB from 63 to 500 Hz 3 m beside a wall 60 m away in the `windy` preset,
+  down- and upwind); above those bands, and
+  round other edges (over a top and round an end at once, a model file's objects), the
+  paths keep their straight legs as over an edge. Against a full-wave solution of rigid
+  barriers and blocks in wind from 63 to 500 Hz, and against a parabolic equation
+  started behind a rigid barrier from its exact field from 125 Hz to 8 kHz, the
+  weather's effect is within 0.71 dB behind one barrier or building in 5 m/s of wind
+  and 0.74 dB downwind in 10 m/s, where the sound is within 25 dB of its level in still
+  air; upwind in 10 m/s it comes out 0.2 to 1.64 dB low (the narrow-angle equation's),
+  behind a top 45 degrees up from the source it is within 1.0 dB, behind two barriers
+  10 m apart within 1.73 dB and 40 m apart within 4.95 dB, and behind the started barrier
+  within 0.5 dB (see
+  [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
+  Nearer than 1.5 times the source's and the listener's heights added, where an object
+  of a model file stands in the way, where the source or the listener stands on a
+  building, or where no path lies in the plane, the paths go over the edges as above.
 - **The direct sound's time** in the results is when the bent direct sound arrives:
-  sooner downwind, later upwind (the time along the ground in the shadow).
+  sooner downwind, later upwind (the time along the ground in the shadow); where
+  nothing clears the way, the earliest path's where it comes sooner than the straight
+  line's (over a barrier downwind).
 - **The late rays** follow their arcs through the layers, in chords that stray at most
   2 cm from them, reflect where they meet a surface, and leave the scene once they are
   bent up out of it. The energy they rain onto listeners goes straight, in the time of
@@ -609,7 +661,36 @@ is an arc of a circle, so its travel time and its length are exact.
 Bending takes time: the `open_air_stage` example runs in 3 s instead of 0.2 s in still
 air, a scene's late rays take about three times as long, and coverage maps about six
 times, the parabolic equation running for each point; `simulation.performance.threads`
-shares the work out over the cores. The places of a walking source share the parabolic
+shares the work out over the cores. Behind barriers and buildings the parabolic
+equation runs in every band, in the weather and in still air, for each degree of
+direction: a pair of runs 160 m out takes about 12 s of CPU, nine tenths of it at 4
+and 8 kHz; a coverage map of 96 points over grass behind two barriers or a building in
+8 m/s of wind 260 to 300 s, two thirds of it at 8 kHz; and three or four listeners 6 to
+20 m up 30 to 80 m from the source behind a barrier or a building, where the wide-angle
+equation runs (the sound reaching them steeply), about 120 s, against 0.2 to 0.6 s in
+still air.
+
+Behind barriers and buildings the runs take 32 frequencies an octave at 8 kHz and 16
+at 4 kHz, where the ground's interference fringes are densest; below, 8, as the early
+paths do. `simulation.early.barrier_frequencies` takes fewer, 16 or 8 at 8 kHz (and no
+more than that at 4 kHz), for less time and a weather's effect further off. Against 64
+an octave, at 15 listeners 15 to 150 m away behind barriers (one 15 m from the source,
+one 4 m from a source by a rail line, one with listeners up to 14 m up, one whose top
+is 60 degrees up from the source) and a building, over rigid ground and grass, in 5 m/s
+of wind down- and upwind (`validation/barrier_wind.py`'s convergence cases, where the
+effect is within 25 dB of still air), the weather's effect is off by, in dB (mean, nine
+in ten, largest), and a coverage map of 140 points over grass behind two barriers in
+8 m/s takes, on one core:
+
+| `barrier_frequencies` | 4 kHz | 8 kHz | the map | against straight legs |
+|---|---|---|---|---|
+| 32 (the default) | 0.05, 0.10, 0.25 | 0.04, 0.09, 0.51 | 457 s | 12 times |
+| 16 | 0.05, 0.10, 0.25 | 0.51, 1.0, 6.4 | 291 s | 7.7 times |
+| 8 | 0.80, 1.7, 9.6 | 2.1, 3.5, 14 | 172 s | 4.5 times |
+
+These come on top of the parabolic equation's own error (see
+[Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)),
+and the bands below 4 kHz do not change. The places of a walking source share the parabolic
 equation's runs where they stand at one height over one ground and neither the weather
 nor the ground has zones: a run from one place serves the listeners of every other that
 the sound goes the same way to, each reached by a last step of its own, so that it gets
@@ -734,8 +815,12 @@ C_v² / c0² (Ostashev and Wilson 2015).
   fitted to the parabolic equation on a sunny day and upwind in the `windy` preset, the
   source 2 m and the listener 1.5 m up, and deep in those shadows the engine is within
   about 1 dB of it on average, 3.5 dB at most; the shadows of other heights and profiles
-  follow the same formula, untested. A barrier's or a building's shadow takes nothing from the
-  eddies.
+  follow the same formula, untested. A barrier's or a building's own shadow takes
+  nothing from the eddies: the sound they scatter over its top into it, which limits a
+  barrier's insertion loss at high frequencies, is not modelled. Behind one, in a
+  refraction shadow, each path in the plane through the source and the listener takes
+  the open ground's share of its own energy, which the barrier has already lowered, so
+  the eddies' share comes down by the barrier's loss too.
 - **An impulse response is one moment of the eddies.** Each path is delayed at random,
   band by band, as the eddies have it at that moment (the seed draws it), so the levels
   of a response scatter about the echogram's average, the more the stronger the eddies
@@ -1442,13 +1527,58 @@ Vegetation is volumes filled evenly: a lone tree's trunk is left out, the foliag
 attenuation is given, not derived from its leaves' size and density, and stems stand
 upright at random.
 
-Sound bent over the top of a barrier or a roof keeps straight legs in any weather, its
-level falling only past the start of a refraction shadow: the wind and the temperature
-do not change how much a barrier screens, though downwind and under an inversion it
-screens less in practice (ISO 9613-2 and CNOSSOS-EU take that as a path curved over
-the edge). Behind a barrier, then, the weather classes of a [long-term
-level](#levels-over-a-long-term) differ only by the sound that does not pass over its
-edge, the late sound above all.
+Behind barriers and buildings in wind (see
+[How the simulation bends sound](#how-the-simulation-bends-sound)) the parabolic
+equation leaves out:
+
+- **The barrier's own wind.** The wind blows through barriers and buildings as over
+  the open ground; behind a real barrier it is slower and gustier, which changes how
+  much it screens by 3 dB or more (Salomons 1999; Aballéa et al. 2007), and Nord2000
+  parts by up to 6.5 dB from a parabolic equation that leaves it out (Plovsing 2006).
+- **Sound going back.** The equation marches away from the source only: nothing
+  reflects between two barriers or back towards the source. Behind two barriers 10 m
+  apart the weather's effect is up to 1.73 dB off from 63 to 500 Hz; 40 m apart (3 and
+  5 m high) up to 4.95 dB at 250 Hz in 8 m/s of wind downwind over rigid ground (2.23 dB
+  in 5 m/s, 1.28 dB over grass), where the full-wave solution's level changes sharply
+  with frequency, as the sound goes back and forth between them.
+- **Steep angles upwind.** The narrow-angle equation is exact only near the
+  horizontal: in 10 m/s of wind upwind the effect comes out 0.2 to 1.64 dB low from 63
+  to 500 Hz, the more the higher the band and the farther the listener (1.0 to 1.4 dB
+  at 250 Hz 120 and 200 m behind a barrier 4 m high 15 m from a source 1 m up, where
+  the wide-angle equation is 0.45 dB low 120 m away); in 5 m/s within 0.71 dB.
+- **The third dimension.** The equation runs in vertical planes along whole degrees, so
+  a barrier is a ring round the source; how obliquely the way crosses it changes the
+  level in still air by 0.4 to 0.9 dB from 0 to 45 degrees (Aballéa et al. 2007), which
+  the ratio cancels in part. Against a run along the listener's own way the blend of two
+  degrees is within 0.9 dB 120 m behind a barrier at 14 degrees to the way and 1.8 dB
+  within 3 m behind a wall at 45 degrees. The paths round an end take the open ground's
+  effect along their way, not the barrier's, and only in its bands, while those over
+  the top take the barrier's, past the end too as they fade out there: where a
+  listener crosses the shadow boundary of a barrier's end, 10 cm across it the level
+  steps by at most 1.0 dB from 63 to 500 Hz (0.42 dB in still air) and 0.91 dB 120 m
+  upwind, but from 1 kHz up, where the paths round the end keep their legs while the
+  direct sound takes the open ground's refraction, by up to 7.8 dB 60 m downwind and
+  20 dB 120 m away. Where the end stands below the line of sight (a barrier 1 m high), a
+  listener crossing the end's line seen from above (its way crossing the barrier on
+  one side, and on the other the open ground's sound) steps, 2 mm across it, by up to
+  1.2 dB from 63 to 250 Hz (0.02 dB in still air), but by up to 4.8 dB at 500 Hz,
+  10.6 dB downwind at 1 kHz 100 m away and 12.8 dB upwind at 8 kHz (see
+  [Validation](validation.md#known-issues)). No reference in three dimensions checks
+  the paths round ends and corners, for listeners behind a barrier or in the open
+  beside it.
+- **Buildings in the wide-angle equation** (at steep points, or with
+  `parabolic_equation: wide_angle`) are two screens at their walls: up to 1.4 dB in the
+  wind's effect behind a building 60 m deep at 500 Hz in 10 m/s.
+- **Objects of a model file** are not in the equation: where one stands in the way the
+  paths go over the edges with straight legs.
+- **Deep shadows.** Deeper than 25 dB below still air the effect is not bounded: in the
+  checks it is off by up to 4.2 dB 39 dB below still air, 20 dB 52 dB below and 17 dB
+  74 dB below.
+
+The levels in still air the effect multiplies keep their own errors (see
+[Validation](validation.md#known-issues)). The standards' corrections for the weather
+over a barrier (ISO 9613-2's and CNOSSOS-EU's path curved over the edge, Nord2000's
+refraction-modified wedges) are not offered.
 
 The eddies are the same over the whole scene (weather zones change the wind and the
 temperature, not the eddies), and the eddies' largest size is the same at every

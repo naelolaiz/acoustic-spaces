@@ -7,9 +7,10 @@ measurements in two real rooms, how edge diffraction, reflections fading at edge
 the reflection off a porous ground compare with the exact solution, how sound outdoors compares with measurements
 up to 845 m away, how its turbulence compares with a parabolic equation through random
 eddies, how its rays through vegetation compare with a separate particle simulation,
-how its wave solver in wind and temperature compares with a parabolic equation, and how
-much of a block's time the real-time convolver needs. It ends with the known issues and
-what has not been validated yet.
+how its wave solver in wind and temperature compares with a parabolic equation, how
+the weather's effect behind barriers and buildings compares with a full-wave solution,
+and how much of a block's time the real-time convolver needs. It ends with the known
+issues and what has not been validated yet.
 
 ## Checks against theory, on every change
 
@@ -1110,15 +1111,36 @@ engine's steps:
 
 | a screen's corner, `direct` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| largest step, engine | 2.82 | 1.81 | 1.37 | 0.50 | 0.28 | 0.27 | 0.10 | 0.15 |
+| largest step, engine | 0.01 | 0.01 | 0.03 | 0.06 | 0.05 | 0.07 | 0.10 | 0.15 |
 | largest step, BTM | 0.00 | 0.01 | 0.02 | 0.06 | 0.04 | 0.07 | 0.10 | 0.15 |
-| largest difference, engine - BTM | 1.83 | 0.99 | 1.06 | 0.41 | 0.21 | 0.22 | 0.05 | 0.08 |
+| largest difference, engine - BTM | 0.06 | 0.01 | 0.05 | 0.01 | 0.00 | 0.01 | 0.00 | 0.10 |
 
-The path over the top edge still touches it 8 cm from the corner there, but its term is
-dropped as the direct sound it borders appears: a term counts only while the specular
-path is found on its lit side and missing on its dark side, and here the direct sound
-appears round the end of the edge, not across its boundary. The UTD has no terms for
-the corners of edges (see [Known issues](#known-issues)).
+The path over the top edge still touches it 8 cm from the corner there as the direct
+sound appears round the side edge. Each edge's term takes the part of its Fresnel zone
+that the edge covers, the two edges sharing it at the corner, so both change smoothly
+there. With the terms stopping at the ends, as the UTD has them, the level steps by
+2.82 dB at 63 Hz (1.37 dB at 250 Hz) and is up to 1.83 dB off.
+
+Only a thin screen's edges fade so. At the corners of a solid block, where three
+right-angled edges meet, the terms still stop at the ends. The block runs from x = 0 to
+2 m and y = -10 to 0 m, with its top at z = 0, open underneath and reaching far down.
+The source is at (1, 3, 1), and the listener walks from (4, -8, h) to (4, 2, h), 5 cm at
+a time, at h = 0.3 and 1.8 m, past where the paths over the block's edges reach its
+corners. BTM is taken over each of its edges, from end to end, with the geometric paths:
+
+| a block's corners, `direct` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.3 m up: largest step, engine | 2.25 | 1.83 | 0.99 | 0.29 | 1.11 | 0.48 | 0.07 | 0.08 |
+| largest step, BTM | 0.11 | 0.03 | 0.03 | 0.04 | 0.04 | 0.05 | 0.04 | 0.03 |
+| largest difference, engine - BTM | 2.29 | 1.50 | 1.62 | 0.46 | 1.44 | 0.59 | 0.14 | 0.14 |
+| 1.8 m up: largest step, engine | 2.41 | 2.06 | 0.47 | 1.97 | 0.96 | 0.99 | 0.62 | 0.44 |
+| largest step, BTM | 0.04 | 0.03 | 0.04 | 0.04 | 0.04 | 0.04 | 0.05 | 0.11 |
+| largest difference, engine - BTM | 1.96 | 1.45 | 0.92 | 1.89 | 0.97 | 0.89 | 0.58 | 0.50 |
+
+Fading the three edges' terms at each corner as at a screen's corner, in a one-off
+check, halved the largest steps 0.3 m up (1.17 dB at 63 Hz). But it put the level up to
+1.25 dB above BTM at 63 and 125 Hz from y = -4 to 0 m, where stopping is within 0.36 dB.
+A model of such corners is an open item on the [roadmap](roadmap.md).
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
@@ -1269,15 +1291,15 @@ nowhere at that order:
 ### Along a street
 
 The `street` example's car (see [Vehicles passing by](demos.md#vehicles-passing-by))
-passes the pavement, a balcony of the office block and the garden behind the noise
-barrier.
+passes the pavement, a balcony of the office block, the point 2 m in front of the
+offices' wall (`balcony_2m`) and the garden behind the noise barrier.
 No exact solution covers a street either, so the check is again that the level does not
 jump: the early level, A-weighted with the car's sound power, every 10 cm of the car's
 125 m, and again 1 cm apart round each step of 10 cm that is among the four largest for
 its listener in some band or in dB(A) (`validation/walks.py`). Outdoors paths
 add in pressure in every band, so the level also swings, smoothly, where they go in
 and out of step: at 8 kHz, where a centimetre is a quarter of a wavelength, the
-garden's level changes by up to 0.76 dB from one centimetre to the next. The late part
+garden's level changes by up to 0.75 dB from one centimetre to the next. The late part
 is left out, as its rays are drawn at random (the early level repeats to the last
 bit): with the scene's rays few of them reach the garden, and in a one-off check two
 runs of the same pass without a `seed` (the car's levels of 4.1.0, every metre, as
@@ -1286,52 +1308,52 @@ place (x = -35 m; 0.37 dB(A) rms over the pass), the pavement's and the balcony'
 0.6 and 0.8 dB(A); their L_Amax came within 0.04 dB on the pavement and in the garden
 and 0.17 dB apart on the balcony.
 
-On the pavement and the balcony the early level changes by at most 0.25 and 0.16 dB(A)
-from one 10 cm to the next, and in the garden by at most 1.38 dB(A), where 1 kHz swings
-by 2.5 dB at x = 28.8 m and does so smoothly 1 cm apart; without the fade the garden's
-level steps by up to 12.2 dB(A) from one 10 cm to the next. The steps left
-that stand out by more than 0.1 dB in some band 1 cm apart, but at 8 kHz, where a
-centimetre is a quarter of a wavelength and the level swings by up to 0.76 dB from one
-to the next (three more at 4 kHz in the garden, at x = 19.40, 28.72 and 28.88 m, are
-swings too: in a one-off check 1 mm apart the level there changed smoothly, by at most
-0.06 dB a millimetre), each the step from
-1 cm before x to x, and how far it stands out in dB(A) and in the same band without the
-fade (`validation/walks.py`):
+On the pavement, the balcony and `balcony_2m` the early level changes by at most 0.17,
+0.16 and 0.13 dB(A) from one 10 cm to the next, and in the garden by at most 1.39 dB(A),
+where 1 kHz swings by 2.5 dB at x = 28.8 m and does so smoothly 1 cm apart; without the
+fade the garden's level steps by up to 12.1 dB(A) from one 10 cm to the next. The steps
+left that stand out by more than 0.1 dB in some band 1 cm apart, but at 8 kHz, where a
+centimetre is a quarter of a wavelength and the level swings by up to 0.75 dB from one
+to the next (five more at 4 kHz in the garden, at x = 19.40, 19.51, 28.69, 28.72 and
+28.88 m, are swings too: in a one-off check 1 mm apart the level there changed by at most
+0.08 dB a millimetre at 4 kHz), each the step from 1 cm before x to x, and how far it
+stands out in dB(A) and in the same band without the fade (`validation/walks.py`):
 
 | car at x (m) | listener | stands out (dB) | in | dB(A) | without the fade (dB) |
 |---:|---|---:|---|---:|---:|
-| -41.39 | garden | 1.13 | 1 kHz | 0.55 | 0.00 |
-| -14.04 | garden | 1.41 | 63 Hz | 0.28 | 0.33 |
-| -0.75 | garden | 1.29 | 63 Hz | 0.16 | 0.42 |
-| -0.69 | garden | 1.37 | 63 Hz | 0.29 | 0.47 |
-| 9.99 | garden | 0.82 | 63 Hz | 0.03 | 0.96 |
-| 37.80 | pavement | 0.55 | 63 Hz | 0.03 | 1.09 |
-| 58.79 | garden | 0.82 | 250 Hz | 0.09 | 0.93 |
-| 59.09 | balcony | 0.29 | 63 Hz | 0.05 | 0.04 |
-| 59.37 | balcony | 0.29 | 63 Hz | 0.08 | 0.15 |
-| 60.03 | balcony | 0.40 | 63 Hz | 0.04 | 0.00 |
-| 60.70 | pavement | 0.40 | 250 Hz | 0.00 | 0.00 |
-| 60.80 | garden | 1.42 | 500 Hz | 0.34 | 0.29 |
-| 60.87 | garden | 1.31 | 500 Hz | 0.21 | 0.26 |
-| 61.02 | pavement | 0.10 | 63 Hz | 0.03 | 0.00 |
-| 62.90 | pavement | 1.02 | 250 Hz | 0.24 | 0.61 |
-| 63.10 | pavement | 1.18 | 250 Hz | 0.28 | 0.60 |
-| 63.53 | balcony | 0.32 | 63 Hz | 0.00 | 0.18 |
-| 66.53 | balcony | 0.16 | 1 kHz | 0.10 | 0.05 |
-| 69.51 | balcony | 0.75 | 63 Hz | 0.09 | 0.70 |
-| 69.61 | balcony | 0.73 | 63 Hz | 0.03 | 0.67 |
+| -41.39 | garden | 1.11 | 1 kHz | 0.55 | 0.00 |
+| -39.92 | balcony | 0.16 | 63 Hz | 0.00 | 0.00 |
+| -14.07 | garden | 0.80 | 125 Hz | 0.31 | 0.00 |
+| 9.99 | garden | 0.83 | 63 Hz | 0.04 | 0.97 |
+| 10.01 | balcony_2m | 0.10 | 125 Hz | 0.00 | 0.08 |
+| 10.02 | garden | 1.05 | 63 Hz | 0.12 | 0.96 |
+| 14.28 | balcony_2m | 0.17 | 125 Hz | 0.00 | 0.04 |
+| 15.98 | balcony_2m | 0.16 | 125 Hz | 0.00 | 0.03 |
+| 16.01 | balcony_2m | 0.11 | 125 Hz | 0.00 | 0.03 |
+| 18.93 | balcony_2m | 0.17 | 125 Hz | 0.03 | 0.00 |
+| 25.31 | balcony | 0.14 | 63 Hz | 0.00 | 0.00 |
+| 37.20 | garden | 0.52 | 500 Hz | 0.02 | 0.00 |
+| 53.96 | pavement | 0.13 | 250 Hz | 0.00 | 0.04 |
+| 60.03 | balcony | 0.30 | 63 Hz | 0.05 | 0.00 |
+| 60.19 | balcony_2m | 0.33 | 63 Hz | 0.05 | 0.00 |
+| 60.70 | pavement | 0.29 | 250 Hz | 0.00 | 0.00 |
+| 63.10 | pavement | 0.21 | 63 Hz | 0.00 | 0.00 |
+| 65.34 | balcony_2m | 0.22 | 500 Hz | 0.09 | 0.00 |
+| 66.62 | balcony | 0.15 | 63 Hz | 0.06 | 0.00 |
 
-All but the one at 9.99 m are the corners of edges (see
-[Known issues](#known-issues-of-the-edge-fade)): a path over the barrier's top, on its
-own or with a reflection off the ground or the offices' façade before or after it,
-reaches an end of the top (x = 14 or 44 m), or a path round the barrier's end at
-x = 44 m reaches the end's top, where its term stops, the edge diffraction's own as
-well as the fade's, whose term of the same path stops there with it and makes several
-of them larger (at 60.80 m 0.29 dB without the fade, 1.42 dB with it). The largest in
-dB(A), at -41.39 m, is the fade's alone: the term of a second-order reflection that the
-barrier's top cuts off reaches the top's end at x = 14 m. The dip at 9.99 m is the next
-paragraph's. `tests/test_walks.py` walks the garden round the four largest steps in CI
-and holds them to 1.5 dB in a band and 0.6 dB(A).
+The paths over the barrier's top and round its end at x = 44 m, the edge diffraction's
+own and the fade's terms of the same paths, fade out past the ends, as the barrier is a
+thin screen. The steps left are terms that still stop where the point they diffract at
+leaves the end of its edge (see [Known issues](#known-issues-of-the-edge-fade)), where
+traced (all but those at 9.99 to 10.02, 14.28, 53.96 and 63.10 m): mostly the fade's
+terms of second-order reflections that the barrier's top (x = 14 to 44 m), its end or a
+corner of the offices or the houses cuts off, which the edge diffraction (`first_order`)
+has no path for, and at 15.98 m the path over the houses' eaves, a solid wedge, at their
+end. The largest in dB(A), at -41.39 m, is the term of a reflection off the houses'
+front and the offices' façade that reaches the top's end at x = 14 m. The dips at 9.99
+and 10.02 m are the next paragraph's. `tests/test_walks.py` walks the garden round three
+of the largest steps left and the one at 60.80 m that the fade past the barrier's end
+took away in CI, and holds them to 1.5 dB in a band and 0.6 dB(A).
 
 At x = 10.0 m, where the car crosses the plane of the houses' end wall, the sound over
 the houses' corner dips by up to 10 dB at 63 Hz within 2 cm (1.0 dB in the garden's
@@ -1353,21 +1375,21 @@ would also be the better one here is not checked.
   gallery's corner (see above). The edge diffraction's own paths over an edge with a
   reflection before or after it stop where that reflection leaves its face, which the
   fade makes up for where it follows the path.
-- **Corners of edges.** A term stops where the point it diffracts at leaves the end of
-  its edge, as the UTD has no terms for the corners of edges, unless that end lies in a
-  plane the path reflects off next to the event, where the edge goes on as its image in
-  the plane (for a leg that stops a path, the image's term is found on the leg on the
-  other side of the reflection); the edge diffraction's own paths stop there alike.
-  Along the street the paths over the barrier's top make steps of up to 1.42 dB in one
-  band and 0.55 dB(A) where they reach its ends (see above), the edge diffraction's own
-  up to 1.09 dB without the fade. Past the corner of a thin screen the edge diffraction
-  alone steps by 2.8 dB at 63 Hz (see
-  [Edge diffraction against the exact solution](#edge-diffraction-against-the-exact-solution)).
-  A term weighted by the part of its Fresnel zone that the edge covers, as BTM's
-  integral over a finite edge has it, and kept where its path appears round the edge's
-  end, would remove these steps; it is an open item on the [roadmap](roadmap.md).
-  `tests/test_walks.py` holds the garden's four largest steps to 1.5 dB in a band and
-  0.6 dB(A).
+- **Corners of edges.** Over the edge of a thin screen (a barrier's top and ends, a
+  face's free edge) a path's term takes the part of its Fresnel zone that the edge
+  covers, as BTM's integral over a finite edge has it, so it fades out past a free end
+  (see [Edge diffraction against the exact solution](#edge-diffraction-against-the-exact-solution)).
+  Elsewhere a term stops where the point it diffracts at leaves the end of its edge, as
+  the UTD has no terms for the corners of edges, unless that end lies in a plane the path
+  reflects off next to the event, where the edge goes on as its image in the plane (for a
+  leg that stops a path, the image's term is found on the leg on the other side of the
+  reflection): at the edges of solid wedges, on paths over two edges (`second_order`) and
+  for the fade's terms of paths the edge diffraction does not have, such as second-order
+  reflections that an edge cuts off. Near a solid block's corners the level steps by up
+  to 2.4 dB at 63 Hz and is up to 2.3 dB from BTM (see above); along the street such
+  terms step by up to 1.11 dB in one band and 0.55 dB(A) (see above). A model of those
+  corners and terms is an open item on the [roadmap](roadmap.md). `tests/test_walks.py`
+  holds the garden's four largest steps to 1.5 dB in a band and 0.6 dB(A).
 - **Terms that cancel, in the bands that add in energy.** Indoors paths add in energy
   from 250 Hz up (`coherent_max_band_hz`). Where both edges of a narrow face border its
   reflection, their terms nearly cancel there at low frequencies; added in energy they
@@ -2894,6 +2916,223 @@ and bends it a little the whole way instead. That is the cost of the equivalent 
 take (Nord2000, Harmonoise), and the reason the bands up to 500 Hz, and up to 2 kHz in
 a shadow, come from the parabolic equation, which goes through the zones.
 
+## Barriers and buildings in wind against a full-wave solution
+
+`validation/barrier_wind.py` checks the weather's effect behind barriers and buildings
+(see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)): the
+level in the weather less the level in still air, which the engine takes from its
+parabolic equation with the barriers and buildings inside (a barrier lets nothing
+through below its top, a roof is a rigid floor) and puts on the paths it finds in still
+air. Two references are written for the script, and the wind is a logarithmic profile
+over a roughness of 5 cm, 5 or 10 m/s 10 m up, towards the listener or the source:
+
+- **A full-wave solution**: the Helmholtz equation round a source on an axis, in air
+  whose speed of sound changes with height, solved by coupled modes stepping in range
+  (Evans 1983): exact in range, a twentieth of the shortest wavelength in height, a
+  perfectly matched layer on top of a domain 30 m high (60 m where given). Barriers are
+  thin rigid rings round the source and a building a rigid ring block; the wind blows
+  through them; 63 to 500 Hz, over rigid ground and over grass (Miki's impedance,
+  200 kPa s/m²). Where given it is also solved along a plane, from a line source with
+  straight barriers (the two dimensions of the engine's equation, where nothing
+  focuses the sound going back between two barriers as a ring does). It checks
+  itself: over open rigid ground it is within 0.002 dB of the exact field of the
+  source and its image, round the axis and along the plane; a barrier in still air is
+  -0.10 to +0.03 dB from a straight barrier's four paths (the uniform theory of
+  diffraction) at 125 and 250 Hz as a ring and +0.04 to +0.09 dB along the plane;
+  over open ground in 5 m/s of wind it is within 0.25 dB of the engine's parabolic
+  equation at each frequency of the 125 Hz band; and deep in the upwind shadow of a
+  barrier 4 m high 15 m from a source 1 m up, at 552 Hz, the domain 30 m high is
+  within 0.00 dB of one 90 m high 120 m away in 5 m/s of wind (1.2 dB in 10 m/s) but
+  1.0 and 10.5 dB off 150 and 200 m away (15 and 45 dB in 10 m/s), and 60 m high within
+  0.04 dB in 5 m/s and 1.24 dB in 10 m/s, which is why the cases upwind beyond 120 m
+  take it.
+- **A parabolic equation started behind the barrier** from the exact field of a rigid
+  straight barrier over rigid ground (the four paths), 1 m behind it (within 0.18 dB
+  of those paths in still air), and marched in a wind that blows behind the barrier
+  only (the engine's equation is given the same), 125 Hz to 8 kHz (from 4 kHz up to
+  100 m only): the `windy` preset downwind and upwind, `clear_night` and `sunny_day`,
+  barriers 3 and 6 m high 20 and 50 m from a source 1 m up, listeners 50, 100 and 200 m
+  away, 1.5 and 4 m up.
+
+The full-wave cases (source 1 m up unless given; listeners 1.5 m up unless given):
+
+| case | on the way | listeners (m away) |
+|---|---|---|
+| near | barrier 15 m away, 4 m high; also along a plane | 30, 60, 120; 60 at 4 m up |
+| far | barrier 100 m away, 4 m high | 110, 130; 130 at 4 m up |
+| rail | source 0.5 m up, barrier 4 m away, 3 m high | 25, 50, 100 |
+| steep 45 and 60 | source 0.5 m up, barrier 4 m away, 4.5 and 7.43 m high (its top 45 and 60 degrees up from the source) | 15, 30, 60 |
+| roof | building 40 to 52 m away, 6 m high | 80, 150 |
+| two | barriers 45 and 55 m away, 8 m high; also along a plane | 100, 150 |
+| two 40 | barriers 20 and 60 m away, 3 and 5 m high; 125 and 250 Hz; also along a plane | 100, 160 |
+| near upwind | as near, upwind only, 5 and 10 m/s, on a domain 60 m high | 60, 120, 200; 120 at 4 m up |
+
+**Against the full-wave solution.** The engine's weather effect less the solution's,
+the largest difference (dB) over the listeners and the bands 63 to 500 Hz, at the
+engine's own frequencies (the solution's tops on its cells), and the solution's
+effects:
+
+| case | reference | ground | 5 m/s downwind | 5 m/s upwind | 8 m/s downwind | 10 m/s downwind | 10 m/s upwind | the effect |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| near | ring | rigid | 0.32 | 0.62 |  | 0.63 |  | -6.8 to +10.3 |
+| near | ring | grass | 0.29 | 0.57 |  | 0.46 |  | -7.3 to +8.3 |
+| near | plane | rigid | 0.27 | 0.61 |  | 0.53 |  | -6.9 to +10.4 |
+| near | plane | grass | 0.24 | 0.53 |  | 0.45 |  | -7.4 to +8.4 |
+| far | ring | rigid | 0.38 | 0.42 |  | 0.67 |  | -11.6 to +2.8 |
+| far | ring | grass | 0.47 | 0.41 |  | 0.74 |  | -7.8 to +10.4 |
+| rail | ring | rigid | 0.25 | 0.38 |  | 0.27 |  | -6.4 to +3.6 |
+| rail | ring | grass | 0.21 | 0.35 |  | 0.25 |  | -6.1 to +9.5 |
+| steep 45 | ring | rigid | 0.43 | 0.45 |  | 0.98 |  | -6.8 to +4.1 |
+| steep 45 | ring | grass | 0.17 | 0.41 |  | 0.50 |  | -1.1 to +3.5 |
+| steep 60 | ring | rigid | 0.54 | 0.53 |  | 0.41 |  | -7.4 to +6.5 |
+| steep 60 | ring | grass | 0.10 | 0.40 |  | 0.46 |  | -1.3 to +3.1 |
+| roof | ring | rigid | 0.15 | 0.24 |  | 0.32 |  | -6.1 to +9.7 |
+| roof | ring | grass | 0.40 | 0.21 |  | 0.51 |  | -6.8 to +8.1 |
+| two | ring | rigid | 1.00 | 1.68 |  | 1.49 |  | -6.7 to +17.3 |
+| two | ring | grass | 0.87 | 0.75 |  | 1.63 |  | -4.4 to +5.2 |
+| two | plane | rigid | 1.00 | 1.63 |  | 1.61 |  | -6.6 to +17.4 |
+| two | plane | grass | 0.82 | 0.69 |  | 1.73 |  | -2.2 to +5.3 |
+| two 40 | ring | rigid | 2.23 | 0.69 | 4.95 | 0.73 |  | -5.9 to +2.0 |
+| two 40 | ring | grass | 1.01 | 0.40 | 1.28 | 1.15 |  | -1.3 to +0.6 |
+| two 40 | plane | rigid | 2.19 | 0.75 | 4.91 | 0.77 |  | -5.9 to +2.1 |
+| two 40 | plane | grass | 0.96 | 0.36 | 1.21 | 1.06 |  | -1.3 to +0.7 |
+| near upwind | ring | rigid |  | 0.71 |  |  | 1.64 | -14.5 to +9.3 |
+| near upwind | ring | grass |  | 0.61 |  |  | 1.37 | -18.8 to +2.9 |
+
+Behind one barrier or building the engine is within 0.71 dB in 5 m/s of wind (at 500 Hz
+120 m behind the near barrier 4 m up, upwind over rigid ground) and 0.74 dB downwind in
+10 m/s. Upwind in 10 m/s it comes out low, by 0.2 to 1.64 dB, the more the higher the
+band and the farther the listener (1.64 dB at 500 Hz 120 m away 4 m up, 1.0 to 1.4 dB at
+250 Hz 120 and 200 m away): the narrow-angle equation's error, as the sound comes down
+steeply into the shadow. Behind a top 45 degrees up from the source it is within
+0.98 dB in 10 m/s at 250 Hz over rigid ground, 60 degrees up 0.54 dB. Behind two
+barriers 10 m apart it is off by up to 1.73 dB, and 40 m apart by up to 4.95 dB at
+250 Hz in 8 m/s downwind over rigid ground (2.23 dB in 5 m/s, 1.28 dB over grass): the
+equation marches away from the source only, so nothing goes back and forth between the
+barriers in it. Along a plane the solution's effect is within 0.14 dB of the
+ring's, so the ring's focusing between the barriers does not explain it. The limits of
+the script (`LIMITS`) are these largest errors rounded up to 0.05 dB, so that a change
+that makes any of them worse fails. Deeper than 25 dB below still air (listed, not
+judged) the engine is off by up to 4.2 dB 39 dB below (500 Hz 200 m away upwind in
+10 m/s over grass) and 20 dB 52 dB below.
+
+**Against the started parabolic equation.** The engine's weather effect less the
+reference's, the largest difference (dB) over the listeners where the reference is
+within 25 dB of still air, at the engine's own frequencies (16 an octave at 4 kHz, 32 at
+8 kHz), and the reference's still air against the four paths it starts from:
+
+| case | 125 Hz to 2 kHz | 4 and 8 kHz | starting field |
+|---|---:|---:|---:|
+| `windy` downwind, barrier 3 m high 20 m away | 0.27 | 0.27 | 0.06 |
+| `windy` downwind, 6 m high 20 m away | 0.42 | 0.17 | 0.18 |
+| `windy` downwind, 3 m high 50 m away | 0.27 | 0.30 | 0.02 |
+| `windy` upwind, 3 m high 20 m away | 0.42 | 0.25 | 0.06 |
+| `windy` upwind, 3 m high 50 m away | 0.47 | 0.26 | 0.02 |
+| `clear_night`, 3 m high 20 m away | 0.15 | 0.18 | 0.06 |
+| `sunny_day`, 3 m high 20 m away | 0.24 | 0.11 | 0.06 |
+
+The engine is within 0.47 dB everywhere (0.5 allowed). Deeper in the upwind shadow,
+where the effect is listed but not bounded, it is within 0.81 dB down to 57 dB below
+still air, but 6.5 and 17.4 dB off at 2 kHz 72 and 74 dB below.
+
+**The engine end to end.** `simulate`'s early paths (their coherent sum; reflections
+off both sides of an edge) in the wind less in still air, against the full-wave
+solution's effect, over rigid ground with the barriers and the building 1 km long: the
+largest difference (dB) over the listeners and the bands 63 to 500 Hz where the
+solution is within 25 dB of still air:
+
+| case | reference | 5 m/s downwind | 5 m/s upwind | 8 m/s downwind | 10 m/s downwind | 10 m/s upwind |
+|---|---|---:|---:|---:|---:|---:|
+| near | ring | 0.33 | 0.66 |  | 0.64 |  |
+| far | ring | 0.41 | 0.43 |  | 0.66 |  |
+| rail | ring | 0.26 | 0.38 |  | 0.29 |  |
+| steep 45 | ring | 0.44 | 0.45 |  | 1.01 |  |
+| steep 60 | ring | 0.53 | 0.51 |  | 0.43 |  |
+| roof | ring | 0.15 | 0.24 |  | 0.32 |  |
+| two | ring | 1.00 | 1.69 |  | 1.53 |  |
+| two 40 | ring | 2.23 | 0.69 | 4.95 | 0.73 |  |
+| two 40 | plane | 2.19 | 0.76 | 4.91 | 0.77 |  |
+| near upwind | ring |  | 0.71 |  |  | 1.70 |
+
+End to end the engine's difference from the solution is within 0.08 dB of its
+parabolic equation's alone, 0.18 dB behind the top 60 degrees up (0.15 dB allowed);
+behind the top 45 degrees up it is 1.01 dB off in 10 m/s and behind two barriers
+1.69 dB, as its equation is.
+
+**Convergence.** The engine's runs behind barriers take a quarter wavelength's height
+step from 1 kHz up (a tenth below) and 8 frequencies a band up to 2 kHz, 16 at 4 kHz and
+32 at 8 kHz. The weather's effect from its parabolic equation alone against finer runs
+(`--only convergence`), the largest difference (dB) over the listeners and both winds
+of 5 m/s: a tenth's step against the quarter's, and 32 frequencies an octave against 8
+and 16, 64 against 32. `high` is a barrier 3 m high 10 m from a source 1 m up, with
+listeners 25 m away 10 and 14 m up and 40 m away 1.5 m up:
+
+| case | ground | step, 1 and 2 kHz | step, 4 and 8 kHz | frequencies, 63 Hz to 2 kHz | 4 kHz | 8 kHz |
+|---|---|---:|---:|---:|---:|---:|
+| near | rigid | 0.09 | 0.01 | 0.22 | 0.04 | 0.04 |
+| near | grass | 0.07 | 0.05 | 0.08 | 0.07 | 0.03 |
+| rail | rigid | 0.16 | 0.08 | 0.13 | 0.06 | 0.13 |
+| rail | grass | 0.18 | 0.09 | 0.08 | 0.10 | 0.18 |
+| roof | rigid | 0.06 | 0.05 | 0.22 | 0.04 | 0.03 |
+| roof | grass | 0.08 | 0.09 | 0.12 | 0.03 | 0.02 |
+| steep 60 | rigid | 0.28 | 0.97 | 0.53 | 0.18 | 0.51 |
+| steep 60 | grass | 0.23 | 2.19 | 0.40 | 0.21 | 0.13 |
+| high | rigid | 0.07 | 0.01 | 0.11 | 0.02 | 0.05 |
+| high | grass | 0.04 | 0.01 | 0.09 | 0.02 | 0.02 |
+
+The quarter wavelength's step costs 2 to 2.5 times less than the tenth's and holds
+within 0.2 dB but 11 m behind the top 60 degrees up, where it is 0.3 dB off at 1 and
+2 kHz and 1.0 and 2.2 dB at 4 kHz over rigid ground and grass. The ground's
+interference fringes behind a barrier are dense in frequency: at 8 kHz 16 frequencies an
+octave are off by up to 1.8 dB against 32 over rigid ground and 6.4 dB at `high`'s
+listener 14 m up, where the fringes fall in step with them (a one-off check), which is
+why the 8 kHz band takes 32, within 0.18 dB of 64 but 0.51 dB 11 m behind the steepest
+top.
+
+**Steep points behind a building.** Where the sound reaches a point more steeply than 15
+degrees the engine's runs take the wide-angle equation, in which a building is two thin
+screens at its roof's height with no roof between them (`--only steep`). 60 m from a
+source 1 m up, behind a building 20 to 30 m away with its roof 8 m up, in 10 m/s
+downwind over rigid ground, the weather's effect steps by 0.24, 0.16, 0.14, 0.25 and
+0.60 dB at 125 Hz to 2 kHz between listeners 15 and 15.5 m up, either side of that
+angle. From 10 to 24 m up it is within 0.31 dB of the full-wave solution's at 125 Hz and
+0.14 dB at 250 Hz; the wide-angle equation alone within 0.09 and 0.15 dB, the
+narrow-angle one within 0.45 and 0.09 dB.
+
+**Continuity.** How much the level steps as one thing changes a little, end to end
+(`simulate`, the coherent sum of the early paths), the most in any band, in the
+`windy` preset down- and upwind and in still air (a one-off check). The scene: a
+source 1 m up over hard ground and a barrier 4 m high 15 m away across the way:
+
+| what changes | in the wind (dB) | in still air (dB) | aim (dB) |
+|---|---:|---:|---:|
+| the wind, from none to 0.01 m/s (0.1 m/s) | 0.024 (0.24) | | 0.2 at 0.1 m/s |
+| the barrier's top, 1 mm higher (listeners 40 and 60 m away) | 0.020 | 0.006 | 0.01 |
+| a listener 40 m away, 1 cm higher through the line of sight over the top | 0.077 | 0.070 | 0.05 |
+| a building's roof 25 to 37 m away, 1 cm higher, from 6 to 6.3 m (listeners 60 and 120 m away, 5 m off its middle) | 0.14 | 0.021 | 0.1 a cell |
+| a listener 60 and 120 m away behind a barrier slanted at 63 degrees to the way, 0.01 degrees round, from 0.40 to 0.60 degrees | 0.017 | 0.018 | |
+| a listener 2 cm further, where the parabolic equation starts (a 1.5 m barrier 2 m from a source 0.5 m up) | 0.24 | 0.16 | |
+| a listener 10 cm across the shadow boundary of a barrier's end, 60 and 120 m away | 7.8 and 20 | 0.42 | 1 |
+| a listener 2 mm across the line of an end below the line of sight seen from above (a barrier 1 m high 30 m away), 100 and 200 m away | 12.8 and 6.3 | 0.02 | |
+
+The wind's effect grows in proportion to the wind (500 Hz, 100 m away and 4 m up),
+with no step as it starts. The roof stands at its own height between the parabolic
+equation's cells (the field over it mirrored about that height), so as it rises the
+weather's effect behind it changes smoothly with it: by up to 0.13 dB a centimetre at
+1 kHz downwind and 0.14 dB at 4 to 8 kHz upwind, 0.03 dB a millimetre, and from 63 to
+500 Hz by 0.03 dB at most, about as in still air; on the grid it stepped from one cell
+to the next by up to 0.50 dB at 1 kHz in the same places. Between two whole
+degrees the listener takes both runs' effects, so the level turns smoothly round. The
+steps at a barrier's end come from the plane's two dimensions (see
+[What is not modelled yet](outdoor.md#what-is-not-modelled-yet)): the paths over the
+top take the barrier's effect, past the end too as they fade out there, and the direct
+sound and the paths round the end the open ground's. Across the end's shadow boundary
+the level steps by at most 1.0 dB from 63 to 500 Hz, and from 1 kHz up, where the
+paths round the end keep their legs, by up to 7.8 and 20 dB downwind; across the line
+of an end below the line of sight, where the direct sound goes from the barrier's
+effect to the open ground's, by up to 1.2 dB from 63 to 250 Hz and 4.8 dB at 500 Hz to
+12.8 dB at 8 kHz above (see [Known issues](#known-issues)).
+
 ## Levels over a long term
 
 `validation/long_term.py` checks how the engine combines weather classes and the
@@ -4003,10 +4242,11 @@ its peak (single precision).
 ## Known issues
 
 Reviews of the code found these, but for the one about barriers, which the checks
-against the exact solution found. Each one was checked against the code; the numbers
-come from the tests or scripts named, and a number from a one-off check says so. They
-are open items on the [roadmap](roadmap.md). The edge fade's own are listed in [Known
-issues of the edge fade](#known-issues-of-the-edge-fade).
+against the exact solution found, and those about barriers in wind and a leg's shadow,
+which their checks found. Each one was checked against the code; the numbers come from
+the tests or scripts named, and a number from a one-off check says so. They are open
+items on the [roadmap](roadmap.md). The edge fade's own are listed in [Known issues of
+the edge fade](#known-issues-of-the-edge-fade).
 
 Results:
 
@@ -4052,6 +4292,30 @@ Results:
   hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from
   500 Hz up, and off by up to 9.9 dB below (see
   [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
+- **A barrier's end in wind.** Behind a barrier the paths in the plane take the
+  barrier's effect, and the paths over the top past its end, as they fade out there,
+  take it too; the direct sound and the paths round the end take the open ground's, in
+  the open ground's bands along their way and above them with their legs' own shadows.
+  10 cm across the end's shadow boundary in the `windy` preset the level steps by at
+  most 1.0 dB from 63 to 500 Hz (0.42 dB in still air), and 120 m upwind by at most
+  0.91 dB in every band, but from 1 kHz up, where the direct sound takes the open
+  ground's refraction and the paths round the end their legs', by up to 7.8 dB 60 m
+  downwind and 20 dB 120 m downwind, and by 5.2 dB at 4 kHz 60 m upwind. Where the end
+  stands below the line of sight (a barrier 1 m high 30 m from a source 1 m up), a
+  listener 100 or 200 m away crossing the end's line seen from above goes from the
+  barrier's effect to the open ground's sound: 2 mm across it the level steps by up to
+  1.2 dB from 63 to 250 Hz (0.02 dB in still air), but by up to 4.8 dB at 500 Hz,
+  10.6 dB downwind at 1 kHz and 12.8 dB upwind at 8 kHz (see
+  [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
+- **Coverage maps behind barriers** read the high bands higher than a listener at the
+  same point: 130 m behind two barriers over grass by 0.6, 1.3, 3.8 and 13.5 dB at 1,
+  2, 4 and 8 kHz, in still air as in 8 m/s of wind, where the weather's effect is the
+  same in the map and at the point (a one-off check).
+- **A leg from a ground reflection a rounding error above the ground** (10⁻¹⁶ m) has no
+  refraction shadow, its shadow's start then being 10²⁸⁴ m out: 120 m upwind of a
+  source in the `windy` preset, as a listener moves 10 cm past a barrier's end the
+  path reflected off the ground round it lifts the level by up to 65 dB at 8 kHz (a
+  one-off check).
 - **Near a shadow boundary, in the bands that add in energy.** There the term of the
   edge's incident wave is part of the direct sound's wave, and the terms of the
   reflections off the edge's faces, which arrive with it, are part of the edge's
@@ -4129,6 +4393,11 @@ Files and runs:
   changes over the scene is checked against a parabolic equation marched through the
   zones, not against measurements, and a zone's border is a step (see
   [Weather zones](#weather-zones-against-a-crank-nicholson-parabolic-equation)).
+  Barriers and buildings in wind are checked against a full-wave solution and a
+  parabolic equation started from the exact field, both in the vertical plane with the
+  wind blowing through the barrier, not against measurements, wind-tunnel data or
+  Nord2000's screen cases (see
+  [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   Levels over a long term are checked against the formulas they come from and against
   ISO 9613-2's meteorological correction, not against long-term measurements, and are
   only as good as the weather classes and shares given to them (see
@@ -4207,6 +4476,7 @@ python validation/terrain.py --json terrain.json
 python validation/ffp.py --json ffp.json
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
+python validation/barrier_wind.py --json barrier_wind.json   # about 4 h; --quick: fewer bands
 python validation/long_term.py --json long_term.json
 python validation/doppler.py --json doppler.json
 python validation/rotorcraft.py --json rotorcraft.json
