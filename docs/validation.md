@@ -1121,6 +1121,27 @@ that the edge covers, the two edges sharing it at the corner, so both change smo
 there. With the terms stopping at the ends, as the UTD has them, the level steps by
 2.82 dB at 63 Hz (1.37 dB at 250 Hz) and is up to 1.83 dB off.
 
+Only a thin screen's edges fade so. At the corners of a solid block, where three
+right-angled edges meet, the terms still stop at the ends. The block runs from x = 0 to
+2 m and y = -10 to 0 m, with its top at z = 0, open underneath and reaching far down.
+The source is at (1, 3, 1), and the listener walks from (4, -8, h) to (4, 2, h), 5 cm at
+a time, at h = 0.3 and 1.8 m, past where the paths over the block's edges reach its
+corners. BTM is taken over each of its edges, from end to end, with the geometric paths:
+
+| a block's corners, `direct` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.3 m up: largest step, engine | 2.25 | 1.83 | 0.99 | 0.29 | 1.11 | 0.48 | 0.07 | 0.08 |
+| largest step, BTM | 0.11 | 0.03 | 0.03 | 0.04 | 0.04 | 0.05 | 0.04 | 0.03 |
+| largest difference, engine - BTM | 2.29 | 1.50 | 1.62 | 0.46 | 1.44 | 0.59 | 0.14 | 0.14 |
+| 1.8 m up: largest step, engine | 2.41 | 2.06 | 0.47 | 1.97 | 0.96 | 0.99 | 0.62 | 0.44 |
+| largest step, BTM | 0.04 | 0.03 | 0.04 | 0.04 | 0.04 | 0.04 | 0.05 | 0.11 |
+| largest difference, engine - BTM | 1.96 | 1.45 | 0.92 | 1.89 | 0.97 | 0.89 | 0.58 | 0.50 |
+
+Fading the three edges' terms at each corner as at a screen's corner, in a one-off
+check, halved the largest steps 0.3 m up (1.17 dB at 63 Hz). But it put the level up to
+1.25 dB above BTM at 63 and 125 Hz from y = -4 to 0 m, where stopping is within 0.36 dB.
+A model of such corners is an open item on the [roadmap](roadmap.md).
+
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
 sight, takes 38 ms per source and listener on four cores without diffraction (23

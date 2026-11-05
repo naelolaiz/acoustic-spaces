@@ -1059,7 +1059,7 @@ def test_how_a_barrier_s_edges_fade_at_their_ends() -> None:
 
 def test_a_solid_block_s_edges_stop_at_its_corners(tmp_path: Path) -> None:
     """Three edges of a solid block meet at each corner, where the paths over them stop at
-    the ends as on endless edges (fading them came out up to 1.2 dB above BTM at 63 and
+    the ends as on endless edges (fading them came out up to 1.25 dB above BTM at 63 and
     125 Hz near the corner), and the faces behind a convex corner close none of them."""
     x0, x1, y0, y1, z0, z1 = 0.0, 2.0, -10.0, 0.0, -300.0, 0.0  # open underneath
     quads = [

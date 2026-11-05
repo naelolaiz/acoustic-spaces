@@ -585,7 +585,7 @@ def end_fades(model: TraceModel, edges: Edges) -> tuple[np.ndarray, np.ndarray, 
     # Only the edges of thin screens fade, and at a corner only where every edge they
     # meet there is one: at the corners of solid wedges (a box's, where three edges
     # meet) the halves do not add up as BTM has them (a fade of every edge there came
-    # out up to 1.2 dB above BTM at 63 and 125 Hz near a block's corner), and their
+    # out up to 1.25 dB above BTM at 63 and 125 Hz near a block's corner), and their
     # paths stop at the ends as on an endless edge.
     thin = np.isclose(edges.wedge, 2.0)
     met = np.ones(2 * count, dtype=bool)

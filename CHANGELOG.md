@@ -18,11 +18,12 @@
   barriers** in the editor) takes fewer
   frequencies an octave at 4 and 8 kHz behind barriers, for less time and a weather's
   effect further off there, by as much as `docs/outdoor.md` gives for each.
-- A path over one edge now fades out past a free end of its edge, by the part of its
-  Fresnel zone the edge covers as in BTM, instead of stopping there: past a thin
-  screen's corner the level is within 0.1 dB of the exact solution (it stepped by
+- A path over the edge of a thin screen now fades out past a free end of the edge, by
+  the part of its Fresnel zone the edge covers as in BTM, instead of stopping there:
+  past a screen's corner the level is within 0.1 dB of the exact solution (it stepped by
   2.8 dB), and 10 cm across a barrier end's shadow boundary it steps by 0.42 dB in still
   air (4.5) and, in wind, by 1.0 dB from 63 to 500 Hz (5.0) and 0.82 dB 120 m upwind (27).
+  A solid block's edges still stop at its corners.
 - Fixed: a curved ray's level near where it runs level at the listener, the source, the
   ground, a table's row or the edge of a layer whose speed does not change with height
   came out several dB off, 20 dB and more at worst, and many such rays were missed; the

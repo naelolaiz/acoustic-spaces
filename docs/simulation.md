@@ -313,15 +313,20 @@ screen comes within 1.5 dB of Maekawa's chart in the tests' geometry (the chart,
 empirical one, is itself up to 2.1 dB from the exact solution behind a barrier 40 to 90
 m away).
 
-A path over one edge takes the part of its Fresnel zone that the edge covers, the
-Fresnel integral from each end as in BTM's integral over a finite edge, so near a free
-end its sound fades to half at the end and out past it, over a few widths of the zone,
-instead of stopping there. Where two edges meet at a corner (a screen's top and its
-side) they share the fade, and an end that stands on the ground, or on a face across the
-edge, goes on as its image there. Past the corner of a thin screen the level is within
-0.1 dB of the exact solution and steps as it does, where it stepped by 2.8 dB (see the
-[validation report](validation.md#edge-diffraction-against-the-exact-solution)). Paths
-over two edges (`second_order`) still stop at the ends.
+A path over the edge of a thin screen takes the part of its Fresnel zone that the edge
+covers, the Fresnel integral from each end as in BTM's integral over a finite edge, so
+near a free end its sound fades to half at the end and out past it, over a few widths of
+the zone, instead of stopping there. Where two such edges meet at a corner (a screen's
+top and its side) they share the fade, and an end that stands on the ground, or on a
+face across the edge, goes on as its image there. Past the corner of a thin screen the
+level is within 0.1 dB of the exact solution and steps as it does, where it stepped by
+2.8 dB (see the
+[validation report](validation.md#edge-diffraction-against-the-exact-solution)). The
+edges of solid wedges still stop at their ends: near a block's corners, where three
+meet, the level steps by up to 2.4 dB at 63 Hz and is up to 2.3 dB from the exact
+solution, and fading them as at a screen's corner put it up to 1.25 dB above it before
+the corner, where stopping is within 0.36 dB. Paths over two edges (`second_order`)
+still stop at the ends.
 
 Behind a thick wall or barrier, whose two corners share its top, no edge sees both the
 source and the listener: `first_order` finds nothing there, or only a way round one
