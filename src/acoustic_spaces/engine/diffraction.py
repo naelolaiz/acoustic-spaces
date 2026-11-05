@@ -103,6 +103,21 @@ _ON_BOUNDARY = 1e-9
 #: Below this cosine to a plane's normal (0.6 degrees from grazing) a path is never
 #: culled for missing that plane's faces (see :func:`_reflecting_pairs`).
 _CULL_GRAZING = 0.01
+#: How far past a free end of an edge (:func:`end_fades`) the paths over the edge's
+#: line are followed, as the argument of the Fresnel integral along the edge at the
+#: lowest frequency (:func:`along_edge`); their share tapers to nothing from
+#: FADE_TAPER on.
+FADE_REACH = 3.0
+FADE_TAPER = 2.0
+#: Paths nearer the edge's line in angle than this sine reach no further past its ends
+#: than at this angle.
+_FADE_MIN_SINE = 0.25
+#: An edge goes on in another one at an end within this angle (degrees) of its line,
+#: bends into it within _BEND_DEG and meets it at a corner beyond that; a face whose
+#: normal lies within _CLOSING_DEG of the edge's line closes the end it holds.
+_COLLINEAR_DEG = 1.0
+_BEND_DEG = 45.0
+_CLOSING_DEG = 5.0
 
 
 # -- the transition function --------------------------------------------------------
@@ -301,6 +316,12 @@ class Edges:
     face: np.ndarray  # (E, 2) face 0 and face n
     plane: np.ndarray  # (E, 2) their planes
     reflection: np.ndarray  # (E, 2, bands) specular pressure reflection factors
+    #: (E, 2) how far the paths over each edge fade at its start and end, (E, 2, 2) the
+    #: edge it meets at a corner there in the plane of face 0 and of face n, or -1, and
+    #: (E, 2) whether a face across it closes the end (end_fades)
+    fade: np.ndarray | None = None
+    corner: np.ndarray | None = None
+    closed: np.ndarray | None = None
 
     def __len__(self) -> int:
         return len(self.length)
@@ -410,7 +431,9 @@ def find_edges(model: TraceModel, min_bend_deg: float = MIN_BEND_DEG) -> Edges:
     p0, p1, e, along, normal, wedge, face0, face1 = (
         np.concatenate([part[i][part[8]] for part in parts]) for i in range(8)
     )
-    return _join(model, p0, p1, e, along, normal, wedge, face0, face1)
+    edges = _join(model, p0, p1, e, along, normal, wedge, face0, face1)
+    edges.fade, edges.corner, edges.closed = end_fades(model, edges)
+    return edges
 
 
 def _outdoors(model: TraceModel, part) -> np.ndarray:
@@ -501,6 +524,193 @@ def _join(model, p0, p1, e, along, normal, wedge, face0, face1) -> Edges:
     )
 
 
+def end_fades(model: TraceModel, edges: Edges) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(E, 2) how far the paths over each edge fade at its start and at its end
+    (:func:`along_edge`), (E, 2, 2) the edge each meets at a corner there in the plane of
+    its face 0 and of its face n, or -1, and (E, 2) whether a face across the edge closes
+    the end, where the edge goes on as its image.
+
+    A path over an edge comes from the stretch of it round the point it touches, about a
+    Fresnel zone long; near an end only part of that stretch is there. An end the edge
+    goes on from, in a collinear edge or as its own image in a face across it (the
+    ground under a barrier's end, the wall a balcony front ends at), cuts nothing off:
+    0, the paths stop there as on an endless edge. At a corner, where another edge meets
+    it at more than 45 degrees, the paths fade halfway (1/2): past the end of one edge
+    the point a path touches reaches the other, and the two halves add up as the edges
+    of a screen's corner do in the Kirchhoff approximation. Elsewhere (a free end, or
+    one another edge goes on from round a slight bend) they fade all the way (1).
+    """
+    from scipy.spatial import cKDTree
+
+    count = len(edges)
+    neighbour = np.full((2 * count, 2), -1, dtype=np.int64)
+    if count == 0:
+        return np.ones((0, 2)), neighbour.reshape(0, 2, 2), np.zeros((0, 2), dtype=bool)
+    size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
+    tol = 1e-6 * size
+    points = np.concatenate([edges.start, edges.end])  # the starts, then the ends
+    outward = np.concatenate([-edges.direction, edges.direction])
+    which = np.concatenate([np.arange(count), np.arange(count)])
+    collinear = np.zeros(2 * count, dtype=bool)
+    bend = np.zeros(2 * count, dtype=bool)
+    corner = np.zeros(2 * count, dtype=bool)
+    pairs = cKDTree(points).query_pairs(tol, output_type="ndarray")
+    if len(pairs):
+        a, b = pairs[:, 0], pairs[:, 1]
+        other = which[a] != which[b]
+        a, b = a[other], b[other]
+        # The cosine of the turn from one edge into the other at their common end.
+        turn = -np.einsum("ij,ij->i", outward[a], outward[b])
+        straight = turn >= math.cos(math.radians(_COLLINEAR_DEG))
+        slight = ~straight & (turn >= math.cos(math.radians(_BEND_DEG)))
+        sharp = (turn < math.cos(math.radians(_BEND_DEG))) & (
+            turn > -math.cos(math.radians(_COLLINEAR_DEG))
+        )
+        for flags, mask in ((collinear, straight), (bend, slight), (corner, sharp)):
+            np.logical_or.at(flags, a, mask)
+            np.logical_or.at(flags, b, mask)
+        # The edge met at a corner in the plane of each face: one with a face there too.
+        for one, two in ((a[sharp], b[sharp]), (b[sharp], a[sharp])):
+            for side in (0, 1):
+                plane = edges.plane[which[one], side]
+                shared = (edges.plane[which[two], 0] == plane) | (
+                    edges.plane[which[two], 1] == plane
+                )
+                neighbour[one[shared], side] = which[two[shared]]
+    closed = _closed_ends(model, points, outward, tol)
+    fade = np.where(collinear | closed, 0.0, np.where(bend, 1.0, np.where(corner, 0.5, 1.0)))
+    neighbour[fade != 0.5] = -1
+    return (
+        fade.reshape(2, count).T.copy(),
+        neighbour.reshape(2, count, 2).transpose(1, 0, 2).copy(),
+        (closed & ~collinear).reshape(2, count).T.copy(),
+    )
+
+
+def _closed_ends(model: TraceModel, points, outward, tol) -> np.ndarray:
+    """Whether each end (``points``, the edge leaving it against ``outward``) lies on a
+    face across the edge's line that reflects towards the edge, where the edge goes on
+    as its image: the ground or a solid face."""
+    closing = math.cos(math.radians(_CLOSING_DEG))
+    into = -outward  # along the edge, away from its end
+    closed = np.zeros(len(points), dtype=bool)
+    if model.ground is not None:
+        layout = model.room.outdoor
+        if layout is not None and layout.terrain is not None:
+            grounded = points[:, 2] <= layout.ground_at(points) + ON_GROUND_M
+        else:
+            grounded = on_ground(points, model.ground)
+        closed |= grounded & (into[:, 2] >= closing)
+    mesh = model.room.mesh
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    solid = np.flatnonzero(~model.transparent)
+    planes = model.face_plane[solid]
+    order = np.argsort(planes, kind="stable")
+    ranked = planes[order]
+    normal, offset = model.plane_normal, model.plane_offset
+    for begin in range(0, len(points), 512):
+        rows = np.arange(begin, min(begin + 512, len(points)))
+        along = points[rows] @ normal.T - offset[None, :]
+        across = np.abs(into[rows] @ normal.T) >= closing
+        hit_rows, hit_planes = np.nonzero(across & (np.abs(along) <= tol))
+        for row, plane in zip(rows[hit_rows], hit_planes, strict=True):
+            if closed[row]:
+                continue
+            # The face must reflect towards the edge (its front, or either side).
+            if model.oriented and not model.plane_two_sided[plane]:
+                if float(normal[plane] @ into[row]) <= 0.0:
+                    continue
+            lo, hi = np.searchsorted(ranked, [plane, plane + 1])
+            faces = solid[order[lo:hi]]
+            if len(faces) and _on_triangles(points[row], vertices[mesh.faces[faces]], tol):
+                closed[row] = True
+    return closed
+
+
+def _on_triangles(point: np.ndarray, triangles: np.ndarray, tol: float) -> bool:
+    """Whether ``point``, in the triangles' plane, lies on any of ``triangles`` (T, 3,
+    3), their edges included."""
+    a, b, c = triangles[:, 0], triangles[:, 1], triangles[:, 2]
+    v0, v1, v2 = b - a, c - a, point[None, :] - a
+    d00 = np.einsum("ij,ij->i", v0, v0)
+    d01 = np.einsum("ij,ij->i", v0, v1)
+    d11 = np.einsum("ij,ij->i", v1, v1)
+    d20 = np.einsum("ij,ij->i", v2, v0)
+    d21 = np.einsum("ij,ij->i", v2, v1)
+    denominator = d00 * d11 - d01**2
+    ok = denominator > 0.0
+    with np.errstate(divide="ignore", invalid="ignore"):
+        v = (d11 * d20 - d01 * d21) / denominator
+        w = (d00 * d21 - d01 * d20) / denominator
+    scale = np.sqrt(np.maximum(d00, d11))
+    eps = tol / np.maximum(scale, 1e-300)
+    return bool(np.any(ok & (v >= -eps) & (w >= -eps) & (v + w <= 1.0 + eps)))
+
+
+def _fade_reach(r1, r2, sin_beta, k_min: float) -> np.ndarray:
+    """How far (m) past a fading end of an edge a path touching its line at distances
+    ``r1`` and ``r2`` from the source and listener sides, at ``sin_beta`` to it, is
+    followed: FADE_REACH over the Fresnel integral's argument per metre at ``k_min``."""
+    spread = np.sqrt(np.pi * r1 * r2 / ((r1 + r2) * k_min))
+    return FADE_REACH * spread / np.maximum(sin_beta, _FADE_MIN_SINE)
+
+
+def along_edge(t_k, length, scale, fade, reach, inside=None, closed=None) -> np.ndarray:
+    """(C, W, B, M) the share of each path over an edge that the edge, from 0 to
+    ``length`` (C,) along its line, gives the path touching the line at ``t_k`` (C,):
+    the Fresnel integral of the path's phase along the edge over that along the whole
+    line, ``scale`` (C, B, M) being the integral's argument per metre along it
+    (sin^2 beta sqrt(k / (pi L))). Each end counts by its ``fade`` (C, 2 or C, W, 2,
+    :func:`end_fades`) as that integral, and by the rest as a hard stop where ``inside``
+    (C, W, 2, for each of W waves and each end) turns false: by default (W = 1, and then
+    (C, B, M)) where the point leaves the edge. A free end gives 1/2, the share 1 well
+    inside and 0 well past it. Within ``reach`` (C, :func:`_fade_reach`) of an end it
+    tapers, from FADE_TAPER on, to 1 inside the edge and to 0 past it. Where a face
+    closes one end (``closed``, C, 2) the edge goes on as its image in the face, as far
+    as the image of its other end, which fades as that end does."""
+    t_k, length = np.asarray(t_k, float), np.asarray(length, float)
+
+    def cumulative(u):
+        """The integral of exp(-j pi t^2 / 2) from minus infinity to u over its total."""
+        tail_c, tail_s = fresnel_tail(np.abs(u))
+        tail = (tail_c - 1j * tail_s) / (1.0 - 1j)
+        return np.where(u >= 0.0, 1.0 - tail, tail)
+
+    def window(distance):
+        start = FADE_TAPER / FADE_REACH * reach
+        x = np.clip((distance - start) / np.maximum(reach - start, 1e-300), 0.0, 1.0)
+        return (0.5 * (1.0 + np.cos(np.pi * x)))[:, None, None, None]
+
+    before, after = t_k < 0.0, t_k > length
+    squeeze = inside is None
+    if squeeze:
+        inside = np.stack([~before, ~after], axis=-1)[:, None, :]
+    if fade.ndim == 2:
+        fade = fade[:, None, :]
+    w_a, w_b = fade[..., 0, None, None], fade[..., 1, None, None]  # (C, W, 1, 1)
+    # What each end takes off a whole line's 1: its integral's part and its hard stop's.
+    off_a = w_a * cumulative(-t_k[:, None, None] * scale)[:, None]
+    off_a = off_a + (1.0 - w_a) * ~inside[..., 0, None, None]
+    off_b = w_b * (1.0 - cumulative((length - t_k)[:, None, None] * scale))[:, None]
+    off_b = off_b + (1.0 - w_b) * ~inside[..., 1, None, None]
+    on = ~(before | after)
+    out = 1.0 - off_a * np.where(on[:, None, None, None], window(t_k), 1.0)
+    out = out - off_b * np.where(on[:, None, None, None], window(length - t_k), 1.0)
+    if closed is not None:
+        # The image of the far end, beyond the end a face closes.
+        for end, image, far in ((0, -length, w_b), (1, 2.0 * length, w_a)):
+            mirrored = closed[:, end] & on
+            if not mirrored.any():
+                continue
+            u = (image - t_k)[:, None, None] * scale
+            part = cumulative(u) if end == 0 else 1.0 - cumulative(u)
+            off = far * part[:, None] * mirrored[:, None, None, None]
+            out = out - off * window(np.abs(image - t_k))
+    past = np.where(before, -t_k, np.where(after, t_k - length, 0.0))
+    out = out * np.where(on[:, None, None, None], 1.0, window(past))
+    return out[:, 0] if squeeze else out
+
+
 # -- diffracted paths ---------------------------------------------------------------
 
 
@@ -558,6 +768,11 @@ class EdgeDiffraction:
         self.size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
         frequencies, self.slice_hz = band_frequencies(bands=model.bands)
         self.wavenumber = 2.0 * np.pi * frequencies / self.speed_of_sound  # (B, M)
+        self.k_min = float(self.wavenumber.min())
+        if self.edges.fade is None or self.edges.corner is None or self.edges.closed is None:
+            self.edges.fade, self.edges.corner, self.edges.closed = end_fades(model, self.edges)
+        self.fades, self.corners = self.edges.fade, self.edges.corner
+        self.closed = self.edges.closed
 
         # The source and its images in the planes it faces; the source side of a
         # diffracted path is one of them, the listener side the listener or its image.
@@ -639,9 +854,21 @@ class EdgeDiffraction:
         if len(planes) == 0 or len(row_edge) == 0:
             return np.zeros(0, np.int64), np.zeros(0, np.int64)
         used = np.unique(row_edge)
+        edges = self.edges
+        if np.any(self.fades > 0.0):
+            # Past the ends that fade, as far as any path's fade reaches.
+            half = 0.5 * self.speed_of_sound * max_delay_s
+            reach = _fade_reach(half, half, 0.0, self.k_min)
+            before, after = (np.where(self.fades[:, i] > 0.0, reach, 0.0) for i in (0, 1))
+            edges = dataclasses.replace(
+                edges,
+                start=edges.start - before[:, None] * edges.direction,
+                length=edges.length + before + after,
+            )
+            t_s = t_s + before[row_edge]
         return _reaching_pairs(
             self.model,
-            self.edges,
+            edges,
             self._bounds,
             listener,
             planes,
@@ -770,8 +997,9 @@ class EdgeDiffraction:
         rows = np.flatnonzero(in_l[edge] & (rho_l[edge] > tolerance))
         e = edge[rows]
         kind = np.where(self.source_planes[side[rows]] >= 0, 1, 0)
+        past = (self.fades[e], self.k_min)
         ok, t_k, r1, r2 = _reach(
-            kind, edges.length[e], t_s[rows], rho_s[rows], t_l[e], rho_l[e], c, max_delay_s
+            kind, edges.length[e], t_s[rows], rho_s[rows], t_l[e], rho_l[e], c, max_delay_s, past
         )
         rows, e = rows[ok], e[ok]
         parts = [
@@ -821,6 +1049,7 @@ class EdgeDiffraction:
                     rho_i,
                     c,
                     max_delay_s,
+                    (self.fades[pe], self.k_min),
                 )
                 sel = np.flatnonzero(ok & reach)
                 _, _, phi_i, in_i = edges.frame(pe[sel], images[pp[sel]])
@@ -904,6 +1133,7 @@ class EdgeDiffraction:
             "rho_s": rho_s[sel],
             "phi_s": phi_s[sel],
             "phi_r": phi_r[sel],
+            "t_k": t_k[sel],
         }
 
     def _single(self, listener, paths: EarlyReflections, c: dict, clusters, start: int) -> dict:
@@ -960,6 +1190,26 @@ class EdgeDiffraction:
             * wedge_prefactor(n[:, None, None], k, sin_beta[:, None, None])
             * np.exp(-1j * k * distance[:, None, None])
         )  # (C, B, M)
+        # Near an end that fades, the share of the path the edge gives (along_edge).
+        t_k, length = c["t_k"], edges.length[edge]
+        fades = self.fades[edge]
+        reach = _fade_reach(r1, r2, sin_beta, self.k_min)
+        near = (fades[:, 0] > 0.0) & (t_k < reach)
+        near |= (fades[:, 1] > 0.0) & (length - t_k < reach)
+        if near.any():
+            fading = np.flatnonzero(near)
+            spread = np.sqrt(k / (np.pi * length_param[fading, None, None]))
+            scale = sin_beta[fading, None, None] ** 2 * spread
+            fade, inside = self._inside(c, fading)
+            shares = along_edge(
+                t_k[fading],
+                length[fading],
+                scale,
+                fade,
+                reach[fading],
+                inside,
+                self.closed[edge[fading]],
+            )
         # The cosine each reflection on the way meets its face at, where its phase is
         # that face's absorption's (EarlyReflections.cosines).
         leg_cosines = np.full((2, len(kind)), np.nan)
@@ -1008,6 +1258,8 @@ class EdgeDiffraction:
         factors = self._face_factors(edge, sin_beta, c["phi_s"])
         waves = _waves(n, c["phi_r"], c["phi_s"], kl, lit, factors)
         waves *= common[:, None]  # (C, 3, B, M): incident, off face 0, off face n
+        if near.any():
+            waves[fading] *= shares
 
         # The waves' terms add up coherently, as one diffracted wave, except in the
         # transition zone round each wave's boundary: there its terms stand in for the
@@ -1015,7 +1267,10 @@ class EdgeDiffraction:
         # term continues its geometric wave by c and is part of the diffracted wave by
         # s = sqrt(1 - c^2) (_continued, :mod:`~acoustic_spaces.engine.clusters`); in
         # the others all of it adds in pressure.
-        counted = lit == (found >= 0)
+        # Near an end that fades, the incident wave's term also counts on the dark side
+        # where the path round the end was found: it fades out past the end, and the end's
+        # own edge takes the path round it (end_fades).
+        counted = (lit == (found >= 0)) | (near[:, None] & ~lit & (found >= 0))
         energy = np.zeros((len(edge), self.wavenumber.shape[0]))
         pressure = (waves * counted[:, :, None, None]).sum(axis=1)
         energy[:, : self.coherent] = np.mean(np.abs(pressure[:, : self.coherent]) ** 2, axis=2)
@@ -1345,6 +1600,8 @@ class EdgeDiffraction:
             return (np.asarray(edge) * 4 + kind) * planes + np.asarray(through) + 1
 
         known = key(c["edge"], c["kind"], c["plane"])
+        # Not the paths past the ends of their edges, which only fade out there.
+        known = np.where((c["t_k"] < 0.0) | (c["t_k"] > self.edges.length[c["edge"]]), -1, known)
         order = np.argsort(known)
         ranked = known[order]
 
@@ -1416,6 +1673,59 @@ class EdgeDiffraction:
             spectrum=None if spectrum is None else spectrum[idx],
             cosines=[] if spectrum is None else [found["cosines"](i) for i in idx],
         ), idx
+
+    def _inside(self, c: dict, rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """For paths ``rows`` of ``c``, (R, 3, 2) how far each wave (the incident wave and
+        the reflections off face 0 and face n) fades at the edge's start and its end and
+        whether it lies inside them, for the hard part of the fade (:func:`along_edge`).
+
+        At a corner, where the wave's line (from the source side, mirrored in the face for
+        a reflection, to the listener side) passes through the plane of the face the two
+        edges share, the face cuts the wave off at both of them: the wave lies inside
+        where it passes on this edge's side of the other edge, whose own term round the
+        end then appears or goes, and the two halves of their fades add up as the edges
+        of a screen's corner do in the Kirchhoff approximation. Where the line does not
+        pass through the face's plane, nothing cuts the wave off there and its term fades
+        all the way. Elsewhere the wave lies inside where the point the path touches
+        lies on the edge."""
+        model, edges = self.model, self.edges
+        edge = c["edge"][rows]
+        t_k, length = c["t_k"][rows], edges.length[edge]
+        fade = np.repeat(self.fades[edge][:, None, :], 3, axis=1)
+        inside = np.empty((len(rows), 3, 2), dtype=bool)
+        inside[:, :, 0] = (t_k >= 0.0)[:, None]
+        inside[:, :, 1] = (t_k <= length)[:, None]
+        source, listener = c["source_side"][rows], c["listener_side"][rows]
+        seen = np.where(c["phi_s"][rows] < np.pi, 0, 1)  # the face the source side sees
+        for end in (0, 1):
+            corner = np.isclose(self.fades[edge, end], 0.5)
+            if not corner.any():
+                continue
+            point = edges.start[edge] if end == 0 else edges.end[edge]
+            into = edges.direction[edge] if end == 0 else -edges.direction[edge]
+            for wave, side in ((0, seen), (1, np.zeros_like(seen)), (2, np.ones_like(seen))):
+                other = self.corners[edge, end, side]
+                use = np.flatnonzero(corner & (other >= 0))
+                if not len(use):
+                    continue
+                plane = edges.plane[edge[use], side[use]]
+                start = source[use] if wave == 0 else model.mirror(source[use], plane)
+                normal, offset = model.plane_normal[plane], model.plane_offset[plane]
+                line = listener[use] - start
+                across = np.einsum("ij,ij->i", normal, line)
+                ahead = offset - np.einsum("ij,ij->i", normal, start)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    at = ahead / across
+                through = (np.abs(across) > 0.0) & (at > 0.0) & (at < 1.0)
+                fade[use[~through], wave, end] = 1.0
+                use, at = use[through], at[through]
+                crossing = start[through] + at[:, None] * line[through]
+                # Across the other edge's line, in the plane, towards this edge.
+                along = edges.direction[other[use]]
+                towards = into[use] - np.einsum("ij,ij->i", into[use], along)[:, None] * along
+                side_of = np.einsum("ij,ij->i", crossing - point[use], towards)
+                inside[use, wave, end] = side_of >= 0.0
+        return fade, inside
 
     def _specular(self, listener: np.ndarray, paths: EarlyReflections, c: dict):
         """(C, 3) index in ``paths`` of the specular path of each term's wave (the
@@ -1792,11 +2102,13 @@ def _reaching_pairs(
     return np.asarray(rows, np.int64), np.asarray(cols, np.int64)
 
 
-def _reach(kind, length, t_s, rho_s, t_r, rho_r, speed_of_sound, max_delay_s):
+def _reach(kind, length, t_s, rho_s, t_r, rho_r, speed_of_sound, max_delay_s, past=None):
     """Where along the edge a path from a source side at ``t_s``, ``rho_s`` to a listener
     side at ``t_r``, ``rho_r`` makes equal angles with it on both sides, the lengths on
     either side, and whether that point lies on the edge and the path ends by
-    ``max_delay_s``."""
+    ``max_delay_s``. With ``past`` (the fades of the edges' ends, (n, 2), and the lowest
+    wave number), the point may also lie past an end that fades, within the reach of
+    its fade (:func:`_fade_reach`)."""
     t_k = t_s + (t_r - t_s) * rho_s / (rho_s + rho_r)
     r1 = np.hypot(rho_s, t_k - t_s)
     r2 = np.hypot(rho_r, t_r - t_k)
@@ -1805,6 +2117,11 @@ def _reach(kind, length, t_s, rho_s, t_r, rho_r, speed_of_sound, max_delay_s):
     # the start of the edge, only the second at its end.
     ok = np.where(kind == 2, (t_k > 0.0) & (t_k <= length), (t_k >= 0.0) & (t_k < length))
     ok &= (kind != 3) | ((t_k > 0.0) & (t_k < length))  # at an end, one of those two
+    if past is not None:
+        fade, k_min = past
+        reach = _fade_reach(r1, r2, rho_s / np.maximum(r1, 1e-300), k_min)
+        ok |= (fade[:, 0] > 0.0) & (t_k < 0.0) & (t_k >= -reach)
+        ok |= (fade[:, 1] > 0.0) & (t_k > length) & (t_k <= length + reach)
     ok &= (r1 + r2) / speed_of_sound <= max_delay_s
     return ok, t_k, r1, r2
 
