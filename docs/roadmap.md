@@ -115,11 +115,11 @@ Edge diffraction:
   0.57 dB at 63 Hz where they go from hitting the jamb's end face to its far face, a
   face of the end's other corner. This and the fade's other known issues are listed in
   [Validation](validation.md#known-issues-of-the-edge-fade).
-- [ ] Terms at the corners of edges, which the UTD has none for: each term weighted by the
-  part of its Fresnel zone that the edge covers, as BTM's integral over a finite edge
-  has it, and kept where its path appears round the edge's end. Past a thin screen's
-  corner the edge diffraction steps by 2.8 dB at 63 Hz, and along the `street` the
-  level by up to 1.42 dB in a band (0.55 dB(A)).
+- [x] Paths over one edge weighted by the part of their Fresnel zone that the edge
+  covers, as BTM's integral over a finite edge has it, and kept past its free ends:
+  past a thin screen's corner within 0.1 dB of BTM, where they stepped by 2.8 dB.
+- [ ] The same for the edge fade's terms and for paths over two edges, which still stop
+  at the ends of their edges (see [Known issues](validation.md#known-issues-of-the-edge-fade)).
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
@@ -284,8 +284,10 @@ Outdoor acoustics, in steps:
   too. Still air is as before.
 - [ ] Barriers in wind, next: the barrier's own wind; the sound the eddies scatter over
   a barrier's top into its shadow; a blend of the barrier's and the
-  open ground's effects across a barrier's end, where the level steps; the paths round
-  ends checked against a reference in three dimensions; a building's rigid roof in the
+  open ground's effects across the line of a barrier's end below the line of sight, and
+  the open ground's refraction for the paths round an end above its equation's bands,
+  where the level steps across the end by up to 20 dB; the paths round ends checked
+  against a reference in three dimensions; a building's rigid roof in the
   wide-angle equation (the effect steps by 0.6 dB at 2 kHz where the points cross the
   steep angle behind one in 10 m/s); the wide-angle equation behind barriers upwind in strong wind, where the narrow-angle one comes out low; the sound
   going back and forth between two barriers, which a one-way equation leaves out; and

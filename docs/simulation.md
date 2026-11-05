@@ -313,6 +313,16 @@ screen comes within 1.5 dB of Maekawa's chart in the tests' geometry (the chart,
 empirical one, is itself up to 2.1 dB from the exact solution behind a barrier 40 to 90
 m away).
 
+A path over one edge takes the part of its Fresnel zone that the edge covers, the
+Fresnel integral from each end as in BTM's integral over a finite edge, so near a free
+end its sound fades to half at the end and out past it, over a few widths of the zone,
+instead of stopping there. Where two edges meet at a corner (a screen's top and its
+side) they share the fade, and an end that stands on the ground, or on a face across the
+edge, goes on as its image there. Past the corner of a thin screen the level is within
+0.1 dB of the exact solution and steps as it does, where it stepped by 2.8 dB (see the
+[validation report](validation.md#edge-diffraction-against-the-exact-solution)). Paths
+over two edges (`second_order`) still stop at the ends.
+
 Behind a thick wall or barrier, whose two corners share its top, no edge sees both the
 source and the listener: `first_order` finds nothing there, or only a way round one
 corner of a doorway. `second_order` follows the shortest path over each pair of edges
