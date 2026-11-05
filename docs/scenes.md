@@ -278,7 +278,8 @@ edges (`not_counted`), each with the largest difference of the level from the ex
 solution that [Validation](validation.md#edge-diffraction-against-the-exact-solution)
 finds in each band, as the band adds its paths in pressure or in energy: over one edge,
 over two (`second_order`), a path reflected on both sides of an edge left out
-(`one_side`), and where a path reaches an edge's end. They are not drawn, as they are
+(`one_side`), and where a path reaches an edge's end (a solid block's corners; a thin
+screen's edges fade out past their ends). They are not drawn, as they are
 measured for whole levels in a few geometries, not for each path.
 `acoustic-spaces simulate` does this itself when a material on the surfaces has an
 uncertainty: it prints the largest combined standard uncertainty in JNDs from 125 Hz to

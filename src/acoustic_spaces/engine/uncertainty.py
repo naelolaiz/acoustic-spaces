@@ -79,10 +79,12 @@ EDGE_ERRORS_DB = {
         "pressure": (9.85, 6.96, 3.83, 5.66, 5.54, 5.18, 5.08, 5.40),
         "energy": (1.86, 1.26, 0.74, 0.44, 0.30, 0.29, 0.23, 0.13),
     },
-    # Where a path's point on an edge leaves the edge's end, as the UTD has no terms for
-    # the corners of edges: at a thin screen's corner, with direct.
+    # Where a path's point on an edge reaches the edge's end, with direct: a thin
+    # screen's edges fade out past their free ends, within 0.10 dB of BTM at a screen's
+    # corner, but the edges of a solid block stop at its corners, as the UTD has no terms
+    # for the corners of edges.
     "corners of edges": {
-        "pressure": (1.83, 0.99, 1.06, 0.41, 0.21, 0.22, 0.05, 0.08),
+        "pressure": (2.29, 1.50, 1.62, 1.89, 1.44, 0.89, 0.58, 0.50),
         "energy": (_NOT,) * 8,
     },
 }
