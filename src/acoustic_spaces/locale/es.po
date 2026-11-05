@@ -7258,6 +7258,16 @@ msgstr ""
 "Por la incertidumbre de absorción de los materiales: incertidumbre típica "
 "{u}, {percent} %: entre {low} y {high} ({count} muestras)"
 
+#. Translators: {db} is a number of decibels.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"Not counted: the method's error over edges, which the validation puts at up "
+"to {db} dB in this band's level"
+msgstr ""
+"No se cuenta: el error del método en las aristas, que la validación sitúa en "
+"hasta {db} dB en el nivel de esta banda"
+
 #. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format

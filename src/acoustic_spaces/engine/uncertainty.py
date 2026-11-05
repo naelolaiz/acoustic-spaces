@@ -19,6 +19,10 @@ each input's standard uncertainty alone.
 Not counted: the scattering's uncertainty, nor the method's (docs/validation.md), nor
 the rays' error with fewer than ``MIN_BATCHES`` batches (Student's t has no variance
 then) or in the parameters it is not found for (those from the late sound's directions).
+Of the method's errors, those of the paths over edges are listed where a response has
+such paths (:data:`EDGE_ERRORS_DB`), each with the largest difference of the early level
+from the exact solution that the validation finds in each band, but not drawn: they are
+measured for whole levels in a few geometries, not for each path.
 A draw of the absorption below 0 is taken as 0 and one above ``MAX_ABSORPTION`` as that,
 so near those ends the spread is a little less than the uncertainty gives. The
 re-weighting is exact for the early paths and to second order for the late part
@@ -46,6 +50,42 @@ DEFAULT_DRAWS = 400
 MIN_BATCHES = 4
 #: The parts of a :class:`Spread`.
 PARTS = ("mean", "standard", "low", "high", "absorption", "rays")
+_NOT = math.nan
+#: The method's errors where a response has paths over edges, which the spread lists but
+#: does not draw: for each, the largest difference (dB) of the level from the exact
+#: solution (BTM) that docs/validation.md finds in each octave band from 63 Hz, where the
+#: band adds the paths in pressure and where in energy (NaN: not measured).
+EDGE_ERRORS_DB = {
+    # Over one edge: over a thin screen, at the shadow boundaries of a thin screen, a
+    # right-angled corner and a wedge open over 225 degrees, and the paths that fade at
+    # the edges of a screen's end, a building's corner, a strip and a gap, and over a
+    # barrier with both_sides ("Edge diffraction against the exact solution",
+    # "Reflections that fade at edges against the exact solution"; at 8 kHz not the
+    # strip's 0.19 dB, which is the exact level's own error).
+    "one edge": {
+        "pressure": (0.08, 0.05, 0.03, 0.01, 0.03, 0.05, 0.04, 0.05),
+        "energy": (3.02, 2.65, 2.22, 1.79, 1.38, 1.04, 0.77, 0.56),
+    },
+    # With one_side, behind a barrier on a reflecting ground: the path reflected off the
+    # ground before the top and after it is left out.
+    "one side": {
+        "pressure": (2.20, 2.98, 2.60, 0.89, 0.80, 0.67, 0.76, 0.73),
+        "energy": (_NOT,) * 8,
+    },
+    # Over two edges (second_order): blocks 0.3 to 3 m wide and two thin screens, and in
+    # pressure a barrier 1 m thick on a reflecting ground, whose paths over both edges
+    # take no reflection off the ground.
+    "two edges": {
+        "pressure": (9.85, 6.96, 3.83, 5.66, 5.54, 5.18, 5.08, 5.40),
+        "energy": (1.86, 1.26, 0.74, 0.44, 0.30, 0.29, 0.23, 0.13),
+    },
+    # Where a path's point on an edge leaves the edge's end, as the UTD has no terms for
+    # the corners of edges: at a thin screen's corner, with direct.
+    "corners of edges": {
+        "pressure": (1.83, 0.99, 1.06, 0.41, 0.21, 0.22, 0.05, 0.08),
+        "energy": (_NOT,) * 8,
+    },
+}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -56,7 +96,9 @@ class Spread:
     and the budget, ``absorption`` and ``rays``, the standard uncertainty from the
     materials' absorption alone and from the rays' random error alone (NaN where it is
     not counted; from ``batches`` batches, 0 for none). NaN where a parameter is
-    undefined in some draw."""
+    undefined in some draw. ``not_counted``: the method's errors over edges that the
+    response has (:data:`EDGE_ERRORS_DB`), each the largest difference of the level
+    from the exact solution in each band (dB; NaN where not measured)."""
 
     mean: RoomParameters
     standard: RoomParameters
@@ -67,6 +109,7 @@ class Spread:
     coverage: float
     draws: int
     batches: int
+    not_counted: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
 
     def as_dict(self) -> dict:
         """Plain values, with None for undefined ones (JSON friendly)."""
@@ -75,6 +118,10 @@ class Spread:
             "coverage": self.coverage,
             "batches": self.batches,
             **{part: getattr(self, part).as_dict() for part in PARTS},
+            "not_counted": {
+                name: [float(v) if math.isfinite(v) else None for v in bound]
+                for name, bound in self.not_counted.items()
+            },
         }
 
 
@@ -136,7 +183,36 @@ def material_spread(
         ]
         batches = len(response.late_batches) if rays else 0
         errors = response.standard_errors() if batches >= MIN_BATCHES else None
-        out[key] = _spread(found, coverage, errors, 0 if errors is None else batches, rng)
+        spread = _spread(found, coverage, errors, 0 if errors is None else batches, rng)
+        out[key] = dataclasses.replace(spread, not_counted=edge_errors(response, scene))
+    return out
+
+
+def edge_errors(response, scene) -> dict[str, np.ndarray]:
+    """{name: (bands,) dB} the method's errors over edges (:data:`EDGE_ERRORS_DB`) that
+    ``response`` (of ``scene``) has, in each band as the band adds its early paths: none
+    without paths over an edge; over two edges with ``second_order``, and with a path
+    reflected on both sides of an edge left out with ``one_side``."""
+    early = response.early
+    if early.edge is None or not np.any(early.edge >= 0):
+        return {}
+    bands = early.energy.shape[1]
+    if bands != len(EDGE_ERRORS_DB["one edge"]["pressure"]):
+        return {}  # measured in octave bands only
+    coherent = 0 if early.spectrum is None else early.spectrum.shape[1]
+    settings = scene.simulation.early
+    names = ["one edge"]
+    if settings.diffraction != "direct" and settings.diffraction_reflections == "one_side":
+        names.append("one side")
+    if settings.diffraction == "second_order":
+        names.append("two edges")
+    names.append("corners of edges")
+    out = {}
+    for name in names:
+        bound = EDGE_ERRORS_DB[name]
+        out[name] = np.array(
+            [bound["pressure"][b] if b < coherent else bound["energy"][b] for b in range(bands)]
+        )
     return out
 
 
@@ -194,10 +270,12 @@ def _spread(
 
 __all__ = [
     "DEFAULT_DRAWS",
+    "EDGE_ERRORS_DB",
     "MAX_ABSORPTION",
     "MIN_BATCHES",
     "Spread",
     "absorption_draws",
+    "edge_errors",
     "material_spread",
     "with_spread",
 ]

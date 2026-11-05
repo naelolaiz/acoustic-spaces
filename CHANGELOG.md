@@ -10,6 +10,8 @@
 - Added: the rays' random error joins the absorption's in the same Monte Carlo, as
   Student's t from the late batches' standard error, for a combined standard uncertainty
   and coverage interval with the budget of each input (`uncertainty` in `parameters.json`).
+- Added: the spread lists the method's errors over edges that it does not count, where a
+  response has paths over edges, each with the validation's largest error in each band.
 - Fixed: a curved ray's level near where it runs level at the listener, the source, the
   ground, a table's row or the edge of a layer whose speed does not change with height
   came out several dB off, 20 dB and more at worst, and many such rays were missed; the
