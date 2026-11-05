@@ -265,7 +265,9 @@ interval of many draws of the absorption, a Monte Carlo propagation as GUM Suppl
 so the run must be simulated with the materials' face groups
 (`acoustic_spaces.engine.reweight.groups_of`, then `simulate(..., groups=...)`), in
 octave bands, with stochastic ray tracing for the late part and without the wave solver.
-The spread counts the absorption only, not the scattering, the seed or the method.
+The spread counts the absorption only, not the scattering, the seed or the method, and a
+parameter that some draw leaves undefined (a decay too slow for the response's length,
+say) gets none in that band.
 `acoustic-spaces simulate` does this itself when a material on the surfaces has an
 uncertainty: it prints the largest standard uncertainty in JNDs from 125 Hz to 4 kHz,
 with its 95 % interval, and `parameters.json` holds them all (`absorption_spread`; 400

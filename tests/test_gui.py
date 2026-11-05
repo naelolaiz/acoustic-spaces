@@ -3061,11 +3061,13 @@ def test_the_absorption_uncertainty_s_spread_shows_in_the_tips(window, qapp) -> 
     window.run_simulation()
     _wait(qapp, lambda: window.job is None)
     spread = window.result.spreads[("source", "listener")]
-    # The clarity is defined in every draw (a decay time need not be: a draw with the
-    # plaster near 0 can decay too slowly for the response).
-    assert spread.draws == 400 and np.isfinite(spread.standard.c80[3])
+    # At 125 Hz the plaster absorbs 0.15, and every draw decays far enough in the 1 s
+    # response; from 1 kHz, where it absorbs 0.04, the draws near 0 do not, and those
+    # bands get no spread.
+    assert spread.draws == 400 and np.isfinite(spread.standard.c80[1])
+    assert np.isnan(spread.standard.c80[4])
     rows = [name for name, _label, _template in ROWS]
-    tip = window.results.table.item(rows.index("c80"), 3).toolTip()
+    tip = window.results.table.item(rows.index("c80"), 1).toolTip()
     assert "From the materials' absorption uncertainty: standard uncertainty" in tip
     assert "95 % within" in tip and "(400 draws)" in tip
 
