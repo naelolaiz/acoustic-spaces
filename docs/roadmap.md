@@ -283,6 +283,24 @@ Outdoor acoustics, in steps:
   40 dB of free field, where the narrow-angle one strays by 3 to 20 dB; in the weather
   presets within 0.04 dB on average (the narrow-angle one 0.11). Three to four times
   the work; without it nothing changes.
+- [x] O22 Barriers and buildings in wind: behind them the paths in the vertical plane
+  through the source and the listener take the weather's effect from the parabolic
+  equation run in every band with the barriers and buildings inside, checked against a
+  full-wave solution and a parabolic equation started from a rigid barrier's exact
+  field (`validation/barrier_wind.py`); the paths round a barrier's end or a building's
+  corner take the open ground's effect along their own way, for listeners in the open
+  too. Still air is as before.
+- [ ] Barriers in wind, next: the barrier's own wind; the sound the eddies scatter over
+  a barrier's top into its shadow; a blend of the barrier's and the
+  open ground's effects across a barrier's end, where the level steps; the paths round
+  ends checked against a reference in three dimensions; a building's rigid roof in the
+  wide-angle equation (the effect steps by 0.6 dB at 2 kHz where the points cross the
+  steep angle behind one in 10 m/s); the wide-angle equation behind barriers upwind in strong wind, where the narrow-angle one comes out low; the sound
+  going back and forth between two barriers, which a one-way equation leaves out; and
+  runs at 4 and 8 kHz, and at steep points, that cost less (see
+  [Known issues](validation.md#known-issues)).
+- [ ] A leg from a ground reflection a rounding error above the ground takes the
+  shadow of one from the ground (see [Known issues](validation.md#known-issues)).
 - [x] The scattered sound of the reflections straight from the source found from each
   listener too, shared with the late rays by how densely each finds it: an aircraft
   overhead no longer brings a listener above grass bursts of it from the few rays that

@@ -75,22 +75,28 @@ def march(
     speed_at=None,
     threads: int = 1,
     independent: bool = False,
+    obstacles=(),
+    steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
     source) and ``heights`` (n,, m above it), from a source at height ``zs``, under the
     effective speed of sound ``speed(z)``: as :func:`acoustic_spaces.engine.parabolic.march`,
-    with the same ``impedance``, ``top``, ``screen``, ``speed_at`` and ``independent``, on
-    ``threads`` threads. The self-starter reaches the first step, or the nearest range
-    if that is nearer; ``independent`` starts each range nearer than a step on its own."""
+    with the same ``impedance``, ``top``, ``screen``, ``speed_at``, ``independent`` and
+    ``obstacles``, on ``threads`` threads, ``steps_per_wavelength`` height steps a
+    wavelength at the highest frequency. The self-starter reaches the first step, or the
+    nearest range or obstacle if that is nearer; ``independent`` starts each range
+    nearer than a step on its own. A building here is two thin screens at its roof's
+    height, its front face and its back face."""
     from acoustic_spaces import _native
+    from acoustic_spaces.engine.parabolic import _obstacles, open_share
 
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
     c0 = float(np.asarray(speed(np.array([0.0])))[0])
     ka = 2.0 * math.pi * f / c0  # (F,)
-    n, dz, thickness = _grid(f, c0, top)
+    n, dz, thickness = _grid(f, c0, top, steps_per_wavelength)
     z = np.arange(n) * dz
     absorbing = 1j * LAYER_STRENGTH * np.clip((z - top) / thickness, 0.0, 1.0) ** 2
     step = RANGE_STEP_WAVELENGTHS * c0 / f.max()
@@ -164,21 +170,38 @@ def march(
         h = heights[index]
         out[:, index] = [np.interp(h, z, row.real) + 1j * np.interp(h, z, row.imag) for row in p]
 
+    # The thin screens in order along the way: a building's front and back faces.
+    cuts = sorted(
+        (at, top_at)
+        for near, far, top_at in _obstacles(obstacles)
+        for at in ((near,) if far == near else (near, far))
+        if at > 1e-9
+    )
+    # The self-starter reaches no further than the first screen.
+    first = cuts[0][0] if cuts else math.inf
     if independent:
-        near = [index for index in order if ranges[index] < step]
+        near = [index for index in order if ranges[index] < min(step, first)]
         for index in near:
             place(index, start(max(float(ranges[index]), 1e-9)), max(float(ranges[index]), 1e-9))
         order = order[len(near) :]
-        r = step
+        r = min(step, first)
     else:
-        r = max(min(step, float(ranges[order[0]])), 1e-9) if len(ranges) else step
+        r = max(min(step, float(ranges[order[0]]), first), 1e-9) if len(ranges) else step
     psi = start(r) if len(order) else None
 
     for index in order:
         goal = ranges[index]
-        while goal - r > 1e-9:
-            dr = min(step, goal - r)
-            if independent and dr < step:
+        while True:
+            if cuts and cuts[0][0] <= r + 1e-9:
+                psi *= open_share(z, cuts.pop(0)[1])[None, :]
+                continue
+            if goal - r <= 1e-9:
+                break
+            # The march stops at each screen on the way, one at the goal included, and at
+            # the goal.
+            screen_first = bool(cuts) and cuts[0][0] <= goal + 1e-9
+            dr = min(step, (cuts[0][0] if screen_first else goal) - r)
+            if independent and dr < step and not screen_first:
                 break
             advance(psi, r, dr)
             r += dr
@@ -280,19 +303,23 @@ def _operators(f, ka, speed, absorbing, zg, dz) -> tuple[np.ndarray, np.ndarray]
     return weights, operator
 
 
-def _grid(f: np.ndarray, c0: float, top: float) -> tuple[int, float, float]:
+def _grid(
+    f: np.ndarray, c0: float, top: float, steps_per_wavelength: float = STEPS_PER_WAVELENGTH
+) -> tuple[int, float, float]:
     """The heights' count and spacing, and the absorbing layer's thickness, for the
     frequencies ``f`` under an absorbing layer from ``top``."""
-    dz = c0 / f.max() / STEPS_PER_WAVELENGTH
+    dz = c0 / f.max() / steps_per_wavelength
     thickness = max(LAYER_WAVELENGTHS * c0 / f.min(), LAYER_MIN_M)
     return int(math.ceil((top + thickness) / dz)) + 1, dz, thickness
 
 
-def footprint(frequencies, c0: float, top: float) -> int:
+def footprint(
+    frequencies, c0: float, top: float, steps_per_wavelength: float = STEPS_PER_WAVELENGTH
+) -> int:
     """About the memory (bytes) :func:`march` takes for ``frequencies`` under an
     absorbing layer from ``top`` in air of speed ``c0`` on the ground."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
-    n = _grid(f, c0, top)[0]
+    n = _grid(f, c0, top, steps_per_wavelength)[0]
     # Two steps' factors and diagonals, the operators and the field.
     return 16 * len(f) * n * (2 * (TERMS + 6) + 8)
 

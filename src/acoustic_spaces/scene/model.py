@@ -2575,6 +2575,16 @@ class EarlyStage(_Model):
             "the work)"
         ),
     )
+    barrier_frequencies: Literal[8, 16, 32] = Field(
+        default=32,
+        description=(
+            "outdoors behind barriers and buildings in wind or temperature gradients, the "
+            "frequencies an octave the parabolic equation with them inside takes at 8 kHz "
+            "(at 4 kHz no more than 16, below 4 kHz always 8): fewer take less time and "
+            "leave the weather's effect there further off (against 64, at 8 kHz up to 0.5 dB "
+            "with 32, 6.4 dB with 16 and 14 dB with 8; docs/outdoor.md gives each)"
+        ),
+    )
     coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(
         default=125,
         description=(

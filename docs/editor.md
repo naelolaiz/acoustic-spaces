@@ -253,7 +253,8 @@ the temperature over the ground and their **Eddies** (see
 or a [weather class](outdoor.md#levels-over-a-long-term)'s (**Add weather class**),
 each class with its share of the time in each period of the day. A material's page has
 a **Ground impedance** group, to make the material a ground. The **Simulation** entry
-adds the **Parabolic equation** (narrow-angle or wide-angle) and, with buildings,
+adds the **Parabolic equation** (narrow-angle or wide-angle), **Frequencies behind
+barriers** (each choice with its largest error at 8 kHz) and, with buildings,
 barriers or vegetation, an **Insertion loss** list: ticking one runs the scene again
 without it (see [Results outdoors](outdoor.md#results-outdoors)). **Draw room**
 replaces an outdoor scene with a floor plan, after asking.

@@ -5156,6 +5156,31 @@ msgstr ""
 "pronunciados a lo largo de kilómetros; varias veces más trabajo)"
 
 #: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count}, off by up to {error:g} dB at 8 kHz"
+msgstr "{count}, con un error de hasta {error:g} dB a 8 kHz"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors behind barriers and buildings in wind or temperature gradients, the "
+"frequencies an octave the parabolic equation takes at 8 kHz (at 4 kHz no "
+"more than 16, below 4 kHz always 8). Fewer take less time and leave the "
+"weather's effect there further off. Against 64, in the validation cases, it "
+"is off by up to 0.51 dB at 8 kHz with 32; 6.4 dB with 16; 9.6 dB at 4 kHz "
+"and 14 dB at 8 kHz with 8. A coverage map behind two barriers took 12, 7.7 "
+"and 4.5 times as long as with straight legs. This comes on top of the "
+"parabolic equation's own error"
+msgstr ""
+"Al aire libre, tras barreras y edificios con viento o gradientes de "
+"temperatura, las frecuencias por octava que toma la ecuación parabólica a 8 "
+"kHz (a 4 kHz no más de 16, por debajo de 4 kHz siempre 8). Menos tardan "
+"menos y dejan más lejos el efecto del tiempo atmosférico allí. Frente a 64, "
+"en los casos de validación, el error llega a 0,51 dB a 8 kHz con 32; 6,4 dB "
+"con 16; 9,6 dB a 4 kHz y 14 dB a 8 kHz con 8. Un mapa de cobertura tras dos "
+"barreras tardó 12, 7,7 y 4,5 veces lo que con tramos rectos. Esto se suma al "
+"error propio de la ecuación parabólica"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
@@ -5192,6 +5217,10 @@ msgstr "Reflexiones sobre una arista"
 #: acoustic_spaces/gui/inspector.py
 msgid "Parabolic equation"
 msgstr "Ecuación parabólica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Frequencies behind barriers"
+msgstr "Frecuencias tras barreras"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "In pressure up to"
