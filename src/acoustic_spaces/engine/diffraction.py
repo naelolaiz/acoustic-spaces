@@ -579,8 +579,21 @@ def end_fades(model: TraceModel, edges: Edges) -> tuple[np.ndarray, np.ndarray, 
                     edges.plane[which[two], 1] == plane
                 )
                 neighbour[one[shared], side] = which[two[shared]]
-    closed = _closed_ends(model, points, outward, tol)
+    sides = edges.bisector()
+    closed = _closed_ends(model, points, outward, np.concatenate([sides, sides]), tol)
     fade = np.where(collinear | closed, 0.0, np.where(bend, 1.0, np.where(corner, 0.5, 1.0)))
+    # Only the edges of thin screens fade, and at a corner only where every edge they
+    # meet there is one: at the corners of solid wedges (a box's, where three edges
+    # meet) the halves do not add up as BTM has them (a fade of every edge there came
+    # out up to 1.2 dB above BTM at 63 and 125 Hz near a block's corner), and their
+    # paths stop at the ends as on an endless edge.
+    thin = np.isclose(edges.wedge, 2.0)
+    met = np.ones(2 * count, dtype=bool)
+    if len(pairs):
+        np.logical_and.at(met, a[sharp | slight], thin[which[b[sharp | slight]]])
+        np.logical_and.at(met, b[sharp | slight], thin[which[a[sharp | slight]]])
+    fade = np.where(thin[which] & met, fade, 0.0)
+    closed &= thin[which]
     neighbour[fade != 0.5] = -1
     return (
         fade.reshape(2, count).T.copy(),
@@ -589,10 +602,12 @@ def end_fades(model: TraceModel, edges: Edges) -> tuple[np.ndarray, np.ndarray, 
     )
 
 
-def _closed_ends(model: TraceModel, points, outward, tol) -> np.ndarray:
-    """Whether each end (``points``, the edge leaving it against ``outward``) lies on a
-    face across the edge's line that reflects towards the edge, where the edge goes on
-    as its image: the ground or a solid face."""
+def _closed_ends(model: TraceModel, points, outward, sides, tol) -> np.ndarray:
+    """Whether each end (``points``, the edge leaving it against ``outward``, its open
+    side towards ``sides``) lies on a face across the edge's line that reflects towards
+    the edge, where the edge goes on as its image: the ground or a solid face that goes
+    on from the end into the edge's open side. At a convex corner (of a box) the faces
+    across the edge lie behind it, and the end does not close."""
     closing = math.cos(math.radians(_CLOSING_DEG))
     into = -outward  # along the edge, away from its end
     closed = np.zeros(len(points), dtype=bool)
@@ -624,7 +639,12 @@ def _closed_ends(model: TraceModel, points, outward, tol) -> np.ndarray:
                     continue
             lo, hi = np.searchsorted(ranked, [plane, plane + 1])
             faces = solid[order[lo:hi]]
-            if len(faces) and _on_triangles(points[row], vertices[mesh.faces[faces]], tol):
+            if not len(faces):
+                continue
+            side = sides[row] - float(sides[row] @ normal[plane]) * normal[plane]
+            side /= max(float(np.linalg.norm(side)), 1e-300)
+            beside = points[row] + 100.0 * tol * side
+            if _on_triangles(beside, vertices[mesh.faces[faces]], tol):
                 closed[row] = True
     return closed
 
