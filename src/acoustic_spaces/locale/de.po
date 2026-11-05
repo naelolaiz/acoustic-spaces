@@ -7254,6 +7254,27 @@ msgstr ""
 "anderen Zufallsstartwerten merklich ändern; mehr Strahlen pro Band "
 "verkleinern den Fehler"
 
+#. Translators: {u}, {absorption}, {rays}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"Combined standard uncertainty {u} (the materials' absorption {absorption}, "
+"the rays {rays}), {percent} % within {low} to {high} ({count} draws)"
+msgstr ""
+"Kombinierte Standardunsicherheit {u} (Absorption der Materialien "
+"{absorption}, Strahlen {rays}), {percent} % zwischen {low} und {high} "
+"({count} Ziehungen)"
+
+#. Translators: {u}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"From the materials' absorption uncertainty: standard uncertainty {u}, "
+"{percent} % within {low} to {high} ({count} draws)"
+msgstr ""
+"Aus der Unsicherheit der Absorption der Materialien: Standardunsicherheit "
+"{u}, {percent} % zwischen {low} und {high} ({count} Ziehungen)"
+
 #. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format
@@ -7601,6 +7622,10 @@ msgstr "Die 3D-Ansicht ist hier nicht verfügbar: {reason}"
 #: acoustic_spaces/gui/viewport.py
 msgid "The 3D view needs a display with OpenGL."
 msgstr "Die 3D-Ansicht benötigt eine Anzeige mit OpenGL."
+
+#: acoustic_spaces/gui/worker.py
+msgid "Drawing the spread from the absorption uncertainty…"
+msgstr "Streuung aus der Unsicherheit der Absorption wird gezogen…"
 
 #: acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format

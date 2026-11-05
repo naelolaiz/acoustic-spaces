@@ -18,6 +18,14 @@
   barriers** in the editor) takes fewer
   frequencies an octave at 4 and 8 kHz behind barriers, for less time and a weather's
   effect further off there, by as much as `docs/outdoor.md` gives for each.
+- Added: a material's `uncertainty` (a standard uncertainty or a tolerance of its
+  absorption), and `material_spread`, the Monte Carlo spread (GUM Supplement 1) of each
+  listener's room parameters that it leads to, by re-weighting the traced run;
+  `simulate` prints it and writes it into `parameters.json`, and the editor's results
+  give it in their tips.
+- Added: the rays' random error joins the absorption's in the same Monte Carlo, as
+  Student's t from the late batches' standard error, for a combined standard uncertainty
+  and coverage interval with the budget of each input (`uncertainty` in `parameters.json`).
 - Fixed: a curved ray's level near where it runs level at the listener, the source, the
   ground, a table's row or the edge of a layer whose speed does not change with height
   came out several dB off, 20 dB and more at worst, and many such rays were missed; the

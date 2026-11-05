@@ -16,6 +16,7 @@ import numpy as np
 from PySide6.QtCore import QThread, Signal
 
 from acoustic_spaces.engine.long_term import coverage_map, simulate
+from acoustic_spaces.i18n import _
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene.model import Simulation
 
@@ -44,13 +45,16 @@ class SimulationJob(QThread):
         settings: Simulation | None = None,
         threads: int | None = None,
         groups: np.ndarray | None = None,
+        materials: list[str] | None = None,
     ):
         super().__init__()
         self.room = room
         self.settings = settings
         self.threads = threads
-        #: Face groups to count reflections off (``simulate(groups=...)``).
+        #: Face groups to count reflections off (``simulate(groups=...)``), and the
+        #: materials they are of, for the spread from their absorption uncertainty.
         self.groups = groups
+        self.materials = materials
         self._stop = False
 
     def cancel(self) -> None:
@@ -62,13 +66,20 @@ class SimulationJob(QThread):
         self.progress.emit(message)
 
     def compute(self):
-        return simulate(
+        result = simulate(
             self.room,
             settings=self.settings,
             threads=self.threads,
             progress=self._say,
             groups=self.groups,
         )
+        if self.groups is None or not self.materials:
+            return result
+        from acoustic_spaces.engine.uncertainty import with_spread
+
+        self._say(_("Drawing the spread from the absorption uncertainty…"))
+        seed = (self.settings or self.room.scene.simulation).seed or 0
+        return with_spread(result, self.room.scene, self.groups, self.materials, seed=seed)
 
     def run(self) -> None:
         try:

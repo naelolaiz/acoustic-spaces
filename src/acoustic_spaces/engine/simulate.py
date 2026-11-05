@@ -66,6 +66,11 @@ class SimulationResult:
     #: :func:`~acoustic_spaces.engine.long_term.simulate`): the responses are the scene's
     #: own weather's, this holds each class's run and the levels combined. None otherwise.
     long_term: LongTermLevels | None = None
+    #: The spread of each response's parameters from its materials' absorption
+    #: uncertainty, by (source, listener)
+    #: (:func:`~acoustic_spaces.engine.uncertainty.material_spread`), where it was drawn.
+    #: Empty otherwise.
+    spreads: dict = field(default_factory=dict)
 
     def parameters(self) -> dict[tuple[str, str], RoomParameters]:
         """ISO 3382-1 parameters of every response."""
