@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import itertools
 import math
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -128,6 +130,8 @@ _FEW_FLOATS = 300
 #: other count as the same, and nodes this close to a line as on it: the rounding of
 #: the speeds worked out at the nodes (:attr:`Profile.trend`).
 _ROUNDING_ULPS = 16.0
+#: The eigenray searches a fan of rays keeps (:meth:`Rays.eigenrays`).
+_KEPT_SEARCHES = 256
 
 
 @dataclass(frozen=True)
@@ -526,14 +530,35 @@ class Rays:
         # The rays that run level in the profile's level layers and stretches (see
         # _LEVEL_SHARE).
         self._levels = 1.0 / profile.c[(profile.gradient == 0.0) | (profile.trend == 0.0)]
+        self._searches: OrderedDict = OrderedDict()
+        self._lock = threading.Lock()
 
     def eigenrays(
         self, zr: float, distance: float, max_bounces: int, max_time: float = np.inf
     ) -> Eigenrays:
         """The eigenrays to a listener at height ``zr`` ``distance`` m away horizontally
         (> 0) that bounce off the ground ``max_bounces`` times at most and arrive by
-        ``max_time``."""
-        zr, distance = float(zr), float(distance)
+        ``max_time``. The last ``_KEPT_SEARCHES`` searches are kept: the paths off the
+        open ground, behind a barrier and round its ends often ask the same again. The
+        rays returned are shared, so read-only."""
+        key = (float(zr), float(distance), int(max_bounces), float(max_time))
+        with self._lock:
+            found = self._searches.get(key)
+            if found is not None:
+                self._searches.move_to_end(key)
+                return found
+        found = self._search(*key)
+        for value in vars(found).values():
+            if isinstance(value, np.ndarray):
+                value.flags.writeable = False
+        with self._lock:
+            self._searches[key] = found
+            while len(self._searches) > _KEPT_SEARCHES:
+                self._searches.popitem(last=False)
+        return found
+
+    def _search(self, zr: float, distance: float, max_bounces: int, max_time: float) -> Eigenrays:
+        """:meth:`eigenrays`, searched."""
         fan = self._fan
         heights = _heights(fan, zr)
         kinds = np.array(_KINDS, dtype=bool)
