@@ -262,8 +262,14 @@ def _spread(
             ("rays", rays),
         ):
             parts[part][name] = np.where(defined, value, np.nan)
+    each = {part: RoomParameters(**values) for part, values in parts.items()}
     return Spread(
-        **{part: RoomParameters(**values) for part, values in parts.items()},
+        mean=each["mean"],
+        standard=each["standard"],
+        low=each["low"],
+        high=each["high"],
+        absorption=each["absorption"],
+        rays=each["rays"],
         coverage=coverage,
         draws=len(found),
         batches=batches,
