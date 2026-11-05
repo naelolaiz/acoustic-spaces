@@ -497,3 +497,28 @@ def test_the_frequencies_at_4_and_8_khz_behind_barriers_can_be_fewer(runs, chose
     behind = [run for run in runs if run.get("obstacles")]
     samples = {(float(np.min(run["frequencies"])), len(run["frequencies"])) for run in behind}
     assert [n for _, n in sorted(samples)] == [8] * 6 + counts
+
+
+@pytest.mark.parametrize(
+    "atmosphere",
+    [None, {"preset": "windy", "wind": {"direction_deg": 180}}],
+    ids=["still", "upwind"],
+)
+def test_the_level_changes_smoothly_past_a_barrier_s_end(atmosphere) -> None:
+    """Behind a barrier, 4 cm apart either side of where the direct sound comes round its
+    end: the paths over its top fade out past the end instead of stopping, in still air
+    and upwind, where they take the weather's effect just inside the end."""
+    listeners = [(120.0, -0.02, 1.5), (120.0, 0.02, 1.5)]
+    barrier = {"name": "screen", "path": [[15, -20], [15, 0]], "height": 4}
+    room = Room.from_scene(
+        scene(
+            atmosphere=atmosphere,
+            listeners=listeners,
+            barriers=[barrier],
+            extent=((-60.0, -60.0), (150.0, 60.0)),
+            ir_length_s=0.6,
+        )
+    )
+    result = simulate(room)
+    levels = [10.0 * np.log10(total_energy(result[("s", f"l{k}")].early)) for k in range(2)]
+    assert np.max(np.abs(levels[1] - levels[0])) < 1.0

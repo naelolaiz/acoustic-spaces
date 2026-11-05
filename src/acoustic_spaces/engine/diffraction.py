@@ -118,6 +118,8 @@ _FADE_MIN_SINE = 0.25
 _COLLINEAR_DEG = 1.0
 _BEND_DEG = 45.0
 _CLOSING_DEG = 5.0
+#: An edge this close to vertical (the cosine of its angle to the vertical) is upright.
+_UPRIGHT = 1.0 - 1e-6
 
 
 # -- the transition function --------------------------------------------------------
@@ -1719,6 +1721,14 @@ class EdgeDiffraction:
                 through = (np.abs(across) > 0.0) & (at > 0.0) & (at < 1.0)
                 fade[use[~through], wave, end] = 1.0
                 use, at = use[through], at[through]
+                # Where a vertical edge meets one that is not, the one that is not fades
+                # all the way and the vertical one stops hard: the two still add up, and
+                # each stays continuous where the other's term appears, as paths over a
+                # barrier's top and paths round its end take different weather.
+                upright = np.abs(edges.direction[edge[use], 2]) >= _UPRIGHT
+                beside = np.abs(edges.direction[other[use], 2]) >= _UPRIGHT
+                fade[use[beside & ~upright], wave, end] = 1.0
+                fade[use[upright & ~beside], wave, end] = 0.0
                 crossing = start[through] + at[:, None] * line[through]
                 # Across the other edge's line, in the plane, towards this edge.
                 along = edges.direction[other[use]]
