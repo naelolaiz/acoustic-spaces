@@ -2673,7 +2673,7 @@ class LateStage(_Model):
             "fastest of those on this computer for the response length, as acoustic-spaces tune "
             "or a short trial found; the CPU when unsure). Not set: this computer's "
             "default, cpu unless acoustic-spaces tune made it auto. Sound through "
-            "partitions and material calibration always run on the CPU"
+            "partitions and openings always runs on the CPU"
         ),
     )
 

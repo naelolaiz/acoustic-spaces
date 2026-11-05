@@ -1104,6 +1104,9 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     from acoustic_spaces.results import REPORT_FILE, results_folder, write_results
     from acoustic_spaces.spatial import from_output
 
+    if args.spread_draws is not None and (args.spread_draws < 0 or args.spread_draws == 1):
+        print("error: --spread-draws: 0 (no spread) or 2 or more", file=sys.stderr)
+        return 1
     room = _load_room(args.scene)
     if room is None or not _print_checks(room):
         return 1
@@ -1155,7 +1158,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         from acoustic_spaces.engine import ray_device
 
         ray_device.set_trial(False)
-    groups = _spread_groups(room, settings)
+    groups = None if args.spread_draws == 0 else _spread_groups(room, settings)
     try:
         result = simulate(
             room,
@@ -2898,7 +2901,8 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         metavar="N",
-        help="draws for the spread from the materials' absorption uncertainty (default 400)",
+        help="draws for the spread from the materials' absorption uncertainty (default 400; "
+        "0: no spread)",
     )
     simulate.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     simulate.add_argument(

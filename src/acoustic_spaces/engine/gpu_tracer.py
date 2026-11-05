@@ -5,14 +5,16 @@
 WGSL compute shader on any GPU wgpu reaches (see :mod:`acoustic_spaces.engine.gpu`). It
 traces what the CPU does: detector spheres and diffuse or specular rain, vector-based
 or random scattering, the scattering of a surface's size, air absorption, the early
-stage's paths left out, arrival directions and the weight window that splits rays and
-thins them out; outdoors, the rays bent by the atmosphere, followed in chords as the
-CPU follows them (``cpp/include/acoustic_spaces/atmosphere.hpp``), and the plants that
+stage's paths left out, arrival directions, the weight window that splits rays and
+thins them out, and the face groups that re-weight the absorption (each ray counts its
+reflections off each group, in 16 bits, and the listeners sum the moments of those
+counts); outdoors, the rays bent by the atmosphere, followed in chords as the CPU
+follows them (``cpp/include/acoustic_spaces/atmosphere.hpp``), and the plants that
 absorb and scatter them (``vegetation.hpp``), with the stems' and the foliage's rain. It
 leaves to the CPU (raising :class:`Unsupported`) sound through surfaces into other
-rooms, the face groups of material calibration, runs whose results its buffers cannot
-hold, and vegetation of more than :data:`MAX_MEDIA` media or so many volumes along one
-ray that its fixed tables run out of room.
+rooms, runs whose results its buffers cannot hold, and vegetation of more than
+:data:`MAX_MEDIA` media or so many volumes along one ray that its fixed tables run out
+of room.
 
 Rays start where the CPU's do (``_native.ray_starts``: the same directions and energies
 for the same seed), then go their own way: the GPU draws its random numbers from
@@ -70,8 +72,10 @@ _MAX_GROUPS = 65535
 _MOST_RAYS = 1 << 18
 _SEARCHES = 1 << 23
 _MOST_LEGS = 32
-#: Fixed point: the largest single addition the energy can make is 2**_FRACTION steps.
+#: Fixed point: the largest single addition the energy can make is 2**_FRACTION steps,
+#: and the moments' 2**(_FRACTION - _MOMENT_HEADROOM).
 _FRACTION = 40
+_MOMENT_HEADROOM = 12
 #: A ray starts its next leg this share of the model's size off the face it left (the
 #: CPU's rain starts 1e-7 of it off): enough for single precision.
 _OFFSET = 1e-5
@@ -90,6 +94,8 @@ _CHORD_IN, _CHORD_OUT = 10, 9
 #: volumes along one piece of a ray (more are dropped, and the run declined).
 MAX_MEDIA = 16
 MAX_SPANS = 32
+#: Most face groups whose reflections a ray counts (as the CPU's kMaxGroups).
+MAX_GROUPS = 16
 
 #: The run's settings, one 32-bit word each, in the order of ``Run`` in the shader.
 _FIELDS = (
@@ -151,6 +157,11 @@ _FIELDS = (
     ("wind_x", "f"),
     ("wind_y", "f"),
     ("gather_ratio", "f"),
+    ("group_at", "u"),
+    ("moment_at", "u"),
+    ("moment_bins", "u"),
+    ("moment_step", "f"),
+    ("moment_scale", "f"),
 )
 _TYPES = {"u": "u32", "i": "i32", "f": "f32"}
 
@@ -158,9 +169,16 @@ _SHADER = (
     (
         """
 const BANDS: u32 = __BANDS__u;
+// Face groups whose reflections each ray counts (StochasticScene::face_group), the
+// words a ray keeps those counts in (two of 16 bits to a word), and the moments' terms
+// per listener: 1, each group's count n_i and each product n_i n_j (i <= j). None
+// without groups.
+const GROUPS: u32 = __GROUPS__u;
+const HIT_WORDS: u32 = (GROUPS + 1u) / 2u;
+const TERMS: u32 = __TERMS__u;
 // Words per ray in flight and per ray from the source; words per face, per listener,
 // per vegetation volume and per medium.
-const RECORD: u32 = 20u + 3u * BANDS;
+const RECORD: u32 = 20u + 3u * BANDS + HIT_WORDS;
 const START: u32 = 3u + BANDS;
 const FACE: u32 = 5u + 2u * BANDS;
 const LISTENER: u32 = 6u;
@@ -241,6 +259,8 @@ var<private> energy: array<f32, BANDS>;
 var<private> seen: array<f32, BANDS>;
 var<private> alone: array<f32, BANDS>;
 var<private> counted: array<f32, BANDS>;
+// Reflections so far off each face group (not in Ray, as energy is not).
+var<private> hits: array<u32, __HITS_LEN__>;
 var<private> reflected: array<f32, BANDS>;
 var<private> scattered: array<f32, BANDS>;
 var<private> scatter: array<f32, BANDS>;
@@ -1285,6 +1305,38 @@ fn deposit(k: u32, factor: f32, travel: f32, absorbing: f32, arrival: vec3<f32>)
             add_fixed(drow + 2u * b * run.dir_bins, e);
         }
     }
+    if (TERMS > 0u) {
+        moments(k, factor, absorbing, time);
+    }
+}
+
+// With face groups: adds counted[b] * factor * air(absorbing) at `time` to listener
+// k's moments, times each term of the ray's counts (as the CPU's add, ray_tracer.hpp).
+fn moments(k: u32, factor: f32, absorbing: f32, time: f32) {
+    let mbin = min(run.moment_bins - 1u, u32(max(time, 0.0) / run.moment_step));
+    let mb = run.moment_bins;
+    let row = run.moment_at + 2u * (k * TERMS * BANDS * mb + mbin);
+    for (var b = 0u; b < BANDS; b++) {
+        let e = counted[b] * factor * exp(-num(run.air_at + b) * absorbing) * run.moment_scale;
+        if (!(e > 0.0)) {
+            continue;
+        }
+        add_fixed(row + 2u * b * mb, e);
+        var t = 1u + GROUPS;
+        for (var i = 0u; i < GROUPS; i++) {
+            let n_i = f32(hits[i]);
+            if (n_i > 0.0) {
+                add_fixed(row + 2u * ((1u + i) * BANDS + b) * mb, e * n_i);
+            }
+            for (var j = i; j < GROUPS; j++) {
+                let n_j = f32(hits[j]);
+                if (n_i > 0.0 && n_j > 0.0) {
+                    add_fixed(row + 2u * (t * BANDS + b) * mb, e * n_i * n_j);
+                }
+                t += 1u;
+            }
+        }
+    }
 }
 
 // The detector spheres along a straight piece of the ray: `segment` metres from `from`
@@ -1550,6 +1602,10 @@ fn load(at: u32) {
         seen[b] = bitcast<f32>(states[at + 20u + BANDS + b]);
         alone[b] = bitcast<f32>(states[at + 20u + 2u * BANDS + b]);
     }
+    for (var g = 0u; g < GROUPS; g++) {
+        let word = states[at + 20u + 3u * BANDS + g / 2u];
+        hits[g] = (word >> (16u * (g % 2u))) & 0xffffu;
+    }
 }
 
 fn store(at: u32) {
@@ -1581,6 +1637,13 @@ fn store(at: u32) {
         states[at + 20u + BANDS + b] = bitcast<u32>(seen[b]);
         states[at + 20u + 2u * BANDS + b] = bitcast<u32>(alone[b]);
     }
+    for (var w = 0u; w < HIT_WORDS; w++) {
+        var word = hits[2u * w];
+        if (2u * w + 1u < GROUPS) {
+            word |= hits[2u * w + 1u] << 16u;
+        }
+        states[at + 20u + 3u * BANDS + w] = word;
+    }
 }
 
 // Ray `k` from the source; false if the source sends nothing its way.
@@ -1608,6 +1671,9 @@ fn start(k: u32) -> bool {
     ray_path = 0.0;
     ray.away = vec3<f32>(0.0);
     ray.leaving = 0u;
+    for (var g = 0u; g < GROUPS; g++) {
+        hits[g] = 0u;
+    }
     atomicAdd(&tallies[3], 1u);
     return true;
 }
@@ -1956,6 +2022,12 @@ fn advance(n_in: u32) -> bool {
     ray.away = n;
     ray.leaving = 1u;
     ray.order += 1;
+    if (GROUPS > 0u) {
+        let g = scene[run.group_at + hit.face];
+        if (g < GROUPS) {
+            hits[g] = min(hits[g] + 1u, 0xffffu);
+        }
+    }
     // Straight from the source: the first reflection, of a ray the plants left alone.
     let first = run.gather_ratio > 0.0 && ray.order == 1 && alone[0] > 0.0;
     let sizes = (run.flags & SIZES) != 0u && ray.order >= run.size_from_order;
@@ -2282,22 +2354,41 @@ def _bindings():
     )
 
 
+def moment_terms(groups: int) -> int:
+    """The moments' terms per listener and band for ``groups`` face groups: 1, each
+    group's count and each product of two (as the CPU's ``detail::moment_terms``)."""
+    return 1 + groups + groups * (groups + 1) // 2 if groups > 0 else 0
+
+
+def _record(bands: int, groups: int) -> int:
+    """Words per ray in flight (``RECORD`` in the shader)."""
+    return 20 + 3 * bands + (groups + 1) // 2
+
+
 @functools.lru_cache(maxsize=8)
-def _module(bands: int, features: int):
-    """The shader for rays of ``bands`` bands, with the code for ``features`` (of
-    ``_ATMOSPHERE`` and ``_PLANTS``) only."""
-    code = _SHADER.replace("__BANDS__", str(bands)).replace("__FEATURES__", str(features))
+def _module(bands: int, features: int, groups: int = 0):
+    """The shader for rays of ``bands`` bands that count their reflections off
+    ``groups`` face groups, with the code for ``features`` (of ``_ATMOSPHERE`` and
+    ``_PLANTS``) only."""
+    code = (
+        _SHADER.replace("__BANDS__", str(bands))
+        .replace("__FEATURES__", str(features))
+        .replace("__GROUPS__", str(groups))
+        .replace("__TERMS__", str(moment_terms(groups)))
+        .replace("__HITS_LEN__", str(max(groups, 1)))
+    )
     return gpu._device().create_shader_module(code=code)
 
 
 @functools.lru_cache(maxsize=8)
-def _pipeline(entry: str, bands: int, features: int):
+def _pipeline(entry: str, bands: int, features: int, groups: int = 0):
     """The shader's kernel ``entry`` (the tracer, "main", or the chord test, "chords")
     as :func:`_module` builds it, compiled once per session."""
     device = gpu._device()
     layout = device.create_pipeline_layout(bind_group_layouts=[_bindings()])
     return device.create_compute_pipeline(
-        layout=layout, compute={"module": _module(bands, features), "entry_point": entry}
+        layout=layout,
+        compute={"module": _module(bands, features, groups), "entry_point": entry},
     )
 
 
@@ -2428,14 +2519,20 @@ class GpuTracer:
         chord_sagitta: float = 0.02,
         plants=None,
         gather_ratio: float = 0.0,
+        face_group=None,
+        groups: int = 0,
+        moment_time_step: float = 1e-2,
     ) -> tuple:
         """Traces the rays ``starts`` (directions and the source's energy weights, as
         ``_native.ray_starts`` gives them for the streams from ``first_ray`` on), each
         carrying 1 / ``total`` of the source's energy; the rest as for
         ``_native.trace_stochastic``, with ``bending`` the atmosphere's rows and wind
         direction (see :func:`_atmosphere_rows`) and ``plants`` the vegetation's
-        tables (see :func:`_plant_tables`), or None. Returns (energy, directional,
-        escaped rays, ray_energy, reflections, traced rays)."""
+        tables (see :func:`_plant_tables`), or None. With ``groups`` face groups
+        (``face_group``, the group of each face, -1 for none), each ray counts its
+        reflections off each and the listeners sum the moments of those counts, at
+        ``moment_time_step``. Returns (energy, directional, moments, escaped rays,
+        ray_energy, reflections, traced rays)."""
         wgpu = gpu._wgpu("ray tracing")
         device = self._device
         dirs, weights = (np.asarray(a, float) for a in starts)
@@ -2449,12 +2546,17 @@ class GpuTracer:
         bins = math.ceil(max_time / time_step)
         dir_bins = math.ceil(max_time / dir_time_step)
         windows = math.ceil(max_time / window_time_step)
+        groups = int(groups)
+        terms = moment_terms(groups)
+        moment_bins = math.ceil(max_time / moment_time_step) if terms else 0
         energy_out = np.zeros((n_rec, bands, bins))
         directional_out = np.zeros((n_rec, n_dirs, bands, dir_bins))
+        moments_out = np.zeros((n_rec, terms, bands, moment_bins))
         energies = weights / total
         loudest = float(energies.max(initial=0.0))
         if rays == 0 or loudest <= 0.0:
-            return energy_out, directional_out, 0, np.zeros(windows), np.zeros(windows), 0
+            empty = np.zeros(windows)
+            return energy_out, directional_out, moments_out, 0, empty, empty.copy(), 0
 
         # The scene: source, faces, listeners, directions, air, band centres, targets,
         # the model's box, the atmosphere and the plants.
@@ -2499,14 +2601,20 @@ class GpuTracer:
                 "medium_at": at + len(shapes) + len(corners),
             }
             scene_words += [shapes, corners, media]
+        group_at = sum(len(w) for w in scene_words)
+        if groups:
+            # Each face's group as a word (none, -1, as 0xffffffff).
+            group_words = np.asarray(face_group, np.int64).reshape(self.faces)
+            scene_words.append(np.where(group_words >= 0, group_words, -1).astype(np.uint32))
         scene = np.concatenate(scene_words)
 
-        # The tallies: counters, windows, energy, directional, families.
+        # The tallies: counters, windows, energy, directional, moments, families.
         energy_at = _COUNTERS + _WINDOW * windows
         directional_at = energy_at + 2 * n_rec * bands * bins
-        family_at = directional_at + 2 * n_rec * n_dirs * bands * dir_bins
+        moment_at = directional_at + 2 * n_rec * n_dirs * bands * dir_bins
+        family_at = moment_at + 2 * n_rec * terms * bands * moment_bins
         tally_words = family_at + rays
-        record = 20 + 3 * bands
+        record = _record(bands, groups)
         most = min(_MOST_RAYS, self._limit // (8 * record))
         # Bent rays take many chords, and so many searches, to a leg: fewer at a time.
         chords = 1
@@ -2596,10 +2704,20 @@ class GpuTracer:
             # together for each reflection per ray.
             "window_scale": 2.0**_FRACTION / (loudest * rays),
             "gather_ratio": gather_ratio,
+            "group_at": group_at,
+            "moment_at": moment_at,
+            "moment_bins": moment_bins,
+            "moment_step": moment_time_step,
+            # The moments' terms multiply the energy by up to the square of a ray's
+            # reflections off a group: 2**12 times less per addition than the energy.
+            "moment_scale": 2.0 ** (_FRACTION - _MOMENT_HEADROOM)
+            * math.pi
+            * r_min**2
+            / (1.5 * loudest),
             **in_air,
             **greenery,
         }
-        pipeline = _pipeline("main", bands, settings["flags"] & (_ATMOSPHERE | _PLANTS))
+        pipeline = _pipeline("main", bands, settings["flags"] & (_ATMOSPHERE | _PLANTS), groups)
         halves = (0, most * record)
         kept = spawned = spawn_from = fresh_from = rounds = 0
         counters = np.zeros(_COUNTERS, np.uint32)
@@ -2655,11 +2773,13 @@ class GpuTracer:
         reflections = window[:, 1].astype(np.float64)
         np.divide(read(energy_at, directional_at), settings["scale"], out=energy_out.reshape(-1))
         np.divide(
-            read(directional_at, family_at), settings["scale"], out=directional_out.reshape(-1)
+            read(directional_at, moment_at), settings["scale"], out=directional_out.reshape(-1)
         )
+        np.divide(read(moment_at, family_at), settings["moment_scale"], out=moments_out.reshape(-1))
         return (
             energy_out,
             directional_out,
+            moments_out,
             int(counters[2]),
             ray_energy,
             reflections,
@@ -2793,10 +2913,11 @@ def run_memory(rays: int, bands: int, results: float) -> float:
     the results, the GPU's sums of them and one part of those read back at a time; the
     rays' starts (``_native.ray_starts``), their copies for the GPU and a word per ray
     for its family; and the GPU's rays in flight (at most ``_MOST_RAYS`` of
-    ``20 + 3 * bands`` words, twice). A GPU built into the processor takes its buffers
-    from the computer's memory."""
+    ``20 + 3 * bands`` words and those of the most face groups, twice). A GPU built into
+    the processor takes its buffers from the computer's memory."""
     starts = 8.0 * rays * (3 + bands)
-    return 3.0 * results + 2.5 * starts + 4.0 * rays + 8.0 * _MOST_RAYS * (20 + 3 * bands)
+    record = _record(bands, MAX_GROUPS)
+    return 3.0 * results + 2.5 * starts + 4.0 * rays + 8.0 * _MOST_RAYS * record
 
 
 def trace_stochastic(
@@ -2859,16 +2980,15 @@ def trace_stochastic(
     part of a run's rays here and the rest elsewhere. With ``keep``, the GPU keeps its
     buffer of rays in flight for the next call, until :func:`release`, as a run's late
     part does; without, the call makes and lets go of its own. Raises
-    :class:`Unsupported` for
-    what only the CPU traces: transmission into a room (see :func:`passes_sound`), face
-    groups, and vegetation of more media than :data:`MAX_MEDIA`."""
+    :class:`Unsupported` for what only the CPU traces: transmission into a room (see
+    :func:`passes_sound`) and vegetation of more media than :data:`MAX_MEDIA`."""
     from acoustic_spaces import _native
 
-    del threads, room_level, face_group, moment_time_step
+    del threads, room_level
     if passes_sound(transmission, face_room, source_room):
         raise Unsupported("the GPU tracer does not let sound through surfaces")
-    if groups:
-        raise Unsupported("the GPU tracer does not count reflections per face group")
+    if int(groups) > MAX_GROUPS:
+        raise ValueError(f"at most {MAX_GROUPS} groups of faces, not {int(groups)}")
     gather_ratio = float(gather_ratio)
     if not 0.0 <= gather_ratio < math.inf:
         raise Unsupported("the GPU tracer shares the rain with a gather of finite ratio only")
@@ -2889,7 +3009,7 @@ def trace_stochastic(
     if declined:
         raise Unsupported(declined)
     on_gpu = tracer(bvh)
-    energy, directional, escaped, ray_energy, reflections, traced = on_gpu.trace(
+    return on_gpu.trace(
         keep=keep,
         source=source,
         starts=starts,
@@ -2933,9 +3053,10 @@ def trace_stochastic(
             on_gpu.centre,
         ),
         gather_ratio=gather_ratio,
+        face_group=face_group,
+        groups=int(groups),
+        moment_time_step=float(moment_time_step),
     )
-    moments = np.zeros((len(np.atleast_2d(receivers)), 0, bands, 0))
-    return energy, directional, moments, escaped, ray_energy, reflections, traced
 
 
 __all__ = [

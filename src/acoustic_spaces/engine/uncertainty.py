@@ -63,6 +63,8 @@ ADMITTANCE_NODES = 9
 #: The fewest batches of late rays whose error counts: Student's t with n - 1 degrees of
 #: freedom has a variance from 3 up.
 MIN_BATCHES = 4
+#: How many draws :func:`material_spread` takes between two calls of its ``progress``.
+PROGRESS_DRAWS = 25
 #: The parts of a :class:`Spread`.
 PARTS = ("mean", "standard", "low", "high", "absorption", "rays")
 #: The half-width of the tolerance a built-in material of unknown source takes in every
@@ -70,12 +72,11 @@ PARTS = ("mean", "standard", "low", "high", "absorption", "rays")
 PRESET_TOLERANCE = 0.1
 #: ISO 12999-2:2020 Table 1: the reproducibility standard deviation of an absorption
 #: coefficient measured to ISO 354 in a third-octave band, sigma_R = m alpha_s + n, as
-#: {band (Hz): (m, n)}. An octave band takes the mean of the sigma_R of its third
-#: octaves the table has (the 63 Hz octave those at 63 and 80 Hz), the 8 kHz octave,
-#: past the table's last band, that at 5 kHz.
+#: {band (Hz): (m, n)}, from 100 Hz to 5 kHz as ISO 354 measures. An octave band takes
+#: the mean of the sigma_R of its third octaves the table has; the 63 Hz and 8 kHz
+#: octaves, outside the table, take its nearest band's (100 Hz, 5 kHz), which likely
+#: understates the reproducibility at 63 Hz.
 ISO_12999_2_THIRDS = {
-    63: (0.450, 0.015),
-    80: (0.330, 0.015),
     100: (0.240, 0.015),
     125: (0.180, 0.015),
     160: (0.140, 0.015),
@@ -323,12 +324,15 @@ def material_spread(
     seed: int = 0,
     coverage: float = 0.95,
     rays: bool = True,
+    progress=None,
 ) -> dict:
     """{(source, listener): :class:`Spread`} the spread of ``result``'s parameters that
     the uncertainty of its materials' absorption leads to, with the rays' random error
     (unless ``rays`` is False). ``result`` is ``scene`` simulated with ``face_group`` for
     ``materials`` (:func:`~acoustic_spaces.engine.reweight.groups_of` and
-    ``simulate(groups=...)``)."""
+    ``simulate(groups=...)``). ``progress(message)``, if given, is called before each
+    response's draws and every ``PROGRESS_DRAWS`` draws; an exception it raises (a
+    cancel) stops the spread."""
     if not 0.0 < coverage < 1.0:
         raise ValueError("the coverage probability lies between 0 and 1")
     if not has_uncertainty(scene, materials):
@@ -341,14 +345,21 @@ def material_spread(
     # those of ``seed``.
     rng = np.random.default_rng([seed, 1])
     defaults = assumed(scene, materials)
+    say = progress or (lambda _: None)
     out = {}
-    for key, response in result.responses.items():
-        found = [
-            response.reweighted(
-                face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
-            ).parameters()
-            for ratio, drawn in zip(ratios, taken, strict=True)
-        ]
+    for n, (key, response) in enumerate(result.responses.items(), start=1):
+        found = []
+        for k, (ratio, drawn) in enumerate(zip(ratios, taken, strict=True)):
+            if k % PROGRESS_DRAWS == 0:
+                say(
+                    f"the spread: {key[0]} -> {key[1]} ({n} of {len(result.responses)}), "
+                    f"draw {k + 1} of {draws}"
+                )
+            found.append(
+                response.reweighted(
+                    face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
+                ).parameters()
+            )
         batches = len(response.late_batches) if rays else 0
         errors = response.standard_errors() if batches >= MIN_BATCHES else None
         spread = _spread(found, coverage, errors, 0 if errors is None else batches, rng)
@@ -386,12 +397,23 @@ def edge_errors(response, scene) -> dict[str, np.ndarray]:
     return out
 
 
-def with_spread(result, scene, face_group, materials, draws: int = DEFAULT_DRAWS, seed: int = 0):
-    """``result`` with its ``spreads`` (:func:`material_spread`), or as it is when no
-    material on the surfaces has an absorption uncertainty (:func:`has_uncertainty`)."""
+def with_spread(
+    result,
+    scene,
+    face_group,
+    materials,
+    draws: int = DEFAULT_DRAWS,
+    seed: int = 0,
+    progress=None,
+):
+    """``result`` with its ``spreads`` (:func:`material_spread`, which ``progress`` goes
+    to), or as it is when no material on the surfaces has an absorption uncertainty
+    (:func:`has_uncertainty`)."""
     if not has_uncertainty(scene, materials):
         return result
-    spreads = material_spread(result, scene, face_group, materials, draws=draws, seed=seed)
+    spreads = material_spread(
+        result, scene, face_group, materials, draws=draws, seed=seed, progress=progress
+    )
     return dataclasses.replace(result, spreads=spreads)
 
 

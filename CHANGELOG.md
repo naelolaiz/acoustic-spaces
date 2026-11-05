@@ -42,8 +42,8 @@ the editor's Run.
 - Added: a material's `uncertainty` (a standard uncertainty or a tolerance of its
   absorption), and `material_spread`, the Monte Carlo spread (GUM Supplement 1) of each
   listener's room parameters that it leads to, by re-weighting the traced run;
-  `simulate` prints it and writes it into `parameters.json`, and the editor's results
-  give it in their tips.
+  `simulate` prints it and writes it into `parameters.json` (`--spread-draws`, 400 by
+  default, 0 for none), and the editor's results give it in their tips.
 - Added: the rays' random error joins the absorption's in the same Monte Carlo, as
   Student's t from the late batches' standard error, for a combined standard uncertainty
   and coverage interval with the budget of each input (`uncertainty` in `parameters.json`).
@@ -469,6 +469,11 @@ the editor's Run.
 
 **Speed and memory**
 
+- The GPU traces a late part with face groups too, counting each ray's reflections off
+  each group: the spread from the absorption's uncertainty, which `simulate` draws by
+  default for a scene of built-in materials, the editor's runs and material calibration
+  no longer send the late part to the CPU where `late.device` asks for the GPU. Its
+  moments agree with the CPU's within the noise of the rays.
 - Coverage maps and runs in wind take less time, with the same results bit for bit: the
   parabolic equation's steps make fewer new arrays, and the eigenray searches it repeated
   are kept (on one core, a map of 96 points over grass in 8 m/s takes 14 % less time,
