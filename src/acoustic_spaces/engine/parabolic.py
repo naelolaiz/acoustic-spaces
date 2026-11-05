@@ -271,7 +271,6 @@ def _march(
     kz = 2.0 * math.pi * np.fft.fftfreq(2 * n, d=dz)
     vertical = np.sqrt((ka[:, None] ** 2 - kz[None, :] ** 2).astype(complex))
     vertical = np.where(vertical.imag < 0.0, -vertical, vertical)  # (F, 2n)
-    mirror = (-np.arange(2 * n)) % (2 * n)
     width = 2.0 * math.pi / (2 * n * dz)
 
     order = np.argsort(ranges, kind="stable")
@@ -279,14 +278,18 @@ def _march(
     step = max(RANGE_STEP_WAVELENGTHS * shortest, RANGE_STEP_MIN_M)
     r = 0.0
     tilted = np.zeros((len(f), 2 * n), dtype=complex)
+    clean = True  # whether the upper half of ``tilted`` is all zero
+    mirrored = np.empty_like(tilted)
     steps: dict[float, tuple] = {}
     current = speed
 
     def stepping(dr: float):
-        # The phase screen's half step and the propagator over dr (most steps are full).
+        # The phase screen's half step and the propagator over dr (most steps are full:
+        # theirs stay while the shorter ones' come and go).
         if dr not in steps:
             if len(steps) > 4:
-                steps.clear()
+                for other in [d for d in steps if d != step]:
+                    del steps[other]
             steps[dr] = (np.exp(0.5j * dr * delta), np.exp(1j * dr * (vertical - ka[:, None])))
         return steps[dr]
 
@@ -313,7 +316,8 @@ def _march(
         part = n - floor
         if (roof, dr) not in roofs:
             if len(roofs) > 4:
-                roofs.clear()
+                for other in [key for key in roofs if key[1] != step]:
+                    del roofs[other]
             heights_kz = 2.0 * math.pi * np.fft.fftfreq(2 * part, d=dz)
             up = np.sqrt((ka[:, None] ** 2 - heights_kz[None, :] ** 2).astype(complex))
             up = np.where(up.imag < 0.0, -up, up)
@@ -321,19 +325,22 @@ def _march(
                 np.exp(0.5j * dr * delta[:, floor:]),
                 np.exp(1j * dr * (up - ka[:, None])),
                 np.exp(-2j * heights_kz * (roof - z[floor])),
-                (-np.arange(2 * part)) % (2 * part),
                 roof_share(z[floor:], roof),
+                # The field on the heights, its upper half staying zero, and the mirror.
+                np.zeros((len(f), 2 * part), dtype=complex),
+                np.empty((len(f), 2 * part), dtype=complex),
             )
-        half, propagate, mirror, flip, share = roofs[(roof, dr)]
+        half, propagate, mirror, share, tilted_roof, mirrored = roofs[(roof, dr)]
         if screen is not None:
             half = half * np.exp(0.5j * ka[:, None] * screen(r, dr, z[floor:])[None, :])
         screened = half * psi[:, floor:]
-        tilted_roof = np.zeros((len(f), 2 * part), dtype=complex)
-        tilted_roof[:, :part] = share[None, :] * screened
-        spectrum = np.fft.fft(tilted_roof, axis=1) * dz
-        field = np.fft.ifft((spectrum + mirror * spectrum[:, flip]) * propagate, axis=1) / dz
+        np.multiply(share[None, :], screened, out=tilted_roof[:, :part])
+        spectrum = np.fft.fft(tilted_roof, axis=1)
+        spectrum *= dz
+        field = np.fft.ifft(_reflected(spectrum, mirror, propagate, mirrored), axis=1)
+        field /= dz
         out = np.zeros_like(psi)
-        out[:, floor:] = half * field[:, :part]
+        np.multiply(half, field[:, :part], out=out[:, floor:])
         return out
 
     def advance(psi: np.ndarray, r: float, dr: float) -> np.ndarray:
@@ -356,34 +363,58 @@ def _march(
         half, propagate = stepping(dr)
         if screen is not None:
             half = half * np.exp(0.5j * ka[:, None] * screen(r, dr, z)[None, :])
-        screened = half * psi
-        tilted[:, :n] = screened
-        tilted[:, n:] = 0.0
+        screened = np.multiply(half, psi, out=tilted[:, :n])
         # The ground's sample weighs half (the trapezoidal rule), as the reflection
         # adds its mirror image.
-        tilted[here.plain, 0] *= 0.5
+        nonlocal clean
+        if here.every_image:
+            tilted[:, n] = 0.0
+        else:
+            if not clean:
+                tilted[:, n:] = 0.0
+                clean = True
+            if here.image.any():
+                tilted[here.plain, 0] *= 0.5
+            else:
+                tilted[:, 0] *= 0.5
         if here.image.any():
+            clean = False
             image = here.image
-            inner = here.growth[image] * screened[image]
-            integral = (np.cumsum(inner, axis=1) - 0.5 * (inner[:, :1] + inner)) * dz
-            below = screened[image] + here.scale[image, None] * here.shrink[image] * integral
-            below *= here.fade[image]
-            tilted[image, n + 1 :] = below[:, 1:][:, ::-1]
-        spectrum = np.fft.fft(tilted, axis=1) * dz
-        field = (
-            np.fft.ifft((spectrum + here.reflection * spectrum[:, mirror]) * propagate, axis=1) / dz
-        )
+            on = screened if here.every_image else screened[image]
+            inner = here.growth_below * on
+            integral = np.cumsum(inner, axis=1)
+            first = inner[:, :1].copy()
+            np.add(first, inner, out=inner)
+            np.multiply(0.5, inner, out=inner)
+            np.subtract(integral, inner, out=integral)
+            np.multiply(integral, dz, out=integral)
+            np.multiply(here.lift_below, integral, out=integral)
+            below = np.add(on, integral, out=integral)
+            below *= here.fade_below
+            if here.every_image:
+                tilted[:, n + 1 :] = below[:, :0:-1]
+            else:
+                tilted[image, n + 1 :] = below[:, :0:-1]
+        spectrum = np.fft.fft(tilted, axis=1)
+        spectrum *= dz
+        field = np.fft.ifft(_reflected(spectrum, here.reflection, propagate, mirrored), axis=1)
+        field /= dz
         psi_next = field[:, :n]
         surface = here.surface
         if surface.any():
-            amplitude = np.sum(tilted[surface, :n] * here.decay[surface], axis=1) * dz
+            decay = here.decay_surface
+            on = tilted[:, :n] if here.every_surface else tilted[surface, :n]
+            amplitude = np.sum(on * decay, axis=1) * dz
             lift = (
                 2j
                 * here.beta[surface]
                 * amplitude
                 * np.exp(1j * dr * (here.wave[surface] - ka[surface]))
             )
-            psi_next[surface] += lift[:, None] * here.decay[surface]
+            if here.every_surface:
+                psi_next += lift[:, None] * decay
+            else:
+                psi_next[surface] += lift[:, None] * decay
         return half * psi_next
 
     # Where the march meets the obstacles: (range, what: "screen" its top (m), "roof" or
@@ -441,6 +472,18 @@ def _march(
         p = reached * (np.exp(1j * ka * at) / math.sqrt(max(at, 1e-9)))[:, None]
         h = heights[index]
         out[:, index] = [np.interp(h, z, row.real) + 1j * np.interp(h, z, row.imag) for row in p]
+    return out
+
+
+def _reflected(spectrum, reflection, propagate, out):
+    """(spectrum + reflection * mirrored spectrum) * propagate, into ``out`` (the same
+    shape as ``spectrum``): the field's spectrum and its reflection off the ground at
+    kz = 0, a step on. The mirror takes the spectrum at -kz (index -i mod 2n)."""
+    out[:, 0] = spectrum[:, 0]
+    out[:, 1:] = spectrum[:, :0:-1]
+    np.multiply(reflection, out, out=out)
+    np.add(spectrum, out, out=out)
+    np.multiply(out, propagate, out=out)
     return out
 
 
@@ -528,6 +571,13 @@ class _Ground:
             )
             t = np.clip((z - 0.5 * depth) / (0.5 * depth), 0.0, 1.0)
             self.fade[row] = 0.5 * (1.0 + np.cos(math.pi * t))
+        # What the march takes of the rows ``image`` at every step.
+        self.every_image = bool(self.image.all())
+        self.every_surface = bool(self.surface.all())
+        self.decay_surface = self.decay[self.surface]
+        self.growth_below = self.growth[self.image]
+        self.lift_below = self.scale[self.image, None] * self.shrink[self.image]
+        self.fade_below = self.fade[self.image]
 
 
 __all__ = ["footprint", "march", "open_share", "roof_share"]
