@@ -7176,6 +7176,16 @@ msgstr ""
 "perceptible entre càlculs amb altres llavors; més raigs per banda redueixen "
 "l'error"
 
+#. Translators: {u}, {absorption}, {rays}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"Combined standard uncertainty {u} (the materials' absorption {absorption}, "
+"the rays {rays}), {percent} % within {low} to {high} ({count} draws)"
+msgstr ""
+"Incertesa típica combinada {u} (absorció dels materials {absorption}, raigs "
+"{rays}); {percent} %: entre {low} i {high} ({count} mostres)"
+
 #. Translators: {u}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format

@@ -3064,12 +3064,16 @@ def test_the_absorption_uncertainty_s_spread_shows_in_the_tips(window, qapp) -> 
     # At 125 Hz the plaster absorbs 0.15, and every draw decays far enough in the 1 s
     # response; from 1 kHz, where it absorbs 0.04, the draws near 0 do not, and those
     # bands get no spread.
-    assert spread.draws == 400 and np.isfinite(spread.standard.c80[1])
+    assert spread.draws == 400 and spread.batches == 10 and np.isfinite(spread.standard.c80[1])
     assert np.isnan(spread.standard.c80[4])
     rows = [name for name, _label, _template in ROWS]
     tip = window.results.table.item(rows.index("c80"), 1).toolTip()
-    assert "From the materials' absorption uncertainty: standard uncertainty" in tip
+    assert "Combined standard uncertainty" in tip and "the rays" in tip
     assert "95 % within" in tip and "(400 draws)" in tip
+    # The lateral fraction's rays have no standard error: the absorption alone.
+    assert np.isfinite(spread.standard.lf[1]) and np.isnan(spread.rays.lf[1])
+    tip = window.results.table.item(rows.index("lf"), 1).toolTip()
+    assert "From the materials' absorption uncertainty: standard uncertainty" in tip
 
 
 def test_changing_absorption_re_weights_the_run(window, qapp) -> None:

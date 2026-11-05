@@ -7223,6 +7223,16 @@ msgstr ""
 "{tip}: {jnd:.1f} JND, quindi il valore può cambiare in modo percepibile tra "
 "calcoli con altri semi; più raggi per banda riducono l'errore"
 
+#. Translators: {u}, {absorption}, {rays}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"Combined standard uncertainty {u} (the materials' absorption {absorption}, "
+"the rays {rays}), {percent} % within {low} to {high} ({count} draws)"
+msgstr ""
+"Incertezza tipo composta {u} (assorbimento dei materiali {absorption}, raggi "
+"{rays}), {percent} % tra {low} e {high} ({count} estrazioni)"
+
 #. Translators: {u}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format

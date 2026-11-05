@@ -1210,8 +1210,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         print(RoomParameters.from_dict(entry["parameters"]).table())
         if "standard_errors" in entry:
             print(_convergence_text(entry, len(response.late_batches)))
-        if "absorption_spread" in entry:
-            print(_spread_text(entry))
+        if "uncertainty" in entry:
+            print(_uncertainty_text(entry))
         print(_level_text(entry))
         for line in _outdoor_lines(entry, result.removed):
             print(line)
@@ -1310,14 +1310,14 @@ def _spread_groups(room, settings):
     return groups
 
 
-def _spread_text(entry: dict) -> str:
-    """One line: the largest standard uncertainty from the materials' absorption in
-    JNDs from 125 Hz to 4 kHz, and its 95 % coverage interval."""
+def _uncertainty_text(entry: dict) -> str:
+    """One line: the largest combined standard uncertainty from the materials' absorption
+    and the rays in JNDs from 125 Hz to 4 kHz, its budget and its coverage interval."""
     from acoustic_spaces.compare import SUMMARY_BANDS_HZ, in_jnds
     from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
     from acoustic_spaces.parameters import ALL_PARAMETERS, RoomParameters, _band_label, _symbol
 
-    spread = entry["absorption_spread"]
+    spread = entry["uncertainty"]
     standard = RoomParameters.from_dict(spread["standard"])
     jnds = in_jnds(RoomParameters.from_dict(entry["parameters"]), standard)
     bands = [OCTAVE_BANDS_HZ.index(hz) for hz in SUMMARY_BANDS_HZ]
@@ -1327,16 +1327,23 @@ def _spread_text(entry: dict) -> str:
         for b in bands
         if math.isfinite(jnds[name][b])
     ]
-    text = f"spread from the absorption uncertainty ({spread['draws']} draws): "
+    inputs = "the absorption"
+    if spread["batches"]:
+        inputs += f" and the rays ({spread['batches']} batches)"
+    text = f"uncertainty from {inputs}, {spread['draws']} draws: "
     if not found:
         return text + "none from 125 Hz to 4 kHz"
     value, name, band = max(found)
     unit = f" {ALL_PARAMETERS[name][0]}" if ALL_PARAMETERS[name][0] else ""
     low, high = spread["low"][name][band], spread["high"][name][band]
+    budget = ""
+    rays = spread["rays"][name][band]
+    if rays is not None:
+        budget = f" (absorption {spread['absorption'][name][band]:.3g}, rays {rays:.3g})"
     return text + (
         f"at most {value:.2f} JND from 125 Hz to 4 kHz ({_symbol(name)} at "
-        f"{_band_label(OCTAVE_BANDS_HZ[band])}: u = {getattr(standard, name)[band]:.3g}{unit}, "
-        f"{100 * spread['coverage']:g} % within {low:.3g} to {high:.3g}{unit})"
+        f"{_band_label(OCTAVE_BANDS_HZ[band])}: u = {getattr(standard, name)[band]:.3g}{unit}"
+        f"{budget}, {100 * spread['coverage']:g} % within {low:.3g} to {high:.3g}{unit})"
     )
 
 

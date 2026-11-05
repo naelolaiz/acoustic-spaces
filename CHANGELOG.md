@@ -7,6 +7,9 @@
   listener's room parameters that it leads to, by re-weighting the traced run;
   `simulate` prints it and writes it into `parameters.json`, and the editor's results
   give it in their tips.
+- Added: the rays' random error joins the absorption's in the same Monte Carlo, as
+  Student's t from the late batches' standard error, for a combined standard uncertainty
+  and coverage interval with the budget of each input (`uncertainty` in `parameters.json`).
 - Fixed: a curved ray's level near where it runs level at the listener, the source, the
   ground, a table's row or the edge of a layer whose speed does not change with height
   came out several dB off, 20 dB and more at worst, and many such rays were missed; the

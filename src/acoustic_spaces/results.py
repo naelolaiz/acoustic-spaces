@@ -219,7 +219,7 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
         if errors is not None:
             entry["standard_errors"] = errors.as_dict()
         if key in result.spreads:
-            entry["absorption_spread"] = result.spreads[key].as_dict()
+            entry["uncertainty"] = result.spreads[key].as_dict()
         # In a band no sound arrives in (spl -inf), neither the level in free field nor
         # the level without what was left out can be read back from spl: their
         # A-weighted values are then NaN (null).

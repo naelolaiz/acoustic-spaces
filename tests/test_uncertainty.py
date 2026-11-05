@@ -7,7 +7,12 @@ import pytest
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine.reweight import groups_of, log_ratio
-from acoustic_spaces.engine.uncertainty import MAX_ABSORPTION, absorption_draws, material_spread
+from acoustic_spaces.engine.uncertainty import (
+    MAX_ABSORPTION,
+    MIN_BATCHES,
+    absorption_draws,
+    material_spread,
+)
 
 WALLS = [0.04, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.12]
 
@@ -70,9 +75,11 @@ def test_the_spread_of_the_parameters_follows_the_absorption_s():
     room = Room.from_scene(scene)
     face_group, materials = groups_of(room)
     result = simulate(room, sources=["s"], groups=face_group)
-    spread = material_spread(result, scene, face_group, materials, draws=60, seed=3)
+    spread = material_spread(result, scene, face_group, materials, draws=60, seed=3, rays=False)
     found = spread["s", "a"]
-    assert found.draws == 60 and found.coverage == 0.95
+    assert found.draws == 60 and found.coverage == 0.95 and found.batches == 0
+    assert np.all(np.isnan(found.rays.t30))
+    np.testing.assert_array_equal(found.standard.t30, found.absorption.t30)
     traced = result["s", "a"].parameters()
     bands = slice(1, 7)
     # The draws centre on the traced values and spread out from them.
@@ -103,6 +110,49 @@ def test_the_spread_of_the_parameters_follows_the_absorption_s():
         material_spread(result, plain, face_group, materials, draws=10)
 
 
+def test_the_rays_error_adds_to_the_absorption_s_as_student_s_t():
+    """The rays' standard error, from 10 batches, enters as Student's t of 9 degrees of
+    freedom: its standard uncertainty is the error times sqrt(9 / 7), and the combined
+    one the root of the sum of the squares of the two, as JCGM 100 combines independent
+    inputs; the absorption's own draws stay as they were."""
+    scene = _box({"absorption": 0.02})
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    response = result["s", "a"]
+    assert len(response.late_batches) == 10
+    both = material_spread(result, scene, face_group, materials, draws=400, seed=3)["s", "a"]
+    alone = material_spread(result, scene, face_group, materials, draws=400, seed=3, rays=False)
+    alone = alone["s", "a"]
+    assert both.batches == 10
+    errors = response.standard_errors()
+    bands = slice(1, 7)
+    for name in ("t30", "edt", "c80", "d50", "g"):
+        np.testing.assert_allclose(
+            getattr(both.rays, name)[bands],
+            getattr(errors, name)[bands] * np.sqrt(9.0 / 7.0),
+            rtol=1e-12,
+        )
+        np.testing.assert_array_equal(
+            getattr(both.absorption, name), getattr(alone.absorption, name)
+        )
+        combined = np.hypot(getattr(both.absorption, name), getattr(both.rays, name))
+        # 400 draws give a standard deviation within about 7 % (two of its own).
+        np.testing.assert_allclose(getattr(both.standard, name)[bands], combined[bands], rtol=0.1)
+        assert np.all(getattr(both.high, name)[bands] > getattr(both.low, name)[bands])
+    # The lateral fraction has no standard error: the absorption alone counts.
+    assert np.all(np.isnan(both.rays.lf))
+    np.testing.assert_array_equal(both.standard.lf, alone.standard.lf)
+    # With fewer than MIN_BATCHES batches Student's t has no variance: the rays do not
+    # count.
+    few = scene.model_copy(deep=True)
+    few.simulation.late.batches = MIN_BATCHES - 1
+    room = Room.from_scene(few)
+    result = simulate(room, sources=["s"], groups=face_group)
+    spread = material_spread(result, few, face_group, materials, draws=10)["s", "a"]
+    assert spread.batches == 0 and np.all(np.isnan(spread.rays.t30))
+
+
 def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
     tmp_path, capsys: pytest.CaptureFixture[str]
 ):
@@ -118,15 +168,17 @@ def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
     args = ["simulate", str(scene), "--out", str(out), "--rays", "300", "--spread-draws", "12"]
     assert main(args) == 0
     stdout = capsys.readouterr().out
-    assert "spread from the absorption uncertainty (12 draws): at most" in stdout
+    assert "uncertainty from the absorption and the rays (10 batches), 12 draws: at most" in stdout
+    assert "(absorption " in stdout and ", rays " in stdout
     entry = json.loads((out / "parameters.json").read_text())["responses"][0]
-    spread = entry["absorption_spread"]
-    assert spread["draws"] == 12 and spread["coverage"] == 0.95
+    spread = entry["uncertainty"]
+    assert spread["draws"] == 12 and spread["coverage"] == 0.95 and spread["batches"] == 10
     assert spread["standard"]["t30"][3] > 0.0
+    assert spread["absorption"]["t30"][3] > 0.0 and spread["rays"]["t30"][3] > 0.0
     assert spread["low"]["t30"][3] < entry["parameters"]["t30"][3] < spread["high"]["t30"][3]
     # Third-octave bands do not re-weight: the run goes on without the spread.
     assert main([*args, "--bands", "third_octave"]) == 0
     captured = capsys.readouterr()
     assert "warning: no spread" in captured.err
     entry = json.loads((out / "parameters.json").read_text())["responses"][0]
-    assert "absorption_spread" not in entry
+    assert "uncertainty" not in entry

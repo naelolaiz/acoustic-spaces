@@ -138,6 +138,8 @@ Parameters:
 - [x] Error estimates, step 1: a material's absorption uncertainty, and the spread it
   leads to in the room parameters by Monte Carlo (GUM Supplement 1), re-weighting the
   traced run, in `simulate`'s output, `parameters.json` and the editor's results.
+- [x] Error estimates, step 2: the rays' random error in the same Monte Carlo (Student's
+  t from the batches' standard error), a combined standard uncertainty and its budget.
 - [ ] Error estimates, next steps: the uncertainty on the editor's material page; the number of draws chosen as GUM Supplement 1's adaptive procedure does;
   default uncertainties for built-in materials; the scattering's uncertainty; levels,
   STI and maps; convergence checks; the method's own error from the validation.

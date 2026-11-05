@@ -641,33 +641,51 @@ class ResultsPanel(QWidget):
                 item.setToolTip(f"{item.toolTip()}. {tip}")
 
     def _spread_in_tips(self) -> None:
-        """Each parameter's spread from the materials' absorption uncertainty in its tip,
-        where the run drew it."""
+        """Each parameter's uncertainty from the materials' absorption and the rays in
+        its tip, with its budget, where the run drew it."""
         spread = self.result.spreads.get(self.pair())
         if spread is None:
             return
+        names = ("standard", "low", "high", "absorption", "rays")
         for row, (name, _label, template) in enumerate(ROWS):
             if not hasattr(spread.standard, name):
                 continue
             scale = 1e3 if name == "ts" else 1.0
-            parts = [getattr(getattr(spread, p), name) * scale for p in ("standard", "low", "high")]
-            for col, (u, low, high) in enumerate(zip(*parts, strict=True)):
+            parts = [getattr(getattr(spread, p), name) * scale for p in names]
+            for col, (u, low, high, absorption, rays) in enumerate(zip(*parts, strict=True)):
                 item = self.table.item(row, col)
                 if item is None or not np.isfinite(u):
                     continue
-                tip = fmt(
-                    # Translators: {u}, {low} and {high} are numbers in the parameter's
-                    # unit, {percent} and {count} numbers.
-                    _(
-                        "From the materials' absorption uncertainty: standard uncertainty "
-                        "{u}, {percent} % within {low} to {high} ({count} draws)"
-                    ),
-                    u=number_text(template.format(u)),
-                    low=number_text(template.format(low)),
-                    high=number_text(template.format(high)),
-                    percent=f"{100 * spread.coverage:g}",
-                    count=spread.draws,
-                )
+                values = {
+                    "u": number_text(template.format(u)),
+                    "low": number_text(template.format(low)),
+                    "high": number_text(template.format(high)),
+                    "percent": f"{100 * spread.coverage:g}",
+                    "count": spread.draws,
+                }
+                if np.isfinite(rays):
+                    tip = fmt(
+                        # Translators: {u}, {absorption}, {rays}, {low} and {high} are
+                        # numbers in the parameter's unit, {percent} and {count} numbers.
+                        _(
+                            "Combined standard uncertainty {u} (the materials' absorption "
+                            "{absorption}, the rays {rays}), {percent} % within {low} to "
+                            "{high} ({count} draws)"
+                        ),
+                        absorption=number_text(template.format(absorption)),
+                        rays=number_text(template.format(rays)),
+                        **values,
+                    )
+                else:
+                    tip = fmt(
+                        # Translators: {u}, {low} and {high} are numbers in the parameter's
+                        # unit, {percent} and {count} numbers.
+                        _(
+                            "From the materials' absorption uncertainty: standard uncertainty "
+                            "{u}, {percent} % within {low} to {high} ({count} draws)"
+                        ),
+                        **values,
+                    )
                 item.setToolTip(f"{item.toolTip()}. {tip}")
 
     def _flag_decays(self, parameters) -> None:

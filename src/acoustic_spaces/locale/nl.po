@@ -7187,6 +7187,17 @@ msgstr ""
 "berekeningen met andere startwaarden; meer stralen per band maken de fout "
 "kleiner"
 
+#. Translators: {u}, {absorption}, {rays}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"Combined standard uncertainty {u} (the materials' absorption {absorption}, "
+"the rays {rays}), {percent} % within {low} to {high} ({count} draws)"
+msgstr ""
+"Gecombineerde standaardonzekerheid {u} (absorptie van de materialen "
+"{absorption}, stralen {rays}), {percent} % tussen {low} en {high} ({count} "
+"trekkingen)"
+
 #. Translators: {u}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format
