@@ -1293,14 +1293,17 @@ def _convergence_text(entry: dict, batches: int) -> str:
 
 def _spread_groups(room, settings):
     """The face groups and materials to trace ``room`` with for the spread from its
-    materials' absorption uncertainty, or None, with a warning when some material has
-    one but ``settings`` cannot re-weight."""
+    materials' absorption uncertainty (their own, or a built-in material's default), or
+    None, with a warning when some material gives one of its own but ``settings``
+    cannot re-weight."""
     from acoustic_spaces.engine.reweight import groups_of
+    from acoustic_spaces.engine.uncertainty import has_uncertainty
 
-    if all(m.uncertainty is None for m in room.scene.materials.values()):
+    if not has_uncertainty(room.scene):
         return None
     groups = groups_of(room, settings)
-    if groups is None:
+    own = any(m.uncertainty is not None for m in room.scene.materials.values())
+    if groups is None and own:
         print(
             "warning: no spread from the materials' absorption uncertainty: it needs octave "
             "bands, stochastic ray tracing for the late part, no wave solver and at most "
@@ -1341,6 +1344,7 @@ def _uncertainty_text(entry: dict) -> str:
             value, band = max(measured)
             errors.append(f"{what} up to {value:.2f} dB at {_band_label(OCTAVE_BANDS_HZ[band])}")
     method = f"; not counted, the level's error over edges: {', '.join(errors)}" if errors else ""
+    method += _assumed_text(spread.get("assumed", {}))
     if not found:
         return text + "none from 125 Hz to 4 kHz" + method
     value, name, band = max(found)
@@ -1355,6 +1359,20 @@ def _uncertainty_text(entry: dict) -> str:
         f"{_band_label(OCTAVE_BANDS_HZ[band])}: u = {getattr(standard, name)[band]:.3g}{unit}"
         f"{budget}, {100 * spread['coverage']:g} % within {low:.3g} to {high:.3g}{unit})"
         f"{method}"
+    )
+
+
+def _assumed_text(assumed: dict) -> str:
+    """The built-in materials of unknown source whose uncertainty is the default, and
+    what it is (``simulation.uncertainty.presets``), or nothing."""
+    from acoustic_spaces.engine.uncertainty import PRESET_UNCERTAINTIES
+
+    if not assumed:
+        return ""
+    what = " or ".join(sorted({PRESET_UNCERTAINTIES[c] for c in assumed.values()}))
+    return (
+        f"; built-in materials of unknown source taken at {what} "
+        f"(simulation.uncertainty.presets): {', '.join(assumed)}"
     )
 
 

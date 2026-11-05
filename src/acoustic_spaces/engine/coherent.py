@@ -151,17 +151,26 @@ def _fitted_phases(model, faces, cosines, f, out):
     return out
 
 
-def absorption_phases(absorption: np.ndarray, cosines: np.ndarray, f: np.ndarray) -> np.ndarray:
+def absorption_phases(
+    absorption: np.ndarray, cosines: np.ndarray, f: np.ndarray, admittance_of=None
+) -> np.ndarray:
     """(n, count, M) e^(j arg R) at the frequencies ``f`` (count, M) of
     reflections at incidence cosines ``cosines`` (n,) off locally reacting surfaces whose
     admittance gives the absorption ``absorption`` (n, bands) in every band, as
-    :func:`reflection_phases` has them."""
+    :func:`reflection_phases` has them. ``admittance_of(row)`` gives the admittance (a
+    callable of the frequency) of an absorption row; by default the one fitted to it
+    (:func:`~acoustic_spaces.engine.impedance.fit_admittance`)."""
     from acoustic_spaces.engine.impedance import fit_admittance
 
     absorption = np.asarray(absorption, dtype=float)
     total = absorption.shape[1]
     rows, inverse = np.unique(absorption, axis=0, return_inverse=True)
-    admittance = np.array([fit_admittance(row, total, None)(f) for row in rows])
+    admittance = np.array(
+        [
+            (fit_admittance(row, total, None) if admittance_of is None else admittance_of(row))(f)
+            for row in rows
+        ]
+    )
     y = admittance[inverse.reshape(-1)]
     cos = np.clip(np.asarray(cosines, dtype=float), 0.0, 1.0)[:, None, None]
     total_ = cos + y

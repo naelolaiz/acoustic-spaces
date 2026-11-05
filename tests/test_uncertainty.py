@@ -9,11 +9,18 @@ from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine.reweight import groups_of, log_ratio
 from acoustic_spaces.engine.uncertainty import (
     EDGE_ERRORS_DB,
+    ISO_12999_2_THIRDS,
     MAX_ABSORPTION,
     MIN_BATCHES,
+    PRESET_TOLERANCE,
+    _Admittances,
+    _draws,
     absorption_draws,
+    assumed,
     edge_errors,
     material_spread,
+    octave_reproducibility,
+    uncertainty_of,
 )
 
 WALLS = [0.04, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.12]
@@ -49,6 +56,101 @@ def test_an_uncertainty_is_given_per_band_or_once_and_a_tolerance_counts_a_third
     for wrong in ({"absorption": [0.01] * 3}, {"absorption": -0.01}, {"absorption": 0.1, "x": 1}):
         with pytest.raises(ValueError):
             _box(wrong)
+
+
+def _with_preset(presets: str | None = None) -> Scene:
+    """The box with a built-in material on its walls, a preset with values of its own
+    on its floor, and the ceiling's own uncertainty."""
+    data = _box(None).to_data()
+    data["materials"]["walls"] = {"preset": "plasterboard", "scattering": 0.3}
+    data["materials"]["floor"] |= {"preset": "carpet_tufted_9.5mm"}
+    data["materials"]["ceiling"]["uncertainty"] = {"absorption": 0.02}
+    if presets is not None:
+        data["simulation"]["uncertainty"] = {"presets": presets}
+    return Scene.model_validate(data)
+
+
+def test_a_built_in_material_of_unknown_source_takes_the_scene_s_default():
+    """A material whose absorption is a built-in database entry's, which names no
+    source, takes plus or minus 0.1 by default; a preset given values of its own, or a
+    material with an uncertainty of its own, keeps what it gives."""
+    scene = _with_preset()
+    walls, floor, ceiling = (scene.materials[n] for n in ("walls", "floor", "ceiling"))
+    assert walls.builtin and not floor.builtin and not ceiling.builtin
+    spec = uncertainty_of(scene, "walls")
+    assert spec.distribution == "uniform" and spec.absorption == [PRESET_TOLERANCE] * 8
+    assert "unknown source" in spec.source
+    assert uncertainty_of(scene, "floor") is None
+    assert uncertainty_of(scene, "ceiling") is ceiling.uncertainty
+    assert assumed(scene, ["walls", "floor", "ceiling"]) == {"walls": "tolerance"}
+    # The preset's own values written out with it (a scene dumped whole) are still its.
+    dumped = Scene.model_validate(scene.model_dump(exclude_none=True))
+    assert dumped.materials["walls"].builtin and not dumped.materials["floor"].builtin
+    assert scene.model_copy(deep=True).materials["walls"].builtin
+    # Twice ISO 12999-2's reproducibility, as a standard uncertainty.
+    iso = _with_preset("iso_12999_2")
+    spec = uncertainty_of(iso, "walls")
+    alpha = np.asarray(walls.coefficients("octave")[0])
+    assert spec.distribution == "normal"
+    np.testing.assert_allclose(spec.absorption, 2.0 * octave_reproducibility(alpha))
+    assert assumed(iso, ["walls"]) == {"walls": "iso_12999_2"}
+    none = _with_preset("none")
+    assert uncertainty_of(none, "walls") is None and assumed(none, ["walls"]) == {}
+    with pytest.raises(ValueError):
+        _with_preset("half")
+
+
+def test_octave_bands_take_the_mean_of_iso_12999_2_s_third_octaves():
+    """sigma_R = m alpha + n (ISO 12999-2:2020, Table 1) in an octave band is the mean of
+    its third octaves' in the table: the 63 Hz octave has its 63 and 80 Hz rows, the
+    8 kHz octave, past the table, takes the 5 kHz row."""
+    table = ISO_12999_2_THIRDS
+    assert len(table) == 20 and min(table) == 63 and max(table) == 5000
+    # At alpha = 1, sigma_R from 500 Hz to 5 kHz as Vercammen (ICA 2019, Table 2) gives
+    # the standard's: 0.065 0.06 0.055 0.055 0.056 0.055 0.056 (2.5 kHz: 0.056 here,
+    # 0.057 there) 0.062 0.07 0.086.
+    found = [round(m + n, 3) for f, (m, n) in sorted(table.items()) if f >= 500]
+    assert found == [0.065, 0.06, 0.055, 0.055, 0.056, 0.055, 0.056, 0.056, 0.062, 0.07, 0.086]
+    alpha = np.linspace(0.1, 0.8, 8)
+    sigma = octave_reproducibility(alpha)
+    rows = {
+        0: (63, 80),
+        1: (100, 125, 160),
+        4: (800, 1000, 1250),
+        6: (3150, 4000, 5000),
+        7: (5000,),
+    }
+    for band, thirds in rows.items():
+        expected = np.mean([table[f][0] * alpha[band] + table[f][1] for f in thirds])
+        assert sigma[band] == pytest.approx(expected, rel=1e-12)
+
+
+def test_the_phases_between_fits_turn_as_a_fit_for_each_draw_does():
+    """The paths that add in pressure turn their phases with each draw's absorption: the
+    admittance taken between fits at nine absorptions gives the levels that a fit for
+    each draw gives, within the fits' own scatter, at a few hundredths of the time."""
+    scene = _box({"absorption": 0.1, "distribution": "uniform"})
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    response = result["s", "a"]
+    assert response.early.spectrum is not None  # the lowest bands add in pressure
+    coherent = response.early.spectrum.shape[1]
+    traced = np.array([scene.materials[n].coefficients("octave")[0] for n in materials])
+    taken, deviates, widths = _draws(scene, materials, 40, 5)
+    between = _Admittances(traced, taken, deviates, widths)
+    for drawn in taken[::8]:
+        ratio = log_ratio(traced, drawn)
+        fitted = response.reweighted(face_group, ratio, absorption=(traced, drawn))
+        taken_between = response.reweighted(
+            face_group, ratio, absorption=(traced, drawn), admittance_of=between
+        )
+        for name in ("g", "c80"):
+            a = np.asarray(getattr(fitted.parameters(), name))[:coherent]
+            b = np.asarray(getattr(taken_between.parameters(), name))[:coherent]
+            np.testing.assert_allclose(b, a, atol=0.2)
+        # The bands above add in energy: no phase, the same levels.
+        np.testing.assert_array_equal(fitted.early.energy, taken_between.early.energy)
 
 
 def test_draws_share_one_deviate_per_material_and_stay_in_range():
@@ -224,3 +326,40 @@ def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
     assert "warning: no spread" in captured.err
     entry = json.loads((out / "parameters.json").read_text())["responses"][0]
     assert "uncertainty" not in entry
+
+
+def test_simulate_spreads_a_scene_of_built_in_materials_by_default(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+):
+    """A scene of built-in materials gets the spread of their default tolerance, which
+    the output names; with presets: none it has none, and a run that cannot re-weight
+    goes on without it and without a warning."""
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+
+    data = _with_preset().to_data()
+    del data["materials"]["ceiling"]["uncertainty"]
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(data))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300", "--spread-draws", "12"]
+    assert main(args) == 0
+    stdout = capsys.readouterr().out
+    assert (
+        "built-in materials of unknown source taken at plus or minus 0.1 "
+        "(simulation.uncertainty.presets): walls"
+    ) in stdout
+    spread = json.loads((out / "parameters.json").read_text())["responses"][0]["uncertainty"]
+    assert spread["assumed"] == {"walls": "tolerance"} and spread["draws"] == 12
+    assert main([*args, "--bands", "third_octave"]) == 0
+    captured = capsys.readouterr()
+    assert "warning" not in captured.err
+    assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
+    data["simulation"]["uncertainty"] = {"presets": "none"}
+    scene.write_text(yaml.safe_dump(data))
+    assert main(args) == 0
+    capsys.readouterr()
+    assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]

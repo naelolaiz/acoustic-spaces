@@ -2611,6 +2611,14 @@ msgstr "Oktave"
 msgid "third_octave"
 msgstr "Terz"
 
+#: acoustic_spaces/gui/inspector.py
+msgid "plus or minus 0.1"
+msgstr "plus oder minus 0,1"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "twice ISO 12999-2"
+msgstr "doppelte ISO 12999-2"
+
 #. Translators: this and the entries below are channels as the scene file names them; (none) leaves the source's channel out.
 #: acoustic_spaces/gui/inspector.py
 msgid "(none)"
@@ -5556,6 +5564,30 @@ msgid "Seed"
 msgstr "Zufallsstartwert"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Uncertainty"
+msgstr "Unsicherheit"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How far the absorption of a built-in material may be off, for the spread of "
+"the results after each run, where the material gives no uncertainty of its "
+"own: the database does not say where its values come from. Plus or minus 0.1 "
+"in every band; twice the reproducibility ISO 12999-2 gives for a measurement "
+"to ISO 354, larger at low frequencies and for high absorption; or none, no "
+"spread from them"
+msgstr ""
+"Wie weit die Absorption eines integrierten Materials abweichen kann, für die "
+"Streuung der Ergebnisse nach jeder Berechnung, wo das Material keine eigene "
+"Unsicherheit angibt: Die Datenbank nennt nicht, woher ihre Werte stammen. "
+"Plus oder minus 0,1 in jedem Band; die doppelte Vergleichbarkeit, die ISO "
+"12999-2 für eine Messung nach ISO 354 angibt, größer bei tiefen Frequenzen "
+"und hoher Absorption; oder keine, ohne Streuung durch sie"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Built-in materials"
+msgstr "Integrierte Materialien"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Insertion loss"
 msgstr "Einfügungsdämpfung"
 
@@ -7253,6 +7285,13 @@ msgstr ""
 "{tip}: {jnd:.1f} JND, der Wert kann sich also zwischen Berechnungen mit "
 "anderen Zufallsstartwerten merklich ändern; mehr Strahlen pro Band "
 "verkleinern den Fehler"
+
+#. Translators: {what} is how far the absorption may be off ("plus or minus 0.1"), {names} the materials' names.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Built-in materials of unknown source taken at {what}: {names}"
+msgstr ""
+"Integrierte Materialien unbekannter Herkunft, angenommen mit {what}: {names}"
 
 #. Translators: {u}, {absorption}, {rays}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
 #: acoustic_spaces/gui/results_view.py

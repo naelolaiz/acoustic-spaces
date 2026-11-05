@@ -1162,6 +1162,9 @@ class Material(_Model):
     )
     # Notes on the coefficients of a preset or file outside 0 to 1, held to that range.
     _clipped: list[str] = PrivateAttr(default_factory=list)
+    # Whether the absorption is the built-in database entry's (``preset``, no other
+    # values), whose source that database does not name.
+    _builtin: bool = PrivateAttr(default=False)
     # The scattering entry ``scattering`` named, which validation replaces by its values.
     _scattering_name: str | None = PrivateAttr(default=None)
 
@@ -1170,6 +1173,13 @@ class Material(_Model):
         """What of the coefficients taken from a preset or file lay outside 0 to 1 and
         was taken as 0 or 1: one note each for the absorption and the scattering."""
         return list(self._clipped)
+
+    @property
+    def builtin(self) -> bool:
+        """Whether the absorption is a built-in database entry's (``preset``, with no
+        other absorption values given): the database does not name where its values
+        come from, so a spread takes ``simulation.uncertainty.presets`` for it."""
+        return self._builtin
 
     @field_validator("impedance", mode="before")
     @classmethod
@@ -1217,7 +1227,7 @@ class Material(_Model):
     def _resolve_coefficients(self) -> Material:
         if self.preset is not None and self.file is not None:
             raise ValueError("give either a preset or a file, not both")
-        absorption = scattering = None
+        absorption = scattering = preset_absorption = None
         origin = scattering_origin = None
         # Where coefficients read from data come from, for the note when they are clipped.
         absorption_from = scattering_from = None
@@ -1244,6 +1254,7 @@ class Material(_Model):
             absorption, extrapolated = _from_data(entry.frequencies, entry.coefficients)
             origin = _describe(entry.source, extrapolated)
             absorption_from = f"preset {self.preset!r}"
+            preset_absorption = _clip(absorption)
         elif self.file is not None:
             if not self.file.exists():
                 raise ValueError(f"coefficient file not found: {self.file}")
@@ -1302,6 +1313,8 @@ class Material(_Model):
                         "the side it comes from, so the absorption must be at least the "
                         "transmission"
                     )
+        # The preset's own values, also when written out with it (a scene dumped whole).
+        self._builtin = preset_absorption is not None and self.absorption == preset_absorption
         if self.source is None:
             origins = [o for o in (origin, scattering_origin) if o]
             self.source = "; ".join(origins) or None
@@ -2834,6 +2847,25 @@ class Output(_Model):
         return self
 
 
+#: What a built-in material of unknown source takes as its absorption's uncertainty
+#: when it gives none (:func:`acoustic_spaces.engine.uncertainty.uncertainty_of`).
+PresetUncertainty = Literal["tolerance", "iso_12999_2", "none"]
+
+
+class Uncertainty(_Model):
+    """The spread of the results from the materials' uncertain absorption."""
+
+    presets: PresetUncertainty = Field(
+        default="tolerance",
+        description=(
+            "for built-in materials (preset, of unknown source) without an uncertainty of "
+            "their own: tolerance, plus or minus 0.1 in every band; iso_12999_2, twice the "
+            "reproducibility ISO 12999-2 gives for ISO 354's measurement; none, no spread "
+            "from them"
+        ),
+    )
+
+
 class Simulation(_Model):
     bands: Resolution = Field(
         default="octave",
@@ -2848,6 +2880,7 @@ class Simulation(_Model):
     scattering: Scattering = Field(default_factory=Scattering)
     wave: WaveStage = Field(default_factory=WaveStage)
     performance: Performance = Field(default_factory=Performance)
+    uncertainty: Uncertainty = Field(default_factory=Uncertainty)
     transition_ms: float | None = Field(
         default=None,
         gt=0.0,

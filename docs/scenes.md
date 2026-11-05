@@ -258,6 +258,29 @@ materials:
     uncertainty: {absorption: 0.02, source: lab report}
 ```
 
+A built-in material (`preset`, with no absorption values of its own) that gives no
+uncertainty takes `simulation.uncertainty.presets`, as the built-in database does not
+say where its values come from (**Built-in materials** in the editor's simulation
+settings):
+
+```yaml
+simulation:
+  uncertainty:
+    presets: tolerance        # tolerance (default), iso_12999_2 or none
+```
+
+`tolerance` is plus or minus 0.1 in every band; `iso_12999_2` is twice the
+reproducibility standard deviation that ISO 12999-2:2020 (Table 1) gives for absorption
+measured to ISO 354, sigma_R = m alpha + n per third octave, as a standard uncertainty
+(an octave band the mean of its third octaves', the 63 Hz octave from the 63 and 80 Hz
+rows, the 8 kHz octave the 5 kHz row's); `none` gives them none. Plus or minus 0.1 is
+much for a hard surface: the shoebox example's painted concrete, 0.01 to 0.02, is drawn
+anywhere from 0 to 0.12, so that example's traced T30 at 1 kHz, 1.28 s, lies near the
+top of its 95 % interval, 0.74 to 1.49 s. ISO 12999-2's reproducibility is largest at low frequencies
+(for alpha = 1, 0.40 at 63 Hz, 0.20 at 125 Hz and 0.055 at 1 kHz), so twice it spreads
+the lowest bands far.
+The spread names the materials that took the default (`assumed`).
+
 `acoustic_spaces.engine.uncertainty.material_spread` gives the uncertainty this leads to
 in each listener's ISO 3382-1 parameters: the mean, combined standard uncertainty and
 95 % coverage interval of many draws, a Monte Carlo propagation as GUM Supplement 1
@@ -281,12 +304,21 @@ over two (`second_order`), a path reflected on both sides of an edge left out
 (`one_side`), and where a path reaches an edge's end (a solid block's corners; a thin
 screen's edges fade out past their ends). They are not drawn, as they are
 measured for whole levels in a few geometries, not for each path.
+In the lowest bands, where the early paths add in pressure, a reflection's phase
+follows its face's admittance, which is fitted to the absorption; the draws take it
+between fits at nine absorptions of each material over their range rather than a fit
+of their own: in the shoebox example within 0.15 dB of a fit for each draw at 63 Hz,
+where a fit itself moves by up to 0.19 dB for a change of 0.001.
 `acoustic-spaces simulate` does this itself when a material on the surfaces has an
-uncertainty: it prints the largest combined standard uncertainty in JNDs from 125 Hz to
+uncertainty, its own or a built-in material's: it prints the largest combined standard uncertainty in JNDs from 125 Hz to
 4 kHz, with its budget, 95 % interval and the errors over edges, and `parameters.json` holds them all
 (`uncertainty`; 400 draws, `--spread-draws` for another number). With settings that cannot re-weight
-(third-octave bands, say) it warns and leaves the spread out. The editor draws it after
-each run as well and gives it in the results table's tips.
+(third-octave bands, say) it leaves the spread out, with a warning when a material gives
+an uncertainty of its own. The editor shows each run's results at once, draws the
+spread after them and gives it in the results table's tips. The draws add to a run: in
+the concert hall example (five built-in materials, six responses) 400 draws took 160 s
+after an 11 s run, over half of it the lowest bands' paths added in pressure for each draw;
+`presets: none` leaves the built-in materials out.
 
 ### Material libraries of CATT-Acoustic and ODEON
 

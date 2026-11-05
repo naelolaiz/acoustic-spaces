@@ -28,6 +28,14 @@
   2.8 dB), and 10 cm across a barrier end's shadow boundary it steps by 0.42 dB in still
   air (4.5) and, in wind, by 1.0 dB from 63 to 500 Hz (5.0) and 0.91 dB 120 m upwind (27).
   A solid block's edges still stop at its corners.
+- Added: built-in materials, whose database does not name its sources, take an
+  absorption uncertainty when they give none (`simulation.uncertainty.presets`,
+  **Built-in materials** in the editor): plus or minus 0.1 by default, or twice the
+  reproducibility ISO 12999-2 gives for ISO 354, so a scene of presets gets a spread too.
+  The editor shows a run's results before it draws the spread.
+- The spread takes the admittance of the paths that add in pressure between fits at nine
+  absorptions of each material: fitting it for every draw took about 3 s a draw (20
+  minutes for 400 in the shoebox example).
 - Added: a material's `uncertainty` (a standard uncertainty or a tolerance of its
   absorption), and `material_spread`, the Monte Carlo spread (GUM Supplement 1) of each
   listener's room parameters that it leads to, by re-weighting the traced run;
