@@ -13,11 +13,15 @@
   one barrier or building in 5 m/s of wind and 0.74 dB downwind in 10 m/s, but up to
   1.0 dB off behind a top 45 degrees up, 1.64 dB low upwind in 10 m/s and 1.73 and 4.95 dB
   off behind two barriers 10 and 40 m apart (`validation/barrier_wind.py`); coverage
-  maps behind barriers in wind take 12 to 27 times as long;
+  maps behind barriers in wind take 8 to 11 times as long;
   `simulation.early.barrier_frequencies` (8, 16 or 32, the default; **Frequencies behind
   barriers** in the editor) takes fewer
   frequencies an octave at 4 and 8 kHz behind barriers, for less time and a weather's
   effect further off there, by as much as `docs/outdoor.md` gives for each.
+- Coverage maps and runs in wind take less time, with the same results bit for bit: the
+  parabolic equation's steps make fewer new arrays, and the eigenray searches it repeated
+  are kept (on one core, a map of 96 points over grass in 8 m/s takes 14 % less time,
+  behind two barriers 22 % less).
 - A path over the edge of a thin screen now fades out past a free end of the edge, by
   the part of its Fresnel zone the edge covers as in BTM, instead of stopping there:
   past a screen's corner the level is within 0.1 dB of the exact solution (it stepped by
