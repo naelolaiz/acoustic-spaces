@@ -72,11 +72,12 @@ PARTS = ("mean", "standard", "low", "high", "absorption", "rays")
 PRESET_TOLERANCE = 0.1
 #: ISO 12999-2:2020 Table 1: the reproducibility standard deviation of an absorption
 #: coefficient measured to ISO 354 in a third-octave band, sigma_R = m alpha_s + n, as
-#: {band (Hz): (m, n)}, from 100 Hz to 5 kHz as ISO 354 measures. An octave band takes
-#: the mean of the sigma_R of its third octaves the table has; the 63 Hz and 8 kHz
-#: octaves, outside the table, take its nearest band's (100 Hz, 5 kHz), which likely
-#: understates the reproducibility at 63 Hz.
+#: {band (Hz): (m, n)}. An octave band takes the mean of the sigma_R of its third
+#: octaves the table has (the 63 Hz octave those at 63 and 80 Hz), the 8 kHz octave,
+#: past the table's last band, that at 5 kHz.
 ISO_12999_2_THIRDS = {
+    63: (0.450, 0.015),
+    80: (0.330, 0.015),
     100: (0.240, 0.015),
     125: (0.180, 0.015),
     160: (0.140, 0.015),

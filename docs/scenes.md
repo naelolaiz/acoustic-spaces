@@ -271,14 +271,14 @@ simulation:
 
 `tolerance` is plus or minus 0.1 in every band; `iso_12999_2` is twice the
 reproducibility standard deviation that ISO 12999-2:2020 (Table 1) gives for absorption
-measured to ISO 354, sigma_R = m alpha + n per third octave from 100 Hz to 5 kHz, as a
-standard uncertainty (an octave band the mean of its third octaves'; the 63 Hz and 8 kHz
-octaves, outside the table, its 100 Hz and 5 kHz rows, which likely understates it at 63
-Hz); `none` gives them none. Plus or minus 0.1 is much for a hard surface: the shoebox
-example's painted concrete, 0.01 to 0.02, is drawn anywhere from 0 to 0.12, so that
-example's traced T30 at 1 kHz, 1.28 s, lies near the top of its 95 % interval, 0.74 to
-1.49 s. ISO 12999-2's reproducibility is largest at low frequencies (for alpha = 1, 0.26
-at 63 Hz, 0.20 at 125 Hz and 0.055 at 1 kHz), so twice it spreads the lowest bands far.
+measured to ISO 354, sigma_R = m alpha + n per third octave, as a standard uncertainty
+(an octave band the mean of its third octaves', the 63 Hz octave from the 63 and 80 Hz
+rows, the 8 kHz octave the 5 kHz row's); `none` gives them none. Plus or minus 0.1 is
+much for a hard surface: the shoebox example's painted concrete, 0.01 to 0.02, is drawn
+anywhere from 0 to 0.12, so that example's traced T30 at 1 kHz, 1.28 s, lies near the
+top of its 95 % interval, 0.74 to 1.49 s. ISO 12999-2's reproducibility is largest at
+low frequencies (for alpha = 1, 0.41 at 63 Hz, 0.20 at 125 Hz and 0.055 at 1 kHz), so
+twice it spreads the lowest bands far.
 The spread names the materials that took the default (`assumed`).
 
 `acoustic_spaces.engine.uncertainty.material_spread` gives the uncertainty this leads to
