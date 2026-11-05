@@ -303,8 +303,12 @@ specular path it borders. Across a boundary the level is continuous: the tests c
 in an L-shaped room in millimetre steps, with first-order reflections, and the level
 changes by less than 0.25 dB where specular paths alone drop by more than 5 dB; where a
 reflection off one of the corner's walls ends and the direct sound carries on, by less
-than 0.05 dB. The diffraction coefficient, its terms added in pressure, matches the
-exact solutions for a half-plane and for wedges (within 0.25 dB); where the paths add in
+than 0.05 dB. Over a ground with an impedance a term reflects off it as its geometric
+wave does near its boundary (the whole path's spherical wave, over the grounds round
+that path's reflection) and as the edge's wave does farther off, so where a barrier's
+top or end cuts off a reflection off grass the level changes by less than 0.02 dB
+across it. The diffraction coefficient, its terms added in pressure, matches the exact
+solutions for a half-plane and for wedges (within 0.25 dB); where the paths add in
 energy (indoors from 250 Hz up), the level near a shadow boundary is below the exact
 solution: on the boundary of a right-angled corner by 1.7 dB at 250 Hz and 1 dB at 1
 kHz, and more behind blunter edges (2.2 dB at 250 Hz for one open over 225°; see the
