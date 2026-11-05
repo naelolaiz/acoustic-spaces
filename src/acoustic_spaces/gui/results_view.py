@@ -647,6 +647,9 @@ class ResultsPanel(QWidget):
         if spread is None:
             return
         names = ("standard", "low", "high", "absorption", "rays")
+        # The method's largest error over edges in each band, which the spread leaves out.
+        bounds = list(spread.not_counted.values())
+        edges = np.fmax.reduce(np.vstack(bounds), axis=0) if bounds else None
         for row, (name, _label, template) in enumerate(ROWS):
             if not hasattr(spread.standard, name):
                 continue
@@ -685,6 +688,15 @@ class ResultsPanel(QWidget):
                             "{u}, {percent} % within {low} to {high} ({count} draws)"
                         ),
                         **values,
+                    )
+                if edges is not None and np.isfinite(edges[col]):
+                    tip += ". " + fmt(
+                        # Translators: {db} is a number of decibels.
+                        _(
+                            "Not counted: the method's error over edges, which the "
+                            "validation puts at up to {db} dB in this band's level"
+                        ),
+                        db=number_text(f"{edges[col]:.2f}"),
                     )
                 item.setToolTip(f"{item.toolTip()}. {tip}")
 

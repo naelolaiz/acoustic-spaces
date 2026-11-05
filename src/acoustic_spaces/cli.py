@@ -1312,7 +1312,8 @@ def _spread_groups(room, settings):
 
 def _uncertainty_text(entry: dict) -> str:
     """One line: the largest combined standard uncertainty from the materials' absorption
-    and the rays in JNDs from 125 Hz to 4 kHz, its budget and its coverage interval."""
+    and the rays in JNDs from 125 Hz to 4 kHz, its budget and its coverage interval, and
+    the method's errors over edges that it does not count."""
     from acoustic_spaces.compare import SUMMARY_BANDS_HZ, in_jnds
     from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
     from acoustic_spaces.parameters import ALL_PARAMETERS, RoomParameters, _band_label, _symbol
@@ -1331,8 +1332,17 @@ def _uncertainty_text(entry: dict) -> str:
     if spread["batches"]:
         inputs += f" and the rays ({spread['batches']} batches)"
     text = f"uncertainty from {inputs}, {spread['draws']} draws: "
+    # The method's errors over edges that the spread does not count, the largest from
+    # 125 Hz to 4 kHz that the validation finds for each.
+    errors = []
+    for what, bound in spread.get("not_counted", {}).items():
+        measured = [(bound[b], b) for b in bands if bound[b] is not None]
+        if measured:
+            value, band = max(measured)
+            errors.append(f"{what} up to {value:.2f} dB at {_band_label(OCTAVE_BANDS_HZ[band])}")
+    method = f"; not counted, the level's error over edges: {', '.join(errors)}" if errors else ""
     if not found:
-        return text + "none from 125 Hz to 4 kHz"
+        return text + "none from 125 Hz to 4 kHz" + method
     value, name, band = max(found)
     unit = f" {ALL_PARAMETERS[name][0]}" if ALL_PARAMETERS[name][0] else ""
     low, high = spread["low"][name][band], spread["high"][name][band]
@@ -1344,6 +1354,7 @@ def _uncertainty_text(entry: dict) -> str:
         f"at most {value:.2f} JND from 125 Hz to 4 kHz ({_symbol(name)} at "
         f"{_band_label(OCTAVE_BANDS_HZ[band])}: u = {getattr(standard, name)[band]:.3g}{unit}"
         f"{budget}, {100 * spread['coverage']:g} % within {low:.3g} to {high:.3g}{unit})"
+        f"{method}"
     )
 
 

@@ -273,9 +273,17 @@ input's standard uncertainty alone (`absorption`, `rays`). The parameters from t
 sound's directions (LF and the like) have no standard error and take the absorption's
 alone. Not counted: the scattering and the method, and a parameter that some draw leaves
 undefined (a decay too slow for the response's length, say) gets none in that band.
+Of the method's errors, those over edges are listed where a response has paths over
+edges (`not_counted`), each with the largest difference of the level from the exact
+solution that [Validation](validation.md#edge-diffraction-against-the-exact-solution)
+finds in each band, as the band adds its paths in pressure or in energy: over one edge,
+over two (`second_order`), a path reflected on both sides of an edge left out
+(`one_side`), and where a path reaches an edge's end (a solid block's corners; a thin
+screen's edges fade out past their ends). They are not drawn, as they are
+measured for whole levels in a few geometries, not for each path.
 `acoustic-spaces simulate` does this itself when a material on the surfaces has an
 uncertainty: it prints the largest combined standard uncertainty in JNDs from 125 Hz to
-4 kHz, with its budget and 95 % interval, and `parameters.json` holds them all
+4 kHz, with its budget, 95 % interval and the errors over edges, and `parameters.json` holds them all
 (`uncertainty`; 400 draws, `--spread-draws` for another number). With settings that cannot re-weight
 (third-octave bands, say) it warns and leaves the spread out. The editor draws it after
 each run as well and gives it in the results table's tips.

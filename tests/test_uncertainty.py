@@ -8,9 +8,11 @@ import pytest
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine.reweight import groups_of, log_ratio
 from acoustic_spaces.engine.uncertainty import (
+    EDGE_ERRORS_DB,
     MAX_ABSORPTION,
     MIN_BATCHES,
     absorption_draws,
+    edge_errors,
     material_spread,
 )
 
@@ -108,6 +110,46 @@ def test_the_spread_of_the_parameters_follows_the_absorption_s():
     plain = _box(None)
     with pytest.raises(ValueError, match="no material"):
         material_spread(result, plain, face_group, materials, draws=10)
+
+
+def test_the_spread_lists_the_errors_over_edges_it_does_not_count():
+    """Where a response has paths over edges, the spread names the method's errors over
+    them, each with the validation's largest error in each band as the band adds its
+    paths: in pressure in the lowest bands, in energy above. A box has no edges."""
+    from types import SimpleNamespace
+
+    scene = _box({"absorption": 0.02})
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    spread = material_spread(result, scene, face_group, materials, draws=10, rays=False)
+    assert spread["s", "a"].not_counted == {}
+    assert spread["s", "a"].as_dict()["not_counted"] == {}
+
+    def response(edges, coherent):
+        early = SimpleNamespace(
+            edge=np.array(edges),
+            energy=np.zeros((len(edges), 8)),
+            spectrum=None if coherent == 0 else np.zeros((len(edges), coherent, 8)),
+        )
+        return SimpleNamespace(early=early)
+
+    assert edge_errors(response([-1, -1], 2), scene) == {}
+    assert edge_errors(response([-1, -2], 2), scene) == {}  # over the terrain's crests
+    found = edge_errors(response([-1, 4], 2), scene)
+    # first_order with one_side by default: a path reflected on both sides is left out.
+    assert list(found) == ["one edge", "one side", "corners of edges"]
+    for name, bound in found.items():
+        table = EDGE_ERRORS_DB[name]
+        np.testing.assert_array_equal(bound[:2], table["pressure"][:2])
+        np.testing.assert_array_equal(bound[2:], table["energy"][2:])
+    assert np.all(np.isnan(found["corners of edges"][2:]))  # not measured in energy
+    wide = scene.model_copy(deep=True)
+    wide.simulation.early.diffraction = "second_order"
+    wide.simulation.early.diffraction_reflections = "both_sides"
+    found = edge_errors(response([7], 8), wide)
+    assert list(found) == ["one edge", "two edges", "corners of edges"]
+    np.testing.assert_array_equal(found["two edges"], EDGE_ERRORS_DB["two edges"]["pressure"])
 
 
 def test_the_rays_error_adds_to_the_absorption_s_as_student_s_t():

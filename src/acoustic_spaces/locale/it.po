@@ -7272,6 +7272,16 @@ msgstr ""
 "Dall'incertezza di assorbimento dei materiali: incertezza tipo {u}, "
 "{percent} % tra {low} e {high} ({count} estrazioni)"
 
+#. Translators: {db} is a number of decibels.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"Not counted: the method's error over edges, which the validation puts at up "
+"to {db} dB in this band's level"
+msgstr ""
+"Non contato: l'errore del metodo sugli spigoli, che la validazione stima "
+"fino a {db} dB nel livello di questa banda"
+
 #. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format

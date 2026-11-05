@@ -7275,6 +7275,16 @@ msgstr ""
 "Aus der Unsicherheit der Absorption der Materialien: Standardunsicherheit "
 "{u}, {percent} % zwischen {low} und {high} ({count} Ziehungen)"
 
+#. Translators: {db} is a number of decibels.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"Not counted: the method's error over edges, which the validation puts at up "
+"to {db} dB in this band's level"
+msgstr ""
+"Nicht berücksichtigt: der Fehler des Verfahrens an Kanten, den die "
+"Validierung im Pegel dieses Bandes auf bis zu {db} dB beziffert"
+
 #. Translators: {tip} is what a parameter means; {xi} and {limit} are numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format
