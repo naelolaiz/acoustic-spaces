@@ -68,8 +68,9 @@ def test_what_only_the_cpu_traces_stays_there(reference, machine) -> None:
     for setting in ("gpu", "both", "auto"):
         plan = ray_device.choose(setting, rooms)
         assert plan.device == "cpu" and "partitions" in plan.reason
+    # Face groups (the spread from the absorption's uncertainty) are traced on the GPU.
     plan = ray_device.choose("gpu", _arguments(reference, "vector") | {"groups": 2})
-    assert plan.device == "cpu" and "face groups" in plan.reason
+    assert plan == ray_device.Plan("gpu")
 
 
 def test_direct3d_12_leaves_bent_rays_through_vegetation_to_the_cpu(

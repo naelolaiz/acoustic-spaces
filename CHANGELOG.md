@@ -469,6 +469,11 @@ the editor's Run.
 
 **Speed and memory**
 
+- The GPU traces a late part with face groups too, counting each ray's reflections off
+  each group: the spread from the absorption's uncertainty, which `simulate` draws by
+  default for a scene of built-in materials, the editor's runs and material calibration
+  no longer send the late part to the CPU where `late.device` asks for the GPU. Its
+  moments agree with the CPU's within the noise of the rays.
 - Coverage maps and runs in wind take less time, with the same results bit for bit: the
   parabolic equation's steps make fewer new arrays, and the eigenray searches it repeated
   are kept (on one core, a map of 96 points over grass in 8 m/s takes 14 % less time,

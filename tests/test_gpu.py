@@ -603,6 +603,77 @@ def test_gpu_tracer_agrees_with_main_within_the_noise(name: str) -> None:
 
 
 @needs_gpu
+def test_gpu_tracer_counts_reflections_off_face_groups_as_the_cpu_does() -> None:
+    """A unit cube's floor and ceiling one group, its walls another: the moments of the
+    reflection counts (energy times 1, n_0, n_1, n_0², n_0 n_1, n_1²) summed over the
+    response agree with the CPU's within three times the spread of the CPU's over seeds
+    (about 1 %), and the first term holds the energy the GPU's own listeners get."""
+    from test_native import _stochastic_args
+
+    groups = np.array([1] * 8 + [0] * 4, dtype=np.int64)
+    values = _stochastic_args() | {
+        "face_group": groups,
+        "groups": 2,
+        "max_time": 0.05,
+        "rays": 20_000,
+    }
+    cpu = np.array(
+        [
+            _native.trace_stochastic(**values | {"seed": 100 + s})[2][0, :, 0].sum(-1)
+            for s in range(8)
+        ]
+    )
+    energy, _, moments, *_ = gpu_tracer.trace_stochastic(**values)
+    assert moments.shape == (1, 1 + 2 + 3, 1, 5)
+    found = moments[0, :, 0].sum(-1)
+    spread = cpu.std(axis=0, ddof=1) * np.sqrt(1 + 1 / len(cpu))
+    z = (found - cpu.mean(axis=0)) / spread
+    assert np.abs(z).max() < 3.0, np.round(z, 2)
+    np.testing.assert_allclose(moments[0, 0, 0], energy[0, 0].reshape(5, 10).sum(1), rtol=1e-5)
+    # The walls are twice the floor and ceiling: twice the reflections.
+    assert found[2] / found[1] == pytest.approx(2.0, rel=0.05)
+    # Without groups, no moments.
+    none = {"face_group": np.zeros(0, np.int64), "groups": 0}
+    plain = gpu_tracer.trace_stochastic(**values | none)
+    assert plain[2].shape == (1, 0, 1, 0)
+
+
+@needs_gpu
+def test_the_late_stage_traces_face_groups_on_the_gpu() -> None:
+    """A late part with face groups (the spread from the absorption's uncertainty, the
+    editor's runs) runs where its device says, the GPU's moments within the noise of
+    the CPU's."""
+    from acoustic_spaces.engine.reweight import groups_of
+
+    room = Room.from_yaml(SHOEBOX)
+    model = TraceModel.from_room(room, room.scene.simulation)
+    face_group, materials = groups_of(room)
+    common = {
+        "rays": 6000,
+        "max_time": 0.5,
+        "time_step": 1e-3,
+        "speed_of_sound": C,
+        "air": room.air_attenuation(model.bands),
+        "covered_order": 2,
+        "radius": 0.5,
+        "seed": 5,
+        "groups": face_group,
+    }
+    source = np.array(room.scene.sources[0].position, float)
+    listeners = np.array([listener.position for listener in room.scene.listeners], float)
+    on_cpu = late.stochastic_energy(model, source, listeners, **common)
+    assert on_cpu.moments.shape[1] == gpu_tracer.moment_terms(len(materials))
+    for device in ("gpu", "both"):
+        found = late.stochastic_energy(model, source, listeners, **common, device=device)
+        assert found.plan.device == device
+        assert found.moments.shape == on_cpu.moments.shape
+        # Within three times the spread of the difference over seeds (5 %), term by term.
+        np.testing.assert_allclose(
+            found.moments.sum((0, 2, 3)), on_cpu.moments.sum((0, 2, 3)), rtol=0.15
+        )
+
+
+@needs_gpu
 def test_the_gpu_tracer_keeps_its_rays_in_flight_through_a_late_part() -> None:
     """Calls that ask to keep it make the buffer of rays in flight once and keep it
     from call to call (the late part makes one for each batch of rays and band), as no
