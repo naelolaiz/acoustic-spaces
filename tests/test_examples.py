@@ -206,7 +206,7 @@ def _script(example: str, name: str):
     return module
 
 
-def test_listening_room_bass(capsys: pytest.CaptureFixture[str]) -> None:
+def test_listening_room_bass(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     bass = _script("listening_room", "bass")
     room = Room.from_yaml(example_path("listening_room"))
     # The early part at 63 Hz: the wall's reflection in phase against the wall, half a
@@ -218,6 +218,12 @@ def test_listening_room_bass(capsys: pytest.CaptureFixture[str]) -> None:
     assert abs(wall - out) < 1.0
     assert bass.main(["--rays", "300"]) == 0
     assert "in pressure up to 125 Hz" in capsys.readouterr().out
+    # The scene it is given, as the editor's Run demo window gives it the open one.
+    copy = room.scene.model_copy(deep=True)
+    copy.sources[0].name = "my own"
+    copy.to_yaml(tmp_path / "scene.yaml")
+    assert bass.main([str(tmp_path / "scene.yaml"), "--rays", "300"]) == 0
+    assert "  my own " in capsys.readouterr().out
 
 
 def _with_left_out(example: str) -> Room:
@@ -976,7 +982,8 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
     """lakeside_demo.py plays the lake scene through its sound system, adds a listener upwind
     and writes the same scene in still air; the tour moves on phrase boundaries, every
     stop is turned up to the audience's loudness, and a place in still air keeps the
-    gain of the same place in the evening's weather, so the difference is heard."""
+    gain of the same place in the evening's weather, so the difference is heard. Both
+    scenes keep the example's seed, so the weather's effect is the same every run."""
     demo = _script("lakeside_concert", "lakeside_demo")
     folder = copy_examples(tmp_path, ["lakeside_concert"])[0].parent
     args = _demo_args(
@@ -997,6 +1004,7 @@ def test_lakeside_demo_scenes_tour_and_gains(tmp_path: Path) -> None:
         names = [listener.name for listener in room.scene.listeners]
         assert names.count(demo.UPWIND) == 1 and set(demo.TITLES) == set(names)
         assert room.scene.simulation.ir_length_s == demo.IR_LENGTH_S
+        assert room.scene.simulation.seed == 1  # the example's: the same draws every run
     assert evening.scene.atmosphere is not None and still.scene.atmosphere is None
     assert demo.plays(args) == {
         "main_left": "spicy_funk_cake, left channel",

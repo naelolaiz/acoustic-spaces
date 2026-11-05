@@ -210,6 +210,21 @@ def test_saving_with_copies_points_the_signals_and_recording_at_them(qapp, tmp_p
     assert document.copies[str((new / "sounds" / "voice.wav").resolve())] == voice
 
 
+def test_undone_past_a_save_the_scene_keeps_the_copies(qapp, tmp_path: Path) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    (old / "sounds").mkdir(parents=True)
+    write_wav(old / "sounds" / "voice.wav", np.zeros(800), 8000)
+    document = Document(box_scene(), old / "scene.yaml")
+    document.edit("signal", lambda data: data["sources"][0].update(signal="sounds/voice.wav"))
+    document.edit("level", lambda data: data["sources"][0].update(level_db=90.0))
+    document.save(new / "scene.yaml", copy_files=True)
+    document.undo()  # before the level, and the save
+    copy = (new / "sounds" / "voice.wav").resolve()
+    assert document.scene.sources[0].signal == copy
+    document.redo()
+    assert document.scene.sources[0].signal == copy and document.scene.sources[0].level_db == 90
+
+
 def test_saving_copies_the_element_file_of_an_inline_array(qapp, tmp_path: Path) -> None:
     folder = tmp_path / "old"
     folder.mkdir()
@@ -1263,6 +1278,21 @@ def test_materials_let_sound_through(window) -> None:
     assert panels.audience and panels.preset == "stage_floor"
     window.select("material", "wooden_floor")
     assert not page.audience.isChecked()
+
+
+def test_a_transmission_alone_can_be_lowered_and_its_absorption_follows(window) -> None:
+    # Without absorption values of its own, a material absorbs what it lets through.
+    window.open_example(example_path("studio"))
+    window.document.set_material("wooden_floor", {"transmission_loss": 30.0, "scattering": 0.1})
+    window.select("material", "wooden_floor")
+    page = window.inspector.pages["material"]
+    page.table.item(2, 3).setText("20")
+    floor = window.document.scene.materials["wooden_floor"]
+    assert floor.transmission_loss == [30.0] * 3 + [20.0] + [30.0] * 4
+    assert floor.absorption[3] == pytest.approx(0.01) and floor.absorption[4] == 0.001
+    page.table.item(2, 3).setText("35")
+    floor = window.document.scene.materials["wooden_floor"]
+    assert floor.absorption[3] == pytest.approx(10.0**-3.5)
 
 
 def test_source_spectrum_gain_equalizer_and_delay(window) -> None:

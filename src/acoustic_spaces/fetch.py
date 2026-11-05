@@ -228,7 +228,8 @@ def extract_tar(
 ) -> dict[str, Path]:
     """Take ``members`` (names in the archive to paths) out of the tar archive at
     ``url``, compressed or not, reading it as it comes and stopping once every member
-    is out. ``progress`` counts the bytes read of the archive."""
+    is out. ``progress`` counts the bytes read of the archive. Raises ``OSError`` if
+    the archive cannot be read, is cut short or lacks a member."""
     wanted = {name: Path(path) for name, path in members.items()}
     done: dict[str, Path] = {}
     parts: list[Path] = []
@@ -255,6 +256,8 @@ def extract_tar(
                     done[info.name] = path
                     if len(done) == len(wanted):
                         break
+    except (tarfile.TarError, EOFError) as exc:  # a body cut short, or damaged
+        raise OSError(f"{url}: the archive is cut short or damaged ({exc})") from exc
     finally:
         for part in parts:
             part.unlink(missing_ok=True)

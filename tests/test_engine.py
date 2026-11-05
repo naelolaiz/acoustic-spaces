@@ -722,6 +722,21 @@ def test_simulate_checks_the_room() -> None:
         simulate(scene, listeners=["nobody"])
     with pytest.raises(ValueError, match="no listener"):
         simulate(scene, listeners=[])
+    # A listener or source left out is simulated when named, so it is checked then.
+    scene = _scene([0.1] * 8, 0.1, source=(2, 2, 1), listeners=[(5, 4, 1), (5, 4, 9)])
+    scene.listeners[1].enabled = False
+    scene.sources.append(scene.sources[0].model_copy(update={"name": "t", "position": (2, 2, 9)}))
+    scene.sources[1].enabled = False
+    room = Room.from_scene(scene)
+    assert room.problems() == []
+    with pytest.raises(ValueError, match="listener 'l1' .* outside the room"):
+        simulate(room, listeners=["l1"])
+    with pytest.raises(ValueError, match="source 't' .* outside the room"):
+        simulate(room, sources=["t"])
+    from acoustic_spaces.engine import coverage_map
+
+    with pytest.raises(ValueError, match="source 't' .* outside the room"):
+        coverage_map(room, sources=["t"])
 
 
 def test_a_single_ray_still_traces() -> None:

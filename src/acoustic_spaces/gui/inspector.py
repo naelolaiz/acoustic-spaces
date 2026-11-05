@@ -2898,8 +2898,10 @@ class MaterialPage(Page):
                 return
         elif same and self._kind(passing) != 1:
             return
-        if same:  # only what passes changed: the rest stays as it is given
-            fields = _without_transmission(fields)
+        if same:
+            # Only what passes changed: the rest stays as the scene gives it, so that an
+            # absorption that came from the transmission follows the new one.
+            fields = _without_transmission(material.to_data())
         else:
             # Scene-file text, in English as the scene file is.
             origin = fields.get("source") or "values given in the scene"

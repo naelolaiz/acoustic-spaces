@@ -8,7 +8,7 @@ sanity-checked before any ray is traced.
 from __future__ import annotations
 
 import math
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -346,11 +346,18 @@ class Room:
             out[_label_text(self.mesh.labels[label_id])] = float(areas[mask].sum())
         return out
 
-    def problems(self, in_use: Collection[str] = ("sources", "listeners")) -> list[str]:
+    def problems(
+        self,
+        in_use: Collection[str] = ("sources", "listeners"),
+        named: Mapping[str, Collection[str]] | None = None,
+    ) -> list[str]:
         """Issues that would make a simulation wrong; fix these first. Sources and
-        listeners left out (``enabled: false``) are not checked, but every one of them
-        left out is a problem for the kinds in ``in_use``: those a run takes as the scene
-        has them in use, rather than by name (a map takes no listeners)."""
+        listeners left out (``enabled: false``) are not checked, unless ``named`` names
+        them (``{"sources": names, "listeners": names}``: those a run takes by name, even
+        when left out); but every one of them left out is a problem for the kinds in
+        ``in_use``: those a run takes as the scene has them in use, rather than by name
+        (a map takes no listeners)."""
+        named = named or {}
         out = [
             every_left_out(kind[:-1])
             for kind in ("sources", "listeners")
@@ -369,13 +376,14 @@ class Room:
             ("source", self.scene.sources, self.sources_inside, self.sources_in_solid),
             ("listener", self.scene.listeners, self.listeners_inside, self.listeners_in_solid),
         ):
-            items = [item for item in every if item.in_use]
+            checked = [item.in_use or item.name in named.get(f"{kind}s", ()) for item in every]
+            items = [item for item, check in zip(every, checked, strict=True) if check]
             inside = None
             if every_inside is not None:
-                inside = [ok for item, ok in zip(every, every_inside, strict=True) if item.in_use]
+                inside = [ok for ok, check in zip(every_inside, checked, strict=True) if check]
             if every_solid is None:
                 every_solid = np.zeros(len(every), dtype=bool)
-            solid = [bad for item, bad in zip(every, every_solid, strict=True) if item.in_use]
+            solid = [bad for bad, check in zip(every_solid, checked, strict=True) if check]
             if self.outdoor is not None:
                 for item in items:
                     points = item.elements() if kind == "source" else [item.position]
@@ -421,8 +429,8 @@ class Room:
                     out.append(
                         f"{kind} {item.name!r} at {list(item.position)} {where} outside the room"
                     )
-        for listener in self._used("listeners"):
-            for source in self._used("sources"):
+        for listener in self._used("listeners", named):
+            for source in self._used("sources", named):
                 gap = np.linalg.norm(source.elements() - np.asarray(listener.position), axis=1)
                 if gap.min() < MIN_SOURCE_DISTANCE_M:
                     out.append(
@@ -444,9 +452,11 @@ class Room:
             mesh = RoomMesh(mesh.vertices, mesh.faces[keep], mesh.face_labels[keep], mesh.labels)
         return distance_to_surface(mesh, np.reshape(np.asarray(points, dtype=float), (-1, 3)))
 
-    def _used(self, kind: str) -> list:
-        """The scene's sources or listeners (``kind``) in use: not left out."""
-        return [item for item in getattr(self.scene, kind) if item.in_use]
+    def _used(self, kind: str, named: Mapping[str, Collection[str]] | None = None) -> list:
+        """The scene's sources or listeners (``kind``) in use: not left out, or named in
+        ``named`` (:meth:`problems`)."""
+        names = (named or {}).get(kind, ())
+        return [item for item in getattr(self.scene, kind) if item.in_use or item.name in names]
 
     def warnings(self) -> list[str]:
         """Things worth a look that do not stop a simulation; about the sources and

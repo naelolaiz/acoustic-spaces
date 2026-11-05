@@ -9,7 +9,7 @@ default, ``simulation.early.coherent_max_band_hz``) and in energy, as they did u
 version 2, where the wall makes no difference; for the whole response and for its
 early part alone.
 
-    python bass.py [--rays 20000]
+    python bass.py [scene.yaml] [--rays 20000]
 """
 
 from __future__ import annotations
@@ -50,13 +50,14 @@ TITLE = "Bass against the wall and a metre out"
 def parser() -> argparse.ArgumentParser:
     """Its arguments, which the editor's Run demo window asks for too."""
     found = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    found.add_argument("scene", nargs="?", default=HERE / "scene.yaml", help="the scene")
     found.add_argument("--rays", type=int, default=20_000, help="late rays per band")
     return found
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
-    room = Room.from_yaml(HERE / "scene.yaml")
+    room = Room.from_yaml(args.scene)
     header = "".join(f"{f'{hz} Hz':>9}" for hz in BANDS)
     print(f"{'G at the sofa (dB)':<34}{header}{header}")
     print(f"{'':<34}{'whole response':^{9 * len(BANDS)}}{'early part':^{9 * len(BANDS)}}")

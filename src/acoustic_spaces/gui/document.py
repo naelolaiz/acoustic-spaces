@@ -391,6 +391,7 @@ class Document(QObject):
             return
         description, scene = self._undo.pop()
         self._redo.append((description, self.scene))
+        scene = self._at_copies(scene)
         self._set(scene, Room.from_scene(scene, reuse=self.room))
 
     def redo(self) -> None:
@@ -398,7 +399,15 @@ class Document(QObject):
             return
         description, scene = self._redo.pop()
         self._undo.append((description, self.scene))
+        scene = self._at_copies(scene)
         self._set(scene, Room.from_scene(scene, reuse=self.room))
+
+    def _at_copies(self, scene: Scene) -> Scene:
+        """``scene``, from before a save copied its files elsewhere, with the copies
+        (:attr:`copies`) in place of the files it left behind."""
+        if not any(str(file) in self.copies for file in referenced_files(scene)):
+            return scene
+        return with_copies(scene, self.copies)
 
     def _set(self, scene: Scene, room: Room) -> None:
         # Shown or hidden as used or left out, where an edit, undo or redo changed that.

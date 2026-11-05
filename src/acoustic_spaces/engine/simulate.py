@@ -479,10 +479,10 @@ def simulate(
     ``listeners`` pick names from the scene, simulated even when left out
     (``enabled: false``); by default, those in use. ``threads`` overrides
     ``simulation.performance.threads`` (0 uses every core). Raises ``ValueError`` if
-    :meth:`Room.problems` reports anything (it checks the sources and listeners in use,
-    not those left out, named or not; every source, or every listener, left out is a
-    problem when they are not named), if a name is not the scene's, or if there is no
-    listener to simulate.
+    :meth:`Room.problems` reports anything (it checks the sources and listeners in use
+    and those named; every source, or every listener, left out is a problem when they
+    are not named), if a name is not the scene's, or if there is no listener to
+    simulate.
 
     ``groups`` (the group of each face, or -1;
     :func:`~acoustic_spaces.engine.reweight.face_groups`) keeps in each response the
@@ -509,7 +509,8 @@ def simulate(
     unnamed = [
         kind for kind, names in (("sources", sources), ("listeners", listeners)) if names is None
     ]
-    problems = room.problems(in_use=unnamed)
+    named = {"sources": sources or (), "listeners": listeners or ()}
+    problems = room.problems(in_use=unnamed, named=named)
     if problems:
         raise ValueError("; ".join(problems))
     scene = room.scene

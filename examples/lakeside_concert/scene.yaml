@@ -133,5 +133,6 @@ listeners:
 simulation:
   early: {method: image_sources, max_order: 2, diffraction: none}
   late: {method: stochastic_ray_tracing}
+  seed: 1                 # the same random draws every run, in both weathers of the demo
 outputs:
   - mono
