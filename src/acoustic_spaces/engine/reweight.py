@@ -60,13 +60,14 @@ def face_groups(room, materials: Sequence[str]) -> np.ndarray:
     return lookup[np.asarray(room.face_materials)]
 
 
-def groups_of(room) -> tuple[np.ndarray, list[str]] | None:
+def groups_of(room, settings=None) -> tuple[np.ndarray, list[str]] | None:
     """Face groups to trace ``room`` with so that its absorption can change afterwards
     (:func:`reweighted_result`): the group of each face and the materials, those on
     surfaces that absorb less than everything in every band. None when its simulation
-    settings do not keep what re-weighting needs (another late method, third-octave
-    bands, the wave solver) or more than ``MAX_GROUPS`` materials are on its surfaces."""
-    sim = room.scene.simulation
+    settings (``settings``, default the scene's) do not keep what re-weighting needs
+    (another late method, third-octave bands, the wave solver) or more than
+    ``MAX_GROUPS`` materials are on its surfaces."""
+    sim = room.scene.simulation if settings is None else settings
     if sim.late.method != "stochastic_ray_tracing" or sim.bands != "octave" or sim.wave.enabled:
         return None
     used = np.unique(np.asarray(room.face_materials))
@@ -80,7 +81,7 @@ def groups_of(room) -> tuple[np.ndarray, list[str]] | None:
 def _without_absorption(scene) -> dict:
     data = scene.model_dump()
     for material in data["materials"].values():
-        for key in ("absorption", "source", "preset", "file"):
+        for key in ("absorption", "source", "preset", "file", "uncertainty"):
             material.pop(key, None)
     return data
 
@@ -108,9 +109,10 @@ def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequenc
         for key, r in result.responses.items()
     }
     # The runs without the removed parts and in the weather classes are not re-weighted:
-    # their insertion loss and the long-term levels go.
+    # their insertion loss and the long-term levels go, and so does the spread drawn
+    # around the absorption as traced.
     return dataclasses.replace(
-        result, responses=responses, removed=(), insertion_loss={}, long_term=None
+        result, responses=responses, removed=(), insertion_loss={}, long_term=None, spreads={}
     )
 
 

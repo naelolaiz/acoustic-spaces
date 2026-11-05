@@ -245,6 +245,41 @@ by having the same name as a material, or through `default_material`. Names matc
 whatever their case (`brick_rough` names SketchUp's `Brick_Rough`), though a name
 written the same way wins over one in another case.
 
+`uncertainty` says how far a material's absorption may be off: a standard uncertainty
+(`distribution: normal`, the default) or a tolerance of plus or minus the value
+(`distribution: uniform`), in absorption coefficient units, one value or one per octave
+band, with an optional `source`. A material's bands are taken as moving together, and
+the materials as independent of one another.
+
+```yaml
+materials:
+  plaster:
+    absorption: [0.02, 0.02, 0.02, 0.03, 0.04, 0.05, 0.05, 0.05]
+    uncertainty: {absorption: 0.02, source: lab report}
+```
+
+`acoustic_spaces.engine.uncertainty.material_spread` gives the uncertainty this leads to
+in each listener's ISO 3382-1 parameters: the mean, combined standard uncertainty and
+95 % coverage interval of many draws, a Monte Carlo propagation as GUM Supplement 1
+(JCGM 101:2008) describes. Each draw takes the absorption from its distribution and
+re-weights the traced run instead of tracing again, so the run must be simulated with
+the materials' face groups (`acoustic_spaces.engine.reweight.groups_of`, then
+`simulate(..., groups=...)`), in octave bands, with stochastic ray tracing for the late
+part and without the wave solver. To each draw it adds the rays' random error: the
+standard error of the late rays' batches (`simulation.late.batches`, 4 or more) times a
+deviate of Student's t with one degree of freedom fewer than the batches, as GUM
+Supplement 1 takes a quantity known from that many observations. The budget gives each
+input's standard uncertainty alone (`absorption`, `rays`). The parameters from the late
+sound's directions (LF and the like) have no standard error and take the absorption's
+alone. Not counted: the scattering and the method, and a parameter that some draw leaves
+undefined (a decay too slow for the response's length, say) gets none in that band.
+`acoustic-spaces simulate` does this itself when a material on the surfaces has an
+uncertainty: it prints the largest combined standard uncertainty in JNDs from 125 Hz to
+4 kHz, with its budget and 95 % interval, and `parameters.json` holds them all
+(`uncertainty`; 400 draws, `--spread-draws` for another number). With settings that cannot re-weight
+(third-octave bands, say) it warns and leaves the spread out. The editor draws it after
+each run as well and gives it in the results table's tips.
+
 ### Material libraries of CATT-Acoustic and ODEON
 
 Materials kept for CATT-Acoustic or ODEON can be used as they are. `file` names the
