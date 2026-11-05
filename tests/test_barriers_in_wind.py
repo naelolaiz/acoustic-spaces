@@ -145,7 +145,9 @@ def test_who_asks_for_the_runs_behind_barriers(runs, asked, tmp_path) -> None:
     }
     listeners = (
         (40.0, 0.0, 1.5),  # behind the barrier: asks
-        (30.0, 60.0, 1.5),  # its way passes the barrier's end: does not
+        # Its way passes 10 m from the barrier's end, where the path over the top still
+        # takes part as the edge fades it out: asks, along the way just inside the end.
+        (30.0, 60.0, 1.5),
         (16.0, 0.0, 12.0),  # nearer than 1.5 times the heights added: does not
         (-30.0, 0.0, 7.0),  # on the shed's roof: does not
         (-50.0, 0.0, 1.5),  # behind the shed (over its roof's two edges): asks
@@ -156,7 +158,7 @@ def test_who_asks_for_the_runs_behind_barriers(runs, asked, tmp_path) -> None:
             scene(listeners=listeners, buildings=[building], diffraction="second_order")
         )
     )
-    assert sorted(asked) == [0, 4, 5]
+    assert sorted(asked) == [0, 1, 4, 5]
     cuts = {run["obstacles"] for run in runs if "obstacles" in run and run["obstacles"]}
     assert {((15.0, 15.0, 4.0),), ((25.0, 35.0, 6.0),)} <= cuts
     # No paths over edges behind the barrier: none in the plane but where the barrier is
