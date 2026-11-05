@@ -83,7 +83,9 @@ class SimulationJob(QThread):
         self.traced.emit(result)
         self._say(_("Drawing the spread from the absorption uncertainty…"))
         seed = (self.settings or self.room.scene.simulation).seed or 0
-        return with_spread(result, self.room.scene, self.groups, self.materials, seed=seed)
+        return with_spread(
+            result, self.room.scene, self.groups, self.materials, seed=seed, progress=self._say
+        )
 
     def run(self) -> None:
         try:

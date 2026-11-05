@@ -799,8 +799,11 @@ acoustic-spaces info                            # the default, and what auto tak
   let them follow the default.
 
 Sound through partitions and openings (an outdoor scene's sky, which lets sound out
-into no room, is not one), the face groups of material calibration, coverage maps and
-vegetation of more than 16 media are traced on the CPU whatever the setting, and so are
+into no room, is not one), the face groups that re-weight the absorption (for the spread
+from its uncertainty, which `simulate` draws when a material has one, a built-in
+material's default too, for material calibration and for the editor's runs), coverage
+maps and vegetation of more than 16 media are traced on the CPU whatever the setting
+(`simulate --spread-draws 0` traces without the spread), and so are
 runs whose results the GPU's buffers cannot hold (many listeners and arrival directions
 over a long response). `simulate --late-device` overrides the setting; the editor's Simulation page
 has it as "Run on" under Late reverberation. When it is not `cpu`, the progress messages

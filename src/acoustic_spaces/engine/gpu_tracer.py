@@ -10,7 +10,7 @@ thins them out; outdoors, the rays bent by the atmosphere, followed in chords as
 CPU follows them (``cpp/include/acoustic_spaces/atmosphere.hpp``), and the plants that
 absorb and scatter them (``vegetation.hpp``), with the stems' and the foliage's rain. It
 leaves to the CPU (raising :class:`Unsupported`) sound through surfaces into other
-rooms, the face groups of material calibration, runs whose results its buffers cannot
+rooms, the face groups that re-weight the absorption, runs whose results its buffers cannot
 hold, and vegetation of more than :data:`MAX_MEDIA` media or so many volumes along one
 ray that its fixed tables run out of room.
 
