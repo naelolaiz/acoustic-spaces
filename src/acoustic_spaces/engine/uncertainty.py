@@ -22,7 +22,7 @@ built-in database entry's, whose source that database does not name
 ``simulation.uncertainty.presets`` (:func:`uncertainty_of`). By default that is a
 tolerance of plus or minus ``PRESET_TOLERANCE`` in every band; ``iso_12999_2`` takes
 twice the reproducibility standard deviation ISO 12999-2:2020 gives for absorption
-measured to ISO 354 (:data:`ISO_12999_2_THIRDS`), doubled as such a table's values
+measured to ISO 354 (:func:`octave_reproducibility`), doubled as such a table's values
 are not a measurement of the material in the room.
 
 Not counted: the scattering's uncertainty, nor the method's (docs/validation.md), nor
@@ -72,9 +72,12 @@ PARTS = ("mean", "standard", "low", "high", "absorption", "rays")
 PRESET_TOLERANCE = 0.1
 #: ISO 12999-2:2020 Table 1: the reproducibility standard deviation of an absorption
 #: coefficient measured to ISO 354 in a third-octave band, sigma_R = m alpha_s + n, as
-#: {band (Hz): (m, n)}. An octave band takes the mean of the sigma_R of its third
-#: octaves the table has (the 63 Hz octave those at 63 and 80 Hz), the 8 kHz octave,
-#: past the table's last band, that at 5 kHz.
+#: {band (Hz): (m, n)}. An octave band the standard gives no value for
+#: (:data:`ISO_12999_2_OCTAVES`) takes the mean of the sigma_R of its third octaves the
+#: table has (the 63 Hz octave those at 63 and 80 Hz, as the table has no 50 Hz row),
+#: the 8 kHz octave, past the table's last band, that at 5 kHz. Below 100 Hz the rows
+#: lie outside ISO 354's range, and the table comes from absorbers (suspended ceilings,
+#: mineral wool, foams), so for hard surfaces it is taken beyond its data.
 ISO_12999_2_THIRDS = {
     63: (0.450, 0.015),
     80: (0.330, 0.015),
@@ -96,6 +99,18 @@ ISO_12999_2_THIRDS = {
     3150: (0.030, 0.032),
     4000: (0.030, 0.040),
     5000: (0.026, 0.060),
+}
+#: ISO 12999-2:2020 Table 2: the reproducibility standard deviation of the practical
+#: absorption coefficient (ISO 11654: the octave band's mean of its third octaves,
+#: rounded to 0.05), sigma_R = m alpha_p + n, as {octave band (Hz): (m, n)}, which an
+#: octave band's absorption takes where the standard gives it. That rounding is in it,
+#: so for unrounded values it is a little more than the measurement's alone.
+ISO_12999_2_OCTAVES = {
+    250: (0.059, 0.016),
+    500: (0.000, 0.040),
+    1000: (0.000, 0.040),
+    2000: (0.000, 0.040),
+    4000: (0.000, 0.050),
 }
 #: How many times ISO 12999-2's reproducibility a built-in material takes with
 #: ``iso_12999_2``.
@@ -188,11 +203,16 @@ class Spread:
 
 def octave_reproducibility(absorption) -> np.ndarray:
     """(octave bands,) ISO 12999-2's reproducibility standard deviation of the octave
-    band ``absorption`` (:data:`ISO_12999_2_THIRDS`)."""
+    band ``absorption``: its octave bands' (:data:`ISO_12999_2_OCTAVES`) where it gives
+    them, else the mean of its third octaves' (:data:`ISO_12999_2_THIRDS`)."""
     alpha = np.asarray(absorption, dtype=float)
     out = np.empty(len(OCTAVE_BANDS_HZ))
     rows = sorted(ISO_12999_2_THIRDS)
     for b in range(len(OCTAVE_BANDS_HZ)):
+        if OCTAVE_BANDS_HZ[b] in ISO_12999_2_OCTAVES:
+            m, n = ISO_12999_2_OCTAVES[OCTAVE_BANDS_HZ[b]]
+            out[b] = m * alpha[b] + n
+            continue
         thirds = [f for f in THIRD_OCTAVE_BANDS_HZ[3 * b : 3 * b + 3] if f in ISO_12999_2_THIRDS]
         if not thirds:  # past the table: its nearest band
             centre = OCTAVE_BANDS_HZ[b]
