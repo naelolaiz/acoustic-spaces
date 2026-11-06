@@ -260,6 +260,40 @@ def test_weight_window_keeps_the_expected_energy() -> None:
             assert traced < 1.1 * rays
 
 
+def test_a_vector_reflections_specular_share_goes_where_the_specular_paths_go() -> None:
+    # A 2 m square reflector in free field, the source 2 m in front of it: each ray
+    # reflects once at most. Random scattering sends a reflection's specular share
+    # exactly specular, so a listener out of the reflection's specular reach hears the
+    # direct sound and the scattered share (the rain) alone. Vector-based scattering
+    # counts that share on a leg of its own along the specular direction, not on its
+    # blended ray (bent towards the normal, which once carried it there): from the same
+    # rays the listener hears the same. In reach, the specular share is the same on
+    # average.
+    from acoustic_spaces import _native
+
+    vertices = np.array([[0.0, -1, -1], [0, 1, -1], [0, 1, 1], [0, -1, 1]])
+    faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int64)
+    # Out of reach at y = 2.5 (the specular paths reach |y| < 2 at x = 2), and in reach.
+    listeners = np.array([[2.0, 2.5, 0.0], [3.0, 0.5, 0.0]])
+
+    def energy(vector: bool) -> np.ndarray:
+        args = _stochastic_args(200_000) | {
+            "bvh": _native.Bvh(vertices, faces),
+            "source": np.array([2.0, 0.0, 0.0]),
+            "absorption": np.full((2, 1), 0.2),
+            "scattering": np.full((2, 1), 0.5),
+            "vector_scattering": vector,
+            "receivers": listeners,
+            "receiver_radius": np.array([0.3, 0.3]),
+            "threads": 2,
+        }
+        return _native.trace_stochastic(**args)[0][:, 0].sum(axis=1)
+
+    vector, random = energy(True), energy(False)
+    assert vector[0] == pytest.approx(random[0], rel=1e-9)
+    assert vector[1] == pytest.approx(random[1], rel=0.005)
+
+
 def test_the_tracer_counts_reflections_off_face_groups() -> None:
     # Two groups: the cube's floor and ceiling, and its walls. Each arrival is summed
     # times each group's reflection count and their products, per bin of 10 ms.

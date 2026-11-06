@@ -273,6 +273,9 @@ var<private> tau: array<f32, BANDS>;
 var<private> leg_hit: Hit;
 var<private> leg_metres: f32;
 var<private> leg_scatter_at: f32;
+// While the leg traced is a vector reflection's specular share on its own (as the CPU's
+// RayState::detect_only): the detector spheres count it and nothing else happens to it.
+var<private> detect_only: bool;
 
 fn num(at: u32) -> f32 {
     return bitcast<f32>(scene[at]);
@@ -1365,7 +1368,12 @@ fn detectors(origin: vec3<f32>, along: vec3<f32>, segment: f32, rate: f32, path:
         if (travel > run.max_length) {
             continue;  // in the overrun: after the time
         }
-        let covered = ray.order <= run.covered_order && travel / run.c <= num(at + 5u);
+        // The specular-only share of a covered path is the early stage's. A vector
+        // reflection's blended leg counts only the scattered share (its specular share is
+        // on its detect-only leg), which never is.
+        let blended = (run.flags & VECTOR) != 0u && ray.order > 0 && !detect_only;
+        let covered = ray.order <= run.covered_order && travel / run.c <= num(at + 5u) &&
+                      !blended;
         if (tracked) {
             track_weight(nearest);
         }
@@ -1699,7 +1707,7 @@ fn straight_leg() -> u32 {
     var tracked = false;
     if ((run.flags & PLANTS) != 0u) {
         tracked = track_build(ray.pos, ray.dir, segment);
-        if (tracked) {
+        if (tracked && !detect_only) {
             scatter_at = track_collide();
             if (found && scatter_at > hit.t - run.offset) {
                 scatter_at = FAR;
@@ -1722,7 +1730,9 @@ fn straight_leg() -> u32 {
     if (!found) {
         // Out of time, or out of the model: then no face lies anywhere ahead. (The
         // search above only looks as far as the ray can go.)
-        escaped();
+        if (!detect_only) {
+            escaped();
+        }
         return 0u;
     }
     ray.travelled += hit.t;
@@ -1784,7 +1794,7 @@ fn bent_leg() -> u32 {
             var tracked = false;
             if ((run.flags & PLANTS) != 0u) {
                 tracked = track_build(chord.start, along, segment);
-                if (tracked) {
+                if (tracked && !detect_only) {
                     scatter_at = track_collide();
                     if (found && scatter_at > met.t - run.offset) {
                         scatter_at = FAR;
@@ -1840,7 +1850,9 @@ fn bent_leg() -> u32 {
         }
     }
     if (went == 0u) {
-        escaped();
+        if (!detect_only) {
+            escaped();
+        }
         return 0u;
     }
     // Where it meets the face, or scatters in the plants, going the ray's way there.
@@ -1857,6 +1869,64 @@ fn bent_leg() -> u32 {
     bent_chord(end_arc, end_away);
     ray.dir = bent_direction();
     return went;
+}
+
+// Whether a straight line from `origin` along `along` (unit) crosses a listener's sphere
+// ahead, before the ray's time runs out.
+fn reaches(origin: vec3<f32>, along: vec3<f32>) -> bool {
+    for (var k = 0u; k < run.receivers; k++) {
+        let at = run.receiver_at + LISTENER * k;
+        let rel = point(at) - origin;
+        let s = dot(rel, along);
+        let d2 = dot(rel, rel) - s * s;
+        let r = num(at + 3u);
+        if (d2 < r * r) {
+            let half = sqrt(r * r - d2);
+            if (s + half > 0.0 && s - half < run.max_length - ray.travelled) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// The specular share of a vector reflection off normal `n` at ray.pos, on a leg of its
+// own along the exact specular direction `specular` (as on the CPU): the detector
+// spheres count it to the first face it meets, which reflects it (scenes whose faces let
+// sound through trace on the CPU). The ray is as it was after, its random numbers too:
+// the leg rounds what it adds up with numbers of its own, so what the ray does next does
+// not hang on how much of the leg falls in the response's time.
+fn specular_leg(n: vec3<f32>, specular: vec3<f32>) {
+    let rng = ray.rng;
+    ray.rng = seeded(rng.x, rng.y ^ rng.z, rng.w ^ 0x2545f491u);
+    let pos = ray.pos;
+    let dir = ray.dir;
+    let travelled = ray.travelled;
+    let path = ray_path;
+    let last = ray.last;
+    let away = ray.away;
+    let leaving = ray.leaving;
+    for (var b = 0u; b < BANDS; b++) {
+        energy[b] = reflected[b];
+        seen[b] = 1.0 - scatter[b];
+    }
+    ray.pos = pos + n * run.offset;
+    ray.dir = specular;
+    detect_only = true;
+    if ((run.flags & ATMOSPHERE) != 0u) {
+        _ = bent_leg();
+    } else {
+        _ = straight_leg();
+    }
+    detect_only = false;
+    ray.rng = rng;
+    ray.pos = pos;
+    ray.dir = dir;
+    ray.travelled = travelled;
+    ray_path = path;
+    ray.last = last;
+    ray.away = away;
+    ray.leaving = leaving;
 }
 
 // The weight window after a reflection or a scattering in window `window`: splits the
@@ -2072,13 +2142,20 @@ fn advance(n_in: u32) -> bool {
     let diffuse_rain = (run.flags & DIFFUSE_RAIN) != 0u;
     if ((run.flags & VECTOR) != 0u) {
         // One ray for the mixture: all the reflected energy, in between the specular and
-        // a Lambert direction.
-        let mixed = reflect(ray.dir, n) * (1.0 - p) + lambert(n) * p;
+        // a Lambert direction. The detector spheres count its specular share along the
+        // exact specular direction, on a leg of its own (when one lies that way, or the
+        // air bends it), and on this one its scattered share unless the rain covers that.
+        let specular = reflect(ray.dir, n);
+        if ((run.flags & SPECULAR_RAIN) == 0u &&
+            ((run.flags & ATMOSPHERE) != 0u || reaches(ray.pos, specular))) {
+            specular_leg(n, specular);
+        }
+        let mixed = specular * (1.0 - p) + lambert(n) * p;
         let size = length(mixed);
         ray.dir = select(n, mixed / size, size > 1e-12);
         for (var b = 0u; b < BANDS; b++) {
             energy[b] = reflected[b];
-            seen[b] = select(1.0, 1.0 - scatter[b], diffuse_rain);
+            seen[b] = select(scatter[b], 0.0, diffuse_rain);
         }
     } else if (random() < p) {
         for (var b = 0u; b < BANDS; b++) {

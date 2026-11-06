@@ -500,6 +500,11 @@ struct RayState {
     // openings). Once more than the early stage follows (kMaxForks) and a reflection,
     // the path is no longer the early stage's: alone drops to zero.
     std::size_t partitions = 0;
+    // The specular share of a vector reflection (vector_scattering), on its own along
+    // the exact specular direction: the detector spheres count it to the first face that
+    // reflects it, and nothing else happens to it (no rain, maps, splitting or plants'
+    // scattering; it goes on through openings and partitions as their share).
+    bool detect_only = false;
 };
 
 // A ray that passes through a partition: one more, and once past those the early stage
@@ -1080,10 +1085,14 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                 const double nearest = std::clamp(s, t0, t1);
                 const double distance = state.travelled + rate * nearest;
                 if (distance > max_length) continue;  // in the overrun: after the time
+                // The specular-only share of a covered path is the early stage's. A vector
+                // reflection's blended leg counts only the scattered share (its specular
+                // share is on its detect-only leg), which never is.
                 const bool covered = state.order <= settings.covered_order &&
                                      (settings.covered_time.empty() ||
-                                      distance / c <= settings.covered_time[k]);
-                // The specular-only share of a covered path is the early stage's.
+                                      distance / c <= settings.covered_time[k]) &&
+                                     !(settings.vector_scattering && state.order > 0 &&
+                                       !state.detect_only);
                 std::array<double, kMaxBands> passed;
                 if (plant_track != nullptr) plant_track->weight(nearest, passed.data());
                 double any = 0.0;
@@ -1097,6 +1106,21 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                 acc.add(k, counted.data(), (t1 - t0) / sphere_volume[k], distance, -along,
                         state.hits.data(), path < 0.0 ? -1.0 : path + stretch * nearest);
             }
+        };
+
+        // Whether a straight line from `from` along `along` (unit) crosses a receiver's
+        // sphere ahead, before the ray's time runs out `travelled` metres in.
+        const auto reaches = [&](const Vec3 &from, const Vec3 &along, double travelled) {
+            for (std::size_t k = 0; k < n_rec; ++k) {
+                const Vec3 rel = scene.receivers[k] - from;
+                const double s = dot(rel, along);
+                const double d2 = dot(rel, rel) - s * s;
+                const double r = settings.receiver_radius[k];
+                if (d2 >= r * r) continue;
+                const double half = std::sqrt(r * r - d2);
+                if (s + half > 0.0 && s - half < max_length - travelled) return true;
+            }
+            return false;
         };
 
         // What stems at state.pos send each receiver as rain: the detector sphere's count
@@ -1230,9 +1254,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
             while (!stack.empty()) {
                 detail::RayState ray_state = stack.back();
                 stack.pop_back();
-                ++out.traced_rays;
+                if (!ray_state.detect_only) ++out.traced_rays;
                 auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room, hits,
-                       path, away, leaving, partitions] = ray_state;
+                       path, away, leaving, partitions, detect_only] = ray_state;
 
                 while (travelled < max_length) {
                     Hit hit;
@@ -1247,14 +1271,14 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         if (plants != nullptr &&
                             track.build(*plants, pos, dir, segment, energy.data())) {
                             plant_track = &track;
-                            scatter_at = track.collide(rng);
+                            if (!detect_only) scatter_at = track.collide(rng);
                             if (hit.found() && scatter_at > hit.t - offset) scatter_at = inf;
                             segment = std::min(segment, scatter_at);
                         }
                         if (!settings.specular_rain) {
                             spheres(pos, dir, segment, ray_state, 1.0, -1.0, 1.0, plant_track);
                         }
-                        if (has_map) {
+                        if (has_map && !detect_only) {
                             acc.add_map(pos, dir, segment, travelled, energy.data(), alone.data(),
                                         order, room, 1.0, -1.0, 1.0, plant_track);
                         }
@@ -1267,7 +1291,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         } else if (!hit.found()) {
                             // Out of time, or out of the model: then no face lies anywhere
                             // ahead. (The search above only looks as far as the ray can go.)
-                            if (!bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),
+                            if (!detect_only &&
+                                !bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),
                                               last)) {
                                 ++out.escaped_rays;
                             }
@@ -1302,7 +1327,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 if (plants != nullptr &&
                                     track.build(*plants, chord.start, along, segment, energy.data())) {
                                     plant_track = &track;
-                                    scatter_at = track.collide(rng);
+                                    if (!detect_only) scatter_at = track.collide(rng);
                                     if (met.found() && scatter_at > met.t - offset) scatter_at = inf;
                                     segment = std::min(segment, scatter_at);
                                 }
@@ -1310,7 +1335,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                     spheres(chord.start, along, segment, ray_state, rate, path, stretch,
                                             plant_track);
                                 }
-                                if (has_map) {
+                                if (has_map && !detect_only) {
                                     acc.add_map(chord.start, along, segment, travelled,
                                                 energy.data(), alone.data(), order, room, rate,
                                                 path, stretch, plant_track);
@@ -1360,7 +1385,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             break;  // in the overrun
                         }
                         if (scatter_at == inf && !hit.found()) {
-                            if (!bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),
+                            if (!detect_only &&
+                                !bvh.occluded(pos, dir, std::numeric_limits<double>::infinity(),
                                               last)) {
                                 ++out.escaped_rays;
                             }
@@ -1496,6 +1522,15 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         away = -n;
                         continue;
                     }
+                    if (detect_only) {
+                        // Its share of a partition goes on through; the face reflects the rest.
+                        if (!(passed > 0.0)) break;
+                        std::copy(through.begin(), through.begin() + bands, energy.begin());
+                        detail::pass_partition(ray_state);
+                        room = beyond;
+                        away = -n;
+                        continue;
+                    }
                     std::copy(seen.begin(), seen.begin() + bands, seen_before.begin());
                     std::copy(alone.begin(), alone.begin() + bands, alone_before.begin());
                     ++order;
@@ -1625,13 +1660,27 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
 
                     if (settings.vector_scattering) {
                         // One ray for the mixture: all the reflected energy, in between the
-                        // specular and a Lambert direction. The rain covers the scattered
-                        // share of the next leg.
-                        const Vec3 mixed = reflect(dir, n) * (1.0 - p) + cosine_hemisphere(n, rng) * p;
+                        // specular and a Lambert direction. The detector spheres count its
+                        // specular share along the exact specular direction, on a leg of its
+                        // own (when one lies that way, or the air bends it), and on this one
+                        // its scattered share unless the rain covers that.
+                        const Vec3 specular = reflect(dir, n);
+                        if (!settings.specular_rain &&
+                            (atmosphere != nullptr || reaches(pos, specular, travelled))) {
+                            stack.push_back(ray_state);
+                            detail::RayState &share_leg = stack.back();
+                            share_leg.dir = specular;
+                            share_leg.detect_only = true;
+                            for (std::size_t b = 0; b < bands; ++b) {
+                                share_leg.energy[b] = reflected[b];
+                                share_leg.seen[b] = 1.0 - scatter[b];
+                            }
+                        }
+                        const Vec3 mixed = specular * (1.0 - p) + cosine_hemisphere(n, rng) * p;
                         dir = mixed / norm(mixed);
                         for (std::size_t b = 0; b < bands; ++b) {
                             energy[b] = reflected[b];
-                            seen[b] = settings.diffuse_rain ? 1.0 - scatter[b] : 1.0;
+                            seen[b] = settings.diffuse_rain ? 0.0 : scatter[b];
                         }
                     } else if (rng.uniform() < p) {
                         // Diffuse, re-weighted per band so each band's expected energy
