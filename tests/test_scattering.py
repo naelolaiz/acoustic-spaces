@@ -229,10 +229,11 @@ def test_one_ray_carries_all_bands_where_they_scatter_alike() -> None:
 
 @pytest.mark.parametrize("method", ["vector", "random"])
 def test_how_far_the_early_order_moves_the_total(method: str) -> None:
-    # Vector-based scattering bends each reflection towards the wall's normal, so the
-    # late part carries the first orders' specular share with more energy than the
-    # exact paths (here about a quarter more for orders 1 to 3): the total comes out
-    # 0.15 to 0.2 dB high when the early stage takes no order, and within 0.04 dB of
+    # Vector-based scattering counts each reflection's specular share along the exact
+    # specular direction, but from where the blended ray met the face: the first order
+    # is the exact paths' (taking it early moves the total by under 0.04 dB, from 0.05
+    # dB when the blended leg carried it), the next ones fall short. The total comes out
+    # 0.08 to 0.14 dB low when the early stage takes no order, and within 0.07 dB of
     # taking orders 1 to 9 when it takes 1 to 3 (the default). Random scattering keeps
     # the specular share specular, within 0.04 dB either way. From 250 Hz up, where the
     # early paths add in energy.
@@ -258,9 +259,10 @@ def test_how_far_the_early_order_moves_the_total(method: str) -> None:
         return simulate(room)["s", "l"].energy()[2:].sum(axis=1)
 
     exact = total(9)
-    none, default = (10 * np.log10(total(order) / exact) for order in (0, 3))
+    none, first, default = (10 * np.log10(total(order) / exact) for order in (0, 1, 3))
+    assert np.all(np.abs(first - none) < 0.04)
     if method == "vector":
-        assert np.all((none > 0.1) & (none < 0.3))
-        assert np.all((default > 0.0) & (default < 0.06))
+        assert np.all((none > -0.2) & (none < -0.05))
+        assert np.all((default > -0.07) & (default < 0.0))
     else:
         assert np.all(np.abs(none) < 0.06) and np.all(np.abs(default) < 0.03)

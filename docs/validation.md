@@ -68,7 +68,9 @@ request and checks:
   random scattering; a box of tiny surfaces decaying at Eyring's rate within 10 % where
   its smooth walls alone decay far slower; and a box that diffuses the bass and
   reflects the treble decaying at Eyring's rate in the bass only, each band traced with
-  rays of its own, with vector-based and with random scattering;
+  rays of its own, with vector-based and with random scattering; off a reflector in free
+  field, vector-based scattering bringing a listener out of the specular paths' reach
+  what random scattering brings, to rounding, and one in reach within 0.5 %;
 - third-octave bands: statistical runs in third octaves give the octave runs'
   parameters within 1 % or 0.1 dB from 250 Hz up (within 5 % or 0.4 dB at 63 and
   125 Hz, where the early paths add in pressure and three filters weigh their
@@ -4263,18 +4265,20 @@ Results:
   parameters `analyze` takes from the WAV files are.
 - **The early order with vector-based scattering.** Vector-based scattering (the
   default) sends each reflection along the sum of its specular direction and a Lambert
-  direction, which leans towards the wall's normal, so the late part carries the
-  specular share of the first orders along other paths than the exact ones, and with
-  more energy at the listener: in a 4 x 3.5 x 3 m box (absorption 0.15, scattering
-  0.3), about a quarter more for orders 1 to 3 near the middle of the room. The early
-  part replaces those orders with the exact paths, so the total depends a little on how
-  many it takes: with the default `early.max_order: 3` it is within 0.04 dB of taking
-  orders 1 to 9, and with `max_order: 0` 0.14 to 0.2 dB higher (from 250 Hz up).
+  direction, which leans towards the wall's normal. The detector spheres count each
+  reflection's specular share along the exact specular direction, but from where that
+  ray met the face: the first order's share is the exact paths', and the later orders'
+  leave the walls from other places than the exact paths and bring less energy to the
+  listener. The early part replaces orders 1 to 3 with the exact paths, so the total
+  depends a little on how many it takes: in a 4 x 3.5 x 3 m box (absorption 0.15,
+  scattering 0.3), with the default `early.max_order: 3` it is 0.02 to 0.05 dB lower
+  than taking orders 1 to 9, and with `max_order: 0` 0.04 to 0.13 dB lower, while taking
+  the first order early or not moves it by under 0.03 dB (from 250 Hz up, four seeds).
   Random scattering keeps the specular share on the specular paths: within 0.02 dB
   either way (the room of `tests/test_scattering.py` with its seed; the test's bounds
-  are looser, to allow for other seeds). A lobe centred on the specular direction would remove
-  this, but changes the late part's decay, which the default was chosen to match in
-  the BRAS rooms.
+  are looser, to allow for other seeds). A lobe centred on the specular direction would
+  remove this, but changes the late part's decay, which the default was chosen to match
+  in the BRAS rooms.
 - **Pairs of paths from 1 kHz up.** In the bands above 500 Hz that add in pressure
   (outdoors, 1 to 8 kHz), the echogram shares each pair of paths' cross term between
   their two time slots, and a slot that would go below zero is set to zero

@@ -602,8 +602,8 @@ Known issues found by the review of 25 October 2026 (see
   `pyproject.toml`), a few at a time.
 - [ ] Collada polygons with their holes.
 - [ ] Vector-based scattering with a lobe centred on the specular direction, so the late
-  part carries the first orders' specular share as the exact paths do, checked against
-  the BRAS rooms' decay.
+  part carries the specular share of the orders after the first as the exact paths do,
+  checked against the BRAS rooms' decay.
 
 Version 4.1.0 (and, in the sections above, the helicopters, the aircraft, the road
 vehicles, the trains, the road works, the horns, the ground's vibration, the pass-by
