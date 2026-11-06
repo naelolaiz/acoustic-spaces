@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+A user manual (`docs/manual.md`) leads through the documentation from a first simulation
+to the advanced workflows, with an example scene to try at each step.
+
 ## 4.2.0
 
 Error estimates: a material's absorption uncertainty, a default one for the built-in

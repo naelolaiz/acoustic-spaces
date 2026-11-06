@@ -70,6 +70,9 @@ python -m sphinx -W -b html docs docs/_build/html
 The front page is the README, a short summary that links to the user guide's pages in
 `docs/` (getting started, the editor, scene files, simulation and so on); new features
 get their details there and a line on the front page if they deserve one.
+`docs/manual.md`, the user manual, orders those pages from a first simulation to the
+advanced workflows and links to them without repeating them; a new page or a new
+workflow gets its place there.
 `docs/validation.md` is the validation report and
 `docs/api.md` the API reference, generated from the docstrings.
 

@@ -96,6 +96,8 @@ print(response.parameters().table())
 
 ## Documentation
 
+- [User manual](docs/manual.md): a path through these pages, from a first simulation
+  to the advanced workflows, with an example to try at each step.
 - [Getting started](docs/getting-started.md): installing, the command line and the
   Python API.
 - [Graphical editor](docs/editor.md): editing scenes, drawing rooms, results and
