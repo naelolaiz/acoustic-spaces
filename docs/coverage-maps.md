@@ -30,7 +30,7 @@ a leg of its own, as at a listener: see [Simulation](simulation.md#scattering)),
 counting only the rays in the point's room and only the part of the slab in its air:
 what lies past a wall, in the next room or inside a building is left out. A map of
 hundreds of points costs about as much as a few listeners: the concert hall example (480
-points, two sources, 50,000 rays per band) takes about a minute on 4 cores. In the
+points, two sources, 50,000 rays per band) takes under two minutes on 4 cores. In the
 shoebox example, full simulations at three of the map's points give G within 0.3 dB of
 the map and T30 within 5 % from 125 Hz to 4 kHz (the tests, with one seed); at other
 points and seeds T30 strays further now and then, as both carry the late rays' noise.

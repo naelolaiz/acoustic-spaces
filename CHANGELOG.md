@@ -23,8 +23,9 @@ weather zones; and the late sound scattered off the ground near a listener, by u
 dB(A) at a place of the airport's landing (BRAS's CR1, CR2 and CR4 move by 0.04 JND at
 most). With vector-based scattering (the default) the late part changes where a
 reflection's specular share could not go, by over 20 dB at 250 Hz behind the railway's
-barrier, and a little everywhere: seven outdoor examples by 0.32 dB and BRAS's rooms by
-0.3 JND at most.
+barrier, and a little everywhere, maps as listeners: seven outdoor examples by 0.32 dB,
+BRAS's rooms by 0.3 JND and the indoor examples by 0.9 JND at most (mostly G down and
+C80 up by 0.1 to 0.4 dB).
 Indoors, early levels change where a reflection lands on the foot of a wall,
 behind a wall between two rooms drawn as two faces (9 to 18 dB at 1 kHz behind a 20 dB
 wall) and, with edge diffraction, near openings; the wave solver's results within a few
@@ -131,9 +132,12 @@ the editor's Run.
   normal, so that share also reached places no specular path goes: behind the railway
   example's barrier one ray made the late part of the horn's pass over 20 dB louder at
   250 Hz, heard as a burst. The share now goes along the exact specular direction on a
-  leg of its own up to the next face; seven outdoor examples move by 0.32 dB at most
-  (the mean over seven seeds), and BRAS's CR1, CR2 and CR4 by 0.3 JND at most over their
-  pairs (C50 and D50 up, Ts down, typically by 0.1 JND).
+  leg of its own up to the next face, for the listeners and the coverage maps alike;
+  seven outdoor examples move by 0.32 dB at most (the mean over seven seeds), BRAS's
+  rooms by 0.3 JND at most over their pairs (C50 and D50 up, Ts down, typically by 0.1
+  JND), and seven indoor examples by 0.9 JND at most (the studio's EDT at 63 Hz; G down
+  by 0.4 dB at most, C80 up by 0.6 dB at most), where the results with and without the
+  early stage's reflections now agree better.
 - Maps over a long term gain the long-term insertion loss of what `insertion_loss_of`
   names (`long_term_insertion_loss`, dB per band, and `long_term_insertion_loss_a`,
   dB(A)), from the runs with and without it that every class already made. Their other
