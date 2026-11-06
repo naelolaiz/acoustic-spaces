@@ -13,6 +13,11 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 SHOEBOX = EXAMPLES / "shoebox" / "scene.yaml"
 
 
+#: Leaves out the spread that simulate draws by default for a scene of built-in materials
+#: (tested in test_uncertainty.py), which adds half a minute to a run of the shoebox.
+NO_SPREAD = ["--spread-draws", "0"]
+
+
 def test_info(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["info"]) == 0
     out = capsys.readouterr().out
@@ -294,7 +299,17 @@ def test_simulate_writes_responses_and_parameters(
     from acoustic_spaces.audio import read_wav
 
     out = tmp_path / "out"
-    args = ["simulate", str(SHOEBOX), "--out", str(out), "--rays", "2000", "--length", "0.6"]
+    args = [
+        "simulate",
+        str(SHOEBOX),
+        "--out",
+        str(out),
+        "--rays",
+        "2000",
+        "--length",
+        "0.6",
+        *NO_SPREAD,
+    ]
     assert main([*args, "--seed", "3", "--sample-rate", "16000", "--normalize"]) == 0
     stdout = capsys.readouterr().out
     assert "talker -> seat-a" in stdout
@@ -326,7 +341,7 @@ def test_simulate_checks_the_options_that_override_the_scene(
     import json
 
     out = tmp_path / "out"
-    args = ["simulate", str(SHOEBOX), "--out", str(out), "--length", "0.3"]
+    args = ["simulate", str(SHOEBOX), "--out", str(out), "--length", "0.3", *NO_SPREAD]
     for option, value, message in [
         ("--rays", "0", "greater than or equal to 1"),  # was a ZeroDivisionError
         ("--sample-rate", "-8000", "greater than or equal to 8000"),
@@ -491,7 +506,17 @@ def test_simulate_writes_spatial_outputs(
     from acoustic_spaces.audio import read_wav
 
     out = tmp_path / "out"
-    args = ["simulate", str(SHOEBOX), "--out", str(out), "--rays", "1000", "--length", "0.3"]
+    args = [
+        "simulate",
+        str(SHOEBOX),
+        "--out",
+        str(out),
+        "--rays",
+        "1000",
+        "--length",
+        "0.3",
+        *NO_SPREAD,
+    ]
     formats = ["binaural", "ambisonics:2", "loudspeakers:5.0"]
     assert main([*args, "--seed", "1", *(f"--output={f}" for f in formats)]) == 0
     capsys.readouterr()
@@ -989,7 +1014,17 @@ def test_compare_plots_both_decays(
 @pytest.fixture(scope="module")
 def simulated(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("sim")
-    args = ["simulate", str(SHOEBOX), "--out", str(out), "--rays", "1000", "--length", "0.3"]
+    args = [
+        "simulate",
+        str(SHOEBOX),
+        "--out",
+        str(out),
+        "--rays",
+        "1000",
+        "--length",
+        "0.3",
+        *NO_SPREAD,
+    ]
     assert main([*args, "--seed", "1", "--output=mono", "--output=loudspeakers:5.0"]) == 0
     return out
 
