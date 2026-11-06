@@ -596,6 +596,67 @@ def test_levels_are_continuous_over_a_barriers_top(tmp_path: Path) -> None:
         assert jump.max() < 1.0 and jump[:, 4:].max() < 0.1
 
 
+def _over_grass(source, listener, barrier, zones=False) -> tuple[np.ndarray, int]:
+    """The level of the early paths (dB) from ``source`` to ``listener`` past a screen
+    (path, height) on grass, outdoors, with a track bed of gravel under the source
+    (``zones``), and how many specular paths there are."""
+    ground = {"extent": [[-200, -200], [200, 200]], "sky": 40}
+    if zones:
+        ground["zones"] = [{"name": "bed", "polygon": [[-200, -2], [200, -2], [200, 2], [-200, 2]]}]
+    room = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {
+                    "ground": ground,
+                    "barriers": [{"name": "screen", "path": barrier[0], "height": barrier[1]}],
+                },
+                "materials": {
+                    "grass": {"impedance": "grass"},
+                    "gravel": {"impedance": "gravel"},
+                    "panel": {"absorption": [0.05] * 8},
+                },
+                "assignments": {"ground": "grass", "bed": "gravel", "barriers": "panel"},
+                "sources": [{"name": "s", "position": list(source)}],
+                "listeners": [{"name": "l", "position": list(listener)}],
+                "simulation": {
+                    "early": {
+                        "method": "image_sources",
+                        "max_order": 1,
+                        "diffraction": "first_order",
+                    },
+                    "ir_length_s": 0.5,
+                },
+            }
+        )
+    )
+    paths = early_paths(room)
+    return 10 * np.log10(total_energy(paths)), int(np.sum(paths.edge < 0))
+
+
+@pytest.mark.parametrize("case", ["end", "top"])
+def test_a_ground_reflection_joins_its_edge_term_on_grass(case: str) -> None:
+    # Where a screen's end (from a source over a track bed, as in the railway example) or
+    # its top (the reflection before the screen) cuts off the reflection off the grass,
+    # the term on the dark side takes over from the reflection and its term on the lit
+    # side. Their ground factors were those of the leg from the edge, the reflection's
+    # that of the whole path, over another stretch of ground (1.2 dB at 250 Hz at the
+    # end, 0.3 dB at 63 Hz at the top).
+    step = 1e-3
+    if case == "end":
+        end = -100.0 - 100.0 * 4.0 / 21.0  # the end's shadow boundary on the track
+        screen = ([[-100, -4], [100, -4]], 3.0)
+        sides = [
+            _over_grass((end + d, 0.0, 2.2), (0.0, -25.0, 1.5), screen, True) for d in (step, -step)
+        ]
+    else:
+        top = -1.0 + 4.0 * 30.0 / 10.0  # the line from the source's image over the top
+        screen = ([[10, -150], [10, 150]], 3.0)
+        sides = [_over_grass((0.0, 0.0, 1.0), (30.0, 0.0, top + d), screen) for d in (-step, step)]
+    (dark, hidden), (lit, seen) = sides
+    assert seen > hidden  # the reflection off the grass, and at the end the direct sound
+    assert np.abs(lit - dark).max() < 0.02
+
+
 # -- reflections on both sides of an edge ----------------------------------------------
 
 

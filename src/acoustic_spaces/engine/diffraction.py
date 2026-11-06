@@ -1243,6 +1243,8 @@ class EdgeDiffraction:
         # The cosine each reflection on the way meets its face at, where its phase is
         # that face's absorption's (EarlyReflections.cosines).
         leg_cosines = np.full((2, len(kind)), np.nan)
+        # The rows that reflect off a ground on the way and each term's factor (below).
+        on_ground = []
         for place, (faces, bounces, via) in enumerate(legs):
             on_plane = faces >= 0
             grounds = on_plane.any() and model.factor_faces(faces[on_plane]).any()
@@ -1270,24 +1272,44 @@ class EdgeDiffraction:
             leg_cosines[place, rows[~ground]] = cosine[~ground]
             if ground.any():
                 # A ground's spherical wave, from the image of the source or the listener
-                # to the edge.
-                leg = np.where(via_source, r1[rows], r2[rows])
-                edge_point = c["point"][rows]
-                ends = (
-                    np.where(via_source[:, None], self.source[None], edge_point),
-                    bounce,
-                    np.where(via_source[:, None], edge_point, listener[None]),
+                # to the edge. Near its boundary, though, a term continues its geometric
+                # wave, which reflects off the ground as the whole path's wave does (its
+                # length, and the grounds round the reflection between the points before
+                # and after it): for the incident wave those on either side of the edge,
+                # for a face's reflection, which reflects at the edge on its boundary,
+                # the edge itself. Each term takes that factor by 1 - |F(X)| of its
+                # boundary, all of it on the boundary, where the wave and the term then
+                # join, and the edge's farther off.
+                g = rows[ground]
+                leg = np.where(via_source, r1[rows], r2[rows])[ground]
+                edge_point = c["point"][g]
+                source = np.broadcast_to(self.source, edge_point.shape)
+                hearer = np.broadcast_to(listener, edge_point.shape)
+                twice = (kind[g] == 3)[:, None]
+                ahead = via_source[ground][:, None]
+                # The point on the far side of the edge from this leg's reflection.
+                beyond = np.where(
+                    ahead,
+                    np.where(twice, c["bounce2"][g], hearer),
+                    np.where(twice, c["bounce"][g], source),
                 )
-                common[rows[ground]] *= ground_factors(
-                    model,
-                    face[ground],
-                    cosine[ground],
-                    leg[ground],
-                    ends=tuple(p[ground] for p in ends),
+                at = bounce[ground]
+                own = (np.where(ahead, source, edge_point), at, np.where(ahead, edge_point, hearer))
+                whole = (np.where(ahead, source, beyond), at, np.where(ahead, beyond, hearer))
+                args = (model, face[ground], cosine[ground])
+                from_edge = ground_factors(*args, leg, ends=own)
+                faces_whole = ground_factors(*args, distance[g], ends=own)
+                incident_whole = ground_factors(*args, distance[g], ends=whole)
+                geometric = np.stack([incident_whole, faces_whole, faces_whole], axis=1)
+                kept_near = 1.0 - _share(kl[g], angle[g])
+                on_ground.append(
+                    (g, kept_near * geometric + (1.0 - kept_near) * from_edge[:, None])
                 )
         factors = self._face_factors(edge, sin_beta, c["phi_s"])
         waves = _waves(n, c["phi_r"], c["phi_s"], kl, lit, factors)
         waves *= common[:, None]  # (C, 3, B, M): incident, off face 0, off face n
+        for g, factor in on_ground:
+            waves[g] *= factor
         if near.any():
             waves[fading] *= shares
 

@@ -15,8 +15,10 @@ rays, the terrain's mean plane, the wave solver, early reflections between rooms
 coverage maps and sweep measurements.
 
 Results change from 4.1.0: outdoors in wind or a temperature gradient behind and beside
-barriers and buildings, past a thin screen's free ends, at listeners whose ground
-reflection comes in more than 15° up, and where a curved ray runs level near the
+barriers and buildings, past a thin screen's free ends, near where a barrier cuts off a
+reflection off soft ground (0.7 dB at most behind the railway example's barrier), at
+listeners whose ground reflection comes in more than 15° up, and where a curved ray
+runs level near the
 listener, the source or the ground (20 dB and more at worst); over uneven terrain, by up
 to 2.1 dB at the hillside example's listener; near where two grounds meet; across
 weather zones; and the late sound scattered off the ground near a listener, by up to 6.1
@@ -119,6 +121,11 @@ the editor's Run.
   goes on past it; the shares were counted on 96 points, so a pass-by's level stepped by
   up to 1.75 dB as the reflection crossed the runway's edge. The airport's departure heard
   at approach_2000m reads 0.2 dB(A) lower (L_ASmax 51.9).
+- Fixed: where a barrier's top or end cuts off a reflection off a ground with an
+  impedance, the reflection and its edge term now join: the term reflected off the
+  ground as the wave from the edge does even on the boundary, where the reflection takes
+  the whole path's factor, so behind the railway example's barrier the horn's level
+  stepped by up to 1.2 dB (250 Hz) as it passed the barrier's end.
 - Fixed: one late ray scattered off the ground next to a listener could lift a place of
   an outdoor walk by up to 6.1 dB(A) (the airport's landing heard at approach_2000m),
   and most runs found too little of that scattered sound far from the source. It is now
