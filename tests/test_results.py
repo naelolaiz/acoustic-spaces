@@ -33,8 +33,9 @@ SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "sce
 def result():
     room = Room.from_yaml(SHOEBOX)
     sim = room.scene.simulation
+    # Long enough for every band to decay the 20 dB its parameters need, whatever the seed.
     quick = sim.model_copy(
-        update={"ir_length_s": 0.3, "seed": 1, "late": sim.late.model_copy(update={"rays": 500})}
+        update={"ir_length_s": 0.5, "seed": 1, "late": sim.late.model_copy(update={"rays": 500})}
     )
     return simulate(room, settings=quick)
 
