@@ -20,8 +20,9 @@ reflection off soft ground (0.7 dB at most behind the railway example's barrier)
 listeners whose ground reflection comes in more than 15° up, and where a curved ray
 runs level near the
 listener, the source or the ground (20 dB and more at worst); over uneven terrain, by up
-to 2.1 dB at the hillside example's listener; near where two grounds meet; across
-weather zones; and the late sound scattered off the ground near a listener, by up to 6.1
+to 2.1 dB at the hillside example's listener; near where two grounds meet; beside
+buildings, by up to 1.6 dB behind the railway example's barrier; across weather zones;
+and the late sound scattered off the ground near a listener, by up to 6.1
 dB(A) at a place of the airport's landing (BRAS's CR1, CR2 and CR4 move by 0.04 JND at
 most). With vector-based scattering (the default) the late part changes where a
 reflection's specular share could not go, by over 20 dB at 250 Hz behind the railway's
@@ -106,6 +107,11 @@ the editor's Run.
   sampled profile, up to 0.33 dB off its smooth one).
   Neither a ground that absorbs nothing (in the parabolic equation) nor a layer whose
   speed changes by less than 5.6e-9 m/s per metre sets off a RuntimeWarning any more.
+- Fixed: beside a building, a reflection off the plane of its roof from below, out in
+  the open air, took edge terms: its corners stood on that plane, and the roof's edge
+  explained a reflection off the back of the roof. Behind the railway example's barrier
+  the horn's level was up to 1.6 dB too high (250 Hz) and stepped by up to 3.8 dB
+  (8 kHz) where such a path met an end of the house's wall.
 - Fixed: with weather zones, the shares of a path's way under each weather, rounded one
   by one, could add up to 1 ± 0.005 (± 0.01 across five weathers), scaling the speed of
   sound in still air by as much; they are now divided by their sum. Over 300 m across

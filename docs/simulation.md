@@ -373,7 +373,9 @@ both edges of a gap count where a path goes through it), and the events of a pat
 multiply, as the path must get past each in turn. A path that is not found is followed
 where one edge explains each run of the events that stop it, or two edges explain them
 between them, in at most two runs: a reflection past the end of its face with a corner
-in the way of a leg next to it, say. Reflections off perpendicular planes, such as the
+in the way of a leg next to it, say. An edge explains a reflection only in front of its
+face, and stands on a plane only where the plane goes on round its end on its open
+side, so no path reflects off a roof's plane from below beside the building. Reflections off perpendicular planes, such as the
 floor and a wall, give the same image in either order, and the path over an edge may
 take another order than the path itself: each path takes the terms of every such
 order, and each order is tried where the early stage found only one. Each term is a
