@@ -59,7 +59,11 @@ loudspeaker formats.
 ```sh
 pip install acoustic-spaces                # simulation, rendering and the command line
 pip install "acoustic-spaces[viz,gui]"     # with the 3D view and the graphical editor
+pip install "acoustic-spaces[viz,gui,measure,sofa,gpu,ifc,sketchup]"  # every optional part
 ```
+
+What each extra in brackets adds is listed in
+[Getting started](docs/getting-started.md#extras).
 
 PyPI and every [GitHub release](https://github.com/naelolaiz/acoustic-spaces/releases)
 have wheels for Linux (x86-64), macOS (Apple silicon and Intel) and Windows (x86-64),
@@ -74,8 +78,8 @@ cd acoustic-spaces
 uv sync --extra viz --extra gui
 ```
 
-[Getting started](docs/getting-started.md) lists the extras, the same with pip, and a
-tour of the command line and the Python API.
+[Getting started](docs/getting-started.md) has the same with pip and a tour of the
+command line and the Python API.
 
 ## Quick start
 

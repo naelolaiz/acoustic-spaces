@@ -10,6 +10,8 @@ every release.
 - Changed: `simulation.uncertainty.presets: iso_12999_2` takes ISO 12999-2's octave-band
   values (Table 2) from 250 Hz to 4 kHz instead of the mean of its third octaves', so hard
   surfaces spread about twice as far there and strong absorbers a little less.
+- Fixed: Getting started lists every install extra and what it adds in one table, which
+  the README and the manual link to.
 
 ## 4.2.0
 
