@@ -9,6 +9,7 @@ from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine.reweight import groups_of, log_ratio
 from acoustic_spaces.engine.uncertainty import (
     EDGE_ERRORS_DB,
+    ISO_12999_2_OCTAVES,
     ISO_12999_2_THIRDS,
     MAX_ABSORPTION,
     MIN_BATCHES,
@@ -22,6 +23,7 @@ from acoustic_spaces.engine.uncertainty import (
     octave_reproducibility,
     uncertainty_of,
 )
+from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 
 WALLS = [0.04, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.12]
 
@@ -100,29 +102,47 @@ def test_a_built_in_material_of_unknown_source_takes_the_scene_s_default():
         _with_preset("half")
 
 
-def test_octave_bands_take_the_mean_of_iso_12999_2_s_third_octaves():
-    """sigma_R = m alpha + n (ISO 12999-2:2020, Table 1) in an octave band is the mean of
-    its third octaves' in the table: the 63 Hz octave has its 63 and 80 Hz rows, the
-    8 kHz octave, past the table, takes the 5 kHz row."""
+def test_octave_bands_take_iso_12999_2_s_octaves_else_the_mean_of_its_thirds():
+    """sigma_R = m alpha + n (ISO 12999-2:2020) in an octave band: from 250 Hz to 4 kHz
+    the standard's octave band's (Table 2), elsewhere the mean of its third octaves' in
+    Table 1: the 63 Hz octave has its 63 and 80 Hz rows, the 8 kHz octave, past the
+    table, takes the 5 kHz row."""
     table = ISO_12999_2_THIRDS
     assert len(table) == 20 and min(table) == 63 and max(table) == 5000
-    # At alpha = 1, sigma_R from 500 Hz to 5 kHz as Vercammen (ICA 2019, Table 2) gives
-    # the standard's: 0.065 0.06 0.055 0.055 0.056 0.055 0.056 (2.5 kHz: 0.056 here,
-    # 0.057 there) 0.062 0.07 0.086.
+    assert sorted(ISO_12999_2_OCTAVES) == [250, 500, 1000, 2000, 4000]
+    # At alpha = 1, sigma_R from 500 Hz to 5 kHz in Table 1 (Vercammen, ICA 2019, Table 2,
+    # has 0.057 at 2.5 kHz).
     found = [round(m + n, 3) for f, (m, n) in sorted(table.items()) if f >= 500]
     assert found == [0.065, 0.06, 0.055, 0.055, 0.056, 0.055, 0.056, 0.056, 0.062, 0.07, 0.086]
     alpha = np.linspace(0.1, 0.8, 8)
     sigma = octave_reproducibility(alpha)
-    rows = {
-        0: (63, 80),
-        1: (100, 125, 160),
-        4: (800, 1000, 1250),
-        6: (3150, 4000, 5000),
-        7: (5000,),
-    }
-    for band, thirds in rows.items():
-        expected = np.mean([table[f][0] * alpha[band] + table[f][1] for f in thirds])
+    thirds = {0: (63, 80), 1: (100, 125, 160), 7: (5000,)}
+    for band, rows in thirds.items():
+        expected = np.mean([table[f][0] * alpha[band] + table[f][1] for f in rows])
         assert sigma[band] == pytest.approx(expected, rel=1e-12)
+    for band in range(2, 7):
+        m, n = ISO_12999_2_OCTAVES[OCTAVE_BANDS_HZ[band]]
+        assert sigma[band] == pytest.approx(m * alpha[band] + n, rel=1e-12)
+
+
+def test_iso_12999_2_tables_give_the_standard_s_examples():
+    """The expanded uncertainty U = 2 sigma_R of the standard's examples, to 0.01: a
+    third-octave absorption (ISO 12999-2:2020, Table 4) and a practical one (Table 5)."""
+    example = {  # band (Hz): (alpha_s, U)
+        63: (0.33, 0.33), 80: (0.35, 0.26), 100: (0.39, 0.22), 125: (0.38, 0.17),
+        160: (0.37, 0.13), 200: (0.36, 0.11), 250: (0.36, 0.09), 315: (0.36, 0.08),
+        400: (0.43, 0.08), 500: (0.49, 0.08), 630: (0.58, 0.08), 800: (0.63, 0.08),
+        1000: (0.68, 0.08), 1250: (0.71, 0.09), 1600: (0.73, 0.09), 2000: (0.75, 0.09),
+        2500: (0.77, 0.10), 3150: (0.79, 0.11), 4000: (0.81, 0.13), 5000: (0.81, 0.16),
+    }  # fmt: skip
+    for band, (alpha, expanded) in example.items():
+        m, n = ISO_12999_2_THIRDS[band]
+        assert round(2.0 * (m * alpha + n), 2) == pytest.approx(expanded), band
+    practical = {250: (0.50, 0.09), 500: (0.65, 0.08), 1000: (0.70, 0.08),
+                 2000: (0.85, 0.08), 4000: (0.80, 0.10)}  # fmt: skip
+    for band, (alpha, expanded) in practical.items():
+        m, n = ISO_12999_2_OCTAVES[band]
+        assert round(2.0 * (m * alpha + n), 2) == pytest.approx(expanded), band
 
 
 def test_the_phases_between_fits_turn_as_a_fit_for_each_draw_does():
