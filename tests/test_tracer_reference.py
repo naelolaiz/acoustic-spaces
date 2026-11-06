@@ -12,9 +12,9 @@ unnoticed.
 The reference came from main before the SAH tree (commit 5a725b2), and was written
 again when a ray's last leg began to take the whole chords through the spheres and map
 cells it crosses as its time runs out (only the last slots changed), and when the
-spheres began to count a vector reflection's specular share along the exact specular
-direction (only the received energy of the vector runs without specular rain changed,
-not the rays' paths). To write it again,
+spheres and the map began to count a vector reflection's specular share along the exact
+specular direction (only the received energy of the vector runs without specular rain
+and the map's energy changed, not the rays' paths). To write it again,
 only for a change that is meant to alter what the tracer computes (and say so in its
 pull request), run this file with that code first on the path::
 

@@ -183,9 +183,9 @@ simulation:
   specular direction and a random Lambert direction, weighted by the scattering
   coefficient, as ODEON and pyroomacoustics do. The ray keeps all the reflected energy:
   the diffuse rain sends the scattered share to the listeners, and the detector spheres
-  count the rest along the exact specular direction, on a leg of its own up to the next
-  face, as random scattering's specular rays do, so it reaches only where specular paths
-  go. Where the bands' coefficients differ, each band is traced with rays of its own, so
+  and coverage maps count the rest along the exact specular direction, on a leg of its
+  own up to the next face, as random scattering's specular rays do, so it reaches only
+  where specular paths go. Where the bands' coefficients differ, each band is traced with rays of its own, so
   a wall that scatters the bass and reflects the treble does both; one direction for all
   bands (pyroomacoustics takes their mean) made the example box's treble decay twice as
   fast as it should. For the same rays per band, tracing band by band takes 3 to 5 times
