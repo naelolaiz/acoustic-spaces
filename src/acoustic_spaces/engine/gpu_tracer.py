@@ -276,6 +276,23 @@ var<private> leg_scatter_at: f32;
 // While the leg traced is a vector reflection's specular share on its own (as the CPU's
 // RayState::detect_only): the detector spheres count it and nothing else happens to it.
 var<private> detect_only: bool;
+// The ray as the reflection left it, while that leg is traced (see specular_leg), and
+// whether it goes on after; the direction the leg takes, once the reflection asks for one,
+// and the random numbers it starts from.
+var<private> held_pos: vec3<f32>;
+var<private> held_dir: vec3<f32>;
+var<private> held_away: vec3<f32>;
+var<private> held_rng: vec4<u32>;
+var<private> held_travelled: f32;
+var<private> held_path: f32;
+var<private> held_last: u32;
+var<private> held_leaving: u32;
+var<private> held_alive: bool;
+var<private> held_energy: array<f32, BANDS>;
+var<private> held_seen: array<f32, BANDS>;
+var<private> specular_wanted: bool;
+var<private> specular_dir: vec3<f32>;
+var<private> specular_rng: vec4<u32>;
 
 fn num(at: u32) -> f32 {
     return bitcast<f32>(scene[at]);
@@ -1890,43 +1907,53 @@ fn reaches(origin: vec3<f32>, along: vec3<f32>) -> bool {
     return false;
 }
 
-// The specular share of a vector reflection off normal `n` at ray.pos, on a leg of its
-// own along the exact specular direction `specular` (as on the CPU): the detector
-// spheres count it to the first face it meets, which reflects it (scenes whose faces let
-// sound through trace on the CPU). The ray is as it was after, its random numbers too:
+// The specular share of a vector reflection, on a leg of its own along the exact
+// specular direction `specular` from ray.pos (as on the CPU): the detector spheres count
+// it to the first face it meets, which reflects it (scenes whose faces let sound through
+// trace on the CPU). The ray as the reflection left it, and whether it goes on
+// (`alive`), wait meanwhile; the next advance() traces the leg, through the one call
+// that traces the ray's own legs (Direct3D on Windows gave nothing back with a second
+// call of the bent leg here), and resume() takes the ray back, its random numbers too:
 // the leg rounds what it adds up with numbers of its own, so what the ray does next does
 // not hang on how much of the leg falls in the response's time.
-fn specular_leg(n: vec3<f32>, specular: vec3<f32>) {
-    let rng = ray.rng;
-    ray.rng = seeded(rng.x, rng.y ^ rng.z, rng.w ^ 0x2545f491u);
-    let pos = ray.pos;
-    let dir = ray.dir;
-    let travelled = ray.travelled;
-    let path = ray_path;
-    let last = ray.last;
-    let away = ray.away;
-    let leaving = ray.leaving;
+fn specular_leg(specular: vec3<f32>, alive: bool) {
+    held_pos = ray.pos;
+    held_dir = ray.dir;
+    held_away = ray.away;
+    held_rng = ray.rng;
+    held_travelled = ray.travelled;
+    held_path = ray_path;
+    held_last = ray.last;
+    held_leaving = ray.leaving;
+    held_alive = alive;
     for (var b = 0u; b < BANDS; b++) {
+        held_energy[b] = energy[b];
+        held_seen[b] = seen[b];
         energy[b] = reflected[b];
         seen[b] = 1.0 - scatter[b];
     }
-    ray.pos = pos + n * run.offset;
+    let rng = specular_rng;
+    ray.rng = seeded(rng.x, rng.y ^ rng.z, rng.w ^ 0x2545f491u);
     ray.dir = specular;
     detect_only = true;
-    if ((run.flags & ATMOSPHERE) != 0u) {
-        _ = bent_leg();
-    } else {
-        _ = straight_leg();
-    }
+}
+
+// The ray back after its reflection's specular leg; false when it does not go on.
+fn resume() -> bool {
     detect_only = false;
-    ray.rng = rng;
-    ray.pos = pos;
-    ray.dir = dir;
-    ray.travelled = travelled;
-    ray_path = path;
-    ray.last = last;
-    ray.away = away;
-    ray.leaving = leaving;
+    ray.pos = held_pos;
+    ray.dir = held_dir;
+    ray.away = held_away;
+    ray.rng = held_rng;
+    ray.travelled = held_travelled;
+    ray_path = held_path;
+    ray.last = held_last;
+    ray.leaving = held_leaving;
+    for (var b = 0u; b < BANDS; b++) {
+        energy[b] = held_energy[b];
+        seen[b] = held_seen[b];
+    }
+    return held_alive;
 }
 
 // The weight window after a reflection or a scattering in window `window`: splits the
@@ -2065,14 +2092,17 @@ fn scatter_in_plants(n_in: u32) -> bool {
 // The ray's next leg and reflection; false once it is done. `n_in` is the number of
 // rays this round, where the copies' place starts.
 fn advance(n_in: u32) -> bool {
-    if (ray.travelled >= run.max_length) {
-        return false;
-    }
+    // The only place a leg is traced: the ray's, or its last reflection's specular leg.
     var went = 0u;
-    if ((run.flags & ATMOSPHERE) != 0u) {
-        went = bent_leg();
-    } else {
-        went = straight_leg();
+    if (detect_only || ray.travelled < run.max_length) {
+        if ((run.flags & ATMOSPHERE) != 0u) {
+            went = bent_leg();
+        } else {
+            went = straight_leg();
+        }
+    }
+    if (detect_only) {
+        return resume();
     }
     if (went == 0u) {
         return false;
@@ -2143,12 +2173,15 @@ fn advance(n_in: u32) -> bool {
     if ((run.flags & VECTOR) != 0u) {
         // One ray for the mixture: all the reflected energy, in between the specular and
         // a Lambert direction. The detector spheres count its specular share along the
-        // exact specular direction, on a leg of its own (when one lies that way, or the
-        // air bends it), and on this one its scattered share unless the rain covers that.
+        // exact specular direction, on a leg of its own that the next advance() traces
+        // (when one lies that way, or the air bends it), and on this one its scattered
+        // share unless the rain covers that.
         let specular = reflect(ray.dir, n);
         if ((run.flags & SPECULAR_RAIN) == 0u &&
             ((run.flags & ATMOSPHERE) != 0u || reaches(ray.pos, specular))) {
-            specular_leg(n, specular);
+            specular_wanted = true;
+            specular_dir = specular;
+            specular_rng = ray.rng;
         }
         let mixed = specular * (1.0 - p) + lambert(n) * p;
         let size = length(mixed);
@@ -2174,7 +2207,13 @@ fn advance(n_in: u32) -> bool {
     }
     // The next leg starts just off the face.
     ray.pos += n * run.offset;
-    return weigh(n_in, window);
+    let alive = weigh(n_in, window);
+    if (specular_wanted) {
+        specular_wanted = false;
+        specular_leg(specular_dir, alive);
+        return true;
+    }
+    return alive;
 }
 
 @compute @workgroup_size(64)
@@ -2192,7 +2231,8 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>,
     } else if (!start(run.fresh_from + i - run.kept - run.spawned)) {
         return;
     }
-    for (var leg = 0u; leg < run.legs; leg++) {
+    // A reflection's specular leg is traced before the ray is kept for the next round.
+    for (var leg = 0u; leg < run.legs || detect_only; leg++) {
         if (!advance(n_in)) {
             return;
         }
