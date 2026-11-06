@@ -65,11 +65,22 @@ Example scenes live in `examples/<name>/scene.yaml`, with a comment at the top t
 ```sh
 python -m pip install -e ".[docs]"     # or: uv sync --extra docs
 python -m sphinx -W -b html docs docs/_build/html
+python docs/print_pdf.py manual.pdf    # the user manual as one PDF; needs Chrome or Chromium
 ```
+
+`print_pdf.py` prints the pages of the User manual and Reference sections of
+`docs/index.md`, in that order, with a title page, the contents with page numbers and
+bookmarks; links to the other pages go to the website. `--chrome` (or `CHROME`) names
+the browser when it is not `google-chrome`. CI builds both on every pull request and, from
+`main`, publishes the website with the PDF on GitHub Pages
+(<https://naelolaiz.github.io/acoustic-spaces/>).
 
 The front page is the README, a short summary that links to the user guide's pages in
 `docs/` (getting started, the editor, scene files, simulation and so on); new features
 get their details there and a line on the front page if they deserve one.
+`docs/manual.md`, the user manual, orders those pages from a first simulation to the
+advanced workflows and links to them without repeating them; a new page or a new
+workflow gets its place there.
 `docs/validation.md` is the validation report and
 `docs/api.md` the API reference, generated from the docstrings.
 
@@ -106,8 +117,8 @@ The version is written in one place, `src/acoustic_spaces/_version.py`.
    (`git tag vX.Y.Z && git push origin vX.Y.Z`), or on GitHub's Releases page draft a new
    release, create the tag `vX.Y.Z` on `main` there and publish it.
 3. CI builds and tests the wheels for every platform and Python version, checks that the
-   tag matches the version, and attaches the wheels and the source distribution to the
-   GitHub release. A release made by CI takes that version's changelog section as its
+   tag matches the version, and attaches the wheels, the source distribution and the user
+   manual's PDF to the GitHub release. A release made by CI takes that version's changelog section as its
    notes; one made on the Releases page keeps its own notes, or gets the changelog's
    when it has none.
 

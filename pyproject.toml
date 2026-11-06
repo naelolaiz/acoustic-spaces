@@ -47,7 +47,7 @@ ifc = ["ifcopenshell>=0.8", "mapbox-earcut>=1.0"]
 gpu = ["wgpu>=0.31"]
 test = ["pytest>=7", "h5py>=3.8"]
 dev = ["pytest>=7", "h5py>=3.8", "ruff>=0.6", "mypy>=2.4", "types-PyYAML>=6.0"]
-docs = ["sphinx>=7.2", "furo>=2024.1", "myst-parser>=3"]
+docs = ["sphinx>=7.2", "furo>=2024.1", "myst-parser>=3", "pypdf>=5"]
 
 [project.scripts]
 acoustic-spaces = "acoustic_spaces.cli:main"
@@ -56,6 +56,7 @@ acoustic-spaces = "acoustic_spaces.cli:main"
 acoustic-spaces-editor = "acoustic_spaces.gui:main"
 
 [project.urls]
+Documentation = "https://naelolaiz.github.io/acoustic-spaces/"
 Repository = "https://github.com/naelolaiz/acoustic-spaces"
 Changelog = "https://github.com/naelolaiz/acoustic-spaces/blob/main/CHANGELOG.md"
 

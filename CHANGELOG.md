@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+A user manual leads through the documentation from a first simulation to the advanced
+workflows, with an example scene to try at each step; the documentation is online at
+<https://naelolaiz.github.io/acoustic-spaces/>, with the manual as one PDF there and on
+every release.
+
 - Changed: `simulation.uncertainty.presets: iso_12999_2` takes ISO 12999-2's octave-band
   values (Table 2) from 250 Hz to 4 kHz instead of the mean of its third octaves', so hard
   surfaces spread about twice as far there and strong absorbers a little less.
