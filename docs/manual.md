@@ -37,11 +37,12 @@ lists them all, in the groups the editor's **File > Open example** shows.
 
 ```sh
 pip install "acoustic-spaces[viz,gui]"    # with the 3D view and the graphical editor
+pip install "acoustic-spaces[viz,gui,measure,sofa,gpu,ifc,sketchup]"  # every optional part
 acoustic-spaces info                      # the version, the compiled core and the GPU
 ```
 
-The other extras (`measure` for the sound card, `sofa`, `gpu`, `ifc`, `sketchup`) and
-installing from a source checkout are in [Getting started](getting-started.md#install).
+What each extra adds is in [Getting started](getting-started.md#extras), and installing
+from a source checkout [below it](getting-started.md#install-from-source).
 
 ### A first simulation
 

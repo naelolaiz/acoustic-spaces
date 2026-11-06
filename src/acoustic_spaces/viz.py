@@ -16,8 +16,8 @@
 - Coverage maps: a parameter over the audience area, from above (matplotlib) or as
   coloured tiles in the 3D view.
 
-Needs the viz extra (a release wheel installed with ``[viz]`` after its file name, or
-``uv sync --extra viz`` in a source checkout). The 3D view works in a desktop window, in
+Needs the viz extra (``pip install "acoustic-spaces[viz]"``, or ``uv sync --extra viz``
+in a source checkout). The 3D view works in a desktop window, in
 Jupyter, and off screen for screenshots.
 """
 

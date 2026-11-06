@@ -1,8 +1,8 @@
 # Graphical editor
 
-The editor needs the `gui` extra: `uv sync --extra gui` in a source checkout, then
-`uv run acoustic-spaces`, or a release wheel installed with `[gui]` after its file
-name.
+The editor needs the `gui` extra ([Extras](getting-started.md#extras)):
+`pip install "acoustic-spaces[gui]"`, or `uv sync --extra gui` in a source checkout and
+then `uv run acoustic-spaces`.
 
 ```sh
 acoustic-spaces                                   # alone, it opens the editor on a new box room

@@ -5,10 +5,9 @@
 ```sh
 pip install acoustic-spaces                # simulation, rendering and the command line
 pip install "acoustic-spaces[viz,gui]"     # with the 3D view and the graphical editor
+pip install "acoustic-spaces[viz,gui,measure,sofa,gpu,ifc,sketchup]"  # every optional part
 ```
 
-The extras in brackets add the optional parts: `viz`, `gui`, `measure`, `sofa`, `gpu`,
-`ifc` and `sketchup` (what each brings is listed under *Install from source* below).
 PyPI has wheels with the compiled core inside for Linux (x86-64), macOS (Apple silicon
 and Intel) and Windows (x86-64), CPython 3.10 to 3.14; elsewhere pip builds the package
 from source, which needs a C++17 compiler. Every
@@ -16,6 +15,26 @@ from source, which needs a C++17 compiler. Every
 wheels, to `pip install` with the extras after the file name, such as
 `pip install "acoustic_spaces-4.2.0-cp312-cp312-win_amd64.whl[viz,gui]"`. Between
 releases, install from source.
+
+### Extras
+
+The extras in brackets add the optional parts:
+
+| Extra | Adds | For |
+| --- | --- | --- |
+| `viz` | matplotlib, PyVista, imageio, imageio-ffmpeg | plots of responses and coverage maps (`--plot`), the 3D view (`view`, `--screenshot`), sound particles and walks as GIF or MP4 videos |
+| `gui` | PySide6, pyvistaqt, PyVista, matplotlib | the [graphical editor](editor.md) |
+| `measure` | sounddevice | the sound card: measuring a room with sweeps (`measure`, `devices`) and real-time playback (`play`, the editor's Listen) |
+| `sofa` | h5py | HRTFs and source directivities from SOFA files |
+| `gpu` | wgpu | the late stage's rays, the wave solver and `tune` on a GPU, through Vulkan, Metal or Direct3D 12 |
+| `ifc` | IfcOpenShell, mapbox-earcut | BIM models: IFC files |
+| `sketchup` | openskp | SketchUp files (experimental) |
+| `test` | pytest, h5py | running the tests |
+| `dev` | pytest, h5py, ruff, mypy, types-PyYAML | the tests, the linter and the type checks ([CONTRIBUTING.md](https://github.com/naelolaiz/acoustic-spaces/blob/main/CONTRIBUTING.md)) |
+| `docs` | Sphinx, Furo, MyST-Parser, pypdf | building this documentation and its PDF |
+
+A command or function that needs an extra that is not installed says which one to
+install.
 
 The documentation (these pages, the validation report and an API reference generated
 from the docstrings) builds with Sphinx; see
@@ -32,30 +51,21 @@ cd acoustic-spaces
 ```
 
 With [uv](https://docs.astral.sh/uv/), `uv sync` builds the package into `.venv` together
-with the test tools (pytest, ruff), and `--extra` adds the optional parts:
+with the `dev` tools (pytest, h5py, ruff, mypy), and `--extra` adds the
+[extras](#extras):
 
 ```sh
-uv sync --extra viz                    # viz: the 3D view (PyVista), plots, MP4 videos
-uv sync --extra viz --extra measure    # measure: sounddevice, for sweeps and playback
-uv sync --extra gui                    # gui: the graphical editor (Qt, PySide6)
-uv sync --extra gpu                    # gpu: the wave solver and the late stage on a GPU (wgpu)
-uv sync --extra ifc                    # ifc: BIM models (IFC files, IfcOpenShell)
-uv sync --all-extras                   # everything, with sofa (h5py), sketchup and docs
+uv sync --extra viz --extra gui        # the 3D view and the editor
+uv sync --all-extras                   # every extra in the table, docs included
 ```
 
 `uv sync` installs exactly what it is asked for, so name every extra each time. It
 rebuilds the compiled core when the C++ sources change.
 
-With pip, in a virtual environment:
+With pip, in a virtual environment, the extras go in brackets after the `.`:
 
 ```sh
-python -m pip install -e ".[dev,viz]"     # viz adds the 3D view (PyVista) and videos
-python -m pip install -e ".[measure]"     # sounddevice: sweeps, real-time playback
-python -m pip install -e ".[sofa]"        # h5py, to read HRTFs from SOFA files
-python -m pip install -e ".[sketchup]"    # openskp, to read SketchUp files (experimental)
-python -m pip install -e ".[ifc]"         # IfcOpenShell, to read IFC files (BIM models)
-python -m pip install -e ".[gui]"         # the graphical editor (Qt, PySide6)
-python -m pip install -e ".[gpu]"         # wgpu: the wave solver and the late stage on a GPU
+python -m pip install -e ".[dev,viz,gui]"   # the development tools, the 3D view and the editor
 ```
 
 Check the installation and look at the example scene. The commands run in the environment
