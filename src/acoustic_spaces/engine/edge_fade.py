@@ -35,18 +35,20 @@ it explains that, on the dark side of its boundary: a leg blocked by a face of t
 barrier standing on the ground it reflects off, the leg that crosses the face's plane),
 or a point of reflection past the edge of its face. Where a point of reflection lies
 past the end of its plane's faces at an edge that stands on one of them (a corner of the
-room on the floor; not a wall as high as a roof elsewhere in the plane), the face of the
+room on the floor; not a wall as high as a roof elsewhere in the plane, nor a building's
+corner under its roof, where the roof's plane does not go on round it), the face of the
 edge that blocks a leg next to it stops the path, and the reflection takes the face
 nearest to that point. Where several events stop it, in at most two runs (the events
 with no reflection on its face between them), the path is followed where one edge
 explains each run, with its images in the planes it has a face in or stands on (its
 blocked legs blocked by the edge's faces, its reflections past the end of their faces
-in such a plane), or two edges explain the stops between them, each a part in a row;
-the path then takes the terms of both stops. Its reflection points are those of the
-image method; of the orders of reflections off perpendicular planes, which have one
-image, the one that can be (each is tried, as the early stage may have found only one).
-Paths that pass through a surface that lets sound through take no terms, as they are
-not the geometric wave the terms continue.
+in such a plane, in front of the edge's face where it has one there: not under a roof),
+or two edges explain the stops between them, each a part in a row; the path then takes
+the terms of both stops. Its reflection points are those of the image method; of the
+orders of reflections off perpendicular planes, which have one image, the one that can
+be (each is tried, as the early stage may have found only one). Paths that pass through
+a surface that lets sound through take no terms, as they are not the geometric wave the
+terms continue.
 
 Reflections off perpendicular planes commute: in either order they give one image, and
 the path takes the order its points come in along the way. The path over an edge may
@@ -654,7 +656,8 @@ class EdgeFade:
     def _stands(self, edge: np.ndarray, plane: np.ndarray) -> np.ndarray:
         """Whether ``edge`` stands on ``plane``: an end of it lies on a face of the plane
         (its sides included), not just in the plane (a wall as high as a roof elsewhere),
-        and the edge leaves it."""
+        the plane goes on round that end on the edge's open side (not a building's
+        corner under the corner of its roof), and the edge leaves it."""
         edges, model = self.edges, self.model
         safe = np.maximum(plane, 0)
         normal, offset = model.plane_normal[safe], model.plane_offset[safe]
@@ -668,7 +671,13 @@ class EdgeFade:
             key = (int(edge[i]), int(plane[i]))
             if key not in self._standing:
                 end = edges.start[edge[i]] if ends[0][i] else edges.end[edge[i]]
-                self._standing[key] = _face_at(model, key[1], end, self.tolerance) >= 0
+                # The plane goes on round the end on the edge's open side.
+                probe = end + 1e-4 * self.d.size * self._bisector[edge[i]]
+                probe -= (normal[i] @ probe - offset[i]) * normal[i]
+                self._standing[key] = (
+                    _face_at(model, key[1], end, self.tolerance) >= 0
+                    and _face_at(model, key[1], probe, self.tolerance) >= 0
+                )
             out[i] = self._standing[key]
         return out
 
@@ -961,6 +970,8 @@ class EdgeFade:
         blocked = np.full((count, k_max + 1), -1, dtype=np.int64)
         stop_at = np.zeros((count, k_max + 1, 3))
         order = np.zeros(count, dtype=np.int64)
+        # The image of the source on the way to each reflection.
+        images = np.zeros((count, max(k_max, 1), 3))
         first = 0
         for k, go in groups:
             n = len(go["fail"])
@@ -968,13 +979,24 @@ class EdgeFade:
             blocked[first : first + n, : k + 1] = go["blocked"]
             stop_at[first : first + n, : k + 1] = go["stop_at"]
             order[first : first + n] = k
+            image = np.broadcast_to(self.d.source, (n, 3))
+            for j in range(k):
+                images[first : first + n, j] = image
+                image = self.model.mirror(image, go["planes"][:, j])
             first += n
-        return {"planes": planes, "blocked": blocked, "stop_at": stop_at, "order": order}
+        return {
+            "planes": planes,
+            "blocked": blocked,
+            "stop_at": stop_at,
+            "order": order,
+            "images": images,
+        }
 
     def _stopping(self, path, edge, event, geometry) -> tuple[np.ndarray, np.ndarray]:
         """Whether each ``edge`` explains the stopping ``event`` of its ``path``: a leg
         blocked by a face of it, a reflection off its faces in the plane of a face of it
-        or in a plane it stands on; and whether it is the edge of the reflection's face."""
+        with the source side in front of that face, or in a plane it stands on; and
+        whether it is the edge of the reflection's face."""
         blocked, planes = geometry["blocked"], geometry["planes"]
         ok = np.zeros(len(edge), dtype=bool)
         face_edge = np.zeros(len(edge), dtype=bool)
@@ -985,8 +1007,13 @@ class EdgeFade:
         )
         j = np.flatnonzero(~legs)
         plane = planes[path[j], (event[j] - 1) // 2]
-        face_edge[j] = (self.edges.plane[edge[j], 0] == plane) | (
-            self.edges.plane[edge[j], 1] == plane
+        # A face of the edge in the plane, with the source side in front of it, as the
+        # path over the edge takes it (_pressure): not the back of a roof, which is
+        # inside the building.
+        _, _, phi, _ = self.edges.frame(edge[j], geometry["images"][path[j], (event[j] - 1) // 2])
+        n = self.edges.wedge[edge[j]]
+        face_edge[j] = ((self.edges.plane[edge[j], 0] == plane) & (phi < np.pi)) | (
+            (self.edges.plane[edge[j], 1] == plane) & (phi > (n - 1.0) * np.pi)
         )
         ok[j] = face_edge[j] | self._stands(edge[j], plane)
         return ok, face_edge
