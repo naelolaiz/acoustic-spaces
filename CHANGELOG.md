@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 4.2.1
 
 A user manual leads through the documentation from a first simulation to the advanced
 workflows, with an example scene to try at each step; the documentation is online at

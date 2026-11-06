@@ -656,6 +656,13 @@ Run demo window's remembered options and the views following a run under Editor)
   door leaf ran 24 mm into the wall at its hinge): the conversion joins the leaf to the
   wall and floor.
 
+Version 4.2.1:
+
+- [x] A user manual that leads through the documentation, online with the
+  documentation and as one PDF.
+- [x] ISO 12999-2's octave-band values (Table 2) for the built-in materials' spread from
+  250 Hz to 4 kHz.
+
 Next:
 
 - [ ] A microphone's measured on-axis response and measured patterns (files), as
