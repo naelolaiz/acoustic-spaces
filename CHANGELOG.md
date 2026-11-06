@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+A user manual leads through the documentation from a first simulation to the advanced
+workflows, with an example scene to try at each step; the documentation is online at
+<https://naelolaiz.github.io/acoustic-spaces/>, with the manual as one PDF there and on
+every release.
+
 ## 4.2.0
 
 Error estimates: a material's absorption uncertainty, a default one for the built-in

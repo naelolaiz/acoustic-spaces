@@ -96,6 +96,8 @@ print(response.parameters().table())
 
 ## Documentation
 
+- [User manual](docs/manual.md): a path through these pages, from a first simulation
+  to the advanced workflows, with an example to try at each step.
 - [Getting started](docs/getting-started.md): installing, the command line and the
   Python API.
 - [Graphical editor](docs/editor.md): editing scenes, drawing rooms, results and
@@ -122,8 +124,11 @@ print(response.parameters().table())
   [changelog](https://github.com/naelolaiz/acoustic-spaces/blob/main/CHANGELOG.md)
   and [repository layout](docs/development.md).
 
-The same pages, with an API reference generated from the docstrings, build into a
-website with Sphinx (see
+The same pages, with an API reference generated from the docstrings, are online at
+[naelolaiz.github.io/acoustic-spaces](https://naelolaiz.github.io/acoustic-spaces/), and
+the user manual and the reference make one
+[PDF](https://naelolaiz.github.io/acoustic-spaces/acoustic-spaces-manual.pdf), also
+attached to every release (to build either, see
 [CONTRIBUTING.md](https://github.com/naelolaiz/acoustic-spaces/blob/main/CONTRIBUTING.md)).
 
 ## Design in one paragraph

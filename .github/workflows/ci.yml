@@ -302,16 +302,47 @@ jobs:
       - name: Build and install
         run: python -m pip install ".[docs]"
       - name: Build the documentation (warnings are errors)
-        run: python -m sphinx -W --keep-going -b html docs docs/_build/html
+        run: python -m sphinx -W --keep-going -b html -d docs/_build/doctrees docs docs/_build/html
+      # The user manual as one PDF, printed by the runner's Chrome; the website links to it.
+      - name: Print the user manual to PDF
+        run: python docs/print_pdf.py docs/_build/html/acoustic-spaces-manual.pdf
       - uses: actions/upload-artifact@v6
         with:
           name: docs
           path: docs/_build/html
+      - uses: actions/upload-artifact@v6
+        with:
+          name: manual
+          path: docs/_build/html/acoustic-spaces-manual.pdf
+          if-no-files-found: error
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/_build/html
+
+  # The documentation and the PDF on GitHub Pages, from every push to main. Before the
+  # first run: Settings > Pages > Source: "GitHub Actions".
+  pages:
+    name: Publish the documentation on GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [docs]
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
 
   # Releases: a tag vX.Y.Z (matching src/acoustic_spaces/_version.py), pushed or made on the
-  # Releases page, attaches the wheels and source distribution to a GitHub release and, once
-  # PyPI trusted publishing is set up and the repository variable PYPI_PUBLISH is "true",
-  # uploads them to PyPI.
+  # Releases page, attaches the wheels, the source distribution and the user manual's PDF to
+  # a GitHub release and, once PyPI trusted publishing is set up and the repository variable
+  # PYPI_PUBLISH is "true", uploads the wheels and the source distribution to PyPI.
   # See "Releasing" in CONTRIBUTING.md.
   github-release:
     name: GitHub release
@@ -325,7 +356,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: dist
-          pattern: "{wheels-*,sdist}"
+          pattern: "{wheels-*,sdist,manual}"
           merge-multiple: true
       - name: Release notes from CHANGELOG.md
         shell: bash
