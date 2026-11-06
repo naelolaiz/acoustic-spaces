@@ -629,7 +629,12 @@ def test_gpu_tracer_counts_reflections_off_face_groups_as_the_cpu_does() -> None
     spread = cpu.std(axis=0, ddof=1) * np.sqrt(1 + 1 / len(cpu))
     z = (found - cpu.mean(axis=0)) / spread
     assert np.abs(z).max() < 3.0, np.round(z, 2)
-    np.testing.assert_allclose(moments[0, 0, 0], energy[0, 0].reshape(5, 10).sum(1), rtol=1e-5)
+    # A sound that arrives on the edge between two slots (here at 20 ms) can fall on
+    # either side of it in the moments' and in the energy's slots, as single precision
+    # rounds the two divisions (Intel Macs' Metal moved 1e-6 of the whole across one).
+    slots = energy[0, 0].reshape(5, 10).sum(1)
+    assert moments[0, 0, 0].sum() == pytest.approx(slots.sum(), rel=1e-6)
+    np.testing.assert_allclose(moments[0, 0, 0], slots, rtol=0, atol=1e-5 * slots.sum())
     # The walls are twice the floor and ceiling: twice the reflections.
     assert found[2] / found[1] == pytest.approx(2.0, rel=0.05)
     # Without groups, no moments.
