@@ -4120,6 +4120,53 @@ def test_run_demo_in_the_editor(window, qapp, monkeypatch, tmp_path: Path) -> No
     assert "The demo failed: wait: the demo stopped (2)" in window.messages.toPlainText()
 
 
+def test_run_demo_saves_the_scene_first(window, monkeypatch, tmp_path: Path) -> None:
+    """The demo reads the scene from its file: Run demo… on a scene with no file or with
+    changes asks to save it first, and opens the window on the saved file, whose sources
+    the table lists with the WAV file each plays; Cancel opens nothing."""
+    from PySide6.QtWidgets import QFileDialog
+
+    import acoustic_spaces.gui.app as app_module
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    opened: list[DemoDialog] = []
+
+    class Dialog(DemoDialog):
+        def exec(self) -> int:
+            opened.append(self)
+            return int(QDialog.DialogCode.Rejected)
+
+    monkeypatch.setattr(app_module, "DemoDialog", Dialog)
+    asked: list[str] = []
+    answer = QMessageBox.StandardButton.Cancel
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: asked.append(a[2]) or answer)
+    wav = tmp_path / "music.wav"
+    write_wav(wav, np.zeros(480), 48000)
+    window.document.update_point("sources", 0, signal=str(wav))
+    assert window.document.path is None
+    window.demo_action.trigger()
+    assert asked == ["The demo reads the scene from its file. Save the scene first?"]
+    assert opened == []
+
+    target = tmp_path / "room" / "scene.yaml"
+    answer = QMessageBox.StandardButton.Save
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    window.demo_action.trigger()
+    assert window.document.path == target and not window.document.modified
+    (dialog,) = opened
+    inputs = dialog.fields["inputs"]
+    assert inputs.table.rowCount() == 1
+    assert inputs.table.item(0, inputs.SOURCE).text() == "source"
+    assert inputs.table.item(0, inputs.PLAYS).text() == "music.wav"
+    assert "save the scene first" not in dialog.problem.text()
+    dialog.deleteLater()
+
+    # A saved scene with no changes opens the window at once.
+    window.demo_action.trigger()
+    assert len(asked) == 2 and len(opened) == 2
+    opened[1].deleteLater()
+
+
 def test_a_demo_prints_any_text_whatever_the_code_page(qapp, tmp_path: Path, monkeypatch) -> None:
     """The demo's process writes its messages as UTF-8 and the editor reads them so,
     whatever the system's code page: on Windows a pipe takes the ANSI code page, which

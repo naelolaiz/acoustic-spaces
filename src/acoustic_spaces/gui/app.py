@@ -1841,9 +1841,14 @@ class MainWindow(QMainWindow):
 
     def run_demo(self) -> None:
         """Ask which demo of the open scene to run (This scene, or the example's own), and
-        run the step it asks for in the background, its messages in the messages panel."""
+        run the step it asks for in the background, its messages in the messages panel.
+        The demo reads the scene from its file, so a scene with no file or with changes
+        is saved first (:meth:`saved_for_demo`); the window lists its sources and
+        listeners from that file."""
         if self.job is not None:
             self.log(_("Wait for the current run to end, then run the demo."))
+            return
+        if not self.saved_for_demo():
             return
         document = self.document
         try:
@@ -1869,6 +1874,20 @@ class MainWindow(QMainWindow):
             job,
             _("Running the {demo} demo ({step})…").format(demo=demo.name, step=step),
         )
+
+    def saved_for_demo(self) -> bool:
+        """True when the scene's file holds the scene as it is: saved already, or saved
+        now that the user says so (Save As… for a scene with no file yet)."""
+        if self.document.path is not None and not self.document.modified:
+            return True
+        answer = QMessageBox.question(
+            self,
+            _(TITLE),
+            _("The demo reads the scene from its file. Save the scene first?"),
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        return answer == QMessageBox.StandardButton.Save and self.save()
 
     def _demo_done(self, report: dict) -> None:
         elapsed = time.perf_counter() - self._started

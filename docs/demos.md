@@ -96,13 +96,14 @@ and its scripts that are no demos. The window shows the options that change what
 demo plays, at the command line's defaults, the file each source plays, the listeners
 to play and the walkers that move; **Advanced** holds the step, the paths and the
 command line, to repeat the run in a terminal. A line above **Run** says what the run
-downloads and how much. A scene with changes is saved first, as the demo reads its
-file. However it closes, the window keeps the options changed in it for the next time,
-each demo its own: a pick from a list, a number, a tick and a file of yours (the HRTFs,
-a song with its credit) for any scene, and what names something in the scene (the
-listeners, the files its sources play, what moves, the format, a tour) for that scene
-file, which also keeps the demo picked; **Defaults** puts them back. The folders and
-files a demo writes and the scenes it reads follow the open scene.
+downloads and how much. The demo reads the scene's file, so the editor asks to save a
+scene with no file or with changes first. However it closes, the window keeps the
+options changed in it for the next time, each demo its own: a pick from a list, a
+number, a tick and a file of yours (the HRTFs, a song with its credit) for any scene,
+and what names something in the scene (the listeners, the files its sources play, what
+moves, the format, a tour) for that scene file, which also keeps the demo picked;
+**Defaults** puts them back. The folders and files a demo writes and the scenes it
+reads follow the open scene.
 
 Every still says how its sound was made, at the bottom: the version, the early
 reflections (traced or image sources, their order, diffraction) and the late sound with
