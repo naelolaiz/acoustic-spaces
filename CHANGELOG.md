@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: the editor's Run demo… asks to save a scene that has no file or has changes,
+  so the window lists its sources to pick WAV files for instead of an empty table.
+
 ## 4.2.1
 
 A user manual leads through the documentation from a first simulation to the advanced

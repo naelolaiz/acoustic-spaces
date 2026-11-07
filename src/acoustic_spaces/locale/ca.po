@@ -1499,6 +1499,11 @@ msgid "Running the {demo} demo ({step})…"
 msgstr "S'està executant la demostració {demo} ({step})…"
 
 #: acoustic_spaces/gui/app.py
+msgid "The demo reads the scene from its file. Save the scene first?"
+msgstr ""
+"La demostració llegeix l'escena del seu fitxer. Voleu desar primer l'escena?"
+
+#: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid ""
 "The {demo} demo is done in {time:.1f} s ({step}); it wrote into {folder}."
