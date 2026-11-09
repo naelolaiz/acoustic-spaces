@@ -42,7 +42,7 @@ inequality), and no gain where no group reflects more. Further from the traced
 absorption it stays an estimate from two moments. In a box of 8 by 6 by 3.5 m traced
 with a ceiling that absorbs 0.5 (20 000 rays, at 1 kHz), the late part's decay time for
 a ceiling of 0.9 is within 1 % of tracing again, for 0.99 within 5 %, and for 0.1 it is
-7 % too short; with a ceiling of 0.85 taken to 0.2, 16 % too short. So
+6 % too short; with a ceiling of 0.85 taken to 0.2, 16 % too short. So
 :func:`~acoustic_spaces.calibration.calibrate` traces again at the absorption it arrives
 at. Its fit within a round keeps the early paths' phases as traced, which that next
 trace turns.
