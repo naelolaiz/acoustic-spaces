@@ -4536,10 +4536,12 @@ msgstr "Soort"
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Where the uncertainty comes from, such as a test report or a standard; left "
-"empty, the scene file names none"
+"empty, the scene file names none. Changing the kind or a value marks it as "
+"edited"
 msgstr ""
 "Waar de onzekerheid vandaan komt, bijvoorbeeld een testrapport of een norm; "
-"leeg gelaten noemt het scènebestand geen herkomst"
+"leeg gelaten noemt het scènebestand geen herkomst. Een wijziging van de "
+"soort of van een waarde markeert die als bewerkt"
 
 #. Translators: where an uncertainty comes from (a test report, a standard), not a source of sound.
 #: acoustic_spaces/gui/inspector.py
@@ -4604,6 +4606,14 @@ msgstr "Bron: waarden opgegeven in de scène"
 #, python-brace-format
 msgid "Covers {area:,.1f} m² of the room."
 msgstr "Bedekt {area:,.1f} m² van de ruimte."
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"An opening lets all the sound through, so its absorption is 1 and exact: the "
+"spread of the results takes no uncertainty for it."
+msgstr ""
+"Een opening laat al het geluid door, dus de absorptie is 1 en exact: de "
+"spreiding van de resultaten neemt er geen onzekerheid voor aan."
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

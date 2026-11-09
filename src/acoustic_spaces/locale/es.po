@@ -4568,10 +4568,12 @@ msgstr "Tipo"
 #: acoustic_spaces/gui/inspector.py
 msgid ""
 "Where the uncertainty comes from, such as a test report or a standard; left "
-"empty, the scene file names none"
+"empty, the scene file names none. Changing the kind or a value marks it as "
+"edited"
 msgstr ""
 "De dónde procede la incertidumbre, por ejemplo un informe de ensayo o una "
-"norma; vacío, el archivo de escena no indica ninguna procedencia"
+"norma; vacío, el archivo de escena no indica ninguna procedencia. Al cambiar "
+"el tipo o un valor, se marca como editada"
 
 #. Translators: where an uncertainty comes from (a test report, a standard), not a source of sound.
 #: acoustic_spaces/gui/inspector.py
@@ -4636,6 +4638,14 @@ msgstr "Procedencia: valores indicados en la escena"
 #, python-brace-format
 msgid "Covers {area:,.1f} m² of the room."
 msgstr "Cubre {area:,.1f} m² del recinto."
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"An opening lets all the sound through, so its absorption is 1 and exact: the "
+"spread of the results takes no uncertainty for it."
+msgstr ""
+"Una abertura deja pasar todo el sonido, así que su absorción es 1 y exacta: "
+"la dispersión de los resultados no toma ninguna incertidumbre para ella."
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

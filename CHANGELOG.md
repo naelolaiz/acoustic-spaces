@@ -47,6 +47,10 @@
   of the absorption's draws. Both move within the draws' noise.
 - Fixed: an end of the spread's interval or a one-sided bound no longer passes what the
   parameter can be (a T30 from -0.18 s, a D50 up to 1.0003): it is held at that limit.
+- Fixed: on a material's page in the editor, ticking **Absorption uncertainty** no
+  longer rewrites a scattering entry given by name as numbers, the Source field keeps
+  its caret after Enter, an opening takes no uncertainty, and a source reads "edited
+  from ..." once the kind or a value of the uncertainty it names is changed.
 
 ## 4.2.1
 

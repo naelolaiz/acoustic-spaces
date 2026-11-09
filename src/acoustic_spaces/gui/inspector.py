@@ -2753,7 +2753,8 @@ class MaterialPage(Page):
         self.uncertainty_source.setToolTip(
             _(
                 "Where the uncertainty comes from, such as a test report or a standard; "
-                "left empty, the scene file names none"
+                "left empty, the scene file names none. Changing the kind or a value "
+                "marks it as edited"
             )
         )
         self.uncertainty_source.editingFinished.connect(self._uncertainty_source_typed)
@@ -2864,16 +2865,22 @@ class MaterialPage(Page):
             self.source.setText(_("Source: values given in the scene"))
         own = material.uncertainty
         self.uncertainty.setChecked(own is not None)
-        self.uncertainty.setEnabled(impedance is None)  # the impedance gives the absorption
+        # The impedance gives the absorption, and an opening's is 1: the spread of the
+        # results leaves out what absorbs everything.
+        self.uncertainty.setEnabled(impedance is None and kind != 2)
         _choose(self.uncertainty_kind, "normal" if own is None else own.distribution)
         for col in range(len(OCTAVE_BANDS_HZ)):
             item = QTableWidgetItem("" if own is None else number(own.absorption[col], ".3f"))
             item.setToolTip(_(_UNCERTAINTY_TIP))
             self.uncertainty_table.setItem(0, col, item)
         self.uncertainty_source.setText("" if own is None else own.source or "")
-        self.uncertainty_source.setCursorPosition(0)  # a long one shows from its start
-        self.uncertainty_note.setVisible(own is None)
-        self.uncertainty_note.setText("" if own is not None else self._without_uncertainty())
+        if not self.uncertainty_source.hasFocus():  # typed on, the caret stays at the end
+            self.uncertainty_source.setCursorPosition(0)  # a long one shows from its start
+        # A ground's or an opening's note shows beside an uncertainty the scene file gave
+        # it too: the spread leaves that out.
+        noted = own is None or kind == 2 or impedance is not None
+        self.uncertainty_note.setVisible(noted)
+        self.uncertainty_note.setText(self._without_uncertainty() if noted else "")
         area = self.document.room.area_by_material().get(self.key, 0.0)
         self.usage.setText(fmt(_("Covers {area:,.1f} m² of the room."), area=area))
 
@@ -2912,6 +2919,8 @@ class MaterialPage(Page):
         if not entry:
             return
         material = self.document.scene.materials[self.key]
+        if entry == material.preset and material.builtin:
+            return  # the entry it has, with that entry's absorption: nothing to replace
         fields = {"preset": entry, "scattering": material.scattering}
         # An uncertainty is of the absorption it came with: it stays with the same
         # entry picked again, and goes with another's.
@@ -2978,9 +2987,15 @@ class MaterialPage(Page):
         table.setFixedHeight(height + 2 * table.frameWidth())
 
     def _without_uncertainty(self) -> str:
-        """What a run's spread takes for the material, which gives no uncertainty."""
+        """What a run's spread takes for the material, which gives no uncertainty, or is
+        a ground or an opening."""
         scene = self.document.scene
         material = scene.materials[self.key]
+        if self._kind(material.transmission_coefficients()) == 2:
+            return _(
+                "An opening lets all the sound through, so its absorption is 1 and exact: "
+                "the spread of the results takes no uncertainty for it."
+            )
         if material.impedance is not None:
             return _(
                 "The ground's impedance gives the absorption, and the spread of the results "
@@ -3017,7 +3032,9 @@ class MaterialPage(Page):
         its own). One it has already writes nothing."""
         if self._loading:
             return
-        fields = self._fields()
+        # The rest as the scene gives it: a scattering entry stays named, and no source
+        # is written that the entry gives.
+        fields = self.document.scene.materials[self.key].to_data()
         if fields.pop("uncertainty", None) == uncertainty:
             return
         if uncertainty is not None:
@@ -3038,10 +3055,21 @@ class MaterialPage(Page):
         else:
             self._set_uncertainty(taken.model_dump(mode="json", exclude_none=True))
 
+    @staticmethod
+    def _edited(own: dict) -> dict:
+        """The uncertainty ``own`` with the source it names marked as edited, as the
+        coefficients' is: its kind or one of its values is that source's no longer."""
+        source = own.get("source")
+        if not source or source.startswith("edited"):
+            return own
+        # Scene-file text, in English as the scene file is.
+        return {**own, "source": f"edited from {source}"}
+
     def _uncertainty_kind_chosen(self) -> None:
         own = self._fields().get("uncertainty")
-        if own is not None:
-            self._set_uncertainty({**own, "distribution": self.uncertainty_kind.currentData()})
+        kind = self.uncertainty_kind.currentData()
+        if own is not None and kind != own["distribution"]:
+            self._set_uncertainty({**self._edited(own), "distribution": kind})
 
     def _uncertainty_source_typed(self) -> None:
         own = self._fields().get("uncertainty")
@@ -3074,7 +3102,7 @@ class MaterialPage(Page):
         if values == own["absorption"]:
             self.reload()  # the same value typed another way (0.05) shows as the rest
         else:
-            self._set_uncertainty({**own, "absorption": values})
+            self._set_uncertainty({**self._edited(own), "absorption": values})
 
     def _passing(self, kind: int) -> None:
         material = self.document.scene.materials[self.key]
