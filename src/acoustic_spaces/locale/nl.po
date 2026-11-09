@@ -1476,6 +1476,17 @@ msgstr "{title}: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
+msgid ""
+"No spread from the materials' absorption uncertainty: it needs octave bands, "
+"stochastic ray tracing for the late part, no wave solver and at most {count} "
+"materials on the surfaces"
+msgstr ""
+"Geen spreiding uit de onzekerheid van de absorptie van de materialen: "
+"daarvoor zijn octaafbanden nodig, stochastische straaltracering voor het "
+"late deel, geen golfsolver en hoogstens {count} materialen op de oppervlakken"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
 msgid "Simulating {scene}…"
 msgstr "{scene} wordt gesimuleerd…"
 
@@ -7473,6 +7484,12 @@ msgid ""
 msgstr ""
 "De trekkingen bereikten hun limiet voordat deze waarden stabiel waren (toets "
 "van GUM Supplement 1)"
+
+#. Translators: {names} are materials' names.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Not drawn in this band, where the absorption is 1: {names}"
+msgstr "Niet getrokken in deze band, waar de absorptie 1 is: {names}"
 
 #. Translators: {db} is a number of decibels.
 #: acoustic_spaces/gui/results_view.py

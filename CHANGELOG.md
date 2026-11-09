@@ -24,6 +24,15 @@
   (which cost a built-in material the uncertainty a run takes for it), the other bands
   keep the decimals the table does not show, and a material given by its sound
   reduction alone takes a scattering value.
+- Fixed: a material that absorbs everything in some band (five built-in ones do) was
+  left out of the spread in every band, without a word. Its other bands are now drawn,
+  and the spread names the bands it holds (`held` in `parameters.json`, the output and
+  the editor's tips).
+- Fixed: a run that cannot have a spread says what the spread needs (the editor too,
+  which said nothing), at most 16 materials on the surfaces among it, and `simulate` no
+  longer announces a spread that no material on the surfaces gives.
+- Fixed: the errors over edges that the spread lists as not counted follow the settings
+  of the run (`simulate --diffraction ...`), not those in the scene file.
 
 ## 4.2.1
 

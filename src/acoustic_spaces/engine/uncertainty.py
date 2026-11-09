@@ -47,6 +47,8 @@ are not a measurement of the material in the room.
 Not counted: the scattering's uncertainty, nor the method's (docs/validation.md), nor
 the rays' error with fewer than ``MIN_BATCHES`` batches (Student's t has no variance
 then) or in the parameters it is not found for (those from the late sound's directions).
+Nor a band in which a material absorbs everything: no energy is left there to
+re-weight, so that band is not drawn, and the spread names it (:func:`held`).
 Of the method's errors, those of the paths over edges are listed where a response has
 such paths (:data:`EDGE_ERRORS_DB`), each with the largest difference of the early level
 from the exact solution that the validation finds in each band, but not drawn: they are
@@ -66,7 +68,12 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from acoustic_spaces.engine.reweight import log_ratio
+from acoustic_spaces.engine.reweight import (
+    cannot_reweight,
+    groups_of,
+    log_ratio,
+    reweighted_materials,
+)
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import RoomParameters
 from acoustic_spaces.scene.model import ONE_SIDED, SPREAD_DRAWS, AbsorptionUncertainty
@@ -214,7 +221,9 @@ class Spread:
     response has (:data:`EDGE_ERRORS_DB`), each the largest difference of the level
     from the exact solution in each band (dB; NaN where not measured). ``assumed``: the
     built-in materials of unknown source that took ``simulation.uncertainty.presets``,
-    with that choice (:func:`assumed`). ``stable``: with the draws chosen adaptively,
+    with that choice (:func:`assumed`). ``held``: the bands (Hz) in which a material
+    with an uncertainty absorbs everything and is not drawn (:func:`held`). ``stable``:
+    with the draws chosen adaptively,
     whether every result of every response met JCGM 101 7.9's test before the draws
     reached their limit; None with a number of draws given beforehand, which is not
     tested."""
@@ -233,6 +242,7 @@ class Spread:
     batches: int
     not_counted: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
     assumed: dict[str, str] = dataclasses.field(default_factory=dict)
+    held: dict[str, list[int]] = dataclasses.field(default_factory=dict)
     stable: bool | None = None
 
     def as_dict(self) -> dict:
@@ -249,6 +259,7 @@ class Spread:
                 for name, bound in self.not_counted.items()
             },
             "assumed": dict(self.assumed),
+            "held": {name: list(bands) for name, bands in self.held.items()},
         }
 
 
@@ -304,6 +315,21 @@ def assumed(scene, materials: Sequence[str]) -> dict[str, str]:
     }
 
 
+def held(scene, materials: Sequence[str]) -> dict[str, list[int]]:
+    """{material: octave bands (Hz)} where those of ``materials`` that have an
+    uncertainty (:func:`uncertainty_of`) absorb everything: no draw moves such a band,
+    as no energy is left in it to re-weight."""
+    out = {}
+    for name in materials:
+        if uncertainty_of(scene, name) is None:
+            continue
+        own = scene.materials[name].coefficients("octave")[0]
+        bands = [hz for hz, a in zip(OCTAVE_BANDS_HZ, own, strict=True) if a >= 1.0]
+        if bands:
+            out[name] = bands
+    return out
+
+
 def has_uncertainty(scene, materials: Sequence[str] | None = None) -> bool:
     """Whether some material of ``materials`` (default all of ``scene``'s) has an
     absorption uncertainty a spread takes (:func:`uncertainty_of`)."""
@@ -311,12 +337,31 @@ def has_uncertainty(scene, materials: Sequence[str] | None = None) -> bool:
     return any(uncertainty_of(scene, name) is not None for name in names)
 
 
+def spread_groups(
+    room, settings=None
+) -> tuple[tuple[np.ndarray, list[str]] | None, str | None, bool]:
+    """(groups, why, own) for the spread of a run of ``room`` with ``settings`` (default
+    the scene's): the face groups and materials to trace it with
+    (:func:`~acoustic_spaces.engine.reweight.groups_of`), or None. None with ``why``
+    None: no material on its surfaces has an uncertainty a spread takes. Otherwise
+    ``why`` is what the run would need to re-weight
+    (:func:`~acoustic_spaces.engine.reweight.cannot_reweight`), and ``own`` whether some
+    material's uncertainty is one of its own, not a built-in material's default."""
+    uncertain = [n for n in reweighted_materials(room) if uncertainty_of(room.scene, n) is not None]
+    if not uncertain:
+        return None, None, False
+    own = any(room.scene.materials[n].uncertainty is not None for n in uncertain)
+    why = cannot_reweight(room, settings)
+    return (None if why else groups_of(room, settings)), why, own
+
+
 def absorption_draws(scene, materials: Sequence[str], draws: int, seed: int) -> np.ndarray:
     """(draws, materials, bands) the absorption of ``materials`` in each draw: each
     material's own, plus its uncertainty times one deviate per draw that its bands share
     (standard normal, or uniform on -1 to 1 for a tolerance); those without an
     uncertainty (:func:`uncertainty_of`) keep their own. Held to 0 to
-    ``MAX_ABSORPTION``."""
+    ``MAX_ABSORPTION``, or to the material's own absorption where that is more; a band
+    that absorbs everything is not drawn (:func:`held`)."""
     return _draws(scene, materials, draws, seed)[0]
 
 
@@ -335,12 +380,14 @@ def _draws(scene, materials, draws, seed):
             deviates.append(np.zeros(draws))
             widths.append(np.zeros(own.size))
             continue
-        width = np.asarray(spec.absorption, dtype=float)
+        # A band that absorbs everything stays: no energy is left there to re-weight.
+        width = np.where(own >= 1.0, 0.0, np.asarray(spec.absorption, dtype=float))
         if spec.distribution == "uniform":
             deviate = rng.uniform(-1.0, 1.0, draws)
         else:
             deviate = rng.standard_normal(draws)
-        out.append(np.clip(own + deviate[:, None] * width, 0.0, MAX_ABSORPTION))
+        top = np.maximum(own, MAX_ABSORPTION)
+        out.append(np.clip(own + deviate[:, None] * width, 0.0, top))
         deviates.append(deviate)
         widths.append(width)
     return np.stack(out, axis=1), np.stack(deviates, axis=1), np.stack(widths)
@@ -643,22 +690,24 @@ def material_spread(
             stable = all(tally.unstable() is None for tally in tallies.values())
             if stable or taken_so_far + ADAPTIVE_BATCH > limit:
                 break
-    defaults = assumed(scene, materials)
+    defaults, full = assumed(scene, materials), held(scene, materials)
     return {
         key: dataclasses.replace(
             tally.spread(stable),
-            not_counted=edge_errors(result.responses[key], scene),
+            not_counted=edge_errors(result.responses[key], result.settings),
             assumed=defaults,
+            held=full,
         )
         for key, tally in tallies.items()
     }
 
 
-def edge_errors(response, scene) -> dict[str, np.ndarray]:
+def edge_errors(response, settings) -> dict[str, np.ndarray]:
     """{name: (bands,) dB} the method's errors over edges (:data:`EDGE_ERRORS_DB`) that
-    ``response`` (of ``scene``) has, in each band as the band adds its early paths: none
-    without paths over an edge; over two edges with ``second_order``, and with a path
-    reflected on both sides of an edge left out with ``one_side``."""
+    ``response`` has, simulated with ``settings`` (the run's, not the scene's where they
+    differ), in each band as the band adds its early paths: none without paths over an
+    edge; over two edges with ``second_order``, and with a path reflected on both sides
+    of an edge left out with ``one_side``."""
     early = response.early
     if early.edge is None or not np.any(early.edge >= 0):
         return {}
@@ -666,7 +715,7 @@ def edge_errors(response, scene) -> dict[str, np.ndarray]:
     if bands != len(EDGE_ERRORS_DB["one edge"]["pressure"]):
         return {}  # measured in octave bands only
     coherent = 0 if early.spectrum is None else early.spectrum.shape[1]
-    settings = scene.simulation.early
+    settings = settings.early
     names = ["one edge"]
     if settings.diffraction != "direct" and settings.diffraction_reflections == "one_side":
         names.append("one side")
@@ -723,7 +772,9 @@ __all__ = [
     "Spread",
     "absorption_draws",
     "edge_errors",
+    "held",
     "material_spread",
     "numerical_tolerance",
+    "spread_groups",
     "with_spread",
 ]

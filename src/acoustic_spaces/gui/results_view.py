@@ -658,6 +658,11 @@ class ResultsPanel(QWidget):
                 what=_(dict(PRESET_UNCERTAINTIES)[choice]),
                 names=", ".join(spread.assumed),
             )
+        # The materials no draw moves in each band, where they absorb everything.
+        held: dict[int, list[str]] = {}
+        for material, bands in spread.held.items():
+            for hz in bands:
+                held.setdefault(OCTAVE_BANDS_HZ.index(hz), []).append(material)
         # The method's largest error over edges in each band, which the spread leaves out.
         bounds = list(spread.not_counted.values())
         edges = np.fmax.reduce(np.vstack(bounds), axis=0) if bounds else None
@@ -720,6 +725,12 @@ class ResultsPanel(QWidget):
                     )
                 if spread.assumed:
                     tip += ". " + assumed
+                if col in held:
+                    tip += ". " + fmt(
+                        # Translators: {names} are materials' names.
+                        _("Not drawn in this band, where the absorption is 1: {names}"),
+                        names=", ".join(held[col]),
+                    )
                 if edges is not None and np.isfinite(edges[col]):
                     tip += ". " + fmt(
                         # Translators: {db} is a number of decibels.

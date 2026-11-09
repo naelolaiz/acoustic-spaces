@@ -1319,20 +1319,15 @@ def _convergence_text(entry: dict, batches: int) -> str:
 def _spread_groups(room, settings):
     """The face groups and materials to trace ``room`` with for the spread from its
     materials' absorption uncertainty (their own, or a built-in material's default), or
-    None, with a warning when some material gives one of its own but ``settings``
-    cannot re-weight."""
-    from acoustic_spaces.engine.reweight import groups_of
-    from acoustic_spaces.engine.uncertainty import has_uncertainty
+    None: no material on its surfaces has one, or ``settings`` cannot re-weight, which
+    is said (as a warning when some material gives an uncertainty of its own)."""
+    from acoustic_spaces.engine.uncertainty import spread_groups
 
-    if not has_uncertainty(room.scene):
-        return None
-    groups = groups_of(room, settings)
-    own = any(m.uncertainty is not None for m in room.scene.materials.values())
-    if groups is None and own:
+    groups, why, own = spread_groups(room, settings)
+    if why is not None:
         print(
-            "warning: no spread from the materials' absorption uncertainty: it needs octave "
-            "bands, stochastic ray tracing for the late part, no wave solver and at most "
-            "a few materials on the surfaces",
+            f"{'warning: ' if own else ''}no spread from the materials' absorption "
+            f"uncertainty: it needs {why}",
             file=sys.stderr,
         )
     return groups
@@ -1373,6 +1368,7 @@ def _uncertainty_text(entry: dict) -> str:
             errors.append(f"{what} up to {value:.2f} dB at {_band_label(OCTAVE_BANDS_HZ[band])}")
     method = f"; not counted, the level's error over edges: {', '.join(errors)}" if errors else ""
     method += _assumed_text(spread.get("assumed", {}))
+    method += _held_text(spread.get("held", {}))
     if not found:
         return text + "none from 125 Hz to 4 kHz" + method
     value, name, band = max(found)
@@ -1405,6 +1401,19 @@ def _assumed_text(assumed: dict) -> str:
         f"; built-in materials of unknown source taken at {what} "
         f"(simulation.uncertainty.presets): {', '.join(assumed)}"
     )
+
+
+def _held_text(held: dict) -> str:
+    """The materials with an uncertainty and the bands in which they absorb everything,
+    where no draw moves them, or nothing."""
+    from acoustic_spaces.parameters import _band_label
+
+    if not held:
+        return ""
+    each = [
+        f"{name} ({', '.join(_band_label(hz) for hz in bands)})" for name, bands in held.items()
+    ]
+    return f"; not drawn where the absorption is 1: {', '.join(each)}"
 
 
 def _outdoor_lines(entry: dict, removed) -> list[str]:

@@ -1485,6 +1485,17 @@ msgstr "{title}: {reason}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
+msgid ""
+"No spread from the materials' absorption uncertainty: it needs octave bands, "
+"stochastic ray tracing for the late part, no wave solver and at most {count} "
+"materials on the surfaces"
+msgstr ""
+"Keine Streuung aus der Unsicherheit der Absorption der Materialien: Sie "
+"braucht Oktavbänder, stochastische Strahlenverfolgung für den späten Anteil, "
+"keinen Wellensolver und höchstens {count} Materialien auf den Flächen"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
 msgid "Simulating {scene}…"
 msgstr "{scene} wird simuliert…"
 
@@ -7507,6 +7518,12 @@ msgid ""
 msgstr ""
 "Die Ziehungen erreichten ihre Grenze, bevor diese Werte stabil waren (Test "
 "von GUM Supplement 1)"
+
+#. Translators: {names} are materials' names.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Not drawn in this band, where the absorption is 1: {names}"
+msgstr "In diesem Band, in dem die Absorption 1 ist, nicht gezogen: {names}"
 
 #. Translators: {db} is a number of decibels.
 #: acoustic_spaces/gui/results_view.py

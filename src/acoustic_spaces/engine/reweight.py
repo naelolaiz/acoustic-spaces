@@ -63,19 +63,40 @@ def face_groups(room, materials: Sequence[str]) -> np.ndarray:
 def groups_of(room, settings=None) -> tuple[np.ndarray, list[str]] | None:
     """Face groups to trace ``room`` with so that its absorption can change afterwards
     (:func:`reweighted_result`): the group of each face and the materials, those on
-    surfaces that absorb less than everything in every band. None when its simulation
-    settings (``settings``, default the scene's) do not keep what re-weighting needs
-    (another late method, third-octave bands, the wave solver) or more than
-    ``MAX_GROUPS`` materials are on its surfaces."""
-    sim = room.scene.simulation if settings is None else settings
-    if sim.late.method != "stochastic_ray_tracing" or sim.bands != "octave" or sim.wave.enabled:
+    surfaces that absorb less than everything in some band (a band in which one absorbs
+    everything keeps that: no energy is left there to re-weight). None when its
+    simulation settings (``settings``, default the scene's) do not keep what
+    re-weighting needs (:func:`cannot_reweight`) or no material is left."""
+    if cannot_reweight(room, settings) is not None:
         return None
+    materials = reweighted_materials(room)
+    return (face_groups(room, materials), materials) if materials else None
+
+
+def reweighted_materials(room) -> list[str]:
+    """The materials on ``room``'s surfaces that absorb less than everything in some
+    band: those whose absorption a re-weighting can change."""
     used = np.unique(np.asarray(room.face_materials))
     names = [room.material_names[k] for k in used if k >= 0]
-    materials = [n for n in names if max(room.scene.materials[n].coefficients("octave")[0]) < 1]
-    if not materials or len(materials) > MAX_GROUPS:
-        return None
-    return face_groups(room, materials), materials
+    return [n for n in names if min(room.scene.materials[n].coefficients("octave")[0]) < 1]
+
+
+def cannot_reweight(room, settings=None) -> str | None:
+    """Why a run of ``room`` with ``settings`` (default the scene's) cannot be
+    re-weighted for other absorption, in words that follow "it needs", or None when it
+    can: another late method, third-octave bands, the wave solver, or more than
+    ``MAX_GROUPS`` materials on its surfaces."""
+    sim = room.scene.simulation if settings is None else settings
+    if sim.late.method != "stochastic_ray_tracing":
+        return "stochastic ray tracing for the late part"
+    if sim.bands != "octave":
+        return "octave bands"
+    if sim.wave.enabled:
+        return "a run without the wave solver"
+    count = len(reweighted_materials(room))
+    if count > MAX_GROUPS:
+        return f"at most {MAX_GROUPS} materials on the surfaces, and there are {count}"
+    return None
 
 
 def _without_absorption(scene) -> dict:
@@ -100,9 +121,10 @@ def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequenc
     if any(old[n] != new[n] for n in old if n not in materials):
         return None
     fresh = np.array([new[n] for n in materials])
-    if np.any(fresh >= 1.0):
-        return None
     traced_absorption = np.array([old[n] for n in materials])
+    # A band that absorbs everything has no energy to re-weight, to it or from it.
+    if np.any((fresh >= 1.0) != (traced_absorption >= 1.0)):
+        return None
     ratio = log_ratio(traced_absorption, fresh)
     responses = {
         key: r.reweighted(face_group, ratio, absorption=(traced_absorption, fresh))
@@ -117,11 +139,17 @@ def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequenc
 
 
 def log_ratio(old: np.ndarray, new: np.ndarray) -> np.ndarray:
-    """(groups, bands) ln((1 - new) / (1 - old)): the change in level per reflection."""
+    """(groups, bands) ln((1 - new) / (1 - old)): the change in level per reflection;
+    0 where both absorb everything, which leaves no energy to change."""
     old, new = (np.asarray(a, dtype=float) for a in (old, new))
-    if np.any(old >= 1.0) or np.any(new >= 1.0):
-        raise ValueError("re-weighting needs absorption below 1")
-    return np.log1p(-new) - np.log1p(-old)
+    full = old >= 1.0
+    if np.any(full != (new >= 1.0)):
+        raise ValueError(
+            "re-weighting needs absorption below 1, or 1 before and after: a band that "
+            "absorbs everything has no energy to re-weight"
+        )
+    kept = np.where(full, 0.0, new), np.where(full, 0.0, old)
+    return np.log1p(-kept[0]) - np.log1p(-kept[1])
 
 
 def path_counts(paths: EarlyReflections, face_group: np.ndarray, groups: int) -> np.ndarray:
@@ -208,12 +236,14 @@ def turned_paths(
 
 __all__ = [
     "MOMENT_STEP",
+    "cannot_reweight",
     "face_groups",
     "groups_of",
     "log_ratio",
     "moment_exponent",
     "path_counts",
     "reweighted_paths",
+    "reweighted_materials",
     "reweighted_result",
     "slot_factor",
     "turned_paths",

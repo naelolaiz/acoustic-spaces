@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from acoustic_spaces import Room, Scene, simulate
-from acoustic_spaces.engine.reweight import groups_of, log_ratio
+from acoustic_spaces.engine.reweight import groups_of, log_ratio, reweighted_result
 from acoustic_spaces.engine.uncertainty import (
     ADAPTIVE,
     ADAPTIVE_BATCH,
@@ -23,9 +23,11 @@ from acoustic_spaces.engine.uncertainty import (
     absorption_draws,
     assumed,
     edge_errors,
+    held,
     material_spread,
     numerical_tolerance,
     octave_reproducibility,
+    spread_groups,
     uncertainty_of,
 )
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
@@ -287,9 +289,10 @@ def test_the_spread_lists_the_errors_over_edges_it_does_not_count():
         )
         return SimpleNamespace(early=early)
 
-    assert edge_errors(response([-1, -1], 2), scene) == {}
-    assert edge_errors(response([-1, -2], 2), scene) == {}  # over the terrain's crests
-    found = edge_errors(response([-1, 4], 2), scene)
+    settings = scene.simulation
+    assert edge_errors(response([-1, -1], 2), settings) == {}
+    assert edge_errors(response([-1, -2], 2), settings) == {}  # over the terrain's crests
+    found = edge_errors(response([-1, 4], 2), settings)
     # first_order with one_side by default: a path reflected on both sides is left out.
     assert list(found) == ["one edge", "one side", "corners of edges"]
     for name, bound in found.items():
@@ -300,9 +303,114 @@ def test_the_spread_lists_the_errors_over_edges_it_does_not_count():
     wide = scene.model_copy(deep=True)
     wide.simulation.early.diffraction = "second_order"
     wide.simulation.early.diffraction_reflections = "both_sides"
-    found = edge_errors(response([7], 8), wide)
+    found = edge_errors(response([7], 8), wide.simulation)
     assert list(found) == ["one edge", "two edges", "corners of edges"]
     np.testing.assert_array_equal(found["two edges"], EDGE_ERRORS_DB["two edges"]["pressure"])
+
+
+def test_the_errors_over_edges_are_those_of_the_run_s_settings():
+    """A run made with other settings than the scene's (``simulate --diffraction``)
+    lists the errors over edges of the settings it was made with."""
+    data = _box({"absorption": 0.02}).to_data()
+    # An L-shaped room, the listener round its corner from the source.
+    data["geometry"] = {
+        "floor_plan": [[0, 0], [8, 0], [8, 4], [4, 4], [4, 8], [0, 8]],
+        "height": 3,
+    }
+    data["assignments"] = {"floor": "floor", "ceiling": "ceiling", "default": "walls"}
+    data["sources"] = [{"name": "s", "position": [7.0, 2.0, 1.5]}]
+    data["listeners"] = [{"name": "a", "position": [2.0, 7.0, 1.2]}]
+    scene = Scene.model_validate(data)
+    assert scene.simulation.early.diffraction == "first_order"
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, groups=face_group)
+    assert np.any(result["s", "a"].early.edge >= 0)
+    spread = material_spread(result, scene, face_group, materials, draws=4, rays=False)
+    assert list(spread["s", "a"].not_counted) == ["one edge", "one side", "corners of edges"]
+    settings = scene.simulation.model_copy(deep=True)
+    settings.early.diffraction = "second_order"
+    settings.early.diffraction_reflections = "both_sides"
+    result = simulate(room, settings=settings, groups=face_group)
+    spread = material_spread(result, scene, face_group, materials, draws=4, rays=False)
+    assert list(spread["s", "a"].not_counted) == ["one edge", "two edges", "corners of edges"]
+
+
+#: A ceiling that absorbs everything at 500 Hz and 1 kHz, as five of the built-in
+#: materials do in some band.
+FULL = [0.45, 0.6, 0.9, 1.0, 1.0, 0.95, 0.9, 0.9]
+
+
+def _full_ceiling(ceiling=FULL, rays: int = 500) -> Scene:
+    data = _box(None).to_data()
+    data["materials"]["ceiling"] = {
+        "absorption": list(ceiling),
+        "uncertainty": {"absorption": 0.05, "source": "lab"},
+    }
+    data["simulation"]["late"]["rays"] = rays
+    return Scene.model_validate(data)
+
+
+def test_a_band_that_absorbs_everything_is_held_and_the_others_are_drawn():
+    scene = _full_ceiling()
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    assert "ceiling" in materials and held(scene, materials) == {"ceiling": [500, 1000]}
+    groups, why, own = spread_groups(room)
+    assert groups[1] == materials and why is None and own
+    taken = absorption_draws(scene, materials, 2000, seed=1)[:, materials.index("ceiling")]
+    np.testing.assert_array_equal(taken[:, 3:5], 1.0)
+    assert np.all(taken[:, :3].std(axis=0) > 0.04)
+    assert taken[:, 5].max() == MAX_ABSORPTION  # 0.95: one u from the top
+    before = np.array([scene.materials[m].coefficients("octave")[0] for m in materials])
+    np.testing.assert_array_equal(log_ratio(before, before), 0.0)
+    for wrong in (0.9, 1.0):  # from everything, and to it
+        after = before.copy()
+        after[materials.index("ceiling"), 3 if wrong < 1.0 else 0] = wrong
+        with pytest.raises(ValueError, match="no energy to re-weight"):
+            log_ratio(before, after)
+
+    result = simulate(room, sources=["s"], groups=face_group)
+    spread = material_spread(result, scene, face_group, materials, draws=40, seed=3, rays=False)
+    found = spread["s", "a"]
+    assert found.held == {"ceiling": [500, 1000]} and found.as_dict()["held"] == found.held
+    # Only the ceiling is uncertain: where it is held nothing moves.
+    np.testing.assert_allclose(found.absorption.g[3:5], 0.0, atol=1e-9)
+    assert np.all(found.absorption.g[[1, 2, 5, 6]] > 0.01)
+
+    # A change in its other bands re-weights; one of a band that absorbs everything
+    # does not, nor one to that.
+    def changed(band: int, value: float) -> Scene:
+        data = scene.to_data()
+        data["materials"]["ceiling"]["absorption"][band] = value
+        return Scene.model_validate(data)
+
+    assert reweighted_result(result, scene, face_group, materials, changed(1, 0.7)) is not None
+    assert reweighted_result(result, scene, face_group, materials, changed(3, 0.9)) is None
+    assert reweighted_result(result, scene, face_group, materials, changed(1, 1.0)) is None
+
+
+def test_the_bands_beside_one_that_absorbs_everything_re_weight_as_tracing_again():
+    old, new = np.array(FULL), np.array([0.5, 0.65, 0.95, 1.0, 1.0, 0.99, 0.95, 0.95])
+    scene = _full_ceiling(rays=3000)
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    before = np.array([scene.materials[m].coefficients("octave")[0] for m in materials])
+    after = before.copy()
+    after[materials.index("ceiling")] = new
+    guess = result["s", "a"].reweighted(
+        face_group, log_ratio(before, after), absorption=(before, after)
+    )
+    again = simulate(Room.from_scene(_full_ceiling(new, rays=3000)), sources=["s"])["s", "a"]
+    found, expected, traced = guess.parameters(), again.parameters(), result["s", "a"].parameters()
+    bands = [1, 2, 5, 6]
+    assert np.all(np.abs(old - new)[bands] >= 0.04)
+    np.testing.assert_allclose(found.g[bands], expected.g[bands], atol=0.15)
+    np.testing.assert_allclose(found.t30[bands], expected.t30[bands], rtol=0.1)
+    assert np.all(found.g[bands] < traced.g[bands])
+    # The bands that absorb everything stay as traced.
+    np.testing.assert_array_equal(found.g[3:5], traced.g[3:5])
 
 
 def test_the_rays_error_adds_to_the_absorption_s_as_student_s_t():
@@ -412,11 +520,63 @@ def test_simulate_spreads_a_scene_of_built_in_materials_by_default(
     assert main([*args, "--bands", "third_octave"]) == 0
     captured = capsys.readouterr()
     assert "warning" not in captured.err
+    assert "no spread from the materials' absorption uncertainty: it needs octave" in captured.err
     assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
     data["simulation"]["uncertainty"] = {"presets": "none"}
     scene.write_text(yaml.safe_dump(data))
     assert main(args) == 0
     capsys.readouterr()
+    assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
+
+
+def test_simulate_says_why_there_is_no_spread_and_announces_none_it_does_not_draw(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+):
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.engine.late import MAX_GROUPS
+
+    # The only material with an uncertainty is on no surface: no spread, none announced.
+    data = _box(None).to_data()
+    data["materials"]["spare"] = {"absorption": [0.2] * 8, "uncertainty": {"absorption": 0.05}}
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(data))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300", "--spread-draws", "12"]
+    assert main(args) == 0
+    captured = capsys.readouterr()
+    assert "spread" not in captured.err and "uncertainty from" not in captured.out
+    assert main([*args, "--bands", "third_octave"]) == 0
+    assert "spread" not in capsys.readouterr().err
+
+    # More materials on the surfaces than the tracer counts reflections off: said, with
+    # the numbers, as a warning when a material gives an uncertainty of its own.
+    data = _box({"absorption": 0.02}).to_data()
+    walls = data["materials"].pop("walls")
+    plain = {k: v for k, v in walls.items() if k != "uncertainty"}
+    corners = [[5 + 4 * np.cos(a), 5 + 4 * np.sin(a)] for a in np.arange(16) * np.pi / 8]
+    data["geometry"] = {
+        "floor_plan": [[round(float(v), 3) for v in c] for c in corners],
+        "height": 3,
+    }
+    sides = [f"wall_{k}" for k in range(1, 17)]
+    data["assignments"] = {"floor": "floor", "ceiling": "ceiling"} | {w: w for w in sides}
+    data["materials"] |= {side: plain for side in sides[1:]} | {sides[0]: walls}
+    data["sources"][0]["position"] = [4.0, 4.5, 1.5]
+    data["listeners"][0]["position"] = [6.5, 5.5, 1.2]
+    room = Room.from_scene(Scene.model_validate(data))
+    assert len(set(room.material_names)) > MAX_GROUPS == 16
+    why = "at most 16 materials on the surfaces, and there are 18"
+    assert spread_groups(room) == (None, why, True)
+    scene.write_text(yaml.safe_dump(data))
+    assert main(args) == 0
+    captured = capsys.readouterr()
+    assert f"warning: no spread from the materials' absorption uncertainty: it needs {why}" in (
+        captured.err
+    )
     assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
 
 

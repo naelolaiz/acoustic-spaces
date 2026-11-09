@@ -292,7 +292,10 @@ in each listener's ISO 3382-1 parameters: the mean, combined standard uncertaint
 re-weights the traced run instead of tracing again, so the run must be simulated with
 the materials' face groups (`acoustic_spaces.engine.reweight.groups_of`, then
 `simulate(..., groups=...)`), in octave bands, with stochastic ray tracing for the late
-part and without the wave solver. To each draw it adds the rays' random error: the
+part, without the wave solver and with at most 16 materials on its surfaces. A band in
+which a material absorbs everything (an absorption of 1, as some absorbers have in some
+bands) is not drawn, as no energy is left in it to re-weight; the spread names these
+(`held`). To each draw it adds the rays' random error: the
 standard error of the late rays' batches (`simulation.late.batches`, 4 or more) times a
 deviate of Student's t with one degree of freedom fewer than the batches, as GUM
 Supplement 1 takes a quantity known from that many observations. The budget gives each
@@ -317,8 +320,9 @@ where a fit itself moves by up to 0.19 dB for a change of 0.001.
 uncertainty, its own or a built-in material's: it prints the largest combined standard
 uncertainty in JNDs from 125 Hz to 4 kHz, with its budget, 95 % interval, one-sided
 bounds and the errors over edges, and `parameters.json` holds them all (`uncertainty`). With settings that cannot re-weight
-(third-octave bands, say) it leaves the spread out, with a warning when a material gives
-an uncertainty of its own. The editor shows each run's results at once, draws the spread
+(third-octave bands, say) it leaves the spread out and says what the spread needs, as a
+warning when a material gives an uncertainty of its own; so does the editor, in its
+messages. The editor shows each run's results at once, draws the spread
 after them and gives it in the results table's tips. The draws add to a run: in the
 concert hall example (five built-in materials, six responses) 400 draws took 160 s after
 an 11 s run, over half of it the lowest bands' paths added in pressure for each draw;

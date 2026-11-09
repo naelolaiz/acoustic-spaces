@@ -3528,6 +3528,54 @@ def test_the_absorption_uncertainty_s_spread_shows_in_the_tips(window, qapp) -> 
     assert spread.stable is None and "limit" not in tip
 
 
+def test_the_editor_says_what_the_spread_leaves_out(window, qapp) -> None:
+    """A band in which a material with an uncertainty absorbs everything is not drawn,
+    which that band's tips say; and a run that cannot re-weight says that it has no
+    spread, as a warning when a material gives an uncertainty of its own."""
+    from acoustic_spaces.gui.results_view import ROWS
+
+    _quick(window.document)
+
+    def change(data: dict) -> None:
+        data["simulation"]["ir_length_s"] = 1.0
+        data["materials"]["plaster"] = {
+            "absorption": [0.15, 0.15, 1.0, 0.1, 0.1, 0.1, 0.1, 0.1],
+            "uncertainty": {"absorption": 0.02},
+        }
+
+    window.document.edit("uncertainty", change)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    spread = window.result.spreads[("source", "listener")]
+    assert spread.held == {"plaster": [250]}
+    row = [name for name, _label, _template in ROWS].index("g")
+    said = "Not drawn in this band, where the absorption is 1: plaster"
+    assert said in window.results.table.item(row, 2).toolTip()
+    assert said not in window.results.table.item(row, 1).toolTip()
+    assert not any("No spread" in text for text, _level, _links in window.message_panel.entries)
+
+    window.document.edit("thirds", lambda d: d["simulation"].update(bands="third_octave"))
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    assert window.result.spreads == {}
+    said = "No spread from the materials' absorption uncertainty: it needs octave bands"
+    found = [level for text, level, _links in window.message_panel.entries if said in text]
+    assert found == ["warning"]
+    # A built-in material's default alone: said, not as a warning.
+    window.message_panel.clear_shown()
+    window.document.edit(
+        "default",
+        lambda d: (
+            d["materials"]["plaster"].pop("uncertainty"),
+            d["simulation"]["uncertainty"].update(presets="tolerance"),
+        ),
+    )
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    found = [level for text, level, _links in window.message_panel.entries if said in text]
+    assert found == ["info"]
+
+
 def test_draws_until_stable_say_when_they_reach_their_limit(window, qapp, monkeypatch) -> None:
     """With the draws taken until the results are stable, the tips say when the draws
     reached their limit first; with no draws, a run has no spread."""
