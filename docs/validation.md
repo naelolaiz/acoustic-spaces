@@ -141,7 +141,9 @@ request and checks:
   the room traced again with it (the same early paths, with the same energies and,
   where they add in pressure, the same phases to 10⁻¹², those of reflections on the way
   round an edge included; T30 within 4 %, EDT within 5 %, C80 within 0.3 dB and G
-  within 0.1 dB); the absorption a simulated room was given
+  within 0.1 dB; far from the traced absorption, a ceiling of 0.5 taken to 0.99, 0.9 or
+  0.1, T30 within 15 % and G within 0.25 dB); the late part's exponent against the exact
+  one for reflection counts that fall by chance; the absorption a simulated room was given
   recovered from its own responses within 0.05 in every band, and a shoebox's walls
   within 0.015 from 500 Hz up, where the fit's own uncertainty is below 0.05 and above
   0.1 in the bands the measurements leave open; a third-octave material that keeps its

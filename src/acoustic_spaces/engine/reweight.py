@@ -19,16 +19,33 @@ nor how it interferes with the reflection it shades. The late part's arrivals ar
 too many to keep, so the tracer sums, per listener and slot
 of ``MOMENT_STEP``, the energy times the reflections each ray has had off each group of
 faces and their products (:func:`~acoustic_spaces.engine.late.stochastic_energy` with
-``groups``). With l_i = ln((1 - a'_i) / (1 - a_i)) for group i, a slot's energy becomes
+``groups``): the energy-weighted mean mu and covariance C of the counts n in the slot.
+With l_i = ln((1 - a'_i) / (1 - a_i)) for group i, a slot's energy becomes E exp(K),
+K = ln of the mean of exp(n . l) over its arrivals, which mu and C give to second order
+in l as mu . l + 1/2 l' C l. That form alone holds near the traced absorption only: for
+much more absorption its square term outgrows the first and the energy rises again,
+without bound. :func:`moment_exponent` takes instead the form the counts of a diffuse
+field lead to. There a ray's N reflections fall on the groups by chance (a multinomial),
+and with u_i = exp(l_i) - 1, the change of what group i reflects,
 
-    E exp(sum_i mu_i l_i + 1/2 sum_ij C_ij l_i l_j),
+    K = N ln(1 + sum_i mu_i u_i / N),
 
-mu and C the energy-weighted mean and covariance of the counts in the slot: the
-second-order cumulant expansion of the sum over arrivals of E_r exp(n_r . l). It is exact
-for the same absorption and to second order around it; after a change of a few tenths
-the tail errs by some per cent, and :func:`~acoustic_spaces.calibration.calibrate`
-traces again at the absorption it arrives at. Its fit within a round keeps the early
-paths' phases as traced, which that next trace turns.
+which is Eyring's decay for the new absorption over that for the old. N comes from the
+covariance: 1 / N = -mu' F mu / (mu . mu)^2 with F = C - diag(mu), which is -mu mu' / N
+for a multinomial. It is held within plus and minus one over the sum of mu: a ray has
+had at least the reflections the groups count, and counts that spread wider than by
+chance make it negative. What of the covariance it leaves, R = F + mu mu' / N, adds
+1/2 w' R w, with w_i = u_i for more absorption and l_i for less. K is then the same to
+second order in l as the form above, exact for the same absorption and for counts that
+fall by chance, and held to what holds for any counts: at least mu . l (Jensen's
+inequality), and no gain where no group reflects more. Further from the traced
+absorption it stays an estimate from two moments. In a box of 8 by 6 by 3.5 m traced
+with a ceiling that absorbs 0.5 (20 000 rays, at 1 kHz), the late part's decay time for
+a ceiling of 0.9 is within 1 % of tracing again, for 0.99 within 5 %, and for 0.1 it is
+7 % too short; with a ceiling of 0.85 taken to 0.2, 16 % too short. So
+:func:`~acoustic_spaces.calibration.calibrate` traces again at the absorption it arrives
+at. Its fit within a round keeps the early paths' phases as traced, which that next
+trace turns.
 """
 
 from __future__ import annotations
@@ -135,20 +152,51 @@ def path_counts(paths: EarlyReflections, face_group: np.ndarray, groups: int) ->
 
 def moment_exponent(moments: np.ndarray, ratio: np.ndarray) -> np.ndarray:
     """(bands, slots) the exponent by which each slot of late energy changes, from the
-    moments of the counts (terms, bands, slots) and ``log_ratio`` (groups, bands)."""
+    moments of the counts (terms, bands, slots) and ``log_ratio`` (groups, bands): the
+    multinomial's form with the rest of the covariance to second order, within the
+    bounds that hold for any counts (see the module's text)."""
     groups = ratio.shape[0]
     total = moments[0]
     safe = np.where(total > 0.0, total, 1.0)
     mean = moments[1 : 1 + groups] / safe  # (groups, bands, slots)
-    exponent = np.einsum("ibs,ib->bs", mean, ratio)
+    change = np.expm1(ratio)  # u: what each group reflects, over what it did, less 1
+    rest_by = np.where(ratio > 0.0, ratio, change)  # w
+    shift = np.einsum("ibs,ib->bs", mean, ratio)  # mu . l
+    first = np.einsum("ibs,ib->bs", mean, change)  # mu . u
+    along = np.einsum("ibs,ib->bs", mean, rest_by)  # mu . w
+    count = mean.sum(axis=0)
+    square = np.einsum("ibs,ibs->bs", mean, mean)
+    # mu' F mu and w' F w, F the covariance less the means on its diagonal.
+    spread = np.zeros_like(total)
+    rest = np.zeros_like(total)
     t = 1 + groups
     for i in range(groups):
         for j in range(i, groups):
-            covariance = moments[t] / safe - mean[i] * mean[j]
-            weight = 0.5 if i == j else 1.0  # C_ij and C_ji both
-            exponent += weight * covariance * (ratio[i] * ratio[j])[:, None]
+            factorial = moments[t] / safe - mean[i] * mean[j]
+            if i == j:
+                factorial = factorial - mean[i]
+            weight = 1.0 if i == j else 2.0  # F_ij and F_ji both
+            spread += weight * factorial * mean[i] * mean[j]
+            rest += weight * factorial * (rest_by[i] * rest_by[j])[:, None]
             t += 1
-    return np.where(total > 0.0, exponent, 0.0)
+    some = (total > 0.0) & (count > 0.0)
+    limit = 1.0 / np.where(some, count, 1.0)
+    inverse = np.clip(-spread / np.where(some, square, 1.0) ** 2, -limit, limit)  # 1 / N
+    x = inverse * first
+    small = np.abs(x) < 1e-6
+    exponent = np.where(
+        small,
+        first * (1.0 - 0.5 * x),
+        np.log1p(np.maximum(x, -1.0 + 1e-12)) / np.where(small, 1.0, inverse),
+    )
+    # Counts spread wider than by chance, and less absorption: the form has a pole
+    # there, so its first two terms stand for it.
+    exponent = np.where((inverse < 0.0) & (first > 0.0), first * (1.0 - 0.5 * x), exponent)
+    exponent += 0.5 * (rest + inverse * along * along)
+    exponent = np.maximum(exponent, shift)
+    no_gain = np.all(ratio <= 0.0, axis=0)[:, None]
+    exponent = np.where(no_gain, np.minimum(exponent, 0.0), exponent)
+    return np.where(some, exponent, 0.0)
 
 
 def slot_factor(exponent: np.ndarray, slots: int, time_step: float, moment_step: float):
