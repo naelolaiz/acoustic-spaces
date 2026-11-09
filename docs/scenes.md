@@ -306,7 +306,13 @@ alone. To each draw it adds the rays' random error: the
 standard error of the late rays' batches (`simulation.late.batches`, 4 or more) times a
 deviate of Student's t with one degree of freedom fewer than the batches, as GUM
 Supplement 1 takes a quantity known from that many observations. The budget gives each
-input's standard uncertainty alone (`absorption`, `rays`). The parameters from the late
+input's standard uncertainty alone (`absorption`, `rays`), and the combined one is the
+root of the sum of their squares: the rays' error is added to each draw on its own, so
+its variance adds exactly, where the standard deviation of draws that hold it would be
+unsteady with few batches. An end of the interval, or a one-sided bound, past what the
+parameter can be (a decay time below 0, a D50 above 1) is held at that limit, as the
+Analytical Methods Committee recommends near a natural limit (AMC Technical Brief 26A).
+The parameters from the late
 sound's directions (LF and the like) have no standard error and take the absorption's
 alone. Not counted: the scattering and the method, and a parameter that some draw leaves
 undefined (a decay too slow for the response's length, say) gets none in that band.

@@ -41,6 +41,12 @@
   several responses, all but the first change by that much.
 - Fixed: a material copied with other absorption (`calibration.with_absorption`) no
   longer counts as built-in, which gave it the built-in materials' default uncertainty.
+- Changed: the spread's combined standard uncertainty is the root of the sum of the
+  squares of its budget (`absorption`, `rays`), where the standard deviation of draws
+  that held the rays' deviates was unsteady with 4 or 5 batches, and its mean is that
+  of the absorption's draws. Both move within the draws' noise.
+- Fixed: an end of the spread's interval or a one-sided bound no longer passes what the
+  parameter can be (a T30 from -0.18 s, a D50 up to 1.0003): it is held at that limit.
 
 ## 4.2.1
 

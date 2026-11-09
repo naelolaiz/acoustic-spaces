@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -496,8 +498,9 @@ def test_the_rays_error_adds_to_the_absorption_s_as_student_s_t():
             getattr(both.absorption, name), getattr(alone.absorption, name)
         )
         combined = np.hypot(getattr(both.absorption, name), getattr(both.rays, name))
-        # 400 draws give a standard deviation within about 7 % (two of its own).
-        np.testing.assert_allclose(getattr(both.standard, name)[bands], combined[bands], rtol=0.1)
+        np.testing.assert_allclose(getattr(both.standard, name)[bands], combined[bands], rtol=1e-12)
+        # The rays' term has no mean: the mean is that of the absorption's draws.
+        np.testing.assert_array_equal(getattr(both.mean, name), getattr(alone.mean, name))
         assert np.all(getattr(both.high, name)[bands] > getattr(both.low, name)[bands])
     # The lateral fraction has no standard error: the absorption alone counts.
     assert np.all(np.isnan(both.rays.lf))
@@ -515,7 +518,7 @@ def test_the_rays_error_adds_to_the_absorption_s_as_student_s_t():
 def test_the_rays_deviates_are_student_s_t_and_the_interval_the_draws_quantiles():
     from acoustic_spaces.parameters import RoomParameters
 
-    names = [f.name for f in __import__("dataclasses").fields(RoomParameters)]
+    names = [f.name for f in dataclasses.fields(RoomParameters)]
     same = RoomParameters(**{name: np.full(8, 5.0) for name in names})
     errors = RoomParameters(**{name: np.ones(8) for name in names})
     tally = _Tally(errors, 10, 0.95, 0.95)
@@ -523,10 +526,11 @@ def test_the_rays_deviates_are_student_s_t_and_the_interval_the_draws_quantiles(
     spread = tally.spread(None)
     # Student's t of 9 degrees of freedom: wider than a normal deviate, whose standard
     # deviation is 1 and whose 97.5 % point 1.96.
-    np.testing.assert_allclose(spread.standard.g, np.sqrt(9.0 / 7.0), rtol=0.03)
+    np.testing.assert_allclose(spread.standard.g, np.sqrt(9.0 / 7.0), rtol=1e-12)
     np.testing.assert_allclose(spread.high.g - 5.0, 2.262, rtol=0.04)
     np.testing.assert_allclose(5.0 - spread.at_least.g, 1.833, rtol=0.04)
     np.testing.assert_array_equal(spread.absorption.g, 0.0)
+    np.testing.assert_array_equal(spread.mean.g, 5.0)
 
     # Without the rays' error the interval's ends are the quantiles of the draws'
     # parameters, of the coverage asked for.
@@ -572,9 +576,56 @@ def test_the_rays_deviates_are_student_s_t_and_the_interval_the_draws_quantiles(
     np.testing.assert_allclose(spread.rays.g[1:7], errors.g[1:7] * np.sqrt(3.0), rtol=1e-12)
 
 
-def test_a_response_s_spread_does_not_depend_on_the_other_responses():
-    import dataclasses
+def test_the_combined_uncertainty_is_steady_with_the_fewest_batches():
+    """With 4 batches the rays' deviates are Student's t of 3 degrees of freedom, whose
+    sample standard deviation does not settle (no fourth moment): 400 draws of them are
+    off by more than a tenth in four trials of ten. The combined standard uncertainty
+    takes the rays' part in closed form, so it is the same whatever the deviates."""
+    from acoustic_spaces.parameters import RoomParameters
 
+    names = [f.name for f in dataclasses.fields(RoomParameters)]
+    same = RoomParameters(**{name: np.full(8, 5.0) for name in names})
+    errors = RoomParameters(**{name: np.ones(8) for name in names})
+    off = 0
+    for seed in range(40):
+        tally = _Tally(errors, 4, 0.95, 0.95)
+        tally.add([same] * 400, np.random.default_rng(seed))
+        spread = tally.spread(None)
+        np.testing.assert_allclose(spread.standard.g, np.sqrt(3.0), rtol=1e-12)
+        np.testing.assert_array_equal(spread.rays.g, spread.standard.g)
+        sampled = np.random.default_rng(seed).standard_t(3, size=400).std(ddof=1)
+        off += abs(sampled / np.sqrt(3.0) - 1.0) > 0.1
+    assert off >= 8
+
+
+def test_an_interval_stays_within_what_the_parameter_can_be():
+    """Where the rays' error is large against a value near its limit, the draws with
+    the rays' deviates pass the limit: a decay time below 0, a D50 above 1. The
+    interval's ends and the one-sided bounds are held at the limit; a level has none."""
+    from acoustic_spaces.parameters import ALL_PARAMETERS, LIMITS, RoomParameters
+
+    assert set(LIMITS) < set(ALL_PARAMETERS)
+    assert all(ALL_PARAMETERS[name][0] != "dB" for name in LIMITS)
+    names = [f.name for f in dataclasses.fields(RoomParameters)]
+    values = {name: np.full(8, 0.05) for name in names} | {"d50": np.full(8, 0.97)}
+    errors = RoomParameters(**{name: np.full(8, 0.1) for name in names})
+    tally = _Tally(errors, 10, 0.95, 0.95)
+    tally.add([RoomParameters(**values)] * 2000, np.random.default_rng(1))
+    spread = tally.spread(None)
+    for name in ("t30", "edt", "ts"):
+        np.testing.assert_array_equal(getattr(spread.low, name), 0.0)
+        np.testing.assert_array_equal(getattr(spread.at_least, name), 0.0)
+        assert np.all(getattr(spread.high, name) > 0.2)
+    np.testing.assert_array_equal(spread.high.d50, 1.0)
+    np.testing.assert_array_equal(spread.at_most.d50, 1.0)
+    assert np.all(spread.low.d50 < 0.8) and np.all(spread.low.d50 > 0.0)
+    # A level has no limit, and the mean and the standard uncertainty are not held.
+    assert np.all(spread.low.g < -0.1) and np.all(spread.at_least.g < -0.1)
+    np.testing.assert_allclose(spread.mean.t30, 0.05, rtol=1e-12)
+    np.testing.assert_allclose(spread.standard.t30, 0.1 * np.sqrt(9.0 / 7.0), rtol=1e-12)
+
+
+def test_a_response_s_spread_does_not_depend_on_the_other_responses():
     data = _box({"absorption": 0.02}).to_data()
     data["listeners"].append({"name": "b", "position": [3.3, 1.2, 1.6]})
     scene = Scene.model_validate(data)
@@ -597,7 +648,7 @@ def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
 
     import yaml
 
-    from acoustic_spaces.cli import main
+    from acoustic_spaces.cli import _uncertainty_text, main
 
     scene = tmp_path / "scene.yaml"
     scene.write_text(yaml.safe_dump(_box({"absorption": 0.02, "source": "lab"}).to_data()))
@@ -606,12 +657,19 @@ def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
     assert main(args) == 0
     stdout = capsys.readouterr().out
     assert "uncertainty from the absorption and the rays (10 batches), 12 draws: at most" in stdout
-    assert "(absorption " in stdout and ", rays " in stdout
     entry = json.loads((out / "parameters.json").read_text())["responses"][0]
     spread = entry["uncertainty"]
     assert spread["draws"] == 12 and spread["coverage"] == 0.95 and spread["batches"] == 10
-    assert spread["standard"]["t30"][3] > 0.0
     assert spread["absorption"]["t30"][3] > 0.0 and spread["rays"]["t30"][3] > 0.0
+    # The combined standard uncertainty is the root sum of squares of its budget.
+    assert spread["standard"]["t30"][3] == pytest.approx(
+        np.hypot(spread["absorption"]["t30"][3], spread["rays"]["t30"][3]), rel=1e-12
+    )
+    # The line gives the budget of the result it names, where the rays' error counts.
+    rays = {n: v for n, v in spread["standard"].items() if spread["rays"][n][3] is not None}
+    standard = {n: rays.get(n, [None] * 8) for n in spread["standard"]}
+    line = _uncertainty_text({**entry, "uncertainty": {**spread, "standard": standard}})
+    assert "(absorption " in line and ", rays " in line
     assert spread["low"]["t30"][3] < entry["parameters"]["t30"][3] < spread["high"]["t30"][3]
     assert spread["one_sided"] == 0.95
     assert spread["low"]["t30"][3] <= spread["at_least"]["t30"][3] < spread["mean"]["t30"][3]

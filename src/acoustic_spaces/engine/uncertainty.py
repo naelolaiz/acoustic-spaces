@@ -12,9 +12,19 @@ a jackknife of n batches) times a deviate of Student's t with n - 1 degrees of f
 as JCGM 101 6.4.9 takes a quantity known from n observations, whose standard uncertainty
 is the standard error times sqrt((n - 1) / (n - 3)). The two are independent, each
 parameter's spread in a band being taken on its own. The parameters of the draws give
-each one's mean, combined standard uncertainty (the draws' standard deviation, JCGM 101
-7.6) and probabilistically symmetric coverage interval (JCGM 101 7.7), and the budget:
-each input's standard uncertainty alone. They also give its one-sided bounds, for a
+each one's mean, the standard uncertainty that the absorption leads to (their standard
+deviation, JCGM 101 7.6) and, with the rays' deviates added, its probabilistically
+symmetric coverage interval (JCGM 101 7.7). The combined standard uncertainty is the
+root of the sum of the squares of the absorption's and the rays': the rays' term is
+added to each draw on its own, so its variance adds exactly, and the standard deviation
+of draws that hold its deviates would give the same less steadily (with 4 or 5 batches
+far less: Student's t of 3 or 4 degrees of freedom has no fourth moment, which a sample
+variance needs to settle). The budget is these two. An end of the interval, or a
+one-sided bound, past what the parameter can be (a decay time below 0, a D50 above 1:
+:data:`~acoustic_spaces.parameters.LIMITS`) is held there, as the Analytical Methods
+Committee recommends for an interval near a natural limit (AMC Technical Brief 26A,
+2008; Cowen and Ellison, Analyst 131 (2006) 710): the rays' error of a value near its
+limit would else take it past it. They also give its one-sided bounds, for a
 limit on one side (JCGM 106:2012's conformance probability): the value it is at least
 with probability ``one_sided``, and the one it is at most with that probability, the
 draws' quantiles of 1 - ``one_sided`` and of ``one_sided`` (for a normal spread at 95 %,
@@ -79,7 +89,7 @@ from acoustic_spaces.engine.reweight import (
     reweighted_materials,
 )
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
-from acoustic_spaces.parameters import RoomParameters
+from acoustic_spaces.parameters import LIMITS, RoomParameters
 from acoustic_spaces.scene.model import ONE_SIDED, SPREAD_DRAWS, AbsorptionUncertainty
 
 #: The highest absorption a draw takes: re-weighting needs some sound reflected.
@@ -511,7 +521,10 @@ class _Tally:
     """One response's parameters in the draws, batch by batch: the parameters each draw
     of the absorption gives, and the rays' error to add to each (their standard errors
     ``errors``, from ``batches`` batches of rays, times a deviate of Student's t of
-    ``batches`` - 1 degrees of freedom; None for none)."""
+    ``batches`` - 1 degrees of freedom; None for none). The mean and the absorption's
+    standard uncertainty are those of the draws' parameters, the combined standard
+    uncertainty has the rays' in closed form, and the interval's ends and the one-sided
+    bounds are quantiles of the draws with the rays' deviates."""
 
     def __init__(
         self, errors: RoomParameters | None, batches: int, coverage: float, one_sided: float
@@ -524,8 +537,9 @@ class _Tally:
         self._names = [f.name for f in dataclasses.fields(RoomParameters)]
         self._values: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
         self._noise: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
-        # Of each batch, each parameter's (6, bands) mean, standard deviation, interval's
-        # ends and one-sided bounds, and whether it is defined in every draw of it.
+        # Of each batch, each parameter's (6, bands) mean and standard deviation over
+        # the absorption's draws, and with the rays' deviates its interval's ends and
+        # one-sided bounds; and whether it is defined in every draw of it.
         self._estimates: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
         self._defined: dict[str, np.ndarray] = {}
         self.draws = 0
@@ -539,6 +553,7 @@ class _Tally:
             defined = np.all(np.isfinite(values), axis=0)
             safe = np.where(defined, values, 0.0)
             self._values[name].append(values)
+            mean, deviation = safe.mean(axis=0), safe.std(axis=0, ddof=1)
             if self._errors is not None:
                 error = np.asarray(getattr(self._errors, name), dtype=float)
                 nu = self._batches - 1
@@ -548,32 +563,45 @@ class _Tally:
                 self._noise[name].append(noise)
                 safe = safe + noise
             self._defined[name] = self._defined.get(name, True) & defined
-            self._estimates[name].append(
-                np.vstack(
-                    [
-                        safe.mean(axis=0),
-                        safe.std(axis=0, ddof=1),
-                        np.quantile(safe, self._quantiles, axis=0),
-                    ]
-                )
-            )
+            self._estimates[name].append(np.vstack([mean, deviation, self._ends(name, safe)]))
+
+    def _ends(self, name: str, drawn: np.ndarray) -> np.ndarray:
+        """(4, bands) the interval's ends and the one-sided bounds of parameter ``name``
+        from ``drawn`` (draws, bands), the draws with the rays' deviates: their
+        quantiles, held to what the parameter can be."""
+        ends = np.quantile(drawn, self._quantiles, axis=0)
+        return np.clip(ends, *LIMITS[name]) if name in LIMITS else ends
+
+    def _rays(self, name: str) -> np.ndarray:
+        """(bands,) the rays' standard uncertainty of parameter ``name``: its standard
+        error times sqrt(nu / (nu - 2)), Student's t of nu degrees of freedom being
+        that much wider than the normal; NaN where the rays' error is not counted."""
+        if self._errors is None:
+            return np.full(self._values[name][0].shape[1], np.nan)
+        error = np.asarray(getattr(self._errors, name), dtype=float)
+        nu = self._batches - 1
+        return np.where(np.isfinite(error), error * math.sqrt(nu / (nu - 2)), np.nan)
 
     def unstable(self) -> tuple[float, str, int] | None:
         """None when every parameter in every band meets the test of JCGM 101 7.9.4 over
         the batches taken: twice the standard deviation of the batches'
-        mean, standard deviation and interval's ends, each over the root of the number
-        of batches, is at most the numerical tolerance of the standard deviation of all
-        the draws; and so for the one-sided bounds, which are results as the interval's
-        ends are. Else the one furthest from it: how many times the tolerance, its
-        name and its band."""
+        mean, combined standard uncertainty and interval's ends, each over the root of
+        the number of batches, is at most the numerical tolerance of the combined
+        standard uncertainty of all the draws; and so for the one-sided bounds, which
+        are results as the interval's ends are. Else the one furthest from it: how many
+        times the tolerance, its name and its band."""
         worst: tuple[float, str, int] | None = None
         for name in self._names:
             estimates = np.stack(self._estimates[name])  # (batches, 6, bands)
             count, size = estimates.shape[0], self.draws // estimates.shape[0]
             means, deviations = estimates[:, 0], estimates[:, 1]
-            # All the draws' standard deviation, from the batches' means and deviations.
+            rays = np.nan_to_num(self._rays(name))
+            # All the draws' standard deviation, from the batches' means and deviations,
+            # and with the rays' the combined standard uncertainty: of all the draws,
+            # and of each batch.
             squares = (size - 1) * deviations**2 + size * (means - means.mean(axis=0)) ** 2
-            standard = np.sqrt(squares.sum(axis=0) / (self.draws - 1))
+            standard = np.hypot(np.sqrt(squares.sum(axis=0) / (self.draws - 1)), rays)
+            estimates[:, 1] = np.hypot(deviations, rays)
             twice = 2.0 * estimates.std(axis=0, ddof=1) / math.sqrt(count)
             over = np.where(
                 self._defined[name],
@@ -592,18 +620,14 @@ class _Tally:
             values = np.concatenate(self._values[name])
             defined = np.all(np.isfinite(values), axis=0)
             safe = np.where(defined, values, 0.0)
-            absorption = safe.std(axis=0, ddof=1)
-            rays = np.full(values.shape[1], np.nan)
+            mean, absorption = safe.mean(axis=0), safe.std(axis=0, ddof=1)
+            rays = self._rays(name)
             if self._errors is not None:
-                error = np.asarray(getattr(self._errors, name), dtype=float)
-                counted = np.isfinite(error)
-                nu = self._batches - 1
                 safe = safe + np.concatenate(self._noise[name])
-                rays = np.where(counted, error * math.sqrt(nu / (nu - 2)), np.nan)
-            low, high, at_least, at_most = np.quantile(safe, self._quantiles, axis=0)
+            low, high, at_least, at_most = self._ends(name, safe)
             for part, value in (
-                ("mean", safe.mean(axis=0)),
-                ("standard", safe.std(axis=0, ddof=1)),
+                ("mean", mean),
+                ("standard", np.hypot(absorption, np.nan_to_num(rays))),
                 ("low", low),
                 ("high", high),
                 ("at_least", at_least),
