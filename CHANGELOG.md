@@ -19,6 +19,11 @@
   its source, or ISO 12999-2's reproducibility at a click), which only the scene file
   did. Typing a material's coefficients there no longer drops an uncertainty the scene
   file gave it.
+- Fixed: typing one coefficient on a material's page in the editor changes that cell
+  only. A scattering value no longer takes the material off its database entry or file
+  (which cost a built-in material the uncertainty a run takes for it), the other bands
+  keep the decimals the table does not show, and a material given by its sound
+  reduction alone takes a scattering value.
 
 ## 4.2.1
 

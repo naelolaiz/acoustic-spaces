@@ -2911,8 +2911,12 @@ class MaterialPage(Page):
         entry = self.preset.currentText().strip()
         if not entry:
             return
-        fields = {"preset": entry, "scattering": self.document.scene.materials[self.key].scattering}
-        fields |= {k: v for k, v in self._fields().items() if k in _KEPT}
+        material = self.document.scene.materials[self.key]
+        fields = {"preset": entry, "scattering": material.scattering}
+        # An uncertainty is of the absorption it came with: it stays with the same
+        # entry picked again, and goes with another's.
+        kept = (*_KEPT, "uncertainty") if entry == material.preset else _KEPT
+        fields |= {k: v for k, v in self._fields().items() if k in kept}
         self.run(lambda: self.document.set_material(self.key, fields))
 
     def _impedance(self) -> dict:
@@ -2942,6 +2946,8 @@ class MaterialPage(Page):
         fields = {"impedance": self._impedance(), "scattering": material.scattering}
         if material.audience:
             fields["audience"] = True
+        if material.impedance is not None and material.uncertainty is not None:
+            fields["uncertainty"] = self._fields()["uncertainty"]
         self.run(lambda: self.document.set_material(self.key, fields))
 
     def _ground_toggled(self, checked: bool) -> None:
@@ -3086,62 +3092,72 @@ class MaterialPage(Page):
             return
         columns = range(self.table.columnCount())
         try:
-            rows = [[parse_number(self.table.item(r, c).text()) for c in columns] for r in range(2)]
+            typed = [
+                [parse_number(self.table.item(r, c).text()) for c in columns] for r in range(2)
+            ]
         except (AttributeError, ValueError):
             self.failed.emit(_("coefficients are numbers from 0 to 1"))
             self.reload()
             return
         material = self.document.scene.materials[self.key]
         bands = self._bands(material)
+        fields = self._fields()
+        # A cell left as shown keeps its value, with the decimals the table leaves out.
+        shown = [convert(fields[k], bands) for k in ("absorption", "scattering")]
+        absorption, scattering = (
+            [
+                was if value == round(was, 2) else value
+                for was, value in zip(given, row, strict=True)
+            ]
+            for given, row in zip(shown, typed, strict=True)
+        )
+        absorption_typed, scattering_typed = absorption != shown[0], scattering != shown[1]
         if material.impedance is not None:  # only the scattering is typed
-            if rows[1] == [round(v, 2) for v in convert(material.scattering, bands)]:
-                return
-            fields = {"impedance": self._impedance(), "scattering": rows[1]}
-            if material.audience:
-                fields["audience"] = True
-            if material.uncertainty is not None:
-                fields["uncertainty"] = self._fields()["uncertainty"]
-            self.run(lambda: self.document.set_material(self.key, fields))
+            if scattering_typed:
+                fields = {**material.to_data(), "scattering": scattering}
+                self.run(lambda: self.document.set_material(self.key, fields))
             return
         passing = material.transmission_coefficients(bands)
-        reduction = None
+        reduction, passing_typed = None, False
         if self._kind(passing) == 1:
             texts = [self.table.item(2, c).text().strip() for c in columns]
             try:
-                typed = [parse_number(t) if t else None for t in texts]
+                given = [parse_number(t) if t else None for t in texts]
             except ValueError:
                 self.failed.emit(_("the sound reduction is in dB"))
                 self.reload()
                 return
             # A blank band takes its neighbour's value; all blank, nothing passes.
-            reduction = _nearest_filled(typed) if any(v is not None for v in typed) else None
-        fields = self._fields()
-        shown = [convert(fields[k], bands) for k in ("absorption", "scattering")]
-        same = rows == [[round(v, 2) for v in row] for row in shown]
-        if reduction is not None:
+            reduction = _nearest_filled(given) if any(v is not None for v in given) else None
             now = list(map(_reduction_text, passing))
-            if same and [_reduction_text(10.0 ** (-r / 10.0)) for r in reduction] == now:
-                return
-        elif same and self._kind(passing) != 1:
+            passing_typed = (
+                reduction is None
+                or [_reduction_text(10.0 ** (-r / 10.0)) for r in reduction] != now
+            )
+        if not (absorption_typed or scattering_typed or passing_typed):
             return
-        if same:
-            # Only what passes changed: the rest stays as the scene gives it, so that an
-            # absorption that came from the transmission follows the new one.
-            fields = _without_transmission(material.to_data())
-        else:
+        if absorption_typed:
             # Scene-file text, in English as the scene file is.
             origin = fields.get("source") or "values given in the scene"
             # The uncertainty too: it is of this material's absorption, typed anew.
             kept = {k: fields[k] for k in (*_KEPT, "uncertainty") if k in fields}
             fields = {
-                "absorption": rows[0],
-                "scattering": rows[1],
+                "absorption": absorption,
+                "scattering": scattering,
                 "source": origin if origin.startswith("edited") else f"edited from {origin}",
                 **kept,
             }
-        if reduction is not None:
-            fields.pop("transmission", None)
-            fields["transmission_loss"] = reduction
+        else:
+            # The rest stays as the scene gives it: its database entry or file, and with
+            # them a built-in material's uncertainty; and an absorption that came from
+            # the transmission follows the new one.
+            fields = material.to_data()
+            if scattering_typed:
+                fields["scattering"] = scattering
+        if passing_typed:
+            fields = _without_transmission(fields)
+            if reduction is not None:
+                fields["transmission_loss"] = reduction
         self.run(lambda: self.document.set_material(self.key, fields))
 
 

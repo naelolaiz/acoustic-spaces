@@ -1343,6 +1343,88 @@ def test_a_transmission_alone_can_be_lowered_and_its_absorption_follows(window) 
     assert floor.absorption[3] == pytest.approx(10.0**-3.5)
 
 
+def test_a_typed_cell_leaves_the_other_cells_and_the_rest_of_the_material(window, tmp_path) -> None:
+    """One coefficient typed on a material's page changes that cell: the other bands keep
+    the decimals the table leaves out, and with the absorption as given the material
+    keeps its database entry or file, so a built-in one keeps the uncertainty a run
+    takes for it, and one of its own stays too."""
+    from acoustic_spaces.engine.uncertainty import uncertainty_of
+
+    window.open_example(example_path("studio"))
+    document = window.document
+    page = window.inspector.pages["material"]
+
+    def material(name: str):
+        return document.scene.materials[name]
+
+    # A built-in material: a scattering value typed leaves it built-in.
+    window.select("material", "wooden_floor")
+    absorption = list(material("wooden_floor").absorption)
+    assert uncertainty_of(document.scene, "wooden_floor") is not None
+    page.table.item(1, 2).setText("0.30")
+    floor = material("wooden_floor")
+    assert floor.scattering == [0.05, 0.05, 0.3, 0.05, 0.05, 0.05, 0.05, 0.05]
+    assert floor.preset == "stage_floor" and floor.builtin and floor.absorption == absorption
+    assert uncertainty_of(document.scene, "wooden_floor") is not None
+    assert "absorption" not in floor.to_data()  # the entry gives it, as before
+
+    # Values with three decimals and an uncertainty of the material's own.
+    given = [0.123, 0.234, 0.345, 0.456, 0.567, 0.678, 0.789, 0.891]
+    own = {"absorption": 0.025, "distribution": "normal", "source": "lab report"}
+    document.set_material(
+        "side_panels", {"absorption": given, "scattering": 0.216, "uncertainty": own}
+    )
+    window.select("material", "side_panels")
+    assert page.table.item(0, 3).text() == "0.46" and page.table.item(1, 3).text() == "0.22"
+    page.table.item(1, 0).setText("0.4")
+    panels = material("side_panels")
+    assert panels.scattering == [0.4] + [0.216] * 7 and panels.absorption == given
+    assert panels.uncertainty.source == "lab report" and panels.source is None
+    page.table.item(0, 7).setText("0.9")
+    panels = material("side_panels")
+    assert panels.absorption == [*given[:7], 0.9] and panels.scattering == [0.4] + [0.216] * 7
+    assert panels.uncertainty.source == "lab report" and panels.source.startswith("edited")
+    # The same database entry picked again keeps the uncertainty too.
+    document.set_material("side_panels", {"preset": "plasterboard", "uncertainty": own})
+    window.select("material", "side_panels")
+    page.preset.setCurrentText("plasterboard")
+    page.preset.activated.emit(0)
+    assert material("side_panels").uncertainty.source == "lab report"
+
+    # A sound reduction alone: the absorption is what passes, and stays so.
+    document.set_material("front_wall", {"transmission_loss": 30.0})
+    window.select("material", "front_wall")
+    page.table.item(1, 4).setText("0.25")
+    wall = material("front_wall")
+    assert wall.scattering[4] == 0.25 and wall.transmission_loss == [30.0] * 8
+    assert "absorption" not in wall.to_data() and wall.absorption == [0.001] * 8
+
+    # A file's values: typing the scattering leaves the material read from the file.
+    document.save(tmp_path / "scene.yaml")
+    (tmp_path / "wall.csv").write_text(
+        "125,250,500,1000,2000,4000\n0.111,0.222,0.333,0.444,0.555,0.666\n", encoding="utf-8"
+    )
+    document.set_material("front_wall", {"file": "wall.csv"})
+    window.select("material", "front_wall")
+    measured = list(material("front_wall").absorption)
+    page.table.item(1, 0).setText("0.5")
+    wall = material("front_wall")
+    assert wall.file == (tmp_path / "wall.csv").resolve() and wall.absorption == measured
+    assert wall.scattering[0] == 0.5 and wall.source.startswith("file wall.csv")
+
+
+def test_a_ground_keeps_its_uncertainty_when_its_impedance_changes(window) -> None:
+    window.open_example(example_path("roadside"))
+    own = {"absorption": 0.03, "distribution": "normal", "source": "survey"}
+    fields = window.document.scene.materials["meadow"].to_data()
+    window.document.set_material("meadow", {**fields, "uncertainty": own})
+    window.select("material", "meadow")
+    page = window.inspector.pages["material"]
+    page.thickness.setValue(0.1)
+    meadow = window.document.scene.materials["meadow"]
+    assert meadow.impedance.thickness == 0.1 and meadow.uncertainty.source == "survey"
+
+
 def test_a_material_page_sets_its_absorption_uncertainty(window) -> None:
     """Ticking Absorption uncertainty on a material's page gives the material an
     uncertainty of its own: what a run takes for it now (a built-in material's default,
