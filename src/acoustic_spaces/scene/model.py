@@ -2854,6 +2854,9 @@ PresetUncertainty = Literal["tolerance", "iso_12999_2", "none"]
 
 #: The draws a spread takes unless the scene or the command line says otherwise.
 SPREAD_DRAWS = 400
+#: The probability of a spread's one-sided bounds unless the scene or the command line
+#: says otherwise.
+ONE_SIDED = 0.95
 
 
 class Uncertainty(_Model):
@@ -2874,6 +2877,17 @@ class Uncertainty(_Model):
             "the draws of the spread: a number (2 or more; 0, no spread), or adaptive, as "
             "many as GUM Supplement 1's adaptive procedure (JCGM 101:2008, 7.9) takes until "
             "the results are stable"
+        ),
+    )
+
+    one_sided: float = Field(
+        default=ONE_SIDED,
+        gt=0.5,
+        lt=1.0,
+        description=(
+            "the probability of the spread's one-sided bounds, between 0.5 and 1 (0.95; "
+            "0.9, say, for bounds less far out): the value each result is at least, and "
+            "the one it is at most, with that probability"
         ),
     )
 

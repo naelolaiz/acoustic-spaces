@@ -9,6 +9,11 @@
   (JCGM 101:2008, 7.9): `simulation.uncertainty.draws: adaptive`, `--spread-draws
   adaptive` or **Draws** in the editor's simulation settings, which also take a number
   (400 as before) or none. `parameters.json` says whether the results were stable.
+- Added: the spread gives each result's one-sided bounds, for a limit on one side: the
+  value it is at least and the one it is at most with a probability of 95 % (`at_least`,
+  `at_most` in `parameters.json`, in `simulate`'s output and in the editor's tips).
+  `simulation.uncertainty.one_sided`, `--one-sided` or **One-sided bounds** in the
+  editor's simulation settings give another probability, 90 % say.
 
 ## 4.2.1
 

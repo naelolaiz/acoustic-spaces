@@ -147,6 +147,8 @@ Parameters:
   the database does not name (plus or minus 0.1, or twice ISO 12999-2's reproducibility).
 - [x] Error estimates: the number of draws chosen as the adaptive procedure of GUM
   Supplement 1 does (JCGM 101:2008, 7.9), or given.
+- [x] Error estimates: each result's one-sided bounds, for a limit on one side, of 95 %
+  or another probability.
 - [ ] Error estimates, next steps: the uncertainty on the editor's material page;
   the scattering's uncertainty; levels, STI and maps; convergence checks; the method's
   own error from the validation.

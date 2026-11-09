@@ -14,19 +14,25 @@ is the standard error times sqrt((n - 1) / (n - 3)). The two are independent, ea
 parameter's spread in a band being taken on its own. The parameters of the draws give
 each one's mean, combined standard uncertainty (the draws' standard deviation, JCGM 101
 7.6) and probabilistically symmetric coverage interval (JCGM 101 7.7), and the budget:
-each input's standard uncertainty alone.
+each input's standard uncertainty alone. They also give its one-sided bounds, for a
+limit on one side (JCGM 106:2012's conformance probability): the value it is at least
+with probability ``one_sided``, and the one it is at most with that probability, the
+draws' quantiles of 1 - ``one_sided`` and of ``one_sided`` (for a normal spread at 95 %,
+the mean less and plus 1.645 standard uncertainties).
 
 The draws are a number given beforehand (JCGM 101 7.2.1), or, with ``draws`` adaptive, as
 many as JCGM 101 7.9's adaptive procedure takes: batch after batch until, for every
 parameter in every band of every response, twice the standard deviation of the batches'
 mean, standard uncertainty and interval's ends, each over the root of the number of
 batches, is no more than the numerical tolerance of the standard uncertainty at
-``ADAPTIVE_DIGITS`` significant digits (7.9.2). A batch is ``ADAPTIVE_BATCH`` draws, not
+``ADAPTIVE_DIGITS`` significant digits (7.9.2), and so for the one-sided bounds, which
+the Supplement's test does not name. A batch is ``ADAPTIVE_BATCH`` draws, not
 the 10 000 the Supplement names (a choice it calls arbitrary), as each draw re-weights
 the whole run. The test is first made after ``ADAPTIVE_MIN_BATCHES`` batches, not 2: the
 Supplement's first test comes after 20 000 draws, which settle one digit of a normal
-spread whatever it is, while two batches of 100 pass by chance about one time in eight
-for a result that needs a thousand draws. The draws stop at ``ADAPTIVE_MAX_DRAWS`` if
+spread whatever it is, while two batches of 100 pass by chance about one time in six
+for a result that needs some 460 draws, and one time in twenty for one that needs a
+thousand. The draws stop at ``ADAPTIVE_MAX_DRAWS`` if
 the results are not stable by then (:attr:`Spread.stable`).
 
 A material that gives no uncertainty of its own takes none, unless its absorption is a
@@ -63,12 +69,15 @@ import numpy as np
 from acoustic_spaces.engine.reweight import log_ratio
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import RoomParameters
-from acoustic_spaces.scene.model import SPREAD_DRAWS, AbsorptionUncertainty
+from acoustic_spaces.scene.model import ONE_SIDED, SPREAD_DRAWS, AbsorptionUncertainty
 
 #: The highest absorption a draw takes: re-weighting needs some sound reflected.
 MAX_ABSORPTION = 0.99
 #: The draws :func:`material_spread` takes unless told otherwise.
 DEFAULT_DRAWS = SPREAD_DRAWS
+#: The probability of the one-sided bounds :func:`material_spread` gives unless told
+#: otherwise.
+DEFAULT_ONE_SIDED = ONE_SIDED
 #: ``draws`` for as many as the adaptive procedure of JCGM 101 7.9 takes.
 ADAPTIVE = "adaptive"
 #: The draws of each batch of the adaptive procedure.
@@ -97,7 +106,7 @@ MIN_BATCHES = 4
 #: How many draws :func:`material_spread` takes between two calls of its ``progress``.
 PROGRESS_DRAWS = 25
 #: The parts of a :class:`Spread`.
-PARTS = ("mean", "standard", "low", "high", "absorption", "rays")
+PARTS = ("mean", "standard", "low", "high", "at_least", "at_most", "absorption", "rays")
 #: The half-width of the tolerance a built-in material of unknown source takes in every
 #: band (``simulation.uncertainty.presets: tolerance``, the default).
 PRESET_TOLERANCE = 0.1
@@ -196,6 +205,8 @@ class Spread:
     """The spread of one response's ISO 3382-1 parameters over the draws, each a
     (bands,) array: ``mean``, ``standard`` (the combined standard uncertainty), and
     ``low`` and ``high``, the ends of the coverage interval of probability ``coverage``;
+    ``at_least`` and ``at_most``, the one-sided bounds of probability ``one_sided`` (the
+    value the parameter is at least with that probability, and the one it is at most);
     and the budget, ``absorption`` and ``rays``, the standard uncertainty from the
     materials' absorption alone and from the rays' random error alone (NaN where it is
     not counted; from ``batches`` batches, 0 for none). NaN where a parameter is
@@ -212,9 +223,12 @@ class Spread:
     standard: RoomParameters
     low: RoomParameters
     high: RoomParameters
+    at_least: RoomParameters
+    at_most: RoomParameters
     absorption: RoomParameters
     rays: RoomParameters
     coverage: float
+    one_sided: float
     draws: int
     batches: int
     not_counted: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
@@ -227,6 +241,7 @@ class Spread:
             "draws": self.draws,
             "stable": self.stable,
             "coverage": self.coverage,
+            "one_sided": self.one_sided,
             "batches": self.batches,
             **{part: getattr(self, part).as_dict() for part in PARTS},
             "not_counted": {
@@ -420,13 +435,19 @@ class _Tally:
     ``errors``, from ``batches`` batches of rays, times a deviate of Student's t of
     ``batches`` - 1 degrees of freedom; None for none)."""
 
-    def __init__(self, errors: RoomParameters | None, batches: int, coverage: float) -> None:
+    def __init__(
+        self, errors: RoomParameters | None, batches: int, coverage: float, one_sided: float
+    ) -> None:
         self._errors, self._batches, self._coverage = errors, batches, coverage
+        # The draws' quantiles: the interval's ends, then the one-sided bounds.
+        tail = 0.5 * (1.0 - coverage)
+        self._quantiles = (tail, 1.0 - tail, 1.0 - one_sided, one_sided)
+        self._one_sided = one_sided
         self._names = [f.name for f in dataclasses.fields(RoomParameters)]
         self._values: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
         self._noise: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
-        # Of each batch, each parameter's (4, bands) mean, standard deviation and
-        # interval's ends, and whether it is defined in every draw of it.
+        # Of each batch, each parameter's (6, bands) mean, standard deviation, interval's
+        # ends and one-sided bounds, and whether it is defined in every draw of it.
         self._estimates: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
         self._defined: dict[str, np.ndarray] = {}
         self.draws = 0
@@ -434,7 +455,6 @@ class _Tally:
     def add(self, found: list[RoomParameters], rng: np.random.Generator) -> None:
         """Take a batch: the parameters ``found`` in its draws of the absorption, the
         rays' deviates from ``rng``."""
-        tail = 0.5 * (1.0 - self._coverage)
         self.draws += len(found)
         for name in self._names:
             values = np.stack([np.asarray(getattr(p, name), dtype=float) for p in found])
@@ -451,12 +471,11 @@ class _Tally:
                 safe = safe + noise
             self._defined[name] = self._defined.get(name, True) & defined
             self._estimates[name].append(
-                np.stack(
+                np.vstack(
                     [
                         safe.mean(axis=0),
                         safe.std(axis=0, ddof=1),
-                        np.quantile(safe, tail, axis=0),
-                        np.quantile(safe, 1.0 - tail, axis=0),
+                        np.quantile(safe, self._quantiles, axis=0),
                     ]
                 )
             )
@@ -466,11 +485,12 @@ class _Tally:
         the batches taken: twice the standard deviation of the batches'
         mean, standard deviation and interval's ends, each over the root of the number
         of batches, is at most the numerical tolerance of the standard deviation of all
-        the draws. Else the one furthest from it: how many times the tolerance, its
+        the draws; and so for the one-sided bounds, which are results as the interval's
+        ends are. Else the one furthest from it: how many times the tolerance, its
         name and its band."""
         worst: tuple[float, str, int] | None = None
         for name in self._names:
-            estimates = np.stack(self._estimates[name])  # (batches, 4, bands)
+            estimates = np.stack(self._estimates[name])  # (batches, 6, bands)
             count, size = estimates.shape[0], self.draws // estimates.shape[0]
             means, deviations = estimates[:, 0], estimates[:, 1]
             # All the draws' standard deviation, from the batches' means and deviations.
@@ -489,7 +509,6 @@ class _Tally:
 
     def spread(self, stable: bool | None) -> Spread:
         """The :class:`Spread` of all the draws taken."""
-        tail = 0.5 * (1.0 - self._coverage)
         parts: dict[str, dict[str, np.ndarray]] = {part: {} for part in PARTS}
         for name in self._names:
             values = np.concatenate(self._values[name])
@@ -503,11 +522,14 @@ class _Tally:
                 nu = self._batches - 1
                 safe = safe + np.concatenate(self._noise[name])
                 rays = np.where(counted, error * math.sqrt(nu / (nu - 2)), np.nan)
+            low, high, at_least, at_most = np.quantile(safe, self._quantiles, axis=0)
             for part, value in (
                 ("mean", safe.mean(axis=0)),
                 ("standard", safe.std(axis=0, ddof=1)),
-                ("low", np.quantile(safe, tail, axis=0)),
-                ("high", np.quantile(safe, 1.0 - tail, axis=0)),
+                ("low", low),
+                ("high", high),
+                ("at_least", at_least),
+                ("at_most", at_most),
                 ("absorption", absorption),
                 ("rays", rays),
             ):
@@ -518,9 +540,12 @@ class _Tally:
             standard=each["standard"],
             low=each["low"],
             high=each["high"],
+            at_least=each["at_least"],
+            at_most=each["at_most"],
             absorption=each["absorption"],
             rays=each["rays"],
             coverage=self._coverage,
+            one_sided=self._one_sided,
             draws=self.draws,
             batches=self._batches,
             stable=stable,
@@ -538,6 +563,7 @@ def material_spread(
     rays: bool = True,
     progress=None,
     max_draws: int | None = None,
+    one_sided: float = DEFAULT_ONE_SIDED,
 ) -> dict:
     """{(source, listener): :class:`Spread`} the spread of ``result``'s parameters that
     the uncertainty of its materials' absorption leads to, with the rays' random error
@@ -546,11 +572,14 @@ def material_spread(
     ``simulate(groups=...)``). ``draws`` is their number, or ``ADAPTIVE``: batches of
     ``ADAPTIVE_BATCH``, ``ADAPTIVE_MIN_BATCHES`` or more, until every result of every
     response is stable by the test of JCGM 101 7.9 (:attr:`Spread.stable`),
-    ``max_draws`` at most (default ``ADAPTIVE_MAX_DRAWS``). ``progress(message)``,
+    ``max_draws`` at most (default ``ADAPTIVE_MAX_DRAWS``). ``one_sided`` is the
+    probability of the one-sided bounds, between 0.5 and 1. ``progress(message)``,
     if given, is called before each response's draws and every ``PROGRESS_DRAWS`` draws;
     an exception it raises (a cancel) stops the spread."""
     if not 0.0 < coverage < 1.0:
         raise ValueError("the coverage probability lies between 0 and 1")
+    if not 0.5 < one_sided < 1.0:
+        raise ValueError("the one-sided bounds' probability lies between 0.5 and 1")
     if not has_uncertainty(scene, materials):
         raise ValueError("no material on the surfaces has an absorption uncertainty")
     adaptive = draws == ADAPTIVE
@@ -566,7 +595,7 @@ def material_spread(
     for key, response in result.responses.items():
         batches = len(response.late_batches) if rays else 0
         errors = response.standard_errors() if batches >= MIN_BATCHES else None
-        tallies[key] = _Tally(errors, 0 if errors is None else batches, coverage)
+        tallies[key] = _Tally(errors, 0 if errors is None else batches, coverage, one_sided)
     admittance_of: _Admittances | None = None
     steps = [
         ADMITTANCE_STEPS[getattr(uncertainty_of(scene, n), "distribution", "normal")]
@@ -661,14 +690,22 @@ def with_spread(
     draws: int | str = DEFAULT_DRAWS,
     seed: int = 0,
     progress=None,
+    one_sided: float = DEFAULT_ONE_SIDED,
 ):
-    """``result`` with its ``spreads`` (:func:`material_spread`, which ``progress`` goes
-    to), or as it is when no material on the surfaces has an absorption uncertainty
+    """``result`` with its ``spreads`` (:func:`material_spread`, which ``progress`` and
+    ``one_sided`` go to), or as it is when no material on the surfaces has an absorption uncertainty
     (:func:`has_uncertainty`)."""
     if not has_uncertainty(scene, materials):
         return result
     spreads = material_spread(
-        result, scene, face_group, materials, draws=draws, seed=seed, progress=progress
+        result,
+        scene,
+        face_group,
+        materials,
+        draws=draws,
+        seed=seed,
+        progress=progress,
+        one_sided=one_sided,
     )
     return dataclasses.replace(result, spreads=spreads)
 
@@ -679,6 +716,7 @@ __all__ = [
     "ADAPTIVE_MAX_DRAWS",
     "ADAPTIVE_MIN_BATCHES",
     "DEFAULT_DRAWS",
+    "DEFAULT_ONE_SIDED",
     "EDGE_ERRORS_DB",
     "MAX_ABSORPTION",
     "MIN_BATCHES",

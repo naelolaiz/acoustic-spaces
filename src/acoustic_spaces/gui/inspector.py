@@ -147,6 +147,9 @@ PRESET_UNCERTAINTIES = [
     ("iso_12999_2", N_("twice ISO 12999-2")),
     ("none", N_("none")),
 ]
+#: simulation.uncertainty.one_sided's choices: the probability of the spread's one-sided
+#: bounds (a scene file's other value shows as an entry of its own).
+ONE_SIDED_BOUNDS = [(0.95, "95 %"), (0.9, "90 %")]
 #: The weathers an outdoor scene starts from: none, a preset, or values of its own.
 WEATHERS = [
     (None, N_("(none)")),
@@ -4010,10 +4013,10 @@ class SimulationPage(Page):
             _(
                 "Draw the spread in batches of 100 until every result is stable, as the "
                 "adaptive procedure of GUM Supplement 1 does (JCGM 101:2008, 7.9): until "
-                "twice the standard deviation of each mean, standard uncertainty and "
-                "interval's end is within half a unit of the standard uncertainty's first "
-                "digit, 20,000 draws at most. That takes several thousand draws, many "
-                "times as long as the 400 a scene starts with"
+                "twice the standard deviation of each mean, standard uncertainty, "
+                "interval's end and one-sided bound is within half a unit of the standard "
+                "uncertainty's first digit, 20,000 draws at most. That takes several "
+                "thousand draws, many times as long as the 400 a scene starts with"
             )
         )
         self.spread_draws = int_spin(0, 100_000, 100)
@@ -4029,6 +4032,17 @@ class SimulationPage(Page):
         )
         uncertainty_form.addRow(_("Draws"), self.adaptive_draws)
         uncertainty_form.addRow("", self.spread_draws)
+        self.one_sided = QComboBox()
+        _fill(self.one_sided, ONE_SIDED_BOUNDS)
+        self.one_sided.setToolTip(
+            _(
+                "The probability of the one-sided bounds the spread gives each result, for "
+                "a limit on one side: the value the result is at least with that "
+                "probability, and the one it is at most. Those of 95 % lie further out "
+                "than those of 90 %"
+            )
+        )
+        uncertainty_form.addRow(_("One-sided bounds"), self.one_sided)
         layout.addWidget(uncertainty)
 
         self.insertion_group = QGroupBox(_("Insertion loss"))
@@ -4060,6 +4074,7 @@ class SimulationPage(Page):
             (self.bands, "bands"),
             (self.wave_wind, "wave.wind"),
             (self.preset_uncertainty, "uncertainty.presets"),
+            (self.one_sided, "uncertainty.one_sided"),
         ):
             combo.currentIndexChanged.connect(
                 lambda index, combo=combo, key=key: self._set(key, combo.itemData(index))
@@ -4165,6 +4180,10 @@ class SimulationPage(Page):
         self.spread_draws.setEnabled(not adaptive)
         if not adaptive:
             self.spread_draws.setValue(s.uncertainty.draws)
+        if self.one_sided.findData(s.uncertainty.one_sided) < 0:
+            percent = 100 * s.uncertainty.one_sided
+            self.one_sided.addItem(fmt("{percent:g} %", percent=percent), s.uncertainty.one_sided)
+        _choose(self.one_sided, s.uncertainty.one_sided)
         self.auto_transition.setChecked(s.transition_ms is None)
         self.transition.setEnabled(s.transition_ms is not None)
         self.transition.setValue(s.transition_ms or 80.0)

@@ -314,8 +314,8 @@ of their own: in the shoebox example within 0.15 dB of a fit for each draw at 63
 where a fit itself moves by up to 0.19 dB for a change of 0.001.
 `acoustic-spaces simulate` does this itself when a material on the surfaces has an
 uncertainty, its own or a built-in material's: it prints the largest combined standard
-uncertainty in JNDs from 125 Hz to 4 kHz, with its budget, 95 % interval and the errors
-over edges, and `parameters.json` holds them all (`uncertainty`). With settings that cannot re-weight
+uncertainty in JNDs from 125 Hz to 4 kHz, with its budget, 95 % interval, one-sided
+bounds and the errors over edges, and `parameters.json` holds them all (`uncertainty`). With settings that cannot re-weight
 (third-octave bands, say) it leaves the spread out, with a warning when a material gives
 an uncertainty of its own. The editor shows each run's results at once, draws the spread
 after them and gives it in the results table's tips. The draws add to a run: in the
@@ -331,13 +331,21 @@ standard uncertainty (twice their own standard deviation). With `draws: adaptive
 draws go on as the adaptive procedure of GUM Supplement 1 has them (JCGM 101:2008, 7.9):
 batch after batch until, for every parameter in every band of every response, twice the
 standard deviation of the mean, of the standard uncertainty and of each end of the
-interval is within the numerical tolerance of the standard uncertainty, half a unit of
-its first digit. A batch is 100 draws, not the Supplement's 10 000 (a number it calls
+interval (and of each one-sided bound, below) is within the numerical tolerance of the
+standard uncertainty, half a unit of its first digit. A batch is 100 draws, not the Supplement's 10 000 (a number it calls
 arbitrary), as each draw re-weights the whole run; the test is first made after ten
 batches, as two this small can pass by chance; and the draws stop at 20 000, the
 Supplement's own first test. `stable` in `parameters.json` says whether the test was met
 (null for a number of draws given beforehand, which is not tested). The test asks for
 many more draws than the default: from 9 000 to 14 500 in runs of the shoebox example.
+
+For a limit on one side, the spread gives each result's one-sided bounds from the same
+draws (`at_least` and `at_most` in `parameters.json`): the value the result is at least
+with a probability of 95 %, and the one it is at most with that probability; for a normal
+spread, the mean less and plus 1.645 standard uncertainties, where the 95 % interval's
+ends lie 1.96 away and leave 2.5 % out on each side. `simulation.uncertainty.one_sided`
+gives another probability between 0.5 and 1, 0.9 say (`--one-sided` on the command line,
+**One-sided bounds** in the editor's simulation settings).
 
 ### Material libraries of CATT-Acoustic and ODEON
 

@@ -92,6 +92,7 @@ class SimulationJob(QThread):
             draws=draws,
             seed=settings.seed or 0,
             progress=self._say,
+            one_sided=settings.uncertainty.one_sided,
         )
 
     def run(self) -> None:

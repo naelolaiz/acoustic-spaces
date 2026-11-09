@@ -1139,6 +1139,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--sample-rate": ("sample_rate", args.sample_rate),
             "--without": ("insertion_loss_of", args.without),
             "--spread-draws": ("uncertainty.draws", args.spread_draws),
+            "--one-sided": ("uncertainty.one_sided", args.one_sided),
             **_performance_options(args),
         },
     )
@@ -1187,7 +1188,14 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             many = f"draws until the results are stable, {ADAPTIVE_MAX_DRAWS} at most"
         print(f"the spread from the materials' absorption uncertainty: {many}", file=sys.stderr)
         try:
-            result = with_spread(result, room.scene, *groups, draws=draws, seed=settings.seed or 0)
+            result = with_spread(
+                result,
+                room.scene,
+                *groups,
+                draws=draws,
+                seed=settings.seed or 0,
+                one_sided=settings.uncertainty.one_sided,
+            )
         except ValueError as exc:
             print(f"warning: no spread from the absorption uncertainty: {exc}", file=sys.stderr)
         if any(spread.stable is False for spread in result.spreads.values()):
@@ -1332,8 +1340,8 @@ def _spread_groups(room, settings):
 
 def _uncertainty_text(entry: dict) -> str:
     """One line: the largest combined standard uncertainty from the materials' absorption
-    and the rays in JNDs from 125 Hz to 4 kHz, its budget and its coverage interval, and
-    the method's errors over edges that it does not count."""
+    and the rays in JNDs from 125 Hz to 4 kHz, its budget, its coverage interval and its
+    one-sided bounds, and the method's errors over edges that it does not count."""
     from acoustic_spaces.compare import SUMMARY_BANDS_HZ, in_jnds
     from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
     from acoustic_spaces.parameters import ALL_PARAMETERS, RoomParameters, _band_label, _symbol
@@ -1370,6 +1378,8 @@ def _uncertainty_text(entry: dict) -> str:
     value, name, band = max(found)
     unit = f" {ALL_PARAMETERS[name][0]}" if ALL_PARAMETERS[name][0] else ""
     low, high = spread["low"][name][band], spread["high"][name][band]
+    at_least, at_most = spread["at_least"][name][band], spread["at_most"][name][band]
+    one_sided = f"{100 * spread['one_sided']:g} %"
     budget = ""
     rays = spread["rays"][name][band]
     if rays is not None:
@@ -1377,7 +1387,8 @@ def _uncertainty_text(entry: dict) -> str:
     return text + (
         f"at most {value:.2f} JND from 125 Hz to 4 kHz ({_symbol(name)} at "
         f"{_band_label(OCTAVE_BANDS_HZ[band])}: u = {getattr(standard, name)[band]:.3g}{unit}"
-        f"{budget}, {100 * spread['coverage']:g} % within {low:.3g} to {high:.3g}{unit})"
+        f"{budget}, {100 * spread['coverage']:g} % within {low:.3g} to {high:.3g}{unit}, "
+        f"{one_sided} at least {at_least:.3g}{unit} and {one_sided} at most {at_most:.3g}{unit})"
         f"{method}"
     )
 
@@ -2922,6 +2933,14 @@ def build_parser() -> argparse.ArgumentParser:
         "materials' absorption uncertainty (400 unless the scene says otherwise; 0: no "
         "spread; adaptive: until the results are stable, as GUM Supplement 1 describes, "
         "which takes several thousand)",
+    )
+    simulate.add_argument(
+        "--one-sided",
+        type=float,
+        default=None,
+        metavar="P",
+        help="override simulation.uncertainty.one_sided: the probability of the spread's "
+        "one-sided bounds, between 0.5 and 1 (0.95 unless the scene says otherwise)",
     )
     simulate.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     simulate.add_argument(

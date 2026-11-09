@@ -646,7 +646,7 @@ class ResultsPanel(QWidget):
         spread = self.result.spreads.get(self.pair())
         if spread is None:
             return
-        names = ("standard", "low", "high", "absorption", "rays")
+        names = ("standard", "low", "high", "absorption", "rays", "at_least", "at_most")
         assumed = ""
         if spread.assumed:
             # One choice for the whole scene (simulation.uncertainty.presets).
@@ -666,7 +666,9 @@ class ResultsPanel(QWidget):
                 continue
             scale = 1e3 if name == "ts" else 1.0
             parts = [getattr(getattr(spread, p), name) * scale for p in names]
-            for col, (u, low, high, absorption, rays) in enumerate(zip(*parts, strict=True)):
+            for col, (u, low, high, absorption, rays, at_least, at_most) in enumerate(
+                zip(*parts, strict=True)
+            ):
                 item = self.table.item(row, col)
                 if item is None or not np.isfinite(u):
                     continue
@@ -700,6 +702,17 @@ class ResultsPanel(QWidget):
                         ),
                         **values,
                     )
+                tip += ". " + fmt(
+                    # Translators: {low} and {high} are numbers in the parameter's unit,
+                    # {percent} a number.
+                    _(
+                        "At least {low} with {percent} % probability, and at most {high} "
+                        "with the same"
+                    ),
+                    low=number_text(template.format(at_least)),
+                    high=number_text(template.format(at_most)),
+                    percent=number_text(f"{100 * spread.one_sided:g}"),
+                )
                 if spread.stable is False:
                     tip += ". " + _(
                         "The draws reached their limit before these were stable (GUM "

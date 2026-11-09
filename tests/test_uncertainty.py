@@ -213,6 +213,7 @@ def test_the_spread_of_the_parameters_follows_the_absorption_s():
     spread = material_spread(result, scene, face_group, materials, draws=60, seed=3, rays=False)
     found = spread["s", "a"]
     assert found.draws == 60 and found.coverage == 0.95 and found.batches == 0
+    assert found.one_sided == 0.95
     assert np.all(np.isnan(found.rays.t30))
     np.testing.assert_array_equal(found.standard.t30, found.absorption.t30)
     traced = result["s", "a"].parameters()
@@ -222,6 +223,25 @@ def test_the_spread_of_the_parameters_follows_the_absorption_s():
     assert np.all(found.standard.t30[bands] > 0.0)
     assert np.all(found.low.t30[bands] < traced.t30[bands])
     assert np.all(found.high.t30[bands] > traced.t30[bands])
+    # The one-sided bounds of 95 % lie within the 95 % interval, which leaves 2.5 % out
+    # at each end, and those of 90 % within them; nothing else changes with them.
+    assert np.all(found.low.t30[bands] < found.at_least.t30[bands])
+    assert np.all(found.at_least.t30[bands] < traced.t30[bands])
+    assert np.all(traced.t30[bands] < found.at_most.t30[bands])
+    assert np.all(found.at_most.t30[bands] < found.high.t30[bands])
+    ninety = material_spread(
+        result, scene, face_group, materials, draws=60, seed=3, rays=False, one_sided=0.9
+    )["s", "a"]
+    assert ninety.one_sided == 0.9
+    assert np.all(ninety.at_least.t30[bands] > found.at_least.t30[bands])
+    assert np.all(ninety.at_most.t30[bands] < found.at_most.t30[bands])
+    for part in ("mean", "standard", "low", "high", "absorption"):
+        np.testing.assert_array_equal(
+            getattr(ninety, part).t30[bands], getattr(found, part).t30[bands]
+        )
+    for bad in (0.5, 1.0, 0.3):
+        with pytest.raises(ValueError, match="one-sided"):
+            material_spread(result, scene, face_group, materials, draws=10, one_sided=bad)
     # The decay time falls as the walls absorb more, faster the less they absorb, so
     # its spread lies between the changes that u up and u down bring, each re-weighted
     # alone, near their mean.
@@ -351,6 +371,10 @@ def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
     assert spread["standard"]["t30"][3] > 0.0
     assert spread["absorption"]["t30"][3] > 0.0 and spread["rays"]["t30"][3] > 0.0
     assert spread["low"]["t30"][3] < entry["parameters"]["t30"][3] < spread["high"]["t30"][3]
+    assert spread["one_sided"] == 0.95
+    assert spread["low"]["t30"][3] <= spread["at_least"]["t30"][3] < spread["mean"]["t30"][3]
+    assert spread["mean"]["t30"][3] < spread["at_most"]["t30"][3] <= spread["high"]["t30"][3]
+    assert ", 95 % at least " in stdout and " and 95 % at most " in stdout
     # Third-octave bands do not re-weight: the run goes on without the spread.
     assert main([*args, "--bands", "third_octave"]) == 0
     captured = capsys.readouterr()
@@ -479,6 +503,69 @@ def test_the_scene_gives_the_draws_and_the_command_line_overrides_them(
     assert "give a number of draws, or adaptive" in capsys.readouterr().err
 
 
+def test_the_one_sided_bounds_are_the_draws_quantiles():
+    """The value a result is at least with probability p is the draws' quantile of
+    1 - p, the one it is at most that of p: for a normal spread the mean less and plus
+    1.645 standard uncertainties at 95 %, 1.282 at 90 %."""
+    rng = np.random.default_rng(5)
+    standard = np.array([0.02, 0.3, 1.5])
+    found = _normal_parameters(rng, 20_000, standard, same=True)
+    values = np.stack([p.t30 for p in found])
+    for probability, factor in ((0.95, 1.645), (0.9, 1.282)):
+        tally = _Tally(None, 0, 0.95, probability)
+        tally.add(found, rng)
+        spread = tally.spread(None)
+        assert spread.one_sided == probability
+        np.testing.assert_array_equal(
+            spread.at_least.c80, np.quantile(values, 1.0 - probability, axis=0)
+        )
+        np.testing.assert_array_equal(spread.at_most.c80, np.quantile(values, probability, axis=0))
+        np.testing.assert_allclose((spread.at_least.t30 - 10.0) / standard, -factor, atol=0.04)
+        np.testing.assert_allclose((spread.at_most.t30 - 10.0) / standard, factor, atol=0.04)
+        assert spread.as_dict()["one_sided"] == probability
+        assert spread.as_dict()["at_most"]["t30"] == list(spread.at_most.t30)
+
+
+def test_the_scene_gives_the_one_sided_probability_and_the_command_line_overrides_it(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+):
+    """``simulation.uncertainty.one_sided`` is the probability of the one-sided bounds,
+    0.95 unless the scene says otherwise, and ``--one-sided`` takes its place."""
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.scene.model import Uncertainty
+
+    assert Uncertainty().one_sided == 0.95
+    for bad in (0.5, 1.0, 95):
+        with pytest.raises(ValueError):
+            Uncertainty(one_sided=bad)
+    data = _box({"absorption": 0.02}).to_data()
+    data["simulation"]["uncertainty"] = {"draws": 14, "one_sided": 0.9}
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(data))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300"]
+    assert main(args) == 0
+    stdout = capsys.readouterr().out
+    assert ", 90 % at least " in stdout and " and 90 % at most " in stdout
+    ninety = json.loads((out / "parameters.json").read_text())["responses"][0]["uncertainty"]
+    assert ninety["one_sided"] == 0.9
+    assert main([*args, "--one-sided", "0.95"]) == 0
+    assert " and 95 % at most " in capsys.readouterr().out
+    spread = json.loads((out / "parameters.json").read_text())["responses"][0]["uncertainty"]
+    # The same draws: bounds further out, the rest as it was.
+    assert spread["one_sided"] == 0.95 and spread["standard"] == ninety["standard"]
+    assert spread["at_most"]["t30"][3] > ninety["at_most"]["t30"][3]
+    assert spread["at_least"]["t30"][3] < ninety["at_least"]["t30"][3]
+    other = tmp_path / "other"
+    assert main([*args[:3], str(other), *args[4:], "--one-sided", "0.4"]) == 1
+    assert "error: --one-sided: Input should be greater than 0.5" in capsys.readouterr().err
+    assert not other.exists()
+
+
 def test_the_numerical_tolerance_is_half_a_unit_of_the_last_meaningful_digit():
     """JCGM 101 7.9.2: a standard uncertainty written as c 10^l, c a whole number of
     n_dig digits, has the numerical tolerance 10^l / 2. Its example: 0.000 35 g with two
@@ -513,10 +600,11 @@ def test_the_adaptive_test_is_that_of_jcgm_101_7_9_4():
     """Over h batches of M draws: with s the standard deviation of the batches' means
     over the root of h, and likewise for their standard deviations and their interval's
     ends, the results are stable when 2 s is at most the numerical tolerance of the
-    standard deviation of all h M values. Worked out here again from the draws."""
+    standard deviation of all h M values; and likewise here for the one-sided bounds.
+    Worked out here again from the draws."""
     rng = np.random.default_rng(11)
     standard = np.array([0.012, 0.25, 0.7, 1.4, 0.0036, 0.09, 3.0, 0.5])
-    tally = _Tally(None, 0, 0.95)
+    tally = _Tally(None, 0, 0.95, 0.95)
     batches = []
     for _ in range(6):
         found = _normal_parameters(rng, ADAPTIVE_BATCH, standard, same=True)
@@ -525,7 +613,11 @@ def test_the_adaptive_test_is_that_of_jcgm_101_7_9_4():
     assert tally.draws == 6 * ADAPTIVE_BATCH
     estimates = np.array(
         [
-            [b.mean(axis=0), b.std(axis=0, ddof=1), *np.quantile(b, [0.025, 0.975], axis=0)]
+            [
+                b.mean(axis=0),
+                b.std(axis=0, ddof=1),
+                *np.quantile(b, [0.025, 0.975, 0.05, 0.95], axis=0),
+            ]
             for b in batches
         ]
     )
@@ -543,7 +635,7 @@ def test_the_adaptive_test_is_that_of_jcgm_101_7_9_4():
     assert band == int(np.argmax(ratios))
     np.testing.assert_allclose(times, ratios[band], rtol=1e-9)
     # Only the bands that pass: stable.
-    passing = _Tally(None, 0, 0.95)
+    passing = _Tally(None, 0, 0.95, 0.95)
     for b in batches:
         columns = b[:, [0, 3]]
         passing.add(
@@ -572,7 +664,7 @@ def test_adaptive_batches_stop_once_stable_near_what_a_normal_spread_needs():
     for seed in range(20):
         rng = np.random.default_rng([7, seed])
         standard = np.full(8, 0.2)
-        tally = _Tally(None, 0, 0.95)
+        tally = _Tally(None, 0, 0.95, 0.95)
         while True:
             tally.add(_normal_parameters(rng, ADAPTIVE_BATCH, standard), rng)
             if tally.draws >= 2 * ADAPTIVE_BATCH and tally.unstable() is None:
@@ -602,18 +694,20 @@ def test_what_400_draws_leave_open():
 
 
 def test_two_small_batches_pass_by_chance_too_easily():
-    """Why the first test waits for ``ADAPTIVE_MIN_BATCHES`` batches: for one result
-    whose standard uncertainty starts with a 3, which needs about a thousand draws
-    (114 * 9), two batches of 100 pass the test about one time in eight."""
+    """Why the first test waits for ``ADAPTIVE_MIN_BATCHES`` batches: two batches of 100
+    pass the test about one time in six for one result whose standard uncertainty starts
+    with a 2, which needs some 460 draws (114 * 4), and about one time in twenty for one
+    that starts with a 3, which needs about a thousand (114 * 9)."""
     rng = np.random.default_rng(17)
-    passed = 0
-    for _ in range(300):
-        tally = _Tally(None, 0, 0.95)
-        for _batch in range(2):
-            values = 3.06 * rng.standard_normal((ADAPTIVE_BATCH, 1))
-            tally.add([_all_parameters(row) for row in values], rng)
-        passed += tally.unstable() is None
-    assert 0.06 < passed / 300 < 0.2
+    for lead, least, most in ((2.06, 0.10, 0.23), (3.06, 0.015, 0.095)):
+        passed = 0
+        for _ in range(300):
+            tally = _Tally(None, 0, 0.95, 0.95)
+            for _batch in range(2):
+                values = lead * rng.standard_normal((ADAPTIVE_BATCH, 1))
+                tally.add([_all_parameters(row) for row in values], rng)
+            passed += tally.unstable() is None
+        assert least < passed / 300 < most, (lead, passed)
 
 
 def test_adaptive_draws_go_on_until_the_results_are_stable(monkeypatch):

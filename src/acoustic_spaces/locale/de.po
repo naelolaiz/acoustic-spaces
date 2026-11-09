@@ -5600,18 +5600,18 @@ msgstr "Bis die Ergebnisse stabil sind"
 msgid ""
 "Draw the spread in batches of 100 until every result is stable, as the "
 "adaptive procedure of GUM Supplement 1 does (JCGM 101:2008, 7.9): until "
-"twice the standard deviation of each mean, standard uncertainty and "
-"interval's end is within half a unit of the standard uncertainty's first "
-"digit, 20,000 draws at most. That takes several thousand draws, many times "
-"as long as the 400 a scene starts with"
+"twice the standard deviation of each mean, standard uncertainty, interval's "
+"end and one-sided bound is within half a unit of the standard uncertainty's "
+"first digit, 20,000 draws at most. That takes several thousand draws, many "
+"times as long as the 400 a scene starts with"
 msgstr ""
 "Zieht die Streuung in Blöcken von 100 Ziehungen, bis jedes Ergebnis stabil "
 "ist, wie das adaptive Verfahren von GUM Supplement 1 (JCGM 101:2008, 7.9): "
 "bis das Doppelte der Standardabweichung jedes Mittelwerts, jeder "
-"Standardunsicherheit und jedes Intervallendes innerhalb einer halben Einheit "
-"der ersten Ziffer der Standardunsicherheit liegt, höchstens 20 000 "
-"Ziehungen. Das braucht mehrere tausend Ziehungen, ein Vielfaches der Zeit "
-"der 400, mit denen eine Szene beginnt"
+"Standardunsicherheit, jedes Intervallendes und jeder einseitigen Grenze "
+"innerhalb einer halben Einheit der ersten Ziffer der Standardunsicherheit "
+"liegt, höchstens 20 000 Ziehungen. Das braucht mehrere tausend Ziehungen, "
+"ein Vielfaches der Zeit der 400, mit denen eine Szene beginnt"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -5628,6 +5628,21 @@ msgstr ""
 #: acoustic_spaces/gui/inspector.py
 msgid "Draws"
 msgstr "Ziehungen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The probability of the one-sided bounds the spread gives each result, for a "
+"limit on one side: the value the result is at least with that probability, "
+"and the one it is at most. Those of 95 % lie further out than those of 90 %"
+msgstr ""
+"Die Wahrscheinlichkeit der einseitigen Grenzen, die die Streuung für jedes "
+"Ergebnis angibt, für einen Grenzwert auf einer Seite: der Wert, den das "
+"Ergebnis mit dieser Wahrscheinlichkeit mindestens hat, und der, den es "
+"höchstens hat. Die von 95 % befinden sich weiter außen als die von 90 %"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "One-sided bounds"
+msgstr "Einseitige Grenzen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Insertion loss"
@@ -7355,6 +7370,15 @@ msgid ""
 msgstr ""
 "Aus der Unsicherheit der Absorption der Materialien: Standardunsicherheit "
 "{u}, {percent} % zwischen {low} und {high} ({count} Ziehungen)"
+
+#. Translators: {low} and {high} are numbers in the parameter's unit, {percent} a number.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"At least {low} with {percent} % probability, and at most {high} with the same"
+msgstr ""
+"Mit {percent} % Wahrscheinlichkeit mindestens {low} und mit derselben "
+"höchstens {high}"
 
 #: acoustic_spaces/gui/results_view.py
 msgid ""

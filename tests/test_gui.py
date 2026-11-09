@@ -2290,6 +2290,27 @@ def test_the_spread_s_draws_are_a_number_or_until_stable(window) -> None:
     assert draws() == 1000 and page.spread_draws.value() == 1000
 
 
+def test_the_one_sided_bounds_are_of_95_or_90_percent(window) -> None:
+    """The simulation page gives the probability of the spread's one-sided bounds: 95 %
+    to start with, or 90 %; another one from a scene file shows as an entry of its own."""
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    one_sided = lambda: window.document.scene.simulation.uncertainty.one_sided  # noqa: E731
+    assert page.one_sided.currentText() == "95 %" and one_sided() == 0.95
+    assert page.one_sided.toolTip() and page.one_sided.count() == 2
+    page.one_sided.setCurrentIndex(page.one_sided.findText("90 %"))
+    assert one_sided() == 0.9
+    window.select("simulation")
+    assert page.one_sided.currentText() == "90 %"
+    window.undo()
+    assert one_sided() == 0.95 and page.one_sided.currentText() == "95 %"
+    window.document.edit("99", lambda d: d["simulation"]["uncertainty"].update(one_sided=0.99))
+    window.select("simulation")
+    assert page.one_sided.currentText() == "99 %" and page.one_sided.count() == 3
+    page.one_sided.setCurrentIndex(0)
+    assert one_sided() == 0.95
+
+
 def test_wind_and_temperature_form(window) -> None:
     window.open_example(example_path("open_air_stage"))
     window.select("scene", None)
@@ -3204,6 +3225,8 @@ def test_the_absorption_uncertainty_s_spread_shows_in_the_tips(window, qapp) -> 
     tip = window.results.table.item(rows.index("c80"), 1).toolTip()
     assert "Combined standard uncertainty" in tip and "the rays" in tip
     assert "95 % within" in tip and "(400 draws)" in tip
+    assert spread.one_sided == 0.95 and "with 95 % probability, and at most" in tip
+    assert spread.low.c80[1] < spread.at_least.c80[1] < spread.at_most.c80[1] < spread.high.c80[1]
     # The lateral fraction's rays have no standard error: the absorption alone.
     assert np.isfinite(spread.standard.lf[1]) and np.isnan(spread.rays.lf[1])
     tip = window.results.table.item(rows.index("lf"), 1).toolTip()
