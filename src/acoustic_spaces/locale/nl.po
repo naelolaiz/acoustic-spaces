@@ -2499,6 +2499,7 @@ msgstr "straaltracering"
 msgid "image_sources"
 msgstr "spiegelbronnen"
 
+#. Translators: no draws at all, so no spread of the results.
 #: acoustic_spaces/gui/inspector.py
 msgid "none"
 msgstr "geen"
@@ -5560,6 +5561,44 @@ msgid "Built-in materials"
 msgstr "Ingebouwde materialen"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Until the results are stable"
+msgstr "Tot de resultaten stabiel zijn"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw the spread in batches of 100 until every result is stable, as the "
+"adaptive procedure of GUM Supplement 1 does (JCGM 101:2008, 7.9): until "
+"twice the standard deviation of each mean, standard uncertainty and "
+"interval's end is within half a unit of the standard uncertainty's first "
+"digit, 20,000 draws at most. That takes several thousand draws, many times "
+"as long as the 400 a scene starts with"
+msgstr ""
+"Trekt de spreiding in reeksen van 100 trekkingen tot elk resultaat stabiel "
+"is, zoals de adaptieve procedure van GUM Supplement 1 (JCGM 101:2008, 7.9): "
+"tot tweemaal de standaardafwijking van elk gemiddelde, elke "
+"standaardonzekerheid en elk uiteinde van het interval binnen een halve "
+"eenheid van het eerste cijfer van de standaardonzekerheid ligt, met "
+"hoogstens 20 000 trekkingen. Dat vergt enkele duizenden trekkingen, vele "
+"malen de tijd van de 400 waarmee een scène begint"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How many draws of the materials' absorption the spread after each run takes: "
+"more settle its numbers further and take as much longer. 400 leave each end "
+"of the coverage interval (95 %) good to about a quarter of the standard "
+"uncertainty. None: no spread"
+msgstr ""
+"Hoeveel trekkingen van de absorptie van de materialen de spreiding na elke "
+"berekening neemt: meer trekkingen leggen haar getallen nauwkeuriger vast en "
+"duren evenredig langer. 400 laten elk uiteinde van het dekkingsinterval (95 "
+"%) tot op ongeveer een kwart van de standaardonzekerheid nauwkeurig. Geen: "
+"geen spreiding"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Draws"
+msgstr "Trekkingen"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Insertion loss"
 msgstr "Invoegdemping"
 
@@ -7279,6 +7318,14 @@ msgid ""
 msgstr ""
 "Uit de onzekerheid van de absorptie van de materialen: standaardonzekerheid "
 "{u}, {percent} % tussen {low} en {high} ({count} trekkingen)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"The draws reached their limit before these were stable (GUM Supplement 1's "
+"test)"
+msgstr ""
+"De trekkingen bereikten hun limiet voordat deze waarden stabiel waren (toets "
+"van GUM Supplement 1)"
 
 #. Translators: {db} is a number of decibels.
 #: acoustic_spaces/gui/results_view.py

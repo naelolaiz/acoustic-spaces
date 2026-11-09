@@ -2499,6 +2499,7 @@ msgstr "traçat de raigs"
 msgid "image_sources"
 msgstr "fonts imatge"
 
+#. Translators: no draws at all, so no spread of the results.
 #: acoustic_spaces/gui/inspector.py
 msgid "none"
 msgstr "cap"
@@ -5548,6 +5549,43 @@ msgid "Built-in materials"
 msgstr "Materials integrats"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Until the results are stable"
+msgstr "Fins que els resultats siguin estables"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw the spread in batches of 100 until every result is stable, as the "
+"adaptive procedure of GUM Supplement 1 does (JCGM 101:2008, 7.9): until "
+"twice the standard deviation of each mean, standard uncertainty and "
+"interval's end is within half a unit of the standard uncertainty's first "
+"digit, 20,000 draws at most. That takes several thousand draws, many times "
+"as long as the 400 a scene starts with"
+msgstr ""
+"Calcula la dispersió en lots de 100 mostres fins que cada resultat sigui "
+"estable, com el procediment adaptatiu del Suplement 1 de la GUM (JCGM "
+"101:2008, 7.9): fins que el doble de la desviació típica de cada mitjana, "
+"incertesa típica i extrem de l'interval quedi dins de mitja unitat de la "
+"primera xifra de la incertesa típica, amb 20 000 mostres com a màxim. Calen "
+"uns quants milers de mostres, moltes vegades el temps de les 400 amb què "
+"comença una escena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How many draws of the materials' absorption the spread after each run takes: "
+"more settle its numbers further and take as much longer. 400 leave each end "
+"of the coverage interval (95 %) good to about a quarter of the standard "
+"uncertainty. None: no spread"
+msgstr ""
+"Quantes mostres de l'absorció dels materials pren la dispersió després de "
+"cada càlcul: més mostres n'afinen els nombres i triguen proporcionalment "
+"més. Amb 400, cada extrem de l'interval de cobertura (95 %) queda determinat "
+"fins a aproximadament un quart de la incertesa típica. Cap: sense dispersió"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Draws"
+msgstr "Mostres"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Insertion loss"
 msgstr "Pèrdua per inserció"
 
@@ -7267,6 +7305,14 @@ msgid ""
 msgstr ""
 "Per la incertesa d'absorció dels materials: incertesa típica {u}, {percent} "
 "%: entre {low} i {high} ({count} mostres)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"The draws reached their limit before these were stable (GUM Supplement 1's "
+"test)"
+msgstr ""
+"Les mostres han arribat al límit abans que aquests valors fossin estables "
+"(prova del Suplement 1 de la GUM)"
 
 #. Translators: {db} is a number of decibels.
 #: acoustic_spaces/gui/results_view.py

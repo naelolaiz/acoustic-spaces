@@ -2521,6 +2521,7 @@ msgstr "Strahlenverfolgung"
 msgid "image_sources"
 msgstr "Spiegelquellen"
 
+#. Translators: no draws at all, so no spread of the results.
 #: acoustic_spaces/gui/inspector.py
 msgid "none"
 msgstr "keine"
@@ -5592,6 +5593,43 @@ msgid "Built-in materials"
 msgstr "Integrierte Materialien"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Until the results are stable"
+msgstr "Bis die Ergebnisse stabil sind"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw the spread in batches of 100 until every result is stable, as the "
+"adaptive procedure of GUM Supplement 1 does (JCGM 101:2008, 7.9): until "
+"twice the standard deviation of each mean, standard uncertainty and "
+"interval's end is within half a unit of the standard uncertainty's first "
+"digit, 20,000 draws at most. That takes several thousand draws, many times "
+"as long as the 400 a scene starts with"
+msgstr ""
+"Zieht die Streuung in Blöcken von 100 Ziehungen, bis jedes Ergebnis stabil "
+"ist, wie das adaptive Verfahren von GUM Supplement 1 (JCGM 101:2008, 7.9): "
+"bis das Doppelte der Standardabweichung jedes Mittelwerts, jeder "
+"Standardunsicherheit und jedes Intervallendes innerhalb einer halben Einheit "
+"der ersten Ziffer der Standardunsicherheit liegt, höchstens 20 000 "
+"Ziehungen. Das braucht mehrere tausend Ziehungen, ein Vielfaches der Zeit "
+"der 400, mit denen eine Szene beginnt"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How many draws of the materials' absorption the spread after each run takes: "
+"more settle its numbers further and take as much longer. 400 leave each end "
+"of the coverage interval (95 %) good to about a quarter of the standard "
+"uncertainty. None: no spread"
+msgstr ""
+"Wie viele Ziehungen der Absorption der Materialien die Streuung nach jeder "
+"Berechnung nimmt: Mehr Ziehungen legen ihre Zahlen genauer fest und dauern "
+"entsprechend länger. 400 lassen jedes Ende des Überdeckungsintervalls (95 %) "
+"auf etwa ein Viertel der Standardunsicherheit genau. Keine: keine Streuung"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Draws"
+msgstr "Ziehungen"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Insertion loss"
 msgstr "Einfügungsdämpfung"
 
@@ -7317,6 +7355,14 @@ msgid ""
 msgstr ""
 "Aus der Unsicherheit der Absorption der Materialien: Standardunsicherheit "
 "{u}, {percent} % zwischen {low} und {high} ({count} Ziehungen)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"The draws reached their limit before these were stable (GUM Supplement 1's "
+"test)"
+msgstr ""
+"Die Ziehungen erreichten ihre Grenze, bevor diese Werte stabil waren (Test "
+"von GUM Supplement 1)"
 
 #. Translators: {db} is a number of decibels.
 #: acoustic_spaces/gui/results_view.py

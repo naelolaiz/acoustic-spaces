@@ -2266,6 +2266,30 @@ def test_built_in_materials_uncertainty_choice(window) -> None:
     assert page.preset_uncertainty.currentData() == "iso_12999_2"
 
 
+def test_the_spread_s_draws_are_a_number_or_until_stable(window) -> None:
+    """The simulation page gives the spread's draws: a number, 400 to start with, none,
+    or as many as it takes until the results are stable."""
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    draws = lambda: window.document.scene.simulation.uncertainty.draws  # noqa: E731
+    assert page.spread_draws.value() == 400 and not page.adaptive_draws.isChecked()
+    assert page.spread_draws.toolTip() and page.adaptive_draws.toolTip()
+    page.spread_draws.setValue(1000)
+    assert draws() == 1000
+    page.adaptive_draws.setChecked(True)
+    assert draws() == "adaptive" and not page.spread_draws.isEnabled()
+    window.select("simulation")
+    assert page.adaptive_draws.isChecked() and page.spread_draws.value() == 1000
+    page.adaptive_draws.setChecked(False)
+    assert draws() == 1000 and page.spread_draws.isEnabled()
+    page.spread_draws.setValue(0)
+    assert draws() == 0 and page.spread_draws.text() == "none"
+    page.spread_draws.setValue(1)  # one draw has no spread: refused, shown as it was
+    assert draws() == 0 and page.spread_draws.value() == 0
+    window.undo()
+    assert draws() == 1000 and page.spread_draws.value() == 1000
+
+
 def test_wind_and_temperature_form(window) -> None:
     window.open_example(example_path("open_air_stage"))
     window.select("scene", None)
@@ -3184,6 +3208,42 @@ def test_the_absorption_uncertainty_s_spread_shows_in_the_tips(window, qapp) -> 
     assert np.isfinite(spread.standard.lf[1]) and np.isnan(spread.rays.lf[1])
     tip = window.results.table.item(rows.index("lf"), 1).toolTip()
     assert "From the materials' absorption uncertainty: standard uncertainty" in tip
+    assert spread.stable is None and "limit" not in tip
+
+
+def test_draws_until_stable_say_when_they_reach_their_limit(window, qapp, monkeypatch) -> None:
+    """With the draws taken until the results are stable, the tips say when the draws
+    reached their limit first; with no draws, a run has no spread."""
+    from acoustic_spaces.engine import uncertainty
+    from acoustic_spaces.gui.results_view import ROWS
+
+    # For the test's speed, two batches of 20; a tolerance nothing meets.
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_BATCH", 20)
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MAX_DRAWS", 40)
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MIN_BATCHES", 2)
+    tolerance = uncertainty.numerical_tolerance
+    monkeypatch.setattr(
+        uncertainty, "numerical_tolerance", lambda u, digits=1: 1e-9 * tolerance(u, digits)
+    )
+    _quick(window.document)
+
+    def change(data: dict) -> None:
+        data["materials"]["plaster"].update(uncertainty={"absorption": 0.02})
+        data["simulation"]["uncertainty"]["draws"] = "adaptive"
+        data["simulation"]["ir_length_s"] = 1.0  # long enough for results at 125 Hz
+
+    window.document.edit("uncertainty", change)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    spread = window.result.spreads[("source", "listener")]
+    assert spread.draws == 40 and spread.stable is False
+    rows = [name for name, _label, _template in ROWS]
+    tip = window.results.table.item(rows.index("c80"), 1).toolTip()
+    assert "(40 draws)" in tip and "reached their limit before these were stable" in tip
+    window.document.edit("none", lambda d: d["simulation"]["uncertainty"].update(draws=0))
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    assert window.result.spreads == {}
 
 
 def test_changing_absorption_re_weights_the_run(window, qapp) -> None:

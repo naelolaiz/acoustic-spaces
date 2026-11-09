@@ -996,6 +996,16 @@ def _override(model, options: dict[str, tuple[str, object]]):
         return None
 
 
+def _spread_draws(text: str) -> int | str:
+    """``--spread-draws``: a number of draws, or adaptive."""
+    if text == "adaptive":
+        return text
+    try:
+        return int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError("give a number of draws, or adaptive") from None
+
+
 def _output_spec(text: str):
     """An outputs entry from the command line: mono, binaural, ambisonics[:ORDER] or
     loudspeakers:LAYOUT."""
@@ -1104,9 +1114,6 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     from acoustic_spaces.results import REPORT_FILE, results_folder, write_results
     from acoustic_spaces.spatial import from_output
 
-    if args.spread_draws is not None and (args.spread_draws < 0 or args.spread_draws == 1):
-        print("error: --spread-draws: 0 (no spread) or 2 or more", file=sys.stderr)
-        return 1
     room = _load_room(args.scene)
     if room is None or not _print_checks(room):
         return 1
@@ -1131,6 +1138,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--length": ("ir_length_s", args.length),
             "--sample-rate": ("sample_rate", args.sample_rate),
             "--without": ("insertion_loss_of", args.without),
+            "--spread-draws": ("uncertainty.draws", args.spread_draws),
             **_performance_options(args),
         },
     )
@@ -1158,7 +1166,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         from acoustic_spaces.engine import ray_device
 
         ray_device.set_trial(False)
-    groups = None if args.spread_draws == 0 else _spread_groups(room, settings)
+    draws = settings.uncertainty.draws
+    groups = None if draws == 0 else _spread_groups(room, settings)
     try:
         result = simulate(
             room,
@@ -1171,17 +1180,22 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         _remove_if_empty(made)
         return 1
     if groups is not None:
-        from acoustic_spaces.engine.uncertainty import DEFAULT_DRAWS, with_spread
+        from acoustic_spaces.engine.uncertainty import ADAPTIVE, ADAPTIVE_MAX_DRAWS, with_spread
 
-        draws = DEFAULT_DRAWS if args.spread_draws is None else args.spread_draws
-        print(
-            f"the spread from the materials' absorption uncertainty: {draws} draws",
-            file=sys.stderr,
-        )
+        many = f"{draws} draws"
+        if draws == ADAPTIVE:
+            many = f"draws until the results are stable, {ADAPTIVE_MAX_DRAWS} at most"
+        print(f"the spread from the materials' absorption uncertainty: {many}", file=sys.stderr)
         try:
             result = with_spread(result, room.scene, *groups, draws=draws, seed=settings.seed or 0)
         except ValueError as exc:
             print(f"warning: no spread from the absorption uncertainty: {exc}", file=sys.stderr)
+        if any(spread.stable is False for spread in result.spreads.values()):
+            print(
+                f"warning: the spread's results were not stable after {ADAPTIVE_MAX_DRAWS} "
+                "draws (GUM Supplement 1's test, JCGM 101:2008 7.9)",
+                file=sys.stderr,
+            )
 
     try:
         report = write_results(
@@ -1337,7 +1351,10 @@ def _uncertainty_text(entry: dict) -> str:
     inputs = "the absorption"
     if spread["batches"]:
         inputs += f" and the rays ({spread['batches']} batches)"
-    text = f"uncertainty from {inputs}, {spread['draws']} draws: "
+    text = f"uncertainty from {inputs}, {spread['draws']} draws"
+    if spread.get("stable") is not None:
+        text += " (adaptive, stable)" if spread["stable"] else " (adaptive, not stable)"
+    text += ": "
     # The method's errors over edges that the spread does not count, the largest from
     # 125 Hz to 4 kHz that the validation finds for each.
     errors = []
@@ -2898,11 +2915,13 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--rays", type=int, help="override simulation.late.rays")
     simulate.add_argument(
         "--spread-draws",
-        type=int,
+        type=_spread_draws,
         default=None,
         metavar="N",
-        help="draws for the spread from the materials' absorption uncertainty (default 400; "
-        "0: no spread)",
+        help="override simulation.uncertainty.draws: the draws for the spread from the "
+        "materials' absorption uncertainty (400 unless the scene says otherwise; 0: no "
+        "spread; adaptive: until the results are stable, as GUM Supplement 1 describes, "
+        "which takes several thousand)",
     )
     simulate.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     simulate.add_argument(

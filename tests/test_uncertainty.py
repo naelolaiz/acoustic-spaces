@@ -8,6 +8,9 @@ import pytest
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine.reweight import groups_of, log_ratio
 from acoustic_spaces.engine.uncertainty import (
+    ADAPTIVE,
+    ADAPTIVE_BATCH,
+    ADMITTANCE_STEPS,
     EDGE_ERRORS_DB,
     ISO_12999_2_OCTAVES,
     ISO_12999_2_THIRDS,
@@ -16,10 +19,12 @@ from acoustic_spaces.engine.uncertainty import (
     PRESET_TOLERANCE,
     _Admittances,
     _draws,
+    _Tally,
     absorption_draws,
     assumed,
     edge_errors,
     material_spread,
+    numerical_tolerance,
     octave_reproducibility,
     uncertainty_of,
 )
@@ -148,7 +153,9 @@ def test_iso_12999_2_tables_give_the_standard_s_examples():
 def test_the_phases_between_fits_turn_as_a_fit_for_each_draw_does():
     """The paths that add in pressure turn their phases with each draw's absorption: the
     admittance taken between fits at nine absorptions gives the levels that a fit for
-    each draw gives, within the fits' own scatter, at a few hundredths of the time."""
+    each draw gives, within the fits' own scatter, at a few hundredths of the time; and
+    so does the one between fits every quarter of the tolerance from 0, which the draws
+    that come batch by batch take."""
     scene = _box({"absorption": 0.1, "distribution": "uniform"})
     room = Room.from_scene(scene)
     face_group, materials = groups_of(room)
@@ -158,19 +165,23 @@ def test_the_phases_between_fits_turn_as_a_fit_for_each_draw_does():
     coherent = response.early.spectrum.shape[1]
     traced = np.array([scene.materials[n].coefficients("octave")[0] for n in materials])
     taken, deviates, widths = _draws(scene, materials, 40, 5)
-    between = _Admittances(traced, taken, deviates, widths)
+    between = _Admittances(traced, widths)
+    between.over(taken, deviates)
+    stepped = _Admittances(traced, widths)
+    stepped.along(taken, deviates, [ADMITTANCE_STEPS["uniform"]] * len(materials))
     for drawn in taken[::8]:
         ratio = log_ratio(traced, drawn)
         fitted = response.reweighted(face_group, ratio, absorption=(traced, drawn))
-        taken_between = response.reweighted(
-            face_group, ratio, absorption=(traced, drawn), admittance_of=between
-        )
-        for name in ("g", "c80"):
-            a = np.asarray(getattr(fitted.parameters(), name))[:coherent]
-            b = np.asarray(getattr(taken_between.parameters(), name))[:coherent]
-            np.testing.assert_allclose(b, a, atol=0.2)
-        # The bands above add in energy: no phase, the same levels.
-        np.testing.assert_array_equal(fitted.early.energy, taken_between.early.energy)
+        for admittance_of in (between, stepped):
+            taken_between = response.reweighted(
+                face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
+            )
+            for name in ("g", "c80"):
+                a = np.asarray(getattr(fitted.parameters(), name))[:coherent]
+                b = np.asarray(getattr(taken_between.parameters(), name))[:coherent]
+                np.testing.assert_allclose(b, a, atol=0.2)
+            # The bands above add in energy: no phase, the same levels.
+            np.testing.assert_array_equal(fitted.early.energy, taken_between.early.energy)
 
 
 def test_draws_share_one_deviate_per_material_and_stay_in_range():
@@ -428,5 +439,251 @@ def test_simulate_spread_draws_0_leaves_the_spread_out(
     assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
     other = tmp_path / "other"
     assert main([*args[:3], str(other), *args[4:], "--spread-draws", "1"]) == 1
-    assert "--spread-draws: 0 (no spread) or 2 or more" in capsys.readouterr().err
+    assert "--spread-draws: 0 (no spread), 2 or more, or adaptive" in capsys.readouterr().err
     assert not other.exists()
+
+
+def test_the_scene_gives_the_draws_and_the_command_line_overrides_them(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+):
+    """``simulation.uncertainty.draws`` is a number (0 for no spread, not 1) or adaptive,
+    and ``--spread-draws`` takes its place."""
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.scene.model import Uncertainty
+
+    assert Uncertainty().draws == 400
+    assert Uncertainty(draws="adaptive").draws == ADAPTIVE
+    assert Uncertainty(draws=0).draws == 0
+    for bad in (1, -3, "many"):
+        with pytest.raises(ValueError):
+            Uncertainty(draws=bad)
+    data = _box({"absorption": 0.02}).to_data()
+    data["simulation"]["uncertainty"] = {"draws": 14}
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(data))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300"]
+    assert main(args) == 0
+    assert ", 14 draws: at most" in capsys.readouterr().out
+    spread = json.loads((out / "parameters.json").read_text())["responses"][0]["uncertainty"]
+    # A number of draws given beforehand is not tested for being stable.
+    assert spread["draws"] == 14 and spread["stable"] is None
+    assert main([*args, "--spread-draws", "12"]) == 0
+    assert ", 12 draws: at most" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        main([*args, "--spread-draws", "many"])
+    assert "give a number of draws, or adaptive" in capsys.readouterr().err
+
+
+def test_the_numerical_tolerance_is_half_a_unit_of_the_last_meaningful_digit():
+    """JCGM 101 7.9.2: a standard uncertainty written as c 10^l, c a whole number of
+    n_dig digits, has the numerical tolerance 10^l / 2. Its example: 0.000 35 g with two
+    meaningful digits is 35 10^-5 g, so 0.000 005 g."""
+    np.testing.assert_allclose(numerical_tolerance(0.00035, 2), 0.000005, rtol=1e-12)
+    # One digit: 0.062 is 6 10^-2; 0.094 is 9 10^-2; 0.096 is 10 10^-2, that is 1 10^-1.
+    one = numerical_tolerance(np.array([0.062, 0.094, 0.096, 0.25, 1.0, 12.0]))
+    np.testing.assert_allclose(one, [0.005, 0.005, 0.05, 0.05, 0.5, 5.0], rtol=1e-12)
+    # No spread: nothing to settle.
+    assert np.all(np.isinf(numerical_tolerance(np.array([0.0, 1e-15]))))
+
+
+def _normal_parameters(
+    rng: np.random.Generator, draws: int, standard: np.ndarray, same: bool = False
+):
+    """``draws`` room parameters whose every value is normal about 10 with ``standard``
+    (bands,): each parameter with draws of its own, or all with the ``same``."""
+    import dataclasses
+
+    from acoustic_spaces.parameters import RoomParameters
+
+    names = [f.name for f in dataclasses.fields(RoomParameters)]
+    shared = 10.0 + standard * rng.standard_normal((draws, standard.size))
+    values = {
+        name: shared if same else 10.0 + standard * rng.standard_normal((draws, standard.size))
+        for name in names
+    }
+    return [RoomParameters(**{name: values[name][k] for name in names}) for k in range(draws)]
+
+
+def test_the_adaptive_test_is_that_of_jcgm_101_7_9_4():
+    """Over h batches of M draws: with s the standard deviation of the batches' means
+    over the root of h, and likewise for their standard deviations and their interval's
+    ends, the results are stable when 2 s is at most the numerical tolerance of the
+    standard deviation of all h M values. Worked out here again from the draws."""
+    rng = np.random.default_rng(11)
+    standard = np.array([0.012, 0.25, 0.7, 1.4, 0.0036, 0.09, 3.0, 0.5])
+    tally = _Tally(None, 0, 0.95)
+    batches = []
+    for _ in range(6):
+        found = _normal_parameters(rng, ADAPTIVE_BATCH, standard, same=True)
+        batches.append(np.stack([p.t30 for p in found]))
+        tally.add(found, rng)
+    assert tally.draws == 6 * ADAPTIVE_BATCH
+    estimates = np.array(
+        [
+            [b.mean(axis=0), b.std(axis=0, ddof=1), *np.quantile(b, [0.025, 0.975], axis=0)]
+            for b in batches
+        ]
+    )
+    twice = 2.0 * estimates.std(axis=0, ddof=1) / np.sqrt(6.0)
+    everything = np.concatenate(batches)
+    tolerance = numerical_tolerance(everything.std(axis=0, ddof=1))
+    ratios = (twice / tolerance).max(axis=0)
+    # 600 draws settle the bands whose standard deviation starts with a 1 (a wide
+    # tolerance), not those that start with a 7 or a 9.
+    assert ratios[0] < 1.0 and ratios[3] < 1.0 and ratios[2] > 1.0 and ratios[5] > 1.0
+    # Every parameter has the same draws here, so the furthest of all is t30's furthest.
+    found = tally.unstable()
+    assert found is not None
+    times, _name, band = found
+    assert band == int(np.argmax(ratios))
+    np.testing.assert_allclose(times, ratios[band], rtol=1e-9)
+    # Only the bands that pass: stable.
+    passing = _Tally(None, 0, 0.95)
+    for b in batches:
+        columns = b[:, [0, 3]]
+        passing.add(
+            [_all_parameters(row) for row in columns],
+            rng,
+        )
+    assert passing.unstable() is None
+
+
+def _all_parameters(values: np.ndarray):
+    """Room parameters that are all ``values``."""
+    import dataclasses
+
+    from acoustic_spaces.parameters import RoomParameters
+
+    return RoomParameters(**{f.name: values for f in dataclasses.fields(RoomParameters)})
+
+
+def test_adaptive_batches_stop_once_stable_near_what_a_normal_spread_needs():
+    """For a normal spread the interval's ends settle last: an end's standard deviation
+    is 2.67 u / sqrt(N), so 2 s is within a tolerance of u / 2 (a standard uncertainty
+    that starts with a 1) from 114 draws and within u / 4 (one that starts with a 2)
+    from 456. Batches of 100 stop near there, and what they then give is within the
+    tolerance of the truth."""
+    stops = []
+    for seed in range(20):
+        rng = np.random.default_rng([7, seed])
+        standard = np.full(8, 0.2)
+        tally = _Tally(None, 0, 0.95)
+        while True:
+            tally.add(_normal_parameters(rng, ADAPTIVE_BATCH, standard), rng)
+            if tally.draws >= 2 * ADAPTIVE_BATCH and tally.unstable() is None:
+                break
+            assert tally.draws < 5000
+        stops.append(tally.draws)
+        spread = tally.spread(True)
+        assert spread.stable is True and spread.draws == tally.draws
+        # Twice the tolerance (0.05): each is within one about 19 times in 20.
+        np.testing.assert_allclose(spread.standard.t30, 0.2, atol=0.1)
+        np.testing.assert_allclose(spread.low.t30, 10.0 - 1.96 * 0.2, atol=0.1)
+        np.testing.assert_allclose(spread.high.t30, 10.0 + 1.96 * 0.2, atol=0.1)
+    # 456 draws for one result alone; all the parameters and bands together need more.
+    assert 400 <= np.median(stops) <= 1500, stops
+
+
+def test_what_400_draws_leave_open():
+    """What the docs and the editor's tip say of 400 draws, for a normal spread: twice
+    the standard deviation of the standard uncertainty is about 7 % of it, and that of
+    an end of the 95 % interval about a quarter (2 * 2.67 / sqrt(400))."""
+    rng = np.random.default_rng(3)
+    draws = rng.standard_normal((4000, 400))
+    deviations = draws.std(axis=1, ddof=1)
+    ends = np.quantile(draws, 0.025, axis=1)
+    assert abs(2.0 * deviations.std() - 0.0708) < 0.004
+    assert abs(2.0 * ends.std() - 0.267) < 0.015
+
+
+def test_two_small_batches_pass_by_chance_too_easily():
+    """Why the first test waits for ``ADAPTIVE_MIN_BATCHES`` batches: for one result
+    whose standard uncertainty starts with a 3, which needs about a thousand draws
+    (114 * 9), two batches of 100 pass the test about one time in eight."""
+    rng = np.random.default_rng(17)
+    passed = 0
+    for _ in range(300):
+        tally = _Tally(None, 0, 0.95)
+        for _batch in range(2):
+            values = 3.06 * rng.standard_normal((ADAPTIVE_BATCH, 1))
+            tally.add([_all_parameters(row) for row in values], rng)
+        passed += tally.unstable() is None
+    assert 0.06 < passed / 300 < 0.2
+
+
+def test_adaptive_draws_go_on_until_the_results_are_stable(monkeypatch):
+    """``draws="adaptive"`` takes batches of 100, ten at least, until every result of
+    every response passes the test, or the draws reach their limit, and says which."""
+    from acoustic_spaces.engine import uncertainty
+
+    scene = _box({"absorption": 0.02})
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+
+    def spread(**options):
+        return material_spread(result, scene, face_group, materials, **options)["s", "a"]
+
+    assert uncertainty.ADAPTIVE_MIN_BATCHES == 10
+    with pytest.raises(ValueError, match="1000 draws or more"):
+        spread(draws=ADAPTIVE, max_draws=900)
+    # For the test's speed, batches of 20 and the first test after 2 of them.
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_BATCH", 20)
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MIN_BATCHES", 2)
+    heard: list[str] = []
+    short = spread(draws=ADAPTIVE, seed=3, max_draws=50, progress=heard.append)
+    # Two batches fit under 50 draws; over a hundred results are not all stable by then.
+    assert short.draws == 40 and short.stable is False and short.as_dict()["stable"] is False
+    assert heard == [f"the spread: s -> a (1 of 1), draw {k}" for k in (1, 21)]
+    again = spread(draws=ADAPTIVE, seed=3, max_draws=40)
+    np.testing.assert_array_equal(again.standard.t30, short.standard.t30)
+    # With a tolerance ten times as wide the results settle a hundred times sooner, no
+    # sooner than the first test, which comes after ADAPTIVE_MIN_BATCHES batches.
+    tolerance = uncertainty.numerical_tolerance
+    monkeypatch.setattr(
+        uncertainty, "numerical_tolerance", lambda u, digits=1: 10.0 * tolerance(u, digits)
+    )
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MIN_BATCHES", 3)
+    wide = spread(draws=ADAPTIVE, seed=3, max_draws=2000)
+    assert wide.stable is True and 60 <= wide.draws < 1000 and wide.draws % 20 == 0
+    # A number of draws given beforehand is not tested.
+    fixed = spread(draws=20, seed=3)
+    assert fixed.stable is None and fixed.draws == 20
+
+
+def test_simulate_draws_adaptively_and_warns_at_the_limit(
+    tmp_path, capsys: pytest.CaptureFixture[str], monkeypatch
+):
+    """``--spread-draws adaptive``: the output says the draws it took and whether the
+    results were stable, with a warning when they reached the limit first."""
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.engine import uncertainty
+
+    # For the test's speed, two batches of 20; a tolerance nothing meets.
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_BATCH", 20)
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MAX_DRAWS", 40)
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MIN_BATCHES", 2)
+    tolerance = uncertainty.numerical_tolerance
+    monkeypatch.setattr(
+        uncertainty, "numerical_tolerance", lambda u, digits=1: 1e-9 * tolerance(u, digits)
+    )
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(_box({"absorption": 0.02}).to_data()))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300"]
+    assert main([*args, "--spread-draws", "adaptive"]) == 0
+    captured = capsys.readouterr()
+    assert "draws until the results are stable, 40 at most" in captured.err
+    assert "warning: the spread's results were not stable after 40 draws" in captured.err
+    assert ", 40 draws (adaptive, not stable): at most" in captured.out
+    spread = json.loads((out / "parameters.json").read_text())["responses"][0]["uncertainty"]
+    assert spread["draws"] == 40 and spread["stable"] is False

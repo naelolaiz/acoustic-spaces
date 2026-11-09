@@ -16,6 +16,19 @@ each one's mean, combined standard uncertainty (the draws' standard deviation, J
 7.6) and probabilistically symmetric coverage interval (JCGM 101 7.7), and the budget:
 each input's standard uncertainty alone.
 
+The draws are a number given beforehand (JCGM 101 7.2.1), or, with ``draws`` adaptive, as
+many as JCGM 101 7.9's adaptive procedure takes: batch after batch until, for every
+parameter in every band of every response, twice the standard deviation of the batches'
+mean, standard uncertainty and interval's ends, each over the root of the number of
+batches, is no more than the numerical tolerance of the standard uncertainty at
+``ADAPTIVE_DIGITS`` significant digits (7.9.2). A batch is ``ADAPTIVE_BATCH`` draws, not
+the 10 000 the Supplement names (a choice it calls arbitrary), as each draw re-weights
+the whole run. The test is first made after ``ADAPTIVE_MIN_BATCHES`` batches, not 2: the
+Supplement's first test comes after 20 000 draws, which settle one digit of a normal
+spread whatever it is, while two batches of 100 pass by chance about one time in eight
+for a result that needs a thousand draws. The draws stop at ``ADAPTIVE_MAX_DRAWS`` if
+the results are not stable by then (:attr:`Spread.stable`).
+
 A material that gives no uncertainty of its own takes none, unless its absorption is a
 built-in database entry's, whose source that database does not name
 (:attr:`~acoustic_spaces.scene.model.Material.builtin`): then it takes the scene's
@@ -50,12 +63,30 @@ import numpy as np
 from acoustic_spaces.engine.reweight import log_ratio
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import RoomParameters
-from acoustic_spaces.scene.model import AbsorptionUncertainty
+from acoustic_spaces.scene.model import SPREAD_DRAWS, AbsorptionUncertainty
 
 #: The highest absorption a draw takes: re-weighting needs some sound reflected.
 MAX_ABSORPTION = 0.99
 #: The draws :func:`material_spread` takes unless told otherwise.
-DEFAULT_DRAWS = 400
+DEFAULT_DRAWS = SPREAD_DRAWS
+#: ``draws`` for as many as the adaptive procedure of JCGM 101 7.9 takes.
+ADAPTIVE = "adaptive"
+#: The draws of each batch of the adaptive procedure.
+ADAPTIVE_BATCH = 100
+#: The batches the adaptive procedure takes before its first test.
+ADAPTIVE_MIN_BATCHES = 10
+#: The most draws the adaptive procedure takes.
+ADAPTIVE_MAX_DRAWS = 20_000
+#: The significant digits of a standard uncertainty that the adaptive procedure takes as
+#: meaningful (n_dig of JCGM 101 7.9.2).
+ADAPTIVE_DIGITS = 1
+#: A standard uncertainty no larger than this is rounding, and stable as it is.
+_NO_SPREAD = 1e-12
+#: How far apart the absorptions lie that the adaptive procedure fits the admittance at,
+#: in deviates of a material's distribution (a normal one's standard deviations, a
+#: tolerance's half-widths): about what ``ADMITTANCE_NODES`` over the range of
+#: ``DEFAULT_DRAWS`` draws gives.
+ADMITTANCE_STEPS = {"normal": 0.75, "uniform": 0.25}
 #: The absorptions of each material, over its draws' range, that the admittance is
 #: fitted at for the phases of the paths that add in pressure (the draws take it between
 #: the two nearest).
@@ -172,7 +203,10 @@ class Spread:
     response has (:data:`EDGE_ERRORS_DB`), each the largest difference of the level
     from the exact solution in each band (dB; NaN where not measured). ``assumed``: the
     built-in materials of unknown source that took ``simulation.uncertainty.presets``,
-    with that choice (:func:`assumed`)."""
+    with that choice (:func:`assumed`). ``stable``: with the draws chosen adaptively,
+    whether every result of every response met JCGM 101 7.9's test before the draws
+    reached their limit; None with a number of draws given beforehand, which is not
+    tested."""
 
     mean: RoomParameters
     standard: RoomParameters
@@ -185,11 +219,13 @@ class Spread:
     batches: int
     not_counted: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
     assumed: dict[str, str] = dataclasses.field(default_factory=dict)
+    stable: bool | None = None
 
     def as_dict(self) -> dict:
         """Plain values, with None for undefined ones (JSON friendly)."""
         return {
             "draws": self.draws,
+            "stable": self.stable,
             "coverage": self.coverage,
             "batches": self.batches,
             **{part: getattr(self, part).as_dict() for part in PARTS},
@@ -298,42 +334,197 @@ def _draws(scene, materials, draws, seed):
 class _Admittances:
     """The admittance of each draw's absorption for the phases of the paths that add in
     pressure (:func:`~acoustic_spaces.engine.coherent.absorption_phases`): for a
-    material's draws, fitted when first asked for at ``ADMITTANCE_NODES`` deviates over
-    their range (:func:`~acoustic_spaces.engine.impedance.fit_admittance`, about a second
-    each) and taken between the two nearest, as fitting each draw's would take that for
-    every draw. Other rows (as traced) are fitted as the trace fits them."""
+    material's draws, fitted when first asked for at nodes among their deviates
+    (:func:`~acoustic_spaces.engine.impedance.fit_admittance`, about a second each) and
+    taken between the two nearest, as fitting each draw's would take that for every
+    draw. The nodes are ``ADMITTANCE_NODES`` over the range of the draws given at once
+    (:meth:`over`), or, for draws that come batch by batch, every ``steps`` (one per
+    material) from 0 (:meth:`along`), so that a later batch moves no earlier draw's.
+    Other rows (as traced) are fitted as the trace fits them."""
 
-    def __init__(self, traced, taken, deviates, widths) -> None:
+    def __init__(self, traced, widths) -> None:
         self._traced, self._widths = traced, widths
-        self._nodes: dict[int, np.ndarray] = {}
-        self._fits: dict[int, list] = {}
-        self._found: dict[bytes, tuple[int, int, float]] = {}
-        for k in range(traced.shape[0]):
-            if not np.any(widths[k]):
+        self._fits: dict[tuple[int, float], object] = {}
+        self._found: dict[bytes, tuple[int, float, float, float]] = {}
+
+    def over(self, taken, deviates) -> None:
+        """Take the draws ``taken`` (draws, materials, bands) of ``deviates`` (draws,
+        materials), with each material's nodes over its deviates' range."""
+        for k in range(self._traced.shape[0]):
+            if not np.any(self._widths[k]):
                 continue
             nodes = np.linspace(deviates[:, k].min(), deviates[:, k].max(), ADMITTANCE_NODES)
-            self._nodes[k] = nodes
             for drawn, deviate in zip(taken[:, k], deviates[:, k], strict=True):
                 j = int(np.clip(np.searchsorted(nodes, deviate) - 1, 0, len(nodes) - 2))
                 t = float((deviate - nodes[j]) / (nodes[j + 1] - nodes[j]))
-                self._found[np.ascontiguousarray(drawn).tobytes()] = (k, j, t)
+                self._found[np.ascontiguousarray(drawn).tobytes()] = (
+                    k,
+                    float(nodes[j]),
+                    float(nodes[j + 1]),
+                    t,
+                )
+
+    def along(self, taken, deviates, steps) -> None:
+        """Take the draws ``taken`` of ``deviates``, with material k's nodes every
+        ``steps[k]`` from 0."""
+        for k in range(self._traced.shape[0]):
+            if not np.any(self._widths[k]):
+                continue
+            for drawn, deviate in zip(taken[:, k], deviates[:, k], strict=True):
+                j = math.floor(deviate / steps[k])
+                t = float(deviate / steps[k] - j)
+                self._found[np.ascontiguousarray(drawn).tobytes()] = (
+                    k,
+                    j * steps[k],
+                    (j + 1) * steps[k],
+                    t,
+                )
+
+    def _fit(self, k: int, node: float):
+        from acoustic_spaces.engine.impedance import fit_admittance
+
+        if (k, node) not in self._fits:
+            row = np.clip(self._traced[k] + node * self._widths[k], 0.0, MAX_ABSORPTION)
+            self._fits[k, node] = fit_admittance(row, self._traced.shape[1])
+        return self._fits[k, node]
 
     def __call__(self, row: np.ndarray):
         from acoustic_spaces.engine.impedance import fit_admittance
 
-        total = self._traced.shape[1]
         found = self._found.get(np.ascontiguousarray(row, dtype=float).tobytes())
         if found is None:
-            return fit_admittance(row.tolist(), total)
-        k, j, t = found
-        if k not in self._fits:
-            own, width = self._traced[k], self._widths[k]
-            self._fits[k] = [
-                fit_admittance(np.clip(own + node * width, 0.0, MAX_ABSORPTION), total)
-                for node in self._nodes[k]
-            ]
-        low, high = self._fits[k][j], self._fits[k][j + 1]
+            return fit_admittance(row.tolist(), self._traced.shape[1])
+        k, below, above, t = found
+        low, high = self._fit(k, below), self._fit(k, above)
         return lambda f: (1.0 - t) * low(f) + t * high(f)
+
+
+def numerical_tolerance(standard, digits: int = 1) -> np.ndarray:
+    """The numerical tolerance of each standard uncertainty ``standard`` with ``digits``
+    significant digits taken as meaningful (JCGM 101 7.9.2): written as c 10^l with c a
+    whole number of ``digits`` digits, half of 10^l. Infinite where there is no spread
+    (``standard`` at most ``_NO_SPREAD``, rounding)."""
+    standard = np.asarray(standard, dtype=float)
+    out = np.full(standard.shape, math.inf)
+    some = standard > _NO_SPREAD
+    power = np.floor(np.log10(standard[some])) - (digits - 1)
+    # 0.096 at one digit is 10 10^-2, which is 1 10^-1.
+    power += np.round(standard[some] / 10.0**power) >= 10.0**digits
+    out[some] = 0.5 * 10.0**power
+    return out
+
+
+class _Tally:
+    """One response's parameters in the draws, batch by batch: the parameters each draw
+    of the absorption gives, and the rays' error to add to each (their standard errors
+    ``errors``, from ``batches`` batches of rays, times a deviate of Student's t of
+    ``batches`` - 1 degrees of freedom; None for none)."""
+
+    def __init__(self, errors: RoomParameters | None, batches: int, coverage: float) -> None:
+        self._errors, self._batches, self._coverage = errors, batches, coverage
+        self._names = [f.name for f in dataclasses.fields(RoomParameters)]
+        self._values: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
+        self._noise: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
+        # Of each batch, each parameter's (4, bands) mean, standard deviation and
+        # interval's ends, and whether it is defined in every draw of it.
+        self._estimates: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
+        self._defined: dict[str, np.ndarray] = {}
+        self.draws = 0
+
+    def add(self, found: list[RoomParameters], rng: np.random.Generator) -> None:
+        """Take a batch: the parameters ``found`` in its draws of the absorption, the
+        rays' deviates from ``rng``."""
+        tail = 0.5 * (1.0 - self._coverage)
+        self.draws += len(found)
+        for name in self._names:
+            values = np.stack([np.asarray(getattr(p, name), dtype=float) for p in found])
+            defined = np.all(np.isfinite(values), axis=0)
+            safe = np.where(defined, values, 0.0)
+            self._values[name].append(values)
+            if self._errors is not None:
+                error = np.asarray(getattr(self._errors, name), dtype=float)
+                nu = self._batches - 1
+                noise = rng.standard_t(nu, size=values.shape) * np.where(
+                    np.isfinite(error), error, 0.0
+                )
+                self._noise[name].append(noise)
+                safe = safe + noise
+            self._defined[name] = self._defined.get(name, True) & defined
+            self._estimates[name].append(
+                np.stack(
+                    [
+                        safe.mean(axis=0),
+                        safe.std(axis=0, ddof=1),
+                        np.quantile(safe, tail, axis=0),
+                        np.quantile(safe, 1.0 - tail, axis=0),
+                    ]
+                )
+            )
+
+    def unstable(self) -> tuple[float, str, int] | None:
+        """None when every parameter in every band meets the test of JCGM 101 7.9.4 over
+        the batches taken: twice the standard deviation of the batches'
+        mean, standard deviation and interval's ends, each over the root of the number
+        of batches, is at most the numerical tolerance of the standard deviation of all
+        the draws. Else the one furthest from it: how many times the tolerance, its
+        name and its band."""
+        worst: tuple[float, str, int] | None = None
+        for name in self._names:
+            estimates = np.stack(self._estimates[name])  # (batches, 4, bands)
+            count, size = estimates.shape[0], self.draws // estimates.shape[0]
+            means, deviations = estimates[:, 0], estimates[:, 1]
+            # All the draws' standard deviation, from the batches' means and deviations.
+            squares = (size - 1) * deviations**2 + size * (means - means.mean(axis=0)) ** 2
+            standard = np.sqrt(squares.sum(axis=0) / (self.draws - 1))
+            twice = 2.0 * estimates.std(axis=0, ddof=1) / math.sqrt(count)
+            over = np.where(
+                self._defined[name],
+                (twice / numerical_tolerance(standard, ADAPTIVE_DIGITS)).max(axis=0),
+                0.0,
+            )
+            band = int(np.argmax(over))
+            if over[band] > 1.0 and (worst is None or over[band] > worst[0]):
+                worst = (float(over[band]), name, band)
+        return worst
+
+    def spread(self, stable: bool | None) -> Spread:
+        """The :class:`Spread` of all the draws taken."""
+        tail = 0.5 * (1.0 - self._coverage)
+        parts: dict[str, dict[str, np.ndarray]] = {part: {} for part in PARTS}
+        for name in self._names:
+            values = np.concatenate(self._values[name])
+            defined = np.all(np.isfinite(values), axis=0)
+            safe = np.where(defined, values, 0.0)
+            absorption = safe.std(axis=0, ddof=1)
+            rays = np.full(values.shape[1], np.nan)
+            if self._errors is not None:
+                error = np.asarray(getattr(self._errors, name), dtype=float)
+                counted = np.isfinite(error)
+                nu = self._batches - 1
+                safe = safe + np.concatenate(self._noise[name])
+                rays = np.where(counted, error * math.sqrt(nu / (nu - 2)), np.nan)
+            for part, value in (
+                ("mean", safe.mean(axis=0)),
+                ("standard", safe.std(axis=0, ddof=1)),
+                ("low", np.quantile(safe, tail, axis=0)),
+                ("high", np.quantile(safe, 1.0 - tail, axis=0)),
+                ("absorption", absorption),
+                ("rays", rays),
+            ):
+                parts[part][name] = np.where(defined, value, np.nan)
+        each = {part: RoomParameters(**values) for part, values in parts.items()}
+        return Spread(
+            mean=each["mean"],
+            standard=each["standard"],
+            low=each["low"],
+            high=each["high"],
+            absorption=each["absorption"],
+            rays=each["rays"],
+            coverage=self._coverage,
+            draws=self.draws,
+            batches=self._batches,
+            stable=stable,
+        )
 
 
 def material_spread(
@@ -341,53 +532,97 @@ def material_spread(
     scene,
     face_group: np.ndarray,
     materials: Sequence[str],
-    draws: int = DEFAULT_DRAWS,
+    draws: int | str = DEFAULT_DRAWS,
     seed: int = 0,
     coverage: float = 0.95,
     rays: bool = True,
     progress=None,
+    max_draws: int | None = None,
 ) -> dict:
     """{(source, listener): :class:`Spread`} the spread of ``result``'s parameters that
     the uncertainty of its materials' absorption leads to, with the rays' random error
     (unless ``rays`` is False). ``result`` is ``scene`` simulated with ``face_group`` for
     ``materials`` (:func:`~acoustic_spaces.engine.reweight.groups_of` and
-    ``simulate(groups=...)``). ``progress(message)``, if given, is called before each
-    response's draws and every ``PROGRESS_DRAWS`` draws; an exception it raises (a
-    cancel) stops the spread."""
+    ``simulate(groups=...)``). ``draws`` is their number, or ``ADAPTIVE``: batches of
+    ``ADAPTIVE_BATCH``, ``ADAPTIVE_MIN_BATCHES`` or more, until every result of every
+    response is stable by the test of JCGM 101 7.9 (:attr:`Spread.stable`),
+    ``max_draws`` at most (default ``ADAPTIVE_MAX_DRAWS``). ``progress(message)``,
+    if given, is called before each response's draws and every ``PROGRESS_DRAWS`` draws;
+    an exception it raises (a cancel) stops the spread."""
     if not 0.0 < coverage < 1.0:
         raise ValueError("the coverage probability lies between 0 and 1")
     if not has_uncertainty(scene, materials):
         raise ValueError("no material on the surfaces has an absorption uncertainty")
+    adaptive = draws == ADAPTIVE
+    limit = ADAPTIVE_MAX_DRAWS if max_draws is None else max_draws
+    first = ADAPTIVE_MIN_BATCHES * ADAPTIVE_BATCH
+    if adaptive and limit < first:
+        raise ValueError(f"the adaptive spread needs {first} draws or more")
+    if not adaptive and (isinstance(draws, str) or draws < 2):
+        raise ValueError(f"the spread needs 2 draws or more, or {ADAPTIVE}")
     traced = np.array([scene.materials[n].coefficients("octave")[0] for n in materials])
-    taken, deviates, widths = _draws(scene, materials, draws, seed)
-    ratios = [log_ratio(traced, drawn) for drawn in taken]
-    admittance_of = _Admittances(traced, taken, deviates, widths)
-    # The rays' deviates from a stream of their own, so that the absorption's draws stay
-    # those of ``seed``.
-    rng = np.random.default_rng([seed, 1])
-    defaults = assumed(scene, materials)
     say = progress or (lambda _: None)
-    out = {}
-    for n, (key, response) in enumerate(result.responses.items(), start=1):
-        found = []
-        for k, (ratio, drawn) in enumerate(zip(ratios, taken, strict=True)):
-            if k % PROGRESS_DRAWS == 0:
-                say(
-                    f"the spread: {key[0]} -> {key[1]} ({n} of {len(result.responses)}), "
-                    f"draw {k + 1} of {draws}"
-                )
-            found.append(
-                response.reweighted(
-                    face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
-                ).parameters()
-            )
+    tallies = {}
+    for key, response in result.responses.items():
         batches = len(response.late_batches) if rays else 0
         errors = response.standard_errors() if batches >= MIN_BATCHES else None
-        spread = _spread(found, coverage, errors, 0 if errors is None else batches, rng)
-        out[key] = dataclasses.replace(
-            spread, not_counted=edge_errors(response, scene), assumed=defaults
+        tallies[key] = _Tally(errors, 0 if errors is None else batches, coverage)
+    admittance_of: _Admittances | None = None
+    steps = [
+        ADMITTANCE_STEPS[getattr(uncertainty_of(scene, n), "distribution", "normal")]
+        for n in materials
+    ]
+    stable: bool | None = None
+    taken_so_far = 0
+    while True:
+        if adaptive:
+            batch = taken_so_far // ADAPTIVE_BATCH
+            # Each batch from streams of its own, so that the first ones are the same
+            # however many follow.
+            taken, deviates, widths = _draws(scene, materials, ADAPTIVE_BATCH, [seed, 2, batch])
+            rng = np.random.default_rng([seed, 3, batch])
+            if admittance_of is None:
+                admittance_of = _Admittances(traced, widths)
+            admittance_of.along(taken, deviates, steps)
+        else:
+            taken, deviates, widths = _draws(scene, materials, draws, seed)
+            # The rays' deviates from a stream of their own, so that the absorption's
+            # draws stay those of ``seed``.
+            rng = np.random.default_rng([seed, 1])
+            admittance_of = _Admittances(traced, widths)
+            admittance_of.over(taken, deviates)
+        ratios = [log_ratio(traced, drawn) for drawn in taken]
+        of = "" if adaptive else f" of {draws}"
+        for n, (key, response) in enumerate(result.responses.items(), start=1):
+            found = []
+            for k, (ratio, drawn) in enumerate(zip(ratios, taken, strict=True)):
+                if k % PROGRESS_DRAWS == 0:
+                    say(
+                        f"the spread: {key[0]} -> {key[1]} ({n} of {len(result.responses)}), "
+                        f"draw {taken_so_far + k + 1}{of}"
+                    )
+                found.append(
+                    response.reweighted(
+                        face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
+                    ).parameters()
+                )
+            tallies[key].add(found, rng)
+        taken_so_far += len(taken)
+        if not adaptive:
+            break
+        if taken_so_far >= first:
+            stable = all(tally.unstable() is None for tally in tallies.values())
+            if stable or taken_so_far + ADAPTIVE_BATCH > limit:
+                break
+    defaults = assumed(scene, materials)
+    return {
+        key: dataclasses.replace(
+            tally.spread(stable),
+            not_counted=edge_errors(result.responses[key], scene),
+            assumed=defaults,
         )
-    return out
+        for key, tally in tallies.items()
+    }
 
 
 def edge_errors(response, scene) -> dict[str, np.ndarray]:
@@ -423,7 +658,7 @@ def with_spread(
     scene,
     face_group,
     materials,
-    draws: int = DEFAULT_DRAWS,
+    draws: int | str = DEFAULT_DRAWS,
     seed: int = 0,
     progress=None,
 ):
@@ -438,56 +673,11 @@ def with_spread(
     return dataclasses.replace(result, spreads=spreads)
 
 
-def _spread(
-    found: list[RoomParameters],
-    coverage: float,
-    errors: RoomParameters | None,
-    batches: int,
-    rng: np.random.Generator,
-) -> Spread:
-    """The :class:`Spread` of the parameters ``found`` in the draws of the absorption,
-    each with the rays' error added where ``errors`` (their standard errors, from
-    ``batches`` batches) has it: Student's t of ``batches`` - 1 degrees of freedom, from
-    ``rng``."""
-    names = [f.name for f in dataclasses.fields(RoomParameters)]
-    tail = 0.5 * (1.0 - coverage)
-    parts: dict[str, dict[str, np.ndarray]] = {part: {} for part in PARTS}
-    for name in names:
-        values = np.stack([np.asarray(getattr(p, name), dtype=float) for p in found])
-        defined = np.all(np.isfinite(values), axis=0)
-        safe = np.where(defined, values, 0.0)
-        absorption = safe.std(axis=0, ddof=1)
-        rays = np.full(values.shape[1], np.nan)
-        if errors is not None:
-            error = np.asarray(getattr(errors, name), dtype=float)
-            counted = np.isfinite(error)
-            nu = batches - 1
-            safe = safe + rng.standard_t(nu, size=safe.shape) * np.where(counted, error, 0.0)
-            rays = np.where(counted, error * math.sqrt(nu / (nu - 2)), np.nan)
-        for part, value in (
-            ("mean", safe.mean(axis=0)),
-            ("standard", safe.std(axis=0, ddof=1)),
-            ("low", np.quantile(safe, tail, axis=0)),
-            ("high", np.quantile(safe, 1.0 - tail, axis=0)),
-            ("absorption", absorption),
-            ("rays", rays),
-        ):
-            parts[part][name] = np.where(defined, value, np.nan)
-    each = {part: RoomParameters(**values) for part, values in parts.items()}
-    return Spread(
-        mean=each["mean"],
-        standard=each["standard"],
-        low=each["low"],
-        high=each["high"],
-        absorption=each["absorption"],
-        rays=each["rays"],
-        coverage=coverage,
-        draws=len(found),
-        batches=batches,
-    )
-
-
 __all__ = [
+    "ADAPTIVE",
+    "ADAPTIVE_BATCH",
+    "ADAPTIVE_MAX_DRAWS",
+    "ADAPTIVE_MIN_BATCHES",
     "DEFAULT_DRAWS",
     "EDGE_ERRORS_DB",
     "MAX_ABSORPTION",
@@ -496,5 +686,6 @@ __all__ = [
     "absorption_draws",
     "edge_errors",
     "material_spread",
+    "numerical_tolerance",
     "with_spread",
 ]

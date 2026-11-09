@@ -4005,6 +4005,30 @@ class SimulationPage(Page):
             )
         )
         uncertainty_form.addRow(_("Built-in materials"), self.preset_uncertainty)
+        self.adaptive_draws = QCheckBox(_("Until the results are stable"))
+        self.adaptive_draws.setToolTip(
+            _(
+                "Draw the spread in batches of 100 until every result is stable, as the "
+                "adaptive procedure of GUM Supplement 1 does (JCGM 101:2008, 7.9): until "
+                "twice the standard deviation of each mean, standard uncertainty and "
+                "interval's end is within half a unit of the standard uncertainty's first "
+                "digit, 20,000 draws at most. That takes several thousand draws, many "
+                "times as long as the 400 a scene starts with"
+            )
+        )
+        self.spread_draws = int_spin(0, 100_000, 100)
+        # Translators: no draws at all, so no spread of the results.
+        self.spread_draws.setSpecialValueText(_("none"))
+        self.spread_draws.setToolTip(
+            _(
+                "How many draws of the materials' absorption the spread after each run "
+                "takes: more settle its numbers further and take as much longer. 400 leave "
+                "each end of the coverage interval (95 %) good to about a quarter of the "
+                "standard uncertainty. None: no spread"
+            )
+        )
+        uncertainty_form.addRow(_("Draws"), self.adaptive_draws)
+        uncertainty_form.addRow("", self.spread_draws)
         layout.addWidget(uncertainty)
 
         self.insertion_group = QGroupBox(_("Insertion loss"))
@@ -4064,6 +4088,7 @@ class SimulationPage(Page):
             (self.length, "ir_length_s"),
             (self.transition, "transition_ms"),
             (self.seed, "seed"),
+            (self.spread_draws, "uncertainty.draws"),
         ):
             box.valueChanged.connect(lambda value, key=key: self._set(key, value))
         for check, key in (
@@ -4078,6 +4103,11 @@ class SimulationPage(Page):
         )
         self.random_seed.toggled.connect(
             lambda on: self._set("seed", None if on else self.seed.value())
+        )
+        self.adaptive_draws.toggled.connect(
+            lambda on: self._set(
+                "uncertainty.draws", "adaptive" if on else self.spread_draws.value()
+            )
         )
 
     def load(self) -> None:
@@ -4130,6 +4160,11 @@ class SimulationPage(Page):
         self.sample_rate.setCurrentText(str(s.sample_rate))
         _choose(self.bands, s.bands)
         _choose(self.preset_uncertainty, s.uncertainty.presets)
+        adaptive = s.uncertainty.draws == "adaptive"
+        self.adaptive_draws.setChecked(adaptive)
+        self.spread_draws.setEnabled(not adaptive)
+        if not adaptive:
+            self.spread_draws.setValue(s.uncertainty.draws)
         self.auto_transition.setChecked(s.transition_ms is None)
         self.transition.setEnabled(s.transition_ms is not None)
         self.transition.setValue(s.transition_ms or 80.0)

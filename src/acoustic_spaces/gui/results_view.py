@@ -700,6 +700,11 @@ class ResultsPanel(QWidget):
                         ),
                         **values,
                     )
+                if spread.stable is False:
+                    tip += ". " + _(
+                        "The draws reached their limit before these were stable (GUM "
+                        "Supplement 1's test)"
+                    )
                 if spread.assumed:
                     tip += ". " + assumed
                 if edges is not None and np.isfinite(edges[col]):

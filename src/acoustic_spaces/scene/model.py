@@ -2852,6 +2852,10 @@ class Output(_Model):
 PresetUncertainty = Literal["tolerance", "iso_12999_2", "none"]
 
 
+#: The draws a spread takes unless the scene or the command line says otherwise.
+SPREAD_DRAWS = 400
+
+
 class Uncertainty(_Model):
     """The spread of the results from the materials' uncertain absorption."""
 
@@ -2864,6 +2868,21 @@ class Uncertainty(_Model):
             "from them"
         ),
     )
+    draws: int | Literal["adaptive"] = Field(
+        default=SPREAD_DRAWS,
+        description=(
+            "the draws of the spread: a number (2 or more; 0, no spread), or adaptive, as "
+            "many as GUM Supplement 1's adaptive procedure (JCGM 101:2008, 7.9) takes until "
+            "the results are stable"
+        ),
+    )
+
+    @field_validator("draws")
+    @classmethod
+    def _draws_or_none(cls, value: int | str) -> int | str:
+        if isinstance(value, int) and (value < 0 or value == 1):
+            raise ValueError("0 (no spread), 2 or more, or adaptive")
+        return value
 
 
 class Simulation(_Model):

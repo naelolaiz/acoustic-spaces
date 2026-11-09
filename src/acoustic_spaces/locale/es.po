@@ -2520,6 +2520,7 @@ msgstr "trazado de rayos"
 msgid "image_sources"
 msgstr "fuentes imagen"
 
+#. Translators: no draws at all, so no spread of the results.
 #: acoustic_spaces/gui/inspector.py
 msgid "none"
 msgstr "ninguno"
@@ -5600,6 +5601,43 @@ msgid "Built-in materials"
 msgstr "Materiales integrados"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Until the results are stable"
+msgstr "Hasta que los resultados sean estables"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw the spread in batches of 100 until every result is stable, as the "
+"adaptive procedure of GUM Supplement 1 does (JCGM 101:2008, 7.9): until "
+"twice the standard deviation of each mean, standard uncertainty and "
+"interval's end is within half a unit of the standard uncertainty's first "
+"digit, 20,000 draws at most. That takes several thousand draws, many times "
+"as long as the 400 a scene starts with"
+msgstr ""
+"Calcula la dispersión en lotes de 100 muestras hasta que cada resultado sea "
+"estable, como el procedimiento adaptativo del Suplemento 1 de la GUM (JCGM "
+"101:2008, 7.9): hasta que el doble de la desviación típica de cada media, "
+"incertidumbre típica y extremo del intervalo quede dentro de media unidad de "
+"la primera cifra de la incertidumbre típica, con 20 000 muestras como "
+"máximo. Requiere varios miles de muestras, muchas veces el tiempo de las 400 "
+"con que empieza una escena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How many draws of the materials' absorption the spread after each run takes: "
+"more settle its numbers further and take as much longer. 400 leave each end "
+"of the coverage interval (95 %) good to about a quarter of the standard "
+"uncertainty. None: no spread"
+msgstr ""
+"Cuántas muestras de la absorción de los materiales toma la dispersión tras "
+"cada cálculo: más muestras afinan sus números y tardan otro tanto más. Con "
+"400, cada extremo del intervalo de cobertura (95 %) queda determinado hasta "
+"aproximadamente un cuarto de la incertidumbre típica. Ninguno: sin dispersión"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Draws"
+msgstr "Muestras"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "Insertion loss"
 msgstr "Pérdida por inserción"
 
@@ -7330,6 +7368,14 @@ msgid ""
 msgstr ""
 "Por la incertidumbre de absorción de los materiales: incertidumbre típica "
 "{u}, {percent} %: entre {low} y {high} ({count} muestras)"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"The draws reached their limit before these were stable (GUM Supplement 1's "
+"test)"
+msgstr ""
+"Las muestras alcanzaron su límite antes de que estos valores fueran estables "
+"(prueba del Suplemento 1 de la GUM)"
 
 #. Translators: {db} is a number of decibels.
 #: acoustic_spaces/gui/results_view.py

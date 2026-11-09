@@ -4,6 +4,11 @@
 
 - Fixed: the editor's Run demo… asks to save a scene that has no file or has changes,
   so the window lists its sources to pick WAV files for instead of an empty table.
+- Added: the spread's draws can go on until every result is stable to the first digit of
+  its standard uncertainty, as the adaptive procedure of GUM Supplement 1 has them
+  (JCGM 101:2008, 7.9): `simulation.uncertainty.draws: adaptive`, `--spread-draws
+  adaptive` or **Draws** in the editor's simulation settings, which also take a number
+  (400 as before) or none. `parameters.json` says whether the results were stable.
 
 ## 4.2.1
 

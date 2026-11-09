@@ -315,14 +315,29 @@ where a fit itself moves by up to 0.19 dB for a change of 0.001.
 `acoustic-spaces simulate` does this itself when a material on the surfaces has an
 uncertainty, its own or a built-in material's: it prints the largest combined standard
 uncertainty in JNDs from 125 Hz to 4 kHz, with its budget, 95 % interval and the errors
-over edges, and `parameters.json` holds them all (`uncertainty`; 400 draws,
-`--spread-draws` for another number, 0 for none). With settings that cannot re-weight
+over edges, and `parameters.json` holds them all (`uncertainty`). With settings that cannot re-weight
 (third-octave bands, say) it leaves the spread out, with a warning when a material gives
 an uncertainty of its own. The editor shows each run's results at once, draws the spread
 after them and gives it in the results table's tips. The draws add to a run: in the
 concert hall example (five built-in materials, six responses) 400 draws took 160 s after
 an 11 s run, over half of it the lowest bands' paths added in pressure for each draw;
 `presets: none` leaves the built-in materials out.
+
+`simulation.uncertainty.draws` is the number of draws: 400 unless the scene says
+otherwise, 0 for no spread (`--spread-draws` on the command line, **Draws** in the
+editor's simulation settings). For a normal spread, 400 draws leave the standard
+uncertainty good to about 7 % and each end of the 95 % interval to about a quarter of the
+standard uncertainty (twice their own standard deviation). With `draws: adaptive` the
+draws go on as the adaptive procedure of GUM Supplement 1 has them (JCGM 101:2008, 7.9):
+batch after batch until, for every parameter in every band of every response, twice the
+standard deviation of the mean, of the standard uncertainty and of each end of the
+interval is within the numerical tolerance of the standard uncertainty, half a unit of
+its first digit. A batch is 100 draws, not the Supplement's 10 000 (a number it calls
+arbitrary), as each draw re-weights the whole run; the test is first made after ten
+batches, as two this small can pass by chance; and the draws stop at 20 000, the
+Supplement's own first test. `stable` in `parameters.json` says whether the test was met
+(null for a number of draws given beforehand, which is not tested). The test asks for
+many more draws than the default: from 9 000 to 14 500 in runs of the shoebox example.
 
 ### Material libraries of CATT-Acoustic and ODEON
 
