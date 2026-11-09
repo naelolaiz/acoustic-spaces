@@ -149,9 +149,9 @@ Parameters:
   Supplement 1 does (JCGM 101:2008, 7.9), or given.
 - [x] Error estimates: each result's one-sided bounds, for a limit on one side, of 95 %
   or another probability.
-- [ ] Error estimates, next steps: the uncertainty on the editor's material page;
-  the scattering's uncertainty; levels, STI and maps; convergence checks; the method's
-  own error from the validation.
+- [x] Error estimates: a material's absorption uncertainty on its page in the editor.
+- [ ] Error estimates, next steps: the scattering's uncertainty; levels, STI and maps;
+  convergence checks; the method's own error from the validation.
 
 Outdoor acoustics, in steps:
 

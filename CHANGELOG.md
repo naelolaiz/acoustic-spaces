@@ -14,6 +14,11 @@
   `at_most` in `parameters.json`, in `simulate`'s output and in the editor's tips).
   `simulation.uncertainty.one_sided`, `--one-sided` or **One-sided bounds** in the
   editor's simulation settings give another probability, 90 % say.
+- Added: a material's page in the editor sets its absorption uncertainty
+  (**Absorption uncertainty**: a standard uncertainty or a tolerance per octave band and
+  its source, or ISO 12999-2's reproducibility at a click), which only the scene file
+  did. Typing a material's coefficients there no longer drops an uncertainty the scene
+  file gave it.
 
 ## 4.2.1
 

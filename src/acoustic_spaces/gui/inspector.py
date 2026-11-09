@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
 from acoustic_spaces import recordings
 from acoustic_spaces.engine import tuning
 from acoustic_spaces.engine.long_term import rating_name
+from acoustic_spaces.engine.uncertainty import octave_reproducibility, uncertainty_of
 from acoustic_spaces.geometry import UNIT_SCALE
 from acoustic_spaces.geometry.io import SUPPORTED_SUFFIXES, ifc_spaces
 from acoustic_spaces.geometry.terrain import footprint_properties
@@ -54,7 +55,7 @@ from acoustic_spaces.gui.document import NEW_PART_SIZES, Document, EditError
 from acoustic_spaces.gui.levels import rich_lines
 from acoustic_spaces.gui.numbers import fmt, number, numbers_text, parse_number, parse_numbers
 from acoustic_spaces.gui.tips import band_headers, row_headers, share_tips
-from acoustic_spaces.i18n import N_, _, ngettext
+from acoustic_spaces.i18n import N_, _, ngettext, pgettext
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, builtin_database
 from acoustic_spaces.materials.bands import convert
 from acoustic_spaces.materials.ground import PRESETS
@@ -2533,14 +2534,31 @@ _REACTIONS = (
 )
 
 
+#: A material's uncertainty.distribution as the material page names it.
+_UNCERTAINTY_KINDS = (
+    ("normal", N_("standard uncertainty")),
+    ("uniform", N_("tolerance (plus or minus)")),
+)
+#: What the uncertainty table's values mean, for its tip and its cells'.
+_UNCERTAINTY_TIP = N_(
+    "How far the absorption may be off in each octave band, in units of the absorption "
+    "coefficient (0.05 is plus or minus 0.05, not 5 per cent), from 0 to 1. A material's "
+    "bands are taken as moving together: measured high in one, it is high in all"
+)
+#: The source of the uncertainty that Take ISO 12999-2's gives: scene-file text, in
+#: English as the scene file is.
+ISO_12999_2_SOURCE = "ISO 12999-2:2020, the reproducibility of a measurement to ISO 354"
+
+
 def _without_transmission(fields: dict) -> dict:
     return {k: v for k, v in fields.items() if k not in ("transmission", "transmission_loss")}
 
 
 class MaterialPage(Page):
-    """A material: its name, the database entry it comes from, its coefficients, and
-    what it lets through: nothing, part of the sound (the sound reduction index R per
-    band) or everything (an opening)."""
+    """A material: its name, the database entry it comes from, its coefficients, what
+    it lets through: nothing, part of the sound (the sound reduction index R per band)
+    or everything (an opening), and how far its absorption may be off (its
+    uncertainty)."""
 
     def __init__(self, document) -> None:
         super().__init__(document)
@@ -2686,6 +2704,82 @@ class MaterialPage(Page):
         self.source.setWordWrap(True)
         self.source.setToolTip(_("Where the coefficients come from"))
         layout.addWidget(self.source)
+        self.uncertainty = QGroupBox(_("Absorption uncertainty"))
+        self.uncertainty.setCheckable(True)
+        self.uncertainty.setToolTip(
+            _(
+                "How far the material's absorption may be off, for the spread of the "
+                "results after each run. Ticked, the material gives the uncertainty below; "
+                "ticking it starts from what a run takes for the material now, else from "
+                "ISO 12999-2's reproducibility. Unticked, it gives none of its own"
+            )
+        )
+        self.uncertainty.toggled.connect(self._uncertainty_toggled)
+        uncertainty_form = QFormLayout(self.uncertainty)
+        self.uncertainty_kind = QComboBox()
+        _fill(self.uncertainty_kind, _UNCERTAINTY_KINDS)
+        self.uncertainty_kind.setToolTip(
+            _(
+                "What the values below are: a standard uncertainty, one standard deviation "
+                "of a normal distribution; or a tolerance of plus or minus the value, every "
+                "absorption within it equally likely, whose standard uncertainty is the "
+                "value divided by the square root of 3 (GUM 4.3.7)"
+            )
+        )
+        self.uncertainty_kind.activated.connect(self._uncertainty_kind_chosen)
+        uncertainty_form.addRow(_("Kind"), self.uncertainty_kind)
+        # Always the octave bands, as the scene file gives an uncertainty in. No row
+        # header: beside one, the bands are too narrow for three decimals.
+        self.uncertainty_table = QTableWidget(1, len(OCTAVE_BANDS_HZ))
+        self.uncertainty_table.setHorizontalHeaderLabels(BAND_LABELS)
+        band_headers(self.uncertainty_table)
+        self.uncertainty_table.verticalHeader().hide()
+        self.uncertainty_table.setToolTip(_(_UNCERTAINTY_TIP))
+        self.uncertainty_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
+        self.uncertainty_table.setEditTriggers(QAbstractItemView.EditTrigger.AllEditTriggers)
+        self.uncertainty_table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # As tall as its row: a table that asks for more makes the group take the room
+        # a taller form leaves under this one.
+        self.uncertainty_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.uncertainty_table.horizontalScrollBar().rangeChanged.connect(
+            lambda _low, _high: self._fit_uncertainty_table()
+        )
+        self._fit_uncertainty_table()
+        self.uncertainty_table.itemChanged.connect(self._uncertainty_typed)
+        uncertainty_form.addRow(self.uncertainty_table)
+        self.uncertainty_source = QLineEdit()
+        self.uncertainty_source.setToolTip(
+            _(
+                "Where the uncertainty comes from, such as a test report or a standard; "
+                "left empty, the scene file names none"
+            )
+        )
+        self.uncertainty_source.editingFinished.connect(self._uncertainty_source_typed)
+        # Translators: where an uncertainty comes from (a test report, a standard), not
+        # a source of sound.
+        source_label = pgettext("where values come from", "Source")
+        uncertainty_form.addRow(source_label, self.uncertainty_source)
+        self.iso_12999_2 = QPushButton(_("Take ISO 12999-2's"))
+        self.iso_12999_2.setToolTip(
+            _(
+                "For absorption measured in a reverberation room to ISO 354: takes, as a "
+                "standard uncertainty, the reproducibility standard deviation that "
+                "ISO 12999-2:2020 gives for each band's absorption. The standard's data "
+                "come from absorbers and, below 100 Hz, from outside ISO 354's range"
+            )
+        )
+        self.iso_12999_2.clicked.connect(self._take_iso_12999_2)
+        uncertainty_form.addRow(self.iso_12999_2)
+        layout.addWidget(self.uncertainty)
+        # Under the group, not in it: an unticked group greys what it holds.
+        self.uncertainty_note = QLabel()
+        self.uncertainty_note.setWordWrap(True)
+        self.uncertainty_note.setToolTip(
+            _("What the spread of the results takes for a material that gives no uncertainty")
+        )
+        layout.addWidget(self.uncertainty_note)
         self.usage = QLabel()
         self.usage.setWordWrap(True)
         self.usage.setToolTip(_("How much of the room's surface has this material"))
@@ -2768,6 +2862,18 @@ class MaterialPage(Page):
             self.source.setText(_("Source: {source}").format(source=material.source))
         else:
             self.source.setText(_("Source: values given in the scene"))
+        own = material.uncertainty
+        self.uncertainty.setChecked(own is not None)
+        self.uncertainty.setEnabled(impedance is None)  # the impedance gives the absorption
+        _choose(self.uncertainty_kind, "normal" if own is None else own.distribution)
+        for col in range(len(OCTAVE_BANDS_HZ)):
+            item = QTableWidgetItem("" if own is None else number(own.absorption[col], ".3f"))
+            item.setToolTip(_(_UNCERTAINTY_TIP))
+            self.uncertainty_table.setItem(0, col, item)
+        self.uncertainty_source.setText("" if own is None else own.source or "")
+        self.uncertainty_source.setCursorPosition(0)  # a long one shows from its start
+        self.uncertainty_note.setVisible(own is None)
+        self.uncertainty_note.setText("" if own is not None else self._without_uncertainty())
         area = self.document.room.area_by_material().get(self.key, 0.0)
         self.usage.setText(fmt(_("Covers {area:,.1f} m² of the room."), area=area))
 
@@ -2856,6 +2962,114 @@ class MaterialPage(Page):
         fields = {**self._fields(), "audience": checked}
         self.run(lambda: self.document.set_material(self.key, fields))
 
+    def _fit_uncertainty_table(self) -> None:
+        """Make the uncertainty table as tall as its header and its row, and as the
+        scroll bar under them where the page is too narrow for the eight bands."""
+        table = self.uncertainty_table
+        bar = table.horizontalScrollBar()
+        height = table.horizontalHeader().sizeHint().height() + table.rowHeight(0)
+        height += bar.sizeHint().height() if bar.maximum() > 0 else 0
+        table.setFixedHeight(height + 2 * table.frameWidth())
+
+    def _without_uncertainty(self) -> str:
+        """What a run's spread takes for the material, which gives no uncertainty."""
+        scene = self.document.scene
+        material = scene.materials[self.key]
+        if material.impedance is not None:
+            return _(
+                "The ground's impedance gives the absorption, and the spread of the results "
+                "takes it as exact."
+            )
+        if not material.builtin:
+            return _(
+                "The material gives none, so the spread of the results takes its "
+                "absorption as exact."
+            )
+        choice = dict(PRESET_UNCERTAINTIES)[scene.simulation.uncertainty.presets]
+        # Translators: {choice} is what the simulation page's Built-in materials list
+        # shows: plus or minus 0.1, twice ISO 12999-2 or none.
+        return _(
+            "The material gives none of its own, so the spread of the results takes the "
+            "simulation page's choice for built-in materials: {choice}."
+        ).format(choice=_(choice))
+
+    def _iso_12999_2(self) -> dict:
+        """ISO 12999-2's reproducibility of the material's absorption, as an uncertainty
+        the scene file writes."""
+        absorption = self.document.scene.materials[self.key].coefficients("octave")[0]
+        return {
+            "absorption": [round(float(v), 3) for v in octave_reproducibility(absorption)],
+            "distribution": "normal",
+            "source": ISO_12999_2_SOURCE,
+        }
+
+    def _take_iso_12999_2(self) -> None:
+        self._set_uncertainty(self._iso_12999_2())
+
+    def _set_uncertainty(self, uncertainty: dict | None) -> None:
+        """Give the material ``uncertainty``, written as its own is dumped (None: none of
+        its own). One it has already writes nothing."""
+        if self._loading:
+            return
+        fields = self._fields()
+        if fields.pop("uncertainty", None) == uncertainty:
+            return
+        if uncertainty is not None:
+            fields["uncertainty"] = uncertainty
+        self.run(lambda: self.document.set_material(self.key, fields))
+
+    def _uncertainty_toggled(self, checked: bool) -> None:
+        if self._loading:
+            return
+        if not checked:
+            self._set_uncertainty(None)
+            return
+        # What a run takes for it now (a built-in material's default), so that the
+        # results stay; else ISO 12999-2's.
+        taken = uncertainty_of(self.document.scene, self.key)
+        if taken is None:
+            self._set_uncertainty(self._iso_12999_2())
+        else:
+            self._set_uncertainty(taken.model_dump(mode="json", exclude_none=True))
+
+    def _uncertainty_kind_chosen(self) -> None:
+        own = self._fields().get("uncertainty")
+        if own is not None:
+            self._set_uncertainty({**own, "distribution": self.uncertainty_kind.currentData()})
+
+    def _uncertainty_source_typed(self) -> None:
+        own = self._fields().get("uncertainty")
+        if own is None:
+            return
+        source = self.uncertainty_source.text().strip()
+        own.pop("source", None)
+        self._set_uncertainty({**own, "source": source} if source else own)
+
+    def _uncertainty_typed(self) -> None:
+        if self._loading:
+            return
+        own = self._fields().get("uncertainty")
+        if own is None:
+            return
+        columns = range(self.uncertainty_table.columnCount())
+        try:
+            typed = [parse_number(self.uncertainty_table.item(0, c).text()) for c in columns]
+            if not all(0.0 <= value <= 1.0 for value in typed):
+                raise ValueError
+        except (AttributeError, ValueError):
+            self.failed.emit(_("an absorption uncertainty is a number from 0 to 1"))
+            self.reload()
+            return
+        # A band left as shown keeps its value, with the decimals the table leaves out.
+        values = [
+            was if value == round(was, 3) else value
+            for was, value in zip(own["absorption"], typed, strict=True)
+        ]
+        if values == own["absorption"]:
+            self.reload()  # the same value typed another way (0.05) shows as the rest
+        else:
+            self._set_uncertainty({**own, "absorption": values})
+
     def _passing(self, kind: int) -> None:
         material = self.document.scene.materials[self.key]
         if kind == self._kind(material.transmission_coefficients()):
@@ -2885,6 +3099,8 @@ class MaterialPage(Page):
             fields = {"impedance": self._impedance(), "scattering": rows[1]}
             if material.audience:
                 fields["audience"] = True
+            if material.uncertainty is not None:
+                fields["uncertainty"] = self._fields()["uncertainty"]
             self.run(lambda: self.document.set_material(self.key, fields))
             return
         passing = material.transmission_coefficients(bands)
@@ -2915,7 +3131,8 @@ class MaterialPage(Page):
         else:
             # Scene-file text, in English as the scene file is.
             origin = fields.get("source") or "values given in the scene"
-            kept = {k: fields[k] for k in _KEPT if k in fields}
+            # The uncertainty too: it is of this material's absorption, typed anew.
+            kept = {k: fields[k] for k in (*_KEPT, "uncertainty") if k in fields}
             fields = {
                 "absorption": rows[0],
                 "scattering": rows[1],

@@ -245,7 +245,8 @@ by having the same name as a material, or through `default_material`. Names matc
 whatever their case (`brick_rough` names SketchUp's `Brick_Rough`), though a name
 written the same way wins over one in another case.
 
-`uncertainty` says how far a material's absorption may be off: a standard uncertainty
+`uncertainty` (**Absorption uncertainty** on the material's form in the editor) says
+how far a material's absorption may be off: a standard uncertainty
 (`distribution: normal`, the default) or a tolerance of plus or minus the value
 (`distribution: uniform`), in absorption coefficient units, one value or one per octave
 band, with an optional `source`. A material's bands are taken as moving together, and
