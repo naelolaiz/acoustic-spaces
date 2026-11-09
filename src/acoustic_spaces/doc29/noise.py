@@ -263,15 +263,26 @@ def segment_levels(
     level = baseline + duration + installation - attenuation + fraction + sor + impedance
 
     # The maximum level (section 4.5.5): the NPD curve at the distance to the segment's
-    # nearest point. Alongside the segment the elevation angle, the lateral displacement
-    # and so the depression angle are the equivalent level path's, as for the exposure
-    # (figure 4-6); behind or ahead of it, the elevation of and the ground distance to
-    # the nearest end (figure 4-7).
+    # nearest point. The lateral attenuation takes, alongside the segment, the
+    # equivalent level path's elevation angle and lateral displacement, as the exposure
+    # does (figure 4-6); behind or ahead of it, the elevation of and the ground distance
+    # to the nearest end (figure 4-7). The installation correction of an airborne
+    # segment takes the exposure's depression angle wherever the receiver is: "the
+    # depression angle is determined at the closest point of approach" of the extended
+    # path (Directive (EU) 2015/996 annex 2.7.19). A ground roll's keeps the nearest
+    # end's elevation: its source, LOWEST_SOURCE_M up, puts that closest point 90
+    # degrees up on the extended runway centreline only.
     beta_max = np.where(alongside, beta_p, np.where(behind, beta1, beta2))
     ell_max = np.where(alongside, lateral, np.where(behind, ell1, ell2))
+    if segment.roll:
+        peak_installation = installation_db(
+            aircraft.installation, beta_max + np.where(starboard, bank, -bank)
+        )
+    else:
+        peak_installation = installation
     peak = (
         maximum.level(power, np.maximum(nearest, NEAREST_NPD_M))
-        + installation_db(aircraft.installation, beta_max + np.where(starboard, bank, -bank))
+        + peak_installation
         - lateral_attenuation_db(beta_max, ell_max)
         + sor
         + impedance

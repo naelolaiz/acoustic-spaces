@@ -71,6 +71,15 @@
   the memory estimate counts what is kept.
 - Changed: the tests write every thread's stack to the log when one has run for 20
   minutes (pytest's `faulthandler_timeout`), to show where a hung job stands.
+- Fixed: Doc 29's L_Amax ahead of or behind an airborne segment takes the installation
+  correction at the extended path's closest point of approach, as the SEL does, not at
+  the segment end's elevation: on Volume 3's departures up to 1.0 dB higher beside the
+  track past the cutbacks and up to 0.40 dB lower under it; the airport example's
+  listeners do not change.
+- Fixed: the Doc 29 table readers match a column by its whole number, so an NPD table
+  whose distances run from 25000 ft down to 200 ft is no longer read with its 2000 to
+  10000 ft levels as the 200 to 1000 ft ones (16 to 30 dB low); a table without one of
+  the distances, or with two columns matching one name, is refused.
 
 ## 4.2.1
 

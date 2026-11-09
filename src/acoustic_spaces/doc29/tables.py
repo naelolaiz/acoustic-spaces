@@ -60,18 +60,35 @@ def read_rows(path: str | Path) -> list[dict[str, str]]:
     ]
 
 
+def _starts(key: str, want: str) -> bool:
+    """Whether the column key ``key`` starts with the wanted key ``want`` and does not
+    go on with more digits of a number ``want`` ends in ("l200" starts "l200ft", not
+    "l2000ft")."""
+    rest = key[len(want) :]
+    return key.startswith(want) and not (want[-1:].isdigit() and rest[:1].isdigit())
+
+
 def _column(names: Iterable[str], *wanted: str) -> str:
-    """The first of ``names`` whose name, its case and punctuation aside, is one of
-    ``wanted`` or else starts with one of them."""
+    """The column of ``names`` whose name, its case and punctuation aside, is one of
+    ``wanted`` (the first that one is), or else starts with one of them and does not
+    go on with more digits of a number it ends in: "L_200" names "L_200 (ft)" and
+    "L_200ft", not "L_2000 (ft)". A wanted name that two columns match alike is a
+    ValueError, none a KeyError."""
     names = list(names)
-    for want in wanted:
-        for name in names:
-            if _key(name) == _key(want):
-                return name
-    for want in wanted:
-        for name in names:
-            if _key(name).startswith(_key(want)):
-                return name
+    for whole in (True, False):
+        for want in wanted:
+            key = _key(want)
+            found = [
+                name for name in names if (_key(name) == key if whole else _starts(_key(name), key))
+            ]
+            if len(found) > 1:
+                listed = ", ".join(repr(name) for name in found[:-1])
+                raise ValueError(
+                    f"the columns {listed} and {found[-1]!r} each name {want!r}: "
+                    "which one is meant cannot be told"
+                )
+            if found:
+                return found[0]
     raise KeyError(f"no column {wanted[0]!r} among {names}")
 
 
