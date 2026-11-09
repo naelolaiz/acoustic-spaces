@@ -33,6 +33,14 @@
   longer announces a spread that no material on the surfaces gives.
 - Fixed: the errors over edges that the spread lists as not counted follow the settings
   of the run (`simulate --diffraction ...`), not those in the scene file.
+- Fixed: the spread drew an absorption uncertainty given beside a ground's impedance as
+  if that ground reflected 1 - absorption, which its impedance decides. It is now left
+  out, with a warning, and a draw no longer goes below what a material lets through.
+- Fixed: a response's spread no longer depends on the other responses of the run, whose
+  number moved its mean, uncertainty and interval within the draws' noise; in a run of
+  several responses, all but the first change by that much.
+- Fixed: a material copied with other absorption (`calibration.with_absorption`) no
+  longer counts as built-in, which gave it the built-in materials' default uncertainty.
 
 ## 4.2.1
 

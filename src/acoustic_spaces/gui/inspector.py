@@ -4236,8 +4236,8 @@ class SimulationPage(Page):
                 "the results after each run, where the material gives no uncertainty of its "
                 "own: the database does not say where its values come from. Plus or minus "
                 "0.1 in every band; twice the reproducibility ISO 12999-2 gives for a "
-                "measurement to ISO 354, larger at low frequencies and for high absorption; "
-                "or none, no spread from them"
+                "measurement to ISO 354, which for an absorber is largest at low "
+                "frequencies; or none, no spread from them"
             )
         )
         uncertainty_form.addRow(_("Built-in materials"), self.preset_uncertainty)

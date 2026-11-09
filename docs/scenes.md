@@ -280,9 +280,11 @@ none. The standard's data come from absorbers, and below 100 Hz from outside ISO
 range, so for hard surfaces and the 63 Hz octave it is taken beyond them.
 Plus or minus 0.1 is much for a hard surface: the shoebox example's painted concrete, 0.01 to 0.02, is drawn
 anywhere from 0 to 0.12, so that example's traced T30 at 1 kHz, 1.28 s, lies near the
-top of its 95 % interval, 0.74 to 1.49 s. ISO 12999-2's reproducibility is largest at
-low frequencies (for alpha = 1, 0.41 at 63 Hz, 0.20 at 125 Hz and 0.040 at 1 kHz), so
-twice it spreads the lowest bands far.
+top of its 95 % interval, 0.74 to 1.49 s. For an absorber ISO 12999-2's reproducibility
+is largest at low frequencies (for alpha = 1, 0.41 at 63 Hz, 0.20 at 125 Hz and 0.040 at
+1 kHz), so twice it spreads the lowest bands far. From 500 Hz to 4 kHz it is the same
+for every absorption (0.040, and 0.050 at 4 kHz), and a hard surface gets the least in
+the lowest bands (for alpha = 0.02, 0.023 at 63 Hz and 0.019 at 125 Hz).
 The spread names the materials that took the default (`assumed`).
 
 `acoustic_spaces.engine.uncertainty.material_spread` gives the uncertainty this leads to
@@ -295,7 +297,12 @@ the materials' face groups (`acoustic_spaces.engine.reweight.groups_of`, then
 part, without the wave solver and with at most 16 materials on its surfaces. A band in
 which a material absorbs everything (an absorption of 1, as some absorbers have in some
 bands) is not drawn, as no energy is left in it to re-weight; the spread names these
-(`held`). To each draw it adds the rays' random error: the
+(`held`). A draw does not go below what the material lets through, which counts as
+absorbed. An absorption uncertainty beside a ground's impedance is left out, with a
+warning: the impedance gives the ground's reflection, which does not follow the
+absorption as other surfaces' do. On a ground with zones, a reflection near a zone's
+edge mixes the grounds on both sides, and a draw takes it as off the ground it meets
+alone. To each draw it adds the rays' random error: the
 standard error of the late rays' batches (`simulation.late.batches`, 4 or more) times a
 deviate of Student's t with one degree of freedom fewer than the batches, as GUM
 Supplement 1 takes a quantity known from that many observations. The budget gives each
@@ -314,8 +321,9 @@ measured for whole levels in a few geometries, not for each path.
 In the lowest bands, where the early paths add in pressure, a reflection's phase
 follows its face's admittance, which is fitted to the absorption; the draws take it
 between fits at nine absorptions of each material over their range rather than a fit
-of their own: in the shoebox example within 0.15 dB of a fit for each draw at 63 Hz,
-where a fit itself moves by up to 0.19 dB for a change of 0.001.
+of their own: in the shoebox example G within 0.17 dB and C80 within 0.20 dB of a fit
+for each draw at 63 Hz, where a fit of its own moves them by as much for a change of
+0.001 in the absorption (0.18 and 0.23 dB in one of the draws furthest off).
 `acoustic-spaces simulate` does this itself when a material on the surfaces has an
 uncertainty, its own or a built-in material's: it prints the largest combined standard
 uncertainty in JNDs from 125 Hz to 4 kHz, with its budget, 95 % interval, one-sided

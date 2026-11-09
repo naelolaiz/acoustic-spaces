@@ -48,7 +48,11 @@ Not counted: the scattering's uncertainty, nor the method's (docs/validation.md)
 the rays' error with fewer than ``MIN_BATCHES`` batches (Student's t has no variance
 then) or in the parameters it is not found for (those from the late sound's directions).
 Nor a band in which a material absorbs everything: no energy is left there to
-re-weight, so that band is not drawn, and the spread names it (:func:`held`).
+re-weight, so that band is not drawn, and the spread names it (:func:`held`). Nor an
+absorption uncertainty given beside a ground's impedance (:func:`grounds_left_out`):
+the impedance gives that ground's reflection, which re-weighting by 1 - a does not
+follow. A draw stays at or above what its material lets through, which is absorbed
+whatever the rest of the surface does.
 Of the method's errors, those of the paths over edges are listed where a response has
 such paths (:data:`EDGE_ERRORS_DB`), each with the largest difference of the early level
 from the exact solution that the validation finds in each band, but not drawn: they are
@@ -286,8 +290,11 @@ def octave_reproducibility(absorption) -> np.ndarray:
 def uncertainty_of(scene, name: str) -> AbsorptionUncertainty | None:
     """The uncertainty of material ``name``'s absorption that a spread takes: its own;
     for a built-in one of unknown source without one, the scene's
-    ``simulation.uncertainty.presets``; else None."""
+    ``simulation.uncertainty.presets``; else None. None for a ground with an impedance
+    too (:func:`grounds_left_out`)."""
     material = scene.materials[name]
+    if material.impedance is not None:
+        return None
     if material.uncertainty is not None or not material.builtin:
         return material.uncertainty
     choice = scene.simulation.uncertainty.presets
@@ -330,6 +337,19 @@ def held(scene, materials: Sequence[str]) -> dict[str, list[int]]:
     return out
 
 
+def grounds_left_out(room) -> list[str]:
+    """The materials on ``room``'s surfaces that give an absorption uncertainty beside
+    a ground impedance. A spread leaves them out: the impedance gives the ground's
+    reflection, which does not change with the absorption as 1 - a, the factor that
+    re-weighting applies."""
+    materials = room.scene.materials
+    return [
+        name
+        for name in reweighted_materials(room)
+        if materials[name].impedance is not None and materials[name].uncertainty is not None
+    ]
+
+
 def has_uncertainty(scene, materials: Sequence[str] | None = None) -> bool:
     """Whether some material of ``materials`` (default all of ``scene``'s) has an
     absorption uncertainty a spread takes (:func:`uncertainty_of`)."""
@@ -360,9 +380,20 @@ def absorption_draws(scene, materials: Sequence[str], draws: int, seed: int) -> 
     material's own, plus its uncertainty times one deviate per draw that its bands share
     (standard normal, or uniform on -1 to 1 for a tolerance); those without an
     uncertainty (:func:`uncertainty_of`) keep their own. Held to 0 to
-    ``MAX_ABSORPTION``, or to the material's own absorption where that is more; a band
-    that absorbs everything is not drawn (:func:`held`)."""
+    ``MAX_ABSORPTION``, or to the material's own absorption where that is more, and from
+    below to what the material lets through, which counts as absorbed; a band that
+    absorbs everything is not drawn (:func:`held`)."""
     return _draws(scene, materials, draws, seed)[0]
+
+
+def _limits(material, own: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The least and the most absorption per band that a draw of ``material`` takes,
+    ``own`` its absorption: from what it lets through, which is absorbed whatever the
+    rest of the surface does (0 for a surface that lets nothing through), to
+    ``MAX_ABSORPTION``, or to ``own`` where that is more."""
+    passing = material.transmission_coefficients("octave")
+    bottom = np.zeros(own.size) if passing is None else np.minimum(passing, own)
+    return bottom, np.maximum(own, MAX_ABSORPTION)
 
 
 def _draws(scene, materials, draws, seed):
@@ -386,8 +417,7 @@ def _draws(scene, materials, draws, seed):
             deviate = rng.uniform(-1.0, 1.0, draws)
         else:
             deviate = rng.standard_normal(draws)
-        top = np.maximum(own, MAX_ABSORPTION)
-        out.append(np.clip(own + deviate[:, None] * width, 0.0, top))
+        out.append(np.clip(own + deviate[:, None] * width, *_limits(scene.materials[name], own)))
         deviates.append(deviate)
         widths.append(width)
     return np.stack(out, axis=1), np.stack(deviates, axis=1), np.stack(widths)
@@ -402,10 +432,11 @@ class _Admittances:
     draw. The nodes are ``ADMITTANCE_NODES`` over the range of the draws given at once
     (:meth:`over`), or, for draws that come batch by batch, every ``steps`` (one per
     material) from 0 (:meth:`along`), so that a later batch moves no earlier draw's.
-    Other rows (as traced) are fitted as the trace fits them."""
+    ``limits`` holds each material's draws (:func:`_limits`), and so the nodes. Other
+    rows (as traced) are fitted as the trace fits them."""
 
-    def __init__(self, traced, widths) -> None:
-        self._traced, self._widths = traced, widths
+    def __init__(self, traced, widths, limits) -> None:
+        self._traced, self._widths, self._limits = traced, widths, limits
         self._fits: dict[tuple[int, float], object] = {}
         self._found: dict[bytes, tuple[int, float, float, float]] = {}
 
@@ -446,7 +477,7 @@ class _Admittances:
         from acoustic_spaces.engine.impedance import fit_admittance
 
         if (k, node) not in self._fits:
-            row = np.clip(self._traced[k] + node * self._widths[k], 0.0, MAX_ABSORPTION)
+            row = np.clip(self._traced[k] + node * self._widths[k], *self._limits[k])
             self._fits[k, node] = fit_admittance(row, self._traced.shape[1])
         return self._fits[k, node]
 
@@ -648,6 +679,7 @@ def material_spread(
         ADMITTANCE_STEPS[getattr(uncertainty_of(scene, n), "distribution", "normal")]
         for n in materials
     ]
+    limits = [_limits(scene.materials[n], own) for n, own in zip(materials, traced, strict=True)]
     stable: bool | None = None
     taken_so_far = 0
     while True:
@@ -656,16 +688,16 @@ def material_spread(
             # Each batch from streams of its own, so that the first ones are the same
             # however many follow.
             taken, deviates, widths = _draws(scene, materials, ADAPTIVE_BATCH, [seed, 2, batch])
-            rng = np.random.default_rng([seed, 3, batch])
+            stream = [seed, 3, batch]
             if admittance_of is None:
-                admittance_of = _Admittances(traced, widths)
+                admittance_of = _Admittances(traced, widths, limits)
             admittance_of.along(taken, deviates, steps)
         else:
             taken, deviates, widths = _draws(scene, materials, draws, seed)
             # The rays' deviates from a stream of their own, so that the absorption's
             # draws stay those of ``seed``.
-            rng = np.random.default_rng([seed, 1])
-            admittance_of = _Admittances(traced, widths)
+            stream = [seed, 1]
+            admittance_of = _Admittances(traced, widths, limits)
             admittance_of.over(taken, deviates)
         ratios = [log_ratio(traced, drawn) for drawn in taken]
         of = "" if adaptive else f" of {draws}"
@@ -682,7 +714,9 @@ def material_spread(
                         face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
                     ).parameters()
                 )
-            tallies[key].add(found, rng)
+            # Each response from the start of the stream: its spread is the same
+            # whichever other responses the run has.
+            tallies[key].add(found, np.random.default_rng(stream))
         taken_so_far += len(taken)
         if not adaptive:
             break
@@ -772,6 +806,7 @@ __all__ = [
     "Spread",
     "absorption_draws",
     "edge_errors",
+    "grounds_left_out",
     "held",
     "material_spread",
     "numerical_tolerance",

@@ -19,10 +19,12 @@ from acoustic_spaces.engine.uncertainty import (
     PRESET_TOLERANCE,
     _Admittances,
     _draws,
+    _limits,
     _Tally,
     absorption_draws,
     assumed,
     edge_errors,
+    grounds_left_out,
     held,
     material_spread,
     numerical_tolerance,
@@ -96,6 +98,14 @@ def test_a_built_in_material_of_unknown_source_takes_the_scene_s_default():
     dumped = Scene.model_validate(scene.model_dump(exclude_none=True))
     assert dumped.materials["walls"].builtin and not dumped.materials["floor"].builtin
     assert scene.model_copy(deep=True).materials["walls"].builtin
+    # By value: a copy with other absorption (a calibration's fitted scene) is not, as
+    # it is not once saved and read again.
+    from acoustic_spaces.calibration import with_absorption
+
+    fitted = with_absorption(scene, ["walls"], [[0.3] * 8])
+    assert not fitted.materials["walls"].builtin and uncertainty_of(fitted, "walls") is None
+    assert not Scene.model_validate(fitted.to_data()).materials["walls"].builtin
+    assert not walls.model_copy(update={"preset": None}).builtin
     # Twice ISO 12999-2's reproducibility, as a standard uncertainty.
     iso = _with_preset("iso_12999_2")
     spec = uncertainty_of(iso, "walls")
@@ -167,9 +177,10 @@ def test_the_phases_between_fits_turn_as_a_fit_for_each_draw_does():
     coherent = response.early.spectrum.shape[1]
     traced = np.array([scene.materials[n].coefficients("octave")[0] for n in materials])
     taken, deviates, widths = _draws(scene, materials, 40, 5)
-    between = _Admittances(traced, widths)
+    limits = [_limits(scene.materials[n], own) for n, own in zip(materials, traced, strict=True)]
+    between = _Admittances(traced, widths, limits)
     between.over(taken, deviates)
-    stepped = _Admittances(traced, widths)
+    stepped = _Admittances(traced, widths, limits)
     stepped.along(taken, deviates, [ADMITTANCE_STEPS["uniform"]] * len(materials))
     for drawn in taken[::8]:
         ratio = log_ratio(traced, drawn)
@@ -205,6 +216,51 @@ def test_draws_share_one_deviate_per_material_and_stay_in_range():
     )
     deviation = uniform[:, 0, 7] - WALLS[7]
     assert np.abs(deviation).max() <= 0.03 and abs(deviation.std() - 0.03 / np.sqrt(3.0)) < 0.002
+
+
+def test_materials_are_drawn_apart_and_not_below_what_they_let_through():
+    data = _box({"absorption": 0.05}).to_data()
+    data["materials"]["ceiling"]["uncertainty"] = {"absorption": 0.03}
+    # A door of 6 dB: a quarter of the sound passes, and counts as absorbed.
+    data["materials"]["floor"] = {
+        "absorption": [0.3] * 8,
+        "transmission_loss": 6.0,
+        "uncertainty": {"absorption": 0.1},
+    }
+    scene = Scene.model_validate(data)
+    taken = absorption_draws(scene, ["floor", "ceiling", "walls"], 4000, seed=1)
+    passing = scene.materials["floor"].transmission_coefficients("octave")
+    assert 0.25 < passing[0] < 0.26 and taken[:, 0].min() == passing[0]
+    assert np.mean(taken[:, 0, 0] == passing[0]) > 0.2  # 0.3 is half a u above it
+    # Each material from a deviate of its own.
+    ceiling, walls = taken[:, 1, 7] - 0.15, taken[:, 2, 7] - WALLS[7]
+    assert abs(np.corrcoef(ceiling, walls)[0, 1]) < 0.05
+    assert abs(ceiling.std() - 0.03) < 0.002 and abs(walls.std() - 0.05) < 0.003
+
+
+def test_a_ground_s_absorption_uncertainty_is_left_out(tmp_path, capsys):
+    """The impedance gives a ground's reflection, which re-weighting by 1 - a does not
+    follow: an absorption uncertainty beside it is left out, and said to be."""
+    import yaml
+
+    from acoustic_spaces.cli import main
+
+    data = _box({"absorption": 0.02}).to_data()
+    data["materials"]["floor"] = {"impedance": "grass", "uncertainty": {"absorption": 0.05}}
+    scene = Scene.model_validate(data)
+    room = Room.from_scene(scene)
+    assert scene.materials["floor"].uncertainty is not None
+    assert uncertainty_of(scene, "floor") is None and grounds_left_out(room) == ["floor"]
+    taken = absorption_draws(scene, ["floor", "walls"], 50, seed=1)
+    np.testing.assert_array_equal(taken[:, 0], np.broadcast_to(taken[0, 0], (50, 8)))
+    path = tmp_path / "scene.yaml"
+    path.write_text(yaml.safe_dump(data))
+    args = ["simulate", str(path), "--out", str(tmp_path / "out"), "--rays", "300"]
+    assert main([*args, "--spread-draws", "4"]) == 0
+    assert (
+        "warning: the absorption uncertainty of floor is left out of the spread: a ground's "
+        "impedance gives its reflection"
+    ) in capsys.readouterr().err
 
 
 def test_the_spread_of_the_parameters_follows_the_absorption_s():
@@ -454,6 +510,84 @@ def test_the_rays_error_adds_to_the_absorption_s_as_student_s_t():
     result = simulate(room, sources=["s"], groups=face_group)
     spread = material_spread(result, few, face_group, materials, draws=10)["s", "a"]
     assert spread.batches == 0 and np.all(np.isnan(spread.rays.t30))
+
+
+def test_the_rays_deviates_are_student_s_t_and_the_interval_the_draws_quantiles():
+    from acoustic_spaces.parameters import RoomParameters
+
+    names = [f.name for f in __import__("dataclasses").fields(RoomParameters)]
+    same = RoomParameters(**{name: np.full(8, 5.0) for name in names})
+    errors = RoomParameters(**{name: np.ones(8) for name in names})
+    tally = _Tally(errors, 10, 0.95, 0.95)
+    tally.add([same] * 20000, np.random.default_rng(4))
+    spread = tally.spread(None)
+    # Student's t of 9 degrees of freedom: wider than a normal deviate, whose standard
+    # deviation is 1 and whose 97.5 % point 1.96.
+    np.testing.assert_allclose(spread.standard.g, np.sqrt(9.0 / 7.0), rtol=0.03)
+    np.testing.assert_allclose(spread.high.g - 5.0, 2.262, rtol=0.04)
+    np.testing.assert_allclose(5.0 - spread.at_least.g, 1.833, rtol=0.04)
+    np.testing.assert_array_equal(spread.absorption.g, 0.0)
+
+    # Without the rays' error the interval's ends are the quantiles of the draws'
+    # parameters, of the coverage asked for.
+    scene = _box({"absorption": 0.02})
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    traced = np.array([scene.materials[m].coefficients("octave")[0] for m in materials])
+    drawn = absorption_draws(scene, materials, 40, seed=3)
+    g = np.array(
+        [
+            result["s", "a"]
+            .reweighted(face_group, log_ratio(traced, row), absorption=(traced, row))
+            .parameters()
+            .g
+            for row in drawn
+        ]
+    )
+    above = slice(2, 7)  # where the paths add in energy: no phases between fits
+    for coverage, tails in ((0.95, (0.025, 0.975)), (0.5, (0.25, 0.75))):
+        found = material_spread(
+            result, scene, face_group, materials, draws=40, seed=3, rays=False, coverage=coverage
+        )["s", "a"]
+        assert found.coverage == coverage
+        np.testing.assert_allclose(
+            found.low.g[above], np.quantile(g, tails[0], axis=0)[above], rtol=1e-9
+        )
+        np.testing.assert_allclose(
+            found.high.g[above], np.quantile(g, tails[1], axis=0)[above], rtol=1e-9
+        )
+    for bad in (0.0, 1.0):
+        with pytest.raises(ValueError, match="coverage"):
+            material_spread(result, scene, face_group, materials, draws=10, coverage=bad)
+
+    # Four batches are the fewest that count: Student's t of 3 degrees of freedom.
+    assert MIN_BATCHES == 4
+    four = scene.model_copy(deep=True)
+    four.simulation.late.batches = 4
+    result = simulate(Room.from_scene(four), sources=["s"], groups=face_group)
+    spread = material_spread(result, four, face_group, materials, draws=10)["s", "a"]
+    errors = result["s", "a"].standard_errors()
+    assert spread.batches == 4
+    np.testing.assert_allclose(spread.rays.g[1:7], errors.g[1:7] * np.sqrt(3.0), rtol=1e-12)
+
+
+def test_a_response_s_spread_does_not_depend_on_the_other_responses():
+    import dataclasses
+
+    data = _box({"absorption": 0.02}).to_data()
+    data["listeners"].append({"name": "b", "position": [3.3, 1.2, 1.6]})
+    scene = Scene.model_validate(data)
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    both = material_spread(result, scene, face_group, materials, draws=30, seed=3)
+    alone = dataclasses.replace(result, responses={("s", "b"): result["s", "b"]})
+    alone = material_spread(alone, scene, face_group, materials, draws=30, seed=3)
+    for part in ("mean", "standard", "low", "high", "at_least", "at_most"):
+        np.testing.assert_array_equal(
+            getattr(both["s", "b"], part).t30, getattr(alone["s", "b"], part).t30
+        )
 
 
 def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(

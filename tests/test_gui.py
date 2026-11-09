@@ -3530,8 +3530,9 @@ def test_the_absorption_uncertainty_s_spread_shows_in_the_tips(window, qapp) -> 
 
 def test_the_editor_says_what_the_spread_leaves_out(window, qapp) -> None:
     """A band in which a material with an uncertainty absorbs everything is not drawn,
-    which that band's tips say; and a run that cannot re-weight says that it has no
-    spread, as a warning when a material gives an uncertainty of its own."""
+    which that band's tips say; a run that cannot re-weight says that it has no spread,
+    as a warning when a material gives an uncertainty of its own; and so does a run
+    with an absorption uncertainty beside a ground's impedance, which it leaves out."""
     from acoustic_spaces.gui.results_view import ROWS
 
     _quick(window.document)
@@ -3574,6 +3575,26 @@ def test_the_editor_says_what_the_spread_leaves_out(window, qapp) -> None:
     _wait(qapp, lambda: window.job is None)
     found = [level for text, level, _links in window.message_panel.entries if said in text]
     assert found == ["info"]
+    # An absorption uncertainty beside a ground's impedance is left out, with a warning.
+    window.message_panel.clear_shown()
+
+    def ground(data: dict) -> None:
+        data["simulation"]["bands"] = "octave"
+        data["materials"]["plaster"] = {
+            "impedance": "grass",
+            "uncertainty": {"absorption": 0.05},
+        }
+
+    window.document.edit("ground", ground)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    said = (
+        "The absorption uncertainty of plaster is left out of the spread: a ground's "
+        "impedance gives its reflection"
+    )
+    found = [level for text, level, _links in window.message_panel.entries if said in text]
+    assert found == ["warning"]
+    assert "plaster" not in window.result.spreads[("source", "listener")].assumed
 
 
 def test_draws_until_stable_say_when_they_reach_their_limit(window, qapp, monkeypatch) -> None:

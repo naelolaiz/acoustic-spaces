@@ -7,6 +7,15 @@ absorption a', the same paths bring each arrival times the product over its refl
 of (1 - a') / (1 - a). The paths themselves need not be traced again: where a ray goes
 depends on the scattering, not on the absorption. (Russian roulette and splitting chose
 rays by their energies, but those choices only weight the estimate; it stays unbiased.)
+An early reflection off a ground with an impedance is not of this kind: it takes the
+impedance's reflection factor in place of 1 - a, and that impedance cannot change
+without tracing again (:func:`reweighted_result`). Nor quite one off a ground with
+zones, which takes the factors of the grounds its Fresnel zone covers and is
+re-weighted as off the ground it meets alone. With source and listener 0.5 and 1.5 m
+high and 30 m apart, and a zone without an impedance taken from an absorption of 0.1 to
+0.2, a reflection half a metre inside the zone's edge falls by 0.5 dB re-weighted and
+by 0.13 to 0.20 dB traced again; half a metre outside it, by none and by 0.11 to
+0.16 dB.
 
 Early paths carry the faces they reflect off, so their energies re-weight exactly. Where
 they add in pressure (:mod:`~acoustic_spaces.engine.coherent`), a reflection also

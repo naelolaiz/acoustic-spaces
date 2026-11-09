@@ -1321,8 +1321,15 @@ def _spread_groups(room, settings):
     materials' absorption uncertainty (their own, or a built-in material's default), or
     None: no material on its surfaces has one, or ``settings`` cannot re-weight, which
     is said (as a warning when some material gives an uncertainty of its own)."""
-    from acoustic_spaces.engine.uncertainty import spread_groups
+    from acoustic_spaces.engine.uncertainty import grounds_left_out, spread_groups
 
+    grounds = grounds_left_out(room)
+    if grounds:
+        print(
+            f"warning: the absorption uncertainty of {', '.join(grounds)} is left out of "
+            "the spread: a ground's impedance gives its reflection",
+            file=sys.stderr,
+        )
     groups, why, own = spread_groups(room, settings)
     if why is not None:
         print(

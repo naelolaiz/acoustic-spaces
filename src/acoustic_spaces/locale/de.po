@@ -1483,6 +1483,16 @@ msgstr[1] ""
 msgid "{title}: {reason}"
 msgstr "{title}: {reason}"
 
+#. Translators: {names} are materials' names.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The absorption uncertainty of {names} is left out of the spread: a ground's "
+"impedance gives its reflection"
+msgstr ""
+"Die Unsicherheit der Absorption von {names} bleibt aus der Streuung heraus: "
+"Die Impedanz des Bodens bestimmt seine Reflexion"
+
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid ""
@@ -5709,15 +5719,15 @@ msgid ""
 "the results after each run, where the material gives no uncertainty of its "
 "own: the database does not say where its values come from. Plus or minus 0.1 "
 "in every band; twice the reproducibility ISO 12999-2 gives for a measurement "
-"to ISO 354, larger at low frequencies and for high absorption; or none, no "
+"to ISO 354, which for an absorber is largest at low frequencies; or none, no "
 "spread from them"
 msgstr ""
 "Wie weit die Absorption eines integrierten Materials abweichen kann, für die "
 "Streuung der Ergebnisse nach jeder Berechnung, wo das Material keine eigene "
 "Unsicherheit angibt: Die Datenbank nennt nicht, woher ihre Werte stammen. "
 "Plus oder minus 0,1 in jedem Band; die doppelte Vergleichbarkeit, die ISO "
-"12999-2 für eine Messung nach ISO 354 angibt, größer bei tiefen Frequenzen "
-"und hoher Absorption; oder keine, ohne Streuung durch sie"
+"12999-2 für eine Messung nach ISO 354 angibt, die bei einem Absorber bei "
+"tiefen Frequenzen am größten ist; oder keine, ohne Streuung durch sie"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Built-in materials"
