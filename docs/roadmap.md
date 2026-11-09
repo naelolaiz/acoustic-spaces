@@ -145,9 +145,13 @@ Parameters:
   t from the batches' standard error), a combined standard uncertainty and its budget.
 - [x] Error estimates: default uncertainties for the built-in materials, whose source
   the database does not name (plus or minus 0.1, or twice ISO 12999-2's reproducibility).
-- [ ] Error estimates, next steps: the uncertainty on the editor's material page; the number of draws chosen as GUM Supplement 1's adaptive procedure does;
-  the scattering's uncertainty; levels, STI and maps; convergence checks; the method's
-  own error from the validation.
+- [x] Error estimates: the number of draws chosen as the adaptive procedure of GUM
+  Supplement 1 does (JCGM 101:2008, 7.9), or given.
+- [x] Error estimates: each result's one-sided bounds, for a limit on one side, of 95 %
+  or another probability.
+- [x] Error estimates: a material's absorption uncertainty on its page in the editor.
+- [ ] Error estimates, next steps: the scattering's uncertainty; levels, STI and maps;
+  convergence checks; the method's own error from the validation.
 
 Outdoor acoustics, in steps:
 

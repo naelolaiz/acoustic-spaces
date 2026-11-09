@@ -4,6 +4,53 @@
 
 - Fixed: the editor's Run demo… asks to save a scene that has no file or has changes,
   so the window lists its sources to pick WAV files for instead of an empty table.
+- Added: the spread's draws can go on until every result is stable to the first digit of
+  its standard uncertainty, as the adaptive procedure of GUM Supplement 1 has them
+  (JCGM 101:2008, 7.9): `simulation.uncertainty.draws: adaptive`, `--spread-draws
+  adaptive` or **Draws** in the editor's simulation settings, which also take a number
+  (400 as before) or none. `parameters.json` says whether the results were stable.
+- Added: the spread gives each result's one-sided bounds, for a limit on one side: the
+  value it is at least and the one it is at most with a probability of 95 % (`at_least`,
+  `at_most` in `parameters.json`, in `simulate`'s output and in the editor's tips).
+  `simulation.uncertainty.one_sided`, `--one-sided` or **One-sided bounds** in the
+  editor's simulation settings give another probability, 90 % say.
+- Added: a material's page in the editor sets its absorption uncertainty
+  (**Absorption uncertainty**: a standard uncertainty or a tolerance per octave band and
+  its source, or ISO 12999-2's reproducibility at a click), which only the scene file
+  did. Typing a material's coefficients there no longer drops an uncertainty the scene
+  file gave it.
+- Fixed: typing one coefficient on a material's page in the editor changes that cell
+  only. A scattering value no longer takes the material off its database entry or file
+  (which cost a built-in material the uncertainty a run takes for it), the other bands
+  keep the decimals the table does not show, and a material given by its sound
+  reduction alone takes a scattering value.
+- Fixed: a material that absorbs everything in some band (five built-in ones do) was
+  left out of the spread in every band, without a word. Its other bands are now drawn,
+  and the spread names the bands it holds (`held` in `parameters.json`, the output and
+  the editor's tips).
+- Fixed: a run that cannot have a spread says what the spread needs (the editor too,
+  which said nothing), at most 16 materials on the surfaces among it, and `simulate` no
+  longer announces a spread that no material on the surfaces gives.
+- Fixed: the errors over edges that the spread lists as not counted follow the settings
+  of the run (`simulate --diffraction ...`), not those in the scene file.
+- Fixed: the spread drew an absorption uncertainty given beside a ground's impedance as
+  if that ground reflected 1 - absorption, which its impedance decides. It is now left
+  out, with a warning, and a draw no longer goes below what a material lets through.
+- Fixed: a response's spread no longer depends on the other responses of the run, whose
+  number moved its mean, uncertainty and interval within the draws' noise; in a run of
+  several responses, all but the first change by that much.
+- Fixed: a material copied with other absorption (`calibration.with_absorption`) no
+  longer counts as built-in, which gave it the built-in materials' default uncertainty.
+- Changed: the spread's combined standard uncertainty is the root of the sum of the
+  squares of its budget (`absorption`, `rays`), where the standard deviation of draws
+  that held the rays' deviates was unsteady with 4 or 5 batches, and its mean is that
+  of the absorption's draws. Both move within the draws' noise.
+- Fixed: an end of the spread's interval or a one-sided bound no longer passes what the
+  parameter can be (a T30 from -0.18 s, a D50 up to 1.0003): it is held at that limit.
+- Fixed: on a material's page in the editor, ticking **Absorption uncertainty** no
+  longer rewrites a scattering entry given by name as numbers, the Source field keeps
+  its caret after Enter, an opening takes no uncertainty, and a source reads "edited
+  from ..." once the kind or a value of the uncertainty it names is changed.
 
 ## 4.2.1
 

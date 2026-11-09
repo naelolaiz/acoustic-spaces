@@ -267,8 +267,9 @@ class Response:
         ln((1 - new) / (1 - old)) per group and band (:func:`~acoustic_spaces.engine.
         reweight.log_ratio`), and ``absorption`` each group's absorption (groups, bands)
         as traced and as ``ratio`` changes it, (old, new). The early paths re-weight
-        exactly, the late part from its moments, which the response needs
-        (``simulate(groups=...)``). Where the early paths add in pressure
+        exactly (but for reflections off a ground with an impedance or with zones, whose
+        factor is not 1 - absorption: see the module), the late part from its moments,
+        which the response needs (``simulate(groups=...)``). Where the early paths add in pressure
         (:mod:`~acoustic_spaces.engine.coherent`), the phase of their reflections
         depends on the absorption too, and turns with it
         (:func:`~acoustic_spaces.engine.reweight.turned_paths`, with

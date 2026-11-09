@@ -1476,6 +1476,27 @@ msgstr[1] ""
 msgid "{title}: {reason}"
 msgstr "{title}: {reason}"
 
+#. Translators: {names} are materials' names.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The absorption uncertainty of {names} is left out of the spread: a ground's "
+"impedance gives its reflection"
+msgstr ""
+"La incertidumbre de absorción de {names} queda fuera de la dispersión: la "
+"impedancia del suelo da su reflexión"
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"No spread from the materials' absorption uncertainty: it needs octave bands, "
+"stochastic ray tracing for the late part, no wave solver and at most {count} "
+"materials on the surfaces"
+msgstr ""
+"Sin dispersión por la incertidumbre de absorción de los materiales: requiere "
+"bandas de octava, trazado de rayos estocástico para la parte tardía, sin "
+"método ondulatorio y como máximo {count} materiales en las superficies"
+
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid "Simulating {scene}…"
@@ -2520,6 +2541,7 @@ msgstr "trazado de rayos"
 msgid "image_sources"
 msgstr "fuentes imagen"
 
+#. Translators: no draws at all, so no spread of the results.
 #: acoustic_spaces/gui/inspector.py
 msgid "none"
 msgstr "ninguno"
@@ -4328,6 +4350,26 @@ msgid "extended: changes with the angle"
 msgstr "extendida: cambia con el ángulo"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "standard uncertainty"
+msgstr "incertidumbre típica"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "tolerance (plus or minus)"
+msgstr "tolerancia (más o menos)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How far the absorption may be off in each octave band, in units of the "
+"absorption coefficient (0.05 is plus or minus 0.05, not 5 per cent), from 0 "
+"to 1. A material's bands are taken as moving together: measured high in one, "
+"it is high in all"
+msgstr ""
+"Cuánto puede desviarse la absorción en cada banda de octava, en unidades del "
+"coeficiente de absorción (0,05 es más o menos 0,05, no un 5 por ciento), de "
+"0 a 1. Se considera que las bandas de un material se mueven juntas: medido "
+"alto en una, es alto en todas"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The material's name; renaming it renames it in the assignments and the "
 "default material too"
@@ -4491,6 +4533,79 @@ msgid "Where the coefficients come from"
 msgstr "De dónde proceden los coeficientes"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "Absorption uncertainty"
+msgstr "Incertidumbre de absorción"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How far the material's absorption may be off, for the spread of the results "
+"after each run. Ticked, the material gives the uncertainty below; ticking it "
+"starts from what a run takes for the material now, else from ISO 12999-2's "
+"reproducibility. Unticked, it gives none of its own"
+msgstr ""
+"Cuánto puede desviarse la absorción del material, para la dispersión de los "
+"resultados tras cada cálculo. Marcado, el material da la incertidumbre de "
+"abajo; al marcarlo se parte de la que un cálculo toma ahora para el material "
+"o, si no toma ninguna, de la reproducibilidad de ISO 12999-2. Sin marcar, no "
+"da ninguna propia"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"What the values below are: a standard uncertainty, one standard deviation of "
+"a normal distribution; or a tolerance of plus or minus the value, every "
+"absorption within it equally likely, whose standard uncertainty is the value "
+"divided by the square root of 3 (GUM 4.3.7)"
+msgstr ""
+"Qué son los valores de abajo: una incertidumbre típica, una desviación "
+"típica de una distribución normal; o una tolerancia de más o menos el valor, "
+"con toda absorción dentro de ella igual de probable, cuya incertidumbre "
+"típica es el valor dividido por la raíz cuadrada de 3 (GUM 4.3.7)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Kind"
+msgstr "Tipo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Where the uncertainty comes from, such as a test report or a standard; left "
+"empty, the scene file names none. Changing the kind or a value marks it as "
+"edited"
+msgstr ""
+"De dónde procede la incertidumbre, por ejemplo un informe de ensayo o una "
+"norma; vacío, el archivo de escena no indica ninguna procedencia. Al cambiar "
+"el tipo o un valor, se marca como editada"
+
+#. Translators: where an uncertainty comes from (a test report, a standard), not a source of sound.
+#: acoustic_spaces/gui/inspector.py
+msgctxt "where values come from"
+msgid "Source"
+msgstr "Procedencia"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Take ISO 12999-2's"
+msgstr "Tomar la de ISO 12999-2"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"For absorption measured in a reverberation room to ISO 354: takes, as a "
+"standard uncertainty, the reproducibility standard deviation that ISO "
+"12999-2:2020 gives for each band's absorption. The standard's data come from "
+"absorbers and, below 100 Hz, from outside ISO 354's range"
+msgstr ""
+"Para absorción medida en cámara reverberante según ISO 354: toma, como "
+"incertidumbre típica, la desviación típica de reproducibilidad que ISO "
+"12999-2:2020 da para la absorción de cada banda. Los datos de la norma "
+"proceden de absorbentes y, por debajo de 100 Hz, de fuera del intervalo de "
+"ISO 354"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"What the spread of the results takes for a material that gives no uncertainty"
+msgstr ""
+"Lo que la dispersión de los resultados toma para un material que no da "
+"incertidumbre"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "How much of the room's surface has this material"
 msgstr "Qué parte de la superficie del recinto tiene este material"
 
@@ -4523,6 +4638,45 @@ msgstr "Procedencia: valores indicados en la escena"
 #, python-brace-format
 msgid "Covers {area:,.1f} m² of the room."
 msgstr "Cubre {area:,.1f} m² del recinto."
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"An opening lets all the sound through, so its absorption is 1 and exact: the "
+"spread of the results takes no uncertainty for it."
+msgstr ""
+"Una abertura deja pasar todo el sonido, así que su absorción es 1 y exacta: "
+"la dispersión de los resultados no toma ninguna incertidumbre para ella."
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The ground's impedance gives the absorption, and the spread of the results "
+"takes it as exact."
+msgstr ""
+"La impedancia del terreno da la absorción, y la dispersión de los resultados "
+"la toma como exacta."
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The material gives none, so the spread of the results takes its absorption "
+"as exact."
+msgstr ""
+"El material no da ninguna, así que la dispersión de los resultados toma su "
+"absorción como exacta."
+
+#. Translators: {choice} is what the simulation page's Built-in materials list shows: plus or minus 0.1, twice ISO 12999-2 or none.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"The material gives none of its own, so the spread of the results takes the "
+"simulation page's choice for built-in materials: {choice}."
+msgstr ""
+"El material no da ninguna propia, así que la dispersión de los resultados "
+"toma la opción de la página de simulación para los materiales integrados: "
+"{choice}."
+
+#: acoustic_spaces/gui/inspector.py
+msgid "an absorption uncertainty is a number from 0 to 1"
+msgstr "una incertidumbre de absorción es un número de 0 a 1"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "coefficients are numbers from 0 to 1"
@@ -5585,19 +5739,71 @@ msgid ""
 "the results after each run, where the material gives no uncertainty of its "
 "own: the database does not say where its values come from. Plus or minus 0.1 "
 "in every band; twice the reproducibility ISO 12999-2 gives for a measurement "
-"to ISO 354, larger at low frequencies and for high absorption; or none, no "
+"to ISO 354, which for an absorber is largest at low frequencies; or none, no "
 "spread from them"
 msgstr ""
 "Cuánto puede desviarse la absorción de un material integrado, para la "
 "dispersión de los resultados tras cada cálculo, cuando el material no da una "
 "incertidumbre propia: la base de datos no dice de dónde proceden sus "
 "valores. Más o menos 0,1 en cada banda; el doble de la reproducibilidad que "
-"da ISO 12999-2 para una medición según ISO 354, mayor a bajas frecuencias y "
-"con mucha absorción; o ninguna, sin dispersión por ellos"
+"da ISO 12999-2 para una medición según ISO 354, que para un absorbente es "
+"mayor a bajas frecuencias; o ninguna, sin dispersión por ellos"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Built-in materials"
 msgstr "Materiales integrados"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Until the results are stable"
+msgstr "Hasta que los resultados sean estables"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Draw the spread in batches of 100 until every result is stable, as the "
+"adaptive procedure of GUM Supplement 1 does (JCGM 101:2008, 7.9): until "
+"twice the standard deviation of each mean, standard uncertainty, interval's "
+"end and one-sided bound is within half a unit of the standard uncertainty's "
+"first digit, 20,000 draws at most. That takes several thousand draws, many "
+"times as long as the 400 a scene starts with"
+msgstr ""
+"Calcula la dispersión en lotes de 100 muestras hasta que cada resultado sea "
+"estable, como el procedimiento adaptativo del Suplemento 1 de la GUM (JCGM "
+"101:2008, 7.9): hasta que el doble de la desviación típica de cada media, "
+"incertidumbre típica, extremo del intervalo y cota unilateral quede dentro "
+"de media unidad de la primera cifra de la incertidumbre típica, con 20 000 "
+"muestras como máximo. Requiere varios miles de muestras, muchas veces el "
+"tiempo de las 400 con que empieza una escena"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"How many draws of the materials' absorption the spread after each run takes: "
+"more settle its numbers further and take as much longer. 400 leave each end "
+"of the coverage interval (95 %) good to about a quarter of the standard "
+"uncertainty. None: no spread"
+msgstr ""
+"Cuántas muestras de la absorción de los materiales toma la dispersión tras "
+"cada cálculo: más muestras afinan sus números y tardan otro tanto más. Con "
+"400, cada extremo del intervalo de cobertura (95 %) queda determinado hasta "
+"aproximadamente un cuarto de la incertidumbre típica. Ninguno: sin dispersión"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Draws"
+msgstr "Muestras"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"The probability of the one-sided bounds the spread gives each result, for a "
+"limit on one side: the value the result is at least with that probability, "
+"and the one it is at most. Those of 95 % lie further out than those of 90 %"
+msgstr ""
+"La probabilidad de las cotas unilaterales que la dispersión da a cada "
+"resultado, para un límite por un solo lado: el valor que el resultado "
+"alcanza como mínimo con esa probabilidad, y el que alcanza como máximo. Las "
+"del 95 % quedan más lejos que las del 90 %"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "One-sided bounds"
+msgstr "Cotas unilaterales"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Insertion loss"
@@ -7330,6 +7536,29 @@ msgid ""
 msgstr ""
 "Por la incertidumbre de absorción de los materiales: incertidumbre típica "
 "{u}, {percent} %: entre {low} y {high} ({count} muestras)"
+
+#. Translators: {low} and {high} are numbers in the parameter's unit, {percent} a number.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid ""
+"At least {low} with {percent} % probability, and at most {high} with the same"
+msgstr ""
+"Al menos {low} con una probabilidad del {percent} %, y como máximo {high} "
+"con la misma"
+
+#: acoustic_spaces/gui/results_view.py
+msgid ""
+"The draws reached their limit before these were stable (GUM Supplement 1's "
+"test)"
+msgstr ""
+"Las muestras alcanzaron su límite antes de que estos valores fueran estables "
+"(prueba del Suplemento 1 de la GUM)"
+
+#. Translators: {names} are materials' names.
+#: acoustic_spaces/gui/results_view.py
+#, python-brace-format
+msgid "Not drawn in this band, where the absorption is 1: {names}"
+msgstr "No se sortea en esta banda, donde la absorción es 1: {names}"
 
 #. Translators: {db} is a number of decibels.
 #: acoustic_spaces/gui/results_view.py

@@ -53,9 +53,11 @@ The editor works on the same scene files as the command line.
   library (**Edit > Add material from a library**).
 - A material's form sets its absorption and scattering per band (24 columns when it
   has third-octave data), whether it **Lets through** nothing, part of the sound (with
-  its sound reduction index per band in the table) or everything (an opening), and
+  its sound reduction index per band in the table) or everything (an opening),
   **Audience seating** for the seats (see
-  [Walls, doors and openings](scenes.md#walls-doors-and-openings)).
+  [Walls, doors and openings](scenes.md#walls-doors-and-openings)), and under
+  **Absorption uncertainty** how far its absorption may be off, for the spread of the
+  results (see [Materials](scenes.md#materials)).
 - **Edit > Edit movement…**, or **Edit movement…** in a source's or listener's form,
   opens the **Movement** panel on the selected point source's or listener's
   [walk](scenes.md#walks): a table of keyframes, where it is and how it faces at each

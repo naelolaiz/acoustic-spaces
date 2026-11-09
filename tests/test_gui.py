@@ -1343,6 +1343,419 @@ def test_a_transmission_alone_can_be_lowered_and_its_absorption_follows(window) 
     assert floor.absorption[3] == pytest.approx(10.0**-3.5)
 
 
+def test_a_typed_cell_leaves_the_other_cells_and_the_rest_of_the_material(window, tmp_path) -> None:
+    """One coefficient typed on a material's page changes that cell: the other bands keep
+    the decimals the table leaves out, and with the absorption as given the material
+    keeps its database entry or file, so a built-in one keeps the uncertainty a run
+    takes for it, and one of its own stays too."""
+    from acoustic_spaces.engine.uncertainty import uncertainty_of
+
+    window.open_example(example_path("studio"))
+    document = window.document
+    page = window.inspector.pages["material"]
+
+    def material(name: str):
+        return document.scene.materials[name]
+
+    # A built-in material: a scattering value typed leaves it built-in.
+    window.select("material", "wooden_floor")
+    absorption = list(material("wooden_floor").absorption)
+    assert uncertainty_of(document.scene, "wooden_floor") is not None
+    page.table.item(1, 2).setText("0.30")
+    floor = material("wooden_floor")
+    assert floor.scattering == [0.05, 0.05, 0.3, 0.05, 0.05, 0.05, 0.05, 0.05]
+    assert floor.preset == "stage_floor" and floor.builtin and floor.absorption == absorption
+    assert uncertainty_of(document.scene, "wooden_floor") is not None
+    assert "absorption" not in floor.to_data()  # the entry gives it, as before
+
+    # Values with three decimals and an uncertainty of the material's own.
+    given = [0.123, 0.234, 0.345, 0.456, 0.567, 0.678, 0.789, 0.891]
+    own = {"absorption": 0.025, "distribution": "normal", "source": "lab report"}
+    document.set_material(
+        "side_panels", {"absorption": given, "scattering": 0.216, "uncertainty": own}
+    )
+    window.select("material", "side_panels")
+    assert page.table.item(0, 3).text() == "0.46" and page.table.item(1, 3).text() == "0.22"
+    page.table.item(1, 0).setText("0.4")
+    panels = material("side_panels")
+    assert panels.scattering == [0.4] + [0.216] * 7 and panels.absorption == given
+    assert panels.uncertainty.source == "lab report" and panels.source is None
+    page.table.item(0, 7).setText("0.9")
+    panels = material("side_panels")
+    assert panels.absorption == [*given[:7], 0.9] and panels.scattering == [0.4] + [0.216] * 7
+    assert panels.uncertainty.source == "lab report" and panels.source.startswith("edited")
+    # The same database entry picked again keeps the uncertainty too.
+    document.set_material("side_panels", {"preset": "plasterboard", "uncertainty": own})
+    window.select("material", "side_panels")
+    page.preset.setCurrentText("plasterboard")
+    page.preset.activated.emit(0)
+    assert material("side_panels").uncertainty.source == "lab report"
+
+    # A sound reduction alone: the absorption is what passes, and stays so.
+    document.set_material("front_wall", {"transmission_loss": 30.0})
+    window.select("material", "front_wall")
+    page.table.item(1, 4).setText("0.25")
+    wall = material("front_wall")
+    assert wall.scattering[4] == 0.25 and wall.transmission_loss == [30.0] * 8
+    assert "absorption" not in wall.to_data() and wall.absorption == [0.001] * 8
+
+    # A file's values: typing the scattering leaves the material read from the file.
+    document.save(tmp_path / "scene.yaml")
+    (tmp_path / "wall.csv").write_text(
+        "125,250,500,1000,2000,4000\n0.111,0.222,0.333,0.444,0.555,0.666\n", encoding="utf-8"
+    )
+    document.set_material("front_wall", {"file": "wall.csv"})
+    window.select("material", "front_wall")
+    measured = list(material("front_wall").absorption)
+    page.table.item(1, 0).setText("0.5")
+    wall = material("front_wall")
+    assert wall.file == (tmp_path / "wall.csv").resolve() and wall.absorption == measured
+    assert wall.scattering[0] == 0.5 and wall.source.startswith("file wall.csv")
+
+
+def test_a_ground_keeps_its_uncertainty_when_its_impedance_changes(window) -> None:
+    window.open_example(example_path("roadside"))
+    own = {"absorption": 0.03, "distribution": "normal", "source": "survey"}
+    fields = window.document.scene.materials["meadow"].to_data()
+    window.document.set_material("meadow", {**fields, "uncertainty": own})
+    window.select("material", "meadow")
+    page = window.inspector.pages["material"]
+    page.thickness.setValue(0.1)
+    meadow = window.document.scene.materials["meadow"]
+    assert meadow.impedance.thickness == 0.1 and meadow.uncertainty.source == "survey"
+
+
+def test_a_material_page_sets_its_absorption_uncertainty(window) -> None:
+    """Ticking Absorption uncertainty on a material's page gives the material an
+    uncertainty of its own: what a run takes for it now (a built-in material's default,
+    so that the results stay), else ISO 12999-2's reproducibility. Its kind, each band's
+    value and its source are set there and undone as any change, another kind or value
+    marking the source as edited; Take ISO 12999-2's replaces it, and unticking takes it
+    away. Typed coefficients keep it; another database entry drops it."""
+    from acoustic_spaces.engine.uncertainty import octave_reproducibility, uncertainty_of
+
+    iso_12999_2 = "ISO 12999-2:2020, the reproducibility of a measurement to ISO 354"
+    window.open_example(example_path("studio"))
+    window.select("material", "wooden_floor")
+    page = window.inspector.pages["material"]
+    table = page.uncertainty_table
+
+    def material(name: str = "wooden_floor"):
+        return window.document.scene.materials[name]
+
+    def shown() -> list[str]:
+        return [table.item(0, col).text() for col in range(table.columnCount())]
+
+    def reproducibility(name: str) -> list[float]:
+        sigma = octave_reproducibility(material(name).coefficients("octave")[0])
+        return [round(float(v), 3) for v in sigma]
+
+    def choose(kind: str) -> None:
+        page.uncertainty_kind.setCurrentIndex(page.uncertainty_kind.findData(kind))
+        page.uncertainty_kind.activated.emit(page.uncertainty_kind.currentIndex())
+
+    # A built-in material: ticking copies the default a run took for it, so the spread
+    # stays, and the simulation's choice for the others is as it was.
+    assert material().builtin and material().uncertainty is None
+    assert not page.uncertainty.isChecked() and shown() == [""] * 8
+    assert not page.uncertainty_kind.isEnabled() and not page.iso_12999_2.isEnabled()
+    taken = uncertainty_of(window.document.scene, "wooden_floor")
+    page.uncertainty.setChecked(True)
+    own = material().uncertainty
+    assert own.distribution == "uniform" and own.absorption == [0.1] * 8
+    assert own.model_dump() == taken.model_dump()
+    assert window.document.scene.simulation.uncertainty.presets == "tolerance"
+    assert material().preset == "stage_floor"
+    assert page.uncertainty.isChecked() and page.uncertainty_note.isHidden()
+    assert page.uncertainty_kind.isEnabled() and page.iso_12999_2.isEnabled()
+    assert page.uncertainty_kind.currentText() == "tolerance (plus or minus)"
+    assert shown() == ["0.100"] * 8 and page.uncertainty_source.text() == taken.source
+    assert window.undo_action.text() == "&Undo change material wooden_floor"
+
+    # The kind, a band's value and the source, which names the default no longer: it is
+    # marked as edited, once.
+    choose("normal")
+    assert page.uncertainty_kind.currentText() == "standard uncertainty"
+    assert material().uncertainty.distribution == "normal"
+    assert material().uncertainty.absorption == [0.1] * 8
+    assert material().uncertainty.source == f"edited from {taken.source}"
+    assert page.uncertainty_source.text() == f"edited from {taken.source}"
+    table.item(0, 3).setText("0.045")
+    assert material().uncertainty.absorption == [0.1] * 3 + [0.045] + [0.1] * 4
+    assert shown()[3] == "0.045"
+    assert material().uncertainty.source == f"edited from {taken.source}"
+    page.uncertainty_source.setText("test report 12-345")
+    page.uncertainty_source.editingFinished.emit()
+    assert material().uncertainty.source == "test report 12-345"
+    page.uncertainty_source.setText(" ")  # empty: the scene file names none
+    page.uncertainty_source.editingFinished.emit()
+    assert material().uncertainty.source is None
+    written = window.document.scene.to_data()["materials"]["wooden_floor"]
+    assert written["preset"] == "stage_floor" and "source" not in written["uncertainty"]
+
+    # A value that is not a number from 0 to 1 is refused: the band shows the old one.
+    for bad in ("1.5", "-0.1", "much", ""):
+        table.item(0, 0).setText(bad)
+        assert table.item(0, 0).text() == "0.100", bad
+    assert "an absorption uncertainty is a number from 0 to 1" in window.messages.toPlainText()
+    assert material().uncertainty.absorption[0] == 0.1
+    # What changes nothing writes nothing: no step to undo.
+    changes = []
+    window.document.changed.connect(lambda: changes.append(1))
+    table.item(0, 1).setText("0.1")
+    assert table.item(0, 1).text() == "0.100"
+    page.uncertainty_kind.activated.emit(page.uncertainty_kind.currentIndex())
+    page.uncertainty_source.editingFinished.emit()
+    page.preset.setCurrentText("stage_floor")  # the database entry it has
+    page.preset.activated.emit(page.preset.currentIndex())
+    assert not changes and material().uncertainty.absorption[3] == 0.045
+
+    # ISO 12999-2's reproducibility of the material's absorption at a click: a standard
+    # uncertainty, also in place of a tolerance.
+    choose("uniform")
+    assert material().uncertainty.distribution == "uniform"
+    assert material().uncertainty.source is None  # none to mark as edited
+    page.iso_12999_2.click()
+    own = material().uncertainty
+    assert own.absorption == reproducibility("wooden_floor")
+    assert own.distribution == "normal" and own.source == iso_12999_2
+    assert page.uncertainty_kind.currentText() == "standard uncertainty"
+    assert shown() == [f"{value:.3f}" for value in own.absorption]
+    assert page.uncertainty_source.text() == iso_12999_2
+    page.iso_12999_2.click()  # the same again: nothing to undo
+    assert len(changes) == 2
+    table.item(0, 0).setText("0.3")  # ISO 12999-2's no longer
+    assert material().uncertainty.source == f"edited from {iso_12999_2}"
+    window.undo()
+    window.undo()
+    assert material().uncertainty.distribution == "uniform"
+    assert page.uncertainty_kind.currentText() == "tolerance (plus or minus)"
+    assert material().uncertainty.absorption[3] == 0.045 and shown()[3] == "0.045"
+    assert material().uncertainty.source is None and page.uncertainty_source.text() == ""
+
+    # Unticked, the material gives none and takes the built-in materials' default again.
+    page.uncertainty.setChecked(False)
+    assert material().uncertainty is None and material().builtin
+    assert "uncertainty" not in window.document.scene.to_data()["materials"]["wooden_floor"]
+    assert shown() == [""] * 8 and not page.uncertainty_note.isHidden()
+    window.undo()
+    assert material().uncertainty.absorption[3] == 0.045 and page.uncertainty.isChecked()
+
+    # Absorption of the material's own: ticking takes ISO 12999-2's.
+    absorption = [0.2, 0.4, 0.6, 0.8, 0.8, 0.7, 0.6, 0.5]
+    window.document.set_material("side_panels", {"absorption": absorption, "scattering": 0.2})
+    window.select("material", "side_panels")
+    assert not page.uncertainty.isChecked()
+    page.uncertainty.setChecked(True)
+    own = material("side_panels").uncertainty
+    assert own.absorption == reproducibility("side_panels") and own.absorption[0] > 0.09
+    assert own.distribution == "normal" and own.source == iso_12999_2
+    assert page.uncertainty_kind.currentData() == "normal"
+    # Typing coefficients keeps it; another database entry is another material's.
+    page.table.item(0, 0).setText("0.25")
+    page.table.item(1, 7).setText("0.30")
+    panels = material("side_panels")
+    assert panels.absorption[0] == 0.25 and panels.scattering[7] == 0.3
+    assert panels.uncertainty == own and page.uncertainty.isChecked()
+    page.preset.setCurrentText("stage_floor")
+    page.preset.activated.emit(0)
+    panels = material("side_panels")
+    assert panels.preset == "stage_floor" and panels.uncertainty is None
+    assert not page.uncertainty.isChecked()
+
+
+def test_a_material_page_says_what_a_run_takes_without_an_uncertainty(window) -> None:
+    """Unticked, a note under Absorption uncertainty says what a run's spread takes for
+    the material: for a built-in one the simulation page's choice, which it follows,
+    else the absorption as exact. A ground's absorption comes from its impedance and an
+    opening's is 1, so their groups are disabled; the one the scene file gave a ground
+    stays while it is a ground. The uncertainty is per octave band also where the
+    coefficients are in third octaves, and every control says what it is."""
+    from PySide6.QtWidgets import QFormLayout
+
+    from acoustic_spaces.engine.uncertainty import octave_reproducibility
+
+    window.open_example(example_path("shoebox"))
+    window.select("material", "painted_concrete")
+    page = window.inspector.pages["material"]
+    table = page.uncertainty_table
+    note = page.uncertainty_note
+
+    form = page.uncertainty.layout()
+    assert isinstance(form, QFormLayout)
+    controls = (page.uncertainty, page.uncertainty_kind, page.uncertainty_source, page.iso_12999_2)
+    for control in (*controls, table, note):
+        assert control.toolTip(), control
+    for field in (page.uncertainty_kind, page.uncertainty_source):
+        assert form.labelForField(field).toolTip() == field.toolTip()
+    assert "GUM 4.3.7" in page.uncertainty_kind.toolTip()
+    assert "ISO 354" in page.iso_12999_2.toolTip()
+    bands = [table.horizontalHeaderItem(col).text() for col in range(table.columnCount())]
+    assert len(bands) == 8 and (bands[0], bands[4], bands[7]) == ("63 Hz", "1 kHz", "8 kHz")
+    for col in range(8):
+        assert table.horizontalHeaderItem(col).toolTip().startswith("Octave band centred on")
+        assert table.item(0, col).toolTip() == table.toolTip()
+    assert "not 5 per cent" in table.toolTip()
+
+    # A built-in material: the simulation's choice, in the words of its list.
+    assert not page.uncertainty.isChecked() and not note.isHidden()
+    assert note.text().endswith("choice for built-in materials: plus or minus 0.1.")
+    change = "another choice for the built-in materials"
+    for choice, words in (("iso_12999_2", "twice ISO 12999-2"), ("none", "none")):
+        window.document.edit(
+            change,
+            lambda data, choice=choice: data["simulation"]["uncertainty"].update(presets=choice),
+        )
+        assert note.text().endswith(f"choice for built-in materials: {words}.")
+    window.select("simulation")
+    simulation = window.inspector.pages["simulation"]
+    simulation.preset_uncertainty.setCurrentIndex(
+        simulation.preset_uncertainty.findData("tolerance")
+    )
+    window.select("material", "painted_concrete")
+    assert note.text().endswith("choice for built-in materials: plus or minus 0.1.")
+
+    # Third-octave absorption of the material's own: taken as exact, and its
+    # uncertainty in the eight octave bands.
+    third = [round(0.01 + 0.03 * k, 2) for k in range(24)]
+    window.document.set_material("acoustic_ceiling", {"absorption": third, "scattering": 0.2})
+    window.select("material", "acoustic_ceiling")
+    assert not page.uncertainty.isChecked() and not note.isHidden()
+    assert note.text().endswith("takes its absorption as exact.")
+    assert page.table.columnCount() == 24 and table.columnCount() == 8
+    page.uncertainty.setChecked(True)
+    ceiling = window.document.scene.materials["acoustic_ceiling"]
+    sigma = octave_reproducibility(ceiling.coefficients("octave")[0])
+    assert ceiling.uncertainty.absorption == [round(float(v), 3) for v in sigma]
+    assert page.table.columnCount() == 24 and table.columnCount() == 8
+    assert table.item(0, 7).text() == f"{ceiling.uncertainty.absorption[7]:.3f}"
+    table.item(0, 7).setText("0.2")
+    page.table.item(0, 23).setText("0.75")  # a third octave typed: the uncertainty stays
+    ceiling = window.document.scene.materials["acoustic_ceiling"]
+    assert ceiling.absorption[23] == 0.75 and ceiling.uncertainty.absorption[7] == 0.2
+    assert note.isHidden()
+
+    # A ground: its impedance gives the absorption, and the page takes no uncertainty.
+    window.document.set_material("carpet_on_concrete", {"impedance": "grass", "scattering": 0.3})
+    window.select("material", "carpet_on_concrete")
+    assert not page.uncertainty.isEnabled() and not page.uncertainty.isChecked()
+    assert "ground's impedance" in note.text() and not note.isHidden()
+    window.select("material", "painted_concrete")
+    assert page.uncertainty.isEnabled()
+    # One the scene file gave it shows, and stays when its scattering is typed or it
+    # becomes another ground: the page, which cannot give it back, does not take it.
+    given = {"absorption": 0.05, "distribution": "uniform", "source": "a guess"}
+    window.document.set_material(
+        "carpet_on_concrete", {"impedance": "grass", "scattering": 0.3, "uncertainty": given}
+    )
+    window.select("material", "carpet_on_concrete")
+    assert page.uncertainty.isChecked() and not page.uncertainty.isEnabled()
+    assert page.uncertainty_kind.currentData() == "uniform" and table.item(0, 0).text() == "0.050"
+    assert page.uncertainty_source.text() == "a guess"
+    # The spread leaves a ground's out, which the note says beside it.
+    assert "ground's impedance" in note.text() and not note.isHidden()
+    page.table.item(1, 0).setText("0.40")
+    ground = window.document.scene.materials["carpet_on_concrete"]
+    assert ground.scattering[0] == 0.4 and ground.impedance.preset == "grass"
+    assert ground.uncertainty.absorption == [0.05] * 8 and ground.uncertainty.source == "a guess"
+    page.ground_kind.setCurrentIndex(page.ground_kind.findData("snow"))
+    page.ground_kind.activated.emit(page.ground_kind.currentIndex())
+    page.thickness.setValue(0.2)
+    ground = window.document.scene.materials["carpet_on_concrete"]
+    assert ground.impedance.preset == "snow" and ground.impedance.thickness == 0.2
+    assert ground.uncertainty.absorption == [0.05] * 8 and ground.uncertainty.source == "a guess"
+    assert page.uncertainty.isChecked() and page.uncertainty_source.text() == "a guess"
+    # A material made a ground has another absorption: its own uncertainty goes.
+    window.select("material", "painted_concrete")
+    page.uncertainty.setChecked(True)
+    assert window.document.scene.materials["painted_concrete"].uncertainty is not None
+    page.ground.setChecked(True)
+    concrete = window.document.scene.materials["painted_concrete"]
+    assert concrete.impedance.preset == "grass" and concrete.uncertainty is None
+    assert not page.uncertainty.isChecked() and not page.uncertainty.isEnabled()
+
+    # An opening absorbs all that reaches it, which no spread changes: no uncertainty
+    # to give, and the note says so, also beside one the scene file gave.
+    window.select("material", "acoustic_ceiling")
+    assert page.uncertainty.isChecked() and page.uncertainty.isEnabled()
+    page.passing.setCurrentIndex(2)
+    page.passing.activated.emit(2)
+    ceiling = window.document.scene.materials["acoustic_ceiling"]
+    assert ceiling.transmission == [1.0] * 8 and ceiling.uncertainty is None
+    assert not page.uncertainty.isEnabled() and not page.uncertainty.isChecked()
+    assert note.text().startswith("An opening lets all the sound through") and not note.isHidden()
+    window.document.set_material(
+        "acoustic_ceiling", {"transmission": 1.0, "scattering": 0.2, "uncertainty": given}
+    )
+    assert page.uncertainty.isChecked() and not page.uncertainty.isEnabled()
+    assert note.text().endswith("takes no uncertainty for it.") and not note.isHidden()
+    page.passing.setCurrentIndex(1)  # part of the sound: an opening no longer
+    page.passing.activated.emit(1)
+    assert page.uncertainty.isEnabled() and page.uncertainty.isChecked() and note.isHidden()
+    # The open sky of an outdoor scene is one, which the scene file does not write.
+    window.open_example(example_path("open_air_stage"))
+    window.select("material", "sky")
+    assert not page.uncertainty.isEnabled() and not page.uncertainty.isChecked()
+    assert note.text().startswith("An opening lets all the sound through") and not note.isHidden()
+    assert "sky" not in window.document.scene.to_data()["materials"]
+
+
+def test_an_absorption_uncertainty_is_all_its_group_changes(window) -> None:
+    """A change under Absorption uncertainty leaves the rest of the material as the scene
+    file has it: a scattering entry stays named, and no source is written for the
+    coefficients. A band that is not typed keeps the decimals its cell leaves out, and
+    the source, typed on after Enter, goes on at its end."""
+    window.open_example(example_path("studio"))
+    document = window.document
+    document.edit(
+        "ISO 12999-2 for the built-in materials",
+        lambda data: data["simulation"]["uncertainty"].update(presets="iso_12999_2"),
+    )
+    window.select("material", "diffuser")
+    page = window.inspector.pages["material"]
+    table, source = page.uncertainty_table, page.uncertainty_source
+
+    def written() -> dict:
+        return document.scene.to_data()["materials"]["diffuser"]
+
+    def own():
+        return document.scene.materials["diffuser"].uncertainty
+
+    before = written()
+    assert before == {"preset": "wood_16mm", "scattering": "rpg_qrd", "audience": False}
+    page.uncertainty.setChecked(True)
+    taken = own()
+    assert written() == {**before, "uncertainty": taken.model_dump(exclude_none=True)}
+    # Twice ISO 12999-2's reproducibility, to more decimals than the three shown.
+    assert taken.absorption[0] != round(taken.absorption[0], 3)
+    assert table.item(0, 0).text() == f"{taken.absorption[0]:.3f}"
+    assert source.text() == taken.source and source.cursorPosition() == 0  # from its start
+    steps = len(document._undo)
+    page.uncertainty_kind.activated.emit(page.uncertainty_kind.currentIndex())  # as it is
+    assert own().source == taken.source and len(document._undo) == steps
+    table.item(0, 3).setText("0.05")
+    assert own().absorption == [*taken.absorption[:3], 0.05, *taken.absorption[4:]]
+    assert own().source == f"edited from {taken.source}"
+    page.iso_12999_2.click()
+    assert {key: value for key, value in written().items() if key != "uncertainty"} == before
+    assert "scattering: rpg_qrd\n" in document.scene.file_text(document.base_dir, readable=True)
+
+    # The window active, as a person types in it.
+    window.activateWindow()
+    source.setFocus()
+    assert QTest.qWaitForWindowActive(window, 2000)
+    source.selectAll()
+    QTest.keyClicks(source, "report 12")
+    QTest.keyClick(source, Qt.Key.Key_Return)
+    assert own().source == "report 12" and source.hasFocus()
+    QTest.keyClicks(source, "-345")
+    QTest.keyClick(source, Qt.Key.Key_Return)
+    assert own().source == "report 12-345" and source.text() == "report 12-345"
+
+    page.uncertainty.setChecked(False)
+    assert written() == before
+
+
 def test_source_spectrum_gain_equalizer_and_delay(window) -> None:
     window.open_example(example_path("studio"))
     window.select("sources", 0)
@@ -2266,6 +2679,51 @@ def test_built_in_materials_uncertainty_choice(window) -> None:
     assert page.preset_uncertainty.currentData() == "iso_12999_2"
 
 
+def test_the_spread_s_draws_are_a_number_or_until_stable(window) -> None:
+    """The simulation page gives the spread's draws: a number, 400 to start with, none,
+    or as many as it takes until the results are stable."""
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    draws = lambda: window.document.scene.simulation.uncertainty.draws  # noqa: E731
+    assert page.spread_draws.value() == 400 and not page.adaptive_draws.isChecked()
+    assert page.spread_draws.toolTip() and page.adaptive_draws.toolTip()
+    page.spread_draws.setValue(1000)
+    assert draws() == 1000
+    page.adaptive_draws.setChecked(True)
+    assert draws() == "adaptive" and not page.spread_draws.isEnabled()
+    window.select("simulation")
+    assert page.adaptive_draws.isChecked() and page.spread_draws.value() == 1000
+    page.adaptive_draws.setChecked(False)
+    assert draws() == 1000 and page.spread_draws.isEnabled()
+    page.spread_draws.setValue(0)
+    assert draws() == 0 and page.spread_draws.text() == "none"
+    page.spread_draws.setValue(1)  # one draw has no spread: refused, shown as it was
+    assert draws() == 0 and page.spread_draws.value() == 0
+    window.undo()
+    assert draws() == 1000 and page.spread_draws.value() == 1000
+
+
+def test_the_one_sided_bounds_are_of_95_or_90_percent(window) -> None:
+    """The simulation page gives the probability of the spread's one-sided bounds: 95 %
+    to start with, or 90 %; another one from a scene file shows as an entry of its own."""
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    one_sided = lambda: window.document.scene.simulation.uncertainty.one_sided  # noqa: E731
+    assert page.one_sided.currentText() == "95 %" and one_sided() == 0.95
+    assert page.one_sided.toolTip() and page.one_sided.count() == 2
+    page.one_sided.setCurrentIndex(page.one_sided.findText("90 %"))
+    assert one_sided() == 0.9
+    window.select("simulation")
+    assert page.one_sided.currentText() == "90 %"
+    window.undo()
+    assert one_sided() == 0.95 and page.one_sided.currentText() == "95 %"
+    window.document.edit("99", lambda d: d["simulation"]["uncertainty"].update(one_sided=0.99))
+    window.select("simulation")
+    assert page.one_sided.currentText() == "99 %" and page.one_sided.count() == 3
+    page.one_sided.setCurrentIndex(0)
+    assert one_sided() == 0.95
+
+
 def test_wind_and_temperature_form(window) -> None:
     window.open_example(example_path("open_air_stage"))
     window.select("scene", None)
@@ -3180,10 +3638,117 @@ def test_the_absorption_uncertainty_s_spread_shows_in_the_tips(window, qapp) -> 
     tip = window.results.table.item(rows.index("c80"), 1).toolTip()
     assert "Combined standard uncertainty" in tip and "the rays" in tip
     assert "95 % within" in tip and "(400 draws)" in tip
+    assert spread.one_sided == 0.95 and "with 95 % probability, and at most" in tip
+    assert spread.low.c80[1] < spread.at_least.c80[1] < spread.at_most.c80[1] < spread.high.c80[1]
     # The lateral fraction's rays have no standard error: the absorption alone.
     assert np.isfinite(spread.standard.lf[1]) and np.isnan(spread.rays.lf[1])
     tip = window.results.table.item(rows.index("lf"), 1).toolTip()
     assert "From the materials' absorption uncertainty: standard uncertainty" in tip
+    assert spread.stable is None and "limit" not in tip
+
+
+def test_the_editor_says_what_the_spread_leaves_out(window, qapp) -> None:
+    """A band in which a material with an uncertainty absorbs everything is not drawn,
+    which that band's tips say; a run that cannot re-weight says that it has no spread,
+    as a warning when a material gives an uncertainty of its own; and so does a run
+    with an absorption uncertainty beside a ground's impedance, which it leaves out."""
+    from acoustic_spaces.gui.results_view import ROWS
+
+    _quick(window.document)
+
+    def change(data: dict) -> None:
+        data["simulation"]["ir_length_s"] = 1.0
+        data["materials"]["plaster"] = {
+            "absorption": [0.15, 0.15, 1.0, 0.1, 0.1, 0.1, 0.1, 0.1],
+            "uncertainty": {"absorption": 0.02},
+        }
+
+    window.document.edit("uncertainty", change)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    spread = window.result.spreads[("source", "listener")]
+    assert spread.held == {"plaster": [250]}
+    row = [name for name, _label, _template in ROWS].index("g")
+    said = "Not drawn in this band, where the absorption is 1: plaster"
+    assert said in window.results.table.item(row, 2).toolTip()
+    assert said not in window.results.table.item(row, 1).toolTip()
+    assert not any("No spread" in text for text, _level, _links in window.message_panel.entries)
+
+    window.document.edit("thirds", lambda d: d["simulation"].update(bands="third_octave"))
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    assert window.result.spreads == {}
+    said = "No spread from the materials' absorption uncertainty: it needs octave bands"
+    found = [level for text, level, _links in window.message_panel.entries if said in text]
+    assert found == ["warning"]
+    # A built-in material's default alone: said, not as a warning.
+    window.message_panel.clear_shown()
+    window.document.edit(
+        "default",
+        lambda d: (
+            d["materials"]["plaster"].pop("uncertainty"),
+            d["simulation"]["uncertainty"].update(presets="tolerance"),
+        ),
+    )
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    found = [level for text, level, _links in window.message_panel.entries if said in text]
+    assert found == ["info"]
+    # An absorption uncertainty beside a ground's impedance is left out, with a warning.
+    window.message_panel.clear_shown()
+
+    def ground(data: dict) -> None:
+        data["simulation"]["bands"] = "octave"
+        data["materials"]["plaster"] = {
+            "impedance": "grass",
+            "uncertainty": {"absorption": 0.05},
+        }
+
+    window.document.edit("ground", ground)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    said = (
+        "The absorption uncertainty of plaster is left out of the spread: a ground's "
+        "impedance gives its reflection"
+    )
+    found = [level for text, level, _links in window.message_panel.entries if said in text]
+    assert found == ["warning"]
+    assert "plaster" not in window.result.spreads[("source", "listener")].assumed
+
+
+def test_draws_until_stable_say_when_they_reach_their_limit(window, qapp, monkeypatch) -> None:
+    """With the draws taken until the results are stable, the tips say when the draws
+    reached their limit first; with no draws, a run has no spread."""
+    from acoustic_spaces.engine import uncertainty
+    from acoustic_spaces.gui.results_view import ROWS
+
+    # For the test's speed, two batches of 20; a tolerance nothing meets.
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_BATCH", 20)
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MAX_DRAWS", 40)
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MIN_BATCHES", 2)
+    tolerance = uncertainty.numerical_tolerance
+    monkeypatch.setattr(
+        uncertainty, "numerical_tolerance", lambda u, digits=1: 1e-9 * tolerance(u, digits)
+    )
+    _quick(window.document)
+
+    def change(data: dict) -> None:
+        data["materials"]["plaster"].update(uncertainty={"absorption": 0.02})
+        data["simulation"]["uncertainty"]["draws"] = "adaptive"
+        data["simulation"]["ir_length_s"] = 1.0  # long enough for results at 125 Hz
+
+    window.document.edit("uncertainty", change)
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    spread = window.result.spreads[("source", "listener")]
+    assert spread.draws == 40 and spread.stable is False
+    rows = [name for name, _label, _template in ROWS]
+    tip = window.results.table.item(rows.index("c80"), 1).toolTip()
+    assert "(40 draws)" in tip and "reached their limit before these were stable" in tip
+    window.document.edit("none", lambda d: d["simulation"]["uncertainty"].update(draws=0))
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    assert window.result.spreads == {}
 
 
 def test_changing_absorption_re_weights_the_run(window, qapp) -> None:
