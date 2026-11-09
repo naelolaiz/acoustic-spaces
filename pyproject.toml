@@ -110,6 +110,12 @@ cache-keys = [
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers"]
 markers = ["render: draws with OpenGL, so needs a display or off-screen rendering"]
+# A test still running after 20 minutes has the stack of every Python thread written to
+# stderr, once, and goes on: a test that hangs then shows in the log where it waits. The
+# slowest 72 tests in a row on CI, those around tests/test_gpu.py on Windows, took 19
+# minutes together (main, 7 November 2026). The wheels' tests do not read this table:
+# their command in [tool.cibuildwheel] sets the same.
+faulthandler_timeout = 1200
 
 [tool.ruff]
 line-length = 100
@@ -225,7 +231,9 @@ build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_* *-win32 *_i686"
 test-requires = ["pytest", "h5py"]
 test-sources = ["tests", "examples", "validation"]
-test-command = "pytest -q tests"
+# The tests run in a copy of test-sources, without this file: the limit after which a
+# test's stacks are written is given here (see [tool.pytest.ini_options]).
+test-command = "pytest -q -o faulthandler_timeout=1200 tests"
 
 [[tool.cibuildwheel.overrides]]
 # CPython 3.10 to 3.13 for Intel Macs target macOS 10.9, where nanobind's aligned new and
