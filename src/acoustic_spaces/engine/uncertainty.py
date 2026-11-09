@@ -69,9 +69,9 @@ from the exact solution that the validation finds in each band, but not drawn: t
 measured for whole levels in a few geometries, not for each path.
 A draw of the absorption below 0 is taken as 0 and one above ``MAX_ABSORPTION`` as that,
 so near those ends the spread is a little less than the uncertainty gives. The
-re-weighting is exact for the early paths and to second order for the late part
-(:mod:`~acoustic_spaces.engine.reweight`): for uncertainties of a few hundredths, as
-measured absorption has, that error is far below the spread.
+re-weighting is exact for the early paths; the late part's follows Eyring's decay with
+the counts' covariance to second order (:mod:`~acoustic_spaces.engine.reweight`), an
+estimate that stays near tracing again also for a draw far from the traced absorption.
 """
 
 from __future__ import annotations

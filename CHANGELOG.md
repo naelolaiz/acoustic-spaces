@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed: a run re-weighted for much more absorption than it was traced with (a draw of a
+  wide absorption uncertainty, a large change in the editor) gave far too much late
+  energy, up to absurd levels near an absorption of 1. The late part now follows
+  Eyring's decay, which stays near tracing again.
 - Fixed: the editor's Run demo… asks to save a scene that has no file or has changes,
   so the window lists its sources to pick WAV files for instead of an empty table.
 - Added: the spread's draws can go on until every result is stable to the first digit of
