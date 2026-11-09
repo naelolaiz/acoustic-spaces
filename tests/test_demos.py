@@ -1526,6 +1526,9 @@ def _any_scene(tmp_path: Path, **outputs) -> Path:
         "late": {"method": "stochastic_ray_tracing", "rays": 500},
         "ir_length_s": 0.3,
         "sample_rate": 16_000,
+        # A seed, so that every run traces the same rays: a simulation without one draws
+        # its own.
+        "seed": 1,
     }
     data["outputs"] = outputs.get("outputs", ["binaural"])
     # The talker plays a file of its own, mixed down, and the scene no recording.
@@ -1920,6 +1923,45 @@ def test_a_demo_of_any_scene_plays_a_walk_with_doppler(tmp_path: Path, monkeypat
         np.abs(audio.read(work / "moving" / f"{k}.binaural.wav")[0]).max() for k in seats["seats"]
     ]
     assert max(peaks) == pytest.approx(10.0 ** (-1.0 / 20.0), rel=1e-3)
+
+
+def test_a_demo_of_any_scene_gives_a_level_along_a_walk_wherever_sound_arrives(
+    two_sources,
+) -> None:
+    """The level of a source along a walk, at a moment whose response has a band with G
+    undefined, is that of the sound the response holds, as a still listener's
+    (``Response.levels_or_held``): there is none only where no sound arrives at all."""
+    import dataclasses
+
+    from conftest import silenced
+
+    from acoustic_spaces.demos.scene_demo import levels_along
+    from acoustic_spaces.parameters import a_weighted
+    from acoustic_spaces.walkthrough import Movement
+
+    radio = two_sources.room.scene.sources[1]
+    whole = two_sources["radio", "seat-a"]
+    # The radio at three moments: as simulated, with no sound in the 8 kHz band, with none.
+    places = {
+        "radio": whole,
+        "radio@1": silenced(whole, [7]),
+        "radio@2": silenced(whole, list(range(8))),
+    }
+    result = dataclasses.replace(
+        two_sources, responses={(place, "seat-a"): response for place, response in places.items()}
+    )
+    movement = Movement(
+        two_sources.room, np.array([0.0, 0.5, 1.0]), result, {("sources", "radio"): tuple(places)}
+    )
+    assert np.isnan(places["radio@1"].parameters().g[7])
+    power = radio.power_db("octave")
+    less = whole.levels(power)
+    less[7] = -np.inf
+    assert levels_along(movement, radio, "seat-a") == [
+        round(float(a_weighted(whole.levels(power))), 2),
+        round(float(a_weighted(less)), 2),
+        None,
+    ]
 
 
 def test_a_demo_of_any_scene_plays_the_files_given_to_its_sources(
