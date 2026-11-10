@@ -2311,6 +2311,9 @@ def test_the_stills_say_how_the_sound_was_made(tmp_path: Path) -> None:
     first, _mixed = pictures.settings_lines(demo, args, scene)
     assert "paths and late rays bent by the wind and temperature" in first
     assert "bands up to 2 kHz by the narrow-angle parabolic equation" in first
+    scene.setdefault("simulation", {}).setdefault("early", {})["open_ground_frequencies"] = "rays"
+    first, _mixed = pictures.settings_lines(demo, args, scene)
+    assert "bands up to 500 Hz (2 kHz in and near shadows) by the narrow-angle" in first
     scene["atmosphere"] = None
     assert "bent" not in pictures.settings_lines(demo, args, scene)[0]
     # Every line fits the still, made smaller when it is long.

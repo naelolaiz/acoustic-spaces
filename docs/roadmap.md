@@ -339,13 +339,23 @@ Outdoor acoustics, in steps:
 - [ ] A leg from a ground reflection a rounding error above the ground takes the
   shadow of one from the ground (see [Known issues](validation.md#known-issues)).
 - [ ] A transition across a caustic for the rays' bands over the open ground (4 and
-  8 kHz), a uniform (Airy) form for the two paths that merge there: past it they vanish
-  and the level steps by up to 12.9 dB within a centimetre (see
+  8 kHz, and 1 and 2 kHz with `open_ground_frequencies: rays`), a uniform (Airy) form
+  for the two paths that merge there: past it they vanish and the level steps by up to
+  12.9 dB within a centimetre (14.0 dB at 1 kHz with `rays`; see
   [Known issues](validation.md#known-issues)).
-- [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz):
+- [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
+  or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
+  the shadow):
   a band's spectrum held past its last frequency misses a ground dip there, by up to
   2.0 dB 100 m downwind in the benchmark's case 2 (see
   [Known issues](validation.md#known-issues)).
+- [ ] Steep sound over the open ground in wind (as under a flyover) left to the rays at
+  1 and 2 kHz by a rule, where they match the equation at a fraction of its time: one
+  studied (the vertical wavenumber changing by at most 3 % over one of its own lengths
+  along the paths) was within 0.03 dB of a fast field program in the presets and under
+  linear gradients and took 0.14 to 0.37 of the equation's time on the helicopter
+  flyover, but its error has no bound (0.12 dB past a 3 K step a centimetre above the
+  source); until one holds, `open_ground_frequencies: rays` is the user's choice.
 - [x] The scattered sound of the reflections straight from the source found from each
   listener too, shared with the late rays by how densely each finds it: an aircraft
   overhead no longer brings a listener above grass bursts of it from the few rays that

@@ -5376,6 +5376,38 @@ msgstr ""
 "cálculo medidos (Outdoor scenes, How the simulation bends sound)"
 
 #: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "rays, off by up to {error:g} dB at 1 and 2 kHz"
+msgstr "rayos, con un error de hasta {error:g} dB a 1 y 2 kHz"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count}, off by up to {error:g} dB at 1 and 2 kHz"
+msgstr "{count}, con un error de hasta {error:g} dB a 1 y 2 kHz"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors over the open ground in wind or temperature gradients, the "
+"frequencies an octave the parabolic equation takes at 1 and 2 kHz (below 1 "
+"kHz always 8), or the rays, which give those bands where one reaches the "
+"listener short of half the way to the shadow's start. Fewer take less time "
+"and leave those bands further off, and in the shadow the bands above, which "
+"deepen from them: each choice says by how much at most at 1 and 2 kHz, "
+"against a fast field program in the validation cases. The documentation has "
+"the errors and the run times measured (Outdoor scenes, How the simulation "
+"bends sound)"
+msgstr ""
+"Al aire libre, sobre terreno abierto con viento o gradientes de temperatura, "
+"las frecuencias por octava que toma la ecuación parabólica a 1 y 2 kHz (por "
+"debajo de 1 kHz siempre 8), o los rayos, que dan esas bandas donde uno llega "
+"al oyente antes de la mitad del camino hasta el comienzo de la sombra. Menos "
+"tardan menos y dejan esas bandas más lejos, y en la sombra las bandas "
+"superiores, que se atenúan a partir de ellas: cada opción dice cuánto como "
+"máximo a 1 y 2 kHz, frente a un programa de campo rápido en los casos de "
+"validación. La documentación recoge los errores y los tiempos de cálculo "
+"medidos (Outdoor scenes, How the simulation bends sound)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
@@ -5416,6 +5448,10 @@ msgstr "Ecuación parabólica"
 #: acoustic_spaces/gui/inspector.py
 msgid "Frequencies behind barriers"
 msgstr "Frecuencias tras barreras"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Frequencies over open ground"
+msgstr "Frecuencias sobre terreno abierto"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "In pressure up to"

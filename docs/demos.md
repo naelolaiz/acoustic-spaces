@@ -1169,9 +1169,11 @@ take 14.3 s at 63 m/s.
   turn, as the car's. From 150 m up, places 4 m apart follow the exact field of a
   flyover to within 55 dB at 4 kHz, more closely than the car's places 1 m apart
   ([validation](validation.md#moving-sources-against-the-exact-field)). Over the grass
-  the bands up to 2 kHz come from the wide-angle parabolic equation where the sound
+  the bands up to 500 Hz come from the wide-angle parabolic equation where the sound
   comes in at 34° from the horizontal or flatter (`parabolic_equation: wide_angle`, as
-  the narrow-angle one holds within some 15°), and the rays give the rest
+  the narrow-angle one holds within some 15°), and the rays give the rest: the example
+  sets `open_ground_frequencies: rays`, as its sound comes down steeply and the rays'
+  1 and 2 kHz bands are within 0.11 dB of the equation's along its track
   ([how the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)). The
   wind bends the sound the helicopter sends ahead up and the sound it leaves behind
   down, and the eddies (`moderate` at 2 m, weaker higher up) make it flicker in the

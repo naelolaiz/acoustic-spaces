@@ -500,11 +500,13 @@ is an arc of a circle, so its travel time and its length are exact.
   level is capped at 10 dB over a straight path's, and each caustic advances the phase
   by a quarter period (a factor j, time going as e^(jωt)); past the caustic the two paths that merged there are gone, with
   nothing in their place (no transition zone), so in the bands the rays give over the
-  open ground (4 and 8 kHz) the level steps there by 10.5 to 12.9 dB within a centimetre
-  (see [Validation](validation.md#known-issues)). Against an independent ray
-  tracer on the smooth profile of the `windy` preset downwind, the levels of three such
-  paths 100 and 300 m away are within 0.05 dB (the tests allow 0.2 dB); no such check is
-  made near a caustic.
+  open ground (4 and 8 kHz, and short of half the way to the shadow 1 and 2 kHz with
+  `open_ground_frequencies: rays`) the level steps there by 10.5 to 12.9 dB within a
+  centimetre (7.2 to 14.0 dB at 1 and 2 kHz; see
+  [Validation](validation.md#known-issues)). Against an independent ray tracer on the
+  smooth profile of the `windy` preset downwind, the levels of three such paths 100
+  and 300 m away are within 0.05 dB (the tests allow 0.2 dB); no such check is made
+  near a caustic.
 - **In the octave bands up to 2 kHz** rays fail over the ground, as the profiles change
   most within a wavelength of it, where the direct sound and its reflection meet: at 1
   and 2 kHz, 50 to 300 m from sources 0.5, 2 and 5 m up to a listener 1.5 m up, they
@@ -514,9 +516,10 @@ is an arc of a circle, so its travel time and its length are exact.
   equation (the Green's function parabolic equation of Gilbert and Di) marched out from
   the source in the vertical plane through the listener, over the grounds along the way
   and their impedances, at eight frequencies an octave and 24 at 1 and 2 kHz, where
-  the ground's fringes come closer in frequency, within 0.1 dB of the program in those
-  cases; in third octaves it gives the three of each of those octave bands, to 2.5 kHz.
-  In the shadow, above those
+  the ground's fringes come closer in frequency (fewer there, or the rays, with
+  `simulation.early.open_ground_frequencies`, see below), within 0.1 dB of the program
+  in those cases; in third octaves it gives the three of each of those octave bands, to
+  2.5 kHz. In the shadow, above those
   bands, the shadow deepens with frequency as it does over the octave below. At 4 and
   8 kHz the rays give the sound: against the program, 50 to 300 m from a source 2 m
   up, they are up to 2.4 dB off at 4 kHz and 0.9 dB at 8 kHz in `windy` downwind and
@@ -690,7 +693,8 @@ is an arc of a circle, so its travel time and its length are exact.
 
 Bending takes time: on one core the `open_air_stage` example takes about 13 times as
 long as in still air and its coverage map on a 10 m grid about 22 times, the parabolic
-equation running up to 2 kHz for each point, and its late rays take about four times as
+equation running up to 2 kHz for each point (less with `open_ground_frequencies`, see
+below), and its late rays take about four times as
 long; `simulation.performance.threads` shares the work out over the cores. Behind barriers and buildings the parabolic
 equation runs in every band, in the weather and in still air, for each degree of
 direction, the runs of a source that differ only past their first obstacle sharing the
@@ -700,6 +704,38 @@ of 96 points behind two barriers or 90 round a building, 77 to 89 s; and three o
 listeners 10 to 20 m up 30 to 60 m from the source behind a barrier or a building,
 where the wide-angle equation runs (the sound reaching them steeply), about 60 s,
 against 0.1 to 0.5 s in still air.
+
+Over the open ground the runs take 24 frequencies an octave at 1 and 2 kHz; below, 8.
+`simulation.early.open_ground_frequencies` takes 8 there too, or `rays`, which leaves
+those bands to the rays where one reaches the listener short of half the way to the
+shadow's start (a third-octave run then takes the equation's bands by octave, so its
+630 Hz band comes from the equation, and deepens the shadow above them from the
+octave bands' levels, as an octave run does). Against the fast
+field program (the band's energy over 24 slices; over 48 it moves by up to 0.04 dB from
+the source 10 m up), at 290 points within 60 dB of free field in 18 cases
+(`validation/open_ground_frequencies.py`: `windy` down- and upwind, `sunny_day` and
+`clear_night`, sources 0.5, 2 and 5 m up over grass and 2 m up over a rigid ground, and
+10 m up over grass downwind and on the clear night, listeners 1.5 and 4 m up 50 m to
+1 km away, 500 m in the upward cases), the early sound at 1 and 2 kHz is off by, in dB
+(mean, nine in ten, largest), and a run takes on one core, against the rays, for the
+`open_air_stage` example's listeners, its coverage map on a 10 m grid,
+`helicopter_flyover` (the wide-angle equation from 150 m up; the example itself sets
+`rays`, which are within 0.11 dB of the default along its track) and one weather class of
+`validation/long_term.py`'s scene:
+
+| `open_ground_frequencies` | 1 and 2 kHz | the stage | its map | the helicopter | a class |
+|---|---|---|---|---|---|
+| 24 (the default) | 0.07, 0.14, 0.75 | 2.3 times | 3.2 times | 30 times | 12 times |
+| 8 | 0.17, 0.35, 4.0 | 1.2 times | 1.4 times | 10 times | 4.5 times |
+| `rays` | 0.67, 1.8, 8.5 | 1 | 1 | 1 | 1 |
+
+With 24 the largest error is the parabolic equation's own, 43 dB deep in the shadow
+200 m upwind; 8 is furthest off 1 km downwind, and the rays 200 m away under the clear
+night's inversion, and they step at a caustic by up to 14 dB a centimetre at 1 kHz
+([Known issues](validation.md#known-issues)). The other bands change only in the
+shadow, where 4 and 8 kHz deepen from the 1 and 2 kHz levels: 8 and `rays` move them
+there by up to 0.33 dB within 60 dB of free field in these cases, and by up to 5.0 dB
+deeper (88 dB below it, 8 kHz upwind). Nothing changes in still air.
 
 Behind barriers and buildings the runs take 32 frequencies an octave at 8 kHz and 16
 at 4 kHz, where the ground's interference fringes are densest; below, 8, as the early

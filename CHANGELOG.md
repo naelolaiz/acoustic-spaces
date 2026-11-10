@@ -214,6 +214,13 @@
   2.8 dB (3.3 dB read from a third-octave run) and makes runs over open ground in wind
   take longer, `open_air_stage` about 2.3 times as long on one core (see
   [Outdoor scenes](docs/outdoor.md)).
+- Added: `simulation.early.open_ground_frequencies` (**Frequencies over open ground** in
+  the editor) picks how those 1 and 2 kHz bands are found: 24 frequencies an octave (the
+  default, up to 0.75 dB off the program), 8 (4.0 dB, 2 to 3 times faster on one core)
+  or the rays short of half the way to the shadow, as 4.2.1 did in octave bands (8.5 dB,
+  2.3 to 30 times faster); in the shadow 4 and 8 kHz, which deepen from those bands,
+  move with them (by up to 0.33 dB within 60 dB of free field). `helicopter_flyover`,
+  whose sound comes down steeply, sets the rays, there within 0.11 dB of the default.
 
 ## 4.2.1
 

@@ -2726,6 +2726,34 @@ def test_barrier_frequencies_choice(window) -> None:
     assert page.barrier_frequencies.currentData() == 8
 
 
+def test_open_ground_frequencies_choice(window) -> None:
+    """Outdoors in wind the simulation page picks the frequencies an octave over the open
+    ground at 1 and 2 kHz, or the rays there, each with its largest error; in still air
+    there is none to pick."""
+    window.open_example(example_path("open_air_stage"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    combo = page.open_ground_frequencies
+    assert combo.isEnabled()
+    assert combo.currentData() == 24
+    assert [combo.itemText(k) for k in range(combo.count())] == [
+        "24, off by up to 0.75 dB at 1 and 2 kHz",
+        "8, off by up to 4 dB at 1 and 2 kHz",
+        "rays, off by up to 8.5 dB at 1 and 2 kHz",
+    ]
+    tip = combo.toolTip()
+    assert "Fewer take less time" in tip and "Outdoor scenes" in tip
+    assert set(re.findall(r"\d+(?:\.\d+)?", tip)) == {"1", "2", "8"}
+    combo.setCurrentIndex(combo.findData("rays"))
+    assert window.document.scene.simulation.early.open_ground_frequencies == "rays"
+    combo.setCurrentIndex(combo.findData(8))
+    assert window.document.scene.simulation.early.open_ground_frequencies == 8
+    window.document.edit("still air", lambda data: data.pop("atmosphere"))
+    window.select("simulation")
+    assert not combo.isEnabled()
+    assert combo.currentData() == 8
+
+
 def test_weather_settings_are_there_when_any_run_of_the_scene_has_weather(window) -> None:
     """The parabolic equation and the frequencies behind barriers are picked where a run
     of the scene takes them: in wind or a temperature gradient of the scene's own, of a
@@ -2744,7 +2772,9 @@ def test_weather_settings_are_there_when_any_run_of_the_scene_has_weather(window
                 data["long_term"] = {"classes": classes}
 
         window.document.edit("weather", change)
-        return [page.parabolic_equation.isEnabled(), page.barrier_frequencies.isEnabled()]
+        enabled = page.barrier_frequencies.isEnabled()
+        assert page.open_ground_frequencies.isEnabled() == enabled
+        return [page.parabolic_equation.isEnabled(), enabled]
 
     calm, breeze = {"name": "calm", "share": 0.5}, {"speed_m_s": 5.0, "direction_deg": 90.0}
     assert picked() == [False, False]

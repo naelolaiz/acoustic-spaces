@@ -26,7 +26,10 @@ parabolic equation (:mod:`~acoustic_spaces.engine.parabolic`) in the vertical pl
 through the source and the listener, over the grounds along it, when nothing stands in
 the way: the first of the eigenrays carries it, the others nothing in those bands. In
 the shadow zone, where no ray arrives, the shadow deepens above those bands with
-frequency as it does over the octave below.
+frequency as it does over the octave below. ``simulation.early.open_ground_frequencies``
+sets how many frequencies an octave the runs take at 1 and 2 kHz, or leaves those bands
+to the rays short of half the way to the shadow's start (:data:`LIT_WAVE_MAX_BAND_HZ`,
+:data:`PENUMBRA`).
 
 Where the listener's way, seen from above, crosses a barrier or a building
 (:meth:`Refraction._barrier`), the paths in the vertical plane through the source and
@@ -78,13 +81,15 @@ from acoustic_spaces.geometry.outdoor import GROUND, SKY, in_polygon, line_cross
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, band_limits, octave_of
 
 #: The bands within the octave bands up to this one (centre, Hz) take the sound over the
-#: open ground from the parabolic equation, in and out of the shadow: in a third-octave
-#: run the three third octaves of each (to 2.5 kHz). At 1 and 2 kHz, 50 to 300 m from
-#: sources 0.5 to 5 m up, rays were up to 3.2 dB off a fast field program in the
-#: ``windy`` preset downwind and 8.5 dB in ``clear_night``, and stepped by up to 14 dB a
-#: centimetre at a caustic, where the parabolic equation is within 0.1 dB of it; on the
-#: way into the shadow they come out too loud (by 5 dB at 1 kHz three quarters of the
-#: way there, upwind in 5 m/s of wind).
+#: open ground from the parabolic equation, in and out of the shadow (with
+#: ``simulation.early.open_ground_frequencies: rays`` only up to
+#: ``LIT_WAVE_MAX_BAND_HZ`` short of ``PENUMBRA`` of the way to the shadow's start): in
+#: a third-octave run the three third octaves of each (to 2.5 kHz). At 1 and 2 kHz, 50
+#: to 300 m from sources 0.5 to 5 m up, rays were up to 3.2 dB off a fast field program
+#: in the ``windy`` preset downwind and 8.5 dB in ``clear_night``, and stepped by up to
+#: 14 dB a centimetre at a caustic, where the parabolic equation is within 0.1 dB of it;
+#: on the way into the shadow they come out too loud (by 5 dB at 1 kHz three quarters of
+#: the way there, upwind in 5 m/s of wind).
 WAVE_MAX_BAND_HZ = 2000
 #: The parabolic equation applies from this many times the source's and the listener's
 #: heights (added) away along the ground, where the sound comes in at 34 degrees from
@@ -133,12 +138,23 @@ BARRIER_COARSE = 0.4
 BARRIER_SAMPLES = ((4000, 16), (8000, 32))
 #: Over the open ground (and along the ways round ends) the runs in the octave bands
 #: from this one (centre, Hz) up take ``OPEN_DENSE`` times the early paths' frequencies
-#: (an odd number, so that theirs are among them, :func:`_early_of`): far downwind the
-#: ground's interference fringes are dense in frequency, and in the benchmark's case 2
-#: 1 km away the 1 kHz band of 8 an octave was 2.2 dB below the fast field program's
-#: (``validation/benchmark_1995.py``).
+#: (an odd number, so that theirs are among them, :func:`_early_of`), with
+#: ``simulation.early.open_ground_frequencies: 24``, the default (8 and ``rays`` take
+#: theirs): far downwind the ground's interference fringes are dense in frequency, and
+#: in the benchmark's case 2 1 km away the 1 kHz band of 8 an octave was 2.2 dB below
+#: the fast field program's (``validation/benchmark_1995.py``).
 OPEN_DENSE_FROM_HZ = 1000
 OPEN_DENSE = 3
+#: With ``simulation.early.open_ground_frequencies: rays`` the open ground's parabolic
+#: equation takes the bands within the octave bands up to this one (centre, Hz), and the
+#: rays the bands above, where a ray reaches the listener and the listener is short of
+#: ``PENUMBRA`` of the way to the shadow's start; in the shadow and from there on, the
+#: bands up to ``WAVE_MAX_BAND_HZ``, at the early paths' frequencies.
+LIT_WAVE_MAX_BAND_HZ = 500
+#: Rays come out too loud on the way into the shadow (by 5 dB at 1 kHz three quarters of
+#: the way there, upwind in 5 m/s of wind): with ``rays``, from this share of the way the
+#: parabolic equation's bands go up to ``WAVE_MAX_BAND_HZ`` as in the shadow.
+PENUMBRA = 0.5
 
 
 def _early_of(values: np.ndarray, count: int) -> np.ndarray:
@@ -290,11 +306,18 @@ class Refraction:
         wide_angle: bool = False,
         edges=None,
         barrier_frequencies: int = 32,
+        open_ground_frequencies: int | str = 24,
         profiles: dict | None = None,
     ) -> None:
         from acoustic_spaces.engine.diffraction import band_frequencies
 
         self.barrier_samples = barrier_samples(barrier_frequencies)
+        #: The open ground's runs from ``OPEN_DENSE_FROM_HZ`` up take this many times the
+        #: early paths' frequencies (``simulation.early.open_ground_frequencies``: 24 an
+        #: octave, else theirs); with ``rays`` their bands end below 1 kHz short of
+        #: ``PENUMBRA`` of the way to the shadow's start (``LIT_WAVE_MAX_BAND_HZ``).
+        self.open_dense = OPEN_DENSE if open_ground_frequencies == 24 else 1
+        self.open_rays = open_ground_frequencies == "rays"
         room = model.room
         self.model = model
         self.atmosphere = room.scene.atmosphere
@@ -555,7 +578,7 @@ class Refraction:
             return family, None
         if not shadow and self.max_order < 1:
             return family, None
-        top, bands = self._open_run(zr, reach, highest)
+        top, bands = self._open_run(key, zr, reach, highest, shadow)
         if not bands.any():
             return family, None
         distance = float(np.linalg.norm(listener - self.source))
@@ -947,7 +970,7 @@ class Refraction:
         # above what stands on the way.
         rays = self.rays(key)
         found = rays.eigenrays(zr, reach, MAX_GROUND_BOUNCES, max_time=cutoff)
-        open_top, _ = self._open_run(zr, reach, _highest(rays, found, zr))
+        open_top, _ = self._open_run(key, zr, reach, _highest(rays, found, zr), len(found) == 0)
         cuts = self._cuts_for(towards, reach, zr, own, open_top)
         # The paths in the plane arrive as much sooner or later as the first of them.
         first = paths.points[min(plane, key=lambda i: float(paths.delay_s[i]))]
@@ -1050,13 +1073,21 @@ class Refraction:
             out.append(_Cut(key, azimuth, cut, weight, reach, zr, top, np.ones(self.bands, bool)))
         return out
 
-    def _open_run(self, zr: float, reach: float, highest: float):
+    def _open_run(self, key, zr: float, reach: float, highest: float, shadow: bool):
         """The absorbing layer (m) and the bands ((bands,) bool) of the open ground's
-        parabolic equation for a listener ``zr`` up and ``reach`` away: room above the
-        rays that reach it (the highest ``highest`` up) for the sound that spreads up
-        from them, deep into the shadow and at the lowest frequencies more than they
-        reach; and the bands within the octave bands up to ``WAVE_MAX_BAND_HZ``."""
-        bands = octave_of(self.model.bands) <= OCTAVE_BANDS_HZ.index(WAVE_MAX_BAND_HZ)
+        parabolic equation for a listener ``zr`` up and ``reach`` away along a way of
+        profile ``key``: room above the rays that reach it (the highest ``highest`` up)
+        for the sound that spreads up from them, deep into the shadow and at the lowest
+        frequencies more than they reach; and the bands within the octave bands up to
+        ``WAVE_MAX_BAND_HZ``, with ``open_rays`` up to ``LIT_WAVE_MAX_BAND_HZ`` unless
+        the listener is in or near the refraction's shadow (``shadow``: no ray reaches
+        it)."""
+        top_band = WAVE_MAX_BAND_HZ
+        if self.open_rays:
+            start = self._start(key, self.zs, zr)
+            near = shadow or (start is not None and reach >= PENUMBRA * start)
+            top_band = WAVE_MAX_BAND_HZ if near else LIT_WAVE_MAX_BAND_HZ
+        bands = octave_of(self.model.bands) <= OCTAVE_BANDS_HZ.index(top_band)
         top = max(
             WAVE_HEADROOM * max(self.zs, zr, highest),
             max(self.zs, zr) + WAVE_MIN_HEADROOM_M,
@@ -1161,7 +1192,7 @@ class Refraction:
                 key = self._key(float(self.wind @ legs.sum(axis=0)) / length)
             rays = self.rays(key)
             eigen = rays.eigenrays(zr, length, MAX_GROUND_BOUNCES, max_time=cutoff)
-            top, bands = self._open_run(zr, length, _highest(rays, eigen, zr))
+            top, bands = self._open_run(key, zr, length, _highest(rays, eigen, zr), len(eigen) == 0)
             first = paths.points[min(found, key=lambda i: float(paths.delay_s[i]))]
             shift = sum(self._leg(a, b)[1] for a, b in zip(first[:-1], first[1:], strict=True))
             index = np.array([at[i] for i in found])
@@ -1372,7 +1403,7 @@ class Refraction:
         """The frequencies (Hz) a run of the parabolic equation takes in ``band``: behind
         barriers (``barrier``) as many an octave as ``barrier_samples`` gives from its
         bands up; over the open ground, in the octave bands from ``OPEN_DENSE_FROM_HZ``
-        up, ``OPEN_DENSE`` times the early paths' (theirs among them,
+        up, ``open_dense`` times the early paths' (theirs among them,
         :func:`_early_of`); None for the early paths' own."""
         from acoustic_spaces.engine.diffraction import band_frequencies
         from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE
@@ -1382,8 +1413,10 @@ class Refraction:
             if not dense:
                 return None
             per_band = math.ceil(dense[-1] / BANDS_PER_OCTAVE[self.model.bands])
-        elif octave_of(self.model.bands)[band] >= OCTAVE_BANDS_HZ.index(OPEN_DENSE_FROM_HZ):
-            per_band = OPEN_DENSE * self.frequencies.shape[1]
+        elif self.open_dense > 1 and octave_of(self.model.bands)[band] >= OCTAVE_BANDS_HZ.index(
+            OPEN_DENSE_FROM_HZ
+        ):
+            per_band = self.open_dense * self.frequencies.shape[1]
         else:
             return None
         if per_band not in self._dense:
@@ -2128,6 +2161,7 @@ def refraction_for(model: TraceModel, source: np.ndarray, **kwargs) -> Refractio
 
 __all__ = [
     "AZIMUTH_STEP_DEG",
+    "LIT_WAVE_MAX_BAND_HZ",
     "MAX_GROUND_BOUNCES",
     "WAVE_MAX_BAND_HZ",
     "WAVE_MIN_RANGE",

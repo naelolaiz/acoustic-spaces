@@ -4583,11 +4583,15 @@ Results:
   and a listener 1.5 m up over grass), and by 10.5 dB at both between 2.04 and 2.05 m
   up 250 m away in `clear_night` (a source 0.5 m up), where up to 2 kHz the level
   changes by at most 0.05 dB a centimetre (`tests/test_refraction.py`, a one-off check
-  at 4 and 8 kHz).
+  at 4 and 8 kHz). With `simulation.early.open_ground_frequencies: rays` the rays give
+  1 and 2 kHz too short of half the way to the shadow, and those step at the same
+  caustics by 10.5 and 12.0 dB in the wind and by 14.0 and 7.2 dB on the clear night (a
+  one-off check).
 - **A ground dip in the crossover from the parabolic equation's bands to the rays'.**
   Each band of the response keeps its own spectrum into the crossovers, held past its
   last frequency, so a ground dip that falls in the crossover above the equation's top
-  band (2.4 to 3.4 kHz) is missed: 100 m downwind in the benchmark's case 2 the dip at
+  band (2.4 to 3.4 kHz; 0.59 to 0.84 kHz short of half the way to the shadow with
+  `open_ground_frequencies: rays`) is missed: 100 m downwind in the benchmark's case 2 the dip at
   2.85 kHz, 12.8 dB deep, comes out 1.3 dB too shallow and the response 2.0 dB too low
   at 3 kHz, off by up to 2.0 dB from 2.75 to 3.2 kHz (`tests/test_ffp.py` checks
   either side of it). More frequencies do not mend it: a model of the hold against the
@@ -4762,6 +4766,7 @@ python validation/terrain.py --json terrain.json
 python validation/ffp.py --json ffp.json
 python validation/curved_rays.py --json curved_rays.json   # about 30 min
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
+python validation/open_ground_frequencies.py --json open_ground.json   # --cache DIR --part K/N to share it
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
 python validation/barrier_wind.py --json barrier_wind.json   # about 4 h; --quick: fewer bands
 python validation/long_term.py --json long_term.json

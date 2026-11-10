@@ -436,8 +436,10 @@ def _late_text(late) -> str:
 def _more_text(scene: dict, settings) -> str:
     """What else made the sound: the wave solver's bands, and outdoors in wind or a
     temperature gradient what the weather bent (the paths, the late rays, the parabolic
-    equation over the open ground up to ``WAVE_MAX_BAND_HZ``); empty for none."""
-    from acoustic_spaces.engine.refracted import WAVE_MAX_BAND_HZ
+    equation over the open ground up to ``WAVE_MAX_BAND_HZ``, short of half the way to
+    the shadow up to ``LIT_WAVE_MAX_BAND_HZ`` with ``open_ground_frequencies: rays``);
+    empty for none."""
+    from acoustic_spaces.engine.refracted import LIT_WAVE_MAX_BAND_HZ, WAVE_MAX_BAND_HZ
     from acoustic_spaces.scene.model import Atmosphere
 
     more = ""
@@ -447,9 +449,12 @@ def _more_text(scene: dict, settings) -> str:
     atmosphere = scene.get("atmosphere")
     if outdoors and atmosphere and not Atmosphere.model_validate(atmosphere).still:
         angle = settings.early.parabolic_equation.replace("_", "-")
+        reach = f"{WAVE_MAX_BAND_HZ / 1000:g} kHz"
+        if settings.early.open_ground_frequencies == "rays":
+            reach = f"{LIT_WAVE_MAX_BAND_HZ:g} Hz ({reach} in and near shadows)"
         more += (
             "; paths and late rays bent by the wind and temperature; the open ground in the "
-            f"bands up to {WAVE_MAX_BAND_HZ / 1000:g} kHz by the {angle} parabolic equation"
+            f"bands up to {reach} by the {angle} parabolic equation"
         )
     return more
 

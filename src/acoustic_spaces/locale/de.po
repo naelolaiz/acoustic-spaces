@@ -5363,6 +5363,39 @@ msgstr ""
 "(Outdoor scenes, How the simulation bends sound)"
 
 #: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "rays, off by up to {error:g} dB at 1 and 2 kHz"
+msgstr "Strahlen, bis zu {error:g} dB Abweichung bei 1 und 2 kHz"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count}, off by up to {error:g} dB at 1 and 2 kHz"
+msgstr "{count}, bis zu {error:g} dB Abweichung bei 1 und 2 kHz"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors over the open ground in wind or temperature gradients, the "
+"frequencies an octave the parabolic equation takes at 1 and 2 kHz (below 1 "
+"kHz always 8), or the rays, which give those bands where one reaches the "
+"listener short of half the way to the shadow's start. Fewer take less time "
+"and leave those bands further off, and in the shadow the bands above, which "
+"deepen from them: each choice says by how much at most at 1 and 2 kHz, "
+"against a fast field program in the validation cases. The documentation has "
+"the errors and the run times measured (Outdoor scenes, How the simulation "
+"bends sound)"
+msgstr ""
+"Im Freien über freiem Gelände bei Wind oder Temperaturgradienten: die "
+"Frequenzen je Oktave, die die parabolische Gleichung bei 1 und 2 kHz nimmt "
+"(unter 1 kHz immer 8), oder die Strahlen, die diese Bänder geben, wo einer "
+"den Hörer vor der Hälfte des Weges zum Beginn des Schattens erreicht. "
+"Weniger brauchen weniger Zeit und geben diese Bänder ungenauer wieder, im "
+"Schatten auch die Bänder darüber, die sich von ihnen aus vertiefen: jede "
+"Auswahl nennt die größte Abweichung bei 1 und 2 kHz gegenüber einem "
+"Fast-Field-Programm in den Validierungsfällen. Die Dokumentation enthält die "
+"Abweichungen und die gemessenen Rechenzeiten (Outdoor scenes, How the "
+"simulation bends sound)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
@@ -5403,6 +5436,10 @@ msgstr "Parabolische Gleichung"
 #: acoustic_spaces/gui/inspector.py
 msgid "Frequencies behind barriers"
 msgstr "Frequenzen hinter Schallschirmen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Frequencies over open ground"
+msgstr "Frequenzen über freiem Gelände"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "In pressure up to"
