@@ -7,7 +7,9 @@
 #   docker run --rm --gpus all -v "$PWD:/work" --user "$(id -u):$(id -g)" \
 #       acoustic-spaces simulate hall.zip --out results
 
-FROM ubuntu:24.04 AS build
+# The system packages of each half are a stage of their own (toolchain, system), which CI
+# builds first: a failure there is one of Ubuntu's package servers, not of the code.
+FROM ubuntu:24.04 AS toolchain
 # No questions from apt, nor notes on the terminal it would ask them in.
 ARG DEBIAN_FRONTEND=noninteractive
 # Ubuntu's g++-13 itself: the g++ package's c++ link warns that the image has no manual
@@ -15,6 +17,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends g++-13 python3-dev python3-venv \
     && rm -rf /var/lib/apt/lists/*
+
+FROM toolchain AS build
 ENV CXX=g++-13
 RUN python3 -m venv /opt/build
 WORKDIR /src
@@ -22,7 +26,7 @@ COPY . .
 # CMake, Ninja and nanobind come from PyPI as build requirements.
 RUN /opt/build/bin/pip wheel --no-cache-dir --no-deps --wheel-dir /wheels .
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS system
 ARG DEBIAN_FRONTEND=noninteractive
 # The Vulkan loader and Mesa's drivers: AMD and Intel GPUs, and lavapipe, a software
 # renderer that device auto never picks. NVIDIA's driver comes from the host.
@@ -30,6 +34,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-venv libvulkan1 \
         mesa-vulkan-drivers \
     && rm -rf /var/lib/apt/lists/*
+
+FROM system
 # The optional parts installed with it: gpu (wgpu) and sofa (h5py) by default; add ifc
 # or sketchup for packs whose model is an IFC or SketchUp file.
 ARG EXTRAS=gpu,sofa

@@ -203,6 +203,10 @@
   0.02 dB of the taller grids and costs cells wherever the model reaches less far:
   1.13 times as many on validation/wave_outdoor.py's 63 Hz grids, 2.1 to 2.4 times in a
   hall open at one end.
+- Changed: CI runs again by itself, up to twice, the jobs of a run that failed only
+  because GitHub lost their runner or a step that fetches system packages failed
+  (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`). A pull request runs one job on
+  the Intel Mac, the tests with Python 3.10; main and tags run all four.
 
 ## 4.2.1
 
