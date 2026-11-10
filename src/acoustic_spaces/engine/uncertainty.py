@@ -30,6 +30,14 @@ with probability ``one_sided``, and the one it is at most with that probability,
 draws' quantiles of 1 - ``one_sided`` and of ``one_sided`` (for a normal spread at 95 %,
 the mean less and plus 1.645 standard uncertainties).
 
+The same draws give the spread of each response's levels and speech results
+(:class:`LevelSpread`): the sound pressure level per octave band and A-weighted, the
+STI, the STIPA, U50 and, outdoors, the level relative to free field, each found from
+the draw's response for the source's sound power, its talker and the scene's background
+noise, with the rays' error of its own from the same batches
+(:meth:`~acoustic_spaces.engine.response.Response.level_errors`). They are results as
+the parameters are: where the text below says parameter, it holds for them too.
+
 The draws are a number given beforehand (JCGM 101 7.2.1), or, with ``draws`` adaptive, as
 many as JCGM 101 7.9's adaptive procedure takes: batch after batch until, for every
 parameter in every band of every response, twice the standard deviation of the batches'
@@ -55,6 +63,8 @@ measured to ISO 354 (:func:`octave_reproducibility`), doubled as such a table's 
 are not a measurement of the material in the room.
 
 Not counted: the scattering's uncertainty, nor the method's (docs/validation.md), nor
+the results that are not a response's own (coverage maps, insertion losses and
+long-term levels have no spread), nor
 the rays' error with fewer than ``MIN_BATCHES`` batches (Student's t has no variance
 then) or in the parameters it is not found for (those from the late sound's directions).
 Nor a band in which a material absorbs everything: no energy is left there to
@@ -79,6 +89,7 @@ from __future__ import annotations
 import dataclasses
 import math
 from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 
@@ -89,7 +100,7 @@ from acoustic_spaces.engine.reweight import (
     reweighted_materials,
 )
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
-from acoustic_spaces.parameters import LIMITS, RoomParameters
+from acoustic_spaces.parameters import LIMITS, Levels, RoomParameters
 from acoustic_spaces.scene.model import ONE_SIDED, SPREAD_DRAWS, AbsorptionUncertainty
 
 #: The highest absorption a draw takes: re-weighting needs some sound reflected.
@@ -128,6 +139,12 @@ MIN_BATCHES = 4
 PROGRESS_DRAWS = 25
 #: The parts of a :class:`Spread`.
 PARTS = ("mean", "standard", "low", "high", "at_least", "at_most", "absorption", "rays")
+#: The results that take another's deviates of the rays' error, so that their intervals
+#: agree with its: a band's level is its G and the source's power (where G is defined),
+#: the level relative to free field moves with the band's energy as G does, U50 is C50
+#: with the background noise added to what comes late, and the A-weighted level
+#: relative to free field is the A-weighted level less that of the source in free field.
+_DEVIATES_OF = {"spl": "g", "re_free_field": "g", "u50": "c50", "re_free_field_a": "spl_a"}
 #: The half-width of the tolerance a built-in material of unknown source takes in every
 #: band (``simulation.uncertainty.presets: tolerance``, the default).
 PRESET_TOLERANCE = 0.1
@@ -222,6 +239,28 @@ EDGE_ERRORS_DB = {
 
 
 @dataclasses.dataclass(frozen=True)
+class LevelSpread:
+    """The parts of a :class:`Spread` for a response's levels and speech results
+    (:class:`~acoustic_spaces.parameters.Levels`: the level per octave band and
+    A-weighted, STI, STIPA, U50 and, outdoors, the level relative to free field), found
+    in each draw for the source's sound power, its talker and the scene's background
+    noise (:meth:`~acoustic_spaces.scene.model.Scene.level_inputs`)."""
+
+    mean: Levels
+    standard: Levels
+    low: Levels
+    high: Levels
+    at_least: Levels
+    at_most: Levels
+    absorption: Levels
+    rays: Levels
+
+    def as_dict(self) -> dict:
+        """Plain values, with None for undefined ones (JSON friendly)."""
+        return {part: getattr(self, part).as_dict() for part in PARTS}
+
+
+@dataclasses.dataclass(frozen=True)
 class Spread:
     """The spread of one response's ISO 3382-1 parameters over the draws, each a
     (bands,) array: ``mean``, ``standard`` (the combined standard uncertainty), and
@@ -240,7 +279,8 @@ class Spread:
     with the draws chosen adaptively,
     whether every result of every response met JCGM 101 7.9's test before the draws
     reached their limit; None with a number of draws given beforehand, which is not
-    tested."""
+    tested. ``levels``: the same parts for the response's levels and speech results
+    (:class:`LevelSpread`), from the same draws."""
 
     mean: RoomParameters
     standard: RoomParameters
@@ -258,9 +298,11 @@ class Spread:
     assumed: dict[str, str] = dataclasses.field(default_factory=dict)
     held: dict[str, list[int]] = dataclasses.field(default_factory=dict)
     stable: bool | None = None
+    levels: LevelSpread | None = None
 
     def as_dict(self) -> dict:
         """Plain values, with None for undefined ones (JSON friendly)."""
+        levels = {} if self.levels is None else {"levels": self.levels.as_dict()}
         return {
             "draws": self.draws,
             "stable": self.stable,
@@ -274,6 +316,7 @@ class Spread:
             },
             "assumed": dict(self.assumed),
             "held": {name: list(bands) for name, bands in self.held.items()},
+            **levels,
         }
 
 
@@ -517,49 +560,95 @@ def numerical_tolerance(standard, digits: int = 1) -> np.ndarray:
     return out
 
 
+def _flat(parameters: RoomParameters, levels: Levels | None) -> dict[str, np.ndarray]:
+    """{name: (bands,) or (1,)} the room parameters, then the levels and speech results
+    if given, a value in all bands together as an array of one."""
+    out = {
+        f.name: np.asarray(getattr(parameters, f.name), dtype=float)
+        for f in dataclasses.fields(RoomParameters)
+    }
+    if levels is not None:
+        for f in dataclasses.fields(Levels):
+            out[f.name] = np.atleast_1d(np.asarray(getattr(levels, f.name), dtype=float))
+    return out
+
+
 class _Tally:
-    """One response's parameters in the draws, batch by batch: the parameters each draw
-    of the absorption gives, and the rays' error to add to each (their standard errors
-    ``errors``, from ``batches`` batches of rays, times a deviate of Student's t of
-    ``batches`` - 1 degrees of freedom; None for none). The mean and the absorption's
-    standard uncertainty are those of the draws' parameters, the combined standard
-    uncertainty has the rays' in closed form, and the interval's ends and the one-sided
-    bounds are quantiles of the draws with the rays' deviates."""
+    """One response's results in the draws, batch by batch: the room parameters, and
+    the levels and speech results, that each draw of the absorption gives, and the
+    rays' error to add to each (their standard errors ``errors`` and ``level_errors``,
+    from ``batches`` batches of rays, times a deviate of Student's t of ``batches`` - 1
+    degrees of freedom; None for none). The mean and the absorption's standard
+    uncertainty are those of the draws' results, the combined standard uncertainty has
+    the rays' in closed form, and the interval's ends and the one-sided bounds are
+    quantiles of the draws with the rays' deviates."""
 
     def __init__(
-        self, errors: RoomParameters | None, batches: int, coverage: float, one_sided: float
+        self,
+        errors: RoomParameters | None,
+        batches: int,
+        coverage: float,
+        one_sided: float,
+        level_errors: Levels | None = None,
     ) -> None:
-        self._errors, self._batches, self._coverage = errors, batches, coverage
+        self._errors = None if errors is None else _flat(errors, level_errors)
+        self._batches, self._coverage = batches, coverage
         # The draws' quantiles: the interval's ends, then the one-sided bounds.
         tail = 0.5 * (1.0 - coverage)
         self._quantiles = (tail, 1.0 - tail, 1.0 - one_sided, one_sided)
         self._one_sided = one_sided
-        self._names = [f.name for f in dataclasses.fields(RoomParameters)]
-        self._values: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
-        self._noise: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
-        # Of each batch, each parameter's (6, bands) mean and standard deviation over
+        # The results' names, the room parameters first, and which of the levels and
+        # speech results are one value: both from the first batch.
+        self._names: list[str] = []
+        self._in_all: set[str] = set()
+        self._values: dict[str, list[np.ndarray]] = {}
+        self._noise: dict[str, list[np.ndarray]] = {}
+        # Of each batch, each result's (6, bands) mean and standard deviation over
         # the absorption's draws, and with the rays' deviates its interval's ends and
         # one-sided bounds; and whether it is defined in every draw of it.
-        self._estimates: dict[str, list[np.ndarray]] = {name: [] for name in self._names}
+        self._estimates: dict[str, list[np.ndarray]] = {}
         self._defined: dict[str, np.ndarray] = {}
         self.draws = 0
 
-    def add(self, found: list[RoomParameters], rng: np.random.Generator) -> None:
+    def add(
+        self,
+        found: list[RoomParameters],
+        rng: np.random.Generator,
+        heard: list[Levels] | None = None,
+    ) -> None:
         """Take a batch: the parameters ``found`` in its draws of the absorption, the
-        rays' deviates from ``rng``."""
+        levels and speech results ``heard`` in them if given, the rays' deviates from
+        ``rng``."""
+        drawn = [
+            _flat(parameters, None if heard is None else heard[k])
+            for k, parameters in enumerate(found)
+        ]
+        if not self._names:
+            self._names = list(drawn[0])
+            if heard is not None:
+                self._in_all = {
+                    f.name
+                    for f in dataclasses.fields(Levels)
+                    if not np.ndim(getattr(heard[0], f.name))
+                }
+            for store in (self._values, self._noise, self._estimates):
+                store.update((name, []) for name in self._names)
         self.draws += len(found)
+        deviates: dict[str, np.ndarray] = {}
         for name in self._names:
-            values = np.stack([np.asarray(getattr(p, name), dtype=float) for p in found])
+            values = np.stack([results[name] for results in drawn])
             defined = np.all(np.isfinite(values), axis=0)
             safe = np.where(defined, values, 0.0)
             self._values[name].append(values)
             mean, deviation = safe.mean(axis=0), safe.std(axis=0, ddof=1)
             if self._errors is not None:
-                error = np.asarray(getattr(self._errors, name), dtype=float)
+                error = self._error(name)
                 nu = self._batches - 1
-                noise = rng.standard_t(nu, size=values.shape) * np.where(
-                    np.isfinite(error), error, 0.0
-                )
+                like = deviates.get(_DEVIATES_OF.get(name, ""))
+                if like is None or like.shape != values.shape:
+                    like = rng.standard_t(nu, size=values.shape)
+                deviates[name] = like
+                noise = like * np.where(np.isfinite(error), error, 0.0)
                 self._noise[name].append(noise)
                 safe = safe + noise
             self._defined[name] = self._defined.get(name, True) & defined
@@ -576,14 +665,21 @@ class _Tally:
         """(bands,) the rays' standard uncertainty of parameter ``name``: its standard
         error times sqrt(nu / (nu - 2)), Student's t of nu degrees of freedom being
         that much wider than the normal; NaN where the rays' error is not counted."""
+        error = self._error(name)
         if self._errors is None:
-            return np.full(self._values[name][0].shape[1], np.nan)
-        error = np.asarray(getattr(self._errors, name), dtype=float)
+            return error
         nu = self._batches - 1
         return np.where(np.isfinite(error), error * math.sqrt(nu / (nu - 2)), np.nan)
 
+    def _error(self, name: str) -> np.ndarray:
+        """(bands,) the rays' standard error of result ``name``, NaN where there is
+        none: without batches, or for a level whose errors were not given."""
+        if self._errors is not None and name in self._errors:
+            return self._errors[name]
+        return np.full(self._values[name][0].shape[1], np.nan)
+
     def unstable(self) -> tuple[float, str, int] | None:
-        """None when every parameter in every band meets the test of JCGM 101 7.9.4 over
+        """None when every result in every band meets the test of JCGM 101 7.9.4 over
         the batches taken: twice the standard deviation of the batches'
         mean, combined standard uncertainty and interval's ends, each over the root of
         the number of batches, is at most the numerical tolerance of the combined
@@ -613,6 +709,15 @@ class _Tally:
                 worst = (float(over[band]), name, band)
         return worst
 
+    def _levels(self, values: dict[str, np.ndarray]) -> Levels:
+        """The levels and speech results among ``values``, one number for those in all
+        bands together."""
+        found: dict[str, Any] = {
+            f.name: float(values[f.name][0]) if f.name in self._in_all else values[f.name]
+            for f in dataclasses.fields(Levels)
+        }
+        return Levels(**found)
+
     def spread(self, stable: bool | None) -> Spread:
         """The :class:`Spread` of all the draws taken."""
         parts: dict[str, dict[str, np.ndarray]] = {part: {} for part in PARTS}
@@ -636,7 +741,14 @@ class _Tally:
                 ("rays", rays),
             ):
                 parts[part][name] = np.where(defined, value, np.nan)
-        each = {part: RoomParameters(**values) for part, values in parts.items()}
+        room = [f.name for f in dataclasses.fields(RoomParameters)]
+        each = {
+            part: RoomParameters(**{name: values[name] for name in room})
+            for part, values in parts.items()
+        }
+        levels = None
+        if len(self._names) > len(room):
+            levels = LevelSpread(**{part: self._levels(values) for part, values in parts.items()})
         return Spread(
             mean=each["mean"],
             standard=each["standard"],
@@ -651,6 +763,7 @@ class _Tally:
             draws=self.draws,
             batches=self._batches,
             stable=stable,
+            levels=levels,
         )
 
 
@@ -667,7 +780,8 @@ def material_spread(
     max_draws: int | None = None,
     one_sided: float = DEFAULT_ONE_SIDED,
 ) -> dict:
-    """{(source, listener): :class:`Spread`} the spread of ``result``'s parameters that
+    """{(source, listener): :class:`Spread`} the spread of ``result``'s parameters, and
+    of its levels and speech results (:attr:`Spread.levels`), that
     the uncertainty of its materials' absorption leads to, with the rays' random error
     (unless ``rays`` is False). ``result`` is ``scene`` simulated with ``face_group`` for
     ``materials`` (:func:`~acoustic_spaces.engine.reweight.groups_of` and
@@ -694,10 +808,15 @@ def material_spread(
     traced = np.array([scene.materials[n].coefficients("octave")[0] for n in materials])
     say = progress or (lambda _: None)
     tallies = {}
+    # The sound power, background noise and talker each response's levels are found with.
+    inputs = {key: scene.level_inputs(key[0]) for key in result.responses}
     for key, response in result.responses.items():
         batches = len(response.late_batches) if rays else 0
         errors = response.standard_errors() if batches >= MIN_BATCHES else None
-        tallies[key] = _Tally(errors, 0 if errors is None else batches, coverage, one_sided)
+        level_errors = None if errors is None else response.level_errors(*inputs[key])
+        tallies[key] = _Tally(
+            errors, 0 if errors is None else batches, coverage, one_sided, level_errors
+        )
     admittance_of: _Admittances | None = None
     steps = [
         ADMITTANCE_STEPS[getattr(uncertainty_of(scene, n), "distribution", "normal")]
@@ -726,21 +845,21 @@ def material_spread(
         ratios = [log_ratio(traced, drawn) for drawn in taken]
         of = "" if adaptive else f" of {draws}"
         for n, (key, response) in enumerate(result.responses.items(), start=1):
-            found = []
+            found, heard = [], []
             for k, (ratio, drawn) in enumerate(zip(ratios, taken, strict=True)):
                 if k % PROGRESS_DRAWS == 0:
                     say(
                         f"the spread: {key[0]} -> {key[1]} ({n} of {len(result.responses)}), "
                         f"draw {taken_so_far + k + 1}{of}"
                     )
-                found.append(
-                    response.reweighted(
-                        face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
-                    ).parameters()
+                moved = response.reweighted(
+                    face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
                 )
+                found.append(moved.parameters())
+                heard.append(moved.levels_and_speech(*inputs[key], found[-1]))
             # Each response from the start of the stream: its spread is the same
             # whichever other responses the run has.
-            tallies[key].add(found, np.random.default_rng(stream))
+            tallies[key].add(found, np.random.default_rng(stream), heard)
         taken_so_far += len(taken)
         if not adaptive:
             break
@@ -827,6 +946,7 @@ __all__ = [
     "EDGE_ERRORS_DB",
     "MAX_ABSORPTION",
     "MIN_BATCHES",
+    "LevelSpread",
     "Spread",
     "absorption_draws",
     "edge_errors",

@@ -55,6 +55,11 @@
   longer rewrites a scattering entry given by name as numbers, the Source field keeps
   its caret after Enter, an opening takes no uncertainty, and a source reads "edited
   from ..." once the kind or a value of the uncertainty it names is changed.
+- Added: the spread covers each listener's levels and speech results: the sound
+  pressure level per octave band and A-weighted, the STI, the STIPA, U50 and, outdoors,
+  the level relative to free field (`uncertainty.levels` in `parameters.json`, the
+  A-weighted level's and the STI's in `simulate`'s output, the level's in the editor's
+  tips).
 
 ## 4.2.1
 

@@ -89,8 +89,8 @@ CURVATURE_LIMIT = 10.0
 #: Every parameter, in display order.
 ALL_PARAMETERS = {**PARAMETERS, **MORE_PARAMETERS}
 #: The least and the most a parameter can be, for those that have such a limit: a time
-#: is not below 0, a share of the energy or a correlation lies between 0 and 1. The
-#: levels (dB) have none.
+#: is not below 0, a share of the energy, a correlation or a speech transmission index
+#: lies between 0 and 1. The levels (dB) have none.
 LIMITS: dict[str, tuple[float, float]] = {
     "edt": (0.0, math.inf),
     "t20": (0.0, math.inf),
@@ -107,6 +107,8 @@ LIMITS: dict[str, tuple[float, float]] = {
     "xi_t20": (0.0, 1000.0),
     "xi_t30": (0.0, 1000.0),
     "curvature": (-100.0, math.inf),
+    "sti": (0.0, 1.0),
+    "stipa": (0.0, 1.0),
 }
 _SYMBOLS = {
     "ts": "Ts",
@@ -815,6 +817,45 @@ class SpeechParameters:
         }
 
 
+@dataclass
+class Levels:
+    """What a listener gets from a source of a given sound power
+    (:meth:`~acoustic_spaces.engine.response.Response.levels_and_speech`): the sound
+    pressure level per octave band (``spl``, dB SPL) and A-weighted (``spl_a``, dB(A));
+    the speech transmission index, ``sti`` and ``stipa`` (0 to 1), and ``u50`` per
+    octave band (dB); outdoors the level relative to free field per octave band
+    (``re_free_field``, dB) and A-weighted (``re_free_field_a``), NaN in a room. NaN
+    where undefined."""
+
+    spl: np.ndarray
+    spl_a: float
+    sti: float
+    stipa: float
+    u50: np.ndarray
+    re_free_field: np.ndarray
+    re_free_field_a: float
+
+    def as_dict(self) -> dict:
+        """Plain numbers and lists under the report's names (``spl_db``, ``spl_a_db``,
+        ``sti``, ``stipa``, ``u50``, ``re_free_field_db``, ``re_free_field_a_db``), with
+        None for undefined values (JSON friendly)."""
+
+        def plain(v):
+            if np.ndim(v):
+                return [plain(x) for x in v]
+            return float(v) if np.isfinite(v) else None
+
+        return {
+            "spl_db": plain(self.spl),
+            "spl_a_db": plain(self.spl_a),
+            "sti": plain(self.sti),
+            "stipa": plain(self.stipa),
+            "u50": plain(self.u50),
+            "re_free_field_db": plain(self.re_free_field),
+            "re_free_field_a_db": plain(self.re_free_field_a),
+        }
+
+
 def useful_to_detrimental(
     d50: Sequence[float] | np.ndarray,
     signal_db: Sequence[float] | np.ndarray | float,
@@ -1376,6 +1417,7 @@ __all__ = [
     "STI_MODULATION_HZ",
     "TIME_WEIGHTING_STEP_S",
     "EventLevels",
+    "Levels",
     "RoomParameters",
     "SpeechParameters",
     "Talker",

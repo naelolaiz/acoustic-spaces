@@ -129,28 +129,29 @@ parameters as it goes:
 ```
 talker -> seat-a: direct sound at 11.7 ms, 63 early paths
                  63 Hz  125 Hz  250 Hz  500 Hz   1 kHz   2 kHz   4 kHz   8 kHz
-EDT (s)          0.688   0.528   0.702   0.751   0.873   0.967   0.918   0.565
-T20 (s)          0.708   0.795   0.870   1.151   1.267   1.266   1.115   0.762
-T30 (s)          0.709   0.886   0.926   1.174   1.262   1.226   1.102   0.773
-C50 (dB)           2.5     5.7     2.6     3.0     3.0     2.9     3.2     5.6
-C80 (dB)           5.9     8.6     6.1     6.2     5.9     5.6     5.9     8.9
-D50              0.641   0.786   0.647   0.666   0.668   0.659   0.674   0.783
-Ts (s)           0.051   0.038   0.051   0.052   0.055   0.057   0.052   0.035
-G (dB)            22.3    24.3    20.8    19.9    18.6    17.8    17.0    15.6
-LF               0.182   0.097   0.299   0.303   0.333   0.350   0.352   0.334
-LFC              0.271   0.144   0.434   0.433   0.451   0.461   0.458   0.436
-LJ (dB)           11.0    10.8     9.9     9.5     9.0     8.5     7.5     3.6
-IACC_E           0.995   0.986   0.863   0.519   0.457   0.661   0.627   0.607
-IACC_L           0.985   0.907   0.756   0.139   0.293   0.106   0.102   0.094
-T30_X (s)        0.712   0.802   0.895   1.149   1.233   1.224   1.090   0.760
-T30_Y (s)        0.707   1.319   0.983   1.205   1.287   1.226   1.101   0.787
-T30_Z (s)        0.708   0.819   0.855   1.093   1.222   1.202   1.084   0.776
-ξ_T20 (‰)          0.0     1.4     1.9     6.2     1.4     0.7     0.5     0.9
-ξ_T30 (‰)          0.0     6.2     2.3     2.0     0.5     0.8     0.4     0.5
-Curvature (%)      0.2    11.4     6.4     1.9    -0.4    -3.2    -1.2     1.5
-standard errors from 10 batches of rays: at most 0.96 JND from 125 Hz to 4 kHz (T30 at 125 Hz); more rays (simulation.late.rays) would change the parameters less from seed to seed
-SPL 60.1 dB(A); per octave band, dB: 53.1 67.1 63.6 59.0 51.7 45.0 38.1 30.7
-STI 0.66 (STIPA 0.67), echo criterion 0.71 for speech (echo above 1.0), 0.69 for music (echo above 1.8)
+EDT (s)          0.680   0.519   0.703   0.764   0.921   1.004   0.942   0.605
+T20 (s)          0.712   0.781   0.876   1.173   1.353   1.369   1.169   0.764
+T30 (s)          0.708   0.841   0.925   1.292   1.378   1.359   1.174   0.778
+C50 (dB)           2.7     5.8     2.8     3.1     3.1     2.7     3.0     5.3
+C80 (dB)           6.1     8.7     6.1     6.1     5.7     5.3     5.6     8.6
+D50              0.652   0.793   0.655   0.670   0.669   0.650   0.664   0.771
+Ts (s)           0.049   0.037   0.050   0.052   0.056   0.058   0.054   0.036
+G (dB)            22.0    24.1    20.6    19.8    18.5    17.8    17.0    15.6
+LF               0.170   0.093   0.300   0.304   0.330   0.343   0.345   0.328
+LFC              0.254   0.138   0.433   0.432   0.446   0.454   0.451   0.430
+LJ (dB)           10.4    10.7     9.5     9.4     8.9     8.6     7.4     3.7
+IACC_E           0.998   0.989   0.817   0.586   0.495   0.739   0.604   0.611
+IACC_L           0.973   0.947   0.577   0.183   0.298   0.122   0.078   0.067
+T30_X (s)        0.707   0.787   0.927   1.265   1.363   1.341   1.146   0.775
+T30_Y (s)        0.708   0.952   0.940   1.341   1.398   1.372   1.209   0.784
+T30_Z (s)        0.707   0.821   0.895   1.083   1.279   1.265   1.154   0.753
+ξ_T20 (‰)          0.0     0.9     2.7     5.5     3.8     1.8     0.6     0.9
+ξ_T30 (‰)          0.0     2.9     2.2     6.5     2.1     1.4     0.8     0.5
+Curvature (%)     -0.6     7.7     5.7    10.1     1.9    -0.8     0.4     1.7
+standard errors from 10 batches of rays: at most 1.58 JND from 125 Hz to 4 kHz (T30 at 500 Hz); more rays (simulation.late.rays) would change the parameters less from seed to seed
+uncertainty from the absorption and the rays (10 batches), 400 draws: at most 5.23 JND from 125 Hz to 4 kHz (T20 at 1 kHz: u = 0.354 s (absorption 0.34, rays 0.097), 95 % within 0.678 to 1.71 s, 95 % at least 0.707 s and 95 % at most 1.67 s); built-in materials of unknown source taken at plus or minus 0.1 (simulation.uncertainty.presets): painted_concrete, carpet_on_concrete, acoustic_ceiling
+SPL 60.0 dB(A) (u = 0.7, 95 % within 58.4 to 61.0, 95 % at most 60.8); per octave band, dB: 52.8 66.9 63.4 58.9 51.6 44.9 38.1 30.7
+STI 0.66 (u = 0.041, 95 % within 0.63 to 0.74, 95 % at least 0.63), STIPA 0.66, echo criterion 0.65 for speech (echo above 1.0), 0.69 for music (echo above 1.8)
 ```
 
 Unless the scene sets `simulation.seed`, its rays and the noise of its rendered late part

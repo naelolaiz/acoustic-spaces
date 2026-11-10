@@ -3087,6 +3087,20 @@ class Scene(_Model):
             raise ValueError(problem)
         return self
 
+    def level_inputs(
+        self, source: str
+    ) -> tuple[np.ndarray | float, list[float] | float | None, Literal["male", "female"]]:
+        """(sound power, noise, talker) that the levels and the speech results of the
+        source named ``source`` are found with at a listener: its sound power per octave
+        band (dB re 1 pW, :meth:`Source.power_db`) and its talker, 94 dB in all and a
+        male talker for a source the scene does not have; and the background noise of
+        ``coverage`` (dB SPL, in all bands or per octave band), None without."""
+        noise = None if self.coverage is None else self.coverage.noise_db
+        for own in self.sources:
+            if own.name == source:
+                return own.power_db("octave"), noise, own.talker
+        return 94.0, noise, "male"
+
     def under(self, given: WeatherClass) -> Scene:
         """This outdoor scene in a weather class: its atmosphere under the class's weather
         (:meth:`Atmosphere.under`), the air at the class's ground temperature when it

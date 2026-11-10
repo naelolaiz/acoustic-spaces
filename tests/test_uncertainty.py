@@ -602,10 +602,12 @@ def test_an_interval_stays_within_what_the_parameter_can_be():
     """Where the rays' error is large against a value near its limit, the draws with
     the rays' deviates pass the limit: a decay time below 0, a D50 above 1. The
     interval's ends and the one-sided bounds are held at the limit; a level has none."""
-    from acoustic_spaces.parameters import ALL_PARAMETERS, LIMITS, RoomParameters
+    from acoustic_spaces.parameters import ALL_PARAMETERS, LIMITS, Levels, RoomParameters
 
-    assert set(LIMITS) < set(ALL_PARAMETERS)
-    assert all(ALL_PARAMETERS[name][0] != "dB" for name in LIMITS)
+    speech = {"sti", "stipa"}
+    assert speech < {f.name for f in dataclasses.fields(Levels)}
+    assert set(LIMITS) - speech < set(ALL_PARAMETERS)
+    assert all(ALL_PARAMETERS[name][0] != "dB" for name in set(LIMITS) - speech)
     names = [f.name for f in dataclasses.fields(RoomParameters)]
     values = {name: np.full(8, 0.05) for name in names} | {"d50": np.full(8, 0.97)}
     errors = RoomParameters(**{name: np.full(8, 0.1) for name in names})
@@ -623,6 +625,174 @@ def test_an_interval_stays_within_what_the_parameter_can_be():
     assert np.all(spread.low.g < -0.1) and np.all(spread.at_least.g < -0.1)
     np.testing.assert_allclose(spread.mean.t30, 0.05, rtol=1e-12)
     np.testing.assert_allclose(spread.standard.t30, 0.1 * np.sqrt(9.0 / 7.0), rtol=1e-12)
+
+
+def _speech_box() -> Scene:
+    """The box with a talker of 70 dB, and an uncertainty on its walls and its ceiling."""
+    data = _box({"absorption": 0.02}).to_data()
+    data["materials"]["ceiling"]["uncertainty"] = {"absorption": 0.03}
+    data["sources"][0].update(level_db=70.0, spectrum="speech_male")
+    return Scene.model_validate(data)
+
+
+def test_a_response_gives_its_levels_and_speech_results_with_their_errors():
+    """levels_and_speech holds what a report gives one by one, and level_errors their
+    standard errors from the batches of rays: a band's level has its G's, and U50
+    without noise C50's."""
+    from acoustic_spaces.parameters import a_weighted
+
+    scene = _speech_box()
+    response = simulate(Room.from_scene(scene), sources=["s"])["s", "a"]
+    power, noise, talker = scene.level_inputs("s")
+    assert noise is None and talker == "male"
+    np.testing.assert_array_equal(power, scene.sources[0].power_db("octave"))
+    assert scene.level_inputs("another") == (94.0, None, "male")
+    heard = response.levels_and_speech(power, noise, talker)
+    spl = response.levels_or_held(power)
+    speech = response.speech(power, noise, talker=talker)
+    np.testing.assert_array_equal(heard.spl, spl)
+    assert heard.spl_a == a_weighted(spl)
+    assert (heard.sti, heard.stipa) == (speech.sti, speech.stipa)
+    np.testing.assert_array_equal(heard.u50, speech.u50)
+    # A room has no level relative to free field.
+    assert np.all(np.isnan(heard.re_free_field)) and np.isnan(heard.re_free_field_a)
+    plain = heard.as_dict()
+    assert plain["spl_a_db"] == heard.spl_a and plain["sti"] == heard.sti
+    assert plain["re_free_field_db"] == [None] * 8 and plain["re_free_field_a_db"] is None
+    errors = response.level_errors(power, noise, talker)
+    parameters = response.standard_errors()
+    np.testing.assert_allclose(errors.spl, parameters.g, rtol=1e-9)
+    np.testing.assert_allclose(errors.u50, parameters.c50, rtol=1e-6)
+    # The bands' errors do not all add in the A-weighted level.
+    assert 0.0 < errors.spl_a < errors.spl.max()
+    assert 0.0 < errors.sti < 0.05 and 0.0 < errors.stipa < 0.05
+    # Background noise lowers the STI and U50.
+    noisy = response.levels_and_speech(power, 40.0, talker)
+    assert noisy.sti < heard.sti and np.all(noisy.u50 < heard.u50)
+    one = dataclasses.replace(response, late_batches=response.late_batches[:1])
+    assert one.level_errors(power) is None and one.standard_errors() is None
+
+
+def test_the_spread_covers_the_levels_and_speech_results():
+    """The draws also give the spread of the levels and speech results: a band's level
+    is its G moved by the source's power, U50 without noise is C50, and the A-weighted
+    level and the STI are those of each draw's response, with the rays' error of their
+    own from the batches."""
+    scene = _speech_box()
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    response = result["s", "a"]
+    found = material_spread(result, scene, face_group, materials, draws=60, seed=3)["s", "a"]
+    levels = found.levels
+    power, noise, talker = scene.level_inputs("s")
+    moved = power + 10.0 * np.log10(1.0 / (400.0 * np.pi))
+    for part in ("mean", "low", "high", "at_least", "at_most"):
+        np.testing.assert_allclose(
+            getattr(levels, part).spl, getattr(found, part).g + moved, rtol=1e-12
+        )
+        np.testing.assert_allclose(getattr(levels, part).u50, getattr(found, part).c50, atol=1e-9)
+    for part in ("standard", "absorption", "rays"):
+        np.testing.assert_allclose(getattr(levels, part).spl, getattr(found, part).g, rtol=1e-9)
+    # Each draw's response again, with a fit of the admittance of its own where the
+    # spread takes it between fits: the lowest bands, which weigh little in these.
+    before = np.array([scene.materials[m].coefficients("octave")[0] for m in materials])
+    drawn = []
+    for after in absorption_draws(scene, materials, 60, 3):
+        again = response.reweighted(
+            face_group, log_ratio(before, after), absorption=(before, after)
+        )
+        drawn.append(again.levels_and_speech(power, noise, talker))
+    errors = response.level_errors(power, noise, talker)
+    heard = response.levels_and_speech(power, noise, talker)
+    for name, close in (("spl_a", 0.01), ("sti", 0.001), ("stipa", 0.001)):
+        values = np.array([getattr(v, name) for v in drawn])
+        assert getattr(levels.mean, name) == pytest.approx(values.mean(), abs=close)
+        assert getattr(levels.absorption, name) == pytest.approx(values.std(ddof=1), rel=0.02)
+        assert getattr(levels.absorption, name) > 0.0
+        # Ten batches: Student's t of 9 degrees of freedom.
+        rays = getattr(errors, name) * np.sqrt(9.0 / 7.0)
+        assert getattr(levels.rays, name) == pytest.approx(rays, rel=1e-12)
+        combined = np.hypot(getattr(levels.absorption, name), rays)
+        assert getattr(levels.standard, name) == pytest.approx(combined, rel=1e-12)
+        assert getattr(levels.low, name) < getattr(heard, name) < getattr(levels.high, name)
+        assert getattr(levels.low, name) < getattr(levels.at_least, name)
+        assert getattr(levels.at_most, name) < getattr(levels.high, name)
+    assert 0.0 < levels.low.sti and levels.high.sti < 1.0
+    # A room has no level relative to free field, and the report holds None for it.
+    assert np.all(np.isnan(levels.standard.re_free_field))
+    plain = found.as_dict()["levels"]
+    assert set(plain) == {"mean", "standard", "low", "high", "at_least", "at_most"} | {
+        "absorption",
+        "rays",
+    }
+    assert plain["standard"]["sti"] == levels.standard.sti
+    assert plain["mean"]["spl_db"] == list(levels.mean.spl)
+    assert plain["mean"]["re_free_field_a_db"] is None
+    # Without the rays' error the absorption's is all of it.
+    alone = material_spread(result, scene, face_group, materials, draws=60, seed=3, rays=False)[
+        "s", "a"
+    ].levels
+    assert np.isnan(alone.rays.sti) and alone.standard.sti == alone.absorption.sti
+    assert alone.absorption.sti == levels.absorption.sti and alone.mean.sti == levels.mean.sti
+
+
+def test_the_levels_intervals_agree_with_the_parameters_and_an_sti_s_stays_in_range():
+    """A band's level and its level relative to free field take the deviates of the
+    rays' error that its G takes, U50 those of C50, and the A-weighted level relative
+    to free field those of the A-weighted level, so their intervals are those moved;
+    the room parameters' deviates are the same with the levels and without. An STI's
+    interval is held between 0 and 1."""
+    from acoustic_spaces.parameters import Levels, RoomParameters
+
+    names = [f.name for f in dataclasses.fields(RoomParameters)]
+    same = RoomParameters(**{name: np.full(8, 1.0) for name in names})
+    errors = RoomParameters(**{name: np.full(8, 0.1) for name in names})
+    bands = np.full(8, 60.0)
+    heard = Levels(
+        spl=bands,
+        spl_a=60.0,
+        sti=0.97,
+        stipa=0.03,
+        u50=bands,
+        re_free_field=bands,
+        re_free_field_a=1.0,
+    )
+    tenth = np.full(8, 0.1)
+    level_errors = Levels(
+        spl=tenth,
+        spl_a=0.05,
+        sti=0.05,
+        stipa=0.05,
+        u50=tenth,
+        re_free_field=tenth,
+        re_free_field_a=0.05,
+    )
+    tally = _Tally(errors, 10, 0.95, 0.95, level_errors)
+    tally.add([same] * 2000, np.random.default_rng(1), [heard] * 2000)
+    spread = tally.spread(None)
+    levels = spread.levels
+    for part in ("low", "high", "at_least", "at_most"):
+        g, c50 = getattr(spread, part).g, getattr(spread, part).c50
+        np.testing.assert_allclose(getattr(levels, part).spl - 60.0, g - 1.0, atol=1e-12)
+        np.testing.assert_allclose(getattr(levels, part).re_free_field - 60.0, g - 1.0, atol=1e-12)
+        np.testing.assert_allclose(getattr(levels, part).u50 - 60.0, c50 - 1.0, atol=1e-12)
+        assert getattr(levels, part).re_free_field_a - 1.0 == pytest.approx(
+            getattr(levels, part).spl_a - 60.0, abs=1e-12
+        )
+    without = _Tally(errors, 10, 0.95, 0.95)
+    without.add([same] * 2000, np.random.default_rng(1))
+    without = without.spread(None)
+    assert without.levels is None and "levels" not in without.as_dict()
+    for name in names:
+        np.testing.assert_array_equal(getattr(without.low, name), getattr(spread.low, name))
+    assert levels.high.sti == 1.0 and levels.at_most.sti == 1.0 and 0.8 < levels.low.sti < 0.97
+    assert levels.low.stipa == 0.0 and levels.at_least.stipa == 0.0
+    assert 0.03 < levels.high.stipa < 0.2
+    # A level has no limit, and the mean and the standard uncertainty are not held.
+    assert levels.low.spl_a < 59.95 and levels.high.spl_a > 60.05
+    assert levels.mean.sti == pytest.approx(0.97, rel=1e-12)
+    assert levels.standard.sti == pytest.approx(0.05 * np.sqrt(9.0 / 7.0), rel=1e-12)
 
 
 def test_a_response_s_spread_does_not_depend_on_the_other_responses():
@@ -675,10 +845,27 @@ def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
     assert spread["low"]["t30"][3] <= spread["at_least"]["t30"][3] < spread["mean"]["t30"][3]
     assert spread["mean"]["t30"][3] < spread["at_most"]["t30"][3] <= spread["high"]["t30"][3]
     assert ", 95 % at least " in stdout and " and 95 % at most " in stdout
+    # The levels and speech results have the same parts, and the report's lines give
+    # the A-weighted level's and the STI's.
+    levels = spread["levels"]
+    assert set(levels) == {"mean", "standard", "low", "high", "at_least", "at_most"} | {
+        "absorption",
+        "rays",
+    }
+    for name in ("spl_a_db", "sti"):
+        assert levels["standard"][name] == pytest.approx(
+            np.hypot(levels["absorption"][name], levels["rays"][name]), rel=1e-12
+        )
+        assert levels["low"][name] < levels["mean"][name] < levels["high"][name]
+    assert levels["standard"]["spl_db"] == pytest.approx(spread["standard"]["g"], rel=1e-9)
+    assert " dB(A) (u = " in stdout and " % at most " in stdout.split(" dB(A) (u = ")[1]
+    assert "STI " in stdout and ", STIPA " in stdout
+    assert ", 95 % at least " in stdout.split("STI ")[1].split(", STIPA ")[0]
     # Third-octave bands do not re-weight: the run goes on without the spread.
     assert main([*args, "--bands", "third_octave"]) == 0
     captured = capsys.readouterr()
     assert "warning: no spread" in captured.err
+    assert " dB(A); per octave band" in captured.out and " (STIPA " in captured.out
     entry = json.loads((out / "parameters.json").read_text())["responses"][0]
     assert "uncertainty" not in entry
 

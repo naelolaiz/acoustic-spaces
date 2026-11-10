@@ -3640,6 +3640,10 @@ def test_the_absorption_uncertainty_s_spread_shows_in_the_tips(window, qapp) -> 
     assert "95 % within" in tip and "(400 draws)" in tip
     assert spread.one_sided == 0.95 and "with 95 % probability, and at most" in tip
     assert spread.low.c80[1] < spread.at_least.c80[1] < spread.at_most.c80[1] < spread.high.c80[1]
+    # The level's row has the spread of the level: its G's, G being defined in every draw.
+    tip = window.results.table.item(rows.index("spl"), 1).toolTip()
+    assert "Combined standard uncertainty" in tip and "95 % within" in tip
+    np.testing.assert_allclose(spread.levels.standard.spl[1], spread.standard.g[1], rtol=1e-9)
     # The lateral fraction's rays have no standard error: the absorption alone.
     assert np.isfinite(spread.standard.lf[1]) and np.isnan(spread.rays.lf[1])
     tip = window.results.table.item(rows.index("lf"), 1).toolTip()

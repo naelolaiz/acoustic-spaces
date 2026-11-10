@@ -150,8 +150,12 @@ Parameters:
 - [x] Error estimates: each result's one-sided bounds, for a limit on one side, of 95 %
   or another probability.
 - [x] Error estimates: a material's absorption uncertainty on its page in the editor.
-- [ ] Error estimates, next steps: the scattering's uncertainty; levels, STI and maps;
-  convergence checks; the method's own error from the validation.
+- [x] Error estimates: the spread of each listener's levels and speech results (the
+  level per octave band and A-weighted, STI, STIPA, U50, the level relative to free
+  field).
+- [ ] Error estimates, next steps: the scattering's uncertainty; coverage maps,
+  insertion losses and long-term levels; convergence checks; the method's own error
+  from the validation.
 
 Outdoor acoustics, in steps:
 

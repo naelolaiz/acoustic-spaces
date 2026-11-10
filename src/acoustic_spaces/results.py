@@ -164,9 +164,7 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
     mono_at = [k for k, fmt in enumerate(formats) if fmt.label == "mono"]
 
     scene = result.room.scene
-    sources = {s.name: s for s in scene.sources}
     listeners = {item.name: item for item in scene.listeners}
-    noise_db = scene.coverage.noise_db if scene.coverage is not None else None
     long_term = result.long_term
 
     def write(key) -> tuple[dict, float]:
@@ -199,8 +197,7 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
             )
         if mono is None:
             mono = response.impulse_response(sample_rate)
-        power = sources[source].power_db("octave") if source in sources else 94.0
-        talker = sources[source].talker if source in sources else "male"
+        power, noise_db, talker = scene.level_inputs(source)
         spl = response.levels_or_held(power, params)
         entry = {
             "source": source,

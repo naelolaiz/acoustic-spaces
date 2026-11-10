@@ -6,6 +6,7 @@ import dataclasses
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -384,15 +385,27 @@ class Response:
         :attr:`batch_step`, so a strong arrival in one of them (a ray through the
         listener long after the rest, in a room whose walls keep a few going) leaves
         with the batch it came in."""
+        values = [self._parameters(energy) for energy in self._without_each_batch()]
+        if not values:
+            return None
+        return iso3382.RoomParameters(
+            **{
+                f.name: _jackknife([getattr(v, f.name) for v in values])
+                for f in dataclasses.fields(iso3382.RoomParameters)
+            }
+        )
+
+    def _without_each_batch(self):
+        """The echogram in octave bands without each batch of late rays in turn (the
+        mean of the others in its place), for a jackknife; none without 2 batches."""
         batches = self.late_batches
         n = len(batches)
         if n < 2:
-            return None
+            return
         echogram = self.energy()
         late = self.late[:, : echogram.shape[1]]
         step = max(1, round(self.batch_step / self.time_step))
         mean = batches.mean(axis=0)
-        values = []
         for k in range(n):
             # The late energy without batch k (the mean of the others), as a factor on it.
             factor = np.ones_like(mean)
@@ -402,14 +415,7 @@ class Response:
             energy[:, : factor.shape[1]] += late[:, : factor.shape[1]] * (factor - 1.0)
             if self.wave is not None:
                 energy[: self.wave.bands] = echogram[: self.wave.bands]
-            values.append(self._parameters(to_octaves(np.maximum(energy, 0.0))))
-        errors = {}
-        for f in dataclasses.fields(iso3382.RoomParameters):
-            replicas = np.array([getattr(v, f.name) for v in values], dtype=float)
-            replicas[~np.isfinite(replicas)] = math.nan  # no spread to a clarity of inf
-            spread = ((replicas - replicas.mean(axis=0)) ** 2).sum(axis=0)
-            errors[f.name] = np.sqrt((n - 1) / n * spread)
-        return iso3382.RoomParameters(**errors)
+            yield to_octaves(np.maximum(energy, 0.0))
 
     def relative_to_free_field(self) -> np.ndarray:
         """The level relative to free field per octave band (dB): how much louder (or,
@@ -422,7 +428,13 @@ class Response:
         band of a response without :attr:`free_field`."""
         if self.free_field is None:
             return np.full(len(OCTAVE_BANDS_HZ), math.nan)
-        held = self.octave_energy().sum(axis=1) / self._reference()  # re 10 m free field
+        return self._relative_to_free_field(self.octave_energy())
+
+    def _relative_to_free_field(self, energy: np.ndarray) -> np.ndarray:
+        """:meth:`relative_to_free_field` of the echogram ``energy`` in octave bands."""
+        if self.free_field is None:
+            return np.full(len(OCTAVE_BANDS_HZ), math.nan)
+        held = energy.sum(axis=1) / self._reference()  # re 10 m free field
         with np.errstate(divide="ignore", invalid="ignore"):
             return 10.0 * np.log10(held / (to_octaves(self.free_field) * (4.0 * math.pi * 100.0)))
 
@@ -459,8 +471,15 @@ class Response:
         of :func:`~acoustic_spaces.walkthrough.pass_by`; the coverage maps and
         :meth:`speech` leave such a band undefined."""
         params = self.parameters() if parameters is None else parameters
+        return self._levels_or_held(level_db, params)
+
+    def _levels_or_held(
+        self, level_db, params: iso3382.RoomParameters, energy: np.ndarray | None = None
+    ) -> np.ndarray:
+        """:meth:`levels_or_held` from the parameters ``params`` of the echogram
+        ``energy`` in octave bands (default the response's own)."""
         if not np.isfinite(params.g).all():
-            energy = self.octave_energy()
+            energy = self.octave_energy() if energy is None else energy
             first = min(int(self.direct_delay_s / self.time_step), energy.shape[1] - 1)
             with np.errstate(divide="ignore"):
                 held = 10.0 * np.log10(energy[:, first:].sum(axis=1) / self._reference())
@@ -481,9 +500,15 @@ class Response:
         STIPA are NaN when a band from 125 Hz up has no level (its G is undefined).
         ``parameters`` are this response's, when already at hand."""
         params = self.parameters() if parameters is None else parameters
+        return self._speech(self.octave_energy(), level_db, noise_db, params, talker)
+
+    def _speech(
+        self, energy: np.ndarray, level_db, noise_db, params: iso3382.RoomParameters, talker
+    ) -> iso3382.SpeechParameters:
+        """:meth:`speech` from the echogram ``energy`` in octave bands and its
+        parameters ``params``."""
         level = self.levels(level_db, params)
         signal = np.where(np.isfinite(level), level, -100.0)
-        energy = self.octave_energy()
         # No STI without the level of each of its bands, 125 Hz to 8 kHz.
         sti, stipa = (
             iso3382.speech_transmission_index(
@@ -500,6 +525,70 @@ class Response:
         )
         u50 = iso3382.useful_to_detrimental(params.d50, signal, noise_db)
         return iso3382.SpeechParameters(sti=sti, stipa=stipa, u50=u50, signal_db=level)
+
+    def levels_and_speech(
+        self,
+        level_db: float | Sequence[float] = 94.0,
+        noise_db: float | Sequence[float] | None = None,
+        talker: iso3382.Talker = "male",
+        parameters: iso3382.RoomParameters | None = None,
+    ) -> iso3382.Levels:
+        """The levels and speech results at the listener for a source of sound power
+        ``level_db`` (dB re 1 pW, in all or per octave band), as a run's report gives
+        them: :meth:`levels_or_held` and its A-weighted sum; the STI, STIPA and U50 of
+        :meth:`speech` with background noise ``noise_db`` for ``talker``; and
+        :meth:`relative_to_free_field`, with its A-weighted value (the A-weighted level
+        less that of the same source in free field). ``parameters`` are this
+        response's, when already at hand."""
+        params = self.parameters() if parameters is None else parameters
+        return self._levels_and_speech(self.octave_energy(), level_db, noise_db, talker, params)
+
+    def _levels_and_speech(
+        self, energy: np.ndarray, level_db, noise_db, talker, params: iso3382.RoomParameters
+    ) -> iso3382.Levels:
+        """:meth:`levels_and_speech` from the echogram ``energy`` in octave bands and
+        its parameters ``params``."""
+        spl = self._levels_or_held(level_db, params, energy)
+        speech = self._speech(energy, level_db, noise_db, params, talker)
+        relative = self._relative_to_free_field(energy)
+        total = iso3382.a_weighted(spl)
+        # In a band no sound arrives in (a level of -inf) the level in free field
+        # cannot be read back from the level: the A-weighted value is then NaN.
+        with np.errstate(invalid="ignore"):
+            relative_a = total - iso3382.a_weighted(spl - relative)
+        return iso3382.Levels(
+            spl=spl,
+            spl_a=total,
+            sti=speech.sti,
+            stipa=speech.stipa,
+            u50=speech.u50,
+            re_free_field=relative,
+            re_free_field_a=relative_a,
+        )
+
+    def level_errors(
+        self,
+        level_db: float | Sequence[float] = 94.0,
+        noise_db: float | Sequence[float] | None = None,
+        talker: iso3382.Talker = "male",
+    ) -> iso3382.Levels | None:
+        """The standard error of each of :meth:`levels_and_speech` from the late rays'
+        batches, by the jackknife of :meth:`standard_errors`: NaN where some batch
+        leaves the value undefined or infinite, None without 2 batches or more. Where
+        G is defined, a band's level is its G and the source's power, so its error is
+        G's; where it is not, the level is that of the energy held
+        (:meth:`levels_or_held`) and has an error of its own."""
+        values = [
+            self._levels_and_speech(energy, level_db, noise_db, talker, self._parameters(energy))
+            for energy in self._without_each_batch()
+        ]
+        if not values:
+            return None
+        errors: dict[str, Any] = {}
+        for f in dataclasses.fields(iso3382.Levels):
+            error = _jackknife([getattr(v, f.name) for v in values])
+            errors[f.name] = error if error.ndim else float(error)
+        return iso3382.Levels(**errors)
 
     def impulse_response(self, sample_rate: int = 48_000, seed: int | None = None) -> np.ndarray:
         """Mono impulse response; the direct sound at r metres is an impulse of height 1 / r.
@@ -557,6 +646,17 @@ class Response:
         from acoustic_spaces.spatial.render import spatial_impulse_response
 
         return spatial_impulse_response(self, fmt, sample_rate, seed)
+
+
+def _jackknife(replicas) -> np.ndarray:
+    """The standard error of a value from its ``replicas`` (n, ...), each found without
+    one of n batches: their spread, times (n - 1) / n under the root. NaN where a
+    replica is undefined or infinite (no spread to a clarity of inf)."""
+    replicas = np.array(replicas, dtype=float)
+    replicas[~np.isfinite(replicas)] = math.nan
+    n = len(replicas)
+    spread = ((replicas - replicas.mean(axis=0)) ** 2).sum(axis=0)
+    return np.sqrt((n - 1) / n * spread)
 
 
 def _delayed(x: np.ndarray, slots: float) -> np.ndarray:

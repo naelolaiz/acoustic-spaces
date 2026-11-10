@@ -1240,7 +1240,13 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         print(_level_text(entry))
         for line in _outdoor_lines(entry, result.removed):
             print(line)
-        print(_speech_text(entry["speech"], entry["echo"]))
+        print(
+            _speech_text(
+                entry["speech"],
+                entry["echo"],
+                _level_spread_text(entry, "sti", ".2f", "at_least"),
+            )
+        )
     files = sum(len(entry["outputs"]) for entry in report["responses"])
     print(f"\nwrote {files} impulse response files and {REPORT_FILE} to {out}")
     if report["peak"] > 1.0:
@@ -1277,9 +1283,27 @@ def _feed_text(source) -> str:
 
 
 def _level_text(entry: dict) -> str:
-    """One line: the A-weighted sound pressure level and that of each octave band."""
+    """One line: the A-weighted sound pressure level, with its spread and the level it
+    is at most where the run drew one, and the level of each octave band."""
     bands = " ".join(_number(v, ".1f") for v in entry["spl_db"])
-    return f"SPL {_number(entry['spl_a_db'], '.1f')} dB(A); per octave band, dB: {bands}"
+    spread = _level_spread_text(entry, "spl_a_db", ".1f", "at_most")
+    return f"SPL {_number(entry['spl_a_db'], '.1f')} dB(A){spread}; per octave band, dB: {bands}"
+
+
+def _level_spread_text(entry: dict, name: str, fmt: str, side: str) -> str:
+    """' (u = 0.42, 95 % within 70.5 to 72.1, 95 % at most 72.0)': the spread of the
+    level or speech result ``name`` of a response whose run drew one (else nothing),
+    with the one-sided bound of ``side``, ``at_least`` or ``at_most``."""
+    spread = entry.get("uncertainty", {})
+    levels = spread.get("levels")
+    if levels is None or levels["standard"][name] is None:
+        return ""
+    low, high, bound = (levels[part][name] for part in ("low", "high", side))
+    one_sided = f"{100 * spread['one_sided']:g} % {side.replace('_', ' ')}"
+    return (
+        f" (u = {levels['standard'][name]:.2g}, {100 * spread['coverage']:g} % within "
+        f"{low:{fmt}} to {high:{fmt}}, {one_sided} {bound:{fmt}})"
+    )
 
 
 def _convergence_text(entry: dict, batches: int) -> str:
@@ -1468,13 +1492,16 @@ def _number(value, fmt: str = ".2f") -> str:
     return "-" if value is None else f"{value:{fmt}}"
 
 
-def _speech_text(speech: dict | None, echo: dict) -> str:
+def _speech_text(speech: dict | None, echo: dict, spread: str = "") -> str:
     """One line: STI and STIPA (when given), and the echo criteria with the values at
-    which half of listeners hear an echo."""
+    which half of listeners hear an echo. ``spread``: the STI's spread, where the run
+    drew one (:func:`_level_spread_text`)."""
     from acoustic_spaces.parameters import ECHO_CRITERIA
 
     parts = []
-    if speech is not None:
+    if speech is not None and spread:
+        parts.append(f"STI {_number(speech['sti'])}{spread}, STIPA {_number(speech['stipa'])}")
+    elif speech is not None:
         parts.append(f"STI {_number(speech['sti'])} (STIPA {_number(speech['stipa'])})")
     criteria = ", ".join(
         f"{_number(echo[kind]['ec'])} for {kind} (echo above {ECHO_CRITERIA[kind][3][1]:.1f})"
