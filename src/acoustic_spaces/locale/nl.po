@@ -4320,7 +4320,7 @@ msgstr "lokaal: dezelfde onder elke hoek"
 msgid "extended: changes with the angle"
 msgstr "uitgebreid: verandert met de hoek"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
 msgid "standard uncertainty"
 msgstr "standaardonzekerheid"
 
@@ -6030,9 +6030,46 @@ msgstr ""
 "met Simulatie > Dekkingskaart berekenen (F6)."
 
 #: acoustic_spaces/gui/inspector.py
+msgid "From the materials' absorption uncertainty"
+msgstr "Uit de onzekerheid van de absorptie van de materialen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Ticked, the map also gives the uncertainty of every value that the "
+"materials' absorption uncertainty leads to. For that it is traced twice more "
+"for each material that has one, with its absorption one standard uncertainty "
+"up and down. Show, in the Coverage map panel, picks what of it the map draws"
+msgstr ""
+"Aangevinkt: de kaart geeft ook de onzekerheid van elke waarde die uit de "
+"onzekerheid van de absorptie van de materialen volgt. Daarvoor wordt ze voor "
+"elk materiaal dat er een heeft nog twee keer berekend, met zijn absorptie "
+"één standaardonzekerheid hoger en lager. Tonen, in het paneel Dekkingskaart, "
+"kiest wat de kaart daarvan tekent"
+
+#: acoustic_spaces/gui/inspector.py
 #, python-brace-format
 msgid "Background noise at {band} (dB SPL)"
 msgstr "Achtergrondgeluid bij {band} (dB SPL)"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"No material on the surfaces has an absorption uncertainty: no map has one."
+msgstr ""
+"Geen enkel materiaal op de oppervlakken heeft een onzekerheid van de "
+"absorptie: geen kaart heeft er een."
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"{count} material on the surfaces has one: the map is traced {runs} times."
+msgid_plural ""
+"{count} materials on the surfaces have one: the map is traced {runs} times."
+msgstr[0] ""
+"{count} materiaal op de oppervlakken heeft er een: de kaart wordt {runs} "
+"keer berekend."
+msgstr[1] ""
+"{count} materialen op de oppervlakken hebben er een: de kaart wordt {runs} "
+"keer berekend."
 
 #: acoustic_spaces/gui/inspector.py
 msgid "noise levels are numbers in dB"
@@ -6069,6 +6106,19 @@ msgstr ""
 "afzonderlijke band"
 
 #: acoustic_spaces/gui/map_view.py
+msgid ""
+"What the map shows of the parameter: its value or, when the map was run with "
+"its uncertainty (Uncertainty, in the coverage map's settings), the standard "
+"uncertainty, an end of the interval that holds the value with a probability "
+"of 95 %, or the value it is at least or at most"
+msgstr ""
+"Wat de kaart van de parameter toont: de waarde of, wanneer de kaart met haar "
+"onzekerheid is berekend (Onzekerheid, in de instellingen van de "
+"dekkingskaart), de standaardonzekerheid, een uiteinde van het interval dat "
+"de waarde met een kans van 95 % bevat, of de waarde die hij ten minste of "
+"ten hoogste heeft"
+
+#: acoustic_spaces/gui/map_view.py
 msgid "Map in 3D"
 msgstr "Kaart in 3D"
 
@@ -6099,6 +6149,10 @@ msgstr "Parameter"
 #: acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
 msgid "Band"
 msgstr "Band"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "Show"
+msgstr "Tonen"
 
 #: acoustic_spaces/gui/map_view.py
 msgid "The lowest, highest and median values of the map on show"
@@ -8242,6 +8296,26 @@ msgstr "niveau"
 msgid "backward-integrated decay per octave band, noise removed"
 msgstr ""
 "achterwaarts geïntegreerde uitsterfcurve per octaafband, ruis verwijderd"
+
+#: acoustic_spaces/viz.py
+msgid "value"
+msgstr "waarde"
+
+#: acoustic_spaces/viz.py
+msgid "lower end of the interval"
+msgstr "onderste uiteinde van het interval"
+
+#: acoustic_spaces/viz.py
+msgid "upper end of the interval"
+msgstr "bovenste uiteinde van het interval"
+
+#: acoustic_spaces/viz.py
+msgid "at least"
+msgstr "ten minste"
+
+#: acoustic_spaces/viz.py
+msgid "at most"
+msgstr "ten hoogste"
 
 #: acoustic_spaces/viz.py
 msgid "x (m)"

@@ -2206,6 +2206,7 @@ class MainWindow(QMainWindow):
                         parameter=panel.name(),
                         band=panel.band_index(),
                         room=panel.room,
+                        part=panel.shown_part(),
                     )
         except (OSError, ValueError) as exc:
             self._error(_("Could not save the map"), str(exc))

@@ -17,7 +17,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from acoustic_spaces.engine.coverage import MAP_PARAMETERS, ROOM_MAP_PARAMETERS
+from acoustic_spaces.engine.coverage import (
+    MAP_PARAMETERS,
+    ROOM_MAP_PARAMETERS,
+    uncertainty_text,
+)
 from acoustic_spaces.gui.inspector import BAND_LABELS
 from acoustic_spaces.gui.numbers import number_text
 from acoustic_spaces.gui.results_view import PLOT_SIZE
@@ -33,7 +37,7 @@ ROOM_PARAMETERS = list(ROOM_MAP_PARAMETERS)
 class MapPanel(QWidget):
     """Shows one parameter of a :class:`~acoustic_spaces.engine.CoverageResult`."""
 
-    #: What the map shows changed (source, parameter, band, or "Map in 3D").
+    #: What the map shows changed (source, parameter, band, part, or "Map in 3D").
     changed = Signal()
     run_requested = Signal()
     save_requested = Signal()
@@ -65,6 +69,19 @@ class MapPanel(QWidget):
                 "STI and SPL (dB(A)) take every band together, so they have no band"
             )
         )
+        from acoustic_spaces.viz import MAP_PARTS
+
+        self.part = QComboBox()
+        for key, name in MAP_PARTS.items():
+            self.part.addItem(_(name), key)
+        self.part.setToolTip(
+            _(
+                "What the map shows of the parameter: its value or, when the map was run "
+                "with its uncertainty (Uncertainty, in the coverage map's settings), the "
+                "standard uncertainty, an end of the interval that holds the value with a "
+                "probability of 95 %, or the value it is at least or at most"
+            )
+        )
         self.in_3d = QCheckBox(_("Map in 3D"))
         self.in_3d.setToolTip(_("Lay the map over the room in the 3D view"))
         self.run = QPushButton(_("Run map"))
@@ -76,6 +93,8 @@ class MapPanel(QWidget):
             bar.addWidget(widget, 1)
         bar.addWidget(label_for(_("Band"), self.band))
         bar.addWidget(self.band)
+        bar.addWidget(label_for(_("Show"), self.part))
+        bar.addWidget(self.part)
         bar.addWidget(self.in_3d)
         bar.addStretch()
         bar.addWidget(self.run)
@@ -92,7 +111,7 @@ class MapPanel(QWidget):
         self.plot.setWidget(QWidget())
         layout.addWidget(self.plot, 1)
 
-        for combo in (self.source, self.parameter, self.band):
+        for combo in (self.source, self.parameter, self.band, self.part):
             combo.currentIndexChanged.connect(self._shown)
         self.in_3d.toggled.connect(lambda *_: self.changed.emit())
         self.run.clicked.connect(self.run_requested)
@@ -164,6 +183,11 @@ class MapPanel(QWidget):
     def band_index(self) -> int:
         return self.band.currentIndex()
 
+    def shown_part(self) -> str:
+        """What of the parameter is on show (a key of ``viz.MAP_PARTS``): its value,
+        unless the map on show has a spread and a part of it is chosen."""
+        return self.part.currentData()
+
     def current(self):
         """The CoverageMap on show, or None."""
         if self.result is None:
@@ -173,14 +197,22 @@ class MapPanel(QWidget):
         return self.result.get(self.source.currentData() or None)
 
     def shown_in_3d(self):
-        """(map, parameter, band) for the 3D view, or None."""
+        """(map, parameter, band, part) for the 3D view, or None."""
         current = self.current()
         if current is None or not self.in_3d.isChecked():
             return None
-        return current, self.name(), self.band_index()
+        return current, self.name(), self.band_index(), self.shown_part()
 
     def _shown(self) -> None:
         self.band.setEnabled(MAP_PARAMETERS[self.name()].per_band)
+        # The parts of a spread are for a map that has one; another shows its value.
+        current = self.current()
+        spread = current is not None and current.spread is not None
+        if not spread and self.part.currentIndex() != 0:
+            self.part.blockSignals(True)
+            self.part.setCurrentIndex(0)
+            self.part.blockSignals(False)
+        self.part.setEnabled(spread)
         self._draw()
         self.changed.emit()
 
@@ -192,13 +224,14 @@ class MapPanel(QWidget):
             self.summary.setText("")
             self.plot.setWidget(QWidget())
             return
-        values, title = map_values(current, self.name(), self.band_index())
+        part = self.shown_part()
+        values, title = map_values(current, self.name(), self.band_index(), part)
         finite = values[np.isfinite(values)]
         info = MAP_PARAMETERS[self.name()]
         if len(finite):
+            text = uncertainty_text if part == "standard" else info.format.format
             low, mid, high = (
-                number_text(info.format.format(v))
-                for v in (finite.min(), np.median(finite), finite.max())
+                number_text(text(float(v))) for v in (finite.min(), np.median(finite), finite.max())
             )
             self.summary.setText(
                 # Translators: {title} names the map on show, such as "STI".
@@ -208,7 +241,9 @@ class MapPanel(QWidget):
             )
         else:
             self.summary.setText(_("{title}: no values").format(title=title))
-        figure = plot_map(current, parameter=self.name(), band=self.band_index(), room=self.room)
+        figure = plot_map(
+            current, parameter=self.name(), band=self.band_index(), room=self.room, part=part
+        )
         canvas = FigureCanvasQTAgg(figure)
         canvas.setMinimumSize(*PLOT_SIZE)
         self.plot.setWidget(canvas)

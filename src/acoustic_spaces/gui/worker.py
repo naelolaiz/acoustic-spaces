@@ -15,7 +15,8 @@ from pathlib import Path
 import numpy as np
 from PySide6.QtCore import QThread, Signal
 
-from acoustic_spaces.engine.long_term import coverage_map, simulate
+from acoustic_spaces.engine.long_term import simulate
+from acoustic_spaces.engine.sensitivity import coverage_map
 from acoustic_spaces.i18n import _
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene.model import Simulation
@@ -111,8 +112,8 @@ class SimulationJob(QThread):
 
 
 class MapJob(SimulationJob):
-    """Runs :func:`acoustic_spaces.engine.coverage_map` (also for an insertion loss and
-    in weather classes);
+    """Runs :func:`acoustic_spaces.engine.sensitivity.coverage_map` (also for an
+    insertion loss, in weather classes and with the map's spread);
     ``done`` carries the :class:`~acoustic_spaces.engine.CoverageResult`."""
 
     kind = "coverage map"

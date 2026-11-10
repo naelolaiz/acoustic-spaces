@@ -57,6 +57,7 @@ coverage:
   spacing: 1.0                 # distance between points, m
   rays: 50000                  # rays per source and band (default: simulation.late.rays)
   noise_db: 35                 # background noise for the STI, dB SPL (or one per band)
+  spread: false                # also every value's uncertainty (see Uncertainty below)
 ```
 
 From Python:
@@ -81,3 +82,37 @@ ISO 3382-3's quantities for open-plan offices (D2,S, Lp,A,S,4m, the distraction 
 rD and the privacy and comfort distances); listeners on a line from an omnidirectional
 source with the standard's speech spectrum and level give the A-weighted level and the
 STI they are read from (see [Simulation](simulation.md)).
+
+## Uncertainty
+
+With `spread: true` in the map's settings (`--spread` on the command line,
+**Uncertainty** on the coverage map's page in the editor) every value of the map gets
+the standard uncertainty that the materials' absorption uncertainty leads to (see
+[Materials](scenes.md#materials)), an insertion loss and the long-term levels too. A map
+keeps no response at its points to re-weight, as a listener's spread does, so it follows
+the law of propagation of uncertainty (GUM, JCGM 100:2008, 5.1.2): for each material
+with an uncertainty the map is traced twice more, on the same points and with the same
+rays, with its absorption one standard uncertainty up and down. Half the difference of
+the two maps is that material's part, and the root of the sum of the parts' squares the
+standard uncertainty of each value at each point. A map with M such materials takes
+2 M + 1 times as long.
+
+`map` prints the least, the median and the largest standard uncertainty of every
+parameter beside its range, and `--json` writes every point's with each material's part
+(`uncertainty` in each map). `--show standard` draws the standard uncertainty in place
+of the value, `--show low` or `high` an end of the 95 % interval and `--show at_least`
+or `at_most` a one-sided bound (of 95 %, or of `simulation.uncertainty.one_sided`); the
+editor's map panel has them under **Show**. The interval and the bounds take the result
+as normal about the map's value: the value less and plus 1.96 standard uncertainties, or
+1.645 for a one-sided 95 %, held to what the parameter can be. From Python,
+`acoustic_spaces.engine.sensitivity.coverage_map(scene, spread=True)` gives each map its
+`spread`, and the map's `spread_of(parameter, part, band)` the values that `--show`
+draws.
+
+The law is first order, so where a value bends over a material's uncertainty the
+standard uncertainty comes out low. In a box of 8 by 6 by 3.5 m, against the Monte Carlo
+of a listener at one of the map's points (2 000 draws): with standard uncertainties of
+0.02 to 0.03 on its three materials every parameter's is within 7 %; with a tolerance of
+0.1 on each, the A-weighted level's is 4 % low, the STI's 3 %, T30's up to 13 % and, at
+63 Hz, EDT's and Ts's a quarter. The rays' random error is not counted, as it is in a
+listener's spread, nor what a listener's spread leaves out.

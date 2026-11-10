@@ -375,8 +375,10 @@ level is its G and the source's power, so its spread is G's; in a band whose G s
 leaves undefined, the level is that of the energy the response holds and has a spread of
 its own. `simulate` prints the
 A-weighted level's with the level it is at most and the STI's with the STI it is at
-least, and the editor's tips give the level's in each band. Coverage maps, insertion
-losses and long-term levels have no spread.
+least, and the editor's tips give the level's in each band. A coverage map gets the
+uncertainty of its values by tracing it again for each material (see
+[Coverage maps](coverage-maps.md#uncertainty)); a listener's insertion loss and
+long-term levels have no spread.
 
 ### Material libraries of CATT-Acoustic and ODEON
 

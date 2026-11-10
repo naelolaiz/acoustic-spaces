@@ -4751,9 +4751,27 @@ class CoveragePage(Page):
         hint.setWordWrap(True)
         noise_layout.addWidget(hint)
         layout.addWidget(noise)
+
+        spread = QGroupBox(_("Uncertainty"))
+        spread_layout = QVBoxLayout(spread)
+        self.spread = QCheckBox(_("From the materials' absorption uncertainty"))
+        self.spread.setToolTip(
+            _(
+                "Ticked, the map also gives the uncertainty of every value that the "
+                "materials' absorption uncertainty leads to. For that it is traced twice "
+                "more for each material that has one, with its absorption one standard "
+                "uncertainty up and down. Show, in the Coverage map panel, picks what of "
+                "it the map draws"
+            )
+        )
+        self.spread_runs = QLabel()
+        self.spread_runs.setWordWrap(True)
+        spread_layout.addWidget(self.spread)
+        spread_layout.addWidget(self.spread_runs)
+        layout.addWidget(spread)
         layout.addStretch()
 
-        for check in (self.automatic, self.same_rays, self.noisy):
+        for check in (self.automatic, self.same_rays, self.noisy, self.spread):
             check.toggled.connect(self._changed)
         for box in (self.height, self.spacing, self.rays):
             box.valueChanged.connect(self._changed)
@@ -4788,6 +4806,26 @@ class CoveragePage(Page):
             item = QTableWidgetItem(number(value))
             item.setToolTip(_("Background noise at {band} (dB SPL)").format(band=BAND_LABELS[col]))
             self.noise.setItem(0, col, item)
+        self.spread.setChecked(defaults.spread)
+        self.spread_runs.setText(self._spread_runs(room))
+
+    @staticmethod
+    def _spread_runs(room) -> str:
+        """How many times a map with its uncertainty is traced in this scene."""
+        from acoustic_spaces.engine.sensitivity import spread_materials
+
+        count = len(spread_materials(room))
+        if count == 0:
+            return _("No material on the surfaces has an absorption uncertainty: no map has one.")
+        return fmt(
+            ngettext(
+                "{count} material on the surfaces has one: the map is traced {runs} times.",
+                "{count} materials on the surfaces have one: the map is traced {runs} times.",
+                count,
+            ),
+            count=count,
+            runs=2 * count + 1,
+        )
 
     @staticmethod
     def _defaults():
@@ -4826,6 +4864,8 @@ class CoveragePage(Page):
                 self.failed.emit(_("noise levels are numbers in dB"))
                 self.reload()
                 return
+        if self.spread.isChecked():
+            settings["spread"] = True
         self.apply(_("change coverage map settings"), lambda data: data.update(coverage=settings))
 
 
