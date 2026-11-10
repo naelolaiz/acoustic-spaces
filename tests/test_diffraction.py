@@ -512,9 +512,10 @@ BARRIER_BTM = {
 }
 
 
-def _barrier(tmp_path: Path, source, listeners, material=None) -> Room:
+def _barrier(tmp_path: Path, source, listeners, material=None, top=None) -> Room:
     """A block from x = 0 to 1 m with its top at z = 0, open underneath, so wide and
-    deep that only its two top corners (along y) matter: rigid, or of ``material``."""
+    deep that only its two top corners (along y) matter: rigid, or of ``material``, and
+    its top of ``top`` if given."""
     a, h = 300, -300
     quads = [
         [(0, -a, 0), (1, -a, 0), (1, a, 0), (0, a, 0)],
@@ -524,22 +525,21 @@ def _barrier(tmp_path: Path, source, listeners, material=None) -> Room:
         [(0, a, h), (0, a, 0), (1, a, 0), (1, a, h)],
     ]
     lines = [f"v {x} {y} {z}" for quad in quads for x, y, z in quad]
-    lines += ["g block"] + [f"f {4 * i + 1} {4 * i + 2} {4 * i + 3} {4 * i + 4}" for i in range(5)]
+    lines += ["g top", "f 1 2 3 4", "g block"]
+    lines += [f"f {4 * i + 1} {4 * i + 2} {4 * i + 3} {4 * i + 4}" for i in range(1, 5)]
     obj = tmp_path / "block.obj"
     obj.write_text("\n".join(lines) + "\n")
-    return Room.from_scene(
-        Scene.model_validate(
-            {
-                "geometry": {"file": str(obj)},
-                "materials": {"hard": material or {"absorption": [0.0] * 8, "scattering": 0.0}},
-                "default_material": "hard",
-                "sources": [{"name": "s", "position": list(source)}],
-                "listeners": [
-                    {"name": f"l{k}", "position": list(p)} for k, p in enumerate(listeners)
-                ],
-            }
-        )
-    )
+    scene = {
+        "geometry": {"file": str(obj)},
+        "materials": {"hard": material or {"absorption": [0.0] * 8, "scattering": 0.0}},
+        "default_material": "hard",
+        "sources": [{"name": "s", "position": list(source)}],
+        "listeners": [{"name": f"l{k}", "position": list(p)} for k, p in enumerate(listeners)],
+    }
+    if top is not None:
+        scene["materials"]["top"] = top
+        scene["assignments"] = {"top": "top"}
+    return Room.from_scene(Scene.model_validate(scene))
 
 
 def _over_barrier(room: Room, mode: str, coherent: int = 0) -> np.ndarray:
@@ -625,6 +625,31 @@ def test_paths_over_two_edges_along_an_absorbing_top_lose_what_the_ground_wave_d
     w = 0.5 * (1 + 1j) * np.sqrt(2 * np.pi * f / 343.0) * beta
     loss = 20 * np.log10(np.abs(1 + 1j * math.sqrt(math.pi) * w * wofz(w)))  # 0.01 to 0.42
     np.testing.assert_allclose(hard - level(s, r, 0.0), loss, atol=0.1)
+
+
+@pytest.mark.parametrize("mode", ["first_order", "second_order"])
+def test_an_absorbing_top_below_its_admittance_in_cosine_is_not_louder_than_a_rigid_one(
+    tmp_path: Path, mode: str
+) -> None:
+    # A source and a listener a little above the plane of the top, 3 m either side: the
+    # direct sound, the reflection off the top and the paths over its corners, with the
+    # fade. Near grazing incidence a point source's sound over a locally reacting face
+    # with a real admittance (here 0.10) is 2 F(w) times the free one, |F(w)| < 1, so an
+    # absorbing top is no louder than a rigid one. Checked only where the source sees
+    # the top and both corners at cosines below the admittance (h < 0.31 m): from there
+    # to h = 0.42 m, where those reflections turn their phase over one after the other,
+    # the level is up to 9.6 dB above the rigid one's (a known issue, docs/validation.md).
+    for h in (0.05, 0.1, 0.3):
+        source, listener = (-3.0, 0.0, h), (4.0, 0.0, h)
+        rigid = _barrier(tmp_path, source, [listener])
+        absorbing = _barrier(
+            tmp_path, source, [listener], top={"absorption": [0.5] * 8, "scattering": 0.0}
+        )
+        levels = [
+            10 * np.log10(total_energy(early_paths(room, max_order=1, diffraction=mode)))
+            for room in (rigid, absorbing)
+        ]
+        assert np.all(levels[1] - levels[0] < 0.5), (h, levels[1] - levels[0])
 
 
 def test_levels_are_continuous_over_a_barriers_top(tmp_path: Path) -> None:

@@ -1420,7 +1420,13 @@ face's plane. A source 0 to 1 cm above the plane of the top of the 1 m block of
 `tests/test_diffraction.py` (absorbing 0.02, admittance 0.0026), 3 m in front of it,
 hears the far corner 14.9 to 18.7 dB below the reversed path, and the paths over both
 corners (`second_order`), which continue that path there, 2.9 to 6.1 dB below; from about
-1 cm up the two agree again. The reflection off the ground takes the
+1 cm up the two agree again. Each of these reflections turns over at its own cosine: the
+specular one off the top at its reflection point, those of the paths over each corner at
+the source's cosine to that corner. With the source and a listener rising together 3 m
+either side of that block, the level at 63 and 125 Hz is therefore above the rigid
+block's from the height where the near corner's turns to where the far corner's does: by
+up to 16 dB with only the top absorbing 0.2 (9.2 to 12.3 cm) and 9.6 dB at 0.5 (31.2 to
+41.6 cm). The reflection off the ground takes the
 factor of a spherical wave instead (see
 [Ground reflection](#ground-reflection-against-the-exact-solution)), as does the wave
 along a face from one edge to the next on a path over both; whether that factor would
