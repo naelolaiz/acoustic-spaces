@@ -63,10 +63,11 @@ def _lambert(normals: np.ndarray, rng: np.random.Generator) -> np.ndarray:
 
 
 def _reflection(model: TraceModel, face, d, dist, alive, order, band: int, c: float, rng):
-    """Where particles arriving along ``d`` (unit) at ``face`` (-1: none) after legs of
-    ``dist`` metres, with ``order`` reflections then (one for all, or each its own), go
-    next: their directions, the share of their energy that survives the face (before
-    the air), which of them passed through it, and the face's normal on their side."""
+    """Where particles arriving along ``d`` (unit) at ``face`` (-1: none), ``dist``
+    metres from the source or their last reflection (through the faces they passed),
+    with ``order`` reflections then, go next: their directions, the share of their
+    energy that survives the face (before the air), which of them passed through it, and
+    the face's normal on their side."""
     count = len(face)
     normal = model.plane_normal[model.face_plane[np.maximum(face, 0)]]
     # Point the normal back at the arriving particle, whichever way the face faces.
@@ -161,14 +162,19 @@ def trace_particles(
             air,
             source,
         )
-    for order in range(1, MAX_REFLECTIONS + 1):
+    leg = np.zeros(count)  # metres since the last reflection
+    for _ in range(MAX_REFLECTIONS):
         p, d, t = start[-1], direction[-1], t0[-1]
         reach = np.where(alive, np.inf, 0.0)
         dist, hit = model.intersect(p, d, reach, face)
         alive &= hit >= 0
         dist = np.where(alive, dist, 0.0)
         face = np.where(alive, hit, -1)
-        new_d, kept, passed, _ = _reflection(model, face, d, dist, alive, order, band, c, rng)
+        leg = leg + dist
+        new_d, kept, passed, _ = _reflection(
+            model, face, d, leg, alive, reflections[-1] + 1, band, c, rng
+        )
+        leg = np.where(passed, leg, 0.0)
         kept = kept * np.exp(-air * dist)
         # A particle that escaped keeps flying along its last segment (no next one).
         t_next = np.where(alive, t + dist / c, np.inf)

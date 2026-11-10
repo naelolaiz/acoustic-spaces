@@ -1108,7 +1108,9 @@ fn depth_tau(p: vec3<f32>, d: vec3<f32>, len: f32) {
 // the ray's energy, and each part's chance of scattering per metre (its medium's rate
 // times its share). The bands are then weighted by what they meet against that rate
 // (w_b(s) = exp(S(s) - tau_b(s)), S the drawn rate and tau_b the band's absorption and
-// scattering, both integrated to s), so each keeps its expected energy.
+// scattering, both integrated to s), so each keeps its expected energy. A detect-only leg,
+// which cannot scatter, is drawn at rate 0: it goes through, and its bands keep
+// exp(-tau_b(s)).
 var<private> span_t0: array<f32, MAX_SPANS>;
 var<private> span_t1: array<f32, MAX_SPANS>;
 var<private> span_medium: array<u32, MAX_SPANS>;
@@ -1154,7 +1156,7 @@ fn track_build(p: vec3<f32>, d: vec3<f32>, len: f32) -> bool {
     }
     for (var m = 0u; m < run.media; m++) {
         rate[m] = 0.0;
-        if (total > 0.0) {
+        if (total > 0.0 && !detect_only) {
             let at = medium_at(m);
             for (var b = 0u; b < BANDS; b++) {
                 rate[m] += energy[b] * num(at + BANDS + b);
@@ -1750,7 +1752,7 @@ fn straight_leg() -> u32 {
     var tracked = false;
     if ((run.flags & PLANTS) != 0u) {
         tracked = track_build(ray.pos, ray.dir, segment);
-        if (tracked && !detect_only) {
+        if (tracked) {
             scatter_at = track_collide();
             if (found && scatter_at > hit.t - run.offset) {
                 scatter_at = FAR;
@@ -1837,7 +1839,7 @@ fn bent_leg() -> u32 {
             var tracked = false;
             if ((run.flags & PLANTS) != 0u) {
                 tracked = track_build(chord.start, along, segment);
-                if (tracked && !detect_only) {
+                if (tracked) {
                     scatter_at = track_collide();
                     if (found && scatter_at > met.t - run.offset) {
                         scatter_at = FAR;

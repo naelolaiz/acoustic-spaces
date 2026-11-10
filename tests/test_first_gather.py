@@ -184,6 +184,31 @@ def test_the_gather_alone_misses_a_source_near_the_ground() -> None:
     np.testing.assert_allclose(tiny, rays[:, 0], rtol=1e-6)
 
 
+def test_an_open_face_changes_nothing_the_gather_finds() -> None:
+    # The ground scattering 0.05 and more as its size has it (4 m squares, 125 Hz), seen
+    # through a fully open face 1 m above it from a source 8 m up and a listener 2 m up:
+    # the distance the sound came from is the source's, as without the face, which the
+    # gather alone (gather_ratio infinite) finds in the same directions either way.
+    source, listeners = (0.0, 0.0, 8.0), [(5.0, 0.0, 2.0)]
+    low = {"scattering": np.full((2, 1), 0.05)}
+    sized = low | {"surface_size": np.full((2, 2), 4.0), "band_hz": np.array([125.0])}
+    bare = _plane(source, listeners, 100, 1, np.inf, **sized)
+    vertices = np.array([[-200, -200, 0], [200, -200, 0], [200, 200, 0], [-200, 200, 0]], float)
+    vertices = np.vstack([vertices, vertices + [0, 0, 1]])
+    faces = np.array([[0, 1, 2], [0, 2, 3], [4, 5, 6], [4, 6, 7]], np.int64)
+    opened = bare | {
+        "bvh": _native.Bvh(vertices, faces),
+        "absorption": np.array([[ALPHA], [ALPHA], [1.0], [1.0]]),
+        "scattering": np.full((4, 1), 0.05),
+        "transmission": np.array([[0.0], [0.0], [1.0], [1.0]]),
+        "surface_size": np.full((4, 2), 4.0),
+    }
+    gathered = [_both(args, late.FIRST_GATHER)[0].sum() for args in (bare, opened)]
+    without = _both(_plane(source, listeners, 100, 1, np.inf, **low), late.FIRST_GATHER)[0].sum()
+    assert gathered[1] == pytest.approx(gathered[0], rel=1e-9)
+    assert gathered[0] > 3 * without  # the size scattering counts here
+
+
 def test_plants_and_directivity_share_alike() -> None:
     # A slab of foliage over part of the ground between the source and the listeners,
     # and a source turned to the ground: the same rays with and without the gather, so

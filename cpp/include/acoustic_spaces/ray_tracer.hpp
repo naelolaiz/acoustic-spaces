@@ -513,13 +513,18 @@ struct RayState {
     std::size_t partitions = 0;
     // The specular share of a vector reflection (vector_scattering), on its own along
     // the exact specular direction: the detector spheres and the maps count it to the
-    // first face that reflects it, and nothing else happens to it (no rain, splitting or
-    // plants' scattering; it goes on through openings and partitions as their share).
+    // first face that reflects it, and nothing else happens to it (no rain or splitting;
+    // in plants it loses what they absorb and scatter but goes on, see Track; it goes on
+    // through openings and partitions as their share).
     bool detect_only = false;
     // With StochasticScene::face_kind: of the reflections so far, those off the ground,
     // and whether one was off a face neither the ground nor a vertical wall.
     int ground = 0;
     bool other = false;
+    // Metres along the ray since its last reflection or scattering in plants (or from
+    // the source), up to the face it last passed through: the distance the sound came
+    // from at the next reflection (size_scattering), through openings and partitions.
+    double since = 0.0;
 };
 
 // Whether the specular-only path a ray in `state` has followed is one the early stage
@@ -557,24 +562,17 @@ inline void pass_partition(RayState &state) {
 // The share of sound per band that travels from `origin` along `dir` (unit) for
 // `length` metres: 1 in the open, the product of the transmission of the faces it
 // crosses; false (and no share) where a face lets nothing through, or, as for a ray,
-// where it would let the sound out into no room (StochasticScene::face_room). With
-// `crossed`, also how far along the last face it crosses lies (0: none).
+// where it would let the sound out into no room (StochasticScene::face_room).
 inline bool passing_share(const StochasticScene &scene, const Vec3 &origin, const Vec3 &dir,
-                          double length, std::int64_t ignore, double *share,
-                          double *crossed = nullptr) {
+                          double length, std::int64_t ignore, double *share) {
     const Bvh &bvh = *scene.bvh;
     const std::size_t bands = scene.bands;
     std::fill(share, share + bands, 1.0);
-    if (crossed != nullptr) *crossed = 0.0;
     if (scene.transmission == nullptr) return !bvh.occluded(origin, dir, length, ignore);
     Vec3 pos = origin;
-    double along = 0.0;
     for (std::size_t k = 0; k <= kMaxCrossings; ++k) {
         const Hit hit = bvh.intersect(pos, dir, length, ignore);
-        if (!hit.found()) {
-            if (crossed != nullptr) *crossed = along;
-            return true;
-        }
+        if (!hit.found()) return true;
         const auto face = static_cast<std::size_t>(hit.face);
         if (scene.face_room != nullptr) {
             const bool from_back = dot(bvh.normal(face), dir) > 0.0;
@@ -589,7 +587,6 @@ inline bool passing_share(const StochasticScene &scene, const Vec3 &origin, cons
         if (!any) return false;
         pos = pos + dir * hit.t;
         length -= hit.t;
-        along += hit.t;
         ignore = hit.face;
     }
     return false;
@@ -612,7 +609,9 @@ inline double rain_share(double cos_in, double r_in, double cos_out, double r_ou
 // bands, each medium's scattering averaged over the bands weighted by the ray's energy;
 // the bands are then weighted by what they meet against that rate (w_b(s) = exp(S(s) -
 // tau_b(s)), S the drawn rate and tau_b the band's absorption and scattering, both
-// integrated to s), so each keeps its expected energy.
+// integrated to s), so each keeps its expected energy. A piece that cannot scatter (a
+// detect-only leg, RayState::detect_only) is drawn at rate 0: it goes through, and its
+// bands keep exp(-tau_b(s)).
 struct Track {
     std::vector<Vegetation::Span> spans;
     std::vector<double> cuts;
@@ -625,9 +624,10 @@ struct Track {
     std::size_t scattered = 0;    // the piece between edges collide last scattered in
 
     // The piece from p along unit d for `length` metres, for a ray with `energy` per
-    // band; false where it meets no plants.
+    // band that scatters in the plants or (`scatters` false) cannot; false where it meets
+    // no plants.
     bool build(const Vegetation &plants, const Vec3 &p, const Vec3 &d, double length,
-               const double *energy) {
+               const double *energy, bool scatters) {
         plants.spans(p, d, length, spans, cuts);
         if (spans.empty()) return false;
         bands = plants.bands;
@@ -635,7 +635,7 @@ struct Track {
         double total = 0.0;
         for (std::size_t b = 0; b < bands; ++b) total += energy[b];
         rate.assign(media, 0.0);
-        for (std::size_t m = 0; m < media && total > 0.0; ++m) {
+        for (std::size_t m = 0; m < media && scatters && total > 0.0; ++m) {
             const double *s = plants.scattering.data() + m * bands;
             for (std::size_t b = 0; b < bands; ++b) rate[m] += energy[b] * s[b];
             rate[m] /= total;
@@ -1315,11 +1315,14 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                 stack.pop_back();
                 if (!ray_state.detect_only) ++out.traced_rays;
                 auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room, hits,
-                       path, away, leaving, partitions, detect_only, ground, other] = ray_state;
+                       path, away, leaving, partitions, detect_only, ground, other, since] =
+                    ray_state;
 
                 while (travelled < max_length) {
                     Hit hit;
-                    double leg = 0.0;  // metres the sound went to the face it meets
+                    // Metres the sound went to the face it meets, since it last reflected
+                    // or scattered.
+                    double leg = since;
                     // Where on its piece (track) the ray scatters in plants, if it does.
                     double scatter_at = inf;
                     if (atmosphere == nullptr) {
@@ -1328,9 +1331,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         double segment = hit.found() ? hit.t : left + overrun;
                         const detail::Track *plant_track = nullptr;
                         if (plants != nullptr &&
-                            track.build(*plants, pos, dir, segment, energy.data())) {
+                            track.build(*plants, pos, dir, segment, energy.data(), !detect_only)) {
                             plant_track = &track;
-                            if (!detect_only) scatter_at = track.collide(rng);
+                            scatter_at = track.collide(rng);
                             if (hit.found() && scatter_at > hit.t - offset) scatter_at = inf;
                             segment = std::min(segment, scatter_at);
                         }
@@ -1358,7 +1361,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         } else {
                             travelled += hit.t;
                             pos = pos + dir * hit.t;
-                            leg = hit.t;
+                            leg += hit.t;
                             if (plant_track != nullptr) {
                                 track.weight(hit.t, weights.data());
                                 for (std::size_t b = 0; b < bands; ++b) energy[b] *= weights[b];
@@ -1383,9 +1386,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 const double stretch = chord.arc / length;
                                 const detail::Track *plant_track = nullptr;
                                 if (plants != nullptr &&
-                                    track.build(*plants, chord.start, along, segment, energy.data())) {
+                                    track.build(*plants, chord.start, along, segment,
+                                                energy.data(), !detect_only)) {
                                     plant_track = &track;
-                                    if (!detect_only) scatter_at = track.collide(rng);
+                                    scatter_at = track.collide(rng);
                                     if (met.found() && scatter_at > met.t - offset) scatter_at = inf;
                                     segment = std::min(segment, scatter_at);
                                 }
@@ -1456,6 +1460,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         // weighted by what they met on the way and by m's scattering
                         // against the rate the scattering was drawn at.
                         const std::size_t m = track.medium(rng);
+                        since = 0.0;
                         track.weight(scatter_at, weights.data());
                         const double *mu = plants->scattering.data() + m * bands;
                         const double *g = plants->asymmetry.data() + m * bands;
@@ -1577,6 +1582,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         std::copy(through.begin(), through.begin() + bands, energy.begin());
                         room = beyond;
                         away = -n;
+                        since = leg;
                         continue;
                     }
                     if (detect_only) {
@@ -1586,6 +1592,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         detail::pass_partition(ray_state);
                         room = beyond;
                         away = -n;
+                        since = leg;
                         continue;
                     }
                     std::copy(seen.begin(), seen.begin() + bands, seen_before.begin());
@@ -1695,6 +1702,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             if (group >= 0) --stack.back().hits[static_cast<std::size_t>(group)];
                             stack.back().ground = ground_before;
                             stack.back().other = other_before;
+                            stack.back().since = leg;
                             detail::pass_partition(stack.back());
                             ++family;
                         } else {
@@ -1712,6 +1720,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 detail::pass_partition(ray_state);
                                 room = beyond;
                                 away = -n;
+                                since = leg;
                                 continue;
                             }
                             for (std::size_t b = 0; b < bands; ++b) {
@@ -1721,6 +1730,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             peak /= 1.0 - q;
                         }
                     }
+                    since = 0.0;  // it reflects here
                     if (peak < cutoff) break;
 
                     if (settings.vector_scattering) {
@@ -1875,17 +1885,16 @@ inline void gather_first_scattering(const StochasticScene &scene,
                 if (!(gap > 0.0) || cos_theta <= 0.0) return;
                 // The source's sound on its straight way there, as a ray's.
                 const Vec3 out_dir = back * (-1.0 / r_in);
-                double crossed = 0.0;
                 if (!detail::passing_share(scene, scene.source, out_dir, r_in - offset, -1,
-                                           from_source.data(), &crossed)) {
+                                           from_source.data())) {
                     return;
                 }
                 scene.directivity.energy_weights(out_dir, bands, weights.data());
                 const double *surface = scene.scattering + f * bands;
                 if (scene.surface_size != nullptr && 1 >= settings.size_from_order) {
-                    // As a ray's leg, from the last face it passed through.
+                    // As a ray's leg, from the source through the faces it passes.
                     size_scattering(scene.surface_size[2 * f], scene.surface_size[2 * f + 1],
-                                    r_in - crossed, cos_in, c, bands, scene.band_hz, surface,
+                                    r_in, cos_in, c, bands, scene.band_hz, surface,
                                     scatter.data());
                 } else {
                     std::copy(surface, surface + bands, scatter.begin());

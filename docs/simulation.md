@@ -215,7 +215,8 @@ simulation:
 - `from_size` (default on): a surface also scatters for its size, after Christensen and
   Rindel (2005), as in ODEON. The specular share falls below f_w = c d / (2 (w cos θ)²)
   and again below f_l = c d / (2 l²), where w and l are the surface's width and length,
-  d the distance the sound came from and θ its angle of incidence. A large wall reflects
+  d the distance the sound came from (from the source or the last reflection, through
+  openings and partitions it passed) and θ its angle of incidence. A large wall reflects
   specularly down to low frequencies, while a small panel, a distant one or one met at a
   grazing angle scatters. Each flat surface (the faces of one plane joined at their
   edges, of any material) counts as the rectangle with its area and perimeter. Early

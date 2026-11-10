@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from test_native import _stochastic_args, _unit_cube, cube_with_seats
 from test_tracer_reference import REFERENCE, reference_arguments
-from test_vegetation import _big_box, _slab
+from test_vegetation import _FLOOR_BIN, _FLOOR_LEG, _FLOOR_PLANTS, _big_box, _over_floor, _slab
 from test_wave import STENCILS, _courant, _drive, _solver, _speeds, _warming
 
 from acoustic_spaces import Room, _native
@@ -1010,6 +1010,16 @@ def test_gpu_tracer_scatters_in_foliage_and_stems_as_the_cpu_does() -> None:
     on_cpu = _native.trace_stochastic(**_big_box(1, 300_000, **spheres), **stems)[0].sum(axis=2)
     on_gpu = gpu_tracer.trace_stochastic(**_big_box(1, 300_000, **spheres), **stems)[0].sum(axis=2)
     np.testing.assert_allclose(on_gpu, on_cpu, rtol=0.03)
+
+
+@needs_gpu
+def test_gpu_tracer_s_vector_reflection_loses_what_plants_absorb_and_scatter() -> None:
+    """test_vegetation's reflection through plants that scatter, vector on the GPU: its
+    specular leg keeps exp(-(a + s) L) of the same rays without plants."""
+    bare = gpu_tracer.trace_stochastic(**_over_floor(True, 100_000))[0]
+    planted = gpu_tracer.trace_stochastic(**_over_floor(True, 100_000) | _FLOOR_PLANTS)[0]
+    ratio = planted[0, :, _FLOOR_BIN] / bare[0, :, _FLOOR_BIN]
+    assert ratio == pytest.approx(np.exp(-np.array([0.3, 0.4]) * _FLOOR_LEG), rel=0.05)
 
 
 @needs_gpu

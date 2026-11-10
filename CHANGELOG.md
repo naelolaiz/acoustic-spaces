@@ -118,6 +118,17 @@
   and 29 dB in the 250 Hz ground dip with 50,000 rays. They now leave out what the early
   part holds (within 0.05 dB of the program in those bands); still air and the shipped
   examples do not change.
+- Fixed: with vector scattering (the default) a reflection's specular share lost what
+  plants absorb on its way but kept what they scatter, so behind 6.3 m of foliage
+  scattering 0.3 per metre it came out 8.2 dB too loud. It now loses both (CPU, GPU and
+  coverage maps); in `tree_belt` one band of the open meadow drops by 0.2 to 0.27 dB in
+  four of six seeds, the A-weighted levels by at most 0.03 dB.
+- Fixed: the distance that sets how much a small or distant surface scatters
+  (`scattering.from_size`) restarted at each opening or partition a late ray, the
+  listeners' gather or a sound particle passed; it now runs from the source or the last
+  reflection, as in the early part. An open face 1 m over a floor had taken 6.3 dB from
+  the floor's scattered sound at 125 Hz; in `apartment` the bed's level drops by
+  0.04 dB(A).
 
 ## 4.2.1
 
