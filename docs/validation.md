@@ -1215,10 +1215,11 @@ A model of such corners is an open item on the [roadmap](roadmap.md).
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
-sight, takes 38 ms per source and listener on four cores without diffraction (23
-paths), 540 ms with `first_order` (979 paths) and 630 ms with `second_order` (994
+sight, takes 44 ms per source and listener on four cores without diffraction (23
+paths), 525 ms with `first_order` (979 paths) and 600 ms with `second_order` (994
 paths): the median of four timings, each the mean of three runs after a first one,
-with nothing else running on the machine. The terms that make the other specular paths fade at the edges (next section)
+with nothing else running on the machine (10 November 2026, the middle of three such
+medians). The terms that make the other specular paths fade at the edges (next section)
 give most of the paths, as each term is a path over its edge, and so is each product of
 terms. In a one-off check when they were written, on a run where the early stage took
 650 ms with `first_order` and 710 ms with `second_order`, they took about 580 ms of the
@@ -2135,10 +2136,10 @@ air is within 0.03 dB on its own grid, whose 40 cm cells (against 39 cm) take 0.
 [above](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation); at
 100 m 5 m up the effective speed of sound is 0.70 dB low and moving air 0.23 dB.
 
-Moving air takes 2.7 and 3.4 times as long as the effective speed of sound: 11.6 s
-against 4.3 s in the free field (3.2 million cells) and 26 s against 7.6 s with the
-façade (6 million), on 4 cores with nothing else running. With the preset its grid has
-25.8 million cells of air and the effective speed of sound's 26.8 million.
+Moving air takes 3.8 to 4.7 times as long as the effective speed of sound: 15 s
+against 3.9 s in the free field (3.2 million cells), 34 s against 7.6 s with the façade
+(6 million) and 4.5 minutes against 58 s with the preset (25.8 against 26.8 million),
+on 4 cores with nothing else running (10 November 2026).
 
 ## Outdoor results against exact solutions
 
@@ -4801,9 +4802,9 @@ minute, the wave solver's checks 1.2 minutes (both stencils), the edge diffracti
 seconds, the fade at edges' 53 minutes, the walks' 14, the ground's 5.5 (51 s of them
 the wave solver's, 100 s the parabolic equation's), the outdoor measurements' 3.1 (3.0
 with turbulence, 20 seconds in still air), the turbulence's 3.9 (3.8 with `--profile`),
-the vegetation's 5.2, the leaves' 2.6, the wave solver's outdoors 11, the moving air's
-9.3, the insertion loss's 1.8, the terrain's 41 seconds (2 November), the fast field
-program's 5.7, the benchmark's 55 (much longer with `--far`), the weather zones' 7.2
+the vegetation's 5.2, the leaves' 2.6, the wave solver's outdoors 12.6 and the moving
+air's 12.3 (both 10 November), the insertion loss's 1.8, the terrain's 41 seconds
+(2 November), the fast field program's 5.7, the benchmark's 55 (much longer with `--far`), the weather zones' 7.2
 (46 s of them the parabolic equation's, 6.4 minutes the mean profile's), the long term's
 16 seconds, the moving sources' 5.6 minutes, the rotors' 3.3, the sirens' 4 seconds, the
 cities' 22 (1.3 minutes with `--sizes 10 20 30 40 60`), each BRAS run of the coupled
