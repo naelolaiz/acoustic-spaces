@@ -1218,6 +1218,97 @@ def test_fitted_admittances_absorb_as_their_materials(total: int, bands: int) ->
     np.testing.assert_allclose(fit_admittance([0.99] * bands, total, rate).achieved, MAX_ABSORPTION)
 
 
+def _same_bits(a, b) -> bool:
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    return a.shape == b.shape and a.tobytes() == b.tobytes()
+
+
+@pytest.mark.parametrize(
+    ("absorption", "total", "rate"),
+    [
+        # The bands' own quality factors are enough.
+        ([0.02, 0.02, 0.02, 0.03, 0.03, 0.04, 0.05, 0.05], 8, None),
+        # The quality factors are freed (a carpet's octaves, and as third octaves).
+        ([0.07, 0.07, 0.31, 0.49, 0.81, 0.66, 0.54, 0.48], 8, None),
+        (np.repeat([0.07, 0.07, 0.31, 0.49, 0.81, 0.66, 0.54, 0.48], 3).tolist(), 24, None),
+        # At a time step, as the wave solver fits its lowest bands.
+        ([0.07, 0.07, 0.31, 0.49], 8, 5512.5),
+        ([0.1, 0.1, 0.1, 0.4, 0.4, 0.4, 0.2, 0.2, 0.2], 24, 3472.0),
+    ],
+)
+def test_the_fit_is_the_one_least_squares_own_differences_give(
+    monkeypatch, absorption, total: int, rate
+) -> None:
+    """The fit takes the forward differences of its misses itself, a branch at a time.
+    They are the ones scipy's ``least_squares`` takes with ``jac="2-point"``, and the fit
+    is the same down to the last bit."""
+    import scipy.optimize
+
+    from acoustic_spaces.engine import impedance
+
+    real = scipy.optimize.least_squares
+
+    def with_its_own_differences(fun, x0, jac=None, **options):
+        assert callable(jac)
+        return real(fun, x0, **options)
+
+    impedance._fit.cache_clear()
+    fit = fit_admittance(absorption, total, rate)
+    impedance._fit.cache_clear()
+    with monkeypatch.context() as patch:
+        patch.setattr(scipy.optimize, "least_squares", with_its_own_differences)
+        plain = fit_admittance(absorption, total, rate)
+    impedance._fit.cache_clear()
+    assert len(fit.conductance) > 0
+    for name in ("beta", "conductance", "quality", "frequency_hz", "achieved"):
+        assert _same_bits(getattr(fit, name), getattr(plain, name)), name
+
+
+def test_the_fits_steps_are_those_of_least_squares_between_bounds() -> None:
+    """Each unknown's step for the forward differences: scipy's, also where an unknown
+    lies at or next to a bound and the step turns back."""
+    from scipy.optimize import least_squares
+
+    from acoustic_spaces.engine.impedance import _forward_steps
+
+    lower = np.array([0.0, 0.0, 0.0, 0.0, -0.7, -0.7, -0.7, -1e-9])
+    upper = np.array([np.inf, np.inf, np.inf, np.inf, 2.3, 2.3, 2.3, 1e-9])
+    x = np.array([1e-4, 3.0, 0.02, 250.0, 2.3 - 1e-9, 0.3, -0.7 + 1e-12, 0.0])
+    asked = []
+
+    def record(values):
+        asked.append(np.array(values))
+        return values - 1.0
+
+    least_squares(record, x, jac="2-point", bounds=(lower, upper), max_nfev=1)
+    # The point (which least_squares takes a little inside its bounds), then one unknown
+    # moved at a time.
+    point = asked[0]
+    np.testing.assert_allclose(point, x, rtol=0.0, atol=1e-9)
+    moved = np.array([asked[1 + k][k] for k in range(len(x))])
+    assert _same_bits(moved, point + _forward_steps(point, lower, upper))
+    assert np.all(moved != point) and np.all((moved >= lower) & (moved <= upper))
+    # Next to the upper bound the step goes down; with no room either way, to the
+    # farther bound.
+    assert moved[4] < point[4] and moved[7] == upper[7]
+
+
+def test_a_sum_with_one_row_changed_is_the_sum_of_the_changed_array() -> None:
+    from acoustic_spaces.engine.impedance import _sums_with_one_changed
+
+    rng = np.random.default_rng(5)
+    for n, m in ((1, 7), (2, 5), (10, 245), (26, 373)):
+        rows = rng.normal(size=(n, m)) * 10.0 ** rng.uniform(-8, 8, (n, m)) + 1j * rng.normal(
+            size=(n, m)
+        )
+        changed = rows * (1.0 + 1e-8 * rng.normal(size=(n, m)))
+        sums = _sums_with_one_changed(rows, changed)
+        for k in range(n):
+            other = rows.copy()
+            other[k] = changed[k]
+            assert sums[k].tobytes() == other.sum(axis=0).tobytes()
+
+
 def _discrete_reflection(
     f: np.ndarray, rate: float, y: np.ndarray, courant: float = COURANT
 ) -> np.ndarray:

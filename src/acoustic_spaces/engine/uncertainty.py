@@ -515,7 +515,8 @@ class _Admittances:
     """The admittance of each draw's absorption for the phases of the paths that add in
     pressure (:func:`~acoustic_spaces.engine.coherent.absorption_phases`): for a
     material's draws, fitted when first asked for at nodes among their deviates
-    (:func:`~acoustic_spaces.engine.impedance.fit_admittance`, about a second each) and
+    (:func:`~acoustic_spaces.engine.impedance.fit_admittance`, a few hundredths of a
+    second to a few seconds each) and
     taken between the two nearest, as fitting each draw's would take that for every
     draw. The nodes are ``ADMITTANCE_NODES`` over the range of the draws given at once
     (:meth:`over`), or, for draws that come batch by batch, every ``steps`` (one per
