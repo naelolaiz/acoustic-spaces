@@ -76,6 +76,7 @@ from acoustic_spaces.engine.clusters import Clusters
 from acoustic_spaces.engine.coherent import ground_factors, ground_wave_factors, reflection_phases
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
+from acoustic_spaces.geometry.cells import _components
 from acoustic_spaces.geometry.outdoor import ON_GROUND_M, on_ground
 from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, Resolution, band_centres
 
@@ -1105,6 +1106,8 @@ class EdgeDiffraction:
         if len(self.edges) == 0:
             return paths
         combos = self._combos(listener, max_delay_s)
+        if combos is not None:
+            combos = self._in_front(listener, paths, combos)
         clusters = self.clusters(listener, paths)
         first = len(paths)
         single = None if combos is None else self._single(listener, paths, combos, clusters, first)
@@ -1188,6 +1191,35 @@ class EdgeDiffraction:
             off -= self.model.plane_offset[np.maximum(plane, 0), None]
             out |= (plane >= 0)[:, None] & (np.abs(off) <= _TOLERANCE * self.size)
         return out
+
+    def _in_front(self, listener: np.ndarray, paths: EarlyReflections, c: dict) -> dict | None:
+        """``c`` (:meth:`_combos`) without the paths whose listener side lies behind a
+        face of their edge, or None where none is left. A listener side exactly in the
+        plane of face 0 or face n, seen along the edge, beyond the face's end, with the
+        source side in that plane too (:func:`_past_face`: a building's wall or a thick
+        barrier's top in line with the source and the listener) lies behind the face
+        where the straight way between them, the incident wave's path, is not found, as
+        just off the plane on that side, inside the wedge, where the edge has no path.
+        That is the side the way runs on in the wind
+        (:meth:`~acoustic_spaces.engine.refracted.Refraction._edge_side`). The wave along
+        the face is then the path over the edge at its other end, which the listener side
+        lies in front of: the paths over the two edges are one ray there, and both
+        together doubled its pressure. A listener on the face itself (on the wall, or at
+        its far corner) has only the side in front of it, and its paths stay."""
+        hearer = np.broadcast_to(listener, (len(c["edge"]), 3))
+        tolerance = _TOLERANCE * self.size
+        past = _past_face(
+            self.model, self.edges, c["edge"], c["phi_r"], c["phi_s"], hearer, tolerance
+        )
+        rows = np.flatnonzero(past)
+        if not len(rows):
+            return c
+        found = self._specular(listener, paths, _subset(c, rows))[0]
+        keep = np.ones(len(c["edge"]), dtype=bool)
+        keep[rows[found[:, 0] < 0]] = False
+        if keep.all():
+            return c
+        return _subset(c, keep) if keep.any() else None
 
     def _combos(self, listener: np.ndarray, max_delay_s: float):
         """Source and listener sides of every edge whose shortest path over the edge
@@ -1694,11 +1726,14 @@ class EdgeDiffraction:
         # the phase alone does not show it. Each edge's distance parameter takes the
         # other's bend by how much nearer the other's boundary is: all of it on that
         # boundary, where the path continues the path over one edge, and none on its own.
+        # On a boundary of each (the source, both edges and the listener in the plane of
+        # the face they share) it is as just off the second's, the listener side moved
+        # off it, as _in_front decides the side there.
         near1 = _share(kl1, angle1).min(axis=1)
         near2 = _share(kl2, angle2).min(axis=1)
         bend1 = np.maximum(bend1, (1.0 - near1) * (flat - 1.0 / along[:, None, None]))
         bend2 = np.maximum(bend2, (1.0 - near2) * (flat - 1.0 / (r1 + r2)[:, None, None]))
-        part = np.where(near1 + near2 > 0.0, near2 / np.maximum(near1 + near2, 1e-300), 0.5)
+        part = np.where(near1 + near2 > 0.0, near2 / np.maximum(near1 + near2, 1e-300), 1.0)
         radius2 = 1.0 / (flat - part * bend1)
         radius1 = 1.0 / (flat - (1.0 - part) * bend2)
         kl2 = (
@@ -2114,6 +2149,65 @@ class EdgeDiffraction:
         at = (np.einsum("ij,ij->i", normal, closest) - offset) * away
         mine = np.where(before, at > 0.0, at >= 0.0)
         found[rows[~mine], 0] = -1
+
+
+def _past_face(model: TraceModel, edges: Edges, edge, phi, phi_source, hearer, tolerance):
+    """(C,) whether the listener side of each path over ``edge`` (C,), at ``phi`` (C,)
+    round it from face 0, lies exactly in the plane of face 0 or face n seen along the
+    edge (phi 0 or n pi) with the source side, at ``phi_source``, in the plane of that
+    face too, and the path's listener ``hearer`` (C, 3) is not on that face of the edge
+    (:func:`_on_own_face`, within ``tolerance``) but beyond it. The straight way between
+    the source and the listener sides then runs in the face's plane past the face;
+    where its path is not found the listener side lies behind the face
+    (:meth:`EdgeDiffraction._in_front`). A listener on the face (its edges included)
+    has only the side in front of it. Another face in that plane, such as the wall of
+    a second building in line with the first, lies beyond the edge's face as the open
+    ground does. The listener itself is tested, not its image where a reflection
+    follows the edge: mirrored with the face in a plane across it (the ground under a
+    wall), it lies on the face's image exactly where it lies on the face."""
+    pi, on, n = np.pi, _ON_BOUNDARY, edges.wedge[edge]
+    first = (phi <= on) & ((phi_source <= on) | (np.abs(phi_source - pi) <= on))
+    last = (phi >= n * pi - on) & (
+        (phi_source >= n * pi - on) | (np.abs(phi_source - (n - 1.0) * pi) <= on)
+    )
+    out = first | last
+    for row in np.flatnonzero(out):
+        side = 0 if first[row] else 1
+        out[row] = not _on_own_face(model, edges, int(edge[row]), side, hearer[row], tolerance)
+    return out
+
+
+def _on_own_face(
+    model: TraceModel, edges: Edges, edge: int, side: int, point: np.ndarray, tolerance: float
+) -> bool:
+    """Whether ``point`` lies on face 0 (``side`` 0) or face n (1) of ``edge``, its edges
+    included, within ``tolerance``: in the face's plane, on the solid faces there that
+    the face is joined to through shared corners (the triangles of a wall or a roof),
+    not on another face in that plane (the wall of another building in line with it)."""
+    face = int(edges.face[edge, side])
+    if face < 0:
+        face = int(edges.face[edge, 0])
+    plane = int(model.face_plane[face])
+    gap = float(model.plane_normal[plane] @ point) - float(model.plane_offset[plane])
+    if abs(gap) > tolerance:
+        return False
+    faces = np.asarray(model.room.mesh.faces)
+    candidates = np.flatnonzero((model.face_plane == plane) & ~model.transparent)
+    if face not in candidates:
+        candidates = np.append(candidates, face)
+    corners = faces[candidates].reshape(-1)
+    triangle = np.repeat(np.arange(len(candidates)), faces.shape[1])
+    order = np.argsort(corners, kind="stable")
+    shared = corners[order][1:] == corners[order][:-1]
+    joined = _components(len(candidates), triangle[order][:-1][shared], triangle[order][1:][shared])
+    own = candidates[joined == joined[np.flatnonzero(candidates == face)[0]]]
+    vertices = np.asarray(model.room.mesh.vertices, dtype=float)
+    return _on_triangles(np.asarray(point, dtype=float), vertices[faces[own]], tolerance)
+
+
+def _subset(part: dict, keep: np.ndarray) -> dict:
+    """The rows ``keep`` of each array in ``part``."""
+    return {key: value[keep] for key, value in part.items()}
 
 
 def _closest(start, end, edges, edge) -> np.ndarray:

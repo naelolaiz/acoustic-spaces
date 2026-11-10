@@ -1359,3 +1359,207 @@ def test_the_very_end_of_a_fading_edge_counts_once() -> None:
         assert kept(3.0, fade, held)[1:] == [False, True, False]
     # Nothing reflected: the end of an edge that goes on belongs to the next one.
     assert (kept(3.0, 1.0, True)[0], kept(3.0, 0.0, False)[0]) == (True, False)
+
+
+def _wall_in_line(
+    sources,
+    listeners,
+    side: float = -1.0,
+    shift: float = 0.0,
+    extent=((-45, -45), (45, 45)),
+    start: float = 10.0,
+    others=(),
+    **simulation,
+):
+    """A rigid building 10 m deep whose wall runs along y = ``shift`` from x = ``start``
+    to 20, the building on the side ``side`` of it, and one like it from x = a to a + 10
+    for each a of ``others``, outdoors on ground over ``extent``. Reflections up to the
+    first order, unless ``simulation`` gives ``early`` settings, which replace them (and
+    with them that order)."""
+    boxes = [[[start, 0], [20, 0], [20, 10 * side], [start, 10 * side]]]
+    boxes += [[[a, 0], [a + 10, 0], [a + 10, 10 * side], [a, 10 * side]] for a in others]
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {
+                    "ground": {"extent": [list(c) for c in extent], "sky": 20.0},
+                    "buildings": [
+                        {
+                            "name": f"h{k}",
+                            "footprint": [[x, y + shift] for x, y in box],
+                            "height": 6,
+                        }
+                        for k, box in enumerate(boxes)
+                    ],
+                },
+                "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+                "default_material": "hard",
+                "sources": [{"name": f"s{k}", "position": list(p)} for k, p in enumerate(sources)],
+                "listeners": [
+                    {"name": f"l{k}", "position": list(p)} for k, p in enumerate(listeners)
+                ],
+                "simulation": {"early": {"max_order": 1}, **simulation},
+            }
+        )
+    )
+
+
+def _pairs(room: Room, count: int) -> list:
+    return [early_paths(room, f"s{k}", f"l{k}", threads=1) for k in range(count)]
+
+
+@pytest.mark.parametrize("bands", ["octave", "third_octave"])
+@pytest.mark.parametrize("side", [-1.0, 1.0])
+@pytest.mark.parametrize("swap", [False, True])
+def test_a_listener_in_line_with_a_wall_hears_one_corner(swap: bool, side: float, bands) -> None:
+    """The source 10 m before a building's wall, in its plane, and the listener 20 m past
+    it, in its plane too or 10 um into the wall's shadow: the way runs along the wall
+    from one upright corner to the other, and both corners' paths are that one ray. The
+    listener on the line has the paths it has just off it in the shadow (over the far
+    corner alone), and its level; with the two swapped, those over the near one. Both
+    corners' paths were kept on the line, 4 to 8 dB louder than beside it."""
+    source, far = (0.0, 0.0, 1.0), (40.0, 0.0, 1.5)
+    if swap:
+        room = _wall_in_line([far, far], [source, (0.0, 1e-5 * side, 1.0)], side)
+    else:
+        room = _wall_in_line([source, source], [far, (40.0, 1e-5 * side, 1.5)], side)
+    room.scene.simulation.bands = bands
+    room = Room.from_scene(room.scene)
+    on, off = _pairs(room, 2)
+    assert sorted(on.edge.tolist()) == sorted(off.edge.tolist()) and len(on) == 2
+    np.testing.assert_allclose(
+        10 * np.log10(total_energy(on)), 10 * np.log10(total_energy(off)), atol=0.01
+    )
+
+
+def test_a_listener_in_line_with_a_wall_over_two_edges() -> None:
+    """As above with paths over two edges: on the line, as 10 um into the shadow."""
+    beside = (40.0, -1e-5, 1.5)
+    room = _wall_in_line(
+        [(0.0, 0.0, 1.0)] * 2, [(40.0, 0.0, 1.5), beside], early={"diffraction": "second_order"}
+    )
+    on, off = _pairs(room, 2)
+    np.testing.assert_allclose(
+        10 * np.log10(total_energy(on)), 10 * np.log10(total_energy(off)), atol=0.01
+    )
+
+
+def test_a_map_point_in_line_with_a_wall_hears_one_corner() -> None:
+    """A coverage map whose points at y = 0 lie in the plane of the wall the source
+    stands in line with: there as with the wall and the source 10 um aside (the points
+    then in the wall's shadow)."""
+    from acoustic_spaces.engine import coverage_map
+    from acoustic_spaces.scene import Coverage
+
+    settings = Coverage(spacing=10.0)
+    maps = []
+    for shift in (0.0, 1e-5):
+        room = _wall_in_line(
+            [(-5.0, shift, 1.0)],
+            [(-5.0, 10.0, 1.2)],
+            shift=shift,
+            extent=((-15, -25), (45, 25)),
+            late={"rays": 50},
+        )
+        maps.append(coverage_map(room, settings=settings, threads=1))
+    on, off = (
+        m.get().values["spl"][(np.abs(m.grid.points[:, 1]) < 1e-9) & (m.grid.points[:, 0] > 20.0)]
+        for m in maps
+    )
+    assert len(on) == 2
+    np.testing.assert_allclose(on, off, atol=0.01)
+
+
+@pytest.mark.parametrize("order", ["first_order", "second_order"])
+@pytest.mark.parametrize("side", [-1.0, 1.0])
+def test_a_listener_on_a_wall_in_line_with_the_source_hears_it(side: float, order) -> None:
+    """The source in the plane of a building's wall and the listener on the wall, or at
+    its far corner: a point on a face has only the side in front of it. On the wall it
+    reads as 10 um in front; at the corner it lies between its neighbours in front of
+    the wall and beside the corner, behind the wall's plane. Taking it for a point past
+    the wall's end, behind it, dropped every path and left it with none."""
+    front, behind = -1e-5 * side, 1e-5 * side
+    listeners = [
+        (15.0, 0.0, 1.5),
+        (15.0, front, 1.5),
+        (20.0, 0.0, 1.5),
+        (20.0, front, 1.5),
+        (20.0 + 1e-5, behind, 1.5),
+    ]
+    room = _wall_in_line([(0.0, 0.0, 1.0)] * 5, listeners, side, early={"diffraction": order})
+    on, ahead, corner, lit, past = (10 * np.log10(total_energy(p)) for p in _pairs(room, 5))
+    np.testing.assert_allclose(on, ahead, atol=0.01)
+    assert np.all((corner > np.minimum(lit, past)) & (corner < np.maximum(lit, past)))
+
+
+def test_a_listener_on_another_wall_in_line_is_past_the_first() -> None:
+    """Two buildings whose walls lie in one plane with the source, the listener on the
+    second's wall: it lies past the first's wall, as a point in the open between them
+    does, so it has no path over the first's near corner either (the wave along that
+    wall is the far corner's). Taking the second wall for the first's face kept both
+    corners' paths there."""
+    listeners = [(35.0, 0.0, 1.5), (25.0, 0.0, 1.5)]
+    room = _wall_in_line([(0.0, 0.0, 1.0)] * 2, listeners, others=(30.0,))
+    edges = find_edges(TraceModel.from_room(room))
+    upright = np.abs(edges.direction[:, 2]) > 1.0 - 1e-9
+    near = np.flatnonzero(
+        upright & (np.linalg.norm(edges.start[:, :2] - [10.0, 0.0], axis=1) < 1e-9)
+    )
+    far = np.flatnonzero(
+        upright & (np.linalg.norm(edges.start[:, :2] - [20.0, 0.0], axis=1) < 1e-9)
+    )
+    assert len(near) == 1 and len(far) == 1
+    for paths in _pairs(room, 2):
+        assert near[0] not in paths.edge and far[0] in paths.edge
+
+
+def test_a_map_point_on_a_wall_in_line_with_the_source_hears_it() -> None:
+    """A coverage map whose points at y = 0 lie in the plane of the wall the source
+    stands in line with, one on the wall and one at its far corner: the one on the wall
+    as with the wall 10 um back (the point then in front of it), the corner's heard too.
+    Both had no paths left."""
+    from acoustic_spaces.engine import coverage_map
+    from acoustic_spaces.scene import Coverage
+
+    settings = Coverage(spacing=10.0)
+    maps = []
+    for shift in (0.0, -1e-5):
+        room = _wall_in_line(
+            [(-5.0, 0.0, 1.0)],
+            [(-5.0, 10.0, 1.2)],
+            shift=shift,
+            extent=((-15, -25), (45, 25)),
+            start=5.0,
+            late={"rays": 50},
+        )
+        maps.append(coverage_map(room, settings=settings, threads=1))
+    on, ahead = (
+        m.get().values["spl"][
+            (np.abs(m.grid.points[:, 1]) < 1e-9) & np.isin(m.grid.points[:, 0], (10.0, 20.0))
+        ]
+        for m in maps
+    )
+    assert len(on) == 2 and np.isfinite(on).all()
+    np.testing.assert_allclose(on[0], ahead[0], atol=0.01)
+
+
+@pytest.mark.parametrize("swap", [False, True])
+def test_the_way_along_a_thick_barrier_s_top(tmp_path: Path, swap: bool) -> None:
+    """The source and the listener at the height of a 1 m thick barrier's top, on either
+    side: just above it and just below the level is the same (within 0.1 dB), and on it
+    too. With both corners' paths it was 8 dB louder."""
+    steps = (-1e-6, 0.0, 1e-6)
+    if swap:
+        level = np.concatenate(
+            [
+                _over_barrier(
+                    _barrier(tmp_path, (4.0, 0.3, dz), [(-3.0, 0.0, 0.0)]), "second_order"
+                )
+                for dz in steps
+            ]
+        )
+    else:
+        room = _barrier(tmp_path, (-3.0, 0.0, 0.0), [(4.0, 0.3, dz) for dz in steps])
+        level = _over_barrier(room, "second_order")
+    assert np.abs(level[2] - level[0]).max() < 0.1
+    np.testing.assert_allclose(level[1], level[0], atol=0.01)

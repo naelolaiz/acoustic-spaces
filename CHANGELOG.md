@@ -173,6 +173,12 @@
   a straight one is within 0.2 dB of the exact solution from 63 Hz to 1 kHz); of the
   examples only `railway`'s line and the `street`'s garden move, by up to 0.14 dB in a
   band.
+- Fixed: a listener or map point exactly in line with the source and a building's wall
+  (or a block's top), past the wall, heard the paths round both of its corners, one ray
+  counted twice: 3 to 9.5 dB louder than 10 µm into the shadow, over one edge or two,
+  with reflections up to the third order. It now has the paths and the level it has
+  just beside the line in the shadow, in still air and in wind; a point on that wall
+  itself keeps the level it had.
 
 ## 4.2.1
 

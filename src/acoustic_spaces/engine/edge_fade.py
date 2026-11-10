@@ -124,7 +124,9 @@ from acoustic_spaces.engine.diffraction import (
     _first_solid,
     _image_sources,
     _match,
+    _past_face,
     _reach,
+    _subset,
     _waves,
     boundary_angles,
     near_fading_end,
@@ -1350,6 +1352,13 @@ class EdgeFade:
         n = edges.wedge[edge]
         start, end = table["start"][slot], table["end"][slot]
         leg = table["kind"][slot] == _LEG
+        # A missed leg that runs in the plane of a face of the edge, the listener side in
+        # the face's plane seen along the edge and the listener beyond the face: that
+        # side lies behind the face, as the edge diffraction has it
+        # (EdgeDiffraction._in_front).
+        if not passes:
+            hearer = table["hearer"][slot]
+            ok &= ~(leg & _past_face(model, edges, edge, phi_r, phi_s, hearer, self.tolerance))
         # At a leg, the point on the edge on the leg's side of the planes the path over
         # it may reflect off at either end (the side away from the image there), as the
         # path over the edge must be: of the twins either side of a plane the edge
@@ -2340,8 +2349,3 @@ def _points(terms: dict, idx: np.ndarray) -> tuple[list, list, list]:
             for i, a, b, c in zip(where[sel], new, new_faces, new_cosines, strict=True):
                 points[i], faces[i], cosines[i] = a, b, c
     return points, faces, cosines
-
-
-def _subset(part: dict, keep: np.ndarray) -> dict:
-    """The terms ``keep`` of ``part``."""
-    return {key: value[keep] for key, value in part.items()}
