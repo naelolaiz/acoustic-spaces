@@ -261,6 +261,16 @@ def modes(stencil: int = 7) -> list[dict]:
     return sorted(rows, key=lambda row: row["theory_hz"])
 
 
+def _fade(count: int, rate: float, until: float, over: float) -> np.ndarray:
+    """A window over ``count`` samples at ``rate``: one, falling to nothing (a raised
+    cosine) over the ``over`` seconds before ``until`` seconds, and nothing after. The
+    source reaches up to waves near the most the grid carries, well above the bands the
+    checks look at, and those travel slowly enough to be still passing where a check cuts
+    a run: an abrupt cut spreads them over every frequency."""
+    t = np.arange(count) / rate
+    return 0.5 - 0.5 * np.cos(np.pi * np.clip((until - t) / over, 0.0, 1.0))
+
+
 def duct(stencil: int = 7) -> list[dict]:
     size, cell = (80.0, 0.6, 0.6), 0.1
     rows = []
@@ -337,7 +347,9 @@ def impedance_duct(stencil: int = 7) -> dict:
     The reflected wave is the far end's run less a run in a duct long enough for nothing
     to come back from its far end in time; the incident wave is that run before the sound
     off the near end arrives. Each over a rigid end's, which the grid reflects whole at
-    every frequency, so what the grid does on the way cancels out.
+    every frequency, so what the grid does on the way cancels out. The cut before the
+    near end's sound and the runs' end fade over 20 ms (see :func:`_fade`); the rigid
+    end's reflection over the incident wave, which is 1, says how well.
     """
     cell, width = 0.05, 0.2
     courant = COURANTS[stencil]
@@ -346,7 +358,8 @@ def impedance_duct(stencil: int = 7) -> dict:
     source_x, probe_x, seconds = 60.0, 110.0, 0.6
     run = (cell, source_x, probe_x, seconds, stencil)
     reference, _ = _plane_wave_runs((200.0, width, width), None, *run)
-    incident = np.where(np.arange(len(reference)) / rate < 0.48, reference, 0.0)
+    incident = reference * _fade(len(reference), rate, 0.48, 0.02)
+    tail = _fade(len(reference), rate, len(reference) / rate, 0.02)
     n_fft = 1 << 15
     f = np.fft.rfftfreq(n_fft, 1.0 / rate)
     band = (f > 30) & (f < 720)
@@ -354,9 +367,12 @@ def impedance_duct(stencil: int = 7) -> dict:
 
     def reflection(end):
         far, _ = _plane_wave_runs((130.0, width, width), end, *run)
-        return np.fft.rfft(far - reference, n_fft)[band] / np.fft.rfft(incident, n_fft)[band]
+        return (
+            np.fft.rfft((far - reference) * tail, n_fft)[band] / np.fft.rfft(incident, n_fft)[band]
+        )
 
-    measured = 1.0 - np.abs(reflection(fit) / reflection(None)) ** 2
+    rigid = reflection(None)
+    measured = 1.0 - np.abs(reflection(fit) / rigid) ** 2
     y = fit(f)
     theory = 1.0 - np.abs((1.0 - y) / (1.0 + y)) ** 2
     grid = 1.0 - np.abs(grid_reflection(f, rate, np.conj(fit(f, rate)), courant)) ** 2
@@ -378,6 +394,7 @@ def impedance_duct(stencil: int = 7) -> dict:
         "max_difference": float(np.max(np.abs(measured - theory))),
         "max_difference_below_360": float(np.max(np.abs(measured - theory)[below])),
         "max_difference_grid": float(np.max(np.abs(measured - grid))),
+        "rigid_end": float(np.max(np.abs(np.abs(rigid) - 1.0))),
         "material": list(POROUS),
         "fitted": [float(a) for a in fit.achieved],
         "branches": len(fit.conductance),
@@ -387,7 +404,8 @@ def impedance_duct(stencil: int = 7) -> dict:
 def open_boundary() -> list[dict]:
     """A rigid 8 x 6 m plate in the open, 25 to 250 Hz at three listeners round it: what
     differs from a grid 16 m larger all round (nothing comes back from its edge in the 90
-    ms the runs last), with the grid's edge alone and with matched layers."""
+    ms the runs last), with the grid's edge alone and with matched layers. The runs' last
+    10 ms fade out (see :func:`_fade`: above the band a layer sends much more back)."""
     h, seconds = 0.2, 0.09
     vertices = np.array([[0, 0, 0], [8, 0, 0], [8, 6, 0], [0, 6, 0]], float)
     bvh = _native.Bvh(vertices, np.array([[0, 1, 2], [0, 2, 3]], np.int64))
@@ -422,6 +440,7 @@ def open_boundary() -> list[dict]:
     gain = np.clip((f - 25) / 10, 0, 1) * np.clip((250 - f) / 50, 0, 1)
 
     def band(x):
+        x = x * _fade(x.shape[1], rate, x.shape[1] / rate, 0.01)
         return np.fft.irfft(np.fft.rfft(x, n_fft, axis=1) * gain, n_fft, axis=1)[:, : x.shape[1]]
 
     reference = band(run(80, 0)[0])
@@ -552,7 +571,7 @@ def places(scheme: str, count: int = 18, distances=(1.0, 2.0, 3.0, 4.0, 8.0, 12.
     offsets = np.array([d * direction for d in distances for direction in directions]) * cell
     radii = np.repeat(distances, len(directions)) * cell
     within = np.random.default_rng(7).random((count, 3))
-    within[0], within[1] = 0.0, 0.5
+    within[:2] = np.array([[0.0] * 3, [0.5] * 3])[:count]
     levels, ratios = [], []
     for place in within:
         source = centre + place * cell
@@ -927,7 +946,8 @@ def main() -> None:
         print(
             f"\n{stencil}-point: largest difference from 30 to 720 Hz: "
             f"{impedance['max_difference']:.4f} ({impedance['max_difference_below_360']:.4f} "
-            f"below 360 Hz, {impedance['max_difference_grid']:.4f} from the grid's theory); "
+            f"below 360 Hz, {impedance['max_difference_grid']:.4f} from the grid's theory; "
+            f"the rigid end's reflection within {impedance['rigid_end']:.4f} of 1); "
             f"random-incidence absorption, material {impedance['material']}, fitted "
             + ", ".join(f"{a:.3f}" for a in impedance["fitted"])
             + f" ({impedance['branches']} branches)"
