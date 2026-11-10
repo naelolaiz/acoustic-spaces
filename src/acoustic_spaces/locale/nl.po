@@ -5334,6 +5334,38 @@ msgstr ""
 "rekentijden (Outdoor scenes, How the simulation bends sound)"
 
 #: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "rays, off by up to {error:g} dB at 1 and 2 kHz"
+msgstr "stralen, tot {error:g} dB afwijking bij 1 en 2 kHz"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count}, off by up to {error:g} dB at 1 and 2 kHz"
+msgstr "{count}, tot {error:g} dB afwijking bij 1 en 2 kHz"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors over the open ground in wind or temperature gradients, the "
+"frequencies an octave the parabolic equation takes at 1 and 2 kHz (below 1 "
+"kHz always 8), or the rays, which give those bands where one reaches the "
+"listener short of half the way to the shadow's start. Fewer take less time "
+"and leave those bands further off, and in the shadow the bands above, which "
+"deepen from them: each choice says by how much at most at 1 and 2 kHz, "
+"against a fast field program in the validation cases. The documentation has "
+"the errors and the run times measured (Outdoor scenes, How the simulation "
+"bends sound)"
+msgstr ""
+"Buiten, boven open terrein bij wind of temperatuurgradiënten: de frequenties "
+"per octaaf die de parabolische vergelijking bij 1 en 2 kHz neemt (onder 1 "
+"kHz altijd 8), of de stralen, die die banden geven waar er een de luisteraar "
+"bereikt vóór de helft van de weg naar het begin van de schaduw. Minder "
+"kosten minder tijd en geven die banden minder nauwkeurig, en in de schaduw "
+"ook de banden erboven, die daarvan uit dieper worden: elke keuze zegt "
+"hoeveel hoogstens bij 1 en 2 kHz, tegenover een fast-field-programma in de "
+"validatiegevallen. De documentatie geeft de afwijkingen en de gemeten "
+"rekentijden (Outdoor scenes, How the simulation bends sound)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
@@ -5374,6 +5406,10 @@ msgstr "Parabolische vergelijking"
 #: acoustic_spaces/gui/inspector.py
 msgid "Frequencies behind barriers"
 msgstr "Frequenties achter schermen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Frequencies over open ground"
+msgstr "Frequenties boven open terrein"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "In pressure up to"
@@ -8868,9 +8904,9 @@ msgid ""
 "heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
 "upwind the listeners are in its shadow, where only what bends round its edge "
 "and what the wind's eddies scatter into it arrive: there the bands from 1 "
-"kHz up are some 19 dB below those downwind, where without the eddies they "
-"would be 60 dB below. The eddies also make the sound flicker as they drift "
-"past. Remove the atmosphere to hear the same park in still air."
+"kHz up are some 19 to 21 dB below those downwind, where without the eddies "
+"they would be 59 to 64 dB below. The eddies also make the sound flicker as "
+"they drift past. Remove the atmosphere to hear the same park in still air."
 msgstr ""
 "Buiten: de luidsprekers van een podium op 5 m hoogte, gehoord op 100 en 300 "
 "m afstand over een park op een winderige avond, met de wind mee en tegen de "
@@ -8880,10 +8916,11 @@ msgstr ""
 "wind mee komt het geluid eerder aan, en luider in de lage banden; 300 m "
 "tegen de wind in staan de luisteraars in zijn schaduw, waar alleen aankomt "
 "wat om de rand ervan buigt en wat de wervelingen van de wind erin "
-"verstrooien: daar liggen de banden vanaf 1 kHz zo'n 19 dB onder die met de "
-"wind mee, waar ze zonder de wervelingen 60 dB lager zouden liggen. De "
-"wervelingen laten het geluid ook schommelen terwijl ze voorbijdrijven. "
-"Verwijder de atmosfeer om hetzelfde park in stilstaande lucht te horen."
+"verstrooien: daar liggen de banden vanaf 1 kHz zo'n 19 tot 21 dB onder die "
+"met de wind mee, waar ze zonder de wervelingen 59 tot 64 dB lager zouden "
+"liggen. De wervelingen laten het geluid ook schommelen terwijl ze "
+"voorbijdrijven. Verwijder de atmosfeer om hetzelfde park in stilstaande "
+"lucht te horen."
 
 #: examples/orchestra/scene.yaml
 msgctxt "example"

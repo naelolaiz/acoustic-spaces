@@ -6,15 +6,20 @@ Error estimates for more results: the uncertainty of a coverage map's values (it
 insertion loss and long-term levels too), the spread of each listener's levels and
 speech results, one-sided bounds, the number of draws chosen as GUM Supplement 1's
 adaptive procedure does, and a material's absorption uncertainty on its page in the
-editor; the parabolic equation behind barriers in wind and the wide-angle one faster
-with the same results, and walks in far less memory; and fixes to sound over two edges
-along an absorbing face, beside a thin screen's bends and corners, behind a barrier's
-foot, in line with a barrier's end or a wall, past roof edges in wind, to the late rays
-in wind and through plants, curved rays near a profile's nodes, the wave solver round
-open models, Doc 29's maximum levels and tables, Doppler walks and the spread itself.
+editor; the sound over the open ground in wind at 1 and 2 kHz from the parabolic
+equation, with a setting for its cost; the parabolic equation behind barriers in wind
+and the wide-angle one faster with the same results, and walks in far less memory; and
+fixes to sound over two edges along an absorbing face, beside a thin screen's bends and
+corners, behind a barrier's foot, in line with a barrier's end or a wall, past roof
+edges in wind, to the late rays in wind and through plants, curved rays near a profile's
+nodes, the wave solver round open models, Doc 29's maximum levels and tables, Doppler
+walks and the spread itself.
 
-Results change from 4.2.1: outdoors, behind a building whose faces absorb, with
-`second_order` (by 18 to 20 dB behind a 6 m building absorbing 0.02; the archway
+Results change from 4.2.1: outdoors in wind or a temperature gradient at 1 and 2 kHz
+over the open ground, now from the parabolic equation (the examples' bands by up to 2.8
+dB; runs over open ground in wind take longer, `open_air_stage` about 2.3 times on one
+core, and `helicopter_flyover` keeps the rays); behind a building whose faces absorb,
+with `second_order` (by 18 to 20 dB behind a 6 m building absorbing 0.02; the archway
 example's first arrival behind the wall by 11.0 and 11.7 dB at 63 and 125 Hz); beside a
 bend of a thin screen's top or past a corner that is not square (steps of up to 5.4 dB,
 16.6 dB or 3.0 dB); where the source, the listener and a barrier's top are at one height
@@ -147,6 +152,23 @@ reaches 1. Scene files of 4.2.1 load unchanged.
 
 **Wind and curved rays**
 
+- Fixed: in wind or a temperature gradient the sound over the open ground at 1 and 2 kHz
+  (630 Hz to 2.5 kHz in third octaves) came from rays outside the shadow, which were up
+  to 3.2 dB off a fast field program in `windy` and 8.5 dB in `clear_night` and stepped
+  by up to 14 dB a centimetre at a caustic; it now comes from the parabolic equation
+  there too, at 24 frequencies an octave, which moves the examples' bands by up to
+  2.8 dB (3.3 dB read from a third-octave run) and makes runs over open ground in wind
+  take longer, `open_air_stage` about 2.3 times as long on one core (see
+  [Outdoor scenes](docs/outdoor.md)).
+- Added: `simulation.early.open_ground_frequencies` (**Frequencies over open ground** in
+  the editor) picks how those 1 and 2 kHz bands are found: 24 frequencies an octave (the
+  default, up to 0.75 dB off the program), 8 (4.0 dB, 2 to 3 times faster on one core)
+  or the rays short of half the way to the shadow, as 4.2.1 did in octave bands (8.5 dB,
+  2.3 to 30 times faster); in the shadow 4 and 8 kHz, which deepen from those bands,
+  move with them (by up to 0.33 dB within 60 dB of free field). `helicopter_flyover`,
+  whose sound comes down steeply, sets the rays, there within 0.11 dB of the default.
+
+
 - Fixed: in wind or a temperature gradient the late rays counted again the curved paths
   off the ground that the early part already holds (those with more bounces than
   `max_order`, up to ten), so over a ground that scatters little the level rose with the
@@ -168,7 +190,7 @@ reaches 1. Scene files of 4.2.1 load unchanged.
   (`validation/curved_rays.py`, paths near a caustic apart) the most a path to listeners
   0.5 to 12 m up is off goes from 15.3 to 2.4 dB where the sound bends down and from 3.1
   to 1.1 dB where it bends up, and a path between ends at one height that turns just
-  below them is within 1.5 dB; from 1 kHz up a listener 300 m downwind of the
+  below them is within 1.5 dB; at 4 and 8 kHz a listener 300 m downwind of the
   `open_air_stage` source and 4.61 m up gains about 2 dB, and the shipped examples' own
   listeners move by 0.02 dB at most.
 
@@ -260,9 +282,8 @@ reaches 1. Scene files of 4.2.1 load unchanged.
   results.
 - Changed: the wide-angle parabolic equation's steps take up to four frequencies
   together, two to an SSE2 register: listeners the sound reaches steeply behind a
-  barrier or a building take about 60 s on one core where they took 115 s, and the
-  equation over open ground two to two and a half times the narrow-angle one's time
-  where it took three to four, with the same results.
+  barrier or a building take about 60 s on one core where they took 115 s, with the same
+  results.
 - Changed: a walk's places between those traced for their late part mix theirs when it
   is read instead of holding a copy for the whole run: a walk of 201 places through the
   `church` example peaks at 336 MiB where it took 1,685 MiB, with the same results, and

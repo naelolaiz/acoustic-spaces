@@ -348,15 +348,15 @@ def test_independent_ranges_get_what_they_would_alone() -> None:
 
 
 def field(early: dict) -> Scene:
-    """A source 2 m up over a lawn, a listener 150 m downwind in a strong wind."""
+    """A source 2 m up over a lawn, a listener 20 m downwind in a strong wind."""
     return Scene.model_validate(
         {
             "name": "field",
-            "geometry": {"ground": {"extent": [[-20.0, -20.0], [170.0, 20.0]], "sky": 20.0}},
+            "geometry": {"ground": {"extent": [[-20.0, -20.0], [40.0, 20.0]], "sky": 20.0}},
             "materials": {"lawn": {"impedance": "grass"}},
             "assignments": {"ground": "lawn"},
             "sources": [{"name": "s", "position": [0.0, 0.0, 2.0]}],
-            "listeners": [{"name": "l", "position": [150.0, 0.0, 1.5]}],
+            "listeners": [{"name": "l", "position": [20.0, 0.0, 1.5]}],
             "atmosphere": {"preset": "windy", "wind": {"direction_deg": 0.0}},
             "simulation": {
                 "seed": 1,
@@ -381,10 +381,10 @@ def test_the_scene_chooses_the_parabolic_equation(monkeypatch) -> None:
 
         monkeypatch.setattr(module, "march", counted)
     narrow = simulate(Room.from_scene(field({})))
-    assert calls == {"narrow": 4, "wide": 0}  # the bands up to 500 Hz
+    assert calls == {"narrow": 6, "wide": 0}  # the bands up to 2 kHz
     wide = simulate(Room.from_scene(field({"parabolic_equation": "wide_angle"})))
-    assert calls == {"narrow": 4, "wide": 4}
-    a = narrow["s", "l"].relative_to_free_field()[:4]
-    b = wide["s", "l"].relative_to_free_field()[:4]
+    assert calls == {"narrow": 6, "wide": 6}
+    a = narrow["s", "l"].relative_to_free_field()[:6]
+    b = wide["s", "l"].relative_to_free_field()[:6]
     np.testing.assert_allclose(b, a, atol=0.3)
     assert not np.array_equal(a, b)

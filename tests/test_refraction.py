@@ -23,6 +23,7 @@ from acoustic_spaces.engine.refracted import refraction_for
 from acoustic_spaces.engine.refraction import Profile, Rays, node_heights
 from acoustic_spaces.engine.shadow import shadow_start
 from acoustic_spaces.examples import example_path
+from acoustic_spaces.materials import THIRD_OCTAVE_BANDS_HZ
 from acoustic_spaces.materials.ground import surface_impedance
 from acoustic_spaces.scene import Atmosphere
 
@@ -1731,7 +1732,7 @@ def test_the_parabolic_equation_s_bands_read_back_as_computed() -> None:
     result = simulate(Room.from_scene(Scene.model_validate(data)))
     response = result["s", "l0"]
     early = response.early
-    wave_bands = 4  # 63 to 500 Hz
+    wave_bands = 6  # 63 Hz to 2 kHz
     carrying = np.flatnonzero(early.energy[:, :wave_bands].sum(axis=1) > 0.0)
     assert len(carrying) == 1 and len(early) > 1
     silent = np.flatnonzero(early.energy[:, :wave_bands].sum(axis=1) == 0.0)
@@ -1743,16 +1744,326 @@ def test_the_parabolic_equation_s_bands_read_back_as_computed() -> None:
     np.testing.assert_allclose(read, computed, atol=0.02)
 
 
+def test_octave_and_third_octave_runs_end_the_equation_at_the_same_frequency(
+    monkeypatch,
+) -> None:
+    """The open ground's bands from the parabolic equation end at a frequency, the upper
+    edge of the 2 kHz octave (2828 Hz), in octave and third-octave runs alike: 100 m
+    downwind the equation runs in the octave bands from 63 Hz to 2 kHz and in the third
+    octaves from 50 Hz to 2.5 kHz (its upper edge 2806 Hz, nominal centres), whose
+    frequencies all lie in those octaves, the highest within 5 % of the edge."""
+    import acoustic_spaces.engine.parabolic as parabolic
+
+    marched = []
+    run = parabolic.march
+
+    def spy(frequencies, *args, **kwargs):
+        marched.append(np.atleast_1d(frequencies).copy())
+        return run(frequencies, *args, **kwargs)
+
+    monkeypatch.setattr(parabolic, "march", spy)
+    join = 2000.0 * math.sqrt(2.0)
+    for bands, runs in (("octave", 6), ("third_octave", 18)):
+        marched.clear()
+        simulate(Room.from_scene(field({"preset": "windy"}, bands=bands)), threads=1)
+        assert len(marched) == runs, bands
+        frequencies = np.concatenate(marched)
+        assert join / 1.05 < frequencies.max() < join, bands
+        assert frequencies.min() > 44.0, bands
+
+
+def test_the_shadow_deepens_alike_in_octave_and_third_octave_runs() -> None:
+    """100 m upwind in the wind, deep in the shadow, the bands above the parabolic
+    equation's are its top octave band's level deepened octave by octave as over the
+    octave below: read in octave bands, a third-octave run's 4 and 8 kHz agree with an
+    octave run's no worse than the computed 1 and 2 kHz do (whose three third octaves
+    take other frequencies of the octave)."""
+    levels = []
+    for bands in ("octave", "third_octave"):
+        scene = field({"preset": "windy"}, ((-100.0, 0.0, 1.5),), bands=bands)
+        response = simulate(Room.from_scene(scene), threads=1)["s", "l0"]
+        energy = response.early.energy.sum(axis=0).reshape(8, -1).sum(axis=1)
+        free = np.asarray(response.free_field).reshape(8, -1).sum(axis=1)
+        levels.append(10.0 * np.log10(energy / free))
+    difference = np.abs(levels[1] - levels[0])
+    assert levels[0][6] < levels[0][5] - 10.0  # deep in the shadow
+    assert difference[6:].max() <= difference[4:6].max()
+
+
+def test_a_silent_top_octave_leaves_the_bands_above_it_silent(monkeypatch) -> None:
+    """Where the parabolic equation's top octave band comes out silent (as in a shadow
+    deeper than its numbers reach), the third octaves above it are silent too, not the
+    0 ** -x of a slope of zero."""
+    from acoustic_spaces.engine import refracted
+
+    place = refracted.Refraction._place
+
+    def silent_top(self, wave, pressure, energy, parts, listeners):
+        energy = np.array(energy, dtype=float)
+        octave = refracted.octave_of(self.model.bands)
+        top = octave[np.flatnonzero(wave.bands)[-1]]
+        energy[octave == top] = 0.0
+        return place(self, wave, pressure, energy, parts, listeners)
+
+    monkeypatch.setattr(refracted.Refraction, "_place", silent_top)
+    scene = field({"preset": "windy"}, ((-100.0, 0.0, 1.5),), bands="third_octave")
+    response = simulate(Room.from_scene(scene), threads=1)["s", "l0"]
+    energy = response.early.energy.sum(axis=0)
+    assert np.all(np.isfinite(energy))
+    assert np.all(energy[THIRD_OCTAVE_BANDS_HZ.index(3150) :] == 0.0)
+
+
+#: The level re free field (dB) at 1 and 2 kHz, the band's energy averaged over 24
+#: frequencies, of ``validation/ffp.py`` (its top 200 m up): ``windy`` downwind, a
+#: source 2 m and a listener 1.5 m up, 119.5, 120 and 120.5 m apart; ``clear_night``,
+#: a source 0.5 m up, a listener 250 m away 2.00, 2.05 and 2.10 m up.
+FFP_WINDY_120 = [[3.710, 2.507], [3.713, 2.517], [3.716, 2.528]]
+FFP_NIGHT_250 = [[-4.087, 0.887], [-4.063, 0.691], [-4.045, 0.525]]
+
+
+def caustic_scene(preset: str, zs: float, listeners, bands: str = "octave", **early) -> Scene:
+    """A source ``zs`` up over grass (Delany and Bazley, 200 kPa s/m2) in ``preset``,
+    downwind, and listeners; nothing from the late part; ``early`` added to its
+    ``simulation.early``."""
+    far = max(p[0] for p in listeners)
+    return Scene.model_validate(
+        {
+            "name": "caustic",
+            "geometry": {"ground": {"extent": [[-50.0, -50.0], [far + 50.0, 50.0]], "sky": 50.0}},
+            "materials": {
+                "field": {
+                    "impedance": {"model": "delany_bazley", "flow_resistivity": 200.0},
+                    "scattering": 0.0,
+                }
+            },
+            "default_material": "field",
+            "sources": [{"name": "s", "position": [0.0, 0.0, zs]}],
+            "listeners": [{"name": f"l{k}", "position": list(p)} for k, p in enumerate(listeners)],
+            "air": {"temperature_c": 20.0, "humidity_percent": 50.0},
+            "atmosphere": {"preset": preset, "wind": {"direction_deg": 0.0}},
+            "simulation": {
+                "seed": 1,
+                "bands": bands,
+                "early": {
+                    "method": "image_sources",
+                    "max_order": 1,
+                    "diffraction": "none",
+                    **early,
+                },
+                "late": {"rays": 200},
+                "ir_length_s": 1.0,
+            },
+        }
+    )
+
+
+#: The level re free field (dB) at 1 and 2 kHz of ``validation/ffp.py`` (its top 200 m
+#: up), the band's energy averaged over 48 frequencies: ``windy`` downwind, a source 8 m
+#: and a listener 7.5 m up, 30 m apart (the ground's fringes some 85 Hz apart). Over 8
+#: frequencies an octave it is -1.50 and -1.46 dB, over 24 1.00 and 0.68.
+FFP_HIGH_30 = [1.001, 0.635]
+
+
+def test_the_equation_s_bands_average_the_ground_s_fringes_from_1_khz() -> None:
+    """Over the open ground the parabolic equation's 1 and 2 kHz bands take 24
+    frequencies an octave, enough for the ground's fringes high above it: within 0.1 dB
+    of a fast field program's band (8 an octave, as below 1 kHz, missed it by 2.5 and
+    2.1 dB)."""
+    scene = caustic_scene("windy", 8.0, [(30.0, 0.0, 7.5)])
+    level = simulate(Room.from_scene(scene), threads=1)["s", "l0"].relative_to_free_field()
+    np.testing.assert_allclose(level[4:6], FFP_HIGH_30, atol=0.1)
+
+
+@pytest.mark.parametrize(
+    ("preset", "zs", "walk", "ends", "ffp"),
+    [
+        # 119.8 to 119.95 m downwind in the wind, 1.5 m up: two rays off the ground appear
+        # (between 119.86 and 119.87 m); the program's level at 119.5, 120 and 120.5 m.
+        (
+            "windy",
+            2.0,
+            [(119.8 + 0.01 * k, 0.0, 1.5) for k in range(16)],
+            [(119.5, 0.0, 1.5), (120.0, 0.0, 1.5), (120.5, 0.0, 1.5)],
+            FFP_WINDY_120,
+        ),
+        # 250 m away on a clear night, 2.00 to 2.10 m up: two rays off the ground merge.
+        (
+            "clear_night",
+            0.5,
+            [(250.0, 0.0, 2.0 + 0.01 * k) for k in range(11)],
+            [(250.0, 0.0, 2.0), (250.0, 0.0, 2.05), (250.0, 0.0, 2.1)],
+            FFP_NIGHT_250,
+        ),
+    ],
+)
+def test_the_level_runs_smoothly_through_a_caustic_up_to_2_khz(preset, zs, walk, ends, ffp):
+    """Where the rays off the ground merge and vanish (a caustic) the bands up to 2 kHz
+    change by at most 0.1 dB a centimetre along ``walk``, as a fast field program's do
+    (``validation/ffp.py``, 24 frequencies a band), and are within 0.2 dB of it at
+    ``ends`` (the rays alone stepped by 12 and 14 dB a centimetre)."""
+    listeners = walk + ends
+    result = simulate(Room.from_scene(caustic_scene(preset, zs, listeners)), threads=1)
+    level = np.array(
+        [result["s", f"l{k}"].relative_to_free_field()[:6] for k in range(len(listeners))]
+    )
+    assert np.abs(np.diff(level[: len(walk)], axis=0)).max() < 0.1
+    np.testing.assert_allclose(level[len(walk) :, 4:6], ffp, atol=0.2)  # 1 and 2 kHz
+
+
+#: ``windy`` downwind, a source 2 m and a listener 1.5 m up, 100 m apart: the level re
+#: free field (dB) at 1 and 2 kHz of ``validation/ffp.py`` (its top 200 m up, the band's
+#: energy averaged over 24 frequencies), and that of the rays, which reach it, as
+#: release 4.2.1 gave it (measured on the code before the parabolic equation took those
+#: bands over).
+FFP_WINDY_100 = [3.575, 2.338]
+RAYS_WINDY_100 = [0.4847, -0.8237]
+
+
+def test_the_open_ground_s_frequencies_choose_how_1_and_2_khz_are_found() -> None:
+    """``simulation.early.open_ground_frequencies``: 24 an octave at 1 and 2 kHz are
+    within 0.1 dB of a fast field program where the rays are 3.1 dB off, as the rays
+    alone (``rays``) give it exactly as before; 8 an octave fall within 0.1 dB of the
+    program there too, but not on 24's levels. The other bands do not change there, where
+    rays reach the listener."""
+    levels = {}
+    for choice in (24, 8, "rays"):
+        scene = caustic_scene("windy", 2.0, [(100.0, 0.0, 1.5)], open_ground_frequencies=choice)
+        result = simulate(Room.from_scene(scene), threads=1)
+        levels[choice] = result["s", "l0"].relative_to_free_field()
+    np.testing.assert_allclose(levels[24][4:6], FFP_WINDY_100, atol=0.1)
+    np.testing.assert_allclose(levels["rays"][4:6], RAYS_WINDY_100, atol=0.01)
+    assert np.all(np.asarray(FFP_WINDY_100) - levels["rays"][4:6] > 3.0)
+    np.testing.assert_allclose(levels[8][4:6], FFP_WINDY_100, atol=0.1)
+    assert np.abs(levels[8][4:6] - levels[24][4:6]).min() > 0.005
+    for choice in (8, "rays"):
+        others = np.r_[0:4, 6:8]
+        np.testing.assert_allclose(levels[choice][others], levels[24][others], atol=1e-9)
+
+
+#: ``windy`` upwind of a source 2 m up over a lawn (:func:`field`), listeners 1.5 m up
+#: 10, 20 and 70 m away, the shadow starting 31.4 m away: the level re free field (dB)
+#: at 1 and 2 kHz as release 4.2.1 gave it (measured on the code before the parabolic
+#: equation took those bands over): from the rays short of half the way to the shadow,
+#: from the equation beyond.
+RAYS_WINDY_UPWIND = [[0.2317, 0.5340], [1.9875, 1.0129], [-9.7644, -11.8441]]
+
+
+def test_the_open_ground_s_rays_give_way_to_the_equation_near_a_shadow() -> None:
+    """With ``rays`` the open ground's 1 and 2 kHz bands come from the rays short of
+    half the way to the shadow and from the parabolic equation at the early paths' own
+    frequencies (as with 8) from there on and in the shadow, as before."""
+    early = {"method": "image_sources", "max_order": 1, "diffraction": "none"}
+    listeners = ((-10.0, 0.0, 1.5), (-20.0, 0.0, 1.5), (-70.0, 0.0, 1.5))
+    levels = {}
+    for choice in (8, "rays"):
+        scene = field(
+            {"preset": "windy"}, listeners, early={**early, "open_ground_frequencies": choice}
+        )
+        result = simulate(Room.from_scene(scene), threads=1)
+        levels[choice] = np.array(
+            [result["s", f"l{k}"].relative_to_free_field()[4:6] for k in range(3)]
+        )
+    np.testing.assert_allclose(levels["rays"], RAYS_WINDY_UPWIND, atol=0.005)
+    np.testing.assert_allclose(levels[8][1:], levels["rays"][1:], atol=0.002)
+    assert np.abs(levels[8][0] - levels["rays"][0]).min() > 0.015
+
+
+def test_the_open_ground_s_frequencies_move_4_and_8_khz_in_the_shadow_alone() -> None:
+    """The bands above 2 kHz do not change with ``open_ground_frequencies`` where rays
+    reach the listener; in the shadow they deepen from the 1 and 2 kHz octave bands
+    (the 2 kHz level and its fall from 1 kHz per octave), so there they move with them:
+    by the 2 kHz change plus once (4 kHz) and twice (8 kHz) the change of that fall."""
+    early = {"method": "image_sources", "max_order": 1, "diffraction": "none"}
+    listeners = ((-10.0, 0.0, 1.5), (-100.0, 0.0, 1.5))  # lit, and deep in the shadow
+    levels = {}
+    for choice in (24, 8):
+        scene = field(
+            {"preset": "windy"}, listeners, early={**early, "open_ground_frequencies": choice}
+        )
+        result = simulate(Room.from_scene(scene), threads=1)
+        levels[choice] = np.array([result["s", f"l{k}"].relative_to_free_field() for k in range(2)])
+    change = levels[8] - levels[24]
+    np.testing.assert_allclose(change[0][6:], 0.0, atol=1e-9)
+    fall = change[1][5] - change[1][4]
+    np.testing.assert_allclose(change[1][6:], change[1][5] + fall * np.array([1, 2]), atol=1e-3)
+    assert abs(change[1][7]) > 0.3
+
+
+def _open_runs(monkeypatch) -> list:
+    """The frequencies (Hz) of each run of the parabolic equation, which gives the
+    pressure 1 everywhere instead of marching."""
+    from acoustic_spaces.engine import parabolic
+
+    runs = []
+
+    def flat(frequencies, speed, impedance, zs, ranges, heights, top, **options):
+        runs.append(np.atleast_1d(frequencies).copy())
+        return np.ones((len(runs[-1]), len(ranges)), dtype=complex)
+
+    monkeypatch.setattr(parabolic, "march", flat)
+    return runs
+
+
+def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatch) -> None:
+    """The setting reaches listeners, coverage maps and the places of a walking source
+    alike: 24 or 8 frequencies in each run at 1 and 2 kHz over the open ground, and
+    with ``rays`` none there, the source at the ground's end, everything downwind of it
+    or across the wind, short of any shadow."""
+    from acoustic_spaces.engine.coverage import coverage_map
+    from acoustic_spaces.scene import Coverage
+    from acoustic_spaces.walkthrough import simulate_walk
+
+    runs = _open_runs(monkeypatch)
+    for choice, count in ((24, 24), (8, 8), ("rays", 0)):
+        early = {"method": "image_sources", "max_order": 1, "diffraction": "none"}
+        data = field({"preset": "windy"}, ((-40.0, 0.0, 1.5),), late={"rays": 50}).model_dump()
+        data["simulation"]["early"] = {**early, "open_ground_frequencies": choice}
+        data["sources"][0]["position"] = [-145.0, 0.0, 2.0]
+        still = Scene.model_validate(data)
+        data["sources"][0]["walk"] = {"to": [[-144.0, 0.0, 2.0]], "speed_m_s": 1.0}
+        walking = Scene.model_validate(data)
+        for name, run in (
+            ("listener", lambda still=still: simulate(Room.from_scene(still), threads=1)),
+            (
+                "map",
+                lambda still=still: coverage_map(
+                    Room.from_scene(still), settings=Coverage(spacing=40.0), threads=1
+                ),
+            ),
+            (
+                "walk",
+                lambda walking=walking: simulate_walk(
+                    Room.from_scene(walking), step_m=0.5, threads=1
+                ),
+            ),
+        ):
+            runs.clear()
+            run()
+            high = [len(f) for f in runs if f.min() > 707.0]
+            assert len(runs) > len(high) > 0 if count else not high, (choice, name)
+            assert all(n == count for n in high), (choice, name, high)
+
+
+def test_the_open_ground_s_frequencies_change_nothing_in_still_air() -> None:
+    """Without wind or a temperature gradient the setting changes nothing."""
+    energies = []
+    for choice in (24, 8, "rays"):
+        scene = caustic_scene("neutral", 2.0, [(100.0, 0.0, 1.5)], open_ground_frequencies=choice)
+        energies.append(simulate(Room.from_scene(scene), threads=1)["s", "l0"].early.energy)
+    for energy in energies[1:]:
+        np.testing.assert_array_equal(energy, energies[0])
+
+
 def test_the_parabolic_equation_over_a_ground_that_absorbs_nothing() -> None:
     """A ground absorbing nothing has an admittance of 0 and an infinite impedance: the
-    parabolic equation's bands (63 to 500 Hz) over it, 100 m downwind and upwind, come
+    parabolic equation's bands (63 Hz to 2 kHz) over it, 100 m downwind and upwind, come
     within 0.05 dB of those over a ground absorbing 0.001."""
     levels = []
     for absorption in (0.0, 0.001):
         data = field({"preset": "windy"}, ((100.0, 0.0, 1.5), (-100.0, 0.0, 1.5))).model_dump()
         data["materials"]["lawn"] = {"absorption": [absorption] * 8, "scattering": 0.0}
         result = simulate(Room.from_scene(Scene.model_validate(data)))
-        energy = [result["s", key].early.energy[:, :4].sum(axis=0) for key in ("l0", "l1")]
+        energy = [result["s", key].early.energy[:, :6].sum(axis=0) for key in ("l0", "l1")]
         levels.append(10.0 * np.log10(energy))
     np.testing.assert_allclose(levels[0], levels[1], atol=0.05)
 

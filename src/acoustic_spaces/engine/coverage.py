@@ -1043,6 +1043,7 @@ def _trace_part(
         threads=threads,
         wide_angle=sim.early.parabolic_equation == "wide_angle",
         barrier_frequencies=sim.early.barrier_frequencies,
+        open_ground_frequencies=sim.early.open_ground_frequencies,
         edges=None if diffraction is None else diffraction.edges,
     )
     if refraction is not None:

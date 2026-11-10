@@ -2599,6 +2599,18 @@ class EarlyStage(_Model):
             "with 32, 6.4 dB with 16 and 14 dB with 8; docs/outdoor.md gives each)"
         ),
     )
+    open_ground_frequencies: Literal[24, 8, "rays"] = Field(
+        default=24,
+        description=(
+            "outdoors over the open ground in wind or temperature gradients, the "
+            "frequencies an octave the parabolic equation takes at 1 and 2 kHz (below "
+            "1 kHz always 8): 24, or 8 for less time; or rays, which leaves those bands "
+            "to the rays where one reaches the listener short of half the way to the "
+            "shadow's start, for less time still. Fewer leave those "
+            "bands further off, and in the shadow the bands above, which deepen from "
+            "them (docs/outdoor.md gives the error and the run time of each)"
+        ),
+    )
     coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(
         default=125,
         description=(
