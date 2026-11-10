@@ -3159,6 +3159,7 @@ source 1 m up over hard ground and a barrier 4 m high 15 m away across the way:
 | a listener 60 and 120 m away behind a barrier slanted at 63 degrees to the way, 0.01 degrees round, from 0.40 to 0.60 degrees | 0.017 | 0.018 | |
 | a listener 2 cm further, where the parabolic equation starts (a 1.5 m barrier 2 m from a source 0.5 m up) | 0.24 | 0.16 | |
 | a listener 10 cm across the shadow boundary of a barrier's end, 60 and 120 m away | 7.8 and 20 | 0.42 | 1 |
+| a listener 10 cm across a roof edge's shadow boundaries, of the direct sound and of the ground reflection, 28 and 43 m from a source 1 m over the roof (and the source and the listener swapped) | 0.28 and 1.79 | 0.09 and 0.04 | |
 | a listener 2 mm across the line of an end below the line of sight seen from above (a barrier 1 m high 30 m away), 100 and 200 m away | 12.8 and 6.3 | 0.02 | |
 
 The wind's effect grows in proportion to the wind (500 Hz, 100 m away and 4 m up),
@@ -3177,7 +3178,9 @@ the level steps by at most 1.0 dB from 63 to 500 Hz, and from 1 kHz up, where th
 paths round the end keep their legs, by up to 7.8 and 20 dB downwind; across the line
 of an end below the line of sight, where the direct sound goes from the barrier's
 effect to the open ground's, by up to 1.2 dB from 63 to 250 Hz and 4.8 dB at 500 Hz to
-12.8 dB at 8 kHz above (see [Known issues](#known-issues)).
+12.8 dB at 8 kHz above (see [Known issues](#known-issues)). Past a roof's edge, where
+the ground reflection comes into view, the open ground's bands go from the rays to the
+parabolic equation (see [Known issues](#known-issues)).
 
 ## Levels over a long term
 
@@ -4403,6 +4406,23 @@ Results:
   1.2 dB from 63 to 250 Hz (0.02 dB in still air), but by up to 4.8 dB at 500 Hz,
   10.6 dB downwind at 1 kHz and 12.8 dB upwind at 8 kHz (see
   [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
+- **A roof's edge in wind.** Where the paths over edges keep their straight legs (a
+  source or a listener on a building, an object of the model file in the way), the bent
+  direct sound and its ground reflection are there where the straight ones are, and
+  the edges' terms, made for the straight paths, do not follow the bent rays' times and
+  levels. Walked in 10 cm steps across a roof edge's shadow boundaries in the `windy`
+  preset, down- and upwind (a source 1 m over a roof 6 m high, listeners 1.5 m up 28
+  and 43 m away, and the two swapped), the weather's effect steps across the direct
+  sound's boundary by at most 0.26 dB in octave bands and 0.63 dB in third octaves.
+  Across the ground reflection's, where it comes into view and the open ground's bands
+  (up to 500 Hz, and to 2 kHz upwind) go from the rays to the parabolic equation, it
+  steps by up to 1.75 dB at 500 Hz and 0.76 dB at 2 kHz in octave bands and 3.2 dB at
+  400 Hz in third octaves, where with the rays on both sides it would step by 0.61,
+  0.14 and 1.2 dB; at 8 kHz by 0.83 dB (1.3 dB in third octaves) either way (a one-off
+  check; `tests/test_barriers_in_wind.py` bounds octave bands from 63 to 500 Hz). The
+  level itself, in the wind, steps by up to 0.28 and 1.79 dB in octave bands
+  ([Continuity](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
+  Blending the rays and the equation there would remove the switch's part.
 - **Coverage maps behind barriers** read the high bands higher than a listener at the
   same point: 130 m behind two barriers over grass by 0.6, 1.3, 3.8 and 13.5 dB at 1,
   2, 4 and 8 kHz, in still air as in 8 m/s of wind, where the weather's effect is the

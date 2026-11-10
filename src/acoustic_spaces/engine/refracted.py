@@ -521,7 +521,13 @@ class Refraction:
         found = rays.eigenrays(zr, reach, cap, max_time=cutoff)
         corners = np.array([self.source[:2], listener[:2]])
         r0, r1 = _family_ratios(paths, rows, ratio, self.flat, self.bands)
-        family, visible, highest = self._curved(rays, found, zr, corners, (), listener, r0, r1)
+        # The paths over edges are those of the straight geometry, and their terms make
+        # up for the straight paths that are there or not: the direct ray and the one
+        # off the ground once are there where those are (:meth:`_curved`).
+        twins = self._twins(paths, rows) if np.any(paths.edge >= 0) else None
+        family, visible, highest = self._curved(
+            rays, found, zr, corners, (), listener, r0, r1, twins=twins
+        )
         direct = bool(np.any((straight.order == 0) & (straight.edge < 0)))
         clear = direct and bool(np.all(visible))
         shadow = len(found) == 0
@@ -593,11 +599,28 @@ class Refraction:
 
     # -- curved paths ------------------------------------------------------------------
 
-    def _curved(self, rays, found, zr, corners, planes, listener, r0, r1):
+    def _twins(self, paths: EarlyReflections, rows) -> dict[int, tuple]:
+        """Of the straight paths ``rows`` of ``paths`` (off nothing but the ground), the
+        one with no bounce off the ground (the direct sound) and the one with one, by
+        bounces, each as the points and faces (-1: in the air) :meth:`_passes` takes."""
+        out: dict[int, tuple] = {}
+        for i in rows:
+            faces = paths.faces[i] if paths.faces else np.zeros(0, dtype=np.int64)
+            bounces = int(np.count_nonzero(self.flat[faces])) if len(faces) else 0
+            if bounces <= 1 and bounces not in out:
+                face = np.concatenate([[-1], np.asarray(faces, dtype=np.int64), [-1]])
+                out[bounces] = (np.asarray(paths.points[i], dtype=float), face)
+        return out
+
+    def _curved(self, rays, found, zr, corners, planes, listener, r0, r1, twins=None):
         """The eigenrays ``found`` as paths along the horizontal ``corners`` (k + 2, 2)
         from the source to the listener, reflecting off the vertical ``planes`` (k,) at
-        the inner corners; those blocked or passing a wall by are left out. Also (n,)
-        whether each could be drawn, and the greatest height they reach (m)."""
+        the inner corners; those blocked or passing a wall by are left out. With
+        ``twins`` (:meth:`_twins`), a ray with no bounce off the ground or one is there
+        where the straight path with as many is, and only there, the edges' terms making
+        up for the straight paths: blocked on its own way, it takes the share of sound
+        that gets along the straight one. Also (n,) whether each could be drawn, and the
+        greatest height they reach (m)."""
         model = self.model
         legs = np.diff(corners, axis=0)
         lengths = np.linalg.norm(legs, axis=1)
@@ -644,7 +667,15 @@ class Refraction:
                 ok &= bool(np.all(face[ground] >= 0))
             if not ok:
                 continue
+            bounces = int(np.count_nonzero(kind == 1))
+            twin = None
+            if twins is not None and bounces <= 1:
+                twin = twins.get(bounces)
+                if twin is None:
+                    continue
             share, crossed = self._passes(points, face)
+            if twin is not None and not np.any(share > 0.0):
+                share, crossed = self._passes(*twin)
             if not np.any(share > 0.0):
                 continue
             visible[i] = True
@@ -866,18 +897,29 @@ class Refraction:
         parabolic equation's sound in it to that in still air, both with the barriers
         and buildings on the way inside (:meth:`_cuts_for`, :meth:`_place_barrier`).
         Returns those paths (indices) and the request; None where the listener's
-        straight way, seen from above, crosses no barrier or building, an object of the
-        model file stands in it, the source or the listener stands on a building, the
-        listener is nearer than the open ground's parabolic equation goes
-        (``WAVE_MIN_RANGE``), stands on a barrier's line or a building's wall seen from
-        above (``ON_OBSTACLE_M``), the paths have no order, or none lies in the plane."""
+        straight way, seen from above, crosses no barrier or building (in line with an
+        end or a corner it touches and with the direct sound cut off, the way just past
+        it on its shadow side counts, see :meth:`_shadow_side`), an object of the model
+        file stands in it, the source or the listener stands on a building, the listener
+        is nearer than the open ground's parabolic equation goes (``WAVE_MIN_RANGE``),
+        stands on a barrier's line or a building's wall seen from above
+        (``ON_OBSTACLE_M``), the paths have no order, or none lies in the plane."""
         layout = self.layout
         if not layout.barriers and not layout.buildings:
             return None
         if self.max_order < 1 or reach < WAVE_MIN_RANGE * (self.zs + zr):
             return None
         own = self._above(layout.obstacles_along(self.source[:2], towards, reach))
-        if not own or _at(own, reach):
+        if not own:
+            # Where the straight line touches an end or a corner, the direct sound tells
+            # its side: cut off, the listener is in the shadow, whose way counts.
+            if np.any((paths.order == 0) & (paths.edge < 0)):
+                return None
+            shadow = self._shadow_side(listener, towards, reach)
+            if shadow is None:
+                return None
+            towards, own = shadow
+        if _at(own, reach):
             return None
         ends = np.array([self.source[:2], listener[:2]])
         if any(in_polygon(ends, footprint).any() for _, footprint, _ in layout.buildings):
@@ -907,6 +949,38 @@ class Refraction:
             )
         request = _Barrier(listener=k, part=0, cuts=cuts, shift=shift, scattered=scattered)
         return plane, request
+
+    def _shadow_side(self, listener: np.ndarray, towards, reach: float) -> tuple | None:
+        """In line with the source and a vertical edge of a barrier or a building (an end
+        or a corner) that the straight line to ``listener`` passes through, within the
+        tolerance the paths over edges are found to, but which its way seen from above
+        (``reach`` along ``towards``) does not cross: that way turned about the source
+        by twice the tolerance at the edge, to the side where it crosses what the edge
+        belongs to, and what it crosses (as :meth:`_above` gives them); None where the
+        line touches no such edge. :meth:`_barrier` asks only where the direct sound is
+        cut off, so that the paths in still air are those of that side, the shadow."""
+        from acoustic_spaces.engine.diffraction import _closest
+
+        edges = self._edge_set()
+        upright = np.flatnonzero(self._laid_edges() & (np.abs(edges.direction[:, 2]) >= 1.0 - 1e-9))
+        if not len(upright):
+            return None
+        start = np.broadcast_to(self.source, (len(upright), 3))
+        end = np.broadcast_to(np.asarray(listener, dtype=float), (len(upright), 3))
+        points = _closest(start, end, edges, upright)
+        line = end[0] - start[0]
+        shares = (points - start[0]) @ line / max(float(line @ line), 1e-300)
+        touched = (shares > 0.0) & (shares < 1.0)
+        touched &= _edge_distance(edges, upright, points) <= self.tolerance
+        for share in shares[touched].tolist():
+            angle = 2.0 * self.tolerance / (share * reach)
+            for turn in (angle, -angle):
+                c, s = math.cos(turn), math.sin(turn)
+                way = np.array([c * towards[0] - s * towards[1], s * towards[0] + c * towards[1]])
+                own = self._above(self.layout.obstacles_along(self.source[:2], way, reach))
+                if own:
+                    return way, own
+        return None
 
     def _cuts_for(self, towards, reach: float, zr: float, own: tuple, open_top: float):
         """The runs whose weather's effects, weighed (in dB), give a listener ``reach``
@@ -1815,9 +1889,18 @@ def _kind(label) -> str | None:
 
 def _on_edges(edges, point: np.ndarray, tolerance: float) -> np.ndarray:
     """The indices of the ``edges`` that ``point`` (3,) lies on, within ``tolerance``."""
-    along = np.clip(np.einsum("ij,ij->i", point - edges.start, edges.direction), 0.0, edges.length)
-    closest = edges.start + edges.direction * along[:, None]
-    return np.flatnonzero(np.linalg.norm(point - closest, axis=1) <= tolerance)
+    index = np.arange(len(edges.length))
+    points = np.broadcast_to(point, (len(index), 3))
+    return np.flatnonzero(_edge_distance(edges, index, points) <= tolerance)
+
+
+def _edge_distance(edges, index: np.ndarray, points: np.ndarray) -> np.ndarray:
+    """(n,) the distance (m) from each of ``points`` (n, 3) to the ``edges`` ``index``
+    (n,), between their ends."""
+    start = edges.start[index]
+    direction = edges.direction[index]
+    along = np.clip(np.einsum("ij,ij->i", points - start, direction), 0.0, edges.length[index])
+    return np.linalg.norm(points - start - direction * along[:, None], axis=1)
 
 
 def _at(cut: tuple, reach: float) -> bool:

@@ -129,6 +129,13 @@
   reflection, as in the early part. An open face 1 m over a floor had taken 6.3 dB from
   the floor's scattered sound at 125 Hz; in `apartment` the bed's level drops by
   0.04 dB(A).
+- Fixed: in wind, a listener or map point exactly in line with the source and a
+  barrier's end takes the weather's effect on the paths round the end; it read up to
+  6.7 dB low from 125 to 500 Hz.
+- Fixed: in wind, where the paths over edges keep their straight legs (a source or a
+  listener on a building, a model file's object in the way), the bent direct sound and
+  ground reflection count only where their straight paths do; strips 0.3 to 3.5 m wide
+  at the edges' shadow boundaries read 4 to 10 dB off in every band.
 
 ## 4.2.1
 

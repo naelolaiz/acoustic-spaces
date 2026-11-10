@@ -598,7 +598,15 @@ is an arc of a circle, so its travel time and its length are exact.
   [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   Nearer than 1.5 times the source's and the listener's heights added, where an object
   of a model file stands in the way, where the source or the listener stands on a
-  building, or where no path lies in the plane, the paths go over the edges as above.
+  building, or where no path lies in the plane, the paths go over the edges as above,
+  and the bent direct sound and its bent reflection off the ground are there where the
+  straight ones the edges' terms make up for are: walked across a roof edge's or a
+  model file's wall's shadow boundaries in 10 cm steps in the `windy` preset, the
+  weather's effect changes by at most 0.2 dB a step from 63 to 500 Hz in octave bands
+  across the direct sound's, and by 0.6 dB across the ground reflection's behind the
+  wall; past a roof's edge, where the reflection comes into view and the parabolic
+  equation takes over from the rays, and in third octaves, by more (see
+  [Known issues](validation.md#known-issues)).
 - **The direct sound's time** in the results is when the bent direct sound arrives:
   sooner downwind, later upwind (the time along the ground in the shadow); where
   nothing clears the way, the earliest path's where it comes sooner than the straight
