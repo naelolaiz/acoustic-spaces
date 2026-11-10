@@ -1107,6 +1107,21 @@ The textbook UTD for two edges, with the second edge's distance parameter for a
 wave from a line, was up to 6 dB low there; the engine takes it from the curvature of
 the first edge's wave where it reaches the second.
 
+Along a top absorbing 0.2 to 0.8, the ground wave's loss is too large against the full
+wave. The wave solver ran a block 24 m long and 12 m deep whose top alone absorbs (5 cm
+cells, the first 50 ms, and a probe 3 m above the top that widens the grid, as with the
+grid ending a few cells above the top its matched layer puts the rigid level 0.5 to 0.6
+dB high at 125 Hz), the source and the listener 1 m below the plane of the top and 3 m
+off its edges, and over the 1 m top absorbing 0.5 also 2 and 4 m off them with the
+listener 0.5 m below. Over tops 1 and 3 m wide absorbing 0.2, 0.5 and 0.8 it puts the
+level at 63 and 125 Hz 0.04 to 2.0 dB below the rigid block's, and the engine is 0.22 to
+3.1 dB below that, more as the top absorbs more and is wider (0.22 to 0.38 dB at 0.2,
+1.8 to 3.1 dB at 0.8); before these paths took the ground wave it was 9.3 to 15.7 dB
+below. The wave solver there is within 0.09 dB of BTM over the rigid blocks and within
+0.07 dB of the exact solution over a plane absorbing 0.2 to 0.8 (with the engine's
+fitted admittance, source and listener 0.1 m high and 7 m apart), and with 6.2 cm cells
+the level over the 3 m top absorbing 0.8 moves by 0.03 and 0.04 dB.
+
 As the source rises through the plane of the 1 m block's top, 3 m in front of it, it
 comes into sight of the far corner, and the path over that corner alone takes over
 from the path over both; likewise as the listener rises behind the block. The largest
@@ -1425,8 +1440,9 @@ specular one off the top at its reflection point, those of the paths over each c
 the source's cosine to that corner. With the source and a listener rising together 3 m
 either side of that block, the level at 63 and 125 Hz is therefore above the rigid
 block's from the height where the near corner's turns to where the far corner's does: by
-up to 16 dB with only the top absorbing 0.2 (9.2 to 12.3 cm) and 9.6 dB at 0.5 (31.2 to
-41.6 cm). The reflection off the ground takes the
+up to 16 dB with only the top absorbing 0.2 (9.2 to 12.3 cm, the most at 10.8 cm) and
+9.6 dB at 0.5 (31.2 to 41.6 cm), with `second_order` (14.9 and 9.2 dB with
+`first_order`). The reflection off the ground takes the
 factor of a spherical wave instead (see
 [Ground reflection](#ground-reflection-against-the-exact-solution)), as does the wave
 along a face from one edge to the next on a path over both; whether that factor would
@@ -1446,6 +1462,21 @@ weaker by the ground wave, also take less of the far corner's wave away above th
 plane: with absorption 0.5 and the source in it, the level at 8 kHz is 3.5 dB above
 the rigid block's in energy. Giving that reflection the spherical wave's factor as well
 would change every path over one edge with an absorbing face, and is not done.
+
+A reflection off a face with an absorption coefficient takes, in the bands that add in
+pressure, the square root of (1 - the absorption) with the phase of the plane wave's
+factor, whatever the size of the face, and near grazing incidence that is wrong for a
+large face as for a small one. With a source and a listener 0.1 m above a rigid floor
+600 m wide and 10 m apart (incidence cosine 0.020), and a square absorbing 0.5 (fitted
+admittance 0.10) centred on the specular point, the phase is turned over and the engine
+gives -10.7 dB against the free field at 63 and 125 Hz for a square 1 m, 80 m or 400 m
+wide, as by hand (the direct sound and a reflection of the square root of 0.5 turned
+over, -10.66 dB). The exact solution over an unbounded plane of that material gives +3.3
+and +2.2 dB, and first-order (Born) theory, the square's own scattering added to the
+rigid floor's field, +6.0 dB over the 1 m square (and 3.5 and 2.8 dB over the 80 m one).
+Moved sideways until the reflection point leaves the 1 m square (from 0.49 to 0.51 m off
+the path), the engine's level steps by 16.7 dB, to the rigid floor's +6.0, where Born
+theory gives +6.0 dB on both sides.
 
 ### Known issues of the edge fade
 

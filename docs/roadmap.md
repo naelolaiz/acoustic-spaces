@@ -134,6 +134,14 @@ Edge diffraction:
   right-angled corner the level is 1.7 dB low at 250 Hz and 1 dB at 1 kHz, and on that
   of a wedge open over 225° 2.2 dB at 250 Hz (see
   [Validation](validation.md#known-issues)).
+- [ ] Absorbing faces near grazing incidence, in one treatment: reflections and paths
+  over edges that take no step where a source or a listener crosses the plane of an
+  absorbing face, are the same both ways round, are right for a face of any size (a
+  small absorbing patch included) and where two materials share the path, for
+  reflections of any order and in the bands that add in energy as in those that add in
+  pressure; checked against full-wave runs (see Validation, the paths
+  [over two edges](validation.md#edge-diffraction-against-the-exact-solution) and the
+  [reflections](validation.md#reflections-that-fade-at-edges-against-the-exact-solution)).
 
 Parameters:
 
