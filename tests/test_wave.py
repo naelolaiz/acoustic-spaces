@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from acoustic_spaces import Room, Scene, _native, simulate, synthesis
+from acoustic_spaces.engine import wave as wave_stage
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.impedance import (
     Admittance,
@@ -233,7 +234,8 @@ def test_source_is_flat_to_the_top_of_the_highest_band(stencil: int) -> None:
     top up to it, within 0.05 dB (0.023 dB at most). The 19-point grid's time step is 1.5
     times the 7-point one's for the same cell, so the band's top lies 1.5 times higher in
     its sample rate, and the low-pass's cutoff with it; with the 7-point stencil's cutoff
-    it fell 0.6 to 1.6 dB by the top."""
+    it fell 0.6 to 1.6 dB by the top. (The 19-point grid's signal as its grid sends it
+    out: with the grid's own gain on a point source's sound, which the signal undoes.)"""
     courant = _courant(stencil)
     for total in (8, 24):
         per_octave = total // 8
@@ -243,6 +245,8 @@ def test_source_is_flat_to_the_top_of_the_highest_band(stencil: int) -> None:
             n_fft = 1 << 18
             f = np.fft.rfftfreq(n_fft, 1.0 / grid.rate)
             spectrum = np.abs(np.fft.rfft(signal, n_fft))
+            if stencil == 19:
+                spectrum *= 9.0 / (5.0 + 4.0 * np.cos(2.0 * np.pi * f / grid.rate))
             top = band_top(band, total)
             level = 20 * np.log10(spectrum[(f >= top / 2) & (f <= top)] / spectrum[f >= top / 2][0])
             assert np.abs(level).max() < 0.05, (total, band)
@@ -276,7 +280,9 @@ def test_isotropic_stencil_disperses_less() -> None:
     # The axial modes of a 6 m tube (rigid, 10 cm cells) at 12, 8 and 5 cells per
     # wavelength: each stencil's frequencies fall short of the tube's as much as
     # slow_by says its waves along an axis are slow, and the 19-point stencil's by less
-    # than half as much as the 7-point one's.
+    # than half as much as the 7-point one's. (The source 0.17 m from the tube's end: at
+    # 0.13 m the mode of 5 cells per wavelength has a node 5 mm away, and its peak was
+    # a fifteenth of its neighbours'.)
     size, h = (6.0, 0.3, 0.2), 0.1
     spacing = C / (2 * size[0])  # between the tube's modes
     error = {}
@@ -284,7 +290,7 @@ def test_isotropic_stencil_disperses_less() -> None:
         solver, rate = _solver(
             size,
             lambda m: np.zeros(len(m.faces)),
-            (0.13, 0.12, 0.07),
+            (0.17, 0.12, 0.07),
             (5.84, 0.17, 0.12),
             stencil=stencil,
         )
@@ -515,9 +521,189 @@ def test_free_field_level_matches_the_rays() -> None:
         energy = response.energy()
         t = np.arange(energy.shape[1]) * response.time_step
         direct = energy[:, t < (d + 6.5) / C].sum(axis=1) * 4 * math.pi * d * d
-        # The wave solver: -0.24, -0.15 and -0.01 dB at 1, 2 and 4 m.
-        assert 10 * math.log10(direct[0]) == pytest.approx(0.0, abs=0.3)
+        # The wave solver: -0.39, -0.05 and -0.01 dB at 1, 2 and 4 m, which are 2.5, 4.9
+        # and 9.9 cells from the source: within three cells of it the level changes with
+        # the source's place in its cell by up to 0.6 dB (docs/validation.md, Free field).
+        assert 10 * math.log10(direct[0]) == pytest.approx(0.0, abs=0.5 if d < 2 else 0.1)
         assert 10 * math.log10(direct[1]) == pytest.approx(0.0, abs=0.1)  # rays
+
+
+def _readings(solver, cell: float) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Of a solver laid out by :func:`_solver`: the centres (n, 3) and the weights (n,)
+    of the cells each probe reads, then of the cells the source feeds."""
+    layout = solver.layout()
+    nx, ny, _ = (int(n) for n in layout["shape"])
+    origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+
+    def centres(cells) -> np.ndarray:
+        cells = np.asarray(cells, dtype=np.int64)
+        index = np.column_stack([cells % nx, cells // nx % ny, cells // (nx * ny)])
+        return origin + (index + 0.5) * cell
+
+    start = np.asarray(layout["probe_start"], dtype=np.int64)
+    cells = np.asarray(layout["probe_cells"])
+    weights = np.asarray(layout["probe_weights"], dtype=float)
+    out = [(centres(cells[a:b]), weights[a:b]) for a, b in itertools.pairwise(start)]
+    fed = np.flatnonzero(np.asarray(layout["source"]))
+    source = np.asarray(layout["source"], dtype=float)[fed]
+    return [*out, (centres(np.asarray(layout["special"])[fed]), source)]
+
+
+def _polynomial(degree: int, seed: int = 3):
+    """A polynomial of ``degree`` along each of x, y and z, of points (n, 3)."""
+    c = np.random.default_rng(seed).normal(size=(degree + 1,) * 3)
+    return lambda p: np.polynomial.polynomial.polyval3d(p[..., 0], p[..., 1], p[..., 2], c)
+
+
+@STENCILS
+def test_a_point_between_cells_takes_a_cubic_through_four_cells_a_side(stencil: int) -> None:
+    # The source and a probe 15 cells from it, neither on a cell's centre: 4 x 4 x 4
+    # cells each, whose weights give any cubic's value at the point from its values at
+    # the cells' centres (and sum to one). A probe 1.7 cells from the source: the 8 cells
+    # round it, weighted trilinearly.
+    source = np.array([1.03, 1.52, 1.47])
+    far, near = np.array([2.51, 1.38, 1.61]), np.array([1.20, 1.50, 1.45])
+    solver, _ = _solver((4.0, 3.0, 3.0), lambda mesh: [0.0] * 12, source, [far, near])
+    cubic, line = _polynomial(3), _polynomial(1)
+    (far_at, far_w), (near_at, near_w), (source_at, source_w) = _readings(solver, 0.1)
+    assert len(far_w) == 64 and far_w.sum() == pytest.approx(1.0, abs=1e-12)
+    assert far_w @ cubic(far_at) == pytest.approx(cubic(far), rel=1e-10)
+    assert np.abs(far_at - far).max() < 0.2 + 1e-9
+    assert len(source_w) == 64 and source_w.sum() == pytest.approx(1.0, abs=1e-6)
+    assert source_w @ cubic(source_at) == pytest.approx(cubic(source), rel=1e-5)  # float32
+    assert len(near_w) == 8 and near_w.min() > 0.0 and near_w.sum() == pytest.approx(1.0)
+    assert near_w @ line(near_at) == pytest.approx(line(near), rel=1e-10)
+    assert not np.isclose(near_w @ cubic(near_at), cubic(near), rtol=1e-6)
+
+
+def test_a_reading_keeps_to_its_side_of_a_surface() -> None:
+    # A screen across the box at x = 2 m (y 0.5 to 2.5, floor to 2 m) and another 0.25 m
+    # behind it. A probe 0.12 m from the box's wall: four cells a side still, all inside
+    # the box, the row along x starting at the wall. A probe 7 cm in front of the first
+    # screen, with a cell's centre between it and the screen: four cells a side, none
+    # across the screen. One 4 cm in front of it, the next centre across it: the one
+    # layer of cells on its side (four by four). One in the slot between the screens,
+    # 2.5 cells wide: the two cells round it along x, four along y and z.
+    box = box_mesh((4.0, 3.0, 3.0))
+    screens = [[[x, 0.5, 0.0], [x, 2.5, 0.0], [x, 2.5, 2.0], [x, 0.5, 2.0]] for x in (2.0, 2.25)]
+    n = len(box.vertices)
+    plates = [[k, k + 1, k + 2] for k in (n, n + 4)] + [[k, k + 2, k + 3] for k in (n, n + 4)]
+    mesh = dataclasses.replace(
+        box,
+        vertices=np.vstack([box.vertices, *screens]),
+        faces=np.vstack([box.faces, plates]),
+        face_labels=np.append(box.face_labels, [0, 0, 0, 0]),
+    )
+    wall, front, close, slot = np.array(
+        [[0.12, 1.52, 1.47], [1.93, 1.38, 1.01], [1.96, 1.38, 1.01], [2.13, 1.55, 0.93]]
+    )
+    solver, _ = _solver(
+        (4.0, 3.0, 3.0),
+        lambda mesh: [0.0] * len(mesh.faces),
+        (1.0, 1.5, 1.5),
+        [wall, front, close, slot],
+        mesh=mesh,
+    )
+    cubic = _polynomial(3)
+    (wall_at, wall_w), (front_at, front_w), (close_at, close_w), (slot_at, slot_w), _ = _readings(
+        solver, 0.1
+    )
+    assert len(wall_w) == 64 and wall_at[:, 0].min() > 0.0
+    assert wall_at[:, 0].max() == pytest.approx(wall_at[:, 0].min() + 0.3)
+    assert wall_w @ cubic(wall_at) == pytest.approx(cubic(wall), rel=1e-10)
+    assert len(front_w) == 64 and front_at[:, 0].max() < 2.0
+    assert front_w @ cubic(front_at) == pytest.approx(cubic(front), rel=1e-10)
+    assert len(close_w) == 16 and close_w.sum() == pytest.approx(1.0)
+    assert np.ptp(close_at[:, 0]) < 1e-9 and 1.9 < close_at[0, 0] < 2.0
+    assert len(slot_w) == 32 and slot_w.sum() == pytest.approx(1.0)
+    assert slot_at[:, 0].min() > 2.0 and slot_at[:, 0].max() < 2.25
+    assert len(np.unique(np.round(slot_at[:, 0], 6))) == 2
+
+
+@STENCILS
+def test_the_level_does_not_change_with_the_place_within_a_cell(stencil: int) -> None:
+    # The source and a listener 13 cells from it, moved together across a cell: the
+    # direct sound's energy from 215 to 430 Hz (16 down to 8 cells per wavelength) stays
+    # within 0.06 dB of what it is with both on cells' centres (0.03 to 0.04 dB under
+    # it; read from the eight cells round each point, 0.67 to 0.81 dB under it).
+    cell, size = 0.1, (6.0, 5.0, 5.0)
+    origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+    source = origin + (np.array([22, 25, 25]) + 0.5) * cell
+    listener = source + cell * np.array([12.0, 4.0, 3.0])
+
+    def level(shift) -> float:
+        solver, rate = _solver(
+            size,
+            lambda mesh: [0.0] * 12,
+            source + cell * np.array(shift),
+            [listener + cell * np.array(shift)],
+            stencil=stencil,
+        )
+        _, delay = source_signal(rate, cell, _courant(stencil))
+        arrival = delay + round(1.3 * rate / C)
+        count, taper = round(0.006 * rate), round(0.002 * rate)
+        heard = solver.run(_drive(rate, cell, arrival + count, stencil))[0]
+        heard[-taper:] *= 0.5 * (1.0 + np.cos(np.linspace(0.0, np.pi, taper)))
+        n_fft = 1 << 12
+        f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+        return float(np.sum(np.abs(np.fft.rfft(heard, n_fft)[(f >= 215.0) & (f <= 430.0)]) ** 2))
+
+    centred = level((0.0, 0.0, 0.0))
+    for shift in ((0.5, 0.5, 0.5), (0.5, 0.0, 0.0), (0.3, 0.7, 0.45)):
+        assert 10 * math.log10(level(shift) / centred) == pytest.approx(0.0, abs=0.06), shift
+
+
+def test_the_19_point_grids_source_undoes_the_grids_own_gain() -> None:
+    # The 19-point grid's signal is the 7-point one's shape through three taps, a step
+    # later; with a slower speed of sound at the source, the side taps over its square.
+    rate, cell = 2000.0, 0.2
+    plain, delay = source_signal(rate, cell, float(np.nextafter(ISOTROPIC_COURANT, 0.0)))
+    signal, later = source_signal(rate, cell, ISOTROPIC_COURANT)
+    assert later == delay + 1
+    assert signal == pytest.approx(np.convolve(plain, [2 / 9, 5 / 9, 2 / 9]), abs=1e-12)
+    slow, _ = source_signal(rate, cell, ISOTROPIC_COURANT, 0.9)
+    side = 2 / (9 * 0.9**2)
+    assert slow == pytest.approx(np.convolve(plain, [side, 1 - 2 * side, side]), abs=1e-12)
+    np.testing.assert_array_equal(
+        source_signal(rate, cell, COURANT, 0.9)[0], source_signal(rate, cell)[0]
+    )
+    # Its gain undoes the grid's on a point source's sound, 9 / (5 + 4 cos wT).
+    turn = 2 * np.pi * np.fft.rfftfreq(256)
+    gain = np.abs(np.fft.rfft([2 / 9, 5 / 9, 2 / 9], 256))
+    assert gain * 9 / (5 + 4 * np.cos(turn)) == pytest.approx(1.0)
+
+
+def test_a_listener_next_to_the_source_leaves_the_sources_cells_out_of_its_gradient(
+    monkeypatch,
+) -> None:
+    # A listener three cells along x from the source: the point two cells towards the
+    # source lies one cell from it, among the cells the source feeds. On the 19-point
+    # grid the gradient goes without it; on the 7-point grid with it.
+    room = _free_room((1.0,))
+    cell = band_grid(0, FS, room.speed_of_sound(), 8.0, 8, ISOTROPIC_COURANT).cell
+    source = np.array(room.scene.sources[0].position, dtype=float)
+    listener = source + [3.0 * cell, 0.0, 0.0]
+    used = {}
+    real = wave_stage._first_order
+
+    def spy(probes, found, *args):
+        used["found"] = list(found)
+        return real(probes, found, *args)
+
+    monkeypatch.setattr(wave_stage, "_first_order", spy)
+    for scheme, without in (("isotropic", [8]), ("standard", [])):
+        wave_responses(
+            TraceModel.from_room(room),
+            source,
+            listener[None, :],
+            ["l"],
+            max_band_hz=63,
+            length_s=0.05,
+            sample_rate=FS,
+            speed_of_sound=room.speed_of_sound(),
+            scheme=scheme,
+        )
+        assert [k for k, found in enumerate(used["found"]) if not found] == without, scheme
 
 
 def test_a_long_run_records_its_tenths_as_one_run_does(monkeypatch) -> None:
@@ -1657,7 +1843,12 @@ def test_a_slower_speed_of_sound_arrives_later_as_loud() -> None:
             np.abs(np.fft.rfft(window * field[:, k], n_fft) / impulse)[(f > 80) & (f < 300)]
             for k in (0, 1)
         )
-        peak = int(np.argmax(np.abs(field[:, 0])))
+        # The peak, between the samples (a parabola through the three round it): the
+        # sound arrives 36 and 46 steps after it leaves, and a whole step is 2 to 3 % of
+        # that.
+        k = int(np.argmax(np.abs(field[:, 0])))
+        before, at, after = np.abs(field[k - 1 : k + 2, 0])
+        peak = k + 0.5 * (before - after) / (before - 2.0 * at + after)
         return (peak - delay) / rate, 2.0 * pressure.mean(), velocity.mean() / pressure.mean()
 
     fast, slow = run(1.0), run(0.8)

@@ -233,9 +233,10 @@ public:
     // q of each (see above). The grid's edge, which only an open model's air reaches, has
     // `edge_admittance`, or with `layer` > 0 a matched layer of that many cells inside
     // it, damped up to `layer_damping` (s T / 2, s the damping rate) at the edge. The
-    // source and every probe take the air cells round them that they can see, weighted
-    // trilinearly. `speed`, when given, holds each cell's speed of sound over the grid's
-    // (in (0, 1], x fastest; see above); without it the speed is the same everywhere.
+    // source and every probe take a box of air cells round them, up to four a side,
+    // weighted by a polynomial through their centres (see reading_cells). `speed`, when
+    // given, holds each cell's speed of sound over the grid's (in (0, 1], x fastest; see
+    // above); without it the speed is the same everywhere.
     WaveSolver(const Bvh &bvh, const std::int64_t *face_material, const double *beta,
                std::size_t materials, const double *branches, const std::int64_t *branch_material,
                std::size_t branch_count, const Vec3 &origin, double cell, std::size_t nx,
@@ -458,7 +459,7 @@ public:
         boundary_cells_ = special_.size();
 
         // The source's cells (made special, so one update adds the source).
-        for (const auto &[i, w] : visible_cells(bvh, source, &type_)) {
+        for (const auto &[i, w] : reading_cells(bvh, cut, source, kReach)) {
             if (type_[i] == kLayer) {
                 throw std::invalid_argument("the source is in the matched layer");
             }
@@ -467,7 +468,7 @@ public:
             source_[k] += static_cast<float>(cell_scale(i) * w);
         }
         for (const Vec3 &p : probes) {
-            auto cells = visible_cells(bvh, p, &type_);
+            auto cells = reading_cells(bvh, cut, p, norm(p - source) < kNear * cell ? 2 : kReach);
             probe_cells_.push_back({});
             probe_weights_.push_back({});
             for (const auto &[i, w] : cells) {
@@ -978,6 +979,175 @@ private:
             }
         }
         return near;
+    }
+
+    // A reading takes at most this many cells a side (see reading_cells), and a probe
+    // nearer the source than kNear cells two.
+    static constexpr int kReach = 4;
+    static constexpr double kNear = 3.0;
+
+    // One axis's share of a reading (see reading_cells): `count` cells in a row from
+    // cell `start`, the weights of Lagrange's polynomial through their centres at the
+    // point, and how far off it can be for a wave of eight cells per wavelength along
+    // the axis (the polynomial's remainder: the wave's turn over a cell to the power of
+    // the count, times the point's distances from the centres, over the count's
+    // factorial).
+    struct Row {
+        long long start = 0;
+        int count = 0;
+        double bound = 0.0;
+        std::array<double, kReach> weight{};
+    };
+
+    // The rows of cells, along an axis of `size` cells, that can stand for a point q
+    // cells from the first cell's centre: `most` (four or two) or two in a row with the
+    // point between two of them, or the one cell to either side of it; none on the
+    // grid's edge.
+    static std::vector<Row> rows(double q, std::size_t size, int most) {
+        static constexpr double kTurn = 0.78539816339744831;  // 2 pi / 8
+        std::vector<Row> out;
+        const long long base = static_cast<long long>(std::floor(q));
+        const long long last = static_cast<long long>(size) - 2;
+        auto add = [&](long long start, int count) {
+            if (start < 1 || start + count - 1 > last) return;
+            Row row;
+            row.start = start;
+            row.count = count;
+            row.bound = 1.0;
+            const double x = q - static_cast<double>(start);
+            for (int j = 0; j < count; ++j) {
+                double w = 1.0;
+                for (int m = 0; m < count; ++m) {
+                    if (m != j) w *= (x - m) / static_cast<double>(j - m);
+                }
+                row.weight[static_cast<std::size_t>(j)] = w;
+                row.bound *= kTurn * std::abs(x - j) / (j + 1);
+            }
+            out.push_back(row);
+        };
+        for (int count = most; count >= 2; count -= 2) {
+            for (long long start = base - (count - 2); start <= base; ++start) add(start, count);
+        }
+        add(base, 1);
+        add(base + 1, 1);
+        return out;
+    }
+
+    // The cells that stand for point p, with weights that sum to one: the source spreads
+    // over them, and a probe reads them. A box of cells, along each axis one of the
+    // `rows` round p of at most `most` cells, weighted by the product of their weights:
+    // Lagrange's polynomial through the cells' centres, a cubic along an axis with four
+    // cells in a row. Halfway between two centres, four cells read a wave of eight cells
+    // per wavelength 0.8 % low where two read it 7.6 % low, and the level of a point
+    // source's sound far from it changes with the places of the source and of the probe
+    // within their cells by 0.02 dB, where with two cells a side it fell by up to 0.5 dB
+    // (docs/validation.md, Free field). Of the boxes whose cells are all air outside the
+    // matched layer, seen from p and linked to their neighbours in the box (no face
+    // between them), the one whose rows' bounds sum to the least; next to a face that is
+    // a box of fewer cells, or one that reaches further to the other side. With no such
+    // box (in a corner too tight for one, or where p lies outside the grid's inner
+    // cells), the cells round p that it sees, weighted trilinearly.
+    //
+    // The source takes four cells a side. Within a few cells of it its sound is not that
+    // of a point (nor is it with two), and a cubic through it reads worse than a line:
+    // a probe nearer the source than kNear cells takes two a side (measured over places
+    // within a cell and the grid's directions, as above: two read the level closer up
+    // to two and a half cells away, four from three on).
+    std::vector<std::pair<std::size_t, double>> reading_cells(
+        const Bvh &bvh, const std::vector<std::uint16_t> &cut, const Vec3 &p, int most) const {
+        const double q[3] = {(p.x - origin_.x) / cell_ - 0.5, (p.y - origin_.y) / cell_ - 0.5,
+                             (p.z - origin_.z) / cell_ - 0.5};
+        const std::size_t size[3] = {nx_, ny_, nz_};
+        std::array<std::vector<Row>, 3> row;
+        long long base[3];
+        for (int a = 0; a < 3; ++a) {
+            if (!(q[a] >= 1.0 && q[a] <= static_cast<double>(size[a]) - 3.0)) {
+                return visible_cells(bvh, p, &type_);  // outside the grid: none
+            }
+            base[a] = static_cast<long long>(std::floor(q[a]));
+            row[static_cast<std::size_t>(a)] = rows(q[a], size[a], most);
+        }
+        // Whether a cell is air outside the matched layer that p sees: found once for
+        // each of the cells the rows reach, kReach - 2 below the cell under p to
+        // kReach - 1 above.
+        static constexpr long long kSide = 2 * kReach - 2;
+        std::array<std::uint8_t, kSide * kSide * kSide> known{};  // 0: not found yet, 1, 2
+        auto index = [&](long long x, long long y, long long z) {
+            return static_cast<std::size_t>(x) + static_cast<std::size_t>(y) * sy_ +
+                   static_cast<std::size_t>(z) * sz_;
+        };
+        auto usable = [&](long long x, long long y, long long z) {
+            std::uint8_t &state = known[static_cast<std::size_t>(
+                (x - base[0] + kReach - 2) +
+                kSide * ((y - base[1] + kReach - 2) + kSide * (z - base[2] + kReach - 2)))];
+            if (state == 0) {
+                const std::size_t i = index(x, y, z);
+                bool seen = type_[i] == kInterior || type_[i] == kSpecial;
+                if (seen) {
+                    const Vec3 to = centre(i) - p;
+                    const double distance = norm(to);
+                    seen = !(distance > 0.0 &&
+                             bvh.intersect(p, to / distance, distance, -1).found());
+                }
+                state = seen ? 1 : 2;
+            }
+            return state == 1;
+        };
+        // Every choice of a row along each axis, the least bound first; of equal bounds
+        // (a point on a cell's centre: none), the fewest cells.
+        struct Choice {
+            double bound;
+            int cells;
+            std::array<std::uint8_t, 3> row;
+        };
+        std::vector<Choice> choices;
+        for (std::size_t x = 0; x < row[0].size(); ++x) {
+            for (std::size_t y = 0; y < row[1].size(); ++y) {
+                for (std::size_t z = 0; z < row[2].size(); ++z) {
+                    choices.push_back(
+                        {row[0][x].bound + row[1][y].bound + row[2][z].bound,
+                         row[0][x].count * row[1][y].count * row[2][z].count,
+                         {static_cast<std::uint8_t>(x), static_cast<std::uint8_t>(y),
+                          static_cast<std::uint8_t>(z)}});
+                }
+            }
+        }
+        std::stable_sort(choices.begin(), choices.end(), [](const Choice &a, const Choice &b) {
+            return a.bound != b.bound ? a.bound < b.bound : a.cells < b.cells;
+        });
+        for (const Choice &choice : choices) {
+            const Row &rx = row[0][choice.row[0]], &ry = row[1][choice.row[1]],
+                      &rz = row[2][choice.row[2]];
+            bool whole = true;
+            for (int z = 0; z < rz.count && whole; ++z) {
+                for (int y = 0; y < ry.count && whole; ++y) {
+                    for (int x = 0; x < rx.count && whole; ++x) {
+                        const long long at[3] = {rx.start + x, ry.start + y, rz.start + z};
+                        whole = usable(at[0], at[1], at[2]);
+                        const std::size_t i = index(at[0], at[1], at[2]);
+                        whole = whole && !(x + 1 < rx.count && is_cut(cut, i, 1)) &&
+                                !(y + 1 < ry.count && is_cut(cut, i, 3)) &&
+                                !(z + 1 < rz.count && is_cut(cut, i, 5));
+                    }
+                }
+            }
+            if (!whole) continue;
+            std::vector<std::pair<std::size_t, double>> out;
+            for (int z = 0; z < rz.count; ++z) {
+                for (int y = 0; y < ry.count; ++y) {
+                    for (int x = 0; x < rx.count; ++x) {
+                        const double w = rx.weight[static_cast<std::size_t>(x)] *
+                                         ry.weight[static_cast<std::size_t>(y)] *
+                                         rz.weight[static_cast<std::size_t>(z)];
+                        if (w != 0.0) {
+                            out.emplace_back(index(rx.start + x, ry.start + y, rz.start + z), w);
+                        }
+                    }
+                }
+            }
+            return out;
+        }
+        return visible_cells(bvh, p, &type_);
     }
 
     // The cells round point p (up to eight) whose centres p sees, with trilinear weights

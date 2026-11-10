@@ -237,13 +237,29 @@ def _cutoff(courant: float) -> float:
     return _LOW_PASS_CUTOFF * courant / COURANT
 
 
-def source_signal(rate: float, cell: float, courant: float = COURANT) -> tuple[np.ndarray, int]:
+def source_signal(
+    rate: float, cell: float, courant: float = COURANT, speed: float = 1.0
+) -> tuple[np.ndarray, int]:
     """What the source adds to the grid on each step, and its delay in steps.
 
     An impulse, low-passed (so the grid carries no frequencies it cannot) and
     high-passed twice (so it leaves no air in the room), scaled so that in free field the
     pressure at r metres is that impulse over r. ``courant`` is the stencil's Courant
-    number, which sets the low-pass's cutoff too (:func:`_cutoff`).
+    number, which sets the low-pass's cutoff too (:func:`_cutoff`); ``speed`` the speed
+    of sound at the source over the grid's (1 where it is the same everywhere).
+
+    On the 19-point grid a point source's sound comes out louder than what the source
+    adds, the more the higher the frequency: by 9 / (5 + 4 cos wT) in pressure, w T the
+    frequency's turn over a time step (the far field of the scheme's own response to one
+    cell, by stationary phase: 3 / (2 + cos kh) along an axis, kh the turn over a cell
+    there, which the scheme ties to the frequency by cos kh = 1 - 4 (1 - cos wT) / 3),
+    alike in every direction within 0.01 dB: 0.06 and 0.34 dB over the 63 and 125 Hz
+    bands of a grid of eight cells per wavelength up to the 125 Hz band. Three taps,
+    2/9, 5/9 and 2/9, have the inverse gain exactly and are part of the signal, with a
+    step of delay (where the source's speed of sound is ``speed`` times the grid's, the
+    side taps are over the square of ``speed``, the middle one what is left of one). The
+    7-point grid's gain changes with the direction (none along an axis, up to 0.33 dB
+    over that 125 Hz band along the cube's diagonals), so no signal can undo it.
     """
     half = _LOW_PASS_TAPS // 2
     k = np.arange(-half, half + 1)
@@ -255,7 +271,12 @@ def source_signal(rate: float, cell: float, courant: float = COURANT) -> tuple[n
     high = -window / window.sum()
     high[0] += 1.0
     signal = np.convolve(np.convolve(low, high), high)
-    return 4.0 * math.pi * courant**2 / cell * signal, half
+    delay = half
+    if courant == ISOTROPIC_COURANT:  # the 19-point stencil, known by its Courant number
+        side = 2.0 / (9.0 * speed**2)
+        signal = np.convolve(signal, [side, 1.0 - 2.0 * side, side])
+        delay += 1
+    return 4.0 * math.pi * courant**2 / cell * signal, delay
 
 
 @dataclass
@@ -557,6 +578,14 @@ class _Weather:
 
 #: Points each listener takes the pressure at (see :func:`_probe_points`).
 _PROBES = 13
+#: On the 19-point grid, a point round a listener that lies nearer the source than this
+#: many cells is left out of the listener's gradient (:func:`_first_order` then takes a
+#: difference of lower order): it reads the cells the source itself feeds, whose sound is
+#: not a point's. Measured over places of the source within a cell and the grid's
+#: directions (docs/validation.md, Free field): two to three and a half cells from the
+#: source the gradient is up to 15 dB off with that point and up to 4 dB without it,
+#: further away closer with it; on the 7-point grid, closer with it from 2.4 cells on.
+_SOURCE_CELLS = 1.5
 
 
 def _probe_points(listener: np.ndarray, cell: float) -> np.ndarray:
@@ -878,7 +907,11 @@ def wave_responses(
         built = prepare("standard", LAYER_CELLS)
     solver, grid, fits, probes, courant, extremes, still = built
     h = grid.cell
-    signal, delay = source_signal(grid.rate, h, courant)
+    at_source = 1.0  # the speed of sound at the source over the grid's
+    if weather is not None:
+        here = weather.still_at(source) if moving else weather.at(source)[0]
+        at_source = min(float(here) / (courant * h * grid.rate), 1.0)
+    signal, delay = source_signal(grid.rate, h, courant, at_source)
     samples = int(math.ceil(length_s * grid.rate))
     # The run starts `lead` steps before emission, where the source's pulse starts (or a
     # little before, so that the lead is a whole number of the output's samples), and
@@ -891,8 +924,13 @@ def wave_responses(
     drive[lead - delay : lead - delay + len(signal)] = signal[: steps - lead + delay]
     # Before any step: a listener outside the source's air, or a source closed in. A
     # point round a listener counts only where the listener sees it.
-    found = [solver.probe_found(p) for p in range(len(probes))]
-    found = (np.array(found) & _in_sight(bvh, listeners, probes)).tolist()
+    found = np.array([solver.probe_found(p) for p in range(len(probes))])
+    found &= _in_sight(bvh, listeners, probes)
+    if solver.stencil == 19:
+        # Nor a point among the source's own cells (the listener's own point stays).
+        away = np.linalg.norm(probes - np.asarray(source, dtype=float), axis=1)
+        found &= (away >= _SOURCE_CELLS * h) | (np.arange(len(probes)) % _PROBES == 0)
+    found = found.tolist()
     missing = [listener for i, listener in enumerate(names) if not found[_PROBES * i]]
     if missing:
         air, volume = solver.air_cells * h**3, model.room.volume_m3
