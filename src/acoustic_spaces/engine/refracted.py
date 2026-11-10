@@ -462,7 +462,10 @@ class Refraction:
         groups.setdefault((), [])
 
         out: list[EarlyReflections] = []
-        barrier = self._barrier(k, listener, towards, reach, zr, paths, groups[()], bent, cutoff)
+        # In line with an end or a corner, the way on the side the paths in still air
+        # are on (:meth:`_edge_side`).
+        way = self._edge_side(listener, towards, reach)
+        barrier = self._barrier(k, listener, way, reach, zr, paths, groups[()], bent, cutoff)
         request = None
         for planes, rows in groups.items():
             vertical = all(abs(float(self.model.plane_normal[p][2])) <= _VERTICAL for p in planes)
@@ -896,30 +899,21 @@ class Refraction:
         keep their level in still air, which the weather changes by the ratio of the
         parabolic equation's sound in it to that in still air, both with the barriers
         and buildings on the way inside (:meth:`_cuts_for`, :meth:`_place_barrier`).
-        Returns those paths (indices) and the request; None where the listener's
-        straight way, seen from above, crosses no barrier or building (in line with an
-        end or a corner it touches and with the direct sound cut off, the way just past
-        it on its shadow side counts, see :meth:`_shadow_side`), an object of the model
-        file stands in it, the source or the listener stands on a building, the listener
-        is nearer than the open ground's parabolic equation goes (``WAVE_MIN_RANGE``),
-        stands on a barrier's line or a building's wall seen from above
-        (``ON_OBSTACLE_M``), the paths have no order, or none lies in the plane."""
+        Returns those paths (indices) and the request; None where the way ``reach``
+        along ``towards`` from the source, seen from above (the listener's, or the way
+        :meth:`_edge_side` gives in line with an end or a corner), crosses no barrier or
+        building, an object of the model file stands in the listener's straight line,
+        the source or the listener stands on a building, the listener is nearer than
+        the open ground's parabolic equation goes (``WAVE_MIN_RANGE``), stands on a
+        barrier's line or a building's wall seen from above (``ON_OBSTACLE_M``), the
+        paths have no order, or none lies in the plane."""
         layout = self.layout
         if not layout.barriers and not layout.buildings:
             return None
         if self.max_order < 1 or reach < WAVE_MIN_RANGE * (self.zs + zr):
             return None
         own = self._above(layout.obstacles_along(self.source[:2], towards, reach))
-        if not own:
-            # Where the straight line touches an end or a corner, the direct sound tells
-            # its side: cut off, the listener is in the shadow, whose way counts.
-            if np.any((paths.order == 0) & (paths.edge < 0)):
-                return None
-            shadow = self._shadow_side(listener, towards, reach)
-            if shadow is None:
-                return None
-            towards, own = shadow
-        if _at(own, reach):
+        if not own or _at(own, reach):
             return None
         ends = np.array([self.source[:2], listener[:2]])
         if any(in_polygon(ends, footprint).any() for _, footprint, _ in layout.buildings):
@@ -950,21 +944,26 @@ class Refraction:
         request = _Barrier(listener=k, part=0, cuts=cuts, shift=shift, scattered=scattered)
         return plane, request
 
-    def _shadow_side(self, listener: np.ndarray, towards, reach: float) -> tuple | None:
-        """In line with the source and a vertical edge of a barrier or a building (an end
-        or a corner) that the straight line to ``listener`` passes through, within the
-        tolerance the paths over edges are found to, but which its way seen from above
-        (``reach`` along ``towards``) does not cross: that way turned about the source
-        by twice the tolerance at the edge, to the side where it crosses what the edge
-        belongs to, and what it crosses (as :meth:`_above` gives them); None where the
-        line touches no such edge. :meth:`_barrier` asks only where the direct sound is
-        cut off, so that the paths in still air are those of that side, the shadow."""
+    def _edge_side(self, listener: np.ndarray, towards, reach: float) -> np.ndarray:
+        """The way from the source, seen from above, on the side of a vertical edge of a
+        barrier or a building (an end or a corner) that the straight line to
+        ``listener`` (``reach`` along ``towards``) passes through, within the tolerance
+        the paths over edges are found to: that way turned about the source by twice
+        the tolerance at the edge, into what the edge belongs to (the turn whose
+        crossings come nearest the edge) where the straight line meets a face in the
+        planes of the edge's own faces (by the intersection test the paths in still air
+        are checked with, :meth:`_meets`), away from it otherwise, so that the paths in
+        still air are those of that side whatever else stands in the way and whichever
+        way the way, rounded, falls; the edge nearest the source decides where the line
+        touches several. ``towards`` itself where it touches none."""
         from acoustic_spaces.engine.diffraction import _closest
 
+        if not self.layout.barriers and not self.layout.buildings:
+            return towards
         edges = self._edge_set()
         upright = np.flatnonzero(self._laid_edges() & (np.abs(edges.direction[:, 2]) >= 1.0 - 1e-9))
         if not len(upright):
-            return None
+            return towards
         start = np.broadcast_to(self.source, (len(upright), 3))
         end = np.broadcast_to(np.asarray(listener, dtype=float), (len(upright), 3))
         points = _closest(start, end, edges, upright)
@@ -972,15 +971,24 @@ class Refraction:
         shares = (points - start[0]) @ line / max(float(line @ line), 1e-300)
         touched = (shares > 0.0) & (shares < 1.0)
         touched &= _edge_distance(edges, upright, points) <= self.tolerance
-        for share in shares[touched].tolist():
-            angle = 2.0 * self.tolerance / (share * reach)
-            for turn in (angle, -angle):
-                c, s = math.cos(turn), math.sin(turn)
-                way = np.array([c * towards[0] - s * towards[1], s * towards[0] + c * towards[1]])
-                own = self._above(self.layout.obstacles_along(self.source[:2], way, reach))
-                if own:
-                    return way, own
-        return None
+        if not touched.any():
+            return towards
+        first = int(np.argmin(np.where(touched, shares, np.inf)))
+        at = float(shares[first]) * reach
+        faces = edges.face[upright[first]]
+        planes = self.model.face_plane[faces[faces >= 0]]
+        inside = self._meets(listener, np.isin(self.model.face_plane, planes))
+        angle = 2.0 * self.tolerance / at
+        sides = []
+        for turn in (angle, -angle):
+            c, s = math.cos(turn), math.sin(turn)
+            way = np.array([c * towards[0] - s * towards[1], s * towards[0] + c * towards[1]])
+            own = self._above(self.layout.obstacles_along(self.source[:2], way, reach))
+            # How far from the edge the nearest of them is crossed along the way.
+            gap = min((max(near - at, at - far, 0.0) for near, far, _ in own), default=math.inf)
+            sides.append((gap, way))
+        sides.sort(key=lambda side: side[0])
+        return sides[0][1] if inside else sides[1][1]
 
     def _cuts_for(self, towards, reach: float, zr: float, own: tuple, open_top: float):
         """The runs whose weather's effects, weighed (in dB), give a listener ``reach``
@@ -1274,7 +1282,12 @@ class Refraction:
                 [_kind(label) in _LAID or tuple(label) in _OPEN for label in mesh.labels] or [True]
             )
             self._objects = ~laid[mesh.face_labels]
-        if not self._objects.any():
+        return self._meets(listener, self._objects)
+
+    def _meets(self, listener: np.ndarray, faces: np.ndarray) -> bool:
+        """Whether the straight line from the source to ``listener`` meets one of the
+        ``faces`` ((F,) bool), by the model's intersection test."""
+        if not faces.any():
             return False
         start = self.source.copy()
         delta = np.asarray(listener, dtype=float) - start
@@ -1287,7 +1300,7 @@ class Refraction:
             )
             if face[0] < 0:
                 return False
-            if self._objects[face[0]]:
+            if faces[face[0]]:
                 return True
             start = start + direction * float(t[0])
             left -= float(t[0])

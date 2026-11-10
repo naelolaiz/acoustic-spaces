@@ -130,8 +130,9 @@
   the floor's scattered sound at 125 Hz; in `apartment` the bed's level drops by
   0.04 dB(A).
 - Fixed: in wind, a listener or map point exactly in line with the source and a
-  barrier's end takes the weather's effect on the paths round the end; it read up to
-  6.7 dB low from 125 to 500 Hz.
+  barrier's end takes the weather's effect on the paths round the end, whichever way
+  the line rounds; it read up to 9.3 dB low downwind from 63 to 500 Hz and up to
+  12.3 dB low upwind from 63 Hz to 1 kHz.
 - Fixed: in wind, where the paths over edges keep their straight legs (a source or a
   listener on a building, a model file's object in the way), the bent direct sound and
   ground reflection count only where their straight paths do; strips 0.3 to 3.5 m wide

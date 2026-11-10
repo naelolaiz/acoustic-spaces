@@ -679,28 +679,67 @@ CORNER = {"name": "h", "footprint": [[15, 0], [25, 0], [25, 10], [15, 10]], "hei
 
 
 @pytest.mark.parametrize(
-    "obstacles",
+    ("source", "line", "obstacles"),
     [
-        {"barriers": [{"name": "screen", "path": [[15, -20], [15, 10]], "height": 4}]},
-        {"barriers": (), "buildings": [CORNER]},
+        # The way seen from above misses the barrier's end, rounded: it meets the
+        # barrier's line at 1 + 2e-16 of the barrier's length.
+        (
+            (0.0, 0.0),
+            (60.0, 40.0),
+            {"barriers": [{"name": "screen", "path": [[15, -20], [15, 10]], "height": 4}]},
+        ),
+        # Rounded the other way: the way seen from above crosses the barrier at its end,
+        # but the edge along its top, as the model holds it, ends 4e-15 m short of it.
+        (
+            (3.0, -2.0),
+            (71.0, 28.0),
+            {"barriers": [{"name": "screen", "path": [[24, -24], [20, 5.5]], "height": 4}]},
+        ),
+        # A corner, with no path over an edge in the plane: the line keeps the straight
+        # legs, as the shadow beside it does, and points within the tolerance past it
+        # keep the lit side's level.
+        ((0.0, 0.0), (60.0, 40.0), {"barriers": (), "buildings": [CORNER]}),
+        # Another barrier across the way beyond the end cuts the direct sound off on
+        # both sides: the end's own barrier, not the direct sound, tells the side.
+        (
+            (0.0, 0.0),
+            (60.0, 40.0),
+            {
+                "barriers": [
+                    {"name": "screen", "path": [[15, -20], [15, 10]], "height": 4},
+                    {"name": "wide", "path": [[57.5, -5], [17.5, 55]], "height": 4},
+                ]
+            },
+        ),
     ],
-    ids=["barrier", "building"],
+    ids=["barrier", "barrier-rounded-across", "building", "barrier-and-another"],
 )
-def test_the_level_in_line_with_a_barrier_s_end_is_that_beside_it(obstacles) -> None:
+def test_the_level_in_line_with_a_barrier_s_end_is_that_beside_it(source, line, obstacles) -> None:
     """Downwind, a listener exactly in line with the source and a barrier's end (or a
     building's corner), 1 mm either side and 10 µm past it, within the tolerance the
     paths over edges are found to: from 63 to 500 Hz the level on the line is that just
-    behind it, the side whose paths it has (the direct sound cut off), and the level
-    10 µm past, where the direct sound gets by, that 1 mm past, within 0.05 dB; on the
-    line and past the barrier's end, within 1.0 dB (the step across the end's shadow
-    boundary, see test_the_level_changes_smoothly_past_a_barrier_s_end). Fewer
+    behind it, the side whose paths it has (the line meets the barrier), and the level
+    10 µm past, where it does not, that 1 mm past, within 0.05 dB; with the barrier
+    alone, on the line and past its end within 1.0 dB (the step across the end's
+    shadow boundary, see test_the_level_changes_smoothly_past_a_barrier_s_end). Fewer
     frequencies at 4 and 8 kHz, which are not compared, keep it quick."""
-    listeners = [(60.0, 40.0 + d, 1.5) for d in (-0.001, 0.0, 1e-5, 0.001)]
-    room = Room.from_scene(scene(listeners=listeners, barrier_frequencies=8, **obstacles))
+    # The barrier or building whose end or corner is in line stands to the right of the
+    # way, seen from above: behind is right.
+    way = np.subtract(line, source)
+    left = np.array([-way[1], way[0]]) / np.hypot(*way)
+    listeners = [(*np.add(line, d * left), 1.5) for d in (-0.001, 0.0, 1e-5, 0.001)]
+    room = Room.from_scene(
+        scene(
+            listeners=listeners,
+            sources=((*source, 1.0),),
+            barrier_frequencies=8,
+            **obstacles,
+        )
+    )
     behind, on, near, past = (
         10.0 * np.log10(total_energy(early_paths(room, listener=f"l{k}")))[:4] for k in range(4)
     )
     np.testing.assert_allclose(on, behind, atol=0.05)
     np.testing.assert_allclose(near, past, atol=0.05)
-    if "buildings" not in obstacles:
+    if "buildings" not in obstacles and len(obstacles["barriers"]) == 1:
         np.testing.assert_allclose(on, past, atol=1.0)
