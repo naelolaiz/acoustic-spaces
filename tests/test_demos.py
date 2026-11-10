@@ -424,7 +424,11 @@ def test_a_tar_sent_in_chunks_and_cut_short_is_an_os_error(tmp_path: Path, monke
     and before the last (empty) chunk, fails with an OSError as every other archive cut
     short does (http.client raises IncompleteRead there, which is none), and leaves
     neither the member nor its .part file. Sent whole in the same chunks, it is read."""
-    take = os.urandom(40_000)  # does not compress: the cuts fall inside the member
+    # The archive is read io.DEFAULT_BUFFER_SIZE at a time (128 KiB from Python 3.14,
+    # 8 KiB before), and a read that meets the cut gives none of its bytes: the cuts fall
+    # three such reads in, inside the member (random bytes, which do not compress).
+    block = io.DEFAULT_BUFFER_SIZE
+    take = os.urandom(5 * block)
     packed = io.BytesIO()
     with tarfile.open(fileobj=packed, mode="w:gz") as archive:
         info = tarfile.TarInfo("takes/wanted.wav")
@@ -439,8 +443,9 @@ def test_a_tar_sent_in_chunks_and_cut_short_is_an_os_error(tmp_path: Path, monke
         fetch, "urlopen", lambda url, headers=None, timeout=0: _http_response(sent["raw"])
     )
     url, path = "https://example.org/takes.tar.gz", tmp_path / "out" / "take.wav"
-    begun = head + b"".join(chunks[:3])
-    for raw in (begun + chunks[3][:-300], begun):
+    whole = 3 * block // 8192
+    begun = head + b"".join(chunks[:whole])
+    for raw in (begun + chunks[whole][:-300], begun):
         sent["raw"] = raw
         with pytest.raises(OSError, match=r"takes.tar.gz: the archive is cut short or damaged"):
             fetch.extract_tar(url, {"takes/wanted.wav": path})
