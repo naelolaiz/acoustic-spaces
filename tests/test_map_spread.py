@@ -13,7 +13,7 @@ from test_long_term import WALL, field
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import coverage as coverage_stage
-from acoustic_spaces.engine import long_term, sensitivity
+from acoustic_spaces.engine import long_term, refracted, sensitivity
 from acoustic_spaces.engine.coverage import (
     LONG_TERM_INSERTION_LOSS_MAP_PARAMETERS,
     LONG_TERM_MAP_PARAMETERS,
@@ -27,6 +27,9 @@ FLOOR = [0.1, 0.15, 0.25, 0.35, 0.4, 0.45, 0.45, 0.45]
 WALLS = [0.14, 0.14, 0.15, 0.16, 0.17, 0.18, 0.2, 0.22]
 #: A tolerance's standard deviation, in tolerances (GUM, JCGM 100:2008, 4.3.7).
 STEP = 1.0 / math.sqrt(3.0)
+#: A belt of trees 8 m deep and 8 m high across the field of test_long_term, between
+#: its source and the listener downwind.
+BELT = {"name": "wood", "footprint": [[6, -30], [14, -30], [14, 30], [6, 30]], "height": 8}
 
 
 def _box(*, listener=(5.8, 3.9, 1.2), coverage=None, simulation=None, **materials) -> Scene:
@@ -270,6 +273,25 @@ def test_a_materials_two_runs_follow_the_rays_of_the_map() -> None:
     full = with_absorption(scene, ["walls"], [[1.0] * 8], "moved", digits=None)
     with pytest.raises(ValueError, match="rays_of: its materials must absorb everything"):
         coverage_stage.coverage_map(Room.from_scene(full), grid=result.grid, rays_of=scene)
+
+
+def test_in_wind_through_trees_the_scene_itself_to_decide_gives_the_same_map() -> None:
+    """Where the air bends the sound the tracer also takes the kind of each face, for
+    the late rays to leave out the curved paths the early part holds, and in plants a
+    ray scatters at the rate of the energy that decides: with the scene's own absorption
+    to decide, the map is the same bit for bit there too."""
+    scene = field(coverage={"spacing": 20.0, "height": 1.5, "rays": 100})
+    data = scene.model_dump(mode="json", exclude_none=True)
+    data["geometry"]["vegetation"] = [BELT]
+    scene = Scene.model_validate(data)
+    room = Room.from_scene(scene)
+    model = TraceModel.from_room(room, scene.simulation)
+    assert model.plants is not None and refracted.covering(model)
+    plain = coverage_stage.coverage_map(room)
+    assert plain.details["s"]["traced_rays"] > 0
+    again = coverage_stage.coverage_map(room, grid=plain.grid, rays_of=scene)
+    for name, values in plain.get().values.items():
+        np.testing.assert_array_equal(again.get().values[name], values)
 
 
 def test_a_third_octave_material_reaches_its_nodes() -> None:
