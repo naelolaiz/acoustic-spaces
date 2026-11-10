@@ -17,7 +17,8 @@ Results change from 4.2.1: outdoors, behind a building whose faces absorb, with
 `second_order` (by 18 to 20 dB behind a 6 m building absorbing 0.02; the archway
 example's first arrival behind the wall by 11.0 and 11.7 dB at 63 and 125 Hz); beside a
 bend of a thin screen's top or past a corner that is not square (steps of up to 5.4 dB,
-16 dB or 3.0 dB); behind a barrier where a reflection lies near its foot (of the
+16.6 dB or 3.0 dB); where the source, the listener and a barrier's top are at one height
+(up to 5.6 dB at 63 Hz); behind a barrier where a reflection lies near its foot (of the
 examples, the `railway`'s line and the `street`'s garden by up to 0.14 dB in a band);
 exactly in line with a source and a barrier's end in wind, or with a building's wall; in
 strips past roof edges in wind; in wind or a temperature gradient over a ground that
@@ -37,8 +38,8 @@ reaches 1. Scene files of 4.2.1 load unchanged.
 
 **Error estimates**
 
-- Added: a coverage map gives the uncertainty of its values from the materials'
-  absorption uncertainty, an insertion loss and the long-term levels too:
+- Added: a coverage map gives the uncertainty of its values, its insertion loss and
+  long-term levels among them, from the materials' absorption uncertainty:
   `coverage.spread: true`, `map --spread` or the tick box under **Uncertainty** on the
   editor's coverage map page trace the map twice more for each material that has one
   (the law of propagation of uncertainty, GUM 5.1.2). `map --show` and the map panel's
@@ -51,7 +52,8 @@ reaches 1. Scene files of 4.2.1 load unchanged.
   (400 as before) or none. `parameters.json` says whether the results were stable.
 - Added: the spread gives each result's one-sided bounds, for a limit on one side: the
   value it is at least and the one it is at most with a probability of 95 % (`at_least`,
-  `at_most` in `parameters.json`, in `simulate`'s output and in the editor's tips).
+  `at_most` in `parameters.json`, in `simulate`'s output and in the editor's tips), held
+  to what the parameter can be, as the interval's ends are.
   `simulation.uncertainty.one_sided`, `--one-sided` or **One-sided bounds** in the
   editor's simulation settings give another probability, 90 % say.
 - Added: the spread covers each listener's levels and speech results: the sound
@@ -70,11 +72,12 @@ reaches 1. Scene files of 4.2.1 load unchanged.
   wide absorption uncertainty, a large change in the editor) gave far too much late
   energy, up to absurd levels near an absorption of 1. The late part now follows
   Eyring's decay, which stays near tracing again.
-- Added: a material's page in the editor sets its absorption uncertainty
-  (**Absorption uncertainty**: a standard uncertainty or a tolerance per octave band and
-  its source, or ISO 12999-2's reproducibility at a click), which only the scene file
-  did. Typing a material's coefficients there no longer drops an uncertainty the scene
-  file gave it.
+- Added: a material's page in the editor sets its absorption uncertainty (**Absorption
+  uncertainty**: a standard uncertainty or a tolerance per octave band and its source,
+  or ISO 12999-2's reproducibility at a click; an opening takes none), which only the
+  scene file did, and a source reads "edited from ..." once the kind or a value of the
+  uncertainty it names is changed. Typing a material's coefficients there no longer
+  drops an uncertainty the scene file gave it.
 - Fixed: typing one coefficient on a material's page in the editor changes that cell
   only. A scattering value no longer takes the material off its database entry or file
   (which cost a built-in material the uncertainty a run takes for it), the other bands
@@ -97,20 +100,20 @@ reaches 1. Scene files of 4.2.1 load unchanged.
   several responses, all but the first change by that much.
 - Fixed: a material copied with other absorption (`calibration.with_absorption`) no
   longer counts as built-in, which gave it the built-in materials' default uncertainty.
-- Fixed: an end of the spread's interval or a one-sided bound no longer passes what the
-  parameter can be (a T30 from -0.18 s, a D50 up to 1.0003): it is held at that limit.
-- Fixed: on a material's page in the editor, ticking **Absorption uncertainty** no
-  longer rewrites a scattering entry given by name as numbers, the Source field keeps
-  its caret after Enter, an opening takes no uncertainty, and a source reads "edited
-  from ..." once the kind or a value of the uncertainty it names is changed.
+- Fixed: an end of the spread's interval no longer passes what the parameter can be (a
+  T30 from -0.18 s, a D50 up to 1.0003): it is held at that limit.
+- Upgrading: `engine.uncertainty.edge_errors` takes the run's simulation settings (a
+  result's `settings`, or a scene's `simulation`) in place of the scene, and
+  `engine.uncertainty.Spread` has the fields `at_least`, `at_most` and `one_sided`,
+  which a `Spread` built by hand must give.
 
 **Edges and barriers**
 
 - Fixed: beside a bend of a thin screen's top (a barrier's path that turns by less than
-  15°) the level stepped by up to 5.4 dB, or 16 dB with the bend towards the source, and
-  past a screen's corner that is not square by up to 3.0 dB: each of an edge's terms now
-  takes its own part of the edge as BTM's integrand weights it (within 0.04 dB of BTM
-  beside bends, 0.17 dB past corners).
+  15°) the level stepped by up to 5.4 dB, or 16.6 dB with the bend towards the source,
+  and past a screen's corner that is not square by up to 3.0 dB: each of an edge's terms
+  now takes its own part of the edge as BTM's integrand weights it (within 0.04 dB of
+  BTM beside bends, 0.17 dB past corners).
 - Fixed: a path that touches the very end of a fading edge, as with the source, the
   listener and a barrier's top at one height, is no longer dropped (up to 5.6 dB low at
   63 Hz).
@@ -119,16 +122,20 @@ reaches 1. Scene files of 4.2.1 load unchanged.
   leg it stops and kept paths over an edge that went on through a wall or another
   barrier: the level read up to 6.0 dB below the exact solution (7.1 dB with
   `both_sides`) and stepped by 5.3 dB at 125 Hz over 2 cm, by up to 15.7 dB at 63 Hz
-  behind two barriers. Behind one barrier the fade now adds nothing (with `both_sides`
-  a straight one is within 0.2 dB of the exact solution from 63 Hz to 1 kHz); of the
-  examples only `railway`'s line and the `street`'s garden move, by up to 0.14 dB in a
-  band.
+  behind two barriers. Behind a straight, bent or curved barrier the fade now adds
+  nothing (with `both_sides` a straight one is within 0.2 dB of the exact solution from
+  63 Hz to 1 kHz); behind two barriers, or a U- or Z-shaped one, the level still steps
+  by up to 2.6 dB from 63 to 250 Hz where the ground reflection crosses the first one's
+  foot (see the known issues of the edge fade in the validation report); of the examples
+  only `railway`'s line and the `street`'s garden move, by up to 0.14 dB in a band.
 - Fixed: a listener or map point exactly in line with the source and a building's wall
   (or a block's top), past the wall, heard the paths round both of its corners, one ray
   counted twice: 3 to 9.5 dB louder than 10 µm into the shadow, over one edge or two,
-  with reflections up to the third order. It now has the paths and the level it has
-  just beside the line in the shadow, in still air and in wind; a point on that wall
-  itself keeps the level it had.
+  with reflections up to the third order. It now has the paths and the level it has just
+  beside the line in the shadow, in still air and in wind; a point on that wall itself
+  keeps the level it had. With a second building's wall in the same plane, a listener on
+  that wall still reads 6.9 dB over the point 10 µm in front of it at 63 Hz (9.3 dB
+  before).
 - Fixed (results change): sound over two edges along a face that absorbs
   (`second_order`, over a roof or a thick wall) was nearly cancelled in the bands that
   add in pressure, by the plane wave's R = -1 at grazing incidence; the path now takes
@@ -156,12 +163,14 @@ reaches 1. Scene files of 4.2.1 load unchanged.
   ground reflection count only where their straight paths do; strips 0.3 to 3.5 m wide
   at the edges' shadow boundaries read 4 to 10 dB off in every band.
 - Fixed: a curved path that turns in the air just past a node of the sampled profile
-  near the source's or the listener's height took that profile's slope there, up to
-  15 dB off the smooth one's; it now takes the fitted one. Against the smooth profiles
-  (`validation/curved_rays.py`, paths near a caustic apart) the most a path is off goes
-  from 15.3 to 2.4 dB where the sound bends down and from 3.1 to 1.1 dB where it bends
-  up; from 1 kHz up a listener 300 m downwind of the `open_air_stage` source and 4.61 m
-  up gains about 2 dB, and the shipped examples' own listeners move by 0.02 dB at most.
+  near the source's or the listener's height took that profile's slope there, up to 15
+  dB off the smooth one's; it now takes the fitted one. Against the smooth profiles
+  (`validation/curved_rays.py`, paths near a caustic apart) the most a path to listeners
+  0.5 to 12 m up is off goes from 15.3 to 2.4 dB where the sound bends down and from 3.1
+  to 1.1 dB where it bends up, and a path between ends at one height that turns just
+  below them is within 1.5 dB; from 1 kHz up a listener 300 m downwind of the
+  `open_air_stage` source and 4.61 m up gains about 2 dB, and the shipped examples' own
+  listeners move by 0.02 dB at most.
 
 **Late rays and scattering**
 
@@ -215,10 +224,10 @@ reaches 1. Scene files of 4.2.1 load unchanged.
 **Walks and demos**
 
 - Fixed: a walk with Doppler follows each path's 1/distance from sample to sample, not
-  every 20 ms: a source passing 1 m from a listener at 70 m/s rippled by up to 0.73 dB
-  and is now within 0.01 dB of the exact field (1 kHz, 5 ms windows). The filters from
-  place to place are joined linearly (triangles, not squared sines), which also moves a
-  source heard through turbulence by up to 0.03 dB in its 5 ms levels.
+  every 20 ms: a source passing 1 m from a listener's line at 70 m/s rippled by up to
+  0.73 dB and is now within 0.01 dB of the exact field (1 kHz, 5 ms windows). The
+  filters from place to place are joined linearly (triangles, not squared sines), which
+  also moves a source heard through turbulence by up to 0.03 dB in its 5 ms levels.
 - Fixed: a demo's tour fits each crossfade to the stops it joins; a stop shorter than
   the crossfade was played twice (+6 dB) or stopped the demo with an error.
 - Docs: a moving monopole's convective amplification, which the engine leaves out, is
@@ -239,9 +248,8 @@ reaches 1. Scene files of 4.2.1 load unchanged.
   whichever **Item** is chosen.
 - Fixed: the tip of **Frequencies behind barriers** leaves the errors and the run times
   to the documentation (it still gave 12, 7.7 and 4.5 times a straight-leg map's time,
-  which are 8.2, 5.6 and 4.0 times since 4.2.0), and `fetch.extract_tar` raises
-  `OSError`, not `http.client.IncompleteRead`, for a tar archive sent in chunks and cut
-  short.
+  which are 5.5, 4.0 and 3.0 times now), and `fetch.extract_tar` raises `OSError`, not
+  `http.client.IncompleteRead`, for a tar archive sent in chunks and cut short.
 
 **Speed and memory**
 

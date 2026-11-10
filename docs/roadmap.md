@@ -693,11 +693,13 @@ Version 4.2.1:
 - [x] ISO 12999-2's octave-band values (Table 2) for the built-in materials' spread from
   250 Hz to 4 kHz.
 
-Version 4.3.0, in the sections above: under Parameters the error estimates' adaptive
+Version 4.3.0 (in the sections above: under Parameters the error estimates' adaptive
 number of draws, one-sided bounds, the absorption uncertainty on the editor's material
 page, the spread of the listeners' levels and speech results and the uncertainty of a
 coverage map's values; under Edge diffraction the fade beside a bend of a thin screen's
-top and past its corners that are not right angles.
+top and past its corners that are not right angles; under Outdoor acoustics the
+wide-angle parabolic equation in two to two and a half times the narrow-angle one's time
+over open ground, O21).
 
 Next:
 

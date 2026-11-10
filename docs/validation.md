@@ -4462,12 +4462,13 @@ its peak (single precision).
 
 ## Known issues
 
-Reviews of the code found these, but for the one about barriers, which the checks
-against the exact solution found, and those about barriers in wind and a leg's shadow,
-which their checks found. Each one was checked against the code; the numbers come from
-the tests or scripts named, and a number from a one-off check says so. They are open
-items on the [roadmap](roadmap.md). The edge fade's own are listed in [Known issues of
-the edge fade](#known-issues-of-the-edge-fade).
+Reviews of the code found these, but for those about barriers and absorbing faces near
+grazing incidence, which the checks against the exact solution found, and those about
+barriers and roof edges in wind and a leg's shadow, which their checks found. Each one
+was checked against the code; the numbers come from the tests or scripts named, and a
+number from a one-off check says so. They are open items on the [roadmap](roadmap.md).
+The edge fade's own are listed in [Known issues of the edge
+fade](#known-issues-of-the-edge-fade).
 
 Results:
 
@@ -4515,6 +4516,25 @@ Results:
   hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from
   500 Hz up, and off by up to 9.9 dB below (see
   [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
+- **Absorbing faces near grazing incidence.** In the bands that add in pressure a
+  reflection off a face with an absorption coefficient takes the phase of the plane
+  wave's factor, whatever the face's size, and near grazing that phase is turned over:
+  0.1 m above a rigid floor, with a square absorbing 0.5 on the specular point, the
+  level is -10.7 dB against the free field at 63 and 125 Hz, where the exact solution
+  over that material gives +3.3 and +2.2 dB, and it steps by 16.7 dB where the
+  reflection point leaves a 1 m square. Over an edge each reflection turns over at its
+  own cosine, so the path is not the same both ways round: just above a 1 m block whose
+  top alone absorbs, the level at 63 and 125 Hz is up to 16 dB above the rigid block's
+  (absorption 0.2) and 9.6 dB (0.5), with `second_order`; where a source or a listener
+  crosses the plane of an absorbing top the level steps by up to 12.9 dB at 8 kHz
+  (absorption 0.5; 28.7 dB over a top 10 m wide); and where the street's car crosses the
+  plane of the houses' end wall the sound over their corner dips by up to 10 dB at 63 Hz
+  within 2 cm (see [Edge diffraction](#edge-diffraction-against-the-exact-solution)).
+- **Two walls in one plane.** A listener on a building's wall that lies in the plane of
+  another building's wall reads 6.9 dB over the point 10 µm in front of it at 63 Hz (a
+  one-off check): the paths over the first building's far corner and the second's near
+  corner are one ray, as a leg that runs in a solid face's plane past the face counts as
+  clear.
 - **A barrier's end in wind.** Behind a barrier the paths in the plane take the
   barrier's effect, and the paths over the top past its end, as they fade out there,
   take it too; the direct sound and the paths round the end take the open ground's, in
