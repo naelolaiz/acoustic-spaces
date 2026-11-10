@@ -475,7 +475,7 @@ simulation:
   [Ground impedance](outdoor.md#ground-impedance)).
 - Outdoors the paths are few, and the ground dip spans several bands: the early paths
   add in pressure up to 8000 Hz by default there. Wind and temperature gradients bend
-  them, and below 500 Hz a parabolic equation gives the sound over the open ground, a
+  them, and up to 2 kHz a parabolic equation gives the sound over the open ground, a
   narrow-angle one by default and a wide-angle one with
   `simulation.early.parabolic_equation: wide_angle` (see
   [Wind and temperature](outdoor.md#wind-and-temperature)). Above 500 Hz they add pair by pair,

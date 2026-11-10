@@ -315,8 +315,8 @@ Outdoor acoustics, in steps:
   angles over several kilometres. On the 1995 benchmark it is within 0.11 dB of the
   fast field program from 10 Hz to 1 kHz and to 10 km wherever the sound is within
   40 dB of free field, where the narrow-angle one strays by 3 to 20 dB; in the weather
-  presets within 0.04 dB on average (the narrow-angle one 0.11). Two to two and a half
-  times the time over open ground; without it nothing changes.
+  presets within 0.03 dB on average at the bands' centres (the narrow-angle one 0.10).
+  Three to seven times the time over open ground; without it nothing changes.
 - [x] O22 Barriers and buildings in wind: behind them the paths in the vertical plane
   through the source and the listener take the weather's effect from the parabolic
   equation run in every band with the barriers and buildings inside, checked against a
@@ -328,7 +328,7 @@ Outdoor acoustics, in steps:
   a barrier's top into its shadow; a blend of the barrier's and the
   open ground's effects across the line of a barrier's end below the line of sight, and
   the open ground's refraction for the paths round an end above its equation's bands,
-  where the level steps across the end by up to 20 dB; a blend of the rays and the open
+  where the level steps across the end by up to 19 dB; a blend of the rays and the open
   ground's equation where a ground reflection comes into view past a roof's edge; the paths round ends checked
   against a reference in three dimensions; a building's rigid roof in the
   wide-angle equation (the effect steps by 0.6 dB at 2 kHz where the points cross the
@@ -338,6 +338,24 @@ Outdoor acoustics, in steps:
   [Known issues](validation.md#known-issues)).
 - [ ] A leg from a ground reflection a rounding error above the ground takes the
   shadow of one from the ground (see [Known issues](validation.md#known-issues)).
+- [ ] A transition across a caustic for the rays' bands over the open ground (4 and
+  8 kHz, and 1 and 2 kHz with `open_ground_frequencies: rays`), a uniform (Airy) form
+  for the two paths that merge there: past it they vanish and the level steps by up to
+  12.9 dB within a centimetre (14.0 dB at 1 kHz with `rays`; see
+  [Known issues](validation.md#known-issues)).
+- [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
+  or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
+  the shadow):
+  a band's spectrum held past its last frequency misses a ground dip there, by up to
+  2.0 dB 100 m downwind in the benchmark's case 2 (see
+  [Known issues](validation.md#known-issues)).
+- [ ] Steep sound over the open ground in wind (as under a flyover) left to the rays at
+  1 and 2 kHz by a rule, where they match the equation at a fraction of its time: one
+  studied (the vertical wavenumber changing by at most 3 % over one of its own lengths
+  along the paths) was within 0.03 dB of a fast field program in the presets and under
+  linear gradients and took 0.14 to 0.37 of the equation's time on the helicopter
+  flyover, but its error has no bound (0.12 dB past a 3 K step a centimetre above the
+  source); until one holds, `open_ground_frequencies: rays` is the user's choice.
 - [x] The scattered sound of the reflections straight from the source found from each
   listener too, shared with the late rays by how densely each finds it: an aircraft
   overhead no longer brings a listener above grass bursts of it from the few rays that

@@ -5320,6 +5320,38 @@ msgstr ""
 "(Outdoor scenes, How the simulation bends sound)"
 
 #: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "rays, off by up to {error:g} dB at 1 and 2 kHz"
+msgstr "raigs, amb un error de fins a {error:g} dB a 1 i 2 kHz"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "{count}, off by up to {error:g} dB at 1 and 2 kHz"
+msgstr "{count}, amb un error de fins a {error:g} dB a 1 i 2 kHz"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Outdoors over the open ground in wind or temperature gradients, the "
+"frequencies an octave the parabolic equation takes at 1 and 2 kHz (below 1 "
+"kHz always 8), or the rays, which give those bands where one reaches the "
+"listener short of half the way to the shadow's start. Fewer take less time "
+"and leave those bands further off, and in the shadow the bands above, which "
+"deepen from them: each choice says by how much at most at 1 and 2 kHz, "
+"against a fast field program in the validation cases. The documentation has "
+"the errors and the run times measured (Outdoor scenes, How the simulation "
+"bends sound)"
+msgstr ""
+"A l'aire lliure, sobre terreny obert amb vent o gradients de temperatura, "
+"les freqüències per octava que pren l'equació parabòlica a 1 i 2 kHz (per "
+"sota d'1 kHz sempre 8), o els raigs, que donen aquestes bandes on n'arriba "
+"un a l'oient abans de la meitat del camí fins al començament de l'ombra. "
+"Menys triguen menys i deixen aquestes bandes més lluny, i a l'ombra les "
+"bandes superiors, que s'hi atenuen a partir d'elles: cada opció diu quant "
+"com a màxim a 1 i 2 kHz, davant d'un programa de camp ràpid en els casos de "
+"validació. La documentació recull els errors i els temps de càlcul mesurats "
+"(Outdoor scenes, How the simulation bends sound)"
+
+#: acoustic_spaces/gui/inspector.py
 msgid ""
 "The highest octave band (Hz) in which the early paths add in pressure, with "
 "the phase of every reflection, rather than in energy; the wave solver's "
@@ -5360,6 +5392,10 @@ msgstr "Equació parabòlica"
 #: acoustic_spaces/gui/inspector.py
 msgid "Frequencies behind barriers"
 msgstr "Freqüències darrere de barreres"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Frequencies over open ground"
+msgstr "Freqüències sobre terreny obert"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "In pressure up to"
@@ -8855,9 +8891,9 @@ msgid ""
 "heads. Downwind the sound comes sooner, and louder in the low bands; 300 m "
 "upwind the listeners are in its shadow, where only what bends round its edge "
 "and what the wind's eddies scatter into it arrive: there the bands from 1 "
-"kHz up are some 19 dB below those downwind, where without the eddies they "
-"would be 60 dB below. The eddies also make the sound flicker as they drift "
-"past. Remove the atmosphere to hear the same park in still air."
+"kHz up are some 19 to 21 dB below those downwind, where without the eddies "
+"they would be 59 to 64 dB below. The eddies also make the sound flicker as "
+"they drift past. Remove the atmosphere to hear the same park in still air."
 msgstr ""
 "A l'aire lliure: els altaveus d'un escenari a 5 m d'alçada, escoltats a 100 "
 "i 300 m a través d'un parc en un vespre de vent, a favor i en contra del "
@@ -8867,10 +8903,10 @@ msgstr ""
 "favor del vent el so arriba abans, i més fort a les bandes greus; a 300 m en "
 "contra del vent els oients són a la seva ombra, on només arriba el que es "
 "corba al voltant de la seva vora i el que els remolins del vent hi "
-"dispersen: allà les bandes des d'1 kHz queden uns 19 dB per sota de les de a "
-"favor del vent, quan sense els remolins quedarien 60 dB per sota. Els "
-"remolins també fan fluctuar el so a mesura que passen. Traieu l'atmosfera "
-"per escoltar el mateix parc amb l'aire en calma."
+"dispersen: allà les bandes des d'1 kHz queden uns 19 a 21 dB per sota de les "
+"de a favor del vent, quan sense els remolins quedarien 59 a 64 dB per sota. "
+"Els remolins també fan fluctuar el so a mesura que passen. Traieu "
+"l'atmosfera per escoltar el mateix parc amb l'aire en calma."
 
 #: examples/orchestra/scene.yaml
 msgctxt "example"

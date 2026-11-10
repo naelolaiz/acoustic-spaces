@@ -246,8 +246,8 @@ def test_the_paths_round_an_end_take_the_open_ground_s_effect_on_both_sides(runs
     listeners = ((60.0, -1.0, 1.5), (60.0, 1.0, 1.5))
     still = Room.from_scene(scene(atmosphere=None, listeners=listeners, barriers=[barrier]))
     windy = Room.from_scene(scene(listeners=listeners, barriers=[barrier]))
-    # 60 m downwind the open ground's parabolic equation gives 63 to 500 Hz.
-    open_bands = np.array([1, 1, 1, 1, 0, 0, 0, 0], dtype=bool)
+    # 60 m downwind the open ground's parabolic equation gives 63 Hz to 2 kHz.
+    open_bands = np.array([1, 1, 1, 1, 1, 1, 0, 0], dtype=bool)
     for name in ("l0", "l1"):
         a = early_paths(still, listener=name)
         b = early_paths(windy, listener=name)
@@ -443,7 +443,8 @@ def test_the_paths_round_an_end_take_the_ground_along_their_own_way(monkeypatch)
     near = [z for reach, z in found if abs(reach - (15.0 + beyond)) < 1e-9]
     far = [z for reach, z in found if abs(reach - (25.0 + beyond)) < 1e-9]
     assert near and far
-    hard = far[0][0]
+    hard = far[0][0][0]  # the same at each frequency, in runs of 8 or 24 frequencies
+    assert np.allclose(far[0][0], hard)
     for z in far:
         for at in z:
             np.testing.assert_allclose(at, hard)
