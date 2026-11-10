@@ -164,6 +164,15 @@
   digits, moving a grid in UTM coordinates by up to 5 m (the northing rounded to 10 m)
   and heights of 1 to 10 km by up to 5 mm; it now writes each in the shortest form that
   reads back as the same number.
+- Fixed: behind a barrier on the ground, where the reflection off the ground or a wall
+  lies near the barrier's foot, the edge fade gave the leg past the barrier terms of the
+  leg it stops and kept paths over an edge that went on through a wall or another
+  barrier: the level read up to 6.0 dB below the exact solution (7.1 dB with
+  `both_sides`) and stepped by 5.3 dB at 125 Hz over 2 cm, by up to 15.7 dB at 63 Hz
+  behind two barriers. Behind one barrier the fade now adds nothing (with `both_sides`
+  a straight one is within 0.2 dB of the exact solution from 63 Hz to 1 kHz); of the
+  examples only `railway`'s line and the `street`'s garden move, by up to 0.14 dB in a
+  band.
 
 ## 4.2.1
 

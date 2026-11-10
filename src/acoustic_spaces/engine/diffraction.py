@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -384,54 +385,15 @@ class Edges:
 def find_edges(model: TraceModel, min_bend_deg: float = MIN_BEND_DEG) -> Edges:
     """The edges of ``model`` that diffract (see the module notes); collinear pieces of
     one edge between the same two planes are joined."""
-    mesh = model.room.mesh
-    vertices = np.asarray(mesh.vertices, dtype=float)
-    solid = ~model.transparent  # openings are holes here
-    if model.sky is not None:
-        # An outdoor scene's sky is an opening, but no hole: the ground goes on past it.
-        solid |= model.sky
-    solid = np.flatnonzero(solid)
-    faces = mesh.faces[solid]
-    first = faces.reshape(-1)
-    second = faces[:, [1, 2, 0]].reshape(-1)
-    opposite = faces[:, [2, 0, 1]].reshape(-1)
-    owner = np.repeat(solid, 3)
-    lo, hi = np.minimum(first, second), np.maximum(first, second)
-    order = np.argsort(lo * len(vertices) + hi, kind="stable")
-    _, starts, uses = np.unique(
-        (lo * len(vertices) + hi)[order], return_index=True, return_counts=True
-    )
+    geometry, owner, h0, h1, single, theta, side, keep = _wedges(model, min_bend_deg)
     normals = model.plane_normal[model.face_plane]  # into the room when oriented
-
-    def geometry(half: np.ndarray):
-        p0, p1 = vertices[lo[half]], vertices[hi[half]]
-        length = np.linalg.norm(p1 - p0, axis=1)
-        e = (p1 - p0) / np.maximum(length, 1e-300)[:, None]
-        v = vertices[opposite[half]] - p0
-        a = v - np.einsum("ij,ij->i", v, e)[:, None] * e
-        a /= np.maximum(np.linalg.norm(a, axis=1), 1e-300)[:, None]
-        return p0, p1, e, a
-
     parts = []
     # Two faces: a wedge, if it opens far enough beyond flat towards the room.
-    pair = starts[uses == 2]
-    h0, h1 = order[pair], order[pair + 1]
-    swap = model.face_plane[owner[h0]] > model.face_plane[owner[h1]]
-    h0, h1 = np.where(swap, h1, h0), np.where(swap, h0, h1)
     p0, p1, e, a0 = geometry(h0)
-    _, _, _, a1 = geometry(h1)
     face0, face1 = owner[h0], owner[h1]
-    theta = np.arccos(np.clip(np.einsum("ij,ij->i", a0, a1), -1.0, 1.0))
-    side = np.einsum("ij,ij->i", normals[face0], a1)
-    keep = theta <= np.pi - math.radians(min_bend_deg)
-    if model.oriented:
-        # Face n lies behind face 0: the solid is inside the angle. Between faces with a
-        # room on both sides (a bent panel), the side that opens wider diffracts.
-        keep &= (side < 0.0) | model.plane_two_sided[model.face_plane[face0]]
     normal = np.where((side > 0.0)[:, None], -normals[face0], normals[face0])
     parts.append((p0, p1, e, a0, normal, (2.0 * np.pi - theta) / np.pi, face0, face1, keep))
     # One face: the free edge of a surface, a wedge open all round.
-    single = order[starts[uses == 1]]
     p0, p1, e, a0 = geometry(single)
     face0 = owner[single]
     parts.append(
@@ -455,6 +417,92 @@ def find_edges(model: TraceModel, min_bend_deg: float = MIN_BEND_DEG) -> Edges:
     edges = _join(model, p0, p1, e, along, normal, wedge, face0, face1)
     edges.fade, edges.corner, edges.closed = end_fades(model, edges)
     return edges
+
+
+def sheets(model: TraceModel, min_bend_deg: float = MIN_BEND_DEG) -> np.ndarray:
+    """(F,) the sheet each face of ``model`` belongs to, a label: the faces that
+    :func:`find_edges` looks at, joined where two of them share an edge of the mesh that
+    is no inside corner, one that bends by less than ``min_bend_deg`` (a curved barrier's
+    facets, a flat wall's triangles) or that diffracts (a barrier's bend, a building's
+    corners and the edges of its roof): one barrier, one building, one pillar each. An
+    inside corner (a pillar's foot on the floor, where two walls of a room meet) parts
+    them. In a model that is not oriented, which says not which side of a face is solid,
+    no bend can be told from an inside corner, and only those of less than
+    ``min_bend_deg`` join."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    _, owner, h0, h1, _, theta, _, keep = _wedges(model, min_bend_deg)
+    join = theta > np.pi - math.radians(min_bend_deg)
+    if model.oriented:
+        join |= keep
+    count = len(model.face_plane)
+    graph = coo_matrix(
+        (np.ones(int(join.sum())), (owner[h0][join], owner[h1][join])), shape=(count, count)
+    )
+    return connected_components(graph, directed=False)[1]
+
+
+def _wedges(
+    model: TraceModel, min_bend_deg: float
+) -> tuple[
+    Callable, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+]:
+    """The edges of the mesh that two of ``model``'s solid faces share, as
+    :func:`_halves` gives them, with the half on the face of the lower plane first; the
+    angle between the two faces, which side of the first face's normal the second lies
+    on, and whether the edge diffracts: it opens far enough beyond flat towards the room.
+    Also :func:`_halves`' geometry, the faces of the halves and the halves of the edges
+    of one face."""
+    geometry, owner, h0, h1, single = _halves(model)
+    normals = model.plane_normal[model.face_plane]  # into the room when oriented
+    swap = model.face_plane[owner[h0]] > model.face_plane[owner[h1]]
+    h0, h1 = np.where(swap, h1, h0), np.where(swap, h0, h1)
+    a0, a1 = geometry(h0)[3], geometry(h1)[3]
+    theta = np.arccos(np.clip(np.einsum("ij,ij->i", a0, a1), -1.0, 1.0))
+    side = np.einsum("ij,ij->i", normals[owner[h0]], a1)
+    keep = theta <= np.pi - math.radians(min_bend_deg)
+    if model.oriented:
+        # Face n lies behind face 0: the solid is inside the angle. Between faces with a
+        # room on both sides (a bent panel), the side that opens wider diffracts.
+        keep &= (side < 0.0) | model.plane_two_sided[model.face_plane[owner[h0]]]
+    return geometry, owner, h0, h1, single, theta, side, keep
+
+
+def _halves(model: TraceModel) -> tuple[Callable, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """The edges of the mesh of ``model``'s solid faces (with an outdoor scene's sky, which
+    is an opening but no hole: the ground goes on past it), as halves, one for each
+    corner of a face: a function of halves that gives the ends of each, its direction and
+    the unit vector across it in its face, away from it; the face of each half; the two
+    halves of each edge that two faces share, and the halves of the edges of one face."""
+    mesh = model.room.mesh
+    vertices = np.asarray(mesh.vertices, dtype=float)
+    solid = ~model.transparent  # openings are holes here
+    if model.sky is not None:
+        solid |= model.sky
+    solid = np.flatnonzero(solid)
+    faces = mesh.faces[solid]
+    first = faces.reshape(-1)
+    second = faces[:, [1, 2, 0]].reshape(-1)
+    opposite = faces[:, [2, 0, 1]].reshape(-1)
+    owner = np.repeat(solid, 3)
+    lo, hi = np.minimum(first, second), np.maximum(first, second)
+    order = np.argsort(lo * len(vertices) + hi, kind="stable")
+    _, starts, uses = np.unique(
+        (lo * len(vertices) + hi)[order], return_index=True, return_counts=True
+    )
+
+    def geometry(half: np.ndarray):
+        p0, p1 = vertices[lo[half]], vertices[hi[half]]
+        length = np.linalg.norm(p1 - p0, axis=1)
+        e = (p1 - p0) / np.maximum(length, 1e-300)[:, None]
+        v = vertices[opposite[half]] - p0
+        a = v - np.einsum("ij,ij->i", v, e)[:, None] * e
+        a /= np.maximum(np.linalg.norm(a, axis=1), 1e-300)[:, None]
+        return p0, p1, e, a
+
+    pair = starts[uses == 2]
+    return geometry, owner, order[pair], order[pair + 1], order[starts[uses == 1]]
 
 
 def _outdoors(model: TraceModel, part) -> np.ndarray:

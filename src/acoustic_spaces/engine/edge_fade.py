@@ -66,20 +66,32 @@ reflection for it (:func:`~acoustic_spaces.engine.model.size_scattering`).
 
 A leg that gets past an edge on the dark side of its boundary, as beside the end of a
 strip, takes the edge's term where the edge's face crosses the leg's line on the leg:
-where the line comes nearest to the edge, it must lie on the leg's side of the planes
-the leg reflects off at its ends. Beyond one of them the edge belongs to the next leg
+where the line crosses the plane of the edge's face (of a solid wedge, the plane through
+the middle of its solid side), it must lie on the leg's side of the planes the leg
+reflects off at its ends. Beyond one of them the edge belongs to the next leg
 (a barrier's top past the reflection off the ground that ends a leg, which blocks the
 leg after it), save for an edge along the plane's normal, its own image there.
 
 Each term makes a path over its edge, which must be clear from the edge to where it
 reflects first before and after it (where the line from the edge to the image on either
 side first meets a plane it may reflect off there), save where two events stop the path
-and it reflects next to the other's blocked leg, which blocks the way there too. In the
-bands where paths add in pressure it carries its phase. In the others it is a piece of
-two waves (:mod:`~acoustic_spaces.engine.clusters`): it continues the geometric wave of
-its boundary, the path's, by c, its coherence with that wave over the band on the lit
-side of the boundary and the UTD's ``sqrt(1 - |F(X)|^2)`` on the dark side, where the
-wave is gone, and is part of its event's diffracted wave by sqrt(1 - c^2), with the terms
+and it reflects next to the other's blocked leg, which blocks the way there too. Where
+it stands in for a missed path (at an event that stops it, and where several do, at the
+legs next to a stopped reflection) it must be clear on from there too, leg after leg
+off the path's planes to the source and the listener, as it reflects at other points
+than the path does (past a barrier's foot, behind another barrier), up to another event
+that stops the path, whose terms go on from there: the terms of one event add, each one
+way past all that stops the path there, so each must get past all of it on its own. At
+an event the path gets past, the term goes on with the path's wave, and an obstacle on
+its further legs is mostly another event of the path, whose terms multiply it already:
+checked there too, that obstacle would count twice (in validation/edge_diffraction.py's
+hall with alcoves the level then steps by 4.2 dB at 63 Hz over 2 cm, against 1.7 dB).
+In the bands where paths add in pressure it carries its phase. In the others it is a
+piece of two waves (:mod:`~acoustic_spaces.engine.clusters`): it continues the
+geometric wave of its boundary, the path's, by c, its coherence with that wave over the
+band on the lit side of the boundary and the UTD's ``sqrt(1 - |F(X)|^2)`` on the dark
+side, where the wave is gone, and is part of its event's diffracted wave by
+sqrt(1 - c^2), with the terms
 the edge diffraction adds there (round a narrow face the two edges' terms nearly
 cancel). A product of terms is split alike, term by term, and so are the events the
 path gets past before a term: the part of their terms in an event's diffracted wave,
@@ -88,8 +100,11 @@ where the point it diffracts at leaves the end of its edge (the UTD has no terms
 the corners of edges), so the level can still step slightly there; where that end lies
 in a plane the path reflects off next to the event, the edge goes on as its image in
 the plane, and the leg on one side of the reflection or the other takes the term. Where
-such a leg stops a path, the term of the edge's image, found on the leg on the other
-side, is the stopping leg's.
+such a leg stops a path and the edge belongs to the obstacle that stops it (its own
+face, or one joined to it by no inside corner, as the far part of a bent or curved
+barrier or another wall of a building), the term of the edge's image, found on the leg
+on the other side, is the stopping leg's: in the plane's image the two legs are one
+line, and the edge is one more way round that one obstacle.
 """
 
 from __future__ import annotations
@@ -106,7 +121,6 @@ from acoustic_spaces.engine.diffraction import (
     MIN_RELATIVE_ENERGY,
     EdgeDiffraction,
     _clear,
-    _closest,
     _first_solid,
     _image_sources,
     _match,
@@ -114,6 +128,7 @@ from acoustic_spaces.engine.diffraction import (
     _waves,
     boundary_angles,
     near_fading_end,
+    sheets,
     wedge_prefactor,
 )
 from acoustic_spaces.engine.early import (
@@ -172,6 +187,7 @@ class EdgeFade:
         self._plane_edges = pairs[:, 1]
         self._plane_start = np.searchsorted(pairs[:, 0], np.arange(self.model.plane_count + 1))
         self._standing: dict[tuple[int, int], bool] = {}  # see _stands
+        self._sheet: np.ndarray | None = None  # the faces' sheets, once needed (_by_image)
         self._pages: Pages | None = None  # the pieces' pressure, while terms runs
 
     def covered(self, before: int, after: int) -> bool:
@@ -494,6 +510,10 @@ class EdgeFade:
             before[:, :j] = planes[:, :j]
             after[:, : k - j] = planes[:, j:]
             sides.append(np.stack([before, after], axis=1))
+        # Alike for each reflection, for the path over an edge there (see _beyond).
+        faces_sides = [
+            np.stack([sides[j - 1][:, 0], sides[j][:, 1]], axis=1) for j in range(1, k + 1)
+        ]
         i = model.size_from_order - 1
         moved = go["faces"][rows, i - 1] if 1 <= i <= k else none
         size = {
@@ -554,7 +574,7 @@ class EdgeFade:
                     if own
                     else np.full((n, 2), -1, dtype=np.int64),
                     "stop_at": go["stop_at"][rows][:, [j - 1, j]] if own else np.zeros((n, 2, 3)),
-                    "sides": np.full((n, 2, width), -1, dtype=np.int64),
+                    "sides": faces_sides[j - 1],
                     **size,
                 }
             )
@@ -822,6 +842,12 @@ class EdgeFade:
             first += n
         many = stopped.any(axis=1)
         width = stopped.shape[1]
+        # Every event that stops each path, which the paths over edges at its other
+        # events go on to and no further (see _beyond).
+        stops = stopped.copy()
+        single = np.flatnonzero((fail >= 0) & ~many[path])
+        stops[path[single], fail[single]] = True
+        table["stops"] = stops[path]
         # Where several events stop a path: each of them, and each leg next to a
         # reflection off its faces among them.
         leg = table["kind"] == _LEG
@@ -840,11 +866,19 @@ class EdgeFade:
         )
         parts = self._terms_at(table, np.flatnonzero(look & ~many[path]), False, max_delay_s)
         stop = np.full(count, -1, dtype=np.int64)
+        explained_by = []  # the paths times the number of edges, plus the edge
         for part in parts:
             own = part["explains"] & (part["at"] == fail[part["slot"]])
             stop[part["path"][own]] = part["at"][own]
+            explained_by.append(part["path"][own] * len(self.edges) + part["edge"][own])
         stop2 = np.full(count, -1, dtype=np.int64)
-        across, handed = self._by_image(table, stop, many, max_delay_s)
+        across, handed = self._by_image(
+            table,
+            stop,
+            many,
+            np.concatenate(explained_by) if explained_by else np.zeros(0, dtype=np.int64),
+            max_delay_s,
+        )
         parts += across
         skip = np.zeros((count, width), dtype=bool)
         if many.any():
@@ -898,63 +932,88 @@ class EdgeFade:
             for lo, hi in zip(bounds[:-1], bounds[1:], strict=True)
         ]
 
-    def _by_image(self, table, stop, many, max_delay_s) -> tuple[list, np.ndarray]:
-        """The terms of the missed paths that one leg stops where no edge explains that
-        at the leg itself (``stop`` -1, set in place; ``many`` marks the paths that
-        several events stop), past the end of an edge that stands on a plane the path
-        reflects off next to the leg and has a face that blocks it (see :meth:`_on_face`).
-        The edge goes on there as its image in the plane: the path over the image is the
-        path over the edge on the leg on the other side of the reflection, where the term
-        is found, and the term is the stopping leg's, in that leg's waves. Also the pairs
-        (the slot times the number of edges, plus the edge) of the legs and edges whose
-        terms are taken so, which those legs do not take again."""
+    def _by_image(self, table, stop, many, explained, max_delay_s) -> tuple[list, np.ndarray]:
+        """The terms of the missed paths that one leg stops (``stop``, the event that an
+        edge explains at the leg itself, or -1, set in place; ``many`` marks the paths
+        that several events stop), past the end of an edge that stands on a plane the
+        path reflects off next to the leg and belongs to the sheet that blocks the leg
+        (:func:`~acoustic_spaces.engine.diffraction.sheets`): a face of the edge blocks
+        it, and the edge explains the stop (see :meth:`_on_face`), or the face that
+        blocks it is joined to the edge's faces by no inside corner (the far part of a
+        bent or curved barrier, another wall of a building). Each such edge once, but
+        not those that explain the leg there (``explained``, the paths times the number
+        of edges, plus the edge). The edge goes on there as its image in the plane: the
+        path over the image is the path over the edge on the leg on the other side of
+        the reflection, where the term is found, and the term is the stopping leg's, in
+        that leg's waves, whether or not another edge explains the leg too (a barrier's
+        end, past its foot, where its top stops the leg). Also the pairs (the slot times
+        the number of edges, plus the edge) of the legs and edges whose terms are taken
+        so, which those legs, getting past the edge, do not take again as one more
+        event."""
         fail, path, at = table["fail"], table["path"], table["at"]
         legs = np.flatnonzero(table["own"] & (table["kind"] == _LEG))
         width = int(at.max()) + 1
         slot_of = np.full((len(stop), width), -1, dtype=np.int64)
         slot_of[path[legs], at[legs]] = legs
-        stopped = legs[(at[legs] == fail[legs]) & ~many[path[legs]] & (stop[path[legs]] < 0)]
+        stopped = legs[(at[legs] == fail[legs]) & ~many[path[legs]]]
         stopped = stopped[table["blocked"][stopped, 0] >= 0]
-        slots, edges, of = [], [], []
+        slots, edges, of, blocking = [], [], [], []
         for side, step in ((0, -2), (1, 2)):
             for s in stopped.tolist():
                 plane, other = int(table["next_to"][s, side]), int(at[s]) + step
                 if plane < 0 or not 0 <= other < width or slot_of[path[s], other] < 0:
                     continue
                 standing = self._standing_on(plane)
+                blocked, point = int(table["blocked"][s, 0]), table["stop_at"][s, 0]
                 blocks = self._on_face(
                     standing,
-                    np.full(len(standing), table["blocked"][s, 0]),
-                    np.broadcast_to(table["stop_at"][s, 0], (len(standing), 3)),
+                    np.full(len(standing), blocked),
+                    np.broadcast_to(point, (len(standing), 3)),
                 )
-                slots.append(np.full(int(blocks.sum()), slot_of[path[s], other]))
-                edges.append(standing[blocks])
-                of.append(np.full(int(blocks.sum()), s))
+                face = _face_at(self.model, blocked, point, self.tolerance)
+                if self._sheet is None:
+                    self._sheet = sheets(self.model)
+                sheet = self._sheet[self.edges.face[standing]]
+                of_sheet = blocks | ((face >= 0) & np.any(sheet == self._sheet[face], axis=1))
+                slots.append(np.full(int(of_sheet.sum()), slot_of[path[s], other]))
+                edges.append(standing[of_sheet])
+                of.append(np.full(int(of_sheet.sum()), s))
+                blocking.append(blocks[of_sheet])
         if not slots:
             return [], np.zeros(0, dtype=np.int64)
         slot, edge, of = np.concatenate(slots), np.concatenate(edges), np.concatenate(of)
+        blocking = np.concatenate(blocking)
         key = slot * len(self.edges) + edge
+        order = np.argsort(key)
         out, handed = [], []
-        for part in self._terms_of(table, slot, edge, False, max_delay_s):
+        taken = explained
+        # The path over the edge's image goes on along the stopping leg, which it gets
+        # past round the image: clear on to the leg's end, as the path's other legs are.
+        unstopped = dict(table, stops=np.zeros_like(table["stops"]))
+        for part in self._terms_of(unstopped, slot, edge, False, max_delay_s):
             keep = np.flatnonzero(~part["lit"])
-            # The first term of each path, on the dark side of its edge.
-            keep = keep[np.unique(part["path"][keep], return_index=True)[1]]
-            keep = keep[stop[part["path"][keep]] < 0]
+            # The first term of each path and edge, on the dark side of the edge.
+            pair = part["path"][keep] * len(self.edges) + part["edge"][keep]
+            keep = keep[np.unique(pair, return_index=True)[1]]
+            pair = part["path"][keep] * len(self.edges) + part["edge"][keep]
+            keep = keep[~np.isin(pair, taken)]
             if len(keep) == 0:
                 continue
             part = _subset(part, keep)
-            order = np.argsort(key)
-            leg = of[order][
+            where = order[
                 np.searchsorted(key[order], part["slot"] * len(self.edges) + part["edge"])
             ]
-            stop[part["path"]] = at[leg]
+            taken = np.concatenate([taken, part["path"] * len(self.edges) + part["edge"]])
+            leg = of[where]
+            explains = blocking[where]
+            stop[part["path"][explains]] = at[leg[explains]]
             handed.append(part["slot"] * len(self.edges) + part["edge"])
             out.append(
                 dict(
                     part,
                     slot=leg,
                     at=at[leg],
-                    explains=np.ones(len(leg), dtype=bool),
+                    explains=explains,
                     source_side=table["source"][leg],
                     listener_side=table["listener"][leg],
                 )
@@ -1316,17 +1375,21 @@ class EdgeFade:
         # plane it reflects off, in the image of the room beyond (a barrier on the ground
         # across the line from the source to the listener's image, where the leg ends on
         # the ground before it): that edge is the next leg's, where it stops the path.
+        # That is where the face crosses the line, not where the line comes nearest to
+        # the edge: just beside a barrier's foot the two lie either side of the ground.
         if passes:
             dark = np.flatnonzero(ok & leg & ~mine)
             if len(dark):
-                closest = _closest(images[0][dark], images[1][dark], edges, edge[dark])
+                crossing = _across_face(
+                    images[0][dark], images[1][dark], edges, edge[dark], self._bisector
+                )
                 at = (images[0][dark], images[1][dark])
                 # An edge along a plane's normal is its own image in it (a corner standing
                 # on the ground): there the side its point lies on says it all.
                 normal = model.plane_normal[np.maximum(ends[dark], 0)]  # (n, 2, m, 3)
                 along = np.abs(np.einsum("nsmj,nj->nsm", normal, edges.direction[edge[dark]]))
                 tilted = np.where(along > 1.0 - 1e-9, -1, ends[dark])
-                ok[dark] &= _on_leg(model, closest, at, tilted, leg[dark])
+                ok[dark] &= _on_leg(model, crossing, at, tilted, leg[dark])
         explains = np.zeros(len(edge), dtype=bool)
         if not passes:
             explains = ~mine & self._explains(table, slot, edge)
@@ -1346,10 +1409,20 @@ class EdgeFade:
                 _towards(model, point[sel], images[side][slot[sel]], planes[:, side], own)
                 for side, own in enumerate((start[sel], end[sel]))
             ]
-            clear = _clear(model, np.vstack([off_edge, off_edge]), np.vstack(reflect))
+            clear = _clear(
+                model, np.vstack([off_edge, off_edge]), np.vstack([r[0] for r in reflect])
+            )
+            clear = [clear[: len(sel)], clear[len(sel) :]]
+            # Where they stand in for a missed path, on from there too (see _beyond).
+            if not passes:
+                for side in (0, 1):
+                    where, plane = reflect[side]
+                    clear[side] &= self._beyond(
+                        table, slot[sel], side, where, plane, images[side][slot[sel]]
+                    )
             # Not towards an event that stops a missed path, which blocks it there.
             free = table["free"][slot[sel]]
-            sel = sel[(clear[: len(sel)] | free[:, 0]) & (clear[len(sel) :] | free[:, 1])]
+            sel = sel[(clear[0] | free[:, 0]) & (clear[1] | free[:, 1])]
         if len(sel) == 0:
             return None
         edge, slot, column, n, point = edge[sel], slot[sel], column[sel], n[sel], point[sel]
@@ -1459,6 +1532,71 @@ class EdgeFade:
             "length": r1 + r2,
             "point": point,
         }
+
+    def _beyond(self, table, slot, side, point, plane, image) -> np.ndarray:
+        """Whether the paths over edges at the events ``slot`` of ``table`` (events
+        where they stand in for missed paths: that stop them, or legs next to a stopped
+        reflection where several events stop them) are clear on their ``side`` (0 the
+        source's, 1 the listener's) beyond ``point``, where they first reflect, off
+        ``plane`` (-1 where they do not), on the way to ``image`` (their image on that
+        side): leg after leg, off the planes the path reflects off there, to the source
+        or the listener. A leg of the path over an edge meets other points than the
+        path's own, which may lie past the foot of a barrier on the ground they reflect
+        off, or behind another obstacle. They go on only up to another event that stops
+        the path (``table["stops"]``), whose terms continue them there (a product of
+        terms)."""
+        model = self.model
+        n = len(slot)
+        ok = np.ones(n, dtype=bool)
+        if n == 0:
+            return ok
+        stops, own, at = table["stops"][slot], table["own"][slot], table["at"][slot]
+        width = stops.shape[1]
+        remaining = table["sides"][slot, side].copy()  # (n, K)
+        image = np.array(image, dtype=float, copy=True)
+        point = np.array(point, dtype=float, copy=True)
+        plane = np.array(plane, dtype=np.int64, copy=True)
+        # The leg each path over an edge goes along first on this side, then the next.
+        leg = at // 2 if side == 0 else (at + 1) // 2
+        any_reflection = stops[:, 1::2].any(axis=1)
+        step = _OFFSET * self.d.size
+        rows_all = np.arange(n)
+
+        def stopping(event: np.ndarray) -> np.ndarray:
+            inside = (event >= 0) & (event < width)
+            return inside & stops[rows_all, np.clip(event, 0, width - 1)]
+
+        alive = plane >= 0
+        while alive.any():
+            leg = leg - 1 if side == 0 else leg + 1
+            # The reflection it leaves the plane at (other orders of the reflections keep
+            # the legs in place, not the reflections: any that stops halts them) and the
+            # leg it then goes along.
+            reflection = 2 * leg + 1 if side == 0 else 2 * leg - 1
+            halt = stopping(2 * leg) | np.where(own, stopping(reflection), any_reflection)
+            alive &= ~halt
+            rows = np.flatnonzero(alive)
+            if len(rows) == 0:
+                break
+            hit = remaining[rows] == plane[rows, None]
+            first = np.argmax(hit, axis=1)
+            mark = hit[np.arange(len(rows)), first]
+            remaining[rows[mark], first[mark]] = -1
+            image[rows] = model.mirror(image[rows], plane[rows])
+            ahead = (remaining[rows] >= 0).any(axis=1)
+            nxt, nxt_plane = _towards(model, point[rows], image[rows], remaining[rows], image[rows])
+            # A path over an edge that meets none of the planes left (there are some):
+            # its way on is not this path's, and is left as it is.
+            go = ~ahead | (nxt_plane >= 0)
+            rows, nxt, nxt_plane = rows[go], nxt[go], nxt_plane[go]
+            alive[np.flatnonzero(alive)[~go]] = False
+            toward = nxt - point[rows]
+            length = np.linalg.norm(toward, axis=1)
+            start = point[rows] + step * toward / np.maximum(length, 1e-300)[:, None]
+            ok[rows] &= _clear(model, start, nxt)
+            point[rows], plane[rows] = nxt, nxt_plane
+            alive[rows] &= ok[rows] & (nxt_plane >= 0)
+        return ok
 
     def _sizes(self, table, slot, face, listener_side) -> np.ndarray:
         """(n, B) the share of the pressure that the sizes of the faces leave the path
@@ -2092,21 +2230,41 @@ def _on_leg(model, point, images, ends, leg) -> np.ndarray:
     return ok
 
 
-def _towards(model, point, image, planes, fallback):
+def _across_face(start, end, edges, edge, bisector) -> np.ndarray:
+    """(n, 3) where the lines from ``start`` to ``end`` (n, 3) cross the plane through
+    each edge of ``edges`` ``edge`` (n,) and the middle of its open side (``bisector``,
+    :meth:`~acoustic_spaces.engine.diffraction.Edges.bisector`), which holds the middle
+    of its solid side (a thin screen's face); ``start`` where they run along it. A line
+    on the dark side of an edge's shadow boundary passes through the solid side, and
+    crosses it there."""
+    normal = np.cross(edges.direction[edge], bisector[edge])
+    line = end - start
+    across = np.einsum("ij,ij->i", normal, line)
+    usable = np.abs(across) > 1e-12 * np.linalg.norm(line, axis=1)
+    t = np.einsum("ij,ij->i", normal, edges.start[edge] - start) / np.where(usable, across, 1.0)
+    return start + np.where(usable, t, 0.0)[:, None] * line
+
+
+def _towards(model, point, image, planes, fallback) -> tuple[np.ndarray, np.ndarray]:
     """Where the lines from ``point`` to ``image`` (its side of a path over an edge, the
     mirror image of what lies beyond the planes) first meet one of ``planes`` (n, m), -1
-    for none; ``fallback`` where they meet none."""
+    for none; ``fallback`` where they meet none. Also the plane each meets there, or
+    -1."""
     toward = image - point
     first = np.full(len(point), np.inf)
+    met_plane = np.full(len(point), -1, dtype=np.int64)
     for plane in planes.T:
         safe = np.maximum(plane, 0)
         normal, offset = model.plane_normal[safe], model.plane_offset[safe]
         across = np.einsum("ij,ij->i", normal, toward)
         usable = (plane >= 0) & (np.abs(across) > 1e-12)
         t = (offset - np.einsum("ij,ij->i", normal, point)) / np.where(usable, across, 1.0)
-        first = np.where(usable & (t > 0.0) & (t <= 1.0) & (t < first), t, first)
+        nearer = usable & (t > 0.0) & (t <= 1.0) & (t < first)
+        first = np.where(nearer, t, first)
+        met_plane = np.where(nearer, plane, met_plane)
     met = np.isfinite(first)
-    return np.where(met[:, None], point + np.where(met, first, 0.0)[:, None] * toward, fallback)
+    where = np.where(met[:, None], point + np.where(met, first, 0.0)[:, None] * toward, fallback)
+    return where, met_plane
 
 
 def _nearest_face(model, plane: int, point: np.ndarray) -> int:

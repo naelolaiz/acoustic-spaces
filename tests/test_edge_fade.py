@@ -13,7 +13,7 @@ from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import early_paths
 from acoustic_spaces.engine.clusters import Clusters
 from acoustic_spaces.engine.coherent import total_energy
-from acoustic_spaces.engine.diffraction import EdgeDiffraction, find_edges
+from acoustic_spaces.engine.diffraction import EdgeDiffraction, find_edges, sheets
 from acoustic_spaces.engine.edge_fade import _FACE, EdgeFade
 from acoustic_spaces.engine.model import TraceModel
 
@@ -427,12 +427,26 @@ def test_nothing_where_the_edge_diffraction_has_every_path(
     assert np.abs(10 * np.log10(faded / plain)).max() < 0.05
 
 
-def _outdoors(listener, *, barrier_m: float = 3.0, shed: bool = False, **early) -> Room:
-    """A source 1 m over a ground, a barrier ``barrier_m`` high 10 m away along y and, with
-    ``shed``, a shed as high as the barrier is out of the way."""
+def _outdoors(
+    listener,
+    *,
+    barrier_m: float = 3.0,
+    shed: bool = False,
+    source=(0.0, 0.0, 1.0),
+    path=((10, -30), (10, 30)),
+    behind=None,
+    **early,
+) -> Room:
+    """A ``source`` (by default 1 m over a ground), a barrier ``barrier_m`` high along
+    ``path`` (by default 10 m away, along y), with ``behind`` another as high along that
+    path, and, with ``shed``, a shed as high as the barrier out of the way."""
     geometry = {
         "ground": {"extent": [[-100, -100], [100, 100]], "sky": 40},
-        "barriers": [{"name": "wall", "path": [[10, -30], [10, 30]], "height": barrier_m}],
+        "barriers": [
+            {"name": name, "path": [list(p) for p in line], "height": barrier_m}
+            for name, line in (("wall", path), ("wall_2", behind))
+            if line is not None
+        ],
     }
     if shed:
         footprint = [[20, 20], [26, 20], [26, 26], [20, 26]]
@@ -446,8 +460,8 @@ def _outdoors(listener, *, barrier_m: float = 3.0, shed: bool = False, **early) 
                     "hard": {"absorption": [0.05] * 8, "scattering": 0.0},
                 },
                 "default_material": "ground",
-                "assignments": {"wall": "hard", "shed": "hard"},
-                "sources": [{"name": "s", "position": [0.0, 0.0, 1.0]}],
+                "assignments": {"wall": "hard", "wall_2": "hard", "shed": "hard"},
+                "sources": [{"name": "s", "position": list(source)}],
                 "listeners": [{"name": "l", "position": list(listener)}],
                 "simulation": {
                     "ir_length_s": 0.3,
@@ -470,6 +484,201 @@ def test_a_barrier_top_is_not_on_the_leg_before_the_ground(monkeypatch, height: 
     monkeypatch.setattr(EdgeFade, "terms", lambda self, *args: None)
     plain = total_energy(early_paths(room))
     assert np.abs(10 * np.log10(faded / plain)).max() < 0.01
+
+
+#: Behind a barrier 20 m long on a rigid ground, from a source 1.5 m up 2 m in from its
+#: end: the listeners either side of the heights where the reflection off the ground
+#: crosses the barrier's foot (1.5 m) and where the paths over the end and the top that
+#: reflect off the ground before them pass the ground there, and on the plane of the
+#: top with the source there too; and behind the barrier bent 5 m from that end, where
+#: the face of its far end lies in the other part's plane, and where the reflection lies
+#: in front of the bent part's foot, past the plane of the near end's face; so behind a
+#: curved one (six parts 4 m long, each turned 8 degrees from the last), too slightly
+#: bent anywhere for an edge there; and behind barriers bent by 30 and 45 degrees away
+#: from the source and by 18 degrees towards it, whose bends diffract.
+_STRAIGHT, _BENT = ((10, -10), (10, 10)), ((10, -10), (10, -5), (13, 10))
+_BENT_30, _BENT_45 = ((10, -10), (10, -5), (18.66, 10)), ((10, -10), (10, -5), (25, 10))
+_BENT_IN = ((10, -10), (10, -5), (5, 10))
+_TURNS = np.radians(90.0 - 8.0 * np.arange(6))
+_CURVED = tuple(
+    map(
+        tuple,
+        np.cumsum(
+            [[10.0, -10.0], *(4.0 * np.column_stack([np.cos(_TURNS), np.sin(_TURNS)]))], axis=0
+        ).tolist(),
+    )
+)
+_FOOT_LISTENERS = (
+    [(_STRAIGHT, (0.0, -8.0, 1.5), (20.0, -9.9, z)) for z in (1.47, 1.4725, 1.49, 1.4999, 1.5001)]
+    + [
+        (_STRAIGHT, (0.0, -8.0, 1.5), (20.0, -4.0, z))
+        for z in (1.37, 1.39, 1.49, 1.51, 1.65, 1.67, 1.73)
+    ]
+    + [(_STRAIGHT, (0.0, -10.0, 3.0), (20.0, y, 3.0)) for y in (-9.9, -9.5)]
+    + [(_BENT, (0.0, -8.0, 1.5), (20.0, -4.0, z)) for z in (1.49, 1.51)]
+    + [(_BENT, (0.0, 0.0, 2.5), (20.0, 0.0, 2.2)), (_CURVED, (0.0, -8.0, 1.5), (20.0, 4.0, 1.4))]
+    + [
+        (_BENT_30, (0.0, 0.0, 2.5), (25.0, 0.0, 2.38)),
+        (_BENT_45, (0.0, 0.0, 2.5), (25.0, 0.0, 2.2)),
+    ]
+    + [(_BENT_IN, (0.0, -8.0, 1.5), (20.0, -4.0, 1.6))]
+)
+
+
+@pytest.mark.parametrize(("path", "source", "listener"), _FOOT_LISTENERS)
+def test_a_reflection_off_the_ground_behind_a_barrier_s_foot_is_bent_once(
+    monkeypatch, path, source, listener
+) -> None:
+    """The reflection off the ground just behind a barrier's foot, which the barrier stops
+    on the leg before it (or just in front, on the leg after it): the edge diffraction
+    bends it over the top and round the ends, before the reflection and after it, and the
+    fade adds nothing. The leg that gets past the barrier took terms of the one it stops,
+    as one more event: of an end, whose path over it reflects off the ground on that
+    leg's side (the leg it stops took it only where no other edge explained the stop and
+    a face of that end blocked it), and of the top, where the line from the source's
+    image to the listener came nearest to it above the ground though the barrier's face
+    crosses it below; behind a bent or curved barrier, of its near end, whose face's
+    plane crosses the leg that gets past in front of the part that stops the other (the
+    leg it stops took it only where a face of that end blocked it, not where the face it
+    bends into does). Their products with the stop's terms replaced the edge
+    diffraction's own paths: the level stepped by up to 4.4 dB at 125 Hz between
+    listeners 2.5 mm apart, and 5.3 dB 2 cm apart; they took 3.1 dB off the level at
+    63 Hz behind the bent barrier, 1.1 dB at 250 Hz behind the curved one, and 3.6, 1.4
+    and 6.3 dB in a band behind the bends of 30, 45 and 18 degrees. Where the bend
+    itself diffracts, its two parts must still count as one obstacle, not two: else
+    1.4 dB at 125 Hz is lost behind the bends of 30 and 45 degrees."""
+    room = _outdoors(listener, source=source, path=path, max_order=2, diffraction="first_order")
+    faded = total_energy(early_paths(room))
+    monkeypatch.setattr(EdgeFade, "terms", lambda self, *args: None)
+    plain = total_energy(early_paths(room))
+    assert np.abs(10 * np.log10(faded / plain)).max() < 0.01
+
+
+def test_a_barrier_bent_or_not_is_one_sheet_and_a_room_s_walls_are_not() -> None:
+    """A barrier is one obstacle whether its bends diffract or not, and a building is
+    one, but the walls of a room, which meet at inside corners, are six."""
+    for path in (_STRAIGHT, _BENT, _BENT_30, _BENT_45, _BENT_IN, _CURVED):
+        model = TraceModel.from_room(_outdoors((20.0, 0.0, 1.5), path=path))
+        barrier = model.plane_two_sided[model.face_plane]
+        assert len(np.unique(sheets(model)[barrier])) == 1
+    model = TraceModel.from_room(_outdoors((20.0, 0.0, 1.5), shed=True))
+    corners = np.asarray(model.room.mesh.vertices)[model.room.mesh.faces]
+    shed = (corners[:, :, :2].min(axis=(1, 2)) >= 20.0) & (
+        corners[:, :, :2].max(axis=(1, 2)) <= 26.0
+    )
+    assert shed.sum() == 10 and len(np.unique(sheets(model)[shed])) == 1
+    room = Room.from_yaml(EXAMPLES / "shoebox" / "scene.yaml")
+    labels = sheets(TraceModel.from_room(room))
+    assert np.array_equal(np.unique(labels, return_counts=True)[1], [2] * 6)
+
+
+def test_in_a_model_not_oriented_only_the_faces_of_a_plane_join() -> None:
+    """Where the model says not which side of its faces is solid (an open model, such as
+    the leaky classroom's), an inside corner cannot be told from a bend that diffracts:
+    the six surfaces of the room are six sheets, not one."""
+    model = TraceModel.from_room(Room.from_yaml(EXAMPLES / "leaky_classroom" / "scene.yaml"))
+    assert not model.oriented
+    labels = sheets(model)
+    assert len(np.unique(labels)) == model.plane_count
+    assert all(len(np.unique(model.face_plane[labels == label])) == 1 for label in labels)
+
+
+#: Two barriers 4 m apart, one shaped like a U and one like a Z, from the source at
+#: (0, -8, 1.5) 2 m in from their ends: listeners either side of the height (1.715 m)
+#: where the path from the source round the first barrier's end to the listener's image
+#: in the ground passes the end's foot.
+_BEHIND = {
+    "two barriers": {"path": _STRAIGHT, "behind": ((14, -10), (14, 10))},
+    "U": {"path": ((10, -10), (10, 10), (14, 10), (14, -10))},
+    "Z": {"path": ((10, -10), (10, 0), (14, 0), (14, -10))},
+}
+
+
+@pytest.mark.parametrize("mode", ["first_order", "second_order"])
+@pytest.mark.parametrize("shape", list(_BEHIND))
+def test_a_path_over_an_edge_is_clear_past_the_ground(shape: str, mode: str) -> None:
+    """Behind two barriers the paths over an edge that reflect off the ground are clear
+    on every leg, not only up to the ground: the level does not step between 1.70 and
+    1.72 m (under 0.15 dB from 63 to 500 Hz). Below, the paths of the missed reflection
+    off the ground round the first barrier's end, on to the listener, and round the
+    second's, back from the ground past the first's foot to the source, went through the
+    other barrier: the level stepped by up to 15.7 dB at 63 Hz."""
+    levels = [
+        10
+        * np.log10(
+            total_energy(
+                early_paths(
+                    _outdoors(
+                        (20.0, -4.0, z),
+                        source=(0.0, -8.0, 1.5),
+                        max_order=2,
+                        diffraction=mode,
+                        **_BEHIND[shape],
+                    )
+                )
+            )
+        )
+        for z in (1.70, 1.72)
+    ]
+    assert np.abs(levels[1] - levels[0])[:4].max() < 0.15
+
+
+# The level (dB re the direct sound in free field) behind that barrier, from the source
+# at (0, -8, 1.5): the exact solution by images in the ground (the barrier and its image,
+# a screen 6 m high, each of its four edges' BTM terms from the source and its image,
+# validation/edge_diffraction.py's btm_first), averaged over 96 frequencies in each band.
+_FOOT_EXACT = {
+    (20.0, -9.9, 1.49): [2.46, -1.59, -3.11, -4.7, -10.88, -13.28, -14.0, -16.93],
+    (20.0, -4.0, 1.45): [2.83, -5.2, -10.41, -9.81, -11.64, -14.98, -18.97, -22.25],
+    (20.0, -4.0, 1.6): [2.61, -5.75, -9.4, -10.34, -11.56, -15.87, -19.32, -21.27],
+}
+
+
+#: Behind the curved barrier, from the source at (0, -8, 1.5), as _FOOT_EXACT has it (the
+#: barrier and its image, each part's top and its image, the two ends) from 63 to 500 Hz.
+_CURVED_EXACT = {(20.0, 4.0, 1.4): [-1.06, -4.09, -11.22, -7.1]}
+
+
+@pytest.mark.parametrize("listener", list(_FOOT_EXACT))
+def test_behind_a_barrier_s_foot_as_the_exact_solution(listener) -> None:
+    """With both_sides the edge diffraction has the four paths over the top and the two
+    round each end, and with the fade the level is the exact one, to 0.2 dB from 63 Hz
+    to 1 kHz (the exact solution leaves out the air's absorption, 0.1 dB at 1 kHz over
+    these 20 m, and the barrier's 5 %). Where the reflection off the ground lies just
+    behind the barrier's foot or just in front of it, it was up to 7.1 dB too low."""
+    source = (0.0, -8.0, 1.5)
+    room = _outdoors(
+        listener,
+        source=source,
+        path=_STRAIGHT,
+        max_order=2,
+        diffraction="first_order",
+        diffraction_reflections="both_sides",
+    )
+    squared = float(np.sum((np.asarray(listener) - np.asarray(source)) ** 2))
+    level = 10 * np.log10(total_energy(early_paths(room)) * 4 * np.pi * squared)
+    assert np.abs(level - _FOOT_EXACT[listener])[:5].max() < 0.2
+
+
+@pytest.mark.parametrize("listener", list(_CURVED_EXACT))
+def test_behind_a_curved_barrier_as_the_exact_solution(listener) -> None:
+    """Behind the curved barrier, where the reflection off the ground lies in front of a
+    part's foot and the plane of the near end's face crosses the leg before it, with
+    both_sides the level is the exact one to 0.1 dB from 63 to 500 Hz. The fade gave the
+    leg before the reflection the near end's term as one more event: 0.6 dB too loud at
+    63 Hz, 1.2 and 1.5 dB too soft at 125 and 250 Hz."""
+    source = (0.0, -8.0, 1.5)
+    room = _outdoors(
+        listener,
+        source=source,
+        path=_CURVED,
+        max_order=2,
+        diffraction="first_order",
+        diffraction_reflections="both_sides",
+    )
+    squared = float(np.sum((np.asarray(listener) - np.asarray(source)) ** 2))
+    level = 10 * np.log10(total_energy(early_paths(room)) * 4 * np.pi * squared)
+    assert np.abs(level[:4] - _CURVED_EXACT[listener]).max() < 0.1
 
 
 def test_a_wall_as_high_as_a_roof_does_not_stand_on_its_plane() -> None:

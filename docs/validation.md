@@ -1212,7 +1212,7 @@ A model of such corners is an open item on the [roadmap](roadmap.md).
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
 sight, takes 38 ms per source and listener on four cores without diffraction (23
-paths), 540 ms with `first_order` (995 paths) and 630 ms with `second_order` (1,010
+paths), 540 ms with `first_order` (979 paths) and 630 ms with `second_order` (994
 paths): the median of four timings, each the mean of three runs after a first one,
 with nothing else running on the machine. The terms that make the other specular paths fade at the edges (next section)
 give most of the paths, as each term is a path over its edge, and so is each product of
@@ -1487,7 +1487,13 @@ theory gives +6.0 dB on both sides.
   still reflects on the face, which makes the steps of up to 0.08 dB left round the
   gallery's corner (see above). The edge diffraction's own paths over an edge with a
   reflection before or after it stop where that reflection leaves its face, which the
-  fade makes up for where it follows the path.
+  fade makes up for where it follows the path. A leg that two obstacles block, or two
+  sides of one, is one event, which no one edge explains: behind two barriers 4 m
+  apart, a U-shaped or a Z-shaped one, on a rigid ground, the level steps by up to
+  2.6 dB in a band from 63 to 250 Hz, along the one line of listeners measured, where
+  the reflection off the ground crosses the first one's foot, and behind the U by
+  2.0 dB (`second_order`; 9.4 dB with `first_order`) where it lies just behind the
+  first side's foot and the path round that side's end leaves its foot.
 - **Corners of edges.** Over the edge of a thin screen (a barrier's top and ends, a
   face's free edge) a path's term takes the part of its Fresnel zone that the edge
   covers, as BTM's integral over a finite edge has it (at a free end, a bend or a corner
