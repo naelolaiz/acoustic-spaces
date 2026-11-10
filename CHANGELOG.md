@@ -55,6 +55,22 @@
   longer rewrites a scattering entry given by name as numbers, the Source field keeps
   its caret after Enter, an opening takes no uncertainty, and a source reads "edited
   from ..." once the kind or a value of the uncertainty it names is changed.
+- Changed: behind barriers and buildings in wind, the parabolic equation's runs that
+  differ only past their first obstacle share the march over the open ground before it,
+  and the march steps eight rows of its field at a time: coverage maps of 90 to 96
+  points take 77 to 89 s on one core where they took 104 to 121 s, with the same
+  results.
+- Changed: the wide-angle parabolic equation's steps take up to four frequencies
+  together, two to an SSE2 register: listeners the sound reaches steeply behind a
+  barrier or a building take about 60 s on one core where they took 115 s, and the
+  equation over open ground two to two and a half times the narrow-angle one's time
+  where it took three to four, with the same results.
+- Changed: a walk's places between those traced for their late part mix theirs when it
+  is read instead of holding a copy for the whole run: a walk of 201 places through the
+  `church` example peaks at 336 MiB where it took 1,685 MiB, with the same results, and
+  the memory estimate counts what is kept.
+- Changed: the tests write every thread's stack to the log when one has run for 20
+  minutes (pytest's `faulthandler_timeout`), to show where a hung job stands.
 
 ## 4.2.1
 

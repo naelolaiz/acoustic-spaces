@@ -7,6 +7,7 @@ import math
 import time
 from collections.abc import Callable, Collection, Generator, Mapping, Sequence
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,7 +24,7 @@ from acoustic_spaces.engine.edge_fade import EdgeFade
 from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel, free_field_energy
 from acoustic_spaces.engine.refracted import direct_times, refraction_for, solve
-from acoustic_spaces.engine.response import Response
+from acoustic_spaces.engine.response import Deferred, Response
 from acoustic_spaces.engine.turbulence import Eddies
 from acoustic_spaces.geometry import distance_to_surface
 from acoustic_spaces.parameters import RoomParameters
@@ -402,29 +403,11 @@ def _mix_listeners(late: late_stage.LateEnergy, weights: np.ndarray) -> late_sta
     )
 
 
-def _mix_sources(
-    lates: Sequence[late_stage.LateEnergy], weights: Sequence[float]
-) -> late_stage.LateEnergy:
-    """The late energy of several sources, summed with ``weights``."""
-
-    def mix(name: str) -> np.ndarray:
-        parts = [getattr(late, name) for late in lates]
-        if not parts[0].size:
-            return parts[0]
-        return np.einsum("t,t...->...", np.asarray(weights, dtype=float), np.array(parts))
-
-    # Batches only where every source has as many.
-    batches = {late.batches.shape for late in lates}
-    return dataclasses.replace(
-        lates[0],
-        energy=mix("energy"),
-        directional=mix("directional"),
-        moments=mix("moments"),
-        batches=mix("batches") if len(batches) == 1 else np.zeros((0, 0, 0, 0)),
-        rays=0,
-        escaped_rays=0,
-        traced_rays=0,
-    )
+def _mixed(parts: Sequence[np.ndarray | Deferred], weights: np.ndarray) -> np.ndarray:
+    """``parts`` (arrays of one shape, those :class:`Deferred` made first) summed with
+    ``weights``."""
+    made = [part.make() if isinstance(part, Deferred) else part for part in parts]
+    return np.einsum("t,t...->...", weights, np.array(made))
 
 
 def coherent_bands(settings, bands: int) -> int:
@@ -495,7 +478,10 @@ def simulate(
     (for a source) that keep their own. Only those are traced by the stochastic ray
     tracer, by far the costliest stage; the statistical method gives everyone their own.
     Walks use it (:func:`acoustic_spaces.walkthrough.simulate_walk`): the late field
-    changes slowly from place to place, the early sound does not.
+    changes slowly from place to place, the early sound does not. The traced late parts
+    are kept once, and a response makes its mix of them when it reads its late part
+    (:class:`~acoustic_spaces.engine.response.Deferred`); only a line's or a surface's is
+    mixed for every listener as it is traced.
 
     ``share_waves`` names sources whose runs of the parabolic equation (outdoors in wind
     or temperature gradients) may serve one another: those at one height over one
@@ -526,7 +512,13 @@ def simulate(
     faces = 0 if groups is None else int(np.max(groups, initial=-1)) + 1
     run_size.check(
         run_size.simulation_need(
-            room, settings, chosen_sources, chosen_listeners, threads, groups=faces
+            room,
+            settings,
+            chosen_sources,
+            chosen_listeners,
+            threads,
+            groups=faces,
+            mixed=late_from or (),
         )
     )
     # Seeds follow the scene's order, so a run of some sources or listeners gives them
@@ -585,6 +577,10 @@ def simulate(
 
     def add(info: dict[str, float], key: str, value: float) -> None:
         info[key] = info.get(key, 0.0) + value
+
+    # The air's profiles by their key, which every source bent by it shares
+    # (:meth:`~acoustic_spaces.engine.refracted.Refraction.profile`).
+    profiles: dict = {}
 
     def trace_point(
         name, label, position, directivity, orientation, point_seed, rays, info, single, own_late
@@ -656,6 +652,7 @@ def simulate(
             wide_angle=early_cfg.parabolic_equation == "wide_angle",
             barrier_frequencies=early_cfg.barrier_frequencies,
             edges=None if diffraction is None else diffraction.edges,
+            profiles=profiles,
         )
         if refraction is not None:
             say(f"{label}: paths bent by the wind and the temperature")
@@ -669,6 +666,9 @@ def simulate(
             pressures, seconds = yield planned
             started = time.perf_counter() - seconds
             paths = planned.finish(pressures)
+            # The plan, with the paths as they waited, is not kept while the late part is
+            # traced.
+            del planned, pressures
             direct = direct_times(direct, paths)
         if model.plants is not None:
             say(f"{label}: paths through vegetation")
@@ -735,7 +735,10 @@ def simulate(
             add(info, "escaped_rays", float(late.escaped_rays))
             add(info, "traced_rays", float(late.traced_rays))
             info["receiver_radius_m"] = float(np.min(radius))
-            if listener_mix is not None:
+            if listener_mix is not None and not single:
+                # A line's or a surface's points are summed listener by listener as they
+                # are traced, so each is mixed for every listener now; a point source's
+                # stays as traced, and its responses mix it when they are read.
                 late = _mix_listeners(late, listener_mix[1])
         add(info, "late_s", time.perf_counter() - started)
         return direct, paths, late
@@ -832,18 +835,56 @@ def simulate(
     _drive([trace_source(source) for source in chosen_sources if source.name in sharing])
     details = {source.name: details[source.name] for source in chosen_sources}
 
+    def giver(source) -> tuple[late_stage.LateEnergy, np.ndarray | None]:
+        """The late energy traced for ``source`` (in ``done``), and the weights that mix
+        it for every listener where it is still at the listeners it was traced at
+        (``traced_at``); None where it is at all of them."""
+        mixes = listener_mix is not None and len(source.elements()) == 1
+        return done[source.name][4], listener_mix[1] if mixes else None
+
+    def late_array(name: str, givers: list, shares: np.ndarray | None, k: int) -> np.ndarray:
+        """The array ``name`` of the late part of a response at listener ``k``, from the
+        sources it comes from (``givers``, as :func:`giver` gives each) summed with
+        ``shares``, or from the one giver as it is for None. A mix, of the listeners
+        the late part was traced at or of the sources, is made when the response reads
+        it (:class:`Deferred`), of those with a weight alone: the others' energy times 0
+        would add nothing. Each value is summed over the parts in turn, as a mix of all
+        the listeners at once sums it: the traced arrays are C-contiguous with more than
+        one value a listener, so numpy's einsum does not run along the parts innermost
+        (where it would sum with several accumulators, in another order)."""
+        parts: list[np.ndarray | Deferred] = []
+        for late, weights in givers:
+            array = getattr(late, name)
+            if weights is None:
+                parts.append(array[k])
+            else:
+                used = np.flatnonzero(weights[k])
+                mix = partial(_mixed, [array[t] for t in used], weights[k][used])
+                parts.append(Deferred(mix))
+        part = parts[0] if shares is None else Deferred(partial(_mixed, parts, shares))
+        return part.field() if isinstance(part, Deferred) else part
+
     for s_index, source in enumerate(chosen_sources):
         src, direct, cutoff, paths, late, waves = done[source.name]
+        shares = None
+        if late is not None:
+            givers = [giver(source)]
+        else:
+            row = source_mix[1][s_index]
+            used = np.flatnonzero(row)
+            givers = [giver(chosen_sources[source_mix[0][j]]) for j in used]
+            shares = row[used]
+            late = givers[0][0]
         if source_mix is None:
             # No other source takes this one's late part: once its responses have what
             # they keep of it (a copy, where the source is fed), it can go.
             del done[source.name]
-        if late is None:
-            row = source_mix[1][s_index]
-            used = np.flatnonzero(row)
-            late = _mix_sources(
-                [done[chosen_sources[source_mix[0][j]].name][4] for j in used], row[used]
-            )
+        # Of the late part's arrays besides the energy, the response has those the
+        # first source it comes from has, and batches only where every source has as
+        # many.
+        directional = bool(late.directional.size)
+        moments = bool(late.moments.size)
+        batches = bool(late.batches.size) and len({x.batches.shape[1:] for x, _ in givers}) == 1
         info = details[source.name]
         fed = is_fed(source)
         free_field = None
@@ -860,7 +901,7 @@ def simulate(
                 source=source.name,
                 listener=listener.name,
                 early=paths[k],
-                late=late.energy[k],
+                late=late_array("energy", givers, shares, k),
                 time_step=late.time_step,
                 length_s=length,
                 direct_delay_s=float(direct[k]),
@@ -870,15 +911,19 @@ def simulate(
                 seed=_seed(info["seed"], listener_index[listener.name] + 1),
                 orientation=np.array(listener.orientation.rotation()),
                 late_directions=late.directions,
-                late_directional=late.directional[k]
-                if late.directional.size
+                late_directional=late_array("directional", givers, shares, k)
+                if directional
                 else np.zeros((0, 0, 0)),
                 direction_step=late.direction_step,
                 wave=waves[k],
                 source_direction=_towards(src, listener_pos[k]),
-                late_moments=late.moments[k] if late.moments.size else np.zeros((0, 0, 0)),
+                late_moments=late_array("moments", givers, shares, k)
+                if moments
+                else np.zeros((0, 0, 0)),
                 moment_step=late.moment_step,
-                late_batches=late.batches[k] if late.batches.size else np.zeros((0, 0, 0)),
+                late_batches=late_array("batches", givers, shares, k)
+                if batches
+                else np.zeros((0, 0, 0)),
                 batch_step=late.batch_step,
                 free_field=None if free_field is None else free_field[k],
             )
@@ -904,10 +949,18 @@ def _drive(steps: list[Generator]) -> None:
         solved = solve([planned for _, planned in waiting])
         # Each source's share of the runs' time.
         seconds = (time.perf_counter() - started) / len(waiting)
+        if len(solved) != len(waiting):
+            raise ValueError(f"{len(solved)} sets of pressures for {len(waiting)} plans")
         going = []
-        for (step, _), pressures in zip(waiting, solved, strict=True):
+        # The sources in turn, the first first; each one's plan and pressures are taken
+        # off the lists as they are sent, so that they do not stay while the others are
+        # traced on.
+        waiting.reverse()
+        solved.reverse()
+        while waiting:
+            step = waiting.pop()[0]
             try:
-                going.append((step, step.send((pressures, seconds))))
+                going.append((step, step.send((solved.pop(), seconds))))
             except StopIteration:
                 pass
         waiting = going

@@ -666,7 +666,10 @@ Before a simulation or a coverage map starts, the memory of its late part is est
 of the response, and at a listener, every 10 ms, for each arrival direction
 (`late.directions`) and as each batch of rays gives it (`late.batches`), for every
 source until the run ends; and while a source is traced,
-the tracer's own. On the CPU that is a copy of the results for each thread that sums
+the tracer's own. The places of a [walk](spatial-audio.md#walkthroughs) between those
+traced for their late part hold none of it: theirs is mixed from the traced places on
+either side when it is read, and the estimate counts the traced ones alone. On the CPU
+the tracer's own is a copy of the results for each thread that sums
 rays, 256 MiB at most together (one thread at least, however large the copy): a run
 whose copies would take more runs on fewer threads, and more slowly. The examples'
 copies take 1.6 MiB a thread at most, as the default vector-based scattering traces one

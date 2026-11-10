@@ -2565,8 +2565,9 @@ parabolic equation gives the 1 kHz band too, within 0.01 dB to 500 m, 53 dB down
 Each band of the wide-angle equation marches a grid of twenty points per wavelength of
 its highest frequency in steps of three wavelengths, ten tridiagonal solves a step,
 where the narrow-angle one takes a pair of Fourier transforms a step on a grid half as
-fine, in steps of five wavelengths: three to four times the work, all of it in the
-bands the parabolic equation gives. Neither equation is checked against measurements
+fine, in steps of five wavelengths: two to two and a half times the time (1.9 to 2.6 on
+one core, for listeners 100 m to 2 km out over grass in the `windy` preset and over
+hard ground in `clear_night`), all of it in the bands the parabolic equation gives. Neither equation is checked against measurements
 in strong refraction, and neither is combined with a terrain yet (see
 [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
 
@@ -2608,8 +2609,9 @@ off. Other listeners in the same direction, whose ranges break a run's steps, mo
 steep level by less than 0.001 dB, the wide-angle equation being converged at its step,
 and a flatter one as before, by up to 0.53 dB per third octave from 50 to 500 Hz and 0.17
 dB per octave band (a source 30 m up, downwind in the `windy` preset, listeners 47 m to 1
-km away). The steep listeners' bands take the wide-angle equation's work, about four times
-the narrow-angle one's.
+km away). The steep listeners' bands take the wide-angle equation's time: 0.6 s instead
+of 0.1 s on one core for three listeners 10 to 20 m up, 30 to 60 m from a source 1 m up
+over a lawn in the `windy` preset.
 
 ## Terrain against closed forms and the exact wedge
 

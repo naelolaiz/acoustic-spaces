@@ -120,6 +120,97 @@ def test_the_steps_solve_their_tridiagonal_systems() -> None:
     assert np.array_equal(one, many)
 
 
+def _written_out(m, op, a, b, psi) -> np.ndarray:
+    """One step on psi, each row alone and every product and sum of real numbers on its
+    own, in the compiled steps' order (complex values as pairs of Python floats)."""
+
+    def pair(value):
+        return float(value.real), float(value.imag)
+
+    def add(x, y):
+        return x[0] + y[0], x[1] + y[1]
+
+    def sub(x, y):
+        return x[0] - y[0], x[1] - y[1]
+
+    def mul(x, y):
+        return x[0] * y[0] - x[1] * y[1], x[0] * y[1] + x[1] * y[0]
+
+    def flush(x):
+        return (0.0, 0.0) if abs(x[0]) < 1e-150 and abs(x[1]) < 1e-150 else x
+
+    out = np.empty_like(psi)
+    n = psi.shape[1]
+    for row in range(len(psi)):
+        field = [pair(value) for value in psi[row]]
+
+        def diagonal(d, c, i, row=row):
+            return add(pair(m[row, d, i]), mul(c, pair(op[row, d, i])))
+
+        for aj, bj in zip(map(pair, a[row]), map(pair, b[row]), strict=True):
+            inverse = []
+            above = (0.0, 0.0)  # the upper diagonal over the previous pivot
+            for i in range(n):
+                pivot = diagonal(1, bj, i)
+                if i > 0:
+                    pivot = sub(pivot, mul(diagonal(0, bj, i), above))
+                size = pivot[0] * pivot[0] + pivot[1] * pivot[1]
+                inverse.append((pivot[0] / size, -pivot[1] / size))
+                above = mul(diagonal(2, bj, i), inverse[i])
+            # (M + a L) psi, eliminated forwards as it is formed.
+            y = []
+            for i in range(n):
+                d = mul(diagonal(1, aj, i), field[i])
+                if i > 0:
+                    d = add(d, mul(diagonal(0, aj, i), field[i - 1]))
+                    d = sub(d, mul(diagonal(0, bj, i), y[i - 1]))
+                if i + 1 < n:
+                    d = add(d, mul(diagonal(2, aj, i), field[i + 1]))
+                y.append(flush(mul(d, inverse[i])))
+            # Back substitution.
+            field[n - 1] = y[n - 1]
+            for i in range(n - 2, -1, -1):
+                over = mul(diagonal(2, bj, i), inverse[i])
+                field[i] = flush(sub(y[i], mul(over, field[i + 1])))
+        out[row] = [complex(*value) for value in field]
+    return out
+
+
+@pytest.mark.parametrize("own", [False, True])
+def test_the_steps_round_as_written_out(own) -> None:
+    # Seven rows, which the steps march four, two and one together; with any diagonals
+    # and with the equation's own, over a grassy ground.
+    rows, n = 7, 12
+    m, op, a, b = _system(rows, n, seed=3)
+    if own:
+        f = 100.0 * 2.0 ** np.arange(rows)
+        absorbing = 0.3j * np.linspace(0.0, 1.0, n) ** 2
+        zg = np.conj(surface_impedance(f, 200.0))
+        m, op = wide_angle._operators(
+            f, 2.0 * math.pi * f / C, C + np.arange(n), absorbing, zg, 0.02
+        )
+    rng = np.random.default_rng(4)
+    psi = rng.normal(size=(rows, n)) + 1j * rng.normal(size=(rows, n))
+    # Rows about as small as what the steps set to zero, and one with zeros.
+    psi[1] *= 1e-150
+    psi[5] *= 1e-151
+    psi[2, 3:9] = 0.0
+    expected = _written_out(m, op, a, b, psi)
+    assert np.any(expected[1] == 0.0) and np.any(expected[1] != 0.0)
+    for threads in (1, 2, 3):
+        field = psi.copy()
+        _native.RationalSteps(m, op, a, b, threads).apply(field, threads)
+        assert field.tobytes() == expected.tobytes()
+    # A row alone.
+    for row in (0, 1, 6):
+        field = psi[row : row + 1].copy()
+        steps = _native.RationalSteps(
+            m[row : row + 1], op[row : row + 1], a[row : row + 1], b[row : row + 1]
+        )
+        steps.apply(field)
+        assert field.tobytes() == expected[row : row + 1].tobytes()
+
+
 def test_the_steps_check_what_they_are_given() -> None:
     m, op, a, b = _system(2, 5)
     with pytest.raises(ValueError, match="rows, 3, points"):
@@ -131,6 +222,11 @@ def test_the_steps_check_what_they_are_given() -> None:
         steps.apply(np.zeros((2, 4), dtype=complex))
     with pytest.raises(TypeError):
         steps.apply(np.zeros((2, 5)))  # real: not stepped in place
+    # No terms: a step leaves the field as it is.
+    field = np.random.default_rng(2).normal(size=(2, 5)) + 1j
+    kept = field.copy()
+    _native.RationalSteps(m, op, a[:, :0].copy(), b[:, :0].copy()).apply(field)
+    assert field.tobytes() == kept.tobytes()
     singular = np.zeros_like(m)
     with pytest.raises(RuntimeError, match="singular"):
         _native.RationalSteps(singular, singular, a, b)
