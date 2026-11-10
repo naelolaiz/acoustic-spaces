@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import dataclasses
 import math
-from collections.abc import Sequence
+import weakref
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -25,6 +26,29 @@ SMOOTH_AFTER_S = 0.05
 #: reads it up to 20 lg r dB off, 0.9 dB at 0.9 m and 0.8 dB at 1.1 m.
 STAGE_DISTANCE_M = 1.0
 STAGE_TOLERANCE_M = 0.1
+#: The fields of a :class:`Response` that hold its late part, each of which may be given
+#: as a :class:`Deferred`.
+LATE_ARRAYS = ("late", "late_directional", "late_moments", "late_batches")
+
+
+@dataclass(frozen=True)
+class Deferred:
+    """A late array that a :class:`Response` makes when it is read instead of holding
+    it: what ``make()`` gives. A walk's places between those traced for their
+    late part have theirs so, each mixed from the traced ones on either side
+    (``simulate(late_from=...)``), which are held once however many places read them."""
+
+    make: Callable[[], np.ndarray]
+
+    def then(self, change: Callable[[np.ndarray], np.ndarray]) -> Deferred:
+        """``change`` of this array, made when it is read."""
+        make = self.make
+        return Deferred(lambda: change(make()))
+
+    def field(self) -> np.ndarray:
+        """This, as a :class:`Response` takes it for one of its ``LATE_ARRAYS``: typed
+        as the array the field reads as."""
+        return cast(np.ndarray, self)
 
 
 @dataclass
@@ -36,6 +60,11 @@ class Response:
 
     Energies are time-integrated intensity for a source of unit energy (the direct sound
     at r metres carries 1 / (4 pi r^2)); times are measured from emission.
+
+    The late part's arrays (``late``, ``late_directional``, ``late_moments`` and
+    ``late_batches``) may each be given as a :class:`Deferred`: the response then keeps
+    that, and reading the field makes the array, which a read of the field again gets
+    until that of another response is made.
     """
 
     source: str
@@ -91,6 +120,11 @@ class Response:
     free_field: np.ndarray | None = None
     #: The early part as the echogram reads its coherent bands, with what it came from.
     _pressure: tuple | None = field(default=None, init=False, repr=False, compare=False)
+
+    def __getstate__(self) -> dict:
+        """What a pickle or a copy of the response holds: its attributes, with the late
+        arrays as they read (one given as a :class:`Deferred` made)."""
+        return {**vars(self), **{name: getattr(self, name) for name in LATE_ARRAYS}}
 
     @property
     def bands(self) -> int:
@@ -225,22 +259,28 @@ class Response:
         early = dataclasses.replace(
             self.early, delay_s=self.early.delay_s + delay_s, energy=self.early.energy * gain
         )
-        directional = self.late_directional
-        if directional.size:
-            directional = _delayed(directional * gain[None, :, None], delay_s / self.direction_step)
+
+        def late(name: str, step: float, gains: np.ndarray, empty: bool = False) -> np.ndarray:
+            """The late array ``name`` (slots of ``step`` s) times ``gains`` and
+            ``delay_s`` later, one without values left as it is unless ``empty``; one
+            made when it is read (:class:`Deferred`) is fed when it is read."""
+
+            def feed(x: np.ndarray) -> np.ndarray:
+                return _delayed(x * gains, delay_s / step) if empty or x.size else x
+
+            held = vars(self)[name]
+            return held.then(feed).field() if isinstance(held, Deferred) else feed(held)
+
+        directional = late("late_directional", self.direction_step, gain[None, :, None])
         wave = None if self.wave is None else self.wave.fed(gain[: self.wave.bands], delay_s)
-        moments = self.late_moments
-        if moments.size:
-            moments = _delayed(moments * gain[None, :, None], delay_s / self.moment_step)
-        batches = self.late_batches
-        if batches.size:
-            batches = _delayed(batches * gain[None, :, None], delay_s / self.batch_step)
+        moments = late("late_moments", self.moment_step, gain[None, :, None])
+        batches = late("late_batches", self.batch_step, gain[None, :, None])
         return dataclasses.replace(
             self,
             early=early,
             late_moments=moments,
             late_batches=batches,
-            late=_delayed(self.late * gain[:, None], delay_s / self.time_step),
+            late=late("late", self.time_step, gain[:, None], empty=True),
             length_s=self.length_s + delay_s,
             direct_delay_s=self.direct_delay_s + delay_s,
             transition_s=self.transition_s + delay_s,
@@ -648,6 +688,46 @@ class Response:
         return spatial_impulse_response(self, fmt, sample_rate, seed)
 
 
+class _LateArray:
+    """One of a :class:`Response`'s ``LATE_ARRAYS``, kept under the field's name among
+    the response's own attributes: read, it is the array given, or what the
+    :class:`Deferred` given makes. The array made last is kept with a weak reference to
+    its :class:`Deferred`, which keeps none of what it is made from and lets the array
+    go with it, so that reading the field of one response again and again makes it
+    once."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self._last: tuple[weakref.ref[Deferred], np.ndarray] | None = None
+
+    def __get__(self, response: Response | None, owner: type | None = None) -> np.ndarray:
+        # Without a response (the class asked), there is no such attribute, as for a
+        # dataclass's field without a default value or with a factory for one.
+        held = None if response is None else vars(response).get(self.name)
+        if held is None:
+            raise AttributeError(self.name)
+        if not isinstance(held, Deferred):
+            return held
+        last = self._last
+        if last is not None and last[0]() is held:
+            return last[1]
+        made = held.make()
+        self._last = (weakref.ref(held, self._forget), made)
+        return made
+
+    def _forget(self, gone: weakref.ref[Deferred]) -> None:
+        last = self._last
+        if last is not None and last[0] is gone:
+            self._last = None
+
+    def __set__(self, response: Response, value: np.ndarray | Deferred) -> None:
+        vars(response)[self.name] = value
+
+
+for _name in LATE_ARRAYS:
+    setattr(Response, _name, _LateArray(_name))
+
+
 def _jackknife(replicas) -> np.ndarray:
     """The standard error of a value from its ``replicas`` (n, ...), each found without
     one of n batches: their spread, times (n - 1) / n under the root. NaN where a
@@ -672,4 +752,4 @@ def _delayed(x: np.ndarray, slots: float) -> np.ndarray:
     return out
 
 
-__all__ = ["Response"]
+__all__ = ["LATE_ARRAYS", "Deferred", "Response"]

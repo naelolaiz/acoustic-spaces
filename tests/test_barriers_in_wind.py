@@ -279,6 +279,28 @@ def test_a_breath_of_wind_behind_a_barrier_is_still_air() -> None:
     np.testing.assert_allclose(levels[1], levels[0], atol=0.02)
 
 
+def test_the_runs_behind_a_barrier_share_the_march_up_to_it(monkeypatch) -> None:
+    """The runs behind a barrier along different degrees take the march over the open
+    ground before it from one another (:class:`parabolic.Trunk`): the listeners get the
+    bytes they get where every run marches from the source by itself."""
+    listeners = ((25.0, 0.0, 1.5), (25.0, 8.0, 1.5))
+    shared = simulate(Room.from_scene(scene(listeners=listeners, barrier_frequencies=8)))
+    march = parabolic.march
+    trunks = []
+
+    def alone(*args, trunk=None, **options):
+        trunks.append(trunk)
+        return march(*args, **options)
+
+    monkeypatch.setattr(parabolic, "march", alone)
+    apart = simulate(Room.from_scene(scene(listeners=listeners, barrier_frequencies=8)))
+    assert any(trunk is not None for trunk in trunks)
+    for k in range(len(listeners)):
+        one, other = shared["s", f"l{k}"].early, apart["s", f"l{k}"].early
+        assert one.energy.tobytes() == other.energy.tobytes()
+        assert one.spectrum.tobytes() == other.spectrum.tobytes()
+
+
 def test_a_listener_close_behind_a_slanting_wall_takes_the_effect_behind_it(field, scaled):
     """Behind a barrier and a building's back wall at 45 degrees to the way, 0.7 to 1.3 m
     behind them: along the nearest whole degree the barrier stands beyond the listener,

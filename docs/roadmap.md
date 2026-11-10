@@ -294,8 +294,8 @@ Outdoor acoustics, in steps:
   angles over several kilometres. On the 1995 benchmark it is within 0.11 dB of the
   fast field program from 10 Hz to 1 kHz and to 10 km wherever the sound is within
   40 dB of free field, where the narrow-angle one strays by 3 to 20 dB; in the weather
-  presets within 0.04 dB on average (the narrow-angle one 0.11). Three to four times
-  the work; without it nothing changes.
+  presets within 0.04 dB on average (the narrow-angle one 0.11). Two to two and a half
+  times the time over open ground; without it nothing changes.
 - [x] O22 Barriers and buildings in wind: behind them the paths in the vertical plane
   through the source and the listener take the weather's effect from the parabolic
   equation run in every band with the barriers and buildings inside, checked against a
