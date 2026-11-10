@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces.compare import CONVERGED_JND, in_jnds
-from acoustic_spaces.gui.inspector import BAND_LABELS, PRESET_UNCERTAINTIES
+from acoustic_spaces.gui.inspector import BAND_LABELS, assumed_text
 from acoustic_spaces.gui.levels import level_colour
 from acoustic_spaces.gui.numbers import fmt, number_text
 from acoustic_spaces.gui.tips import (
@@ -642,22 +642,13 @@ class ResultsPanel(QWidget):
 
     def _spread_in_tips(self) -> None:
         """Each parameter's uncertainty from the materials' absorption and the rays in
-        its tip, with its budget, where the run drew it."""
+        its tip, with its budget, where the run drew it; the level's and the level's
+        relative to free field too."""
         spread = self.result.spreads.get(self.pair())
         if spread is None:
             return
         names = ("standard", "low", "high", "absorption", "rays", "at_least", "at_most")
-        assumed = ""
-        if spread.assumed:
-            # One choice for the whole scene (simulation.uncertainty.presets).
-            choice = next(iter(spread.assumed.values()))
-            assumed = fmt(
-                # Translators: {what} is how far the absorption may be off ("plus or minus
-                # 0.1"), {names} the materials' names.
-                _("Built-in materials of unknown source taken at {what}: {names}"),
-                what=_(dict(PRESET_UNCERTAINTIES)[choice]),
-                names=", ".join(spread.assumed),
-            )
+        assumed = assumed_text(spread.assumed)
         # The materials no draw moves in each band, where they absorb everything.
         held: dict[int, list[str]] = {}
         for material, bands in spread.held.items():
@@ -667,10 +658,12 @@ class ResultsPanel(QWidget):
         bounds = list(spread.not_counted.values())
         edges = np.fmax.reduce(np.vstack(bounds), axis=0) if bounds else None
         for row, (name, _label, template) in enumerate(ROWS):
-            if not hasattr(spread.standard, name):
+            # A room parameter's, or that of a level (the spread's levels).
+            of = spread if hasattr(spread.standard, name) else spread.levels
+            if of is None or not hasattr(of.standard, name):
                 continue
             scale = 1e3 if name == "ts" else 1.0
-            parts = [getattr(getattr(spread, p), name) * scale for p in names]
+            parts = [getattr(getattr(of, p), name) * scale for p in names]
             for col, (u, low, high, absorption, rays, at_least, at_most) in enumerate(
                 zip(*parts, strict=True)
             ):

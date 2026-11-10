@@ -197,7 +197,7 @@ class Viewport(QWidget):
         run: RunView = NO_RUN,
     ):
         """Draw ``room`` with ``selection`` highlighted and, if given, early ``paths``,
-        a coverage map (``coverage`` is (CoverageMap, parameter, band)) and the
+        a coverage map (``coverage`` is (CoverageMap, parameter, band, part)) and the
         ``leaks`` from :func:`acoustic_spaces.engine.leaks.find_leaks`. The sources and
         listeners in ``hidden`` ((kind, name) pairs) are left out; those left out of
         simulations are drawn faded. Outdoors, ``wind`` draws the wind and the weather
@@ -386,8 +386,8 @@ class Viewport(QWidget):
         if paths is not None:
             plot_paths(paths, plotter)
         if coverage is not None:
-            shown, parameter, band = coverage
-            plot_coverage(shown, plotter, parameter=parameter, band=band, render=False)
+            shown, parameter, band, part = coverage
+            plot_coverage(shown, plotter, parameter=parameter, band=band, part=part, render=False)
         if leaks is not None:
             plot_leaks(leaks, room, plotter, render=False)
         if camera is None:

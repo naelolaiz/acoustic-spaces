@@ -26,6 +26,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from statistics import NormalDist
 from typing import NamedTuple
 
 import numpy as np
@@ -615,6 +616,47 @@ def _in_buildings(
     return out
 
 
+#: What a map's spread gives of a parameter: its standard uncertainty, the ends of its
+#: interval, and the value it is at least and at most (:meth:`CoverageMap.spread_of`).
+SPREAD_PARTS = ("standard", "low", "high", "at_least", "at_most")
+
+
+def uncertainty_text(value: float) -> str:
+    """A standard uncertainty as a map shows it: to two significant digits, which are
+    as many as it has (GUM, JCGM 100:2008, 7.2.6), and to four decimals at most."""
+    if not math.isfinite(value):
+        return "–"
+    if value == 0.0:
+        return "0"
+    rounded = float(f"{value:.2g}")
+    decimals = min(4, max(0, 1 - math.floor(math.log10(abs(rounded)))))
+    return f"{rounded:.{decimals}f}"
+
+
+@dataclass
+class MapSpread:
+    """The uncertainty of a map's parameters that the uncertainty of the materials'
+    absorption leads to, by the law of propagation of uncertainty
+    (:func:`~acoustic_spaces.engine.sensitivity.coverage_map`)."""
+
+    #: Parameter -> its combined standard uncertainty, shaped as the map's values: the
+    #: root of the sum of the squares of the materials' parts. NaN where the value is
+    #: undefined, in the map or in a run of the spread.
+    standard: dict[str, np.ndarray]
+    #: Material -> parameter -> its part: half of the map with its absorption one
+    #: standard uncertainty up less the map with it one down (negative where more
+    #: absorption lowers the value).
+    materials: dict[str, dict[str, np.ndarray]]
+    #: The probability of the interval, and that of the one-sided bounds.
+    coverage: float = 0.95
+    one_sided: float = 0.95
+    #: As a listener's spread has them (:class:`~acoustic_spaces.engine.uncertainty.
+    #: Spread`): the built-in materials that took the scene's default uncertainty, and
+    #: the bands in which a material absorbs everything, which no run moved.
+    assumed: dict[str, str] = field(default_factory=dict)
+    held: dict[str, list[int]] = field(default_factory=dict)
+
+
 @dataclass
 class CoverageMap:
     """Parameters at every map point for one source, or for all of them together."""
@@ -623,6 +665,9 @@ class CoverageMap:
     grid: MapGrid
     #: Parameter name (see :data:`MAP_PARAMETERS`) -> (points, bands) or (points,).
     values: dict[str, np.ndarray]
+    #: Their uncertainty from the materials' absorption, where the map was run with its
+    #: spread (:func:`~acoustic_spaces.engine.sensitivity.coverage_map`).
+    spread: MapSpread | None = None
 
     def parameters(self) -> list[str]:
         """The parameters the map has, in the order of :data:`MAP_PARAMETERS`: those of
@@ -638,26 +683,72 @@ class CoverageMap:
         ``OCTAVE_BANDS_HZ``), or a parameter that has no bands."""
         if name not in self.values:
             raise ValueError(f"unknown parameter {name!r}; use one of {', '.join(self.values)}")
-        v = self.values[name]
+        return self._one_per_point(name, self.values[name], band)
+
+    @staticmethod
+    def _one_per_point(name: str, v: np.ndarray, band: int | None) -> np.ndarray:
         if v.ndim == 1:
             return v
         if band is None:
             raise ValueError(f"{name} is per octave band; give a band")
         return v[:, band]
 
+    def spread_of(self, name: str, part: str = "standard", band: int | None = None) -> np.ndarray:
+        """One value per point of the spread of parameter ``name`` (as :meth:`value`
+        takes it): its ``standard`` uncertainty; the ``low`` or the ``high`` end of the
+        interval that holds it with the spread's coverage probability; or the value it
+        is ``at_least`` or ``at_most`` with the spread's one-sided probability. The
+        interval and the bounds take the result as normal about the map's value (GUM,
+        JCGM 100:2008, 6.3 and G.2): the value less and plus the normal quantile times
+        the standard uncertainty (1.96 for 95 %; 1.645 for a one-sided 95 %), held to
+        what the parameter can be (:data:`~acoustic_spaces.parameters.LIMITS`)."""
+        if self.spread is None:
+            raise ValueError("the map was run without its spread")
+        if part not in SPREAD_PARTS:
+            raise ValueError(f"unknown part {part!r}; use one of {', '.join(SPREAD_PARTS)}")
+        if name not in self.spread.standard:
+            raise ValueError(f"unknown parameter {name!r}; use one of {', '.join(self.values)}")
+        u = self.spread.standard[name]
+        if part == "standard":
+            return self._one_per_point(name, u, band)
+        if part in ("low", "high"):
+            factor = NormalDist().inv_cdf(0.5 + 0.5 * self.spread.coverage)
+        else:
+            factor = NormalDist().inv_cdf(self.spread.one_sided)
+        sign = -1.0 if part in ("low", "at_least") else 1.0
+        least, most = iso3382.LIMITS.get(name, (-math.inf, math.inf))
+        with np.errstate(invalid="ignore"):
+            out = np.clip(self.values[name] + sign * factor * u, least, most)
+        return self._one_per_point(name, out, band)
+
     def as_dict(self) -> dict:
-        """Points and values as plain lists, None where undefined (JSON friendly)."""
+        """Points and values as plain lists, None where undefined (JSON friendly); with
+        its spread, ``uncertainty`` holds the probabilities, each parameter's
+        ``standard`` uncertainty and each material's part of it (``materials``)."""
 
         def plain(a: np.ndarray):
             rounded = np.round(a.astype(float), 4)
             return np.where(np.isfinite(rounded), rounded, None).tolist()
 
-        return {
+        out = {
             "source": self.source,
             "bands_hz": list(OCTAVE_BANDS_HZ),
             "points": self.grid.points.round(3).tolist(),
             "values": {name: plain(v) for name, v in self.values.items()},
         }
+        if self.spread is not None:
+            out["uncertainty"] = {
+                "coverage": self.spread.coverage,
+                "one_sided": self.spread.one_sided,
+                "standard": {name: plain(v) for name, v in self.spread.standard.items()},
+                "materials": {
+                    material: {name: plain(v) for name, v in parts.items()}
+                    for material, parts in self.spread.materials.items()
+                },
+                "assumed": dict(self.spread.assumed),
+                "held": {name: list(bands) for name, bands in self.spread.held.items()},
+            }
+        return out
 
 
 @dataclass
@@ -1004,6 +1095,21 @@ def _trace_part(
     return _Part(onset, early, late, decay, plain if changed else None)
 
 
+def _deciding(room: Room, model: TraceModel, rays_of: Scene) -> np.ndarray:
+    """(faces, bands) the absorption of ``room``'s faces with the materials of
+    ``rays_of``, to decide for the rays of ``model``."""
+    rows = np.array(
+        [rays_of.materials[n].coefficients(model.bands)[0] for n in room.material_names]
+    )
+    deciding = np.ascontiguousarray(rows[room.face_materials], dtype=np.float64)
+    if not np.array_equal(deciding < 1.0, model.absorption < 1.0):
+        raise ValueError(
+            "rays_of: its materials must absorb everything in the bands in which the "
+            "scene's own do, and in those only"
+        )
+    return deciding
+
+
 def coverage_map(
     room: Room | Scene | str | Path,
     *,
@@ -1013,6 +1119,7 @@ def coverage_map(
     threads: int | None = None,
     progress: Callable[[str], None] | None = None,
     grid: MapGrid | None = None,
+    rays_of: Scene | None = None,
 ) -> CoverageResult:
     """Coverage maps of the scene's sources (all by default) over its audience area.
 
@@ -1033,6 +1140,13 @@ def coverage_map(
     ``grid`` takes the place of the one the settings give, so that two runs of a scene
     share their points (:func:`~acoustic_spaces.engine.insertion.coverage_map`); the
     rooms its points lie in and the air in their slabs are those of ``room``.
+
+    ``rays_of`` is the scene as it was before its materials' absorption was moved: with
+    the same seed, the map then follows the rays of that scene's map, whose materials'
+    absorption decides for them (:attr:`~acoustic_spaces.engine.model.TraceModel.
+    deciding`), and counts on them the energy this scene's absorption leaves. The two
+    maps differ by what the absorption does, and not by their rays
+    (:mod:`~acoustic_spaces.engine.sensitivity`).
     """
     room = _as_room(room)
     # Listeners play no part in a map; sources named are mapped even when left out.
@@ -1058,6 +1172,9 @@ def coverage_map(
         grid = _in_room(room, grid)
     say(f"Map: {len(grid)} points, {grid.cell:g} m apart")
     model = TraceModel.from_room(room, sim)
+    # The statistical tail traces no rays to decide for.
+    if rays_of is not None and sim.late.method != "statistical":
+        model.deciding = _deciding(room, model, rays_of)
     edges = _Edges(model)
     c = room.speed_of_sound()
     volume = room.volume_m3
@@ -1204,12 +1321,15 @@ __all__ = [
     "MAP_PARAMETERS",
     "OUTDOOR_MAP_PARAMETERS",
     "ROOM_MAP_PARAMETERS",
+    "SPREAD_PARTS",
     "TIME_STEP",
     "CoverageMap",
     "CoverageResult",
     "MapGrid",
     "MapParameter",
+    "MapSpread",
     "audience_surfaces",
     "coverage_map",
     "map_grid",
+    "uncertainty_text",
 ]

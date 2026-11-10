@@ -1464,16 +1464,6 @@ msgstr[1] ""
 msgid "{title}: {reason}"
 msgstr "{title}: {reason}"
 
-#. Translators: {names} are materials' names.
-#: acoustic_spaces/gui/app.py
-#, python-brace-format
-msgid ""
-"The absorption uncertainty of {names} is left out of the spread: a ground's "
-"impedance gives its reflection"
-msgstr ""
-"La incertesa d'absorció de {names} queda fora de la dispersió: la impedància "
-"del terra en dona la reflexió"
-
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid ""
@@ -1563,6 +1553,12 @@ msgid "Map done in {time:.1f} s: {count:,} point."
 msgid_plural "Map done in {time:.1f} s: {count:,} points."
 msgstr[0] "Mapa completat en {time:.1f} s: {count:,} punt."
 msgstr[1] "Mapa completat en {time:.1f} s: {count:,} punts."
+
+#. Translators: {names} are materials' names, each with its bands.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Left out of the map's uncertainty, where the absorption is 1: {names}"
+msgstr "Fora de la incertesa del mapa, on l'absorció és 1: {names}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -2793,6 +2789,36 @@ msgstr "(material per defecte)"
 #: acoustic_spaces/gui/inspector.py
 msgid "(unnamed)"
 msgstr "(sense nom)"
+
+#. Translators: {names} are materials' names.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"The absorption uncertainty of {names} is left out of the spread: a ground's "
+"impedance gives its reflection"
+msgstr ""
+"La incertesa d'absorció de {names} queda fora de la dispersió: la impedància "
+"del terra en dona la reflexió"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"No other material on the surfaces has an absorption uncertainty: no map has "
+"one."
+msgstr ""
+"Cap altre material de les superfícies té incertesa d'absorció: cap mapa en "
+"té."
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"No material on the surfaces has an absorption uncertainty: no map has one."
+msgstr ""
+"Cap material de les superfícies té incertesa d'absorció: cap mapa en té."
+
+#. Translators: {what} is how far the absorption may be off ("plus or minus 0.1"), {names} the materials' names.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Built-in materials of unknown source taken at {what}: {names}"
+msgstr "Materials integrats d'origen desconegut, presos amb {what}: {names}"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -4309,7 +4335,7 @@ msgstr "local: la mateixa a tots els angles"
 msgid "extended: changes with the angle"
 msgstr "estesa: canvia amb l'angle"
 
-#: acoustic_spaces/gui/inspector.py
+#: acoustic_spaces/gui/inspector.py acoustic_spaces/viz.py
 msgid "standard uncertainty"
 msgstr "incertesa típica"
 
@@ -6016,9 +6042,41 @@ msgstr ""
 "Calcular mapa de cobertura (F6)."
 
 #: acoustic_spaces/gui/inspector.py
+msgid "From the materials' absorption uncertainty"
+msgstr "Per la incertesa d'absorció dels materials"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"Ticked, the map also gives the uncertainty of its values that the materials' "
+"absorption uncertainty leads to. For that it is traced twice more for each "
+"material that has one, with its absorption one standard uncertainty up and "
+"down. Show, in the Coverage map panel, picks what of it the map draws"
+msgstr ""
+"Activat, el mapa dona també la incertesa dels seus valors deguda a la "
+"incertesa d'absorció dels materials. Per fer-ho es traça dues vegades més "
+"per cada material que en té, amb l'absorció una incertesa típica per sobre i "
+"per sota. Mostra, al tauler Mapa de cobertura, tria quina part dibuixa el "
+"mapa"
+
+#: acoustic_spaces/gui/inspector.py
 #, python-brace-format
 msgid "Background noise at {band} (dB SPL)"
 msgstr "Soroll de fons a {band} (dB SPL)"
+
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"{count} material on the surfaces has one: the map with its uncertainty is "
+"traced {runs} times."
+msgid_plural ""
+"{count} materials on the surfaces have one: the map with its uncertainty is "
+"traced {runs} times."
+msgstr[0] ""
+"{count} material de les superfícies en té: el mapa amb la seva incertesa es "
+"traça {runs} vegades."
+msgstr[1] ""
+"{count} materials de les superfícies en tenen: el mapa amb la seva incertesa "
+"es traça {runs} vegades."
 
 #: acoustic_spaces/gui/inspector.py
 msgid "noise levels are numbers in dB"
@@ -6054,6 +6112,19 @@ msgstr ""
 "tenen cap de pròpia"
 
 #: acoustic_spaces/gui/map_view.py
+msgid ""
+"What the map shows of the parameter: its value or, when the map was run with "
+"its uncertainty (Uncertainty, in the coverage map's settings), the standard "
+"uncertainty, an end of the interval that holds the value with a probability "
+"of 95 %, or the value it is at least or at most"
+msgstr ""
+"El que el mapa mostra del paràmetre: el seu valor o, quan el mapa s'ha "
+"calculat amb la seva incertesa (Incertesa, als ajustos del mapa de "
+"cobertura), la incertesa típica, un extrem de l'interval que conté el valor "
+"amb una probabilitat del 95 %, o el valor que assoleix com a mínim o com a "
+"màxim"
+
+#: acoustic_spaces/gui/map_view.py
 msgid "Map in 3D"
 msgstr "Mapa en 3D"
 
@@ -6084,6 +6155,10 @@ msgstr "Paràmetre"
 #: acoustic_spaces/gui/map_view.py acoustic_spaces/gui/results_view.py
 msgid "Band"
 msgstr "Banda"
+
+#: acoustic_spaces/gui/map_view.py
+msgid "Show"
+msgstr "Mostra"
 
 #: acoustic_spaces/gui/map_view.py
 msgid "The lowest, highest and median values of the map on show"
@@ -7450,12 +7525,6 @@ msgstr ""
 "perceptible entre càlculs amb altres llavors; més raigs per banda redueixen "
 "l'error"
 
-#. Translators: {what} is how far the absorption may be off ("plus or minus 0.1"), {names} the materials' names.
-#: acoustic_spaces/gui/results_view.py
-#, python-brace-format
-msgid "Built-in materials of unknown source taken at {what}: {names}"
-msgstr "Materials integrats d'origen desconegut, presos amb {what}: {names}"
-
 #. Translators: {u}, {absorption}, {rays}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
 #: acoustic_spaces/gui/results_view.py
 #, python-brace-format
@@ -8234,6 +8303,26 @@ msgstr "nivell"
 #: acoustic_spaces/viz.py
 msgid "backward-integrated decay per octave band, noise removed"
 msgstr "decaïment integrat cap enrere per banda d'octava, sense soroll"
+
+#: acoustic_spaces/viz.py
+msgid "value"
+msgstr "valor"
+
+#: acoustic_spaces/viz.py
+msgid "lower end of the interval"
+msgstr "extrem inferior de l'interval"
+
+#: acoustic_spaces/viz.py
+msgid "upper end of the interval"
+msgstr "extrem superior de l'interval"
+
+#: acoustic_spaces/viz.py
+msgid "at least"
+msgstr "com a mínim"
+
+#: acoustic_spaces/viz.py
+msgid "at most"
+msgstr "com a màxim"
 
 #: acoustic_spaces/viz.py
 msgid "x (m)"

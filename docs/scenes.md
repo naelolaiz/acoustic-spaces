@@ -348,7 +348,7 @@ editor's simulation settings). For a normal spread, 400 draws leave the standard
 uncertainty good to about 7 % and each end of the 95 % interval to about a quarter of the
 standard uncertainty (twice their own standard deviation). With `draws: adaptive` the
 draws go on as the adaptive procedure of GUM Supplement 1 has them (JCGM 101:2008, 7.9):
-batch after batch until, for every parameter in every band of every response, twice the
+batch after batch until, for every result in every band of every response, twice the
 standard deviation of the mean, of the standard uncertainty and of each end of the
 interval (and of each one-sided bound, below) is within the numerical tolerance of the
 standard uncertainty, half a unit of its first digit. A batch is 100 draws, not the Supplement's 10 000 (a number it calls
@@ -365,6 +365,20 @@ spread, the mean less and plus 1.645 standard uncertainties, where the 95 % inte
 ends lie 1.96 away and leave 2.5 % out on each side. `simulation.uncertainty.one_sided`
 gives another probability between 0.5 and 1, 0.9 say (`--one-sided` on the command line,
 **One-sided bounds** in the editor's simulation settings).
+
+The same draws give the spread of each listener's levels and speech results
+(`uncertainty.levels` in `parameters.json`, with the same parts): the sound pressure
+level per octave band and A-weighted, the STI, the STIPA, U50 and, outdoors, the level
+relative to free field. Each draw finds them for the source's sound power and the
+scene's background noise, and their rays' error comes from the same batches. A band's
+level is its G and the source's power, so its spread is G's; in a band whose G some draw
+leaves undefined, the level is that of the energy the response holds and has a spread of
+its own. `simulate` prints the
+A-weighted level's with the level it is at most and the STI's with the STI it is at
+least, and the editor's tips give the level's in each band. A coverage map gets the
+uncertainty of its values by tracing it again for each material (see
+[Coverage maps](coverage-maps.md#uncertainty)); a listener's insertion loss and
+long-term levels have no spread.
 
 ### Material libraries of CATT-Acoustic and ODEON
 

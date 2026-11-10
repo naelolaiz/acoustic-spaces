@@ -2957,6 +2957,14 @@ class Coverage(_Model):
         default=None,
         description="background noise for the STI (dB SPL, one value or one per octave band)",
     )
+    spread: bool = Field(
+        default=False,
+        description=(
+            "also the map's uncertainty from the materials' absorption uncertainty: the "
+            "map is traced twice more for each material that has one, so with M of them "
+            "it takes 2 M + 1 times as long"
+        ),
+    )
 
     @field_validator("noise_db")
     @classmethod
@@ -3086,6 +3094,20 @@ class Scene(_Model):
         if problem is not None:
             raise ValueError(problem)
         return self
+
+    def level_inputs(
+        self, source: str
+    ) -> tuple[np.ndarray | float, list[float] | float | None, Literal["male", "female"]]:
+        """(sound power, noise, talker) that the levels and the speech results of the
+        source named ``source`` are found with at a listener: its sound power per octave
+        band (dB re 1 pW, :meth:`Source.power_db`) and its talker, 94 dB in all and a
+        male talker for a source the scene does not have; and the background noise of
+        ``coverage`` (dB SPL, in all bands or per octave band), None without."""
+        noise = None if self.coverage is None else self.coverage.noise_db
+        for own in self.sources:
+            if own.name == source:
+                return own.power_db("octave"), noise, own.talker
+        return 94.0, noise, "male"
 
     @property
     def still(self) -> bool:

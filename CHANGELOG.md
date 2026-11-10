@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added: a coverage map gives the uncertainty of its values from the materials'
+  absorption uncertainty, an insertion loss and the long-term levels too:
+  `coverage.spread: true`, `map --spread` or the tick box under **Uncertainty** on the
+  editor's coverage map page trace the map twice more for each material that has one
+  (the law of propagation of uncertainty, GUM 5.1.2). `map --show` and the map panel's
+  **Show** draw the standard uncertainty, an end of the 95 % interval or a one-sided
+  bound.
+- Fixed: a calibrated material given in third octaves keeps the octave values that were
+  fitted where one of its thirds reaches 1 or what the surface lets through: the
+  octave's other thirds take up the rest.
 - Fixed: a run re-weighted for much more absorption than it was traced with (a draw of a
   wide absorption uncertainty, a large change in the editor) gave far too much late
   energy, up to absurd levels near an absorption of 1. The late part now follows
@@ -71,6 +81,11 @@
   the memory estimate counts what is kept.
 - Changed: the tests write every thread's stack to the log when one has run for 20
   minutes (pytest's `faulthandler_timeout`), to show where a hung job stands.
+- Added: the spread covers each listener's levels and speech results: the sound
+  pressure level per octave band and A-weighted, the STI, the STIPA, U50 and, outdoors,
+  the level relative to free field (`uncertainty.levels` in `parameters.json`, the
+  A-weighted level's and the STI's in `simulate`'s output, the level's in the editor's
+  tips).
 - Fixed: Doc 29's L_Amax ahead of or behind an airborne segment takes the installation
   correction at the extended path's closest point of approach, as the SEL does, not at
   the segment end's elevation: on Volume 3's departures up to 1.0 dB higher beside the

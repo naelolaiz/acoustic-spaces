@@ -203,8 +203,9 @@ results' tips ([Simulation](simulation.md), [Materials](scenes.md#materials)).
 ### Coverage maps
 
 A coverage map gives the parameters, the A-weighted level and the STI on a grid over the
-audience area ([Coverage maps](coverage-maps.md)); in the editor, **Simulation > Run
-coverage map** (F6).
+audience area, and with `--spread` the uncertainty of each
+([Coverage maps](coverage-maps.md)); in the editor, **Simulation > Run coverage map**
+(F6).
 
 ```sh
 acoustic-spaces map examples/lecture_hall/scene.yaml --plot sti.png --parameter sti

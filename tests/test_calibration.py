@@ -317,6 +317,10 @@ def test_a_third_octave_material_keeps_its_shape():
     out = with_absorption(scene, ["floor"], [octaves + 0.05])
     np.testing.assert_allclose(out.materials["floor"].absorption, thirds + 0.05, atol=1e-4)
     np.testing.assert_allclose(scene.materials["floor"].absorption, thirds)
+    # A third that would pass 1 stays there, and its octave's others take up the rest.
+    high = with_absorption(scene, ["floor"], [octaves + 0.45]).materials["floor"].absorption
+    np.testing.assert_allclose(high[-3:], [0.975, 0.995, 1.0], atol=1e-4)
+    np.testing.assert_allclose(np.reshape(high, (-1, 3)).mean(axis=1), octaves + 0.45, atol=1e-4)
 
 
 @pytest.mark.parametrize(
