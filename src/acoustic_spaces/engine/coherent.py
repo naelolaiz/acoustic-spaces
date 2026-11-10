@@ -160,6 +160,21 @@ def absorption_phases(
     :func:`reflection_phases` has them. ``admittance_of(row)`` gives the admittance (a
     callable of the frequency) of an absorption row; by default the one fitted to it
     (:func:`~acoustic_spaces.engine.impedance.fit_admittance`)."""
+    y = _fitted_admittances(absorption, f, admittance_of)
+    cos = np.clip(np.asarray(cosines, dtype=float), 0.0, 1.0)[:, None, None]
+    total_ = cos + y
+    hard = np.abs(total_) < 1e-12  # a hard surface met at grazing incidence
+    r = (cos - y) / np.where(hard, 1.0, total_)
+    magnitude = np.abs(r)
+    return np.where(hard | (magnitude < 1e-12), 1.0, r / np.maximum(magnitude, 1e-300))
+
+
+def _fitted_admittances(absorption: np.ndarray, f: np.ndarray, admittance_of=None) -> np.ndarray:
+    """(n, *f.shape) the admittances at the frequencies ``f`` of locally reacting
+    surfaces whose admittance gives the absorption ``absorption`` (n, bands) in every
+    band: ``admittance_of(row)`` (a callable of the frequency) of each absorption row, by
+    default the one fitted to it (:func:`~acoustic_spaces.engine.impedance.
+    fit_admittance`)."""
     from acoustic_spaces.engine.impedance import fit_admittance
 
     absorption = np.asarray(absorption, dtype=float)
@@ -171,13 +186,30 @@ def absorption_phases(
             for row in rows
         ]
     )
-    y = admittance[inverse.reshape(-1)]
-    cos = np.clip(np.asarray(cosines, dtype=float), 0.0, 1.0)[:, None, None]
-    total_ = cos + y
-    hard = np.abs(total_) < 1e-12  # a hard surface met at grazing incidence
-    r = (cos - y) / np.where(hard, 1.0, total_)
-    magnitude = np.abs(r)
-    return np.where(hard | (magnitude < 1e-12), 1.0, r / np.maximum(magnitude, 1e-300))
+    return admittance[inverse.reshape(-1)]
+
+
+def ground_wave_factors(model: TraceModel, faces: np.ndarray, distance: np.ndarray) -> np.ndarray:
+    """(n, bands, M) the Weyl-van der Pol factor Q of the sound that runs ``distance``
+    (n,) m along ``faces`` (n,) at grazing incidence, from a point on them, at the
+    frequencies of every band's samples: the field there is (1 + Q) = 2 F(w) times the
+    free one (see :func:`~acoustic_spaces.materials.ground.spherical_reflection`). Faces
+    with an impedance of their own take :func:`ground_factors`' spherical wave, the
+    others, a ground zone's among them, that of the admittance fitted to their absorption
+    (as :func:`reflection_phases` has it); a hard face gives 1."""
+    from acoustic_spaces.engine.diffraction import band_frequencies
+    from acoustic_spaces.materials.ground import spherical_reflection
+
+    faces = np.asarray(faces, dtype=np.int64)
+    distance = np.asarray(distance, dtype=float)
+    out = ground_factors(model, faces, np.zeros(len(faces)), distance)
+    other = ~model.impedance_faces(faces)
+    if other.any():
+        f = band_frequencies(bands=model.bands)[0]
+        k = 2.0 * np.pi * f / model.room.speed_of_sound()
+        admittance = _fitted_admittances(model.absorption[faces[other]], f)
+        out[other] = spherical_reflection(admittance, 0.0, k, distance[other, None, None])
+    return out
 
 
 def ground_factors(
@@ -897,6 +929,7 @@ __all__ = [
     "coherent_energy",
     "filtered_bands",
     "ground_factors",
+    "ground_wave_factors",
     "held_phase",
     "own_phases",
     "pair_energy",

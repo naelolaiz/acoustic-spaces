@@ -141,6 +141,14 @@
   are given as the code has them: `apartment`'s bed with the door open reads 62 dB(A),
   not 63, and the CPU's next seed in validation.md differs by 1.32 dB and 20.6 ms in
   `tree_belt` and by 2.04 dB and 1.9 ms on the hillside, a new draw of the rays' noise.
+- Fixed (results change): sound over two edges along a face that absorbs
+  (`second_order`, over a roof or a thick wall) was nearly cancelled in the bands that
+  add in pressure, by the plane wave's R = -1 at grazing incidence; the path now takes
+  the face as rigid and the ground wave's loss along it (Weyl-van der Pol), in every
+  band. Behind a 6 m building absorbing 0.02 the level rises by 18 to 20 dB, to 0.1 to
+  0.8 dB below a rigid one's, and the archway example's first arrival behind the wall by
+  11.0 and 11.7 dB at 63 and 125 Hz; with faces absorbing 0.5 it changes by +11.0 dB at
+  63 Hz to -8.7 dB at 8 kHz.
 
 ## 4.2.1
 

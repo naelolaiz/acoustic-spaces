@@ -458,6 +458,12 @@ simulation:
   fits it but without its grid, so the phase in a band does not depend on how many
   bands add in pressure. A hard surface reflects in phase at every angle; an absorbing
   one turns the phase of sound that grazes it, by half a turn at grazing incidence.
+  Not so the sound that runs along a face from one edge to the next (`second_order`,
+  over a roof or a thick wall): that is a point source's wave along the surface, which
+  the plane wave's half turn would cancel; it takes the face as rigid and the ground
+  wave's loss over the way along it, 2 F(w) against a rigid face's 2 (Weyl-van der Pol,
+  see [Ground impedance](outdoor.md#ground-impedance)), in every band: 0.07 dB at 63 Hz
+  to 0.76 dB at 8 kHz over a 10 m roof absorbing 0.02.
   Above those bands each reflection keeps the phase it has at their top, so the bands
   join without a step. A path over an edge does too where it arrives alone; where
   other paths' sound reaches it, a rendered response turns it by a phase of its own,

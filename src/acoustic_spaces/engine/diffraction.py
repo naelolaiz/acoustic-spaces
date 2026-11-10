@@ -39,17 +39,19 @@ wall or a pillar, round both of its corners. Its shortest path touches each edge
 the path makes equal angles with it on both sides. The wave from the first edge reaches
 the second as a wave of its own, which the second bends again: where the path runs along
 a face between them (the top of a thick wall), that wave already holds the face's
-reflection, so the second edge's coefficient is halved. Near the first edge's
-boundaries its wave still curves like the source's, not like a wave from the edge, and
-the second edge's distance parameter takes that curvature where the wave reaches it;
-seen from the listener, the same holds for the second edge's wave at the first. Each
-edge takes the other's curvature by how much nearer the other's boundary is, so the
-path is the same both ways round. In the bands where the paths add in energy, each
-term splits at each edge as at one: near the first edge's boundary it is part of the
-wave of the path over the second edge alone, near the second's of the path over the
-first alone, and well off both the waves of the two edges add coherently. Where the
-source's wave would reach the listener past both edges the path over two edges is left
-out: it is then a correction of a correction.
+reflection, so the second edge's coefficient is halved. Along a face that absorbs, it is
+a point source's wave along a locally reacting surface at grazing incidence (Weyl-van der
+Pol): both edges take the face as rigid, and the path the ground wave's loss F(w) over
+the way along it. Near the first edge's boundaries its wave still curves like the
+source's, not like a wave from the edge, and the second edge's distance parameter takes
+that curvature where the wave reaches it; seen from the listener, the same holds for the
+second edge's wave at the first. Each edge takes the other's curvature by how much
+nearer the other's boundary is, so the path is the same both ways round. In the bands
+where the paths add in energy, each term splits at each edge as at one: near the first
+edge's boundary it is part of the wave of the path over the second edge alone, near the
+second's of the path over the first alone, and well off both the waves of the two
+edges add coherently. Where the source's wave would reach the listener past both edges
+the path over two edges is left out: it is then a correction of a correction.
 
 Openings are not there for diffraction: the edges of a doorway are the free edges of the
 wall round it, and diffracted paths pass through openings as through air. Outdoors, the
@@ -70,7 +72,7 @@ import numpy as np
 
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.clusters import Clusters
-from acoustic_spaces.engine.coherent import ground_factors, reflection_phases
+from acoustic_spaces.engine.coherent import ground_factors, ground_wave_factors, reflection_phases
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 from acoustic_spaces.geometry.outdoor import ON_GROUND_M, on_ground
@@ -1622,6 +1624,8 @@ class EdgeDiffraction:
         kl1, kl2 = k * length1[:, None, None], k * length2[:, None, None]
         factors1 = self._face_factors(e1, sin1, phi_s1)
         factors2 = self._face_factors(e2, sin2, phi_12)
+        # The wave along a face between the two edges (see _along_faces).
+        loss = self._along_faces(factors1, factors2, e1, e2, leave, graze, r1)
         forward = _phase_curvature(n1, phi_21, phi_s1, kl1, factors1, angle1)
         back_angle = boundary_angles(n2, phi_12, phi_r2)
         back_kl = k * (r2 * r1 / (r2 + r1) * sin2**2)[:, None, None]
@@ -1682,6 +1686,7 @@ class EdgeDiffraction:
             * wedge_prefactor(n1[:, None, None], k, sin1[:, None, None])
             * wedge_prefactor(n2[:, None, None], k, sin2[:, None, None])
             * np.exp(-1j * k * distance[:, None, None])
+            * loss
         )  # (C, B, M)
         waves = first[:, :, None] * second[:, None, :] * common[:, None, None]  # (C, 3, 3, B, M)
         counted = (lit1 == (has1 >= 0))[:, :, None] & (lit2 == (has2 >= 0))[:, None, :]
@@ -1772,6 +1777,43 @@ class EdgeDiffraction:
             "faces": lambda i: np.zeros(0, dtype=np.int64),
             "cosines": lambda i: np.zeros(0),
         }
+
+    def _along_faces(self, factors1, factors2, e1, e2, leave, graze, distance) -> np.ndarray:
+        """(C, B, M) the boundary loss F(w) of the paths over two edges that run along a
+        face between them (``leave`` at the first edge ``e1``, ``graze`` at the second
+        ``e2``, (C, 2)), 1 for the others; and the factors ``factors1`` and ``factors2``
+        (C, 2, B, M) of the reflections off those faces set in place to the specular
+        share of their scattering alone, as on a rigid face. The first edge's wave runs
+        to the second along the face at grazing incidence, where over a locally reacting
+        face it is the spherical wave's (Weyl-van der Pol), 2 F(w) = 1 + Q times the
+        free one over the way ``distance`` (C,) along it
+        (:func:`~acoustic_spaces.engine.coherent.ground_wave_factors`), and over a rigid one
+        twice the free one; not the plane wave's, whose R = -1 at grazing incidence
+        would cancel it. So the edges' coefficients take the face as rigid, and the
+        whole path F(w), once for a plane both edges' faces lie in, in every band. The
+        way is the whole way from one edge to the other, also where the face covers
+        only part of it (it ends before the other edge, which merely lies in its plane)."""
+        edges, model = self.edges, self.model
+        loss = np.ones((len(e1), *self.wavenumber.shape), dtype=complex)
+
+        def plane_normal(edge, faces):
+            plane = np.where(faces[:, 0], edges.plane[edge, 0], edges.plane[edge, 1])
+            return np.where(faces.any(axis=1)[:, None], model.plane_normal[plane], 0.0)
+
+        same = np.abs(np.einsum("ij,ij->i", plane_normal(e1, leave), plane_normal(e2, graze)))
+        once = graze & (same < 1.0 - 1e-9)[:, None]  # not the plane the first edge leaves on
+        for factors, edge, faces, lose in (
+            (factors1, e1, leave, leave),
+            (factors2, e2, graze, once),
+        ):
+            rows, side = np.nonzero(faces)
+            face = edges.face[edge[rows], side]
+            factors[rows, side] = np.sqrt(1.0 - model.scattering[face])[..., None]
+            rows, side = np.nonzero(lose)
+            if len(rows):
+                face = edges.face[edge[rows], side]
+                loss[rows] *= 0.5 * (1.0 + ground_wave_factors(model, face, distance[rows]))
+        return loss
 
     def _alone(self, single, e1, e2, phi_1, phi_2, leave, graze):
         """(C, 3) each for the waves at the first edge and at the second (the incident

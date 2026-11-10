@@ -25,6 +25,8 @@ half-plane, which is exact far from the edge, and the engine against it:
   against BTM, which is exact for a half-plane;
 - a thick barrier (two right-angled corners 0.3, 1 and 3 m apart, sharing the top face),
   second order: the engine against BTM, at two pairs of positions, one of them oblique;
+  and the same block absorbing 0.02, against BTM for the rigid one and the Weyl-van der
+  Pol field's loss along its top (|F(w)|, by hand);
 - two thin screens in a row, second order;
 - a thin screen, a right-angled corner and a wedge open over 225 degrees, first order,
   with the listener on the shadow boundary and 10.5 degrees into the shadow: the whole
@@ -84,6 +86,8 @@ EXTENT = 300.0
 FREQUENCIES, _ = band_frequencies()
 #: The bands in which the engine adds paths in pressure by default: 63 and 125 Hz.
 COHERENT = 2
+#: The absorption of the absorbing blocks over two edges.
+ABSORBING = 0.02
 K = 2.0 * np.pi * FREQUENCIES.ravel() / C
 
 
@@ -216,9 +220,11 @@ def band_level(pressure: np.ndarray, distance: float) -> np.ndarray:
 # -- the engine -----------------------------------------------------------------------
 
 
-def _room(folder: Path, name: str, quads: list, source, receiver, simulation=None) -> Room:
-    """A room of rigid ``quads`` with one source and one listener, with the scene's
-    ``simulation`` settings where given."""
+def _room(
+    folder: Path, name: str, quads: list, source, receiver, simulation=None, absorption=0.0
+) -> Room:
+    """A room of rigid ``quads`` (or of ``absorption`` in every band) with one source and
+    one listener, with the scene's ``simulation`` settings where given."""
     lines, faces = [], []
     for quad in quads:
         base = len(lines)
@@ -228,7 +234,7 @@ def _room(folder: Path, name: str, quads: list, source, receiver, simulation=Non
     obj.write_text("\n".join(lines + ["g surfaces"] + faces) + "\n")
     scene = {
         "geometry": {"file": str(obj)},
-        "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+        "materials": {"hard": {"absorption": [absorption] * 8, "scattering": 0.0}},
         "default_material": "hard",
         "sources": [{"name": "s", "position": list(map(float, source))}],
         "listeners": [{"name": "l", "position": list(map(float, receiver))}],
@@ -401,18 +407,44 @@ def second_order(folder: Path) -> list[dict]:
         seconds = time.perf_counter() - began
         distance = float(np.linalg.norm(receiver - source))
         reference = band_level(btm, distance)
-        rows.append(
-            {
-                "case": name,
-                "source": source.tolist(),
-                "receiver": receiver.tolist(),
-                "btm_db": reference.tolist(),
-                "engine_minus_btm_db": (level - reference).tolist(),
-                "in_pressure_minus_btm_db": (pressure - reference).tolist(),
-                "btm_seconds": seconds,
-            }
-        )
+        row = {
+            "case": name,
+            "source": source.tolist(),
+            "receiver": receiver.tolist(),
+            "btm_db": reference.tolist(),
+            "engine_minus_btm_db": (level - reference).tolist(),
+            "in_pressure_minus_btm_db": (pressure - reference).tolist(),
+            "btm_seconds": seconds,
+        }
+        if half:
+            # The block's faces absorbing 0.02: along its top the first corner's wave is
+            # the Weyl-van der Pol one, below the rigid block's by |F(w)| over the top.
+            room = _room(folder, "second", quads, source, receiver, absorption=ABSORBING)
+            _, soft = engine(room, "second_order")
+            _, soft_pressure = engine(room, "second_order", coherent=COHERENT)
+            row["absorbing_minus_btm_db"] = (soft - reference).tolist()
+            row["absorbing_in_pressure_minus_btm_db"] = (soft_pressure - reference).tolist()
+            row["ground_wave_db"] = ground_wave(ABSORBING, float(np.linalg.norm(p2 - p1)))
+        rows.append(row)
     return rows
+
+
+def ground_wave(absorption: float, distance: float) -> list[float]:
+    """20 lg |F(w)| (dB) in each octave band, at its centre: the Weyl-van der Pol field
+    over ``distance`` m of a locally reacting surface at grazing incidence, 2 F(w) times
+    the free one, against a rigid one's twice, with w = (1 + j) / 2 sqrt(k distance) beta
+    and the real admittance beta whose random-incidence absorption (Paris's formula) is
+    ``absorption``."""
+    from scipy.optimize import brentq
+    from scipy.special import wofz
+
+    def paris(z: float) -> float:  # of a real normalised impedance z
+        return 8.0 / z * (1.0 + 1.0 / (1.0 + z) - 2.0 / z * math.log(1.0 + z))
+
+    beta = 1.0 / brentq(lambda z: paris(z) - absorption, 1.0, 1e9)
+    k = 2.0 * math.pi * np.array(OCTAVE_BANDS_HZ, dtype=float) / C
+    w = 0.5 * (1.0 + 1.0j) * np.sqrt(k * distance) * beta
+    return (20.0 * np.log10(np.abs(1.0 + 1.0j * math.sqrt(math.pi) * w * wofz(w)))).tolist()
 
 
 def shadow_boundary(folder: Path) -> list[dict]:
@@ -838,6 +870,11 @@ def main() -> None:
             print(f"| {where}: BTM | {_row(row['btm_db'])} |")
             print(f"| engine - BTM | {_row(row['engine_minus_btm_db'])} |")
             print(f"| engine in pressure - BTM | {_row(row['in_pressure_minus_btm_db'])} |")
+            if "ground_wave_db" in row:
+                print(f"| absorbing {ABSORBING:g} - BTM | {_row(row['absorbing_minus_btm_db'])} |")
+                soft = row["absorbing_in_pressure_minus_btm_db"]
+                print(f"| absorbing {ABSORBING:g} in pressure - BTM | {_row(soft)} |")
+                print(f"| 20 lg abs F(w) over the top | {_row(row['ground_wave_db'])} |")
         seconds = max(row["btm_seconds"] for row in results["second_order"])
         print(f"\n(BTM takes up to {seconds:.0f} s per case)")
 

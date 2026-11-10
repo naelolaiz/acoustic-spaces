@@ -203,8 +203,8 @@ EDGE_ERRORS_DB = {
         "pressure": (2.20, 2.98, 2.60, 0.89, 0.80, 0.67, 0.76, 0.73),
         "energy": (_NOT,) * 8,
     },
-    # Over two edges (second_order): blocks 0.3 to 3 m wide and two thin screens, and in
-    # pressure a barrier 1 m thick on a reflecting ground, whose paths over both edges
+    # Over two edges (second_order): rigid blocks 0.3 to 3 m wide and two thin screens, and
+    # in pressure a barrier 1 m thick on a reflecting ground, whose paths over both edges
     # take no reflection off the ground.
     "two edges": {
         "pressure": (9.85, 6.96, 3.83, 5.66, 5.54, 5.18, 5.08, 5.40),
