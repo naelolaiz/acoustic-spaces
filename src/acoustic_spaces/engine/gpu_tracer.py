@@ -115,6 +115,7 @@ _FIELDS = (
     ("legs", "u"),
     ("flags", "u"),
     ("covered_order", "i"),
+    ("covered_ground", "i"),
     ("size_from_order", "i"),
     ("max_split", "u"),
     ("max_family", "u"),
@@ -178,9 +179,9 @@ const HIT_WORDS: u32 = (GROUPS + 1u) / 2u;
 const TERMS: u32 = __TERMS__u;
 // Words per ray in flight and per ray from the source; words per face, per listener,
 // per vegetation volume and per medium.
-const RECORD: u32 = 20u + 3u * BANDS + HIT_WORDS;
+const RECORD: u32 = 21u + 3u * BANDS + HIT_WORDS;
 const START: u32 = 3u + BANDS;
-const FACE: u32 = 5u + 2u * BANDS;
+const FACE: u32 = 6u + 2u * BANDS;
 const LISTENER: u32 = 6u;
 const SHAPE: u32 = __SHAPE__u;
 const MEDIUM: u32 = 3u * BANDS + 1u;
@@ -213,7 +214,9 @@ struct Run {
 @group(0) @binding(0) var<uniform> run: Run;
 @group(0) @binding(1) var<storage, read> nodes: array<vec4<u32>>;
 @group(0) @binding(2) var<storage, read> triangles: array<vec4<u32>>;
-// The source, then per face its normal, size, absorption and scattering; per listener
+// The source, then per face its normal, size, kind (as the CPU's
+// StochasticScene::face_kind: 1 the ground, 0 a vertical wall, -1 any other; 0 without
+// them), absorption and scattering; per listener
 // its place, sphere radius and volume and how long the early stage covers; the arrival
 // directions; air absorption and band centres; the weight window's expected energies;
 // the model's box; the atmosphere's nodes (heights, still speeds, wind speeds) and its
@@ -239,6 +242,11 @@ struct Ray {
     last: u32,
     rng: vec4<u32>,
     order: i32,
+    // Of the reflections so far, those off the ground and (1) whether one was off a face
+    // neither the ground nor a vertical wall, while run.covered_ground >= 0 (bent air,
+    // as the CPU's RayState::ground and other).
+    ground: i32,
+    other: u32,
     root: u32,
     cutoff: f32,
     // In an atmosphere, while `leaving`: the normal of the face the ray left (pointing
@@ -296,6 +304,20 @@ var<private> specular_rng: vec4<u32>;
 
 fn num(at: u32) -> f32 {
     return bitcast<f32>(scene[at]);
+}
+
+// Whether the specular-only path the ray has followed is one the early stage computes
+// (its time aside), as the CPU's detail::early_holds: with run.covered_ground below 0
+// (straight rays) when it has at most run.covered_order reflections; in bent air, with
+// no reflection off a face neither the ground nor a vertical wall, when it has up to
+// run.covered_ground bounces off the ground and at most run.covered_order reflections
+// counting those as one.
+fn early_holds() -> bool {
+    if (run.covered_ground < 0 || ray.other != 0u) {
+        return ray.order <= run.covered_order;
+    }
+    return ray.ground <= run.covered_ground &&
+           ray.order - ray.ground + min(ray.ground, 1) <= run.covered_order;
 }
 
 fn point(at: u32) -> vec3<f32> {
@@ -1389,8 +1411,7 @@ fn detectors(origin: vec3<f32>, along: vec3<f32>, segment: f32, rate: f32, path:
         // reflection's blended leg counts only the scattered share (its specular share is
         // on its detect-only leg), which never is.
         let blended = (run.flags & VECTOR) != 0u && ray.order > 0 && !detect_only;
-        let covered = ray.order <= run.covered_order && travel / run.c <= num(at + 5u) &&
-                      !blended;
+        let covered = early_holds() && travel / run.c <= num(at + 5u) && !blended;
         if (tracked) {
             track_weight(nearest);
         }
@@ -1450,7 +1471,7 @@ fn rain(n: vec3<f32>, first: bool) {
             reach = run.c * atm_straight_time(origin, listener);
             absorbing = ray_path + gap;
         }
-        let covered = specular && ray.order <= run.covered_order &&
+        let covered = specular && early_holds() &&
                       (ray.travelled + reach) / run.c <= num(at + 5u);
         let planted = (run.flags & PLANTS) != 0u;
         if (planted) {
@@ -1622,13 +1643,15 @@ fn load(at: u32) {
     ray_path = bitcast<f32>(states[at + 15u]);
     ray.away = bitcast<vec3<f32>>(vec3<u32>(states[at + 16u], states[at + 17u], states[at + 18u]));
     ray.leaving = states[at + 19u];
+    ray.ground = i32(states[at + 20u] & 0x7fffffffu);
+    ray.other = states[at + 20u] >> 31u;
     for (var b = 0u; b < BANDS; b++) {
-        energy[b] = bitcast<f32>(states[at + 20u + b]);
-        seen[b] = bitcast<f32>(states[at + 20u + BANDS + b]);
-        alone[b] = bitcast<f32>(states[at + 20u + 2u * BANDS + b]);
+        energy[b] = bitcast<f32>(states[at + 21u + b]);
+        seen[b] = bitcast<f32>(states[at + 21u + BANDS + b]);
+        alone[b] = bitcast<f32>(states[at + 21u + 2u * BANDS + b]);
     }
     for (var g = 0u; g < GROUPS; g++) {
-        let word = states[at + 20u + 3u * BANDS + g / 2u];
+        let word = states[at + 21u + 3u * BANDS + g / 2u];
         hits[g] = (word >> (16u * (g % 2u))) & 0xffffu;
     }
 }
@@ -1657,17 +1680,18 @@ fn store(at: u32) {
     states[at + 17u] = away.y;
     states[at + 18u] = away.z;
     states[at + 19u] = ray.leaving;
+    states[at + 20u] = u32(ray.ground) | (ray.other << 31u);
     for (var b = 0u; b < BANDS; b++) {
-        states[at + 20u + b] = bitcast<u32>(energy[b]);
-        states[at + 20u + BANDS + b] = bitcast<u32>(seen[b]);
-        states[at + 20u + 2u * BANDS + b] = bitcast<u32>(alone[b]);
+        states[at + 21u + b] = bitcast<u32>(energy[b]);
+        states[at + 21u + BANDS + b] = bitcast<u32>(seen[b]);
+        states[at + 21u + 2u * BANDS + b] = bitcast<u32>(alone[b]);
     }
     for (var w = 0u; w < HIT_WORDS; w++) {
         var word = hits[2u * w];
         if (2u * w + 1u < GROUPS) {
             word |= hits[2u * w + 1u] << 16u;
         }
-        states[at + 20u + 3u * BANDS + w] = word;
+        states[at + 21u + 3u * BANDS + w] = word;
     }
 }
 
@@ -1691,6 +1715,8 @@ fn start(k: u32) -> bool {
     ray.last = NONE;
     ray.rng = seeded(run.seed, run.ray_seed + k, 0x85ebca6bu);
     ray.order = 0;
+    ray.ground = 0;
+    ray.other = 0u;
     ray.root = k;
     ray.cutoff = loudest * 1e-14;
     ray_path = 0.0;
@@ -2122,6 +2148,14 @@ fn advance(n_in: u32) -> bool {
     ray.away = n;
     ray.leaving = 1u;
     ray.order += 1;
+    if (run.covered_ground >= 0) {
+        let kind = num(face + 5u);
+        if (kind > 0.5) {
+            ray.ground += 1;
+        } else if (kind < -0.5) {
+            ray.other = 1u;
+        }
+    }
     if (GROUPS > 0u) {
         let g = scene[run.group_at + hit.face];
         if (g < GROUPS) {
@@ -2144,7 +2178,7 @@ fn advance(n_in: u32) -> bool {
     var mean = 0.0;
     var p = 0.0;
     for (var b = 0u; b < BANDS; b++) {
-        let surface = num(face + 5u + BANDS + b);
+        let surface = num(face + 6u + BANDS + b);
         if (sizes) {
             let hz = num(run.hz_at + b);
             let specular = min(1.0, hz / f_width) * min(1.0, hz / f_length);
@@ -2153,7 +2187,7 @@ fn advance(n_in: u32) -> bool {
             scatter[b] = surface;
         }
         mean += energy[b];
-        reflected[b] = energy[b] * (1.0 - num(face + 5u + b));
+        reflected[b] = energy[b] * (1.0 - num(face + 6u + b));
         scattered[b] = reflected[b] * scatter[b];
         peak = max(peak, reflected[b]);
         p += scatter[b];
@@ -2479,7 +2513,7 @@ def moment_terms(groups: int) -> int:
 
 def _record(bands: int, groups: int) -> int:
     """Words per ray in flight (``RECORD`` in the shader)."""
-    return 20 + 3 * bands + (groups + 1) // 2
+    return 21 + 3 * bands + (groups + 1) // 2
 
 
 @functools.lru_cache(maxsize=8)
@@ -2639,6 +2673,8 @@ class GpuTracer:
         face_group=None,
         groups: int = 0,
         moment_time_step: float = 1e-2,
+        face_kind=None,
+        covered_ground: int = 0,
     ) -> tuple:
         """Traces the rays ``starts`` (directions and the source's energy weights, as
         ``_native.ray_starts`` gives them for the streams from ``first_ray`` on), each
@@ -2648,8 +2684,9 @@ class GpuTracer:
         tables (see :func:`_plant_tables`), or None. With ``groups`` face groups
         (``face_group``, the group of each face, -1 for none), each ray counts its
         reflections off each and the listeners sum the moments of those counts, at
-        ``moment_time_step``. Returns (energy, directional, moments, escaped rays,
-        ray_energy, reflections, traced rays)."""
+        ``moment_time_step``. ``face_kind`` (one per face, or None) and ``covered_ground``
+        count the covered paths' reflections as in bent air. Returns (energy,
+        directional, moments, escaped rays, ray_energy, reflections, traced rays)."""
         wgpu = gpu._wgpu("ray tracing")
         device = self._device
         dirs, weights = (np.asarray(a, float) for a in starts)
@@ -2681,7 +2718,10 @@ class GpuTracer:
         with_sizes = len(sizes) > 0
         if not with_sizes:
             sizes = np.zeros((self.faces, 2))
-        faces = np.hstack([self._normals, sizes, absorption, scattering])
+        kinds = np.zeros((self.faces, 1))
+        if face_kind is not None:
+            kinds[:, 0] = np.asarray(face_kind, float).reshape(self.faces)
+        faces = np.hstack([self._normals, sizes, kinds, absorption, scattering])
         covered = np.asarray(covered_time, float)
         if covered.size == 0:
             covered = np.full(n_rec, np.inf)
@@ -2786,6 +2826,7 @@ class GpuTracer:
             | (_ATMOSPHERE if bending is not None else 0)
             | (_PLANTS if plants is not None else 0),
             "covered_order": covered_order,
+            "covered_ground": -1 if face_kind is None else int(covered_ground),
             "size_from_order": size_from_order,
             "max_split": max_split,
             "max_family": max_family,
@@ -3030,7 +3071,7 @@ def run_memory(rays: int, bands: int, results: float) -> float:
     the results, the GPU's sums of them and one part of those read back at a time; the
     rays' starts (``_native.ray_starts``), their copies for the GPU and a word per ray
     for its family; and the GPU's rays in flight (at most ``_MOST_RAYS`` of
-    ``20 + 3 * bands`` words and those of the most face groups, twice). A GPU built into
+    ``21 + 3 * bands`` words and those of the most face groups, twice). A GPU built into
     the processor takes its buffers from the computer's memory."""
     starts = 8.0 * rays * (3 + bands)
     record = _record(bands, MAX_GROUPS)
@@ -3088,6 +3129,8 @@ def trace_stochastic(
     plant_asymmetry=None,
     plant_upright=None,
     gather_ratio=0.0,
+    face_kind=None,
+    covered_ground=0,
     *,
     total: int | None = None,
     keep: bool = False,
@@ -3106,6 +3149,11 @@ def trace_stochastic(
         raise Unsupported("the GPU tracer does not let sound through surfaces")
     if int(groups) > MAX_GROUPS:
         raise ValueError(f"at most {MAX_GROUPS} groups of faces, not {int(groups)}")
+    if face_kind is not None:  # as the CPU's trace_stochastic takes them
+        if not np.isin(face_kind, (-1, 0, 1)).all():
+            raise ValueError("trace_stochastic: bad face_kind")
+        if int(covered_ground) < 0:
+            raise ValueError("trace_stochastic: covered_ground below 0")
     gather_ratio = float(gather_ratio)
     if not 0.0 <= gather_ratio < math.inf:
         raise Unsupported("the GPU tracer shares the rain with a gather of finite ratio only")
@@ -3173,6 +3221,8 @@ def trace_stochastic(
         face_group=face_group,
         groups=int(groups),
         moment_time_step=float(moment_time_step),
+        face_kind=face_kind,
+        covered_ground=int(covered_ground),
     )
 
 

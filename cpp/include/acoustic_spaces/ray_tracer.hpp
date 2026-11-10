@@ -334,8 +334,12 @@ struct StochasticSettings {
     int size_from_order = 1;
     // Specular-only paths with at most this many reflections, arriving at receiver k no
     // later than covered_time[k] (s, from emission), are left out: the early-reflection
-    // finder computes those exactly. -1 keeps everything.
+    // finder computes those exactly. -1 keeps everything. With StochasticScene::face_kind
+    // (bent air), the order counts as the early stage's there (see detail::early_holds).
     int covered_order = -1;
+    // With StochasticScene::face_kind: the most bounces off the ground a covered path
+    // has (the early stage's curved paths have up to so many).
+    int covered_ground = 0;
     std::vector<double> covered_time;  // per receiver; empty: no time limit
     // Rays use random streams first_ray .. first_ray + rays - 1, and each carries
     // 1 / rays of the source energy.
@@ -442,6 +446,10 @@ struct StochasticScene {
     // StochasticResult::moments: enough to re-weight the response for new absorption.
     const std::int64_t *face_group = nullptr;
     std::size_t groups = 0;
+    // Optional, in bent air (faces): how the early stage counts the reflections off each
+    // face, kGroundFace, kWallFace or kOtherFace (see detail::early_holds). Without it, every
+    // reflection counts towards StochasticSettings::covered_order.
+    const std::int64_t *face_kind = nullptr;
     std::vector<Vec3> receivers;
     std::vector<Vec3> directions;  // unit vectors for directional bins; may be empty
     MapGrid map;                   // no points: no map
@@ -454,6 +462,9 @@ struct StochasticScene {
     // and scatter them. The rain on the way to a receiver loses what the plants take.
     const Vegetation *vegetation = nullptr;
 };
+
+// StochasticScene::face_kind: the ground, a vertical wall, any other face.
+constexpr std::int64_t kGroundFace = 1, kWallFace = 0, kOtherFace = -1;
 
 struct StochasticResult {
     std::size_t bins = 0, dir_bins = 0, windows = 0;
@@ -505,7 +516,37 @@ struct RayState {
     // first face that reflects it, and nothing else happens to it (no rain, splitting or
     // plants' scattering; it goes on through openings and partitions as their share).
     bool detect_only = false;
+    // With StochasticScene::face_kind: of the reflections so far, those off the ground,
+    // and whether one was off a face neither the ground nor a vertical wall.
+    int ground = 0;
+    bool other = false;
 };
+
+// Whether the specular-only path a ray in `state` has followed is one the early stage
+// computes (its time aside). Without StochasticScene::face_kind (straight rays): when it
+// has at most covered_order reflections. In bent air the early stage holds the curved
+// paths off the ground and off vertical walls (unfolded): those with up to
+// covered_ground bounces off the ground and at most covered_order reflections counting
+// the ground's as one, any of them; a path that reflects off any other face it holds as
+// in straight air.
+inline bool early_holds(const StochasticSettings &settings, const StochasticScene &scene,
+                        const RayState &state) {
+    if (scene.face_kind == nullptr || state.other) return state.order <= settings.covered_order;
+    const int walls = state.order - state.ground;
+    return state.ground <= settings.covered_ground &&
+           walls + std::min(state.ground, 1) <= settings.covered_order;
+}
+
+// Counts a reflection off `face` (after RayState::order) in state.ground and state.other.
+inline void count_reflection(const StochasticScene &scene, std::size_t face, RayState &state) {
+    if (scene.face_kind == nullptr) return;
+    const std::int64_t kind = scene.face_kind[face];
+    if (kind == kGroundFace) {
+        ++state.ground;
+    } else if (kind != kWallFace) {
+        state.other = true;
+    }
+}
 
 // A ray that passes through a partition: one more, and once past those the early stage
 // follows, a path that has reflected is no longer the early stage's.
@@ -828,6 +869,7 @@ struct Accumulator {
         const double *energy = state.energy.data();
         // A blended leg's scattered share never is the early stage's (see spheres).
         const bool blended = settings.vector_scattering && order > 0 && !state.detect_only;
+        const bool early = early_holds(settings, scene, state);
         const MapGrid &map = scene.map;
         constexpr double kFlat = 1e-12;
         const double inf = std::numeric_limits<double>::infinity();
@@ -877,8 +919,7 @@ struct Accumulator {
                 const double distance = travelled + rate * middle;
                 if (distance > c * settings.max_time) continue;  // in the overrun
                 const double absorbing = path < 0.0 ? distance : path + stretch * middle;
-                const bool covered = !blended && order <= settings.covered_order &&
-                                     distance / c <= map.covered_time[k];
+                const bool covered = !blended && early && distance / c <= map.covered_time[k];
                 const std::size_t bin = map.bin(distance / c - map.onset[k]);
                 if (bin >= out.map_bins) continue;
                 const double factor = (b - a) / map.volume[k];
@@ -1107,11 +1148,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                 // The specular-only share of a covered path is the early stage's. A vector
                 // reflection's blended leg counts only the scattered share (its specular
                 // share is on its detect-only leg), which never is.
-                const bool covered = state.order <= settings.covered_order &&
-                                     (settings.covered_time.empty() ||
-                                      distance / c <= settings.covered_time[k]) &&
-                                     !(settings.vector_scattering && state.order > 0 &&
-                                       !state.detect_only);
+                const bool covered =
+                    detail::early_holds(settings, scene, state) &&
+                    (settings.covered_time.empty() || distance / c <= settings.covered_time[k]) &&
+                    !(settings.vector_scattering && state.order > 0 && !state.detect_only);
                 std::array<double, kMaxBands> passed;
                 if (plant_track != nullptr) plant_track->weight(nearest, passed.data());
                 double any = 0.0;
@@ -1275,7 +1315,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                 stack.pop_back();
                 if (!ray_state.detect_only) ++out.traced_rays;
                 auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room, hits,
-                       path, away, leaving, partitions, detect_only] = ray_state;
+                       path, away, leaving, partitions, detect_only, ground, other] = ray_state;
 
                 while (travelled < max_length) {
                     Hit hit;
@@ -1551,6 +1591,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     std::copy(seen.begin(), seen.begin() + bands, seen_before.begin());
                     std::copy(alone.begin(), alone.begin() + bands, alone_before.begin());
                     ++order;
+                    const int ground_before = ground;
+                    const bool other_before = other;
+                    detail::count_reflection(scene, face, ray_state);
                     const std::int64_t group =
                         scene.groups > 0 ? scene.face_group[face] : std::int64_t{-1};
                     if (group >= 0) ++hits[static_cast<std::size_t>(group)];
@@ -1621,7 +1664,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             // specular-only share of a path the early stage computes
                             // exactly stays out.
                             const bool covered =
-                                settings.specular_rain && order <= settings.covered_order &&
+                                settings.specular_rain &&
+                                detail::early_holds(settings, scene, ray_state) &&
                                 (settings.covered_time.empty() ||
                                  (travelled + reach) / c <= settings.covered_time[k]);
                             const double kept =
@@ -1649,6 +1693,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                                              last, rng.split(), beyond, hits,
                                                              path, -n, true, partitions});
                             if (group >= 0) --stack.back().hits[static_cast<std::size_t>(group)];
+                            stack.back().ground = ground_before;
+                            stack.back().other = other_before;
                             detail::pass_partition(stack.back());
                             ++family;
                         } else {
@@ -1660,6 +1706,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 std::copy(alone_before.begin(), alone_before.begin() + bands,
                                           alone.begin());
                                 --order;
+                                ground = ground_before;
+                                other = other_before;
                                 if (group >= 0) --hits[static_cast<std::size_t>(group)];
                                 detail::pass_partition(ray_state);
                                 room = beyond;

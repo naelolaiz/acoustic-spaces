@@ -1501,6 +1501,151 @@ def test_bent_late_rays_are_traced_on_any_device() -> None:
     assert _unsupported(values) == ""
 
 
+def downwind(
+    rays: int,
+    max_order: int = 1,
+    scattering: float = 0.0,
+    method: str = "vector",
+    seed: int = 1,
+    barriers: tuple = (),
+) -> Scene:
+    """The fast field program's scene (``validation/benchmark_1995.py``): a source 2 m
+    up over grass, listeners 1.5 m up 200 and 300 m downwind in the windy preset."""
+    material = {
+        "impedance": {"model": "delany_bazley", "flow_resistivity": 200.0},
+        "scattering": scattering,
+    }
+    return Scene.model_validate(
+        {
+            "name": "downwind",
+            "geometry": {
+                "ground": {"extent": [[-50.0, -50.0], [350.0, 50.0]], "sky": 50.0},
+                "barriers": list(barriers),
+            },
+            "materials": {"field": material},
+            "default_material": "field",
+            "sources": [{"name": "s", "position": [0.0, 0.0, 2.0]}],
+            "listeners": [{"name": f"{r:g}", "position": [r, 0.0, 1.5]} for r in (200, 300)],
+            "atmosphere": {"preset": "windy", "wind": {"direction_deg": 0.0}},
+            "simulation": {
+                "seed": seed,
+                "ir_length_s": 1.2,
+                "early": {"method": "image_sources", "max_order": max_order, "diffraction": "none"},
+                "late": {"rays": rays},
+                "scattering": {"method": method},
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize("scattering, method", [(0.0, "vector"), (0.1, "random")])
+def test_the_late_rays_leave_out_the_ground_bounces_the_bent_early_part_holds(
+    scattering, method
+) -> None:
+    """Downwind the early stage holds the curved paths off the ground with up to
+    MAX_GROUND_BOUNCES bounces whatever its order: the late rays leave all of them out,
+    so the early order changes the late part not at all, and over a ground that scatters
+    nothing more late rays add nothing (they added 11 dB at 500 Hz with 20,000 rays, the
+    paths of 2 and 3 bounces counted twice). Over a ground that scatters, 200 and 20,000
+    rays give the 500 Hz level within the noise of its scattered sound (the paths counted
+    twice added 9 and 6 dB; at 250 Hz the scattered sound near a listener in bent air
+    comes in bursts, a known issue, and is not compared)."""
+    run = {
+        (rays, order): simulate(
+            Room.from_scene(downwind(rays, order, scattering, method)), threads=1
+        )
+        for rays, order in ((200, 1), (20_000, 1), (20_000, 2))
+    }
+    for key in run[200, 1].responses:
+        one, two = run[20_000, 1][key], run[20_000, 2][key]
+        assert np.array_equal(one.early.energy, two.early.energy)
+        assert np.array_equal(one.late, two.late)
+        if scattering == 0.0:
+            # Nothing scatters and every specular path is the early stage's: the late
+            # part is empty, however many rays.
+            assert not one.late.any() and not run[200, 1][key].late.any()
+        else:
+            few, many = (run[rays, 1][key].relative_to_free_field()[3] for rays in (200, 20_000))
+            assert abs(few - many) < 0.5
+
+
+def test_a_wall_s_reflection_above_the_early_order_stays_with_the_late_rays() -> None:
+    """In wind the early stage holds a wall's reflection with bounces off the ground only
+    up to its order (the wall's counting as one and the ground's as one): with order 1
+    the paths off the wall and the ground are the late rays', with order 2 the early
+    stage's. The late rays' secondary sources radiate the specular sound of each
+    reflection to the listeners, so the late part with order 1 has more, from when the
+    first such path arrives on."""
+    wall = {"name": "wall", "path": [[-40.0, 15.0], [340.0, 15.0]], "height": 10.0}
+    runs = []
+    for order in (1, 2):
+        scene = downwind(2_000, order, barriers=(wall,))
+        scene.simulation.late.reception = "secondary_sources"
+        runs.append(simulate(Room.from_scene(scene), threads=1))
+    for key in runs[0].responses:
+        one, two = (run[key] for run in runs)
+        step = one.time_step
+        more = one.late.sum(axis=0) - two.late.sum(axis=0)
+        assert more.min() >= 0.0 and more.sum() > 0.1 * two.late.sum()
+        added = two.early.delay_s[~np.isin(two.early.delay_s, one.early.delay_s)]
+        assert np.flatnonzero(more)[0] * step >= added.min() - step
+
+
+def test_a_coverage_map_point_in_wind_reads_as_a_listener_there() -> None:
+    """A map point 100 m downwind of a source 1 m up over grass that scatters nothing, and
+    a listener there, within 0.1 dB in every band (the map's late part added the bounces
+    the early stage holds: 5 dB at 250 Hz with this seed)."""
+    from acoustic_spaces.engine.coverage import coverage_map
+
+    data = {
+        "name": "map",
+        "geometry": {"ground": {"extent": [[-10.0, -10.0], [130.0, 10.0]], "sky": 20.0}},
+        "materials": {"field": {"impedance": "grass", "scattering": 0.0}},
+        "default_material": "field",
+        "sources": [{"name": "s", "position": [0.0, 0.0, 1.0]}],
+        "listeners": [{"name": "l", "position": [100.0, 0.0, 1.5]}],
+        "atmosphere": {"preset": "windy", "wind": {"direction_deg": 0.0}},
+        "coverage": {"spacing": 20.0, "height": 1.5, "rays": 2000},
+        "simulation": {
+            "seed": 2,
+            "ir_length_s": 0.5,
+            "early": {"method": "image_sources", "max_order": 1, "diffraction": "none"},
+            "late": {"rays": 2000},
+        },
+    }
+    room = Room.from_scene(Scene.model_validate(data))
+    mapped = coverage_map(room, threads=1)
+    at = int(np.argmin(np.linalg.norm(mapped.grid.points - [100.0, 0.0, 1.5], axis=1)))
+    assert np.allclose(mapped.grid.points[at], [100.0, 0.0, 1.5])
+    listener = simulate(room, threads=1)["s", "l"].relative_to_free_field()
+    point = np.asarray(mapped.maps["s"].values["re_free_field"][at])
+    np.testing.assert_allclose(point, listener, atol=0.1)
+
+
+def test_still_air_traces_the_late_part_as_before() -> None:
+    """Without an atmosphere that bends the sound every reflection counts towards the
+    early order as before: the late part of a closed room and of a field in neutral air
+    as computed before the late rays learnt the bent early stage's paths."""
+    box = Scene.model_validate(
+        {
+            "name": "box",
+            "geometry": {"box": [6.0, 5.0, 3.0]},
+            "materials": {"m": {"absorption": [0.1] * 8, "scattering": 0.2}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": [1.5, 1.2, 1.4]}],
+            "listeners": [{"name": "l0", "position": [4.2, 3.1, 1.2]}],
+            "simulation": {"seed": 3, "ir_length_s": 0.2, "late": {"rays": 300}},
+        }
+    )
+    neutral = field({"preset": "neutral"}, ((60.0, 0.0, 1.5), (-30.0, 10.0, 3.0)))
+    before = (1.6025686813266748, 8.349338904503138e-07, 8.012851349037927e-06)
+    found = []
+    for scene in (box, neutral):
+        result = simulate(Room.from_scene(scene), threads=1)
+        found += [float(result[key].late.sum()) for key in sorted(result.responses)]
+    np.testing.assert_allclose(found, before, rtol=1e-6)
+
+
 def test_particles_bend_and_stay_put_in_still_air() -> None:
     from acoustic_spaces.engine.particles import trace_particles
 

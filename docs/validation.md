@@ -2304,7 +2304,7 @@ of free field, but for 0.11 dB at 1 kHz 10 km downwind; deeper in the shadow wit
 Then whole scenes, each case as an outdoor scene: the gradient as a measured
 atmosphere (`atmosphere.table`) with the wind along the line of the listeners, the air
 at 19.6 °C (343 m/s at the ground) and 50 % humidity, and the engine's defaults
-otherwise (the early paths as image sources up to one reflection, 200 late rays). The
+otherwise (the early paths as image sources up to one reflection, 50,000 late rays). The
 level relative to free field the engine reports per octave band from 63 Hz to 1 kHz
 ([Outdoor scenes](outdoor.md#results-outdoors)) against the program averaged over the
 band as the engine reads it (eight frequencies per band; 24 at 1 kHz, where the rays

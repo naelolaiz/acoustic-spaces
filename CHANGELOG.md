@@ -111,6 +111,13 @@
 - Fixed: a path that touches the very end of a fading edge, as with the source, the
   listener and a barrier's top at one height, is no longer dropped (up to 5.6 dB low at
   63 Hz).
+- Fixed: in wind or a temperature gradient the late rays counted again the curved paths
+  off the ground that the early part already holds (those with more bounces than
+  `max_order`, up to ten), so over a ground that scatters little the level rose with the
+  ray count: downwind of a low source, up to 8 dB over the fast field program at 500 Hz
+  and 29 dB in the 250 Hz ground dip with 50,000 rays. They now leave out what the early
+  part holds (within 0.05 dB of the program in those bands); still air and the shipped
+  examples do not change.
 
 ## 4.2.1
 

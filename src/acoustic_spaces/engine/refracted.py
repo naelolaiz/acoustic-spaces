@@ -1894,16 +1894,22 @@ def _thinned(rows: np.ndarray, tolerance: float) -> np.ndarray:
     return np.array(keep)
 
 
+def _bends(model: TraceModel) -> bool:
+    """Whether the atmosphere bends the sound: outdoors, in air that is not still."""
+    atmosphere = getattr(model.room.scene, "atmosphere", None)
+    return model.room.outdoor is not None and atmosphere is not None and not atmosphere.still
+
+
 def bending(model: TraceModel) -> dict:
     """The arguments that bend the rays of ``_native.trace_stochastic``, ``trace_map``
     and ``bent_chords`` in an outdoor scene's atmosphere: its profile (rows of height
     above the ground, speed of sound in still air and wind speed), the way the wind
     blows, the ground's height and how far a chord may stray from its arc. Empty where
     sound goes straight: indoors, or outdoors in still air."""
+    if not _bends(model):
+        return {}
     scene = model.room.scene
     atmosphere = getattr(scene, "atmosphere", None)
-    if model.room.outdoor is None or atmosphere is None or atmosphere.still:
-        return {}
     if atmosphere.zones:
         # The late rays sweep the whole scene: the mean weather over it, by area.
         rows, towards = Weather.of(model).mean_rows()
@@ -1918,6 +1924,26 @@ def bending(model: TraceModel) -> dict:
         "wind_direction": np.ascontiguousarray(towards, dtype=np.float64),
         "ground": float(model.ground),
         "chord_sagitta": CHORD_SAGITTA_M,
+    }
+
+
+def covering(model: TraceModel) -> dict:
+    """The arguments of ``_native.trace_stochastic`` and ``trace_map`` that leave out of
+    the late rays the specular paths the early stage holds where the atmosphere bends the
+    sound (:meth:`Refraction._listener`): the curved paths off the ground, with up to
+    :data:`MAX_GROUND_BOUNCES` bounces whatever the order, alone or unfolded off vertical
+    walls, the ground's bounces counting as one reflection towards the order, and the
+    paths off any other face as in still air. ``face_kind`` is 1 for the faces of the
+    ground (:func:`~acoustic_spaces.engine.model._ground_faces`), 0 for vertical walls and
+    -1 for the others, ``covered_ground`` the most bounces. Empty where sound goes
+    straight, where every reflection counts towards the order."""
+    if not _bends(model):
+        return {}
+    vertical = np.abs(model.plane_normal[model.face_plane, 2]) <= _VERTICAL
+    kind = np.where(_ground_faces(model.room), 1, np.where(vertical, 0, -1))
+    return {
+        "face_kind": np.ascontiguousarray(kind, dtype=np.int64),
+        "covered_ground": MAX_GROUND_BOUNCES,
     }
 
 
@@ -1940,9 +1966,7 @@ def direct_times(times: np.ndarray, paths: list[EarlyReflections]) -> np.ndarray
 def refraction_for(model: TraceModel, source: np.ndarray, **kwargs) -> Refraction | None:
     """The :class:`Refraction` of the source at ``source``, or None where sound goes
     straight: indoors, or outdoors in still air."""
-    scene = model.room.scene
-    atmosphere = getattr(scene, "atmosphere", None)
-    if model.room.outdoor is None or atmosphere is None or atmosphere.still:
+    if not _bends(model):
         return None
     return Refraction(model, source, **kwargs)
 
@@ -1956,6 +1980,7 @@ __all__ = [
     "Planned",
     "Refraction",
     "bending",
+    "covering",
     "direct_times",
     "refraction_for",
     "solve",

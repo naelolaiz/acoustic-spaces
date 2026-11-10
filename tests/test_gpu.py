@@ -906,6 +906,51 @@ def test_bent_rays_last_slots_take_the_whole_chords(device: str) -> None:
     np.testing.assert_allclose(short, long[:, :, : short.shape[2]], rtol=0.01, atol=0.0)
 
 
+@pytest.mark.parametrize("device", ["cpu", pytest.param("gpu", marks=needs_gpu)])
+@pytest.mark.parametrize("rain", [False, True])
+def test_bent_rays_leave_out_the_ground_bounces_the_early_stage_holds(
+    device: str, rain: bool
+) -> None:
+    """Downwind of a source 2 m up over a field that scatters nothing, the specular paths
+    that bounce twice or more off the ground reach listeners 150 and 180 m away, through
+    the detector spheres or the secondary sources' rain. With early order 1 the order
+    alone leaves them to the late rays; the early stage's rule in bent air (face_kind)
+    leaves out those with up to covered_ground bounces, with 10 all of them, and with 1,
+    or with the ground counted as a wall or as any other face, the order alone decides
+    again, to the bit. A kind that is none of the three, or fewer than no bounces, is
+    refused."""
+    trace = _native.trace_stochastic if device == "cpu" else gpu_tracer.trace_stochastic
+    listeners = np.array([[150.0, 0, 1.5], [180.0, 0, 1.5], [-150.0, 0, 1.5], [0, 150.0, 1.5]])
+    values = _open_field(
+        bands=1,
+        rays=5000,
+        diffuse_rain=rain,
+        specular_rain=rain,
+        receivers=listeners,
+        scattering=np.zeros((12, 1)),
+        covered_order=1,
+        covered_time=np.full(4, 1.0),
+    ) | _profile(0.0, 6.0)
+    vertices, faces = _unit_cube()
+    height = vertices[faces][:, :, 2]
+    ground = np.all(height == 0.0, axis=1)
+    kind = np.where(ground, 1, np.where(np.all(height == 1.0, axis=1), -1, 0))
+    plain = trace(**values)[0]
+    assert np.all(plain[:2].sum(axis=(1, 2)) > 0.0)
+    assert not trace(**values, face_kind=kind, covered_ground=10)[0].any()
+    for kinds, most in (
+        (kind, 1),
+        (np.where(ground, -1, kind), 10),
+        (np.where(ground, 0, kind), 10),
+    ):
+        np.testing.assert_array_equal(
+            trace(**values, face_kind=kinds, covered_ground=most)[0], plain
+        )
+    for kinds, most in ((np.where(ground, 2, kind), 10), (kind, -1)):
+        with pytest.raises(ValueError, match="face_kind|covered_ground"):
+            trace(**values, face_kind=kinds, covered_ground=most)
+
+
 def _crown(absorption, scattering, asymmetry) -> dict:
     """A spheroid of foliage 30 m across and 20 m high, between the source and the first
     listener of :func:`_big_box`."""

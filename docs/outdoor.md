@@ -607,9 +607,12 @@ is an arc of a circle, so its travel time and its length are exact.
   2 cm from them, reflect where they meet a surface, and leave the scene once they are
   bent up out of it. The energy they rain onto listeners goes straight, in the time of
   the heights it crosses, and does not reach a listener in the shadow of where it
-  leaves. The CPU and the GPU trace these rays alike (`simulation.late.device`): the
-  GPU follows the same chords, in single precision, and what reaches each listener in
-  each band, and when, agrees within the noise of the ray count (see
+  leaves. They leave out the specular paths the early part holds: off the ground and
+  vertical walls, those with up to ten bounces off the ground, which count as one
+  reflection towards `max_order`; off any other surface, as in still air. The CPU and
+  the GPU trace these rays alike (`simulation.late.device`): the GPU follows the same
+  chords, in single precision, and what reaches each listener in each band, and when,
+  agrees within the noise of the ray count (see
   [Validation](validation.md#outdoor-scenes-on-the-gpu)). On Direct3D 12 (Windows) the
   CPU traces them in a scene with vegetation too, which the run says.
 - **The wave solver** (`simulation.wave`) steps the sound field itself in its bands, with
