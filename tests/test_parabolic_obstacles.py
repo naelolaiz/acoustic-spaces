@@ -223,3 +223,57 @@ def test_a_coarser_grid_keeps_the_wind_s_effect_behind_a_screen() -> None:
         ]
         effects.append(levels[1] - levels[0])
     np.testing.assert_allclose(effects[1], effects[0], atol=0.1)
+
+
+def test_runs_sharing_the_march_over_the_open_ground_get_what_they_get_alone(monkeypatch) -> None:
+    """Runs that differ in their obstacles, points and grounds take one trunk one after
+    another, in three orders: each has the bytes of the run by itself, and together they
+    take fewer transforms."""
+    f = F[3]
+    wind = log_wind(5.0)
+    lawn, hard = grass(f), (lambda r: np.full(len(f), 30.0 + 20.0j))
+    there = lawn(0.0)
+    patchy = lambda r: there if r < 20.0 else hard(r)  # noqa: E731
+    runs = [
+        (lawn, [(45.0, 45.0, 4.0)], [63.0, 93.0], True),
+        (lawn, [(45.0, 45.0, 4.0), (55.0, 55.0, 4.0)], [50.0, 93.0], True),
+        (lawn, [(45.0, 55.0, 6.0)], [63.0, 63.0], True),
+        (lawn, [(30.0, 30.0, 3.0)], [20.0, 93.0], False),
+        (lawn, [(-2.0, 3.0, 5.0), (60.0, 60.0, 4.0)], [93.0], True),
+        (patchy, [(45.0, 45.0, 4.0)], [63.0, 93.0], True),
+        (patchy, [(60.0, 60.0, 4.0)], [93.0], True),
+        (hard, [(45.0, 45.0, 4.0)], [63.0], True),
+        (None, [(60.0, 60.0, 4.0)], [93.0], True),
+    ]
+    transforms = []
+    fft = np.fft.fft
+
+    def counted(a, *args, **kwargs):
+        transforms.append(len(a))
+        return fft(a, *args, **kwargs)
+
+    monkeypatch.setattr(np.fft, "fft", counted)
+
+    def march(run, trunk):
+        ground, obstacles, ranges, independent = run
+        return parabolic.march(
+            f,
+            wind,
+            ground,
+            1.0,
+            np.array(ranges),
+            np.full(len(ranges), 1.5),
+            25.0,
+            independent=independent,
+            obstacles=obstacles,
+            trunk=trunk,
+        )
+
+    alone = [march(run, None) for run in runs]
+    apart = sum(transforms)
+    for order in (range(len(runs)), reversed(range(len(runs))), (3, 4, 2, 0, 6, 5, 1, 7, 8)):
+        transforms.clear()
+        trunk = parabolic.Trunk()
+        for i in order:
+            assert march(runs[i], trunk).tobytes() == alone[i].tobytes()
+        assert sum(transforms) < apart
