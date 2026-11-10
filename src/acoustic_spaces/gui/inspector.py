@@ -4038,11 +4038,11 @@ class SimulationPage(Page):
                 "Outdoors behind barriers and buildings in wind or temperature gradients, the "
                 "frequencies an octave the parabolic equation takes at 8 kHz (at 4 kHz no "
                 "more than 16, below 4 kHz always 8). Fewer take less time and leave the "
-                "weather's effect there further off. Against 64, in the validation cases, it "
-                "is off by up to 0.51 dB at 8 kHz with 32; 6.4 dB with 16; 9.6 dB at 4 kHz "
-                "and 14 dB at 8 kHz with 8. A coverage map behind two barriers took 12, 7.7 "
-                "and 4.5 times as long as with straight legs. This comes on top of the "
-                "parabolic equation's own error"
+                "weather's effect there further off: each choice says by how much at most at "
+                "8 kHz, against 64 in the validation cases, on top of the parabolic "
+                "equation's own error; with 8 the 4 kHz band is further off too. The "
+                "documentation has the errors and the run times measured (Outdoor scenes, "
+                "How the simulation bends sound)"
             )
         )
         self.coherent = QComboBox()
@@ -4444,9 +4444,9 @@ class SimulationPage(Page):
         coherent = s.early.coherent_max_band_hz
         outdoor = self.document.scene.geometry.ground is not None
         _choose(self.parabolic_equation, s.early.parabolic_equation)
-        # The parabolic equation runs outdoors in wind or temperature gradients only.
-        atmosphere = self.document.scene.atmosphere
-        weather = outdoor and atmosphere is not None and not atmosphere.still
+        # The parabolic equation runs outdoors in wind or temperature gradients only: the
+        # scene's own, a weather zone's or a long-term weather class's.
+        weather = not self.document.scene.still
         self.parabolic_equation.setEnabled(weather)
         _choose(self.barrier_frequencies, s.early.barrier_frequencies)
         self.barrier_frequencies.setEnabled(weather)

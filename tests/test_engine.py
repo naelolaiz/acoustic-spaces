@@ -267,6 +267,39 @@ def test_exhaustive_search_has_a_limit() -> None:
         early_stage.exhaustive_candidates(model, np.array([2.0, 2.0, 1.0]), 8, limit=1000)
 
 
+def _open_field(early: dict) -> Room:
+    """Grass and the open sky: the ground is the only plane that reflects."""
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"ground": {"extent": [[-50, -50], [150, 50]], "sky": 30}},
+                "materials": {"field": {"impedance": "grass"}},
+                "default_material": "field",
+                "sources": [{"name": "s", "position": [0, 0, 2]}],
+                "listeners": [{"name": "l", "position": [100, 0, 1.5]}],
+                "simulation": {
+                    "ir_length_s": 0.5,
+                    "seed": 1,
+                    "early": early,
+                    "late": {"rays": 200},
+                },
+            }
+        )
+    )
+
+
+def test_exhaustive_search_over_one_plane_ends_after_the_first_order() -> None:
+    # No sequence of two reflections exists: every higher order is empty (was a ValueError
+    # from the third order on), one (0, k) array per order as the ray-traced search gives.
+    model = TraceModel.from_room(_open_field({}))
+    seqs = early_stage.exhaustive_candidates(model, np.array([0.0, 0.0, 2.0]), 5)
+    assert [s.shape for s in seqs] == [(1, 1), (0, 2), (0, 3), (0, 4), (0, 5)]
+    early = {"method": "image_sources", "diffraction": "none"}
+    first = simulate(_open_field({**early, "max_order": 1}), threads=1)[("s", "l")]
+    third = simulate(_open_field({**early, "max_order": 3}), threads=1)[("s", "l")]
+    np.testing.assert_array_equal(third.relative_to_free_field(), first.relative_to_free_field())
+
+
 def _diffuse_box(simulation: dict, scattering: float = 1.0) -> Room:
     return Room.from_scene(
         _scene(

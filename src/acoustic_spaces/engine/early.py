@@ -310,7 +310,10 @@ def exhaustive_candidates(
     out = []
     total = 0
     for _ in range(max_order):
-        new_seqs, new_images = [], []
+        # Starting from empty arrays keeps one (0, k) entry for an order with no sequence
+        # left (a single reflecting plane leaves none from the second order on).
+        new_seqs = [np.zeros((0, seqs.shape[1] + 1), dtype=np.int64)]
+        new_images = [np.zeros((0, 3))]
         chunk = max(1, 4_000_000 // max(1, model.plane_count))
         for start in range(0, len(seqs), chunk):
             s, img = seqs[start : start + chunk], images[start : start + chunk]

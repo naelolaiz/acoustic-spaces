@@ -13,6 +13,7 @@ from acoustic_spaces.engine import early_paths
 from acoustic_spaces.engine.coherent import (
     arriving_with,
     band_count,
+    ground_wave_factors,
     own_phases,
     reflection_phases,
     sample_frequencies,
@@ -391,3 +392,48 @@ def test_each_path_over_an_edge_takes_the_same_phase_wherever_it_is() -> None:
     # Another seed draws other phases; the same one, the same response.
     assert np.abs(np.angle(own_phases(paths, 8) / phases)).max() > 0.5
     np.testing.assert_array_equal(_octaves(paths, 3), _octaves(paths, 3))
+
+
+def test_sound_along_a_ground_zone_without_an_impedance_takes_its_fitted_admittance() -> None:
+    # Along a zone of absorbing ground (no impedance of its own) the wave at grazing
+    # incidence is the Weyl-van der Pol field 2 F(w) of the admittance fitted to its
+    # absorption, as along any face of that absorption; not the plane wave's factor,
+    # -1 at grazing incidence, which left 2 F(w) = 1 + Q near 0.
+    from scipy.optimize import brentq
+    from scipy.special import wofz
+
+    zone = [[-5, -5], [5, -5], [5, 5], [-5, 5]]
+    room = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {
+                    "ground": {
+                        "extent": [[-20, -20], [20, 20]],
+                        "sky": 20,
+                        "zones": [{"name": "bed", "polygon": zone}],
+                    }
+                },
+                "materials": {
+                    "grass": {"impedance": "grass"},
+                    "felt": {"absorption": [0.02] * 8, "scattering": 0.0},
+                },
+                "assignments": {"ground": "grass", "bed": "felt"},
+                "sources": [{"name": "s", "position": [0.0, 0.0, 1.0]}],
+                "listeners": [{"name": "l", "position": [3.0, 0.0, 1.0]}],
+            }
+        )
+    )
+    model = TraceModel.from_room(room)
+    faces = np.arange(len(model.absorption))
+    bed = faces[model.factor_faces(faces) & ~model.impedance_faces(faces)]
+    assert len(bed) and np.all(model.absorption[bed] == 0.02)
+
+    def paris(z):  # random-incidence absorption of a real normalised impedance z
+        return 8.0 / z * (1.0 + 1.0 / (1.0 + z) - 2.0 / z * math.log(1.0 + z))
+
+    beta = 1.0 / brentq(lambda z: paris(z) - 0.02, 1.0, 1e6)
+    w = 0.5 * (1 + 1j) * np.sqrt(2 * np.pi * np.array(model.band_hz) * 10.0 / 343.0) * beta
+    hand = 20 * np.log10(np.abs(1 + 1j * math.sqrt(math.pi) * w * wofz(w)))  # 10 m along it
+    q = ground_wave_factors(model, bed[:1], np.array([10.0]))[0]
+    level = 10 * np.log10(np.mean(np.abs(0.5 * (1.0 + q)) ** 2, axis=1))
+    np.testing.assert_allclose(level, hand, atol=0.05)

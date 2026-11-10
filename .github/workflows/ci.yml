@@ -113,12 +113,13 @@ jobs:
       - name: Test
         # Python itself is not built with them, so their runtimes are loaded first. Leaks
         # are not checked: Python keeps some memory to the end on purpose. The checks make
-        # the tests about three times as slow as on the plain Linux jobs: over 45 minutes
-        # in October 2026.
+        # the tests about three times as slow as on the plain Linux jobs: 41 to 67 minutes
+        # in November 2026, and one run on a slow runner was cut at 75 with 97 % of the
+        # tests passed.
         env:
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1
-        timeout-minutes: 75
+        timeout-minutes: 100
         run: >-
           LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libubsan.so)"
           python -m pytest -q -W error

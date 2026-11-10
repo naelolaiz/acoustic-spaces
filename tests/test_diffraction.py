@@ -14,6 +14,7 @@ from acoustic_spaces.engine import edge_fade as edge_fade_module
 from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.diffraction import (
     EdgeDiffraction,
+    Edges,
     along_edge,
     band_frequencies,
     boundary_angles,
@@ -27,7 +28,7 @@ from acoustic_spaces.engine.edge_fade import EdgeFade
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.reweight import groups_of, reweighted_result
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
-from acoustic_spaces.scene.model import EarlyStage
+from acoustic_spaces.scene.model import EarlyStage, Impedance
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
 
@@ -511,9 +512,10 @@ BARRIER_BTM = {
 }
 
 
-def _barrier(tmp_path: Path, source, listeners) -> Room:
-    """A rigid block from x = 0 to 1 m with its top at z = 0, open underneath, so wide
-    and deep that only its two top corners (along y) matter."""
+def _barrier(tmp_path: Path, source, listeners, material=None, top=None) -> Room:
+    """A block from x = 0 to 1 m with its top at z = 0, open underneath, so wide and
+    deep that only its two top corners (along y) matter: rigid, or of ``material``, and
+    its top of ``top`` if given."""
     a, h = 300, -300
     quads = [
         [(0, -a, 0), (1, -a, 0), (1, a, 0), (0, a, 0)],
@@ -523,30 +525,32 @@ def _barrier(tmp_path: Path, source, listeners) -> Room:
         [(0, a, h), (0, a, 0), (1, a, 0), (1, a, h)],
     ]
     lines = [f"v {x} {y} {z}" for quad in quads for x, y, z in quad]
-    lines += ["g block"] + [f"f {4 * i + 1} {4 * i + 2} {4 * i + 3} {4 * i + 4}" for i in range(5)]
+    lines += ["g top", "f 1 2 3 4", "g block"]
+    lines += [f"f {4 * i + 1} {4 * i + 2} {4 * i + 3} {4 * i + 4}" for i in range(1, 5)]
     obj = tmp_path / "block.obj"
     obj.write_text("\n".join(lines) + "\n")
-    return Room.from_scene(
-        Scene.model_validate(
-            {
-                "geometry": {"file": str(obj)},
-                "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
-                "default_material": "hard",
-                "sources": [{"name": "s", "position": list(source)}],
-                "listeners": [
-                    {"name": f"l{k}", "position": list(p)} for k, p in enumerate(listeners)
-                ],
-            }
-        )
-    )
+    scene = {
+        "geometry": {"file": str(obj)},
+        "materials": {"hard": material or {"absorption": [0.0] * 8, "scattering": 0.0}},
+        "default_material": "hard",
+        "sources": [{"name": "s", "position": list(source)}],
+        "listeners": [{"name": f"l{k}", "position": list(p)} for k, p in enumerate(listeners)],
+    }
+    if top is not None:
+        scene["materials"]["top"] = top
+        scene["assignments"] = {"top": "top"}
+    return Room.from_scene(Scene.model_validate(scene))
 
 
-def _over_barrier(room: Room, mode: str) -> np.ndarray:
-    """The level of every listener over the barrier, without air, as in BARRIER_BTM."""
+def _over_barrier(room: Room, mode: str, coherent: int = 0) -> np.ndarray:
+    """The level of every listener over the barrier, without air, as in BARRIER_BTM,
+    with the paths in pressure in the lowest ``coherent`` bands."""
     model = TraceModel.from_room(room)
     c, air = room.speed_of_sound(), np.zeros(8)
     source = np.array(room.scene.sources[0].position)
-    diffraction = EdgeDiffraction(model, source, speed_of_sound=c, air=air, mode=mode)
+    diffraction = EdgeDiffraction(
+        model, source, speed_of_sound=c, air=air, mode=mode, coherent=coherent
+    )
     out = []
     for listener in room.scene.listeners:
         at = np.array(listener.position)
@@ -577,6 +581,75 @@ def test_a_thick_barrier_takes_paths_over_two_edges(tmp_path: Path) -> None:
         # The same path backwards.
         back = _over_barrier(_barrier(tmp_path, r, [s]), "second_order")[0]
         np.testing.assert_allclose(back, level, atol=1e-9)
+
+
+@pytest.mark.parametrize("coherent", [0, 8])
+def test_paths_over_two_edges_along_an_absorbing_top_lose_what_the_ground_wave_does(
+    tmp_path: Path, coherent: int
+) -> None:
+    # Along the top the wave from the first corner is the Weyl-van der Pol field over a
+    # locally reacting face at grazing incidence, 2 F(w) times the free one, which goes
+    # to the rigid face's as the admittance does; not its plane wave's R = -1, which
+    # cancels the incident wave. So the level over an absorbing top falls short of the
+    # rigid one by |F(w)| over the 1 m top, whether the paths add in pressure or in
+    # energy, and stays with BTM's for the rigid block.
+    from scipy.optimize import brentq
+    from scipy.special import wofz
+
+    def level(s, r, absorption):
+        material = {"absorption": [absorption] * 8, "scattering": 0.0}
+        return _over_barrier(_barrier(tmp_path, s, [r], material), "second_order", coherent)[0]
+
+    def paris(z):  # random-incidence absorption of a real normalised impedance z
+        return 8.0 / z * (1.0 + 1.0 / (1.0 + z) - 2.0 / z * math.log(1.0 + z))
+
+    beta = 1.0 / brentq(lambda z: paris(z) - 0.02, 1.0, 1e6)
+    w = 0.5 * (1 + 1j) * np.sqrt(2 * np.pi * np.array(OCTAVE_BANDS_HZ) / 343.0) * beta
+    loss = 20 * np.log10(np.abs(1 + 1j * math.sqrt(math.pi) * w * wofz(w)))  # -0.02 to -0.24
+    for (s, r), btm in BARRIER_BTM.items():
+        rigid = level(s, r, 0.0)
+        np.testing.assert_allclose(level(s, r, 1e-6), rigid, atol=1e-3)
+        absorbing = level(s, r, 0.02)
+        if s[1] == r[1]:  # straight across the top, 1 m
+            np.testing.assert_allclose(absorbing - rigid, loss, atol=0.05)
+        assert np.all(absorbing < rigid) and np.all(absorbing > rigid - 0.3)
+        assert np.abs(absorbing - np.array(btm)).max() < 1.0
+        back = level(r, s, 0.02)
+        np.testing.assert_allclose(back, absorbing, atol=1e-9)
+    # Of an impedance (a hard ground's, 20 MPa s/m²) the same, with its own F(w).
+    (s, r), _ = next(iter(BARRIER_BTM.items()))
+    material = {"impedance": {"flow_resistivity": 20000}, "scattering": 0.0}
+    hard = _over_barrier(_barrier(tmp_path, s, [r], material), "second_order", coherent)[0]
+    f = np.array(OCTAVE_BANDS_HZ, dtype=float)
+    beta = np.conj(Impedance(flow_resistivity=20000).admittance(f))  # as e^(-iwt)
+    w = 0.5 * (1 + 1j) * np.sqrt(2 * np.pi * f / 343.0) * beta
+    loss = 20 * np.log10(np.abs(1 + 1j * math.sqrt(math.pi) * w * wofz(w)))  # 0.01 to 0.42
+    np.testing.assert_allclose(hard - level(s, r, 0.0), loss, atol=0.1)
+
+
+@pytest.mark.parametrize("mode", ["first_order", "second_order"])
+def test_an_absorbing_top_below_its_admittance_in_cosine_is_not_louder_than_a_rigid_one(
+    tmp_path: Path, mode: str
+) -> None:
+    # A source and a listener a little above the plane of the top, 3 m either side: the
+    # direct sound, the reflection off the top and the paths over its corners, with the
+    # fade. Near grazing incidence a point source's sound over a locally reacting face
+    # with a real admittance (here 0.10) is 2 F(w) times the free one, |F(w)| < 1, so an
+    # absorbing top is no louder than a rigid one. Checked only where the source sees
+    # the top and both corners at cosines below the admittance (h < 0.31 m): from there
+    # to h = 0.42 m, where those reflections turn their phase over one after the other,
+    # the level is up to 9.6 dB above the rigid one's (a known issue, docs/validation.md).
+    for h in (0.05, 0.1, 0.3):
+        source, listener = (-3.0, 0.0, h), (4.0, 0.0, h)
+        rigid = _barrier(tmp_path, source, [listener])
+        absorbing = _barrier(
+            tmp_path, source, [listener], top={"absorption": [0.5] * 8, "scattering": 0.0}
+        )
+        levels = [
+            10 * np.log10(total_energy(early_paths(room, max_order=1, diffraction=mode)))
+            for room in (rigid, absorbing)
+        ]
+        assert np.all(levels[1] - levels[0] < 0.5), (h, levels[1] - levels[0])
 
 
 def test_levels_are_continuous_over_a_barriers_top(tmp_path: Path) -> None:
@@ -660,15 +733,22 @@ def test_a_ground_reflection_joins_its_edge_term_on_grass(case: str) -> None:
 # -- reflections on both sides of an edge ----------------------------------------------
 
 
-def _ground_barrier(both_sides: bool, listener=(20.0, 0.0, 1.5), absorption: float = 0.0) -> Room:
-    """A thin barrier 3 m high, 10 m from a source 1 m over a ground of this absorption."""
+def _ground_barrier(
+    both_sides: bool,
+    listener=(20.0, 0.0, 1.5),
+    absorption: float = 0.0,
+    source=(0.0, 0.0, 1.0),
+    path=((10, -190), (10, 190)),
+) -> Room:
+    """A thin barrier 3 m high along ``path``, 10 m from a source 1 m over a ground of
+    this absorption."""
     return Room.from_scene(
         Scene.model_validate(
             {
                 "geometry": {
                     "ground": {"extent": [[-100, -200], [200, 200]], "sky": 40},
                     "barriers": [
-                        {"name": "barrier", "path": [[10, -190], [10, 190]], "height": 3.0}
+                        {"name": "barrier", "path": [list(p) for p in path], "height": 3.0}
                     ],
                 },
                 "materials": {
@@ -677,7 +757,7 @@ def _ground_barrier(both_sides: bool, listener=(20.0, 0.0, 1.5), absorption: flo
                 },
                 "default_material": "ground",
                 "assignments": {"barrier": "rigid"},
-                "sources": [{"name": "s", "position": [0.0, 0.0, 1.0]}],
+                "sources": [{"name": "s", "position": list(source)}],
                 "listeners": [{"name": "l", "position": list(listener)}],
                 "simulation": {
                     "ir_length_s": 0.3,
@@ -1135,3 +1215,351 @@ def test_a_solid_block_s_edges_stop_at_its_corners(tmp_path: Path) -> None:
     assert (np.isclose(edges.wedge, 1.5).sum(), np.isclose(edges.wedge, 2.0).sum()) == (8, 4)
     assert np.all(edges.fade == 0.0)
     assert not np.any(edges.closed)
+
+
+def _weighted_share(u: float, v: float) -> complex:
+    """The integral of exp(-j pi t^2 / 2) / (t^2 + v^2) up to ``u`` over that along the
+    whole line, by the midpoint rule out to 300 either side of ``u``."""
+    steps = (np.arange(600_000) + 0.5) * 5e-4
+
+    def part(t):
+        return np.sum(np.exp(-0.5j * np.pi * t**2) / (t**2 + v**2))
+
+    upto, beyond = part(u - steps), part(u + steps)
+    return complex(upto / (upto + beyond))
+
+
+@pytest.mark.parametrize(
+    "u, v",
+    [(-0.3, 0.05), (0.4, 1.5), (-1.2, 0.7), (2.5, 0.3), (-2.4, 3.0), (3.2, 2.6), (-4.0, 2.3)],
+)
+def test_a_term_s_share_of_a_finite_edge_is_weighted_for_its_boundary(u: float, v: float) -> None:
+    """The share of one term that the edge gives up to ``u`` past the path's point, its
+    boundary ``v`` away (both as arguments of the Fresnel integral along the edge),
+    against the integral itself: each of the three ways the engine evaluates it."""
+    cumulative = diffraction_module._cumulative
+    got = complex(cumulative(np.array([u]), np.array([v]))[0])
+    assert abs(got - _weighted_share(u, v)) < 1e-5
+    # Half of it lies either side of the point; on the boundary all of it is at the
+    # point; far from the boundary it is the Fresnel integral's.
+    assert cumulative(np.array([0.0]), np.array([v]))[0] == pytest.approx(0.5, abs=1e-12)
+    assert abs(cumulative(np.array([u]), np.array([1e-9]))[0] - (u > 0)) < 1e-6
+    far = cumulative(np.array([u]), np.array([1e3]))[0]
+    assert abs(far - cumulative(np.array([u]))[0]) < 1e-5
+
+
+@pytest.mark.parametrize("bend", [10.0, 2.0, -2.0, -10.0])
+def test_a_bent_screen_matches_btm_beside_the_bend_and_deep_in_the_shadow(
+    tmp_path: Path, bend: float
+) -> None:
+    """Two screens whose tops meet at a bend of 2 or 10 degrees, away from the source
+    (+) and towards it (-): the listener within 2 cm of the top's shadow boundary, the
+    line to the source passing the top 0.5 and 0.1 m from the bend, and deep in the
+    shadow past the bend, is within 0.1 dB of BTM over both tops in every band (0.03 dB
+    here). Each top took the Fresnel integral's share of its terms, whose step on the
+    boundary the direct sound did not match: 4.5 to 5.3 dB too high beside a bend away
+    from the source, up to 9.9 dB too low beside one towards it (63 Hz)."""
+    listeners = [(5.0, -0.5, z) for z in (0.98137, 0.99737, 1.00137, 1.02137)]
+    listeners += [(5.0, 0.3, 1.00137), (5.0, 0.003, -2.0), (5.0, 0.553, -2.0), (5.0, 1.503, -2.0)]
+    found, exact = edge_diffraction.bent_screen_levels(
+        tmp_path, bend, (-5.0, -0.5, -1.0), listeners
+    )
+    assert np.abs(found - exact).max() < 0.1
+
+
+def _rhombus(tmp_path: Path, angle: float) -> Edges:
+    """The edges of a thin screen with four sides 2 m long that meet at ``angle`` degrees
+    and at 180 less."""
+    a = np.array([2.0, 0.0, 0.0])
+    b = 2.0 * np.array([math.cos(math.radians(angle)), 0.0, math.sin(math.radians(angle))])
+    quads = [[tuple(corner) for corner in (0 * a, a, a + b, b)]]
+    room = edge_diffraction._room(tmp_path, "rhombus", quads, (1.0, 3.0, 1.0), (1.0, -3.0, 1.0))
+    return find_edges(TraceModel.from_room(room))
+
+
+def test_how_a_screen_s_edges_fade_at_corners_of_other_angles(tmp_path: Path) -> None:
+    """The paths over two edges that meet within 1 degree of square fade halfway at the
+    corner, where the two halves add up; at any other angle each edge keeps its own part
+    of its terms (all the way, 1). They faded halfway from 45 to 135 degrees, which came
+    out up to 2.75 dB from BTM at a corner of 45 degrees."""
+    assert np.all(_rhombus(tmp_path, 90.0).fade == 0.5)
+    assert np.all(_rhombus(tmp_path, 89.5).fade == 0.5)
+    for angle in (88.0, 60.0, 45.0, 20.0):
+        assert np.all(_rhombus(tmp_path, angle).fade == 1.0)
+
+
+@pytest.mark.parametrize(
+    "angle, turned, ys",
+    [(45.0, 45.0, (-0.057, -0.007, 0.003, 0.053)), (120.0, 0.0, (3.6532, 3.9032))],
+)
+def test_corners_of_other_angles_match_btm(tmp_path: Path, angle: float, turned, ys) -> None:
+    """Behind the corner of a thin screen whose edges meet at 45 degrees, one of them
+    upright, and at 120 degrees: within 0.15 dB of BTM over both edges in every band,
+    and no step that BTM does not have. The acute corner was up to 2.75 dB off (250 Hz)
+    with a step of 3 dB at 125 Hz between the two listeners in the middle, where the
+    direct sound comes round the upright edge; the obtuse one 0.5 to 0.6 dB off."""
+    corner = edge_diffraction.screen_corner(tmp_path, angle, turned, np.array(ys), per_band=96)
+    assert max(corner["largest_difference_db"]) < 0.15
+    steps = np.subtract(corner["largest_step_db"], corner["exact_largest_step_db"])
+    assert np.abs(steps).max() < 0.15
+
+
+@pytest.mark.parametrize("both_sides", [False, True])
+@pytest.mark.parametrize(
+    "source, listener",
+    [
+        ((0.0, -8.0, 3.0), (20.0, -8.0, 3.0)),  # both at the height of the top
+        ((0.0, -8.0, 1.0), (20.0, -8.0, 5.0)),  # mirrored in the barrier, the top between
+        ((0.0, -10.5, 3.0), (20.0, -10.5, 3.0)),  # 0.5 m past the end
+        ((0.0, -12.0, 3.0), (20.0, -12.0, 3.0)),  # 2 m past it
+    ],
+)
+def test_no_hole_where_a_path_touches_the_very_end_of_an_edge(
+    both_sides: bool, source, listener
+) -> None:
+    """A barrier 3 m high and 20 m long: with the source and the listener at the height
+    of its top (behind it, and in sight of each other 0.5 and 2 m past its end), or
+    mirrored in it at 1 and 5 m, the shortest path round each of its upright ends
+    touches the end's top corner exactly. The level there is the mean of those 1 mm
+    lower and higher (within 0.1 dB, 0.05 dB here), which are 0.12 dB apart at most. The
+    paths that touch the very end of a fading edge were dropped: the level there was 4.8
+    to 5.6 dB lower at 63 Hz and 2.1 dB higher at 125 Hz (at the top's height), 3 dB
+    lower at 63 and 125 Hz and as much higher at 250 Hz (mirrored), and 0.4 and 0.2 dB
+    lower 0.5 and 2 m past the end."""
+    path = ((10, -10), (10, 10))
+    levels = []
+    for dz in (-0.001, 0.0, 0.001):
+        at = (listener[0], listener[1], listener[2] + dz)
+        paths = early_paths(_ground_barrier(both_sides, at, source=source, path=path))
+        levels.append(10 * np.log10(total_energy(paths)))
+    assert np.abs(levels[2] - levels[0]).max() < 0.2
+    assert np.abs(levels[1] - 0.5 * (levels[0] + levels[2])).max() < 0.1
+
+
+def test_the_very_end_of_a_fading_edge_counts_once() -> None:
+    """A path that touches an end of its edge exactly: nothing reflected (kind 0), with a
+    reflection before the edge (1), after it (2) and both (3). An end that fades is part
+    of its fade, and keeps them all. Where the end lies in the plane the path reflects
+    off, the path that reflects before the edge and the one that reflects after it are
+    one path: the first counts at the edge's start only, the second at its end only, and
+    the one with both at neither, whether the end fades or not."""
+    kind, ones = np.arange(4), np.ones(4)
+
+    def kept(at: float, fade: float, held: bool) -> list[bool]:
+        in_plane = np.repeat((kind > 0) & held, 2).reshape(4, 2)
+        past = (np.full((4, 2), fade), 1.0, in_plane)
+        reach = diffraction_module._reach
+        return reach(kind, 3.0 * ones, at * ones, ones, at * ones, ones, 343.0, 1.0, past)[
+            0
+        ].tolist()
+
+    assert kept(0.0, 1.0, False) == kept(3.0, 1.0, False) == [True, True, True, True]
+    for fade, held in ((1.0, True), (0.0, True), (0.0, False)):
+        assert kept(0.0, fade, held)[1:] == [True, False, False]
+        assert kept(3.0, fade, held)[1:] == [False, True, False]
+    # Nothing reflected: the end of an edge that goes on belongs to the next one.
+    assert (kept(3.0, 1.0, True)[0], kept(3.0, 0.0, False)[0]) == (True, False)
+
+
+def _wall_in_line(
+    sources,
+    listeners,
+    side: float = -1.0,
+    shift: float = 0.0,
+    extent=((-45, -45), (45, 45)),
+    start: float = 10.0,
+    others=(),
+    **simulation,
+):
+    """A rigid building 10 m deep whose wall runs along y = ``shift`` from x = ``start``
+    to 20, the building on the side ``side`` of it, and one like it from x = a to a + 10
+    for each a of ``others``, outdoors on ground over ``extent``. Reflections up to the
+    first order, unless ``simulation`` gives ``early`` settings, which replace them (and
+    with them that order)."""
+    boxes = [[[start, 0], [20, 0], [20, 10 * side], [start, 10 * side]]]
+    boxes += [[[a, 0], [a + 10, 0], [a + 10, 10 * side], [a, 10 * side]] for a in others]
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {
+                    "ground": {"extent": [list(c) for c in extent], "sky": 20.0},
+                    "buildings": [
+                        {
+                            "name": f"h{k}",
+                            "footprint": [[x, y + shift] for x, y in box],
+                            "height": 6,
+                        }
+                        for k, box in enumerate(boxes)
+                    ],
+                },
+                "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+                "default_material": "hard",
+                "sources": [{"name": f"s{k}", "position": list(p)} for k, p in enumerate(sources)],
+                "listeners": [
+                    {"name": f"l{k}", "position": list(p)} for k, p in enumerate(listeners)
+                ],
+                "simulation": {"early": {"max_order": 1}, **simulation},
+            }
+        )
+    )
+
+
+def _pairs(room: Room, count: int) -> list:
+    return [early_paths(room, f"s{k}", f"l{k}", threads=1) for k in range(count)]
+
+
+@pytest.mark.parametrize("bands", ["octave", "third_octave"])
+@pytest.mark.parametrize("side", [-1.0, 1.0])
+@pytest.mark.parametrize("swap", [False, True])
+def test_a_listener_in_line_with_a_wall_hears_one_corner(swap: bool, side: float, bands) -> None:
+    """The source 10 m before a building's wall, in its plane, and the listener 20 m past
+    it, in its plane too or 10 um into the wall's shadow: the way runs along the wall
+    from one upright corner to the other, and both corners' paths are that one ray. The
+    listener on the line has the paths it has just off it in the shadow (over the far
+    corner alone), and its level; with the two swapped, those over the near one. Both
+    corners' paths were kept on the line, 4 to 8 dB louder than beside it."""
+    source, far = (0.0, 0.0, 1.0), (40.0, 0.0, 1.5)
+    if swap:
+        room = _wall_in_line([far, far], [source, (0.0, 1e-5 * side, 1.0)], side)
+    else:
+        room = _wall_in_line([source, source], [far, (40.0, 1e-5 * side, 1.5)], side)
+    room.scene.simulation.bands = bands
+    room = Room.from_scene(room.scene)
+    on, off = _pairs(room, 2)
+    assert sorted(on.edge.tolist()) == sorted(off.edge.tolist()) and len(on) == 2
+    np.testing.assert_allclose(
+        10 * np.log10(total_energy(on)), 10 * np.log10(total_energy(off)), atol=0.01
+    )
+
+
+def test_a_listener_in_line_with_a_wall_over_two_edges() -> None:
+    """As above with paths over two edges: on the line, as 10 um into the shadow."""
+    beside = (40.0, -1e-5, 1.5)
+    room = _wall_in_line(
+        [(0.0, 0.0, 1.0)] * 2, [(40.0, 0.0, 1.5), beside], early={"diffraction": "second_order"}
+    )
+    on, off = _pairs(room, 2)
+    np.testing.assert_allclose(
+        10 * np.log10(total_energy(on)), 10 * np.log10(total_energy(off)), atol=0.01
+    )
+
+
+def test_a_map_point_in_line_with_a_wall_hears_one_corner() -> None:
+    """A coverage map whose points at y = 0 lie in the plane of the wall the source
+    stands in line with: there as with the wall and the source 10 um aside (the points
+    then in the wall's shadow)."""
+    from acoustic_spaces.engine import coverage_map
+    from acoustic_spaces.scene import Coverage
+
+    settings = Coverage(spacing=10.0)
+    maps = []
+    for shift in (0.0, 1e-5):
+        room = _wall_in_line(
+            [(-5.0, shift, 1.0)],
+            [(-5.0, 10.0, 1.2)],
+            shift=shift,
+            extent=((-15, -25), (45, 25)),
+            late={"rays": 50},
+        )
+        maps.append(coverage_map(room, settings=settings, threads=1))
+    on, off = (
+        m.get().values["spl"][(np.abs(m.grid.points[:, 1]) < 1e-9) & (m.grid.points[:, 0] > 20.0)]
+        for m in maps
+    )
+    assert len(on) == 2
+    np.testing.assert_allclose(on, off, atol=0.01)
+
+
+@pytest.mark.parametrize("order", ["first_order", "second_order"])
+@pytest.mark.parametrize("side", [-1.0, 1.0])
+def test_a_listener_on_a_wall_in_line_with_the_source_hears_it(side: float, order) -> None:
+    """The source in the plane of a building's wall and the listener on the wall, or at
+    its far corner: a point on a face has only the side in front of it. On the wall it
+    reads as 10 um in front; at the corner it lies between its neighbours in front of
+    the wall and beside the corner, behind the wall's plane. Taking it for a point past
+    the wall's end, behind it, dropped every path and left it with none."""
+    front, behind = -1e-5 * side, 1e-5 * side
+    listeners = [
+        (15.0, 0.0, 1.5),
+        (15.0, front, 1.5),
+        (20.0, 0.0, 1.5),
+        (20.0, front, 1.5),
+        (20.0 + 1e-5, behind, 1.5),
+    ]
+    room = _wall_in_line([(0.0, 0.0, 1.0)] * 5, listeners, side, early={"diffraction": order})
+    on, ahead, corner, lit, past = (10 * np.log10(total_energy(p)) for p in _pairs(room, 5))
+    np.testing.assert_allclose(on, ahead, atol=0.01)
+    assert np.all((corner > np.minimum(lit, past)) & (corner < np.maximum(lit, past)))
+
+
+def test_a_listener_on_another_wall_in_line_is_past_the_first() -> None:
+    """Two buildings whose walls lie in one plane with the source, the listener on the
+    second's wall: it lies past the first's wall, as a point in the open between them
+    does, so it has no path over the first's near corner either (the wave along that
+    wall is the far corner's). Taking the second wall for the first's face kept both
+    corners' paths there."""
+    listeners = [(35.0, 0.0, 1.5), (25.0, 0.0, 1.5)]
+    room = _wall_in_line([(0.0, 0.0, 1.0)] * 2, listeners, others=(30.0,))
+    edges = find_edges(TraceModel.from_room(room))
+    upright = np.abs(edges.direction[:, 2]) > 1.0 - 1e-9
+    near = np.flatnonzero(
+        upright & (np.linalg.norm(edges.start[:, :2] - [10.0, 0.0], axis=1) < 1e-9)
+    )
+    far = np.flatnonzero(
+        upright & (np.linalg.norm(edges.start[:, :2] - [20.0, 0.0], axis=1) < 1e-9)
+    )
+    assert len(near) == 1 and len(far) == 1
+    for paths in _pairs(room, 2):
+        assert near[0] not in paths.edge and far[0] in paths.edge
+
+
+def test_a_map_point_on_a_wall_in_line_with_the_source_hears_it() -> None:
+    """A coverage map whose points at y = 0 lie in the plane of the wall the source
+    stands in line with, one on the wall and one at its far corner: the one on the wall
+    as with the wall 10 um back (the point then in front of it), the corner's heard too.
+    Both had no paths left."""
+    from acoustic_spaces.engine import coverage_map
+    from acoustic_spaces.scene import Coverage
+
+    settings = Coverage(spacing=10.0)
+    maps = []
+    for shift in (0.0, -1e-5):
+        room = _wall_in_line(
+            [(-5.0, 0.0, 1.0)],
+            [(-5.0, 10.0, 1.2)],
+            shift=shift,
+            extent=((-15, -25), (45, 25)),
+            start=5.0,
+            late={"rays": 50},
+        )
+        maps.append(coverage_map(room, settings=settings, threads=1))
+    on, ahead = (
+        m.get().values["spl"][
+            (np.abs(m.grid.points[:, 1]) < 1e-9) & np.isin(m.grid.points[:, 0], (10.0, 20.0))
+        ]
+        for m in maps
+    )
+    assert len(on) == 2 and np.isfinite(on).all()
+    np.testing.assert_allclose(on[0], ahead[0], atol=0.01)
+
+
+@pytest.mark.parametrize("swap", [False, True])
+def test_the_way_along_a_thick_barrier_s_top(tmp_path: Path, swap: bool) -> None:
+    """The source and the listener at the height of a 1 m thick barrier's top, on either
+    side: just above it and just below the level is the same (within 0.1 dB), and on it
+    too. With both corners' paths it was 8 dB louder."""
+    steps = (-1e-6, 0.0, 1e-6)
+    if swap:
+        level = np.concatenate(
+            [
+                _over_barrier(
+                    _barrier(tmp_path, (4.0, 0.3, dz), [(-3.0, 0.0, 0.0)]), "second_order"
+                )
+                for dz in steps
+            ]
+        )
+    else:
+        room = _barrier(tmp_path, (-3.0, 0.0, 0.0), [(4.0, 0.3, dz) for dz in steps])
+        level = _over_barrier(room, "second_order")
+    assert np.abs(level[2] - level[0]).max() < 0.1
+    np.testing.assert_allclose(level[1], level[0], atol=0.01)

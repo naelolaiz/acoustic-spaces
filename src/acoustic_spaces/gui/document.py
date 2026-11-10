@@ -308,6 +308,10 @@ class Document(QObject):
 
     #: Emitted after every change of the scene: an edit, undo, redo or load.
     changed = Signal()
+    #: Emitted when a save copied the scene's files elsewhere, with the scene as it was
+    #: and the same scene naming the copies, ahead of ``changed``: what was kept for the
+    #: first holds for the second.
+    files_moved = Signal(object, object)
     #: Emitted when the file, the unsaved state or the undo history changes.
     state_changed = Signal()
 
@@ -391,7 +395,7 @@ class Document(QObject):
             return
         description, scene = self._undo.pop()
         self._redo.append((description, self.scene))
-        scene = self._at_copies(scene)
+        scene = self.at_copies(scene)
         self._set(scene, Room.from_scene(scene, reuse=self.room))
 
     def redo(self) -> None:
@@ -399,10 +403,10 @@ class Document(QObject):
             return
         description, scene = self._redo.pop()
         self._undo.append((description, self.scene))
-        scene = self._at_copies(scene)
+        scene = self.at_copies(scene)
         self._set(scene, Room.from_scene(scene, reuse=self.room))
 
-    def _at_copies(self, scene: Scene) -> Scene:
+    def at_copies(self, scene: Scene) -> Scene:
         """``scene``, from before a save copied its files elsewhere, with the copies
         (:attr:`copies`) in place of the files it left behind."""
         if not any(str(file) in self.copies for file in referenced_files(scene)):
@@ -493,7 +497,9 @@ class Document(QObject):
         # The same scene with other copies of its files: no undo step. The copies hold
         # the same bytes, so the loaded geometry and directivities stay (an array's take
         # seconds to add up again).
+        old = self.scene
         self.scene, self.room = scene, dataclasses.replace(self.room, scene=scene)
+        self.files_moved.emit(old, scene)
         self.changed.emit()
 
     # -- common edits -----------------------------------------------------------------

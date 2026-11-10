@@ -25,7 +25,7 @@ from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine import ray_device
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.model import TraceModel
-from acoustic_spaces.engine.refracted import bending
+from acoustic_spaces.engine.refracted import bending, covering
 from acoustic_spaces.engine.vegetation import plant_arguments
 from acoustic_spaces.spatial.rotation import quaternion_matrix
 
@@ -516,8 +516,10 @@ def stochastic_energy(
 
     Specular-only paths with up to ``covered_order`` reflections reaching listener k
     no later than ``covered_time[k]`` (s, from emission) are left out; ``None`` puts no
-    time limit on that. With ``directions`` (unit vectors in room coordinates), each
-    arrival is also counted at the nearest of them, every ``DIRECTION_STEP``.
+    time limit on that. Where the atmosphere bends the sound, the order counts as the
+    early stage's there (:func:`~acoustic_spaces.engine.refracted.covering`). With
+    ``directions`` (unit vectors in room coordinates), each arrival is also counted at
+    the nearest of them, every ``DIRECTION_STEP``.
 
     With ``splitting``, a first tenth of the rays (at least ``MIN_FIRST_RAYS``, or half
     of them when there are fewer than twice that) measures how much energy a ray
@@ -565,6 +567,7 @@ def stochastic_energy(
     )
     face_room, source_room, level, own = _rooms(model, source, air, listeners)
     bent = bending(model)
+    cover = covering(model)
     coarse = max(1, round(BATCH_STEP / time_step))
     if groups is None:
         face_group, n_groups = np.zeros(0, dtype=np.int64), 0
@@ -630,6 +633,7 @@ def stochastic_energy(
                 **bent,
                 **plant_arguments(model, band),
                 "gather_ratio": ratio,
+                **cover,
             }
             if not plans:
                 plans.append(ray_device.choose(device, values))
@@ -804,6 +808,7 @@ def stochastic_map_energy(
         # Nothing lets sound through: every ray stays in the source's room.
         source_room = int(model.room.room_of(np.asarray(source, float)[None])[0])
     bent = bending(model)
+    cover = covering(model)
 
     def run(band: slice, count: int):
         first_order, band_table, absorption, scattering, band_air, sizes = _band_arguments(
@@ -853,6 +858,7 @@ def stochastic_map_energy(
                 level,
                 **bent,
                 **plant_arguments(model, band),
+                **cover,
                 **pinned,
             )
             return [energy], *rest

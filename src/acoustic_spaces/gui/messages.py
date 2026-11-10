@@ -2,8 +2,9 @@
 error in red, every other message on a shaded row so that one ends where the next
 begins. Ticks show or hide each level, a list and a filter keep only the messages
 about one source, listener or material or with some words, and Clear removes the
-messages on show. A path in a message to a file or folder that is there opens with a
-click in this computer's default app, and its right-click menu copies it."""
+messages on show. An error and the line that ends a run show whichever item the list
+is on. A path in a message to a file or folder that is there opens with a click in this
+computer's default app, and its right-click menu copies it."""
 
 from __future__ import annotations
 
@@ -236,8 +237,8 @@ class MessagesPanel(QWidget):
     def __init__(self) -> None:
         super().__init__()
         #: Every message kept: (text, level, the paths in it that open as
-        #: :func:`paths_in` gives them), oldest first.
-        self.entries: list[tuple[str, str, list[tuple[int, int, str]]]] = []
+        #: :func:`paths_in` gives them, whether it ends a run), oldest first.
+        self.entries: list[tuple[str, str, list[tuple[int, int, str]], bool]] = []
         #: Each scene item's name and how many messages name it.
         self._names: dict[str, int] = {}
         self._patterns: dict[str, re.Pattern] = {}
@@ -266,8 +267,9 @@ class MessagesPanel(QWidget):
         self.item = QComboBox()
         self.item.setToolTip(
             _(
-                "Show only the messages about one source, listener or material; the list "
-                "holds those that messages name, with how many do"
+                "Show only the messages about one source, listener or material; errors and "
+                "the line that ends a run show whichever is chosen. The list holds the "
+                "items that messages name, with how many do"
             )
         )
         self.filter = QLineEdit()
@@ -301,15 +303,23 @@ class MessagesPanel(QWidget):
 
     # -- adding and removing ----------------------------------------------------------
 
-    def add(self, text: str, level: str = "info", *, folder: str | Path | None = None) -> None:
+    def add(
+        self,
+        text: str,
+        level: str = "info",
+        *,
+        folder: str | Path | None = None,
+        closing: bool = False,
+    ) -> None:
         """Keep ``text`` (``level`` one of :data:`~acoustic_spaces.gui.levels.LEVELS`)
         and show it when the choices let it through. Its paths to files and folders that
         are there now open with a click, those relative to ``folder`` counted from there
-        (:func:`paths_in`)."""
+        (:func:`paths_in`). ``closing`` says it is the line that ends a run, which shows
+        whichever item the list is on, as an error does."""
         if level not in LEVELS:
             raise ValueError(f"level must be one of {', '.join(LEVELS)}, not {level!r}")
         links = paths_in(text, folder)
-        self.entries.append((text, level, links))
+        self.entries.append((text, level, links, closing))
         named = [name for name, pattern in self._patterns.items() if pattern.search(text)]
         for name in named:
             self._names[name] += 1
@@ -321,7 +331,7 @@ class MessagesPanel(QWidget):
         if named:
             self._items()
         self._counts()
-        if self._passes(text, level):
+        if self._passes(text, level, closing):
             bar = self.view.verticalScrollBar()
             following = bar.value() == bar.maximum()
             self._insert(text, level, links)
@@ -351,7 +361,9 @@ class MessagesPanel(QWidget):
 
     def clear_shown(self) -> None:
         """Remove the messages on show, keeping those the choices hide."""
-        self.entries = [entry for entry in self.entries if not self._passes(*entry[:2])]
+        self.entries = [
+            entry for entry in self.entries if not self._passes(entry[0], entry[1], entry[3])
+        ]
         self._recount()
         self._render()
 
@@ -370,22 +382,25 @@ class MessagesPanel(QWidget):
     def counts(self) -> dict[str, int]:
         """How many messages are kept at each level."""
         counts = dict.fromkeys(LEVELS, 0)
-        for _text, level, _links in self.entries:
+        for _text, level, _links, _closing in self.entries:
             counts[level] += 1
         return counts
 
-    def _passes(self, text: str, level: str) -> bool:
+    def _passes(self, text: str, level: str, closing: bool) -> bool:
+        """Whether the choices show this message: its level's tick, the item on the list
+        (an error and the line that ends a run are for every item) and the filter."""
         if not self.levels[level].isChecked():
             return False
         name = self.item.currentData()
-        if name and not self._patterns[name].search(text):
+        for_every_item = closing or level == "error"
+        if name and not for_every_item and not self._patterns[name].search(text):
             return False
         words = self.filter.text().strip().casefold()
         return not words or words in text.casefold()
 
     def _recount(self) -> None:
         self._names = dict.fromkeys(self._patterns, 0)
-        for text, _level, _links in self.entries:
+        for text, _level, _links, _closing in self.entries:
             for name, pattern in self._patterns.items():
                 if pattern.search(text):
                     self._names[name] += 1
@@ -415,8 +430,8 @@ class MessagesPanel(QWidget):
         """Show again the messages the choices let through, the newest at the bottom."""
         self.view.clear()
         self._shown = 0
-        for text, level, links in self.entries:
-            if self._passes(text, level):
+        for text, level, links, closing in self.entries:
+            if self._passes(text, level, closing):
                 self._insert(text, level, links)
         bar = self.view.verticalScrollBar()
         bar.setValue(bar.maximum())

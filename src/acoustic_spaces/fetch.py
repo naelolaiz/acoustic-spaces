@@ -256,7 +256,9 @@ def extract_tar(
                     done[info.name] = path
                     if len(done) == len(wanted):
                         break
-    except (tarfile.TarError, EOFError) as exc:  # a body cut short, or damaged
+    # A body cut short, or damaged; http.client ends one sent in chunks and cut short
+    # with IncompleteRead, which is no OSError.
+    except (tarfile.TarError, EOFError, http.client.IncompleteRead) as exc:
         raise OSError(f"{url}: the archive is cut short or damaged ({exc})") from exc
     finally:
         for part in parts:

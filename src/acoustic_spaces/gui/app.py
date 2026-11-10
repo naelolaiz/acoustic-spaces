@@ -750,11 +750,13 @@ class MainWindow(QMainWindow):
         old = self.document
         if old is not document:
             old.changed.disconnect(self._changed)
+            old.files_moved.disconnect(self._files_moved)
             old.state_changed.disconnect(self._state)
             if self.job is not None:  # its results would be of a scene no longer open
                 self.job.cancel()
         self.document = document
         document.changed.connect(self._changed)
+        document.files_moved.connect(self._files_moved)
         document.state_changed.connect(self._state)
         self.movement.reset()
         self.yaml_panel.reset()
@@ -868,11 +870,14 @@ class MainWindow(QMainWindow):
         *,
         status: bool = True,
         folder: str | Path | None = None,
+        closing: bool = False,
     ) -> None:
         """Add ``text`` to the messages, a warning in amber and an error in red, and show
         it in the status bar unless ``status`` is False. Its paths open with a click,
-        those relative to ``folder`` counted from there."""
-        self.message_panel.add(text, level, folder=folder)
+        those relative to ``folder`` counted from there. ``closing`` says it is the line
+        that ends a run (done, cancelled, its results dropped), which the messages show
+        whichever item they are of, as they do an error."""
+        self.message_panel.add(text, level, folder=folder, closing=closing)
         if status:
             self.statusBar().showMessage(text, 8000)
 
@@ -1177,7 +1182,8 @@ class MainWindow(QMainWindow):
                 length=report["length_s"],
                 rate=report["rate"],
                 seconds=time.perf_counter() - self._started,
-            )
+            ),
+            closing=True,
         )
         if report["gain"] != 1.0:
             self.log(
@@ -1617,15 +1623,12 @@ class MainWindow(QMainWindow):
         return answer == QMessageBox.StandardButton.Yes
 
     def _save_to(self, path: Path) -> bool:
-        scene = self.document.scene
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             self.document.save(path, copy_files=self.from_example)
         except (OSError, ValueError) as exc:
             self._error(_("Could not save"), str(exc))
             return False
-        if self.document.scene is not scene:
-            self._files_moved(scene, self.document.scene)
         self.from_example = False
         self.log(_("Saved {path}").format(path=path))
         if self.yaml_panel.edited():
@@ -1639,16 +1642,24 @@ class MainWindow(QMainWindow):
 
     def _files_moved(self, old, new) -> None:
         """The scene ``old`` became ``new``, the same scene with copies of its files (an
-        example saved elsewhere): runs, maps and Scene YAML text of ``old`` hold for
-        ``new``."""
+        example saved elsewhere): runs, maps, the sound playing and Scene YAML text of
+        ``old`` hold for ``new``. The document says so ahead of its ``changed``."""
         if self._result_scene is old:
             self._result_scene = new
         if self._coverage_scene is old:
             self._coverage_scene = new
         if self._job_scene is old:
             self._job_scene = new
+        if self._played is not None and self._played["scene"] is old:
+            self._played["scene"] = new
+        if self._traced is not None:
+            # The run's scene is ``old``, or an older one when the results on show
+            # re-weight the run: it names the copies too, so that it still differs from
+            # the scene in absorption alone.
+            result, traced, *groups = self._traced
+            traced = new if traced is old else self.document.at_copies(traced)
+            self._traced = (result, traced, *groups)
         self.yaml_panel.files_moved(old, new)
-        self._changed()
 
     def save_screenshot(self) -> None:
         if not self.viewport.available:
@@ -1934,7 +1945,8 @@ class MainWindow(QMainWindow):
                 time=elapsed,
                 step=report["step"],
                 folder=report["folder"],
-            )
+            ),
+            closing=True,
         )
 
     def _start(self, job: SimulationJob, message: str) -> None:
@@ -1986,7 +1998,11 @@ class MainWindow(QMainWindow):
         open: another was opened or started while the job ran."""
         if self._job_document is self.document:
             return False
-        self.log(_("Dropped the results of the run: its scene is no longer open."), "warning")
+        self.log(
+            _("Dropped the results of the run: its scene is no longer open."),
+            "warning",
+            closing=True,
+        )
         return True
 
     def _traced_shown(self, result) -> None:
@@ -2022,7 +2038,8 @@ class MainWindow(QMainWindow):
                 ),
                 time=elapsed,
                 count=count,
-            )
+            ),
+            closing=True,
         )
 
     def _map_done(self, result) -> None:
@@ -2043,7 +2060,8 @@ class MainWindow(QMainWindow):
                 ),
                 time=elapsed,
                 count=count,
-            )
+            ),
+            closing=True,
         )
         self._log_map_spread(result)
         self._draw()
@@ -2079,7 +2097,7 @@ class MainWindow(QMainWindow):
         else:
             text = _("Tuned in {time:.1f} s: late stage {late}.")
         wave = tuning.wave_pick(result.wave.costs) if result.wave else ""
-        self.log(fmt(text, time=elapsed, late=late, wave=wave))
+        self.log(fmt(text, time=elapsed, late=late, wave=wave), closing=True)
         settings = self.document.scene.simulation
         dialog = TuneDialog(result, settings.late.device, settings.wave.device, self)
         dialog.finished.connect(lambda code: self._tune_answered(dialog, code))
@@ -2142,7 +2160,8 @@ class MainWindow(QMainWindow):
                 "export": _("Export cancelled."),
                 "demo": _("Demo cancelled."),
                 "movement": _("Movement cancelled."),
-            }.get(self._job_kind(), _("Simulation cancelled."))
+            }.get(self._job_kind(), _("Simulation cancelled.")),
+            closing=True,
         )
 
     def _job_ended(self) -> None:
@@ -2196,7 +2215,8 @@ class MainWindow(QMainWindow):
                 "Wrote {count} impulse response file and {report} to {folder}",
                 "Wrote {count} impulse response files and {report} to {folder}",
                 files,
-            ).format(count=files, report=REPORT_FILE, folder=self._export_folder)
+            ).format(count=files, report=REPORT_FILE, folder=self._export_folder),
+            closing=True,
         )
         if report["peak"] > 1.0:
             self.log(

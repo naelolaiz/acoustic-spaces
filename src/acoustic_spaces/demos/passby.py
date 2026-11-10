@@ -77,7 +77,7 @@ SPEED_KMH = 50.0
 #: speed (a share of the slowest): 1 % is 0.2 dB of CNOSSOS-EU's rolling noise at most.
 STEADY = 0.01
 #: How far apart the places of the walk are simulated (m): through places 1 m apart a
-#: car's sound at 1 kHz follows the exact field's waveform to within -54 dB, -57 dB a
+#: car's sound at 1 kHz follows the exact field's waveform to within -58 dB, -94 dB a
 #: quarter of a metre apart (validation/doppler.py).
 STEP_M = 1.0
 #: The vehicle's sound fades in over its first FADE_S and out over its last, where it

@@ -4,7 +4,7 @@ listener, and the pass-by levels against the sound they render.
     python validation/doppler.py [--json results.json]
 
 A walk with ``doppler: true`` plays each early path through a delay that changes as the
-walker goes (:mod:`acoustic_spaces.doppler`). Four checks:
+walker goes (:mod:`acoustic_spaces.doppler`). Five checks:
 
 - **Over a hard ground.** A source passes a listener 10 m from its line, 1 m up, the
   listener 1.5 m up, over a rigid ground, at 30 m/s (a car) and 80 m/s (a train), and a
@@ -26,6 +26,12 @@ walker goes (:mod:`acoustic_spaces.doppler`). Four checks:
 - **The places.** The car at 1 kHz with places 0.25 to 4 m apart, and a helicopter's
   flyover, 150 m up at 63 m/s over a listener 1.2 m up right under its track, at 250
   Hz, 1 kHz and 4 kHz with places 1 to 16 m apart: how far apart they may be.
+- **Passing close.** A source at 70 m/s and at 30 m/s, and a listener at 30 m/s, pass 2
+  m and 1 m from the other's line, the places 0.25 m apart: the distance and the
+  direction change by a large part within one window of a path's filter (20 ms,
+  :data:`acoustic_spaces.doppler.HOP_S`), so the level is compared in windows of 5 ms;
+  at 1 kHz also as a cardioid microphone aimed level at the walker's line hears it,
+  each path times the capsule's 0.5 + 0.5 cos of the angle it arrives at.
 - **The pass-by levels.** White noise through the car's walk over grass (Miki's
   impedance, 200 kPa s/m²): the energy of the sound in each octave band against that of
   the noise through each place's own impulse response for as long as its sound is heard
@@ -54,6 +60,7 @@ from acoustic_spaces.directivity import _from_angles, _grid  # noqa: E402
 from acoustic_spaces.emission import Mixture  # noqa: E402
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ  # noqa: E402
 from acoustic_spaces.spatial import Mono  # noqa: E402
+from acoustic_spaces.spatial.microphone import first_order  # noqa: E402
 from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk  # noqa: E402
 
 RATE = 48_000
@@ -99,6 +106,17 @@ def road() -> Line:
     return Line(X0, X1, D, ZS, ZR)
 
 
+#: The close passes: who walks, at what speed (m/s), how far from the other's line (m);
+#: the distance between their places (m) and the windows of the level's error (s).
+CLOSE = (
+    ("source", 70.0, 2.0),
+    ("source", 70.0, 1.0),
+    ("source", 30.0, 1.0),
+    ("listener", 30.0, 1.0),
+)
+CLOSE_STEP_M = 0.25
+CLOSE_WINDOW_S = 0.005
+
 #: A helicopter's flyover: 150 m up at 63 m/s over a listener 1.2 m up right under its
 #: track, at the height and where the microphone stands in a helicopter's noise
 #: certification.
@@ -108,8 +126,16 @@ FLYOVER_STEPS = (1.0, 4.0, 8.0, 16.0)
 
 
 def scene(
-    walker: str, speed: float, ground: str, doppler: bool = True, directivity=None, line=None
+    walker: str,
+    speed: float,
+    ground: str,
+    doppler: bool = True,
+    directivity=None,
+    line=None,
+    cardioid: bool = False,
 ) -> Scene:
+    """The pass-by along ``line`` (by default :func:`road`); with ``cardioid``, the
+    listener facing the other's line, level, for a microphone aimed there."""
     line = line or road()
     walk = {"to": [[line.x1, 0.0, line.zs if walker == "source" else line.zr]]}
     walk |= {"speed_m_s": speed, "doppler": doppler, "face_forward": False}
@@ -119,6 +145,8 @@ def scene(
         source = {"name": "s", "position": [line.x0, 0.0, line.zs], "walk": walk}
     else:
         listener = {"name": "l", "position": [line.x0, 0.0, line.zr], "walk": walk}
+    if cardioid:
+        listener["orientation"] = {"yaw": -90.0 if walker == "source" else 90.0}
     if directivity is not None:
         source["directivity"] = directivity
     material = {"absorption": [0.0] * 8, "scattering": 0.0}
@@ -160,11 +188,12 @@ def emission(tone: float, n: int) -> Mixture:
     return Mixture(signals, weights.reshape(len(elevation), len(azimuth), 2), RATE)
 
 
-def exact(walker, speed, tone, n, sent=False, line=None) -> np.ndarray:
+def exact(walker, speed, tone, n, sent=False, line=None, cardioid=False) -> np.ndarray:
     """The direct sound and the image source's of a tone ``tone`` (Hz) at each sample,
     each at its retarded time, as the walk has them (a walking source stands at the
     end once there, a walking listener too), along ``line`` (by default :func:`road`);
-    ``sent``, as :func:`pattern` sends it the way the path leaves the source."""
+    ``sent``, as :func:`pattern` sends it the way the path leaves the source;
+    ``cardioid``, as a cardioid microphone aimed level at the other's line hears it."""
     c = speed_of_sound(20.0)
     band = int(np.argmin(np.abs(np.log2(np.array(OCTAVE_BANDS_HZ) / tone))))
     m = energy_attenuation_per_m()[band]
@@ -192,6 +221,9 @@ def exact(walker, speed, tone, n, sent=False, line=None) -> np.ndarray:
         r = np.sqrt(x**2 + b2)
         heard = (te >= 0.0) & (te < played)
         level = np.exp(-m * r / 2.0) / r
+        if cardioid:
+            # The path arrives d / r off the capsule's aim, in cosine.
+            level = level * (0.5 + 0.5 * d / r)
         amplitude, phase = np.ones(n), np.zeros(n)
         if sent:
             # From the source to the listener, or to the listener's image under the
@@ -205,12 +237,18 @@ def exact(walker, speed, tone, n, sent=False, line=None) -> np.ndarray:
     return out
 
 
-def errors(wet: np.ndarray, field: np.ndarray, walked: float, heard_s: float = 0.0) -> dict:
-    """The waveform's error and the level's in windows, from ``heard_s`` (s, when the
-    first sound arrives) and MARGIN_S on."""
+def errors(
+    wet: np.ndarray,
+    field: np.ndarray,
+    walked: float,
+    heard_s: float = 0.0,
+    window_s: float = WINDOW_S,
+) -> dict:
+    """The waveform's error and the level's in windows of ``window_s``, from ``heard_s``
+    (s, when the first sound arrives) and MARGIN_S on."""
     lo, hi = int((heard_s + MARGIN_S[0]) * RATE), int((walked - MARGIN_S[1]) * RATE)
     a, b = wet[lo:hi], field[lo:hi]
-    window = int(WINDOW_S * RATE)
+    window = int(window_s * RATE)
     levels = []
     for start in range(0, len(a) - window, window):
         pa, pb = np.sum(a[start : start + window] ** 2), np.sum(b[start : start + window] ** 2)
@@ -223,11 +261,12 @@ def errors(wet: np.ndarray, field: np.ndarray, walked: float, heard_s: float = 0
     }
 
 
-def run(walker, speed, ground, doppler, signals, step_m=STEP_M, line=None) -> tuple:
-    room = Room.from_scene(scene(walker, speed, ground, doppler, line=line))
+def run(walker, speed, ground, doppler, signals, step_m=STEP_M, line=None, cardioid=False) -> tuple:
+    room = Room.from_scene(scene(walker, speed, ground, doppler, line=line, cardioid=cardioid))
     walk = simulate_walk(room, step_m=step_m, late_step_m=None)
     name = "s"
-    return walk, [render_walk(walk, {name: s}, Mono())[:, 0] for s in signals]
+    fmt = first_order("cardioid") if cardioid else Mono()
+    return walk, [render_walk(walk, {name: s}, fmt)[:, 0] for s in signals]
 
 
 def check_field(cases, ground: str) -> list[dict]:
@@ -323,6 +362,35 @@ def check_flyover() -> list[dict]:
                 f"{row['level_max_db']:.3f} dB",
                 flush=True,
             )
+    return rows
+
+
+def check_close() -> list[dict]:
+    """The walkers of :data:`CLOSE` passing close by at 1 kHz and 4 kHz, the level in
+    windows of :data:`CLOSE_WINDOW_S`; and at 1 kHz as a cardioid microphone aimed at
+    the walker's line hears them."""
+    rows = []
+    for walker, speed, d in CLOSE:
+        line = dataclasses.replace(road(), d=d)
+        walked = (line.x1 - line.x0) / speed
+        t = np.arange(int((walked + 0.5) * RATE)) / RATE
+        # The first sound arrives this long after the walk starts.
+        heard = math.hypot(line.x0, line.d, line.zs - line.zr) / speed_of_sound(20.0)
+        for cardioid, tones in ((False, TONES[1:]), (True, TONES[1:2])):
+            signals = [np.sin(2.0 * np.pi * tone * t) for tone in tones]
+            _, wets = run(walker, speed, "hard", True, signals, CLOSE_STEP_M, line, cardioid)
+            for tone, wet in zip(tones, wets, strict=True):
+                field = exact(walker, speed, tone, len(wet), line=line, cardioid=cardioid)
+                row = {"walker": walker, "speed_m_s": speed, "distance_m": d, "tone_hz": tone}
+                row["heard_by"] = "cardioid" if cardioid else "mono"
+                row |= errors(wet, field, walked, heard, CLOSE_WINDOW_S)
+                rows.append(row)
+                print(
+                    f"{walker:8s} {speed:3.0f} m/s  {d:3.1f} m away  {tone:5.0f} Hz  "
+                    f"{row['heard_by']:8s}  waveform {row['waveform_db']:6.1f} dB, level "
+                    f"{row['level_mean_db']:.3f} / {row['level_max_db']:.3f} dB",
+                    flush=True,
+                )
     return rows
 
 
@@ -431,6 +499,11 @@ def main(argv=None) -> int:
     print("\nA helicopter's flyover, 150 m up at 63 m/s over a listener under its track,")
     print("its places further apart\n")
     flyover = check_flyover()
+    print(
+        f"\nPassing close, the places {CLOSE_STEP_M:g} m apart: the level's error in "
+        f"{1e3 * CLOSE_WINDOW_S:g} ms windows\n"
+    )
+    close = check_close()
     print("\nWhite noise through the car's walk over grass: its energy per band re the source's")
     print("(dB), as rendered, through the places' impulse responses and from the pass-by's")
     print("sound exposure level, and the rendered sound's difference from each\n")
@@ -439,6 +512,7 @@ def main(argv=None) -> int:
     print(f"\n{seconds:.0f} s")
     if args.json:
         out = {"field": rows, "emission": sent, "steps": steps, "flyover": flyover}
+        out["close"] = close
         out["levels"] = levels
         args.json.write_text(json.dumps(out, indent=2))
     return 0

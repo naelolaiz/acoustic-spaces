@@ -419,6 +419,42 @@ def test_a_body_cut_short_that_http_client_raises_for_is_an_os_error(
     assert asked == ["bytes=0-99"] * fetch.RETRIES
 
 
+def test_a_tar_sent_in_chunks_and_cut_short_is_an_os_error(tmp_path: Path, monkeypatch) -> None:
+    """A tar archive sent in chunks whose connection ends inside a chunk, or after one
+    and before the last (empty) chunk, fails with an OSError as every other archive cut
+    short does (http.client raises IncompleteRead there, which is none), and leaves
+    neither the member nor its .part file. Sent whole in the same chunks, it is read."""
+    # The archive is read io.DEFAULT_BUFFER_SIZE at a time (128 KiB from Python 3.14,
+    # 8 KiB before), and a read that meets the cut gives none of its bytes: the cuts fall
+    # three such reads in, inside the member (random bytes, which do not compress).
+    block = io.DEFAULT_BUFFER_SIZE
+    take = os.urandom(5 * block)
+    packed = io.BytesIO()
+    with tarfile.open(fileobj=packed, mode="w:gz") as archive:
+        info = tarfile.TarInfo("takes/wanted.wav")
+        info.size = len(take)
+        archive.addfile(info, io.BytesIO(take))
+    tar = packed.getvalue()
+    pieces = [tar[at : at + 8192] for at in range(0, len(tar), 8192)]
+    chunks = [b"%x\r\n%s\r\n" % (len(piece), piece) for piece in pieces]
+    head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+    sent = {}
+    monkeypatch.setattr(
+        fetch, "urlopen", lambda url, headers=None, timeout=0: _http_response(sent["raw"])
+    )
+    url, path = "https://example.org/takes.tar.gz", tmp_path / "out" / "take.wav"
+    whole = 3 * block // 8192
+    begun = head + b"".join(chunks[:whole])
+    for raw in (begun + chunks[whole][:-300], begun):
+        sent["raw"] = raw
+        with pytest.raises(OSError, match=r"takes.tar.gz: the archive is cut short or damaged"):
+            fetch.extract_tar(url, {"takes/wanted.wav": path})
+        assert sorted(path.parent.iterdir()) == []  # the member was begun: its folder is there
+    sent["raw"] = head + b"".join(chunks) + b"0\r\n\r\n"
+    assert fetch.extract_tar(url, {"takes/wanted.wav": path}) == {"takes/wanted.wav": path}
+    assert path.read_bytes() == take and sorted(path.parent.iterdir()) == [path]
+
+
 def test_a_remote_file_is_read_in_blocks_of_the_size_asked(monkeypatch) -> None:
     """A remote archive is asked for in blocks of the size given (large ones read large
     members in fewer requests), and keeps 64 MiB of them, two blocks at the least."""
@@ -1213,6 +1249,32 @@ def test_a_tour_crossfade_keeps_the_power_however_alike_the_two_mixes_are(
 
     assert level_at_cut("alike") == pytest.approx(0.0, abs=0.2)
     assert level_at_cut("unlike") == pytest.approx(0.0, abs=0.3)
+
+
+@pytest.mark.parametrize(
+    "cuts",
+    [
+        (0.0, 2.0, 2.6, 5.0),  # a middle stop shorter than the crossfade
+        (0.0, 2.0, 2.2, 5.0),  # and shorter than half of it
+        (0.0, 0.3, 3.0, 5.0),  # a first stop shorter than half the crossfade
+        (0.0, 2.0, 4.7, 5.0),  # a last one
+    ],
+)
+def test_a_tour_crossfade_is_no_longer_than_the_stops_it_joins(tmp_path: Path, cuts) -> None:
+    """Three mixes of one sound, toured, are that sound, however short a stop: a 1 s
+    crossfade is cut to the shorter of the two stops it joins. Left whole, a middle
+    stop's two crossfades overlapped and played it twice (6 dB louder), and one at
+    either end reached past the tour's (numpy's error for the shapes)."""
+    folder = tmp_path / "seats"
+    noise = np.random.default_rng(4).standard_normal((5 * RATE, 2)) * 0.1
+    keys = ("a", "b", "c")
+    for key in keys:
+        audio.write(folder / f"{key}.binaural.wav", noise, RATE)
+    seats = {"rate": RATE, "format": "binaural", "seats": {key: {"lag_s": 0.0} for key in keys}}
+    stops = [pipeline.TourStop(key, cuts[k], cuts[k], cuts[k + 1]) for k, key in enumerate(keys)]
+    out = pipeline.tour_audio(stops, folder, seats, crossfade_s=1.0, fade_out_s=0.0, peak_db=None)
+    played = audio.read(folder / "a.binaural.wav")[0]
+    np.testing.assert_allclose(out, played, rtol=0.0, atol=1e-12)
 
 
 def test_a_shaker_tour_keeps_each_stops_level_and_its_power_across_the_cuts(

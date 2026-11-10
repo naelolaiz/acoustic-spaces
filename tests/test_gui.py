@@ -106,6 +106,13 @@ def _wait(qapp, done, timeout: float = 120.0) -> None:
         time.sleep(0.01)
 
 
+def _ends_a_run(window, text: str) -> bool:
+    """Whether the message holding ``text`` is kept as the line that ends a run, which
+    the messages show whichever item they are of."""
+    entries = window.message_panel.entries
+    return any(closing for message, _level, _links, closing in entries if text in message)
+
+
 # -- the document -----------------------------------------------------------------------
 
 
@@ -589,7 +596,8 @@ def test_warnings_and_errors_stand_out(window) -> None:
 
 def test_messages_show_hide_filter_and_clear(window) -> None:
     """Ticks show or hide each level, the item list and the filter keep only some
-    messages, every other message is shaded and Clear removes those on show."""
+    messages (errors and the line that ends a run pass the item list), every other
+    message is shaded and Clear removes those on show."""
     from acoustic_spaces.gui.messages import LIMIT, row_shade
 
     panel = window.message_panel
@@ -630,8 +638,21 @@ def test_messages_show_hide_filter_and_clear(window) -> None:
     # The items that messages name, as whole names, with how many do.
     items = [panel.item.itemText(i) for i in range(panel.item.count())]
     assert items == ["All items", "left-speaker (1)", "mix-position (1)", "right-speaker (1)"]
+    # One item's messages, with the errors and the line that ends a run whatever they
+    # name; the ticks and the filter hide those as they do any other message.
     panel.item.setCurrentIndex(panel.item.findData("left-speaker"))
-    assert window.messages.toPlainText() == "left-speaker is 2 m from mix-position"
+    of_item = "left-speaker is 2 m from mix-position"
+    assert window.messages.toPlainText() == f"{of_item}\nbroken\nreally"
+    window.log("Done in 0.9 s: 2 responses.", closing=True)
+    assert (
+        window.messages.toPlainText() == f"{of_item}\nbroken\nreally\nDone in 0.9 s: 2 responses."
+    )
+    panel.levels["error"].setChecked(False)
+    panel.filter.setText("speaker")
+    assert window.messages.toPlainText() == of_item
+    panel.levels["error"].setChecked(True)
+    panel.filter.clear()
+    assert [panel.item.itemText(i) for i in range(panel.item.count())] == items
     panel.item.setCurrentIndex(0)
     panel.filter.setText("CLIPS")
     assert window.messages.toPlainText() == "right-speaker clips"
@@ -652,6 +673,42 @@ def test_messages_show_hide_filter_and_clear(window) -> None:
         panel.add(f"message {index}", "error")
     assert len(panel.entries) <= LIMIT + 200 and panel.entries[-1][0] == f"message {LIMIT + 200}"
     assert window.messages.toPlainText().endswith(f"message {LIMIT + 200}")
+
+
+def test_the_end_of_a_run_and_errors_show_whichever_item_is_chosen(
+    window, qapp, tmp_path: Path
+) -> None:
+    """With the messages of one item on show, the line that ends a run (done, exported,
+    cancelled, its results dropped, a demo's) and an error, such as why Run was refused,
+    still show; the steps of the run that do not name the item stay hidden."""
+    panel = window.message_panel
+    _quick(window.document)
+    window.log("the listener is in the room")
+    panel.item.setCurrentIndex(panel.item.findData("listener"))
+
+    def last() -> str:
+        return window.messages.toPlainText().splitlines()[-1]
+
+    window.run_simulation()
+    _wait(qapp, lambda: window.job is None)
+    assert last().startswith("Done in ") and last().endswith(": 1 response.")
+    steps = [entry[0] for entry in panel.entries if "stochastic ray tracing" in entry[0]]
+    assert steps and "stochastic ray tracing" not in window.messages.toPlainText()
+    window.write_results(tmp_path)
+    _wait(qapp, lambda: window.job is None)
+    assert last() == f"Wrote 1 impulse response file and parameters.json to {tmp_path}"
+    window._cancelled()
+    assert last() == "Simulation cancelled."
+    window._demo_done({"demo": "tour", "step": "render", "folder": str(tmp_path)})
+    assert last().startswith("The tour demo is done in ") and last().endswith(f"into {tmp_path}.")
+    window._job_document = None  # as after another scene was opened while a job ran
+    assert window._closed_meanwhile() and last().startswith("Dropped the results of the run")
+    # Run refused: the Messages panel comes up with the reason on show.
+    window.document.set_enabled("sources", [0], False)
+    window.docks["results"].raise_()
+    window.run_simulation()
+    assert window.job is None and last().startswith("Cannot run: every source is left out")
+    assert panel.item.currentData() == "listener"
 
 
 def test_message_paths_open_with_a_click(window, tmp_path, monkeypatch) -> None:
@@ -2656,12 +2713,54 @@ def test_barrier_frequencies_choice(window) -> None:
     assert page.barrier_frequencies.isEnabled()
     assert page.barrier_frequencies.currentData() == 32
     assert page.barrier_frequencies.currentText() == "32, off by up to 0.51 dB at 8 kHz"
+    # The tip says what the choice trades and where the errors and run times measured
+    # are: the choices and the documentation give those, the tip none that go stale.
+    tip = page.barrier_frequencies.toolTip()
+    assert "Fewer take less time" in tip and "Outdoor scenes" in tip
+    assert set(re.findall(r"\d+(?:\.\d+)?", tip)) == {"4", "8", "16", "64"}
     page.barrier_frequencies.setCurrentIndex(page.barrier_frequencies.findData(8))
     assert window.document.scene.simulation.early.barrier_frequencies == 8
     window.document.edit("still air", lambda data: data.pop("atmosphere"))
     window.select("simulation")
     assert not page.barrier_frequencies.isEnabled()
     assert page.barrier_frequencies.currentData() == 8
+
+
+def test_weather_settings_are_there_when_any_run_of_the_scene_has_weather(window) -> None:
+    """The parabolic equation and the frequencies behind barriers are picked where a run
+    of the scene takes them: in wind or a temperature gradient of the scene's own, of a
+    weather zone or of a long-term weather class, which is run with the same settings."""
+    window.open_example(example_path("open_air_stage"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+
+    def picked(atmosphere: dict | None = None, classes: list[dict] | None = None) -> list[bool]:
+        def change(data: dict) -> None:
+            data.pop("atmosphere", None)
+            data.pop("long_term", None)
+            if atmosphere is not None:
+                data["atmosphere"] = atmosphere
+            if classes is not None:
+                data["long_term"] = {"classes": classes}
+
+        window.document.edit("weather", change)
+        return [page.parabolic_equation.isEnabled(), page.barrier_frequencies.isEnabled()]
+
+    calm, breeze = {"name": "calm", "share": 0.5}, {"speed_m_s": 5.0, "direction_deg": 90.0}
+    assert picked() == [False, False]
+    # A class with wind, with a temperature gradient or with a windy preset.
+    for weather in ({"wind": breeze}, {"temperature_gradient_k_m": 0.05}, {"preset": "windy"}):
+        assert picked(classes=[calm, {"share": 0.5, **weather}]) == [True, True]
+    # Classes that leave the air still: another temperature at the ground, or eddies.
+    still = [{"share": 0.5, "temperature_c": 5.0}, {"share": 0.5, "turbulence": "moderate"}]
+    assert picked(classes=still) == [False, False]
+    # A class that stills the scene's wind leaves the scene's own run in it.
+    lull = {"share": 0.5, "wind": {"speed_m_s": 0.0}}
+    assert picked({"wind": breeze}, [calm, lull]) == [True, True]
+    # A weather zone with wind in a scene otherwise still, as before.
+    square = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]
+    assert picked({"zones": [{"polygon": square, "wind": breeze}]}) == [True, True]
+    assert picked({"turbulence": "moderate"}) == [False, False]
 
 
 def test_built_in_materials_uncertainty_choice(window) -> None:
@@ -3676,14 +3775,14 @@ def test_the_editor_says_what_the_spread_leaves_out(window, qapp) -> None:
     said = "Not drawn in this band, where the absorption is 1: plaster"
     assert said in window.results.table.item(row, 2).toolTip()
     assert said not in window.results.table.item(row, 1).toolTip()
-    assert not any("No spread" in text for text, _level, _links in window.message_panel.entries)
+    assert not any("No spread" in text for text, _level, *_rest in window.message_panel.entries)
 
     window.document.edit("thirds", lambda d: d["simulation"].update(bands="third_octave"))
     window.run_simulation()
     _wait(qapp, lambda: window.job is None)
     assert window.result.spreads == {}
     said = "No spread from the materials' absorption uncertainty: it needs octave bands"
-    found = [level for text, level, _links in window.message_panel.entries if said in text]
+    found = [level for text, level, *_rest in window.message_panel.entries if said in text]
     assert found == ["warning"]
     # A built-in material's default alone: said, not as a warning.
     window.message_panel.clear_shown()
@@ -3696,7 +3795,7 @@ def test_the_editor_says_what_the_spread_leaves_out(window, qapp) -> None:
     )
     window.run_simulation()
     _wait(qapp, lambda: window.job is None)
-    found = [level for text, level, _links in window.message_panel.entries if said in text]
+    found = [level for text, level, *_rest in window.message_panel.entries if said in text]
     assert found == ["info"]
     # An absorption uncertainty beside a ground's impedance is left out, with a warning.
     window.message_panel.clear_shown()
@@ -3715,7 +3814,7 @@ def test_the_editor_says_what_the_spread_leaves_out(window, qapp) -> None:
         "The absorption uncertainty of plaster is left out of the spread: a ground's "
         "impedance gives its reflection"
     )
-    found = [level for text, level, _links in window.message_panel.entries if said in text]
+    found = [level for text, level, *_rest in window.message_panel.entries if said in text]
     assert found == ["warning"]
     assert "plaster" not in window.result.spreads[("source", "listener")].assumed
 
@@ -3776,6 +3875,54 @@ def test_changing_absorption_re_weights_the_run(window, qapp) -> None:
     assert window._stale() and "run again" in window.results.stale.text()
 
 
+def test_an_example_saved_elsewhere_keeps_its_run_for_re_weighting(
+    window, qapp, tmp_path: Path, fake_sounddevice
+) -> None:
+    """Saving an example elsewhere copies its files, and the scene names the copies: the
+    run, as traced or re-weighted since, and what plays are still that scene's, so other
+    absorption re-weights the run to what it gives without the save."""
+    fake_sounddevice.play = lambda data, rate: fake_sounddevice.played.append((data, rate))
+    fake_sounddevice.stop = lambda: None
+    write_wav(tmp_path / "dry.wav", np.r_[1.0, np.zeros(5 * 16_000)], 16_000)  # 5 s
+
+    def absorbing(value: float) -> np.ndarray:
+        """The energy at the seat with the walls absorbing ``value`` in every band."""
+        walls = window.document.scene.materials["painted_concrete"]
+        fields = walls.model_dump(mode="json", exclude_none=True)
+        fields.pop("preset", None)
+        fields["absorption"] = [value] * 8
+        window.document.set_material("painted_concrete", fields)
+        assert not window._stale() and "re-weight" in window.results.stale.text()
+        return window.result[("talker", "seat-a")].energy()
+
+    for first in (None, 0.2):  # saved with the run as traced, and re-weighted before
+        window.open_example(example_path("shoebox"))
+        _quick(window.document)
+        window.run_simulation()
+        _wait(qapp, lambda: window.job is None)
+        traced = window.result
+        expected = absorbing(0.3)
+        window.document.undo()
+        assert window.result is traced
+        if first is not None:
+            absorbing(first)
+        assert window.play_file(tmp_path / "dry.wav")
+        scene, said = window.document.scene, len(window.message_panel.entries)
+        folder = tmp_path / f"saved {first}"
+        assert window._save_to(folder / "scene.yaml")
+        assert window.document.scene is not scene
+        assert window.document.scene.geometry.file == folder / "shoebox.obj"
+        assert not window._stale() and window._reweighted() == (first is not None)
+        # What plays is of the scene as it is: the save says nothing else, the edit does.
+        assert window.now_playing.text() == "Playing dry.wav from talker at seat-a"
+        messages = [entry[0] for entry in window.message_panel.entries[said:]]
+        assert messages == [f"Saved {folder / 'scene.yaml'}"]
+        np.testing.assert_array_equal(absorbing(0.3), expected)
+        assert window.now_playing.text().endswith("(before the latest changes)")
+        assert "does not follow them" in window.message_panel.entries[-1][0]
+        window.stop_playing()
+
+
 def test_map_job(qapp) -> None:
     document = Document(box_scene())
     _quick_map(document)
@@ -3800,6 +3947,7 @@ def test_coverage_map_in_the_editor(window, qapp, tmp_path: Path) -> None:
     _wait(qapp, lambda: window.job is None)
     assert window.coverage is not None and window.map_action.isEnabled()
     assert "Map done in" in window.messages.toPlainText()
+    assert _ends_a_run(window, "Map done in")
     # Two sources: the map of both together comes first.
     assert [panel.source.itemText(k) for k in range(panel.source.count())] == [
         "All sources",
@@ -4782,6 +4930,7 @@ def test_run_demo_in_the_editor(window, qapp, monkeypatch, tmp_path: Path) -> No
     messages = window.messages.toPlainText()
     assert "python wait_demo.py wait" in messages and "waiting 0.2 s" in messages
     assert "The wait demo is done in" in messages
+    assert _ends_a_run(window, "The wait demo is done in")
     assert (args.work / "waited").read_text() == "done"
     assert window.run_action.isEnabled() and not window.cancel_action.isEnabled()
 
@@ -4794,6 +4943,7 @@ def test_run_demo_in_the_editor(window, qapp, monkeypatch, tmp_path: Path) -> No
     window.cancel_simulation()
     _wait(qapp, lambda: window.job is None, timeout=30.0)
     assert "Demo cancelled." in window.messages.toPlainText()
+    assert _ends_a_run(window, "Demo cancelled.")
     assert not (slow_args.work / "waited").exists()
 
     # A demo that stops with an error says so, in red.
@@ -5345,6 +5495,7 @@ def test_tune_in_the_editor(window, qapp, monkeypatch) -> None:
     assert timed == [window.document.scene.name] and tune_action.isEnabled()
     assert alerts == [window]  # flashes in the taskbar if another window is in front
     assert "Tuned in" in window.messages.toPlainText()
+    assert _ends_a_run(window, "Tuned in")
     assert "late stage 1 s both." in window.messages.toPlainText()
     # The table, auto as this computer's default (ticked); a scene naming no device
     # follows the default already, so nothing asks about it.
@@ -6072,6 +6223,7 @@ def test_render_movement_in_the_editor(window, qapp, tmp_path: Path, monkeypatch
     _wait(qapp, lambda: window.job is None)
     text = window.messages.toPlainText()
     assert "mix-position move for 1.0 s: responses at" in text and str(out) in text
+    assert _ends_a_run(window, "mix-position move for 1.0 s")
     # Binaural comes first in the Output list, before the scene's first output, mono.
     assert "binaural, 2 channels," in text and "-1 dBFS" in text
     data, rate = read_wav(out)

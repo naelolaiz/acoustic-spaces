@@ -666,18 +666,27 @@ def tour_audio(
     Ambisonics and loudspeaker mixes decoded through the HRTFs of ``scene``, the scene's
     file, or the spherical head model) shifted earlier by its arrival (``lag_s`` in
     ``seats``) so the music runs on across a cut, turned up as the stop is, crossfades
-    of ``crossfade_s`` centred on the cuts between joined stops, a quarter sine
-    (:func:`~acoustic_spaces.render.crossfaded`: the power runs on, however alike the
-    two mixes are; two seats of one piece, each brought forward by its arrival, are much
-    alike), a fade at the end and the peak at ``peak_db``. With a ``kind``, each stop's
-    ``<listener>.<kind>.wav`` instead of its mix (what is felt there, ``"shaker"``),
-    neither turned up nor brought to a peak, as it is."""
+    of ``crossfade_s`` centred on the cuts between joined stops (shorter where a stop is:
+    a crossfade is no longer than the shorter of the two stops it joins, so that a
+    stop's two crossfades do not overlap and none reaches past the tour's ends), a
+    quarter sine (:func:`~acoustic_spaces.render.crossfaded`: the power runs on, however
+    alike the two mixes are; two seats of one piece, each brought forward by its arrival,
+    are much alike), a fade at the end and the peak at ``peak_db``. With a ``kind``, each
+    stop's ``<listener>.<kind>.wav`` instead of its mix (what is felt there,
+    ``"shaker"``), neither turned up nor brought to a peak, as it is."""
     rate, fmt = seats["rate"], seats["format"]
-    length = round(stops[-1].end * rate)
+    bounds = [(round(stop.at * rate), round(stop.end * rate)) for stop in stops]
+    length = bounds[-1][1]
     out = np.zeros((length, 2))
-    half = int(crossfade_s * rate / 2)
-    ramp = np.sin(np.linspace(0.0, np.pi / 2, 2 * half))
-    joined = [stops[k].joined_after and stops[k + 1].joined_before for k in range(len(stops) - 1)]
+    # Half of each cut's crossfade (samples): no more than half of either stop it joins,
+    # and none between stops that are not joined.
+    most = int(crossfade_s * rate / 2)
+    halves = [
+        max(min(most, (b0 - a0) // 2, (b1 - a1) // 2), 0)
+        if stops[k].joined_after and stops[k + 1].joined_before
+        else 0
+        for k, ((a0, b0), (a1, b1)) in enumerate(zip(bounds, bounds[1:], strict=False))
+    ]
     previous: np.ndarray | None = None  # the stop before, when it is joined to this one
     ears = ears_of(fmt, rate, scene)
     for k, stop in enumerate(stops):
@@ -688,16 +697,17 @@ def tour_audio(
         x = audio.shifted(x, round(seat.get("lag_s", 0.0) * rate) - offset, length)
         if kind is None:
             x = x * 10.0 ** (stop.gain_db / 20.0)
-        a, b = round(stop.at * rate), round(stop.end * rate)
-        before = k > 0 and joined[k - 1] and half > 0
-        after = k < len(stops) - 1 and joined[k] and half > 0
+        a, b = bounds[k]
+        before = halves[k - 1] if k > 0 else 0
+        after = halves[k] if k < len(stops) - 1 else 0
         if before:
             assert previous is not None
-            if round(stops[k - 1].end * rate) != a:
+            if bounds[k - 1][1] != a:
                 raise ValueError(f"{stops[k - 1].key} must end where {stop.key} starts")
-            cut = slice(a - half, a + half)
+            cut = slice(a - before, a + before)
+            ramp = np.sin(np.linspace(0.0, np.pi / 2, 2 * before))
             out[cut] += crossfaded(previous[cut], x[cut], ramp)
-        alone = slice(a + half if before else a, b - half if after else b)
+        alone = slice(a + before, b - after)
         out[alone] += x[alone]
         previous = x if after else None
     fade = min(int(fade_out_s * rate), length)

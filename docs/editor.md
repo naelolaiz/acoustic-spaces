@@ -152,7 +152,9 @@ The editor works on the same scene files as the command line.
 - The status bar keeps the volume and the Eyring reverberation time at 1 kHz up to date
   as you edit, with the number of problems in red.
 - **Messages** shows warnings in amber and errors in red; so does the scene's own form
-  for its problems and warnings.
+  for its problems and warnings. Its **Item** list keeps only the messages about one
+  source, listener or material, and with them every error and the line that ends a run
+  (done, cancelled, a demo's).
 - **View > Scene YAML** shows the scene as YAML text that follows every edit. Edited
   text is applied with **Apply** (Ctrl+Return), checked as every other change is, in one
   step that **Undo** takes back; text the checks refuse stays as typed, with the reason.

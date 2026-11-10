@@ -86,6 +86,123 @@
   the level relative to free field (`uncertainty.levels` in `parameters.json`, the
   A-weighted level's and the STI's in `simulate`'s output, the level's in the editor's
   tips).
+- Fixed: Doc 29's L_Amax ahead of or behind an airborne segment takes the installation
+  correction at the extended path's closest point of approach, as the SEL does, not at
+  the segment end's elevation: on Volume 3's departures up to 1.0 dB higher beside the
+  track past the cutbacks and up to 0.40 dB lower under it; the airport example's
+  listeners do not change.
+- Fixed: the Doc 29 table readers match a column by its whole number, so an NPD table
+  whose distances run from 25000 ft down to 200 ft is no longer read with its 2000 to
+  10000 ft levels as the 200 to 1000 ft ones (16 to 30 dB low); a table without one of
+  the distances, or with two columns matching one name, is refused.
+- Fixed: in the editor, after an example is saved elsewhere a change of absorption
+  re-weights its run again instead of marking it out of date, and the sound playing is
+  no longer said to be from before the latest changes.
+- Fixed: the editor's Simulation page offers **Parabolic equation** and **Frequencies
+  behind barriers** when only a long-term weather class brings the wind or the
+  temperature gradient.
+- Changed: the editor's **Messages** shows every error and the line that ends a run
+  whichever **Item** is chosen.
+- Fixed: the tip of **Frequencies behind barriers** leaves the errors and the run times
+  to the documentation (it still gave 12, 7.7 and 4.5 times a straight-leg map's time,
+  which are 8.2, 5.6 and 4.0 times since 4.2.0), and `fetch.extract_tar` raises
+  `OSError`, not `http.client.IncompleteRead`, for a tar archive sent in chunks and cut
+  short.
+- Fixed: a walk with Doppler follows each path's 1/distance from sample to sample, not
+  every 20 ms: a source passing 1 m from a listener at 70 m/s rippled by up to 0.73 dB
+  and is now within 0.01 dB of the exact field (1 kHz, 5 ms windows). The filters from
+  place to place are joined linearly (triangles, not squared sines), which also moves a
+  source heard through turbulence by up to 0.03 dB in its 5 ms levels.
+- Fixed: a demo's tour fits each crossfade to the stops it joins; a stop shorter than
+  the crossfade was played twice (+6 dB) or stopped the demo with an error.
+- Docs: a moving monopole's convective amplification, which the engine leaves out, is
+  40 lg 1/(1 − M cos θ) dB (1.6 dB ahead at 30 m/s, 4.0 dB at 70 m/s), twice what the
+  docs said.
+- Fixed: beside a bend of a thin screen's top (a barrier's path that turns by less than
+  15°) the level stepped by up to 5.4 dB, or 16 dB with the bend towards the source, and
+  past a screen's corner that is not square by up to 3.0 dB: each of an edge's terms now
+  takes its own part of the edge as BTM's integrand weights it (within 0.04 dB of BTM
+  beside bends, 0.17 dB past corners).
+- Fixed: a path that touches the very end of a fading edge, as with the source, the
+  listener and a barrier's top at one height, is no longer dropped (up to 5.6 dB low at
+  63 Hz).
+- Fixed: in wind or a temperature gradient the late rays counted again the curved paths
+  off the ground that the early part already holds (those with more bounces than
+  `max_order`, up to ten), so over a ground that scatters little the level rose with the
+  ray count: downwind of a low source, up to 8 dB over the fast field program at 500 Hz
+  and 29 dB in the 250 Hz ground dip with 50,000 rays. They now leave out what the early
+  part holds (within 0.05 dB of the program in those bands); still air and the shipped
+  examples do not change.
+- Fixed: with vector scattering (the default) a reflection's specular share lost what
+  plants absorb on its way but kept what they scatter, so behind 6.3 m of foliage
+  scattering 0.3 per metre it came out 8.2 dB too loud. It now loses both (CPU, GPU and
+  coverage maps); in `tree_belt` one band of the open meadow drops by 0.2 to 0.27 dB in
+  four of six seeds, the A-weighted levels by at most 0.03 dB.
+- Fixed: the distance that sets how much a small or distant surface scatters
+  (`scattering.from_size`) restarted at each opening or partition a late ray, the
+  listeners' gather or a sound particle passed; it now runs from the source or the last
+  reflection, as in the early part. An open face 1 m over a floor had taken 6.3 dB from
+  the floor's scattered sound at 125 Hz; in `apartment` the bed's level drops by
+  0.04 dB(A).
+- Fixed: in wind, a listener or map point exactly in line with the source and a
+  barrier's end takes the weather's effect on the paths round the end, whichever way
+  the line rounds; it read up to 9.3 dB low downwind from 63 to 500 Hz and up to
+  12.3 dB low upwind from 63 Hz to 1 kHz.
+- Fixed: in wind, where the paths over edges keep their straight legs (a source or a
+  listener on a building, a model file's object in the way), the bent direct sound and
+  ground reflection count only where their straight paths do; strips 0.3 to 3.5 m wide
+  at the edges' shadow boundaries read 4 to 10 dB off in every band.
+- Docs: three numbers that 4.2.0's fix of the vector reflection's specular share moved
+  are given as the code has them: `apartment`'s bed with the door open reads 62 dB(A),
+  not 63, and the CPU's next seed in validation.md differs by 1.32 dB and 20.6 ms in
+  `tree_belt` and by 2.04 dB and 1.9 ms on the hillside, a new draw of the rays' noise.
+- Fixed (results change): sound over two edges along a face that absorbs
+  (`second_order`, over a roof or a thick wall) was nearly cancelled in the bands that
+  add in pressure, by the plane wave's R = -1 at grazing incidence; the path now takes
+  the face as rigid and the ground wave's loss along it (Weyl-van der Pol), in every
+  band. Behind a 6 m building absorbing 0.02 the level rises by 18 to 20 dB, to 0.1 to
+  0.8 dB below a rigid one's, and the archway example's first arrival behind the wall by
+  11.0 and 11.7 dB at 63 and 125 Hz; with faces absorbing 0.5 it changes by +11.0 dB at
+  63 Hz to -8.7 dB at 8 kHz.
+- Fixed: a curved path that turns in the air just past a node of the sampled profile
+  near the source's or the listener's height took that profile's slope there, up to
+  15 dB off the smooth one's; it now takes the fitted one. Against the smooth profiles
+  (`validation/curved_rays.py`, paths near a caustic apart) the most a path is off goes
+  from 15.3 to 2.4 dB where the sound bends down and from 3.1 to 1.1 dB where it bends
+  up; from 1 kHz up a listener 300 m downwind of the `open_air_stage` source and 4.61 m
+  up gains about 2 dB, and the shipped examples' own listeners move by 0.02 dB at most.
+- Fixed: `early.method: image_sources` with `max_order` 3 or more (the default order)
+  stopped with "need at least one array to concatenate" where the ground is the only
+  reflecting plane, as in the open-air examples; the orders past the first now find no
+  path and the levels are those of `max_order: 1`.
+- Fixed: `write_asc` wrote the grid's origin, cell size and heights to 6 significant
+  digits, moving a grid in UTM coordinates by up to 5 m (the northing rounded to 10 m)
+  and heights of 1 to 10 km by up to 5 mm; it now writes each in the shortest form that
+  reads back as the same number.
+- Fixed: behind a barrier on the ground, where the reflection off the ground or a wall
+  lies near the barrier's foot, the edge fade gave the leg past the barrier terms of the
+  leg it stops and kept paths over an edge that went on through a wall or another
+  barrier: the level read up to 6.0 dB below the exact solution (7.1 dB with
+  `both_sides`) and stepped by 5.3 dB at 125 Hz over 2 cm, by up to 15.7 dB at 63 Hz
+  behind two barriers. Behind one barrier the fade now adds nothing (with `both_sides`
+  a straight one is within 0.2 dB of the exact solution from 63 Hz to 1 kHz); of the
+  examples only `railway`'s line and the `street`'s garden move, by up to 0.14 dB in a
+  band.
+- Fixed: a listener or map point exactly in line with the source and a building's wall
+  (or a block's top), past the wall, heard the paths round both of its corners, one ray
+  counted twice: 3 to 9.5 dB louder than 10 µm into the shadow, over one edge or two,
+  with reflections up to the third order. It now has the paths and the level it has
+  just beside the line in the shadow, in still air and in wind; a point on that wall
+  itself keeps the level it had.
+- Fixed (results change): round an open model the wave solver's matched layer lay a few
+  cells past the model, the source and the listeners and sent back much of the sound
+  that ran along it: over a rigid plate, with 40 cm cells, the 63 Hz band read 3.2 and
+  10.8 dB below far taller grids 80 and 160 m away. The grid now reaches past the source
+  and the listeners on each side (not under an outdoor ground) by 15 % of how far the
+  listeners lie from the source along that side, which brings those checks within
+  0.02 dB of the taller grids and costs cells wherever the model reaches less far:
+  1.13 times as many on validation/wave_outdoor.py's 63 Hz grids, 2.1 to 2.4 times in a
+  hall open at one end.
 
 ## 4.2.1
 

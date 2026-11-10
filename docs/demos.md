@@ -63,7 +63,8 @@ and the pass-by demos visit them in the order given; the others keep their own t
 order: the church's tour keeps its times, a place left out giving its time to the one
 before; the stadium's and the lake's stops there keep their phrases, the last running to
 the end; the orchestra plays each movement at the seats of its tour among them, or at
-all of them when its tour has none. The gallery walk hears its visitor alone and takes
+all of them when its tour has none. A tour's crossfade is never longer than the shorter
+of the two stops it joins. The gallery walk hears its visitor alone and takes
 no `--listeners`.
 
 `--input SOURCE=WAV`, once for each source, has a source play a recording of yours
@@ -880,7 +881,7 @@ three, the car's with its horn) in its Movement box.
   places with each early path through its own delay as it changes ([moving sources and
   Doppler](spatial-audio.md#moving-sources-and-doppler)), the late sound crossfaded from
   place to place without a shift of its own. Through places 1 m apart a car's sound at 1
-  kHz follows the exact field's waveform to within -54 dB (-57 dB a quarter of a metre
+  kHz follows the exact field's waveform to within -58 dB (-94 dB a quarter of a metre
   apart; [validation](validation.md#moving-sources-against-the-exact-field)). The level
   at each moment, the loudest (L_Amax) and the sound exposure level (SEL) come from the
   same simulation, each place's as if the vehicle stood there (a horn's as loud as it
