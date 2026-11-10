@@ -6,6 +6,7 @@ import math
 import sys
 import time
 import warnings
+import weakref
 from decimal import Decimal, localcontext
 from pathlib import Path
 
@@ -1418,6 +1419,54 @@ def test_sources_alike_share_the_parabolic_equation_s_runs(monkeypatch) -> None:
     for key in separate.responses:
         a, b = (r[key].early.energy.sum(axis=0) for r in (separate, shared))
         np.testing.assert_allclose(10 * np.log10(b / a), 0.0, atol=0.01)
+
+
+def test_sources_share_the_air_s_profiles_and_keep_no_plan_once_finished(monkeypatch) -> None:
+    """The sources of a run find each profile of the air once, as a source finds it on
+    its own; and of the plans waiting for the parabolic equation, each is gone once its
+    source has taken the pressures, before the next one's turn."""
+    from acoustic_spaces.engine import refracted
+
+    scene = field({"preset": "windy"}, ((80.0, 0.0, 1.5), (-60.0, 20.0, 1.5)))
+    item = scene.sources[0]
+    places = ((0.0, 0.0), (-30.0, 5.0), (25.0, -8.0))
+    sources = [
+        item.model_copy(update={"name": f"s{k}", "position": (x, y, 2.0)})
+        for k, (x, y) in enumerate(places)
+    ]
+    room = Room.from_scene(scene.model_copy(update={"sources": sources}))
+    bent, plans, waiting = [], [], []
+    plan_, finish_ = refracted.Refraction.plan, refracted.Planned.finish
+
+    def plan(self, *args):
+        planned = plan_(self, *args)
+        bent.append(self)
+        plans.append(weakref.ref(planned))
+        return planned
+
+    def finish(self, pressures):
+        waiting.append(sum(ref() is not None for ref in plans))
+        return finish_(self, pressures)
+
+    monkeypatch.setattr(refracted.Refraction, "plan", plan)
+    monkeypatch.setattr(refracted.Planned, "finish", finish)
+    simulate(room, share_waves=[s.name for s in sources])
+    assert waiting == [3, 2, 1]
+    assert all(ref() is None for ref in plans)
+    profiles = bent[0]._profiles
+    assert len(bent) == 3 and all(refraction._profiles is profiles for refraction in bent)
+    assert len(profiles) > 1
+    own = refraction_for(
+        TraceModel.from_room(room),
+        np.array(sources[2].position),
+        speed_of_sound=room.speed_of_sound(),
+        air=np.zeros(8),
+    )
+    for key, profile in profiles.items():
+        for name in ("z", "c", "rows", "gradient", "trend", "corners"):
+            a, b = getattr(profile, name), getattr(own.profile(key), name)
+            assert a.dtype == b.dtype and a.shape == b.shape and a.tobytes() == b.tobytes()
+    assert own._profiles is not profiles and own._profiles.keys() == profiles.keys()
 
 
 def test_uniform_rows_trace_the_late_rays_as_straight_ones(monkeypatch) -> None:

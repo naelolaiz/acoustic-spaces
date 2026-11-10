@@ -164,6 +164,7 @@ def result():
     settings = room.scene.simulation.model_copy(deep=True)
     settings.late.rays = 1_000
     settings.ir_length_s = 0.3
+    settings.seed = 1  # every run traces the same rays: without one it draws its own
     return simulate(room, settings=settings)
 
 

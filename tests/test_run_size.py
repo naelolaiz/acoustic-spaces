@@ -168,6 +168,34 @@ def test_a_refusal_gives_what_each_setting_lowered_would_need() -> None:
     assert need(batches=1) < need(batches=2) < need() < need(batches=20)
 
 
+def test_a_late_part_mixed_from_others_needs_no_memory_of_its_own() -> None:
+    """Listeners and sources whose late part is a mix of others' (a walk's places
+    between the traced ones) count for nothing: a point source's late part is traced and
+    kept at the other listeners alone, a line's is mixed for every listener as its
+    points are summed, and the statistical method gives everyone their own."""
+    room = Room.from_yaml(SHOEBOX)
+    scene = room.scene
+    source = next(s for s in scene.sources if s.in_use)
+    listener = next(s for s in scene.listeners if s.in_use)
+    sources = [source.model_copy(update={"name": f"s{k}"}) for k in range(3)]
+    listeners = [listener.model_copy(update={"name": f"l{k}"}) for k in range(8)]
+
+    def need(sources=sources, listeners=listeners, settings=scene.simulation, **more) -> float:
+        return run_size.simulation_need(room, settings, sources, listeners, 4, **more).bytes
+
+    between = {item.name for item in listeners[2:]}
+    assert need(mixed=between) == need(listeners=listeners[:2]) < need()
+    assert need(mixed={"s1", "s2"}) == need(sources=sources[:1]) < need()
+    assert need(mixed=between | {"s2"}) == need(sources=sources[:2], listeners=listeners[:2])
+    line = [source.model_copy(update={"name": "line", "line_m": 1.0})]
+    assert need(sources=line, listeners=listeners[:2]) < need(sources=line, mixed=between)
+    assert need(sources=line, mixed=between) <= need(sources=line)
+    statistical = scene.simulation.model_copy(
+        update={"late": scene.simulation.late.model_copy(update={"method": "statistical"})}
+    )
+    assert need(settings=statistical, mixed=between) == need(settings=statistical)
+
+
 def test_a_map_too_fine_for_the_memory_is_refused(monkeypatch) -> None:
     room = Room.from_yaml(SHOEBOX)
     monkeypatch.setattr(run_size, "machine_memory", lambda: 64 * MiB)

@@ -254,7 +254,9 @@ class Refraction:
     atmosphere (not still), running the parabolic equation on ``threads`` threads (0:
     every core): the wide-angle one (:mod:`~acoustic_spaces.engine.wide_angle`) with
     ``wide_angle``. ``edges``: the model's diffracting edges, as the paths over them
-    number them (found when needed if not given)."""
+    number them (found when needed if not given). ``profiles``: the profiles of the
+    model's air found so far by their key (:meth:`profile`), which the sources of one
+    model may share, as none depends on the source; its own if not given."""
 
     def __init__(
         self,
@@ -271,6 +273,7 @@ class Refraction:
         wide_angle: bool = False,
         edges=None,
         barrier_frequencies: int = 32,
+        profiles: dict | None = None,
     ) -> None:
         from acoustic_spaces.engine.diffraction import band_frequencies
 
@@ -309,7 +312,7 @@ class Refraction:
             self._rows = self.weather.rows
             self.windy = self.windy or bool(np.any(self.weather.wind != 0.0))
         self._weather = (self.atmosphere.model_dump_json(), self.ground_c)
-        self._profiles: dict[float, Profile] = {}
+        self._profiles: dict[float, Profile] = {} if profiles is None else profiles
         #: The frequencies of each band at so many an octave (:meth:`_samples`).
         self._dense: dict[int, list] = {}
         self._admittances: dict[int, np.ndarray] = {}
@@ -1521,6 +1524,11 @@ class _Job:
     #: Whether the air bends sound (None: as the march finds).
     refracting: bool | None = None
     barrier: bool = False  # with the grid and samples of the runs behind barriers
+    #: What the run has in common with those that differ from it in what stands on the
+    #: way and in their listeners alone (the source's runs behind barriers in one band
+    #: and weather, under one absorbing layer), which share the march over the open
+    #: ground (:class:`~acoustic_spaces.engine.parabolic.Trunk`); None: none do.
+    family: tuple | None = None
 
 
 def solve(plans: list[Planned]) -> list[dict]:
@@ -1541,7 +1549,15 @@ def solve(plans: list[Planned]) -> list[dict]:
     way (the cut), those in still air by the cut and the absorbing layer alone; the
     open ground's runs along the ways round ends, in the weather and in still air,
     likewise with no cut. Every listener of theirs is reached by a last step of its
-    own."""
+    own.
+
+    The runs behind barriers in one band that differ in the cut and the listeners alone
+    (in still air those of every direction under one absorbing layer; in the weather,
+    where it has no zones, those of one profile) march through the same air before
+    their first obstacle: they go one after another, the nearest first obstacle first,
+    each taking the field there from the one before where the grounds on its way that
+    far are the same (:class:`~acoustic_spaces.engine.parabolic.Trunk`), in as many
+    chains as runs go side by side."""
     groups: dict[tuple, list[tuple[int, _Wave]]] = {}
     behind: dict[tuple, list] = {}
     for p, planned in enumerate(plans):
@@ -1602,6 +1618,8 @@ def solve(plans: list[Planned]) -> list[dict]:
         direction, face_at = grounds(refraction, members, reach)
         speed, speed_at = weather(refraction, key, direction, reach)
         top = max(m.top for _, m in members)
+        # Behind barriers, in a weather that is one all the way: a family's runs.
+        alike = bool(cut) and speed_at is None
         for band in range(refraction.bands):
             needing = [(p, m, "wind") for p, m in members if m.bands[band]]
             if needing:
@@ -1618,13 +1636,14 @@ def solve(plans: list[Planned]) -> list[dict]:
                         obstacles=cut,
                         refracting=True,
                         barrier=barrier,
+                        family=(owner, barrier, key, top, band) if alike else None,
                     )
                 )
         c0 = float(np.asarray(speed(np.array([0.0])))[0])
         if barrier:  # round ends ``ground`` is the way's already
             ground = members[0][1].azimuth if refraction.zones else None
         calm.setdefault((owner, barrier, c0, cut, top, ground), []).extend(members)
-    for (_, barrier, c0, cut, top, _), members in calm.items():
+    for (owner, barrier, c0, cut, top, _), members in calm.items():
         refraction = plans[members[0][0]].refraction
         reach = max(m.range for _, m in members)
         _, face_at = grounds(refraction, members, reach)
@@ -1644,6 +1663,7 @@ def solve(plans: list[Planned]) -> list[dict]:
                         obstacles=cut,
                         refracting=True,
                         barrier=barrier,
+                        family=(owner, barrier, "still", c0, top, band) if cut else None,
                     )
                 )
     if not jobs:
@@ -1661,7 +1681,7 @@ def solve(plans: list[Planned]) -> list[dict]:
         found = job.refraction._samples(job.band, job.barrier)
         return job.refraction.frequencies[job.band] if found is None else found
 
-    def run(job: _Job) -> np.ndarray:
+    def run(job: _Job, trunk: parabolic.Trunk | None = None) -> np.ndarray:
         refraction, band = job.refraction, job.band
         dense = refraction._samples(band, job.barrier) is not None
         frequencies = frequencies_of(job)
@@ -1681,6 +1701,8 @@ def solve(plans: list[Planned]) -> list[dict]:
             extra = {"obstacles": job.obstacles, "steps_per_wavelength": steps(job)}
             if solver is parabolic:
                 extra["refracting"] = job.refracting
+                if trunk is not None:
+                    extra["trunk"] = trunk
         # The wide-angle equation's frequencies (the narrow-angle one's at steep points)
         # share the threads the runs leave.
         return solver.march(
@@ -1708,12 +1730,39 @@ def solve(plans: list[Planned]) -> list[dict]:
         for job in jobs
     )
     workers = min(first.threads, len(jobs), max(1, WAVE_MEMORY_BYTES // max(biggest, 1)))
+    # The runs in chains: each family's, the nearest first obstacle first, shared out
+    # over the workers (two runs or more to a chain), and every other run by itself.
+    families: dict[tuple, list[int]] = {}
+    for index, job in enumerate(jobs):
+        if solver is parabolic and job.family is not None:
+            families.setdefault(job.family, []).append(index)
+    chains: list[list[int]] = []
+    chained: set[int] = set()
+    for members in families.values():
+        members.sort(key=lambda index: min(near for near, _, _ in jobs[index].obstacles))
+        count = min(workers, len(members) // 2)
+        for part in range(count):
+            chain = members[part * len(members) // count : (part + 1) * len(members) // count]
+            chains.append(chain)
+            chained.update(chain)
+    chains += [[index] for index in range(len(jobs)) if index not in chained]
+    chains.sort(key=min)
+
+    def run_chain(chain: list[int]) -> list[np.ndarray]:
+        trunk = parabolic.Trunk() if len(chain) > 1 else None
+        return [run(jobs[index], trunk) for index in chain]
+
+    workers = min(workers, len(chains))
     share = max(1, first.threads // max(workers, 1))
     if workers > 1:
         with ThreadPoolExecutor(workers) as pool:
-            results = list(pool.map(run, jobs))
+            done = list(pool.map(run_chain, chains))
     else:
-        results = [run(job) for job in jobs]
+        done = [run_chain(chain) for chain in chains]
+    results: list = [None] * len(jobs)
+    for chain, values in zip(chains, done, strict=True):
+        for index, value in zip(chain, values, strict=True):
+            results[index] = value
     out: list[dict] = [
         {
             id(m): np.zeros(planned.refraction.frequencies.shape, dtype=complex)
