@@ -277,3 +277,50 @@ def test_runs_sharing_the_march_over_the_open_ground_get_what_they_get_alone(mon
         for i in order:
             assert march(runs[i], trunk).tobytes() == alone[i].tobytes()
         assert sum(transforms) < apart
+
+
+def test_a_run_with_steep_points_drops_the_march_kept(monkeypatch) -> None:
+    """A run with points for the wide-angle equation clears the trunk it is given: it
+    gets what it gets alone, and so does the run after it, which marches from the source
+    again."""
+    f = F[3]
+    wind = log_wind(5.0)
+    lawn = grass(f)
+    transforms = []
+    fft = np.fft.fft
+
+    def counted(a, *args, **kwargs):
+        transforms.append(len(a))
+        return fft(a, *args, **kwargs)
+
+    monkeypatch.setattr(np.fft, "fft", counted)
+
+    def march(points, trunk):
+        ranges, heights = points
+        return parabolic.march(
+            f,
+            wind,
+            lawn,
+            1.0,
+            np.array(ranges),
+            np.array(heights),
+            25.0,
+            independent=True,
+            obstacles=[(45.0, 45.0, 4.0)],
+            trunk=trunk,
+        )
+
+    flat = ([63.0, 93.0], [1.5, 1.5])
+    steep = ([50.0, 93.0], [20.0, 1.5])
+    alone = march(flat, None)
+    from_the_source = sum(transforms)
+    high = march(steep, None)
+    trunk = parabolic.Trunk()
+    assert march(flat, trunk).tobytes() == alone.tobytes()
+    transforms.clear()
+    assert march(flat, trunk).tobytes() == alone.tobytes()
+    assert sum(transforms) < from_the_source
+    assert march(steep, trunk).tobytes() == high.tobytes()
+    transforms.clear()
+    assert march(flat, trunk).tobytes() == alone.tobytes()
+    assert sum(transforms) == from_the_source
