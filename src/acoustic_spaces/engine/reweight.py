@@ -67,6 +67,7 @@ import numpy as np
 from acoustic_spaces.engine.coherent import absorption_phases, sample_frequencies
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.late import MAX_GROUPS, MOMENT_STEP
+from acoustic_spaces.materials.bands import THIRD_OCTAVE_BANDS_HZ
 
 
 def face_groups(room, materials: Sequence[str]) -> np.ndarray:
@@ -123,6 +124,55 @@ def cannot_reweight(room, settings=None) -> str | None:
     if count > MAX_GROUPS:
         return f"at most {MAX_GROUPS} materials on the surfaces, and there are {count}"
     return None
+
+
+def with_absorption(
+    scene, materials: Sequence[str], absorption, source: str, digits: int | None = 4
+):
+    """A copy of ``scene`` whose ``materials`` take ``absorption`` (for each, its octave
+    bands), their other properties kept. A material given in third octaves keeps its
+    shape within each octave: its three values move together, by what the octave does;
+    one that would pass 1, or fall below what the surface lets through, stays there, and
+    the octave's others take up what it could not, so that the octave is what was asked.
+    Given its third-octave values instead, it takes them as they are. Each one's source
+    then reads ``source``, with what it was after it; the values are rounded to
+    ``digits`` decimals (None: as given)."""
+    out = scene.model_copy(deep=True)
+    for name, values in zip(materials, absorption, strict=True):
+        values = np.asarray(values, dtype=float)
+        material = out.materials[name]
+        old = np.asarray(material.absorption, dtype=float)
+        if len(old) == len(THIRD_OCTAVE_BANDS_HZ) and len(values) != len(old):
+            passing = material.transmission_coefficients("third_octave")
+            least = np.zeros(len(old)) if passing is None else np.asarray(passing, dtype=float)
+            values = _thirds_at(old.reshape(-1, 3), values, least.reshape(-1, 3)).ravel()
+        was = f"; was: {material.source}" if material.source else ""
+        out.materials[name] = material.model_copy(
+            update={
+                "absorption": [
+                    float(v) if digits is None else round(float(v), digits) for v in values
+                ],
+                "source": f"{source}{was}",
+            }
+        )
+    return out
+
+
+def _thirds_at(thirds: np.ndarray, octaves: np.ndarray, least: np.ndarray) -> np.ndarray:
+    """The third-octave values ``thirds`` (octaves, 3) moved together so that each
+    octave's mean is that of ``octaves``, each held between its ``least`` and 1. Where
+    one is held, the octave's others take up evenly what it could not, as far as their
+    own limits let them."""
+    shifted = thirds + (octaves - thirds.mean(axis=1))[:, None]
+    moved = np.clip(shifted, least, 1.0)
+    held = np.any(moved != shifted, axis=1)
+    for _ in range(2):
+        short = np.where(held, octaves - moved.mean(axis=1), 0.0)
+        free = np.where(short[:, None] > 0.0, moved < 1.0, moved > least)
+        count = free.sum(axis=1)
+        each = np.divide(3.0 * short, count, out=np.zeros_like(short), where=count > 0)
+        moved = np.clip(moved + np.where(free, each[:, None], 0.0), least, 1.0)
+    return moved
 
 
 def _without_absorption(scene) -> dict:

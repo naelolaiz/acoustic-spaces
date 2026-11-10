@@ -3813,7 +3813,8 @@ def test_coverage_map_in_the_editor(window, qapp, tmp_path: Path) -> None:
     panel.source.setCurrentText("organ")
     assert panel.current().source == "organ"
     panel.in_3d.setChecked(True)
-    assert panel.shown_in_3d()[1:] == ("c80", 4)
+    assert panel.shown_in_3d()[1:] == ("c80", 4, "value")
+    assert not panel.part.isEnabled()  # the map was run without its uncertainty
 
     assert window.write_map(tmp_path / "map.png")
     assert (tmp_path / "map.png").stat().st_size > 10_000
@@ -3828,6 +3829,123 @@ def test_coverage_map_in_the_editor(window, qapp, tmp_path: Path) -> None:
     _wait(qapp, lambda: window.job is None)
     assert panel.source.currentText() == "organ"  # kept across runs
     assert not panel.note.isVisible()
+
+
+def test_a_maps_uncertainty_in_the_editor(window, qapp, tmp_path: Path) -> None:
+    """The coverage map's page asks for the map's uncertainty, the run finds it and the
+    panel's Show list draws its parts, in the picture, the 3D view and the saved files."""
+    import json
+
+    window.open_example(example_path("shoebox"))
+    _quick(window.document)
+    window.document.edit(
+        "coarse map", lambda data: data.update(coverage={"spacing": 3.0, "rays": 300})
+    )
+    window.select("coverage")
+    page = window.inspector.pages["coverage"]
+    assert not page.spread.isChecked() and page.spread.toolTip()
+    nothing = "No material on the surfaces has an absorption uncertainty: no map has one."
+    assert page.spread_runs.text() == nothing
+    # Asked for all the same, the run says so and gives the map as it is.
+    page.spread.setChecked(True)
+    coverage = window.document.scene.coverage
+    assert coverage.spread is True and coverage.rays == 300 and coverage.spacing == 3.0
+    panel = window.map_panel
+    assert panel.part.toolTip() and not panel.part.isEnabled()
+    window.run_map()
+    _wait(qapp, lambda: window.job is None)
+    assert nothing in window.messages.toPlainText()
+    assert window.coverage.get().spread is None and not panel.part.isEnabled()
+
+    def uncertain(data: dict) -> None:
+        data["materials"]["carpet_on_concrete"]["uncertainty"] = {"absorption": 0.05}
+
+    window.document.edit("carpet uncertainty", uncertain)
+    window.select("coverage")
+    assert page.spread_runs.text() == (
+        "1 material on the surfaces has one: the map with its uncertainty is traced 3 times."
+    )
+    assert page.spread.isChecked() and window.document.scene.coverage.spread is True
+    window.run_map()
+    _wait(qapp, lambda: window.job is None)
+    assert "Spread: the map with the absorption of carpet_on_concrete" in (
+        window.messages.toPlainText()
+    )
+    shown = window.coverage.get()
+    assert list(shown.spread.materials) == ["carpet_on_concrete"]
+    assert panel.part.isEnabled() and panel.shown_part() == "value"
+    assert [panel.part.itemText(k) for k in range(panel.part.count())] == [
+        "value",
+        "standard uncertainty",
+        "lower end of the interval",
+        "upper end of the interval",
+        "at least",
+        "at most",
+    ]
+    assert panel.summary.text().startswith("STI: ")
+    panel.part.setCurrentIndex(panel.part.findData("standard"))
+    assert panel.summary.text().startswith("STI: standard uncertainty: 0.0")
+    panel.part.setCurrentIndex(panel.part.findData("at_least"))
+    assert panel.summary.text().startswith("STI: at least (95 %): ")
+    panel.in_3d.setChecked(True)
+    assert panel.shown_in_3d()[1:] == ("sti", 4, "at_least")
+    assert window.write_map(tmp_path / "at_least.png")
+    assert (tmp_path / "at_least.png").stat().st_size > 10_000
+    assert window.write_map(tmp_path / "map.json")
+    report = json.loads((tmp_path / "map.json").read_text(encoding="utf-8"))
+    assert set(report["maps"]["talker"]["uncertainty"]["materials"]) == {"carpet_on_concrete"}
+
+    # The run names what the command names under its table: the built-in materials
+    # taken at the scene's default, and the bands that no run moved.
+    def more(data: dict) -> None:
+        data["simulation"]["uncertainty"] = {"presets": "tolerance"}
+        data["materials"]["acoustic_ceiling"] = {
+            "absorption": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+            "uncertainty": {"absorption": 0.03},
+        }
+
+    window.document.edit("more uncertainty", more)
+    window.select("coverage")
+    assert page.spread_runs.text() == (
+        "3 materials on the surfaces have one: the map with its uncertainty is traced 7 times."
+    )
+    window.run_map()
+    _wait(qapp, lambda: window.job is None)
+    said = window.messages.toPlainText()
+    assert (
+        "Built-in materials of unknown source taken at plus or minus 0.1: painted_concrete"
+    ) in said
+    assert (
+        "Left out of the map's uncertainty, where the absorption is 1: acoustic_ceiling (8 kHz)"
+    ) in said
+
+    # A ground's uncertainty is left out, which the page says where it is the only one.
+    def ground(data: dict) -> None:
+        data["simulation"]["uncertainty"] = {"presets": "none"}
+        data["materials"]["acoustic_ceiling"] = {"preset": "ceiling_fissured_tile"}
+        data["materials"]["carpet_on_concrete"] = {
+            "impedance": "grass",
+            "uncertainty": {"absorption": 0.05},
+        }
+
+    window.document.edit("a ground", ground)
+    window.select("coverage")
+    assert page.spread_runs.text() == (
+        "The absorption uncertainty of carpet_on_concrete is left out of the spread: "
+        "a ground's impedance gives its reflection. "
+        "No other material on the surfaces has an absorption uncertainty: no map has one."
+    )
+    window.document.undo()
+    window.select("coverage")
+
+    # Unticked, the next map has none, and the list goes back to the value.
+    page.spread.setChecked(False)
+    assert window.document.scene.coverage.spread is False
+    window.run_map()
+    _wait(qapp, lambda: window.job is None)
+    assert window.coverage.get().spread is None
+    assert not panel.part.isEnabled() and panel.shown_part() == "value"
+    assert panel.summary.text().startswith("STI: ") and "at least" not in panel.summary.text()
 
 
 WAITING_DEMO = '''"""A demo that waits, for the tests of the editor's Run demo window."""

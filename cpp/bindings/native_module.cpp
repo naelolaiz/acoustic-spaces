@@ -813,11 +813,24 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
                     std::size_t max_family, InArray room_level, Points atmosphere_rows,
                     InArray wind_direction, double ground, double chord_sagitta, Matrix plants,
                     Matrix plant_outline, Matrix plant_absorption, Matrix plant_scattering,
-                    Matrix plant_asymmetry, Flags plant_upright) {
+                    Matrix plant_asymmetry, Flags plant_upright, Matrix deciding) {
     as::StochasticScene scene =
         stochastic_scene("trace_map", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
                          transmission, face_room, source_room);
+    if (deciding.is_valid()) {
+        if (deciding.shape(0) != absorption.shape(0) || deciding.shape(1) != absorption.shape(1)) {
+            throw std::invalid_argument("trace_map: deciding must be faces x bands");
+        }
+        for (std::size_t i = 0; i < deciding.size(); ++i) {
+            if ((deciding.data()[i] < 1.0) != (absorption.data()[i] < 1.0)) {
+                throw std::invalid_argument(
+                    "trace_map: deciding must absorb everything where absorption does, and "
+                    "there only");
+            }
+        }
+        scene.deciding = deciding.data();
+    }
     as::Atmosphere bending;
     if (atmosphere("trace_map", atmosphere_rows, wind_direction, ground, chord_sagitta,
                    bending)) {
@@ -1224,11 +1237,15 @@ NB_MODULE(_native, m) {
           nb::arg("plant_scattering").none() = nb::none(),
           nb::arg("plant_asymmetry").none() = nb::none(),
           nb::arg("plant_upright").none() = nb::none(),
+          nb::arg("deciding").none() = nb::none(),
           "Stochastic ray tracing onto a coverage map: (energy[point, band, bin], escaped "
           "rays, ray_energy[window], reflections[window], traced rays). point (ny x nx x "
           "layers) holds the map point of each column of width cell from origin (x, y), "
           "-1 for none; each point is a slab of air from low to high (z) of the given "
           "volume, which counts the rays in its map_room alone (-1: in any). Bins count "
-          "from each point's onset: fine_bins of fine_step, then coarse_step. Other "
-          "arguments as for trace_stochastic.");
+          "from each point's onset: fine_bins of fine_step, then coarse_step. With deciding "
+          "(faces x bands), that absorption decides for the rays wherever their energy "
+          "does (splitting, roulette, passing a partition, plants' scattering, their end), "
+          "so that the run follows the rays of the run with it and counts on them the "
+          "energy its own absorption leaves. Other arguments as for trace_stochastic.");
 }

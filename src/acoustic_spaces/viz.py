@@ -797,6 +797,7 @@ def plot_room(
     coverage: CoverageMap | None = None,
     parameter: str = "g",
     band: int = 4,
+    part: str = "value",
     leaks: Leaks | None = None,
     wind: bool = True,
 ) -> pyvista.Plotter:
@@ -804,7 +805,8 @@ def plot_room(
 
     ``paths`` adds early reflection paths (from :func:`acoustic_spaces.engine.early_paths`
     or a response's ``early``), coloured by order up to ``max_order``. ``coverage`` adds
-    a coverage map of one ``parameter`` and ``band`` (see :func:`plot_coverage`).
+    a coverage map of one ``parameter`` and ``band``, or of a ``part`` of its spread
+    (see :func:`plot_coverage`).
     ``leaks`` adds the open edges and the rays that escape through them (see
     :func:`plot_leaks`). Outdoors, ``wind`` adds the wind and the weather zones (see
     :func:`plot_wind`).
@@ -823,16 +825,16 @@ def plot_room(
         faces = np.flatnonzero((room.face_materials == k) & shown)
         if len(faces) == 0:
             continue
-        part = room_polydata(room, faces)
+        mesh = room_polydata(room, faces)
         colour = MATERIAL_COLOURS[k % len(MATERIAL_COLOURS)]
-        plotter.add_mesh(part, color=colour, opacity=opacity)
-        plotter.add_mesh(_outline(part), color=EDGE_COLOUR, line_width=1.5)
+        plotter.add_mesh(mesh, color=colour, opacity=opacity)
+        plotter.add_mesh(_outline(mesh), color=EDGE_COLOUR, line_width=1.5)
         legend.append([name, colour])
     missing = np.flatnonzero((room.face_materials == UNASSIGNED) & shown)
     if len(missing):
-        part = room_polydata(room, missing)
-        plotter.add_mesh(part, color=UNASSIGNED_COLOUR, opacity=max(opacity, 0.8))
-        plotter.add_mesh(_outline(part), color=EDGE_COLOUR, line_width=1.5)
+        mesh = room_polydata(room, missing)
+        plotter.add_mesh(mesh, color=UNASSIGNED_COLOUR, opacity=max(opacity, 0.8))
+        plotter.add_mesh(_outline(mesh), color=EDGE_COLOUR, line_width=1.5)
         legend.append([_("no material"), UNASSIGNED_COLOUR])
     legend.extend(plot_vegetation(room, plotter))
     if wind:
@@ -890,7 +892,7 @@ def plot_room(
     if paths is not None:
         legend.extend(plot_paths(paths, plotter, max_order=max_order))
     if coverage is not None:
-        plot_coverage(coverage, plotter, parameter=parameter, band=band)
+        plot_coverage(coverage, plotter, parameter=parameter, band=band, part=part)
     if leaks is not None:
         legend.extend(plot_leaks(leaks, room, plotter, render=False))
 
@@ -1744,22 +1746,60 @@ def _band_name(f: int) -> str:
     return f"{f} Hz" if f < 1000 else f"{f // 1000} kHz"
 
 
-def map_values(coverage: CoverageMap, parameter: str = "g", band: int = 4):
+#: What a map shows of a parameter: its value, or a part of its spread
+#: (:meth:`~acoustic_spaces.engine.coverage.CoverageMap.spread_of`), each with the name
+#: it has in a title.
+MAP_PARTS = {
+    "value": N_("value"),
+    "standard": N_("standard uncertainty"),
+    "low": N_("lower end of the interval"),
+    "high": N_("upper end of the interval"),
+    "at_least": N_("at least"),
+    "at_most": N_("at most"),
+}
+
+
+def map_values(coverage: CoverageMap, parameter: str = "g", band: int = 4, part: str = "value"):
     """The values a map shows of ``parameter`` (in ``band`` when it has bands, as an
-    index into ``OCTAVE_BANDS_HZ``), in the units of its label, and its title."""
+    index into ``OCTAVE_BANDS_HZ``), in the units of its label, and its title. ``part``
+    (a key of :data:`MAP_PARTS`) takes, in place of the value, a part of its spread on a
+    map run with one: its standard uncertainty, an end of its interval, or the value it
+    is at least or at most, the last four with their probability in the title."""
     from acoustic_spaces.engine.coverage import MAP_PARAMETERS
     from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 
     if parameter not in MAP_PARAMETERS:
         raise ValueError(f"unknown parameter {parameter!r}; use one of {', '.join(MAP_PARAMETERS)}")
+    if part not in MAP_PARTS:
+        raise ValueError(f"unknown part {part!r}; use one of {', '.join(MAP_PARTS)}")
     info = MAP_PARAMETERS[parameter]
-    values = coverage.value(parameter, band if info.per_band else None) * info.scale
+    own = band if info.per_band else None
     label = _(info.label)
     title = f"{label}, {_band_name(OCTAVE_BANDS_HZ[band])}" if info.per_band else label
-    return values, title
+    if part == "value":
+        return coverage.value(parameter, own) * info.scale, title
+    values = coverage.spread_of(parameter, part, own) * info.scale
+    what = _(MAP_PARTS[part])
+    if part != "standard":
+        spread = coverage.spread
+        probability = spread.coverage if part in ("low", "high") else spread.one_sided
+        what = f"{what} ({100 * probability:g} %)"
+    return values, f"{title}: {what}"
 
 
-def map_polydata(coverage: CoverageMap, parameter: str = "g", band: int = 4) -> pyvista.PolyData:
+def _map_text(info, value: float, part: str) -> str:
+    """A map value as its cell shows it: in the parameter's format, a standard
+    uncertainty to two significant digits."""
+    from acoustic_spaces.engine.coverage import uncertainty_text
+
+    if not np.isfinite(value):
+        return "–"
+    return uncertainty_text(float(value)) if part == "standard" else info.format.format(value)
+
+
+def map_polydata(
+    coverage: CoverageMap, parameter: str = "g", band: int = 4, part: str = "value"
+) -> pyvista.PolyData:
     """The map's columns as tiles at listening height, over the audience surfaces
     (:meth:`~acoustic_spaces.engine.coverage.MapGrid.tiles`); the cell data ``value``
     holds the parameter as :func:`map_values` gives it (NaN where undefined) and
@@ -1769,7 +1809,7 @@ def map_polydata(coverage: CoverageMap, parameter: str = "g", band: int = 4) -> 
     n = len(corners)
     cells = np.column_stack([np.full(n, 4), np.arange(4 * n).reshape(n, 4)]).ravel()
     poly = pv.PolyData(corners.reshape(-1, 3), cells)
-    poly.cell_data["value"] = map_values(coverage, parameter, band)[0][owner]
+    poly.cell_data["value"] = map_values(coverage, parameter, band, part)[0][owner]
     poly.cell_data["point"] = owner
     return poly
 
@@ -1791,12 +1831,14 @@ def plot_coverage(
     parameter: str = "g",
     band: int = 4,
     render: bool = True,
+    part: str = "value",
 ):
     """Add a coverage map to a 3D view: coloured tiles at listening height over the
-    audience area, with a colour bar. Returns the actor of the tiles."""
+    audience area, with a colour bar (``parameter``, ``band`` and ``part`` as
+    :func:`map_values` takes them). Returns the actor of the tiles."""
     pv = _pyvista()
-    poly = map_polydata(coverage, parameter, band)
-    _values, title = map_values(coverage, parameter, band)
+    poly = map_polydata(coverage, parameter, band, part)
+    _values, title = map_values(coverage, parameter, band, part)
     actor = plotter.add_mesh(
         poly,
         scalars="value",
@@ -1906,16 +1948,17 @@ def plot_map(
     parameter: str = "g",
     band: int = 4,
     room: Room | None = None,
+    part: str = "value",
 ):
     """A coverage map seen from above: one panel per level (stalls, balcony, ...),
     columns coloured by ``parameter`` in ``band`` (an index into ``OCTAVE_BANDS_HZ``;
-    4 is 1 kHz) and labelled with their values when there is room. With ``room`` the
-    walls and sources are drawn too. Returns the matplotlib figure; it is saved to
-    ``path`` if given."""
+    4 is 1 kHz) and labelled with their values when there is room; with ``part``, by
+    that part of its spread (:func:`map_values`). With ``room`` the walls and sources
+    are drawn too. Returns the matplotlib figure; it is saved to ``path`` if given."""
     from acoustic_spaces.engine.coverage import MAP_PARAMETERS
 
     grid = coverage.grid
-    values, title = map_values(coverage, parameter, band)
+    values, title = map_values(coverage, parameter, band, part)
     ny, nx = grid.index.shape[:2]
     levels = int(grid.level.max()) + 1
     lo, hi = _limits(values)
@@ -1967,7 +2010,7 @@ def plot_map(
             size = max(5.0, min(9.0, 60.0 / max(nx, ny)))
             for k in on:
                 value = values[k]
-                text = info.format.format(value) if np.isfinite(value) else "–"
+                text = _map_text(info, value, part)
                 cx, cy = grid.points[k, :2]
                 shade = (value - lo) / (hi - lo) if np.isfinite(value) else 0.5
                 colour = "black" if 0.25 < shade < 0.85 else "white"

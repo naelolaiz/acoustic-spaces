@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Added: a coverage map gives the uncertainty of its values from the materials'
+  absorption uncertainty, an insertion loss and the long-term levels too:
+  `coverage.spread: true`, `map --spread` or the tick box under **Uncertainty** on the
+  editor's coverage map page trace the map twice more for each material that has one
+  (the law of propagation of uncertainty, GUM 5.1.2). `map --show` and the map panel's
+  **Show** draw the standard uncertainty, an end of the 95 % interval or a one-sided
+  bound.
+- Fixed: a calibrated material given in third octaves keeps the octave values that were
+  fitted where one of its thirds reaches 1 or what the surface lets through: the
+  octave's other thirds take up the rest.
 - Fixed: a run re-weighted for much more absorption than it was traced with (a draw of a
   wide absorption uncertainty, a large change in the editor) gave far too much late
   energy, up to absurd levels near an absorption of 1. The late part now follows

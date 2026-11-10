@@ -175,6 +175,12 @@ class TraceModel:
     #: An outdoor scene's vegetation in ``bands``
     #: (:class:`~acoustic_spaces.engine.vegetation.Plants`); None without any.
     plants: object | None = None
+    #: (F, bands) the absorption that decides for a map's rays in place of
+    #: ``absorption``, wherever the energy a ray carries decides what happens to it (the
+    #: splitting and thinning out, whether it passes a partition): the run then follows
+    #: the rays of the run with this absorption
+    #: (:func:`~acoustic_spaces.engine.late.stochastic_map_energy`). None: its own.
+    deciding: np.ndarray | None = None
 
     @classmethod
     def from_room(cls, room: Room, settings=None) -> TraceModel:

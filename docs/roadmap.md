@@ -153,9 +153,12 @@ Parameters:
 - [x] Error estimates: the spread of each listener's levels and speech results (the
   level per octave band and A-weighted, STI, STIPA, U50, the level relative to free
   field).
-- [ ] Error estimates, next steps: the scattering's uncertainty; coverage maps,
-  insertion losses and long-term levels; convergence checks; the method's own error
-  from the validation.
+- [x] Error estimates: the uncertainty of a coverage map's values, its insertion
+  loss and long-term levels too, by the law of propagation of uncertainty (the map
+  traced twice more for each material with an absorption uncertainty).
+- [ ] Error estimates, next steps: the scattering's uncertainty; a listener's insertion
+  loss and long-term levels; convergence checks; the method's own error from the
+  validation.
 
 Outdoor acoustics, in steps:
 

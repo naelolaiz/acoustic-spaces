@@ -49,6 +49,9 @@ MAP_PARAMETER_NAMES = (
     "long_term_insertion_loss",
     "long_term_insertion_loss_a",
 )
+#: What the map command can show of a parameter: its value, or a part of its spread
+#: (engine.coverage.SPREAD_PARTS).
+MAP_PARTS = ("value", "standard", "low", "high", "at_least", "at_most")
 #: What the commands that read a scene take.
 SCENE_HELP = "path to a scene YAML file, or a pack of one (.zip, see pack)"
 #: Edge diffraction settings (engine.diffraction.DIFFRACTION_MODES).
@@ -1345,15 +1348,9 @@ def _spread_groups(room, settings):
     materials' absorption uncertainty (their own, or a built-in material's default), or
     None: no material on its surfaces has one, or ``settings`` cannot re-weight, which
     is said (as a warning when some material gives an uncertainty of its own)."""
-    from acoustic_spaces.engine.uncertainty import grounds_left_out, spread_groups
+    from acoustic_spaces.engine.uncertainty import spread_groups
 
-    grounds = grounds_left_out(room)
-    if grounds:
-        print(
-            f"warning: the absorption uncertainty of {', '.join(grounds)} is left out of "
-            "the spread: a ground's impedance gives its reflection",
-            file=sys.stderr,
-        )
+    _warn_grounds_left_out(room)
     groups, why, own = spread_groups(room, settings)
     if why is not None:
         print(
@@ -1362,6 +1359,21 @@ def _spread_groups(room, settings):
             file=sys.stderr,
         )
     return groups
+
+
+def _warn_grounds_left_out(room) -> list[str]:
+    """Warn of the grounds whose absorption uncertainty a spread leaves out, and return
+    them."""
+    from acoustic_spaces.engine.uncertainty import grounds_left_out
+
+    grounds = grounds_left_out(room)
+    if grounds:
+        print(
+            f"warning: the absorption uncertainty of {', '.join(grounds)} is left out of "
+            "the spread: a ground's impedance gives its reflection",
+            file=sys.stderr,
+        )
+    return grounds
 
 
 def _uncertainty_text(entry: dict) -> str:
@@ -1434,9 +1446,10 @@ def _assumed_text(assumed: dict) -> str:
     )
 
 
-def _held_text(held: dict) -> str:
+def _held_text(held: dict, how: str = "drawn") -> str:
     """The materials with an uncertainty and the bands in which they absorb everything,
-    where no draw moves them, or nothing."""
+    where no draw moves them (``how``: "moved" for a map, whose runs draw nothing), or
+    nothing."""
     from acoustic_spaces.parameters import _band_label
 
     if not held:
@@ -1444,7 +1457,7 @@ def _held_text(held: dict) -> str:
     each = [
         f"{name} ({', '.join(_band_label(hz) for hz in bands)})" for name, bands in held.items()
     ]
-    return f"; not drawn where the absorption is 1: {', '.join(each)}"
+    return f"; not {how} where the absorption is 1: {', '.join(each)}"
 
 
 def _outdoor_lines(entry: dict, removed) -> list[str]:
@@ -1530,8 +1543,8 @@ def _early_text(paths) -> str:
 def _cmd_map(args: argparse.Namespace) -> int:
     import numpy as np
 
-    from acoustic_spaces.engine.coverage import MAP_PARAMETERS
-    from acoustic_spaces.engine.long_term import coverage_map
+    from acoustic_spaces.engine.coverage import MAP_PARAMETERS, uncertainty_text
+    from acoustic_spaces.engine.sensitivity import coverage_map, spread_materials
     from acoustic_spaces.scene import Coverage
 
     room = _load_room(args.scene)
@@ -1552,6 +1565,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
             ),
             "--parabolic-equation": ("early.parabolic_equation", args.parabolic_equation),
             "--length": ("ir_length_s", args.length),
+            "--one-sided": ("uncertainty.one_sided", args.one_sided),
             "--without": ("insertion_loss_of", args.without),
             **_performance_options(args),
         },
@@ -1566,9 +1580,26 @@ def _cmd_map(args: argparse.Namespace) -> int:
             "--spacing": ("spacing", args.spacing),
             "--rays": ("rays", args.rays),
             "--noise": ("noise_db", noise),
+            "--spread": ("spread", args.spread),
         },
     )
     if simulation is None or settings is None or not _without_named(room, args.without):
+        return 1
+    materials = spread_materials(room) if settings.spread else []
+    if settings.spread:
+        other = " other" if _warn_grounds_left_out(room) else ""
+        if not materials:
+            print(
+                f"warning: no spread: no{other} material on the surfaces has an absorption "
+                "uncertainty",
+                file=sys.stderr,
+            )
+    if args.show != "value" and not materials:
+        print(
+            f"error: --show {args.show}: the map has no spread"
+            + ("" if settings.spread else "; ask for it with --spread or coverage.spread"),
+            file=sys.stderr,
+        )
         return 1
     try:
         result = coverage_map(
@@ -1590,21 +1621,38 @@ def _cmd_map(args: argparse.Namespace) -> int:
         f"\n{len(grid)} map points {grid.cell:g} m apart, {settings.height:g} m above the "
         f"audience surfaces" + (f", on {levels} levels" if levels > 1 else "")
     )
+    shown = result.get(args.source)
+    if shown.spread is not None:
+        print(
+            f"u: the standard uncertainty from the absorption uncertainty of "
+            f"{', '.join(materials)} (the map traced {2 * len(materials)} times more)"
+            + _assumed_text(shown.spread.assumed)
+            + _held_text(shown.spread.held, "moved")
+        )
+
+    def ranges(values, text) -> list[str]:
+        finite = values[np.isfinite(values)]
+        if len(finite) == 0:
+            return ["-"] * 3
+        return [text(float(v)) for v in (finite.min(), np.median(finite), finite.max())]
+
     for chosen in [*result.maps.values(), *([result.combined] if result.combined else [])]:
         print(f"\n{chosen.source} (bands: {band_text})")
         width = max(14, *(len(MAP_PARAMETERS[name].label) + 2 for name in chosen.parameters()))
-        print(f"{'':<{width}}{'min':>8}{'median':>8}{'max':>8}")
+        head = f"{'':<{width}}{'min':>8}{'median':>8}{'max':>8}"
+        if chosen.spread is not None:
+            head += f"{'u min':>10}{'u median':>10}{'u max':>10}"
+        print(head)
         for name in chosen.parameters():
             info = MAP_PARAMETERS[name]
-            values = chosen.value(name, band if info.per_band else None)
-            finite = values[np.isfinite(values)]
-            if len(finite) == 0:
-                row = ["-"] * 3
-            else:
-                row = [info.text(float(v)) for v in (finite.min(), np.median(finite), finite.max())]
-            print(f"{info.label:<{width}}" + "".join(f"{cell:>8}" for cell in row))
+            own = band if info.per_band else None
+            row = f"{info.label:<{width}}"
+            row += "".join(f"{cell:>8}" for cell in ranges(chosen.value(name, own), info.text))
+            if chosen.spread is not None:
+                standard = chosen.spread_of(name, "standard", own) * info.scale
+                row += "".join(f"{cell:>10}" for cell in ranges(standard, uncertainty_text))
+            print(row)
 
-    shown = result.get(args.source)
     if (args.plot or args.screenshot) and args.parameter not in shown.parameters():
         print(
             f"error: --parameter {args.parameter}: this map has none; it has "
@@ -1621,7 +1669,9 @@ def _cmd_map(args: argparse.Namespace) -> int:
         if args.plot:
             from acoustic_spaces.viz import plot_map
 
-            plot_map(shown, args.plot, parameter=args.parameter, band=band, room=room)
+            plot_map(
+                shown, args.plot, parameter=args.parameter, band=band, room=room, part=args.show
+            )
             print(f"saved {args.plot}")
         if args.screenshot:
             from acoustic_spaces.viz import show_room
@@ -1632,6 +1682,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
                 coverage=shown,
                 parameter=args.parameter,
                 band=band,
+                part=args.show,
             )
             print(f"saved {args.screenshot}")
     except ImportError as exc:
@@ -3109,6 +3160,22 @@ def build_parser() -> argparse.ArgumentParser:
         "8000, or none)",
     )
     coverage.add_argument("--length", type=float, help="override simulation.ir_length_s")
+    coverage.add_argument(
+        "--spread",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="override coverage.spread: also the uncertainty of the map's values from the "
+        "materials' absorption uncertainty, for which the map is traced twice more for "
+        "each material that has one",
+    )
+    coverage.add_argument(
+        "--one-sided",
+        type=float,
+        default=None,
+        metavar="P",
+        help="override simulation.uncertainty.one_sided: the probability of the spread's "
+        "one-sided bounds, between 0.5 and 1 (0.95 unless the scene says otherwise)",
+    )
     _add_performance_arguments(coverage)
     coverage.add_argument(
         "--band",
@@ -3122,6 +3189,14 @@ def build_parser() -> argparse.ArgumentParser:
         default="g",
         choices=MAP_PARAMETER_NAMES,
         help="parameter to plot (default g)",
+    )
+    coverage.add_argument(
+        "--show",
+        default="value",
+        choices=MAP_PARTS,
+        help="what --plot and --screenshot show of the parameter: its value (default) or, "
+        "of its spread, the standard uncertainty, the low or high end of the interval, or "
+        "the value it is at least or at most",
     )
     coverage.add_argument("--plot", metavar="PNG", help="save the map seen from above")
     coverage.add_argument("--screenshot", metavar="PNG", help="save the map in the 3D view")

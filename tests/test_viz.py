@@ -403,14 +403,14 @@ def test_walk_video_carries_the_sound(tmp_path: Path, capsys, monkeypatch) -> No
         animate_walk(room, walk, tmp_path / "three.mp4", sound=tmp_path / "three.wav")
 
 
-def _map():
-    from acoustic_spaces.engine import coverage_map
+def _map(spread: bool = False):
+    from acoustic_spaces.engine.sensitivity import coverage_map
     from acoustic_spaces.scene import Coverage
 
     room = Room.from_yaml(SHOEBOX)
     settings = room.scene.simulation.model_copy(update={"ir_length_s": 1.0, "seed": 1}, deep=True)
     settings.late.method = "statistical"
-    result = coverage_map(room, settings=Coverage(spacing=2.0), simulation=settings)
+    result = coverage_map(room, settings=Coverage(spacing=2.0), simulation=settings, spread=spread)
     return room, result.get()
 
 
@@ -451,6 +451,33 @@ def test_map_plot(tmp_path: Path) -> None:
     texts = [t.get_text() for t in figure.axes[0].texts]
     assert len(texts) == 12 + 1 and "talker" in texts
     assert "C50 (dB), 500 Hz" in figure.get_suptitle()
+
+
+def test_a_map_shows_the_parts_of_its_spread() -> None:
+    pytest.importorskip("matplotlib")
+    from acoustic_spaces.engine.coverage import uncertainty_text
+    from acoustic_spaces.viz import map_polydata, map_values, plot_map
+
+    room, coverage = _map(spread=True)
+    values, title = map_values(coverage, "ts", band=4, part="standard")
+    np.testing.assert_allclose(values, coverage.spread_of("ts", "standard", 4) * 1e3)
+    assert title == "Ts (ms), 1 kHz: standard uncertainty"
+    assert map_values(coverage, "sti", part="low")[1] == "STI: lower end of the interval (95 %)"
+    assert map_values(coverage, "sti", part="at_least")[1] == "STI: at least (95 %)"
+    assert map_values(coverage, "sti", part="value")[1] == "STI"
+    poly = map_polydata(coverage, "sti", part="high")
+    np.testing.assert_allclose(poly.cell_data["value"], coverage.spread_of("sti", "high"))
+    with pytest.raises(ValueError, match="unknown part 'mean'"):
+        map_values(coverage, "sti", part="mean")
+    with pytest.raises(ValueError, match="without its spread"):
+        map_values(_map()[1], "sti", part="standard")
+    # A standard uncertainty is labelled with its two significant digits.
+    figure = plot_map(coverage, parameter="sti", part="standard", room=room)
+    texts = [t.get_text() for t in figure.axes[0].texts]
+    assert sorted(texts[:12]) == sorted(
+        uncertainty_text(float(u)) for u in coverage.spread_of("sti")
+    )
+    assert "STI: standard uncertainty" in figure.get_suptitle()
 
 
 @pytest.mark.render
