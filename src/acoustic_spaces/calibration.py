@@ -44,7 +44,7 @@ from acoustic_spaces.engine.coherent import EarlyPressure, filtered_bands, with_
 from acoustic_spaces.engine.late import MAX_GROUPS
 from acoustic_spaces.engine.response import Response
 from acoustic_spaces.engine.simulate import _as_room, simulate
-from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
+from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 from acoustic_spaces.parameters import RoomParameters
 from acoustic_spaces.room import Room
 from acoustic_spaces.scene import Scene
@@ -169,25 +169,11 @@ class Calibration:
 
 def with_absorption(scene: Scene, materials: Sequence[str], absorption: np.ndarray) -> Scene:
     """A copy of ``scene`` whose ``materials`` take ``absorption`` (materials, octave
-    bands), their other properties kept. A material given in third octaves keeps its
-    shape within each octave: its three values move together, by what the octave does."""
-    out = scene.model_copy(deep=True)
-    for name, values in zip(materials, np.asarray(absorption, dtype=float), strict=True):
-        material = out.materials[name]
-        old = np.asarray(material.absorption, dtype=float)
-        if len(old) == len(THIRD_OCTAVE_BANDS_HZ):
-            passing = material.transmission_coefficients("third_octave")
-            least = 0.0 if passing is None else np.asarray(passing)
-            shift = values - old.reshape(-1, 3).mean(axis=1)
-            values = np.clip(old + np.repeat(shift, 3), least, 1.0)
-        was = f"; was: {material.source}" if material.source else ""
-        out.materials[name] = material.model_copy(
-            update={
-                "absorption": [round(float(v), 4) for v in values],
-                "source": f"absorption calibrated to measurements{was}",
-            }
-        )
-    return out
+    bands), as calibrated to measurements
+    (:func:`~acoustic_spaces.engine.reweight.with_absorption`)."""
+    return reweight.with_absorption(
+        scene, materials, absorption, "absorption calibrated to measurements"
+    )
 
 
 def _jnd_differences(name: str, simulated, measured) -> np.ndarray:

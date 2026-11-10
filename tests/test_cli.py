@@ -562,6 +562,61 @@ def test_map_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
     assert "noise_db" in capsys.readouterr().err
 
 
+def test_map_command_gives_the_spread(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    import json
+
+    from acoustic_spaces.cli import MAP_PARTS
+    from acoustic_spaces.engine.coverage import SPREAD_PARTS
+    from acoustic_spaces.viz import MAP_PARTS as SHOWN
+
+    assert MAP_PARTS == ("value", *SPREAD_PARTS) == tuple(SHOWN)  # map --show takes them
+    out = tmp_path / "map.json"
+    args = [
+        "map",
+        str(SHOEBOX),
+        "--spacing",
+        "3",
+        "--rays",
+        "300",
+        "--length",
+        "0.6",
+        "--seed",
+        "4",
+    ]
+    assert main([*args, "--spread", "--one-sided", "0.9", "--json", str(out)]) == 0
+    captured = capsys.readouterr()
+    assert "Spread: the map as it is, then 6 times more" in captured.err
+    assert "(run 6 of 6)" in captured.err
+    materials = "painted_concrete, carpet_on_concrete, acoustic_ceiling"
+    assert (
+        f"u: the standard uncertainty from the absorption uncertainty of {materials} "
+        "(the map traced 6 times more); built-in materials of unknown source taken at "
+    ) in captured.out
+    assert "   u min  u median     u max" in captured.out
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["details"]["spread"]["runs"] == 6.0
+    spread = report["maps"]["talker"]["uncertainty"]
+    assert spread["one_sided"] == 0.9 and list(spread["materials"]) == materials.split(", ")
+    assert len(spread["standard"]["spl_a"]) == len(report["points"]) == 6
+    assert all(u > 0 for u in spread["standard"]["spl_a"])
+
+    if importlib.util.find_spec("matplotlib") is not None:
+        plot = tmp_path / "at_least.png"
+        shown = ["--spread", "--parameter", "sti", "--show", "at_least", "--plot", str(plot)]
+        assert main([*args, *shown]) == 0
+        assert plot.stat().st_size > 10_000
+
+    # A part of the spread needs the spread; without one the map is as it was.
+    capsys.readouterr()
+    assert main([*args, "--show", "standard"]) == 1
+    assert (
+        "error: --show standard: the map has no spread; ask for it with --spread or coverage.spread"
+    ) in capsys.readouterr().err
+    assert main([*args, "--no-spread"]) == 0
+    captured = capsys.readouterr()
+    assert "Spread" not in captured.err and "u median" not in captured.out
+
+
 def test_map_checks_the_options_that_override_the_scene(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

@@ -67,6 +67,7 @@ import numpy as np
 from acoustic_spaces.engine.coherent import absorption_phases, sample_frequencies
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.late import MAX_GROUPS, MOMENT_STEP
+from acoustic_spaces.materials.bands import THIRD_OCTAVE_BANDS_HZ
 
 
 def face_groups(room, materials: Sequence[str]) -> np.ndarray:
@@ -123,6 +124,35 @@ def cannot_reweight(room, settings=None) -> str | None:
     if count > MAX_GROUPS:
         return f"at most {MAX_GROUPS} materials on the surfaces, and there are {count}"
     return None
+
+
+def with_absorption(
+    scene, materials: Sequence[str], absorption, source: str, digits: int | None = 4
+):
+    """A copy of ``scene`` whose ``materials`` take ``absorption`` (materials, octave
+    bands), their other properties kept. A material given in third octaves keeps its
+    shape within each octave: its three values move together, by what the octave does.
+    Each one's source then reads ``source``, with what it was after it; the values are
+    rounded to ``digits`` decimals (None: as given)."""
+    out = scene.model_copy(deep=True)
+    for name, values in zip(materials, np.asarray(absorption, dtype=float), strict=True):
+        material = out.materials[name]
+        old = np.asarray(material.absorption, dtype=float)
+        if len(old) == len(THIRD_OCTAVE_BANDS_HZ):
+            passing = material.transmission_coefficients("third_octave")
+            least = 0.0 if passing is None else np.asarray(passing)
+            shift = values - old.reshape(-1, 3).mean(axis=1)
+            values = np.clip(old + np.repeat(shift, 3), least, 1.0)
+        was = f"; was: {material.source}" if material.source else ""
+        out.materials[name] = material.model_copy(
+            update={
+                "absorption": [
+                    float(v) if digits is None else round(float(v), digits) for v in values
+                ],
+                "source": f"{source}{was}",
+            }
+        )
+    return out
 
 
 def _without_absorption(scene) -> dict:

@@ -2957,6 +2957,14 @@ class Coverage(_Model):
         default=None,
         description="background noise for the STI (dB SPL, one value or one per octave band)",
     )
+    spread: bool = Field(
+        default=False,
+        description=(
+            "also the map's uncertainty from the materials' absorption uncertainty: the "
+            "map is traced twice more for each material that has one, so with M of them "
+            "it takes 2 M + 1 times as long"
+        ),
+    )
 
     @field_validator("noise_db")
     @classmethod

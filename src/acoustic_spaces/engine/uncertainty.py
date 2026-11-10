@@ -464,16 +464,43 @@ def _draws(scene, materials, draws, seed):
             deviates.append(np.zeros(draws))
             widths.append(np.zeros(own.size))
             continue
-        # A band that absorbs everything stays: no energy is left there to re-weight.
-        width = np.where(own >= 1.0, 0.0, np.asarray(spec.absorption, dtype=float))
         if spec.distribution == "uniform":
             deviate = rng.uniform(-1.0, 1.0, draws)
         else:
             deviate = rng.standard_normal(draws)
-        out.append(np.clip(own + deviate[:, None] * width, *_limits(scene.materials[name], own)))
+        moved, width = _moved(scene.materials[name], spec, deviate)
+        out.append(moved)
         deviates.append(deviate)
         widths.append(width)
     return np.stack(out, axis=1), np.stack(deviates, axis=1), np.stack(widths)
+
+
+def _moved(
+    material, spec: AbsorptionUncertainty, deviate: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """((deviates, bands), (bands,)) the absorption of ``material``, whose uncertainty
+    is ``spec`` (:func:`uncertainty_of`), for these values of its deviate, and the width
+    they scale: its own plus the width times the deviate, held to :func:`_limits`."""
+    own = np.asarray(material.coefficients("octave")[0], dtype=float)
+    # A band that absorbs everything stays: no energy is left there to re-weight.
+    width = np.where(own >= 1.0, 0.0, np.asarray(spec.absorption, dtype=float))
+    moved = np.clip(own + deviate[:, None] * width, *_limits(material, own))
+    return moved, width
+
+
+def absorption_nodes(scene, name: str) -> tuple[np.ndarray, np.ndarray]:
+    """(plus, minus) the absorption per octave band of material ``name``, which has an
+    uncertainty (:func:`uncertainty_of`), with its deviate one standard deviation above
+    and below 0: what a draw takes (:func:`absorption_draws`) for a deviate of plus and
+    minus 1, or, for a tolerance, of plus and minus 1 over the root of 3 (the standard
+    deviation of a deviate uniform on -1 to 1). So its own plus and minus its standard
+    uncertainty, held to a draw's limits."""
+    spec = uncertainty_of(scene, name)
+    if spec is None:
+        raise ValueError(f"material {name!r} has no absorption uncertainty a spread takes")
+    step = 1.0 / math.sqrt(3.0) if spec.distribution == "uniform" else 1.0
+    plus, minus = _moved(scene.materials[name], spec, np.array([step, -step]))[0]
+    return plus, minus
 
 
 class _Admittances:
@@ -949,6 +976,7 @@ __all__ = [
     "LevelSpread",
     "Spread",
     "absorption_draws",
+    "absorption_nodes",
     "edge_errors",
     "grounds_left_out",
     "held",
