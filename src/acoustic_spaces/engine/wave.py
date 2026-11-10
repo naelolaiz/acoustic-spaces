@@ -28,7 +28,8 @@ octave bands replace the ray-traced ones.
   rooms, open models and thin screens all work. Round an open model, whose air reaches
   the edge of the grid, the grid grows by a perfectly matched layer of
   :data:`LAYER_CELLS` cells that takes in the sound leaving it, and leaves room
-  (:data:`LAYER_ROOM`) for sound that runs along it. Openings are not
+  (:data:`LAYER_ROOM`) for sound that runs along it, on the sides where no surface of
+  the model lies between that sound and the layer (:func:`_open_sides`). Openings are not
   surfaces here: the air flows through them. Surfaces that let only part of the sound
   through are not modelled, so a model with any stops the wave solver with an error.
 - At these frequencies the source radiates the same way in all directions. The
@@ -126,7 +127,8 @@ LAYER_DAMPING = 0.5
 #: cells), the level read 0.64 dB below the exact one at 125 Hz 20 m away, and 1.7 and
 #: 2.1 dB below it at 63 and 125 Hz 40 m away, where far taller grids read 0.36, and
 #: 0.13 and 0.41 dB below it. With this room it is within 0.06 dB of the taller grids,
-#: 10 to 160 m away (docs/validation.md, Open models).
+#: 10 to 160 m away (docs/validation.md, Open models). A side that the model's own
+#: surfaces close off from the source and the listeners gets none (:func:`_open_sides`).
 LAYER_ROOM = 0.15
 #: The wave solver's part of a response starts here (Hz), with the synthesis's
 #: crossover shape round it: an octave below the 63 Hz band's lower edge, so that band,
@@ -604,6 +606,68 @@ def _spans_across(source: np.ndarray, listeners: np.ndarray) -> np.ndarray:
     return np.sqrt(np.max(across, axis=0, initial=0.0))
 
 
+def _open_sides(
+    bvh,
+    points: np.ndarray,
+    room: np.ndarray,
+    origin: np.ndarray,
+    cell: float,
+    shape,
+    layer: int,
+    threads: int = 0,
+) -> np.ndarray:
+    """(3, 2) for each axis's low and high side, whether sound that runs between
+    ``points`` (the source, then the listeners) can meet the matched layer on that side
+    of the grid (of ``shape`` cells of ``cell`` metres from ``origin``, ``layer`` of them
+    matched layer inside each edge) near grazing: whether the layer there needs its
+    ``room`` (3,) (see :data:`LAYER_ROOM`).
+
+    It can where the air round the points reaches the layer inside the box that lies the
+    room past them along every axis (and three cells, for the cells a point takes). The
+    air is flooded from the source over the grid's cells in that box, as the solver
+    floods its own, and from every listener it does not reach. Where it reaches no
+    layer, a surface of the model lies between: sound from a point to that side's layer
+    and back to a point leaves the box on its way, so it runs at least as far as off a
+    layer the room away, which is what the room is for. A side of the box that ends
+    short of the layer counts as open (its room lies inside the grid).
+    """
+    from acoustic_spaces import _native
+
+    shape = np.asarray(shape, dtype=np.int64)
+    first, last = np.full(3, layer + 1), shape - 2 - layer  # the cells inside the layer
+    low = np.floor((points.min(axis=0) - room - origin) / cell).astype(np.int64) - 3
+    high = np.floor((points.max(axis=0) + room - origin) / cell).astype(np.int64) + 3
+    start, stop = np.maximum(first, low), np.minimum(last, high)
+    reached = np.zeros((3, 2), dtype=bool)
+    left = list(range(len(points)))  # the points whose air is not flooded yet
+    while left:
+        seed, left = left[0], left[1:]
+        try:
+            # A grid of the box's cells and one more round them, where its air ends.
+            part = _native.WaveSolver(
+                bvh,
+                np.zeros(bvh.face_count, np.int64),
+                np.zeros(1),
+                np.zeros((0, 3)),
+                np.zeros(0, np.int64),
+                origin + (start - 1) * cell,
+                cell,
+                *(int(n) for n in stop - start + 3),
+                np.ascontiguousarray(points[seed]),
+                np.ascontiguousarray(points[left].reshape(-1, 3)),
+                1.0,
+                0,
+                0.0,
+                threads,
+            )
+        except ValueError:
+            continue  # a point in no air: the run's own grid says which, and stops
+        reached |= np.array(part.open_sides, dtype=bool).reshape(3, 2)
+        left = [p for k, p in enumerate(left) if not part.probe_found(k)]
+    at_layer = np.column_stack([start == first, stop == last])
+    return reached | ~at_layer
+
+
 def _in_sight(bvh, listeners: np.ndarray, probes: np.ndarray) -> np.ndarray:
     """(len(probes),) whether no face of ``bvh`` lies between each of ``probes`` (the
     :func:`_probe_points` of each of ``listeners`` in turn) and its listener. A point
@@ -766,6 +830,8 @@ def wave_responses(
         weathers = weather.weathers if weather.zones is not None else [weather.atmosphere]
         moving = any(np.any(np.asarray(w.wind_speed(z - model.ground)) != 0.0) for w in weathers)
 
+    open_sides: list[np.ndarray] = []  # the sides whose layer needs room, once found
+
     def layout(courant: float, layer: int, speed: float, per_wavelength: float):
         """The grid for the stencil's ``courant``, with ``layer`` cells of matched
         layer, its time step set by ``speed``, ``per_wavelength`` cells per wavelength
@@ -778,17 +844,29 @@ def wave_responses(
         # model's planes.
         low = np.minimum(mesh.vertices.min(axis=0), points.min(axis=0) - 2.0 * h)
         high = np.maximum(mesh.vertices.max(axis=0), points.max(axis=0) + 2.0 * h)
+        offset = h * (2.0 + layer + np.array([0.0137, 0.0219, 0.0291]))
         if layer:
             # Room for sound that runs along the layer (see LAYER_ROOM), below in whole
             # cells so that the grid keeps its place on the model; none under an outdoor
-            # scene, whose ground closes the grid there.
+            # scene, whose ground closes the grid there, nor on a side the model's own
+            # surfaces close (found once, on the first grid that would grow).
             room = LAYER_ROOM * _spans_across(points[0], points[1:])
             below = np.ceil(np.maximum(low - (points.min(axis=0) - room), 0.0) / h)
             if outdoor:
                 below[2] = 0.0
-            low = low - h * below
-            high = np.maximum(high, points.max(axis=0) + room)
-        origin = low - h * (2.0 + layer + np.array([0.0137, 0.0219, 0.0291]))
+            above = np.maximum(high, points.max(axis=0) + room)
+            if not open_sides and (below.any() or np.any(above > high)):
+                bare = np.ceil((high - low + offset) / h).astype(np.int64) + 2 + layer
+                if int(np.prod(bare)) > MAX_CELLS:  # refused below, with or without room
+                    open_sides.append(np.ones((3, 2), dtype=bool))
+                else:
+                    open_sides.append(
+                        _open_sides(bvh, points, room, low - offset, h, bare, layer, threads)
+                    )
+            if open_sides:
+                low = low - h * np.where(open_sides[0][:, 0], below, 0.0)
+                high = np.where(open_sides[0][:, 1], above, high)
+        origin = low - offset
         shape = np.ceil((high - origin) / h).astype(np.int64) + 2 + layer
         return grid, origin, shape
 

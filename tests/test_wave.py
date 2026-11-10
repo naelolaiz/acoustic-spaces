@@ -28,6 +28,7 @@ from acoustic_spaces.engine.wave import (
     WAVE_BANDS_HZ,
     WaveResponse,
     _first_order,
+    _open_sides,
     _probe_points,
     _spans_across,
     absorption_of_impedance,
@@ -1730,6 +1731,95 @@ def test_the_room_for_the_layer_keeps_the_grid_on_the_model(tmp_path: Path, monk
     assert cells == pytest.approx(round(cells)) and cells >= 1
     assert origin[2] + h * margin[2] <= -1.5 - room + 1e-9
     assert origin[0] == pytest.approx(-4.0 - h * margin[0])
+
+
+def _hall(path: Path) -> str:
+    """A model file of a hall 40 x 20 x 4 m of single faces, open at its end x = 40 m:
+    floor, roof, both long walls and the wall at x = 0."""
+    path.write_text(
+        "v 0 0 0\nv 40 0 0\nv 40 20 0\nv 0 20 0\nv 0 0 4\nv 40 0 4\nv 40 20 4\nv 0 20 4\n"
+        "f 1 2 3 4\nf 5 6 7 8\nf 1 2 6 5\nf 4 3 7 8\nf 1 4 8 5\n"
+    )
+    return str(path)
+
+
+def test_the_layer_gets_no_room_where_the_models_surfaces_close_the_side(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # In a hall open at one end, the source and a listener 33 m apart inside it: the
+    # floor and the roof lie between them and the layer under and over the hall, so the
+    # grid stays on the model there (5 m of room each way otherwise: 1.8 times the
+    # cells). With the listener 4 m outside the open end, the air round it reaches the
+    # layer both ways, and the grid leaves the room under and over the two.
+    obj = _hall(tmp_path / "hall.obj")
+    margin = 2.0 + LAYER_CELLS + np.array([0.0137, 0.0219, 0.0291])
+    origin, h, shape = _laid_grid(monkeypatch, {"file": obj}, [3.0, 7.0, 1.5], [36.0, 9.0, 1.2])
+    assert origin == pytest.approx(-h * margin)
+    assert shape[2] == math.ceil((4.0 - origin[2]) / h) + 2 + LAYER_CELLS
+    origin, h, shape = _laid_grid(monkeypatch, {"file": obj}, [3.0, 7.0, 1.5], [44.0, 9.0, 1.2])
+    room = LAYER_ROOM * math.hypot(41.0, 2.0)
+    assert origin[2] + h * margin[2] <= 1.2 - room + 1e-9
+    assert origin[2] + h * (shape[2] - 2 - LAYER_CELLS) >= 1.5 + room
+
+
+def test_open_sides_floods_the_air_of_every_point() -> None:
+    # The grid round the hall of :func:`_hall`, as wave_responses lays it before any
+    # room. From points inside, the air reaches no layer under or over the hall within
+    # the box the room spans (along x and y that box ends inside the hall: those sides
+    # count as open).
+    # A point outside the hall's closed end, whose air the source's flood does not reach
+    # within the box, is flooded on its own, and reaches the layer under, over and
+    # behind it. A point in no air (inside the wall's plane counts for none) is passed
+    # over.
+    corners = np.array(list(itertools.product((0.0, 40.0), (0.0, 20.0), (0.0, 4.0))))
+    quads = [(0, 2, 6, 4), (1, 3, 7, 5), (0, 4, 5, 1), (2, 6, 7, 3), (0, 1, 3, 2)]
+    faces = np.array([[a, b, c] for q in quads for a, b, c in (q[:3], (q[0], q[2], q[3]))])
+    bvh = _native.Bvh(corners, faces)
+    h = 0.4
+
+    def sides(points) -> np.ndarray:
+        points = np.array(points, dtype=float)
+        low = np.minimum(corners.min(axis=0), points.min(axis=0) - 2 * h)
+        high = np.maximum(corners.max(axis=0), points.max(axis=0) + 2 * h)
+        origin = low - h * (2.0 + LAYER_CELLS + np.array([0.0137, 0.0219, 0.0291]))
+        shape = np.ceil((high - origin) / h).astype(int) + 2 + LAYER_CELLS
+        room = LAYER_ROOM * _spans_across(points[0], points[1:])
+        return _open_sides(bvh, points, room, origin, h, shape, LAYER_CELLS)
+
+    inside = sides([[3.0, 7.0, 1.5], [36.0, 9.0, 1.2]])
+    assert inside.tolist() == [[True, True], [True, True], [False, False]]
+    behind = sides([[3.0, 7.0, 1.5], [36.0, 9.0, 1.2], [-3.0, 9.0, 1.2]])
+    assert behind.tolist() == [[True, True], [True, True], [True, True]]
+    assert sides([[3.0, 7.0, 1.5], [36.0, 9.0, 1.2], [500.0, 9.0, 1.2]]).shape == (3, 2)
+
+
+def test_wave_solver_tells_the_sides_its_air_reaches() -> None:
+    # A closed box on a grid that ends halfway along it: the air reaches the grid's edge
+    # at +x alone. On a grid round the whole box: nowhere. Round a plate in the open,
+    # with a matched layer: everywhere.
+    mesh = box_mesh((4.0, 3.0, 3.0))
+    bvh = _native.Bvh(mesh.vertices, mesh.faces)
+    origin = -0.1 * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+
+    def solver(size):
+        shape = np.ceil((np.array(size) - origin) / 0.1).astype(int) + 2
+        return _native.WaveSolver(
+            bvh,
+            np.zeros(12, np.int64),
+            np.zeros(1),
+            np.zeros((0, 3)),
+            np.zeros(0, np.int64),
+            origin,
+            0.1,
+            *map(int, shape),
+            np.array([1.0, 1.5, 1.5]),
+            np.zeros((0, 3)),
+        )
+
+    assert solver((2.0, 3.0, 3.0)).open_sides == (False, True, False, False, False, False)
+    assert solver((4.0, 3.0, 3.0)).open_sides == (False,) * 6
+    _, plate, _ = _plate(0.2, LAYER_CELLS, LAYER_CELLS, 0.001)
+    assert plate.open_sides == (True,) * 6
 
 
 def test_matched_layer_stays_stable() -> None:

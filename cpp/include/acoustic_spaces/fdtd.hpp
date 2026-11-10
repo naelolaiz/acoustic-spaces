@@ -368,6 +368,7 @@ public:
             layer_cells_.push_back(static_cast<std::int64_t>(i));
             ++air_;
             open_ = true;
+            reach_sides(i, layer_);
         }
         if (!layer_cells_.empty()) {
             layer_damping_ = layer_damping;
@@ -411,6 +412,7 @@ public:
                 if (edge(j)) {
                     beta_sum += w * edge_admittance;
                     open_ = true;
+                    reach_sides(j, 0);
                     return;
                 }
                 Hit hit = bvh.intersect(centre(i), unit(k), length(k), -1);
@@ -502,6 +504,9 @@ public:
     std::size_t branch_states() const { return state_branch_.size(); }
     std::size_t layer_cells() const { return layer_cells_.size(); }
     bool open() const { return open_; }
+    // Whether the air reaches each side of the grid (-x, +x, -y, +y, -z, +z): its edge
+    // there, or the matched layer inside it.
+    const std::array<bool, 6> &open_sides() const { return open_sides_; }
     bool flowing() const { return !flow_mask_.empty(); }
     std::size_t probes() const { return probe_cells_.size(); }
     bool probe_found(std::size_t p) const { return !probe_cells_.at(p).empty(); }
@@ -877,6 +882,16 @@ private:
                 origin_.z + (static_cast<double>(z) + 0.5) * cell_};
     }
 
+    // Marks as reached by the air (open_sides) the sides of the grid that cell i lies
+    // within `within` cells of.
+    void reach_sides(std::size_t i, std::size_t within) {
+        const std::size_t at[3] = {i % nx_, (i / nx_) % ny_, i / sz_};
+        const std::size_t size[3] = {nx_, ny_, nz_};
+        for (std::size_t a = 0; a < 3; ++a) {
+            if (at[a] <= within) open_sides_[2 * a] = true;
+            if (at[a] + 1 + within >= size[a]) open_sides_[2 * a + 1] = true;
+        }
+    }
     bool edge(std::size_t i) const {
         const std::size_t x = i % nx_, y = (i / nx_) % ny_, z = i / sz_;
         return x == 0 || y == 0 || z == 0 || x + 1 == nx_ || y + 1 == ny_ || z + 1 == nz_;
@@ -1241,6 +1256,7 @@ private:
     std::size_t threads_ = 1;
     std::size_t air_ = 0, boundary_cells_ = 0;
     bool open_ = false;
+    std::array<bool, 6> open_sides_{};
     // The stencil: its directions, their weights (exact, and as the update uses them),
     // the weight of a cut link as a boundary, the offset to the neighbour, the bit of
     // the + half's directions in the cut mask (-1: the - half), and the centre's weight.

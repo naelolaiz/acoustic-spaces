@@ -570,8 +570,9 @@ simulation:
   grows by a perfectly matched layer of 8 cells, which takes in the sound leaving it:
   what comes back is 67 to 74 dB down, against 7 to 14 dB from the grid's edge alone.
   Sound that runs along the layer it sends back far more, so the grid reaches past the
-  source and the listeners, on each side, by 15 % of the farthest a listener lies from
-  the source along that side (none under an outdoor ground).
+  source and the listeners, on each side the model leaves open, by 15 % of the farthest
+  a listener lies from the source along that side (none under an outdoor ground, and
+  none on a side that the model's own surfaces close round them).
 - Outdoors in wind and temperature (an [atmosphere](outdoor.md#wind-and-temperature)
   in which sound bends), the speed of sound changes from cell to cell: the still air's
   at the cell's height, plus the wind's component along the horizontal from the source.
