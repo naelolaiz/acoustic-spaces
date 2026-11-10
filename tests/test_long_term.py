@@ -179,6 +179,31 @@ def test_a_class_takes_what_it_leaves_out_from_the_scene_s_weather() -> None:
     assert same.air == scene.air
 
 
+def test_a_scene_is_still_when_the_air_of_every_run_of_it_is() -> None:
+    """The scene's own weather and each weather class's count, as the runs of the long
+    term find them (the scene under each class); a class that changes only the ground's
+    temperature or the eddies leaves the air still."""
+    neutral, half = {"preset": "neutral"}, {"share": 0.5}
+    cases = [
+        (field(atmosphere=neutral), True),
+        (field(), False),
+        (field(atmosphere=neutral, classes=[half, {**half, "wind": {"speed_m_s": 4.0}}]), False),
+        (field(atmosphere=neutral, classes=[half, {**half, "preset": "clear_night"}]), False),
+        (field(classes=[{"share": 1.0, "preset": "neutral"}]), False),  # its own run is windy
+        (
+            field(
+                atmosphere=neutral,
+                classes=[{**half, "temperature_c": 5.0}, {**half, "turbulence": "weak"}],
+            ),
+            True,
+        ),
+    ]
+    for scene, still in cases:
+        classes = [] if scene.long_term is None else scene.long_term.classes
+        runs = [scene.atmosphere.still, *(scene.under(c).atmosphere.still for c in classes)]
+        assert scene.still == all(runs) == still
+
+
 # -- the arithmetic -------------------------------------------------------------------
 
 

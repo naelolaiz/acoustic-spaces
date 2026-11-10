@@ -419,6 +419,37 @@ def test_a_body_cut_short_that_http_client_raises_for_is_an_os_error(
     assert asked == ["bytes=0-99"] * fetch.RETRIES
 
 
+def test_a_tar_sent_in_chunks_and_cut_short_is_an_os_error(tmp_path: Path, monkeypatch) -> None:
+    """A tar archive sent in chunks whose connection ends inside a chunk, or after one
+    and before the last (empty) chunk, fails with an OSError as every other archive cut
+    short does (http.client raises IncompleteRead there, which is none), and leaves
+    neither the member nor its .part file. Sent whole in the same chunks, it is read."""
+    take = os.urandom(40_000)  # does not compress: the cuts fall inside the member
+    packed = io.BytesIO()
+    with tarfile.open(fileobj=packed, mode="w:gz") as archive:
+        info = tarfile.TarInfo("takes/wanted.wav")
+        info.size = len(take)
+        archive.addfile(info, io.BytesIO(take))
+    tar = packed.getvalue()
+    pieces = [tar[at : at + 8192] for at in range(0, len(tar), 8192)]
+    chunks = [b"%x\r\n%s\r\n" % (len(piece), piece) for piece in pieces]
+    head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+    sent = {}
+    monkeypatch.setattr(
+        fetch, "urlopen", lambda url, headers=None, timeout=0: _http_response(sent["raw"])
+    )
+    url, path = "https://example.org/takes.tar.gz", tmp_path / "out" / "take.wav"
+    begun = head + b"".join(chunks[:3])
+    for raw in (begun + chunks[3][:-300], begun):
+        sent["raw"] = raw
+        with pytest.raises(OSError, match=r"takes.tar.gz: the archive is cut short or damaged"):
+            fetch.extract_tar(url, {"takes/wanted.wav": path})
+        assert sorted(path.parent.iterdir()) == []  # the member was begun: its folder is there
+    sent["raw"] = head + b"".join(chunks) + b"0\r\n\r\n"
+    assert fetch.extract_tar(url, {"takes/wanted.wav": path}) == {"takes/wanted.wav": path}
+    assert path.read_bytes() == take and sorted(path.parent.iterdir()) == [path]
+
+
 def test_a_remote_file_is_read_in_blocks_of_the_size_asked(monkeypatch) -> None:
     """A remote archive is asked for in blocks of the size given (large ones read large
     members in fewer requests), and keeps 64 MiB of them, two blocks at the least."""

@@ -80,6 +80,19 @@
   whose distances run from 25000 ft down to 200 ft is no longer read with its 2000 to
   10000 ft levels as the 200 to 1000 ft ones (16 to 30 dB low); a table without one of
   the distances, or with two columns matching one name, is refused.
+- Fixed: in the editor, after an example is saved elsewhere a change of absorption
+  re-weights its run again instead of marking it out of date, and the sound playing is
+  no longer said to be from before the latest changes.
+- Fixed: the editor's Simulation page offers **Parabolic equation** and **Frequencies
+  behind barriers** when only a long-term weather class brings the wind or the
+  temperature gradient.
+- Changed: the editor's **Messages** shows every error and the line that ends a run
+  whichever **Item** is chosen.
+- Fixed: the tip of **Frequencies behind barriers** leaves the errors and the run times
+  to the documentation (it still gave 12, 7.7 and 4.5 times a straight-leg map's time,
+  which are 8.2, 5.6 and 4.0 times since 4.2.0), and `fetch.extract_tar` raises
+  `OSError`, not `http.client.IncompleteRead`, for a tar archive sent in chunks and cut
+  short.
 
 ## 4.2.1
 
