@@ -199,9 +199,16 @@
   10.8 dB below far taller grids 80 and 160 m away. The grid now reaches past the source
   and the listeners on each side (not under an outdoor ground) by 15 % of how far the
   listeners lie from the source along that side, which brings those checks within
-  0.02 dB of the taller grids and costs cells wherever the model reaches less far:
-  1.13 times as many on validation/wave_outdoor.py's 63 Hz grids, 2.1 to 2.4 times in a
-  hall open at one end.
+  0.02 dB of the taller grids and costs cells wherever an open side of the model reaches
+  less far (1.13 times as many on validation/wave_outdoor.py's 63 Hz grids); a side
+  that the model's own surfaces close gets none.
+- Fixed (results change): the wave solver took its source and each point a listener
+  samples from the eight cells round them, weighted trilinearly, which moved the 63 and
+  125 Hz bands by up to 0.5 dB with their place within a cell (8 points per wavelength).
+  They now take a cubic through four cells a side, within 0.02 dB of a point source's
+  level from eight cells on in closed rooms, where the source's signal also undoes the
+  19-point grid's own gain on a point source (0.06 and 0.34 dB in the two bands), which
+  that loss had hidden.
 - Changed: CI runs again by itself, up to twice, the jobs of a run that failed only
   because GitHub lost their runner or a step that fetches system packages failed
   (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`). A pull request runs one job on
