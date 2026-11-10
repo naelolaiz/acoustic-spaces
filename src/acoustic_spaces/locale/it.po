@@ -1471,16 +1471,6 @@ msgstr[1] ""
 msgid "{title}: {reason}"
 msgstr "{title}: {reason}"
 
-#. Translators: {names} are materials' names.
-#: acoustic_spaces/gui/app.py
-#, python-brace-format
-msgid ""
-"The absorption uncertainty of {names} is left out of the spread: a ground's "
-"impedance gives its reflection"
-msgstr ""
-"L'incertezza di assorbimento di {names} resta fuori dalla dispersione: "
-"l'impedenza del suolo ne determina la riflessione"
-
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid ""
@@ -1498,10 +1488,27 @@ msgstr ""
 msgid "Simulating {scene}…"
 msgstr "Simulazione di {scene}…"
 
+#. Translators: {names} are materials' names.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The absorption uncertainty of {names} is left out of the spread: a ground's "
+"impedance gives its reflection"
+msgstr ""
+"L'incertezza di assorbimento di {names} resta fuori dalla dispersione: "
+"l'impedenza del suolo ne determina la riflessione"
+
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid "Cannot map: {problems}"
 msgstr "Impossibile calcolare la mappa: {problems}"
+
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/inspector.py
+msgid ""
+"No material on the surfaces has an absorption uncertainty: no map has one."
+msgstr ""
+"Nessun materiale sulle superfici ha un'incertezza di assorbimento: nessuna "
+"mappa ne ha una."
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -6070,13 +6077,6 @@ msgstr ""
 #, python-brace-format
 msgid "Background noise at {band} (dB SPL)"
 msgstr "Rumore di fondo a {band} (dB SPL)"
-
-#: acoustic_spaces/gui/inspector.py
-msgid ""
-"No material on the surfaces has an absorption uncertainty: no map has one."
-msgstr ""
-"Nessun materiale sulle superfici ha un'incertezza di assorbimento: nessuna "
-"mappa ne ha una."
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format

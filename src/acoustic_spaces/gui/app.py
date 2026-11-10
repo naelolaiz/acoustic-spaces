@@ -1808,18 +1808,9 @@ class MainWindow(QMainWindow):
         self._job_groups = reweight.groups_of(self.document.room)
         groups, materials = self._job_groups or (None, None)
         if self.document.scene.simulation.uncertainty.draws:
-            from acoustic_spaces.engine.uncertainty import grounds_left_out, spread_groups
+            from acoustic_spaces.engine.uncertainty import spread_groups
 
-            grounds = grounds_left_out(self.document.room)
-            if grounds:
-                self.log(
-                    # Translators: {names} are materials' names.
-                    _(
-                        "The absorption uncertainty of {names} is left out of the spread: "
-                        "a ground's impedance gives its reflection"
-                    ).format(names=", ".join(grounds)),
-                    "warning",
-                )
+            self._warn_grounds_left_out()
             # Said here as the command line says it: a warning where a material gives
             # an uncertainty of its own, which the run then leaves out.
             _groups, why, own = spread_groups(self.document.room)
@@ -1837,6 +1828,21 @@ class MainWindow(QMainWindow):
         job.done.connect(self._done)
         self._start(job, _("Simulating {scene}…").format(scene=self.document.scene.name))
 
+    def _warn_grounds_left_out(self) -> None:
+        """Warn of the grounds whose absorption uncertainty a spread leaves out."""
+        from acoustic_spaces.engine.uncertainty import grounds_left_out
+
+        grounds = grounds_left_out(self.document.room)
+        if grounds:
+            self.log(
+                # Translators: {names} are materials' names.
+                _(
+                    "The absorption uncertainty of {names} is left out of the spread: "
+                    "a ground's impedance gives its reflection"
+                ).format(names=", ".join(grounds)),
+                "warning",
+            )
+
     def run_map(self) -> None:
         """Compute the coverage map of every source in the background."""
         if self.job is not None:
@@ -1848,6 +1854,17 @@ class MainWindow(QMainWindow):
             self.log(_("Cannot map: {problems}").format(problems="; ".join(problems)), "error")
             self.docks["messages"].raise_()
             return
+        coverage = self.document.scene.coverage
+        if coverage is not None and coverage.spread:
+            # Said here as the command line says it.
+            from acoustic_spaces.engine.sensitivity import spread_materials
+
+            self._warn_grounds_left_out()
+            if not spread_materials(self.document.room):
+                self.log(
+                    _("No material on the surfaces has an absorption uncertainty: no map has one."),
+                    "warning",
+                )
         job = MapJob(self.document.room)
         job.done.connect(self._map_done)
         self._start(job, _("Mapping {scene}…").format(scene=self.document.scene.name))

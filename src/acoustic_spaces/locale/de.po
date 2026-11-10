@@ -1483,16 +1483,6 @@ msgstr[1] ""
 msgid "{title}: {reason}"
 msgstr "{title}: {reason}"
 
-#. Translators: {names} are materials' names.
-#: acoustic_spaces/gui/app.py
-#, python-brace-format
-msgid ""
-"The absorption uncertainty of {names} is left out of the spread: a ground's "
-"impedance gives its reflection"
-msgstr ""
-"Die Unsicherheit der Absorption von {names} bleibt aus der Streuung heraus: "
-"Die Impedanz des Bodens bestimmt seine Reflexion"
-
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid ""
@@ -1509,10 +1499,27 @@ msgstr ""
 msgid "Simulating {scene}…"
 msgstr "{scene} wird simuliert…"
 
+#. Translators: {names} are materials' names.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The absorption uncertainty of {names} is left out of the spread: a ground's "
+"impedance gives its reflection"
+msgstr ""
+"Die Unsicherheit der Absorption von {names} bleibt aus der Streuung heraus: "
+"Die Impedanz des Bodens bestimmt seine Reflexion"
+
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid "Cannot map: {problems}"
 msgstr "Kartenberechnung nicht möglich: {problems}"
+
+#: acoustic_spaces/gui/app.py acoustic_spaces/gui/inspector.py
+msgid ""
+"No material on the surfaces has an absorption uncertainty: no map has one."
+msgstr ""
+"Kein Material auf den Flächen hat eine Unsicherheit der Absorption: Keine "
+"Karte hat eine."
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -6078,13 +6085,6 @@ msgstr ""
 #, python-brace-format
 msgid "Background noise at {band} (dB SPL)"
 msgstr "Hintergrundgeräusch bei {band} (dB SPL)"
-
-#: acoustic_spaces/gui/inspector.py
-msgid ""
-"No material on the surfaces has an absorption uncertainty: no map has one."
-msgstr ""
-"Kein Material auf den Flächen hat eine Unsicherheit der Absorption: Keine "
-"Karte hat eine."
 
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format

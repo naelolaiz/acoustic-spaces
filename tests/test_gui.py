@@ -3844,9 +3844,18 @@ def test_a_maps_uncertainty_in_the_editor(window, qapp, tmp_path: Path) -> None:
     window.select("coverage")
     page = window.inspector.pages["coverage"]
     assert not page.spread.isChecked() and page.spread.toolTip()
-    assert page.spread_runs.text() == (
-        "No material on the surfaces has an absorption uncertainty: no map has one."
-    )
+    nothing = "No material on the surfaces has an absorption uncertainty: no map has one."
+    assert page.spread_runs.text() == nothing
+    # Asked for all the same, the run says so and gives the map as it is.
+    page.spread.setChecked(True)
+    coverage = window.document.scene.coverage
+    assert coverage.spread is True and coverage.rays == 300 and coverage.spacing == 3.0
+    panel = window.map_panel
+    assert panel.part.toolTip() and not panel.part.isEnabled()
+    window.run_map()
+    _wait(qapp, lambda: window.job is None)
+    assert nothing in window.messages.toPlainText()
+    assert window.coverage.get().spread is None and not panel.part.isEnabled()
 
     def uncertain(data: dict) -> None:
         data["materials"]["carpet_on_concrete"]["uncertainty"] = {"absorption": 0.05}
@@ -3856,12 +3865,7 @@ def test_a_maps_uncertainty_in_the_editor(window, qapp, tmp_path: Path) -> None:
     assert page.spread_runs.text() == (
         "1 material on the surfaces has one: the map is traced 3 times."
     )
-    page.spread.setChecked(True)
-    coverage = window.document.scene.coverage
-    assert coverage.spread is True and coverage.rays == 300 and coverage.spacing == 3.0
-
-    panel = window.map_panel
-    assert panel.part.toolTip() and not panel.part.isEnabled()
+    assert page.spread.isChecked() and window.document.scene.coverage.spread is True
     window.run_map()
     _wait(qapp, lambda: window.job is None)
     assert "Spread: the map with the absorption of carpet_on_concrete" in (
