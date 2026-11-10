@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -932,3 +933,81 @@ def test_loudspeakers_play_a_pressure_alike_everywhere_at_unit_power(name: str) 
     assert np.allclose(gains[mains], gains[mains][0]) and not np.any(gains[~mains])
     if layout.horizontal:
         assert np.allclose(layout.gains(np.array([[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]])), gains)
+
+
+#: A pattern that changes with frequency, rendered in two parts.
+_PER_BAND = ["omni", "omni", "subcardioid", "cardioid", "cardioid", "supercardioid", 0.1, 0.0]
+
+
+def test_threads_render_the_channels_as_one_thread_does(response) -> None:
+    # Each channel (binaurally each band of the late part and each ear) is worked out
+    # as alone, into its own place: the same to the last bit with any number of threads.
+    formats = [
+        Ambisonics(2),
+        Loudspeakers.layout("5.0"),
+        Binaural(),
+        first_order(_PER_BAND),
+        xy(100.0, "cardioid"),
+    ]
+    for fmt in formats:
+        one = response.spatial_impulse_response(fmt, FS)
+        for threads in (2, 3, 16):
+            more = response.spatial_impulse_response(fmt, FS, threads=threads)
+            assert np.array_equal(more, one), (fmt.label, threads)
+
+
+def test_the_formats_of_a_response_share_its_late_part(response, monkeypatch) -> None:
+    """Within ``sharing_late_parts`` the late part of a response is drawn once for its
+    formats, both parts of a microphone among them, and the result is the same as
+    drawn again for each; it is kept for that block and that response only."""
+    from acoustic_spaces.spatial import render
+
+    calls: list[tuple] = []
+    worked_out = render._worked_out_late_impulses
+
+    def counted(*args):
+        calls.append(args)
+        return worked_out(*args)
+
+    monkeypatch.setattr(render, "_worked_out_late_impulses", counted)
+    formats = [Ambisonics(1), Binaural(), first_order(_PER_BAND), Loudspeakers.layout("5.0")]
+    alone = [response.spatial_impulse_response(fmt, FS) for fmt in formats]
+    assert len(calls) == 5  # the microphone's two parts each draw it
+    calls.clear()
+    with render.sharing_late_parts():
+        shared = [response.spatial_impulse_response(fmt, FS) for fmt in formats]
+        assert len(calls) == 1
+        # Another seed, another rate, another response: each its own.
+        response.spatial_impulse_response(formats[0], FS, seed=3)
+        response.spatial_impulse_response(formats[0], 44_100)
+        dataclasses.replace(response).spatial_impulse_response(formats[0], FS)
+        assert len(calls) == 4
+    for one, other in zip(alone, shared, strict=True):
+        assert np.array_equal(one, other)
+    response.spatial_impulse_response(formats[0], FS)
+    assert len(calls) == 5
+    # The mono response draws its own noise, outside this.
+    with render.sharing_late_parts():
+        response.spatial_impulse_response(Mono(), FS)
+    assert len(calls) == 5
+
+
+def test_render_threads_are_at_most_the_cores(response, monkeypatch) -> None:
+    """``threads`` asked of spatial_impulse_response are capped at the cores (all of
+    them for 0), so that a caller cannot hold a channel in memory per thread past them."""
+    from acoustic_spaces.spatial import render
+
+    asked: list[int] = []
+    each = render.each_on_threads
+
+    def counted(function, items, threads):
+        asked.append(threads)
+        return each(function, items, threads)
+
+    monkeypatch.setattr(render, "each_on_threads", counted)
+    monkeypatch.setattr(os, "cpu_count", lambda: 2)
+    one = response.spatial_impulse_response(Ambisonics(1), FS)
+    for threads, used in ((64, 2), (0, 2), (2, 2), (1, 1)):
+        asked.clear()
+        more = response.spatial_impulse_response(Ambisonics(1), FS, threads=threads)
+        assert asked == [used] and np.array_equal(more, one)

@@ -1,6 +1,7 @@
 import dataclasses
 import errno
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -215,6 +216,57 @@ def test_each_response_is_written_before_the_next_is_rendered(
         "render",
         "talker__b.ambix1.wav",
     ]
+
+
+def test_threads_a_response_leaves_free_render_its_channels_to_the_same_bits(
+    result, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Two responses on four threads: two each for the channels, and binaurally for the
+    # bands of the late part and the two ears. Each response's late part is drawn once
+    # for all its formats, and again for the next response.
+    from acoustic_spaces.engine import run_size
+    from acoustic_spaces.spatial import render
+
+    monkeypatch.setattr(os, "cpu_count", lambda: 4)
+    response = result["talker", "seat-a"]
+    formats = [Mono(), Ambisonics(2), Binaural(), xy()]
+    given: list[int] = []
+    each = run_size.each_on_threads
+
+    def counted(function, items, threads):
+        given.append(threads)
+        return each(function, items, threads)
+
+    calls: list[tuple] = []
+    worked_out = render._worked_out_late_impulses
+
+    def drawn(*args):
+        calls.append(args)
+        return worked_out(*args)
+
+    monkeypatch.setattr(render, "each_on_threads", counted)
+    monkeypatch.setattr(render, "_worked_out_late_impulses", drawn)
+    reports = []
+    for threads in (1, 4):
+        performance = result.settings.performance.model_copy(update={"threads": threads})
+        two = dataclasses.replace(
+            result,
+            responses={("talker", "a"): response, ("talker", "b"): response},
+            settings=result.settings.model_copy(update={"performance": performance}),
+        )
+        reports.append(write_results(two, tmp_path / str(threads), formats))
+    assert set(given) == {1, 2}
+    assert len(calls) == 4  # each response once, on one thread and on four
+    for report in reports:
+        report["settings"]["performance"].pop("threads")
+    assert json.dumps(reports[0]) == json.dumps(reports[1])
+    names = sorted(path.name for path in (tmp_path / "1").iterdir() if path.suffix == ".wav")
+    assert len(names) == 8
+    assert names == sorted(
+        path.name for path in (tmp_path / "4").iterdir() if path.suffix == ".wav"
+    )
+    for name in names:
+        assert (tmp_path / "1" / name).read_bytes() == (tmp_path / "4" / name).read_bytes()
 
 
 def test_the_results_folder_is_checked(result, tmp_path: Path) -> None:

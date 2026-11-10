@@ -678,14 +678,15 @@ class Response:
         return self.early.frozen(self.seed if seed is None else seed)
 
     def spatial_impulse_response(
-        self, fmt, sample_rate: int = 48_000, seed: int | None = None
+        self, fmt, sample_rate: int = 48_000, seed: int | None = None, *, threads: int = 1
     ) -> np.ndarray:
         """Impulse responses (samples, channels) in a format of
         :mod:`acoustic_spaces.spatial`: ``Ambisonics(order)``, ``Loudspeakers.layout(name)``,
-        ``Binaural(hrtf)`` or ``Mono()``."""
+        ``Binaural(hrtf)`` or ``Mono()``, its channels rendered on ``threads`` threads
+        (the same result with any number; at most the computer's cores)."""
         from acoustic_spaces.spatial.render import spatial_impulse_response
 
-        return spatial_impulse_response(self, fmt, sample_rate, seed)
+        return spatial_impulse_response(self, fmt, sample_rate, seed, threads=threads)
 
 
 class _LateArray:

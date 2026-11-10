@@ -13,6 +13,9 @@ keeps the mono energy, and each band's directions match the simulation on averag
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
@@ -21,6 +24,7 @@ import numpy as np
 
 from acoustic_spaces import synthesis
 from acoustic_spaces.engine import coherent
+from acoustic_spaces.engine.run_size import each_on_threads, worker_threads
 from acoustic_spaces.spatial.directions import fibonacci_sphere, to_head
 from acoustic_spaces.spatial.hrtf import HRTF, spherical_head
 
@@ -35,6 +39,9 @@ _KERNEL_S = 0.3
 _CHUNK = 64
 #: Length of the windowed sinc for fractional delays, as in ``synthesis.place_impulses``.
 _SINC_TAPS = 32
+#: The late parts worked out within :func:`sharing_late_parts` in this thread, by
+#: (id of the response, samples, sample rate, seed), each with its response.
+_LATE_PARTS: ContextVar[dict | None] = ContextVar("late_parts", default=None)
 
 
 class Format(Protocol):
@@ -107,7 +114,39 @@ def _late_directions(response: Response) -> tuple[np.ndarray, np.ndarray, float]
     return response.late_directions, share, response.direction_step
 
 
+@contextmanager
+def sharing_late_parts() -> Iterator[None]:
+    """Within it, :func:`spatial_impulse_response` called in this thread works out the
+    late part of a response (its band signals and the direction of each impulse) once
+    for each length, sample rate and seed, and the formats rendered after the first
+    take it from there: it is drawn from a generator seeded with the seed each time,
+    so it is the same. What it keeps, the band signals and a direction per impulse and
+    band (some 21 MB for 3.5 s at 48 kHz in 8 bands), goes when the block ends:
+    :func:`~acoustic_spaces.results.write_results` holds one around the formats of one
+    response. The mono response draws its own noise and keeps nothing here."""
+    token = _LATE_PARTS.set({})
+    try:
+        yield
+    finally:
+        _LATE_PARTS.reset(token)
+
+
 def _late_impulses(response: Response, n: int, sample_rate: float, seed: int | None):
+    """:func:`_worked_out_late_impulses`, taken from :func:`sharing_late_parts` where it
+    has them (read-only) and kept there once worked out."""
+    kept = _LATE_PARTS.get()
+    if kept is None:
+        return _worked_out_late_impulses(response, n, sample_rate, seed)
+    key = (id(response), n, sample_rate, seed)
+    if key not in kept:
+        late = _worked_out_late_impulses(response, n, sample_rate, seed)
+        for array in late[:3]:
+            array.setflags(write=False)
+        kept[key] = (response, late)
+    return kept[key][1]
+
+
+def _worked_out_late_impulses(response: Response, n: int, sample_rate: float, seed: int | None):
     """The mono late part as band signals (bands, n), the samples holding its impulses,
     and the direction each impulse comes from in each band (impulses, bands)."""
     rng = np.random.default_rng(response.seed if seed is None else seed)
@@ -140,9 +179,19 @@ def _late_impulses(response: Response, n: int, sample_rate: float, seed: int | N
     return signals, at, np.clip(chosen, 0, count - 1), directions
 
 
-def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed):
+def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed, threads: int = 1):
     """``response`` in ``fmt`` (n, channels), and its early paths alone when the wave
-    solver's bands are to take their place (else None)."""
+    solver's bands are to take their place (else None).
+
+    The channels are rendered on ``threads`` threads, each into its own column, which
+    bounds the channels in progress at once to ``threads``. A channel in progress holds
+    its band signals and their spectra (some 70 MB for 3.5 s at 48 kHz in 8 bands, with
+    the quarter turns of paths over edges, in proportion to the length), and the peak
+    memory grows by as much for each thread past the first. That is what a channel
+    takes in a response rendered on one thread, so ``write_results``, which gives the
+    responses its threads and each the threads they leave free, holds no more channels
+    at once than it holds when there are as many responses as threads, one on each.
+    One thread renders the channels one after another."""
     early = coherent.with_own_phases(response.moment(seed), response.seed if seed is None else seed)
     early_gains = fmt.gains(to_head(early.direction, response.orientation))
     low = coherent.signal(early, n, sample_rate, early_gains)
@@ -150,20 +199,27 @@ def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed):
     if has_late:
         signals, at, chosen, directions = _late_impulses(response, n, sample_rate, seed)
         late_gains = fmt.gains(to_head(directions, response.orientation))
+        heights = signals[:, at]  # (bands, impulses), the same in every channel
     out = np.empty((n, fmt.channels))
     alone = np.empty((n, fmt.channels)) if response.wave is not None else None
-    for c in range(fmt.channels):
+
+    def channel(c: int) -> None:
         bands, quadrature = coherent.band_impulses(early, n, sample_rate, early_gains[:, c])
         if alone is not None:
             alone[:, c] = synthesis.combine_bands(bands, sample_rate, quadrature) + low[:, c]
         if has_late:
-            bands[:, at] += signals[:, at] * late_gains[chosen, c].T
+            bands[:, at] += heights * late_gains[chosen, c].T
         out[:, c] = synthesis.combine_bands(bands, sample_rate, quadrature) + low[:, c]
+
+    each_on_threads(channel, range(fmt.channels), threads)
     return out, alone
 
 
-def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, seed):
-    """As :func:`_render_gains`, at the two ears."""
+def _render_binaural(
+    response: Response, fmt: Binaural, n: int, sample_rate, seed, threads: int = 1
+):
+    """As :func:`_render_gains`, at the two ears: the late part's bands placed and the
+    two ears' bands combined on ``threads`` threads, each into its own row."""
     hrtf = fmt.at(sample_rate)
     out = np.zeros((2, n + hrtf.taps))
 
@@ -204,12 +260,18 @@ def _render_binaural(response: Response, fmt: Binaural, n: int, sample_rate, see
         # One interpolated response per direction of the late energy.
         kernels = np.ascontiguousarray(hrtf.interpolate(to_head(directions, response.orientation)))
         ears = np.empty((signals.shape[0], 2, out.shape[1]))
-        for b in range(signals.shape[0]):
+
+        def place(b: int) -> None:
             ears[b] = _native.scatter_kernels(
                 out.shape[1], at, np.ascontiguousarray(chosen[:, b]), signals[b, at], kernels
             )
+
+        each_on_threads(place, range(signals.shape[0]), threads)
+        heard = each_on_threads(
+            lambda ear: synthesis.combine_bands(ears[:, ear], sample_rate), range(2), threads
+        )
         for ear in range(2):
-            out[ear] += synthesis.combine_bands(ears[:, ear], sample_rate)
+            out[ear] += heard[ear]
     return out[:, :n].T, alone
 
 
@@ -284,28 +346,37 @@ def spatial_impulse_response(
     fmt: Format,
     sample_rate: int = 48_000,
     seed: int | None = None,
+    *,
+    threads: int = 1,
 ) -> np.ndarray:
     """Impulse responses (samples, channels) of ``response`` in ``fmt``.
 
     Levels match the mono response: an arrival from straight ahead has the same height
     in W, in a speaker it is panned to, and (below the head's influence) at both ears.
+    ``threads`` render the channels (binaurally the late part's bands and the ears) side
+    by side, each as it is rendered alone, so the result is the same with any number.
+    They are at most the computer's cores (all of them for 0 or fewer, as
+    ``performance.threads``), and each past the first holds one channel's band signals
+    more (some 70 MB for 3.5 s at 48 kHz in 8 bands).
     """
     from acoustic_spaces.spatial.microphone import Microphone
+
+    threads = worker_threads(threads)
 
     if isinstance(fmt, Microphone) and fmt.a is not None:
         # A pattern that changes with frequency: the part that does not, and the part
         # its a scales through a filter of gain a in each band, from the same paths.
         steady, scaled = fmt.parts()
-        out = spatial_impulse_response(response, steady, sample_rate, seed)
-        rest = spatial_impulse_response(response, scaled, sample_rate, seed)
+        out = spatial_impulse_response(response, steady, sample_rate, seed, threads=threads)
+        rest = spatial_impulse_response(response, scaled, sample_rate, seed, threads=threads)
         return out + synthesis.equalized(rest, sample_rate, fmt.a_in(response.bands))
     n = int(math.ceil(response.length_s * sample_rate))
     if isinstance(fmt, Mono):
         return response.impulse_response(sample_rate, seed)[:, None]
     if isinstance(fmt, Binaural):
-        out, early = _render_binaural(response, fmt, n, sample_rate, seed)
+        out, early = _render_binaural(response, fmt, n, sample_rate, seed, threads)
     else:
-        out, early = _render_gains(response, fmt, n, sample_rate, seed)
+        out, early = _render_gains(response, fmt, n, sample_rate, seed, threads)
     if response.wave is not None:
         out = _with_wave(response, fmt, out, early, sample_rate)
     return out
@@ -318,5 +389,6 @@ __all__ = [
     "Format",
     "Mono",
     "from_output",
+    "sharing_late_parts",
     "spatial_impulse_response",
 ]
