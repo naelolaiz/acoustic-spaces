@@ -601,10 +601,15 @@ step in turn, leaving out what is there already (the music, the scenes, the simu
   dB(A) louder than still air would, in the garden 5.0 dB; behind the stage, upwind, it
   is 0.7 dB quieter, and on the boat 0.9 dB quieter (the example's `simulation.seed`,
   1; with rays of their own, two other runs gave up to 6.0 dB at the window and 0.5 dB
-  behind the stage). The far shore gains most: what the weather bends down comes in
-  off the water as well as straight, and at the window the house's wall gives back each
-  of those again.
-- **How loud.** From the audience to the far shore the sound drops by about 25 dB(A),
+  behind the stage). These figures are from before the 1 and 2 kHz bands over the open
+  ground came from the parabolic equation and have not been run again since: for the
+  line arrays that change lowers those two bands in the evening's weather by up to 2.7
+  dB at the window and 3.5 dB in the garden and raises them by up to 1.6 dB on the boat,
+  and leaves the other bands, the place behind the stage and still air as they were, so
+  the gains at the window and in the garden can only have shrunk, by at most that much.
+  The far shore gains most: what the weather bends down comes in off the water as well
+  as straight, and at the window the house's wall gives back each of those again.
+- **How loud.** From the audience to the far shore the sound drops by more than 20 dB(A),
   too much to hear the far places in a video, so each stop is turned up to the
   audience's loudness and its caption says how much quieter the place really is, in
   dB(A). The loudness is K-weighted, as meters weigh it, not A-weighted: the far places
@@ -1164,7 +1169,7 @@ take 14.3 s at 63 m/s.
   turn, as the car's. From 150 m up, places 4 m apart follow the exact field of a
   flyover to within 55 dB at 4 kHz, more closely than the car's places 1 m apart
   ([validation](validation.md#moving-sources-against-the-exact-field)). Over the grass
-  the bands up to 500 Hz come from the wide-angle parabolic equation where the sound
+  the bands up to 2 kHz come from the wide-angle parabolic equation where the sound
   comes in at 34° from the horizontal or flatter (`parabolic_equation: wide_angle`, as
   the narrow-angle one holds within some 15°), and the rays give the rest
   ([how the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)). The

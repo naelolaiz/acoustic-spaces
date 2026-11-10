@@ -16,9 +16,9 @@ from fast field programs. This script solves cases 1 to 3 with this package's ow
 solution for the ground) and compares the engine with it:
 
 - the parabolic equations that give the engine's sound over the open ground in the
-  bands up to 500 Hz, and in a shadow up to 2 kHz, at the benchmark's pure tones, 100 m
-  to 10 km: the narrow-angle one of the default (:mod:`acoustic_spaces.engine.parabolic`)
-  and the wide-angle one of ``simulation.early.parabolic_equation: wide_angle``
+  bands up to 2 kHz, at the benchmark's pure tones, 100 m to 10 km: the narrow-angle
+  one of the default (:mod:`acoustic_spaces.engine.parabolic`) and the wide-angle one
+  of ``simulation.early.parabolic_equation: wide_angle``
   (:mod:`acoustic_spaces.engine.wide_angle`);
 - whole outdoor scenes, the level relative to free field per octave band from 63 Hz to
   1 kHz, 100 m to 2 km (``--far``: to 10 km, which takes long in the shadow of case 3),
@@ -32,7 +32,7 @@ solution for the ground) and compares the engine with it:
 - both parabolic equations in the engine's weather presets (``windy`` downwind and
   upwind, ``sunny_day``, ``clear_night``), whose profiles change fastest near the
   ground, a source 2 m and a listener 1.5 m up over the benchmark's ground, 50 to 300 m
-  apart, at the octave bands' centres from 63 to 500 Hz and over each of those bands as
+  apart, at the octave bands' centres from 63 Hz to 2 kHz and over each of those bands as
   the engine reads it (the mean energy over its frequencies).
 
 The benchmark's profiles go on with the height without end; the engine's atmosphere
@@ -69,6 +69,8 @@ from acoustic_spaces.air import SOUND_SPEED_0C  # noqa: E402
 from acoustic_spaces.engine import insertion, parabolic, wide_angle  # noqa: E402
 from acoustic_spaces.engine.diffraction import band_frequencies  # noqa: E402
 from acoustic_spaces.engine.refracted import (  # noqa: E402
+    OPEN_DENSE,
+    OPEN_DENSE_FROM_HZ,
     WAVE_MIN_HEADROOM_M,
     WAVE_TOP_SLOPE,
 )
@@ -95,8 +97,9 @@ CASES = {
 TONES = (10.0, 100.0, 1000.0)
 RANGES = (100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0)
 #: The octave bands the whole scenes are compared in, and the slices of the 1 kHz band
-#: the fast field program is averaged over (the engine averages the interference of
-#: its rays over the band exactly; the parabolic equation's bands take its own 8).
+#: the fast field program is averaged over (in still air the engine averages the
+#: interference of its paths over the band exactly; in wind the parabolic equation's
+#: band takes its own 24).
 BANDS = (63, 125, 250, 500, 1000)
 RAY_BAND_SLICES = 24
 #: The engine reads the bands up to this one through its band filters, which let in a
@@ -118,7 +121,7 @@ PRESET_CASES = (
 )
 PRESET_ZS, PRESET_ZR = 2.0, 1.5
 PRESET_GROUND_C = 20.0
-PRESET_TONES = (63.0, 125.0, 250.0, 500.0)
+PRESET_TONES = (63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0)
 PRESET_RANGES = (50.0, 100.0, 200.0, 300.0)
 
 
@@ -180,8 +183,14 @@ def check_tones(cases: dict, tones=TONES, ranges=RANGES) -> dict:
     return out
 
 
+def _cell(value: float) -> str:
+    """A difference (dB) as a table's cell: - where it is not compared (NaN)."""
+    return f"{'-':>9}" if np.isnan(value) else f"{value:+9.2f}"
+
+
 def check_presets(cases=PRESET_CASES, tones=PRESET_TONES, ranges=PRESET_RANGES) -> dict:
-    """Both parabolic equations in the weather presets against the fast field program."""
+    """Both parabolic equations in the weather presets against the fast field program,
+    where it is no deeper than ``FLOOR_DB`` below free field."""
     ranges = np.asarray(ranges, dtype=float)
     heights = np.full(len(ranges), PRESET_ZR)
     direct = np.hypot(ranges, PRESET_ZS - PRESET_ZR)
@@ -193,6 +202,7 @@ def check_presets(cases=PRESET_CASES, tones=PRESET_TONES, ranges=PRESET_RANGES) 
     misses: dict[str, list] = {"narrow": [], "wide": []}
     band_misses: dict[str, list] = {"narrow": [], "wide": []}
     slices, _ = band_frequencies(bands="octave")
+    dense, _ = band_frequencies(OPEN_DENSE * slices.shape[1], "octave")
     for name, preset, along in cases:
         atmosphere = Atmosphere(preset=preset, wind={"direction_deg": 0.0})
         towards = np.array([along, 0.0])
@@ -211,12 +221,14 @@ def check_presets(cases=PRESET_CASES, tones=PRESET_TONES, ranges=PRESET_RANGES) 
             print(f"{label:28}" + "".join(f"{v:9.2f}" for v in level) + "  ffp")
             for key, solver in (("narrow", parabolic), ("wide", wide_angle)):
                 wave = solver.march([f], speed, lambda r, z=z: z, PRESET_ZS, ranges, heights, 60.0)
-                miss = 20.0 * np.log10(np.abs(wave[0] / reference))
-                misses[key].extend(np.abs(miss).tolist())
+                miss = np.where(
+                    level >= FLOOR_DB, 20.0 * np.log10(np.abs(wave[0] / reference)), np.nan
+                )
+                misses[key].extend(np.abs(miss[np.isfinite(miss)]).tolist())
                 out[label][f"{key}_minus_ffp_db"] = miss.tolist()
-                print(f"{'':28}" + "".join(f"{v:+9.2f}" for v in miss) + f"  {key} - ffp")
+                print(f"{'':28}" + "".join(_cell(v) for v in miss) + f"  {key} - ffp")
             # The band as the engine reads it: the mean energy over its frequencies.
-            spread = slices[list(OCTAVE_BANDS_HZ).index(int(f))]
+            spread = (dense if f >= OPEN_DENSE_FROM_HZ else slices)[OCTAVE_BANDS_HZ.index(int(f))]
             grounds = np.array([complex(impedance_of(g, c0)) for g in spread])
             energy = np.mean(
                 [
@@ -232,9 +244,10 @@ def check_presets(cases=PRESET_CASES, tones=PRESET_TONES, ranges=PRESET_RANGES) 
                     spread, speed, lambda r, zg=grounds: zg, PRESET_ZS, ranges, heights, 60.0
                 )
                 miss = 10.0 * np.log10(np.mean(np.abs(wave) ** 2, axis=0) * direct**2) - band
-                band_misses[key].extend(np.abs(miss).tolist())
+                miss = np.where(band >= FLOOR_DB, miss, np.nan)
+                band_misses[key].extend(np.abs(miss[np.isfinite(miss)]).tolist())
                 out[label][f"{key}_band_minus_ffp_db"] = miss.tolist()
-                print(f"{'':28}" + "".join(f"{v:+9.2f}" for v in miss) + f"  {key} - ffp, band")
+                print(f"{'':28}" + "".join(_cell(v) for v in miss) + f"  {key} - ffp, band")
     out["summary"] = {
         f"{key}{part}_{what}_abs_db": float(getattr(np, what)(values[key]))
         for part, values in (("", misses), ("_band", band_misses))
@@ -306,7 +319,8 @@ def _frequency_plan(bands) -> tuple[np.ndarray, np.ndarray, list[slice]]:
     """The frequencies the program runs at for whole scenes, the width of the slice
     each stands for, and where each octave band's own slices are: the band below 63 Hz
     and the bands up to 1 kHz, which the filters of the bands up to 500 Hz let in a
-    little of, and 1 kHz in finer slices for the rays' band average when it is compared."""
+    little of, and 1 kHz in finer slices for the paths' exact band average in still
+    air when it is compared."""
     slices, widths = band_frequencies(bands="octave")
     many, many_widths = band_frequencies(RAY_BAND_SLICES, bands="octave")
     plan = [(slices[0] / OCTAVE_RATIO, widths[0] / OCTAVE_RATIO)]

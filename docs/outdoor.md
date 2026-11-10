@@ -498,19 +498,31 @@ is an arc of a circle, so its travel time and its length are exact.
   rounding can rarely leave out a direct path or take one that arrives up to 4 cm from
   the listener, at its level to 0.003 dB. Where neighbouring rays cross (a caustic) the
   level is capped at 10 dB over a straight path's, and each caustic advances the phase
-  by a quarter period (a factor j, time going as e^(jωt)). Against an independent ray
+  by a quarter period (a factor j, time going as e^(jωt)); past the caustic the two paths that merged there are gone, with
+  nothing in their place (no transition zone), so in the bands the rays give over the
+  open ground (4 and 8 kHz) the level steps there by 10.5 to 12.9 dB within a centimetre
+  (see [Validation](validation.md#known-issues)). Against an independent ray
   tracer on the smooth profile of the `windy` preset downwind, the levels of three such
   paths 100 and 300 m away are within 0.05 dB (the tests allow 0.2 dB); no such check is
   made near a caustic.
-- **In the bands up to 500 Hz** rays fail over the ground, as the profiles change most
-  within a wavelength of it, where the direct sound and its reflection meet. There the
-  sound over the open ground comes from a parabolic equation (the Green's function
-  parabolic equation of Gilbert and Di) marched out from the source in the vertical
-  plane through the listener, over the grounds along the way and their impedances. In
-  the shadow, and from halfway to its start, where rays come out too loud, it gives the
-  bands up to 2 kHz, and above them the shadow deepens with frequency as it does over
-  the octave below. It applies from 1.5 times the source's and the listener's heights
-  added away along the ground, where the sound comes in at 34 degrees from the
+- **In the octave bands up to 2 kHz** rays fail over the ground, as the profiles change
+  most within a wavelength of it, where the direct sound and its reflection meet: at 1
+  and 2 kHz, 50 to 300 m from sources 0.5, 2 and 5 m up to a listener 1.5 m up, they
+  were up to 3.2 dB off a fast field program in the `windy` preset downwind, 8.5 dB in
+  `clear_night` and 9.6 dB under a gradient of 0.1/s, and stepped by up to 14 dB a
+  centimetre at a caustic. There the sound over the open ground comes from a parabolic
+  equation (the Green's function parabolic equation of Gilbert and Di) marched out from
+  the source in the vertical plane through the listener, over the grounds along the way
+  and their impedances, at eight frequencies an octave and 24 at 1 and 2 kHz, where
+  the ground's fringes come closer in frequency, within 0.1 dB of the program in those
+  cases; in third octaves it gives the three of each of those octave bands, to 2.5 kHz.
+  In the shadow, above those
+  bands, the shadow deepens with frequency as it does over the octave below. At 4 and
+  8 kHz the rays give the sound: against the program, 50 to 300 m from a source 2 m
+  up, they are up to 2.4 dB off at 4 kHz and 0.9 dB at 8 kHz in `windy` downwind and
+  4.6 and 1.7 dB in `clear_night`, and from a source 5 m up within 0.8 dB at 4 kHz
+  (8 kHz was not checked there). The equation applies from 1.5 times the source's and
+  the listener's heights added away along the ground, where the sound comes in at 34 degrees from the
   horizontal or flatter; nearer, the atmosphere has had little room to bend it, and the
   rays give it. In still air the parabolic equation is within 0.2 dB of the exact
   solution over grass and harder grounds from a source 1 m up, 25 to 400 m away, and
@@ -522,7 +534,7 @@ is an arc of a circle, so its travel time and its length are exact.
   sound is 20 dB down and up to 6 dB off deeper into the shadow. A gradient that goes on
   to a kilometre up bends sound back at angles it does not carry, and beyond 1 to 2 km
   its pure tones stray there by 3 to 20 dB, though the bands a scene reports stay within
-  0.8 dB of the program to 2 km (see
+  0.9 dB of the program to 2 km (see
   [Validation](validation.md#outdoor-sound-in-wind-against-a-fast-field-program)).
 - **The wide-angle parabolic equation** takes its place with
   `simulation.early.parabolic_equation: wide_angle` (`--parabolic-equation wide_angle`
@@ -531,10 +543,11 @@ is an arc of a circle, so its travel time and its length are exact.
   holds for sound within some 15 degrees of the horizontal and a speed of sound close to
   the ground's, so the listeners whose reflection off the ground comes in more steeply
   get the wide-angle one's level: within 0.05 dB of a fast field program per octave band
-  in the `windy` preset (0.09 dB per third octave), where the narrow-angle one is up to
-  0.46 dB off (1.65 dB); flatter, the narrow-angle one is up to 0.56 dB off (0.90 dB),
-  and from 10 to 15 degrees up by up to 1.2 dB (3 dB) in 10 m/s of wind over a hard
-  ground. The wide-angle one (split-step Padé, as in Collins' RAM) marches the field
+  from 63 to 500 Hz in the `windy` preset (0.09 dB per third octave), where the
+  narrow-angle one is up to 0.46 dB off (1.65 dB), and within 0.03 dB at 1 and 2 kHz (a
+  one-off check); flatter, in the bands up to 500 Hz, the narrow-angle one is up to
+  0.56 dB off (0.90 dB), and from 10 to 15 degrees up by up to 1.2 dB (3 dB) in 10 m/s
+  of wind over a hard ground. The wide-angle one (split-step Padé, as in Collins' RAM) marches the field
   with the exact one-way operator, written as a rational function of ten terms, on
   finite differences of fourth order in height, with the ground's impedance as its
   boundary and a starting field of the operator's own; it carries sound at up to 45
@@ -542,9 +555,9 @@ is an arc of a circle, so its travel time and its length are exact.
   going on to a kilometre up it is within 0.11 dB of the fast field program to 10 km
   (0.4 dB at 10 Hz 44 dB deep in a shadow) where the narrow-angle one strays by 3 to 20
   dB, and in the weather presets within 0.02 dB per band on average where the
-  narrow-angle one is within 0.08 dB (see
+  narrow-angle one is within 0.07 dB (see
   [Validation](validation.md#the-wide-angle-parabolic-equation)). Over open ground it
-  takes two to two and a half times as long, all of it in the bands the parabolic
+  takes three to seven times as long, all of it in the bands the parabolic
   equation gives, and behind barriers and buildings, where it runs in every band, about
   ten times.
 - **Off façades and barriers** the paths bend the same way, in the vertical plane the
@@ -665,8 +678,8 @@ is an arc of a circle, so its travel time and its length are exact.
   weighted by its area. Against a Crank-Nicholson parabolic equation marched through
   the zones, the engine's parabolic equation is within 0.15 dB on average and 1.2 dB
   at most to 800 m, over shelter and gusts downwind and upwind, an inversion past a
-  lake shore and cool water downwind. The mean profile, at the bands the rays give,
-  is within 0.35 dB over the cool water; where the wind changes, or an inversion sets
+  lake shore and cool water downwind. The mean profile, which the rays' bands (4 and
+  8 kHz) take, is within 0.35 dB over the cool water at 500 Hz to 2 kHz; where the wind changes, or an inversion sets
   in, it is up to 6.6 dB off (at 2 kHz 800 m downwind of a shelter), mostly giving 1
   to 4 dB more sound and in a few places up to 2.7 dB less: one profile cannot both
   bend the sound down over the first 150 m and let it go straight after, the cost of
@@ -675,10 +688,10 @@ is an arc of a circle, so its travel time and its length are exact.
 - **The animation's particles** and **the drawn paths** (`view --paths`, the Blender
   export) curve as the sound does.
 
-Bending takes time: the `open_air_stage` example runs in 3 s instead of 0.2 s in still
-air, a scene's late rays take about three times as long, and coverage maps about six
-times, the parabolic equation running for each point; `simulation.performance.threads`
-shares the work out over the cores. Behind barriers and buildings the parabolic
+Bending takes time: on one core the `open_air_stage` example takes about 13 times as
+long as in still air and its coverage map on a 10 m grid about 22 times, the parabolic
+equation running up to 2 kHz for each point, and its late rays take about four times as
+long; `simulation.performance.threads` shares the work out over the cores. Behind barriers and buildings the parabolic
 equation runs in every band, in the weather and in still air, for each degree of
 direction, the runs of a source that differ only past their first obstacle sharing the
 march over the open ground before it: on one core, the runs for a listener 160 m out
@@ -715,10 +728,11 @@ the sound goes the same way to, each reached by a last step of its own, so that 
 what a run of its own place would give it; only the absorbing layer can lie higher,
 where the farthest of the run's listeners needs it. Each place keeps its bent paths
 while it waits for the shared runs, so the memory a walk takes grows with the places
-that share them. An aircraft's 26 places 64 m apart,
-100 m up over 1.6 km of a meadow in the `windy` preset, take 31 s instead of 89 s on
-four cores, with the same early levels to 10⁻⁷ dB. An atmosphere in which sound goes straight (`neutral`, no wind
-and no temperature gradient) changes nothing: the results are those of still air, bit
+that share them. An aircraft's 26 places 64 m apart, 100 m up over 1.6 km of a meadow
+in the `windy` preset, heard 30 m off the middle of its track, take about three quarters
+of the time on one core that a run for each place takes, with the same early levels to
+10⁻⁷ dB. An atmosphere in which sound goes straight (`neutral`, no wind and no
+temperature gradient) changes nothing: the results are those of still air, bit
 for bit.
 
 **Without turbulence, shadows come out deeper than measured.** The eddies of the wind
@@ -728,7 +742,7 @@ without them it is 50 to 70 dB deep. Give the atmosphere its `turbulence` (see [
 
 Against measurements of a wind turbine up to 845 m away in ten spells of different
 weather, from light winds to strong upwind, the bands from 80 Hz to 2 kHz are within
-1.7 to 2.7 dB on average, about as close as the published parabolic equation model in
+1.8 to 2.7 dB on average, about as close as the published parabolic equation model in
 the eight cases other than strong upwind, and closer in those two (see [Validation](validation.md#outdoor-propagation-against-measurements-hannover)).
 
 `acoustic-spaces inspect` describes the atmosphere and gives the speed of sound across
@@ -1166,7 +1180,7 @@ The level in each class is as accurate as the simulation in that weather (see [H
 simulation bends sound](#how-the-simulation-bends-sound)). The combination is the
 standards' formula, exact to rounding; over grass, the correction it gives from the
 classes favourable to propagation to the long-term level follows ISO 9613-2's within
-0.8 dB, with a C_0 of 3.4 dB, inside the standard's 0 to 5 dB (see
+0.7 dB, with a C_0 of 3.4 dB, inside the standard's 0 to 5 dB (see
 [Validation](validation.md#levels-over-a-long-term)).
 
 ## Passing vehicles
@@ -1576,14 +1590,14 @@ equation leaves out:
   effect along their way, not the barrier's, and only in its bands, while those over
   the top take the barrier's, past the end too as they fade out there: where a
   listener crosses the shadow boundary of a barrier's end, 10 cm across it the level
-  steps by at most 1.0 dB from 63 to 500 Hz (0.42 dB in still air) and 0.91 dB 120 m
-  upwind, but from 1 kHz up, where the paths round the end keep their legs while the
-  direct sound takes the open ground's refraction, by up to 7.8 dB 60 m downwind and
-  20 dB 120 m away. Where the end stands below the line of sight (a barrier 1 m high), a
+  steps by at most 1.0 dB from 63 to 500 Hz and 1.6 dB at 1 and 2 kHz (0.42 dB in still
+  air) and 0.92 dB 120 m upwind, but at 4 and 8 kHz, where the paths round the end keep
+  their legs while the direct sound takes the open ground's refraction, by up to 7.8 dB
+  60 m downwind and 19 dB 120 m away. Where the end stands below the line of sight (a barrier 1 m high), a
   listener crossing the end's line seen from above (its way crossing the barrier on
   one side, and on the other the open ground's sound) steps, 2 mm across it, by up to
-  1.2 dB from 63 to 250 Hz (0.02 dB in still air), but by up to 4.8 dB at 500 Hz,
-  10.6 dB downwind at 1 kHz 100 m away and 12.8 dB upwind at 8 kHz (see
+  1.2 dB from 63 to 250 Hz (0.02 dB in still air), but by up to 4.8 dB from 500 Hz to
+  2 kHz and 12.8 dB upwind at 8 kHz (see
   [Validation](validation.md#known-issues)). No reference in three dimensions checks
   the paths round ends and corners, for listeners behind a barrier or in the open
   beside it.

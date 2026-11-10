@@ -2310,7 +2310,7 @@ def test_the_stills_say_how_the_sound_was_made(tmp_path: Path) -> None:
     scene = yaml.safe_load(lake.read_text(encoding="utf-8"))
     first, _mixed = pictures.settings_lines(demo, args, scene)
     assert "paths and late rays bent by the wind and temperature" in first
-    assert "up to 500 Hz (2 kHz in shadows) by the narrow-angle parabolic equation" in first
+    assert "bands up to 2 kHz by the narrow-angle parabolic equation" in first
     scene["atmosphere"] = None
     assert "bent" not in pictures.settings_lines(demo, args, scene)[0]
     # Every line fits the still, made smaller when it is long.
