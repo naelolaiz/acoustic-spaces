@@ -460,17 +460,22 @@ public:
         }
         boundary_cells_ = special_.size();
 
-        // The source's cells (made special, so one update adds the source).
-        for (const auto &[i, w] : reading_cells(bvh, cut, source, kReach)) {
+        // The source's cells (made special, so one update adds the source): none of the
+        // cells round it in the matched layer, whichever cells it then takes.
+        for (const auto &[i, w] : visible_cells(bvh, source, &type_)) {
             if (type_[i] == kLayer) {
                 throw std::invalid_argument("the source is in the matched layer");
             }
+        }
+        for (const auto &[i, w] : reading_cells(bvh, cut, source, kReach)) {
             std::size_t k = special_index(i);
             if (k == npos) k = add_special(i, exact_.data(), 0.0);
             source_[k] += static_cast<float>(cell_scale(i) * w);
         }
         for (const Vec3 &p : probes) {
-            auto cells = reading_cells(bvh, cut, p, norm(p - source) < kNear * cell ? 2 : kReach);
+            // (kNear cells away to within rounding counts as that far.)
+            const bool near = norm(p - source) < (kNear - 1e-9) * cell;
+            auto cells = reading_cells(bvh, cut, p, near ? 2 : kReach);
             probe_cells_.push_back({});
             probe_weights_.push_back({});
             for (const auto &[i, w] : cells) {
@@ -1014,37 +1019,39 @@ private:
         std::array<double, kReach> weight{};
     };
 
+    // A row of `count` cells from cell `start` for a point q cells from the first
+    // cell's centre along an axis.
+    static Row row_of(double q, long long start, int count) {
+        static constexpr double kTurn = 0.78539816339744831;  // 2 pi / 8
+        Row row;
+        row.start = start;
+        row.count = count;
+        row.bound = 1.0;
+        const double x = q - static_cast<double>(start);
+        for (int j = 0; j < count; ++j) {
+            double w = 1.0;
+            for (int m = 0; m < count; ++m) {
+                if (m != j) w *= (x - m) / static_cast<double>(j - m);
+            }
+            row.weight[static_cast<std::size_t>(j)] = w;
+            row.bound *= kTurn * std::abs(x - j) / (j + 1);
+        }
+        return row;
+    }
+
     // The rows of cells, along an axis of `size` cells, that can stand for a point q
-    // cells from the first cell's centre: `most` (four or two) or two in a row with the
-    // point between two of them, or the one cell to either side of it; none on the
+    // cells from the first cell's centre with cells of its own to either side: `most`
+    // (four or two) or two in a row with the point between two of them; none on the
     // grid's edge.
     static std::vector<Row> rows(double q, std::size_t size, int most) {
-        static constexpr double kTurn = 0.78539816339744831;  // 2 pi / 8
         std::vector<Row> out;
         const long long base = static_cast<long long>(std::floor(q));
         const long long last = static_cast<long long>(size) - 2;
-        auto add = [&](long long start, int count) {
-            if (start < 1 || start + count - 1 > last) return;
-            Row row;
-            row.start = start;
-            row.count = count;
-            row.bound = 1.0;
-            const double x = q - static_cast<double>(start);
-            for (int j = 0; j < count; ++j) {
-                double w = 1.0;
-                for (int m = 0; m < count; ++m) {
-                    if (m != j) w *= (x - m) / static_cast<double>(j - m);
-                }
-                row.weight[static_cast<std::size_t>(j)] = w;
-                row.bound *= kTurn * std::abs(x - j) / (j + 1);
-            }
-            out.push_back(row);
-        };
         for (int count = most; count >= 2; count -= 2) {
-            for (long long start = base - (count - 2); start <= base; ++start) add(start, count);
+            for (long long start = base - (count - 2); start <= base; ++start) {
+                if (start >= 1 && start + count - 1 <= last) out.push_back(row_of(q, start, count));
+            }
         }
-        add(base, 1);
-        add(base + 1, 1);
         return out;
     }
 
@@ -1053,34 +1060,45 @@ private:
     // `rows` round p of at most `most` cells, weighted by the product of their weights:
     // Lagrange's polynomial through the cells' centres, a cubic along an axis with four
     // cells in a row. Halfway between two centres, four cells read a wave of eight cells
-    // per wavelength 0.8 % low where two read it 7.6 % low, and the level of a point
-    // source's sound far from it changes with the places of the source and of the probe
-    // within their cells by 0.02 dB, where with two cells a side it fell by up to 0.5 dB
+    // per wavelength along the axis 0.85 % low where two, weighted linearly, read it
+    // 7.6 % low (9/8 cos(kh/2) - 1/8 cos(3kh/2) against cos(kh/2)), and the level of a
+    // point source's sound twelve cells from it changes with the places of the source
+    // and of the probe within their cells by 0.02 dB on the 19-point grid
     // (docs/validation.md, Free field). Of the boxes whose cells are all air outside the
     // matched layer, seen from p and linked to their neighbours in the box (no face
     // between them), the one whose rows' bounds sum to the least; next to a face that is
-    // a box of fewer cells, or one that reaches further to the other side. With no such
-    // box (in a corner too tight for one, or where p lies outside the grid's inner
-    // cells), the cells round p that it sees, weighted trilinearly.
+    // a box of fewer cells, or one that reaches further to the other side.
+    //
+    // Within a cell of a surface some of the eight cells round p (those of the trilinear
+    // reading) are not p's: solid, in the layer or out of its sight. Where p's are one
+    // whole layer of them along an axis (next to a face that lies along the grid), the
+    // row along that axis is that layer's one cell, as far from p as it lies, and the
+    // other axes keep their rows. Where they are no box (next to a face at an angle to
+    // the grid), no row stands for p along two axes at once, and a reading from one
+    // cell along either jumps as p moves along the face: there, as with no whole box at
+    // all (a corner too tight for one) and where p lies outside the grid's inner cells,
+    // the reading is of the cells round p that it sees, weighted trilinearly.
     //
     // The source takes four cells a side. Within a few cells of it its sound is not that
     // of a point (nor is it with two), and a cubic through it reads worse than a line:
-    // a probe nearer the source than kNear cells takes two a side (measured over places
-    // within a cell and the grid's directions, as above: two read the level closer up
-    // to two and a half cells away, four from three on).
+    // a probe nearer the source than kNear cells takes two a side. The same table gives
+    // the level and the gradient by the distance from the source, and with kNear changed
+    // they come out further off: with every probe taking four (kNear 0), the 19-point
+    // grid's level two cells from the source is up to 2.1 dB off where it is 0.6 dB,
+    // and the 7-point grid's gradient three cells from it 6.8 dB where it is 1.7 dB;
+    // with two a side up to four cells (kNear 4), the 19-point grid's level in the
+    // 125 Hz band three cells from the source is 0.28 dB off where it is 0.05 dB.
     std::vector<std::pair<std::size_t, double>> reading_cells(
         const Bvh &bvh, const std::vector<std::uint16_t> &cut, const Vec3 &p, int most) const {
         const double q[3] = {(p.x - origin_.x) / cell_ - 0.5, (p.y - origin_.y) / cell_ - 0.5,
                              (p.z - origin_.z) / cell_ - 0.5};
         const std::size_t size[3] = {nx_, ny_, nz_};
-        std::array<std::vector<Row>, 3> row;
         long long base[3];
         for (int a = 0; a < 3; ++a) {
             if (!(q[a] >= 1.0 && q[a] <= static_cast<double>(size[a]) - 3.0)) {
                 return visible_cells(bvh, p, &type_);  // outside the grid: none
             }
             base[a] = static_cast<long long>(std::floor(q[a]));
-            row[static_cast<std::size_t>(a)] = rows(q[a], size[a], most);
         }
         // Whether a cell is air outside the matched layer that p sees: found once for
         // each of the cells the rows reach, kReach - 2 below the cell under p to
@@ -1108,8 +1126,29 @@ private:
             }
             return state == 1;
         };
-        // Every choice of a row along each axis, the least bound first; of equal bounds
-        // (a point on a cell's centre: none), the fewest cells.
+        // The eight cells round p: which of their two layers along each axis hold cells
+        // of p's, and whether p's cells are all the cells of those layers (a box).
+        bool layer[3][2] = {{false, false}, {false, false}, {false, false}};
+        int own = 0;
+        for (int corner = 0; corner < 8; ++corner) {
+            const int up[3] = {corner & 1, (corner >> 1) & 1, (corner >> 2) & 1};
+            if (!usable(base[0] + up[0], base[1] + up[1], base[2] + up[2])) continue;
+            ++own;
+            for (int a = 0; a < 3; ++a) layer[a][up[a]] = true;
+        }
+        int box = 1;
+        for (int a = 0; a < 3; ++a) box *= int(layer[a][0]) + int(layer[a][1]);
+        if (own == 0 || own != box) return visible_cells(bvh, p, &type_);
+        std::array<std::vector<Row>, 3> row;
+        for (std::size_t a = 0; a < 3; ++a) {
+            if (layer[a][0] && layer[a][1]) {
+                row[a] = rows(q[a], size[a], most);
+            } else {
+                row[a] = {row_of(q[a], base[a] + (layer[a][1] ? 1 : 0), 1)};
+            }
+        }
+        // Every choice of a row along each axis, the least bound first; of equal bounds,
+        // the fewest cells.
         struct Choice {
             double bound;
             int cells;

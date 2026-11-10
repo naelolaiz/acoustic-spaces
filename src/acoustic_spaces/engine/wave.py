@@ -240,28 +240,32 @@ def _cutoff(courant: float) -> float:
 
 
 def source_signal(
-    rate: float, cell: float, courant: float = COURANT, speed: float = 1.0
+    rate: float, cell: float, courant: float = COURANT, speed: float = 1.0, *, level: bool = True
 ) -> tuple[np.ndarray, int]:
     """What the source adds to the grid on each step, and its delay in steps.
 
     An impulse, low-passed (so the grid carries no frequencies it cannot) and
     high-passed twice (so it leaves no air in the room), scaled so that in free field the
     pressure at r metres is that impulse over r. ``courant`` is the stencil's Courant
-    number, which sets the low-pass's cutoff too (:func:`_cutoff`); ``speed`` the speed
-    of sound at the source over the grid's (1 where it is the same everywhere).
+    number, which says which stencil it is for and sets the low-pass's cutoff
+    (:func:`_cutoff`); ``speed`` the speed of sound at the source over the grid's (1
+    where it is the same everywhere).
 
     On the 19-point grid a point source's sound comes out louder than what the source
     adds, the more the higher the frequency: by 9 / (5 + 4 cos wT) in pressure, w T the
     frequency's turn over a time step (the far field of the scheme's own response to one
     cell, by stationary phase: 3 / (2 + cos kh) along an axis, kh the turn over a cell
-    there, which the scheme ties to the frequency by cos kh = 1 - 4 (1 - cos wT) / 3),
-    alike in every direction within 0.01 dB: 0.06 and 0.34 dB over the 63 and 125 Hz
-    bands of a grid of eight cells per wavelength up to the 125 Hz band. Three taps,
-    2/9, 5/9 and 2/9, have the inverse gain exactly and are part of the signal, with a
-    step of delay (where the source's speed of sound is ``speed`` times the grid's, the
-    side taps are over the square of ``speed``, the middle one what is left of one). The
-    7-point grid's gain changes with the direction (none along an axis, up to 0.33 dB
-    over that 125 Hz band along the cube's diagonals), so no signal can undo it.
+    there, which the scheme ties to the frequency by cos kh = 1 - 4 (1 - cos wT) / 3).
+    That is the gain along the axes and the cube's diagonals; along a face's diagonals
+    it is up to 0.03 dB more at eight cells per wavelength, and the same within 0.01 dB
+    over a band: 0.06 and 0.35 dB over the 63 and 125 Hz bands of a grid up to the
+    125 Hz band. Three taps, 2/9, 5/9 and 2/9, have the inverse gain exactly and are
+    part of the signal, with a step of delay (where the source's speed of sound is
+    ``speed`` times the grid's, the side taps are over the square of ``speed``, the
+    middle one what is left of one); ``level=False`` gives the signal without them, the
+    impulse that the signal with them stands for. The 7-point grid's gain changes with
+    the direction (none along an axis, 0.26 dB over that 125 Hz band along a face's
+    diagonals and 0.35 dB along the cube's), so no signal can undo it.
     """
     half = _LOW_PASS_TAPS // 2
     k = np.arange(-half, half + 1)
@@ -274,7 +278,8 @@ def source_signal(
     high[0] += 1.0
     signal = np.convolve(np.convolve(low, high), high)
     delay = half
-    if courant == ISOTROPIC_COURANT:  # the 19-point stencil, known by its Courant number
+    # (The 19-point stencil, known by its Courant number.)
+    if level and math.isclose(courant, ISOTROPIC_COURANT, rel_tol=1e-9):
         side = 2.0 / (9.0 * speed**2)
         signal = np.convolve(signal, [side, 1.0 - 2.0 * side, side])
         delay += 1
@@ -580,14 +585,17 @@ class _Weather:
 
 #: Points each listener takes the pressure at (see :func:`_probe_points`).
 _PROBES = 13
-#: On the 19-point grid, a point round a listener that lies nearer the source than this
-#: many cells is left out of the listener's gradient (:func:`_first_order` then takes a
-#: difference of lower order): it reads the cells the source itself feeds, whose sound is
-#: not a point's. Measured over places of the source within a cell and the grid's
-#: directions (docs/validation.md, Free field): two to three and a half cells from the
-#: source the gradient is up to 15 dB off with that point and up to 4 dB without it,
-#: further away closer with it; on the 7-point grid, closer with it from 2.4 cells on.
-_SOURCE_CELLS = 1.5
+#: A point round a listener that lies nearer the source than this many cells is left out
+#: of the listener's gradient (:func:`_first_order` then takes a difference of lower
+#: order), by the stencil's points: it reads the cells the source itself feeds, whose
+#: sound is not a point's. Measured over 18 places of the source within a cell and the
+#: grid's 26 directions (``places`` of validation/wave_solver.py at 2, 2.5 and 3 cells
+#: from the source, with this at 0 and at 1.5: the gradient's energy over the pressure's
+#: against a point source's, in the 63 Hz band, the worse of the two): on the 19-point
+#: grid the worst is 7.6, 13.2 and 6.6 dB with those points and 4.5, 3.7 and 1.0 dB
+#: without them (further away no point lies that near). On the 7-point grid it is 5.4,
+#: 3.4 and 1.7 dB with them and 4.3, 3.5 and 1.9 dB without: no gain, so it keeps them.
+_SOURCE_CELLS = {7: 0.0, 19: 1.5}
 
 
 def _probe_points(listener: np.ndarray, cell: float) -> np.ndarray:
@@ -623,20 +631,22 @@ def _open_sides(
     ``room`` (3,) (see :data:`LAYER_ROOM`).
 
     It can where the air round the points reaches the layer inside the box that lies the
-    room past them along every axis (and three cells, for the cells a point takes). The
+    room past them along every axis (and five cells, for the cells the points take: a
+    listener's gradient points lie two cells from it, and each reads three further). The
     air is flooded from the source over the grid's cells in that box, as the solver
     floods its own, and from every listener it does not reach. Where it reaches no
     layer, a surface of the model lies between: sound from a point to that side's layer
-    and back to a point leaves the box on its way, so it runs at least as far as off a
-    layer the room away, which is what the room is for. A side of the box that ends
-    short of the layer counts as open (its room lies inside the grid).
+    and back to a point leaves the box across one of its faces, so it runs at least as
+    far as a reflection off a layer that lies that face's axis's room past the points,
+    which a grid with room on every side has too. A side of the box that ends short of
+    the layer counts as open (its room lies inside the grid).
     """
     from acoustic_spaces import _native
 
     shape = np.asarray(shape, dtype=np.int64)
     first, last = np.full(3, layer + 1), shape - 2 - layer  # the cells inside the layer
-    low = np.floor((points.min(axis=0) - room - origin) / cell).astype(np.int64) - 3
-    high = np.floor((points.max(axis=0) + room - origin) / cell).astype(np.int64) + 3
+    low = np.floor((points.min(axis=0) - room - origin) / cell).astype(np.int64) - 5
+    high = np.floor((points.max(axis=0) + room - origin) / cell).astype(np.int64) + 5
     start, stop = np.maximum(first, low), np.minimum(last, high)
     reached = np.zeros((3, 2), dtype=bool)
     left = list(range(len(points)))  # the points whose air is not flooded yet
@@ -702,7 +712,8 @@ def _first_order(
     The gradient is a central difference of fourth order over two cells either side,
     (8 (p(h) - p(-h)) - (p(2h) - p(-2h))) / 12h, of second order where a point two cells
     away is not ``found`` (out of the air, or across a surface from the listener), and
-    one-sided where a point one cell away is not. The integral is the trapezoidal rule,
+    one-sided where a point one cell away is not, and from the points two cells away
+    where neither is. The integral is the trapezoidal rule,
     so that it falls on the pressure's samples, with the rule's gain, (wT/2) / tan(wT/2),
     divided out up to ``cutoff`` (of the sample rate), the source's low-pass's cutoff:
     above it the source gives next to nothing. ``courant`` is the Courant number of the
@@ -722,6 +733,12 @@ def _first_order(
             difference = probes[plus] - probes[0]
         elif found[minus]:
             difference = probes[0] - probes[minus]
+        elif found[plus + 6] and found[minus + 6]:
+            difference = 0.25 * (probes[plus + 6] - probes[minus + 6])
+        elif found[plus + 6]:
+            difference = 0.5 * (probes[plus + 6] - probes[0])
+        elif found[minus + 6]:
+            difference = 0.5 * (probes[0] - probes[minus + 6])
         else:
             continue
         out[:, 1 + axis] = courant * (np.cumsum(difference) - 0.5 * difference)
@@ -1004,10 +1021,11 @@ def wave_responses(
     # point round a listener counts only where the listener sees it.
     found = np.array([solver.probe_found(p) for p in range(len(probes))])
     found &= _in_sight(bvh, listeners, probes)
-    if solver.stencil == 19:
-        # Nor a point among the source's own cells (the listener's own point stays).
-        away = np.linalg.norm(probes - np.asarray(source, dtype=float), axis=1)
-        found &= (away >= _SOURCE_CELLS * h) | (np.arange(len(probes)) % _PROBES == 0)
+    # Nor a point among the source's own cells (the listener's own point stays; that many
+    # cells away to within rounding counts as that far).
+    away = np.linalg.norm(probes - np.asarray(source, dtype=float), axis=1)
+    near = away < (_SOURCE_CELLS[solver.stencil] - 1e-9) * h
+    found &= ~near | (np.arange(len(probes)) % _PROBES == 0)
     found = found.tolist()
     missing = [listener for i, listener in enumerate(names) if not found[_PROBES * i]]
     if missing:
