@@ -1,5 +1,7 @@
+import copy
 import dataclasses
 import math
+import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -547,6 +549,68 @@ def test_late_from_mixes_the_late_part_of_sources() -> None:
     )
     assert "rays" not in mixed.details["c"] and mixed.details["a"]["rays"] > 0
     assert mixed["c", "l"].direct_delay_s == own["c", "l"].direct_delay_s
+
+
+def test_a_mixed_late_part_is_made_when_read_as_all_are_mixed_at_once() -> None:
+    """A response whose late part is a mix of others' keeps the mix, not arrays of its
+    own: each read makes them, bit for bit as one sum over every listener and source at
+    once gives them, and a feed leaves them to be made when read."""
+    from acoustic_spaces.engine.response import LATE_ARRAYS, Deferred
+
+    listeners = [
+        {"name": name, "position": position}
+        for name, position in (
+            ("a", [2.0, 2.0, 1.5]),
+            ("b", [6.0, 4.0, 1.5]),
+            ("c", [4.0, 3.0, 1.5]),
+            ("d", [3.0, 2.5, 1.2]),
+        )
+    ]
+    sources = [
+        {"name": "s", "position": [1, 5, 1.5]},
+        {"name": "t", "position": [7, 1, 1.5]},
+        {"name": "u", "position": [5, 5, 1.2]},
+    ]
+    room = Room.from_scene(_scene(sources=sources, listeners=listeners))
+    late_from = {"c": {"a": 0.25, "b": 0.75}, "d": {"b": 1.0}, "u": {"s": 0.3, "t": 0.7}}
+    mixed = simulate(room, late_from=late_from)
+    names = ("late", "late_directional", "late_batches")
+    weights = np.array([[1.0, 0.0], [0.0, 1.0], [0.25, 0.75], [0.0, 1.0]])
+    for name in names:
+        at_once = {}
+        for source in ("s", "t"):
+            traced = np.array([getattr(mixed[source, listener], name) for listener in "ab"])
+            at_once[source] = np.einsum("lt,t...->l...", weights, traced)
+            for k, listener in enumerate("abcd"):
+                response = mixed[source, listener]
+                assert isinstance(vars(response)[name], Deferred)
+                read = getattr(response, name)
+                # Read again, it is the array made, until another response's is made.
+                assert getattr(response, name) is read
+                getattr(mixed["u" if source == "s" else "s", listener], name)
+                again = getattr(response, name)
+                assert again is not read and again.tobytes() == read.tobytes()
+                assert read.tobytes() == at_once[source][k].tobytes()
+        both = np.einsum("t,t...->...", np.array([0.3, 0.7]), np.array(list(at_once.values())))
+        for k, listener in enumerate("abcd"):
+            assert getattr(mixed["u", listener], name).tobytes() == both[k].tobytes()
+    assert mixed["u", "c"].late_moments.shape == (0, 0, 0)
+    # A copy holds the arrays as they read; fed, they are the same as the mix's fed.
+    response = mixed["u", "c"]
+    held = dataclasses.replace(response)
+    assert all(isinstance(vars(held)[name], np.ndarray) for name in LATE_ARRAYS)
+    for other in (pickle.loads(pickle.dumps(response)), copy.copy(response)):
+        assert all(isinstance(vars(other)[name], np.ndarray) for name in LATE_ARRAYS)
+        assert all(
+            getattr(other, name).tobytes() == getattr(response, name).tobytes() for name in names
+        )
+    gain = [0.0, 1.0, 2.0, 3.0, -1.0, -2.0, -3.0, 0.5]
+    fed, expected = response.fed(gain, 0.0123), held.fed(gain, 0.0123)
+    for name in names:
+        assert isinstance(vars(fed)[name], Deferred)
+        assert getattr(fed, name).tobytes() == getattr(expected, name).tobytes()
+    assert fed.late_moments.shape == (0, 0, 0)
+    np.testing.assert_array_equal(fed.energy(), expected.energy())
 
 
 def test_a_walking_listener() -> None:

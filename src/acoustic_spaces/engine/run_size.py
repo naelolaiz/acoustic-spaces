@@ -6,7 +6,9 @@ per arrival direction. Every source's is kept to the end of the run, and while o
 traced the tracer needs more: on the CPU a copy for each thread that sums rays (at most
 ``_native.COPY_MEMORY`` together, one at least), on a GPU its buffers. So a run needs
 memory in proportion to ``simulation.ir_length_s``, the listeners and
-``late.directions``, the map points (``coverage.spacing``) and the sources. On the CPU
+``late.directions``, the map points (``coverage.spacing``) and the sources: those traced
+for their late part, as a source or a listener whose late part is a mix of others' (a
+walk's places between the traced ones, ``simulate``'s ``late_from``) holds none. On the CPU
 the rays cost time, not memory. A run whose late part would need more memory than the
 computer has is refused before it starts (:func:`check`), and
 :meth:`~acoustic_spaces.room.Room.warnings` notes one that would need more than half of
@@ -25,7 +27,7 @@ import dataclasses
 import math
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -262,6 +264,7 @@ def simulation_need(
     listeners: Sequence,
     threads: int,
     groups: int = 0,
+    mixed: Collection[str] = (),
 ) -> Need:
     """The memory the late part of a simulation of ``sources`` at ``listeners`` needs:
     the energy of every source, kept to the end; that of a line or surface source's
@@ -272,6 +275,12 @@ def simulation_need(
     their moments to each listener's arrays, and batches of rays (``late.batches``)
     the energy as each gives it.
 
+    ``mixed`` names the sources and the listeners whose late part is a mix of others'
+    (``simulate``'s ``late_from``, with the stochastic ray tracer): such a source is not
+    traced and keeps no energy, and a point source's energy is traced and kept at the
+    other listeners alone (a line's or a surface's is traced at those and mixed for
+    every listener as its points are summed).
+
     Its advice gives what the run would need with each setting it may lower changed
     on its own (:func:`_lowered`), the least first."""
     stochastic = settings.late.method != "statistical"
@@ -280,10 +289,13 @@ def simulation_need(
         (_band_groups(room, settings), late_devices(settings.late.device)) if stochastic else None
     )
 
-    def bytes_of(settings: Simulation, sources: Sequence, listeners: Sequence) -> float:
-        return _simulation_bytes(room, settings, sources, listeners, threads, groups, tracer)[0]
+    def found(settings: Simulation, sources: Sequence, listeners: Sequence) -> tuple[float, str]:
+        return _simulation_bytes(room, settings, sources, listeners, threads, groups, tracer, mixed)
 
-    need, what = _simulation_bytes(room, settings, sources, listeners, threads, groups, tracer)
+    def bytes_of(settings: Simulation, sources: Sequence, listeners: Sequence) -> float:
+        return found(settings, sources, listeners)[0]
+
+    need, what = found(settings, sources, listeners)
     options = sorted(
         (bytes_of(*changed), label) for label, changed in _lowered(settings, sources, listeners)
     )
@@ -350,10 +362,12 @@ def _simulation_bytes(
     threads: int,
     groups: int,
     tracer: tuple[int, tuple[str, ...]] | None,
+    mixed: Collection[str] = (),
 ) -> tuple[float, str]:
     """:func:`simulation_need`'s bytes and what they are for; ``tracer`` is how many
     groups of bands the late tracer traces in and its devices (:func:`late_devices`),
-    None for the statistical late method."""
+    None for the statistical late method, which gives everyone a late part of their own
+    whatever ``mixed`` names."""
     from acoustic_spaces.engine.late import BATCH_STEP, DIRECTION_STEP, MOMENT_STEP
     from acoustic_spaces.engine.simulate import TIME_STEP, is_fed, response_length
 
@@ -366,12 +380,11 @@ def _simulation_bytes(
     slots = math.ceil(length / TIME_STEP - 1e-9)
     late = settings.late
     noun = "listener" if count == 1 else "listeners"
-    summed = max(elements) > 1
-    held = max(0, len(sources) - 1) + int(summed)
     # Each fed source's responses: its late part copied for a listener at a time.
     feeding = 4.0 / count if any(is_fed(source) for source in sources) else 0.0
     what = f"the late part of a simulation at {count} {noun} ({length:.4g} s long"
     if tracer is None:
+        held = max(0, len(sources) - 1) + int(max(elements) > 1)
         results = float(count * bands * slots * VALUE_BYTES)
         need = max((held + 1) * results, (len(sources) + feeding) * results)
         return need, what + ")"
@@ -386,8 +399,12 @@ def _simulation_bytes(
     estimates = float(count * bands * late.batches * coarse * VALUE_BYTES)
     if late.batches < 2:
         estimates = 0.0
+    # The share of the listeners that the late part is traced at: those whose own is
+    # not a mix of others'.
+    traced = sum(1 for listener in listeners if listener.name not in mixed) or count
+    share = traced / count
     call = late_call(
-        results,
+        share * results,
         bands,
         band_groups,
         # Batches traced in runs hold their sums while the next run is traced.
@@ -395,11 +412,39 @@ def _simulation_bytes(
         threads=threads,
         rays=late.rays,
         devices=devices,
-        estimates=estimates,
+        estimates=share * estimates,
     )
     results += estimates
     what += f", {directions} arrival directions)"
-    need = max(held * results + call, (len(sources) + feeding) * results)
+    # What each source traced keeps to the end, in units of one source's energy at every
+    # listener (``results``), and what the run takes besides the other sources' while it
+    # is traced: so many units and bytes.
+    kept: list[float] = []
+    besides: list[tuple[float, float]] = []
+    copied = 0.0
+    for source, points in zip(sources, elements, strict=False):
+        if source.name in mixed:
+            continue
+        if points == 1:
+            # A point source's energy stays at the listeners it was traced at.
+            kept.append(share)
+            besides.append((0.0, call))
+        else:
+            # A line's or a surface's: its points' sum at every listener, and after the
+            # tracer each point's energy as traced with what it mixes to for them all.
+            kept.append(1.0)
+            besides.append((1.0, max(call, (share + 1.0) * results if share < 1.0 else 0.0)))
+        if is_fed(source) and (points > 1 or share == 1.0):
+            copied += kept[-1]
+    while_traced = [
+        (sum(kept) - one + units) * results + more
+        for one, (units, more) in zip(kept, besides, strict=True)
+    ]
+    # Where another source's late part is a mix of theirs, the sources' energy stays for
+    # it beside the copies that their own responses take with a feed.
+    if not any(source.name in mixed for source in sources):
+        copied = 0.0
+    need = max(max(while_traced or [call]), (sum(kept) + copied + feeding) * results)
     return need, what
 
 

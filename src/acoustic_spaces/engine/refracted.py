@@ -254,7 +254,9 @@ class Refraction:
     atmosphere (not still), running the parabolic equation on ``threads`` threads (0:
     every core): the wide-angle one (:mod:`~acoustic_spaces.engine.wide_angle`) with
     ``wide_angle``. ``edges``: the model's diffracting edges, as the paths over them
-    number them (found when needed if not given)."""
+    number them (found when needed if not given). ``profiles``: the profiles of the
+    model's air found so far by their key (:meth:`profile`), which the sources of one
+    model may share, as none depends on the source; its own if not given."""
 
     def __init__(
         self,
@@ -271,6 +273,7 @@ class Refraction:
         wide_angle: bool = False,
         edges=None,
         barrier_frequencies: int = 32,
+        profiles: dict | None = None,
     ) -> None:
         from acoustic_spaces.engine.diffraction import band_frequencies
 
@@ -309,7 +312,7 @@ class Refraction:
             self._rows = self.weather.rows
             self.windy = self.windy or bool(np.any(self.weather.wind != 0.0))
         self._weather = (self.atmosphere.model_dump_json(), self.ground_c)
-        self._profiles: dict[float, Profile] = {}
+        self._profiles: dict[float, Profile] = {} if profiles is None else profiles
         #: The frequencies of each band at so many an octave (:meth:`_samples`).
         self._dense: dict[int, list] = {}
         self._admittances: dict[int, np.ndarray] = {}
