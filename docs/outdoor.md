@@ -539,8 +539,10 @@ is an arc of a circle, so its travel time and its length are exact.
   (0.4 dB at 10 Hz 44 dB deep in a shadow) where the narrow-angle one strays by 3 to 20
   dB, and in the weather presets within 0.02 dB per band on average where the
   narrow-angle one is within 0.08 dB (see
-  [Validation](validation.md#the-wide-angle-parabolic-equation)). It takes three to four
-  times the work, all of it in the bands the parabolic equation gives.
+  [Validation](validation.md#the-wide-angle-parabolic-equation)). Over open ground it
+  takes two to two and a half times as long, all of it in the bands the parabolic
+  equation gives, and behind barriers and buildings, where it runs in every band, about
+  ten times.
 - **Off façades and barriers** the paths bend the same way, in the vertical plane the
   reflections fold them into, with the wind's mean component over their legs. A path
   that would pass over the wall, or through something on the way, is left out.
@@ -663,11 +665,13 @@ air, a scene's late rays take about three times as long, and coverage maps about
 times, the parabolic equation running for each point; `simulation.performance.threads`
 shares the work out over the cores. Behind barriers and buildings the parabolic
 equation runs in every band, in the weather and in still air, for each degree of
-direction: on one core, a pair of runs 160 m out takes about 8 s, nine tenths of it at
-4 and 8 kHz; a coverage map of 96 points over grass behind two barriers or a building in
-8 m/s of wind 175 to 191 s; and three or four listeners 6 to 20 m up 30 to 80 m from
-the source behind a barrier or a building, where the wide-angle equation runs (the
-sound reaching them steeply), about 120 s, against 0.2 to 0.6 s in still air.
+direction, the runs of a source that differ only past their first obstacle sharing the
+march over the open ground before it: on one core, the runs for a listener 160 m out
+take about 7 s, 85 % of it at 4 and 8 kHz; a coverage map over grass in 8 m/s of wind,
+of 96 points behind two barriers or 90 round a building, 77 to 89 s; and three or four
+listeners 10 to 20 m up 30 to 60 m from the source behind a barrier or a building,
+where the wide-angle equation runs (the sound reaching them steeply), about 60 s,
+against 0.1 to 0.5 s in still air.
 
 Behind barriers and buildings the runs take 32 frequencies an octave at 8 kHz and 16
 at 4 kHz, where the ground's interference fringes are densest; below, 8, as the early
@@ -683,9 +687,9 @@ in ten, largest), and a coverage map of 96 points over grass behind two barriers
 
 | `barrier_frequencies` | 4 kHz | 8 kHz | the map | against straight legs |
 |---|---|---|---|---|
-| 32 (the default) | 0.05, 0.10, 0.25 | 0.04, 0.09, 0.51 | 189 s | 8.2 times |
-| 16 | 0.05, 0.10, 0.25 | 0.51, 1.0, 6.4 | 129 s | 5.6 times |
-| 8 | 0.80, 1.7, 9.6 | 2.1, 3.5, 14 | 93 s | 4.0 times |
+| 32 (the default) | 0.05, 0.10, 0.25 | 0.04, 0.09, 0.51 | 81 s | 5.5 times |
+| 16 | 0.05, 0.10, 0.25 | 0.51, 1.0, 6.4 | 59 s | 4.0 times |
+| 8 | 0.80, 1.7, 9.6 | 2.1, 3.5, 14 | 45 s | 3.0 times |
 
 These come on top of the parabolic equation's own error (see
 [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)),
