@@ -7,6 +7,15 @@ absorption a', the same paths bring each arrival times the product over its refl
 of (1 - a') / (1 - a). The paths themselves need not be traced again: where a ray goes
 depends on the scattering, not on the absorption. (Russian roulette and splitting chose
 rays by their energies, but those choices only weight the estimate; it stays unbiased.)
+An early reflection off a ground with an impedance is not of this kind: it takes the
+impedance's reflection factor in place of 1 - a, and that impedance cannot change
+without tracing again (:func:`reweighted_result`). Nor quite one off a ground with
+zones, which takes the factors of the grounds its Fresnel zone covers and is
+re-weighted as off the ground it meets alone. With source and listener 0.5 and 1.5 m
+high and 30 m apart, and a zone without an impedance taken from an absorption of 0.1 to
+0.2, a reflection half a metre inside the zone's edge falls by 0.5 dB re-weighted and
+by 0.13 to 0.20 dB traced again; half a metre outside it, by none and by 0.11 to
+0.16 dB.
 
 Early paths carry the faces they reflect off, so their energies re-weight exactly. Where
 they add in pressure (:mod:`~acoustic_spaces.engine.coherent`), a reflection also
@@ -19,16 +28,33 @@ nor how it interferes with the reflection it shades. The late part's arrivals ar
 too many to keep, so the tracer sums, per listener and slot
 of ``MOMENT_STEP``, the energy times the reflections each ray has had off each group of
 faces and their products (:func:`~acoustic_spaces.engine.late.stochastic_energy` with
-``groups``). With l_i = ln((1 - a'_i) / (1 - a_i)) for group i, a slot's energy becomes
+``groups``): the energy-weighted mean mu and covariance C of the counts n in the slot.
+With l_i = ln((1 - a'_i) / (1 - a_i)) for group i, a slot's energy becomes E exp(K),
+K = ln of the mean of exp(n . l) over its arrivals, which mu and C give to second order
+in l as mu . l + 1/2 l' C l. That form alone holds near the traced absorption only: for
+much more absorption its square term outgrows the first and the energy rises again,
+without bound. :func:`moment_exponent` takes instead the form the counts of a diffuse
+field lead to. There a ray's N reflections fall on the groups by chance (a multinomial),
+and with u_i = exp(l_i) - 1, the change of what group i reflects,
 
-    E exp(sum_i mu_i l_i + 1/2 sum_ij C_ij l_i l_j),
+    K = N ln(1 + sum_i mu_i u_i / N),
 
-mu and C the energy-weighted mean and covariance of the counts in the slot: the
-second-order cumulant expansion of the sum over arrivals of E_r exp(n_r . l). It is exact
-for the same absorption and to second order around it; after a change of a few tenths
-the tail errs by some per cent, and :func:`~acoustic_spaces.calibration.calibrate`
-traces again at the absorption it arrives at. Its fit within a round keeps the early
-paths' phases as traced, which that next trace turns.
+which is Eyring's decay for the new absorption over that for the old. N comes from the
+covariance: 1 / N = -mu' F mu / (mu . mu)^2 with F = C - diag(mu), which is -mu mu' / N
+for a multinomial. It is held within plus and minus one over the sum of mu: a ray has
+had at least the reflections the groups count, and counts that spread wider than by
+chance make it negative. What of the covariance it leaves, R = F + mu mu' / N, adds
+1/2 w' R w, with w_i = u_i for more absorption and l_i for less. K is then the same to
+second order in l as the form above, exact for the same absorption and for counts that
+fall by chance, and held to what holds for any counts: at least mu . l (Jensen's
+inequality), and no gain where no group reflects more. Further from the traced
+absorption it stays an estimate from two moments. In a box of 8 by 6 by 3.5 m traced
+with a ceiling that absorbs 0.5 (20 000 rays, at 1 kHz), the late part's decay time for
+a ceiling of 0.9 is within 1 % of tracing again, for 0.99 within 5 %, and for 0.1 it is
+6 % too short; with a ceiling of 0.85 taken to 0.2, 16 % too short. So
+:func:`~acoustic_spaces.calibration.calibrate` traces again at the absorption it arrives
+at. Its fit within a round keeps the early paths' phases as traced, which that next
+trace turns.
 """
 
 from __future__ import annotations
@@ -63,19 +89,40 @@ def face_groups(room, materials: Sequence[str]) -> np.ndarray:
 def groups_of(room, settings=None) -> tuple[np.ndarray, list[str]] | None:
     """Face groups to trace ``room`` with so that its absorption can change afterwards
     (:func:`reweighted_result`): the group of each face and the materials, those on
-    surfaces that absorb less than everything in every band. None when its simulation
-    settings (``settings``, default the scene's) do not keep what re-weighting needs
-    (another late method, third-octave bands, the wave solver) or more than
-    ``MAX_GROUPS`` materials are on its surfaces."""
-    sim = room.scene.simulation if settings is None else settings
-    if sim.late.method != "stochastic_ray_tracing" or sim.bands != "octave" or sim.wave.enabled:
+    surfaces that absorb less than everything in some band (a band in which one absorbs
+    everything keeps that: no energy is left there to re-weight). None when its
+    simulation settings (``settings``, default the scene's) do not keep what
+    re-weighting needs (:func:`cannot_reweight`) or no material is left."""
+    if cannot_reweight(room, settings) is not None:
         return None
+    materials = reweighted_materials(room)
+    return (face_groups(room, materials), materials) if materials else None
+
+
+def reweighted_materials(room) -> list[str]:
+    """The materials on ``room``'s surfaces that absorb less than everything in some
+    band: those whose absorption a re-weighting can change."""
     used = np.unique(np.asarray(room.face_materials))
     names = [room.material_names[k] for k in used if k >= 0]
-    materials = [n for n in names if max(room.scene.materials[n].coefficients("octave")[0]) < 1]
-    if not materials or len(materials) > MAX_GROUPS:
-        return None
-    return face_groups(room, materials), materials
+    return [n for n in names if min(room.scene.materials[n].coefficients("octave")[0]) < 1]
+
+
+def cannot_reweight(room, settings=None) -> str | None:
+    """Why a run of ``room`` with ``settings`` (default the scene's) cannot be
+    re-weighted for other absorption, in words that follow "it needs", or None when it
+    can: another late method, third-octave bands, the wave solver, or more than
+    ``MAX_GROUPS`` materials on its surfaces."""
+    sim = room.scene.simulation if settings is None else settings
+    if sim.late.method != "stochastic_ray_tracing":
+        return "stochastic ray tracing for the late part"
+    if sim.bands != "octave":
+        return "octave bands"
+    if sim.wave.enabled:
+        return "a run without the wave solver"
+    count = len(reweighted_materials(room))
+    if count > MAX_GROUPS:
+        return f"at most {MAX_GROUPS} materials on the surfaces, and there are {count}"
+    return None
 
 
 def _without_absorption(scene) -> dict:
@@ -100,9 +147,10 @@ def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequenc
     if any(old[n] != new[n] for n in old if n not in materials):
         return None
     fresh = np.array([new[n] for n in materials])
-    if np.any(fresh >= 1.0):
-        return None
     traced_absorption = np.array([old[n] for n in materials])
+    # A band that absorbs everything has no energy to re-weight, to it or from it.
+    if np.any((fresh >= 1.0) != (traced_absorption >= 1.0)):
+        return None
     ratio = log_ratio(traced_absorption, fresh)
     responses = {
         key: r.reweighted(face_group, ratio, absorption=(traced_absorption, fresh))
@@ -117,11 +165,17 @@ def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequenc
 
 
 def log_ratio(old: np.ndarray, new: np.ndarray) -> np.ndarray:
-    """(groups, bands) ln((1 - new) / (1 - old)): the change in level per reflection."""
+    """(groups, bands) ln((1 - new) / (1 - old)): the change in level per reflection;
+    0 where both absorb everything, which leaves no energy to change."""
     old, new = (np.asarray(a, dtype=float) for a in (old, new))
-    if np.any(old >= 1.0) or np.any(new >= 1.0):
-        raise ValueError("re-weighting needs absorption below 1")
-    return np.log1p(-new) - np.log1p(-old)
+    full = old >= 1.0
+    if np.any(full != (new >= 1.0)):
+        raise ValueError(
+            "re-weighting needs absorption below 1, or 1 before and after: a band that "
+            "absorbs everything has no energy to re-weight"
+        )
+    kept = np.where(full, 0.0, new), np.where(full, 0.0, old)
+    return np.log1p(-kept[0]) - np.log1p(-kept[1])
 
 
 def path_counts(paths: EarlyReflections, face_group: np.ndarray, groups: int) -> np.ndarray:
@@ -135,20 +189,51 @@ def path_counts(paths: EarlyReflections, face_group: np.ndarray, groups: int) ->
 
 def moment_exponent(moments: np.ndarray, ratio: np.ndarray) -> np.ndarray:
     """(bands, slots) the exponent by which each slot of late energy changes, from the
-    moments of the counts (terms, bands, slots) and ``log_ratio`` (groups, bands)."""
+    moments of the counts (terms, bands, slots) and ``log_ratio`` (groups, bands): the
+    multinomial's form with the rest of the covariance to second order, within the
+    bounds that hold for any counts (see the module's text)."""
     groups = ratio.shape[0]
     total = moments[0]
     safe = np.where(total > 0.0, total, 1.0)
     mean = moments[1 : 1 + groups] / safe  # (groups, bands, slots)
-    exponent = np.einsum("ibs,ib->bs", mean, ratio)
+    change = np.expm1(ratio)  # u: what each group reflects, over what it did, less 1
+    rest_by = np.where(ratio > 0.0, ratio, change)  # w
+    shift = np.einsum("ibs,ib->bs", mean, ratio)  # mu . l
+    first = np.einsum("ibs,ib->bs", mean, change)  # mu . u
+    along = np.einsum("ibs,ib->bs", mean, rest_by)  # mu . w
+    count = mean.sum(axis=0)
+    square = np.einsum("ibs,ibs->bs", mean, mean)
+    # mu' F mu and w' F w, F the covariance less the means on its diagonal.
+    spread = np.zeros_like(total)
+    rest = np.zeros_like(total)
     t = 1 + groups
     for i in range(groups):
         for j in range(i, groups):
-            covariance = moments[t] / safe - mean[i] * mean[j]
-            weight = 0.5 if i == j else 1.0  # C_ij and C_ji both
-            exponent += weight * covariance * (ratio[i] * ratio[j])[:, None]
+            factorial = moments[t] / safe - mean[i] * mean[j]
+            if i == j:
+                factorial = factorial - mean[i]
+            weight = 1.0 if i == j else 2.0  # F_ij and F_ji both
+            spread += weight * factorial * mean[i] * mean[j]
+            rest += weight * factorial * (rest_by[i] * rest_by[j])[:, None]
             t += 1
-    return np.where(total > 0.0, exponent, 0.0)
+    some = (total > 0.0) & (count > 0.0)
+    limit = 1.0 / np.where(some, count, 1.0)
+    inverse = np.clip(-spread / np.where(some, square, 1.0) ** 2, -limit, limit)  # 1 / N
+    x = inverse * first
+    small = np.abs(x) < 1e-6
+    exponent = np.where(
+        small,
+        first * (1.0 - 0.5 * x),
+        np.log1p(np.maximum(x, -1.0 + 1e-12)) / np.where(small, 1.0, inverse),
+    )
+    # Counts spread wider than by chance, and less absorption: the form has a pole
+    # there, so its first two terms stand for it.
+    exponent = np.where((inverse < 0.0) & (first > 0.0), first * (1.0 - 0.5 * x), exponent)
+    exponent += 0.5 * (rest + inverse * along * along)
+    exponent = np.maximum(exponent, shift)
+    no_gain = np.all(ratio <= 0.0, axis=0)[:, None]
+    exponent = np.where(no_gain, np.minimum(exponent, 0.0), exponent)
+    return np.where(some, exponent, 0.0)
 
 
 def slot_factor(exponent: np.ndarray, slots: int, time_step: float, moment_step: float):
@@ -208,12 +293,14 @@ def turned_paths(
 
 __all__ = [
     "MOMENT_STEP",
+    "cannot_reweight",
     "face_groups",
     "groups_of",
     "log_ratio",
     "moment_exponent",
     "path_counts",
     "reweighted_paths",
+    "reweighted_materials",
     "reweighted_result",
     "slot_factor",
     "turned_paths",

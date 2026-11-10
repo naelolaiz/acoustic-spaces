@@ -996,6 +996,16 @@ def _override(model, options: dict[str, tuple[str, object]]):
         return None
 
 
+def _spread_draws(text: str) -> int | str:
+    """``--spread-draws``: a number of draws, or adaptive."""
+    if text == "adaptive":
+        return text
+    try:
+        return int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError("give a number of draws, or adaptive") from None
+
+
 def _output_spec(text: str):
     """An outputs entry from the command line: mono, binaural, ambisonics[:ORDER] or
     loudspeakers:LAYOUT."""
@@ -1104,9 +1114,6 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
     from acoustic_spaces.results import REPORT_FILE, results_folder, write_results
     from acoustic_spaces.spatial import from_output
 
-    if args.spread_draws is not None and (args.spread_draws < 0 or args.spread_draws == 1):
-        print("error: --spread-draws: 0 (no spread) or 2 or more", file=sys.stderr)
-        return 1
     room = _load_room(args.scene)
     if room is None or not _print_checks(room):
         return 1
@@ -1131,6 +1138,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
             "--length": ("ir_length_s", args.length),
             "--sample-rate": ("sample_rate", args.sample_rate),
             "--without": ("insertion_loss_of", args.without),
+            "--spread-draws": ("uncertainty.draws", args.spread_draws),
+            "--one-sided": ("uncertainty.one_sided", args.one_sided),
             **_performance_options(args),
         },
     )
@@ -1158,7 +1167,8 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         from acoustic_spaces.engine import ray_device
 
         ray_device.set_trial(False)
-    groups = None if args.spread_draws == 0 else _spread_groups(room, settings)
+    draws = settings.uncertainty.draws
+    groups = None if draws == 0 else _spread_groups(room, settings)
     try:
         result = simulate(
             room,
@@ -1171,17 +1181,29 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         _remove_if_empty(made)
         return 1
     if groups is not None:
-        from acoustic_spaces.engine.uncertainty import DEFAULT_DRAWS, with_spread
+        from acoustic_spaces.engine.uncertainty import ADAPTIVE, ADAPTIVE_MAX_DRAWS, with_spread
 
-        draws = DEFAULT_DRAWS if args.spread_draws is None else args.spread_draws
-        print(
-            f"the spread from the materials' absorption uncertainty: {draws} draws",
-            file=sys.stderr,
-        )
+        many = f"{draws} draws"
+        if draws == ADAPTIVE:
+            many = f"draws until the results are stable, {ADAPTIVE_MAX_DRAWS} at most"
+        print(f"the spread from the materials' absorption uncertainty: {many}", file=sys.stderr)
         try:
-            result = with_spread(result, room.scene, *groups, draws=draws, seed=settings.seed or 0)
+            result = with_spread(
+                result,
+                room.scene,
+                *groups,
+                draws=draws,
+                seed=settings.seed or 0,
+                one_sided=settings.uncertainty.one_sided,
+            )
         except ValueError as exc:
             print(f"warning: no spread from the absorption uncertainty: {exc}", file=sys.stderr)
+        if any(spread.stable is False for spread in result.spreads.values()):
+            print(
+                f"warning: the spread's results were not stable after {ADAPTIVE_MAX_DRAWS} "
+                "draws (GUM Supplement 1's test, JCGM 101:2008 7.9)",
+                file=sys.stderr,
+            )
 
     try:
         report = write_results(
@@ -1297,20 +1319,22 @@ def _convergence_text(entry: dict, batches: int) -> str:
 def _spread_groups(room, settings):
     """The face groups and materials to trace ``room`` with for the spread from its
     materials' absorption uncertainty (their own, or a built-in material's default), or
-    None, with a warning when some material gives one of its own but ``settings``
-    cannot re-weight."""
-    from acoustic_spaces.engine.reweight import groups_of
-    from acoustic_spaces.engine.uncertainty import has_uncertainty
+    None: no material on its surfaces has one, or ``settings`` cannot re-weight, which
+    is said (as a warning when some material gives an uncertainty of its own)."""
+    from acoustic_spaces.engine.uncertainty import grounds_left_out, spread_groups
 
-    if not has_uncertainty(room.scene):
-        return None
-    groups = groups_of(room, settings)
-    own = any(m.uncertainty is not None for m in room.scene.materials.values())
-    if groups is None and own:
+    grounds = grounds_left_out(room)
+    if grounds:
         print(
-            "warning: no spread from the materials' absorption uncertainty: it needs octave "
-            "bands, stochastic ray tracing for the late part, no wave solver and at most "
-            "a few materials on the surfaces",
+            f"warning: the absorption uncertainty of {', '.join(grounds)} is left out of "
+            "the spread: a ground's impedance gives its reflection",
+            file=sys.stderr,
+        )
+    groups, why, own = spread_groups(room, settings)
+    if why is not None:
+        print(
+            f"{'warning: ' if own else ''}no spread from the materials' absorption "
+            f"uncertainty: it needs {why}",
             file=sys.stderr,
         )
     return groups
@@ -1318,8 +1342,8 @@ def _spread_groups(room, settings):
 
 def _uncertainty_text(entry: dict) -> str:
     """One line: the largest combined standard uncertainty from the materials' absorption
-    and the rays in JNDs from 125 Hz to 4 kHz, its budget and its coverage interval, and
-    the method's errors over edges that it does not count."""
+    and the rays in JNDs from 125 Hz to 4 kHz, its budget, its coverage interval and its
+    one-sided bounds, and the method's errors over edges that it does not count."""
     from acoustic_spaces.compare import SUMMARY_BANDS_HZ, in_jnds
     from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
     from acoustic_spaces.parameters import ALL_PARAMETERS, RoomParameters, _band_label, _symbol
@@ -1337,7 +1361,10 @@ def _uncertainty_text(entry: dict) -> str:
     inputs = "the absorption"
     if spread["batches"]:
         inputs += f" and the rays ({spread['batches']} batches)"
-    text = f"uncertainty from {inputs}, {spread['draws']} draws: "
+    text = f"uncertainty from {inputs}, {spread['draws']} draws"
+    if spread.get("stable") is not None:
+        text += " (adaptive, stable)" if spread["stable"] else " (adaptive, not stable)"
+    text += ": "
     # The method's errors over edges that the spread does not count, the largest from
     # 125 Hz to 4 kHz that the validation finds for each.
     errors = []
@@ -1348,11 +1375,14 @@ def _uncertainty_text(entry: dict) -> str:
             errors.append(f"{what} up to {value:.2f} dB at {_band_label(OCTAVE_BANDS_HZ[band])}")
     method = f"; not counted, the level's error over edges: {', '.join(errors)}" if errors else ""
     method += _assumed_text(spread.get("assumed", {}))
+    method += _held_text(spread.get("held", {}))
     if not found:
         return text + "none from 125 Hz to 4 kHz" + method
     value, name, band = max(found)
     unit = f" {ALL_PARAMETERS[name][0]}" if ALL_PARAMETERS[name][0] else ""
     low, high = spread["low"][name][band], spread["high"][name][band]
+    at_least, at_most = spread["at_least"][name][band], spread["at_most"][name][band]
+    one_sided = f"{100 * spread['one_sided']:g} %"
     budget = ""
     rays = spread["rays"][name][band]
     if rays is not None:
@@ -1360,7 +1390,8 @@ def _uncertainty_text(entry: dict) -> str:
     return text + (
         f"at most {value:.2f} JND from 125 Hz to 4 kHz ({_symbol(name)} at "
         f"{_band_label(OCTAVE_BANDS_HZ[band])}: u = {getattr(standard, name)[band]:.3g}{unit}"
-        f"{budget}, {100 * spread['coverage']:g} % within {low:.3g} to {high:.3g}{unit})"
+        f"{budget}, {100 * spread['coverage']:g} % within {low:.3g} to {high:.3g}{unit}, "
+        f"{one_sided} at least {at_least:.3g}{unit} and {one_sided} at most {at_most:.3g}{unit})"
         f"{method}"
     )
 
@@ -1377,6 +1408,19 @@ def _assumed_text(assumed: dict) -> str:
         f"; built-in materials of unknown source taken at {what} "
         f"(simulation.uncertainty.presets): {', '.join(assumed)}"
     )
+
+
+def _held_text(held: dict) -> str:
+    """The materials with an uncertainty and the bands in which they absorb everything,
+    where no draw moves them, or nothing."""
+    from acoustic_spaces.parameters import _band_label
+
+    if not held:
+        return ""
+    each = [
+        f"{name} ({', '.join(_band_label(hz) for hz in bands)})" for name, bands in held.items()
+    ]
+    return f"; not drawn where the absorption is 1: {', '.join(each)}"
 
 
 def _outdoor_lines(entry: dict, removed) -> list[str]:
@@ -2898,11 +2942,21 @@ def build_parser() -> argparse.ArgumentParser:
     simulate.add_argument("--rays", type=int, help="override simulation.late.rays")
     simulate.add_argument(
         "--spread-draws",
-        type=int,
+        type=_spread_draws,
         default=None,
         metavar="N",
-        help="draws for the spread from the materials' absorption uncertainty (default 400; "
-        "0: no spread)",
+        help="override simulation.uncertainty.draws: the draws for the spread from the "
+        "materials' absorption uncertainty (400 unless the scene says otherwise; 0: no "
+        "spread; adaptive: until the results are stable, as GUM Supplement 1 describes, "
+        "which takes several thousand)",
+    )
+    simulate.add_argument(
+        "--one-sided",
+        type=float,
+        default=None,
+        metavar="P",
+        help="override simulation.uncertainty.one_sided: the probability of the spread's "
+        "one-sided bounds, between 0.5 and 1 (0.95 unless the scene says otherwise)",
     )
     simulate.add_argument("--max-order", type=int, help="override simulation.early.max_order")
     simulate.add_argument(

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pytest
 
 from acoustic_spaces import Room, Scene, simulate
-from acoustic_spaces.engine.reweight import groups_of, log_ratio
+from acoustic_spaces.engine.reweight import groups_of, log_ratio, reweighted_result
 from acoustic_spaces.engine.uncertainty import (
+    ADAPTIVE,
+    ADAPTIVE_BATCH,
+    ADMITTANCE_STEPS,
     EDGE_ERRORS_DB,
     ISO_12999_2_OCTAVES,
     ISO_12999_2_THIRDS,
@@ -16,11 +21,17 @@ from acoustic_spaces.engine.uncertainty import (
     PRESET_TOLERANCE,
     _Admittances,
     _draws,
+    _limits,
+    _Tally,
     absorption_draws,
     assumed,
     edge_errors,
+    grounds_left_out,
+    held,
     material_spread,
+    numerical_tolerance,
     octave_reproducibility,
+    spread_groups,
     uncertainty_of,
 )
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
@@ -89,6 +100,14 @@ def test_a_built_in_material_of_unknown_source_takes_the_scene_s_default():
     dumped = Scene.model_validate(scene.model_dump(exclude_none=True))
     assert dumped.materials["walls"].builtin and not dumped.materials["floor"].builtin
     assert scene.model_copy(deep=True).materials["walls"].builtin
+    # By value: a copy with other absorption (a calibration's fitted scene) is not, as
+    # it is not once saved and read again.
+    from acoustic_spaces.calibration import with_absorption
+
+    fitted = with_absorption(scene, ["walls"], [[0.3] * 8])
+    assert not fitted.materials["walls"].builtin and uncertainty_of(fitted, "walls") is None
+    assert not Scene.model_validate(fitted.to_data()).materials["walls"].builtin
+    assert not walls.model_copy(update={"preset": None}).builtin
     # Twice ISO 12999-2's reproducibility, as a standard uncertainty.
     iso = _with_preset("iso_12999_2")
     spec = uncertainty_of(iso, "walls")
@@ -148,7 +167,9 @@ def test_iso_12999_2_tables_give_the_standard_s_examples():
 def test_the_phases_between_fits_turn_as_a_fit_for_each_draw_does():
     """The paths that add in pressure turn their phases with each draw's absorption: the
     admittance taken between fits at nine absorptions gives the levels that a fit for
-    each draw gives, within the fits' own scatter, at a few hundredths of the time."""
+    each draw gives, within the fits' own scatter, at a few hundredths of the time; and
+    so does the one between fits every quarter of the tolerance from 0, which the draws
+    that come batch by batch take."""
     scene = _box({"absorption": 0.1, "distribution": "uniform"})
     room = Room.from_scene(scene)
     face_group, materials = groups_of(room)
@@ -158,19 +179,24 @@ def test_the_phases_between_fits_turn_as_a_fit_for_each_draw_does():
     coherent = response.early.spectrum.shape[1]
     traced = np.array([scene.materials[n].coefficients("octave")[0] for n in materials])
     taken, deviates, widths = _draws(scene, materials, 40, 5)
-    between = _Admittances(traced, taken, deviates, widths)
+    limits = [_limits(scene.materials[n], own) for n, own in zip(materials, traced, strict=True)]
+    between = _Admittances(traced, widths, limits)
+    between.over(taken, deviates)
+    stepped = _Admittances(traced, widths, limits)
+    stepped.along(taken, deviates, [ADMITTANCE_STEPS["uniform"]] * len(materials))
     for drawn in taken[::8]:
         ratio = log_ratio(traced, drawn)
         fitted = response.reweighted(face_group, ratio, absorption=(traced, drawn))
-        taken_between = response.reweighted(
-            face_group, ratio, absorption=(traced, drawn), admittance_of=between
-        )
-        for name in ("g", "c80"):
-            a = np.asarray(getattr(fitted.parameters(), name))[:coherent]
-            b = np.asarray(getattr(taken_between.parameters(), name))[:coherent]
-            np.testing.assert_allclose(b, a, atol=0.2)
-        # The bands above add in energy: no phase, the same levels.
-        np.testing.assert_array_equal(fitted.early.energy, taken_between.early.energy)
+        for admittance_of in (between, stepped):
+            taken_between = response.reweighted(
+                face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
+            )
+            for name in ("g", "c80"):
+                a = np.asarray(getattr(fitted.parameters(), name))[:coherent]
+                b = np.asarray(getattr(taken_between.parameters(), name))[:coherent]
+                np.testing.assert_allclose(b, a, atol=0.2)
+            # The bands above add in energy: no phase, the same levels.
+            np.testing.assert_array_equal(fitted.early.energy, taken_between.early.energy)
 
 
 def test_draws_share_one_deviate_per_material_and_stay_in_range():
@@ -194,6 +220,51 @@ def test_draws_share_one_deviate_per_material_and_stay_in_range():
     assert np.abs(deviation).max() <= 0.03 and abs(deviation.std() - 0.03 / np.sqrt(3.0)) < 0.002
 
 
+def test_materials_are_drawn_apart_and_not_below_what_they_let_through():
+    data = _box({"absorption": 0.05}).to_data()
+    data["materials"]["ceiling"]["uncertainty"] = {"absorption": 0.03}
+    # A door of 6 dB: a quarter of the sound passes, and counts as absorbed.
+    data["materials"]["floor"] = {
+        "absorption": [0.3] * 8,
+        "transmission_loss": 6.0,
+        "uncertainty": {"absorption": 0.1},
+    }
+    scene = Scene.model_validate(data)
+    taken = absorption_draws(scene, ["floor", "ceiling", "walls"], 4000, seed=1)
+    passing = scene.materials["floor"].transmission_coefficients("octave")
+    assert 0.25 < passing[0] < 0.26 and taken[:, 0].min() == passing[0]
+    assert np.mean(taken[:, 0, 0] == passing[0]) > 0.2  # 0.3 is half a u above it
+    # Each material from a deviate of its own.
+    ceiling, walls = taken[:, 1, 7] - 0.15, taken[:, 2, 7] - WALLS[7]
+    assert abs(np.corrcoef(ceiling, walls)[0, 1]) < 0.05
+    assert abs(ceiling.std() - 0.03) < 0.002 and abs(walls.std() - 0.05) < 0.003
+
+
+def test_a_ground_s_absorption_uncertainty_is_left_out(tmp_path, capsys):
+    """The impedance gives a ground's reflection, which re-weighting by 1 - a does not
+    follow: an absorption uncertainty beside it is left out, and said to be."""
+    import yaml
+
+    from acoustic_spaces.cli import main
+
+    data = _box({"absorption": 0.02}).to_data()
+    data["materials"]["floor"] = {"impedance": "grass", "uncertainty": {"absorption": 0.05}}
+    scene = Scene.model_validate(data)
+    room = Room.from_scene(scene)
+    assert scene.materials["floor"].uncertainty is not None
+    assert uncertainty_of(scene, "floor") is None and grounds_left_out(room) == ["floor"]
+    taken = absorption_draws(scene, ["floor", "walls"], 50, seed=1)
+    np.testing.assert_array_equal(taken[:, 0], np.broadcast_to(taken[0, 0], (50, 8)))
+    path = tmp_path / "scene.yaml"
+    path.write_text(yaml.safe_dump(data))
+    args = ["simulate", str(path), "--out", str(tmp_path / "out"), "--rays", "300"]
+    assert main([*args, "--spread-draws", "4"]) == 0
+    assert (
+        "warning: the absorption uncertainty of floor is left out of the spread: a ground's "
+        "impedance gives its reflection"
+    ) in capsys.readouterr().err
+
+
 def test_the_spread_of_the_parameters_follows_the_absorption_s():
     scene = _box({"absorption": 0.02})
     room = Room.from_scene(scene)
@@ -202,6 +273,7 @@ def test_the_spread_of_the_parameters_follows_the_absorption_s():
     spread = material_spread(result, scene, face_group, materials, draws=60, seed=3, rays=False)
     found = spread["s", "a"]
     assert found.draws == 60 and found.coverage == 0.95 and found.batches == 0
+    assert found.one_sided == 0.95
     assert np.all(np.isnan(found.rays.t30))
     np.testing.assert_array_equal(found.standard.t30, found.absorption.t30)
     traced = result["s", "a"].parameters()
@@ -211,6 +283,25 @@ def test_the_spread_of_the_parameters_follows_the_absorption_s():
     assert np.all(found.standard.t30[bands] > 0.0)
     assert np.all(found.low.t30[bands] < traced.t30[bands])
     assert np.all(found.high.t30[bands] > traced.t30[bands])
+    # The one-sided bounds of 95 % lie within the 95 % interval, which leaves 2.5 % out
+    # at each end, and those of 90 % within them; nothing else changes with them.
+    assert np.all(found.low.t30[bands] < found.at_least.t30[bands])
+    assert np.all(found.at_least.t30[bands] < traced.t30[bands])
+    assert np.all(traced.t30[bands] < found.at_most.t30[bands])
+    assert np.all(found.at_most.t30[bands] < found.high.t30[bands])
+    ninety = material_spread(
+        result, scene, face_group, materials, draws=60, seed=3, rays=False, one_sided=0.9
+    )["s", "a"]
+    assert ninety.one_sided == 0.9
+    assert np.all(ninety.at_least.t30[bands] > found.at_least.t30[bands])
+    assert np.all(ninety.at_most.t30[bands] < found.at_most.t30[bands])
+    for part in ("mean", "standard", "low", "high", "absorption"):
+        np.testing.assert_array_equal(
+            getattr(ninety, part).t30[bands], getattr(found, part).t30[bands]
+        )
+    for bad in (0.5, 1.0, 0.3):
+        with pytest.raises(ValueError, match="one-sided"):
+            material_spread(result, scene, face_group, materials, draws=10, one_sided=bad)
     # The decay time falls as the walls absorb more, faster the less they absorb, so
     # its spread lies between the changes that u up and u down bring, each re-weighted
     # alone, near their mean.
@@ -256,9 +347,10 @@ def test_the_spread_lists_the_errors_over_edges_it_does_not_count():
         )
         return SimpleNamespace(early=early)
 
-    assert edge_errors(response([-1, -1], 2), scene) == {}
-    assert edge_errors(response([-1, -2], 2), scene) == {}  # over the terrain's crests
-    found = edge_errors(response([-1, 4], 2), scene)
+    settings = scene.simulation
+    assert edge_errors(response([-1, -1], 2), settings) == {}
+    assert edge_errors(response([-1, -2], 2), settings) == {}  # over the terrain's crests
+    found = edge_errors(response([-1, 4], 2), settings)
     # first_order with one_side by default: a path reflected on both sides is left out.
     assert list(found) == ["one edge", "one side", "corners of edges"]
     for name, bound in found.items():
@@ -269,9 +361,114 @@ def test_the_spread_lists_the_errors_over_edges_it_does_not_count():
     wide = scene.model_copy(deep=True)
     wide.simulation.early.diffraction = "second_order"
     wide.simulation.early.diffraction_reflections = "both_sides"
-    found = edge_errors(response([7], 8), wide)
+    found = edge_errors(response([7], 8), wide.simulation)
     assert list(found) == ["one edge", "two edges", "corners of edges"]
     np.testing.assert_array_equal(found["two edges"], EDGE_ERRORS_DB["two edges"]["pressure"])
+
+
+def test_the_errors_over_edges_are_those_of_the_run_s_settings():
+    """A run made with other settings than the scene's (``simulate --diffraction``)
+    lists the errors over edges of the settings it was made with."""
+    data = _box({"absorption": 0.02}).to_data()
+    # An L-shaped room, the listener round its corner from the source.
+    data["geometry"] = {
+        "floor_plan": [[0, 0], [8, 0], [8, 4], [4, 4], [4, 8], [0, 8]],
+        "height": 3,
+    }
+    data["assignments"] = {"floor": "floor", "ceiling": "ceiling", "default": "walls"}
+    data["sources"] = [{"name": "s", "position": [7.0, 2.0, 1.5]}]
+    data["listeners"] = [{"name": "a", "position": [2.0, 7.0, 1.2]}]
+    scene = Scene.model_validate(data)
+    assert scene.simulation.early.diffraction == "first_order"
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, groups=face_group)
+    assert np.any(result["s", "a"].early.edge >= 0)
+    spread = material_spread(result, scene, face_group, materials, draws=4, rays=False)
+    assert list(spread["s", "a"].not_counted) == ["one edge", "one side", "corners of edges"]
+    settings = scene.simulation.model_copy(deep=True)
+    settings.early.diffraction = "second_order"
+    settings.early.diffraction_reflections = "both_sides"
+    result = simulate(room, settings=settings, groups=face_group)
+    spread = material_spread(result, scene, face_group, materials, draws=4, rays=False)
+    assert list(spread["s", "a"].not_counted) == ["one edge", "two edges", "corners of edges"]
+
+
+#: A ceiling that absorbs everything at 500 Hz and 1 kHz, as five of the built-in
+#: materials do in some band.
+FULL = [0.45, 0.6, 0.9, 1.0, 1.0, 0.95, 0.9, 0.9]
+
+
+def _full_ceiling(ceiling=FULL, rays: int = 500) -> Scene:
+    data = _box(None).to_data()
+    data["materials"]["ceiling"] = {
+        "absorption": list(ceiling),
+        "uncertainty": {"absorption": 0.05, "source": "lab"},
+    }
+    data["simulation"]["late"]["rays"] = rays
+    return Scene.model_validate(data)
+
+
+def test_a_band_that_absorbs_everything_is_held_and_the_others_are_drawn():
+    scene = _full_ceiling()
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    assert "ceiling" in materials and held(scene, materials) == {"ceiling": [500, 1000]}
+    groups, why, own = spread_groups(room)
+    assert groups[1] == materials and why is None and own
+    taken = absorption_draws(scene, materials, 2000, seed=1)[:, materials.index("ceiling")]
+    np.testing.assert_array_equal(taken[:, 3:5], 1.0)
+    assert np.all(taken[:, :3].std(axis=0) > 0.04)
+    assert taken[:, 5].max() == MAX_ABSORPTION  # 0.95: one u from the top
+    before = np.array([scene.materials[m].coefficients("octave")[0] for m in materials])
+    np.testing.assert_array_equal(log_ratio(before, before), 0.0)
+    for wrong in (0.9, 1.0):  # from everything, and to it
+        after = before.copy()
+        after[materials.index("ceiling"), 3 if wrong < 1.0 else 0] = wrong
+        with pytest.raises(ValueError, match="no energy to re-weight"):
+            log_ratio(before, after)
+
+    result = simulate(room, sources=["s"], groups=face_group)
+    spread = material_spread(result, scene, face_group, materials, draws=40, seed=3, rays=False)
+    found = spread["s", "a"]
+    assert found.held == {"ceiling": [500, 1000]} and found.as_dict()["held"] == found.held
+    # Only the ceiling is uncertain: where it is held nothing moves.
+    np.testing.assert_allclose(found.absorption.g[3:5], 0.0, atol=1e-9)
+    assert np.all(found.absorption.g[[1, 2, 5, 6]] > 0.01)
+
+    # A change in its other bands re-weights; one of a band that absorbs everything
+    # does not, nor one to that.
+    def changed(band: int, value: float) -> Scene:
+        data = scene.to_data()
+        data["materials"]["ceiling"]["absorption"][band] = value
+        return Scene.model_validate(data)
+
+    assert reweighted_result(result, scene, face_group, materials, changed(1, 0.7)) is not None
+    assert reweighted_result(result, scene, face_group, materials, changed(3, 0.9)) is None
+    assert reweighted_result(result, scene, face_group, materials, changed(1, 1.0)) is None
+
+
+def test_the_bands_beside_one_that_absorbs_everything_re_weight_as_tracing_again():
+    old, new = np.array(FULL), np.array([0.5, 0.65, 0.95, 1.0, 1.0, 0.99, 0.95, 0.95])
+    scene = _full_ceiling(rays=3000)
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    before = np.array([scene.materials[m].coefficients("octave")[0] for m in materials])
+    after = before.copy()
+    after[materials.index("ceiling")] = new
+    guess = result["s", "a"].reweighted(
+        face_group, log_ratio(before, after), absorption=(before, after)
+    )
+    again = simulate(Room.from_scene(_full_ceiling(new, rays=3000)), sources=["s"])["s", "a"]
+    found, expected, traced = guess.parameters(), again.parameters(), result["s", "a"].parameters()
+    bands = [1, 2, 5, 6]
+    assert np.all(np.abs(old - new)[bands] >= 0.04)
+    np.testing.assert_allclose(found.g[bands], expected.g[bands], atol=0.15)
+    np.testing.assert_allclose(found.t30[bands], expected.t30[bands], rtol=0.1)
+    assert np.all(found.g[bands] < traced.g[bands])
+    # The bands that absorb everything stay as traced.
+    np.testing.assert_array_equal(found.g[3:5], traced.g[3:5])
 
 
 def test_the_rays_error_adds_to_the_absorption_s_as_student_s_t():
@@ -301,8 +498,9 @@ def test_the_rays_error_adds_to_the_absorption_s_as_student_s_t():
             getattr(both.absorption, name), getattr(alone.absorption, name)
         )
         combined = np.hypot(getattr(both.absorption, name), getattr(both.rays, name))
-        # 400 draws give a standard deviation within about 7 % (two of its own).
-        np.testing.assert_allclose(getattr(both.standard, name)[bands], combined[bands], rtol=0.1)
+        np.testing.assert_allclose(getattr(both.standard, name)[bands], combined[bands], rtol=1e-12)
+        # The rays' term has no mean: the mean is that of the absorption's draws.
+        np.testing.assert_array_equal(getattr(both.mean, name), getattr(alone.mean, name))
         assert np.all(getattr(both.high, name)[bands] > getattr(both.low, name)[bands])
     # The lateral fraction has no standard error: the absorption alone counts.
     assert np.all(np.isnan(both.rays.lf))
@@ -317,6 +515,132 @@ def test_the_rays_error_adds_to_the_absorption_s_as_student_s_t():
     assert spread.batches == 0 and np.all(np.isnan(spread.rays.t30))
 
 
+def test_the_rays_deviates_are_student_s_t_and_the_interval_the_draws_quantiles():
+    from acoustic_spaces.parameters import RoomParameters
+
+    names = [f.name for f in dataclasses.fields(RoomParameters)]
+    same = RoomParameters(**{name: np.full(8, 5.0) for name in names})
+    errors = RoomParameters(**{name: np.ones(8) for name in names})
+    tally = _Tally(errors, 10, 0.95, 0.95)
+    tally.add([same] * 20000, np.random.default_rng(4))
+    spread = tally.spread(None)
+    # Student's t of 9 degrees of freedom: wider than a normal deviate, whose standard
+    # deviation is 1 and whose 97.5 % point 1.96.
+    np.testing.assert_allclose(spread.standard.g, np.sqrt(9.0 / 7.0), rtol=1e-12)
+    np.testing.assert_allclose(spread.high.g - 5.0, 2.262, rtol=0.04)
+    np.testing.assert_allclose(5.0 - spread.at_least.g, 1.833, rtol=0.04)
+    np.testing.assert_array_equal(spread.absorption.g, 0.0)
+    np.testing.assert_array_equal(spread.mean.g, 5.0)
+
+    # Without the rays' error the interval's ends are the quantiles of the draws'
+    # parameters, of the coverage asked for.
+    scene = _box({"absorption": 0.02})
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    traced = np.array([scene.materials[m].coefficients("octave")[0] for m in materials])
+    drawn = absorption_draws(scene, materials, 40, seed=3)
+    g = np.array(
+        [
+            result["s", "a"]
+            .reweighted(face_group, log_ratio(traced, row), absorption=(traced, row))
+            .parameters()
+            .g
+            for row in drawn
+        ]
+    )
+    above = slice(2, 7)  # where the paths add in energy: no phases between fits
+    for coverage, tails in ((0.95, (0.025, 0.975)), (0.5, (0.25, 0.75))):
+        found = material_spread(
+            result, scene, face_group, materials, draws=40, seed=3, rays=False, coverage=coverage
+        )["s", "a"]
+        assert found.coverage == coverage
+        np.testing.assert_allclose(
+            found.low.g[above], np.quantile(g, tails[0], axis=0)[above], rtol=1e-9
+        )
+        np.testing.assert_allclose(
+            found.high.g[above], np.quantile(g, tails[1], axis=0)[above], rtol=1e-9
+        )
+    for bad in (0.0, 1.0):
+        with pytest.raises(ValueError, match="coverage"):
+            material_spread(result, scene, face_group, materials, draws=10, coverage=bad)
+
+    # Four batches are the fewest that count: Student's t of 3 degrees of freedom.
+    assert MIN_BATCHES == 4
+    four = scene.model_copy(deep=True)
+    four.simulation.late.batches = 4
+    result = simulate(Room.from_scene(four), sources=["s"], groups=face_group)
+    spread = material_spread(result, four, face_group, materials, draws=10)["s", "a"]
+    errors = result["s", "a"].standard_errors()
+    assert spread.batches == 4
+    np.testing.assert_allclose(spread.rays.g[1:7], errors.g[1:7] * np.sqrt(3.0), rtol=1e-12)
+
+
+def test_the_combined_uncertainty_is_steady_with_the_fewest_batches():
+    """With 4 batches the rays' deviates are Student's t of 3 degrees of freedom, whose
+    sample standard deviation does not settle (no fourth moment): 400 draws of them are
+    off by more than a tenth in four trials of ten. The combined standard uncertainty
+    takes the rays' part in closed form, so it is the same whatever the deviates."""
+    from acoustic_spaces.parameters import RoomParameters
+
+    names = [f.name for f in dataclasses.fields(RoomParameters)]
+    same = RoomParameters(**{name: np.full(8, 5.0) for name in names})
+    errors = RoomParameters(**{name: np.ones(8) for name in names})
+    off = 0
+    for seed in range(40):
+        tally = _Tally(errors, 4, 0.95, 0.95)
+        tally.add([same] * 400, np.random.default_rng(seed))
+        spread = tally.spread(None)
+        np.testing.assert_allclose(spread.standard.g, np.sqrt(3.0), rtol=1e-12)
+        np.testing.assert_array_equal(spread.rays.g, spread.standard.g)
+        sampled = np.random.default_rng(seed).standard_t(3, size=400).std(ddof=1)
+        off += abs(sampled / np.sqrt(3.0) - 1.0) > 0.1
+    assert off >= 8
+
+
+def test_an_interval_stays_within_what_the_parameter_can_be():
+    """Where the rays' error is large against a value near its limit, the draws with
+    the rays' deviates pass the limit: a decay time below 0, a D50 above 1. The
+    interval's ends and the one-sided bounds are held at the limit; a level has none."""
+    from acoustic_spaces.parameters import ALL_PARAMETERS, LIMITS, RoomParameters
+
+    assert set(LIMITS) < set(ALL_PARAMETERS)
+    assert all(ALL_PARAMETERS[name][0] != "dB" for name in LIMITS)
+    names = [f.name for f in dataclasses.fields(RoomParameters)]
+    values = {name: np.full(8, 0.05) for name in names} | {"d50": np.full(8, 0.97)}
+    errors = RoomParameters(**{name: np.full(8, 0.1) for name in names})
+    tally = _Tally(errors, 10, 0.95, 0.95)
+    tally.add([RoomParameters(**values)] * 2000, np.random.default_rng(1))
+    spread = tally.spread(None)
+    for name in ("t30", "edt", "ts"):
+        np.testing.assert_array_equal(getattr(spread.low, name), 0.0)
+        np.testing.assert_array_equal(getattr(spread.at_least, name), 0.0)
+        assert np.all(getattr(spread.high, name) > 0.2)
+    np.testing.assert_array_equal(spread.high.d50, 1.0)
+    np.testing.assert_array_equal(spread.at_most.d50, 1.0)
+    assert np.all(spread.low.d50 < 0.8) and np.all(spread.low.d50 > 0.0)
+    # A level has no limit, and the mean and the standard uncertainty are not held.
+    assert np.all(spread.low.g < -0.1) and np.all(spread.at_least.g < -0.1)
+    np.testing.assert_allclose(spread.mean.t30, 0.05, rtol=1e-12)
+    np.testing.assert_allclose(spread.standard.t30, 0.1 * np.sqrt(9.0 / 7.0), rtol=1e-12)
+
+
+def test_a_response_s_spread_does_not_depend_on_the_other_responses():
+    data = _box({"absorption": 0.02}).to_data()
+    data["listeners"].append({"name": "b", "position": [3.3, 1.2, 1.6]})
+    scene = Scene.model_validate(data)
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+    both = material_spread(result, scene, face_group, materials, draws=30, seed=3)
+    alone = dataclasses.replace(result, responses={("s", "b"): result["s", "b"]})
+    alone = material_spread(alone, scene, face_group, materials, draws=30, seed=3)
+    for part in ("mean", "standard", "low", "high", "at_least", "at_most"):
+        np.testing.assert_array_equal(
+            getattr(both["s", "b"], part).t30, getattr(alone["s", "b"], part).t30
+        )
+
+
 def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
     tmp_path, capsys: pytest.CaptureFixture[str]
 ):
@@ -324,7 +648,7 @@ def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
 
     import yaml
 
-    from acoustic_spaces.cli import main
+    from acoustic_spaces.cli import _uncertainty_text, main
 
     scene = tmp_path / "scene.yaml"
     scene.write_text(yaml.safe_dump(_box({"absorption": 0.02, "source": "lab"}).to_data()))
@@ -333,13 +657,24 @@ def test_simulate_writes_the_spread_when_a_material_has_an_uncertainty(
     assert main(args) == 0
     stdout = capsys.readouterr().out
     assert "uncertainty from the absorption and the rays (10 batches), 12 draws: at most" in stdout
-    assert "(absorption " in stdout and ", rays " in stdout
     entry = json.loads((out / "parameters.json").read_text())["responses"][0]
     spread = entry["uncertainty"]
     assert spread["draws"] == 12 and spread["coverage"] == 0.95 and spread["batches"] == 10
-    assert spread["standard"]["t30"][3] > 0.0
     assert spread["absorption"]["t30"][3] > 0.0 and spread["rays"]["t30"][3] > 0.0
+    # The combined standard uncertainty is the root sum of squares of its budget.
+    assert spread["standard"]["t30"][3] == pytest.approx(
+        np.hypot(spread["absorption"]["t30"][3], spread["rays"]["t30"][3]), rel=1e-12
+    )
+    # The line gives the budget of the result it names, where the rays' error counts.
+    rays = {n: v for n, v in spread["standard"].items() if spread["rays"][n][3] is not None}
+    standard = {n: rays.get(n, [None] * 8) for n in spread["standard"]}
+    line = _uncertainty_text({**entry, "uncertainty": {**spread, "standard": standard}})
+    assert "(absorption " in line and ", rays " in line
     assert spread["low"]["t30"][3] < entry["parameters"]["t30"][3] < spread["high"]["t30"][3]
+    assert spread["one_sided"] == 0.95
+    assert spread["low"]["t30"][3] <= spread["at_least"]["t30"][3] < spread["mean"]["t30"][3]
+    assert spread["mean"]["t30"][3] < spread["at_most"]["t30"][3] <= spread["high"]["t30"][3]
+    assert ", 95 % at least " in stdout and " and 95 % at most " in stdout
     # Third-octave bands do not re-weight: the run goes on without the spread.
     assert main([*args, "--bands", "third_octave"]) == 0
     captured = capsys.readouterr()
@@ -377,11 +712,63 @@ def test_simulate_spreads_a_scene_of_built_in_materials_by_default(
     assert main([*args, "--bands", "third_octave"]) == 0
     captured = capsys.readouterr()
     assert "warning" not in captured.err
+    assert "no spread from the materials' absorption uncertainty: it needs octave" in captured.err
     assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
     data["simulation"]["uncertainty"] = {"presets": "none"}
     scene.write_text(yaml.safe_dump(data))
     assert main(args) == 0
     capsys.readouterr()
+    assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
+
+
+def test_simulate_says_why_there_is_no_spread_and_announces_none_it_does_not_draw(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+):
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.engine.late import MAX_GROUPS
+
+    # The only material with an uncertainty is on no surface: no spread, none announced.
+    data = _box(None).to_data()
+    data["materials"]["spare"] = {"absorption": [0.2] * 8, "uncertainty": {"absorption": 0.05}}
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(data))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300", "--spread-draws", "12"]
+    assert main(args) == 0
+    captured = capsys.readouterr()
+    assert "spread" not in captured.err and "uncertainty from" not in captured.out
+    assert main([*args, "--bands", "third_octave"]) == 0
+    assert "spread" not in capsys.readouterr().err
+
+    # More materials on the surfaces than the tracer counts reflections off: said, with
+    # the numbers, as a warning when a material gives an uncertainty of its own.
+    data = _box({"absorption": 0.02}).to_data()
+    walls = data["materials"].pop("walls")
+    plain = {k: v for k, v in walls.items() if k != "uncertainty"}
+    corners = [[5 + 4 * np.cos(a), 5 + 4 * np.sin(a)] for a in np.arange(16) * np.pi / 8]
+    data["geometry"] = {
+        "floor_plan": [[round(float(v), 3) for v in c] for c in corners],
+        "height": 3,
+    }
+    sides = [f"wall_{k}" for k in range(1, 17)]
+    data["assignments"] = {"floor": "floor", "ceiling": "ceiling"} | {w: w for w in sides}
+    data["materials"] |= {side: plain for side in sides[1:]} | {sides[0]: walls}
+    data["sources"][0]["position"] = [4.0, 4.5, 1.5]
+    data["listeners"][0]["position"] = [6.5, 5.5, 1.2]
+    room = Room.from_scene(Scene.model_validate(data))
+    assert len(set(room.material_names)) > MAX_GROUPS == 16
+    why = "at most 16 materials on the surfaces, and there are 18"
+    assert spread_groups(room) == (None, why, True)
+    scene.write_text(yaml.safe_dump(data))
+    assert main(args) == 0
+    captured = capsys.readouterr()
+    assert f"warning: no spread from the materials' absorption uncertainty: it needs {why}" in (
+        captured.err
+    )
     assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
 
 
@@ -428,5 +815,321 @@ def test_simulate_spread_draws_0_leaves_the_spread_out(
     assert "uncertainty" not in json.loads((out / "parameters.json").read_text())["responses"][0]
     other = tmp_path / "other"
     assert main([*args[:3], str(other), *args[4:], "--spread-draws", "1"]) == 1
-    assert "--spread-draws: 0 (no spread) or 2 or more" in capsys.readouterr().err
+    assert "--spread-draws: 0 (no spread), 2 or more, or adaptive" in capsys.readouterr().err
     assert not other.exists()
+
+
+def test_the_scene_gives_the_draws_and_the_command_line_overrides_them(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+):
+    """``simulation.uncertainty.draws`` is a number (0 for no spread, not 1) or adaptive,
+    and ``--spread-draws`` takes its place."""
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.scene.model import Uncertainty
+
+    assert Uncertainty().draws == 400
+    assert Uncertainty(draws="adaptive").draws == ADAPTIVE
+    assert Uncertainty(draws=0).draws == 0
+    for bad in (1, -3, "many"):
+        with pytest.raises(ValueError):
+            Uncertainty(draws=bad)
+    data = _box({"absorption": 0.02}).to_data()
+    data["simulation"]["uncertainty"] = {"draws": 14}
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(data))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300"]
+    assert main(args) == 0
+    assert ", 14 draws: at most" in capsys.readouterr().out
+    spread = json.loads((out / "parameters.json").read_text())["responses"][0]["uncertainty"]
+    # A number of draws given beforehand is not tested for being stable.
+    assert spread["draws"] == 14 and spread["stable"] is None
+    assert main([*args, "--spread-draws", "12"]) == 0
+    assert ", 12 draws: at most" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        main([*args, "--spread-draws", "many"])
+    assert "give a number of draws, or adaptive" in capsys.readouterr().err
+
+
+def test_the_one_sided_bounds_are_the_draws_quantiles():
+    """The value a result is at least with probability p is the draws' quantile of
+    1 - p, the one it is at most that of p: for a normal spread the mean less and plus
+    1.645 standard uncertainties at 95 %, 1.282 at 90 %."""
+    rng = np.random.default_rng(5)
+    standard = np.array([0.02, 0.3, 1.5])
+    found = _normal_parameters(rng, 20_000, standard, same=True)
+    values = np.stack([p.t30 for p in found])
+    for probability, factor in ((0.95, 1.645), (0.9, 1.282)):
+        tally = _Tally(None, 0, 0.95, probability)
+        tally.add(found, rng)
+        spread = tally.spread(None)
+        assert spread.one_sided == probability
+        np.testing.assert_array_equal(
+            spread.at_least.c80, np.quantile(values, 1.0 - probability, axis=0)
+        )
+        np.testing.assert_array_equal(spread.at_most.c80, np.quantile(values, probability, axis=0))
+        np.testing.assert_allclose((spread.at_least.t30 - 10.0) / standard, -factor, atol=0.04)
+        np.testing.assert_allclose((spread.at_most.t30 - 10.0) / standard, factor, atol=0.04)
+        assert spread.as_dict()["one_sided"] == probability
+        assert spread.as_dict()["at_most"]["t30"] == list(spread.at_most.t30)
+
+
+def test_the_scene_gives_the_one_sided_probability_and_the_command_line_overrides_it(
+    tmp_path, capsys: pytest.CaptureFixture[str]
+):
+    """``simulation.uncertainty.one_sided`` is the probability of the one-sided bounds,
+    0.95 unless the scene says otherwise, and ``--one-sided`` takes its place."""
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.scene.model import Uncertainty
+
+    assert Uncertainty().one_sided == 0.95
+    for bad in (0.5, 1.0, 95):
+        with pytest.raises(ValueError):
+            Uncertainty(one_sided=bad)
+    data = _box({"absorption": 0.02}).to_data()
+    data["simulation"]["uncertainty"] = {"draws": 14, "one_sided": 0.9}
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(data))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300"]
+    assert main(args) == 0
+    stdout = capsys.readouterr().out
+    assert ", 90 % at least " in stdout and " and 90 % at most " in stdout
+    ninety = json.loads((out / "parameters.json").read_text())["responses"][0]["uncertainty"]
+    assert ninety["one_sided"] == 0.9
+    assert main([*args, "--one-sided", "0.95"]) == 0
+    assert " and 95 % at most " in capsys.readouterr().out
+    spread = json.loads((out / "parameters.json").read_text())["responses"][0]["uncertainty"]
+    # The same draws: bounds further out, the rest as it was.
+    assert spread["one_sided"] == 0.95 and spread["standard"] == ninety["standard"]
+    assert spread["at_most"]["t30"][3] > ninety["at_most"]["t30"][3]
+    assert spread["at_least"]["t30"][3] < ninety["at_least"]["t30"][3]
+    other = tmp_path / "other"
+    assert main([*args[:3], str(other), *args[4:], "--one-sided", "0.4"]) == 1
+    assert "error: --one-sided: Input should be greater than 0.5" in capsys.readouterr().err
+    assert not other.exists()
+
+
+def test_the_numerical_tolerance_is_half_a_unit_of_the_last_meaningful_digit():
+    """JCGM 101 7.9.2: a standard uncertainty written as c 10^l, c a whole number of
+    n_dig digits, has the numerical tolerance 10^l / 2. Its example: 0.000 35 g with two
+    meaningful digits is 35 10^-5 g, so 0.000 005 g."""
+    np.testing.assert_allclose(numerical_tolerance(0.00035, 2), 0.000005, rtol=1e-12)
+    # One digit: 0.062 is 6 10^-2; 0.094 is 9 10^-2; 0.096 is 10 10^-2, that is 1 10^-1.
+    one = numerical_tolerance(np.array([0.062, 0.094, 0.096, 0.25, 1.0, 12.0]))
+    np.testing.assert_allclose(one, [0.005, 0.005, 0.05, 0.05, 0.5, 5.0], rtol=1e-12)
+    # No spread: nothing to settle.
+    assert np.all(np.isinf(numerical_tolerance(np.array([0.0, 1e-15]))))
+
+
+def _normal_parameters(
+    rng: np.random.Generator, draws: int, standard: np.ndarray, same: bool = False
+):
+    """``draws`` room parameters whose every value is normal about 10 with ``standard``
+    (bands,): each parameter with draws of its own, or all with the ``same``."""
+    import dataclasses
+
+    from acoustic_spaces.parameters import RoomParameters
+
+    names = [f.name for f in dataclasses.fields(RoomParameters)]
+    shared = 10.0 + standard * rng.standard_normal((draws, standard.size))
+    values = {
+        name: shared if same else 10.0 + standard * rng.standard_normal((draws, standard.size))
+        for name in names
+    }
+    return [RoomParameters(**{name: values[name][k] for name in names}) for k in range(draws)]
+
+
+def test_the_adaptive_test_is_that_of_jcgm_101_7_9_4():
+    """Over h batches of M draws: with s the standard deviation of the batches' means
+    over the root of h, and likewise for their standard deviations and their interval's
+    ends, the results are stable when 2 s is at most the numerical tolerance of the
+    standard deviation of all h M values; and likewise here for the one-sided bounds.
+    Worked out here again from the draws."""
+    rng = np.random.default_rng(11)
+    standard = np.array([0.012, 0.25, 0.7, 1.4, 0.0036, 0.09, 3.0, 0.5])
+    tally = _Tally(None, 0, 0.95, 0.95)
+    batches = []
+    for _ in range(6):
+        found = _normal_parameters(rng, ADAPTIVE_BATCH, standard, same=True)
+        batches.append(np.stack([p.t30 for p in found]))
+        tally.add(found, rng)
+    assert tally.draws == 6 * ADAPTIVE_BATCH
+    estimates = np.array(
+        [
+            [
+                b.mean(axis=0),
+                b.std(axis=0, ddof=1),
+                *np.quantile(b, [0.025, 0.975, 0.05, 0.95], axis=0),
+            ]
+            for b in batches
+        ]
+    )
+    twice = 2.0 * estimates.std(axis=0, ddof=1) / np.sqrt(6.0)
+    everything = np.concatenate(batches)
+    tolerance = numerical_tolerance(everything.std(axis=0, ddof=1))
+    ratios = (twice / tolerance).max(axis=0)
+    # 600 draws settle the bands whose standard deviation starts with a 1 (a wide
+    # tolerance), not those that start with a 7 or a 9.
+    assert ratios[0] < 1.0 and ratios[3] < 1.0 and ratios[2] > 1.0 and ratios[5] > 1.0
+    # Every parameter has the same draws here, so the furthest of all is t30's furthest.
+    found = tally.unstable()
+    assert found is not None
+    times, _name, band = found
+    assert band == int(np.argmax(ratios))
+    np.testing.assert_allclose(times, ratios[band], rtol=1e-9)
+    # Only the bands that pass: stable.
+    passing = _Tally(None, 0, 0.95, 0.95)
+    for b in batches:
+        columns = b[:, [0, 3]]
+        passing.add(
+            [_all_parameters(row) for row in columns],
+            rng,
+        )
+    assert passing.unstable() is None
+
+
+def _all_parameters(values: np.ndarray):
+    """Room parameters that are all ``values``."""
+    import dataclasses
+
+    from acoustic_spaces.parameters import RoomParameters
+
+    return RoomParameters(**{f.name: values for f in dataclasses.fields(RoomParameters)})
+
+
+def test_adaptive_batches_stop_once_stable_near_what_a_normal_spread_needs():
+    """For a normal spread the interval's ends settle last: an end's standard deviation
+    is 2.67 u / sqrt(N), so 2 s is within a tolerance of u / 2 (a standard uncertainty
+    that starts with a 1) from 114 draws and within u / 4 (one that starts with a 2)
+    from 456. Batches of 100 stop near there, and what they then give is within the
+    tolerance of the truth."""
+    stops = []
+    for seed in range(20):
+        rng = np.random.default_rng([7, seed])
+        standard = np.full(8, 0.2)
+        tally = _Tally(None, 0, 0.95, 0.95)
+        while True:
+            tally.add(_normal_parameters(rng, ADAPTIVE_BATCH, standard), rng)
+            if tally.draws >= 2 * ADAPTIVE_BATCH and tally.unstable() is None:
+                break
+            assert tally.draws < 5000
+        stops.append(tally.draws)
+        spread = tally.spread(True)
+        assert spread.stable is True and spread.draws == tally.draws
+        # Twice the tolerance (0.05): each is within one about 19 times in 20.
+        np.testing.assert_allclose(spread.standard.t30, 0.2, atol=0.1)
+        np.testing.assert_allclose(spread.low.t30, 10.0 - 1.96 * 0.2, atol=0.1)
+        np.testing.assert_allclose(spread.high.t30, 10.0 + 1.96 * 0.2, atol=0.1)
+    # 456 draws for one result alone; all the parameters and bands together need more.
+    assert 400 <= np.median(stops) <= 1500, stops
+
+
+def test_what_400_draws_leave_open():
+    """What the docs and the editor's tip say of 400 draws, for a normal spread: twice
+    the standard deviation of the standard uncertainty is about 7 % of it, and that of
+    an end of the 95 % interval about a quarter (2 * 2.67 / sqrt(400))."""
+    rng = np.random.default_rng(3)
+    draws = rng.standard_normal((4000, 400))
+    deviations = draws.std(axis=1, ddof=1)
+    ends = np.quantile(draws, 0.025, axis=1)
+    assert abs(2.0 * deviations.std() - 0.0708) < 0.004
+    assert abs(2.0 * ends.std() - 0.267) < 0.015
+
+
+def test_two_small_batches_pass_by_chance_too_easily():
+    """Why the first test waits for ``ADAPTIVE_MIN_BATCHES`` batches: two batches of 100
+    pass the test about one time in six for one result whose standard uncertainty starts
+    with a 2, which needs some 460 draws (114 * 4), and about one time in twenty for one
+    that starts with a 3, which needs about a thousand (114 * 9)."""
+    rng = np.random.default_rng(17)
+    for lead, least, most in ((2.06, 0.10, 0.23), (3.06, 0.015, 0.095)):
+        passed = 0
+        for _ in range(300):
+            tally = _Tally(None, 0, 0.95, 0.95)
+            for _batch in range(2):
+                values = lead * rng.standard_normal((ADAPTIVE_BATCH, 1))
+                tally.add([_all_parameters(row) for row in values], rng)
+            passed += tally.unstable() is None
+        assert least < passed / 300 < most, (lead, passed)
+
+
+def test_adaptive_draws_go_on_until_the_results_are_stable(monkeypatch):
+    """``draws="adaptive"`` takes batches of 100, ten at least, until every result of
+    every response passes the test, or the draws reach their limit, and says which."""
+    from acoustic_spaces.engine import uncertainty
+
+    scene = _box({"absorption": 0.02})
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, sources=["s"], groups=face_group)
+
+    def spread(**options):
+        return material_spread(result, scene, face_group, materials, **options)["s", "a"]
+
+    assert uncertainty.ADAPTIVE_MIN_BATCHES == 10
+    with pytest.raises(ValueError, match="1000 draws or more"):
+        spread(draws=ADAPTIVE, max_draws=900)
+    # For the test's speed, batches of 20 and the first test after 2 of them.
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_BATCH", 20)
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MIN_BATCHES", 2)
+    heard: list[str] = []
+    short = spread(draws=ADAPTIVE, seed=3, max_draws=50, progress=heard.append)
+    # Two batches fit under 50 draws; over a hundred results are not all stable by then.
+    assert short.draws == 40 and short.stable is False and short.as_dict()["stable"] is False
+    assert heard == [f"the spread: s -> a (1 of 1), draw {k}" for k in (1, 21)]
+    again = spread(draws=ADAPTIVE, seed=3, max_draws=40)
+    np.testing.assert_array_equal(again.standard.t30, short.standard.t30)
+    # With a tolerance ten times as wide the results settle a hundred times sooner, no
+    # sooner than the first test, which comes after ADAPTIVE_MIN_BATCHES batches.
+    tolerance = uncertainty.numerical_tolerance
+    monkeypatch.setattr(
+        uncertainty, "numerical_tolerance", lambda u, digits=1: 10.0 * tolerance(u, digits)
+    )
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MIN_BATCHES", 3)
+    wide = spread(draws=ADAPTIVE, seed=3, max_draws=2000)
+    assert wide.stable is True and 60 <= wide.draws < 1000 and wide.draws % 20 == 0
+    # A number of draws given beforehand is not tested.
+    fixed = spread(draws=20, seed=3)
+    assert fixed.stable is None and fixed.draws == 20
+
+
+def test_simulate_draws_adaptively_and_warns_at_the_limit(
+    tmp_path, capsys: pytest.CaptureFixture[str], monkeypatch
+):
+    """``--spread-draws adaptive``: the output says the draws it took and whether the
+    results were stable, with a warning when they reached the limit first."""
+    import json
+
+    import yaml
+
+    from acoustic_spaces.cli import main
+    from acoustic_spaces.engine import uncertainty
+
+    # For the test's speed, two batches of 20; a tolerance nothing meets.
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_BATCH", 20)
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MAX_DRAWS", 40)
+    monkeypatch.setattr(uncertainty, "ADAPTIVE_MIN_BATCHES", 2)
+    tolerance = uncertainty.numerical_tolerance
+    monkeypatch.setattr(
+        uncertainty, "numerical_tolerance", lambda u, digits=1: 1e-9 * tolerance(u, digits)
+    )
+    scene = tmp_path / "scene.yaml"
+    scene.write_text(yaml.safe_dump(_box({"absorption": 0.02}).to_data()))
+    out = tmp_path / "out"
+    args = ["simulate", str(scene), "--out", str(out), "--rays", "300"]
+    assert main([*args, "--spread-draws", "adaptive"]) == 0
+    captured = capsys.readouterr()
+    assert "draws until the results are stable, 40 at most" in captured.err
+    assert "warning: the spread's results were not stable after 40 draws" in captured.err
+    assert ", 40 draws (adaptive, not stable): at most" in captured.out
+    spread = json.loads((out / "parameters.json").read_text())["responses"][0]["uncertainty"]
+    assert spread["draws"] == 40 and spread["stable"] is False

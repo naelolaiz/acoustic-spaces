@@ -1162,9 +1162,8 @@ class Material(_Model):
     )
     # Notes on the coefficients of a preset or file outside 0 to 1, held to that range.
     _clipped: list[str] = PrivateAttr(default_factory=list)
-    # Whether the absorption is the built-in database entry's (``preset``, no other
-    # values), whose source that database does not name.
-    _builtin: bool = PrivateAttr(default=False)
+    # The absorption of the built-in database entry ``preset`` names, as read.
+    _preset_absorption: list[float] | None = PrivateAttr(default=None)
     # The scattering entry ``scattering`` named, which validation replaces by its values.
     _scattering_name: str | None = PrivateAttr(default=None)
 
@@ -1178,8 +1177,10 @@ class Material(_Model):
     def builtin(self) -> bool:
         """Whether the absorption is a built-in database entry's (``preset``, with no
         other absorption values given): the database does not name where its values
-        come from, so a spread takes ``simulation.uncertainty.presets`` for it."""
-        return self._builtin
+        come from, so a spread takes ``simulation.uncertainty.presets`` for it. By
+        value: a copy with other absorption is not."""
+        given = self._preset_absorption
+        return self.preset is not None and given is not None and self.absorption == given
 
     @field_validator("impedance", mode="before")
     @classmethod
@@ -1314,7 +1315,7 @@ class Material(_Model):
                         "transmission"
                     )
         # The preset's own values, also when written out with it (a scene dumped whole).
-        self._builtin = preset_absorption is not None and self.absorption == preset_absorption
+        self._preset_absorption = preset_absorption
         if self.source is None:
             origins = [o for o in (origin, scattering_origin) if o]
             self.source = "; ".join(origins) or None
@@ -2852,6 +2853,13 @@ class Output(_Model):
 PresetUncertainty = Literal["tolerance", "iso_12999_2", "none"]
 
 
+#: The draws a spread takes unless the scene or the command line says otherwise.
+SPREAD_DRAWS = 400
+#: The probability of a spread's one-sided bounds unless the scene or the command line
+#: says otherwise.
+ONE_SIDED = 0.95
+
+
 class Uncertainty(_Model):
     """The spread of the results from the materials' uncertain absorption."""
 
@@ -2864,6 +2872,32 @@ class Uncertainty(_Model):
             "from them"
         ),
     )
+    draws: int | Literal["adaptive"] = Field(
+        default=SPREAD_DRAWS,
+        description=(
+            "the draws of the spread: a number (2 or more; 0, no spread), or adaptive, as "
+            "many as GUM Supplement 1's adaptive procedure (JCGM 101:2008, 7.9) takes until "
+            "the results are stable"
+        ),
+    )
+
+    one_sided: float = Field(
+        default=ONE_SIDED,
+        gt=0.5,
+        lt=1.0,
+        description=(
+            "the probability of the spread's one-sided bounds, between 0.5 and 1 (0.95; "
+            "0.9, say, for bounds less far out): the value each result is at least, and "
+            "the one it is at most, with that probability"
+        ),
+    )
+
+    @field_validator("draws")
+    @classmethod
+    def _draws_or_none(cls, value: int | str) -> int | str:
+        if isinstance(value, int) and (value < 0 or value == 1):
+            raise ValueError("0 (no spread), 2 or more, or adaptive")
+        return value
 
 
 class Simulation(_Model):

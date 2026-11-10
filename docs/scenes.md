@@ -245,7 +245,8 @@ by having the same name as a material, or through `default_material`. Names matc
 whatever their case (`brick_rough` names SketchUp's `Brick_Rough`), though a name
 written the same way wins over one in another case.
 
-`uncertainty` says how far a material's absorption may be off: a standard uncertainty
+`uncertainty` (**Absorption uncertainty** on the material's form in the editor) says
+how far a material's absorption may be off: a standard uncertainty
 (`distribution: normal`, the default) or a tolerance of plus or minus the value
 (`distribution: uniform`), in absorption coefficient units, one value or one per octave
 band, with an optional `source`. A material's bands are taken as moving together, and
@@ -279,9 +280,11 @@ none. The standard's data come from absorbers, and below 100 Hz from outside ISO
 range, so for hard surfaces and the 63 Hz octave it is taken beyond them.
 Plus or minus 0.1 is much for a hard surface: the shoebox example's painted concrete, 0.01 to 0.02, is drawn
 anywhere from 0 to 0.12, so that example's traced T30 at 1 kHz, 1.28 s, lies near the
-top of its 95 % interval, 0.74 to 1.49 s. ISO 12999-2's reproducibility is largest at
-low frequencies (for alpha = 1, 0.41 at 63 Hz, 0.20 at 125 Hz and 0.040 at 1 kHz), so
-twice it spreads the lowest bands far.
+top of its 95 % interval, 0.74 to 1.49 s. For an absorber ISO 12999-2's reproducibility
+is largest at low frequencies (for alpha = 1, 0.41 at 63 Hz, 0.20 at 125 Hz and 0.040 at
+1 kHz), so twice it spreads the lowest bands far. From 500 Hz to 4 kHz it is the same
+for every absorption (0.040, and 0.050 at 4 kHz), and a hard surface gets the least in
+the lowest bands (for alpha = 0.02, 0.023 at 63 Hz and 0.019 at 125 Hz).
 The spread names the materials that took the default (`assumed`).
 
 `acoustic_spaces.engine.uncertainty.material_spread` gives the uncertainty this leads to
@@ -291,11 +294,25 @@ in each listener's ISO 3382-1 parameters: the mean, combined standard uncertaint
 re-weights the traced run instead of tracing again, so the run must be simulated with
 the materials' face groups (`acoustic_spaces.engine.reweight.groups_of`, then
 `simulate(..., groups=...)`), in octave bands, with stochastic ray tracing for the late
-part and without the wave solver. To each draw it adds the rays' random error: the
+part, without the wave solver and with at most 16 materials on its surfaces. A band in
+which a material absorbs everything (an absorption of 1, as some absorbers have in some
+bands) is not drawn, as no energy is left in it to re-weight; the spread names these
+(`held`). A draw does not go below what the material lets through, which counts as
+absorbed. An absorption uncertainty beside a ground's impedance is left out, with a
+warning: the impedance gives the ground's reflection, which does not follow the
+absorption as other surfaces' do. On a ground with zones, a reflection near a zone's
+edge mixes the grounds on both sides, and a draw takes it as off the ground it meets
+alone. To each draw it adds the rays' random error: the
 standard error of the late rays' batches (`simulation.late.batches`, 4 or more) times a
 deviate of Student's t with one degree of freedom fewer than the batches, as GUM
 Supplement 1 takes a quantity known from that many observations. The budget gives each
-input's standard uncertainty alone (`absorption`, `rays`). The parameters from the late
+input's standard uncertainty alone (`absorption`, `rays`), and the combined one is the
+root of the sum of their squares: the rays' error is added to each draw on its own, so
+its variance adds exactly, where the standard deviation of draws that hold it would be
+unsteady with few batches. An end of the interval, or a one-sided bound, past what the
+parameter can be (a decay time below 0, a D50 above 1) is held at that limit, as the
+Analytical Methods Committee recommends near a natural limit (AMC Technical Brief 26A).
+The parameters from the late
 sound's directions (LF and the like) have no standard error and take the absorption's
 alone. Not counted: the scattering and the method, and a parameter that some draw leaves
 undefined (a decay too slow for the response's length, say) gets none in that band.
@@ -310,19 +327,44 @@ measured for whole levels in a few geometries, not for each path.
 In the lowest bands, where the early paths add in pressure, a reflection's phase
 follows its face's admittance, which is fitted to the absorption; the draws take it
 between fits at nine absorptions of each material over their range rather than a fit
-of their own: in the shoebox example within 0.15 dB of a fit for each draw at 63 Hz,
-where a fit itself moves by up to 0.19 dB for a change of 0.001.
+of their own: in the shoebox example G within 0.17 dB and C80 within 0.20 dB of a fit
+for each draw at 63 Hz, where a fit of its own moves them by as much for a change of
+0.001 in the absorption (0.18 and 0.23 dB in one of the draws furthest off).
 `acoustic-spaces simulate` does this itself when a material on the surfaces has an
 uncertainty, its own or a built-in material's: it prints the largest combined standard
-uncertainty in JNDs from 125 Hz to 4 kHz, with its budget, 95 % interval and the errors
-over edges, and `parameters.json` holds them all (`uncertainty`; 400 draws,
-`--spread-draws` for another number, 0 for none). With settings that cannot re-weight
-(third-octave bands, say) it leaves the spread out, with a warning when a material gives
-an uncertainty of its own. The editor shows each run's results at once, draws the spread
+uncertainty in JNDs from 125 Hz to 4 kHz, with its budget, 95 % interval, one-sided
+bounds and the errors over edges, and `parameters.json` holds them all (`uncertainty`). With settings that cannot re-weight
+(third-octave bands, say) it leaves the spread out and says what the spread needs, as a
+warning when a material gives an uncertainty of its own; so does the editor, in its
+messages. The editor shows each run's results at once, draws the spread
 after them and gives it in the results table's tips. The draws add to a run: in the
 concert hall example (five built-in materials, six responses) 400 draws took 160 s after
 an 11 s run, over half of it the lowest bands' paths added in pressure for each draw;
 `presets: none` leaves the built-in materials out.
+
+`simulation.uncertainty.draws` is the number of draws: 400 unless the scene says
+otherwise, 0 for no spread (`--spread-draws` on the command line, **Draws** in the
+editor's simulation settings). For a normal spread, 400 draws leave the standard
+uncertainty good to about 7 % and each end of the 95 % interval to about a quarter of the
+standard uncertainty (twice their own standard deviation). With `draws: adaptive` the
+draws go on as the adaptive procedure of GUM Supplement 1 has them (JCGM 101:2008, 7.9):
+batch after batch until, for every parameter in every band of every response, twice the
+standard deviation of the mean, of the standard uncertainty and of each end of the
+interval (and of each one-sided bound, below) is within the numerical tolerance of the
+standard uncertainty, half a unit of its first digit. A batch is 100 draws, not the Supplement's 10 000 (a number it calls
+arbitrary), as each draw re-weights the whole run; the test is first made after ten
+batches, as two this small can pass by chance; and the draws stop at 20 000, the
+Supplement's own first test. `stable` in `parameters.json` says whether the test was met
+(null for a number of draws given beforehand, which is not tested). The test asks for
+many more draws than the default: from 9 000 to 14 500 in runs of the shoebox example.
+
+For a limit on one side, the spread gives each result's one-sided bounds from the same
+draws (`at_least` and `at_most` in `parameters.json`): the value the result is at least
+with a probability of 95 %, and the one it is at most with that probability; for a normal
+spread, the mean less and plus 1.645 standard uncertainties, where the 95 % interval's
+ends lie 1.96 away and leave 2.5 % out on each side. `simulation.uncertainty.one_sided`
+gives another probability between 0.5 and 1, 0.9 say (`--one-sided` on the command line,
+**One-sided bounds** in the editor's simulation settings).
 
 ### Material libraries of CATT-Acoustic and ODEON
 

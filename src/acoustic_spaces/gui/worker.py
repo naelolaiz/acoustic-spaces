@@ -78,13 +78,21 @@ class SimulationJob(QThread):
         )
         from acoustic_spaces.engine.uncertainty import has_uncertainty, with_spread
 
-        if not self.materials or not has_uncertainty(self.room.scene, self.materials):
+        settings = self.settings or self.room.scene.simulation
+        draws = settings.uncertainty.draws
+        if not draws or not self.materials or not has_uncertainty(self.room.scene, self.materials):
             return result
         self.traced.emit(result)
         self._say(_("Drawing the spread from the absorption uncertainty…"))
-        seed = (self.settings or self.room.scene.simulation).seed or 0
         return with_spread(
-            result, self.room.scene, self.groups, self.materials, seed=seed, progress=self._say
+            result,
+            self.room.scene,
+            self.groups,
+            self.materials,
+            draws=draws,
+            seed=settings.seed or 0,
+            progress=self._say,
+            one_sided=settings.uncertainty.one_sided,
         )
 
     def run(self) -> None:

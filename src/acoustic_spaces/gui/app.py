@@ -1807,6 +1807,31 @@ class MainWindow(QMainWindow):
         # re-weights the run instead of making it out of date.
         self._job_groups = reweight.groups_of(self.document.room)
         groups, materials = self._job_groups or (None, None)
+        if self.document.scene.simulation.uncertainty.draws:
+            from acoustic_spaces.engine.uncertainty import grounds_left_out, spread_groups
+
+            grounds = grounds_left_out(self.document.room)
+            if grounds:
+                self.log(
+                    # Translators: {names} are materials' names.
+                    _(
+                        "The absorption uncertainty of {names} is left out of the spread: "
+                        "a ground's impedance gives its reflection"
+                    ).format(names=", ".join(grounds)),
+                    "warning",
+                )
+            # Said here as the command line says it: a warning where a material gives
+            # an uncertainty of its own, which the run then leaves out.
+            _groups, why, own = spread_groups(self.document.room)
+            if why is not None:
+                self.log(
+                    _(
+                        "No spread from the materials' absorption uncertainty: it needs "
+                        "octave bands, stochastic ray tracing for the late part, no wave "
+                        "solver and at most {count} materials on the surfaces"
+                    ).format(count=reweight.MAX_GROUPS),
+                    "warning" if own else "info",
+                )
         job = SimulationJob(self.document.room, groups=groups, materials=materials)
         job.traced.connect(self._traced_shown)
         job.done.connect(self._done)

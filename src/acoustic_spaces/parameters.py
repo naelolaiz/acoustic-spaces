@@ -88,6 +88,26 @@ NON_LINEARITY_LIMIT = 10.0
 CURVATURE_LIMIT = 10.0
 #: Every parameter, in display order.
 ALL_PARAMETERS = {**PARAMETERS, **MORE_PARAMETERS}
+#: The least and the most a parameter can be, for those that have such a limit: a time
+#: is not below 0, a share of the energy or a correlation lies between 0 and 1. The
+#: levels (dB) have none.
+LIMITS: dict[str, tuple[float, float]] = {
+    "edt": (0.0, math.inf),
+    "t20": (0.0, math.inf),
+    "t30": (0.0, math.inf),
+    "d50": (0.0, 1.0),
+    "ts": (0.0, math.inf),
+    "lf": (0.0, 1.0),
+    "lfc": (0.0, 1.0),
+    "iacc_e": (0.0, 1.0),
+    "iacc_l": (0.0, 1.0),
+    "t30_x": (0.0, math.inf),
+    "t30_y": (0.0, math.inf),
+    "t30_z": (0.0, math.inf),
+    "xi_t20": (0.0, 1000.0),
+    "xi_t30": (0.0, 1000.0),
+    "curvature": (-100.0, math.inf),
+}
 _SYMBOLS = {
     "ts": "Ts",
     "iacc_e": "IACC_E",

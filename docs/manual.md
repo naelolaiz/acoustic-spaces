@@ -195,8 +195,8 @@ With the late rays in batches (10 by default) every parameter gets a standard er
 how much it would change on a run with another seed. `simulate` also propagates the
 materials' absorption uncertainty (plus or minus 0.1 for a built-in material unless the
 scene says otherwise) and the rays' error into each parameter's combined uncertainty and
-95 % interval, by Monte Carlo (GUM Supplement 1), for runs in octave bands without the
-wave solver. It prints the largest of both after
+95 % interval, by Monte Carlo (GUM Supplement 1), for runs in octave bands that meet
+what [Materials](scenes.md#materials) lists. It prints the largest of both after
 the parameters and keeps them all in `parameters.json`; the editor gives them in the
 results' tips ([Simulation](simulation.md), [Materials](scenes.md#materials)).
 

@@ -12,7 +12,13 @@ import yaml
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.calibration import calibrate, with_absorption
 from acoustic_spaces.cli import main
-from acoustic_spaces.engine.reweight import face_groups, groups_of, log_ratio, reweighted_result
+from acoustic_spaces.engine.reweight import (
+    face_groups,
+    groups_of,
+    log_ratio,
+    moment_exponent,
+    reweighted_result,
+)
 
 MATERIALS = ["floor", "ceiling", "walls"]
 #: The absorption the recovery test measures with, floor and walls rising with frequency.
@@ -85,6 +91,93 @@ def test_reweighted_responses_match_tracing_again():
         np.testing.assert_allclose(found.edt[bands], expected.edt[bands], rtol=0.05)
         np.testing.assert_allclose(found.c80[bands], expected.c80[bands], atol=0.3)
         np.testing.assert_allclose(found.g[bands], expected.g[bands], atol=0.1)
+
+
+@pytest.mark.parametrize("ceiling", [0.99, 0.9, 0.1])
+def test_re_weighting_far_from_the_traced_absorption_stays_near_tracing_again(ceiling):
+    # A ceiling of 0.5 taken to 0.99 is what a draw of a wide uncertainty does. The
+    # late part's exponent to second order alone rises again there: over 100 dB too
+    # much energy at 0.99, and 0.5 to 1.2 dB at 0.9.
+    old, new = np.array([0.3, 0.5, 0.1]), np.array([0.3, ceiling, 0.1])
+    room = Room.from_scene(_box(_flat(*old), rays=4000, length=1.2))
+    group = face_groups(room, MATERIALS)
+    traced = simulate(room, sources=["s"], groups=group)
+    before, after = np.repeat(old[:, None], 8, 1), np.repeat(new[:, None], 8, 1)
+    ratio = log_ratio(before, after)
+    fresh = simulate(Room.from_scene(_box(_flat(*new), rays=4000, length=1.2)), sources=["s"])
+    bands = slice(1, 7)
+    for listener in ("a", "b", "c"):
+        guess = traced["s", listener].reweighted(group, ratio, absorption=(before, after))
+        found, expected = guess.parameters(), fresh["s", listener].parameters()
+        np.testing.assert_allclose(found.t30[bands], expected.t30[bands], rtol=0.15)
+        np.testing.assert_allclose(found.g[bands], expected.g[bands], atol=0.25)
+        # More absorption never adds late energy, and less never takes any.
+        change = guess.late.sum(axis=-1) - traced["s", listener].late.sum(axis=-1)
+        assert np.all(change * np.sign(0.5 - ceiling) > 0.0)
+
+
+def _count_moments(mean: np.ndarray, products: np.ndarray) -> np.ndarray:
+    """(terms, 1, 1) what the tracer sums in one band and slot of unit energy, from the
+    counts' means (groups,) and the means of their products (groups, groups)."""
+    groups = len(mean)
+    pairs = [products[i, j] for i in range(groups) for j in range(i, groups)]
+    return np.array([1.0, *mean, *pairs])[:, None, None]
+
+
+#: Changes of absorption far from the traced one, for three groups: much more of one,
+#: less of all, and more of some with less of others.
+FAR = [
+    ([0.3, 0.5, 0.1], [0.3, 0.99, 0.1]),
+    ([0.3, 0.5, 0.1], [0.05, 0.1, 0.02]),
+    ([0.3, 0.5, 0.1], [0.6, 0.2, 0.3]),
+]
+
+
+@pytest.mark.parametrize(("old", "new"), FAR)
+def test_the_late_exponent_is_exact_for_counts_that_fall_by_chance(old, new):
+    ratio = log_ratio(np.array(old)[:, None], np.array(new)[:, None])
+    # A ray's 24 reflections fall on the three groups and on faces of no group by
+    # chance: K = N ln(1 + sum of p u), Eyring's decay for the new absorption.
+    reflections, share = 24, np.array([0.2, 0.15, 0.4])
+    mean = reflections * share
+    products = reflections * (reflections - 1) * np.outer(share, share) + np.diag(mean)
+    exact = reflections * np.log1p(share @ np.expm1(ratio[:, 0]))
+    found = moment_exponent(_count_moments(mean, products), ratio)
+    np.testing.assert_allclose(found, [[exact]], rtol=1e-12)
+    # Counts of Poisson's distribution, each group on its own: K = sum of mu u.
+    products = np.outer(mean, mean) + np.diag(mean)
+    found = moment_exponent(_count_moments(mean, products), ratio)
+    np.testing.assert_allclose(found, [[mean @ np.expm1(ratio[:, 0])]], rtol=1e-12)
+
+
+def test_the_late_exponent_keeps_the_bounds_of_any_counts():
+    rng = np.random.default_rng(5)
+    for _ in range(200):
+        # Arrivals of two kinds of rays with unequal energies: counts that spread wider
+        # than by chance, or narrower where one kind has nearly all the energy.
+        rate = rng.uniform(0.2, 30.0, (2, 3))
+        counts = np.concatenate([rng.poisson(r, (40, 3)) for r in rate]).astype(float)
+        energy = rng.uniform(0.0, 1.0, 80) * np.repeat(rng.uniform(0.01, 1.0, 2), 40)
+        energy /= energy.sum()
+        mean = energy @ counts
+        products = np.einsum("r,ri,rj->ij", energy, counts, counts)
+        moments = _count_moments(mean, products)
+        old = rng.uniform(0.0, 0.99, 3)
+        new = rng.uniform(0.0, 0.99, 3)
+        ratio = log_ratio(old[:, None], new[:, None])
+        found = moment_exponent(moments, ratio)[0, 0]
+        # Jensen's inequality: at least what the mean counts give.
+        assert found >= mean @ ratio[:, 0] - 1e-9
+        # More absorption everywhere gives no gain, however far it goes.
+        more = log_ratio(old[:, None], np.maximum(old, new)[:, None])
+        assert moment_exponent(moments, more)[0, 0] <= 0.0
+        # No change, no change; and near it the cumulants to second order.
+        assert moment_exponent(moments, np.zeros((3, 1)))[0, 0] == 0.0
+        near = 1e-3 * ratio
+        covariance = products - np.outer(mean, mean)
+        second = mean @ near[:, 0] + 0.5 * near[:, 0] @ covariance @ near[:, 0]
+        third = np.abs(energy @ np.abs((counts - mean) @ near[:, 0]) ** 3)
+        assert abs(moment_exponent(moments, near)[0, 0] - second) <= 3.0 * third + 1e-12
 
 
 def test_a_run_re_weights_when_only_absorption_changes():
