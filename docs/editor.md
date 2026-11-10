@@ -97,7 +97,7 @@ The editor works on the same scene files as the command line.
   it over the room, see-through so that the sources and listeners stay in sight;
   **Save** writes the picture or every map as JSON. The scene tree's
   **Coverage map** entry sets the surfaces, height, spacing, rays and background noise,
-  and with **Uncertainty** ticked the map also gives each value's
+  and with the box under **Uncertainty** ticked the map also gives its values'
   [uncertainty](coverage-maps.md#uncertainty), which the panel's **Show** draws.
 
   ![The editor with the lecture hall example and its speech transmission index map laid over the room](images/editor_map.png)

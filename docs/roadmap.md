@@ -153,7 +153,7 @@ Parameters:
 - [x] Error estimates: the spread of each listener's levels and speech results (the
   level per octave band and A-weighted, STI, STIPA, U50, the level relative to free
   field).
-- [x] Error estimates: the uncertainty of every value of a coverage map, its insertion
+- [x] Error estimates: the uncertainty of a coverage map's values, its insertion
   loss and long-term levels too, by the law of propagation of uncertainty (the map
   traced twice more for each material with an absorption uncertainty).
 - [ ] Error estimates, next steps: the scattering's uncertainty; a listener's insertion
