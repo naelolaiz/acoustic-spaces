@@ -28,10 +28,18 @@ walker goes (:mod:`acoustic_spaces.doppler`). Five checks:
   Hz, 1 kHz and 4 kHz with places 1 to 16 m apart: how far apart they may be.
 - **Passing close.** A source at 70 m/s and at 30 m/s, and a listener at 30 m/s, pass 2
   m and 1 m from the other's line, the places 0.25 m apart: the distance and the
-  direction change by a large part within one window of a path's filter (20 ms,
-  :data:`acoustic_spaces.doppler.HOP_S`), so the level is compared in windows of 5 ms;
+  direction change by a large part within 20 ms
+  (:data:`acoustic_spaces.doppler.HOP_S`), so the level is compared in windows of 5 ms;
   at 1 kHz also as a cardioid microphone aimed level at the walker's line hears it,
-  each path times the capsule's 0.5 + 0.5 cos of the angle it arrives at.
+  each path times the capsule's 0.5 + 0.5 cos of the angle it arrives at; and at the
+  ears of a listener facing along the walker's line, whom it passes on one side (the
+  spherical head). A standing head scatters a moving source's sound exactly as the
+  sum of what each moment's sound at its centre does: each sample of the pressure
+  there through the ears' responses to the direction it arrives from. A walking
+  head has no such exact field; the walking listener's ears are compared with what
+  the engine models, worked out sample by sample: each ear a point its onset further
+  along the path at the moment it hears, and what arrives there through the rest of
+  the ear's response to its direction.
 - **The pass-by levels.** White noise through the car's walk over grass (Miki's
   impedance, 200 kPa s/m²): the energy of the sound in each octave band against that of
   the noise through each place's own impulse response for as long as its sound is heard
@@ -59,7 +67,7 @@ from acoustic_spaces.air import energy_attenuation_per_m, speed_of_sound  # noqa
 from acoustic_spaces.directivity import _from_angles, _grid  # noqa: E402
 from acoustic_spaces.emission import Mixture  # noqa: E402
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ  # noqa: E402
-from acoustic_spaces.spatial import Mono  # noqa: E402
+from acoustic_spaces.spatial import Binaural, Mono  # noqa: E402
 from acoustic_spaces.spatial.microphone import first_order  # noqa: E402
 from acoustic_spaces.walkthrough import pass_by, render_walk, simulate_walk  # noqa: E402
 
@@ -116,6 +124,13 @@ CLOSE = (
 )
 CLOSE_STEP_M = 0.25
 CLOSE_WINDOW_S = 0.005
+#: What hears a close pass, and the tones it hears (Hz).
+CLOSE_HEARD_BY = (("mono", TONES[1:]), ("cardioid", TONES[1:2]), ("ears", TONES[1:]))
+#: How long the rest of an ear's response is taken, moved back by its onset (for a
+#: walking listener's ears): this many times the response's length. With twice the
+#: length, what rings on past it wraps round: the level in the ground's dips 17 m from
+#: the pass was then 0.18 dB off at 1 kHz; with 64 times, the same as with 16.
+EARS_ROOM = 16
 
 #: A helicopter's flyover: 150 m up at 63 m/s over a listener 1.2 m up right under its
 #: track, at the height and where the microphone stands in a helicopter's noise
@@ -188,12 +203,52 @@ def emission(tone: float, n: int) -> Mixture:
     return Mixture(signals, weights.reshape(len(elevation), len(azimuth), 2), RATE)
 
 
-def exact(walker, speed, tone, n, sent=False, line=None, cardioid=False) -> np.ndarray:
+def _at_ears(walker, level, te, tone, ways) -> np.ndarray:
+    """(n, 2) one path of a tone at the ears of the spherical head: ``level`` (n,) its
+    amplitude and ``te`` (n,) the time its sound left at each sample of the head's
+    centre, ``ways`` (n, 3) where it arrives from in the head's frame.
+
+    A standing head hears a walking source exactly so: each sample of the pressure at
+    its centre through the ears' responses to the direction it arrives from, the
+    responses added up where they land. A walking head is taken as the engine models
+    it: each ear a point its onset further along the path at the moment it hears, and
+    each sample arriving there through the rest of the ear's response to its direction
+    (the response moved back by its onset)."""
+    hrtf = Binaural().at(RATE)
+    n, taps = len(te), hrtf.taps
+    # A response moved back by its onset, a fraction of a sample, rings on before and
+    # after it: EARS_ROOM times its length is kept, half of that before the sample.
+    room = EARS_ROOM * taps if walker == "listener" else taps
+    before = room // 2 if walker == "listener" else 0
+    cycles = np.fft.rfftfreq(room)
+    out = np.zeros((n + room, 2))
+    for start in range(0, n, 512):
+        some = slice(start, min(start + 512, n))
+        if walker == "source":
+            responses = hrtf.interpolate(ways[some])
+            pressure = (level[some] * np.sin(2.0 * np.pi * tone * te[some]))[:, None]
+        else:
+            responses, onsets = hrtf.interpolate(ways[some], onsets=True)
+            spectra = np.fft.rfft(responses, room, axis=-1)
+            spectra *= np.exp(2j * np.pi * cycles * onsets[..., None])
+            responses = np.roll(np.fft.irfft(spectra, room, axis=-1), before, axis=-1)
+            pressure = level[some, None] * np.sin(
+                2.0 * np.pi * tone * (te[some, None] - onsets / RATE)
+            )
+        # Sample i's response lands on the samples from i - before on: out's i on.
+        for i, part in enumerate(responses * pressure[:, :, None], some.start):
+            out[i : i + room] += part.T
+    return out[before : before + n]
+
+
+def exact(walker, speed, tone, n, sent=False, line=None, heard_by="mono") -> np.ndarray:
     """The direct sound and the image source's of a tone ``tone`` (Hz) at each sample,
     each at its retarded time, as the walk has them (a walking source stands at the
     end once there, a walking listener too), along ``line`` (by default :func:`road`);
-    ``sent``, as :func:`pattern` sends it the way the path leaves the source;
-    ``cardioid``, as a cardioid microphone aimed level at the other's line hears it."""
+    ``sent``, as :func:`pattern` sends it the way the path leaves the source. Heard by
+    ``heard_by``: "mono"; "cardioid", a cardioid microphone aimed level at the other's
+    line; or "ears" (n, 2), the ears of a listener facing along the walker's line
+    (:func:`_at_ears`)."""
     c = speed_of_sound(20.0)
     band = int(np.argmin(np.abs(np.log2(np.array(OCTAVE_BANDS_HZ) / tone))))
     m = energy_attenuation_per_m()[band]
@@ -202,7 +257,7 @@ def exact(walker, speed, tone, n, sent=False, line=None, cardioid=False) -> np.n
     x0, x1, d, zr = line.x0, line.x1, line.d, line.zr
     walked = (x1 - x0) / speed
     played = walked + 0.5
-    out = np.zeros(n)
+    out = np.zeros((n, 2)) if heard_by == "ears" else np.zeros(n)
     for image in (False, True):
         zs = -line.zs if image else line.zs
         b2 = d**2 + (zs - zr) ** 2
@@ -221,7 +276,15 @@ def exact(walker, speed, tone, n, sent=False, line=None, cardioid=False) -> np.n
         r = np.sqrt(x**2 + b2)
         heard = (te >= 0.0) & (te < played)
         level = np.exp(-m * r / 2.0) / r
-        if cardioid:
+        if heard_by == "ears":
+            # From the listener to the source or its image under the ground, in the
+            # head's frame: forward along the walker's line, left, up.
+            along = x if walker == "source" else -x
+            across = -d if walker == "source" else d
+            ways = np.column_stack([along, np.full(n, across), np.full(n, zs - zr)])
+            out += _at_ears(walker, np.where(heard, level, 0.0), te, tone, ways)
+            continue
+        if heard_by == "cardioid":
             # The path arrives d / r off the capsule's aim, in cosine.
             level = level * (0.5 + 0.5 * d / r)
         amplitude, phase = np.ones(n), np.zeros(n)
@@ -245,28 +308,36 @@ def errors(
     window_s: float = WINDOW_S,
 ) -> dict:
     """The waveform's error and the level's in windows of ``window_s``, from ``heard_s``
-    (s, when the first sound arrives) and MARGIN_S on."""
+    (s, when the first sound arrives) and MARGIN_S on; of sound in channels (n,
+    channels), the worse channel's waveform, and the level's error over them all."""
     lo, hi = int((heard_s + MARGIN_S[0]) * RATE), int((walked - MARGIN_S[1]) * RATE)
-    a, b = wet[lo:hi], field[lo:hi]
     window = int(window_s * RATE)
-    levels = []
-    for start in range(0, len(a) - window, window):
-        pa, pb = np.sum(a[start : start + window] ** 2), np.sum(b[start : start + window] ** 2)
-        levels.append(10.0 * math.log10(pa / pb))
-    levels = np.abs(np.array(levels))
+    waveform, levels = [], []
+    sounds, fields = (np.atleast_2d(v[lo:hi].T) for v in (wet, field))
+    for a, b in zip(sounds, fields, strict=True):
+        waveform.append(10.0 * np.log10(np.sum((a - b) ** 2) / np.sum(b**2)))
+        for start in range(0, len(a) - window, window):
+            pa, pb = np.sum(a[start : start + window] ** 2), np.sum(b[start : start + window] ** 2)
+            levels.append(abs(10.0 * math.log10(pa / pb)))
     return {
-        "waveform_db": float(10.0 * np.log10(np.sum((a - b) ** 2) / np.sum(b**2))),
-        "level_mean_db": float(levels.mean()),
-        "level_max_db": float(levels.max()),
+        "waveform_db": float(max(waveform)),
+        "level_mean_db": float(np.mean(levels)),
+        "level_max_db": float(np.max(levels)),
     }
 
 
-def run(walker, speed, ground, doppler, signals, step_m=STEP_M, line=None, cardioid=False) -> tuple:
-    room = Room.from_scene(scene(walker, speed, ground, doppler, line=line, cardioid=cardioid))
+def run(
+    walker, speed, ground, doppler, signals, step_m=STEP_M, line=None, heard_by="mono"
+) -> tuple:
+    """The walk, and each of ``signals`` through it as ``heard_by`` hears it (see
+    :func:`exact`): (n,), at the ears (n, 2)."""
+    aimed = heard_by == "cardioid"
+    room = Room.from_scene(scene(walker, speed, ground, doppler, line=line, cardioid=aimed))
     walk = simulate_walk(room, step_m=step_m, late_step_m=None)
     name = "s"
-    fmt = first_order("cardioid") if cardioid else Mono()
-    return walk, [render_walk(walk, {name: s}, fmt)[:, 0] for s in signals]
+    fmt = {"mono": Mono(), "cardioid": first_order("cardioid"), "ears": Binaural()}[heard_by]
+    wets = [render_walk(walk, {name: s}, fmt) for s in signals]
+    return walk, wets if heard_by == "ears" else [wet[:, 0] for wet in wets]
 
 
 def check_field(cases, ground: str) -> list[dict]:
@@ -367,8 +438,8 @@ def check_flyover() -> list[dict]:
 
 def check_close() -> list[dict]:
     """The walkers of :data:`CLOSE` passing close by at 1 kHz and 4 kHz, the level in
-    windows of :data:`CLOSE_WINDOW_S`; and at 1 kHz as a cardioid microphone aimed at
-    the walker's line hears them."""
+    windows of :data:`CLOSE_WINDOW_S`; at 1 kHz as a cardioid microphone aimed at the
+    walker's line hears them; and at the ears of a listener facing along it."""
     rows = []
     for walker, speed, d in CLOSE:
         line = dataclasses.replace(road(), d=d)
@@ -376,13 +447,13 @@ def check_close() -> list[dict]:
         t = np.arange(int((walked + 0.5) * RATE)) / RATE
         # The first sound arrives this long after the walk starts.
         heard = math.hypot(line.x0, line.d, line.zs - line.zr) / speed_of_sound(20.0)
-        for cardioid, tones in ((False, TONES[1:]), (True, TONES[1:2])):
+        for heard_by, tones in CLOSE_HEARD_BY:
             signals = [np.sin(2.0 * np.pi * tone * t) for tone in tones]
-            _, wets = run(walker, speed, "hard", True, signals, CLOSE_STEP_M, line, cardioid)
+            _, wets = run(walker, speed, "hard", True, signals, CLOSE_STEP_M, line, heard_by)
             for tone, wet in zip(tones, wets, strict=True):
-                field = exact(walker, speed, tone, len(wet), line=line, cardioid=cardioid)
+                field = exact(walker, speed, tone, len(wet), line=line, heard_by=heard_by)
                 row = {"walker": walker, "speed_m_s": speed, "distance_m": d, "tone_hz": tone}
-                row["heard_by"] = "cardioid" if cardioid else "mono"
+                row["heard_by"] = heard_by
                 row |= errors(wet, field, walked, heard, CLOSE_WINDOW_S)
                 rows.append(row)
                 print(

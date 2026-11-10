@@ -125,6 +125,38 @@ def test_hermite_goes_through_its_points_and_holds_at_the_ends() -> None:
     assert np.all(dp.hermite([1.0], [4.0], at) == 4.0)
 
 
+def test_the_slope_of_the_curve_through_the_points() -> None:
+    x = np.array([0.0, 1.0, 2.5, 3.0, 5.0])
+    y = np.sin(x)
+    at = np.linspace(0.01, 4.99, 499)
+    step = 1e-6
+    chords = (dp.hermite(x, y, at + step) - dp.hermite(x, y, at - step)) / (2.0 * step)
+    assert np.allclose(dp._slope(x, y, at), chords, rtol=0.0, atol=1e-5)
+    # Held beyond its ends, the curve has no slope there; nor has one point's.
+    assert np.all(dp._slope(x, y, np.array([-1.0, 6.0])) == 0.0)
+    assert np.all(dp._slope(np.array([1.0]), np.array([4.0]), at) == 0.0)
+
+
+def test_an_ear_hears_what_passed_the_head_an_onset_earlier() -> None:
+    """A walking source's sound passes the head's centre at a time s and reaches an ear
+    at s + onset(s). From the times heard, ``passed`` gives s, and how much of s goes
+    by in each moment heard: one over (1 + the onset's slope), here up to 0.2 % either
+    way."""
+    received = np.linspace(0.0, 1.0, 21)
+    turn = 3e-4 * np.sin(2.0 * np.pi * received)
+    onsets = 1e-3 + np.column_stack([turn, -turn])
+    track = dp.Track(
+        np.ones(21, dtype=bool), np.zeros(21, dtype=np.int64), received, np.full(21, 0.01)
+    )
+    reading = dp._Reading(track, np.arange(21), 0, 0, 1.0, None, onsets)
+    t = np.linspace(0.1, 0.9, 2001)
+    for ear in (0, 1):
+        s, share = reading.passed(t, ear)
+        assert np.allclose(s + reading.onset(s, ear), t, rtol=0.0, atol=1e-10)
+        assert np.allclose(share[1:-1], np.gradient(s, t)[1:-1], rtol=0.0, atol=1e-6)
+        assert 1.5e-3 < np.abs(share - 1.0).max() < 2e-3
+
+
 def test_read_delays_a_signal_by_a_fraction_of_a_sample() -> None:
     n = 4000
     t = np.arange(n) / RATE
@@ -400,9 +432,9 @@ def test_a_passing_source_and_listener_sound_as_the_exact_field(short) -> None:
 
 
 @pytest.mark.parametrize("walker", ["source", "listener"])
-@pytest.mark.parametrize("cardioid", [False, True], ids=["mono", "cardioid"])
+@pytest.mark.parametrize("heard_by", ["mono", "cardioid", "ears"])
 def test_a_fast_walker_passing_close_keeps_the_level_of_the_exact_field(
-    short, walker, cardioid
+    short, walker, heard_by
 ) -> None:
     """At 70 m/s, 2 m from the other's line, the distance changes by more than half of
     itself within ``HOP_S``, and the walker passes more than five places: the level
@@ -411,15 +443,24 @@ def test_a_fast_walker_passing_close_keeps_the_level_of_the_exact_field(
     each place's time), here in windows a quarter of ``HOP_S`` long. Between two places
     0.25 m apart a straight line strays from the capsule's 0.5 + 0.5 cos by 0.01 dB at
     most (a chord's sag, an eighth of the step squared times the curvature, 0.5 / 2.06²
-    a metre squared at the pass)."""
+    a metre squared at the pass).
+
+    At the ears of a listener the walker passes on one side, a walking source's sound
+    is what a standing head makes of the pressure at its centre, each sample of it
+    through the ears' responses to the direction it arrives from, and a walking
+    listener's ears are each a point their onset further along the path
+    (``reference._at_ears``). The level stays within 0.02 dB there. With a source's
+    onset added to its delay instead, it was 2.7 dB off and the difference from the
+    field 61 % of the field; with the filter taken every ``HOP_S`` alone, a walking
+    listener's level was 0.27 dB off."""
     speed, tone = 70.0, 1000.0
     line = dataclasses.replace(short.road(), x0=-8.0, x1=8.0, d=2.0)
     walked = (line.x1 - line.x0) / speed
     t = np.arange(int((walked + 0.5) * RATE)) / RATE
     dry = np.sin(2 * np.pi * tone * t)
     step = short.CLOSE_STEP_M
-    _, (wet,) = short.run(walker, speed, "hard", True, [dry], step, line, cardioid)
-    field = short.exact(walker, speed, tone, len(wet), line=line, cardioid=cardioid)
+    _, (wet,) = short.run(walker, speed, "hard", True, [dry], step, line, heard_by)
+    field = short.exact(walker, speed, tone, len(wet), line=line, heard_by=heard_by)
     found = short.errors(wet, field, walked, window_s=dp.HOP_S / 4)
     assert found["level_max_db"] < 0.05
     assert found["waveform_db"] < -45.0
