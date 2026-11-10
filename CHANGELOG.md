@@ -149,6 +149,21 @@
   0.8 dB below a rigid one's, and the archway example's first arrival behind the wall by
   11.0 and 11.7 dB at 63 and 125 Hz; with faces absorbing 0.5 it changes by +11.0 dB at
   63 Hz to -8.7 dB at 8 kHz.
+- Fixed: a curved path that turns in the air just past a node of the sampled profile
+  near the source's or the listener's height took that profile's slope there, up to
+  15 dB off the smooth one's; it now takes the fitted one. Against the smooth profiles
+  (`validation/curved_rays.py`, paths near a caustic apart) the most a path is off goes
+  from 15.3 to 2.4 dB where the sound bends down and from 3.1 to 1.1 dB where it bends
+  up; from 1 kHz up a listener 300 m downwind of the `open_air_stage` source and 4.61 m
+  up gains about 2 dB, and the shipped examples' own listeners move by 0.02 dB at most.
+- Fixed: `early.method: image_sources` with `max_order` 3 or more (the default order)
+  stopped with "need at least one array to concatenate" where the ground is the only
+  reflecting plane, as in the open-air examples; the orders past the first now find no
+  path and the levels are those of `max_order: 1`.
+- Fixed: `write_asc` wrote the grid's origin, cell size and heights to 6 significant
+  digits, moving a grid in UTM coordinates by up to 5 m (the northing rounded to 10 m)
+  and heights of 1 to 10 km by up to 5 mm; it now writes each in the shortest form that
+  reads back as the same number.
 
 ## 4.2.1
 

@@ -121,6 +121,12 @@ def test_esri_ascii_grids_are_read_from_the_north_row_down(tmp_path: Path) -> No
     write_asc(out, grid)
     again = read_height_grid(out)
     assert again.origin == grid.origin and again.heights.tolist() == grid.heights.tolist()
+    # Map coordinates and millimetres come back exactly, not rounded to 6 digits.
+    utm = HeightGrid((432187.5, 5713412.25), 2.5, [[1234.567, 1234.891], [1235.123, 12345.678]])
+    write_asc(out, utm)
+    again = read_height_grid(out)
+    assert again.origin == utm.origin and again.spacing == utm.spacing
+    assert again.heights.tolist() == utm.heights.tolist()
 
 
 def test_xyz_points_make_a_grid_in_any_order(tmp_path: Path) -> None:

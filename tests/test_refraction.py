@@ -1071,6 +1071,63 @@ def test_the_levels_of_rays_that_turn_back_in_a_warm_layer_2_km_away() -> None:
     _assert_on_the_listener(profile, zs, zr, 2134.3, found)
 
 
+@pytest.mark.parametrize(
+    ("ground_c", "zr", "distance", "branch", "reference"),
+    [
+        (15.0, 4.21, 800.0, (True, False, 3), 7.641),
+        (20.0, 4.61, 300.0, (True, False, 1), 6.106),
+        (20.0, 1.5, 152.0, (True, True, 1), -0.740),
+        (20.0, 5.81, 800.0, (False, False, 3), 9.122),
+    ],
+)
+def test_the_level_of_a_ray_that_turns_just_above_a_node_over_an_end(
+    ground_c, zr, distance, branch, reference
+) -> None:
+    """Downwind in the `windy` preset, from a source 5 m up (within a quarter of a layer
+    under the profile's node at 5.063 m), the ray along ``branch`` turns just above that
+    node, or above the node at 5.852 m over a listener 5.81 m up. Against the smooth
+    profile's ray tube (quadrature in the elevation angle, and the ray equations shot
+    and differenced, which agree to 0.002 dB), its level over free field at its length
+    is that given (dB); the sampled profile's own is 10 to 15 dB lower there. The
+    engine's is within 0.39 dB of it; the bound is 1 dB, well short of that step."""
+    windy = Atmosphere.model_validate({"preset": "windy"})
+    rays = Rays(Profile.of(windy, ground_c, np.array([1.0, 0.0])), 5.0)
+    found = rays.eigenrays(zr, distance, 3)
+    (i,) = _on(found, *branch)
+    assert _level(found, i) == pytest.approx(reference, abs=1.0)
+
+
+def test_the_levels_of_paths_to_seeded_listeners_against_the_smooth_profile() -> None:
+    """Downwind in the `windy` preset at 20 °C, from a source 5 m up to 15 listeners at
+    random 100 to 1000 m away and 0.5 to 12 m up (seed 2), against the smooth profile's
+    paths (validation/curved_rays.py, which has 1300 listeners a family): the 66 paths
+    not near a caustic are at most 0.52 dB off its levels, and the sums at the 14
+    listeners none of whose paths is at most 0.32 dB off. The bounds are 1 and 0.5 dB; a
+    ray turning just above the node over the source took one path 970 m away 2.17 dB
+    off."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
+    import curved_rays
+
+    weather = "windy_downwind"
+    r = curved_rays.family(weather, 5.0, curved_rays.places(weather, 15, 2))
+    assert r["unmatched"] == 0 and r["listeners_summed"] >= 12
+    assert r["max_db"] <= 1.0
+    assert r["sum_max_db"] <= 0.5
+
+
+def test_the_level_over_a_node_just_above_the_source_does_not_step() -> None:
+    """The same 300 m away, listeners 4.60 and 4.61 m up: the smooth profile's rays add
+    up to 9.52 dB over free field at both; theirs do to within 0.1 dB of each other (the
+    one ray turning over the node took 2.5 dB off the sum in that centimetre)."""
+    windy = Atmosphere.model_validate({"preset": "windy"})
+    rays = Rays(Profile.of(windy, 20.0, np.array([1.0, 0.0])), 5.0)
+    sums = [
+        10 * math.log10(np.sum(rays.eigenrays(zr, 300.0, 3).spreading) * 300.0**2)
+        for zr in (4.60, 4.61)
+    ]
+    assert sums[1] == pytest.approx(sums[0], abs=0.1)
+
+
 def test_the_levels_of_rays_in_a_duct_through_air_3_8e_12_off_level() -> None:
     """Upwind of a table whose wind is 1.377 m/s up to 1.56 cm, 1.391 m/s at 1.124 m and
     3.8e-12 m/s less at 1.438 m, 1.390 m/s at 1.836 m and 3.68 m/s at 20.56 m (15 C),

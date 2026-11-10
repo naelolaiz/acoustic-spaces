@@ -3278,7 +3278,7 @@ the long term and L_den (5 dB in the evening, 10 at night), in dB(A):
 
 | | downwind | upwind | still | inversion | day | evening | night | long term | L_den |
 |---|---|---|---|---|---|---|---|---|---|
-| 50 m | 46.5 | 36.6 | 47.4 | 47.7 | 45.6 | 46.1 | 46.8 | 46.1 | 53.0 |
+| 50 m | 46.5 | 36.6 | 47.4 | 47.6 | 45.6 | 46.1 | 46.8 | 46.1 | 53.0 |
 | 100 m | 42.9 | 21.6 | 38.9 | 40.6 | 39.5 | 39.8 | 40.1 | 39.8 | 46.4 |
 | 200 m | 33.5 | 10.5 | 26.3 | 36.1 | 29.2 | 31.8 | 33.9 | 31.7 | 39.8 |
 | 400 m | 22.2 | -2.8 | 12.0 | 28.5 | 17.5 | 22.7 | 25.8 | 22.7 | 31.4 |
@@ -3300,13 +3300,13 @@ dB, within the standard's range:
 
 | distance | engine | ISO 9613-2 | difference |
 |---|---|---|---|
-| 50 m | 0.94 | 1.69 | -0.75 |
+| 50 m | 0.92 | 1.69 | -0.76 |
 | 100 m | 2.21 | 2.53 | -0.32 |
 | 200 m | 3.12 | 2.95 | +0.17 |
 | 400 m | 3.43 | 3.16 | +0.27 |
 | 800 m | 3.49 | 3.27 | +0.22 |
 
-The engine's correction follows the standard's shape within 0.75 dB, the most at 50 m,
+The engine's correction follows the standard's shape within 0.76 dB, the most at 50 m,
 where the standard's formula is only a step past d_p = 25 m and the ground's own
 pattern still differs from one weather to the next. This is a check of plausibility,
 not of accuracy: the standard's correction is an empirical fit, and the engine's comes
@@ -4664,6 +4664,7 @@ python validation/wave_wind.py --json wave_wind.json   # --skip-profiles: no par
 python validation/insertion_loss.py --json insertion_loss.json
 python validation/terrain.py --json terrain.json
 python validation/ffp.py --json ffp.json
+python validation/curved_rays.py --json curved_rays.json   # about 30 min
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
 python validation/barrier_wind.py --json barrier_wind.json   # about 4 h; --quick: fewer bands

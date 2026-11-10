@@ -482,22 +482,26 @@ is an arc of a circle, so its travel time and its length are exact.
   taken from the arcs in closed form. Each is worked out again from rays half as far
   apart, and rules on how much each changes pick one; a path neither gives steadily is
   left out. Where the speed is the same at every height between the source's and the
-  listener's, the direct path is the straight line. Against the smooth profiles of the
-  `windy` preset downwind and of `clear_night`, from sources 1 and 4 m up to listeners
-  0.5 to 12 m up, the levels of the paths 150 and 300 m away, straight or off the ground
-  up to twice, are within 3.6 dB, four in five of them within 0.1 dB (1.8 dB where they
-  are 8 dB or more over a straight path's, nearer a caustic), and those 600 m away in
-  `windy` within 3.3 dB, nine in ten within 0.1 dB (1.9 dB nearer a caustic). A path
-  that leaves and arrives at about the same height and turns once in the air follows the
-  sampled profile exactly, which can be up to 0.33 dB off the smooth one (`clear_night`
-  12 to 25 m up and 300 to 600 m away, `windy` across the wind). Where the air at the
-  source or the listener is nearly level, rounding can rarely leave out a direct path or
-  take one that arrives up to 4 cm from the listener, at its level to 0.003 dB. Where
-  neighbouring rays cross (a caustic) the level is capped at 10 dB over a straight
-  path's, and each caustic advances the phase by a quarter period (a factor j, time
-  going as e^(jωt)). Against an independent ray tracer on the smooth profile of the
-  `windy` preset downwind, the levels of three such paths 100 and 300 m away are within
-  0.05 dB (the tests allow 0.2 dB); no such check is made near a caustic.
+  listener's, the direct path is the straight line. Against the smooth profiles at 20 °C
+  (`validation/curved_rays.py`), from sources 1, 4 and 5 m up to 1300 listeners 0.5 to
+  12 m up, 100 to 1000 m away where the sound bends down (the `windy` preset downwind,
+  `clear_night`) and 20 to 400 m away where it bends up (`windy` upwind, `sunny_day`),
+  the levels of the paths, straight or off the ground up to three times, are within 1.5
+  dB, 87 % of them within 0.1 dB, but for three that come in 8.5 dB or more over a
+  straight path's, nearer a caustic (up to 2.4 dB). Those the engine caps or where the
+  smooth profile's is 8 dB or more are up to 9.4 dB off, and four that graze the ground
+  at the shadow's edge are not checked; the sums at the listeners with none of these
+  and no path the smooth profile lacks are within 1.9 dB. A path between ends at one
+  height that turns just above them is within 0.8 dB of the smooth profile's, and one
+  that turns just below them, where the sound bends up, within 1.5 dB (ends 1 to 25 m
+  up, 10 to 600 m apart). Where the air at the source or the listener is nearly level,
+  rounding can rarely leave out a direct path or take one that arrives up to 4 cm from
+  the listener, at its level to 0.003 dB. Where neighbouring rays cross (a caustic) the
+  level is capped at 10 dB over a straight path's, and each caustic advances the phase
+  by a quarter period (a factor j, time going as e^(jωt)). Against an independent ray
+  tracer on the smooth profile of the `windy` preset downwind, the levels of three such
+  paths 100 and 300 m away are within 0.05 dB (the tests allow 0.2 dB); no such check is
+  made near a caustic.
 - **In the bands up to 500 Hz** rays fail over the ground, as the profiles change most
   within a wavelength of it, where the direct sound and its reflection meet. There the
   sound over the open ground comes from a parabolic equation (the Green's function

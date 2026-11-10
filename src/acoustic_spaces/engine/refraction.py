@@ -74,7 +74,9 @@ _AGREEMENT = 1e-2
 #: Where the width from the range less its singular parts cannot be had, the width from
 #: the range itself is taken only where it changes by no more than this share of it from
 #: rays half as far apart; for a ray that turns in the air, that from the rays a small
-#: step either side is taken instead of the fitted one where the two differ by more.
+#: step either side is taken instead of the fitted one where the two differ by more. The
+#: former is taken over the sampled profile's own slope about a node of it
+#: (:meth:`Rays._sampled`) only where it changes by no more than this.
 _ALONE = 1e-1
 #: The width from the range less its singular parts is taken over one from the range
 #: itself that it disagrees with, or alone, only where it changes by no more than this
@@ -158,6 +160,11 @@ class Profile:
     #: change by any amount: the ``rows`` and the edges of its level stretches (the top
     #: of the profile among them).
     corners: np.ndarray = field(init=False, repr=False, compare=False)
+    #: The indices of the nodes where the trend changes that are not corners, as where a
+    #: smooth profile is sampled: they hold no singular part of the range
+    #: (:meth:`Rays._singular`), which wiggles about the smooth profile's as a ray's
+    #: turning point passes one.
+    gentle: np.ndarray = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         z = np.asarray(self.z, dtype=float)
@@ -171,9 +178,11 @@ class Profile:
         level = trend == 0.0
         inner = np.arange(1, len(z))
         corner = (level[inner - 1] != level[inner]) | np.isin(z[inner], rows)
+        bends = inner[trend[inner] != trend[inner - 1]]
         object.__setattr__(self, "gradient", gradient)
         object.__setattr__(self, "trend", trend)
         object.__setattr__(self, "corners", inner[corner])
+        object.__setattr__(self, "gentle", np.setdiff1d(bends, inner[corner]))
 
     @classmethod
     def of(cls, atmosphere, ground_c: float, towards=None) -> Profile:
@@ -908,7 +917,12 @@ class Rays:
         raw = self._raw_slope(zr, p, branch, turns, out, ps)
         parts = self._singular(zr, p, branch, ground, float(fan.lo[0]), float(fan.hi[0]))
         new = self._width(zr, distance, p, branch, turns, parts, fan, float(s), capped)
-        chosen = self._choose(new, raw, sin_s * sin_r, capped, steady)
+        # A ray that turns in the air whose range itself could not be fitted over the
+        # rays that turn about it (flatter ones would not leave the source or reach the
+        # listener) has the slope of the sampled profile's range: off the smooth one's
+        # where its turning point is near one of the nodes it is sampled at.
+        sampled = bool(turns) and raw is not None and raw[3] is None and self._sampled(turns)
+        chosen = self._choose(new, raw, sin_s * sin_r, capped, steady, sampled)
         if chosen is None:
             return None
         if chosen is new:
@@ -943,7 +957,7 @@ class Rays:
         }
 
     @staticmethod
-    def _choose(new, raw, sines, capped, steady):
+    def _choose(new, raw, sines, capped, steady, sampled):
         """The one of two the tube of a ray takes: ``new``, (its width from its range less
         its singular parts, the same from rays half as far apart: a callable), and
         ``raw``, (the slope of its range itself, the same from rays half as far apart: a
@@ -962,7 +976,10 @@ class Rays:
         where there is no ``new``, there from the rays a small step either side where
         those lie more than ``_FEW_FLOATS`` floats apart and the fitted slope differs
         from theirs by more than ``_ALONE``; and ``new`` alone only where it changes by
-        no more than ``_STABLE``. None where neither can be taken."""
+        no more than ``_STABLE``. Where ``raw`` is the sampled profile's own slope about
+        a node of it (``sampled``, :meth:`_sampled`) and they do not agree, ``new``
+        where it changes by no more than ``_ALONE``, as one taken alone. None where
+        neither can be taken."""
 
         def change(estimate, scale=1.0):
             again = estimate[1]()
@@ -981,6 +998,8 @@ class Rays:
             if moved <= min(0.1 * gap, _STABLE * max(abs(new[0]), capped)) and (
                 shaky > _AGREEMENT * max(abs(width), capped)
             ):
+                return new
+            if sampled and moved <= _ALONE * max(abs(new[0]), capped):
                 return new
         if raw is None:
             return None
@@ -1329,11 +1348,9 @@ class Rays:
         loose = np.abs(gradient[sloped] - trend[sloped]) > 1e-6 * np.abs(trend[sloped])
         # A level layer they only touch, at an end, holds none of their range.
         level = flat & (z < upper) & (above > lower)
-        inner = np.arange(1, len(z))
-        bends = inner[
-            (trend[inner] != trend[inner - 1]) & (z[inner] >= lower) & (z[inner] <= upper)
-        ]
-        return level, np.setdiff1d(bends, self.profile.corners), bool(np.any(loose))
+        gentle = self.profile.gentle
+        crossed_gentle = gentle[(z[gentle] >= lower) & (z[gentle] <= upper)]
+        return level, crossed_gentle, bool(np.any(loose))
 
     def _step(self, zr, p, branch, parts: _Singular):
         """The step in p to rays either side of the one with parameter ``p`` along
@@ -1385,6 +1402,21 @@ class Rays:
                 # The turning height moves by c / (p g) per unit of p, c being 1 / p.
                 width = max(width, _TURN_LAYERS * (z[j + 1] - z[j]) * p * p * abs(g[j]))
         return width
+
+    def _sampled(self, turns) -> bool:
+        """Whether a gentle corner of the profile (:attr:`Profile.gentle`) lies within
+        ``_TURN_LAYERS`` layers of any of the heights ``turns``, counted in nodes: one
+        the turning points of the rays a turning ray's tube is fitted over pass
+        (:meth:`_turn_span`), where the sampled profile's range wiggles about the smooth
+        one's. A table's straight stretch has none: the profile is linear between its
+        rows."""
+        reach = math.ceil(_TURN_LAYERS)
+        gentle = self.profile.gentle
+        for height in turns:
+            j = int(self.profile.layer(height))
+            if np.any((gentle > j - reach) & (gentle <= j + reach)):
+                return True
+        return False
 
     def _turning_slope(self, zr, p, branch, turns, parts: _Singular, gap, span=None, tries=None):
         """The slope in p of the range of a ray with parameter ``p`` along ``branch``
