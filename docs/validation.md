@@ -2827,22 +2827,22 @@ alone moves them:
 | open_air_stage | 12 | 50,000 | gpu | 20.21 | 0.02 | 0.2 |
 | tree_belt | 30 | 200,000 | cpu, next seed | 1.12 | 1.20 | 22.3 |
 | tree_belt | 30 | 200,000 | gpu | 33.30 | 1.29 | 13.0 |
-| hillside | 3,730 | 50,000 | cpu, next seed | 0.34 | 1.16 | 0.8 |
+| hillside | 3,730 | 50,000 | cpu, next seed | 0.34 | 2.04 | 1.9 |
 | hillside | 3,730 | 50,000 | gpu | 11.49 | 1.88 | 1.6 |
 
 On SwiftShader, a software Vulkan driver on the container's 4 cores (the CPU runs took
 0.3 to 1.1 s), which shows that the two agree, not how fast a GPU is; `python
 validation/outdoor_gpu.py` times your own. The GPU rows are from that run, when the
 port was added; the CPU's next-seed rows come out the same with this version's code
-(the container that checked them has no GPU driver). The tree belt's rows are from when it traced its image sources to the first order; at the second, as it does now, the house's reflection keeps its ground partners, the late sound changes with it, and the next seed differs by 1.01 dB and 17.7 ms (its GPU row needs a run on a GPU). The tree belt's rays through its foliage and
+(the container that checked them has no GPU driver). The tree belt's rows are from when it traced its image sources to the first order; at the second, as it does now, the house's reflection keeps its ground partners, the late sound changes with it, and the next seed differs by 1.32 dB and 20.6 ms (seeds 1 and 2; its GPU row needs a run on a GPU). The tree belt's rays through its foliage and
 stems come out as far from the CPU's as the next seed's do. The stage in the wind
 agrees to 0.02 dB with the same seed, whose rays start where the CPU's do; the next
 seed starts them elsewhere and moves the late sound at the two listeners downwind by
 4.2 dB on average (upwind, in the wind's shadow, no late ray arrives in either run).
 The stage's eddies play no part in this: they act on the early paths only, and the
 script compares the late sound (without them the next seed differs by the same
-4.21 dB). On the hillside the GPU is 1.9 dB from the CPU against the next seed's
-1.2 dB: the listener in the shadow gets no late rays, the one on the crest about the
+4.21 dB). On the hillside the GPU was 1.9 dB from the CPU in that run, against the
+next seed's 2.0 dB now: the listener in the shadow gets no late rays, the one on the crest about the
 same level from every run, and the one on the slope a level that moves by several
 decibels with the seed, so one run of each, as here, cannot tell the GPU's difference
 from the rays' noise there.

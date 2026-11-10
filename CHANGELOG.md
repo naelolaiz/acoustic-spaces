@@ -137,6 +137,10 @@
   listener on a building, a model file's object in the way), the bent direct sound and
   ground reflection count only where their straight paths do; strips 0.3 to 3.5 m wide
   at the edges' shadow boundaries read 4 to 10 dB off in every band.
+- Docs: three numbers that 4.2.0's fix of the vector reflection's specular share moved
+  are given as the code has them: `apartment`'s bed with the door open reads 62 dB(A),
+  not 63, and the CPU's next seed in validation.md differs by 1.32 dB and 20.6 ms in
+  `tree_belt` and by 2.04 dB and 1.9 ms on the hillside, a new draw of the rays' noise.
 
 ## 4.2.1
 
