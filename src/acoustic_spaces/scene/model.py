@@ -3087,6 +3087,15 @@ class Scene(_Model):
             raise ValueError(problem)
         return self
 
+    @property
+    def still(self) -> bool:
+        """Whether sound goes in straight lines in every run of the scene: in its own
+        weather (:attr:`Atmosphere.still`, the zones too) and in each weather class of
+        ``long_term`` (:meth:`Atmosphere.under`)."""
+        own = self.atmosphere or Atmosphere()
+        classes = [] if self.long_term is None else self.long_term.classes
+        return own.still and all(own.under(given).still for given in classes)
+
     def under(self, given: WeatherClass) -> Scene:
         """This outdoor scene in a weather class: its atmosphere under the class's weather
         (:meth:`Atmosphere.under`), the air at the class's ground temperature when it

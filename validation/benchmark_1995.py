@@ -283,7 +283,6 @@ def scene_of(gradient: float, cap: float, ranges, equation: str = "narrow_angle"
                 "diffraction": "none",
                 "parabolic_equation": equation,
             },
-            "late": {"rays": 200},
         },
     }
     if gradient != 0.0:

@@ -7,7 +7,7 @@
 #   acoustic-spaces map scene.yaml --parameter spl_a --plot levels.png
 #
 # With the door closed, the television that gives 73 dB(A) on the sofa gives 45 dB(A) in
-# bed. Open the door (`door: open` below) and run them again: 63 dB(A) in bed. `inspect`
+# bed. Open the door (`door: open` below) and run them again: 62 dB(A) in bed. `inspect`
 # lists the two rooms the model closes off. make_model.py writes apartment.obj.
 name: Flat with a door between two rooms (living room 52 m3, bedroom 42 m3)
 geometry:

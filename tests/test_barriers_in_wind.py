@@ -23,10 +23,11 @@ def scene(
     extent=((-60.0, -60.0), (90.0, 60.0)),
     ir_length_s=0.3,
     lawn=None,
+    sources=((0.0, 0.0, 1.0),),
     **early,
 ) -> Scene:
     """A source 1 m up over hard ground (grass on the polygon ``lawn``), a barrier 15 m
-    away across the x axis, and listeners."""
+    away across the x axis, and listeners; or ``sources`` (named s, or s0, s1 ...)."""
     geometry = {
         "ground": {"extent": [list(corner) for corner in extent], "sky": 20.0},
         "barriers": list(barriers),
@@ -43,7 +44,10 @@ def scene(
         "materials": materials,
         "assignments": {"lawn": "grass"} if lawn is not None else {},
         "default_material": "hard",
-        "sources": [{"name": "s", "position": [0.0, 0.0, 1.0]}],
+        "sources": [
+            {"name": "s" if len(sources) == 1 else f"s{k}", "position": list(p)}
+            for k, p in enumerate(sources)
+        ],
         "listeners": [{"name": f"l{k}", "position": list(p)} for k, p in enumerate(listeners)],
         "simulation": {
             "seed": 1,
@@ -265,6 +269,25 @@ def test_the_paths_round_an_end_take_the_open_ground_s_effect_on_both_sides(runs
             shifts.append(float(b.delay_s[low[0]] - a.delay_s[i]))
             times.append(float(b.delay_s[high[0]] - a.delay_s[i]))
         assert np.ptp(shifts) < 1e-12 and np.ptp(times) > 1e-5
+
+
+def test_the_paths_round_an_end_take_the_open_ground_s_effect_in_line_with_it(runs) -> None:
+    """A listener exactly in line with the source and the barrier's end, where the
+    straight way touches the end: the direct sound is cut off there, and the paths round
+    the end take the open ground's effect (2 here) from 63 to 500 Hz all the same."""
+    barrier = {"name": "screen", "path": [[15, -20], [15, 10]], "height": 4}
+    listeners = ((60.0, 40.0, 1.5),)
+    a = early_paths(scene(atmosphere=None, listeners=listeners, barriers=[barrier]))
+    b = early_paths(scene(listeners=listeners, barriers=[barrier]))
+    assert not np.any((a.order == 0) & (a.edge < 0))  # cut off
+    ends = [
+        i for i in range(len(a)) if any(np.allclose(c[:2], [15.0, 10.0]) for c in a.points[i][1:-1])
+    ]
+    assert len(ends) >= 2  # off the ground or not
+    for i in ends:
+        rows = np.flatnonzero(b.distance_m == a.distance_m[i])
+        energy = b.energy[rows].sum(axis=0)
+        np.testing.assert_allclose(energy[:4], 2.0 * a.energy[i, :4])
 
 
 def test_a_breath_of_wind_behind_a_barrier_is_still_air() -> None:
@@ -500,6 +523,109 @@ def test_a_listener_beside_a_building_takes_the_open_ground_s_effect(towards) ->
     np.testing.assert_allclose(effects[0][:4], effects[1][:4], atol=0.7)
 
 
+#: A building 6 m high, 10 m by 20 m, with a point 1 m above the middle of its roof.
+ROOF = {"name": "h", "footprint": [[15, -10], [25, -10], [25, 10], [15, 10]], "height": 6}
+ON_ROOF = (20.0, 0.0, 7.0)
+
+
+def _walked(pairs, towards, **kwargs) -> np.ndarray:
+    """The weather's effect (dB, the ``windy`` preset towards ``towards`` degrees over
+    still air) from 63 to 500 Hz between each (source, listener) of ``pairs``."""
+    levels = []
+    for atmosphere in (None, {"preset": "windy", "wind": {"direction_deg": towards}}):
+        room = Room.from_scene(scene(atmosphere=atmosphere, barriers=(), **kwargs))
+        levels.append(
+            [10.0 * np.log10(total_energy(early_paths(room, s, r)))[:4] for s, r in pairs]
+        )
+    return np.subtract(levels[1], levels[0])
+
+
+def _steps(effect: np.ndarray) -> np.ndarray:
+    """(bands,) the largest change of ``effect`` (points, bands) from one point to the next."""
+    return np.abs(np.diff(effect, axis=0)).max(axis=0)
+
+
+# Where the barrier's equation does not run (a source or a listener on a building, an
+# object of the model file), the direct ray and the one off the ground are there where
+# the straight paths the edges' terms make up for are. The same wall as a scene's
+# barrier, where the equation runs, changes the weather's effect by at most 0.1 dB in
+# 10 cm from 63 to 500 Hz across the direct sound's shadow boundary and 0.04 dB (-0.7
+# to 1.3 dB effect) across the ground reflection's, source 8 m up. Here the bent rays'
+# level and time, which the edges' terms do not follow, step by up to 0.2 dB across
+# the direct sound's boundary and 0.6 dB across the reflection's behind the wall:
+# bounds 0.3 and 0.7 dB. Past a roof's edge, where the reflection comes into view, the
+# open ground's parabolic equation takes over from the rays in those bands and the
+# effect steps by up to 1.75 dB at 500 Hz (0.6 dB with the rays on both sides): the
+# 2 dB bound there admits that known issue (docs/validation.md), it is no accuracy.
+# Unbent, the paths' sets disagreed between the straight and the bent boundary by 4 to
+# 10 dB.
+
+#: The largest steps (dB) a 10 cm walk across the boundaries may take, see above.
+DIRECT_STEP, REFLECTION_STEP, ROOF_SWITCH_STEP = 0.3, 0.7, 2.0
+
+
+@pytest.mark.parametrize("towards", [0.0, 180.0])
+def test_a_source_on_a_roof_in_wind_has_no_strips_at_the_edge_s_shadows(towards) -> None:
+    """Listeners 1.5 m up walked in 10 cm steps across the straight shadow boundaries
+    of the roof's edge, of the direct sound (x = 47.6) and of the ground reflection
+    (x = 62.6), from a source on the roof, down- and upwind."""
+    direct, reflection = np.arange(46.5, 48.05, 0.1), np.arange(59.5, 63.55, 0.1)
+    xs = np.round(np.concatenate([direct, reflection]), 2)
+    effect = _walked(
+        [("s", f"l{k}") for k in range(len(xs))],
+        towards,
+        sources=(ON_ROOF,),
+        listeners=[(x, 0.0, 1.5) for x in xs],
+        buildings=(ROOF,),
+    )
+    assert np.all(_steps(effect[: len(direct)]) < DIRECT_STEP)
+    assert np.all(_steps(effect[len(direct) :]) < ROOF_SWITCH_STEP)
+
+
+@pytest.mark.parametrize("towards", [0.0, 180.0])
+def test_a_listener_on_a_roof_in_wind_has_no_strips_at_the_edge_s_shadows(towards) -> None:
+    """Sources 1.5 m up walked in 10 cm steps across the roof edge's straight shadow
+    boundaries, of the direct sound and of the ground reflection, from a listener on
+    the roof."""
+    direct, reflection = np.arange(47.1, 48.15, 0.1), np.arange(62.1, 63.15, 0.1)
+    xs = np.round(np.concatenate([direct, reflection]), 2)
+    effect = _walked(
+        [(f"s{k}", "l0") for k in range(len(xs))],
+        towards,
+        sources=[(x, 0.0, 1.5) for x in xs],
+        listeners=(ON_ROOF,),
+        buildings=(ROOF,),
+    )
+    assert np.all(_steps(effect[: len(direct)]) < DIRECT_STEP)
+    assert np.all(_steps(effect[len(direct) :]) < ROOF_SWITCH_STEP)
+
+
+@pytest.mark.parametrize("towards", [0.0, 180.0])
+def test_a_model_file_s_wall_in_wind_has_no_strips_at_its_shadows(towards, tmp_path) -> None:
+    """A wall of the model file 4 m high and 0.3 m thick 15 m from a source 8 m up:
+    listeners walked in 10 cm steps across the straight shadow boundaries of its top, of
+    the direct sound (x = 24.86) and of the ground reflection (x = 36.3)."""
+    wall = tmp_path / "wall.obj"
+    corners = [(x, y, z) for z in (0, 4) for y in (-40, 40) for x in (15, 15.3)]
+    sides = [(1, 2, 4, 3), (5, 6, 8, 7), (1, 2, 6, 5), (3, 4, 8, 7), (1, 3, 7, 5), (2, 4, 8, 6)]
+    wall.write_text(
+        "g wall\n"
+        + "".join(f"v {x} {y} {z}\n" for x, y, z in corners)
+        + "".join("f " + " ".join(map(str, s)) + "\n" for s in sides)
+    )
+    direct, reflection = np.arange(24.4, 25.45, 0.1), np.arange(35.8, 36.85, 0.1)
+    xs = np.round(np.concatenate([direct, reflection]), 2)
+    effect = _walked(
+        [("s", f"l{k}") for k in range(len(xs))],
+        towards,
+        sources=((0.0, 0.0, 8.0),),
+        listeners=[(x, 0.0, 1.5) for x in xs],
+        file=wall,
+    )
+    assert np.all(_steps(effect[: len(direct)]) < DIRECT_STEP)
+    assert np.all(_steps(effect[len(direct) :]) < REFLECTION_STEP)
+
+
 def test_a_listener_on_a_barrier_s_line_keeps_straight_legs() -> None:
     """A listener (or a map point) on a barrier's line seen from above, 58 m from the
     source exactly: the parabolic equation would take it past the barrier, where nothing
@@ -546,3 +672,74 @@ def test_the_level_changes_smoothly_past_a_barrier_s_end(atmosphere) -> None:
     result = simulate(room)
     levels = [10.0 * np.log10(total_energy(result[("s", f"l{k}")].early)) for k in range(2)]
     assert np.max(np.abs(levels[1] - levels[0])) < 1.0
+
+
+#: A building whose corner (15, 10) is in line with the source and (60, 40).
+CORNER = {"name": "h", "footprint": [[15, 0], [25, 0], [25, 10], [15, 10]], "height": 6}
+
+
+@pytest.mark.parametrize(
+    ("source", "line", "obstacles"),
+    [
+        # The way seen from above misses the barrier's end, rounded: it meets the
+        # barrier's line at 1 + 2e-16 of the barrier's length.
+        (
+            (0.0, 0.0),
+            (60.0, 40.0),
+            {"barriers": [{"name": "screen", "path": [[15, -20], [15, 10]], "height": 4}]},
+        ),
+        # Rounded the other way: the way seen from above crosses the barrier at its end,
+        # but the edge along its top, as the model holds it, ends 4e-15 m short of it.
+        (
+            (3.0, -2.0),
+            (71.0, 28.0),
+            {"barriers": [{"name": "screen", "path": [[24, -24], [20, 5.5]], "height": 4}]},
+        ),
+        # A corner, with no path over an edge in the plane: the line keeps the straight
+        # legs, as the shadow beside it does, and points within the tolerance past it
+        # keep the lit side's level.
+        ((0.0, 0.0), (60.0, 40.0), {"barriers": (), "buildings": [CORNER]}),
+        # Another barrier across the way beyond the end cuts the direct sound off on
+        # both sides: the end's own barrier, not the direct sound, tells the side.
+        (
+            (0.0, 0.0),
+            (60.0, 40.0),
+            {
+                "barriers": [
+                    {"name": "screen", "path": [[15, -20], [15, 10]], "height": 4},
+                    {"name": "wide", "path": [[57.5, -5], [17.5, 55]], "height": 4},
+                ]
+            },
+        ),
+    ],
+    ids=["barrier", "barrier-rounded-across", "building", "barrier-and-another"],
+)
+def test_the_level_in_line_with_a_barrier_s_end_is_that_beside_it(source, line, obstacles) -> None:
+    """Downwind, a listener exactly in line with the source and a barrier's end (or a
+    building's corner), 1 mm either side and 10 µm past it, within the tolerance the
+    paths over edges are found to: from 63 to 500 Hz the level on the line is that just
+    behind it, the side whose paths it has (the line meets the barrier), and the level
+    10 µm past, where it does not, that 1 mm past, within 0.05 dB; with the barrier
+    alone, on the line and past its end within 1.0 dB (the step across the end's
+    shadow boundary, see test_the_level_changes_smoothly_past_a_barrier_s_end). Fewer
+    frequencies at 4 and 8 kHz, which are not compared, keep it quick."""
+    # The barrier or building whose end or corner is in line stands to the right of the
+    # way, seen from above: behind is right.
+    way = np.subtract(line, source)
+    left = np.array([-way[1], way[0]]) / np.hypot(*way)
+    listeners = [(*np.add(line, d * left), 1.5) for d in (-0.001, 0.0, 1e-5, 0.001)]
+    room = Room.from_scene(
+        scene(
+            listeners=listeners,
+            sources=((*source, 1.0),),
+            barrier_frequencies=8,
+            **obstacles,
+        )
+    )
+    behind, on, near, past = (
+        10.0 * np.log10(total_energy(early_paths(room, listener=f"l{k}")))[:4] for k in range(4)
+    )
+    np.testing.assert_allclose(on, behind, atol=0.05)
+    np.testing.assert_allclose(near, past, atol=0.05)
+    if "buildings" not in obstacles and len(obstacles["barriers"]) == 1:
+        np.testing.assert_allclose(on, past, atol=1.0)

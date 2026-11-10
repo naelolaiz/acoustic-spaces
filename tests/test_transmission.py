@@ -160,18 +160,22 @@ def test_rooms_come_from_the_sides_of_the_faces(
     ]
 
 
-def test_an_opening_is_not_there(tmp_path: Path) -> None:
-    # Two 5 x 4 x 3 m rooms joined by an opening the size of the wall between them
-    # sound like one 10 x 4 x 3 m room.
-    alpha = {"absorption": [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.3, 0.3], "scattering": 1.0}
+def _joined_and_single(tmp_path: Path, scattering: float, late: dict) -> list:
+    """The parameters at two listeners of two 5 x 4 x 3 m rooms joined by an opening the
+    size of the wall between them, and of one 10 x 4 x 3 m room, walls scattering
+    `scattering`: [(joined, single) per listener]."""
+    alpha = {
+        "absorption": [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.3, 0.3],
+        "scattering": scattering,
+    }
     listeners = {"near": [3.9, 1.7, 1.2], "far": [8.3, 1.1, 2.1]}
-    settings = {"ir_length_s": 1.5, "late": {"rays": 4000}}
     joined = _scene(
         _coupled(tmp_path / "joined.obj", 5, 5, 4, 3, opening="all"),
         {"wall": alpha, "opening": {"transmission": 1}},
         {"room1": "wall", "room2": "wall", "opening": "opening"},
         listeners,
-        **settings,
+        ir_length_s=1.5,
+        late=late,
     )
     single = Scene.model_validate(
         {
@@ -182,11 +186,28 @@ def test_an_opening_is_not_there(tmp_path: Path) -> None:
         }
     )
     a, b = simulate(Room.from_scene(joined)), simulate(Room.from_scene(single))
-    for name in listeners:
-        p, q = a["s", name].parameters(), b["s", name].parameters()
+    return [(a["s", name].parameters(), b["s", name].parameters()) for name in listeners]
+
+
+def test_an_opening_is_not_there(tmp_path: Path) -> None:
+    # The joined rooms sound like the one room.
+    for p, q in _joined_and_single(tmp_path, 1.0, {"rays": 4000}):
         np.testing.assert_allclose(p.t30[1:7], q.t30[1:7], rtol=0.04)
         np.testing.assert_allclose(p.g[1:7], q.g[1:7], atol=0.3)
         np.testing.assert_allclose(p.c80[1:7], q.c80[1:7], atol=0.5)
+
+
+def test_an_opening_leaves_the_walls_size_scattering_as_it_was(tmp_path: Path) -> None:
+    # Walls that scatter little, and more as their size has it (the default): the
+    # distance the sound came from to a wall runs through the opening. Without
+    # splitting (which follows each room's level) the rays are the same in both models,
+    # an opening drawing no random number, so they agree closely. (In the lowest bands
+    # the size scattering, and so a vector reflection's direction, follows the rounding
+    # of the distance summed past the opening, which the box's reflections grow.)
+    for p, q in _joined_and_single(tmp_path, 0.05, {"rays": 2000, "splitting": False}):
+        np.testing.assert_allclose(p.g, q.g, atol=0.005)
+        np.testing.assert_allclose(p.t30[1:], q.t30[1:], rtol=0.005)
+        np.testing.assert_allclose(p.t30[0], q.t30[0], rtol=0.01)
 
 
 @pytest.mark.parametrize(("transmission", "volume"), [(0.01, 120.0), (0.0, 48.0)])
@@ -1212,6 +1233,49 @@ def test_the_face_nearest_to_a_point_in_a_doorway_is_the_wall_beside_it(
     face = _nearest_face(model, plane, point)
     assert not model.transparent[face]
     assert model.room.mesh.triangles[face][:, 0].min() == 6.0  # the wall from x = 6 on
+
+
+def test_particles_reflect_past_an_opening_as_if_it_were_not_there(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # Each particle's first reflection in the joined rooms and in the one room: the same
+    # face met along the same first leg from the source, so the same distance (through
+    # the opening) for the size scattering and the same count of reflections.
+    from acoustic_spaces.engine import particles
+
+    reflection = particles._reflection
+
+    def first_reflections(scene: Scene) -> tuple:
+        distance, order = np.full(300, np.nan), np.zeros(300, dtype=np.int64)
+
+        def recorded(model, face, d, dist, alive, now, *rest):
+            first = alive & ~model.transparent[face] & np.isnan(distance)
+            distance[first] = dist[first]
+            order[first] = np.broadcast_to(now, first.shape)[first]
+            return reflection(model, face, d, dist, alive, now, *rest)
+
+        monkeypatch.setattr(particles, "_reflection", recorded)
+        trace_particles(Room.from_scene(scene), count=300, duration=0.04, frames=2)
+        return distance, order
+
+    joined = _scene(
+        _coupled(tmp_path / "joined.obj", 5, 5, 4, 3, opening="all"),
+        {"wall": {"absorption": [0.1] * 8, "scattering": 0.05}, "opening": {"transmission": 1}},
+        {"room1": "wall", "room2": "wall", "opening": "opening"},
+        {"l": [8.0, 2.0, 1.5]},
+    )
+    single = Scene.model_validate(
+        {
+            **joined.model_dump(mode="json"),
+            "geometry": {"box": [10, 4, 3]},
+            "assignments": {},
+            "default_material": "wall",
+        }
+    )
+    (a, order_a), (b, order_b) = first_reflections(joined), first_reflections(single)
+    assert not np.isnan(a).any() and np.any(a > 5.0)  # some through the opening first
+    np.testing.assert_allclose(a, b, rtol=1e-9)
+    assert (order_a == 1).all() and (order_b == 1).all()
 
 
 def test_particles_and_the_wave_solver_pass_openings(tmp_path: Path) -> None:

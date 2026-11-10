@@ -1071,6 +1071,63 @@ def test_the_levels_of_rays_that_turn_back_in_a_warm_layer_2_km_away() -> None:
     _assert_on_the_listener(profile, zs, zr, 2134.3, found)
 
 
+@pytest.mark.parametrize(
+    ("ground_c", "zr", "distance", "branch", "reference"),
+    [
+        (15.0, 4.21, 800.0, (True, False, 3), 7.641),
+        (20.0, 4.61, 300.0, (True, False, 1), 6.106),
+        (20.0, 1.5, 152.0, (True, True, 1), -0.740),
+        (20.0, 5.81, 800.0, (False, False, 3), 9.122),
+    ],
+)
+def test_the_level_of_a_ray_that_turns_just_above_a_node_over_an_end(
+    ground_c, zr, distance, branch, reference
+) -> None:
+    """Downwind in the `windy` preset, from a source 5 m up (within a quarter of a layer
+    under the profile's node at 5.063 m), the ray along ``branch`` turns just above that
+    node, or above the node at 5.852 m over a listener 5.81 m up. Against the smooth
+    profile's ray tube (quadrature in the elevation angle, and the ray equations shot
+    and differenced, which agree to 0.002 dB), its level over free field at its length
+    is that given (dB); the sampled profile's own is 10 to 15 dB lower there. The
+    engine's is within 0.39 dB of it; the bound is 1 dB, well short of that step."""
+    windy = Atmosphere.model_validate({"preset": "windy"})
+    rays = Rays(Profile.of(windy, ground_c, np.array([1.0, 0.0])), 5.0)
+    found = rays.eigenrays(zr, distance, 3)
+    (i,) = _on(found, *branch)
+    assert _level(found, i) == pytest.approx(reference, abs=1.0)
+
+
+def test_the_levels_of_paths_to_seeded_listeners_against_the_smooth_profile() -> None:
+    """Downwind in the `windy` preset at 20 °C, from a source 5 m up to 15 listeners at
+    random 100 to 1000 m away and 0.5 to 12 m up (seed 2), against the smooth profile's
+    paths (validation/curved_rays.py, which has 1300 listeners a family): the 66 paths
+    not near a caustic are at most 0.52 dB off its levels, and the sums at the 14
+    listeners none of whose paths is at most 0.32 dB off. The bounds are 1 and 0.5 dB; a
+    ray turning just above the node over the source took one path 970 m away 2.17 dB
+    off."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
+    import curved_rays
+
+    weather = "windy_downwind"
+    r = curved_rays.family(weather, 5.0, curved_rays.places(weather, 15, 2))
+    assert r["unmatched"] == 0 and r["listeners_summed"] >= 12
+    assert r["max_db"] <= 1.0
+    assert r["sum_max_db"] <= 0.5
+
+
+def test_the_level_over_a_node_just_above_the_source_does_not_step() -> None:
+    """The same 300 m away, listeners 4.60 and 4.61 m up: the smooth profile's rays add
+    up to 9.52 dB over free field at both; theirs do to within 0.1 dB of each other (the
+    one ray turning over the node took 2.5 dB off the sum in that centimetre)."""
+    windy = Atmosphere.model_validate({"preset": "windy"})
+    rays = Rays(Profile.of(windy, 20.0, np.array([1.0, 0.0])), 5.0)
+    sums = [
+        10 * math.log10(np.sum(rays.eigenrays(zr, 300.0, 3).spreading) * 300.0**2)
+        for zr in (4.60, 4.61)
+    ]
+    assert sums[1] == pytest.approx(sums[0], abs=0.1)
+
+
 def test_the_levels_of_rays_in_a_duct_through_air_3_8e_12_off_level() -> None:
     """Upwind of a table whose wind is 1.377 m/s up to 1.56 cm, 1.391 m/s at 1.124 m and
     3.8e-12 m/s less at 1.438 m, 1.390 m/s at 1.836 m and 3.68 m/s at 20.56 m (15 C),
@@ -1499,6 +1556,151 @@ def test_bent_late_rays_are_traced_on_any_device() -> None:
 
     values = {"atmosphere": np.zeros((2, 3)), "transmission": np.zeros(0), "groups": 0}
     assert _unsupported(values) == ""
+
+
+def downwind(
+    rays: int,
+    max_order: int = 1,
+    scattering: float = 0.0,
+    method: str = "vector",
+    seed: int = 1,
+    barriers: tuple = (),
+) -> Scene:
+    """The fast field program's scene (``validation/benchmark_1995.py``): a source 2 m
+    up over grass, listeners 1.5 m up 200 and 300 m downwind in the windy preset."""
+    material = {
+        "impedance": {"model": "delany_bazley", "flow_resistivity": 200.0},
+        "scattering": scattering,
+    }
+    return Scene.model_validate(
+        {
+            "name": "downwind",
+            "geometry": {
+                "ground": {"extent": [[-50.0, -50.0], [350.0, 50.0]], "sky": 50.0},
+                "barriers": list(barriers),
+            },
+            "materials": {"field": material},
+            "default_material": "field",
+            "sources": [{"name": "s", "position": [0.0, 0.0, 2.0]}],
+            "listeners": [{"name": f"{r:g}", "position": [r, 0.0, 1.5]} for r in (200, 300)],
+            "atmosphere": {"preset": "windy", "wind": {"direction_deg": 0.0}},
+            "simulation": {
+                "seed": seed,
+                "ir_length_s": 1.2,
+                "early": {"method": "image_sources", "max_order": max_order, "diffraction": "none"},
+                "late": {"rays": rays},
+                "scattering": {"method": method},
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize("scattering, method", [(0.0, "vector"), (0.1, "random")])
+def test_the_late_rays_leave_out_the_ground_bounces_the_bent_early_part_holds(
+    scattering, method
+) -> None:
+    """Downwind the early stage holds the curved paths off the ground with up to
+    MAX_GROUND_BOUNCES bounces whatever its order: the late rays leave all of them out,
+    so the early order changes the late part not at all, and over a ground that scatters
+    nothing more late rays add nothing (they added 11 dB at 500 Hz with 20,000 rays, the
+    paths of 2 and 3 bounces counted twice). Over a ground that scatters, 200 and 20,000
+    rays give the 500 Hz level within the noise of its scattered sound (the paths counted
+    twice added 9 and 6 dB; at 250 Hz the scattered sound near a listener in bent air
+    comes in bursts, a known issue, and is not compared)."""
+    run = {
+        (rays, order): simulate(
+            Room.from_scene(downwind(rays, order, scattering, method)), threads=1
+        )
+        for rays, order in ((200, 1), (20_000, 1), (20_000, 2))
+    }
+    for key in run[200, 1].responses:
+        one, two = run[20_000, 1][key], run[20_000, 2][key]
+        assert np.array_equal(one.early.energy, two.early.energy)
+        assert np.array_equal(one.late, two.late)
+        if scattering == 0.0:
+            # Nothing scatters and every specular path is the early stage's: the late
+            # part is empty, however many rays.
+            assert not one.late.any() and not run[200, 1][key].late.any()
+        else:
+            few, many = (run[rays, 1][key].relative_to_free_field()[3] for rays in (200, 20_000))
+            assert abs(few - many) < 0.5
+
+
+def test_a_wall_s_reflection_above_the_early_order_stays_with_the_late_rays() -> None:
+    """In wind the early stage holds a wall's reflection with bounces off the ground only
+    up to its order (the wall's counting as one and the ground's as one): with order 1
+    the paths off the wall and the ground are the late rays', with order 2 the early
+    stage's. The late rays' secondary sources radiate the specular sound of each
+    reflection to the listeners, so the late part with order 1 has more, from when the
+    first such path arrives on."""
+    wall = {"name": "wall", "path": [[-40.0, 15.0], [340.0, 15.0]], "height": 10.0}
+    runs = []
+    for order in (1, 2):
+        scene = downwind(2_000, order, barriers=(wall,))
+        scene.simulation.late.reception = "secondary_sources"
+        runs.append(simulate(Room.from_scene(scene), threads=1))
+    for key in runs[0].responses:
+        one, two = (run[key] for run in runs)
+        step = one.time_step
+        more = one.late.sum(axis=0) - two.late.sum(axis=0)
+        assert more.min() >= 0.0 and more.sum() > 0.1 * two.late.sum()
+        added = two.early.delay_s[~np.isin(two.early.delay_s, one.early.delay_s)]
+        assert np.flatnonzero(more)[0] * step >= added.min() - step
+
+
+def test_a_coverage_map_point_in_wind_reads_as_a_listener_there() -> None:
+    """A map point 100 m downwind of a source 1 m up over grass that scatters nothing, and
+    a listener there, within 0.1 dB in every band (the map's late part added the bounces
+    the early stage holds: 5 dB at 250 Hz with this seed)."""
+    from acoustic_spaces.engine.coverage import coverage_map
+
+    data = {
+        "name": "map",
+        "geometry": {"ground": {"extent": [[-10.0, -10.0], [130.0, 10.0]], "sky": 20.0}},
+        "materials": {"field": {"impedance": "grass", "scattering": 0.0}},
+        "default_material": "field",
+        "sources": [{"name": "s", "position": [0.0, 0.0, 1.0]}],
+        "listeners": [{"name": "l", "position": [100.0, 0.0, 1.5]}],
+        "atmosphere": {"preset": "windy", "wind": {"direction_deg": 0.0}},
+        "coverage": {"spacing": 20.0, "height": 1.5, "rays": 2000},
+        "simulation": {
+            "seed": 2,
+            "ir_length_s": 0.5,
+            "early": {"method": "image_sources", "max_order": 1, "diffraction": "none"},
+            "late": {"rays": 2000},
+        },
+    }
+    room = Room.from_scene(Scene.model_validate(data))
+    mapped = coverage_map(room, threads=1)
+    at = int(np.argmin(np.linalg.norm(mapped.grid.points - [100.0, 0.0, 1.5], axis=1)))
+    assert np.allclose(mapped.grid.points[at], [100.0, 0.0, 1.5])
+    listener = simulate(room, threads=1)["s", "l"].relative_to_free_field()
+    point = np.asarray(mapped.maps["s"].values["re_free_field"][at])
+    np.testing.assert_allclose(point, listener, atol=0.1)
+
+
+def test_still_air_traces_the_late_part_as_before() -> None:
+    """Without an atmosphere that bends the sound every reflection counts towards the
+    early order as before: the late part of a closed room and of a field in neutral air
+    as computed before the late rays learnt the bent early stage's paths."""
+    box = Scene.model_validate(
+        {
+            "name": "box",
+            "geometry": {"box": [6.0, 5.0, 3.0]},
+            "materials": {"m": {"absorption": [0.1] * 8, "scattering": 0.2}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": [1.5, 1.2, 1.4]}],
+            "listeners": [{"name": "l0", "position": [4.2, 3.1, 1.2]}],
+            "simulation": {"seed": 3, "ir_length_s": 0.2, "late": {"rays": 300}},
+        }
+    )
+    neutral = field({"preset": "neutral"}, ((60.0, 0.0, 1.5), (-30.0, 10.0, 3.0)))
+    before = (1.6025686813266748, 8.349338904503138e-07, 8.012851349037927e-06)
+    found = []
+    for scene in (box, neutral):
+        result = simulate(Room.from_scene(scene), threads=1)
+        found += [float(result[key].late.sum()) for key in sorted(result.responses)]
+    np.testing.assert_allclose(found, before, rtol=1e-6)
 
 
 def test_particles_bend_and_stay_put_in_still_air() -> None:

@@ -80,6 +80,50 @@ def test_npd_curves() -> None:
     assert float(far) == pytest.approx(row[-1] + slope * math.log10(2.0))
 
 
+def test_npd_columns_by_their_whole_names(tmp_path) -> None:
+    """An NPD table's distance columns are found by their whole number, in any order
+    and with ANP's unit suffix: "L_200" is not the start of "L_2000 (ft)". A table
+    without one of the distances, or with two columns for one, is refused."""
+    lines = (volume3.DATA / "npd.csv").read_text(encoding="utf-8").splitlines()
+    rows = [line.split(",") for line in lines]
+    distances = list(range(4, 14))
+    # Each level, by (curves, power, ft), straight from the table's cells.
+    cells = {
+        ((r[0], r[1], r[2]), float(r[3]), feet): float(r[k])
+        for r in rows[1:]
+        for k, feet in zip(distances, NPD_FEET, strict=True)
+    }
+
+    def written(name: str, order: list[int], unit: str = " (ft)"):
+        table = tmp_path / name
+        columns = [0, 1, 2, 3, *order]
+        lines = [",".join(r[k] for k in columns) for r in rows]
+        table.write_text("\n".join([lines[0].replace(" (ft)", unit), *lines[1:]]))
+        return table
+
+    shuffled = [9, 13, 4, 7, 11, 5, 12, 8, 6, 10]
+    for table in (
+        written("reversed.csv", distances[::-1]),
+        written("shuffled.csv", shuffled),
+        written("anp.csv", distances[::-1], unit="ft"),
+    ):
+        got = {
+            (key, power, feet): level
+            for key, c in doc29.read_npd(table).items()
+            for power, row in zip(c.powers, c.levels, strict=True)
+            for feet, level in zip(NPD_FEET, row, strict=True)
+        }
+        assert got == cells, table.name
+    curves = doc29.read_npd(written("reversed.csv", distances[::-1]))
+    assert curves[("JETW", "LAmax", "D")].levels[0][:4] == (100.1, 92.8, 87.9, 82.8)
+    with pytest.raises(KeyError, match="no column 'L_200'"):
+        doc29.read_npd(written("short.csv", distances[1:]))
+    both = written("two.csv", [4, *distances])
+    both.write_text(both.read_text().replace("L_200 (ft),L_200 (ft)", "L_200 (ft),L_200ft"))
+    with pytest.raises(ValueError, match=r"'L_200 \(ft\)' and 'L_200ft' each name 'L_200'"):
+        doc29.read_npd(both)
+
+
 def test_corrections() -> None:
     """Volume 2's corrections at the values it states."""
     assert ev.impedance_db() == pytest.approx(0.074, abs=0.0005)
@@ -322,6 +366,69 @@ def test_maximum_level_behind_and_ahead_of_the_rolls() -> None:
     ahead = np.array([[900.0, 300.0, 0.0]])
     result = doc29.event(plane, sel, lamax, [landing], ahead)
     assert result.lamax == pytest.approx([expected(ends["end"], ahead[0], sor=False)], abs=1e-6)
+
+
+def _fuselage(phi_deg: float) -> float:
+    """Eq. 4-15 for engines on the fuselage (a = 0.1225, b = 0.329, c = 1)."""
+    phi = math.radians(phi_deg)
+    top = (0.1225 * math.cos(phi) ** 2 + math.sin(phi) ** 2) ** 0.329
+    return 10 * math.log10(top / (math.sin(2 * phi) ** 2 + math.cos(2 * phi) ** 2))
+
+
+def test_maximum_level_behind_and_ahead_of_an_airborne_segment() -> None:
+    """Ahead of or behind an airborne segment the maximum level takes the NPD curve at
+    the distance d to the nearest end and the lateral attenuation at that end's
+    elevation angle asin(z/d) and ground distance, but the installation correction at
+    the depression angle at the extended path's closest point of approach, beta_p -/+
+    the bank angle (Volume 2 section 4.5.5, Directive (EU) 2015/996 annex 2.7.19), as
+    the exposure does: under the extended ground track of a level flight that is 90
+    degrees, where a fuselage-mounted jet's installation correction is nought."""
+    curves = volume3.npd()
+    plane = volume3.aircraft()["JETF"]
+    sel, lamax = curves[("JETF", "SEL", "D")], curves[("JETF", "LAmax", "D")]
+    speed = ev.REFERENCE_SPEED_M_S
+
+    def expected(end, receiver, beta_p: float, bank: float) -> float:
+        z = end[2] - receiver[2]
+        d = math.dist(end, receiver)
+        beta = math.degrees(math.asin(z / d))
+        ell = math.hypot(receiver[0] - end[0], receiver[1] - end[1])
+        return _lamax_npd(lamax, 20000.0, d) - _lateral(beta, ell) + _fuselage(beta_p + bank)
+
+    # Ahead of a level segment 300 m up: beta_p = atan(300 / |y|).
+    level = doc29.Segment(
+        start=(-5000.0, 0.0, 300.0),
+        end=(0.0, 0.0, 300.0),
+        speeds=(speed, speed),
+        powers=(20000.0, 20000.0),
+    )
+    ahead = np.array([[600.0, 0.0, 0.0], [600.0, 150.0, 0.0]])
+    result = doc29.event(plane, sel, lamax, [level], ahead)
+    hand = [expected(level.end, r, math.degrees(math.atan2(300.0, r[1])), 0.0) for r in ahead]
+    assert result.lamax == pytest.approx(hand, abs=1e-6)
+    assert result.lamax == pytest.approx([79.766, 79.148], abs=5e-4)
+    assert result.segments[0].depression == pytest.approx([90.0, 63.435], abs=5e-4)
+
+    # Behind a segment climbing at 10 degrees, banked 5 degrees (starboard wing up):
+    # beta_p from the closest point of the extended path, h = sqrt(dp² - l²).
+    climb = math.radians(10.0)
+    start = np.array([0.0, 0.0, 100.0])
+    end = start + 3000.0 * np.array([math.cos(climb), 0.0, math.sin(climb)])
+    climbing = doc29.Segment(
+        start=tuple(start),
+        end=tuple(end),
+        speeds=(80.0, 85.0),
+        powers=(20000.0, 20000.0),
+        banks=(5.0, 5.0),
+    )
+    behind = np.array([[-300.0, 300.0, 0.0], [-300.0, -300.0, 0.0]])  # port, starboard
+    result = doc29.event(plane, sel, lamax, [climbing], behind)
+    u = (end - start) / np.linalg.norm(end - start)
+    rel = behind[0] - start
+    dp = math.sqrt(rel @ rel - (rel @ u) ** 2)
+    beta_p = math.degrees(math.atan(math.sqrt(dp**2 - 300.0**2) / 300.0))
+    hand = [expected(start, behind[0], beta_p, -5.0), expected(start, behind[1], beta_p, 5.0)]
+    assert result.lamax == pytest.approx(hand, abs=1e-6)
 
 
 def _level_flight(power: float, height: float = 1000 * FOOT_M) -> doc29.Segment:
