@@ -50,6 +50,14 @@ jobs:
         # macos-latest is Apple silicon; macos-26-intel is an Intel Mac (see the wheels job).
         os: [ubuntu-24.04, macos-latest, macos-26-intel, windows-latest]
         python: ["3.10", "3.14"]
+        # Five macOS jobs run at a time for the whole account, and those on the Intel Mac
+        # take the longest (two thirds of a run's macOS time in November 2026, when jobs
+        # waited for hours). A pull request runs one job there, these tests with Python
+        # 3.10; main and tags run this job with Python 3.14, the editor's and the wheels'
+        # as well. On other events the entry names no runner, and excludes nothing.
+        exclude:
+          - os: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'none' }}
+            python: "3.14"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -218,6 +226,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, macos-latest, macos-26-intel, windows-latest]
+        # Not on the Intel Mac for a pull request: see the test job.
+        exclude:
+          - os: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'none' }}
     env:
       # Qt without a display; the 3D view shows a note instead, and the Xvfb step below
       # covers it on Linux.
@@ -256,6 +267,9 @@ jobs:
         # GitHub offers, as macOS 26 is the last macOS for Intel Macs. When it is retired,
         # build the Intel wheels on macos-latest with CIBW_ARCHS_MACOS: x86_64 instead.
         os: [ubuntu-24.04, macos-latest, macos-26-intel, windows-latest]
+        # Not on the Intel Mac for a pull request: see the test job.
+        exclude:
+          - os: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'none' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -268,8 +282,8 @@ jobs:
         timeout-minutes: 240
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
-          # Pull requests build the oldest and the newest CPython per platform; tags build the
-          # full set from pyproject.toml.
+          # Pull requests and main build the oldest and the newest CPython per platform; tags
+          # build the full set from pyproject.toml.
           CIBW_BUILD: ${{ startsWith(github.ref, 'refs/tags/') && 'cp310-* cp311-* cp312-* cp313-* cp314-*' || 'cp310-* cp314-*' }}
       - uses: actions/upload-artifact@v6
         with:

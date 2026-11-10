@@ -73,7 +73,8 @@
   minutes (pytest's `faulthandler_timeout`), to show where a hung job stands.
 - Changed: CI runs again by itself, up to twice, the jobs of a run that failed only
   because GitHub lost their runner or a step that fetches system packages failed
-  (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`).
+  (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`). A pull request runs one job on
+  the Intel Mac, the tests with Python 3.10; main and tags run all four.
 
 ## 4.2.1
 
