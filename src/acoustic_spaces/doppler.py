@@ -22,15 +22,27 @@ place to place along the walk:
   most the path raises the pitch (as a ratio), rounded down to 32 / n of the Nyquist
   frequency, n the taps it then needs on each side, so that the paths share a few
   tables of taps.
+- **The spreading.** The direct sound's level, and a reflection's, falls as one over the
+  path's length, which is its delay times the speed of sound, and a fast walker close
+  by changes that length by much of itself within one window of the filter. So each
+  sample read is divided by the path's delay at that sample (the cubic's, held past
+  the path's own ends, before the eddies move it and without an ear's onset; no less
+  than that of
+  :data:`~acoustic_spaces.room.MIN_SOURCE_DISTANCE_M`, the nearest a listener may
+  stand to a source), and the level follows the distance from sample to sample, as the
+  pitch does.
 - **The filter.** What else the path does to the sound (the air, the ground's
   reflection, a diffracting edge, the source's directivity, the direction it arrives
   from in the output format, and in turbulence how the eddies delay its other bands
-  from its top one at that moment) goes into a filter, the path's spectrum without its
-  delay as the impulse response has it. The filter changes every :data:`HOP_S`, taken
-  between the places on either side in proportion to how near they are; the delayed
-  signal goes through it in windows that half overlap (squared sines, which add up to
-  one), so a path heard from one place alone gives exactly the convolution with its
-  response.
+  from its top one at that moment) goes into a filter: the path's spectrum as the
+  impulse response has it, without its delay and times its delay at the place, which
+  the division by the delay takes back there (a path bent over an edge spreads
+  otherwise: what of that is not one over its length stays in the filter). The filter
+  is taken every :data:`HOP_S`, between the places on either side in proportion to how
+  near they are; the delayed signal goes through it in windows that half overlap
+  (triangles, which add up to one), so from one window's centre to the next the filter
+  goes linearly from one to the other, and a path heard from one place alone gives
+  exactly the convolution with its response.
 - **The ears.** Where each ear's response starts (its onset, as the ears are mixed
   between measured directions: :meth:`~acoustic_spaces.spatial.hrtf.HRTF.interpolate`)
   is a delay too: it goes into that ear's delay, read through the cubic and the sinc
@@ -55,9 +67,13 @@ source's sound as it is sent, so that each place's late part follows its early p
 at the retarded time; a walking listener's as it is heard); and the wave solver's
 bands are not taken (a walk with Doppler and the wave solver stops with an error).
 The source radiates as it would standing at each place, as road and rail emission data
-have it: the convective amplification of a moving source (for a monopole up to 0.8 dB
-ahead at 30 m/s, 2 dB at 70 m/s, less behind) is left out, and emission measured in a
-pass-by already carries it, as an emission may.
+have it: the convective amplification of a moving source is left out, and emission
+measured in a pass-by already carries it, as an emission may. Its size depends on the
+kind of source. For a point monopole (a source of volume flow q) in steady motion the
+far-field pressure is rho q' / (4 pi R (1 - M cos theta)^2), R and theta as the sound
+left: two powers of the Doppler factor, 40 lg(1 / (1 - M cos theta)) dB in level, which
+is 1.6 dB more straight ahead at 30 m/s and 4.0 dB at 70 m/s, 1.5 and 3.2 dB less
+straight behind.
 """
 
 from __future__ import annotations
@@ -77,8 +93,9 @@ from acoustic_spaces import synthesis
 from acoustic_spaces.emission import Emission
 from acoustic_spaces.engine import coherent
 from acoustic_spaces.engine.model import source_weights
+from acoustic_spaces.room import MIN_SOURCE_DISTANCE_M
 
-#: How often each path's filter changes (s): the hop of the half-overlapping windows.
+#: How often each path's filter is taken (s): the hop of the half-overlapping windows.
 HOP_S = 0.02
 #: Length of a path's filter (s), as the binaural early paths have it.
 KERNEL_S = 0.3
@@ -478,6 +495,9 @@ class Filters:
             paths = dataclasses.replace(paths, energy=energy)
         gains = synthesis.band_gains(self.n_fft, self.rate, response.bands)
         shaping = coherent.amplitude_spectra(paths, self.f, gains) * self.shift
+        # Each sample is divided by the path's delay then (:func:`render`), so the
+        # filter is times the path's delay at the place: at the place the two cancel.
+        shaping *= response.early.delay_s[:, None]
         heads = to_head(paths.direction, response.orientation)
         if isinstance(self.fmt, Binaural):
             hrtf = self.fmt.at(self.rate)
@@ -563,9 +583,13 @@ class _Reading:
         assert self.onsets is not None
         return hermite(self.track.received[self.heard], self.onsets[self.heard, ear], t)
 
-    def delays(self, t: np.ndarray, walk_last: int) -> np.ndarray:
+    def delays(self, t: np.ndarray, walk_last: int) -> tuple[np.ndarray, np.ndarray]:
+        """The path's delay at times ``t`` (s), carried on along its slope past the
+        path's own ends, and the same delay held at its ends instead (inside the places
+        it is heard from the two are the same)."""
         track, heard = self.track, self.heard
-        delay = hermite(track.received[heard], track.delays[heard], t, hold=True)
+        held = hermite(track.received[heard], track.delays[heard], t, hold=True)
+        delay = held.copy()
         first_k, last_k = track.span
         if first_k > 0 or last_k < walk_last:
             # Past a path's own ends (it appears or goes) its delay carries on along
@@ -577,7 +601,7 @@ class _Reading:
             if last_k < walk_last:
                 ends |= t > track.received[last_k]
             delay[ends] = carried[ends]
-        return delay
+        return delay, held
 
 
 #: Blocks of :data:`HOP_S` whose delayed signals are read at once.
@@ -694,7 +718,8 @@ def render(
         frames,
     )
     turbulent = any(r.early.wander is not None for r in responses)
-    window = np.sin(np.pi * np.arange(2 * hop) / (2 * hop)) ** 2
+    nearest = MIN_SOURCE_DISTANCE_M / responses[0].speed_of_sound
+    window = 1.0 - np.abs(np.arange(2 * hop) - hop) / hop
     begin, end = (0, length) if span is None else (max(int(span[0]), 0), int(span[1]))
     end = min(end, length)
     # Block j adds to the samples from (j - 1) hops on, heard half a kernel later: the
@@ -722,7 +747,13 @@ def render(
         for reading in readings:
             if reading.first > c1 - 1 or reading.last < c0:
                 continue
-            delay = reading.delays(t, last)
+            delay, held = reading.delays(t, last)
+            # The path's spreading, which its filter leaves to the delay: one over the
+            # delay at each sample, before the eddies move it and without an ear's
+            # onset; between places no nearer than a listener may stand to a source.
+            # Past the path's ends, where it fades in or out, the delay held there: the
+            # fade is then the filter's, from the level at the place it is heard from.
+            spread = 1.0 / np.maximum(held, nearest)
             if turbulent:
                 delay = delay + _moved(filters, reading.track, t, gusts)
             # At the ears, each ear's own delay (its onset added): (samples, 2).
@@ -735,9 +766,9 @@ def render(
                 for each in ears:
                     positions = np.arange(n0, n1) - each * rate
                     if emission is not None:
-                        reads.append(reading.sent(emission, positions, rate))
+                        reads.append(reading.sent(emission, positions, rate) * spread)
                     else:
-                        reads.append(read(signal, positions, reading.cutoff))
+                        reads.append(read(signal, positions, reading.cutoff) * spread)
                 at_ears.append(np.column_stack(reads))
             active.append((reading, at_ears))
         if not active:

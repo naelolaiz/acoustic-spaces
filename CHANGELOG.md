@@ -93,6 +93,16 @@
   which are 8.2, 5.6 and 4.0 times since 4.2.0), and `fetch.extract_tar` raises
   `OSError`, not `http.client.IncompleteRead`, for a tar archive sent in chunks and cut
   short.
+- Fixed: a walk with Doppler follows each path's 1/distance from sample to sample, not
+  every 20 ms: a source passing 1 m from a listener at 70 m/s rippled by up to 0.73 dB
+  and is now within 0.01 dB of the exact field (1 kHz, 5 ms windows). The filters from
+  place to place are joined linearly (triangles, not squared sines), which also moves a
+  source heard through turbulence by up to 0.03 dB in its 5 ms levels.
+- Fixed: a demo's tour fits each crossfade to the stops it joins; a stop shorter than
+  the crossfade was played twice (+6 dB) or stopped the demo with an error.
+- Docs: a moving monopole's convective amplification, which the engine leaves out, is
+  40 lg 1/(1 − M cos θ) dB (1.6 dB ahead at 30 m/s, 4.0 dB at 70 m/s), twice what the
+  docs said.
 
 ## 4.2.1
 

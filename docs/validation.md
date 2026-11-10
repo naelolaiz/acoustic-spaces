@@ -3213,18 +3213,24 @@ error, mean and most), away from the walk's ends:
 
 | case | tone | waveform | level | without Doppler: waveform | level |
 |---|---|---|---|---|---|
-| car, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | 2.9 dB | 0.73 / 3.42 dB |
-| | 1 kHz | -54.0 dB | 0.003 / 0.029 dB | 2.9 dB | 0.76 / 3.54 dB |
-| | 4 kHz | -45.4 dB | 0.003 / 0.032 dB | 3.0 dB | 0.96 / 4.13 dB |
-| train, 80 m/s | 250 Hz | -46.4 dB | 0.007 / 0.024 dB | 2.9 dB | 1.62 / 2.75 dB |
-| | 1 kHz | -46.7 dB | 0.012 / 0.032 dB | 2.9 dB | 1.63 / 3.54 dB |
-| | 4 kHz | -38.7 dB | 0.081 / 0.415 dB | 3.1 dB | 2.39 / 12.21 dB |
-| passing listener, 30 m/s | 250 Hz | -55.0 dB | 0.002 / 0.011 dB | -0.5 dB | 0.22 / 2.87 dB |
-| | 1 kHz | -54.2 dB | 0.003 / 0.019 dB | 1.7 dB | 0.24 / 3.45 dB |
-| | 4 kHz | -45.5 dB | 0.003 / 0.019 dB | 2.9 dB | 0.35 / 3.78 dB |
+| car, 30 m/s | 250 Hz | -71.3 dB | 0.000 / 0.000 dB | 2.9 dB | 0.73 / 3.42 dB |
+| | 1 kHz | -58.0 dB | 0.000 / 0.012 dB | 2.9 dB | 0.76 / 3.54 dB |
+| | 4 kHz | -46.0 dB | 0.001 / 0.019 dB | 3.0 dB | 0.96 / 4.13 dB |
+| train, 80 m/s | 250 Hz | -68.7 dB | 0.002 / 0.009 dB | 2.9 dB | 1.62 / 2.75 dB |
+| | 1 kHz | -56.6 dB | 0.006 / 0.034 dB | 2.9 dB | 1.63 / 3.54 dB |
+| | 4 kHz | -39.5 dB | 0.077 / 0.419 dB | 3.1 dB | 2.39 / 12.21 dB |
+| passing listener, 30 m/s | 250 Hz | -71.4 dB | 0.000 / 0.000 dB | -0.5 dB | 0.22 / 2.87 dB |
+| | 1 kHz | -58.1 dB | 0.000 / 0.001 dB | 1.7 dB | 0.24 / 3.45 dB |
+| | 4 kHz | -46.1 dB | 0.000 / 0.005 dB | 2.9 dB | 0.35 / 3.78 dB |
 
 With Doppler the sound follows the field to within 39 dB and its level to within 0.42
-dB, the most for the train at 4 kHz, where its two paths cancel for a moment. The same
+dB, both the most for the train at 4 kHz, and there mostly the air's doing, not the
+delays': ahead of the train its tone is heard at 5.2 kHz, which the engine's band
+filters share between the 4 and the 8 kHz band, each with its own absorption in the
+air, where the field here takes the 4 kHz band's all along. The level differs most
+where the comparison starts, the train 47 m away. With the field's absorption taken at
+the pitch heard instead, through the same band filters (a one-off check, not repeated
+by the script), the train at 4 kHz is within 44.9 dB and its level within 0.025 dB. The same
 walks crossfaded from place to place, as without Doppler, keep each place's pitch, so
 their phase jumps from place to place: the waveform's error is about as large as the
 field itself (-0.5 dB or more). Their crossfades keep each band's power however alike
@@ -3242,31 +3248,35 @@ source, at the time it leaves:
 
 | case | tone | waveform | level |
 |---|---|---|---|
-| car, 30 m/s | 1 kHz | -53.2 dB | 0.005 / 0.039 dB |
-| | 4 kHz | -46.3 dB | 0.006 / 0.067 dB |
-| train, 80 m/s | 1 kHz | -45.3 dB | 0.016 / 0.057 dB |
-| | 4 kHz | -35.2 dB | 0.085 / 0.419 dB |
-| passing listener, 30 m/s | 1 kHz | -53.5 dB | 0.005 / 0.047 dB |
-| | 4 kHz | -46.1 dB | 0.007 / 0.105 dB |
+| car, 30 m/s | 1 kHz | -57.7 dB | 0.004 / 0.025 dB |
+| | 4 kHz | -47.1 dB | 0.005 / 0.060 dB |
+| train, 80 m/s | 1 kHz | -56.1 dB | 0.010 / 0.038 dB |
+| | 4 kHz | -35.7 dB | 0.080 / 0.423 dB |
+| passing listener, 30 m/s | 1 kHz | -57.5 dB | 0.004 / 0.032 dB |
+| | 4 kHz | -46.8 dB | 0.005 / 0.086 dB |
 
 With a cardioid directivity on the source, which the emission takes the place of in
 the early paths, every number is the same to the digits shown. The level stays within
-0.11 dB at 30 m/s and 0.42 dB for the train at 4 kHz, as one signal's does there; the
-train's waveform at 4 kHz is 3.5 dB further than one signal's,
-as the tone sent ahead weighs the approach more, where the pitch is higher and the
-delays' error weighs more. In one-off checks, not repeated by the script, the tone sent
-louder behind instead (1 - 0.8 cos θ) came within 42.7 dB, and with the amplitude alike
-every way (only the phase turning) within 38.6 dB, as one signal; a grid 1° apart, or
-places 0.5 m apart, changed it by 0.3 dB at most.
+0.09 dB at 30 m/s and 0.42 dB for the train at 4 kHz, as one signal's does there; the
+train's waveform at 4 kHz is 3.8 dB further than one signal's,
+as the tone sent ahead weighs the approach more, where the air's absorption at the
+pitch heard differs most from the field's (with the field's taken at the pitch heard,
+as above, it is within 46.6 dB and its level within 0.012 dB). In one-off checks, not
+repeated by the script, the tone sent
+louder behind instead (1 - 0.8 cos θ) came within 44.9 dB, and with the amplitude alike
+every way (only the phase turning) within 39.5 dB, as one signal; a grid 1° apart
+changed the table by 0.4 dB at most, and places 0.5 m apart brought the cases at 30 m/s
+within 63 dB and the train at 1 kHz within 60 dB, the train at 4 kHz staying within
+36 dB.
 
 **The places.** The car at 1 kHz with its places further apart:
 
 | places apart | waveform | level |
 |---|---|---|
-| 0.25 m | -57.1 dB | 0.001 / 0.016 dB |
-| 1 m | -54.0 dB | 0.003 / 0.029 dB |
-| 2 m | -38.5 dB | 0.008 / 0.055 dB |
-| 4 m | -18.3 dB | 0.037 / 0.289 dB |
+| 0.25 m | -93.8 dB | 0.000 / 0.000 dB |
+| 1 m | -58.0 dB | 0.000 / 0.012 dB |
+| 2 m | -38.7 dB | 0.002 / 0.033 dB |
+| 4 m | -18.3 dB | 0.015 / 0.235 dB |
 
 The delays are curves through the places, so the further apart the places, the more
 they stray between them; up to 1 m they hardly do.
@@ -3278,23 +3288,60 @@ windows from 0.3 s after the first sound arrives):
 
 | places apart | tone | waveform | level |
 |---|---|---|---|
-| 1 m | 250 Hz | -71.8 dB | 0.000 / 0.001 dB |
-| | 1 kHz | -71.8 dB | 0.000 / 0.003 dB |
-| | 4 kHz | -67.9 dB | 0.000 / 0.005 dB |
-| 4 m | 250 Hz | -71.3 dB | 0.001 / 0.015 dB |
-| | 1 kHz | -66.8 dB | 0.002 / 0.045 dB |
-| | 4 kHz | -55.1 dB | 0.004 / 0.089 dB |
-| 8 m | 250 Hz | -63.0 dB | 0.003 / 0.094 dB |
-| | 1 kHz | -50.3 dB | 0.007 / 0.202 dB |
-| | 4 kHz | -37.2 dB | 0.019 / 0.309 dB |
-| 16 m | 250 Hz | -45.8 dB | 0.015 / 0.813 dB |
-| | 1 kHz | -32.2 dB | 0.026 / 0.478 dB |
-| | 4 kHz | -19.4 dB | 0.074 / 0.993 dB |
+| 1 m | 250 Hz | -110.7 dB | 0.000 / 0.000 dB |
+| | 1 kHz | -102.1 dB | 0.000 / 0.001 dB |
+| | 4 kHz | -88.5 dB | 0.000 / 0.002 dB |
+| 4 m | 250 Hz | -81.6 dB | 0.001 / 0.015 dB |
+| | 1 kHz | -68.5 dB | 0.002 / 0.047 dB |
+| | 4 kHz | -55.3 dB | 0.004 / 0.088 dB |
+| 8 m | 250 Hz | -64.0 dB | 0.003 / 0.094 dB |
+| | 1 kHz | -50.4 dB | 0.006 / 0.202 dB |
+| | 4 kHz | -37.2 dB | 0.018 / 0.308 dB |
+| 16 m | 250 Hz | -45.9 dB | 0.013 / 0.819 dB |
+| | 1 kHz | -32.2 dB | 0.025 / 0.490 dB |
+| | 4 kHz | -19.4 dB | 0.072 / 0.994 dB |
 
 From 150 m up the delays curve far less than from a road 10 m away, so places 4 m
 apart follow the field to within 55 dB at 4 kHz, more closely than the car's places 1 m
-apart (45.4 dB at 4 kHz); the [flyover demo](demos.md#a-helicopter-flying-over)
+apart (46.0 dB at 4 kHz); the [flyover demo](demos.md#a-helicopter-flying-over)
 simulates its helicopter every 4 m.
+
+**Passing close.** The road's walks again with the walker passing 2 m or 1 m from the
+other's line (2.06 and 1.12 m away at the nearest, with their heights), its places 0.25
+m apart, heard in mono and, at 1 kHz, through a cardioid microphone. At 70 m/s the
+walker goes 1.4 m from one of a path's filters to the next, 20 ms later, so here the
+level's error is in 5 ms windows:
+
+| walker | from the line | tone | waveform | level |
+|---|---|---|---|---|
+| source, 70 m/s | 2 m | 1 kHz | -67.8 dB | 0.002 / 0.010 dB |
+| | | 4 kHz | -52.9 dB | 0.022 / 0.128 dB |
+| | | 1 kHz, cardioid | -41.4 dB | 0.009 / 0.147 dB |
+| source, 70 m/s | 1 m | 1 kHz | -56.1 dB | 0.002 / 0.010 dB |
+| | | 4 kHz | -44.2 dB | 0.023 / 0.130 dB |
+| | | 1 kHz, cardioid | -36.5 dB | 0.011 / 0.252 dB |
+| source, 30 m/s | 1 m | 1 kHz | -56.6 dB | 0.000 / 0.011 dB |
+| | | 4 kHz | -45.1 dB | 0.001 / 0.034 dB |
+| | | 1 kHz, cardioid | -43.2 dB | 0.003 / 0.170 dB |
+| listener, 30 m/s | 1 m | 1 kHz | -56.8 dB | 0.000 / 0.008 dB |
+| | | 4 kHz | -45.3 dB | 0.001 / 0.026 dB |
+| | | 1 kHz, cardioid | -44.2 dB | 0.002 / 0.142 dB |
+
+A path's spreading is not in its filter: each sample is divided by the path's delay
+then, so the level follows one over the distance through the pass. At 70 m/s the most
+is not at the pass but where the comparison starts, 33 m before it, and is the air's
+again: the 4 kHz tone is heard at 5.0 kHz there. With the field's absorption taken at
+the pitch heard (a one-off check), the level at 70 m/s is within 0.028 dB at 4 kHz and
+0.009 dB at 1 kHz, the most at the pass.
+
+What depends on the direction a path arrives from (a microphone's pattern, the ears, a
+loudspeaker's panning, the source's directivity) stays in the filter, taken every 20 ms
+and going linearly from one window's centre to the next: heard through a cardioid
+microphone level at the listener, aimed at the walker's line (each path times 0.5 +
+0.5 cos of the angle it arrives at), the level misses the field's by up to 0.25 dB in
+5 ms windows, the walker 1 m away at 70 m/s. That is the filter's 20 ms: taken every 5
+ms instead (a one-off check), it misses it by 0.036 dB at 30 m/s and 0.055 dB at 70
+m/s, 1 m away.
 
 **The levels.** White noise through the car's walk over grass (Miki's impedance, 200
 kPa s/m²), 16 noises up to 18 kHz: the energy of the sound in each octave band over the
@@ -3308,7 +3355,7 @@ places' band levels:
 | 63 Hz | -25.87 | -25.90 | -26.13 | -25.90 | -25.92 |
 | 125 Hz | -27.54 | -27.55 | -27.70 | -27.62 | -27.64 |
 | 250 Hz | -32.13 | -32.10 | -32.30 | -32.31 | -32.31 |
-| 500 Hz | -34.87 | -34.92 | -34.05 | -34.98 | -34.91 |
+| 500 Hz | -34.87 | -34.92 | -34.05 | -34.97 | -34.91 |
 | 1 kHz | -29.52 | -29.53 | -29.64 | -29.56 | -29.59 |
 | 2 kHz | -30.18 | -30.19 | -30.28 | -30.21 | -30.23 |
 | 4 kHz | -30.76 | -30.77 | -30.68 | -30.78 | -30.79 |
@@ -3327,10 +3374,11 @@ listener has L_Amax 61.4 dB(A) 2.03 s into the walk, SEL 61.2 dB(A) and L_Aeq 55
 over 4 s.
 
 **What it leaves out.** The engine's source is quasi-static, as the field it is
-compared with: a moving source's convective amplification is left out (taking its
-intensity as (1 − M cos θ)⁻², one common form whose exponent depends on the source,
-up to 0.8 dB louder ahead of it at 30 m/s and 2.0 dB at 70 m/s, 0.7 and 1.6 dB
-quieter behind), and so is the
+compared with: a moving source's convective amplification is left out (its size depends
+on the kind of source: a point monopole's far-field pressure goes as (1 − M cos θ)⁻²,
+M cos θ its Mach number towards the listener as the sound leaves, so its level as
+40 lg 1/(1 − M cos θ), up to 1.6 dB louder straight ahead of it at 30 m/s and 4.0 dB
+at 70 m/s, 1.5 and 3.2 dB quieter straight behind), and so is the
 Doppler shift of the late part, which is crossfaded. Binaural walks are checked
 against the convolution with a response when the walker stands still (to within 45 dB
 at each ear in the tests), not against a moving head's exact field. A test drives a

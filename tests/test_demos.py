@@ -1251,6 +1251,32 @@ def test_a_tour_crossfade_keeps_the_power_however_alike_the_two_mixes_are(
     assert level_at_cut("unlike") == pytest.approx(0.0, abs=0.3)
 
 
+@pytest.mark.parametrize(
+    "cuts",
+    [
+        (0.0, 2.0, 2.6, 5.0),  # a middle stop shorter than the crossfade
+        (0.0, 2.0, 2.2, 5.0),  # and shorter than half of it
+        (0.0, 0.3, 3.0, 5.0),  # a first stop shorter than half the crossfade
+        (0.0, 2.0, 4.7, 5.0),  # a last one
+    ],
+)
+def test_a_tour_crossfade_is_no_longer_than_the_stops_it_joins(tmp_path: Path, cuts) -> None:
+    """Three mixes of one sound, toured, are that sound, however short a stop: a 1 s
+    crossfade is cut to the shorter of the two stops it joins. Left whole, a middle
+    stop's two crossfades overlapped and played it twice (6 dB louder), and one at
+    either end reached past the tour's (numpy's error for the shapes)."""
+    folder = tmp_path / "seats"
+    noise = np.random.default_rng(4).standard_normal((5 * RATE, 2)) * 0.1
+    keys = ("a", "b", "c")
+    for key in keys:
+        audio.write(folder / f"{key}.binaural.wav", noise, RATE)
+    seats = {"rate": RATE, "format": "binaural", "seats": {key: {"lag_s": 0.0} for key in keys}}
+    stops = [pipeline.TourStop(key, cuts[k], cuts[k], cuts[k + 1]) for k, key in enumerate(keys)]
+    out = pipeline.tour_audio(stops, folder, seats, crossfade_s=1.0, fade_out_s=0.0, peak_db=None)
+    played = audio.read(folder / "a.binaural.wav")[0]
+    np.testing.assert_allclose(out, played, rtol=0.0, atol=1e-12)
+
+
 def test_a_shaker_tour_keeps_each_stops_level_and_its_power_across_the_cuts(
     tmp_path: Path,
 ) -> None:
