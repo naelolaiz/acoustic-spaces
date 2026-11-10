@@ -14,6 +14,7 @@ from acoustic_spaces.engine import edge_fade as edge_fade_module
 from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.diffraction import (
     EdgeDiffraction,
+    Edges,
     along_edge,
     band_frequencies,
     boundary_angles,
@@ -660,15 +661,22 @@ def test_a_ground_reflection_joins_its_edge_term_on_grass(case: str) -> None:
 # -- reflections on both sides of an edge ----------------------------------------------
 
 
-def _ground_barrier(both_sides: bool, listener=(20.0, 0.0, 1.5), absorption: float = 0.0) -> Room:
-    """A thin barrier 3 m high, 10 m from a source 1 m over a ground of this absorption."""
+def _ground_barrier(
+    both_sides: bool,
+    listener=(20.0, 0.0, 1.5),
+    absorption: float = 0.0,
+    source=(0.0, 0.0, 1.0),
+    path=((10, -190), (10, 190)),
+) -> Room:
+    """A thin barrier 3 m high along ``path``, 10 m from a source 1 m over a ground of
+    this absorption."""
     return Room.from_scene(
         Scene.model_validate(
             {
                 "geometry": {
                     "ground": {"extent": [[-100, -200], [200, 200]], "sky": 40},
                     "barriers": [
-                        {"name": "barrier", "path": [[10, -190], [10, 190]], "height": 3.0}
+                        {"name": "barrier", "path": [list(p) for p in path], "height": 3.0}
                     ],
                 },
                 "materials": {
@@ -677,7 +685,7 @@ def _ground_barrier(both_sides: bool, listener=(20.0, 0.0, 1.5), absorption: flo
                 },
                 "default_material": "ground",
                 "assignments": {"barrier": "rigid"},
-                "sources": [{"name": "s", "position": [0.0, 0.0, 1.0]}],
+                "sources": [{"name": "s", "position": list(source)}],
                 "listeners": [{"name": "l", "position": list(listener)}],
                 "simulation": {
                     "ir_length_s": 0.3,
@@ -1135,3 +1143,147 @@ def test_a_solid_block_s_edges_stop_at_its_corners(tmp_path: Path) -> None:
     assert (np.isclose(edges.wedge, 1.5).sum(), np.isclose(edges.wedge, 2.0).sum()) == (8, 4)
     assert np.all(edges.fade == 0.0)
     assert not np.any(edges.closed)
+
+
+def _weighted_share(u: float, v: float) -> complex:
+    """The integral of exp(-j pi t^2 / 2) / (t^2 + v^2) up to ``u`` over that along the
+    whole line, by the midpoint rule out to 300 either side of ``u``."""
+    steps = (np.arange(600_000) + 0.5) * 5e-4
+
+    def part(t):
+        return np.sum(np.exp(-0.5j * np.pi * t**2) / (t**2 + v**2))
+
+    upto, beyond = part(u - steps), part(u + steps)
+    return complex(upto / (upto + beyond))
+
+
+@pytest.mark.parametrize(
+    "u, v",
+    [(-0.3, 0.05), (0.4, 1.5), (-1.2, 0.7), (2.5, 0.3), (-2.4, 3.0), (3.2, 2.6), (-4.0, 2.3)],
+)
+def test_a_term_s_share_of_a_finite_edge_is_weighted_for_its_boundary(u: float, v: float) -> None:
+    """The share of one term that the edge gives up to ``u`` past the path's point, its
+    boundary ``v`` away (both as arguments of the Fresnel integral along the edge),
+    against the integral itself: each of the three ways the engine evaluates it."""
+    cumulative = diffraction_module._cumulative
+    got = complex(cumulative(np.array([u]), np.array([v]))[0])
+    assert abs(got - _weighted_share(u, v)) < 1e-5
+    # Half of it lies either side of the point; on the boundary all of it is at the
+    # point; far from the boundary it is the Fresnel integral's.
+    assert cumulative(np.array([0.0]), np.array([v]))[0] == pytest.approx(0.5, abs=1e-12)
+    assert abs(cumulative(np.array([u]), np.array([1e-9]))[0] - (u > 0)) < 1e-6
+    far = cumulative(np.array([u]), np.array([1e3]))[0]
+    assert abs(far - cumulative(np.array([u]))[0]) < 1e-5
+
+
+@pytest.mark.parametrize("bend", [10.0, 2.0, -2.0, -10.0])
+def test_a_bent_screen_matches_btm_beside_the_bend_and_deep_in_the_shadow(
+    tmp_path: Path, bend: float
+) -> None:
+    """Two screens whose tops meet at a bend of 2 or 10 degrees, away from the source
+    (+) and towards it (-): the listener within 2 cm of the top's shadow boundary, the
+    line to the source passing the top 0.5 and 0.1 m from the bend, and deep in the
+    shadow past the bend, is within 0.1 dB of BTM over both tops in every band (0.03 dB
+    here). Each top took the Fresnel integral's share of its terms, whose step on the
+    boundary the direct sound did not match: 4.5 to 5.3 dB too high beside a bend away
+    from the source, up to 9.9 dB too low beside one towards it (63 Hz)."""
+    listeners = [(5.0, -0.5, z) for z in (0.98137, 0.99737, 1.00137, 1.02137)]
+    listeners += [(5.0, 0.3, 1.00137), (5.0, 0.003, -2.0), (5.0, 0.553, -2.0), (5.0, 1.503, -2.0)]
+    found, exact = edge_diffraction.bent_screen_levels(
+        tmp_path, bend, (-5.0, -0.5, -1.0), listeners
+    )
+    assert np.abs(found - exact).max() < 0.1
+
+
+def _rhombus(tmp_path: Path, angle: float) -> Edges:
+    """The edges of a thin screen with four sides 2 m long that meet at ``angle`` degrees
+    and at 180 less."""
+    a = np.array([2.0, 0.0, 0.0])
+    b = 2.0 * np.array([math.cos(math.radians(angle)), 0.0, math.sin(math.radians(angle))])
+    quads = [[tuple(corner) for corner in (0 * a, a, a + b, b)]]
+    room = edge_diffraction._room(tmp_path, "rhombus", quads, (1.0, 3.0, 1.0), (1.0, -3.0, 1.0))
+    return find_edges(TraceModel.from_room(room))
+
+
+def test_how_a_screen_s_edges_fade_at_corners_of_other_angles(tmp_path: Path) -> None:
+    """The paths over two edges that meet within 1 degree of square fade halfway at the
+    corner, where the two halves add up; at any other angle each edge keeps its own part
+    of its terms (all the way, 1). They faded halfway from 45 to 135 degrees, which came
+    out up to 2.75 dB from BTM at a corner of 45 degrees."""
+    assert np.all(_rhombus(tmp_path, 90.0).fade == 0.5)
+    assert np.all(_rhombus(tmp_path, 89.5).fade == 0.5)
+    for angle in (88.0, 60.0, 45.0, 20.0):
+        assert np.all(_rhombus(tmp_path, angle).fade == 1.0)
+
+
+@pytest.mark.parametrize(
+    "angle, turned, ys",
+    [(45.0, 45.0, (-0.057, -0.007, 0.003, 0.053)), (120.0, 0.0, (3.6532, 3.9032))],
+)
+def test_corners_of_other_angles_match_btm(tmp_path: Path, angle: float, turned, ys) -> None:
+    """Behind the corner of a thin screen whose edges meet at 45 degrees, one of them
+    upright, and at 120 degrees: within 0.15 dB of BTM over both edges in every band,
+    and no step that BTM does not have. The acute corner was up to 2.75 dB off (250 Hz)
+    with a step of 3 dB at 125 Hz between the two listeners in the middle, where the
+    direct sound comes round the upright edge; the obtuse one 0.5 to 0.6 dB off."""
+    corner = edge_diffraction.screen_corner(tmp_path, angle, turned, np.array(ys), per_band=96)
+    assert max(corner["largest_difference_db"]) < 0.15
+    steps = np.subtract(corner["largest_step_db"], corner["exact_largest_step_db"])
+    assert np.abs(steps).max() < 0.15
+
+
+@pytest.mark.parametrize("both_sides", [False, True])
+@pytest.mark.parametrize(
+    "source, listener",
+    [
+        ((0.0, -8.0, 3.0), (20.0, -8.0, 3.0)),  # both at the height of the top
+        ((0.0, -8.0, 1.0), (20.0, -8.0, 5.0)),  # mirrored in the barrier, the top between
+        ((0.0, -10.5, 3.0), (20.0, -10.5, 3.0)),  # 0.5 m past the end
+        ((0.0, -12.0, 3.0), (20.0, -12.0, 3.0)),  # 2 m past it
+    ],
+)
+def test_no_hole_where_a_path_touches_the_very_end_of_an_edge(
+    both_sides: bool, source, listener
+) -> None:
+    """A barrier 3 m high and 20 m long: with the source and the listener at the height
+    of its top (behind it, and in sight of each other 0.5 and 2 m past its end), or
+    mirrored in it at 1 and 5 m, the shortest path round each of its upright ends
+    touches the end's top corner exactly. The level there is the mean of those 1 mm
+    lower and higher (within 0.1 dB, 0.05 dB here), which are 0.12 dB apart at most. The
+    paths that touch the very end of a fading edge were dropped: the level there was 4.8
+    to 5.6 dB lower at 63 Hz and 2.1 dB higher at 125 Hz (at the top's height), 3 dB
+    lower at 63 and 125 Hz and as much higher at 250 Hz (mirrored), and 0.4 and 0.2 dB
+    lower 0.5 and 2 m past the end."""
+    path = ((10, -10), (10, 10))
+    levels = []
+    for dz in (-0.001, 0.0, 0.001):
+        at = (listener[0], listener[1], listener[2] + dz)
+        paths = early_paths(_ground_barrier(both_sides, at, source=source, path=path))
+        levels.append(10 * np.log10(total_energy(paths)))
+    assert np.abs(levels[2] - levels[0]).max() < 0.2
+    assert np.abs(levels[1] - 0.5 * (levels[0] + levels[2])).max() < 0.1
+
+
+def test_the_very_end_of_a_fading_edge_counts_once() -> None:
+    """A path that touches an end of its edge exactly: nothing reflected (kind 0), with a
+    reflection before the edge (1), after it (2) and both (3). An end that fades is part
+    of its fade, and keeps them all. Where the end lies in the plane the path reflects
+    off, the path that reflects before the edge and the one that reflects after it are
+    one path: the first counts at the edge's start only, the second at its end only, and
+    the one with both at neither, whether the end fades or not."""
+    kind, ones = np.arange(4), np.ones(4)
+
+    def kept(at: float, fade: float, held: bool) -> list[bool]:
+        in_plane = np.repeat((kind > 0) & held, 2).reshape(4, 2)
+        past = (np.full((4, 2), fade), 1.0, in_plane)
+        reach = diffraction_module._reach
+        return reach(kind, 3.0 * ones, at * ones, ones, at * ones, ones, 343.0, 1.0, past)[
+            0
+        ].tolist()
+
+    assert kept(0.0, 1.0, False) == kept(3.0, 1.0, False) == [True, True, True, True]
+    for fade, held in ((1.0, True), (0.0, True), (0.0, False)):
+        assert kept(0.0, fade, held)[1:] == [True, False, False]
+        assert kept(3.0, fade, held)[1:] == [False, True, False]
+    # Nothing reflected: the end of an edge that goes on belongs to the next one.
+    assert (kept(3.0, 1.0, True)[0], kept(3.0, 0.0, False)[0]) == (True, False)

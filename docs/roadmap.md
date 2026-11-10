@@ -117,7 +117,9 @@ Edge diffraction:
   [Validation](validation.md#known-issues-of-the-edge-fade).
 - [x] Paths over a thin screen's edge weighted by the part of their Fresnel zone that
   the edge covers, as BTM's integral over a finite edge has it, and kept past its free
-  ends: past a screen's corner within 0.1 dB of BTM, where they stepped by 2.8 dB.
+  ends: past a screen's right-angled corner within 0.1 dB of BTM, where they stepped by
+  2.8 dB; past corners of 45° to 170° and beside a bend of a screen's top, each term
+  weighted for its own boundary, within 0.17 and 0.04 dB.
 - [ ] The same at the corners of solid wedges, where three edges meet: sharing the fade
   as at a screen's corner came out up to 1.25 dB above BTM at 63 and 125 Hz near a
   block's corner, so their paths still stop at the ends.

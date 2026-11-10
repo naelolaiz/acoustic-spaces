@@ -1125,6 +1125,45 @@ that the edge covers, the two edges sharing it at the corner, so both change smo
 there. With the terms stopping at the ends, as the UTD has them, the level steps by
 2.82 dB at 63 Hz (1.37 dB at 250 Hz) and is up to 1.83 dB off.
 
+The two halves add up so only where the edges are square (within 1°). At any other
+angle, and where a screen's top bends, each of an edge's four terms takes the edge's own
+part of it as BTM's integrand weights the edge near the point the path touches: by
+1 / (t² + v²) with the Fresnel integral's phase, v being how far the term is from its
+shadow or reflection boundary in the Fresnel integral's argument t. On its boundary a
+term then comes from that point alone, so it keeps its whole step while the point lies
+on the edge, and the other edge's term takes it over past the end. A screen in x = 0
+with a corner of 45° to 170° at the origin (at 45° also with one edge upright), the
+source at (-5, -3, -1) and the listener walking from (5, -1, -2) to (5, 6, -2) 5 cm at
+a time across both edges' boundaries, BTM over both edges at 96 frequencies in a band:
+
+| corners of other angles, `direct` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 45° and 60°, largest difference | 0.09 | 0.07 | 0.06 | 0.07 | 0.03 | 0.03 | 0.08 | 0.10 |
+| 120° to 170°, largest difference | 0.05 | 0.08 | 0.07 | 0.04 | 0.05 | 0.12 | 0.10 | 0.17 |
+
+The steps are BTM's within 0.07 dB. With each edge taking the Fresnel integral's share
+(halved at 45° to 120°), the level stepped by up to 3.0 dB at 125 Hz at the corner of 45°
+with an upright edge and was up to 2.7 dB off; at the other corners it was 0.3 to 1.1 dB
+off.
+
+A screen whose top bends: two screens below z = 0 that meet along the z axis, one in
+x = 0 for y < 0, the other turned about the z axis by 2, 5, 10 or 14°, away from the
+source or towards it. The source is at (-5, -0.5, -1); the listener rises 1 cm at a
+time through the top's shadow boundary from z = 0.9 to 1.1 m at (5, -0.5, z) and
+(5, 0.3, z), where the line to the source passes the top 0.5 and 0.1 m from the bend,
+and walks deep in the shadow from (5, -1, -2) to (5, 3, -2) 5 cm at a time; BTM is taken
+over both tops from the bend on:
+
+| a bent screen, `direct` (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| across the boundary, largest difference | 0.03 | 0.01 | 0.01 | 0.01 | 0.00 | 0.00 | 0.00 | 0.00 |
+| deep in the shadow, largest difference | 0.04 | 0.02 | 0.01 | 0.01 | 0.02 | 0.01 | 0.01 | 0.01 |
+
+Both ways round the steps are BTM's within 0.03 dB. With each top taking the Fresnel
+integral's share of its terms, the level 0.1 m from the bend was up to 5.3 dB too high
+across the boundary with the bend away from the source, stepping by 5.4 dB, and up to
+16.4 dB too low with it towards the source, stepping by 16.6 dB.
+
 Only a thin screen's edges fade so. At the corners of a solid block, where three
 right-angled edges meet, the terms still stop at the ends. The block runs from x = 0 to
 2 m and y = -10 to 0 m, with its top at z = 0, open underneath and reaching far down.
@@ -1381,8 +1420,9 @@ would also be the better one here is not checked.
   fade makes up for where it follows the path.
 - **Corners of edges.** Over the edge of a thin screen (a barrier's top and ends, a
   face's free edge) a path's term takes the part of its Fresnel zone that the edge
-  covers, as BTM's integral over a finite edge has it, so it fades out past a free end
-  (see [Edge diffraction against the exact solution](#edge-diffraction-against-the-exact-solution)).
+  covers, as BTM's integral over a finite edge has it (at a free end, a bend or a corner
+  that is not square, each of its terms weighted for the term's boundary), so it fades
+  out past a free end (see [Edge diffraction against the exact solution](#edge-diffraction-against-the-exact-solution)).
   Elsewhere a term stops where the point it diffracts at leaves the end of its edge, as
   the UTD has no terms for the corners of edges, unless that end lies in a plane the path
   reflects off next to the event, where the edge goes on as its image in the plane (for a

@@ -103,6 +103,14 @@
 - Docs: a moving monopole's convective amplification, which the engine leaves out, is
   40 lg 1/(1 − M cos θ) dB (1.6 dB ahead at 30 m/s, 4.0 dB at 70 m/s), twice what the
   docs said.
+- Fixed: beside a bend of a thin screen's top (a barrier's path that turns by less than
+  15°) the level stepped by up to 5.4 dB, or 16 dB with the bend towards the source, and
+  past a screen's corner that is not square by up to 3.0 dB: each of an edge's terms now
+  takes its own part of the edge as BTM's integrand weights it (within 0.04 dB of BTM
+  beside bends, 0.17 dB past corners).
+- Fixed: a path that touches the very end of a fading edge, as with the source, the
+  listener and a barrier's top at one height, is no longer dropped (up to 5.6 dB low at
+  63 Hz).
 
 ## 4.2.1
 

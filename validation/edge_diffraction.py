@@ -32,7 +32,12 @@ half-plane, which is exact far from the edge, and the engine against it:
   against BTM;
 - the corner of a thin screen, first order: the listener walks past where the direct
   sound comes round one edge while the path over the other still touches it, against
-  BTM over both edges, each ending at the corner;
+  BTM over both edges, each ending at the corner; right-angled, and at 45, 60, 120,
+  135.5, 150 and 170 degrees;
+- a thin screen whose top bends by 2 to 14 degrees, away from the source and towards
+  it, first order: the listener rises through the top's shadow boundary beside the
+  bend and walks past it deep in the shadow, against BTM over both tops, each ending at
+  the bend;
 - the corners of a solid block, where three right-angled edges meet, first order: the
   listener walks past where the paths over its edges reach their ends, against BTM over
   each edge from end to end;
@@ -493,34 +498,57 @@ def crossing(folder: Path) -> dict:
     return out
 
 
-def screen_corner(folder: Path) -> dict:
-    """The corner of a thin screen in the plane x = 0 that fills y < 0 and z < 0: the
-    listener walks along y, 1 cm at a time, past where the direct sound comes round the
-    side edge while the path over the top edge still touches it near the corner. The
-    engine (``direct``, every band in pressure) against BTM over both edges, each from
-    the corner on; the sound diffracted from one edge to the other is left out."""
-    a = EXTENT
-    quads = [[(0, -a, -a), (0, 0, -a), (0, 0, 0), (0, -a, 0)]]
-    top = Edge([0, 0, 0], [0, -1, 0], [0, 0, -1], [1, 0, 0], 2.0)
-    side = Edge([0, 0, 0], [0, 0, -1], [0, -1, 0], [1, 0, 0], 2.0)
+def screen_corner(
+    folder: Path, angle: float = 90.0, turned: float = 0.0, ys=None, per_band: int | None = None
+) -> dict:
+    """The corner of a thin screen in the plane x = 0, at the origin: the screen lies
+    between its top edge, which runs along -y turned by ``turned`` degrees towards -z,
+    and its side edge, ``angle`` degrees further round (by default the quarter plane
+    y < 0, z < 0). The listener walks along y at ``ys`` (by default 1 cm at a time past
+    where the direct sound comes round the side edge of the quarter plane while the
+    path over the top edge still touches it near the corner). The engine (``direct``,
+    every band in pressure) against BTM over both edges, each from the corner on, at
+    the engine's frequencies or ``per_band`` in each band; the sound diffracted from one
+    edge to the other is left out."""
+    k = K if per_band is None else 2.0 * np.pi * band_frequencies(per_band)[0].ravel() / C
+    # Rounded, so that a right angle is one exactly.
+    first, second = math.radians(turned), math.radians(turned + angle)
+    along_top = np.round([0.0, -math.cos(first), -math.sin(first)], 15)
+    along_side = np.round([0.0, -math.cos(second), -math.sin(second)], 15)
+    into_top = np.round([0.0, math.sin(first), -math.cos(first)], 15)  # into the screen
+    into_side = np.round([0.0, -math.sin(second), math.cos(second)], 15)
+    # A rhombus whose far edges lie EXTENT from the corner's edges.
+    reach = EXTENT / math.sin(math.radians(angle))
+    corners = [
+        reach * (along_top + along_side),
+        reach * along_side,
+        0 * along_top,
+        reach * along_top,
+    ]
+    quads = [[tuple(float(v) + 0.0 for v in corner) for corner in corners]]
+    top = Edge([0, 0, 0], along_top, into_top, [1, 0, 0], 2.0)
+    side = Edge([0, 0, 0], along_side, into_side, [1, 0, 0], 2.0)
     source = np.array([-5.0, -3.0, -1.0])
-    ys = np.arange(2.5, 4.0 + 1e-9, 0.01) + 0.00317  # none exactly on a boundary
+    if ys is None:
+        ys = np.arange(2.5, 4.0 + 1e-9, 0.01) + 0.00317  # none exactly on a boundary
     found, exact = [], []
     for y in ys:
         receiver = np.array([5.0, y, -2.0])
         _, level = engine(_room(folder, "corner", quads, source, receiver), "direct", coherent=8)
         found.append(level)
-        pressure = btm_first(top, source, receiver, ends=(0.0, np.inf))
-        pressure = pressure + btm_first(side, source, receiver, ends=(0.0, np.inf))
+        pressure = btm_first(top, source, receiver, k, ends=(0.0, np.inf))
+        pressure = pressure + btm_first(side, source, receiver, k, ends=(0.0, np.inf))
         t = source[0] / (source[0] - receiver[0])  # where the line crosses x = 0
-        crossing = source[1:] + t * (receiver[1:] - source[1:])
+        crossing = source + t * (receiver - source)
         distance = float(np.linalg.norm(receiver - source))
-        if not (crossing < 0.0).all():
-            pressure = pressure + np.exp(-1j * K * distance) / distance
+        if not (crossing @ into_top > 0.0 and crossing @ into_side > 0.0):
+            pressure = pressure + np.exp(-1j * k * distance) / distance
         exact.append(band_level(pressure, distance))
     found, exact = np.array(found), np.array(exact)
     steps = np.abs(np.diff(found, axis=0))
     return {
+        "angle_deg": angle,
+        "turned_deg": turned,
         "source": source.tolist(),
         "line": [[5.0, float(ys[0]), -2.0], [5.0, float(ys[-1]), -2.0]],
         "largest_step_db": steps.max(axis=0).tolist(),
@@ -528,6 +556,107 @@ def screen_corner(folder: Path) -> dict:
         "exact_largest_step_db": np.abs(np.diff(exact, axis=0)).max(axis=0).tolist(),
         "largest_difference_db": np.abs(found - exact).max(axis=0).tolist(),
     }
+
+
+#: The corners of :func:`other_corners`: the angle between the screen's two edges and how
+#: far its top edge is turned from level (degrees). The second has one edge upright; the
+#: last three are turns of a flat screen's outline by 44.5, 30 and 10 degrees.
+CORNERS = (
+    (45.0, 0.0),
+    (45.0, 45.0),
+    (60.0, 0.0),
+    (120.0, 0.0),
+    (135.5, 0.0),
+    (150.0, 0.0),
+    (170.0, 0.0),
+)
+
+
+def other_corners(folder: Path) -> list[dict]:
+    """:func:`screen_corner` for corners that are not right-angled (:data:`CORNERS`), the
+    listener walking from (5, -1, -2) to (5, 6, -2), 5 cm at a time, across the shadow
+    boundaries of both edges. BTM is averaged over 96 frequencies in each band: along
+    this walk the paths over the two edges come to differ in length by the speed of
+    sound over the spacing of the engine's eight frequencies in a band (0.49 m at
+    8 kHz), where eight of them alias, while the engine lets each frequency stand for
+    its slice of the band."""
+    ys = np.arange(-1.0, 6.0 + 1e-9, 0.05) + 0.00317  # none exactly on a boundary
+    return [screen_corner(folder, angle, turned, ys, per_band=96) for angle, turned in CORNERS]
+
+
+def bent_quads(bend: float) -> list:
+    """Two screens below z = 0 that meet along the z axis: one in the plane x = 0 on the
+    side y < 0, the other on the side y > 0, turned from that plane about the z axis by
+    ``bend`` degrees (towards +x for a positive bend)."""
+    a = EXTENT
+    s, c = math.sin(math.radians(bend)), math.cos(math.radians(bend))
+    return [
+        [(0, -a, -a), (0, 0, -a), (0, 0, 0), (0, -a, 0)],
+        [(0, 0, -a), (a * s, a * c, -a), (a * s, a * c, 0), (0, 0, 0)],
+    ]
+
+
+def bent_screen_levels(folder: Path, bend: float, source, receivers):
+    """The levels at ``receivers`` behind :func:`bent_quads`: the engine's (``direct``,
+    every band in pressure) and BTM's over both top edges, each from the joint on, with
+    the direct sound where neither screen hides it; the sound diffracted from one edge
+    to the other is left out."""
+    s, c = math.sin(math.radians(bend)), math.cos(math.radians(bend))
+    edges = (
+        Edge([0, 0, 0], [0, -1, 0], [0, 0, -1], [1, 0, 0], 2.0),
+        Edge([0, 0, 0], [s, c, 0], [0, 0, -1], [c, -s, 0], 2.0),
+    )
+    source = np.asarray(source, dtype=float)
+    found, exact = [], []
+    for receiver in np.asarray(receivers, dtype=float):
+        room = _room(folder, "bent", bent_quads(bend), source, receiver)
+        found.append(engine(room, "direct", coherent=8)[1])
+        pressure = sum(btm_first(edge, source, receiver, ends=(0.0, np.inf)) for edge in edges)
+        hidden = False
+        for edge in edges:  # where the line crosses each screen's plane: on the screen?
+            across = (receiver - source) @ edge.normal
+            if across != 0.0:
+                t = (edge.origin - source) @ edge.normal / across
+                at = source + t * (receiver - source) - edge.origin
+                hidden |= 0.0 < t < 1.0 and at @ edge.direction > 0.0 and at @ edge.along > 0.0
+        distance = float(np.linalg.norm(receiver - source))
+        if not hidden:
+            pressure = pressure + np.exp(-1j * K * distance) / distance
+        exact.append(band_level(pressure, distance))
+    return np.array(found), np.array(exact)
+
+
+#: The bends of :func:`bent_screen` (degrees): away from the source, then towards it.
+BENDS = (2.0, 5.0, 10.0, 14.0, -2.0, -5.0, -10.0, -14.0)
+
+
+def bent_screen(folder: Path) -> list[dict]:
+    """A screen whose top bends by a few degrees (:data:`BENDS`, :func:`bent_quads`),
+    with the source at (-5, -0.5, -1): the listener rises through the top's shadow
+    boundary 1 cm at a time, from z = 0.9 to 1.1 at (5, -0.5, z), where the line to the
+    source passes the top 0.5 m from the bend, and at (5, 0.3, z), where it does 0.1 m
+    from it; and walks deep in the shadow past the bend, from (5, -1, -2) to (5, 3, -2)
+    5 cm at a time. The engine against BTM (:func:`bent_screen_levels`)."""
+    source = (-5.0, -0.5, -1.0)
+    heights = np.arange(0.90, 1.10 + 1e-9, 0.01) + 0.00137  # none exactly on a boundary
+    lines = {
+        "boundary": [(5.0, -0.5, z) for z in heights],
+        "boundary_near": [(5.0, 0.3, z) for z in heights],
+        "shadow": [(5.0, y, -2.0) for y in np.arange(-1.0, 3.0 + 1e-9, 0.05) + 0.00317],
+    }
+    rows = []
+    for bend in BENDS:
+        row: dict = {"bend_deg": bend, "source": list(source)}
+        for name, line in lines.items():
+            found, exact = bent_screen_levels(folder, bend, source, line)
+            row[name] = {
+                "line": [list(line[0]), list(line[-1])],
+                "largest_step_db": np.abs(np.diff(found, axis=0)).max(axis=0).tolist(),
+                "exact_largest_step_db": np.abs(np.diff(exact, axis=0)).max(axis=0).tolist(),
+                "largest_difference_db": np.abs(found - exact).max(axis=0).tolist(),
+            }
+        rows.append(row)
+    return rows
 
 
 #: The solid block of :func:`block_corner` (m): x, y and z from and to, open underneath
@@ -724,6 +853,26 @@ def main() -> None:
         print(f"| largest step, engine | {_row(corner['largest_step_db'])} |")
         print(f"| largest step, BTM | {_row(corner['exact_largest_step_db'])} |")
         print(f"| largest difference | {_row(corner['largest_difference_db'])} |")
+
+        results["other_corners"] = other_corners(folder)
+        print(f"\n| corners of other angles, direct (dB) | {header} |\n{rule}")
+        for row in results["other_corners"]:
+            what = f"{row['angle_deg']:g} degrees"
+            if row["turned_deg"]:
+                what += f", turned {row['turned_deg']:g}"
+            print(f"| {what}: largest step, engine | {_row(row['largest_step_db'])} |")
+            print(f"| largest step, BTM | {_row(row['exact_largest_step_db'])} |")
+            print(f"| largest difference | {_row(row['largest_difference_db'])} |")
+
+        results["bent_screen"] = bent_screen(folder)
+        print(f"\n| a bent screen, direct (dB) | {header} |\n{rule}")
+        for row in results["bent_screen"]:
+            for name in ("boundary", "boundary_near", "shadow"):
+                line = row[name]
+                what = f"{row['bend_deg']:+g} degrees, {name.replace('_', ' ')}"
+                print(f"| {what}: largest step, engine | {_row(line['largest_step_db'])} |")
+                print(f"| largest step, BTM | {_row(line['exact_largest_step_db'])} |")
+                print(f"| largest difference | {_row(line['largest_difference_db'])} |")
 
         results["block_corner"] = block = block_corner(folder)
         print(f"\n| a block's corners, direct (dB) | {header} |\n{rule}")
