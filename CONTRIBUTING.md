@@ -44,6 +44,11 @@ python -m pip install ".[test]" -C cmake.build-type=RelWithDebInfo -C cmake.defi
 ASAN_OPTIONS=detect_leaks=0 LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libubsan.so)" pytest -W error
 ```
 
+A red job is a failure to look at, with two exceptions that CI heals by running the job
+again, up to twice per run (`.github/workflows/rerun.yml`, with the rules in
+`tools/ci_rerun.py`): a job whose runner GitHub lost (a step that never ended, and no
+log), and a job that failed in a step that only fetches system packages.
+
 Text the editor or the command line shows is marked for translation and goes into the
 catalogs with `python tools/catalog.py update`, translated; `check` fails otherwise. See
 [docs/translating.md](docs/translating.md).

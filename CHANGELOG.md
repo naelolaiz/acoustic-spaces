@@ -71,6 +71,9 @@
   the memory estimate counts what is kept.
 - Changed: the tests write every thread's stack to the log when one has run for 20
   minutes (pytest's `faulthandler_timeout`), to show where a hung job stands.
+- Changed: CI runs again by itself, up to twice, the jobs of a run that failed only
+  because GitHub lost their runner or a step that fetches system packages failed
+  (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`).
 
 ## 4.2.1
 

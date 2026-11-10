@@ -57,6 +57,11 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Software Vulkan driver (Mesa's lavapipe), for the wave solver on a GPU
         if: runner.os == 'Linux'
+        # Seconds as a rule. Every step that only fetches system packages has a time limit
+        # and is named in tools/ci_rerun.py: when Ubuntu's package servers fail it or hold
+        # it up (one such step stood still for hours in November 2026), rerun.yml runs the
+        # job again.
+        timeout-minutes: 15
         run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
       - name: Build and install
         run: python -m pip install ".[test,sketchup,gpu,ifc]"
@@ -152,6 +157,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install off-screen OpenGL
+        timeout-minutes: 15  # see the Vulkan driver's step of the test job
         run: sudo apt-get update && sudo apt-get install -y libosmesa6 libegl1 libgl1 libxrender1
       - name: Build and install
         run: python -m pip install ".[test,viz]"
@@ -184,6 +190,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+      - name: Fetch the system packages of the image's two stages
+        # The Dockerfile's stages that only run apt-get, built first and apart from the
+        # rest (which the next step adds to them): see the Vulkan driver's step of the
+        # test job. A minute as a rule.
+        timeout-minutes: 30
+        run: docker build --target toolchain . && docker build --target system .
       - name: Build the image
         run: docker build -t acoustic-spaces .
       - name: Pack a scene and run it in the container (on its software Vulkan driver)
@@ -217,6 +229,7 @@ jobs:
           python-version: "3.13"
       - name: Install the libraries Qt and its X11 platform load
         if: runner.os == 'Linux'
+        timeout-minutes: 15  # see the Vulkan driver's step of the test job
         run: >-
           sudo apt-get update && sudo apt-get install -y xvfb libegl1 libgl1 libopengl0
           libfontconfig1 libdbus-1-3 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0
@@ -250,6 +263,9 @@ jobs:
           python-version: "3.13"
       - run: python -m pip install cibuildwheel==4.3.1
       - name: Build and test wheels
+        # A hung test would otherwise hold the runner for 6 hours. In November 2026 the
+        # step took up to 151 minutes, for a tag's five CPythons on the Intel Mac.
+        timeout-minutes: 240
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
           # Pull requests build the oldest and the newest CPython per platform; tags build the

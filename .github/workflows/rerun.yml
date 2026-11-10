@@ -1,0 +1,37 @@
+name: Re-run
+
+# Runs again, by itself, the jobs of a CI run that the machines failed and not the code: a
+# job whose runner GitHub lost, or one that could not fetch its system packages. The rules
+# are in tools/ci_rerun.py. GitHub starts this workflow as the default branch has it when
+# a run of CI ends, whatever branch or pull request that run was for, and it checks out
+# the default branch only: the code of that run is never run here.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: write  # to run jobs again
+  contents: read  # to check out tools/ci_rerun.py
+
+# One at a time for each run of CI, should GitHub tell twice that it ended.
+concurrency:
+  group: rerun-${{ github.event.workflow_run.id }}
+
+jobs:
+  rerun:
+    name: Run again the jobs the machines failed
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: tools
+      - name: Decide, and run the failed jobs again
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: python3 tools/ci_rerun.py "$RUN_ID"
