@@ -94,6 +94,7 @@ from typing import Any
 import numpy as np
 
 from acoustic_spaces.engine.reweight import (
+    Redraws,
     cannot_reweight,
     groups_of,
     log_ratio,
@@ -803,6 +804,36 @@ class _Tally:
         )
 
 
+def _redrawn(
+    response, face_group, traced, taken, ratios, admittance_of, inputs, told
+) -> tuple[list[RoomParameters], list[Levels]]:
+    """The parameters, and the levels and speech results for ``inputs`` (the sound power,
+    background noise and talker), of ``response`` re-weighted for each draw ``taken``
+    (draws, groups, bands) of the absorption ``traced`` of its face groups, ``ratios``
+    their :func:`log_ratio`, with ``admittance_of``. ``told(k)`` comes before draw k,
+    every ``PROGRESS_DRAWS`` draws. Each draw is worked out alone; what they share
+    (:class:`~acoustic_spaces.engine.reweight.Redraws`) is made for them and goes
+    with them."""
+    redraws = Redraws(response.early, face_group, len(traced), traced, admittance_of)
+    found, heard = [], []
+    for k, (ratio, drawn) in enumerate(zip(ratios, taken, strict=True)):
+        if k % PROGRESS_DRAWS == 0:
+            told(k)
+        moved = response.reweighted(
+            face_group,
+            ratio,
+            absorption=(traced, drawn),
+            admittance_of=admittance_of,
+            redraws=redraws,
+        )
+        # One echogram in octave bands for both.
+        energy = moved.octave_energy()
+        energy.flags.writeable = False
+        found.append(moved.parameters(energy))
+        heard.append(moved.levels_and_speech(*inputs, found[-1], energy=energy))
+    return found, heard
+
+
 def material_spread(
     result,
     scene,
@@ -881,18 +912,17 @@ def material_spread(
         ratios = [log_ratio(traced, drawn) for drawn in taken]
         of = "" if adaptive else f" of {draws}"
         for n, (key, response) in enumerate(result.responses.items(), start=1):
-            found, heard = [], []
-            for k, (ratio, drawn) in enumerate(zip(ratios, taken, strict=True)):
-                if k % PROGRESS_DRAWS == 0:
-                    say(
-                        f"the spread: {key[0]} -> {key[1]} ({n} of {len(result.responses)}), "
-                        f"draw {taken_so_far + k + 1}{of}"
-                    )
-                moved = response.reweighted(
-                    face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
-                )
-                found.append(moved.parameters())
-                heard.append(moved.levels_and_speech(*inputs[key], found[-1]))
+            told = f"the spread: {key[0]} -> {key[1]} ({n} of {len(result.responses)}), draw "
+            found, heard = _redrawn(
+                response,
+                face_group,
+                traced,
+                taken,
+                ratios,
+                admittance_of,
+                inputs[key],
+                lambda k, told=told, first=taken_so_far, of=of: say(f"{told}{first + k + 1}{of}"),
+            )
             # Each response from the start of the stream: its spread is the same
             # whichever other responses the run has.
             tallies[key].add(found, np.random.default_rng(stream), heard)
