@@ -188,7 +188,10 @@ request and checks:
   continuous within 0.25 dB with first-order reflections where specular paths alone drop
   by more than 5 dB, and across the boundary of a reflection off one of the corner's
   walls within 0.05 dB; over a 1 m thick barrier, the path over both corners against the
-  exact BTM solution (within 1 dB, and 0.2 dB from 500 Hz up, the same both ways round),
+  exact BTM solution (within 1 dB, and 0.2 dB from 500 Hz up, the same both ways round;
+  with faces absorbing 0.02, in pressure or in energy, within 1 dB of it too and, straight
+  across the top, below the rigid block's level by the Weyl-van der Pol ground wave's
+  loss along it worked out by hand, within 0.05 dB),
   and the level as the source and the listener rise through the plane of its top,
   continuous within 1 dB (0.1 dB from 1 kHz up); a thin screen's diffracted wave in its
   lit zone, all four terms of the UTD within 0.2 %; and through `early_paths`, next to
@@ -1039,6 +1042,12 @@ edges and obliquely (the second from (-6, -2, -0.3) to (w + 2, 3, -4)):
 | two screens 1 m apart | -1.86 | -1.23 | -0.74 | -0.37 | -0.12 | -0.00 | +0.01 | +0.01 |
 | two screens 2 m apart, the second 0.4 m higher | -1.30 | -0.92 | -0.65 | -0.44 | -0.30 | -0.18 | -0.11 | -0.05 |
 
+With the block's faces absorbing 0.02 the engine's level is below its own for the rigid
+block by the loss of the Weyl-van der Pol ground wave along the top, the magnitude of
+F(w) worked out by hand (0.01 dB at 63 Hz over 0.3 m to 0.43 dB at 8 kHz over 3 m),
+within 0.03 dB in every band, in energy and in pressure. Against BTM for the rigid block
+it is then within 1.74 dB, and within 0.64 dB at 63 and 125 Hz in pressure.
+
 The levels themselves run from -9 dB at 63 Hz to -42 dB at 8 kHz. Adding its waves in
 energy, the engine is low: up to 1.9 dB at 63 Hz where the edges are close together, as
 over a thin screen, and near a shadow boundary in every band. The waves of an edge add
@@ -1403,10 +1412,34 @@ the houses' corner dips by up to 10 dB at 63 Hz within 2 cm (1.0 dB in the garde
 level over 1 cm). It is the edge diffraction's own term, with or without the fade: it
 gives the wall's reflection the factor of a plane wave, which for the brick's impedance
 turns to -1 at grazing incidence, so that the reflection cancels the incident sound
-there. With a rigid wall the dip is gone. The reflection off the ground takes the
+there. With a rigid wall the dip is gone. A face with an absorption coefficient does the
+same in the bands that add in pressure, which take only the phase of that factor: it is
+turned over while the incidence cosine is below the fitted admittance, so for a source
+(not a listener: the path is then not the same both ways round) that close to the
+face's plane. A source 0 to 1 cm above the plane of the top of the 1 m block of
+`tests/test_diffraction.py` (absorbing 0.02, admittance 0.0026), 3 m in front of it,
+hears the far corner 14.9 to 18.7 dB below the reversed path, and the paths over both
+corners (`second_order`), which continue that path there, 2.9 to 6.1 dB below; from about
+1 cm up the two agree again. The reflection off the ground takes the
 factor of a spherical wave instead (see
-[Ground reflection](#ground-reflection-against-the-exact-solution)); whether that factor
-would also be the better one here is not checked.
+[Ground reflection](#ground-reflection-against-the-exact-solution)), as does the wave
+along a face from one edge to the next on a path over both; whether that factor would
+also be the better one here is not checked.
+
+Where the source or the listener rises through the plane of an absorbing top, the level
+steps. Below the plane only the paths over both corners reach, and they take the ground
+wave's loss along the top; above it the path over the far corner alone takes none, as
+its reflection off the top takes the plane wave's factor (in the bands that add in
+energy, its specular share alone). Over the 1 m block, with the source 3 m in front and
+the listener 3 m behind and 1.5 m below the top or the other way round, from 1 mm below
+the plane to on it, the level steps by up to 2.2 dB at absorption 0.1 and 12.9 dB at 0.5
+(at 8 kHz), and over a block 10 m wide by 7.1 and 28.7 dB; before the paths over both
+corners took the ground wave these steps were at most 0.47 and 2.58 dB. A listener steps
+as much in pressure; a source is then in the dip above. The paths over both corners,
+weaker by the ground wave, also take less of the far corner's wave away above the
+plane: with absorption 0.5 and the source in it, the level at 8 kHz is 3.5 dB above
+the rigid block's in energy. Giving that reflection the spherical wave's factor as well
+would change every path over one edge with an absorbing face, and is not done.
 
 ### Known issues of the edge fade
 
@@ -1452,13 +1485,17 @@ would also be the better one here is not checked.
   (x = 7.6 m, y = 5.3 to 7.8 m), where the reflection off the arch's jamb, 40 cm deep,
   appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz, between y = 5.39
   and 5.40 m (see the next item), and by at most 0.16 dB from 2 kHz up. The edge
-  diffraction's own paths, without the fade, step there by up to 1.56 dB at 63 Hz and
-  1.88 dB from 250 Hz up. Averaged over the walk, in a one-off check, the level was 0.4,
-  1.1 and 0.7 dB above that with every band in pressure (`coherent_max_band_hz: 8000`)
-  at 250, 500 and 1000 Hz and 0.1 to 0.4 dB below it from 2 kHz up: not traced.
+  diffraction's own paths, without the fade, step there by up to 0.74 dB at 63 Hz,
+  1.18 dB at 125 Hz and 1.88 dB from 250 Hz up. Averaged over the walk, in a one-off
+  check, the level was 0.15 dB below that with every band in pressure
+  (`coherent_max_band_hz: 8000`) at 250 Hz, 0.67 and 0.58 dB above it at 500 and
+  1000 Hz and 0.11 to 0.43 dB below it from 2 kHz up. Before the paths over two edges
+  along an absorbing face took the ground wave, which in pressure they had all but lost,
+  it was 0.39, 1.12 and 0.73 dB above it at 250, 500 and 1000 Hz; the rest of the
+  difference is not traced.
 - **Cut off by a thick end.** Behind the `archway`'s wall the level steps by 0.57 dB at
-  63 Hz and 0.41 dB at 125 Hz between y = 5.39 and 5.40 m, and by 0.08 dB or less from
-  250 Hz up, as it did with every band in pressure in a one-off check. Reflections
+  63 Hz and 0.28 dB at 125 Hz between y = 5.39 and 5.40 m (at 63 Hz by 0.29 dB more
+  to 5.41 m), and by 0.08 dB or less from 250 Hz up, as it did with every band in pressure in a one-off check. Reflections
   that the end of the arch's jamb cuts off are followed while the leg they are cut off
   on hits the end's
   face, and left out once it hits the jamb's face on the far side, 40 cm on, which is a
@@ -1466,7 +1503,7 @@ would also be the better one here is not checked.
   that other corner explain them removed the step but made one of 1.75 dB at y = 5.90 m,
   where a reflection point of one of those paths also leaves its face and the path,
   stopped at two events, is left out at once; so it is not done. The other steps along
-  the walk, of up to 0.24 dB at 63 and 125 Hz and 0.07 dB from 250 Hz up, were there in
+  the walk, of up to 0.20 dB at 63 and 125 Hz and 0.07 dB from 250 Hz up, were there in
   pressure too (a one-off check); at y = 6.83 to 6.84 m and 7.00 to 7.01 m, terms of
   cut-off second- and third-order reflections come or go, and why is not traced. The fix would take a term
   over both corners of the end in turn, as `second_order` has for the direct sound,

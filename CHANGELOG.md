@@ -118,6 +118,14 @@
   and 29 dB in the 250 Hz ground dip with 50,000 rays. They now leave out what the early
   part holds (within 0.05 dB of the program in those bands); still air and the shipped
   examples do not change.
+- Fixed (results change): sound over two edges along a face that absorbs
+  (`second_order`, over a roof or a thick wall) was nearly cancelled in the bands that
+  add in pressure, by the plane wave's R = -1 at grazing incidence; the path now takes
+  the face as rigid and the ground wave's loss along it (Weyl-van der Pol), in every
+  band. Behind a 6 m building absorbing 0.02 the level rises by 18 to 20 dB, to 0.1 to
+  0.8 dB below a rigid one's, and the archway example's first arrival behind the wall by
+  11.0 and 11.7 dB at 63 and 125 Hz; with faces absorbing 0.5 it changes by +11.0 dB at
+  63 Hz to -8.7 dB at 8 kHz.
 
 ## 4.2.1
 

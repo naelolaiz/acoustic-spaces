@@ -984,10 +984,11 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
   roofs, round the corners of buildings and over the top and round the ends of barriers.
   Edges on the ground (the foot of a wall or a barrier) and the inside corners where two
   wings of a building meet diffract nothing. `second_order` follows the sound over a
-  building, its front and back edges in turn; `first_order` bends over one edge at a
-  time, which is enough for a barrier. With `diffraction_reflections: both_sides` a
-  path reflects off the ground both before and after the edge, the fourth of the four
-  paths over a barrier on the ground (see
+  building, its front and back edges in turn, along the roof with the ground wave's
+  loss over it (see [Simulation](simulation.md#low-frequencies-early-reflections-in-pressure));
+  `first_order` bends over one edge at a time, which is enough for a barrier. With
+  `diffraction_reflections: both_sides` a path reflects off the ground both before and
+  after the edge, the fourth of the four paths over a barrier on the ground (see
   [Edge diffraction](simulation.md#edge-diffraction)).
 - **The late part** comes from the stochastic ray tracer: rays reflect and scatter off
   the ground and the buildings until they leave through the sky. Between tall buildings

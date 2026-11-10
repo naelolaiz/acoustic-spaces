@@ -28,7 +28,7 @@ from acoustic_spaces.engine.edge_fade import EdgeFade
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.reweight import groups_of, reweighted_result
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
-from acoustic_spaces.scene.model import EarlyStage
+from acoustic_spaces.scene.model import EarlyStage, Impedance
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
 
@@ -512,9 +512,9 @@ BARRIER_BTM = {
 }
 
 
-def _barrier(tmp_path: Path, source, listeners) -> Room:
-    """A rigid block from x = 0 to 1 m with its top at z = 0, open underneath, so wide
-    and deep that only its two top corners (along y) matter."""
+def _barrier(tmp_path: Path, source, listeners, material=None) -> Room:
+    """A block from x = 0 to 1 m with its top at z = 0, open underneath, so wide and
+    deep that only its two top corners (along y) matter: rigid, or of ``material``."""
     a, h = 300, -300
     quads = [
         [(0, -a, 0), (1, -a, 0), (1, a, 0), (0, a, 0)],
@@ -531,7 +531,7 @@ def _barrier(tmp_path: Path, source, listeners) -> Room:
         Scene.model_validate(
             {
                 "geometry": {"file": str(obj)},
-                "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+                "materials": {"hard": material or {"absorption": [0.0] * 8, "scattering": 0.0}},
                 "default_material": "hard",
                 "sources": [{"name": "s", "position": list(source)}],
                 "listeners": [
@@ -542,12 +542,15 @@ def _barrier(tmp_path: Path, source, listeners) -> Room:
     )
 
 
-def _over_barrier(room: Room, mode: str) -> np.ndarray:
-    """The level of every listener over the barrier, without air, as in BARRIER_BTM."""
+def _over_barrier(room: Room, mode: str, coherent: int = 0) -> np.ndarray:
+    """The level of every listener over the barrier, without air, as in BARRIER_BTM,
+    with the paths in pressure in the lowest ``coherent`` bands."""
     model = TraceModel.from_room(room)
     c, air = room.speed_of_sound(), np.zeros(8)
     source = np.array(room.scene.sources[0].position)
-    diffraction = EdgeDiffraction(model, source, speed_of_sound=c, air=air, mode=mode)
+    diffraction = EdgeDiffraction(
+        model, source, speed_of_sound=c, air=air, mode=mode, coherent=coherent
+    )
     out = []
     for listener in room.scene.listeners:
         at = np.array(listener.position)
@@ -578,6 +581,50 @@ def test_a_thick_barrier_takes_paths_over_two_edges(tmp_path: Path) -> None:
         # The same path backwards.
         back = _over_barrier(_barrier(tmp_path, r, [s]), "second_order")[0]
         np.testing.assert_allclose(back, level, atol=1e-9)
+
+
+@pytest.mark.parametrize("coherent", [0, 8])
+def test_paths_over_two_edges_along_an_absorbing_top_lose_what_the_ground_wave_does(
+    tmp_path: Path, coherent: int
+) -> None:
+    # Along the top the wave from the first corner is the Weyl-van der Pol field over a
+    # locally reacting face at grazing incidence, 2 F(w) times the free one, which goes
+    # to the rigid face's as the admittance does; not its plane wave's R = -1, which
+    # cancels the incident wave. So the level over an absorbing top falls short of the
+    # rigid one by |F(w)| over the 1 m top, whether the paths add in pressure or in
+    # energy, and stays with BTM's for the rigid block.
+    from scipy.optimize import brentq
+    from scipy.special import wofz
+
+    def level(s, r, absorption):
+        material = {"absorption": [absorption] * 8, "scattering": 0.0}
+        return _over_barrier(_barrier(tmp_path, s, [r], material), "second_order", coherent)[0]
+
+    def paris(z):  # random-incidence absorption of a real normalised impedance z
+        return 8.0 / z * (1.0 + 1.0 / (1.0 + z) - 2.0 / z * math.log(1.0 + z))
+
+    beta = 1.0 / brentq(lambda z: paris(z) - 0.02, 1.0, 1e6)
+    w = 0.5 * (1 + 1j) * np.sqrt(2 * np.pi * np.array(OCTAVE_BANDS_HZ) / 343.0) * beta
+    loss = 20 * np.log10(np.abs(1 + 1j * math.sqrt(math.pi) * w * wofz(w)))  # -0.02 to -0.24
+    for (s, r), btm in BARRIER_BTM.items():
+        rigid = level(s, r, 0.0)
+        np.testing.assert_allclose(level(s, r, 1e-6), rigid, atol=1e-3)
+        absorbing = level(s, r, 0.02)
+        if s[1] == r[1]:  # straight across the top, 1 m
+            np.testing.assert_allclose(absorbing - rigid, loss, atol=0.05)
+        assert np.all(absorbing < rigid) and np.all(absorbing > rigid - 0.3)
+        assert np.abs(absorbing - np.array(btm)).max() < 1.0
+        back = level(r, s, 0.02)
+        np.testing.assert_allclose(back, absorbing, atol=1e-9)
+    # Of an impedance (a hard ground's, 20 MPa s/m²) the same, with its own F(w).
+    (s, r), _ = next(iter(BARRIER_BTM.items()))
+    material = {"impedance": {"flow_resistivity": 20000}, "scattering": 0.0}
+    hard = _over_barrier(_barrier(tmp_path, s, [r], material), "second_order", coherent)[0]
+    f = np.array(OCTAVE_BANDS_HZ, dtype=float)
+    beta = np.conj(Impedance(flow_resistivity=20000).admittance(f))  # as e^(-iwt)
+    w = 0.5 * (1 + 1j) * np.sqrt(2 * np.pi * f / 343.0) * beta
+    loss = 20 * np.log10(np.abs(1 + 1j * math.sqrt(math.pi) * w * wofz(w)))  # 0.01 to 0.42
+    np.testing.assert_allclose(hard - level(s, r, 0.0), loss, atol=0.1)
 
 
 def test_levels_are_continuous_over_a_barriers_top(tmp_path: Path) -> None:
