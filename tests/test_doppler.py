@@ -231,6 +231,46 @@ def test_a_filter_goes_linearly_from_one_place_to_the_next() -> None:
 
     growing, steady = heard(responses, [0.1, 0.3]), heard(responses[:1], [0.0])
     assert _error_db(growing, np.interp(t, [0.1, 0.3], [1.0, 2.0]) * steady) < -70.0
+    # Places heard 6 ms apart, more than three within one window of the filter (HOP_S),
+    # the path twice as loud at every other one: the filter is taken at each place's
+    # time too, so the tone still goes linearly from each place to the next. Taken
+    # every HOP_S alone it skipped places, and the difference was 17 % of the tone (RMS).
+    times = 0.1 + 0.006 * np.arange(34)
+    gains = 1.0 + np.arange(34) % 2
+    waving = heard([responses[k % 2] for k in range(34)], list(times))
+    assert _error_db(waving, np.interp(t, times, gains) * steady) < -70.0
+
+
+def test_the_windows_of_a_filter_add_up_to_one_and_turn_at_the_places() -> None:
+    """The filter is taken at every block's centre and at the places' times between
+    them; each time's window is one there and falls linearly to nothing at the times on
+    either side, so together they add up to one at every sample."""
+    hop, rate, blocks = 960, RATE, 8
+    received = np.array([0.0, 0.0213, 0.0251, 0.04, 0.0537, 0.2])
+    when, at, block = dp._turns(received, rate, hop, blocks)
+    # A place heard at a block's centre (0 and 0.04 s) adds no time of its own, nor
+    # does one heard past the last block's centre (0.2 s).
+    assert when.tolist() == [0.0213, 0.0251, 0.0537]
+    assert np.allclose(at, when * rate) and block.tolist() == [1, 1, 2]
+    assert dp._turns(received[:1], rate, hop, blocks)[0].size == 0
+    reading = dp._Reading(dp.Track(*[np.zeros(0)] * 4), np.zeros(0), 0, 7, 1.0, None, None)
+    plain = reading.taken(3, hop, rate)
+    assert plain[0] == [3 * hop / rate] and plain[1].tolist() == [2 * hop, 3 * hop, 4 * hop]
+    reading = dataclasses.replace(reading, turn_s=when, turn_at=at, turn_block=block)
+    samples = np.arange(0, 5 * hop)
+    total = np.zeros(len(samples))
+    for j in range(0, 6):
+        whens, turns = reading.taken(j, hop, rate)
+        assert whens[0] == j * hop / rate and whens[1:] == when[block == j].tolist()
+        windows = dp._windows(turns, samples)
+        assert windows.shape == (len(whens), len(samples))
+        # One at its own time, nothing at the others' nor from the times on either side on.
+        assert np.array_equal(dp._windows(turns, turns[1:-1]), np.eye(len(whens)))
+        assert not np.any(windows[:, (samples <= turns[0]) | (samples >= turns[-1])])
+        total += windows.sum(axis=0)
+    np.testing.assert_allclose(total, 1.0, rtol=0.0, atol=1e-12)
+    # The block after the place at 0.0537 s rises from it, not from the centre before.
+    assert reading.taken(3, hop, rate)[1].tolist() == [0.0537 * rate, 3 * hop, 4 * hop]
 
 
 def _late_only(walker: str, monkeypatch: pytest.MonkeyPatch):
@@ -360,17 +400,26 @@ def test_a_passing_source_and_listener_sound_as_the_exact_field(short) -> None:
 
 
 @pytest.mark.parametrize("walker", ["source", "listener"])
-def test_a_fast_walker_passing_close_keeps_the_level_of_the_exact_field(short, walker) -> None:
+@pytest.mark.parametrize("cardioid", [False, True], ids=["mono", "cardioid"])
+def test_a_fast_walker_passing_close_keeps_the_level_of_the_exact_field(
+    short, walker, cardioid
+) -> None:
     """At 70 m/s, 2 m from the other's line, the distance changes by more than half of
-    itself within one window of a path's filter (``HOP_S``): the level follows one over
-    the distance sample by sample, here in windows a quarter of that long."""
+    itself within ``HOP_S``, and the walker passes more than five places: the level
+    follows one over the distance sample by sample, and through a cardioid microphone
+    aimed at the walker's line the pattern from place to place (the filter is taken at
+    each place's time), here in windows a quarter of ``HOP_S`` long. Between two places
+    0.25 m apart a straight line strays from the capsule's 0.5 + 0.5 cos by 0.01 dB at
+    most (a chord's sag, an eighth of the step squared times the curvature, 0.5 / 2.06²
+    a metre squared at the pass)."""
     speed, tone = 70.0, 1000.0
     line = dataclasses.replace(short.road(), x0=-8.0, x1=8.0, d=2.0)
     walked = (line.x1 - line.x0) / speed
     t = np.arange(int((walked + 0.5) * RATE)) / RATE
     dry = np.sin(2 * np.pi * tone * t)
-    _, (wet,) = short.run(walker, speed, "hard", True, [dry], short.CLOSE_STEP_M, line)
-    field = short.exact(walker, speed, tone, len(wet), line=line)
+    step = short.CLOSE_STEP_M
+    _, (wet,) = short.run(walker, speed, "hard", True, [dry], step, line, cardioid)
+    field = short.exact(walker, speed, tone, len(wet), line=line, cardioid=cardioid)
     found = short.errors(wet, field, walked, window_s=dp.HOP_S / 4)
     assert found["level_max_db"] < 0.05
     assert found["waveform_db"] < -45.0
