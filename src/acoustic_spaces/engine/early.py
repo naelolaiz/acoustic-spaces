@@ -291,7 +291,26 @@ def ray_traced_candidates(
     for k in range(1, max_order + 1):
         prefix = planes[:, :k]
         prefix = prefix[np.all(prefix >= 0, axis=1)]
-        out.append(np.unique(prefix, axis=0) if len(prefix) else np.zeros((0, k), np.int64))
+        out.append(
+            _distinct_rows(prefix, model.plane_count) if len(prefix) else np.zeros((0, k), np.int64)
+        )
+    return out
+
+
+def _distinct_rows(rows: np.ndarray, base: int) -> np.ndarray:
+    """The distinct rows of ``rows`` (n, k), whole numbers from 0 to ``base`` - 1, in
+    ascending order: what ``np.unique(rows, axis=0)`` gives, through one number per row
+    (each row read as a number in base ``base``) where those fit in 64 bits."""
+    k = rows.shape[1]
+    if base**k > np.iinfo(np.int64).max:
+        return np.unique(rows, axis=0)
+    key = rows[:, 0].astype(np.int64)
+    for column in range(1, k):
+        key = key * base + rows[:, column]
+    key = np.unique(key)
+    out = np.empty((len(key), k), dtype=rows.dtype)
+    for column in range(k - 1, -1, -1):
+        key, out[:, column] = np.divmod(key, base)
     return out
 
 
