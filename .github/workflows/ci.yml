@@ -128,7 +128,8 @@ jobs:
         # are not checked: Python keeps some memory to the end on purpose. The checks make
         # the tests about three times as slow as on the plain Linux jobs: 41 to 77 minutes
         # in November 2026, by the runner's speed, and three runs were cut at the 75
-        # minutes the step had then, with 97 to 98 % of the tests passed and none failing.
+        # minutes the step had then, 97 to 98 % of the way through the tests and with
+        # none failing.
         env:
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1

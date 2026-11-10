@@ -130,6 +130,7 @@ def _run(conclusion: str = "failure", attempt: int = 1) -> dict:
         "conclusion": conclusion,
         "event": "pull_request",
         "head_branch": "a-branch",
+        "head_repository": {"id": 1},
         "workflow_id": 7,
     }
 
@@ -165,38 +166,149 @@ def test_the_failed_jobs_are_run_again_only_when_the_machines_failed_them_all(
     assert said in why
 
 
-@pytest.mark.parametrize(
-    ("jobs", "newer", "again"),
-    [([PASSED, LOST_IN_THE_TESTS], 0, True), ([PASSED, LOST_IN_THE_TESTS], 1, False)],
-)
-def test_the_tool_asks_github_and_runs_the_failed_jobs_again(
-    tool, monkeypatch, capsys, tmp_path, jobs, newer, again
-) -> None:
-    run, asked, summary = _run(), [], tmp_path / "summary.md"
-    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+RUN_PATH = "repos/{owner}/{repo}/actions/runs/42"
+RERUN = ("run", "rerun", "42", "--failed")
+
+
+def _github(tool, run: dict, jobs: list[dict], others: list[dict], refused: dict | None = None):
+    """A stand-in for the tool's ``_gh`` and the list of what it was asked. It answers the
+    four requests the tool makes, each only when made exactly as GitHub's command line
+    tool takes it. With ``refused`` it refuses to run the jobs again, as GitHub does for
+    a run that is running, and lists the run with those fields from then on."""
+    asked: list[tuple[str, ...]] = []
+    listed = dict(run)
 
     def gh(*arguments: str) -> str:
         asked.append(arguments)
-        if arguments[0] == "run":
-            return ""
-        if arguments[-1].endswith("/actions/runs/42"):
-            return json.dumps(run)
-        if "/actions/runs/42/jobs" in arguments[-1]:
+        if arguments == RERUN:
+            if refused is None:
+                return ""
+            listed.update(refused)
+            raise tool.GhError("gh run rerun 42 --failed: run 42 cannot be rerun")
+        if arguments == ("api", RUN_PATH):
+            return json.dumps(listed)
+        if arguments == (
+            "api",
+            "--paginate",
+            "--slurp",
+            f"{RUN_PATH}/jobs?filter=latest&per_page=100",
+        ):
             # Two pages, as --paginate --slurp gives them.
             return json.dumps([{"jobs": jobs[:1]}, {"jobs": jobs[1:]}])
-        # Later runs of the branch, whatever started them: CI's group is the ref alone.
-        assert "repos/{owner}/{repo}/actions/workflows/7/runs" in arguments
-        assert "branch=a-branch" in arguments
-        assert not any(argument.startswith("event=") for argument in arguments)
-        runs = [{"run_number": 783 + k} for k in range(-2, newer + 1)]
-        return json.dumps({"workflow_runs": runs})
+        # The later runs: those of the run's branch, whatever started them.
+        branch = ("-f", f"branch={run['head_branch']}") if run["head_branch"] else ()
+        path = "repos/{owner}/{repo}/actions/workflows/7/runs"
+        assert arguments == ("api", "--method", "GET", path, "-F", "per_page=100", *branch)
+        return json.dumps({"workflow_runs": others})
 
+    return gh, asked
+
+
+def _other(number: int, event: str = "pull_request", repository: int = 1) -> dict:
+    """Another run of CI as the API lists it, with the head branch of ``_run()``."""
+    return {
+        "run_number": number,
+        "event": event,
+        "head_branch": "a-branch",
+        "head_repository": {"id": repository},
+    }
+
+
+@pytest.mark.parametrize(
+    ("others", "again"),
+    [([_other(781), _other(782), _other(783)], True), ([_other(783), _other(784)], False)],
+)
+def test_the_tool_asks_github_and_runs_the_failed_jobs_again(
+    tool, monkeypatch, capsys, tmp_path, others, again
+) -> None:
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    gh, asked = _github(tool, _run(), [PASSED, LOST_IN_THE_TESTS], others)
     monkeypatch.setattr(tool, "_gh", gh)
     assert tool.main(["42"]) == 0
-    assert (("run", "rerun", "42", "--failed") in asked) is again
+    assert (RERUN in asked) is again
     said = capsys.readouterr().out
     assert ("is run again" if again else "is left as it is") in said
     assert summary.read_text(encoding="utf-8") == said
+
+
+PUSH = _run() | {"event": "push"}
+FROM_A_FORK = _run() | {"head_repository": {"id": 2}}
+
+
+@pytest.mark.parametrize(
+    ("run", "others", "later"),
+    [
+        # Runs for the same pull request: the later ones count, however many.
+        (_run(), [_other(782), _other(783), _other(784), _other(785)], 2),
+        # A pull request is not the branch or the tag its head is called as, nor a pull
+        # request from the branch of that name in another repository.
+        (
+            _run(),
+            [_other(784, "push"), _other(785, "workflow_dispatch"), _other(786, repository=2)],
+            0,
+        ),
+        (FROM_A_FORK, [_other(784, "push"), _other(785), _other(786, repository=2)], 1),
+        # A branch is the same ref to a push and to a run started by hand, and not that
+        # of a pull request from a branch of its name.
+        (PUSH, [_other(784, "workflow_dispatch"), _other(785, "push"), _other(786)], 2),
+        (PUSH, [_other(784, repository=2)], 0),
+        # Without the branch's name every later run counts.
+        (_run() | {"head_branch": None}, [_other(783), _other(784, "push", 2)], 1),
+    ],
+)
+def test_a_later_run_counts_when_ci_would_cancel_it_for_the_rerun(
+    tool, monkeypatch, run, others, later
+) -> None:
+    gh, _ = _github(tool, run, [], others)
+    monkeypatch.setattr(tool, "_gh", gh)
+    assert tool._later_runs(run) == later
+
+
+@pytest.mark.parametrize(
+    "now",
+    [
+        # Running again, by its status or by the number of its attempt, or ended again
+        # already: someone started it since it was read.
+        {"status": "queued", "conclusion": None, "run_attempt": 2},
+        {"status": "in_progress", "conclusion": None},
+        {"run_attempt": 2},
+    ],
+)
+def test_a_run_someone_started_again_meanwhile_is_left_to_them(
+    tool, monkeypatch, capsys, tmp_path, now
+) -> None:
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    gh, asked = _github(tool, _run(), [PASSED, LOST_IN_THE_TESTS], [], refused=now)
+    monkeypatch.setattr(tool, "_gh", gh)
+    assert tool.main(["42"]) == 0
+    assert asked[-2:] == [RERUN, ("api", RUN_PATH)]
+    said = capsys.readouterr().out
+    assert "is left as it is: someone started it again first" in said
+    assert summary.read_text(encoding="utf-8") == said
+
+
+def test_a_refusal_of_github_for_another_reason_is_an_error(tool, monkeypatch, tmp_path) -> None:
+    """The run is as it was read, and GitHub would not run its jobs again: the step
+    fails with what GitHub said, and nothing false is written."""
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    gh, _ = _github(tool, _run(), [PASSED, LOST_IN_THE_TESTS], [], refused={})
+    monkeypatch.setattr(tool, "_gh", gh)
+    with pytest.raises(tool.GhError, match="cannot be rerun"):
+        tool.main(["42"])
+    assert not summary.exists()
+
+
+def test_an_error_of_the_command_line_tool_is_raised_with_what_it_said(tool, monkeypatch) -> None:
+    def run(command, **_):
+        assert command == ["gh", "api", "a/path"]
+        return tool.subprocess.CompletedProcess(command, 1, stdout="", stderr="HTTP 403\n")
+
+    monkeypatch.setattr(tool.subprocess, "run", run)
+    with pytest.raises(tool.GhError, match="^gh api a/path: HTTP 403$"):
+        tool._gh("api", "a/path")
 
 
 def _steps(workflow: dict):
