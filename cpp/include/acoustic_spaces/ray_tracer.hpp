@@ -436,6 +436,14 @@ struct StochasticScene {
     const double *transmission = nullptr;
     const std::int64_t *face_room = nullptr;
     std::int64_t source_room = -1;
+    // Optional: the absorption (faces x bands) that decides for the rays in place of
+    // `absorption`, wherever the energy a ray carries decides what happens to it: the
+    // weight window's splitting and roulette, whether it passes a partition, the rate
+    // and the turn plants scatter it at, and where it ends. A run with other
+    // `absorption` then follows the rays of the run with this one, and counts on them
+    // the energy its own absorption leaves. Both must absorb everything in the same
+    // bands of the same faces.
+    const double *deciding = nullptr;
     // Optional: the group of each face (faces, -1 for none) out of `groups` (at most
     // kMaxGroups). The tracer counts the reflections each ray has had off each group and
     // sums, per receiver, the energy times those counts and their products in
@@ -476,6 +484,12 @@ struct StochasticResult {
 namespace detail {
 
 // Everything a ray carries from one leg to the next.
+inline std::array<double, kMaxBands> ones() {
+    std::array<double, kMaxBands> all;
+    all.fill(1.0);
+    return all;
+}
+
 struct RayState {
     Vec3 pos, dir;
     std::array<double, kMaxBands> energy;
@@ -505,6 +519,9 @@ struct RayState {
     // first face that reflects it, and nothing else happens to it (no rain, splitting or
     // plants' scattering; it goes on through openings and partitions as their share).
     bool detect_only = false;
+    // With StochasticScene::deciding, per band: the energy the ray would carry with that
+    // absorption over the energy it carries.
+    std::array<double, kMaxBands> ratio = ones();
 };
 
 // A ray that passes through a partition: one more, and once past those the early stage
@@ -1076,6 +1093,18 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
         std::vector<Vegetation::Span> line_spans;
         std::vector<double> line_cuts;
         const double inf = std::numeric_limits<double>::infinity();
+        // With StochasticScene::deciding, the energy that decides for a ray is what it
+        // would carry with that absorption; else its own.
+        const bool pinned = scene.deciding != nullptr;
+        std::array<double, kMaxBands> decided{};
+        const auto deciding = [pinned](const detail::RayState &state, std::size_t b) {
+            return pinned ? state.energy[b] * state.ratio[b] : state.energy[b];
+        };
+        const auto deciding_energy = [&](const detail::RayState &state) -> const double * {
+            if (!pinned) return state.energy.data();
+            for (std::size_t b = 0; b < bands; ++b) decided[b] = state.energy[b] * state.ratio[b];
+            return decided.data();
+        };
         // The weight window's level of a room relative to the source's.
         const auto level = [&](std::int64_t room) {
             if (room < 0 || static_cast<std::size_t>(room) >= settings.room_level.size()) {
@@ -1246,7 +1275,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     level(state.room);
                 if (!(expected > 0.0)) return true;
                 double now = 0.0;
-                for (std::size_t b = 0; b < bands; ++b) now += state.energy[b];
+                for (std::size_t b = 0; b < bands; ++b) now += deciding(state, b);
                 now /= static_cast<double>(bands);
                 if (now > settings.split_ratio * expected && family < settings.max_family) {
                     const auto copies = static_cast<std::size_t>(std::min<double>(
@@ -1275,7 +1304,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                 stack.pop_back();
                 if (!ray_state.detect_only) ++out.traced_rays;
                 auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room, hits,
-                       path, away, leaving, partitions, detect_only] = ray_state;
+                       path, away, leaving, partitions, detect_only, ratio] = ray_state;
 
                 while (travelled < max_length) {
                     Hit hit;
@@ -1288,7 +1317,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         double segment = hit.found() ? hit.t : left + overrun;
                         const detail::Track *plant_track = nullptr;
                         if (plants != nullptr &&
-                            track.build(*plants, pos, dir, segment, energy.data())) {
+                            track.build(*plants, pos, dir, segment, deciding_energy(ray_state))) {
                             plant_track = &track;
                             if (!detect_only) scatter_at = track.collide(rng);
                             if (hit.found() && scatter_at > hit.t - offset) scatter_at = inf;
@@ -1343,7 +1372,8 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                 const double stretch = chord.arc / length;
                                 const detail::Track *plant_track = nullptr;
                                 if (plants != nullptr &&
-                                    track.build(*plants, chord.start, along, segment, energy.data())) {
+                                    track.build(*plants, chord.start, along, segment,
+                                                deciding_energy(ray_state))) {
                                     plant_track = &track;
                                     if (!detect_only) scatter_at = track.collide(rng);
                                     if (met.found() && scatter_at > met.t - offset) scatter_at = inf;
@@ -1422,10 +1452,11 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         double mean = 0.0, kept = 0.0, mean_g = 0.0;
                         for (std::size_t b = 0; b < bands; ++b) {
                             energy[b] *= weights[b];
-                            mean += energy[b];
+                            mean += deciding(ray_state, b);
                             energy[b] *= mu[b] / track.rate[m];
-                            kept += energy[b];
-                            mean_g += energy[b] * g[b];
+                            const double scattered = deciding(ray_state, b);
+                            kept += scattered;
+                            mean_g += scattered * g[b];
                             alone[b] = 0.0;
                         }
                         const std::size_t window =
@@ -1501,7 +1532,9 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             }
                         }
                         double peak = 0.0;
-                        for (std::size_t b = 0; b < bands; ++b) peak = std::max(peak, energy[b]);
+                        for (std::size_t b = 0; b < bands; ++b) {
+                            peak = std::max(peak, deciding(ray_state, b));
+                        }
                         if (peak < cutoff) break;
                         if (!weigh(ray_state, window)) break;
                         continue;
@@ -1526,11 +1559,18 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     }
                     const bool passes =
                         tau != nullptr && (scene.face_room == nullptr || beyond >= 0);
+                    // The absorption that decides: the scene's own, or `deciding`.
+                    const double *ruling = pinned ? scene.deciding + face * bands : alpha;
                     double passed = 0.0, kept = 0.0;
                     for (std::size_t b = 0; b < bands; ++b) {
                         through[b] = passes ? energy[b] * tau[b] : 0.0;
-                        passed += through[b];
-                        kept += energy[b] * (1.0 - alpha[b]);
+                        if (pinned) {
+                            passed += through[b] * ratio[b];
+                            kept += energy[b] * ratio[b] * (1.0 - ruling[b]);
+                        } else {
+                            passed += through[b];
+                            kept += energy[b] * (1.0 - alpha[b]);
+                        }
                     }
                     if (passed > 0.0 && !(kept > 0.0)) {
                         // An opening: the ray goes on into the next room, as it was.
@@ -1565,10 +1605,11 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     }
                     double peak = 0.0, mean = 0.0, p = 0.0;
                     for (std::size_t b = 0; b < bands; ++b) {
-                        mean += energy[b];
+                        mean += deciding(ray_state, b);
                         reflected[b] = energy[b] * (1.0 - alpha[b]);
                         rain[b] = reflected[b] * scatter[b];
-                        peak = std::max(peak, reflected[b]);
+                        peak = std::max(peak, pinned ? energy[b] * ratio[b] * (1.0 - ruling[b])
+                                                     : reflected[b]);
                         p += scatter[b];
                         // After this reflection; past the partitions the early stage
                         // follows, none of the path is the early stage's.
@@ -1649,6 +1690,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                                                              last, rng.split(), beyond, hits,
                                                              path, -n, true, partitions});
                             if (group >= 0) --stack.back().hits[static_cast<std::size_t>(group)];
+                            stack.back().ratio = ratio;
                             detail::pass_partition(stack.back());
                             ++family;
                         } else {
@@ -1674,6 +1716,12 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         }
                     }
                     if (peak < cutoff) break;
+                    if (pinned) {
+                        // It has reflected: what it would carry with the deciding absorption.
+                        for (std::size_t b = 0; b < bands; ++b) {
+                            if (alpha[b] < 1.0) ratio[b] *= (1.0 - ruling[b]) / (1.0 - alpha[b]);
+                        }
+                    }
 
                     if (settings.vector_scattering) {
                         // One ray for the mixture: all the reflected energy, in between the

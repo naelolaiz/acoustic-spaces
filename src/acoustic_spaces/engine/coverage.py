@@ -628,8 +628,9 @@ def uncertainty_text(value: float) -> str:
         return "–"
     if value == 0.0:
         return "0"
-    decimals = min(4, max(0, 1 - math.floor(math.log10(abs(value)))))
-    return f"{value:.{decimals}f}"
+    rounded = float(f"{value:.2g}")
+    decimals = min(4, max(0, 1 - math.floor(math.log10(abs(rounded)))))
+    return f"{rounded:.{decimals}f}"
 
 
 @dataclass
@@ -1094,6 +1095,21 @@ def _trace_part(
     return _Part(onset, early, late, decay, plain if changed else None)
 
 
+def _deciding(room: Room, model: TraceModel, rays_of: Scene) -> np.ndarray:
+    """(faces, bands) the absorption of ``room``'s faces with the materials of
+    ``rays_of``, to decide for the rays of ``model``."""
+    rows = np.array(
+        [rays_of.materials[n].coefficients(model.bands)[0] for n in room.material_names]
+    )
+    deciding = np.ascontiguousarray(rows[room.face_materials], dtype=np.float64)
+    if not np.array_equal(deciding < 1.0, model.absorption < 1.0):
+        raise ValueError(
+            "rays_of: its materials must absorb everything in the bands in which the "
+            "scene's own do, and in those only"
+        )
+    return deciding
+
+
 def coverage_map(
     room: Room | Scene | str | Path,
     *,
@@ -1103,6 +1119,7 @@ def coverage_map(
     threads: int | None = None,
     progress: Callable[[str], None] | None = None,
     grid: MapGrid | None = None,
+    rays_of: Scene | None = None,
 ) -> CoverageResult:
     """Coverage maps of the scene's sources (all by default) over its audience area.
 
@@ -1123,6 +1140,13 @@ def coverage_map(
     ``grid`` takes the place of the one the settings give, so that two runs of a scene
     share their points (:func:`~acoustic_spaces.engine.insertion.coverage_map`); the
     rooms its points lie in and the air in their slabs are those of ``room``.
+
+    ``rays_of`` is the scene as it was before its materials' absorption was moved: with
+    the same seed, the map then follows the rays of that scene's map, whose materials'
+    absorption decides for them (:attr:`~acoustic_spaces.engine.model.TraceModel.
+    deciding`), and counts on them the energy this scene's absorption leaves. The two
+    maps differ by what the absorption does, and not by their rays
+    (:mod:`~acoustic_spaces.engine.sensitivity`).
     """
     room = _as_room(room)
     # Listeners play no part in a map; sources named are mapped even when left out.
@@ -1148,6 +1172,9 @@ def coverage_map(
         grid = _in_room(room, grid)
     say(f"Map: {len(grid)} points, {grid.cell:g} m apart")
     model = TraceModel.from_room(room, sim)
+    # The statistical tail traces no rays to decide for.
+    if rays_of is not None and sim.late.method != "statistical":
+        model.deciding = _deciding(room, model, rays_of)
     edges = _Edges(model)
     c = room.speed_of_sound()
     volume = room.volume_m3

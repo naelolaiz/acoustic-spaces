@@ -19,6 +19,7 @@ from acoustic_spaces.engine.coverage import (
     LONG_TERM_MAP_PARAMETERS,
     uncertainty_text,
 )
+from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.reweight import groups_of, with_absorption
 from acoustic_spaces.engine.uncertainty import MAX_ABSORPTION, absorption_nodes, material_spread
 
@@ -127,16 +128,19 @@ def test_a_maps_spread_is_the_root_sum_of_squares_of_its_materials_parts() -> No
         np.testing.assert_array_equal(chosen.values[name], values)
 
     # A material's part is half the difference of the maps traced on the same points
-    # with the same rays, its absorption one standard uncertainty up and down.
-    up, down = (
+    # with the rays of the map itself, its absorption one standard uncertainty up and
+    # down.
+    traced = result.details["s"]["traced_rays"]
+    moved = [
         coverage_stage.coverage_map(
             Room.from_scene(with_absorption(scene, ["walls"], [absorption], "moved", digits=None)),
             grid=result.grid,
+            rays_of=scene,
         )
-        .get()
-        .values
         for absorption in absorption_nodes(scene, "walls")
-    )
+    ]
+    assert [run.details["s"]["traced_rays"] for run in moved] == [traced, traced]
+    up, down = (run.get().values for run in moved)
     for name in ("g", "spl", "spl_a", "sti", "c50"):
         part = spread.materials["walls"][name]
         assert part.shape == chosen.values[name].shape
@@ -228,6 +232,110 @@ def test_the_runs_of_a_spread_trace_the_same_rays() -> None:
     assert 0.0 < np.abs(part).max() < 1e-4
 
 
+def test_a_materials_two_runs_follow_the_rays_of_the_map() -> None:
+    """The splitting and thinning out of rays choose them by the energy they carry, so
+    two runs with other absorption follow other rays, and a decay time's part would be
+    the rays' noise as much as the absorption's doing: for this uncertainty, T30's at
+    1 kHz ran from -4.1 to -1.6 times it over these points. With the scene as it is to
+    decide for their rays, the two runs follow the map's own, and the part is the
+    uncertainty times the slope of T30 over the walls' absorption, which is the room's:
+    much the same at every point."""
+    walls = {"absorption": WALLS, "scattering": 0.3, "uncertainty": {"absorption": 1e-3}}
+    scene = _box(
+        floor={"absorption": FLOOR},
+        walls=walls,
+        coverage={"spacing": 2.5},
+        simulation={"ir_length_s": 1.6, "late": {"rays": 2000}},
+    )
+    assert scene.simulation.late.splitting
+    room = Room.from_scene(scene)
+    result = sensitivity.coverage_map(room, spread=True)
+    assert len(result.grid) == 12
+    slope = result.get().spread.materials["walls"]["t30"][:, 4] / 1e-3
+    assert (slope < 0).all()
+    np.testing.assert_allclose(slope, np.median(slope), rtol=0.15)
+
+    # The tracer itself: with the scene's own absorption to decide, the same map bit for
+    # bit; with moved absorption, the same rays as the map's, where a run left to itself
+    # splits and thins out others.
+    again = coverage_stage.coverage_map(room, grid=result.grid, rays_of=scene)
+    for name, values in result.get().values.items():
+        np.testing.assert_array_equal(again.get().values[name], values)
+    more = with_absorption(scene, ["walls"], [np.add(WALLS, 0.03)], "moved", digits=None)
+    traced = result.details["s"]["traced_rays"]
+    led = coverage_stage.coverage_map(Room.from_scene(more), grid=result.grid, rays_of=scene)
+    free = coverage_stage.coverage_map(Room.from_scene(more), grid=result.grid)
+    assert led.details["s"]["traced_rays"] == traced != free.details["s"]["traced_rays"]
+    # Both must absorb everything in the same bands: there no energy is left to compare.
+    full = with_absorption(scene, ["walls"], [[1.0] * 8], "moved", digits=None)
+    with pytest.raises(ValueError, match="rays_of: its materials must absorb everything"):
+        coverage_stage.coverage_map(Room.from_scene(full), grid=result.grid, rays_of=scene)
+
+
+def test_a_third_octave_material_reaches_its_nodes() -> None:
+    """A material given in third octaves moves by what its octaves do, and a third that
+    cannot (below no absorption here) leaves the rest to the octave's others: the
+    octave is at the node, as a listener's draw of it is."""
+    thirds = [0.01, 0.06, 0.14] * 4 + [0.12, 0.2, 0.28] * 4
+    scene = _box(walls={"absorption": thirds, "uncertainty": {"absorption": 0.05}})
+    plus, minus = absorption_nodes(scene, "walls")
+    np.testing.assert_allclose(minus, [0.02] * 4 + [0.15] * 4)
+    for node in (plus, minus):
+        moved = with_absorption(scene, ["walls"], [node], "moved", digits=None)
+        octaves = moved.materials["walls"].coefficients("octave")[0]
+        np.testing.assert_allclose(octaves, node, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(
+        moved.materials["walls"].absorption[:3], [0.0, 0.0, 0.06], atol=1e-12
+    )
+    np.testing.assert_allclose(moved.materials["walls"].absorption[-3:], [0.07, 0.15, 0.23])
+
+
+@pytest.mark.parametrize(
+    ("last", "plus", "minus"),
+    [
+        ([0.9, 0.96, 0.99], [0.95, 0.99, 0.99], [0.85, 0.91, 0.94]),
+        ([0.8, 0.9, 1.0], [0.85, 0.95, 1.0], [0.75, 0.85, 1.0]),
+    ],
+)
+def test_a_run_in_third_octaves_moves_each_third(
+    last: list[float], plus: list[float], minus: list[float]
+) -> None:
+    """In a run in third octaves each third of a material given in them is moved by its
+    octave's uncertainty and held to a draw's limits: one at absorption 1 stays there
+    and no other passes the most a draw takes. The run then has its bands that absorb
+    everything where the scene's own has them, which following the rays of the map
+    itself asks for."""
+    thirds = [0.2, 0.3, 0.4] * 7 + last
+    walls = {"absorption": thirds, "scattering": 0.3, "uncertainty": {"absorption": 0.05}}
+    scene = _box(walls=walls, simulation={"bands": "third_octave"})
+    room = Room.from_scene(scene)
+    nodes = absorption_nodes(scene, "walls", "third_octave")
+    for node, end, by in zip(nodes, (plus, minus), (0.05, -0.05), strict=True):
+        np.testing.assert_allclose(node[:-3], np.array(thirds[:-3]) + by)
+        np.testing.assert_allclose(node[-3:], end, rtol=0, atol=1e-12)
+        other = with_absorption(scene, ["walls"], [node], "moved", digits=None)
+        np.testing.assert_array_equal(other.materials["walls"].absorption, node)
+        of = Room.from_scene(other, reuse=room)
+        model = TraceModel.from_room(of, other.simulation)
+        deciding = coverage_stage._deciding(of, model, scene)
+        np.testing.assert_array_equal(deciding < 1.0, model.absorption < 1.0)
+
+
+def test_a_map_in_third_octaves_has_its_spread() -> None:
+    """A map in third octaves of a third-octave material with a value at absorption 1,
+    with rays and with the statistical tail, which traces none to follow. Its early
+    paths add in energy here, which spares the fit of each moved wall's admittance."""
+    thirds = [0.2, 0.3, 0.4] * 7 + [0.8, 0.9, 1.0]
+    walls = {"absorption": thirds, "scattering": 0.3, "uncertainty": {"absorption": 0.05}}
+    early = {"coherent_max_band_hz": None}
+    for late in ({"rays": 60}, {"method": "statistical"}):
+        few = {"bands": "third_octave", "ir_length_s": 0.4, "early": early, "late": late}
+        scene = _box(walls=walls, floor={"absorption": FLOOR}, simulation=few)
+        spread = sensitivity.coverage_map(Room.from_scene(scene), spread=True).get().spread
+        assert list(spread.materials) == ["walls"]
+        assert np.all(spread.standard["spl_a"] > 0.0)
+
+
 def test_a_map_is_run_once_without_a_spread_to_find() -> None:
     late = {"late": {"method": "statistical"}}
     # Asked for by the scene, with no uncertain material on the surfaces.
@@ -253,9 +361,12 @@ def test_a_map_is_run_once_without_a_spread_to_find() -> None:
 def test_a_maps_spread_agrees_with_a_listeners_monte_carlo_at_a_point() -> None:
     """The law of propagation on the map against the Monte Carlo of a listener put at
     one of its points (other rays, re-weighted for each draw and not traced again).
-    With 20 000 rays and 2 000 draws they agree within 4 % for the A-weighted level and
-    the STI and within 8 % for the bands' levels; these few rays and draws leave the
-    draws' own error, some 6 % of a standard deviation, and the rays' besides."""
+    In a box like this one with an uncertainty on all three materials, 20 000 rays and
+    2 000 draws, they agree within 3 % for the A-weighted level, the STI and the bands'
+    levels with standard uncertainties of 0.02 to 0.03, and within 4 %, 3 % and 8 % with
+    a tolerance of 0.1 on each. This box (a tolerance on the floor, a standard
+    uncertainty on the walls) with these few rays and draws leaves the draws' own error,
+    some 6 % of a standard deviation, and the rays' besides."""
     few = {"late": {"rays": 1500}, "ir_length_s": 0.8}
     result = sensitivity.coverage_map(Room.from_scene(_box(simulation=few)), spread=True)
     k = int(np.argmin(np.linalg.norm(result.grid.points - np.array([5.8, 3.9, 1.2]), axis=1)))
@@ -313,7 +424,11 @@ def test_a_standard_uncertainty_shows_two_significant_digits() -> None:
     assert uncertainty_text(0.0392) == "0.039"
     assert uncertainty_text(0.96) == "0.96"
     assert uncertainty_text(11.3) == "11"
-    assert uncertainty_text(123.4) == "123"
+    assert uncertainty_text(123.4) == "120"
+    # Rounded first: 0.0996 is 0.10, not 0.100.
+    assert uncertainty_text(0.0996) == "0.10"
+    assert uncertainty_text(0.996) == "1.0"
+    assert uncertainty_text(9.97) == "10"
     assert uncertainty_text(0.0) == "0"
     assert uncertainty_text(2e-9) == "0.0000"
     assert uncertainty_text(math.nan) == "–"

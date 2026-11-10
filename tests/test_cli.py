@@ -617,6 +617,54 @@ def test_map_command_gives_the_spread(tmp_path: Path, capsys: pytest.CaptureFixt
     assert "Spread" not in captured.err and "u median" not in captured.out
 
 
+def test_map_command_says_what_its_spread_leaves_out(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    text = SHOEBOX.read_text(encoding="utf-8")
+    text = text.replace("file: shoebox.obj", f"file: {(SHOEBOX.parent / 'shoebox.obj').as_posix()}")
+    # No built-in material is taken at a tolerance: none of the scene's has an uncertainty.
+    text = text.replace("  ir_length_s: 2.5", "  ir_length_s: 2.5\n  uncertainty: {presets: none}")
+
+    def run(scene_text: str, *more: str) -> tuple[int, str, str]:
+        scene = tmp_path / "scene.yaml"
+        scene.write_text(scene_text, encoding="utf-8")
+        args = ["map", str(scene), "--spacing", "3", "--rays", "300", "--length", "0.6"]
+        code = main([*args, "--seed", "4", "--spread", *more])
+        captured = capsys.readouterr()
+        return code, captured.out, captured.err
+
+    code, out, err = run(text)
+    assert code == 0 and "u median" not in out
+    assert "warning: no spread: no material on the surfaces has an absorption uncertainty" in err
+    # It was asked for, so the error does not say to ask for it.
+    code, out, err = run(text, "--show", "standard")
+    assert code == 1
+    assert err.rstrip().endswith("error: --show standard: the map has no spread")
+
+    # A ground's absorption uncertainty is left out, and it is the scene's only one.
+    carpet = "preset: carpet_6mm_closed_cell_foam"
+    ground = "impedance: grass\n    uncertainty: {absorption: 0.05}"
+    code, out, err = run(text.replace(carpet, ground))
+    assert code == 0
+    assert "carpet_on_concrete" in err and "a ground's impedance gives its reflection" in err
+    assert (
+        "warning: no spread: no other material on the surfaces has an absorption uncertainty"
+    ) in err
+
+    # Where a material absorbs everything, its two runs leave it there.
+    tile = "preset: ceiling_fissured_tile"
+    full = (
+        "absorption: [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]\n    uncertainty: {absorption: 0.03}"
+    )
+    code, out, err = run(text.replace(tile, full))
+    assert code == 0 and "(run 2 of 2)" in err
+    assert (
+        "u: the standard uncertainty from the absorption uncertainty of acoustic_ceiling "
+        "(the map traced 2 times more); not moved where the absorption is 1: "
+        "acoustic_ceiling (8 kHz)"
+    ) in out
+
+
 def test_map_checks_the_options_that_override_the_scene(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

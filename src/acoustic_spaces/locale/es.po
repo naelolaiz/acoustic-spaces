@@ -1492,27 +1492,10 @@ msgstr ""
 msgid "Simulating {scene}…"
 msgstr "Simulando {scene}…"
 
-#. Translators: {names} are materials' names.
-#: acoustic_spaces/gui/app.py
-#, python-brace-format
-msgid ""
-"The absorption uncertainty of {names} is left out of the spread: a ground's "
-"impedance gives its reflection"
-msgstr ""
-"La incertidumbre de absorción de {names} queda fuera de la dispersión: la "
-"impedancia del suelo da su reflexión"
-
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid "Cannot map: {problems}"
 msgstr "No se puede calcular el mapa: {problems}"
-
-#: acoustic_spaces/gui/app.py acoustic_spaces/gui/inspector.py
-msgid ""
-"No material on the surfaces has an absorption uncertainty: no map has one."
-msgstr ""
-"Ningún material de las superficies tiene incertidumbre de absorción: ningún "
-"mapa la tiene."
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -1584,6 +1567,12 @@ msgid "Map done in {time:.1f} s: {count:,} point."
 msgid_plural "Map done in {time:.1f} s: {count:,} points."
 msgstr[0] "Mapa terminado en {time:.1f} s: {count:,} punto."
 msgstr[1] "Mapa terminado en {time:.1f} s: {count:,} puntos."
+
+#. Translators: {names} are materials' names, each with its bands.
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid "Left out of the map's uncertainty, where the absorption is 1: {names}"
+msgstr "Fuera de la incertidumbre del mapa, donde la absorción es 1: {names}"
 
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
@@ -2824,6 +2813,38 @@ msgstr "(material predeterminado)"
 #: acoustic_spaces/gui/inspector.py
 msgid "(unnamed)"
 msgstr "(sin nombre)"
+
+#. Translators: {names} are materials' names.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid ""
+"The absorption uncertainty of {names} is left out of the spread: a ground's "
+"impedance gives its reflection"
+msgstr ""
+"La incertidumbre de absorción de {names} queda fuera de la dispersión: la "
+"impedancia del suelo da su reflexión"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"No other material on the surfaces has an absorption uncertainty: no map has "
+"one."
+msgstr ""
+"Ningún otro material de las superficies tiene incertidumbre de absorción: "
+"ningún mapa la tiene."
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
+"No material on the surfaces has an absorption uncertainty: no map has one."
+msgstr ""
+"Ningún material de las superficies tiene incertidumbre de absorción: ningún "
+"mapa la tiene."
+
+#. Translators: {what} is how far the absorption may be off ("plus or minus 0.1"), {names} the materials' names.
+#: acoustic_spaces/gui/inspector.py
+#, python-brace-format
+msgid "Built-in materials of unknown source taken at {what}: {names}"
+msgstr ""
+"Materiales integrados de origen desconocido, tomados con {what}: {names}"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -6081,12 +6102,12 @@ msgstr "Por la incertidumbre de absorción de los materiales"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"Ticked, the map also gives the uncertainty of every value that the "
-"materials' absorption uncertainty leads to. For that it is traced twice more "
-"for each material that has one, with its absorption one standard uncertainty "
-"up and down. Show, in the Coverage map panel, picks what of it the map draws"
+"Ticked, the map also gives the uncertainty of its values that the materials' "
+"absorption uncertainty leads to. For that it is traced twice more for each "
+"material that has one, with its absorption one standard uncertainty up and "
+"down. Show, in the Coverage map panel, picks what of it the map draws"
 msgstr ""
-"Marcado, el mapa da también la incertidumbre de cada valor debida a la "
+"Marcado, el mapa da también la incertidumbre de sus valores debida a la "
 "incertidumbre de absorción de los materiales. Para ello se traza dos veces "
 "más por cada material que la tiene, con su absorción una incertidumbre "
 "típica por encima y por debajo. Mostrar, en el panel Mapa de cobertura, "
@@ -6100,14 +6121,17 @@ msgstr "Ruido de fondo a {band} (dB SPL)"
 #: acoustic_spaces/gui/inspector.py
 #, python-brace-format
 msgid ""
-"{count} material on the surfaces has one: the map is traced {runs} times."
+"{count} material on the surfaces has one: the map with its uncertainty is "
+"traced {runs} times."
 msgid_plural ""
-"{count} materials on the surfaces have one: the map is traced {runs} times."
+"{count} materials on the surfaces have one: the map with its uncertainty is "
+"traced {runs} times."
 msgstr[0] ""
-"{count} material de las superficies la tiene: el mapa se traza {runs} veces."
+"{count} material de las superficies la tiene: el mapa con su incertidumbre "
+"se traza {runs} veces."
 msgstr[1] ""
-"{count} materiales de las superficies la tienen: el mapa se traza {runs} "
-"veces."
+"{count} materiales de las superficies la tienen: el mapa con su "
+"incertidumbre se traza {runs} veces."
 
 #: acoustic_spaces/gui/inspector.py
 msgid "noise levels are numbers in dB"
@@ -7560,13 +7584,6 @@ msgid ""
 msgstr ""
 "{tip}: {jnd:.1f} JND, así que el valor puede cambiar de forma perceptible "
 "entre cálculos con otras semillas; más rayos por banda reducen el error"
-
-#. Translators: {what} is how far the absorption may be off ("plus or minus 0.1"), {names} the materials' names.
-#: acoustic_spaces/gui/results_view.py
-#, python-brace-format
-msgid "Built-in materials of unknown source taken at {what}: {names}"
-msgstr ""
-"Materiales integrados de origen desconocido, tomados con {what}: {names}"
 
 #. Translators: {u}, {absorption}, {rays}, {low} and {high} are numbers in the parameter's unit, {percent} and {count} numbers.
 #: acoustic_spaces/gui/results_view.py

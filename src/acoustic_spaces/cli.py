@@ -1361,8 +1361,9 @@ def _spread_groups(room, settings):
     return groups
 
 
-def _warn_grounds_left_out(room) -> None:
-    """Warn of the grounds whose absorption uncertainty a spread leaves out."""
+def _warn_grounds_left_out(room) -> list[str]:
+    """Warn of the grounds whose absorption uncertainty a spread leaves out, and return
+    them."""
     from acoustic_spaces.engine.uncertainty import grounds_left_out
 
     grounds = grounds_left_out(room)
@@ -1372,6 +1373,7 @@ def _warn_grounds_left_out(room) -> None:
             "the spread: a ground's impedance gives its reflection",
             file=sys.stderr,
         )
+    return grounds
 
 
 def _uncertainty_text(entry: dict) -> str:
@@ -1444,9 +1446,10 @@ def _assumed_text(assumed: dict) -> str:
     )
 
 
-def _held_text(held: dict) -> str:
+def _held_text(held: dict, how: str = "drawn") -> str:
     """The materials with an uncertainty and the bands in which they absorb everything,
-    where no draw moves them, or nothing."""
+    where no draw moves them (``how``: "moved" for a map, whose runs draw nothing), or
+    nothing."""
     from acoustic_spaces.parameters import _band_label
 
     if not held:
@@ -1454,7 +1457,7 @@ def _held_text(held: dict) -> str:
     each = [
         f"{name} ({', '.join(_band_label(hz) for hz in bands)})" for name, bands in held.items()
     ]
-    return f"; not drawn where the absorption is 1: {', '.join(each)}"
+    return f"; not {how} where the absorption is 1: {', '.join(each)}"
 
 
 def _outdoor_lines(entry: dict, removed) -> list[str]:
@@ -1584,10 +1587,11 @@ def _cmd_map(args: argparse.Namespace) -> int:
         return 1
     materials = spread_materials(room) if settings.spread else []
     if settings.spread:
-        _warn_grounds_left_out(room)
+        other = " other" if _warn_grounds_left_out(room) else ""
         if not materials:
             print(
-                "warning: no spread: no material on the surfaces has an absorption uncertainty",
+                f"warning: no spread: no{other} material on the surfaces has an absorption "
+                "uncertainty",
                 file=sys.stderr,
             )
     if args.show != "value" and not materials:
@@ -1623,7 +1627,7 @@ def _cmd_map(args: argparse.Namespace) -> int:
             f"u: the standard uncertainty from the absorption uncertainty of "
             f"{', '.join(materials)} (the map traced {2 * len(materials)} times more)"
             + _assumed_text(shown.spread.assumed)
-            + _held_text(shown.spread.held)
+            + _held_text(shown.spread.held, "moved")
         )
 
     def ranges(values, text) -> list[str]:
@@ -3160,7 +3164,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--spread",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="override coverage.spread: also the uncertainty of every value from the "
+        help="override coverage.spread: also the uncertainty of the map's values from the "
         "materials' absorption uncertainty, for which the map is traced twice more for "
         "each material that has one",
     )

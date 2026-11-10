@@ -253,6 +253,50 @@ def label_text(label: tuple[str, ...]) -> str:
     return " / ".join(label) if label else _("(unnamed)")
 
 
+def grounds_left_out_text(room) -> str:
+    """That a spread leaves out the absorption uncertainty of ``room``'s grounds with an
+    impedance, by their names, or nothing where it has none such."""
+    from acoustic_spaces.engine.uncertainty import grounds_left_out
+
+    grounds = grounds_left_out(room)
+    if not grounds:
+        return ""
+    # Translators: {names} are materials' names.
+    return _(
+        "The absorption uncertainty of {names} is left out of the spread: "
+        "a ground's impedance gives its reflection"
+    ).format(names=", ".join(grounds))
+
+
+def no_map_spread_text(room) -> str:
+    """That no map of ``room`` has an uncertainty, where no material on its surfaces has
+    one a map takes (none but the grounds that :func:`grounds_left_out_text` names), or
+    nothing."""
+    from acoustic_spaces.engine.sensitivity import spread_materials
+
+    if spread_materials(room):
+        return ""
+    if grounds_left_out_text(room):
+        return _("No other material on the surfaces has an absorption uncertainty: no map has one.")
+    return _("No material on the surfaces has an absorption uncertainty: no map has one.")
+
+
+def assumed_text(assumed: dict) -> str:
+    """That a spread took the scene's default (simulation.uncertainty.presets) for the
+    built-in materials of unknown source ``assumed`` names, or nothing."""
+    if not assumed:
+        return ""
+    # One choice for the whole scene.
+    choice = next(iter(assumed.values()))
+    return fmt(
+        # Translators: {what} is how far the absorption may be off ("plus or minus
+        # 0.1"), {names} the materials' names.
+        _("Built-in materials of unknown source taken at {what}: {names}"),
+        what=_(dict(PRESET_UNCERTAINTIES)[choice]),
+        names=", ".join(assumed),
+    )
+
+
 class Page(QWidget):
     """One form. ``load`` fills it from the document; edits go through ``apply``."""
 
@@ -4757,7 +4801,7 @@ class CoveragePage(Page):
         self.spread = QCheckBox(_("From the materials' absorption uncertainty"))
         self.spread.setToolTip(
             _(
-                "Ticked, the map also gives the uncertainty of every value that the "
+                "Ticked, the map also gives the uncertainty of its values that the "
                 "materials' absorption uncertainty leads to. For that it is traced twice "
                 "more for each material that has one, with its absorption one standard "
                 "uncertainty up and down. Show, in the Coverage map panel, picks what of "
@@ -4811,16 +4855,20 @@ class CoveragePage(Page):
 
     @staticmethod
     def _spread_runs(room) -> str:
-        """How many times a map with its uncertainty is traced in this scene."""
+        """How many times a map with its uncertainty is traced in this scene, ticked or
+        not."""
         from acoustic_spaces.engine.sensitivity import spread_materials
 
         count = len(spread_materials(room))
         if count == 0:
-            return _("No material on the surfaces has an absorption uncertainty: no map has one.")
+            left_out = grounds_left_out_text(room)
+            return (f"{left_out}. " if left_out else "") + no_map_spread_text(room)
         return fmt(
             ngettext(
-                "{count} material on the surfaces has one: the map is traced {runs} times.",
-                "{count} materials on the surfaces have one: the map is traced {runs} times.",
+                "{count} material on the surfaces has one: the map with its uncertainty "
+                "is traced {runs} times.",
+                "{count} materials on the surfaces have one: the map with its uncertainty "
+                "is traced {runs} times.",
                 count,
             ),
             count=count,

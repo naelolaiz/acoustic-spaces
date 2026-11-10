@@ -99,7 +99,7 @@ from acoustic_spaces.engine.reweight import (
     log_ratio,
     reweighted_materials,
 )
-from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
+from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, Resolution
 from acoustic_spaces.parameters import LIMITS, Levels, RoomParameters
 from acoustic_spaces.scene.model import ONE_SIDED, SPREAD_DRAWS, AbsorptionUncertainty
 
@@ -439,12 +439,14 @@ def absorption_draws(scene, materials: Sequence[str], draws: int, seed: int) -> 
     return _draws(scene, materials, draws, seed)[0]
 
 
-def _limits(material, own: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _limits(
+    material, own: np.ndarray, bands: Resolution = "octave"
+) -> tuple[np.ndarray, np.ndarray]:
     """The least and the most absorption per band that a draw of ``material`` takes,
-    ``own`` its absorption: from what it lets through, which is absorbed whatever the
-    rest of the surface does (0 for a surface that lets nothing through), to
-    ``MAX_ABSORPTION``, or to ``own`` where that is more."""
-    passing = material.transmission_coefficients("octave")
+    ``own`` its absorption in ``bands``: from what it lets through, which is absorbed
+    whatever the rest of the surface does (0 for a surface that lets nothing through),
+    to ``MAX_ABSORPTION``, or to ``own`` where that is more."""
+    passing = material.transmission_coefficients(bands)
     bottom = np.zeros(own.size) if passing is None else np.minimum(passing, own)
     return bottom, np.maximum(own, MAX_ABSORPTION)
 
@@ -476,30 +478,36 @@ def _draws(scene, materials, draws, seed):
 
 
 def _moved(
-    material, spec: AbsorptionUncertainty, deviate: np.ndarray
+    material, spec: AbsorptionUncertainty, deviate: np.ndarray, bands: Resolution = "octave"
 ) -> tuple[np.ndarray, np.ndarray]:
-    """((deviates, bands), (bands,)) the absorption of ``material``, whose uncertainty
-    is ``spec`` (:func:`uncertainty_of`), for these values of its deviate, and the width
-    they scale: its own plus the width times the deviate, held to :func:`_limits`."""
-    own = np.asarray(material.coefficients("octave")[0], dtype=float)
+    """((deviates, bands), (bands,)) the absorption of ``material`` in ``bands``, whose
+    uncertainty is ``spec`` (:func:`uncertainty_of`), for these values of its deviate,
+    and the width they scale: its own plus the width times the deviate, held to
+    :func:`_limits`. An octave's uncertainty holds for its three third octaves."""
+    own = np.asarray(material.coefficients(bands)[0], dtype=float)
     # A band that absorbs everything stays: no energy is left there to re-weight.
-    width = np.where(own >= 1.0, 0.0, np.asarray(spec.absorption, dtype=float))
-    moved = np.clip(own + deviate[:, None] * width, *_limits(material, own))
+    each = np.asarray(spec.absorption, dtype=float)
+    width = np.where(own >= 1.0, 0.0, np.repeat(each, own.size // each.size))
+    moved = np.clip(own + deviate[:, None] * width, *_limits(material, own, bands))
     return moved, width
 
 
-def absorption_nodes(scene, name: str) -> tuple[np.ndarray, np.ndarray]:
+def absorption_nodes(
+    scene, name: str, bands: Resolution = "octave"
+) -> tuple[np.ndarray, np.ndarray]:
     """(plus, minus) the absorption per octave band of material ``name``, which has an
     uncertainty (:func:`uncertainty_of`), with its deviate one standard deviation above
     and below 0: what a draw takes (:func:`absorption_draws`) for a deviate of plus and
     minus 1, or, for a tolerance, of plus and minus 1 over the root of 3 (the standard
     deviation of a deviate uniform on -1 to 1). So its own plus and minus its standard
-    uncertainty, held to a draw's limits."""
+    uncertainty, held to a draw's limits. With ``bands`` in third octaves, each third
+    octave is moved so, by its octave's uncertainty, and held to its own limits: what a
+    run in third octaves sees of a material given in them."""
     spec = uncertainty_of(scene, name)
     if spec is None:
         raise ValueError(f"material {name!r} has no absorption uncertainty a spread takes")
     step = 1.0 / math.sqrt(3.0) if spec.distribution == "uniform" else 1.0
-    plus, minus = _moved(scene.materials[name], spec, np.array([step, -step]))[0]
+    plus, minus = _moved(scene.materials[name], spec, np.array([step, -step]), bands)[0]
     return plus, minus
 
 

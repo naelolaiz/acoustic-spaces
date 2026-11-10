@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
@@ -778,7 +778,14 @@ def stochastic_map_energy(
     each point's slab of air, where the model holds several rooms only that of a ray in
     the point's room. ``onset`` is the arrival of the direct sound at each point (s);
     ``covered_order``, ``covered_time`` (per point), ``splitting`` and the rest are as
-    for :func:`stochastic_energy`."""
+    for :func:`stochastic_energy`.
+
+    Where the model has a ``deciding`` absorption, that one decides for the rays
+    wherever the energy they carry does: how the weight window splits them and thins
+    them out, with the rooms' levels it has, and whether one passes a partition or
+    reflects off it. The run then follows the rays of the run with that absorption, the
+    seed being the same, and counts on them the energy its own absorption leaves: the
+    two differ by what the absorption does and not by their rays."""
     from acoustic_spaces import _native
 
     n = len(grid.points)
@@ -790,7 +797,9 @@ def stochastic_map_energy(
     directivity_a, orientation, table = _directivity_arrays(
         directivity, orientation, model.absorption.shape[1]
     )
-    face_room, source_room, level, own = _rooms(model, source, air, grid.points)
+    deciding = model.deciding
+    ruling = model if deciding is None else replace(model, absorption=deciding)
+    face_room, source_room, level, own = _rooms(ruling, source, air, grid.points)
     if model.transmission is None and len(model.room_volumes) > 1:
         # Nothing lets sound through: every ray stays in the source's room.
         source_room = int(model.room.room_of(np.asarray(source, float)[None])[0])
@@ -800,6 +809,9 @@ def stochastic_map_energy(
         first_order, band_table, absorption, scattering, band_air, sizes = _band_arguments(
             model, air, (directivity_a, table), band
         )
+        pinned = {}
+        if deciding is not None:
+            pinned["deciding"] = np.ascontiguousarray(deciding[:, band], dtype=np.float64)
 
         def trace(count: int, first: int, target: np.ndarray):
             energy, *rest = _native.trace_map(
@@ -841,6 +853,7 @@ def stochastic_map_energy(
                 level,
                 **bent,
                 **plant_arguments(model, band),
+                **pinned,
             )
             return [energy], *rest
 

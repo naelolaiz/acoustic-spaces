@@ -3863,7 +3863,7 @@ def test_a_maps_uncertainty_in_the_editor(window, qapp, tmp_path: Path) -> None:
     window.document.edit("carpet uncertainty", uncertain)
     window.select("coverage")
     assert page.spread_runs.text() == (
-        "1 material on the surfaces has one: the map is traced 3 times."
+        "1 material on the surfaces has one: the map with its uncertainty is traced 3 times."
     )
     assert page.spread.isChecked() and window.document.scene.coverage.spread is True
     window.run_map()
@@ -3894,6 +3894,49 @@ def test_a_maps_uncertainty_in_the_editor(window, qapp, tmp_path: Path) -> None:
     assert window.write_map(tmp_path / "map.json")
     report = json.loads((tmp_path / "map.json").read_text(encoding="utf-8"))
     assert set(report["maps"]["talker"]["uncertainty"]["materials"]) == {"carpet_on_concrete"}
+
+    # The run names what the command names under its table: the built-in materials
+    # taken at the scene's default, and the bands that no run moved.
+    def more(data: dict) -> None:
+        data["simulation"]["uncertainty"] = {"presets": "tolerance"}
+        data["materials"]["acoustic_ceiling"] = {
+            "absorption": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+            "uncertainty": {"absorption": 0.03},
+        }
+
+    window.document.edit("more uncertainty", more)
+    window.select("coverage")
+    assert page.spread_runs.text() == (
+        "3 materials on the surfaces have one: the map with its uncertainty is traced 7 times."
+    )
+    window.run_map()
+    _wait(qapp, lambda: window.job is None)
+    said = window.messages.toPlainText()
+    assert (
+        "Built-in materials of unknown source taken at plus or minus 0.1: painted_concrete"
+    ) in said
+    assert (
+        "Left out of the map's uncertainty, where the absorption is 1: acoustic_ceiling (8 kHz)"
+    ) in said
+
+    # A ground's uncertainty is left out, which the page says where it is the only one.
+    def ground(data: dict) -> None:
+        data["simulation"]["uncertainty"] = {"presets": "none"}
+        data["materials"]["acoustic_ceiling"] = {"preset": "ceiling_fissured_tile"}
+        data["materials"]["carpet_on_concrete"] = {
+            "impedance": "grass",
+            "uncertainty": {"absorption": 0.05},
+        }
+
+    window.document.edit("a ground", ground)
+    window.select("coverage")
+    assert page.spread_runs.text() == (
+        "The absorption uncertainty of carpet_on_concrete is left out of the spread: "
+        "a ground's impedance gives its reflection. "
+        "No other material on the surfaces has an absorption uncertainty: no map has one."
+    )
+    window.document.undo()
+    window.select("coverage")
 
     # Unticked, the next map has none, and the list goes back to the value.
     page.spread.setChecked(False)

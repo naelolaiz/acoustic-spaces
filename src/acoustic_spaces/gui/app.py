@@ -57,7 +57,14 @@ from acoustic_spaces.gui.document import (
     outdoor_scene,
 )
 from acoustic_spaces.gui.following import NO_RUN, RunFocus, RunView
-from acoustic_spaces.gui.inspector import BAND_LABELS, Inspector, label_text
+from acoustic_spaces.gui.inspector import (
+    BAND_LABELS,
+    Inspector,
+    assumed_text,
+    grounds_left_out_text,
+    label_text,
+    no_map_spread_text,
+)
 from acoustic_spaces.gui.levels import rich_lines
 from acoustic_spaces.gui.map_view import MapPanel
 from acoustic_spaces.gui.messages import MessagesPanel
@@ -1830,18 +1837,9 @@ class MainWindow(QMainWindow):
 
     def _warn_grounds_left_out(self) -> None:
         """Warn of the grounds whose absorption uncertainty a spread leaves out."""
-        from acoustic_spaces.engine.uncertainty import grounds_left_out
-
-        grounds = grounds_left_out(self.document.room)
-        if grounds:
-            self.log(
-                # Translators: {names} are materials' names.
-                _(
-                    "The absorption uncertainty of {names} is left out of the spread: "
-                    "a ground's impedance gives its reflection"
-                ).format(names=", ".join(grounds)),
-                "warning",
-            )
+        text = grounds_left_out_text(self.document.room)
+        if text:
+            self.log(text, "warning")
 
     def run_map(self) -> None:
         """Compute the coverage map of every source in the background."""
@@ -1857,14 +1855,10 @@ class MainWindow(QMainWindow):
         coverage = self.document.scene.coverage
         if coverage is not None and coverage.spread:
             # Said here as the command line says it.
-            from acoustic_spaces.engine.sensitivity import spread_materials
-
             self._warn_grounds_left_out()
-            if not spread_materials(self.document.room):
-                self.log(
-                    _("No material on the surfaces has an absorption uncertainty: no map has one."),
-                    "warning",
-                )
+            none = no_map_spread_text(self.document.room)
+            if none:
+                self.log(none, "warning")
         job = MapJob(self.document.room)
         job.done.connect(self._map_done)
         self._start(job, _("Mapping {scene}…").format(scene=self.document.scene.name))
@@ -2051,7 +2045,29 @@ class MainWindow(QMainWindow):
                 count=count,
             )
         )
+        self._log_map_spread(result)
         self._draw()
+
+    def _log_map_spread(self, result) -> None:
+        """Say of a map with its uncertainty what the command line says under it: the
+        built-in materials whose uncertainty is the scene's default, and the bands no
+        run moved."""
+        spread = next((m.spread for m in result.maps.values() if m.spread is not None), None)
+        if spread is None:
+            return
+        if spread.assumed:
+            self.log(assumed_text(spread.assumed))
+        if spread.held:
+            each = [
+                f"{name} ({', '.join(BAND_LABELS[OCTAVE_BANDS_HZ.index(hz)] for hz in bands)})"
+                for name, bands in spread.held.items()
+            ]
+            self.log(
+                # Translators: {names} are materials' names, each with its bands.
+                _("Left out of the map's uncertainty, where the absorption is 1: {names}").format(
+                    names=", ".join(each)
+                )
+            )
 
     def _tune_done(self, result) -> None:
         elapsed = time.perf_counter() - self._started

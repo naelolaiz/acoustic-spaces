@@ -299,6 +299,7 @@ def coverage_map(
     threads: int | None = None,
     progress: Callable[[str], None] | None = None,
     grid: coverage_stage.MapGrid | None = None,
+    rays_of: Scene | None = None,
 ) -> coverage_stage.CoverageResult:
     """:func:`~acoustic_spaces.engine.insertion.coverage_map`, and the levels over a
     long term when the scene has weather classes: every map gains ``long_term`` (dB per
@@ -308,10 +309,10 @@ def coverage_map(
     that with them, from the runs with and without them in every class. The maps' other
     values are the scene's own weather's, and every class's run shares their points
     (``grid``, if given, as :func:`~acoustic_spaces.engine.coverage.coverage_map` takes
-    it)."""
+    it, as it does ``rays_of``, for every run)."""
     room = _as_room(room)
     spec = _spec(room, long_term)
-    common = {"without": without, "sources": sources, "threads": threads}
+    common = {"without": without, "sources": sources, "threads": threads, "rays_of": rays_of}
     if spec is None:
         return insertion.coverage_map(
             room,

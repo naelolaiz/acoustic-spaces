@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from acoustic_spaces.compare import CONVERGED_JND, in_jnds
-from acoustic_spaces.gui.inspector import BAND_LABELS, PRESET_UNCERTAINTIES
+from acoustic_spaces.gui.inspector import BAND_LABELS, assumed_text
 from acoustic_spaces.gui.levels import level_colour
 from acoustic_spaces.gui.numbers import fmt, number_text
 from acoustic_spaces.gui.tips import (
@@ -648,17 +648,7 @@ class ResultsPanel(QWidget):
         if spread is None:
             return
         names = ("standard", "low", "high", "absorption", "rays", "at_least", "at_most")
-        assumed = ""
-        if spread.assumed:
-            # One choice for the whole scene (simulation.uncertainty.presets).
-            choice = next(iter(spread.assumed.values()))
-            assumed = fmt(
-                # Translators: {what} is how far the absorption may be off ("plus or minus
-                # 0.1"), {names} the materials' names.
-                _("Built-in materials of unknown source taken at {what}: {names}"),
-                what=_(dict(PRESET_UNCERTAINTIES)[choice]),
-                names=", ".join(spread.assumed),
-            )
+        assumed = assumed_text(spread.assumed)
         # The materials no draw moves in each band, where they absorb everything.
         held: dict[int, list[str]] = {}
         for material, bands in spread.held.items():
