@@ -215,7 +215,8 @@ simulation:
 - `from_size` (default on): a surface also scatters for its size, after Christensen and
   Rindel (2005), as in ODEON. The specular share falls below f_w = c d / (2 (w cos θ)²)
   and again below f_l = c d / (2 l²), where w and l are the surface's width and length,
-  d the distance the sound came from and θ its angle of incidence. A large wall reflects
+  d the distance the sound came from (from the source or the last reflection, through
+  openings and partitions it passed) and θ its angle of incidence. A large wall reflects
   specularly down to low frequencies, while a small panel, a distant one or one met at a
   grazing angle scatters. Each flat surface (the faces of one plane joined at their
   edges, of any material) counts as the rectangle with its area and perimeter. Early
@@ -322,11 +323,15 @@ m away).
 A path over the edge of a thin screen takes the part of its Fresnel zone that the edge
 covers, the Fresnel integral from each end as in BTM's integral over a finite edge, so
 near a free end its sound fades to half at the end and out past it, over a few widths of
-the zone, instead of stopping there. Where two such edges meet at a corner (a screen's
-top and its side) they share the fade, and an end that stands on the ground, or on a
-face across the edge, goes on as its image there. Past the corner of a thin screen the
-level is within 0.1 dB of the exact solution and steps as it does, where it stepped by
-2.8 dB (see the
+the zone, instead of stopping there. Where two such edges meet at a right angle (a
+screen's top and its side) they share the fade; at a free end, where they meet at
+another angle, or where a screen's top bends, each of an edge's terms takes its own part
+of the edge, as BTM's integrand weights it near that term's boundary. An end that
+stands on the ground, or on a face across the edge, goes on as its image there. Past the
+corner of a thin screen,
+square or not, and beside the bend of a screen's top, the level is within 0.2 dB of the
+exact solution and steps as it does, where it stepped by up to 2.8 dB past a square
+corner, 3.0 dB past one of 45° and 16 dB beside a bend (see the
 [validation report](validation.md#edge-diffraction-against-the-exact-solution)). The
 edges of solid wedges still stop at their ends: near a block's corners, where three
 meet, the level steps by up to 2.4 dB at 63 Hz and is up to 2.3 dB from the exact
@@ -453,6 +458,12 @@ simulation:
   fits it but without its grid, so the phase in a band does not depend on how many
   bands add in pressure. A hard surface reflects in phase at every angle; an absorbing
   one turns the phase of sound that grazes it, by half a turn at grazing incidence.
+  Not so the sound that runs along a face from one edge to the next (`second_order`,
+  over a roof or a thick wall): that is a point source's wave along the surface, which
+  the plane wave's half turn would cancel; it takes the face as rigid and the ground
+  wave's loss over the way along it, 2 F(w) against a rigid face's 2 (Weyl-van der Pol,
+  see [Ground impedance](outdoor.md#ground-impedance)), in every band: 0.07 dB at 63 Hz
+  to 0.76 dB at 8 kHz over a 10 m roof absorbing 0.02.
   Above those bands each reflection keeps the phase it has at their top, so the bands
   join without a step. A path over an edge does too where it arrives alone; where
   other paths' sound reaches it, a rendered response turns it by a phase of its own,
@@ -558,6 +569,9 @@ simulation:
 - Closed rooms, open models and thin screens all work. Round an open model the grid
   grows by a perfectly matched layer of 8 cells, which takes in the sound leaving it:
   what comes back is 67 to 74 dB down, against 7 to 14 dB from the grid's edge alone.
+  Sound that runs along the layer it sends back far more, so the grid reaches past the
+  source and the listeners, on each side, by 15 % of the farthest a listener lies from
+  the source along that side (none under an outdoor ground).
 - Outdoors in wind and temperature (an [atmosphere](outdoor.md#wind-and-temperature)
   in which sound bends), the speed of sound changes from cell to cell: the still air's
   at the cell's height, plus the wind's component along the horizontal from the source.

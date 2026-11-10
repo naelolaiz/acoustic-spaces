@@ -424,7 +424,9 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   So each path shifts in pitch as its own length changes: the ground's reflection
   shifts a little differently from the direct sound, and their interference sweeps as
   it does by a road. Each path keeps its filter (the ground's, the air's, a barrier's,
-  the ears' in binaural), which changes from one place to the next as before, and in
+  the ears' in binaural), which changes from one place to the next as before, but for
+  its spreading: each sample is divided by the path's delay then, so the level follows
+  one over the distance from sample to sample, as the pitch does. In
   turbulence the eddies drift past as in any walkthrough, the delay they give each path
   in its delay. In binaural, where each ear's
   response starts goes into that ear's delay instead of its filter: measured ears start
@@ -440,7 +442,11 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   of the place it is at. Outdoors it is far below the early sound.
 - Against the exact field of a source passing 10 m from a listener over a hard ground,
   the sound is within 45 dB of it at 30 m/s, with places 1 m apart, and its level within
-  0.04 dB at every moment; a train at 80 m/s is within 38 dB and 0.42 dB at 4 kHz.
+  0.02 dB in every 20 ms; a train at 80 m/s is within 39 dB and 0.42 dB at 4 kHz, most
+  of that the air's absorption, which the engine takes at the pitch heard and that
+  field at the pitch sent. A source
+  passing 1 m from the listener's line at 70 m/s, its places 25 cm apart, keeps its
+  level within 0.01 dB of the field's at 1 kHz in every 5 ms.
   Crossfading from place to place instead misses the level by 2.7 to 4.1 dB at most, and
   by 12 dB for the train at 4 kHz, where the field's two paths cancel for a moment and
   the places' do not (see
@@ -449,9 +455,11 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   within 38 dB of the field, 4 m apart only within 18 dB.
 - The source is quasi-static: its sound power and directivity are those of a source
   standing at each place. A moving source's convective amplification, which makes it
-  louder ahead of it and quieter behind, is left out: taking its intensity as
-  (1 − M cos θ)⁻², one common form whose exponent depends on the source, it would add
-  up to 0.8 dB ahead at 30 m/s and 2.0 dB at 70 m/s, and take 0.7 and 1.6 dB behind.
+  louder ahead of it and quieter behind, is left out. Its size depends on the kind of
+  source: a point monopole's far-field pressure goes as (1 − M cos θ)⁻², M cos θ its
+  Mach number towards the listener as the sound leaves, so its level as
+  40 lg 1/(1 − M cos θ), which would add up to 1.6 dB straight ahead at 30 m/s and 4.0
+  dB at 70 m/s, and take 1.5 and 3.2 dB straight behind.
 - **The sound sent each way.** From Python, the walker (or, for a walking listener, a
   source it passes) may send an `Emission` (`acoustic_spaces.emission`) instead of one
   signal: the sound it sends in every direction of its own frame, as a rotor sends each
@@ -471,7 +479,7 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   (or third octaves), taken as ideal filters between their band edges: what is sent
   below the 63 Hz octave's 44.7 Hz or above the 8 kHz octave's 11.2 kHz plays, but is in
   no band. A tone sent louder ahead (1 + 0.8 cos θ in amplitude) and turned in phase
-  with the height follows the exact field within 0.11 dB in level at 30 m/s and 0.42 dB
+  with the height follows the exact field within 0.09 dB in level at 30 m/s and 0.42 dB
   for the train at 4 kHz, as one signal does there, with a cardioid directivity on the
   source or without (see
   [Validation](validation.md#moving-sources-against-the-exact-field)). An emission

@@ -685,7 +685,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
         stops,
         folder,
         seats,
-        crossfade_s=min(CROSSFADE_S, stops[0].length / 2),
+        crossfade_s=CROSSFADE_S,
         fade_out_s=min(FADE_OUT_S, stops[-1].length / 2),
         scene=args.scene,
     )
@@ -700,7 +700,7 @@ def video(args: argparse.Namespace, demo: Demo | None = None, indoors=None) -> N
             folder,
             seats,
             seats["shaker"],
-            min(CROSSFADE_S, stops[0].length / 2),
+            CROSSFADE_S,
             min(FADE_OUT_S, stops[-1].length / 2),
         )
     scene = moving_scene(args)

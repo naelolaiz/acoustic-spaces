@@ -347,11 +347,15 @@ def _big_box(bands: int, rays: int, **kwargs) -> dict:
     return args
 
 
-def _slab(absorption, scattering, asymmetry, upright: bool = False, z=(-100, 100)) -> dict:
-    """A slab of plants from x = 10 to 40 m across the box."""
+def _slab(
+    absorption, scattering, asymmetry, upright: bool = False, z=(-100, 100), x=(10, 40)
+) -> dict:
+    """A slab of plants from x = 10 to 40 m (or `x`) across the box."""
     return {
         "plants": np.array([[0, 0, z[0], z[1], 0, 4, 0, 0]], dtype=float),
-        "plant_outline": np.array([[10, -100], [40, -100], [40, 100], [10, 100]], dtype=float),
+        "plant_outline": np.array(
+            [[x[0], -100], [x[1], -100], [x[1], 100], [x[0], 100]], dtype=float
+        ),
         "plant_absorption": np.atleast_2d(absorption).astype(float),
         "plant_scattering": np.atleast_2d(scattering).astype(float),
         "plant_asymmetry": np.atleast_2d(asymmetry).astype(float),
@@ -424,6 +428,92 @@ def test_upright_media_meet_sound_by_its_horizontal_share() -> None:
     assert sideways[0, 0] / _trace(**_big_box(1, 50_000))[0, 0] == pytest.approx(
         math.exp(-1.5), rel=5e-3
     )
+
+
+# A reflection off the floor of the big box through plants: source and receiver 6 m up
+# and 40 m apart, the floor (z = -100) reflecting 0.8, the plants 4 m high from x = 21 to
+# 27 m, which the reflected leg crosses for 6 sqrt(1.09) m and the direct sound passes
+# over. They scatter mostly back (mean cosine -0.9), so that little of what they scatter
+# reaches the receiver with the reflection.
+_FLOOR_PLANTS = _slab([0.0, 0.1], [0.3, 0.3], [-0.9, -0.9], z=(-100, -96), x=(21, 27))
+_FLOOR_LEG = 6.0 * math.sqrt(1.09)
+_FLOOR_BIN = int(2.0 * math.hypot(20.0, 6.0) / 343.0 / 1e-3)  # of the reflection, 1 ms bins
+
+
+def _over_floor(vector: bool, rays: int, seed: int = 1, **kwargs) -> dict:
+    """_big_box's arguments, two bands, for the reflection under _FLOOR_PLANTS (the
+    direct sound left out), detector spheres only."""
+    args = _big_box(
+        2,
+        rays,
+        source=np.array([0.0, 0, -94]),
+        receivers=np.array([[40.0, 0, -94]]),
+        receiver_radius=np.array([1.0]),
+        vector_scattering=vector,
+        covered_order=0,
+        seed=seed,
+        threads=1,
+        max_time=0.2,
+        **kwargs,
+    )
+    args["absorption"][8:10] = 0.2  # the floor
+    return args
+
+
+def test_a_reflection_loses_what_plants_absorb_and_scatter_vector_and_random() -> None:
+    expected = np.exp(-np.array([0.3, 0.4]) * _FLOOR_LEG)
+    measured = {}
+    for vector, rays, seeds in ((True, 100_000, (1,)), (False, 1_000_000, (1, 2, 3))):
+        ratios = []
+        for seed in seeds:
+            bare = _native_energy(_over_floor(vector, rays, seed))
+            planted = _native_energy(_over_floor(vector, rays, seed) | _FLOOR_PLANTS)
+            ratios.append(planted[0, :, _FLOOR_BIN] / bare[0, :, _FLOOR_BIN])
+        measured[vector] = np.mean(ratios, axis=0)
+    # Against the same rays without plants, the reflection keeps exp(-(a + s) L): a
+    # vector reflection's specular leg goes through as it is and loses both, a random
+    # one's rays scatter (and so it is the noisier).
+    assert measured[True] == pytest.approx(expected, rel=0.05)
+    assert measured[False] == pytest.approx(expected, rel=0.2)
+
+
+def test_a_coverage_map_through_plants_loses_what_they_absorb_and_scatter() -> None:
+    from acoustic_spaces import _native
+
+    def mapped(plants: dict) -> np.ndarray:
+        listeners_only = {"receivers", "directions", "time_step", "dir_time_step", "groups"}
+        listeners_only |= {"receiver_radius", "diffuse_rain", "specular_rain", "face_group"}
+        listeners_only |= {"moment_time_step"}
+        args = {
+            k: v
+            for k, v in (_over_floor(True, 100_000) | plants).items()
+            if k not in listeners_only
+        }
+        args.update(
+            origin=np.array([39.0, -1.0]),
+            cell=2.0,
+            point=np.zeros((1, 1, 1), dtype=np.int64),
+            low=np.array([-95.0]),
+            high=np.array([-93.0]),
+            volume=np.array([8.0]),
+            map_room=np.array([-1], dtype=np.int64),
+            onset=np.array([0.0]),
+            covered_time=np.array([1.0]),
+            fine_step=1e-3,
+            fine_bins=200,
+            coarse_step=1e-2,
+        )
+        return _native.trace_map(**args)[0][0, :, _FLOOR_BIN - 1 : _FLOOR_BIN + 2].sum(axis=1)
+
+    # The cell around the receiver, the reflection's bins, on the same rays.
+    ratio = mapped(_FLOOR_PLANTS) / mapped({})
+    assert ratio == pytest.approx(np.exp(-np.array([0.3, 0.4]) * _FLOOR_LEG), rel=0.05)
+
+
+def _native_energy(args: dict) -> np.ndarray:
+    from acoustic_spaces import _native
+
+    return _native.trace_stochastic(**args)[0]
 
 
 def _slab_above(*args) -> dict:

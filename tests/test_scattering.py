@@ -266,3 +266,58 @@ def test_how_far_the_early_order_moves_the_total(method: str) -> None:
         assert np.all((default > -0.07) & (default < 0.0))
     else:
         assert np.all(np.abs(none) < 0.06) and np.all(np.abs(default) < 0.03)
+
+
+def _floor_rain(opening: bool, vector: bool) -> float:
+    """The tracer's rain at (5, 0, 2) m of the floor of a box 40 x 40 x 20 m (absorbing
+    0.1, scattering 0.05 and as 4 x 4 m squares have it at 125 Hz; the other faces
+    absorb all), from a source 8 m up, the specular reflection left out; with or
+    without a fully open face 1 m over the floor."""
+    from test_native import _stochastic_args, _unit_cube
+
+    from acoustic_spaces import _native
+
+    vertices, faces = _unit_cube()
+    vertices = vertices * [40.0, 40.0, 20.0] - [20.0, 20.0, 0.0]
+    if opening:
+        faces = np.vstack([faces, len(vertices) + np.array([[0, 1, 2], [0, 2, 3]])])
+        vertices = np.vstack([vertices, [[-20, -20, 1], [20, -20, 1], [20, 20, 1], [-20, 20, 1]]])
+    floor = np.all(vertices[faces][:, :, 2] == 0.0, axis=1)
+    open_face = np.all(vertices[faces][:, :, 2] == 1.0, axis=1)
+    args = _stochastic_args(100_000) | {
+        "bvh": _native.Bvh(vertices, faces),
+        "source": np.array([0.0, 0.0, 8.0]),
+        "receivers": np.array([[5.0, 0.0, 2.0]]),
+        "receiver_radius": np.array([0.3]),
+        "absorption": np.where(floor, 0.1, 1.0)[:, None],
+        "scattering": np.where(floor, 0.05, 0.0)[:, None],
+        "surface_size": np.full((len(faces), 2), 4.0),
+        "band_hz": np.array([125.0]),
+        "vector_scattering": vector,
+        "max_time": 0.3,
+        "covered_order": 1,
+        "threads": 1,
+    }
+    if opening:
+        args["transmission"] = open_face[:, None].astype(float)
+    return float(_native.trace_stochastic(**args)[0].sum())
+
+
+@pytest.mark.parametrize("vector", [True, False], ids=["vector", "random"])
+def test_an_open_face_leaves_the_size_scattering_as_it_was(vector: bool) -> None:
+    # The distance the sound came from runs from the source through the open face, so
+    # the rain is that without it (the same rays: an opening draws no random number).
+    bare, opened = _floor_rain(False, vector), _floor_rain(True, vector)
+    assert opened == pytest.approx(bare, rel=1e-9)
+    # A quadrature of the floor's rain: cos_in / (4 pi r_in^2) lands, 0.9 reflects, the
+    # scattering of a 4 m square at r_in from the source, Lambert's cos_out / (pi
+    # r_out^2) to the listener.
+    x = (np.arange(1600) + 0.5) / 40 - 20
+    x, y = np.meshgrid(x, x)
+    r_in, r_out = np.sqrt(x**2 + y**2 + 64), np.sqrt((x - 5) ** 2 + y**2 + 4)
+    cos_in, cos_out = 8 / r_in, 2 / r_out
+    side, low = np.full(r_in.size, 4.0), np.full((r_in.size, 1), 0.05)
+    scattered = size_scattering(side, side, r_in.ravel(), cos_in.ravel(), C, low, [125.0])
+    landed = cos_in / (4 * np.pi * r_in**2) * 0.9 * scattered[:, 0].reshape(x.shape)
+    exact = np.sum(landed * cos_out / (np.pi * r_out**2)) / 40**2
+    assert bare == pytest.approx(exact, rel=0.02)

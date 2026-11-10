@@ -117,7 +117,9 @@ Edge diffraction:
   [Validation](validation.md#known-issues-of-the-edge-fade).
 - [x] Paths over a thin screen's edge weighted by the part of their Fresnel zone that
   the edge covers, as BTM's integral over a finite edge has it, and kept past its free
-  ends: past a screen's corner within 0.1 dB of BTM, where they stepped by 2.8 dB.
+  ends: past a screen's right-angled corner within 0.1 dB of BTM, where they stepped by
+  2.8 dB; past corners of 45° to 170° and beside a bend of a screen's top, each term
+  weighted for its own boundary, within 0.17 and 0.04 dB.
 - [ ] The same at the corners of solid wedges, where three edges meet: sharing the fade
   as at a screen's corner came out up to 1.25 dB above BTM at 63 and 125 Hz near a
   block's corner, so their paths still stop at the ends.
@@ -132,6 +134,14 @@ Edge diffraction:
   right-angled corner the level is 1.7 dB low at 250 Hz and 1 dB at 1 kHz, and on that
   of a wedge open over 225° 2.2 dB at 250 Hz (see
   [Validation](validation.md#known-issues)).
+- [ ] Absorbing faces near grazing incidence, in one treatment: reflections and paths
+  over edges that take no step where a source or a listener crosses the plane of an
+  absorbing face, are the same both ways round, are right for a face of any size (a
+  small absorbing patch included) and where two materials share the path, for
+  reflections of any order and in the bands that add in energy as in those that add in
+  pressure; checked against full-wave runs (see Validation, the paths
+  [over two edges](validation.md#edge-diffraction-against-the-exact-solution) and the
+  [reflections](validation.md#reflections-that-fade-at-edges-against-the-exact-solution)).
 
 Parameters:
 
@@ -278,6 +288,14 @@ Outdoor acoustics, in steps:
   against ray theory and the parabolic equation in the `windy` preset
   (`validation/wave_wind.py`). Runs on the CPU; the wind's shear term on the air's
   motion stays out. Without it nothing changes.
+- [ ] The wave solver's room for sound along its matched layer only on the sides that
+  need it: it is added on every side of an open model, also those the model's own
+  walls close, which costs a hall open at one end 2.1 to 2.4 times the cells (see
+  Open models under [Wave-based solver](validation.md#wave-based-solver)).
+- [ ] The wave solver's source and listeners read between the cell centres to a
+  higher order: read trilinearly, a wave along the ground loses an estimated 0.15 to
+  0.49 dB at 63 Hz with 8 points per wavelength (see
+  [Validation](validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
 - [x] O19 Whole cities: edge diffraction skips the pairs of an edge and a wall or roof
   that no path can use before it traces a ray, on every core, with the same results:
   900 buildings simulate in about 2 s on four cores instead of 81 s, and 3,600 in
@@ -303,7 +321,8 @@ Outdoor acoustics, in steps:
   a barrier's top into its shadow; a blend of the barrier's and the
   open ground's effects across the line of a barrier's end below the line of sight, and
   the open ground's refraction for the paths round an end above its equation's bands,
-  where the level steps across the end by up to 20 dB; the paths round ends checked
+  where the level steps across the end by up to 20 dB; a blend of the rays and the open
+  ground's equation where a ground reflection comes into view past a roof's edge; the paths round ends checked
   against a reference in three dimensions; a building's rigid roof in the
   wide-angle equation (the effect steps by 0.6 dB at 2 kHz where the points cross the
   steep angle behind one in 10 m/s); the wide-angle equation behind barriers upwind in strong wind, where the narrow-angle one comes out low; the sound

@@ -453,6 +453,17 @@ def test_alone_it_opens_the_editor(monkeypatch, capsys) -> None:
     assert cli._no_editor() == ""
 
 
+def test_simulate_an_open_field_to_the_third_order(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The ground is its only reflecting plane: orders past the first find nothing (this
+    # stopped with "need at least one array to concatenate").
+    scene = EXAMPLES / "open_air_stage" / "scene.yaml"
+    args = ["simulate", str(scene), "--out", str(tmp_path / "out"), "--max-order", "3"]
+    assert main([*args, "--rays", "500", "--length", "0.5", "--threads", "1", *NO_SPREAD]) == 0
+    assert "2 early paths" in capsys.readouterr().out  # the direct sound and the ground's
+
+
 def test_simulate_in_third_octave_bands(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     import json
 

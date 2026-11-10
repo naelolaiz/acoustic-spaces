@@ -482,22 +482,26 @@ is an arc of a circle, so its travel time and its length are exact.
   taken from the arcs in closed form. Each is worked out again from rays half as far
   apart, and rules on how much each changes pick one; a path neither gives steadily is
   left out. Where the speed is the same at every height between the source's and the
-  listener's, the direct path is the straight line. Against the smooth profiles of the
-  `windy` preset downwind and of `clear_night`, from sources 1 and 4 m up to listeners
-  0.5 to 12 m up, the levels of the paths 150 and 300 m away, straight or off the ground
-  up to twice, are within 3.6 dB, four in five of them within 0.1 dB (1.8 dB where they
-  are 8 dB or more over a straight path's, nearer a caustic), and those 600 m away in
-  `windy` within 3.3 dB, nine in ten within 0.1 dB (1.9 dB nearer a caustic). A path
-  that leaves and arrives at about the same height and turns once in the air follows the
-  sampled profile exactly, which can be up to 0.33 dB off the smooth one (`clear_night`
-  12 to 25 m up and 300 to 600 m away, `windy` across the wind). Where the air at the
-  source or the listener is nearly level, rounding can rarely leave out a direct path or
-  take one that arrives up to 4 cm from the listener, at its level to 0.003 dB. Where
-  neighbouring rays cross (a caustic) the level is capped at 10 dB over a straight
-  path's, and each caustic advances the phase by a quarter period (a factor j, time
-  going as e^(jωt)). Against an independent ray tracer on the smooth profile of the
-  `windy` preset downwind, the levels of three such paths 100 and 300 m away are within
-  0.05 dB (the tests allow 0.2 dB); no such check is made near a caustic.
+  listener's, the direct path is the straight line. Against the smooth profiles at 20 °C
+  (`validation/curved_rays.py`), from sources 1, 4 and 5 m up to 1300 listeners 0.5 to
+  12 m up, 100 to 1000 m away where the sound bends down (the `windy` preset downwind,
+  `clear_night`) and 20 to 400 m away where it bends up (`windy` upwind, `sunny_day`),
+  the levels of the paths, straight or off the ground up to three times, are within 1.5
+  dB, 87 % of them within 0.1 dB, but for three that come in 8.5 dB or more over a
+  straight path's, nearer a caustic (up to 2.4 dB). Those the engine caps or where the
+  smooth profile's is 8 dB or more are up to 9.4 dB off, and four that graze the ground
+  at the shadow's edge are not checked; the sums at the listeners with none of these
+  and no path the smooth profile lacks are within 1.9 dB. A path between ends at one
+  height that turns just above them is within 0.8 dB of the smooth profile's, and one
+  that turns just below them, where the sound bends up, within 1.5 dB (ends 1 to 25 m
+  up, 10 to 600 m apart). Where the air at the source or the listener is nearly level,
+  rounding can rarely leave out a direct path or take one that arrives up to 4 cm from
+  the listener, at its level to 0.003 dB. Where neighbouring rays cross (a caustic) the
+  level is capped at 10 dB over a straight path's, and each caustic advances the phase
+  by a quarter period (a factor j, time going as e^(jωt)). Against an independent ray
+  tracer on the smooth profile of the `windy` preset downwind, the levels of three such
+  paths 100 and 300 m away are within 0.05 dB (the tests allow 0.2 dB); no such check is
+  made near a caustic.
 - **In the bands up to 500 Hz** rays fail over the ground, as the profiles change most
   within a wavelength of it, where the direct sound and its reflection meet. There the
   sound over the open ground comes from a parabolic equation (the Green's function
@@ -598,7 +602,15 @@ is an arc of a circle, so its travel time and its length are exact.
   [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   Nearer than 1.5 times the source's and the listener's heights added, where an object
   of a model file stands in the way, where the source or the listener stands on a
-  building, or where no path lies in the plane, the paths go over the edges as above.
+  building, or where no path lies in the plane, the paths go over the edges as above,
+  and the bent direct sound and its bent reflection off the ground are there where the
+  straight ones the edges' terms make up for are: walked across a roof edge's or a
+  model file's wall's shadow boundaries in 10 cm steps in the `windy` preset, the
+  weather's effect changes by at most 0.2 dB a step from 63 to 500 Hz in octave bands
+  across the direct sound's, and by 0.6 dB across the ground reflection's behind the
+  wall; past a roof's edge, where the reflection comes into view and the parabolic
+  equation takes over from the rays, and in third octaves, by more (see
+  [Known issues](validation.md#known-issues)).
 - **The direct sound's time** in the results is when the bent direct sound arrives:
   sooner downwind, later upwind (the time along the ground in the shadow); where
   nothing clears the way, the earliest path's where it comes sooner than the straight
@@ -607,9 +619,12 @@ is an arc of a circle, so its travel time and its length are exact.
   2 cm from them, reflect where they meet a surface, and leave the scene once they are
   bent up out of it. The energy they rain onto listeners goes straight, in the time of
   the heights it crosses, and does not reach a listener in the shadow of where it
-  leaves. The CPU and the GPU trace these rays alike (`simulation.late.device`): the
-  GPU follows the same chords, in single precision, and what reaches each listener in
-  each band, and when, agrees within the noise of the ray count (see
+  leaves. They leave out the specular paths the early part holds: off the ground and
+  vertical walls, those with up to ten bounces off the ground, which count as one
+  reflection towards `max_order`; off any other surface, as in still air. The CPU and
+  the GPU trace these rays alike (`simulation.late.device`): the GPU follows the same
+  chords, in single precision, and what reaches each listener in each band, and when,
+  agrees within the noise of the ray count (see
   [Validation](validation.md#outdoor-scenes-on-the-gpu)). On Direct3D 12 (Windows) the
   CPU traces them in a scene with vegetation too, which the run says.
 - **The wave solver** (`simulation.wave`) steps the sound field itself in its bands, with
@@ -633,8 +648,8 @@ is an arc of a circle, so its travel time and its length are exact.
   m/s it is within 0.05 dB and 0.1 ms of the exact solution in every direction, where
   the effective speed of sound is up to 0.9 dB off; the echo of a façade 40 m
   downwind comes within 0.02 ms of ray theory's, where the effective speed of sound
-  brings it 10.6 ms early; in the `windy` preset over grass it is within 0.34 dB of the
-  parabolic equation, where the effective speed of sound is within 0.69 dB (see
+  brings it 10.6 ms early; in the `windy` preset over grass it is within 0.31 dB of the
+  parabolic equation, where the effective speed of sound is within 0.70 dB (see
   [Validation](validation.md#moving-air-in-the-wave-solver)).
   It costs three to four times as much as the effective speed of sound, on the CPU only
   (asked for the GPU, it says so and stays on the CPU), and the run's details say
@@ -981,10 +996,11 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
   roofs, round the corners of buildings and over the top and round the ends of barriers.
   Edges on the ground (the foot of a wall or a barrier) and the inside corners where two
   wings of a building meet diffract nothing. `second_order` follows the sound over a
-  building, its front and back edges in turn; `first_order` bends over one edge at a
-  time, which is enough for a barrier. With `diffraction_reflections: both_sides` a
-  path reflects off the ground both before and after the edge, the fourth of the four
-  paths over a barrier on the ground (see
+  building, its front and back edges in turn, along the roof with the ground wave's
+  loss over it (see [Simulation](simulation.md#low-frequencies-early-reflections-in-pressure));
+  `first_order` bends over one edge at a time, which is enough for a barrier. With
+  `diffraction_reflections: both_sides` a path reflects off the ground both before and
+  after the edge, the fourth of the four paths over a barrier on the ground (see
   [Edge diffraction](simulation.md#edge-diffraction)).
 - **The late part** comes from the stochastic ray tracer: rays reflect and scatter off
   the ground and the buildings until they leave through the sky. Between tall buildings
@@ -998,8 +1014,10 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
 - **Coverage maps** cover the ground by default and leave out the points inside
   buildings (see [Coverage maps](coverage-maps.md)).
 - **The wave solver** sees the sky as an opening and puts a matched layer round the
-  grid, as for any open model, and in wind and temperature takes a speed of sound per
-  cell (see [How the simulation bends sound](#how-the-simulation-bends-sound)).
+  grid, as for any open model, past the source and the listeners above and to the
+  sides by at least 15 % of the farthest a listener lies from the source along that
+  side (where the sky or the ground's edge is nearer), and in wind and temperature
+  takes a speed of sound per cell (see [How the simulation bends sound](#how-the-simulation-bends-sound)).
 - **A terrain** reflects the early sound off the mean plane of its profile and bends
   it over its crests, and the late rays off its triangles (see
   [How the simulation takes the terrain into account](#how-the-simulation-takes-the-terrain-into-account)).

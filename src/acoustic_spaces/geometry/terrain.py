@@ -290,18 +290,26 @@ def _read_xyz(path: Path) -> HeightGrid:
         raise ValueError(f"{path.name}: {exc}") from None
 
 
+def _exact(value: float) -> str:
+    """The shortest text that reads back as ``value`` exactly, a whole number without
+    its ``.0``."""
+    text = repr(float(value))
+    return text.removesuffix(".0")
+
+
 def write_asc(path: str | Path, grid: HeightGrid) -> None:
-    """Write ``grid`` as an Esri ASCII grid (the rows from the north one down)."""
+    """Write ``grid`` as an Esri ASCII grid (the rows from the north one down), every
+    number in the shortest form that reads back as the same float."""
     nx, ny = grid.shape
     lines = [
         f"ncols {nx}",
         f"nrows {ny}",
-        f"xllcenter {grid.origin[0]:g}",
-        f"yllcenter {grid.origin[1]:g}",
-        f"cellsize {grid.spacing:g}",
+        f"xllcenter {_exact(grid.origin[0])}",
+        f"yllcenter {_exact(grid.origin[1])}",
+        f"cellsize {_exact(grid.spacing)}",
         "NODATA_value -9999",
     ]
-    lines += [" ".join(f"{v:g}" for v in row) for row in grid.heights[::-1]]
+    lines += [" ".join(_exact(v) for v in row) for row in grid.heights[::-1]]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

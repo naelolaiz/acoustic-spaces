@@ -14,7 +14,9 @@ again when a ray's last leg began to take the whole chords through the spheres a
 cells it crosses as its time runs out (only the last slots changed), and when the
 spheres and the map began to count a vector reflection's specular share along the exact
 specular direction (only the received energy of the vector runs without specular rain
-and the map's energy changed, not the rays' paths). To write it again,
+and the map's energy changed, not the rays' paths), and when the size scattering's
+distance began to run on through a partition (only the run through the partition with
+the surfaces' sizes changed). To write it again,
 only for a change that is meant to alter what the tracer computes (and say so in its
 pull request), run this file with that code first on the path::
 

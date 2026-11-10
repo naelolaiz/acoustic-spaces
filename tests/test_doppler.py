@@ -204,6 +204,35 @@ def test_a_walker_that_stands_still_is_a_convolution_at_the_ears() -> None:
         assert _error_db(wet[:, ear], ref[:, ear]) < -45.0
 
 
+def test_a_filter_goes_linearly_from_one_place_to_the_next() -> None:
+    """A path twice as loud at the next place, 0.2 s later (ten windows of the filter),
+    and no further: a tone grows linearly in between, as the triangles that join the
+    windows give it. Squared sines there rippled once a window about the line, by 0.7 %
+    of the tone's peak."""
+    walk, first = _standing_walk("hard")
+    louder = dataclasses.replace(first.early, energy=4.0 * first.early.energy)
+    responses = [first, dataclasses.replace(first, early=louder)]
+    t = np.arange(int(0.4 * RATE)) / RATE
+    dry = np.sin(2 * np.pi * 1000.0 * t)
+
+    def heard(places: list, times: list[float]) -> np.ndarray:
+        planes = dp.plane_ids(walk.result.room.mesh)
+        return dp.render(
+            dry,
+            places,
+            np.array(times),
+            Mono(),
+            RATE,
+            len(dry),
+            source_walks=False,
+            planes=planes,
+            step_s=1e-4,
+        )[:, 0]
+
+    growing, steady = heard(responses, [0.1, 0.3]), heard(responses[:1], [0.0])
+    assert _error_db(growing, np.interp(t, [0.1, 0.3], [1.0, 2.0]) * steady) < -70.0
+
+
 def _late_only(walker: str, monkeypatch: pytest.MonkeyPatch):
     """The short pass-by of a walking ``walker``, 1 m between places, each with its own
     late part, and the early paths left out of its renders: the walk and each place's
@@ -328,6 +357,55 @@ def test_a_passing_source_and_listener_sound_as_the_exact_field(short) -> None:
         assert with_doppler["level_max_db"] < 0.1, walker
         # Crossfading from place to place, the pitch stays put and the phase jumps.
         assert short.errors(faded, field, walked)["waveform_db"] > 0.0, walker
+
+
+@pytest.mark.parametrize("walker", ["source", "listener"])
+def test_a_fast_walker_passing_close_keeps_the_level_of_the_exact_field(short, walker) -> None:
+    """At 70 m/s, 2 m from the other's line, the distance changes by more than half of
+    itself within one window of a path's filter (``HOP_S``): the level follows one over
+    the distance sample by sample, here in windows a quarter of that long."""
+    speed, tone = 70.0, 1000.0
+    line = dataclasses.replace(short.road(), x0=-8.0, x1=8.0, d=2.0)
+    walked = (line.x1 - line.x0) / speed
+    t = np.arange(int((walked + 0.5) * RATE)) / RATE
+    dry = np.sin(2 * np.pi * tone * t)
+    _, (wet,) = short.run(walker, speed, "hard", True, [dry], short.CLOSE_STEP_M, line)
+    field = short.exact(walker, speed, tone, len(wet), line=line)
+    found = short.errors(wet, field, walked, window_s=dp.HOP_S / 4)
+    assert found["level_max_db"] < 0.05
+    assert found["waveform_db"] < -45.0
+
+
+@pytest.mark.parametrize("way", ["goes", "comes"])
+def test_a_path_that_goes_or_comes_is_nowhere_louder_than_at_the_places_it_is_heard_from(
+    way: str,
+) -> None:
+    """A listener walks 1 m at a time at a source (``goes``: 1.9 m, 0.9 m and 0.1 m
+    from it) or away from it (``comes``: 0.1 m, 0.9 m, 1.9 m), and the direct sound is
+    not heard at the place 0.1 m away. Between that place and the next it fades, its
+    delay carried on along its slope towards zero; the fade is the filter's, from one
+    over the distance at the place it is heard from (here 0.9 m), never above it."""
+    x0, x1 = (-1.9, 0.1) if way == "goes" else (-0.1, 1.9)
+    line = reference.Line(x0, x1, 0.05, 1.5, 1.5)
+    room = Room.from_scene(reference.scene("listener", 10.0, "hard", line=line))
+    dry = np.sin(2 * np.pi * 1000.0 * np.arange(int(0.5 * RATE)) / RATE)
+
+    def without_direct(at: list[int]) -> np.ndarray:
+        walk = simulate_walk(room, step_m=1.0, late_step_m=None)
+        assert len(walk.names) == 3
+        responses = walk.result.responses
+        for k in at:
+            place = responses["s", walk.names[k]]
+            responses["s", walk.names[k]] = dataclasses.replace(
+                place, early=place.early[place.early.order > 0]
+            )
+        return render_walk(walk, {"s": dry}, Mono())[:, 0]
+
+    gone = 2 if way == "goes" else 0
+    # The paths add: what the direct sound alone gives, the ground's reflection taken out.
+    direct = without_direct([gone]) - without_direct([0, 1, 2])
+    nearest_heard = 1.0 / math.hypot(0.9, 0.05)
+    assert 0.99 * nearest_heard < np.abs(direct).max() < 1.001 * nearest_heard
 
 
 @pytest.mark.parametrize("directivity", [None, "cardioid"])

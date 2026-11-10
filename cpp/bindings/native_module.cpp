@@ -568,6 +568,27 @@ void face_groups(const char *name, const Indices &face_group, std::size_t groups
     scene.groups = groups;
 }
 
+// In bent air: how the early stage counts the reflections off each face (one per face:
+// as::kGroundFace, as::kWallFace or as::kOtherFace) and the most ground bounces of the
+// paths it holds, into the scene and the settings; None: as in straight air.
+void face_kinds(const char *name, const std::optional<Indices> &face_kind, int covered_ground,
+                as::StochasticScene &scene, as::StochasticSettings &settings) {
+    if (!face_kind.has_value()) return;
+    const std::string fn = name;
+    if (face_kind->shape(0) != scene.bvh->face_count()) {
+        throw std::invalid_argument(fn + ": face_kind must have one per face");
+    }
+    for (std::size_t i = 0; i < face_kind->shape(0); ++i) {
+        const std::int64_t kind = face_kind->data()[i];
+        if (kind != as::kGroundFace && kind != as::kWallFace && kind != as::kOtherFace) {
+            throw std::invalid_argument(fn + ": bad face_kind");
+        }
+    }
+    if (covered_ground < 0) throw std::invalid_argument(fn + ": covered_ground below 0");
+    scene.face_kind = face_kind->data();
+    settings.covered_ground = covered_ground;
+}
+
 // Ray count, timing, seed, threads and weight window of a stochastic run.
 as::StochasticSettings stochastic_settings(std::size_t rays, double max_time,
                                            double speed_of_sound, int covered_order,
@@ -613,7 +634,8 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
                            Points atmosphere_rows, InArray wind_direction, double ground,
                            double chord_sagitta, Matrix plants, Matrix plant_outline,
                            Matrix plant_absorption, Matrix plant_scattering,
-                           Matrix plant_asymmetry, Flags plant_upright, double gather_ratio) {
+                           Matrix plant_asymmetry, Flags plant_upright, double gather_ratio,
+                           std::optional<Indices> face_kind, int covered_ground) {
     as::StochasticScene scene =
         stochastic_scene("trace_stochastic", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
@@ -645,6 +667,7 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
     settings.covered_time = to_vector(covered_time);
     settings.moment_time_step = moment_time_step;
     settings.gather_ratio = gather_ratio;
+    face_kinds("trace_stochastic", face_kind, covered_ground, scene, settings);
 
     as::StochasticResult result;
     {
@@ -813,7 +836,8 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
                     std::size_t max_family, InArray room_level, Points atmosphere_rows,
                     InArray wind_direction, double ground, double chord_sagitta, Matrix plants,
                     Matrix plant_outline, Matrix plant_absorption, Matrix plant_scattering,
-                    Matrix plant_asymmetry, Flags plant_upright) {
+                    Matrix plant_asymmetry, Flags plant_upright,
+                    std::optional<Indices> face_kind, int covered_ground) {
     as::StochasticScene scene =
         stochastic_scene("trace_map", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
@@ -857,6 +881,7 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
     settings.time_step = max_time;
     settings.dir_time_step = max_time;
     settings.diffuse_rain = false;
+    face_kinds("trace_map", face_kind, covered_ground, scene, settings);
 
     as::StochasticResult result;
     {
@@ -1119,6 +1144,7 @@ NB_MODULE(_native, m) {
           nb::arg("plant_scattering").none() = nb::none(),
           nb::arg("plant_asymmetry").none() = nb::none(),
           nb::arg("plant_upright").none() = nb::none(), nb::arg("gather_ratio") = 0.0,
+          nb::arg("face_kind").none() = nb::none(), nb::arg("covered_ground") = 0,
           "Stochastic ray tracing: (energy[r, band, bin], directional[r, dir, band, bin], "
           "moments[r, term, band, moment bin], escaped rays, ray_energy[window], "
           "reflections[window], traced rays); "
@@ -1154,7 +1180,13 @@ NB_MODULE(_native, m) {
           "part of the rain of reflections straight from the source to "
           "gather_first_scattering, which gathers it from the receivers in gather_ratio "
           "times as many directions as rays: the rays keep the share where they land "
-          "more densely than those directions (the balance heuristic).");
+          "more densely than those directions (the balance heuristic). Specular-only paths "
+          "with at most covered_order reflections that reach receiver k by covered_time[k] "
+          "(s; empty: any time) are left out, the early stage's; in bent air, face_kind (one "
+          "per face: 1 the ground, 0 a vertical wall, -1 any other; None: every reflection "
+          "counts) counts them as the early stage does there: those with no reflection off "
+          "a face of kind -1 are left out with up to covered_ground bounces off the ground "
+          "and at most covered_order reflections counting those bounces as one.");
 
     m.def("gather_first_scattering", &gather_first_scattering, nb::arg("bvh"),
           nb::arg("source"), nb::arg("directivity_a"), nb::arg("orientation"),
@@ -1224,6 +1256,7 @@ NB_MODULE(_native, m) {
           nb::arg("plant_scattering").none() = nb::none(),
           nb::arg("plant_asymmetry").none() = nb::none(),
           nb::arg("plant_upright").none() = nb::none(),
+          nb::arg("face_kind").none() = nb::none(), nb::arg("covered_ground") = 0,
           "Stochastic ray tracing onto a coverage map: (energy[point, band, bin], escaped "
           "rays, ray_energy[window], reflections[window], traced rays). point (ny x nx x "
           "layers) holds the map point of each column of width cell from origin (x, y), "
