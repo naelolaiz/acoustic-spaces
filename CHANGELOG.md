@@ -179,6 +179,15 @@
   with reflections up to the third order. It now has the paths and the level it has
   just beside the line in the shadow, in still air and in wind; a point on that wall
   itself keeps the level it had.
+- Fixed (results change): round an open model the wave solver's matched layer lay a few
+  cells past the model, the source and the listeners and sent back much of the sound
+  that ran along it: over a rigid plate, with 40 cm cells, the 63 Hz band read 3.2 and
+  10.8 dB below far taller grids 80 and 160 m away. The grid now reaches past the source
+  and the listeners on each side (not under an outdoor ground) by 15 % of how far the
+  listeners lie from the source along that side, which brings those checks within
+  0.02 dB of the taller grids and costs cells wherever the model reaches less far:
+  1.13 times as many on validation/wave_outdoor.py's 63 Hz grids, 2.1 to 2.4 times in a
+  hall open at one end.
 
 ## 4.2.1
 

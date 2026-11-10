@@ -22,11 +22,13 @@ from acoustic_spaces.engine.wave import (
     ISOTROPIC_COURANT,
     LAYER_CELLS,
     LAYER_DAMPING,
+    LAYER_ROOM,
     MAX_ABSORPTION,
     WAVE_BANDS_HZ,
     WaveResponse,
     _first_order,
     _probe_points,
+    _spans_across,
     absorption_of_impedance,
     admittance,
     band_grid,
@@ -1287,9 +1289,10 @@ def _plate(
     flow=None,
     block: bool = False,
 ):
-    """The pressure at three points round a rigid 8 x 6 m plate in the open, with
-    ``pad`` more cells round the grid than wave_responses gives it and ``layer`` cells
-    of matched layer; ``speed`` and ``flow`` as for :func:`_solver`; ``block`` stands a
+    """The pressure at three points round a rigid 8 x 6 m plate in the open, on a grid
+    that reaches two cells past the plate, the source and the points (with none of the
+    room :data:`LAYER_ROOM` leaves), then ``pad`` more cells and ``layer`` cells of
+    matched layer; ``speed`` and ``flow`` as for :func:`_solver`; ``block`` stands a
     rigid block 0.8 x 3 x 2 m on the plate, across x from 4.6 m."""
     vertices = np.array([[0, 0, 0], [8, 0, 0], [8, 6, 0], [0, 6, 0]], float)
     faces = np.array([[0, 1, 2], [0, 2, 3]], np.int64)
@@ -1347,6 +1350,200 @@ def test_matched_layer_takes_in_the_sound_leaving_an_open_model() -> None:
     layered, solver, _ = _plate(h, LAYER_CELLS, LAYER_CELLS, seconds)
     assert solver.layer_cells > 0
     assert np.all(error_db(layered) < -40)
+
+
+def _along_the_layer(geometry: dict, source, listeners, distance: float) -> tuple:
+    """The 63 Hz wave solver's response, at the first of ``listeners``, to ``source`` in
+    a rigid open model of ``geometry``, ``distance`` away: from emission until just
+    before what the model's far edges send; with the response's rate and its grid's cell."""
+    room = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": geometry,
+                "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+                "default_material": "hard",
+                "sources": [{"name": "s", "position": source}],
+                "listeners": [
+                    {"name": f"l{i}", "position": point} for i, point in enumerate(listeners)
+                ],
+            }
+        )
+    )
+    c = room.speed_of_sound()
+    (response, *_), info = wave_responses(
+        TraceModel.from_room(room),
+        np.array(source, dtype=float),
+        np.array(listeners, dtype=float),
+        [f"l{i}" for i in range(len(listeners))],
+        max_band_hz=63,
+        length_s=(distance + 8.0) / c,
+        sample_rate=FS,
+        speed_of_sound=c,
+    )
+    assert info["wave_open"] == 1.0
+    lead = round(response.lead_s * response.rate)
+    n = round(response.rate * (distance + 7.0) / c)
+    taper = round(response.rate * 0.008)
+    window = np.ones(n)
+    window[-taper:] = 0.5 * (1.0 + np.cos(np.linspace(0.0, np.pi, taper)))
+    return response.signals[lead : lead + n, 0] * window, response.rate, response.cell
+
+
+def test_the_matched_layer_lies_clear_of_sound_that_runs_along_it() -> None:
+    # Sound runs 60 m over rigid ground, 1.5 m up, under a sky 3 m up. With the matched
+    # layer a few cells over the sky the sound met it near grazing, and it sent back
+    # enough to put the 63 Hz band 0.80 dB below the same run under a sky 18 m up. The
+    # grid now reaches LAYER_ROOM of the 60 m above the source and the listener: within
+    # 0.01 dB.
+    distance, height = 60.0, 1.5
+    half_width = math.sqrt((distance / 2 + 4.0) ** 2 - (distance / 2) ** 2) + 0.5
+    runs = [
+        _along_the_layer(
+            {"ground": {"extent": [[-4.0, -half_width], [distance + 4.0, half_width]], "sky": sky}},
+            [0.0, 0.0, height],
+            [[distance, 0.0, height]],
+            distance,
+        )
+        for sky in (3.0, 18.0)
+    ]
+    (low, rate, _), (high, _, _) = runs
+    assert _band_db(low, high, rate, band=(40.0, 100.0)) == pytest.approx(0.0, abs=0.05)
+
+
+def test_the_matched_layer_lies_clear_of_sound_along_the_sides() -> None:
+    # Sound runs 40 m along a strip of rigid ground 3 m wide, 1.5 m up, under a sky 8 m
+    # up: the grid's matched layer started two cells past the strip's edges, and the
+    # 63 Hz band read 0.87 dB below the same run on a grid widened
+    # by two more listeners 16.6 m off to either side, at whole cells from the strip's
+    # edges so that both grids keep their place on it. Now within 0.01 dB.
+    distance, half_width = 40.0, 1.5
+    geometry = {
+        "ground": {"extent": [[-4.0, -half_width], [distance + 4.0, half_width]], "sky": 8.0}
+    }
+    narrow, rate, h = _along_the_layer(geometry, [0.0, 0.0, 1.5], [[distance, 0.0, 1.5]], distance)
+    side = half_width + 38 * h
+    wide, _, _ = _along_the_layer(
+        geometry,
+        [0.0, 0.0, 1.5],
+        [[distance, 0.0, 1.5], [distance / 2, side, 1.5], [distance / 2, -side, 1.5]],
+        distance,
+    )
+    assert _band_db(narrow, wide, rate, band=(40.0, 100.0)) == pytest.approx(0.0, abs=0.05)
+
+
+def test_the_matched_layer_lies_clear_of_sound_below_an_open_model(tmp_path: Path) -> None:
+    # Sound runs 60 m under a rigid plate (a model file, nothing below it), 1.5 m under
+    # it: the grid's matched layer started four cells under the source and the
+    # listener, and the 63 Hz band read 1.67 dB below the same run on a
+    # grid deepened by one more listener 11 m further down, at whole cells, so that both
+    # grids keep their place on the plate. Now within 0.01 dB.
+    distance = 60.0
+    half_width = math.sqrt((distance / 2 + 4.0) ** 2 - (distance / 2) ** 2) + 0.5
+    obj = tmp_path / "plate.obj"
+    obj.write_text(
+        f"v -4 {-half_width} 0\nv {distance + 4} {-half_width} 0\n"
+        f"v {distance + 4} {half_width} 0\nv -4 {half_width} 0\ng plate\nf 1 2 3 4\n"
+    )
+    geometry = {"file": str(obj)}
+    near, rate, h = _along_the_layer(geometry, [0.0, 0.0, -1.5], [[distance, 0.0, -1.5]], distance)
+    deep, _, _ = _along_the_layer(
+        geometry,
+        [0.0, 0.0, -1.5],
+        [[distance, 0.0, -1.5], [distance / 2, 0.0, -1.5 - 28 * h]],
+        distance,
+    )
+    assert _band_db(near, deep, rate, band=(40.0, 100.0)) == pytest.approx(0.0, abs=0.05)
+
+
+def test_spans_across_takes_the_farthest_listener_in_the_plane_of_the_other_axes() -> None:
+    # By hand: across x the farthest is (0, 0, 12) at 12 m in the y-z plane, across y the
+    # same, across z (3, 4, 0) at 5 m in the x-y plane.
+    source = np.array([1.0, 1.0, 1.0])
+    listeners = source + np.array([[3.0, 4.0, 0.0], [0.0, 0.0, 12.0]])
+    assert _spans_across(source, listeners) == pytest.approx([12.0, 12.0, 5.0])
+    assert _spans_across(source, np.zeros((0, 3))) == pytest.approx([0.0, 0.0, 0.0])
+
+
+class _Laid(Exception):
+    """Where the grid with the matched layer starts, its cell and its shape."""
+
+
+def _laid_grid(monkeypatch, geometry: dict, source, listener) -> tuple:
+    """The origin, cell and shape of the 63 Hz grid with the matched layer round
+    ``geometry``, from ``source`` to ``listener``, before any solver is made for it."""
+    real = _native.WaveSolver
+
+    def laid(*args):
+        if args[13]:  # the matched layer's cells
+            raise _Laid(np.asarray(args[5]), float(args[6]), np.array(args[7:10]))
+        return real(*args)
+
+    monkeypatch.setattr(_native, "WaveSolver", laid)
+    room = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": geometry,
+                "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+                "default_material": "hard",
+                "sources": [{"name": "s", "position": source}],
+                "listeners": [{"name": "l", "position": listener}],
+            }
+        )
+    )
+    with pytest.raises(_Laid) as laid_out:
+        wave_responses(
+            TraceModel.from_room(room),
+            np.array(source, dtype=float),
+            np.array([listener], dtype=float),
+            ["l"],
+            max_band_hz=63,
+            length_s=0.1,
+            sample_rate=FS,
+            speed_of_sound=room.speed_of_sound(),
+        )
+    return laid_out.value.args
+
+
+def test_the_room_for_the_layer_keeps_the_grid_on_the_model(tmp_path: Path, monkeypatch) -> None:
+    # Where the model reaches past the source, the listeners and their room, the grid
+    # starts at the model's lowest corner, less two cells of margin, the layer and a
+    # fraction of a cell off the model's planes; elsewhere whole cells further out, at
+    # least the room past the source and the listeners; under an outdoor ground, at the
+    # ground.
+    margin = 2.0 + LAYER_CELLS + np.array([0.0137, 0.0219, 0.0291])
+    distance = 60.0
+    room = LAYER_ROOM * distance
+    # Outdoors along a strip 3 m wide: nothing under the ground; along x the ground
+    # reaches 4 m past the source and the listener (no room across x); across y whole
+    # cells past the strip's edge, at least the room past the source and the listener;
+    # above, the room over them.
+    origin, h, shape = _laid_grid(
+        monkeypatch,
+        {"ground": {"extent": [[-4.0, -1.5], [distance + 4.0, 1.5]], "sky": 3.0}},
+        [0.0, 0.0, 1.5],
+        [distance, 0.0, 1.5],
+    )
+    model = np.array([-4.0, -1.5, 0.0]) - h * margin
+    assert origin[[0, 2]] == pytest.approx(model[[0, 2]])
+    cells = (model[1] - origin[1]) / h
+    assert cells == pytest.approx(round(cells)) and cells >= 1
+    assert origin[1] + h * margin[1] <= -room + 1e-9
+    assert origin[2] + h * (shape[2] - 2 - LAYER_CELLS) >= 1.5 + room
+    # Under a rigid plate, the model file's only face: below the source and the
+    # listener 1.5 m under it the grid starts whole cells under where it did, at least
+    # the room under them.
+    obj = tmp_path / "plate.obj"
+    obj.write_text(
+        f"v -4 -20 0\nv {distance + 4} -20 0\nv {distance + 4} 20 0\nv -4 20 0\nf 1 2 3 4\n"
+    )
+    origin, h, _ = _laid_grid(
+        monkeypatch, {"file": str(obj)}, [0.0, 0.0, -1.5], [distance, 0.0, -1.5]
+    )
+    before = -1.5 - 2.0 * h - h * margin[2]
+    cells = (before - origin[2]) / h
+    assert cells == pytest.approx(round(cells)) and cells >= 1
+    assert origin[2] + h * margin[2] <= -1.5 - room + 1e-9
+    assert origin[0] == pytest.approx(-4.0 - h * margin[0])
 
 
 def test_matched_layer_stays_stable() -> None:

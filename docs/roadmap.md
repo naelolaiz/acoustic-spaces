@@ -288,6 +288,14 @@ Outdoor acoustics, in steps:
   against ray theory and the parabolic equation in the `windy` preset
   (`validation/wave_wind.py`). Runs on the CPU; the wind's shear term on the air's
   motion stays out. Without it nothing changes.
+- [ ] The wave solver's room for sound along its matched layer only on the sides that
+  need it: it is added on every side of an open model, also those the model's own
+  walls close, which costs a hall open at one end 2.1 to 2.4 times the cells (see
+  Open models under [Wave-based solver](validation.md#wave-based-solver)).
+- [ ] The wave solver's source and listeners read between the cell centres to a
+  higher order: read trilinearly, a wave along the ground loses an estimated 0.15 to
+  0.49 dB at 63 Hz with 8 points per wavelength (see
+  [Validation](validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
 - [x] O19 Whole cities: edge diffraction skips the pairs of an edge and a wall or roof
   that no path can use before it traces a ray, on every core, with the same results:
   900 buildings simulate in about 2 s on four cores instead of 81 s, and 3,600 in

@@ -239,7 +239,11 @@ request and checks:
   one 1.5 cells in front of it, taken on the listeners' side, as in front of a solid
   block (within 1 dB and 0.5 dB), open models and thin screens (stable, and the sound
   leaves), the matched layer round an open model (what comes back 40 dB down or more,
-  against a grid too large for anything to come back; stable for 9,500 steps), one run
+  against a grid too large for anything to come back; stable for 9,500 steps; at 63 Hz
+  the sound that runs along it 60 m over the ground under a sky 3 m up, 40 m along a
+  strip of ground 3 m wide and 60 m under a plate within 0.05 dB of the same on a
+  taller, wider or deeper grid; the room it leaves, in whole cells off the model and
+  none under an outdoor ground), one run
   for bands with their own absorption, and the level of the late part across the
   crossover to the rays (flat within 1 dB in sixth octaves);
 - the ray tracer against runs stored before its tree was rebuilt
@@ -1109,10 +1113,10 @@ the first edge's wave where it reaches the second.
 
 Along a top absorbing 0.2 to 0.8, the ground wave's loss is too large against the full
 wave. The wave solver ran a block 24 m long and 12 m deep whose top alone absorbs (5 cm
-cells, the first 50 ms, and a probe 3 m above the top that widens the grid, as with the
-grid ending a few cells above the top its matched layer puts the rigid level 0.5 to 0.6
-dB high at 125 Hz), the source and the listener 1 m below the plane of the top and 3 m
-off its edges, and over the 1 m top absorbing 0.5 also 2 and 4 m off them with the
+cells, the first 50 ms, and a probe 3 m above the top that widened the grid, as with the
+grid ending a few cells above the top its matched layer had put the rigid level 0.5 to
+0.6 dB high at 125 Hz), the source and the listener 1 m below the plane of the top and
+3 m off its edges, and over the 1 m top absorbing 0.5 also 2 and 4 m off them with the
 listener 0.5 m below. Over tops 1 and 3 m wide absorbing 0.2, 0.5 and 0.8 it puts the
 level at 63 and 125 Hz 0.04 to 2.0 dB below the rigid block's, and the engine is 0.22 to
 3.1 dB below that, more as the top absorbs more and is wider (0.22 to 0.38 dB at 0.2,
@@ -2018,8 +2022,8 @@ the vertical plane through the source and the listener with the effective speed 
 sound along it. Both take the same profiles; the wave solver steps the scene in three
 dimensions. Over grass (Miki's impedance, 200 kPa s/m²), the source 2 m up, the
 listeners 1.5 and 5 m up, 50 to 200 m away: the 63 Hz band from a grid for that band
-(8 points per wavelength, 23 million cells), the 125 Hz band from one for it (32
-million cells), up to 100 m. The ground reaches three times the half-width of the
+(8 points per wavelength, 26 to 27.5 million cells), the 125 Hz band from one for it
+(32 million cells), up to 100 m. The ground reaches three times the half-width of the
 reflection's first Fresnel zone at the farthest listener to either side, and 30 m past
 it, so that its edges change little. Levels in dB over the free field, the mean square
 of the pressure over the band's slices, wave solver / parabolic equation:
@@ -2027,9 +2031,9 @@ of the pressure over the band's slices, wave solver / parabolic equation:
 | 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
 |---|---|---|---|---|---|---|
 | still | +5.2 / +5.2 | +4.3 / +4.4 | +5.0 / +5.2 | +4.2 / +4.4 | +5.0 / +5.0 | +4.0 / +4.1 |
-| downwind | +5.2 / +5.7 | +3.9 / +4.4 | +5.8 / +6.3 | +4.3 / +4.9 | +7.0 / +7.2 | +5.0 / +5.4 |
-| upwind | +4.4 / +4.6 | +4.0 / +4.3 | +3.5 / +3.8 | +3.4 / +3.4 | +1.7 / +1.8 | +1.6 / +1.6 |
-| sunny day | +4.9 / +5.1 | +4.3 / +4.4 | +4.5 / +4.8 | +3.9 / +4.1 | +4.0 / +4.0 | +3.3 / +3.3 |
+| downwind | +5.2 / +5.7 | +3.9 / +4.4 | +5.8 / +6.3 | +4.2 / +4.9 | +6.9 / +7.2 | +5.0 / +5.4 |
+| upwind | +4.4 / +4.6 | +4.0 / +4.3 | +3.5 / +3.8 | +3.4 / +3.4 | +1.8 / +1.8 | +1.7 / +1.6 |
+| sunny day | +4.9 / +5.1 | +4.3 / +4.4 | +4.5 / +4.8 | +3.9 / +4.1 | +3.9 / +4.0 | +3.3 / +3.3 |
 | clear night | +5.1 / +5.4 | +4.1 / +4.4 | +5.2 / +5.6 | +4.1 / +4.6 | +5.6 / +5.8 | +4.4 / +4.6 |
 
 | 125 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up |
@@ -2042,11 +2046,18 @@ of the pressure over the band's slices, wave solver / parabolic equation:
 
 The weathers are the presets: downwind and upwind in the `windy` one (5 m/s 10 m up),
 `sunny_day` and `clear_night`. The wave solver is within 0.7 dB of the parabolic
-equation everywhere, 0.22 dB on average at 63 Hz and 0.17 dB at 125 Hz, and follows
-the weather as it does: 2 dB louder downwind than in still air at 200 m and 1.5 m up,
-3.3 dB quieter upwind (1.0 and 2.4 dB 5 m up). At 63 Hz it comes out a little low downwind and under the night's
-inversion (by up to 0.7 dB), where the wind and the temperature change fastest in the
-lowest cells. Neither the deep shadow upwind (it
+equation everywhere, 0.24 dB on average at 63 Hz and 0.17 dB at 125 Hz, and follows
+the weather as it does: 1.9 dB louder downwind than in still air at 200 m and 1.5 m up,
+3.2 dB quieter upwind (1.0 and 2.3 dB 5 m up). At 63 Hz it comes out a little low
+downwind and under the night's inversion (by up to 0.7 dB). Much of that is where the
+source and the listeners fall between the cell centres, from which the grid takes them
+trilinearly: on those weathers' grids, whose cell the slowest sound on them sets, that
+alone takes 0.36 to 0.49 dB off a wave along the ground, against 0.15 to 0.27 dB in
+still air (one-off estimates; a cell 0.15 % larger, of the downwind grid reaching 69 m
+up instead of 39 m, moved its levels by −0.08 to +0.23 dB, within 0.02 dB of the
+estimate, where the taller grid alone moved them by 0.02 dB at most). Upwind, on the
+downwind grid, it reads up to 0.6 dB above that estimate, for a reason not traced.
+Neither the deep shadow upwind (it
 starts a few hundred metres away at these heights) nor reflections off buildings, where
 the effective speed of sound along the horizontal from the source stands in for the
 flow, were checked (moving air is, [below](#moving-air-in-the-wave-solver)).
@@ -2110,22 +2121,24 @@ equation:
 | 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
 |---|---|---|---|---|---|---|
 | downwind, parabolic equation | +5.7 | +4.4 | +6.3 | +4.9 | +7.2 | +5.4 |
-| downwind, effective | +5.2 | +3.9 | +5.8 | +4.3 | +7.0 | +5.0 |
-| downwind, moving | +5.7 | +4.4 | +6.3 | +4.7 | +7.5 | +5.3 |
+| downwind, effective | +5.2 | +3.9 | +5.8 | +4.2 | +6.9 | +5.0 |
+| downwind, moving | +5.7 | +4.4 | +6.3 | +4.7 | +7.5 | +5.5 |
 | upwind, parabolic equation | +4.6 | +4.3 | +3.8 | +3.4 | +1.8 | +1.6 |
-| upwind, effective | +4.4 | +4.0 | +3.5 | +3.4 | +1.7 | +1.6 |
-| upwind, moving | +4.5 | +4.2 | +3.5 | +3.4 | +1.9 | +1.5 |
+| upwind, effective | +4.4 | +4.0 | +3.5 | +3.4 | +1.8 | +1.7 |
+| upwind, moving | +4.5 | +4.2 | +3.5 | +3.3 | +1.8 | +1.5 |
 
-Moving air is within 0.34 dB of the parabolic equation, 0.13 dB on average; the
-effective speed of sound within 0.69 dB, 0.31 dB on average. Downwind at 50 m and at
+Moving air is within 0.31 dB of the parabolic equation, 0.11 dB on average; the
+effective speed of sound within 0.70 dB, 0.34 dB on average. Downwind at 50 m and at
 100 m 1.5 m up, where the effective speed of sound comes out about 0.5 dB low, moving
-air is within 0.03 dB on the same grid; at 100 m 5 m up the effective speed of sound is
-0.69 dB low and moving air 0.25 dB.
+air is within 0.03 dB on its own grid, whose 40 cm cells (against 39 cm) take 0.23 to
+0.33 dB less off there by the estimate
+[above](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation); at
+100 m 5 m up the effective speed of sound is 0.70 dB low and moving air 0.23 dB.
 
-Moving air takes 2.7 to 3.7 times as long as the effective speed of sound: 11.6 s
-against 4.3 s in the free field (3.2 million cells), 26 s against 7.6 s with the façade
-(6 million) and 3.2 minutes against 53 s with the preset (23 million), on 4 cores with
-nothing else running.
+Moving air takes 2.7 and 3.4 times as long as the effective speed of sound: 11.6 s
+against 4.3 s in the free field (3.2 million cells) and 26 s against 7.6 s with the
+façade (6 million), on 4 cores with nothing else running. With the preset its grid has
+25.8 million cells of air and the effective speed of sound's 26.8 million.
 
 ## Outdoor results against exact solutions
 
@@ -4322,6 +4335,37 @@ back there in the first 50 ms falls with the layer's depth, but not later in the
 for a reason not traced. Runs take 8 cells, which is not a setting. In the layer the sound keeps
 falling over 59,409 steps (20 s): 79 dB below the first second's level after one second,
 at least 134 dB below it through the second half.
+
+Sound that runs along the layer meets it near grazing, where it sends much more back. In
+one-off checks over a rigid plate (open below), the source and the listener 1.5 m above
+it, a layer only a few cells above them puts the level below the exact solution over a
+rigid plane by 0.64 dB at 125 Hz 20 m away and by 1.7 and 2.1 dB at 63 and 125 Hz 40 m
+away (20 cm cells), and at 63 Hz by 3.7 dB 80 m away and 11.1 dB 160 m away (40 cm
+cells), where the same runs on far taller grids read 0.36, 0.13 and 0.41, 0.54 and
+0.34 dB below it (with 10 cm cells, 20 m away, 0.04 dB); with 5 cm cells, the two 0.1 m
+up and 7 m apart, it reads 6.66 dB over the free field at 125 Hz, where the exact value
+is 6.02. So the grid reaches past the source and the listeners, on each side, by 15 % of
+the farthest a listener lies from the source along that side (none under an outdoor
+ground, and in whole cells, so that the grid keeps its place on the model). In the same
+checks this brings the plate within 0.06 dB of the far taller grids 10 to 160 m away,
+to 5.99 and 5.96 dB over the free field at 63 and 125 Hz with the 5 cm cells, within
+0.01 dB of a wider grid at 125 Hz beside the plate's edge, and over the rigid 3 m block
+of the edge diffraction checks, at 6.2 cm cells, to −9.00 and −11.21 dB against BTM's
+−9.04 and −11.25. One case stays 0.13 and 0.14 dB off at 63 and 125 Hz: the source and
+the listener 0.1 m up and 20 m apart with 10 cm cells, whose layer is 0.8 m deep; 12
+cells of layer, or 25 % of room, bring it within 0.02 dB.
+It costs cells on every side where the model reaches less far than that room, whether
+the model's own walls close that side or not: in these checks 2.3 times as many 40 m
+away at 20 cm cells, 2.8 and 4.9 times 80 and 160 m away at 40 cm cells and 3 % more
+over the block; in a dry layout of a hall 40 x 20 x 4 m open at one end, its listeners
+8 to 33 m from the source, 2.1 and 2.4 times as many at 125 and 250 Hz, mostly under
+its floor and over its roof. Outdoors, where nothing is added under the ground, only
+where the sky (by default 30 m above the highest building) or the ground's edge lies
+nearer than that room: 13 % more on the 63 Hz grids of
+[the wave solver in wind and temperature](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)
+(a sky 30 m up, listeners up to 200 m away), with or without
+[moving air](#moving-air-in-the-wave-solver), and none on its 125 Hz grids, on the free
+field and façade grids of moving air or on the ground reflection's wave check.
 
 **One run for all bands.** A 7 x 5 x 3 m box whose absorption differs in every band
 (0.10 to 0.25 from 63 to 500 Hz), the wave solver up to the 500 Hz band: one run of

@@ -648,8 +648,8 @@ is an arc of a circle, so its travel time and its length are exact.
   m/s it is within 0.05 dB and 0.1 ms of the exact solution in every direction, where
   the effective speed of sound is up to 0.9 dB off; the echo of a façade 40 m
   downwind comes within 0.02 ms of ray theory's, where the effective speed of sound
-  brings it 10.6 ms early; in the `windy` preset over grass it is within 0.34 dB of the
-  parabolic equation, where the effective speed of sound is within 0.69 dB (see
+  brings it 10.6 ms early; in the `windy` preset over grass it is within 0.31 dB of the
+  parabolic equation, where the effective speed of sound is within 0.70 dB (see
   [Validation](validation.md#moving-air-in-the-wave-solver)).
   It costs three to four times as much as the effective speed of sound, on the CPU only
   (asked for the GPU, it says so and stays on the CPU), and the run's details say
@@ -1014,8 +1014,10 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
 - **Coverage maps** cover the ground by default and leave out the points inside
   buildings (see [Coverage maps](coverage-maps.md)).
 - **The wave solver** sees the sky as an opening and puts a matched layer round the
-  grid, as for any open model, and in wind and temperature takes a speed of sound per
-  cell (see [How the simulation bends sound](#how-the-simulation-bends-sound)).
+  grid, as for any open model, past the source and the listeners above and to the
+  sides by at least 15 % of the farthest a listener lies from the source along that
+  side (where the sky or the ground's edge is nearer), and in wind and temperature
+  takes a speed of sound per cell (see [How the simulation bends sound](#how-the-simulation-bends-sound)).
 - **A terrain** reflects the early sound off the mean plane of its profile and bends
   it over its crests, and the late rays off its triangles (see
   [How the simulation takes the terrain into account](#how-the-simulation-takes-the-terrain-into-account)).

@@ -27,7 +27,8 @@ octave bands replace the ray-traced ones.
 - Cells are air when the source reaches them without crossing a surface, so closed
   rooms, open models and thin screens all work. Round an open model, whose air reaches
   the edge of the grid, the grid grows by a perfectly matched layer of
-  :data:`LAYER_CELLS` cells that takes in the sound leaving it. Openings are not
+  :data:`LAYER_CELLS` cells that takes in the sound leaving it, and leaves room
+  (:data:`LAYER_ROOM`) for sound that runs along it. Openings are not
   surfaces here: the air flows through them. Surfaces that let only part of the sound
   through are not modelled, so a model with any stops the wave solver with an error.
 - At these frequencies the source radiates the same way in all directions. The
@@ -116,6 +117,17 @@ HIGH_PASS_S = 0.12
 #: Open models).
 LAYER_CELLS = 8
 LAYER_DAMPING = 0.5
+#: Round an open model, the grid reaches past the source and the listeners, on each
+#: side, by at least this share of the farthest a listener lies from the source along
+#: that side (across its axis), before its margin and its matched layer; under an
+#: outdoor ground, not at all. Sound that runs along the layer meets it near grazing,
+#: where the layer sends much of it back: in one-off checks over a rigid plate, the
+#: source and the listener 1.5 m above it and the layer a few cells above them (20 cm
+#: cells), the level read 0.64 dB below the exact one at 125 Hz 20 m away, and 1.7 and
+#: 2.1 dB below it at 63 and 125 Hz 40 m away, where far taller grids read 0.36, and
+#: 0.13 and 0.41 dB below it. With this room it is within 0.06 dB of the taller grids,
+#: 10 to 160 m away (docs/validation.md, Open models).
+LAYER_ROOM = 0.15
 #: The wave solver's part of a response starts here (Hz), with the synthesis's
 #: crossover shape round it: an octave below the 63 Hz band's lower edge, so that band,
 #: skirts and all, comes from the wave solver. Further down a closed room's air is
@@ -555,6 +567,14 @@ def _probe_points(listener: np.ndarray, cell: float) -> np.ndarray:
     return listener[None, :] + cell * np.vstack([np.zeros(3), steps, 2 * steps])
 
 
+def _spans_across(source: np.ndarray, listeners: np.ndarray) -> np.ndarray:
+    """(3,) the farthest any of ``listeners`` lies from ``source`` across each axis: in
+    the plane of the other two."""
+    offsets = listeners - source
+    across = np.sum(offsets**2, axis=1)[:, None] - offsets**2
+    return np.sqrt(np.max(across, axis=0, initial=0.0))
+
+
 def _in_sight(bvh, listeners: np.ndarray, probes: np.ndarray) -> np.ndarray:
     """(len(probes),) whether no face of ``bvh`` lies between each of ``probes`` (the
     :func:`_probe_points` of each of ``listeners`` in turn) and its listener. A point
@@ -706,6 +726,7 @@ def wave_responses(
     else:
         rows, face_material = np.unique(coefficients, axis=0, return_inverse=True)
 
+    outdoor = model.room.outdoor is not None
     weather = _Weather.of(model, source)
     moving = False
     if weather is not None and wind == "moving":
@@ -728,6 +749,16 @@ def wave_responses(
         # model's planes.
         low = np.minimum(mesh.vertices.min(axis=0), points.min(axis=0) - 2.0 * h)
         high = np.maximum(mesh.vertices.max(axis=0), points.max(axis=0) + 2.0 * h)
+        if layer:
+            # Room for sound that runs along the layer (see LAYER_ROOM), below in whole
+            # cells so that the grid keeps its place on the model; none under an outdoor
+            # scene, whose ground closes the grid there.
+            room = LAYER_ROOM * _spans_across(points[0], points[1:])
+            below = np.ceil(np.maximum(low - (points.min(axis=0) - room), 0.0) / h)
+            if outdoor:
+                below[2] = 0.0
+            low = low - h * below
+            high = np.maximum(high, points.max(axis=0) + room)
         origin = low - h * (2.0 + layer + np.array([0.0137, 0.0219, 0.0291]))
         shape = np.ceil((high - origin) / h).astype(np.int64) + 2 + layer
         return grid, origin, shape
@@ -830,7 +861,6 @@ def wave_responses(
     # layer, which the isotropic one has none of. An outdoor model's sky is an opening,
     # so its grid is open unless the source is shut in: the one with the layer first,
     # and the isotropic stencil refused before any grid is made.
-    outdoor = model.room.outdoor is not None
     if scheme == "isotropic" and outdoor:
         raise ValueError(
             "outdoors the isotropic stencil is not available (it has no matched layer for "
