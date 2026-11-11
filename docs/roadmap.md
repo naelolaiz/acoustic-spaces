@@ -356,6 +356,11 @@ Outdoor acoustics, in steps:
   frequencies there, and in the shadow, where the bands above the equation deepen from
   the octave below 18 to 36 dB louder than its field, the bands keep their own samples
   (8.6 dB low in case 3 300 m away; see [Known issues](validation.md#known-issues)).
+- [ ] The eddies downwind: their coherence factor, fitted in still air and in the
+  shadow, leaves the 1 kHz band 0.3 to 1.8 dB from a parabolic equation through random
+  eddies 100 to 300 m downwind, and with eddies a step of the rays at a caustic comes
+  into the equation's bands; and the echogram of the bands up to 500 Hz, which takes
+  the coherence as a band's mean (see [Known issues](validation.md#known-issues)).
 - [ ] Steep sound over the open ground in wind (as under a flyover) left to the rays at
   1 and 2 kHz by a rule, where they match the equation at a fraction of its time: one
   studied (the vertical wavenumber changing by at most 3 % over one of its own lengths

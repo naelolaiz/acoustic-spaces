@@ -935,7 +935,8 @@ C_v² / c0² (Ostashev and Wilson 2015).
   [Validation](validation.md#turbulence-against-a-parabolic-equation-through-random-eddies)).
 - **In the parabolic equation's bands** (in wind or temperature gradients, see
   [How the simulation bends sound](#how-the-simulation-bends-sound)) the eddies blur its
-  sound towards the rays' added in energy, by the rays' coherence factors.
+  sound towards the rays' added in energy, by the rays' coherence factors at each
+  frequency the equation ran at.
 - **In a shadow** the eddies add the sound they scatter into it: once, from the air
   that the source and the listener both see over the shadow's edge (the Born
   approximation, which the parabolic equation through random eddies bears out at 250

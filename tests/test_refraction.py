@@ -1885,12 +1885,12 @@ def test_a_silent_top_octave_leaves_the_bands_above_it_silent(monkeypatch) -> No
 
     place = refracted.Refraction._place
 
-    def silent_top(self, wave, pressure, energy, parts, listeners, runs=None):
+    def silent_top(self, wave, pressure, energy, parts, listeners, runs=None, blur=None):
         energy = np.array(energy, dtype=float)
         octave = refracted.octave_of(self.model.bands)
         top = octave[np.flatnonzero(wave.bands)[-1]]
         energy[octave == top] = 0.0
-        return place(self, wave, pressure, energy, parts, listeners, runs)
+        return place(self, wave, pressure, energy, parts, listeners, runs, blur)
 
     monkeypatch.setattr(refracted.Refraction, "_place", silent_top)
     scene = field({"preset": "windy"}, ((-100.0, 0.0, 1.5),), bands="third_octave")
@@ -2111,8 +2111,8 @@ def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatc
     kept, stage = {}, [""]
     place = refracted.Refraction._place
 
-    def keep(self, wave, pressure, energy, parts, listeners, runs=None):
-        place(self, wave, pressure, energy, parts, listeners, runs)
+    def keep(self, wave, pressure, energy, parts, listeners, runs=None, blur=None):
+        place(self, wave, pressure, energy, parts, listeners, runs, blur)
         if tuple(listeners[wave.listener]) == (-20.0, 0.0, 1.5):
             kept[stage[0]] = parts[wave.listener][0].fine[wave.carrier]
 
@@ -2183,6 +2183,69 @@ def test_one_coherent_band_keeps_its_run_below_it() -> None:
     under = fine_frequencies(8, 1)[0] < 44.0
     assert under.sum() == 4 and np.isfinite(fine[carrier, 0, under].real).all()
     assert levels[1] == pytest.approx(levels[0], abs=1e-6)
+
+
+def scattering_levels(scattering: float, zs: float, xs, atmosphere: dict) -> np.ndarray:
+    """(len(xs), bands) the early level (dB) of a source ``zs`` up over grass whose
+    scattering coefficient is ``scattering``, set here so that the scene's default does
+    not count, at listeners 1.5 m up ``xs`` m along x in ``atmosphere``."""
+    from acoustic_spaces.engine.coherent import total_energy
+
+    data = {
+        "name": "scattering",
+        "geometry": {"ground": {"extent": [[-50.0, -50.0], [250.0, 50.0]], "sky": 50.0}},
+        "materials": {"field": {"impedance": "grass", "scattering": scattering}},
+        "default_material": "field",
+        "sources": [{"name": "s", "position": [0.0, 0.0, zs]}],
+        "listeners": [{"name": f"l{k}", "position": [x, 0.0, 1.5]} for k, x in enumerate(xs)],
+        "atmosphere": atmosphere,
+        "simulation": {
+            "seed": 1,
+            "early": {"method": "image_sources", "max_order": 1, "diffraction": "none"},
+            "late": {"rays": 50},
+            "ir_length_s": 0.1,
+        },
+    }
+    result = simulate(Room.from_scene(Scene.model_validate(data)), threads=1)
+    return np.array(
+        [10.0 * np.log10(total_energy(result["s", f"l{k}"].early)) for k in range(len(xs))]
+    )
+
+
+@pytest.mark.parametrize(
+    "xs",
+    [(119.865, 119.8675, 119.870, 119.8725), (162.0, 162.25, 162.5, 162.75)],
+    ids=["caustic", "ray event"],
+)
+def test_the_equation_s_bands_leave_the_ground_s_scattering_and_go_on_across_the_rays(
+    xs,
+) -> None:
+    """Downwind in the ``windy`` preset, the source 2 m up: the parabolic equation's
+    bands (63 Hz to 2 kHz) are the same bit for bit over grass that scatters nothing and
+    over grass whose scattering coefficient is 0.1, and with 0.1 they go on across the
+    rays' caustic between 119.8675 and 119.870 m and where a ray comes in between 162.25
+    and 162.5 m as on either side: each step within a quarter more than the larger of its
+    neighbours' (at most 1.08 times measured: 0.0431 dB at 250 Hz at the ray event against
+    0.0400 dB beside it; at the caustic all steps within 0.0005 dB)."""
+    windy = {"preset": "windy", "wind": {"direction_deg": 0.0}}
+    smooth = scattering_levels(0.0, 2.0, xs, windy)[:, :6]
+    rough = scattering_levels(0.1, 2.0, xs, windy)[:, :6]
+    np.testing.assert_array_equal(rough, smooth)
+    steps = np.abs(np.diff(rough, axis=0))
+    assert np.all(steps[1] <= 1.25 * np.maximum(steps[0], steps[2]) + 0.001), steps
+
+
+def test_the_equation_s_bands_go_on_at_the_upwind_shadow_s_start() -> None:
+    """In 1 m/s of wind upwind, the source 10 m up over grass whose scattering
+    coefficient is 0.1, the rays stop arriving between 181.794 and 181.795 m: every
+    millimetre from 181.788 to 181.800 m the parabolic equation's bands (63 Hz to 2 kHz)
+    move by at most 0.002 dB (0.0016 measured, 250 Hz, the field's own slope), and are
+    those over grass that scatters nothing bit for bit."""
+    xs = np.round(np.arange(181.788, 181.8005, 0.001), 4)
+    upwind = {"wind": {"speed_m_s": 1.0, "direction_deg": 180.0}}
+    rough = scattering_levels(0.1, 10.0, xs, upwind)[:, :6]
+    np.testing.assert_array_equal(rough, scattering_levels(0.0, 10.0, xs, upwind)[:, :6])
+    assert np.abs(np.diff(rough, axis=0)).max() <= 0.002
 
 
 def test_the_open_ground_s_frequencies_change_nothing_in_still_air() -> None:

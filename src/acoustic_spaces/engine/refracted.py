@@ -60,6 +60,7 @@ import dataclasses
 import math
 import threading
 from collections import OrderedDict
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
@@ -231,6 +232,9 @@ class _Wave:
     carrier: int  # the path of the family that carries it, or -1 (shadow)
     family: np.ndarray  # (n,) the family's paths
     delay: float
+    #: With eddies, out of the shadow: the family's coherence factor at frequencies of a
+    #: band, ``blur(band, f)`` (:meth:`Refraction._coherence_of`); None without.
+    blur: Callable[[int, np.ndarray], np.ndarray | None] | None = None
 
 
 @dataclass
@@ -657,6 +661,7 @@ class Refraction:
             carrier=carrier,
             family=np.arange(len(family)),
             delay=delay,
+            blur=None if self.eddies is None or shadow else self._coherence_of(family),
         )
 
     def _off_walls(self, listener, zr, paths, rows, planes, ratio, cutoff):
@@ -1600,6 +1605,7 @@ class Refraction:
                     pressures[(id(way), "wind")],
                     virtual,
                     way.at[None],
+                    blur=pressures.get((id(way), "wind", "blur")),
                 )
                 weather = virtual[0][0]
                 # Where one path holds the open ground's field (the equation's, or the
@@ -2001,12 +2007,14 @@ class Refraction:
         parts: list,
         listeners: np.ndarray,
         runs: dict | None = None,
+        blur: np.ndarray | None = None,
     ):
         """Puts the open ground's parabolic equation in the paths of ``wave``'s listener:
         its ``pressure`` (bands, M) at the early paths' frequencies and its band
         ``energy`` (bands,) over all the frequencies it ran at; its pressure at every
         frequency it ran at (``runs`` by band, :func:`solve`) in the carrier's
-        :attr:`~acoustic_spaces.engine.early.EarlyReflections.fine` (:meth:`_fine`)."""
+        :attr:`~acoustic_spaces.engine.early.EarlyReflections.fine` (:meth:`_fine`);
+        with eddies its band energy blurred by ``blur`` (:meth:`_blurred`)."""
         bands = wave.bands
         excess = np.array(energy, dtype=float) * wave.distance**2  # (bands,)
         if wave.shadow:
@@ -2090,8 +2098,8 @@ class Refraction:
         fine = self._fine(wave, runs) if coherent and runs and not wave.shadow else None
         found = parts[wave.listener]
         family = found[0]
-        if self.eddies is not None and wave.carrier >= 0:
-            energy = self._blurred(energy, family[wave.family], bands)
+        if blur is not None and wave.carrier >= 0:
+            energy = self._blurred(energy, family[wave.family], bands, blur)
         if wave.carrier < 0:
             listener = listeners[wave.listener]
             arrival = self.source - listener
@@ -2141,24 +2149,45 @@ class Refraction:
         fine = placed(self.bands, coherent, kept, wave.delay)
         return fine, reference_delay(fine, self.bands)
 
-    def _blurred(self, energy: np.ndarray, rays: EarlyReflections, bands: np.ndarray):
-        """The parabolic equation's ``energy`` (bands,) in still air, in the ``bands``
-        it gives, as the eddies blur it: E = C E_pe + (1 - C) E_rays, E_rays the
-        family's ``rays`` added in energy and C their coherence factor, weighted by
-        sqrt(E_i E_j) over each two of them."""
+    def _coherence_of(
+        self, rays: EarlyReflections
+    ) -> Callable[[int, np.ndarray], np.ndarray | None] | None:
+        """The coherence factor of the family ``rays`` as the eddies give it, as a
+        function ``blur(band, f)`` (len(f),) of frequencies f (Hz) in a band: each two
+        rays' (:meth:`~acoustic_spaces.engine.turbulence.Wander.coherence`) weighted by
+        sqrt(E_i E_j) of their energies in the band, or None in a band where they carry
+        nothing; None for fewer than two rays."""
         if len(rays) < 2:
-            return energy
+            return None
         wander = self.eddies.wander(rays)
-        out = energy.copy()
         off = ~np.eye(len(rays), dtype=bool)
-        for band in np.flatnonzero(bands):
-            alone = rays.energy[:, band]
+        energy = rays.energy.copy()
+
+        def blur(band: int, f: np.ndarray) -> np.ndarray | None:
+            alone = energy[:, band]
             weights = np.sqrt(np.outer(alone, alone))[off]
             if weights.sum() <= 0.0:
-                continue
-            together = wander.coherence(self.frequencies[band]).mean(axis=2)[off]
-            share = float(np.sum(together * weights) / weights.sum())
-            out[band] = share * energy[band] + (1.0 - share) * alone.sum()
+                return None
+            return weights @ wander.coherence(f)[off] / weights.sum()
+
+        return blur
+
+    def _blurred(
+        self, energy: np.ndarray, rays: EarlyReflections, bands: np.ndarray, blur: np.ndarray
+    ) -> np.ndarray:
+        """The parabolic equation's ``energy`` (bands,) in still air, in the ``bands``
+        it gives, as the eddies blur it at each frequency f its run took: E(f) = C(f)
+        E_pe(f) + (1 - C(f)) E_rays, E_rays the family's ``rays`` added in energy and
+        C(f) their coherence factor (:meth:`_coherence_of`), averaged over the band as
+        the rays' own bands average their pairs' cross terms
+        (:func:`~acoustic_spaces.engine.coherent.total_energy`). ``blur`` (bands, 2)
+        holds for each band the run's mean of C(f) |P(f)|² over that of |P(f)|², and its
+        mean of C(f) (:func:`solve`); NaN where it has none."""
+        out = energy.copy()
+        for band in np.flatnonzero(bands):
+            effective, mean = blur[band]
+            if np.isfinite(mean):
+                out[band] = effective * energy[band] + (1.0 - mean) * rays.energy[:, band].sum()
         return out
 
 
@@ -2186,6 +2215,7 @@ class Planned:
                 self.parts,
                 self.listeners,
                 pressures.get((id(request), "fine")),
+                pressures.get((id(request), None, "blur")),
             )
         for request in self.barriers:
             refraction._place_barrier(request, pressures, self.parts)
@@ -2246,15 +2276,17 @@ def solve(plans: list[Planned]) -> list[dict]:
     frequency its runs took (:meth:`Refraction._fine`): the band's own, under the lowest
     band those down to an octave below it, and through the upper crossover of the
     request's top band of the equation those above, where a response is rendered or the
-    band filters read that crossover. A source's listeners that the sound goes the same
-    way to share a run (the same profile; with weather or ground zones the same
-    direction too). So do several sources' at one height over one ground, where the
-    weather and the grounds have no zones (the places of a walk, say): there a run from
-    one source holds for any other alike, the way along the ground being the same from
-    each. A run marches out to the farthest of its listeners under an absorbing layer
-    above the highest of their ``top``; in a run shared that way each listener is
-    reached by a last step of its own, off to the side of the march, so that it gets
-    what its own source's run would give it alone.
+    band filters read that crossover; with eddies, by (the request's id, None, "blur")
+    and (the way's id, "wind", "blur"), the two numbers (bands, 2) of each band that the
+    eddies' blur takes from the band's own frequencies (:meth:`Refraction._blurred`). A
+    source's listeners that the sound goes the same way to share a run (the same profile;
+    with weather or ground zones the same direction too). So do several sources' at one
+    height over one ground, where the weather and the grounds have no zones (the places
+    of a walk, say): there a run from one source holds for any other alike, the way along
+    the ground being the same from each. A run marches out to the farthest of its
+    listeners under an absorbing layer above the highest of their ``top``; in a run
+    shared that way each listener is reached by a last step of its own, off to the side
+    of the march, so that it gets what its own source's run would give it alone.
 
     Behind barriers the runs in the weather share by the profile and what stands on the
     way (the cut), those in still air by the cut and the absorbing layer alone; the open
@@ -2543,7 +2575,21 @@ def solve(plans: list[Planned]) -> list[dict]:
             # The band's energy over every frequency the run took; the pressures at the
             # early paths' own, time as exp(j omega t), as the early paths have it.
             energy = out[p].setdefault((id(m), slot), np.zeros(job.refraction.bands))
-            energy[job.band] = np.mean(np.abs(value) ** 2)
+            power = np.abs(value) ** 2
+            energy[job.band] = np.mean(power)
+            # The open ground's request, a listener's or a way's round ends.
+            wave = m if slot is None else getattr(m, "wave", None)
+            if wave is not None and wave.blur is not None:
+                # With eddies, what the blur takes at each frequency of the run
+                # (Refraction._blurred): two numbers a band, however many it took.
+                together = wave.blur(job.band, frequencies_of(job)[under:])
+                if together is not None:
+                    blur = out[p].setdefault(
+                        (id(m), slot, "blur"), np.full((job.refraction.bands, 2), np.nan)
+                    )
+                    total = float(np.sum(power))
+                    effective = float(together @ power) / total if total > 0.0 else 0.0
+                    blur[job.band] = effective, float(np.mean(together))
             if slot is None:
                 out[p][id(m)][job.band] = np.conj(_early_of(value, shape[1]))
             elif isinstance(m, _Way):

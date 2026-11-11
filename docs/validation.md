@@ -4778,6 +4778,44 @@ Results:
   crossover is 8.6 dB below the program at 2.95 kHz. The paths round a barrier's end
   still take the weather's effect at the early paths' frequencies, held through the
   crossover above the equation's top band, where it moves by 14 to 17 dB in case 2.
+- **The eddies downwind.** The eddies' coherence factor was fitted in still air and in
+  the shadow (see
+  [Turbulence](#turbulence-against-a-parabolic-equation-through-random-eddies)); downwind
+  it is checked only here. In `windy` with the `strong` eddies, over grass with a
+  scattering coefficient of 0, a source 5 m and a listener 1.5 m up, the eddies raise
+  the 1 kHz octave band by 0.33, 0.60 and -0.34 dB 100, 200 and 300 m away, where the
+  engine's narrow-angle parabolic equation marched at the band's 24 frequencies through
+  224 fields of these eddies (drawn as by `validation/turbulence.py`, Cn² the same at
+  every height) raises it by 0.62 ± 0.24, 2.39 ± 0.34 and 0.67 ± 0.34 dB (95 %
+  confidence): 0.3 to 1.8 dB apart (a one-off check). Since the eddies add the rays'
+  energy into the equation's bands, a step of the rays' at a caustic comes through:
+  in the same case, between 335.9 and 336.0 m away, the 125 Hz to 2 kHz bands step up
+  by 1.8 to 8.1 dB with the `strong` eddies and 0.5 to 6.2 dB with the `moderate`,
+  where without eddies they move by at most 0.012 dB.
+- **The eddies in a band's echogram.** Up to 500 Hz, where the early paths' energy over
+  time is read through each band's filter, each two paths' product still takes their
+  coherence factor as its mean over the band's frequencies, where the band's level
+  takes it at each frequency. In still air with the `strong` eddies, a listener 1.5 m
+  up over grass with a scattering coefficient of 0, the 500 Hz octave band's echogram
+  so sums to 0.02 dB more 50 m from a source 5 m up, and 0.06 and 0.12 dB more 100 and
+  200 m from one 10 m up, than with the coherence taken at each frequency (0.005 dB
+  over asphalt at 100 m; within 0.05 dB from 63 to 250 Hz, and within 0.01 dB in third
+  octaves at 100 m; a one-off check).
+- **A ground's scattering coefficient in wind.** The parabolic equation's bands over the
+  open ground (63 Hz to 2 kHz in wind or a temperature gradient) keep a ground's whole
+  reflection, while the rays and still air's image sources keep sqrt(1 - s) of it at
+  each bounce, s the ground's scattering coefficient. Over a ground with a scattering
+  coefficient of 0.1 this steps the level by 0.075 and 0.122 dB more at 1 and 2 kHz over
+  grass (0.196 and 0.151 dB over asphalt) where the rays take over with
+  `open_ground_frequencies: rays` (1 m/s of wind upwind, a source 10 m and a listener
+  1.5 m up, between 90.8 and 90.9 m away), takes 0.11 to 0.14 dB from the 4 and 8 kHz
+  bands but nothing from the 2 kHz band beside them (the same weather, 90.4 m away), and
+  changes by up to 0.23 dB how far a breath of wind is from still air (0.05 m/s, a
+  source 2 m and a listener 1.5 m up, 50 m away, 63 Hz to 2 kHz). With a scattering
+  coefficient of 0 only the models' own differences remain: up to 0.08 dB at the
+  hand-over, and between still air and the breath up to 0.07 dB from 63 to 500 Hz and
+  0.13 dB over grass and 0.19 dB over asphalt at 1 and 2 kHz (a one-off check;
+  `tests/test_refraction.py` holds the equation's bands the same with 0 and 0.1).
 - **The late part of a band read through its filter outdoors.** Between the
   equation's samples h apart (11, 22 and 44 Hz in the 125, 250 and 500 Hz octave
   bands) a band's spectrum is drawn linearly, which weighs the response about the

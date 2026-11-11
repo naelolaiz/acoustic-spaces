@@ -266,6 +266,12 @@
   11 to 79 % longer for a listener; C50 and C80 below 1 kHz move with it, C80 at
   500 Hz away from a dense run of the equation, and the top crossover moves where the
   rays' band beside it is off (see [Known issues](docs/validation.md#known-issues)).
+- Fixed (results change): with eddies, the parabolic equation's bands over the open
+  ground took the rays' coherence as one mean a band; they take it at each frequency the
+  equation ran at, as the rays do, which brings 2 kHz in a breath of wind from 0.41 to
+  0.07 dB off still air's image sources (0.12 dB without eddies). Downwind in `windy`,
+  a source 5 m and a listener 1.5 m up over grass 25 to 600 m away, the 250 Hz to 2 kHz
+  bands move by up to 0.59 dB with the `strong` eddies and 0.50 dB with the `moderate`.
 
 ## 4.2.1
 
