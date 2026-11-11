@@ -4493,14 +4493,24 @@ away (16 and 13 degrees and 3.7 dB without them). A listener nearer the source t
 energy changes by 2.4 dB at most from one listener to the next 0.1 cells further out
 (a one-off scan every 0.1 cells from 0.5 to 2). On the 7-point grid leaving the points
 out gains nothing clear, and it keeps them.
-From two cells away the gradient's energy is at some distances further off than with
-everything read trilinearly: 3.2 to 3.8 cells away on the 19-point grid (up to 1.4 dB
-against 0.8 dB) and 4.4 to 4.8 (0.41 against 0.29), and 2 to 3.8 cells away on the
-7-point one (5.4 dB against 3.8 dB at 2 cells, 3.3 against 1.6 at 2.6, 0.62 against
-0.45 at 3.8); elsewhere it is closer. Its main axis lies up to 3.4 degrees further off
-the line (12.2 against 8.8 degrees, 2.2 cells away on the 19-point grid; one-off scans
-every 0.2 cells from 2 to 5.6 along the grid's 26 directions, the worse of the two
-bands).
+At some distances the gradient's energy over the pressure's is further off than with the
+source and every point read trilinearly and no point left out: 3.0 to 3.9 and 4.1 to
+4.8 cells away on the 19-point grid (1.6 dB against 0.6 dB at 3.5 cells, 0.41 against
+0.29 at 4.4), and 1.2 to 3.9 cells away on the 7-point one (5.4 dB against 3.8 dB at 2
+cells, 3.3 against 1.6 at 2.6, 0.62 against 0.45 at 3.8); elsewhere it is closer. Its
+main axis lies up to 4.9 degrees further off the line (12.3 against 7.4 degrees, 2.3
+cells away on the 19-point grid). From 2 to 3.4 cells away that comes mostly from the
+source: spread over four cells a side, its sound is not a point's within about two cells
+of it, where some of a listener's gradient points lie (two cells away on the 7-point
+grid, 4.0 dB off with the source over its eight cells and everything else the same),
+and on the 19-point grid an axis that goes without a point near the source is a
+second-order difference. From 3.4 to 3.8 cells away on the 7-point grid, and 3.8 and 4.4
+to 4.8 cells away on the 19-point one, it comes from the listener's reading, and part of
+it from the measure: read trilinearly, the pressure loses about as much as the gradient,
+which cancels in their ratio (up to 0.16 dB), while the pressure read as here is the
+closer of the two (3.6 cells away on the 7-point grid, 0.24 dB off against 0.36 dB).
+(One-off scans every 0.1 cells from 1 to 6, over 18 places of the source and 50
+directions, the worse of the two bands.)
 
 Next to a surface along the grid (a floor, a wall, flat ground) a point leaves out the
 cells behind it: across the surface it reads the two cells round it, weighted linearly
