@@ -360,8 +360,9 @@ class _Misses:
 
     def absorption(self, y: np.ndarray) -> np.ndarray:
         """(rows, frequencies) the random-incidence absorption at the admittances ``y``
-        (rows, frequencies), each row as :func:`random_incidence_absorption` gives it
-        alone."""
+        (rows, frequencies), by the operations of :func:`random_incidence_absorption`
+        on each row: the arc tangent and the logarithm are taken row by row, so that
+        each value lies where it does when its row is worked out alone."""
         return _paris(
             np.ascontiguousarray(y.real),
             np.ascontiguousarray(y.imag),
@@ -369,18 +370,20 @@ class _Misses:
             _row_by_row(np.log),
         )
 
-    def absorbed(self, y: np.ndarray) -> np.ndarray:
-        """(rows, bands) the absorption in each band at the admittances ``y``
-        (rows, frequencies), each row's as :meth:`__call__` finds its own."""
-        return np.array([self.weights @ row for row in self.absorption(y)])
+    def absorbed(self, absorption: np.ndarray) -> np.ndarray:
+        """(rows, bands) the absorption in each band of the rows of ``absorption``
+        (rows, frequencies), each row's by the product :meth:`__call__` takes of its
+        own."""
+        return np.array([self.weights @ row for row in absorption])
 
     def slopes(self, x: np.ndarray, free: bool) -> np.ndarray:
-        """(misses, unknowns) the misses' forward differences: those ``least_squares``
-        takes itself for ``jac="2-point"``, value for value, at a fraction of their
-        cost (:meth:`moved`)."""
+        """(misses, unknowns) the misses' forward differences, as ``least_squares``
+        takes them itself for ``jac="2-point"``: with its steps, and each value by the
+        operations that give it when the misses are worked out once more for each
+        unknown, at a fraction of that cost (:meth:`moved`)."""
         n, bands = self.n, self.bands
         moved, y = self.moved(x, free)
-        found = self.absorbed(y) - self.goal
+        found = self.absorbed(self.absorption(y)) - self.goal
         # A row for each unknown, transposed at the end: the layout of least_squares'
         # own differences, on which the order its linear algebra adds in depends.
         out = np.empty((len(x), bands + (n if free else 0)))
