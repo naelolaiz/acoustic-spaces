@@ -1183,6 +1183,69 @@ def test_a_roof_and_then_a_screen_level_with_it_the_same_both_ways_round(tmp_pat
         np.testing.assert_allclose(back, forward, atol=0.15)
 
 
+@pytest.mark.parametrize("mode", ["second_order", "first_order"])
+@pytest.mark.parametrize(
+    ("height", "gap", "method"),
+    [
+        (1e-3, 5.0, "ray_tracing"),
+        (1e-2, 0.1, "ray_tracing"),
+        (1e-2, 1.0, "image_sources"),
+        (0.1, 0.1, "image_sources"),
+        (1.0, 0.1, "image_sources"),
+    ],
+)
+def test_a_screen_level_with_a_roof_belongs_to_the_leg_it_stands_beside(
+    tmp_path: Path, mode, height, gap, method
+) -> None:
+    # A flat top and a screen ``gap`` past it whose top lies in the top's plane. The
+    # reflection off the top passes the screen's top, an edge in the very plane it
+    # reflects off: the screen's term belongs to the leg the screen stands beside, the
+    # one after the point of reflection one way round and the one before it the other.
+    # Taken for the leg after the plane wherever the edge stood, the term was missing one
+    # way round: swapping the source and the listener changed the level by 5.4 to 9.5 dB
+    # in the first four cases (6.5 to 7.4 dB with first_order) and by 0.9 and 1.1 dB a
+    # metre above the plane. With the rays' own search for reflections, the two ways
+    # round can still find different reflections between the roof's wall and the screen
+    # (a known issue), so the cases where that reflection counts take every sequence.
+    quads = edge_diffraction.barrier_quads(10.0 - gap) + edge_diffraction.screen_quads(10.0)
+    source, listener = (-10.0, 0.0, height), (15.0, 0.0, height)
+    simulation = {"early": {"diffraction": mode, "coherent_max_band_hz": 500, "method": method}}
+    levels = []
+    for a, b in ((source, listener), (listener, source)):
+        room = edge_diffraction._room(tmp_path, "past", quads, a, b, simulation)
+        levels.append(edge_diffraction.whole_early_stage(room))
+    np.testing.assert_allclose(levels[1], levels[0], atol=0.05)
+    if mode == "first_order" and (height, gap) == (1e-2, 1.0):
+        # Which leg: a wave calculation in two dimensions turned into a point source's
+        # gives -6.3 to -6.9 dB from 63 to 500 Hz there. first_order is 0.2 to 2.0 dB
+        # below it; with the screen's term on the other leg it was 4.4 to 6.1 dB above.
+        reference = [-6.26, -6.50, -6.74, -6.93]
+        np.testing.assert_allclose(levels[0][:4], reference, atol=2.5)
+
+
+@pytest.mark.parametrize("mode", ["second_order", "first_order"])
+def test_a_screens_top_within_rounding_of_a_roofs_plane_is_level_with_it(
+    tmp_path: Path, mode
+) -> None:
+    # The screen's top a millionth of a micrometre below the plane of the top 1 m before
+    # it, as two heights that are sums of other numbers differ: it is an edge in that
+    # plane all the same, on the leg it stands beside, and the level a centimetre above
+    # is that with the top exactly level, both ways round. Taken for an edge beyond the
+    # plane, on no leg of the reflection, the level up to 500 Hz was 1.3 to 2.5 dB off
+    # with second_order and 6.3 to 6.5 dB with first_order.
+    source, listener = (-10.0, 0.0, 1e-2), (15.0, 0.0, 1e-2)
+    simulation = {
+        "early": {"diffraction": mode, "coherent_max_band_hz": 500, "method": "image_sources"}
+    }
+    levels = []
+    for top in (0.0, -1e-12):
+        quads = edge_diffraction.barrier_quads(9.0) + edge_diffraction.screen_quads(10.0, top)
+        for a, b in ((source, listener), (listener, source)):
+            room = edge_diffraction._room(tmp_path, "nearly", quads, a, b, simulation)
+            levels.append(edge_diffraction.whole_early_stage(room))
+    np.testing.assert_allclose(levels[1:], np.tile(levels[0], (3, 1)), atol=0.01)
+
+
 def test_two_flat_tops_in_a_row_exactly_in_their_plane_with_first_order(tmp_path: Path) -> None:
     # Two flat tops of one height, 2 and 3 m wide and 6 m apart, the source and the
     # listener exactly in their plane. The path over the far edge of each top is found

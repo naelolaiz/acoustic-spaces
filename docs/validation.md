@@ -1264,7 +1264,7 @@ paths in pressure up to 500 Hz):
 | a top 5 m wide, then a screen, 1 cm above | -11.00 | -10.39 | -10.65 | -10.83 | -10.85 | -10.82 | -10.81 | -10.86 |
 | in the plane | -11.37 | -12.06 | -11.26 | -10.86 | -10.34 | -10.34 | -10.39 | -10.61 |
 | 1 cm below | -10.52 | -11.01 | -11.36 | -11.62 | -12.15 | -12.23 | -12.33 | -12.44 |
-| a screen, then a top 5 m wide, 1 cm above | -10.82 | -10.13 | -10.42 | -10.59 | -10.64 | -10.62 | -10.59 | -10.67 |
+| a screen, then a top 5 m wide, 1 cm above | -10.83 | -10.14 | -10.43 | -10.61 | -10.64 | -10.62 | -10.59 | -10.67 |
 | in the plane | -13.67 | -14.28 | -14.57 | -14.89 | -14.94 | -15.02 | -15.24 | -15.99 |
 | 1 cm below | -10.65 | -11.09 | -11.42 | -11.66 | -12.14 | -12.22 | -12.31 | -12.44 |
 
@@ -1276,12 +1276,17 @@ should leave less; a slot 2 cm wide across the 10 m top, far narrower than the
 wavelengths up to 500 Hz, lowers the level by 0.6 to 1.1 dB; over three tops in a row
 the level is 3.4 to 5.0 dB above that over one. Over a top 5 m wide and then a
 screen level with it, 5 m past it, the level a centimetre above their plane is the
-same with the source and the listener swapped, within 0.15 dB
-(`tests/test_diffraction.py`), and within 0.25 dB with a top up to 8 m wide and the
-screen 2 m or more past it; closer to the top or to the plane it is not (see
-[Known issues](#known-issues)). Exactly in the plane of several flat tops the
+same with the source and the listener swapped, within 0.15 dB. Closer to the top or
+to the plane, the screen's top lies beside the reflection off the top, before the
+point of reflection one way round and after it the other, and takes its term on that
+leg: in five cases from a millimetre to a metre above the plane, the screen 0.1 to 5 m
+past the top, the two ways round agree within 0.05 dB (`tests/test_diffraction.py`),
+in three of them with every sequence of reflections tested (`method: image_sources`),
+as the rays can find the reflection between the top's wall and the screen one way
+round only (see [Known issues](#known-issues)). Exactly in the plane of several
+flat tops the
 level is off by more: 3.9 to 9.2 dB below that a centimetre above the plane of two
-tops, 2.5 to 6.9 dB below it over three and 2.9 to 5.3 dB below it over a screen and
+tops, 2.5 to 6.9 dB below it over three and 2.8 to 5.3 dB below it over a screen and
 then a top, where a top and then a screen is within 1.7 dB of it. It is off within
 two millionths of the model's size below the plane too (1.2 mm here), where the rays
 that look for paths over edges, which start a millionth of the model's size off the
@@ -1693,7 +1698,15 @@ theory gives +6.0 dB on both sides.
   with the source on one side and not with the two swapped: level with the tops of two
   screens 10 m apart, a centimetre beside where the first one's top drops by a metre,
   swapping them changes the level by 0.4 to 0.6 dB with `second_order` and, with
-  `first_order`, whose level there is 17 to 39 dB down, by up to 8.2 dB. A model of those
+  `first_order`, whose level there is 17 to 39 dB down, by up to 8.2 dB. Likewise just
+  above a flat top and a screen level with it close past it, where the reflection
+  between the top's wall and the screen counts: a centimetre above their plane with the
+  screen 0.5 or 1 m past the top, swapping the source and the listener changes the
+  level by up to 2.3 and 2.9 dB up to 500 Hz with `second_order` (1.0 dB with
+  `first_order`), and a tenth of a metre above it with the screen 0.1 m or less past
+  the top by 1.4 to 1.5 dB (0.7 to 0.8 dB). With `method: image_sources`, which tests
+  every sequence of reflections, the two ways round agree within 0.05 dB there (0.23 dB
+  with the screen 1 cm past the top). A model of those
   corners and terms is an open item on the [roadmap](roadmap.md). `tests/test_walks.py`
   holds the garden's four largest steps to 1.5 dB in a band and 0.6 dB(A).
 - **Terms that cancel, in the bands that add in energy.** Indoors paths add in energy
@@ -4812,13 +4825,23 @@ Results:
   the source below the plane the two are the same. With `first_order`
   the level a centimetre above two tops in a row is at -0.4 to -1.5 dB and above three
   at +4.9 to +5.8 dB, where one top leaves -5.3 to -5.9 dB. There is no exact solution
-  for these in the report.
+  for these in the report. One check against a two-dimensional wave calculation turned
+  into a point source's (on a 2 cm grid, within 0.05 dB of the exact solution over the
+  10 m top), up to 500 Hz, a centimetre above the plane of a flat top and a screen
+  level with it: with the top 9 m wide and the screen 1 m past it the level is -6.3
+  to -6.9 dB, and `second_order` is 2.6 to 5.8 dB below that (`first_order` 0.3 to
+  3.2 dB below it); with the top 5 m wide and the screen 5 m past it, -7.6 to -8.4 dB,
+  `second_order` 2.3 to 3.4 dB below (`first_order` within 1.3 dB). The level also
+  steps with the height of the screen's top at that plane, by 12 to 15 dB over 4 mm:
+  past the 9 m top with `second_order` and every sequence of reflections tested
+  (`method: image_sources`), it is -13.1 to -16.0 dB with the screen's top 2 mm below
+  the plane, -9.9 to -11.6 dB with it level and -0.7 to -1.7 dB with it 2 mm above.
 - **Exactly in the plane of several tops in a row.** With the source and the listener
   both exactly in the plane of two flat roofs of one height, or of a roof and a
   barrier's top, the paths over one edge and over two do not add up as they do just
   above it. The level is 3.9 to 9.2 dB below that a centimetre above the plane of two
   tops 5 m apart, 2.5 to 6.9 dB below it over three tops, 1.4 to 5.4 dB below it with
-  a 2 cm slot across a 10 m top and 2.9 to 5.3 dB below it over a screen and then a
+  a 2 cm slot across a 10 m top and 2.8 to 5.3 dB below it over a screen and then a
   top; over a top and then a screen it is within 1.7 dB of it (in pressure up to
   500 Hz and in the bands that add in energy). Within two millionths of the model's
   size below that plane, the rays that look for paths over edges, which start a
@@ -4848,16 +4871,6 @@ Results:
   ends on the way 7 m before the corner, the level is 8 to 28 dB below that a
   millimetre above the plane (the screen's paths stood for the direct sound there
   before, within 2.2 dB of it).
-- **A flat top and then a barrier level with it, the source and the listener
-  swapped.** Just above the plane of a flat top and of a barrier's top past it, the
-  level changes with the source and the listener swapped where the barrier stands
-  close to the top or the two are close to the plane: by 5.5 to 7.9 dB a centimetre
-  above the plane with the barrier a metre or less past the top, by 5.7 to 7.6 dB a
-  millimetre above it with the barrier up to 5 m past the top, and by 10.9 to 12.2 dB
-  a tenth of a metre above it with the barrier 0.1 m or less past the top (the top's
-  first corner 10 m before the barrier, the source 10 m before that corner and the
-  listener 5 m past the barrier). From 2 m past the top a centimetre above the plane,
-  and from 0.5 m past it a tenth of a metre above, the two agree within 0.4 dB.
 - **A slight bend of a barrier.** Where a barrier's top goes on in another across a
   bend of less than a degree in plan, neither edge fades at the joint, and the point a
   path touches can fall past the end of both (no path over the top) or on both (two

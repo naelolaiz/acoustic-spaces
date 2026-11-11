@@ -136,18 +136,20 @@ Edge diffraction:
   roof), and behind the roof with the source above its plane up to 6 dB too high (see
   [Known issues](validation.md#known-issues)).
 - [ ] Paths over more than two edges: just over three barriers or three flat roofs in
-  a row, or a roof with a slot across it, the level is off by 1 to 5 dB; behind three
-  barriers with the source on the line of their tops there is next to no sound, and
-  behind two flat roofs of one height with the source up to 0.5 m above their plane
-  the level is 9 to 23 dB below that behind one roof as wide as both.
+  a row, or a roof with a slot across it, the level is off by 1 to 5 dB, and over a
+  roof and a screen level with it 2 to 6 dB too low against a wave calculation, with
+  a step of 12 to 15 dB as the screen's top passes the roof's plane;
+  behind three barriers with the source on the line of their tops there is next to no
+  sound, and behind two flat roofs of one height with the source up to 0.5 m above
+  their plane the level is 9 to 23 dB below that behind one roof as wide as both.
 - [ ] Paths over edges tested from the edge itself, not from a millionth of the
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9
   to 15 dB above that further below.
-- [ ] The same level with the source and the listener swapped just over a flat top and
-  a barrier level with it close by, and where the edge fade has the reflection between
-  two screens from one side only (5.5 to 12 dB and up to 8 dB apart; see
-  [Known issues](validation.md#known-issues)).
+- [ ] The same reflections whichever way round: the rays of the source and those of
+  the listener can find different reflections between two faces, such as two screens
+  or a roof's wall and a screen level with the roof (up to 3 dB apart, and 8 dB where
+  the level is far down; see [Known issues](validation.md#known-issues)).
 - [ ] Barriers with bends of less than a degree: beside each bend a strip up to
   centimetres wide has no path over the top or two (see
   [Known issues](validation.md#known-issues)).

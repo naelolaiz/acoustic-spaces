@@ -12,6 +12,10 @@
   three barriers in a row, each top's path stood for the whole direct sound, about
   10 dB too high over two. The level is now that just above the tops, which
   `first_order` and `direct` have far too low there (they have no path over two edges).
+- Fixed: just above a flat roof and a barrier's top level with it, with the barrier
+  close past the roof or the source and the listener close to their plane, the level
+  differed by 5 to 12 dB with the two swapped: the barrier's term was taken on the
+  wrong side of the reflection off the roof one way round.
 - Changed: with edge diffraction, the first reflections the rays look for include the
   faces of every diffracting edge the source stands in front of, which a ray misses
   where the source sees a face nearly edge-on or an obstacle hides it. Levels near

@@ -70,7 +70,10 @@ where the line crosses the plane of the edge's face (of a solid wedge, the plane
 the middle of its solid side), it must lie on the leg's side of the planes the leg
 reflects off at its ends. Beyond one of them the edge belongs to the next leg
 (a barrier's top past the reflection off the ground that ends a leg, which blocks the
-leg after it), save for an edge along the plane's normal, its own image there.
+leg after it), save for an edge along the plane's normal, its own image there. A point
+of another edge in such a plane (on a barrier's top level with the roof a path reflects
+off) belongs to the leg it stands beside: the one before the point of reflection or the
+one after it.
 
 Each term makes a path over its edge, which must be clear from the edge to where it
 reflects first before and after it (where the line from the edge to the image on either
@@ -1370,10 +1373,11 @@ class EdgeFade:
         # it may reflect off at either end (the side away from the image there), as the
         # path over the edge must be: of the twins either side of a plane the edge
         # crosses (a wall standing on the ground), the one that is there; on the plane
-        # itself, the leg after it.
+        # itself, the leg after it, or on an edge that does not run along the plane's
+        # normal (a barrier's top level with a roof), the leg it stands beside.
         ends = table["ends"][slot]
         images = (table["source"][slot], table["listener"][slot])
-        ok &= _on_leg(model, point, images, ends, leg)
+        ok &= _on_leg(model, point, images, ends, leg, edges.direction[edge], self.tolerance)
         # At a reflection, the face of the edge in the plane, with the source side in
         # front of it.
         plane = table["plane"][slot]
@@ -2232,12 +2236,18 @@ def _once(events: list[dict], tolerance: float) -> list[dict]:
     return out
 
 
-def _on_leg(model, point, images, ends, leg) -> np.ndarray:
+def _on_leg(model, point, images, ends, leg, direction=None, tolerance=0.0) -> np.ndarray:
     """(n,) whether each ``point`` lies on the leg's side of the planes ``ends`` (n, 2,
     m) the leg may reflect off before and after (the side away from ``images``, its
     images on the source and the listener side); on the plane itself, the leg after it.
-    True where ``leg`` is False."""
+    With ``direction`` (n, 3), that of the edge each point lies on: a point within
+    ``tolerance`` of a plane, on an edge that does not run along the plane's normal,
+    belongs to the leg it stands beside, before or after where the line between the
+    images crosses the plane, the point of reflection (the top of a barrier level with
+    the roof a path reflects off; an edge along the normal is its own image there, and
+    either leg has the same term). True where ``leg`` is False."""
     ok = np.ones(len(point), dtype=bool)
+    line = images[1] - images[0]
     for side, image in enumerate(images):
         for plane in ends[:, side].T:
             there = leg & (plane >= 0)
@@ -2246,8 +2256,21 @@ def _on_leg(model, point, images, ends, leg) -> np.ndarray:
             normal = model.plane_normal[np.maximum(plane, 0)]
             offset = model.plane_offset[np.maximum(plane, 0)]
             away = offset - np.einsum("ij,ij->i", normal, image)
-            at = (np.einsum("ij,ij->i", normal, point) - offset) * np.sign(away)
-            ok &= ~there | ((at >= 0.0) if side == 0 else (at > 0.0))
+            height = np.einsum("ij,ij->i", normal, point) - offset
+            at = height * np.sign(away)
+            mine = (at >= 0.0) if side == 0 else (at > 0.0)
+            if direction is not None:
+                across = np.einsum("ij,ij->i", normal, line)
+                lying = np.abs(np.einsum("ij,ij->i", normal, direction)) <= 1.0 - 1e-9
+                lying &= (np.abs(height) <= tolerance) & (np.abs(across) > 1e-12)
+                t = (offset - np.einsum("ij,ij->i", normal, images[0])) / np.where(
+                    lying, across, 1.0
+                )
+                crossing = images[0] + t[:, None] * line
+                foot = point - height[:, None] * normal  # the point, in the plane
+                ahead = np.einsum("ij,ij->i", foot - crossing, line)
+                mine = np.where(lying, (ahead >= 0.0) if side == 0 else (ahead < 0.0), mine)
+            ok &= ~there | mine
     return ok
 
 
