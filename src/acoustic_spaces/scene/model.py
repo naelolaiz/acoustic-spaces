@@ -2762,7 +2762,7 @@ class WaveStage(_Model):
             "component along the way from the source changes, as the rays and the parabolic "
             "equation take it) or moving (the air moves, so sound going against the wind is "
             "slower whichever way it turned, off a building too; four to five times the "
-            "work, on the CPU)"
+            "work over open ground, more round buildings, on the CPU)"
         ),
     )
     device: Literal["cpu", "gpu", "auto"] | None = Field(

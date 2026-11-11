@@ -1,6 +1,6 @@
 """Check the wave solver's moving air (``simulation.wave.wind: moving``) against exact
-solutions in a uniform wind and against the parabolic equation in a wind that grows
-with height.
+solutions in a uniform wind, against ray theory through the wind it makes flow round a
+building, and against the parabolic equation in a wind that grows with height.
 
     python validation/wave_wind.py [--json results.json] [--skip-profiles]
 
@@ -8,7 +8,8 @@ The wave solver takes the wind in one of two ways (:mod:`acoustic_spaces.engine.
 ``effective``, a speed of sound that the wind's component along the horizontal from the
 source changes, as the rays and the parabolic equation take it, or ``moving``, air that
 moves, so that sound goes at c + v downwind and c - v upwind whichever way it turned.
-Four checks, in the 63 Hz octave band from a grid for that band:
+Moving air's wind flows round the model's solids. Six checks, in the 63 Hz octave band
+from a grid for that band:
 
 - **Free field over a rigid ground in a uniform wind** of 15 m/s. The source 2 m up,
   listeners 1.5 m up 30 m away downwind, upwind, across the wind and at 45 degrees. In
@@ -20,38 +21,48 @@ Four checks, in the 63 Hz octave band from a grid for that band:
   sound in the wind is compared with the still air's run as the exact solution
   changes it (each listener's sound moved by the change of its arrival time and scaled
   by R / R*); the level is the energy over the arrival.
+- **The wind round a dome.** A rigid half sphere of 4 m radius on the ground in a
+  uniform wind: the wind the solver makes flow round it (read from the solver the run
+  made, on the faces between its cells) against the exact flow of an ideal fluid past
+  a sphere, U (x + a^3 x / (2 r^3))'s gradient, which the ground, a plane of symmetry,
+  leaves as it is. On the 63 Hz band's grid and on the 125 Hz band's.
 - **A facade downwind.** A rigid building 40 m downwind of the source, its facade
   across the wind, 30 m high and 50 m wide, and a listener 10 m upwind of the source:
   the facade sends the sound back against the wind. Ray theory in a uniform wind gives
   when the reflections arrive (a ray goes at c n + v for its wave normal n; at the
   facade the wave keeps its frequency and its wavenumber along the facade, and goes
-  back at the speed of sound against the wind). Their arrival is read from the
-  correlation with the still air's, against the exact change.
+  back at the speed of sound against the wind). The moving air's wind is not uniform:
+  it slows towards the facade and flows round the building, so its reference is the
+  time along the still air's paths through the wind the solver made, each step of a
+  path at the speed of a ray along it, v . s + sqrt(c^2 - |v|^2 + (v . s)^2) (the paths
+  themselves change the time only to the second order of their bending). Their arrival
+  is read from the correlation with the still air's.
 - **A wind that grows with height** over grass (Miki's impedance, 200 kPa s/m²), the
   `windy` preset (5 m/s 10 m up, logarithmic): the source 2 m up, listeners 1.5 and 5 m
   up 50, 100 and 200 m downwind and upwind, against the engine's parabolic equation
   (the reference of ``wave_outdoor.py``), with moving air and with the effective speed
   of sound.
-- **A room with an opening**, where moving air is not stable: its wind blows through the
-  model's solids, and in a nearly closed space the sound then grows instead of dying
-  away. A rigid room on the ground, 4 x 4 x 3 m inside, with an opening of 0.8 x 0.8 m
-  in its wall downwind, the source and a listener in it, in uniform winds of 5, 15 and
-  30 m/s: when the solver's watch stops the run (see WATCH_S in
-  :mod:`acoustic_spaces.engine.wave`), and, of a run it lets go on for 3 s, how the
-  listener's level changes from the second quarter second to the last, against the
-  effective speed of sound's run.
+- **A room with an opening**, the nearly closed space that a wind blown through the
+  model's solids makes grow without bound. A rigid room on the ground, 4 x 4 x 3 m
+  inside, with an opening of 0.8 x 0.8 m in its wall downwind, the source and a
+  listener in it, in uniform winds of 5, 15 and 30 m/s: over 3 s, how the listener's
+  level changes from the second quarter second to the last, against the effective
+  speed of sound's run, the fastest wind round the room and the fastest inside it.
+- **The time it takes**, moving air against the effective speed of sound, from the
+  runs above.
 """
 
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import math
-import re
 import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 
@@ -127,6 +138,82 @@ def _run(room: Room, length_s: float, wind_model: str, still: bool = False) -> t
         wind=wind_model,
         points_per_wavelength=8.0 * c / (c - WIND) if still else 8.0,
     )
+
+
+class Made(NamedTuple):
+    """A wave solver a run made: the solver, where its grid starts (m), its cell (m), its
+    shape, and how long making it took (s; laying the grid out and, in moving air round
+    solids, solving the wind)."""
+
+    solver: object
+    origin: np.ndarray
+    cell: float
+    shape: tuple
+    seconds: float
+
+
+def with_solver(run) -> tuple:
+    """What ``run()`` gives, and the wave solver it made (the last one; the ones before
+    it find the model's open sides)."""
+    from acoustic_spaces import _native
+
+    made = []
+    real = _native.WaveSolver
+
+    def make(*args, **kwargs):
+        started = time.perf_counter()
+        solver = real(*args, **kwargs)
+        made.append(
+            Made(
+                solver,
+                np.asarray(args[5], dtype=float),
+                float(args[6]),
+                tuple(args[7:10]),
+                time.perf_counter() - started,
+            )
+        )
+        return solver
+
+    _native.WaveSolver = make
+    try:
+        out = run()
+    finally:
+        _native.WaveSolver = real
+    return out, made[-1]
+
+
+class Wind:
+    """The wind a run's solver made flow round its model's solids, from the solver (see
+    :func:`with_solver`) and the run's sample rate: ``faces[d]`` (nz, ny, nx) the
+    wind through each cell's face towards +x, +y or +z (m/s), ``types`` the cells'
+    (0 solid, 1 and 2 the air that moves, 3 the matched layer), and each cell's own
+    wind, the mean of its two faces' along each axis."""
+
+    def __init__(self, made: Made, rate: float) -> None:
+        layout = made.solver.layout()
+        nx, ny, nz = (int(n) for n in made.shape)
+        self.origin, self.cell = made.origin, made.cell
+        cell = made.cell
+        self.types = layout["types"].reshape(nz, ny, nx)
+        self.faces = [
+            layout[f"wind_{axis}"].reshape(nz, ny, nx).astype(float) * cell * rate for axis in "xyz"
+        ]
+        self.cells = np.zeros((nz, ny, nx, 3))
+        for d, face in enumerate(self.faces):
+            below = np.zeros_like(face)
+            np.moveaxis(below, 2 - d, 0)[1:] = np.moveaxis(face, 2 - d, 0)[:-1]
+            self.cells[..., d] = 0.5 * (face + below)
+
+    def centres(self) -> np.ndarray:
+        """The cells' centres (nz, ny, nx, 3)."""
+        nz, ny, nx = self.types.shape
+        z, y, x = np.meshgrid(*(np.arange(n) + 0.5 for n in (nz, ny, nx)), indexing="ij")
+        return self.origin + self.cell * np.stack([x, y, z], axis=-1)
+
+    def at(self, points: np.ndarray) -> np.ndarray:
+        """The wind (m/s) of the cells that hold ``points`` (n, 3)."""
+        k = np.floor((np.asarray(points) - self.origin) / self.cell).astype(np.int64)
+        return self.cells[k[:, 2], k[:, 1], k[:, 0]]
 
 
 #: The frequencies (Hz) the band is summed over, and the time step (s) compared on: the
@@ -205,7 +292,11 @@ def check_free_field() -> list[dict]:
         )
     for wind_model in WIND_MODELS:
         started = time.perf_counter()
-        windy, info = _run(_scene(listeners, WIND, wind_model), length, wind_model)
+        (windy, info), made = with_solver(
+            lambda wind_model=wind_model: _run(
+                _scene(listeners, WIND, wind_model), length, wind_model
+            )
+        )
         seconds = time.perf_counter() - started
         for (name, (x, y, z)), response in zip(listeners.items(), windy, strict=True):
             # The still air's sound as the wind changes it: moved by the direct sound's
@@ -223,6 +314,7 @@ def check_free_field() -> list[dict]:
                 "level_db": 10.0 * math.log10(np.sum(a**2) / np.sum(b**2)),
                 "arrival_ms": 1e3 * _lag(a, b, 1.0 / STEP),
                 "seconds": seconds,
+                "set_up_s": made.seconds,
                 "cells": info["wave_cells"],
             }
             rows.append(row)
@@ -286,6 +378,45 @@ def facade_times(c: float, wind: float) -> list[tuple[float, float]]:
     return out
 
 
+def facade_still_paths() -> list[np.ndarray]:
+    """The still air's paths from the source off the facade to the listener, each as its
+    corners (n, 3): the source, where it meets the facade and the ground, the listener.
+    One for each pair of the source or its image under the ground and the listener or
+    its image, as :func:`facade_times` counts them."""
+    xl, _, zl = FACADE_LISTENER
+    out = []
+    for zs in (ZS, -ZS):
+        for zr in (zl, -zl):
+            # Unfolded: a straight line to the listener's image behind the facade.
+            start, end = np.array([0.0, 0.0, zs]), np.array([2.0 * FACADE_X - xl, 0.0, zr])
+            turns = {0.0, 1.0, FACADE_X / end[0]}
+            if zs * zr < 0.0:
+                turns.add(zs / (zs - zr))
+            corners = start + np.array(sorted(turns))[:, None] * (end - start)
+            corners[:, 0] = np.where(
+                corners[:, 0] > FACADE_X, 2.0 * FACADE_X - corners[:, 0], corners[:, 0]
+            )
+            corners[:, 2] = np.abs(corners[:, 2])
+            out.append(corners)
+    return out
+
+
+def path_time(corners: np.ndarray, c: float, wind, step: float) -> float:
+    """The time (s) along the path through ``corners`` (n, 3) in the wind ``wind(points)``
+    (m/s at points (m, 3)), in pieces of at most ``step`` (m): each at the speed of a
+    ray along it, v . s + sqrt(c^2 - |v|^2 + (v . s)^2)."""
+    total = 0.0
+    for a, b in itertools.pairwise(corners):
+        length = float(np.linalg.norm(b - a))
+        pieces = max(1, math.ceil(length / step))
+        s = (b - a) / length
+        v = wind(a + (np.arange(pieces)[:, None] + 0.5) / pieces * (b - a))
+        along = v @ s
+        speed = along + np.sqrt(c * c - np.sum(v * v, axis=1) + along**2)
+        total += float(np.sum(length / pieces / speed))
+    return total
+
+
 def check_facade() -> list[dict]:
     listeners = {"upwind": FACADE_LISTENER}
     length = 0.45
@@ -297,31 +428,201 @@ def check_facade() -> list[dict]:
     change = np.mean([w[0] - s[0] for w, s in zip(windy_times, still_times, strict=True)])
     arrival = min(w[0] for w in windy_times)
     times = arrival + np.arange(-0.03, 0.03, STEP)
-    # The still air's facade sound moved by the exact change of its arrival: the windy
-    # run's lag behind it is the error.
-    expected = in_band(spectrum(calm.signals[:, 0], calm.rate, calm.lead_s), times, change)
+    calm_spectrum = spectrum(calm.signals[:, 0], calm.rate, calm.lead_s)
+    paths = facade_still_paths()
     rows = []
     for wind_model in WIND_MODELS:
         started = time.perf_counter()
-        (response,), info = _run(_scene(listeners, WIND, wind_model, True), length, wind_model)
+        room = _scene(listeners, WIND, wind_model, True)
+        ((response,), info), made = with_solver(
+            lambda room=room, wind_model=wind_model: _run(room, length, wind_model)
+        )
+        seconds = time.perf_counter() - started
+        row = {"wind": wind_model, "exact_change_ms": 1e3 * change, "set_up_s": made.seconds}
+        reference = change
+        if wind_model == "moving":
+            # Through the wind the solver made: the time along the still air's paths. The
+            # same sum through the uniform wind, against its exact rays, says what
+            # keeping the still air's paths costs.
+            wind = Wind(made, response.rate)
+            sums = {
+                name: np.mean([path_time(path, c, field, 0.25 * made.cell) for path in paths])
+                for name, field in (
+                    ("still", lambda q: np.zeros_like(q)),
+                    ("uniform", lambda q: np.array([WIND, 0.0, 0.0]) + np.zeros_like(q)),
+                    ("round", wind.at),
+                )
+            }
+            reference = sums["round"] - sums["still"]
+            row["round_change_ms"] = 1e3 * reference
+            row["paths_miss_ms"] = 1e3 * (sums["uniform"] - sums["still"] - change)
+            row["fastest_m_s"] = info["wave_wind_fastest_m_s"]
+            row["sweeps"] = made.solver.wind_sweeps
+            at = wind.at(np.array([[0.0, 0.0, ZS], FACADE_LISTENER, [FACADE_X - 5.0, 0.0, ZS]]))
+            row["wind_at_source_m_s"], row["wind_at_listener_m_s"], row["wind_at_facade_m_s"] = (
+                float(v) for v in at[:, 0]
+            )
+        # The still air's facade sound moved by the reference's change of its arrival:
+        # the windy run's lag behind it is the error.
+        expected = in_band(calm_spectrum, times, reference)
         got = in_band(spectrum(response.signals[:, 0], response.rate, response.lead_s), times)
         error = 1e3 * _lag(got, expected, 1.0 / STEP)
-        moved = 1e3 * change + error
-        row = {
-            "wind": wind_model,
-            "exact_change_ms": 1e3 * change,
-            "change_ms": moved,
+        row |= {
+            "change_ms": 1e3 * reference + error,
             "error_ms": error,
-            "seconds": time.perf_counter() - started,
+            "seconds": seconds,
             "cells": info["wave_cells"],
         }
         rows.append(row)
+        if wind_model == "moving":
+            print(
+                f"moving   : its wind is {row['wind_at_listener_m_s']:.1f} m/s at the listener, "
+                f"{row['wind_at_source_m_s']:.1f} at the source, {row['wind_at_facade_m_s']:.1f} "
+                f"5 m before the facade and up to {row['fastest_m_s']:.1f} round the building; "
+                f"along the still air's paths through it the facade's sound arrives "
+                f"{row['round_change_ms']:+.2f} ms later than in still air (the same sum "
+                f"through the uniform wind is {row['paths_miss_ms']:+.3f} ms off its exact rays)",
+                flush=True,
+            )
+        against = f"ray theory in the uniform wind {row['exact_change_ms']:+.2f} ms"
+        if wind_model == "moving":
+            against = f"ray theory through its wind {1e3 * reference:+.2f} ms; {against[11:]}"
         print(
             f"{wind_model:9s}: the facade's sound arrives {row['change_ms']:+.2f} ms later than "
-            f"in still air (exact {row['exact_change_ms']:+.2f} ms): off by "
-            f"{row['error_ms']:+.2f} ms",
+            f"in still air ({against}): off by {row['error_ms']:+.2f} ms",
             flush=True,
         )
+    return rows
+
+
+#: The dome: its radius (m), and the bands (Hz) whose grids its wind is read on.
+DOME_RADIUS = 4.0
+DOME_BANDS = (63, 125)
+#: The shells round the dome the wind is compared over, in radii from its centre; the
+#: first ends two cells from its surface.
+DOME_SHELLS = (1.5, 2.0, 3.0)
+
+
+def dome(path: Path, wind: float, span: float = 4.0 * DOME_RADIUS) -> Room:
+    """A rigid half sphere of DOME_RADIUS on rigid ground, written to ``path`` (an OBJ
+    file), in a uniform wind ``wind`` (m/s) along +x, a source and a listener beside
+    it; the ground reaches ``span`` (m) from its centre, and the sky is 2 m less up."""
+    rings, around = 24, 64
+    lines, faces = [], []
+    for i in range(rings):
+        latitude = 0.5 * math.pi * i / rings
+        for j in range(around):
+            longitude = 2.0 * math.pi * j / around
+            lines.append(
+                f"v {DOME_RADIUS * math.cos(latitude) * math.cos(longitude)} "
+                f"{DOME_RADIUS * math.cos(latitude) * math.sin(longitude)} "
+                f"{DOME_RADIUS * math.sin(latitude)}"
+            )
+    lines.append(f"v 0 0 {DOME_RADIUS}")
+    top = rings * around + 1
+    for i in range(rings):
+        for j in range(around):
+            a, b = i * around + j + 1, i * around + (j + 1) % around + 1
+            last = i == rings - 1
+            faces.append(f"f {a} {b} {top}" if last else f"f {a} {b} {b + around} {a + around}")
+    path.write_text("\n".join(lines + faces) + "\n")
+    data = {
+        "geometry": {
+            "ground": {"extent": [[-span, -span], [span, span]], "sky": span - 2.0},
+            "file": str(path),
+            "up_axis": "z",
+        },
+        "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+        "default_material": "hard",
+        "sources": [{"name": "s", "position": [-2.0 * DOME_RADIUS, 0.0, 2.0]}],
+        "listeners": [{"name": "l", "position": [2.0 * DOME_RADIUS, 0.0, 2.0]}],
+        "atmosphere": {"wind": {"speed_m_s": wind, "direction_deg": 0.0, "profile": "constant"}},
+    }
+    return Room.from_scene(Scene.model_validate(data))
+
+
+def sphere_flow(points: np.ndarray, wind: float, radius: float) -> np.ndarray:
+    """An ideal fluid's velocity at ``points`` (..., 3) past a sphere of ``radius`` at
+    the origin, ``wind`` along +x far from it: the gradient of U (x + a^3 x / (2 r^3))."""
+    r = np.linalg.norm(points, axis=-1)[..., None]
+    out = 0.5 * wind * radius**3 * (-3.0 * points[..., :1] * points / r**5)
+    out[..., 0] += wind + 0.5 * wind * radius**3 / r[..., 0] ** 3
+    return out
+
+
+def check_dome(bands=DOME_BANDS, span: float = 4.0 * DOME_RADIUS) -> list[dict]:
+    rows = []
+    with tempfile.TemporaryDirectory() as folder:
+        room = dome(Path(folder) / "dome.obj", WIND, span)
+        source = np.array(room.scene.sources[0].position, dtype=float)
+        listener = np.array(room.scene.listeners[0].position, dtype=float)
+        for band in bands:
+            (responses, info), made = with_solver(
+                lambda band=band: wave_responses(
+                    TraceModel.from_room(room),
+                    source,
+                    listener[None, :],
+                    ["l"],
+                    max_band_hz=band,
+                    length_s=0.02,
+                    sample_rate=RATE,
+                    speed_of_sound=room.speed_of_sound(),
+                    wind="moving",
+                )
+            )
+            wind = Wind(made, responses[0].rate)
+            cell, solver = made.cell, made.solver
+            centres = wind.centres()
+            # The faces between two cells of moving air over the ground, each against
+            # the exact flow's component across it at its centre.
+            air = ((wind.types == 1) | (wind.types == 2)) & (centres[..., 2] > 0.0)
+            radii, misses = [], []
+            for d, face in enumerate(wind.faces):
+                ahead = np.zeros_like(air)
+                np.moveaxis(ahead, 2 - d, 0)[:-1] = np.moveaxis(air, 2 - d, 0)[1:]
+                at = centres[air & ahead]
+                at[:, d] += 0.5 * cell
+                radii.append(np.linalg.norm(at, axis=1) / DOME_RADIUS)
+                misses.append((face[air & ahead] - sphere_flow(at, WIND, DOME_RADIUS)[:, d]) / WIND)
+            r, miss = np.concatenate(radii), np.concatenate(misses)
+            near = 1.0 + 2.0 * cell / DOME_RADIUS
+            row = {
+                "band_hz": band,
+                "cell_m": cell,
+                "sweeps": solver.wind_sweeps,
+                "fastest_over_wind": info["wave_wind_fastest_m_s"] / WIND,
+                "shells": [],
+            }
+            for low, high in itertools.pairwise((0.0, near, *DOME_SHELLS, math.inf)):
+                pick = (r >= low) & (r < high)
+                row["shells"].append(
+                    {
+                        "from_radii": low,
+                        "to_radii": high,
+                        "rms_percent": 100.0 * math.sqrt(float(np.mean(miss[pick] ** 2))),
+                        "largest_percent": 100.0 * float(np.abs(miss[pick]).max()),
+                        "faces": int(pick.sum()),
+                    }
+                )
+            rows.append(row)
+            print(
+                f"{band} Hz band's grid (cells of {100 * cell:.0f} cm, {DOME_RADIUS / cell:.0f} "
+                f"to the radius; {solver.wind_sweeps} sweeps): the fastest wind is "
+                f"{row['fastest_over_wind']:.2f} of the given one (exact 1.50, over the top)"
+            )
+            for shell in row["shells"]:
+                where = (
+                    "within two cells of the dome"
+                    if shell["from_radii"] == 0.0
+                    else f"from {shell['from_radii']:.2f} radii"
+                    + ("" if math.isinf(shell["to_radii"]) else f" to {shell['to_radii']:.2f}")
+                )
+                print(
+                    f"  {where}: off the exact flow by {shell['rms_percent']:.2f} % of the "
+                    f"wind (rms), {shell['largest_percent']:.1f} % at most "
+                    f"({shell['faces']:,} faces)",
+                    flush=True,
+                )
     return rows
 
 
@@ -375,10 +676,11 @@ ROOM_SOURCE = (-0.7, -0.4, 1.2)
 ROOM_LISTENER = (1.2, 0.9, 1.5)
 
 
-def room_with_an_opening(path: Path, wind: float) -> Room:
+def room_with_an_opening(path: Path, wind: float, profile: str = "constant") -> Room:
     """A rigid room on rigid ground, 4 x 4 x 3 m inside with walls and a roof 0.8 m thick
     and an opening 0.8 x 0.8 m in its wall downwind, written to ``path`` (an OBJ file),
-    the source and a listener in it, in a uniform wind ``wind`` (m/s) along +x."""
+    the source and a listener in it, in a wind ``wind`` (m/s) along +x: uniform, or
+    with ``profile`` the atmosphere's profile that reaches it 10 m up."""
     boxes = [
         ((-2.8, -2.8, 0.0), (-2.0, 2.8, 3.8)),
         ((-2.0, -2.8, 0.0), (2.0, -2.0, 3.8)),
@@ -406,25 +708,25 @@ def room_with_an_opening(path: Path, wind: float) -> Room:
         "default_material": "hard",
         "sources": [{"name": "s", "position": list(ROOM_SOURCE)}],
         "listeners": [{"name": "in", "position": list(ROOM_LISTENER)}],
-        "atmosphere": {"wind": {"speed_m_s": wind, "direction_deg": 0.0, "profile": "constant"}},
+        "atmosphere": {"wind": {"speed_m_s": wind, "direction_deg": 0.0, "profile": profile}},
     }
     return Room.from_scene(Scene.model_validate(data))
 
 
 def check_room_with_an_opening(winds=(5.0, 15.0, 30.0), length_s: float = 3.0) -> list[dict]:
     rows = []
-    stopped = re.compile(r"\(([\d.]+) dB over its lowest level, ([\d.]+) s after emission\)")
     print(
-        "| wind (m/s) | moving air | level, last quarter second over the second (dB) | "
-        "effective speed of sound (dB) |\n|---:|---|---:|---:|"
+        "| wind (m/s) | fastest round the room (m/s) | fastest in the room (m/s) | moving "
+        "air: level, last quarter second over the second (dB) | effective speed of sound "
+        "(dB) |\n|---:|---:|---:|---:|---:|"
     )
     with tempfile.TemporaryDirectory() as folder:
         for wind in winds:
             room = room_with_an_opening(Path(folder) / "room.obj", wind)
             row: dict = {"wind_m_s": wind}
             for wind_model in ("moving", "effective"):
-                try:
-                    (response,), _ = wave_responses(
+                ((response,), info), solver = with_solver(
+                    lambda room=room, wind_model=wind_model: wave_responses(
                         TraceModel.from_room(room),
                         np.array(ROOM_SOURCE),
                         np.array([ROOM_LISTENER]),
@@ -435,12 +737,7 @@ def check_room_with_an_opening(winds=(5.0, 15.0, 30.0), length_s: float = 3.0) -
                         speed_of_sound=room.speed_of_sound(),
                         wind=wind_model,
                     )
-                except ValueError as exc:
-                    found = stopped.search(str(exc))
-                    if found is None or wind_model != "moving":
-                        raise
-                    row["rise_db"], row["stopped_s"] = float(found[1]), float(found[2])
-                    continue
+                )
                 quarter = int(0.25 * response.rate)
                 pressure = response.signals[round(response.lead_s * response.rate) :, 0]
                 rms = [
@@ -448,17 +745,51 @@ def check_room_with_an_opening(winds=(5.0, 15.0, 30.0), length_s: float = 3.0) -
                     for k in range(int(length_s / 0.25))
                 ]
                 row[f"{wind_model}_change_db"] = 20.0 * math.log10(rms[-1] / rms[1])
+                if wind_model == "moving":
+                    wind_made = Wind(solver, response.rate)
+                    x, y, z = np.moveaxis(wind_made.centres(), -1, 0)
+                    inside = (
+                        ((wind_made.types == 1) | (wind_made.types == 2))
+                        & (np.abs(x) < 2.0)
+                        & (np.abs(y) < 2.0)
+                        & (z > 0.0)
+                        & (z < 3.0)
+                    )
+                    row["fastest_m_s"] = info["wave_wind_fastest_m_s"]
+                    row["fastest_inside_m_s"] = float(
+                        np.linalg.norm(wind_made.cells[inside], axis=1).max()
+                    )
             rows.append(row)
-            if "stopped_s" in row:
-                went = (
-                    f"stopped {row['stopped_s']:.1f} s after emission, "
-                    f"{row['rise_db']:.1f} dB over its lowest level"
-                )
-                change = ""
-            else:
-                went, change = f"runs its {length_s:g} s", f"{row['moving_change_db']:+.1f}"
-            print(f"| {wind:g} | {went} | {change} | {row['effective_change_db']:+.1f} |")
+            print(
+                f"| {wind:g} | {row['fastest_m_s']:.1f} | {row['fastest_inside_m_s']:.2f} | "
+                f"{row['moving_change_db']:+.1f} | {row['effective_change_db']:+.1f} |",
+                flush=True,
+            )
     return rows
+
+
+def costs(free: list[dict], facade: list[dict]) -> dict:
+    """How long moving air took against the effective speed of sound, from the free
+    field's rows (the wind carried as given) and the facade's (the wind made to flow
+    round the building, the solve of that wind included)."""
+    out = {}
+    for name, rows in (("free field", free), ("facade", facade)):
+        took = {row["wind"]: row for row in rows}
+        out[name] = {
+            "effective_s": took["effective"]["seconds"],
+            "moving_s": took["moving"]["seconds"],
+            "ratio": took["moving"]["seconds"] / took["effective"]["seconds"],
+            "effective_set_up_s": took["effective"]["set_up_s"],
+            "moving_set_up_s": took["moving"]["set_up_s"],
+            "cells": took["moving"]["cells"],
+        }
+        print(
+            f"{name}: moving air {out[name]['moving_s']:.1f} s, the effective speed of sound "
+            f"{out[name]['effective_s']:.1f} s ({out[name]['ratio']:.1f} times; "
+            f"{out[name]['cells']:,.0f} cells); of those, making the solver "
+            f"{out[name]['moving_set_up_s']:.1f} s and {out[name]['effective_set_up_s']:.1f} s"
+        )
+    return out
 
 
 def main(argv=None) -> int:
@@ -471,17 +802,28 @@ def main(argv=None) -> int:
     started = time.perf_counter()
     print(f"Free field over a rigid ground in a uniform wind of {WIND:g} m/s, 63 Hz band\n")
     free = check_free_field()
+    print(f"\nThe wind round a dome of {DOME_RADIUS:g} m against an ideal fluid's past a sphere\n")
+    round_dome = check_dome()
     print("\nA facade 40 m downwind, the listener 10 m upwind of the source\n")
     facade = check_facade()
     profiles = []
     if not args.skip_profiles:
         print("\nThe windy preset over grass against the parabolic equation, 63 Hz band\n")
         profiles = check_profiles()
-    print("\nA room with an opening downwind: when the watch stops moving air\n")
+    print("\nA room with an opening downwind, over 3 s\n")
     opening = check_room_with_an_opening()
+    print("\nThe time it takes (alone on the machine, or the times mean nothing)\n")
+    took = costs(free, facade)
     print(f"\n{time.perf_counter() - started:.0f} s")
     if args.json:
-        out = {"free_field": free, "facade": facade, "profiles": profiles, "opening": opening}
+        out = {
+            "free_field": free,
+            "dome": round_dome,
+            "facade": facade,
+            "profiles": profiles,
+            "opening": opening,
+            "costs": took,
+        }
         args.json.write_text(json.dumps(out, indent=2))
     return 0
 
