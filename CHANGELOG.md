@@ -248,6 +248,14 @@
   1.08 dB) and in weather zones (0.76 dB), see
   [Known issues](docs/validation.md#known-issues); wind behind a building costs a run
   of the open ground's equation a way (a coverage map round one, 32 % more CPU).
+- Fixed: in wind, the paths round a barrier's end to a listener on a building's roof (or
+  from a source there) took the open ground's field and the paths over its top past the
+  end kept straight legs; they now take the runs the lit side's paths take, so that
+  1.5 m over a roof 45 m from a source 1 m up (and the two swapped), 1 mm either side of
+  the end's shadow boundary, the weather's effect steps by up to 0.57 dB in octave bands
+  (1.28 dB in third octaves) instead of 6.4 dB, the rest from the paths over the roof's
+  edge, which only the lit side has (see
+  [Known issues](docs/validation.md#known-issues)).
 - Fixed: a leg along the ground, a rounding error above it, had no refraction shadow.
 - Fixed (results change): outdoors in wind and temperature gradients, out of the
   shadow, the parabolic equation's bands carry its field at every frequency its runs

@@ -3311,6 +3311,7 @@ source 1 m up over hard ground and a barrier 4 m high 15 m away across the way:
 | a listener 1 mm either side of the shadow boundary of a barrier's end, 60 and 120 m away | 0.04 and 0.22 | 0.04 and 0.17 | 1 |
 | a listener 10 cm across a roof edge's shadow boundaries, of the direct sound and of the ground reflection, 28 and 43 m from a source 1 m over the roof (and the source and the listener swapped) | 0.11 and 0.09 | 0.09 and 0.04 | |
 | a listener 2 cm further, where the parabolic equation starts, 12.75 m from a source 1 m over a roof 6 m high (and the two swapped) | 0.13 | 0.024 | |
+| a listener 1.5 m over a roof 45 m away, 1 mm either side of the shadow boundary of a barrier's end (and the two swapped) | 2.83 | 2.79 | |
 | a listener 1 mm either side of the line of an end below the line of sight seen from above (a barrier 1 m high 30 m away), 100 and 200 m away | 12.8 and 6.0 | 0.01 | |
 
 The wind's effect grows in proportion to the wind (500 Hz, 100 m away and 4 m up),
@@ -4714,6 +4715,30 @@ Results:
   0.26 dB off the full-wave solution at 250 Hz 6 m from the source and the runs'
   frequencies fall in step with the ground's fringes 11.5 to 12.4 m away (up to 2.9 dB
   at 8 kHz, 0.11 dB with 64 frequencies an octave).
+- **A barrier's end seen from a roof.** On the lit side of the shadow boundary of a
+  barrier's end the roof's near edge diffracts the direct sound and its ground
+  reflection, but no path goes round the end and then over that edge, so that 1.5 m
+  over a roof 6 m high 45 m from a source 1 m up the level steps 1 mm across the
+  boundary by up to 2.79 dB in still air (at 250 Hz; by up to 0.05 dB with no
+  building). In wind the paths round the end take there the lit side's runs with the
+  building inside, the paths over the barrier's top those with the barrier too, and
+  with the roof edge's paths stepping the weather's effect steps by up to 0.37 dB
+  downwind and 0.57 dB upwind at 500 Hz, and by up to 1.28 dB in the 400 Hz third
+  octave; without the roof edge's paths it steps by at most 0.02 dB (0.07 dB in third
+  octaves; `tests/test_barriers_in_wind.py`). Diffraction to the second order leaves
+  the still-air step (3.53 dB at 250 Hz). A path round the end and then over the roof's
+  edge would keep its straight legs in wind as the paths are routed now (it goes round a
+  vertical and then a horizontal edge), while the lit side's paths over that edge take
+  the building's runs, so supplying it in still air alone would not be known to remove
+  the step of the weather's effect: that is not measured. In other cases (one-off
+  checks): 0.8 m over the same roof the weather's effect steps by 0.82 dB at 4 kHz
+  (still air by 5.76 dB at 125 Hz); with a barrier 8 m high and the source on the roof
+  by 0.69 and 1.15 dB at 250 and 500 Hz; and where a second building 4 m high stands
+  with its corner's top 0.17 m under the line of sight from a source on a roof, by 3.3
+  and 4.5 dB at 1 and 2 kHz (up to 6.5 dB with the two swapped): there the direct
+  sound's own runs step as the way to the listener takes in that building at its
+  footprint's corner (their effect goes from 0.97 to -2.29 dB at 250 Hz), and the paths
+  over its roof's edge past the end keep straight legs.
 - **A caustic in the rays' bands.** Over the open ground in wind or a temperature
   gradient the bands above the parabolic equation's (4 and 8 kHz) come from the
   eigenrays, and where two of them merge (a caustic) each is capped at 10 dB over a

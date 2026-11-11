@@ -337,6 +337,12 @@ Outdoor acoustics, in steps:
   (the direct sound in still air, the open ground's path in wind), which steps across
   an end's shadow boundary by up to 0.95 dB in still air and 1.08 dB in wind (see
   [Known issues](validation.md#known-issues)).
+- [ ] The path round a barrier's end and then over a roof's edge, without which the level
+  1.5 m over a roof 45 m from a source 1 m up (and the two swapped) steps across the
+  end's shadow boundary by up to 2.79 dB in still air and the weather's effect by up to
+  0.57 dB (see [Known issues](validation.md#known-issues)); in wind it would also
+  need the lit side's runs, which the routing in `engine/refracted.py` does not give a
+  path round a vertical and then a horizontal edge.
 - [ ] A transition across a caustic for the rays' bands over the open ground (4 and
   8 kHz, and 1 and 2 kHz with `open_ground_frequencies: rays`), a uniform (Airy) form
   for the two paths that merge there: past it they vanish and the level steps by up to

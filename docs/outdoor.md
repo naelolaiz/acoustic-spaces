@@ -630,7 +630,20 @@ is an arc of a circle, so its travel time and its length are exact.
   listener took 1.1 s of CPU instead of 0.16 s in the `windy` preset, and a coverage map
   round it on a 10 m grid 33.7 s instead of 25.6 s (300 runs in its bands instead of
   240); at that listener the wind's effect comes within 0.33 dB of the open ground's
-  along the way round the corner from 63 Hz to 2 kHz and 1.04 dB at 4 kHz. Round other
+  along the way round the corner from 63 Hz to 2 kHz and 1.04 dB at 4 kHz. Where the
+  source or the listener stands on a building's roof, the paths round an end take
+  instead, in every band, the effect of the runs with the buildings under the two
+  inside that a listener there takes with nothing else on its way (and come as much
+  sooner or later as the first of them along its legs): the lit side's paths take
+  those runs, so 1.5 m over a roof 45 m downwind and upwind of a source 1 m up (and
+  the two swapped), 1 mm either side of the end's shadow boundary, the weather's effect
+  of the paths but those over the roof's edge steps by at most 0.02 dB (up to 7.1 dB
+  with the open ground's field along the way), and of all of them by up to 0.57 dB at
+  500 Hz (see
+  [Known issues](validation.md#known-issues)). A row of 11 such listeners across the
+  boundary took 256 runs and 14.4 s of CPU, against 312 runs and 18.9 s with the open
+  ground's runs along the ways: along a whole degree the ways' runs hold what the lit
+  listeners' runs there hold, and share them. Round other
   edges (over a top and round an end
   at once, a model file's objects), the paths keep their straight legs as over an
   edge. Against a full-wave solution of rigid
