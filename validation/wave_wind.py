@@ -8,7 +8,7 @@ The wave solver takes the wind in one of two ways (:mod:`acoustic_spaces.engine.
 ``effective``, a speed of sound that the wind's component along the horizontal from the
 source changes, as the rays and the parabolic equation take it, or ``moving``, air that
 moves, so that sound goes at c + v downwind and c - v upwind whichever way it turned.
-Three checks, in the 63 Hz octave band from a grid for that band:
+Four checks, in the 63 Hz octave band from a grid for that band:
 
 - **Free field over a rigid ground in a uniform wind** of 15 m/s. The source 2 m up,
   listeners 1.5 m up 30 m away downwind, upwind, across the wind and at 45 degrees. In
@@ -32,6 +32,14 @@ Three checks, in the 63 Hz octave band from a grid for that band:
   up 50, 100 and 200 m downwind and upwind, against the engine's parabolic equation
   (the reference of ``wave_outdoor.py``), with moving air and with the effective speed
   of sound.
+- **A room with an opening**, where moving air is not stable: its wind blows through the
+  model's solids, and in a nearly closed space the sound then grows instead of dying
+  away. A rigid room on the ground, 4 x 4 x 3 m inside, with an opening of 0.8 x 0.8 m
+  in its wall downwind, the source and a listener in it, in uniform winds of 5, 15 and
+  30 m/s: when the solver's watch stops the run (see WATCH_S in
+  :mod:`acoustic_spaces.engine.wave`), and, of a run it lets go on for 3 s, how the
+  listener's level changes from the second quarter second to the last, against the
+  effective speed of sound's run.
 """
 
 from __future__ import annotations
@@ -39,7 +47,9 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -360,6 +370,97 @@ def check_profiles() -> list[dict]:
     return rows
 
 
+#: The room with an opening: where its source and its listener are (m).
+ROOM_SOURCE = (-0.7, -0.4, 1.2)
+ROOM_LISTENER = (1.2, 0.9, 1.5)
+
+
+def room_with_an_opening(path: Path, wind: float) -> Room:
+    """A rigid room on rigid ground, 4 x 4 x 3 m inside with walls and a roof 0.8 m thick
+    and an opening 0.8 x 0.8 m in its wall downwind, written to ``path`` (an OBJ file),
+    the source and a listener in it, in a uniform wind ``wind`` (m/s) along +x."""
+    boxes = [
+        ((-2.8, -2.8, 0.0), (-2.0, 2.8, 3.8)),
+        ((-2.0, -2.8, 0.0), (2.0, -2.0, 3.8)),
+        ((-2.0, 2.0, 0.0), (2.0, 2.8, 3.8)),
+        ((-2.0, -2.0, 3.0), (2.0, 2.0, 3.8)),
+        ((2.0, -2.8, 0.0), (2.8, 2.8, 1.0)),
+        ((2.0, -2.8, 1.8), (2.8, 2.8, 3.8)),
+        ((2.0, -2.8, 1.0), (2.8, -0.4, 1.8)),
+        ((2.0, 0.4, 1.0), (2.8, 2.8, 1.8)),
+    ]
+    sides = ((1, 2, 3, 4), (5, 6, 7, 8), (1, 2, 6, 5), (2, 3, 7, 6), (3, 4, 8, 7), (4, 1, 5, 8))
+    lines = []
+    for k, ((x0, y0, z0), (x1, y1, z1)) in enumerate(boxes):
+        plan = ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+        lines += [f"v {x} {y} {z}" for z in (z0, z1) for x, y in plan]
+        lines += ["f " + " ".join(str(8 * k + corner) for corner in side) for side in sides]
+    path.write_text("\n".join(lines) + "\n")
+    data = {
+        "geometry": {
+            "ground": {"extent": [[-5, -5], [5, 5]], "sky": 5},
+            "file": str(path),
+            "up_axis": "z",
+        },
+        "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+        "default_material": "hard",
+        "sources": [{"name": "s", "position": list(ROOM_SOURCE)}],
+        "listeners": [{"name": "in", "position": list(ROOM_LISTENER)}],
+        "atmosphere": {"wind": {"speed_m_s": wind, "direction_deg": 0.0, "profile": "constant"}},
+    }
+    return Room.from_scene(Scene.model_validate(data))
+
+
+def check_room_with_an_opening(winds=(5.0, 15.0, 30.0), length_s: float = 3.0) -> list[dict]:
+    rows = []
+    stopped = re.compile(r"\(([\d.]+) dB over its lowest level, ([\d.]+) s after emission\)")
+    print(
+        "| wind (m/s) | moving air | level, last quarter second over the second (dB) | "
+        "effective speed of sound (dB) |\n|---:|---|---:|---:|"
+    )
+    with tempfile.TemporaryDirectory() as folder:
+        for wind in winds:
+            room = room_with_an_opening(Path(folder) / "room.obj", wind)
+            row: dict = {"wind_m_s": wind}
+            for wind_model in ("moving", "effective"):
+                try:
+                    (response,), _ = wave_responses(
+                        TraceModel.from_room(room),
+                        np.array(ROOM_SOURCE),
+                        np.array([ROOM_LISTENER]),
+                        ["in"],
+                        max_band_hz=63,
+                        length_s=length_s,
+                        sample_rate=RATE,
+                        speed_of_sound=room.speed_of_sound(),
+                        wind=wind_model,
+                    )
+                except ValueError as exc:
+                    found = stopped.search(str(exc))
+                    if found is None or wind_model != "moving":
+                        raise
+                    row["rise_db"], row["stopped_s"] = float(found[1]), float(found[2])
+                    continue
+                quarter = int(0.25 * response.rate)
+                pressure = response.signals[round(response.lead_s * response.rate) :, 0]
+                rms = [
+                    math.sqrt(float(np.mean(pressure[k * quarter : (k + 1) * quarter] ** 2)))
+                    for k in range(int(length_s / 0.25))
+                ]
+                row[f"{wind_model}_change_db"] = 20.0 * math.log10(rms[-1] / rms[1])
+            rows.append(row)
+            if "stopped_s" in row:
+                went = (
+                    f"stopped {row['stopped_s']:.1f} s after emission, "
+                    f"{row['rise_db']:.1f} dB over its lowest level"
+                )
+                change = ""
+            else:
+                went, change = f"runs its {length_s:g} s", f"{row['moving_change_db']:+.1f}"
+            print(f"| {wind:g} | {went} | {change} | {row['effective_change_db']:+.1f} |")
+    return rows
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--json", type=Path, help="write the numbers to this file")
@@ -376,9 +477,11 @@ def main(argv=None) -> int:
     if not args.skip_profiles:
         print("\nThe windy preset over grass against the parabolic equation, 63 Hz band\n")
         profiles = check_profiles()
+    print("\nA room with an opening downwind: when the watch stops moving air\n")
+    opening = check_room_with_an_opening()
     print(f"\n{time.perf_counter() - started:.0f} s")
     if args.json:
-        out = {"free_field": free, "facade": facade, "profiles": profiles}
+        out = {"free_field": free, "facade": facade, "profiles": profiles, "opening": opening}
         args.json.write_text(json.dumps(out, indent=2))
     return 0
 

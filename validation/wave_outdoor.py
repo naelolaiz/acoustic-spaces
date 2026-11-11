@@ -15,13 +15,22 @@ the 125 Hz band from a grid for it, 50 and 100 m away. Five weathers: still air,
 downwind and upwind in the windy preset (5 m/s 10 m up), a sunny day (sound bends up)
 and a clear night (sound bends down). The ground reaches far enough to either side that
 its edges change the level by little (three times the half-width of the reflection's
-first Fresnel zone at the farthest listener), and 30 m past it.
+first Fresnel zone at the farthest listener), 20 m behind the source, and past the
+farthest listener far enough that the sound off its far end, which runs there and back,
+reaches no listener before the run ends (:func:`beyond_m`: 63 m in the 63 Hz band, 60 m
+in the 125 Hz band). The sound off the sides and off the end behind the source does
+reach the listeners within the run, and is in the levels: in still air, against the same
+scene with every edge too far for its sound to come within the response, it adds -0.04
+to +0.05 dB in the 63 Hz band and +0.05 to +0.08 dB in the 125 Hz band.
 
 Both levels are in dB over the free field: the mean square of the pressure over the
 band's slices (the frequencies the engine's parabolic equation takes), the wave
-solver's from the spectrum of its response over the source's. The script prints a
-Markdown table, and the mean and largest differences per band. A run takes some half an
-hour on four cores (the 125 Hz grids have up to 30 million cells).
+solver's from the spectrum of its response over the source's, max(distances) / 330 +
+0.3 s long. The script prints a Markdown table, and the mean and largest differences per
+band. The grids have 29 to 31 million cells in the 63 Hz band and 39 to 45 million in
+the 125 Hz band; the 45 million of the 125 Hz band in wind are more than the solver
+takes by default, so the script raises ``wave.MAX_CELLS`` for its own runs
+(:data:`MAX_CELLS`). It takes up to 1.7 GB of memory and some half an hour on four cores.
 """
 
 from __future__ import annotations
@@ -35,6 +44,7 @@ import time
 import numpy as np
 
 from acoustic_spaces import Room, Scene
+from acoustic_spaces.engine import wave
 from acoustic_spaces.engine.diffraction import band_frequencies
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.parabolic import march
@@ -55,13 +65,36 @@ WEATHERS = {
     "clear_night": {"preset": "clear_night"},
 }
 SAMPLE_RATE = 48_000
+#: Faster than sound goes on any of these grids in any of these weathers (m/s): the
+#: windy preset's fastest effective speed of sound on them is 349.5 m/s. A run whose
+#: grid has faster sound is refused (the far end's sound could then come within it).
+FASTEST_M_S = 350.0
+#: The most cells a grid of this script may have (the solver's own limit is
+#: wave.MAX_CELLS): the 125 Hz grids in wind have 45.1 million.
+MAX_CELLS = 46_000_000
+
+
+def length_s(band: int) -> float:
+    """How long the wave solver's run lasts after emission (s)."""
+    return max(GRIDS[band][0]) / 330.0 + 0.3
+
+
+def beyond_m(band: int) -> float:
+    """How far the ground reaches past the farthest listener (m), in whole metres: far
+    enough that the first sound off its far end, which runs from the source to the end
+    and back, at no more than FASTEST_M_S, reaches no listener before the run ends, nor
+    the 20 ms before (the source's low-pass starts up to 11 ms before emission)."""
+    distances = GRIDS[band][0]
+    return float(math.ceil(0.5 * (FASTEST_M_S * (length_s(band) + 0.02) - max(distances))))
 
 
 def scene(weather: str, band: int) -> Room:
     distances, half_width, sky = GRIDS[band]
     data = {
         "geometry": {
-            "ground": {"extent": [[-20.0, -half_width], [max(distances) + 30.0, half_width]]},
+            "ground": {
+                "extent": [[-20.0, -half_width], [max(distances) + beyond_m(band), half_width]]
+            },
         },
         "materials": {"lawn": {"impedance": "grass"}},
         "assignments": {"ground": "lawn"},
@@ -82,21 +115,31 @@ def wave_levels(room: Room, band: int, wind: str = "effective") -> tuple[dict[st
     """The wave solver's level (dB over the free field) at each listener in ``band``,
     and the run's details; ``wind`` as ``simulation.wave.wind``."""
     model = TraceModel.from_room(room)
-    distances = GRIDS[band][0]
     listeners = room.scene.listeners
     points = np.array([listener.position for listener in listeners], dtype=float)
-    responses, info = wave_responses(
-        model,
-        np.array([0.0, 0.0, SOURCE_M]),
-        points,
-        [listener.name for listener in listeners],
-        max_band_hz=band,
-        length_s=max(distances) / 330.0 + 0.3,
-        sample_rate=SAMPLE_RATE,
-        speed_of_sound=room.speed_of_sound(),
-        say=lambda line: print(line, file=sys.stderr, flush=True),
-        wind=wind,
-    )
+    limit = wave.MAX_CELLS
+    wave.MAX_CELLS = max(limit, MAX_CELLS)
+    try:
+        responses, info = wave_responses(
+            model,
+            np.array([0.0, 0.0, SOURCE_M]),
+            points,
+            [listener.name for listener in listeners],
+            max_band_hz=band,
+            length_s=length_s(band),
+            sample_rate=SAMPLE_RATE,
+            speed_of_sound=room.speed_of_sound(),
+            say=lambda line: print(line, file=sys.stderr, flush=True),
+            wind=wind,
+        )
+    finally:
+        wave.MAX_CELLS = limit
+    fastest = info.get("wave_speed_max_m_s", room.speed_of_sound())
+    if fastest > FASTEST_M_S:
+        raise RuntimeError(
+            f"sound goes at up to {fastest:.1f} m/s on the grid, faster than the "
+            f"{FASTEST_M_S:g} m/s the ground's length is made for (beyond_m)"
+        )
     slices = _slices(band)
     out = {}
     for listener, point, response in zip(listeners, points, responses, strict=True):

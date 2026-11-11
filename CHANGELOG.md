@@ -16,7 +16,8 @@ barrier level with it, beside a thin screen's bends and corners, behind a barrie
 foot, in line with a barrier's end or a wall, across a barrier end's shadow boundary in
 wind, from and to roofs in wind, with eddies at each frequency, to the late rays in wind
 and through plants, curved rays near a profile's nodes, the wave solver round open
-models and between its cells, Doc 29's maximum levels and tables, Doppler walks and the
+models, between its cells, at a response's end and round a closed building in wind, and
+its moving air kept stable, Doc 29's maximum levels and tables, Doppler walks and the
 spread itself.
 
 Results change from 4.2.1: outdoors in wind or a temperature gradient at 1 and 2 kHz
@@ -50,14 +51,17 @@ listeners by 0.02 dB at most); behind plants, with vector scattering (`tree_belt
 A-weighted levels by 0.03 dB at most); where the size that sets scattering runs through
 an opening (`apartment`'s bed by 0.04 dB(A)); the wave solver's low bands round an open
 model, on a larger grid, and its 125 Hz band at a source or listener between its cells
-(up to 0.53 dB); Doc 29's L_Amax ahead of and behind a segment (up to 1.0 dB on Volume
-3's departures; the airport example does not change); a walk with Doppler passing close
-to a listener (a ripple of up to 0.73 dB gone), through a directional microphone (up to
-0.25 dB) or in binaural (up to 3.1 dB at 1 kHz); and the spread: its combined standard
-uncertainty and its mean, within the draws' noise, every response after the first in a
-run of several, materials that absorb everything in some band, grounds with an
-impedance, and draws of much more absorption than was traced; and a calibrated material
-given in third octaves where one of them reaches 1. Scene files of 4.2.1 load unchanged.
+(up to 0.53 dB), the last 50 ms of its bands (up to 7.5 dB off, 15.7 dB in third
+octaves, in a room of 2 % absorption), and a closed building round a shut-in source in
+wind, now in still air (a 6 m hut's bands up to 1.7 dB off in a 15 m/s wind); Doc 29's
+L_Amax ahead of and behind a segment (up to 1.0 dB on Volume 3's departures; the airport
+example does not change); a walk with Doppler passing close to a listener (a ripple of
+up to 0.73 dB gone), through a directional microphone (up to 0.25 dB) or in binaural (up
+to 3.1 dB at 1 kHz); and the spread: its combined standard uncertainty and its mean,
+within the draws' noise, every response after the first in a run of several, materials
+that absorb everything in some band, grounds with an impedance, and draws of much more
+absorption than was traced; and a calibrated material given in third octaves where one
+of them reaches 1. Scene files of 4.2.1 load unchanged.
 
 **Error estimates**
 
@@ -314,6 +318,26 @@ given in third octaves where one of them reaches 1. Scene files of 4.2.1 load un
   source's level from eight cells on in closed rooms, where the source's signal also
   undoes the 19-point grid's own gain on a point source (0.06 and 0.35 dB in the two
   bands), which that loss had hidden.
+- Fixed: with `simulation.wave.wind: moving`, the sound in a nearly closed space such
+  as a room with an opening grew without bound (the moving air's wind blows through
+  the model's solids), up to results that were not numbers. Each run in moving air is
+  now watched and stops with an error once its sound grows instead of dying away, and
+  a wave solver's run that does not stay finite is refused.
+- Fixed (results change): outdoors, the wave solver took the wind into a closed building
+  round a shut-in source, whose air is still. In a 15 m/s wind a 6 m hut's band
+  energies were up to 1.7 dB off the still air's with the effective speed of sound and
+  up to 1.2 dB with `wind: moving`, which also grew there instead of dying away. A
+  closed model now takes still air, and the run says so (`wave_still_inside`).
+- Fixed: the wave solver's moving air let a closed rigid room's mean pressure grow
+  2 to 2.6 times per 10,000 steps, from single-precision rounding in its carrying
+  step, which now keeps a uniform pressure to the bit. Open models change by rounding
+  only.
+- Fixed (results change): the wave solver stopped at the response's end, where the
+  bands' filters still read the run that follows: the last 50 ms of the wave bands'
+  energy were up to 7.5 dB off (15.7 dB with third-octave bands) in a room of 2 %
+  absorption. It now steps 0.2 s further (0.4 s with third-octave bands), which also
+  keeps the 19-point stencil's slow drift of a closed room's mean pressure out of the
+  bands.
 
 **Image sources and terrain files**
 
@@ -422,6 +446,19 @@ given in third octaves where one of them reaches 1. Scene files of 4.2.1 load un
   the grid's theory (it showed 0.005 to 0.007), and the default matched layer returns 72
   to 74 dB less than the sound (67 to 74). Its near-source table takes 50 directions and
   gives the gradient's direction.
+- Changed: `validation/wave_outdoor.py`'s ground reaches 63 m (63 Hz band) and 60 m
+  (125 Hz band) past the farthest listener instead of 30 m, so that the sound off its
+  far end comes after the end of the run. Without that sound the 63 Hz band reads 0.14
+  to 0.29 dB lower at 200 m in every weather, and the 125 Hz band between 0.17 dB lower
+  and 0.11 dB higher at 100 m (see
+  [Validation](docs/validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
+- Docs: the distances at which the wave solver's gradient (X, Y, Z) near its source is
+  further off a point source's than read from eight cells, from a finer scan, and why:
+  the source's spread over four cells a side from 2 to 3.4 cells away, the listener's
+  reading beyond (Free field under [Validation](docs/validation.md#wave-based-solver)).
+- Docs: the cost of the wave solver's moving air is given as four to five times the
+  effective speed of sound's (`validation/wave_wind.py` measures 4.0 to 5.1 times), where
+  the help, the editor's tip and the docs said three to four times.
 
 **Tests and CI**
 

@@ -1099,6 +1099,9 @@ NB_MODULE(_native, m) {
             "Whether the air reaches each side of the grid (-x, +x, -y, +y, -z, +z): its "
             "edge there, or the matched layer inside it.")
         .def_prop_ro("flowing", &as::WaveSolver::flowing)
+        .def_prop_ro("mean_square", &as::WaveSolver::mean_square,
+                     "In moving air, the pressure squared over the grid's air and the steps "
+                     "of the last run, on average; 0 in still air.")
         .def_prop_ro("stencil", &as::WaveSolver::stencil)
         .def_prop_ro("threads", &as::WaveSolver::threads)
         .def("probe_found", &as::WaveSolver::probe_found, nb::arg("probe"))
