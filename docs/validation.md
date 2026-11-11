@@ -3453,8 +3453,8 @@ windows from 0.3 s after the first sound arrives):
 
 | places apart | tone | waveform | level |
 |---|---|---|---|
-| 1 m | 250 Hz | -110.7 dB | 0.000 / 0.000 dB |
-| | 1 kHz | -102.1 dB | 0.000 / 0.001 dB |
+| 1 m | 250 Hz | -110.8 dB | 0.000 / 0.000 dB |
+| | 1 kHz | -102.3 dB | 0.000 / 0.001 dB |
 | | 4 kHz | -88.5 dB | 0.000 / 0.002 dB |
 | 4 m | 250 Hz | -81.6 dB | 0.001 / 0.015 dB |
 | | 1 kHz | -68.5 dB | 0.002 / 0.047 dB |
@@ -3473,40 +3473,76 @@ simulates its helicopter every 4 m.
 
 **Passing close.** The road's walks again with the walker passing 2 m or 1 m from the
 other's line (2.06 and 1.12 m away at the nearest, with their heights), its places 0.25
-m apart, heard in mono and, at 1 kHz, through a cardioid microphone. At 70 m/s the
-walker goes 1.4 m from one of a path's filters to the next, 20 ms later, so here the
-level's error is in 5 ms windows:
+m apart, heard in mono; at 1 kHz through a cardioid microphone aimed level at the
+walker's line; and at the ears of a listener facing along that line, whom the walker
+passes on one side (the spherical head; the worse ear's waveform, the level's error
+over both). At 70 m/s the walker goes 1.4 m in 20 ms, so here the level's error is in
+5 ms windows:
 
 | walker | from the line | tone | waveform | level |
 |---|---|---|---|---|
 | source, 70 m/s | 2 m | 1 kHz | -67.8 dB | 0.002 / 0.010 dB |
 | | | 4 kHz | -52.9 dB | 0.022 / 0.128 dB |
-| | | 1 kHz, cardioid | -41.4 dB | 0.009 / 0.147 dB |
+| | | 1 kHz, cardioid | -65.2 dB | 0.002 / 0.010 dB |
+| | | 1 kHz, ears | -55.5 dB | 0.002 / 0.058 dB |
+| | | 4 kHz, ears | -47.6 dB | 0.023 / 0.129 dB |
 | source, 70 m/s | 1 m | 1 kHz | -56.1 dB | 0.002 / 0.010 dB |
 | | | 4 kHz | -44.2 dB | 0.023 / 0.130 dB |
-| | | 1 kHz, cardioid | -36.5 dB | 0.011 / 0.252 dB |
+| | | 1 kHz, cardioid | -53.3 dB | 0.002 / 0.023 dB |
+| | | 1 kHz, ears | -48.9 dB | 0.002 / 0.020 dB |
+| | | 4 kHz, ears | -41.1 dB | 0.024 / 0.130 dB |
 | source, 30 m/s | 1 m | 1 kHz | -56.6 dB | 0.000 / 0.011 dB |
 | | | 4 kHz | -45.1 dB | 0.001 / 0.034 dB |
-| | | 1 kHz, cardioid | -43.2 dB | 0.003 / 0.170 dB |
+| | | 1 kHz, cardioid | -53.6 dB | 0.000 / 0.032 dB |
+| | | 1 kHz, ears | -48.4 dB | 0.001 / 0.033 dB |
+| | | 4 kHz, ears | -41.8 dB | 0.001 / 0.105 dB |
 | listener, 30 m/s | 1 m | 1 kHz | -56.8 dB | 0.000 / 0.008 dB |
 | | | 4 kHz | -45.3 dB | 0.001 / 0.026 dB |
-| | | 1 kHz, cardioid | -44.2 dB | 0.002 / 0.142 dB |
+| | | 1 kHz, cardioid | -53.8 dB | 0.000 / 0.029 dB |
+| | | 1 kHz, ears | -50.1 dB | 0.000 / 0.038 dB |
+| | | 4 kHz, ears | -41.4 dB | 0.001 / 0.045 dB |
 
 A path's spreading is not in its filter: each sample is divided by the path's delay
-then, so the level follows one over the distance through the pass. At 70 m/s the most
-is not at the pass but where the comparison starts, 33 m before it, and is the air's
-again: the 4 kHz tone is heard at 5.0 kHz there. With the field's absorption taken at
-the pitch heard (a one-off check), the level at 70 m/s is within 0.028 dB at 4 kHz and
-0.009 dB at 1 kHz, the most at the pass.
+then, so the level follows one over the distance through the pass. In mono at 70 m/s
+the most is not at the pass but where the comparison starts, 33 m before it, and is the
+air's again: the 4 kHz tone is heard at 5.0 kHz there. With the field's absorption
+taken at the pitch heard (a one-off check), the level at 70 m/s is within 0.028 dB at 4
+kHz and 0.009 dB at 1 kHz, the most at the pass.
 
 What depends on the direction a path arrives from (a microphone's pattern, the ears, a
-loudspeaker's panning, the source's directivity) stays in the filter, taken every 20 ms
-and going linearly from one window's centre to the next: heard through a cardioid
-microphone level at the listener, aimed at the walker's line (each path times 0.5 +
-0.5 cos of the angle it arrives at), the level misses the field's by up to 0.25 dB in
-5 ms windows, the walker 1 m away at 70 m/s. That is the filter's 20 ms: taken every 5
-ms instead (a one-off check), it misses it by 0.036 dB at 30 m/s and 0.055 dB at 70
-m/s, 1 m away.
+loudspeaker's panning, the source's directivity) stays in the filter, which is known at
+the places and goes in a straight line from each to the next, taken when each place's
+sound is heard however many of them go by in 20 ms. Through the cardioid microphone
+(each path times 0.5 + 0.5 cos of the angle it arrives at) the level stays within 0.032
+dB of the field's in 5 ms windows. A straight line between two places 0.25 m apart
+strays from the pattern by 0.026 dB in the direct sound 1.12 m from the capsule (by
+hand: an eighth of the step squared times the pattern's curvature over its value).
+
+At the ears a walking source's field is exact too, for ears whose responses depend on
+the direction alone, as the engine's do: the head stands still, so each sample of the
+pressure at its centre goes through the ears' responses to the direction it arrives
+from, and the responses add up where they land.
+The engine keeps where each ear's response starts as a delay and takes what passed the
+head's centre that much earlier (see
+[Moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)). The level
+stays within 0.06 dB at 1 kHz, the most 1.9 m after the pass at 70 m/s, 2 m away, where
+the ground's reflection takes the field 15 dB down. At 4 kHz it is within 0.13 dB: at
+70 m/s the most is where the comparison starts, as in mono (0.13 dB there too), at 30
+m/s (0.105 dB) the far ear's 0.3 m before the pass, the field 12 dB down. With the
+places 0.125 m apart the 0.06 dB at 1 kHz and this 0.105 dB are 0.015 and 0.034 dB (a
+one-off check, not repeated by the script), so they come mostly from the straight line
+between the places. A walking listener's head moves through the field,
+which has no exact solution of this kind: its rows compare the engine with its own
+model worked out sample by sample, each ear a point its onset further along the path at
+the moment it hears, and what arrives there through the rest of the ear's response.
+
+Formats of many channels turn faster with the direction than a cardioid does. In a
+one-off check, not repeated by the script (a source passing 1 m from the listener at
+70 m/s, the direct sound alone, 1 kHz, against the field through the format's gains
+for the direction at each instant), third-order Ambisonics differed from the field by
+1.3 % of it over the pass with the places 0.25 m apart (14° apart at the pass, as the
+listener sees them), by 0.33 % with 0.125 m and 0.08 % with 0.0625 m; panning to 5.0
+by 1.5 %, 0.26 % and 0.14 %.
 
 **The levels.** White noise through the car's walk over grass (Miki's impedance, 200
 kPa s/m²), 16 noises up to 18 kHz: the energy of the sound in each octave band over the
@@ -3517,13 +3553,13 @@ places' band levels:
 
 | band | rendered | responses | pass-by | early part alone: rendered | responses |
 |---|---|---|---|---|---|
-| 63 Hz | -25.87 | -25.90 | -26.13 | -25.90 | -25.92 |
-| 125 Hz | -27.54 | -27.55 | -27.70 | -27.62 | -27.64 |
-| 250 Hz | -32.13 | -32.10 | -32.30 | -32.31 | -32.31 |
-| 500 Hz | -34.87 | -34.92 | -34.05 | -34.97 | -34.91 |
-| 1 kHz | -29.52 | -29.53 | -29.64 | -29.56 | -29.59 |
+| 63 Hz | -25.89 | -25.91 | -26.13 | -25.90 | -25.92 |
+| 125 Hz | -27.53 | -27.54 | -27.69 | -27.62 | -27.64 |
+| 250 Hz | -32.11 | -32.07 | -32.29 | -32.31 | -32.31 |
+| 500 Hz | -34.87 | -34.92 | -34.04 | -34.97 | -34.91 |
+| 1 kHz | -29.52 | -29.53 | -29.63 | -29.56 | -29.59 |
 | 2 kHz | -30.18 | -30.19 | -30.28 | -30.21 | -30.23 |
-| 4 kHz | -30.76 | -30.77 | -30.68 | -30.78 | -30.79 |
+| 4 kHz | -30.75 | -30.77 | -30.68 | -30.78 | -30.79 |
 | 8 kHz | -31.81 | -31.81 | -31.85 | -31.82 | -31.82 |
 
 The sound keeps the energy of the responses to within 0.07 dB in every band, with its
@@ -3531,7 +3567,7 @@ late part and without. The late part is crossfaded by weights that add up to one
 the car sends its sound, drawn from one random sequence for every place; the responses
 here are drawn from the same one, as otherwise their late parts' chance correlation with
 the early sound would differ by up to 0.25 dB in a band (a one-off check). The pass-by's
-band levels are within 0.26 dB of the sound, 0.8 dB in the 500 Hz band, where the
+band levels are within 0.24 dB of the sound, 0.8 dB in the 500 Hz band, where the
 ground's dip falls: the pass-by takes the places' band levels, averaged over each band,
 where the sound is read through band filters, whose skirts fill a dip (a cause not
 checked separately). For a car at 30 m/s over this grass with 94 dB of sound power, the
@@ -3544,13 +3580,19 @@ on the kind of source: a point monopole's far-field pressure goes as (1 − M co
 M cos θ its Mach number towards the listener as the sound leaves, so its level as
 40 lg 1/(1 − M cos θ), up to 1.6 dB louder straight ahead of it at 30 m/s and 4.0 dB
 at 70 m/s, 1.5 and 3.2 dB quieter straight behind), and so is the
-Doppler shift of the late part, which is crossfaded. Binaural walks are checked
+Doppler shift of the late part, which is crossfaded. At the ears what is left out is
+the amplification at the head's centre: each ear keeps its own Doppler factor over the
+centre's, as the exact field above has it (up to 0.15 dB at an ear at 70 m/s, 1 m
+away, a one-off check). The ears' responses depend on the direction a sound arrives
+from, not on how far its source is: one passing 1 m away is heard through the responses
+of a far one. A walking source is
+checked against the exact field above; a walking listener's moving head has none, and
+is checked against the engine's model worked out sample by sample, as above; and both
 against the convolution with a response when the walker stands still (to within 45 dB
-at each ear in the tests), not against a moving head's exact field. A test drives a
+at each ear in the tests). A test drives a
 source past a listener whose ears' responses start 4 samples apart from one direction
 to the next, as a measured set's may, and holds its treble (6 to 16 kHz, frame by
-frame) within 0.3 dB of the same walk with ears that start together; before each ear's
-onset went into its delay, it lost 5.4 dB between places.
+frame) within 0.3 dB of the same walk with ears that start together.
 
 ## Helicopter rotors against theory and a certified level
 
