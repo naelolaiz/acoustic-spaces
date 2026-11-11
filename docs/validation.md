@@ -2935,7 +2935,9 @@ and without an atmosphere, agree the same way; a tree belt of 17 media is declin
 its reason and traced on the CPU.
 
 **Whole runs.** `validation/outdoor_gpu.py` simulates the outdoor examples with their own
-settings once per device and once more on the CPU with the next seed, and compares the
+settings, but for grounds that scatter 0.1 where the examples' scatter nothing (over
+those no late ray reaches the stage's listeners or the hillside's crest), once per
+device and once more on the CPU with the next seed, and compares the
 late sound's level per band and its centre time at every listener (the mean absolute
 difference over listeners and bands); the next seed shows how much the ray count's noise
 alone moves them:
@@ -3324,11 +3326,11 @@ the long term and L_den (5 dB in the evening, 10 at night), in dB(A):
 
 | | downwind | upwind | still | inversion | day | evening | night | long term | L_den |
 |---|---|---|---|---|---|---|---|---|---|
-| 50 m | 47.0 | 36.6 | 47.4 | 47.6 | 45.8 | 46.2 | 46.8 | 46.2 | 53.0 |
-| 100 m | 41.7 | 21.6 | 38.9 | 41.0 | 38.8 | 39.3 | 40.0 | 39.3 | 46.2 |
-| 200 m | 34.3 | 10.5 | 26.3 | 35.7 | 30.0 | 31.9 | 33.7 | 31.9 | 39.6 |
-| 400 m | 24.0 | -2.8 | 12.0 | 29.4 | 19.1 | 23.9 | 26.8 | 23.8 | 32.5 |
-| 800 m | 12.9 | -20.2 | -1.6 | 20.0 | 7.9 | 14.0 | 17.2 | 13.9 | 22.8 |
+| 50 m | 47.1 | 36.6 | 47.6 | 47.7 | 46.0 | 46.3 | 46.9 | 46.3 | 53.1 |
+| 100 m | 41.8 | 21.6 | 39.1 | 41.0 | 38.9 | 39.4 | 40.1 | 39.4 | 46.3 |
+| 200 m | 34.5 | 10.5 | 26.5 | 35.8 | 30.1 | 32.0 | 33.8 | 32.0 | 39.7 |
+| 400 m | 24.1 | -2.8 | 11.8 | 29.5 | 19.2 | 23.9 | 26.8 | 23.9 | 32.5 |
+| 800 m | 12.9 | -20.2 | -2.1 | 20.0 | 7.9 | 14.0 | 17.2 | 13.9 | 22.8 |
 
 **The arithmetic.** The script works the period levels, the long-term levels and L_den
 out again from each class's own run: the energy mean over the classes by their shares
@@ -3341,18 +3343,18 @@ clear nights bring, and takes the long-term level from it as L_LT = L_DW - C_met
 C_met = C_0 (1 - 10 (h_s + h_r) / d_p) beyond d_p = 10 (h_s + h_r) and 0 nearer, where
 C_0 lies between 0 and 5 dB by the local weather statistics. The engine's C_met is the
 A-weighted level in the favourable classes (downwind and the inversion, combined by
-their shares of the whole day) less the long-term level. With C_0 fitted to it at 3.37
+their shares of the whole day) less the long-term level. With C_0 fitted to it at 3.36
 dB, within the standard's range:
 
 | distance | engine | ISO 9613-2 | difference |
 |---|---|---|---|
-| 50 m | 1.03 | 1.68 | -0.65 |
-| 100 m | 2.04 | 2.53 | -0.49 |
-| 200 m | 3.14 | 2.95 | +0.19 |
-| 400 m | 3.46 | 3.16 | +0.30 |
-| 800 m | 3.51 | 3.26 | +0.25 |
+| 50 m | 1.00 | 1.68 | -0.68 |
+| 100 m | 2.01 | 2.52 | -0.51 |
+| 200 m | 3.14 | 2.94 | +0.20 |
+| 400 m | 3.46 | 3.15 | +0.31 |
+| 800 m | 3.51 | 3.25 | +0.26 |
 
-The engine's correction follows the standard's shape within 0.65 dB, the most at 50 m,
+The engine's correction follows the standard's shape within 0.68 dB, the most at 50 m,
 where the standard's formula is only a step past d_p = 25 m and the ground's own
 pattern still differs from one weather to the next. This is a check of plausibility,
 not of accuracy: the standard's correction is an empirical fit, and the engine's comes
@@ -3794,13 +3796,13 @@ microphone stands, and M. Toward et al., "Sound propagation and audibility of tr
 horns", ISVR and RSSB, measured train horns 1.5 m up), each harmonic's reflection off
 the ballast added in pressure and taken out of its sound power. The engine, which
 averages a reflection's interference over each band, gives the high note 108.8 dB(C)
-there and the low one 108.9, and 109.6 and 109.1 in a free field. Sounded together as
+there and the low one 109.0, and 109.6 and 109.1 in a free field. Sounded together as
 a chord (`--horn chord`), which EN 15153-2 allows, the two notes are made to 109 dB(C)
 together, its level for a group of horns; the engine gives 108.9 dB(C) there and 109.3
 in a free field. Toward et al. measured a train horn of 368 Hz over ballast with the
 horn from 0.5 to 3.0 m up and
 found virtually no difference at 25 m; the low note's A-weighted level there changes by
-+1.5 to 0 dB over those heights by its harmonics and by 0 to -0.5 dB in the engine.
++1.5 to 0 dB over those heights by its harmonics and by +0.1 to -0.5 dB in the engine.
 A-weighted, the low note is 2.4 dB under its C-weighted level harmonic by harmonic
 (Toward et al. take 2 dB off the rules' C-weighted levels for their A-weighted ones)
 and 1.4 dB under it by octave bands, as the engine weights it; the high note 0.5 and
@@ -3861,16 +3863,16 @@ ground's attenuation (A_gr,B, equation 14, 0 dB this near):
 
 | train | speed | 7.5 m: engine | Schall 03 | 25 m: engine | Schall 03 |
 |---|---:|---:|---:|---:|---:|
-| S-Bahn | 80 km/h | 87.2 | 91.1 | 80.7 | 84.7 |
-| regional train | 160 km/h | 97.1 | 100.9 | 91.5 | 94.5 |
+| S-Bahn | 80 km/h | 87.0 | 91.1 | 80.5 | 84.7 |
+| regional train | 160 km/h | 97.0 | 100.9 | 91.5 | 94.5 |
 
-The engine gives 2.9 to 4.0 dB(A) less; by octave band, 7.5 m from the S-Bahn, +2.7,
-+2.0, +0.7, -2.1, -5.8, -4.1, -1.0 and -2.3 dB from 63 Hz to 8 kHz. The two reckon the
+The engine gives 3.0 to 4.1 dB(A) less; by octave band, 7.5 m from the S-Bahn, +2.9,
++2.2, +0.8, -2.1, -6.1, -4.3, -1.0 and -2.2 dB from 63 Hz to 8 kHz. The two reckon the
 ground in different ways. Schall 03 adds the reflection's energy, about as much again
 as the direct sound's at every frequency. The engine adds the reflection with its phase
 (+6 dB where the two arrive together, at 63 and 125 Hz, a dip where they cancel), off
 a ground whose impedance it weighs over the reflection's Fresnel zone. Traced at 7.5 m
-from the S-Bahn: of the 3.9 dB, 0.7 dB is the ballast taking sound where a hard bed
+from the S-Bahn: of the 4.0 dB, 0.9 dB is the ballast taking sound where a hard bed
 would not (87.9 dB(A) with the bed hard), 1.2 dB is the dip of a point at the rail top
 and its reflection in step with each other at 1 to 2 kHz (89.1 dB(A) with the bed hard
 and the reflection's energy added, `coherent_max_band_hz: 63`), and the last 2.0 dB is
@@ -3888,13 +3890,13 @@ Commission Regulation (EU) No 1304/2014 (the TSI Noise, table 4) for new units t
 
 | unit | Tp | engine | Schall 03 | limit |
 |---|---:|---:|---:|---:|
-| electric multiple unit (the S-Bahn, 67.4 m) | 3.03 s | 82.3 | 86.2 | 80 |
-| electric locomotive (19.0 m) | 0.86 s | 87.7 | 90.4 | 84 |
-| coach (26.4 m) | 1.19 s | 84.0 | 88.0 | 79 |
-| freight wagon with composite blocks, not a tank wagon (17.8 m) | 0.80 s | 85.9 | 89.9 | 83 |
+| electric multiple unit (the S-Bahn, 67.4 m) | 3.03 s | 82.2 | 86.2 | 80 |
+| electric locomotive (19.0 m) | 0.85 s | 87.7 | 90.4 | 84 |
+| coach (26.4 m) | 1.19 s | 83.9 | 88.0 | 79 |
+| freight wagon with composite blocks, not a tank wagon (17.8 m) | 0.80 s | 85.7 | 89.9 | 83 |
 
 (dB(A)). Schall 03's units are 6.2 to 9.0 dB over the limits by its own reckoning, and
-2.3 to 5.0 dB over them in the engine. The limits are for new units on a track of low
+2.2 to 4.9 dB over them in the engine. The limits are for new units on a track of low
 roughness (EN ISO 3095:2013, 6.2); Schall 03's levels are for units of the German fleet
 on rails in average condition, rougher than the TSI's track. That Schall 03 is over the limits says that, not that
 either is wrong; no measured pass-by is compared here.
@@ -4070,12 +4072,12 @@ engine departing and 5,000 lb arriving:
 
 | distance | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| 200 ft (61 m) | 99.8 (102.5) | 104.0 (104.0) | 95.8 (98.4) | 100.0 (101.8) |
-| 400 ft (122 m) | 94.2 (95.4) | 100.2 (100.2) | 90.1 (91.2) | 96.1 (98.0) |
-| 630 ft (192 m) | 90.2 (90.6) | 97.5 (97.4) | 86.0 (86.5) | 93.3 (95.2) |
-| 1000 ft (305 m) | 85.7 (85.8) | 94.5 (94.4) | 81.5 (81.6) | 90.4 (92.1) |
-| 2000 ft (610 m) | 78.2 (78.2) | 89.5 (89.3) | 74.2 (74.0) | 85.6 (87.0) |
-| 4000 ft (1219 m) | 69.7 (70.0) | 83.7 (83.6) | 66.1 (65.9) | 80.0 (81.4) |
+| 200 ft (61 m) | 99.7 (102.5) | 104.0 (104.0) | 95.7 (98.4) | 99.9 (101.8) |
+| 400 ft (122 m) | 94.2 (95.4) | 100.1 (100.2) | 90.1 (91.2) | 96.0 (98.0) |
+| 630 ft (192 m) | 90.1 (90.6) | 97.4 (97.4) | 86.0 (86.5) | 93.3 (95.2) |
+| 1000 ft (305 m) | 85.6 (85.8) | 94.5 (94.4) | 81.5 (81.6) | 90.3 (92.1) |
+| 2000 ft (610 m) | 78.1 (78.2) | 89.5 (89.3) | 74.1 (74.0) | 85.5 (87.0) |
+| 4000 ft (1219 m) | 69.7 (70.0) | 83.7 (83.6) | 66.0 (65.9) | 79.9 (81.4) |
 
 (dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The engine's
 pass is measured as Doc 29 defines its levels (Volume 2's glossary, section 4.1 and its
@@ -4083,13 +4085,13 @@ footnote 15): L_ASmax is the highest of its A-weighted level through a sound lev
 meter's slow time weighting, and the SEL is taken over the time that level is within 10
 dB of it. The source is made to the NPD curves' L_Amax 1000 ft away, raised by the 0.29
 dB the slow time weighting takes off a point source's loudest moment there, and the
-engine gives it back within 0.1 dB. Nearer, the NPD curves' L_Amax grows faster than one
-point source's with one spectrum: at 200 ft the engine reads 2.8 dB (departure) and 2.6
+engine gives it back within 0.2 dB. Nearer, the NPD curves' L_Amax grows faster than one
+point source's with one spectrum: at 200 ft the engine reads 2.8 dB (departure) and 2.7
 dB (arrival) under them. With no time weighting, the highest level of the places is 2.0
 dB over L_ASmax at 200 ft, 1.0 dB at 400 ft, 0.6 dB at 630 ft and less farther out (0.3
-dB at 1000 ft, under 0.1 dB at 4000 ft), and the SEL of the whole walk is 0.35 to 0.46
+dB at 1000 ft, under 0.1 dB at 4000 ft), and the SEL of the whole walk is 0.34 to 0.46
 dB over the 10 dB-down one. The departure's SEL is
-within 0.3 dB of its NPD curves, the arrival's 1.4 to 1.9 dB under: JETW's arrival
+within 0.2 dB of its NPD curves, the arrival's 1.5 to 2.0 dB under: JETW's arrival
 curves have SEL - L_Amax = 10 lg(πd/V) within 0.22 dB out to 1000 ft, the SEL of a point
 source's whole pass over its level as it passes, with no time weighting and in air that
 absorbs nothing. Measured as Doc 29 defines its levels, that source's SEL - L_ASmax is
@@ -4102,24 +4104,23 @@ each listener, their level following their thrust:
 
 | listener | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| departure_4km | 87.2 (87.2) | 96.0 (96.0) | 49.9 (43.1) | 64.1 (60.7) |
-| lateral_450m | 85.1 (85.1) | 95.5 (94.5) | 43.1 (54.4) | 57.3 (68.8) |
-| approach_2000m | 51.9 (54.8) | 67.8 (68.6) | 90.6 (91.5) | 96.9 (98.8) |
+| departure_4km | 87.1 (87.2) | 95.9 (96.0) | 50.2 (43.1) | 64.4 (60.7) |
+| lateral_450m | 85.0 (85.1) | 95.5 (94.5) | 41.8 (54.4) | 56.4 (68.8) |
+| approach_2000m | 52.0 (54.8) | 67.3 (68.6) | 90.5 (91.5) | 96.8 (98.8) |
 
-(dB(A); Doc 29's in brackets.) Where the jet is heard rolling, the walk starts or ends
+(dB(A); Doc 29's in brackets.) Where the arrival is heard rolling, the walk starts or ends
 less than 10 dB under its L_ASmax, so its SEL there is over less than the 10 dB-down
 time. Where the jet is heard in the air, they agree within 1.0 dB but for the arrival's
-SEL, 1.9 dB under as its NPD curves have it. Where it is heard rolling on the runway
+SEL, 2.0 dB under as its NPD curves have it. Where it is heard rolling on the runway
 they part, as the two reckon sound running along the ground differently. Doc 29 takes
 off its lateral attenuation, 10.9 dB at grazing for a listener ahead of a landing roll
 or behind a take-off roll, from measurements and so averaged over their weather, and
 behind a take-off roll adds its start-of-roll directivity (5.1 dB down at
 approach_2000m). The engine reckons the scene's ground in still air: the hard runway
-reflects the sound back up, so the arrival's roll-out is 6.7 dB over Doc 29 at
+reflects the sound back up, so the arrival's roll-out is 7.1 dB over Doc 29 at
 departure_4km, 2.4 km ahead of it along the runway, while the meadow takes much of it
-away from 250 Hz up, so it is 11.3 dB under at lateral_450m, 1 km away across the grass
-(at 250 Hz the roll-out's end is 14 dB quieter there than at departure_4km); the
-departure's take-off roll is 2.9 dB under at approach_2000m.
+away from 250 Hz up, so it is 12.6 dB under at lateral_450m, 1 km away across the grass;
+the departure's take-off roll is 2.8 dB under at approach_2000m.
 
 ## Ground-borne vibration against the FTA's manual
 
@@ -4702,7 +4703,7 @@ Files and runs:
   against measured pass-bys (see
   [Sirens and road vehicles](#sirens-and-road-vehicles-against-their-rules)).
   The trains' sound power is Schall 03's as published: a pass in the engine is checked
-  against Schall 03's own sum, exact in a free field and 2.9 to 4.0 dB(A) under it over
+  against Schall 03's own sum, exact in a free field and 3.0 to 4.1 dB(A) under it over
   the railway example's ground, which the two reckon otherwise, not against measured
   pass-bys (see [Trains](#trains-against-schall-03-and-the-eus-limits)).
   The road works' machines are rows of Defra's database for construction sites as

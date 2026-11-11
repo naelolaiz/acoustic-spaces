@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Changed: an outdoor ground (a material with an `impedance`) scatters nothing unless
+  its material gives a `scattering`, where it took 0.1 like any material: the early
+  level over grass is within 0.05 dB of the exact solution 20 and 100 m away (it was
+  0.3 and 0.5 dB off at 500 Hz), the ground dips in still air are deeper, and open
+  ground alone gives no late part. `scattering: 0.1` on the ground gives the earlier
+  results.
 - Added: a coverage map gives the uncertainty of its values from the materials'
   absorption uncertainty, an insertion loss and the long-term levels too:
   `coverage.spread: true`, `map --spread` or the tick box under **Uncertainty** on the

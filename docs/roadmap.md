@@ -357,9 +357,9 @@ Outdoor acoustics, in steps:
   flyover, but its error has no bound (0.12 dB past a 3 K step a centimetre above the
   source); until one holds, `open_ground_frequencies: rays` is the user's choice.
 - [x] The scattered sound of the reflections straight from the source found from each
-  listener too, shared with the late rays by how densely each finds it: an aircraft
-  overhead no longer brings a listener above grass bursts of it from the few rays that
-  land nearby.
+  listener too, shared with the late rays by how densely each finds it: under an
+  aircraft overhead a listener above a ground that scatters no longer gets bursts of it
+  from the few rays that land nearby.
 - [ ] The same where the rays bend in wind or a temperature gradient, scatter in plants
   before they reflect, or reach the listeners as secondary sources: there the
   scattered sound near a listener still comes from the few rays that land nearby.

@@ -293,9 +293,10 @@ the whole reflection its impedance gives, as the exact solutions for a flat grou
 (roughness takes little from sound that grazes a ground: by Kirchhoff's approximation,
 heights of 2 cm rms take 0.4 % out of a reflection 5° off the ground at 1 kHz). A
 `scattering` given to a ground is a share lost at every reflection off it in the image
-sources, the curved rays and the paths over a barrier's edge, which the late rays
-scatter; the parabolic equation and the paths over a terrain's crests keep the whole
-reflection.
+sources (over a terrain, the reflections off its mean plane and off the slopes in sight
+of the source), the curved rays and the paths round edges, which the late rays scatter;
+the parabolic equation, the wave solver and the waves bent over a terrain's crests keep
+the whole reflection.
 
 The early paths use the impedance itself. A point source's spherical wave does not
 reflect off a ground as a plane wave does: near grazing incidence, where the plane wave's
@@ -313,7 +314,7 @@ sound over a band of frequencies: the ground dip, at a few hundred hertz for a s
 a listener a metre or two up over grass, deeper and wider the farther apart they are.
 Over hard ground the dip lies where the reflected path is half a wavelength longer,
 often above 1 kHz. In the `roadside` example, 25 m from the road and 1.5 m up, the
-500 Hz band is 10.7 dB quieter over the meadow than over the paved yard across the road,
+500 Hz band is 11.3 dB quieter over the meadow than over the paved yard across the road,
 and the yard has its own dip at 2 kHz.
 
 So that the dip shows in every band, outdoors the early paths add in pressure in every
@@ -1061,9 +1062,13 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
   `diffraction_reflections: both_sides` a path reflects off the ground both before and
   after the edge, the fourth of the four paths over a barrier on the ground (see
   [Edge diffraction](simulation.md#edge-diffraction)).
-- **The late part** comes from the stochastic ray tracer: rays reflect and scatter off
-  the ground and the buildings until they leave through the sky. Between tall buildings
-  (a street canyon, a courtyard) that is a tail of its own; in the open, almost nothing.
+- **The late part** comes from the stochastic ray tracer: rays reflect off the ground
+  and the buildings, and scatter off those that scatter, until they leave through the
+  sky. Between tall buildings (a street canyon, a courtyard) that is a tail of its own;
+  in the open, almost nothing: over flat ground that scatters nothing, nothing at all,
+  and over a terrain that scatters nothing, the sound its slopes reflect more often than
+  the image sources' order (twice or more, off the hollow at the foot of the `hillside`
+  example's hill).
   The statistical late method needs a diffuse field, which the open air does not have:
   outdoors it stops with an error.
 - **Response length.** Sources and listeners can stand hundreds of metres apart, so
