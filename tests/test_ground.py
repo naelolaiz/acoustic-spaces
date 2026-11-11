@@ -260,7 +260,7 @@ def test_a_material_with_an_impedance() -> None:
 
 def test_a_ground_scatters_nothing_unless_its_material_says_so() -> None:
     """A material with an impedance scatters nothing without a ``scattering`` of its
-    own, and the scene file writes back the one it was given; a material without an
+    own, and reads back from the scene file the one it was given; a material without an
     impedance keeps the default of 0.1. Over such a ground the reflection keeps all the
     energy its impedance leaves it and, in the open, nothing arrives late; a ground
     given a scattering of 0.1 loses that share of the reflection, which arrives late."""

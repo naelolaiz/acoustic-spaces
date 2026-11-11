@@ -1043,7 +1043,7 @@ comes scattered, with the late rays, and their noise shows in the levels: trace 
 of them (`simulation.late.rays`) for steadier results. The
 [`tree_belt`](https://github.com/naelolaiz/acoustic-spaces/blob/main/examples/tree_belt/scene.yaml)
 example traces 200000, and G behind its trees still varies from run to run, by 0.1 to
-0.7 dB (one standard deviation) depending on the band.
+0.9 dB (one standard deviation over ten seeds, a one-off check) depending on the band.
 
 `acoustic-spaces inspect` lists the vegetation with what sound loses per metre through
 each, foliage (or leaves) and stems together. The editor's 3D view, `view` and the export to

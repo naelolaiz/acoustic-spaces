@@ -587,9 +587,9 @@ step in turn, leaving out what is there already (the music, the scenes, the simu
   130 dB) on the ground at the stage front, 2 m nearer the audience and delayed 6 ms so
   that both arrive together there, playing both channels, rolled off above 125 Hz. The
   system is tuned at the audience as a system engineer tunes it (`eq_db`: the arrays' low
-  mids up, their top octave up for the air): at 30 m every octave from 500 Hz to 4 kHz is
-  within 1 dB of 1 kHz, 250 Hz 1.3 dB down, 8 kHz 1.8 dB down and 63 and 125 Hz 1.8 to
-  1.9 dB up. `scenes` also takes
+  mids up, their top octave up for the air): at 30 m, in the evening's weather, every
+  octave from 500 Hz to 4 kHz is within 1 dB of 1 kHz, 250 Hz 1.3 dB down, 8 kHz 1.8 dB
+  down and 63 and 125 Hz 1.8 to 1.9 dB up. `scenes` also takes
   in the example's listener 140 m behind the stage, upwind (`behind_stage`, left out as
   the system is), and lets the responses run 3.5 s past the latest direct sound, the far
   shore's, 1.6 s late (5.2 s in all).

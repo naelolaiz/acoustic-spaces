@@ -3545,11 +3545,12 @@ listener sees them), by 0.33 % with 0.125 m and 0.08 % with 0.0625 m; panning to
 by 1.5 %, 0.26 % and 0.14 %.
 
 **The levels.** White noise through the car's walk over grass (Miki's impedance, 200
-kPa s/m²), 16 noises up to 18 kHz: the energy of the sound in each octave band over the
-pass-by, relative to the source's, against the noise through each place's own impulse
-response for the time its sound is heard (Doppler moves the sound in time and pitch but
-keeps its energy), and against the sound exposure level `pass_by` gives from the
-places' band levels:
+kPa s/m², scattering 0.1, which gives the walk a late part over the open ground), 16
+noises up to 18 kHz: the energy of the sound in each octave band over the pass-by,
+relative to the source's, against the noise through each place's own impulse response
+for the time its sound is heard (Doppler moves the sound in time and pitch but keeps its
+energy), and against the sound exposure level `pass_by` gives from the places' band
+levels:
 
 | band | rendered | responses | pass-by | early part alone: rendered | responses |
 |---|---|---|---|---|---|
@@ -4106,7 +4107,8 @@ straight).
 landing](demos.md#aircraft-taking-off-and-landing)) against Doc 29's own levels: JETW's
 source (`doc29.source`), simulated in the engine, against its NPD curves in the
 scene's air, and the example's flights against Doc 29's sum over the same flight
-path's segments. The late rays are seeded, so a run gives these numbers.
+path's segments. Over the meadow and the runway, which scatter nothing, the late rays
+bring the microphones no sound.
 
 **The source against its NPD curves.** JETW flies straight and level at 160 kt, the
 NPD curves' speed, over a microphone 1.2 m above grass, at 15,000 lb of thrust an
@@ -4579,7 +4581,7 @@ Results:
   temperature gradient, scatter in plants before they reflect, or reach the listeners
   as secondary sources, the scattered sound of a reflection near a listener comes from
   the few rays that land there, not from the listener's own gather: a run with a far
-  source over grass has bursts of it that change with the seed.
+  source over a ground that scatters has bursts of it that change with the seed.
 - **Paths over two edges take no reflections.** With `second_order` a path over two
   edges reflects nowhere before, between or after them, so behind a thick barrier on a
   hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from
