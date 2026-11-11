@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 from test_native import _stochastic_args, _unit_cube
-from test_refraction import field
+from test_refraction import field, scattering_lawn
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import early_paths
@@ -208,7 +208,10 @@ def test_leaves_make_a_medium_from_their_area_and_width() -> None:
 
 
 def test_leaves_in_a_scene_lose_and_scatter() -> None:
-    scene = planted({**BELT, "foliage": {"leaf_area_per_m3": 1.0, "leaf_width": 0.05}})
+    # The lawn scatters 0.1, so that the leaves' late sound stands against the ground's.
+    scene = scattering_lawn(
+        planted({**BELT, "foliage": {"leaf_area_per_m3": 1.0, "leaf_width": 0.05}})
+    )
     room = Room.from_scene(scene)
     plants = Plants.of(room, "octave", room.speed_of_sound())
     medium = leaves_medium(1.0, 0.05, "octave", room.speed_of_sound())
@@ -218,7 +221,7 @@ def test_leaves_in_a_scene_lose_and_scatter() -> None:
     result = simulate(scene)
     response = result["s", "l0"]
     # The highest bands' early paths lose most; what they scatter comes back late.
-    bare = simulate(field())["s", "l0"]
+    bare = simulate(scattering_lawn(field()))["s", "l0"]
     early_loss = 10 * np.log10(bare.early.energy.sum(axis=0) / response.early.energy.sum(axis=0))
     assert early_loss[-1] == pytest.approx(30 * medium.extinction[-1] * DB_PER_NEPER, rel=0.05)
     assert early_loss[0] < 0.1

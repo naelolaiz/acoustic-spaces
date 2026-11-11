@@ -37,8 +37,8 @@ or in a corner. Sound that bends round edges is added to them (see
     surfaces it sees, and the rays and those directions share that sound by how
     densely each finds it (the balance heuristic of multiple importance sampling): the
     rays near the source, the listener's directions near the listener. The expected
-    energy is the same, but a ray that lands next to a listener (above grass, an
-    aircraft overhead) brings it no burst of scattered sound.
+    energy is the same, but a ray that lands next to a listener (above a ground that
+    scatters, an aircraft overhead) brings it no burst of scattered sound.
   - `secondary_sources`: all reflected energy radiates that way, as in ODEON's late
     method. Much smoother tails, but it treats specular energy as diffuse: in the
     example box (smooth walls, absorbing ceiling) EDT comes out about 20 % shorter.
@@ -171,8 +171,9 @@ interference of reflections close in time.
 ## Scattering
 
 A surface's scattering coefficient (ISO 17497-1) is the share of the reflected energy
-that leaves it diffusely rather than specularly. `simulation.scattering` says how rays
-carry it out:
+that leaves it diffusely rather than specularly (that of a ground with an impedance is
+0 unless its material gives one, see [Ground impedance](outdoor.md#ground-impedance)).
+`simulation.scattering` says how rays carry it out:
 
 ```yaml
 simulation:
@@ -591,8 +592,9 @@ simulation:
   The grid is then fine enough for the slowest sound and steps in time for the fastest,
   on the CPU or on the GPU alike (see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
   With `wind: moving` (`simulate --wave-wind moving`) the air moves instead, so that
-  sound a building sends back towards the source goes against the wind; it takes four
-  to five times as long and runs on the CPU.
+  sound a building sends back towards the source goes against the wind, which flows
+  round the model's solids; it takes four to five times as long over open ground,
+  more round buildings, and runs on the CPU.
 - The listener records the pressure and its gradient, so the low end keeps its direction
   in Ambisonics, binaural and loudspeaker outputs (to first order). The source and each
   point a listener samples lie between the grid's cell centres (a cell is 0.2 m on the

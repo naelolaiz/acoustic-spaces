@@ -348,9 +348,9 @@ Outdoor acoustics, in steps:
   against the wind. Checked against the exact field in a uniform wind, a façade's echo
   against ray theory and the parabolic equation in the `windy` preset
   (`validation/wave_wind.py`). Runs on the CPU; the wind's shear term on the air's
-  motion stays out. Its wind blows through solids, which is not stable in a nearly
-  closed space such as a room with an opening: the run is watched and stops with an
-  error there. Without it nothing changes.
+  motion stays out. Its wind flows round the model's solids as an ideal fluid's (no
+  wake, no eddies), checked against the exact flow past a sphere. Without it nothing
+  changes.
 - [x] The wave solver's room for sound along its matched layer only on the sides that
   need it: a side the model's own surfaces close gets none, which saves a hall open at
   one end 1.8 to 2.0 times the cells (see Open models under
@@ -433,9 +433,9 @@ Outdoor acoustics, in steps:
   flyover, but its error has no bound (0.12 dB past a 3 K step a centimetre above the
   source); until one holds, `open_ground_frequencies: rays` is the user's choice.
 - [x] The scattered sound of the reflections straight from the source found from each
-  listener too, shared with the late rays by how densely each finds it: an aircraft
-  overhead no longer brings a listener above grass bursts of it from the few rays that
-  land nearby.
+  listener too, shared with the late rays by how densely each finds it: under an
+  aircraft overhead a listener above a ground that scatters no longer gets bursts of it
+  from the few rays that land nearby.
 - [ ] The same where the rays bend in wind or a temperature gradient, scatter in plants
   before they reflect, or reach the listeners as secondary sources: there the
   scattered sound near a listener still comes from the few rays that land nearby.

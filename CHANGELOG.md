@@ -10,6 +10,12 @@
   between rigid screens on a rigid ground up to 3.4 dB low, and with an error for the
   ends it cannot hold, such as a source on a roof close to a parapet
   (`validation/rows.py`). Simulations do not use it yet.
+- Changed: an outdoor ground (a material with an `impedance`) scatters nothing unless
+  its material gives a `scattering`, where it took 0.1 like any material: the early
+  level over grass is within 0.05 dB of the exact solution 20 and 100 m away (it was
+  0.3 and 0.5 dB off at 500 Hz), the ground dips in still air are deeper, and flat
+  open ground alone gives no late part. `scattering: 0.1` on the ground gives the
+  earlier results.
 - Fixed: with `second_order` diffraction, sound that just clears two edges in a row (a
   source and a listener in sight of each other over a flat roof, a thick wall or two
   barriers, or along a wall in line with both) was far too low, 15 to 26 dB across the
@@ -268,11 +274,15 @@
   to 0.29 dB lower at 200 m in every weather, and the 125 Hz band between 0.17 dB lower
   and 0.11 dB higher at 100 m (see
   [Validation](docs/validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
-- Fixed: with `simulation.wave.wind: moving`, the sound in a nearly closed space such
-  as a room with an opening grew without bound (the moving air's wind blows through
-  the model's solids), up to results that were not numbers. Each run in moving air is
-  now watched and stops with an error once its sound grows instead of dying away, and
-  a wave solver's run that does not stay finite is refused.
+- Fixed (results change): with `simulation.wave.wind: moving`, the wind blew through
+  the model's solids, which made the sound in a nearly closed space such as a room
+  with an opening grow without bound; it now flows round them as an ideal fluid's, so
+  results near buildings change (the validation's façade echo comes 0.42 ms sooner)
+  and runs there take longer. Where weather zones change the wind along its way, it
+  now passes from one zone's wind to the next's gradually, no cell gaining or losing
+  air, which changes results there too; open, flat ground in one weather is as before,
+  to the bit. Each run in moving air is also watched and stops with an error should
+  its sound grow, and a wave solver's run that does not stay finite is refused.
 - Fixed (results change): outdoors, the wave solver took the wind into a closed building
   round a shut-in source, whose air is still. In a 15 m/s wind a 6 m hut's band
   energies were up to 1.7 dB off the still air's with the effective speed of sound and
@@ -293,8 +303,10 @@
   the source's spread over four cells a side from 2 to 3.4 cells away, the listener's
   reading beyond (Free field under [Validation](docs/validation.md#wave-based-solver)).
 - Docs: the cost of the wave solver's moving air is given as four to five times the
-  effective speed of sound's (`validation/wave_wind.py` measures 4.0 to 5.1 times), where
-  the help, the editor's tip and the docs said three to four times.
+  effective speed of sound's over open ground and more round buildings
+  (`validation/wave_wind.py` measures 3.8 to 5.0 times, and 10.5 times round its
+  façade's building), where the help, the editor's tip and the docs said three to four
+  times.
 - New validation: `validation/wave_walls.py`, what the wave solver's walls on cell faces
   cost: in seven placements of a rigid box moved within a cell or turned against the grid,
   its modes are up to 11 %, 6.4 % and 2.8 % off on the 63, 125 and 250 Hz bands' grids
