@@ -579,8 +579,8 @@ simulation:
   The grid is then fine enough for the slowest sound and steps in time for the fastest,
   on the CPU or on the GPU alike (see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
   With `wind: moving` (`simulate --wave-wind moving`) the air moves instead, so that
-  sound a building sends back towards the source goes against the wind; it costs three
-  to four times as much and runs on the CPU.
+  sound a building sends back towards the source goes against the wind; it takes about
+  four times as long and runs on the CPU.
 - The listener records the pressure and its gradient, so the low end keeps its direction
   in Ambisonics, binaural and loudspeaker outputs (to first order). The source and each
   point a listener samples lie between the grid's cell centres (a cell is 0.2 m on the
