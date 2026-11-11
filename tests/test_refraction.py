@@ -2186,7 +2186,7 @@ def test_one_coherent_band_keeps_its_run_below_it() -> None:
     preset, the 63 Hz band is the only coherent one: it takes no skirt above, and its run
     goes on down to half its lower edge as with more bands (four frequencies, 25 to 42
     Hz), whose samples the carrier keeps. The band's run is the same as with 125, and so
-    is its level (+6.2750 dB re free field both, ``coh63.py``; 4e-8 dB apart, the 63 Hz
+    is its level (+6.2726 dB re free field both, ``coh63.py``; 4e-8 dB apart, the 63 Hz
     shape drawn with and without the 125 Hz band's samples beside it)."""
     from acoustic_spaces.engine.fine import fine_frequencies
 

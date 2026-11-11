@@ -1111,6 +1111,11 @@ in the street, at the speed of its walk (50 km/h) unless `--speed` says.
   | behind the barrier, 25 m | 78.2 (79.2) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (82.6) |
   | house, 18 m | 92.5 (97.8) | 87.2 (90.1) | 95.4 (103.0) | 89.1 (100.9) |
 
+  The scene fixes no seed, so each run draws its own late rays: over five runs the peaks
+  by the house vary by up to 0.2 dB and their SELs by 0.04 dB, over four runs those on
+  the meadow by 0.05 dB, and at 7.5 m and behind the barrier two runs agree within
+  0.01 dB.
+
   The longer a train, the more its SEL is over its L_Amax: the freight train, 446 m
   long, takes 16 s to pass at 100 km/h, the S-Bahn, 67 m, 2 s at 120 km/h. The barrier,
   3 m high and 4 m from the track, hides the rail top from the listener behind it, but
@@ -1240,11 +1245,11 @@ listeners.
   `helicopter` its rotors' sound, `scene` the helicopter alone (`scene_overhead.yaml`)
   with the sound power and the directivity of its rotors at 63 m/s through still air
   (137.1 dB, 132.8 dB(A)), and `walk` the helicopter every 4 m along its flight at
-  each of the 12 listeners, with Doppler. At the mix position it peaks at about
+  each of the 12 listeners, with Doppler. At the mix position it peaks between 81 and
   82 dB(A) (about 74 from 330 m), where the sound system's loudspeakers, simulated at
   their sound power, give 97 dB(A): it is some 15 dB under the music, heard most in the
   song's quiet passages. High in the north stand, under the roof, it peaks 10 to 12 dB
-  lower (two runs): the sound there is almost all late sound, which a few rays can lift
+  lower (four runs): the sound there is almost all late sound, which a few rays can lift
   by several decibels at one place.
 - **The mix.** `mix` adds the helicopter's pass at each listener to the concert's mix
   there (`demo/seats`), the helicopter over the centre spot at `--at`. The feeds stand
