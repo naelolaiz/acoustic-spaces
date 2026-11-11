@@ -28,6 +28,7 @@ from acoustic_spaces.engine.wave import (
     WAVE_BANDS_HZ,
     WaveResponse,
     _first_order,
+    _off_the_source,
     _open_sides,
     _probe_points,
     _spans_across,
@@ -844,46 +845,82 @@ def test_the_19_point_grid_gives_a_point_sources_level(ratio: float) -> None:
     assert level(False) == pytest.approx(0.5, abs=0.05)
 
 
+def test_points_among_the_sources_cells_are_left_out_of_a_gradient() -> None:
+    # By the listener's place in cells from the source, the points round it that do not
+    # count (1 to 6: a cell along +x, -x, +y, -y, +z, -z; 7 to 12: two cells): on the
+    # 19-point grid those nearer the source than 1.5 cells, unless the listener is that
+    # near itself; on the 7-point grid none.
+    cell, source = 0.4, np.array([5.0, 4.0, 3.0])
+
+    def left_out(offset, missing=(), stencil=19) -> list[int]:
+        probes = _probe_points(source + cell * np.array(offset, dtype=float), cell)
+        found = np.ones(13, dtype=bool)
+        found[list(missing)] = False
+        kept = _off_the_source(found, probes, source, cell, stencil)
+        return [k for k, ok in enumerate(kept) if not ok]
+
+    assert left_out((3.0, 0.0, 0.0)) == [8]
+    assert left_out((2.0, 0.0, 0.0)) == [2, 8]
+    assert left_out((1.5, 0.0, 0.0)) == [2, 8]
+    assert left_out((1.49, 0.0, 0.0)) == []
+    assert left_out((0.5, 0.3, 0.2)) == []
+    assert left_out((1.2, 1.2, 0.0)) == [2, 4, 8, 10]
+    assert left_out((2.0, 0.8, 0.5)) == [2, 8]
+    assert left_out((0.0, -2.5, 0.0)) == [9]  # the point 1.5 cells from the source stays
+    assert left_out((0.0, 0.0, 3.4)) == [12]
+    assert left_out((0.0, 0.0, 3.5)) == []
+    assert left_out((2.0, 0.0, 0.0), stencil=7) == []
+    # A wall behind the listener, which hides the points away from the source: the axis
+    # keeps the points towards it, or it would have none.
+    assert left_out((2.0, 0.0, 0.0), missing=(1, 7)) == [1, 7]
+    assert left_out((2.0, 0.8, 0.5), missing=(1, 7)) == [1, 7]
+    assert left_out((0.0, -2.5, 0.0), missing=(4, 10)) == [4, 9, 10]
+
+
 def test_a_listener_next_to_the_source_leaves_the_sources_cells_out_of_its_gradient(
     monkeypatch,
 ) -> None:
-    # A listener three cells along x from the source: the point two cells towards the
-    # source lies one cell from it, among the cells the source feeds. On the 19-point
-    # grid the gradient goes without it; on the 7-point grid with it. A listener one
-    # cell from the source: its points at the source, one cell from it and one cell to
-    # the side of each (1.41 cells from the source) are left out, and across x the
-    # gradient is of the points two cells to the side.
+    # Listeners off the grid's axes, 2.2 and 0.6 cells from the source. The first has the
+    # two points towards the source along x among the cells the source feeds (1.4 and 0.9
+    # cells from it): on the 19-point grid its gradient goes without them, on the 7-point
+    # grid with them. The second lies among those cells itself and keeps its points. The
+    # gradient's main axis lies within 8 degrees of the line to the source (0.8 and 3.8
+    # degrees on the 19-point grid, 5.3 and 5.1 on the 7-point one; 32 degrees for the
+    # nearer listener without its points), and its part in step with the pressure points
+    # to the source.
     room = _free_room((1.0,))
     cell = band_grid(0, FS, room.speed_of_sound(), 8.0, 8, ISOTROPIC_COURANT).cell
     source = np.array(room.scene.sources[0].position, dtype=float)
-    listener = source + [3.0 * cell, 0.0, 0.0]
-    beside = source + [cell, 0.0, 0.0]
-    used = {}
+    offsets = np.array([[2.0, 0.8, 0.5], [0.5, 0.3, 0.2]])
+    used = []
     real = wave_stage._first_order
 
     def spy(probes, found, *args):
-        used["found"] = list(found)
+        used.append([k for k, ok in enumerate(found) if not ok])
         return real(probes, found, *args)
 
     monkeypatch.setattr(wave_stage, "_first_order", spy)
-    for scheme, at, without in (
-        ("isotropic", listener, [8]),
-        ("standard", listener, []),
-        ("isotropic", beside, [2, 3, 4, 5, 6, 8]),
-    ):
-        (response,), _ = wave_responses(
+    for scheme, without in (("isotropic", [[2, 8], []]), ("standard", [[], []])):
+        used.clear()
+        responses, _ = wave_responses(
             TraceModel.from_room(room),
             source,
-            at[None, :],
-            ["l"],
+            source + cell * offsets,
+            ["far", "near"],
             max_band_hz=63,
             length_s=0.05,
             sample_rate=FS,
             speed_of_sound=room.speed_of_sound(),
             scheme=scheme,
         )
-        assert [k for k, found in enumerate(used["found"]) if not found] == without, scheme
-        assert np.all(np.abs(response.signals[:, 1:]).max(axis=0) > 0.0)
+        assert used == without, scheme
+        for response, offset in zip(responses, offsets, strict=True):
+            line = offset / np.linalg.norm(offset)
+            gradient = response.signals[:, 1:]
+            main = np.linalg.eigh(gradient.T @ gradient)[1][:, -1]
+            angle = math.degrees(math.acos(min(1.0, abs(float(main @ line)))))
+            assert angle < 8.0, (scheme, offset)
+            assert (response.signals[:, :1] * gradient).sum(axis=0) @ line < 0.0
 
 
 def test_a_long_run_records_its_tenths_as_one_run_does(monkeypatch) -> None:
@@ -1050,40 +1087,52 @@ def test_velocity_is_in_step_with_the_pressure() -> None:
 def test_velocity_falls_back_to_the_points_it_has() -> None:
     """Along an axis the gradient is the fourth-order central difference over two cells
     either side, the second-order one over one cell where a point two cells away is not
-    found, the one-sided difference to the listener where a point one cell away is not,
-    and the difference over the points two cells away where neither is; a point not found
-    never counts (its row is noise here). With no gain divided out (cutoff 0), X is c
-    times the trapezoidal rule's integral of that difference, exactly."""
+    found, and the one-sided difference to the listener where a point one cell away is
+    not; a point not found never counts (its row is noise here). With no gain divided out
+    (cutoff 0), X is c times the trapezoidal rule's integral of that difference, exactly;
+    and Y and Z likewise, from their own points."""
     t = np.arange(400.0)
     shift = 1.0 / COURANT
-    p = np.zeros((13, len(t)))
-    for k, cells in ((0, 0), (1, 1), (2, -1), (7, 2), (8, -2)):
-        p[k] = np.exp(-(((t - 200.0 - cells * shift) / 16.0) ** 2))
-    fourth = (8 * (p[1] - p[2]) - (p[7] - p[8])) / 12
-    second = 0.5 * (p[1] - p[2])
+    wave_at = {
+        cells: np.exp(-(((t - 200.0 - cells * shift) / 16.0) ** 2)) for cells in range(-2, 3)
+    }
+    fourth = (8 * (wave_at[1] - wave_at[-1]) - (wave_at[2] - wave_at[-2])) / 12
+    second = 0.5 * (wave_at[1] - wave_at[-1])
+    ahead, behind = wave_at[1] - wave_at[0], wave_at[0] - wave_at[-1]
+    # By the points missing, as they are numbered along x: 1 and 2 a cell either side,
+    # 7 and 8 two cells either side.
     cases = {
         (): fourth,
         (7,): second,
         (8,): second,
         (7, 8): second,
-        (1,): p[0] - p[2],
-        (1, 7): p[0] - p[2],
-        (2,): p[1] - p[0],
-        (2, 8): p[1] - p[0],
-        (1, 2): 0.25 * (p[7] - p[8]),
-        (1, 2, 7): 0.5 * (p[0] - p[8]),
-        (1, 2, 8): 0.5 * (p[7] - p[0]),
+        (1,): behind,
+        (1, 7): behind,
+        (1, 8): behind,
+        (1, 7, 8): behind,
+        (2,): ahead,
+        (2, 8): ahead,
+        (2, 7): ahead,
+        (2, 7, 8): ahead,
+        (1, 2): np.zeros(len(t)),
         (1, 2, 7, 8): np.zeros(len(t)),
     }
     noise = np.random.default_rng(2).standard_normal(len(t))
-    for missing, difference in cases.items():
-        probes, found = p.copy(), [True] * 13
-        for k in missing:
-            probes[k], found[k] = noise, False
-        field = _first_order(probes, found, "l", cutoff=0.0)
-        expected = COURANT * (np.cumsum(difference) - 0.5 * difference)
-        np.testing.assert_allclose(field[:, 1], expected, rtol=0, atol=1e-12, err_msg=str(missing))
-        assert not np.any(field[:, 2:])
+    for axis in range(3):
+        p = np.zeros((13, len(t)))
+        p[0] = wave_at[0]
+        for k, cells in ((1, 1), (2, -1), (7, 2), (8, -2)):
+            p[k + 2 * axis] = wave_at[cells]
+        for missing, difference in cases.items():
+            probes, found = p.copy(), [True] * 13
+            for k in missing:
+                probes[k + 2 * axis], found[k + 2 * axis] = noise, False
+            field = _first_order(probes, found, "l", cutoff=0.0)
+            expected = COURANT * (np.cumsum(difference) - 0.5 * difference)
+            np.testing.assert_allclose(
+                field[:, 1 + axis], expected, rtol=0, atol=1e-12, err_msg=f"{axis} {missing}"
+            )
+            assert not np.any(np.delete(field[:, 1:], axis, axis=1))
 
 
 def test_first_order_field_points_to_the_source() -> None:

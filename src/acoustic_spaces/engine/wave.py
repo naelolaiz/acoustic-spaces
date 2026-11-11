@@ -264,8 +264,10 @@ def source_signal(
     ``speed`` times the grid's, the side taps are over the square of ``speed``, the
     middle one what is left of one); ``level=False`` gives the signal without them, the
     impulse that the signal with them stands for. The 7-point grid's gain changes with
-    the direction (none along an axis, 0.26 dB over that 125 Hz band along a face's
-    diagonals and 0.35 dB along the cube's), so no signal can undo it.
+    the direction (twelve cells away, over that 125 Hz band: none along an axis, 0.25 dB
+    along a face's diagonals and 0.32 to 0.34 dB along the cube's, by the places of the
+    source and the listener within their cells; validation/wave_solver.py), so no signal
+    can undo it.
     """
     half = _LOW_PASS_TAPS // 2
     k = np.arange(-half, half + 1)
@@ -586,16 +588,43 @@ class _Weather:
 #: Points each listener takes the pressure at (see :func:`_probe_points`).
 _PROBES = 13
 #: A point round a listener that lies nearer the source than this many cells is left out
-#: of the listener's gradient (:func:`_first_order` then takes a difference of lower
-#: order), by the stencil's points: it reads the cells the source itself feeds, whose
-#: sound is not a point's. Measured over 18 places of the source within a cell and the
-#: grid's 26 directions (``places`` of validation/wave_solver.py at 2, 2.5 and 3 cells
-#: from the source, with this at 0 and at 1.5: the gradient's energy over the pressure's
-#: against a point source's, in the 63 Hz band, the worse of the two): on the 19-point
-#: grid the worst is 7.6, 13.2 and 6.6 dB with those points and 4.5, 3.7 and 1.0 dB
-#: without them (further away no point lies that near). On the 7-point grid it is 5.4,
-#: 3.4 and 1.7 dB with them and 4.3, 3.5 and 1.9 dB without: no gain, so it keeps them.
+#: of the listener's gradient, unless the listener itself lies that near (see
+#: :func:`_off_the_source`), by the stencil's points: it reads the cells the source
+#: itself feeds, whose sound is not a point's. Measured against a point source's exact
+#: field over 18 places of the source within a cell and 50 directions, the grid's 26 and
+#: others (``places`` of validation/wave_solver.py, with this at 0 and at 1.5; the worse
+#: of the 63 and 125 Hz bands). On the 19-point grid, 1.5, 2, 2.5 and 3 cells from the
+#: source, the gradient's main axis is up to 26, 21, 10 and 7 degrees off the line to
+#: the source with those points and 16, 13, 10 and 7 without them, and its energy over
+#: the pressure's up to 9.2, 7.6, 13.2 and 6.6 dB off with them and 6.3, 4.5, 3.7 and
+#: 1.2 dB without. A listener nearer than 1.5 cells keeps them: one cell away its axis
+#: is up to 18 degrees off with them and up to 30 without. On the 7-point grid the
+#: same four distances give 21, 15, 5 and 4 degrees and 6.2, 5.4, 3.4 and 1.7 dB with
+#: the points, 17, 17, 5 and 4 degrees and 5.4, 4.3, 3.5 and 1.9 dB without: no clear
+#: gain, so it keeps them.
 _SOURCE_CELLS = {7: 0.0, 19: 1.5}
+
+
+def _off_the_source(
+    found: np.ndarray, probes: np.ndarray, source: np.ndarray, cell: float, stencil: int
+) -> np.ndarray:
+    """``found`` (whether each of ``probes``, the :func:`_probe_points` of each listener
+    in turn, counts) without the points among the source's own cells: those nearer the
+    source than :data:`_SOURCE_CELLS` cells, round a listener that is not itself that
+    near (that many cells to within rounding counts as that far). So far from the source
+    a listener loses at most one of the two points a cell from it along an axis. Where
+    the other one is not found either (a wall behind the listener), the axis keeps its
+    points."""
+    limit = (_SOURCE_CELLS[stencil] - 1e-9) * cell
+    away = np.linalg.norm(probes - source, axis=1).reshape(-1, _PROBES)
+    near = (away < limit) & (away[:, :1] >= limit)
+    before = np.asarray(found, dtype=bool).reshape(-1, _PROBES)
+    after = before & ~near
+    for axis in range(3):
+        points = [1 + 2 * axis, 2 + 2 * axis, 7 + 2 * axis, 8 + 2 * axis]
+        empty = ~(after[:, points[0]] | after[:, points[1]])
+        after[np.ix_(empty, points)] = before[np.ix_(empty, points)]
+    return after.reshape(-1)
 
 
 def _probe_points(listener: np.ndarray, cell: float) -> np.ndarray:
@@ -712,8 +741,7 @@ def _first_order(
     The gradient is a central difference of fourth order over two cells either side,
     (8 (p(h) - p(-h)) - (p(2h) - p(-2h))) / 12h, of second order where a point two cells
     away is not ``found`` (out of the air, or across a surface from the listener), and
-    one-sided where a point one cell away is not, and from the points two cells away
-    where neither is. The integral is the trapezoidal rule,
+    one-sided where a point one cell away is not. The integral is the trapezoidal rule,
     so that it falls on the pressure's samples, with the rule's gain, (wT/2) / tan(wT/2),
     divided out up to ``cutoff`` (of the sample rate), the source's low-pass's cutoff:
     above it the source gives next to nothing. ``courant`` is the Courant number of the
@@ -733,12 +761,6 @@ def _first_order(
             difference = probes[plus] - probes[0]
         elif found[minus]:
             difference = probes[0] - probes[minus]
-        elif found[plus + 6] and found[minus + 6]:
-            difference = 0.25 * (probes[plus + 6] - probes[minus + 6])
-        elif found[plus + 6]:
-            difference = 0.5 * (probes[plus + 6] - probes[0])
-        elif found[minus + 6]:
-            difference = 0.5 * (probes[0] - probes[minus + 6])
         else:
             continue
         out[:, 1 + axis] = courant * (np.cumsum(difference) - 0.5 * difference)
@@ -1021,11 +1043,7 @@ def wave_responses(
     # point round a listener counts only where the listener sees it.
     found = np.array([solver.probe_found(p) for p in range(len(probes))])
     found &= _in_sight(bvh, listeners, probes)
-    # Nor a point among the source's own cells (the listener's own point stays; that many
-    # cells away to within rounding counts as that far).
-    away = np.linalg.norm(probes - np.asarray(source, dtype=float), axis=1)
-    near = away < (_SOURCE_CELLS[solver.stencil] - 1e-9) * h
-    found &= ~near | (np.arange(len(probes)) % _PROBES == 0)
+    found = _off_the_source(found, probes, np.asarray(source, dtype=float), h, solver.stencil)
     found = found.tolist()
     missing = [listener for i, listener in enumerate(names) if not found[_PROBES * i]]
     if missing:
