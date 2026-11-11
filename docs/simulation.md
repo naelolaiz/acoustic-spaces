@@ -8,7 +8,10 @@ crossfade.
 image sources come from deterministic specular rays (`method: ray_tracing`, the
 default; cost grows with `rays`, not with the number of surfaces) or from every
 sequence of planes (`method: image_sources`; complete, but grows as planes to the
-power of the order). Every candidate is then traced back from the listener, so the
+power of the order). With edge diffraction the rays' first reflections come with the
+faces of every diffracting edge that the source stands in front of, in its sight or
+not: a ray misses a face the source sees nearly edge-on, and a reflection that an
+obstacle cuts off still fades at the obstacle's edges. Every candidate is then traced back from the listener, so the
 paths found are exact either way, including paths that reflect exactly on an edge
 or in a corner. Sound that bends round edges is added to them (see
 [Edge diffraction](#edge-diffraction)).
@@ -270,7 +273,12 @@ part with the uniform theory of diffraction (UTD, Kouyoumjian and Pathak), avera
 each octave band:
 
 - `first_order` (default): the direct sound and the first-order reflections bend round
-  edges, with the reflection before or after the edge.
+  edges, with the reflection before or after the edge. Sound that passes two edges in
+  a row is left out: there is none behind a thick wall; where the source and the
+  listener see each other just over both edges of a flat roof, or along a wall in line
+  with both, the level is too low; and behind the roof with the source above its
+  plane it is up to 6 dB too high (see the
+  [validation report](validation.md#known-issues)).
 - `second_order`: as `first_order`, and the direct sound bends round two edges in turn:
   over a thick wall or barrier, round both corners of a doorway's jamb, over two screens
   in a row. A path over two edges reflects nowhere, so over a thick barrier on a hard
@@ -349,7 +357,11 @@ Where one of the two edges' waves is lit, the path continues a path over the oth
 alone and shares its energy with it, so the level is continuous where a path over one
 edge appears: as the listener rises past the top of a barrier, it changes by at most
 0.1 dB from 1 kHz up, and 0.01 dB at 63 Hz, where the waves add in pressure (0.7 dB in
-energy). Against the exact solution (BTM, in the
+energy). Where both are lit, the source and the listener in sight of each other just
+over both edges, each edge's terms take their part off the direct sound, and the path
+over both gives back what they take twice: up to 500 Hz the level over a roof 10 m wide
+is then within 0.06 dB of the exact solution, where `first_order` is 6.4 dB low at
+63 Hz half a metre above the roof's plane and 12.6 dB a centimetre above it. Against the exact solution (BTM, in the
 [validation report](validation.md#edge-diffraction-against-the-exact-solution)),
 the level over barriers 0.3 to 3 m thick is within 0.3 dB from 500 Hz up, and over two
 screens in a row within 0.45 dB; at 63 and 125 Hz, in pressure, within 0.6 dB over
@@ -430,8 +442,8 @@ or the listener faces, which in a whole city grows with the square of the buildi
 Most of those pairs cannot carry a path, because the plane's faces lie nowhere near
 where a ray from the edge would meet the plane: the engine leaves them out before it
 traces a ray, on `simulation.performance.threads` threads, and the results are the
-same bit for bit. A city of 900 buildings simulates in about 17 s on four cores, and
-3,600 in about 56 s, of which the fade's terms take about 14 and 32 s (see [Outdoor scenes](outdoor.md#buildings-from-a-map) and the
+same bit for bit. A city of 900 buildings simulates in about 13 s on four cores, and
+3,600 in about 48 s, of which the fade's terms take about 10 and 24 s (see [Outdoor scenes](outdoor.md#buildings-from-a-map) and the
 [validation report](validation.md#edge-diffraction-in-whole-cities)).
 
 ## Low frequencies: early reflections in pressure

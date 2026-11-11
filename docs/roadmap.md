@@ -112,7 +112,7 @@ Edge diffraction:
   behind the `archway`'s wall the level steps by up to 1.4 dB where the reflection off
   the arch's jamb appears, instead of 4.4 dB.
 - [ ] Reflections cut off by a thick end: behind the archway's wall the level steps by
-  0.57 dB at 63 Hz where they go from hitting the jamb's end face to its far face, a
+  0.56 dB at 63 Hz where they go from hitting the jamb's end face to its far face, a
   face of the end's other corner. This and the fade's other known issues are listed in
   [Validation](validation.md#known-issues-of-the-edge-fade).
 - [x] Paths over a thin screen's edge weighted by the part of their Fresnel zone that
@@ -124,10 +124,45 @@ Edge diffraction:
   as at a screen's corner came out up to 1.25 dB above BTM at 63 and 125 Hz near a
   block's corner, so their paths still stop at the ends.
 - [ ] The same for the edge fade's terms and for paths over two edges, which still stop
-  at the ends of their edges (see [Known issues](validation.md#known-issues-of-the-edge-fade)).
+  at the ends of their edges: in sight just over two barriers in a row the level steps
+  by up to 6 dB where the way passes the end of one (see
+  [Known issues](validation.md#known-issues-of-the-edge-fade)).
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
+- [ ] The path over two edges that the source's wave passes in a row, with
+  `first_order` and `direct` too: without it the level just over a flat roof or along
+  a wall in line with both is too low (6.4 dB at 63 Hz half a metre above a 10 m
+  roof), and behind the roof with the source above its plane up to 6 dB too high (see
+  [Known issues](validation.md#known-issues)).
+- [ ] Paths over more than two edges: just over three barriers or three flat roofs in
+  a row, or a roof with a slot across it, the level is off by 1 to 5 dB, and over a
+  roof and a screen level with it 2 to 6 dB too low against a wave calculation, with
+  steps of 12 to 15 dB in all as the screen's top rises through the roof's plane;
+  behind three barriers with the source on the line of their tops there is next to no
+  sound, and behind two flat roofs of one height with the source up to 0.5 m above
+  their plane the level is 9 to 23 dB below that behind one roof as wide as both.
+- [ ] Paths over edges tested from the edge itself, not from a millionth of the
+  model's size off it: exactly in the plane of several roofs in a row the level is up
+  to 9 dB below that just above it, and within twice that distance below the plane 9
+  to 15 dB above that further below.
+- [ ] The same reflections whichever way round: the rays of the source and those of
+  the listener can find different reflections between two faces, such as two screens
+  or a roof's wall and a screen level with the roof (up to 0.7 dB apart, and 8 dB
+  where the level is far down), and the edge fade follows the reflections off a
+  roof's wall one way round only past the end of a screen before the roof (up to
+  1.3 dB apart, 4 dB with `first_order`; see
+  [Known issues](validation.md#known-issues)).
+- [ ] Barriers with bends of less than a degree: beside each bend a strip up to
+  centimetres wide has no path over the top or two (see
+  [Known issues](validation.md#known-issues)).
+- [ ] A way exactly through a corner of a flat top, in the top's plane (no sound over
+  the box alone), and reflections of second order and up that pass level with several
+  tops (5 to 6 dB too high in one scene; see
+  [Known issues](validation.md#known-issues)).
+- [ ] A coefficient for two separate edges in each other's transition zones, with a
+  transition function of both edges' parameters: near grazing incidence over two
+  screens in a row the product of two coefficients is 1.0 to 2.1 dB low from 2 kHz up.
 - [ ] Near a shadow boundary, in the bands that add in energy (indoors from 250 Hz), the
   cross term between the term that continues the geometric wave and the edge's other
   terms, weighted by how coherent they are over the band: on the boundary of a

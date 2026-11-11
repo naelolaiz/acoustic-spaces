@@ -7,16 +7,17 @@ insertion loss and long-term levels too), the spread of each listener's levels a
 speech results, one-sided bounds, the number of draws chosen as GUM Supplement 1's
 adaptive procedure does, and a material's absorption uncertainty on its page in the
 editor; the sound over the open ground in wind at 1 and 2 kHz from the parabolic
-equation, with a setting for its cost, and its bands carried through the crossovers;
-the parabolic equation behind barriers in wind and the wide-angle one, the spread's
-draws, the fit of an admittance and the rendering of a run's files faster with the same
+equation, with a setting for its cost, and its bands carried through the crossovers; the
+parabolic equation behind barriers in wind and the wide-angle one, the spread's draws,
+the fit of an admittance and the rendering of a run's files faster with the same
 results, and walks in far less memory; and fixes to sound over two edges along an
-absorbing face, beside a thin screen's bends and corners, behind a barrier's foot, in
-line with a barrier's end or a wall, across a barrier end's shadow boundary in wind,
-from and to roofs in wind, with eddies at each frequency, to the late rays in wind and
-through plants, curved rays near a profile's nodes, the wave solver round open models
-and between its cells, Doc 29's maximum levels and tables, Doppler walks and the spread
-itself.
+absorbing face or in sight over both, level with several tops, just above a roof and a
+barrier level with it, beside a thin screen's bends and corners, behind a barrier's
+foot, in line with a barrier's end or a wall, across a barrier end's shadow boundary in
+wind, from and to roofs in wind, with eddies at each frequency, to the late rays in wind
+and through plants, curved rays near a profile's nodes, the wave solver round open
+models and between its cells, Doc 29's maximum levels and tables, Doppler walks and the
+spread itself.
 
 Results change from 4.2.1: outdoors in wind or a temperature gradient at 1 and 2 kHz
 over the open ground, now from the parabolic equation (that change alone moves the
@@ -24,9 +25,15 @@ examples' bands by up to 2.8 dB; runs over open ground in wind take longer,
 `open_air_stage` about 2.3 times on one core, and `helicopter_flyover` keeps the rays);
 behind a building whose faces absorb, with `second_order` (by 18 to 20 dB behind a 6 m
 building absorbing 0.02; the archway example's first arrival behind the wall by 11.0 and
-11.7 dB at 63 and 125 Hz); beside a bend of a thin screen's top or past a corner that is
-not square (steps of up to 5.4 dB, 16.6 dB or 3.0 dB); where the source, the listener
-and a barrier's top are at one height (up to 5.6 dB at 63 Hz); behind a barrier where a
+11.7 dB at 63 and 125 Hz); just over two edges in a row in sight of each other, with
+`second_order` (15 to 26 dB a centimetre above a 10 m roof); level with the tops of two
+or three barriers (about 10 dB); just above a flat roof and a barrier level with it (up
+to 8 dB with the source and the listener swapped, 16 dB past the barrier's end); near a
+diffracting edge's face that the source sees nearly edge-on, with every diffraction mode
+(0.2 dB at 63 Hz at one of eight positions in two cities, which simulate up to about 15
+% slower); beside a bend of a thin screen's top or past a corner that is not square
+(steps of up to 5.4 dB, 16.6 dB or 3.0 dB); where the source, the listener and a
+barrier's top are at one height (up to 5.6 dB at 63 Hz); behind a barrier where a
 reflection lies near its foot (of the examples, the `railway`'s line and the `street`'s
 garden by up to 0.14 dB in a band); exactly in line with a source and a barrier's end in
 wind, or with a building's wall; in strips past roof edges in wind; across the shadow
@@ -152,6 +159,28 @@ given in third octaves where one of them reaches 1. Scene files of 4.2.1 load un
   keeps the level it had. With a second building's wall in the same plane, a listener on
   that wall still reads 6.9 dB over the point 10 µm in front of it at 63 Hz (9.3 dB
   before).
+- Fixed: with `second_order` diffraction, sound that just clears two edges in a row (a
+  source and a listener in sight of each other over a flat roof, a thick wall or two
+  barriers, or along a wall in line with both) was far too low, 15 to 26 dB across the
+  bands a centimetre above a 10 m roof and 6.7 dB at 63 Hz half a metre above it: the
+  path over both edges was left out there. `first_order` has no such path and stays
+  low there.
+- Fixed: with a source and a listener both exactly level with the tops of two or
+  three barriers in a row, each top's path stood for the whole direct sound, about
+  10 dB too high over two. The level is now that just above the tops, which
+  `first_order` and `direct` have far too low there (they have no path over two edges).
+- Fixed: just above a flat roof and a barrier whose top is level with it, the level
+  changed by up to 8 dB with the source and the listener swapped and, past the
+  barrier's end, by up to 16 dB between a millimetre and a centimetre above their
+  plane: a path over the barrier's top was taken to reflect off the roof, whose plane
+  it meets at the top itself, and the barrier's term was taken on the wrong side of
+  the reflection off the roof one way round.
+- Changed: with edge diffraction, the first reflections the rays look for include the
+  faces of every diffracting edge the source stands in front of, which a ray misses
+  where the source sees a face nearly edge-on or an obstacle hides it. Levels near
+  such a face can move with every diffraction mode (by 0.2 dB at 63 Hz at one of eight
+  positions in two cities with `first_order`), and a whole city simulates up to about
+  15 % slower.
 - Fixed (results change): sound over two edges along a face that absorbs
   (`second_order`, over a roof or a thick wall) was nearly cancelled in the bands that
   add in pressure, by the plane wave's R = -1 at grazing incidence; the path now takes
