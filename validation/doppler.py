@@ -33,9 +33,10 @@ walker goes (:mod:`acoustic_spaces.doppler`). Five checks:
   at 1 kHz also as a cardioid microphone aimed level at the walker's line hears it,
   each path times the capsule's 0.5 + 0.5 cos of the angle it arrives at; and at the
   ears of a listener facing along the walker's line, whom it passes on one side (the
-  spherical head). A standing head scatters a moving source's sound exactly as the
-  sum of what each moment's sound at its centre does: each sample of the pressure
-  there through the ears' responses to the direction it arrives from. A walking
+  spherical head). A standing head whose ears' responses depend on the direction
+  alone, as the engine's do, hears a moving source's sound exactly as the sum of what
+  each moment's sound at its centre does: each sample of the pressure there through
+  the ears' responses to the direction it arrives from. A walking
   head has no such exact field; the walking listener's ears are compared with what
   the engine models, worked out sample by sample: each ear a point its onset further
   along the path at the moment it hears, and what arrives there through the rest of
@@ -203,10 +204,11 @@ def emission(tone: float, n: int) -> Mixture:
     return Mixture(signals, weights.reshape(len(elevation), len(azimuth), 2), RATE)
 
 
-def _at_ears(walker, level, te, tone, ways) -> np.ndarray:
+def _at_ears(walker, level, te, tone, ways, phase) -> np.ndarray:
     """(n, 2) one path of a tone at the ears of the spherical head: ``level`` (n,) its
-    amplitude and ``te`` (n,) the time its sound left at each sample of the head's
-    centre, ``ways`` (n, 3) where it arrives from in the head's frame.
+    amplitude, ``te`` (n,) the time its sound left and ``phase`` (n,) the phase it was
+    sent with at each sample of the head's centre, ``ways`` (n, 3) where it arrives
+    from in the head's frame.
 
     A standing head hears a walking source exactly so: each sample of the pressure at
     its centre through the ears' responses to the direction it arrives from, the
@@ -226,14 +228,14 @@ def _at_ears(walker, level, te, tone, ways) -> np.ndarray:
         some = slice(start, min(start + 512, n))
         if walker == "source":
             responses = hrtf.interpolate(ways[some])
-            pressure = (level[some] * np.sin(2.0 * np.pi * tone * te[some]))[:, None]
+            pressure = (level[some] * np.sin(2.0 * np.pi * tone * te[some] + phase[some]))[:, None]
         else:
             responses, onsets = hrtf.interpolate(ways[some], onsets=True)
             spectra = np.fft.rfft(responses, room, axis=-1)
             spectra *= np.exp(2j * np.pi * cycles * onsets[..., None])
             responses = np.roll(np.fft.irfft(spectra, room, axis=-1), before, axis=-1)
             pressure = level[some, None] * np.sin(
-                2.0 * np.pi * tone * (te[some, None] - onsets / RATE)
+                2.0 * np.pi * tone * (te[some, None] - onsets / RATE) + phase[some, None]
             )
         # Sample i's response lands on the samples from i - before on: out's i on.
         for i, part in enumerate(responses * pressure[:, :, None], some.start):
@@ -276,27 +278,28 @@ def exact(walker, speed, tone, n, sent=False, line=None, heard_by="mono") -> np.
         r = np.sqrt(x**2 + b2)
         heard = (te >= 0.0) & (te < played)
         level = np.exp(-m * r / 2.0) / r
-        if heard_by == "ears":
-            # From the listener to the source or its image under the ground, in the
-            # head's frame: forward along the walker's line, left, up.
-            along = x if walker == "source" else -x
-            across = -d if walker == "source" else d
-            ways = np.column_stack([along, np.full(n, across), np.full(n, zs - zr)])
-            out += _at_ears(walker, np.where(heard, level, 0.0), te, tone, ways)
-            continue
-        if heard_by == "cardioid":
-            # The path arrives d / r off the capsule's aim, in cosine.
-            level = level * (0.5 + 0.5 * d / r)
-        amplitude, phase = np.ones(n), np.zeros(n)
+        phase = np.zeros(n)
         if sent:
             # From the source to the listener, or to the listener's image under the
             # ground for the reflection.
             along = -x if walker == "source" else x
             across = d if walker == "source" else -d
             up = (-zr if image else zr) - line.zs
-            ways = np.column_stack([along, np.full(n, across), np.full(n, up)])
-            amplitude, phase = pattern(ways / np.linalg.norm(ways, axis=1, keepdims=True))
-        out += np.where(heard, level * amplitude * np.sin(2.0 * np.pi * tone * te + phase), 0.0)
+            leaves = np.column_stack([along, np.full(n, across), np.full(n, up)])
+            amplitude, phase = pattern(leaves / np.linalg.norm(leaves, axis=1, keepdims=True))
+            level = level * amplitude
+        if heard_by == "ears":
+            # From the listener to the source or its image under the ground, in the
+            # head's frame: forward along the walker's line, left, up.
+            along = x if walker == "source" else -x
+            across = -d if walker == "source" else d
+            ways = np.column_stack([along, np.full(n, across), np.full(n, zs - zr)])
+            out += _at_ears(walker, np.where(heard, level, 0.0), te, tone, ways, phase)
+            continue
+        if heard_by == "cardioid":
+            # The path arrives d / r off the capsule's aim, in cosine.
+            level = level * (0.5 + 0.5 * d / r)
+        out += np.where(heard, level * np.sin(2.0 * np.pi * tone * te + phase), 0.0)
     return out
 
 

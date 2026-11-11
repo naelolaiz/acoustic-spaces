@@ -39,12 +39,12 @@ place to place along the walk:
   the division by the delay takes back there (a path bent over an edge spreads
   otherwise: what of that is not one over its length stays in the filter). The filter
   is known at the places, and between two of them it is theirs in proportion to how
-  near they are. It is taken at the time each place's sound is heard and, where the
-  places are heard further apart than that, every :data:`HOP_S`; the delayed signal
-  goes through it in windows that overlap, each rising from the time before its own
-  and falling to the time after (triangles, which add up to one), so the filter goes
-  linearly from each place to the next however fast the walker passes them, and a path
-  heard from one place alone gives exactly the convolution with its response.
+  near they are. It is taken every :data:`HOP_S` and, between those times, at the time
+  each place's sound is heard; the delayed signal goes through it in windows that
+  overlap, each rising from the time before its own and falling to the time after
+  (triangles, which add up to one), so the filter goes linearly from each place to the
+  next however fast the walker passes them, and a path heard from one place alone
+  gives exactly the convolution with its response.
 - **The ears.** Where each ear's response starts (its onset, as the ears are mixed
   between measured directions: :meth:`~acoustic_spaces.spatial.hrtf.HRTF.interpolate`)
   is a delay too: it goes into that ear's delay, read through the cubic and the sinc
@@ -57,12 +57,14 @@ place to place along the walk:
   passed the centre an onset earlier: the path's delay, its spreading and how far its
   filter is between two places are all taken at that earlier time. And while the
   onset grows, what passed the centre in one sample takes more than one to reach the
-  ear (less while it shrinks), so the sound is divided by one plus the onset's slope.
+  ear (less while it shrinks), so the sound is divided by one plus the onset's slope:
+  the ear's Doppler factor over the centre's, which the two ears do not share (the
+  centre's own, the convective amplification, is left out: see below).
   The ears then hear what a standing head makes of the pressure at its centre: each
   moment of it through the ears' responses to the direction it arrives from. Added to
   the delay instead, the onset would be a time of the sound sent, not of the sound
   heard, and the time between the two ears would shrink as the pitch rises and grow
-  as it falls (by a fifth at 70 m/s).
+  as it falls (by up to a fifth at 70 m/s, straight ahead and behind).
 - **The eddies.** In turbulence the eddies move each path's delay from one moment to
   the next (by microseconds, as :class:`~acoustic_spaces.engine.turbulence.Gusts`
   draws them): the top band's goes into the path's delay, taken between the places and
@@ -109,8 +111,8 @@ from acoustic_spaces.engine import coherent
 from acoustic_spaces.engine.model import source_weights
 from acoustic_spaces.room import MIN_SOURCE_DISTANCE_M
 
-#: How often each path's filter is taken at least (s): the hop of the half-overlapping
-#: windows, between which it is also taken at each place's time (:func:`_turns`).
+#: How often each path's filter is taken at least (s): the hop of the blocks, between
+#: whose centres it is also taken at each place's time (:func:`_turns`).
 HOP_S = 0.02
 #: Length of a path's filter (s), as the binaural early paths have it.
 KERNEL_S = 0.3
@@ -122,8 +124,9 @@ _PHASES = 4096
 #: Samples read through a delay at once.
 _CHUNK = 1 << 15
 #: The most steps in which the time a sound passed the head's centre is found from the
-#: time an ear hears it (:meth:`_Reading.passed`).
-_STEPS = 16
+#: time an ear hears it (:meth:`_Reading.passed`): twice those that halve a
+#: millisecond down to the tenth of a nanosecond it is found within.
+_STEPS = 48
 
 
 @dataclass
@@ -645,22 +648,52 @@ class _Reading:
 
     def passed(self, t: np.ndarray, ear: int) -> tuple[np.ndarray, np.ndarray]:
         """When the sound ``ear`` hears at times ``t`` (s) passed the head's centre:
-        the ear's onset earlier, the onset of the direction it passed from (found in
-        steps, each from the time the step before gave, until they agree within a
-        tenth of a nanosecond; the onset kept between the least and the most of the
-        places'). And how much of that time passes in each moment heard: one over
-        (1 + the onset's slope then)."""
+        the ear's onset earlier, the onset of the direction it passed from (kept
+        between the least and the most of the places'), so the time s at which
+        s + onset(s) is t. And how much of that time passes in each moment heard: one
+        over (1 + the onset's slope then), twice at most.
+
+        Each sample's time is found on its own, within a tenth of a nanosecond, so it
+        does not depend on the samples asked for with it. It lies between t less the
+        most onset and t less the least; from t less the onset at t, each step goes on
+        along the onset's slope (Newton's step), or to the middle of the times it is
+        known to lie between where that step would leave them or the one before did
+        not halve the miss. So the time is found whatever the onsets do, also where
+        one changes as fast as time passes; where one falls faster than that (sound
+        that passed later would arrive first), it is one of the times that fit."""
         assert self.onsets is not None
         received, onsets = self.track.received[self.heard], self.onsets[self.heard, ear]
         lo, hi = float(np.min(onsets)), float(np.max(onsets))
-        s = t
+        t = np.asarray(t, dtype=float)
+
+        def heard(at: np.ndarray, of: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+            """How much later than samples ``of`` of ``t`` the sound that passed at
+            ``at`` is heard, and 1 + the onset's slope there (0.5 at least)."""
+            onset = hermite(received, onsets, at)
+            kept = (onset >= lo) & (onset <= hi)
+            slope = np.where(kept, _slope(received, onsets, at), 0.0)
+            return at + np.clip(onset, lo, hi) - t[of], np.maximum(1.0 + slope, 0.5)
+
+        s = t - np.clip(hermite(received, onsets, t), lo, hi)
+        low, high = t - hi, t - lo
+        rate, missed = np.ones(len(t)), np.full(len(t), np.inf)
+        left = np.arange(len(t))
         for _ in range(_STEPS):
-            was, s = s, t - np.clip(hermite(received, onsets, s), lo, hi)
-            if np.max(np.abs(s - was), initial=0.0) < 1e-10:
+            late, rate[left] = heard(s[left], left)
+            more = np.abs(late) >= 1e-10
+            left, late = left[more], late[more]
+            if len(left) == 0:
                 break
-        onset = hermite(received, onsets, s)
-        slope = np.where((onset >= lo) & (onset <= hi), _slope(received, onsets, s), 0.0)
-        return s, 1.0 / np.maximum(1.0 + slope, 0.5)
+            at = s[left]
+            low[left] = np.where(late < 0.0, at, low[left])
+            high[left] = np.where(late > 0.0, at, high[left])
+            step = at - late / rate[left]
+            fits = (np.abs(late) <= 0.5 * missed[left]) & (step > low[left]) & (step < high[left])
+            missed[left] = np.abs(late)
+            s[left] = np.where(fits, step, 0.5 * (low[left] + high[left]))
+        else:
+            _, rate[left] = heard(s[left], left)
+        return s, 1.0 / rate
 
     def delays(self, t: np.ndarray, walk_last: int) -> tuple[np.ndarray, np.ndarray]:
         """The path's delay at times ``t`` (s), carried on along its slope past the
