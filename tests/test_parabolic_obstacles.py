@@ -144,19 +144,25 @@ def test_the_field_changes_smoothly_with_a_screen_s_height() -> None:
     assert np.abs(np.diff(levels[5.0] - levels[0.0])).max() <= 0.03
 
 
-def test_a_roof_s_wind_effect_against_the_full_wave_solution() -> None:
+@pytest.mark.parametrize("solver", [parabolic, wide_angle])
+def test_a_roof_s_wind_effect_against_the_full_wave_solution(solver) -> None:
     """A rigid block 40 to 52 m from a source 1 m up, its roof 6 m up, over rigid
     ground, at 125 Hz: the wind's effect on the level 80 and 150 m away, 1.5 m up, is
     within 0.2 dB of a full-wave solution's (mode matching in range, Evans 1983, with
-    the same roof height; 0.15 dB here), where two zero-field screens in its place are
-    0.28 dB off."""
+    the same roof height), in both equations: 0.12 dB in the narrow-angle one and 0.12
+    in the wide-angle one. Two zero-field screens in its place, with no roof between
+    them, are 0.29 dB off in the narrow-angle equation and 0.27 dB in the wide-angle
+    one."""
     f = F[1]
     ranges, heights = np.array([80.0, 150.0]), np.array([1.5, 1.5])
     roof = 6.0087  # the full-wave solution's roof, on its grid
     full_wave = {5.0: np.array([-0.06, 1.08]), -5.0: np.array([-0.10, -2.15])}
+    flat = {"refracting": False} if solver is parabolic else {}
 
     def level(u, obstacles):
-        p = parabolic.march(f, log_wind(u), None, 1.0, ranges, heights, 30.0, obstacles=obstacles)
+        p = solver.march(
+            f, log_wind(u), None, 1.0, ranges, heights, 30.0, obstacles=obstacles, **flat
+        )
         return band_db(p, ranges, heights)
 
     block = [(40.0, 52.0, roof)]
@@ -164,7 +170,7 @@ def test_a_roof_s_wind_effect_against_the_full_wave_solution() -> None:
         effect = level(u, block) - level(0.0, block)
         np.testing.assert_allclose(effect, expected, atol=0.2)
     # Below the roof the field behind the front face is gone, and comes back behind it.
-    over = parabolic.march(
+    over = solver.march(
         f,
         log_wind(5.0),
         None,
@@ -175,6 +181,38 @@ def test_a_roof_s_wind_effect_against_the_full_wave_solution() -> None:
         obstacles=block,
     )
     assert np.all(over[:, 0] == 0.0) and np.all(np.abs(over[:, 1]) > 0.0)
+
+
+@pytest.mark.parametrize("solver", [parabolic, wide_angle])
+@pytest.mark.parametrize("f", [125.0, 500.0, 2000.0])
+def test_a_source_over_a_roof_against_its_two_paths(solver, f) -> None:
+    """A source 1 m over a rigid roof 6 m up that reaches past the points, in still
+    air: the source and its image in the roof, 2 to 14 degrees down from the source,
+    within 0.15 dB in both equations (the narrow-angle one within 0.11 dB, the
+    wide-angle one 0.01; with the image in the ground the narrow-angle one was 0.63 dB
+    over at 125 Hz, and the wide-angle one, with no roof under the source, missed the
+    image)."""
+    ranges = np.array([10.0, 20.0, 30.0, 30.0, 60.0])
+    heights = np.array([7.5, 6.5, 7.5, 10.0, 7.5])
+    roof, zs = 6.0, 7.0
+    flat = {"refracting": False} if solver is parabolic else {}
+    p = solver.march(
+        np.array([f]),
+        lambda z: np.full(np.shape(z), C0),
+        None,
+        zs,
+        ranges,
+        heights,
+        40.0,
+        independent=True,
+        obstacles=[(0.0, 200.0, roof)],
+        **flat,
+    )[0]
+    k = 2.0 * math.pi * f / C0
+    direct = np.hypot(ranges, heights - zs)
+    image = np.hypot(ranges, heights - (2.0 * roof - zs))
+    exact = np.exp(1j * k * direct) / direct + np.exp(1j * k * image) / image
+    np.testing.assert_allclose(20.0 * np.log10(np.abs(p / exact)), 0.0, atol=0.15)
 
 
 def test_refracting_takes_the_wide_angle_equation_at_steep_points_in_still_air(monkeypatch) -> None:

@@ -2555,13 +2555,32 @@ equation too: within 0.07 dB to 1 km, downwind and upwind, and at 2 km downwind 
 low with the gradient going on to 1000 m, as the bands below it there, and 0.38 dB high
 with it stopping at 100 m.
 
-At the join between the parabolic equation's bands and the rays' each band of the
-response keeps its own spectrum into the crossovers, since a blend of spectra that
-stand for different sound (the whole field over the ground on one path, each ray's own
-on the others) would put a notch in it, and a path that carries nothing in a band is
-left out of that band's reading, where its higher bands would count against it. A
-ground dip that falls in the crossover above the 2 kHz band is missed (see
-[Known issues](#known-issues)).
+At the join between the parabolic equation's bands and the rays' each ray band keeps
+its own spectrum, since a blend of spectra that stand for different sound (the whole
+field over the ground on one path, each ray's own on the others) would put a notch in
+it, and a path that carries nothing in a band is left out of that band's reading. The
+equation's bands carry its field at every frequency its runs took, and out of the shadow
+the top one on through the crossover above it (`engine/fine.py`), so both bands of a
+crossover give the same field there: in case 2 the dip in the crossover above the 2 kHz
+band, 12.8 dB deep at 2.85 kHz 100 m away, comes out within 0.19 dB of the program from
+2 to 3.45 kHz at 100 m, 0.05 and 0.28 dB at 150 and 200 m and 0.45 dB at 300 m (on the
+rays' side, 3.1 kHz), alike with 8 frequencies an octave and with the wide-angle
+equation, the join of the equation's 500 Hz and 1 kHz bands within 0.07 dB, and
+third-octave runs within 0.12 and 0.58 dB at 100 and 300 m (`tests/test_ffp.py`). In
+the shadow the bands keep their own samples (see [Known issues](#known-issues)).
+
+Up to 500 Hz the echogram reads the bands through band filters from that field, the
+63 Hz band's run going on down to an octave below it, where its filter still reads it.
+100 m downwind in case 2 and 200 m downwind in `windy`, C50 and C80 at 63 Hz are within
+0.01 and 0.08 dB and within 0.05 and 0.10 dB of a run of the equation 27 times as dense
+going on down to 11 Hz, read through the same filters (27 and 81 times, to 11 or
+5.5 Hz, agree within 0.06 dB), where the band's own samples were 0.30 and 0.29 dB and
+0.91 and 0.19 dB off, and EDT within a step of the echogram (1 ms), where `windy`'s was
+1.8 ms off (`tests/test_ffp.py`); a coverage map's point keeps the same samples in these
+bands as a listener there (`tests/test_refraction.py`). That run's lowest frequency, 25 Hz,
+thickens its absorbing layer, which moves the 63 Hz band's level by 0.002 and 0.003 dB,
+to within 0.0001 dB of a thicker one still. Above 63 Hz, where C50 and C80 are 47 to
+88 dB, see [Known issues](#known-issues).
 
 ## The wide-angle parabolic equation
 
@@ -3155,6 +3174,8 @@ The full-wave cases (source 1 m up unless given; listeners 1.5 m up unless given
 | two | barriers 45 and 55 m away, 8 m high; also along a plane | 100, 150 |
 | two 40 | barriers 20 and 60 m away, 3 and 5 m high; 125 and 250 Hz; also along a plane | 100, 160 |
 | near upwind | as near, upwind only, 5 and 10 m/s, on a domain 60 m high | 60, 120, 200; 120 at 4 m up |
+| rooftop | source 7 m up on a building from the axis to 5 m, 6 m high | 27.5, 42.5, 100 |
+| mast | source 10 m up, building 15 to 25 m away, 6 m high | 40, 45, 50, all 10 m up |
 
 **Against the full-wave solution.** The engine's weather effect less the solution's,
 the largest difference (dB) over the listeners and the bands 63 to 500 Hz, at the
@@ -3177,6 +3198,10 @@ effects:
 | steep 60 | ring | grass | 0.10 | 0.40 |  | 0.46 |  | -1.3 to +3.1 |
 | roof | ring | rigid | 0.15 | 0.24 |  | 0.32 |  | -6.1 to +9.7 |
 | roof | ring | grass | 0.40 | 0.21 |  | 0.51 |  | -6.8 to +8.1 |
+| rooftop | ring | rigid | 0.09 | 0.18 |  | 0.31 |  | -8.4 to +3.7 |
+| rooftop | ring | grass | 0.13 | 0.17 |  | 0.22 |  | -3.4 to +2.4 |
+| mast | ring | rigid | 0.03 | 0.03 |  | 0.05 |  | -0.5 to +0.3 |
+| mast | ring | grass | 0.02 | 0.02 |  | 0.04 |  | -0.6 to +0.3 |
 | two | ring | rigid | 1.00 | 1.68 |  | 1.49 |  | -6.7 to +17.3 |
 | two | ring | grass | 0.87 | 0.75 |  | 1.63 |  | -4.4 to +5.2 |
 | two | plane | rigid | 1.00 | 1.63 |  | 1.61 |  | -6.6 to +17.4 |
@@ -3194,7 +3219,10 @@ Behind one barrier or building the engine is within 0.71 dB in 5 m/s of wind (at
 band and the farther the listener (1.64 dB at 500 Hz 120 m away 4 m up, 1.0 to 1.4 dB at
 250 Hz 120 and 200 m away): the narrow-angle equation's error, as the sound comes down
 steeply into the shadow. Behind a top 45 degrees up from the source it is within
-0.98 dB in 10 m/s at 250 Hz over rigid ground, 60 degrees up 0.54 dB. Behind two
+0.98 dB in 10 m/s at 250 Hz over rigid ground, 60 degrees up 0.54 dB. From a source
+1 m over the roof of a building 6 m high it is within 0.31 dB (250 Hz 100 m away in
+10 m/s downwind over rigid ground), and with the source and the listeners 10 m up,
+higher than the building (mast), within 0.05 dB. Behind two
 barriers 10 m apart it is off by up to 1.73 dB, and 40 m apart by up to 4.95 dB at
 250 Hz in 8 m/s downwind over rigid ground (2.23 dB in 5 m/s, 1.28 dB over grass): the
 equation marches away from the source only, so nothing goes back and forth between the
@@ -3279,14 +3307,17 @@ why the 8 kHz band takes 32, within 0.18 dB of 64 but 0.51 dB 11 m behind the st
 top.
 
 **Steep points behind a building.** Where the sound reaches a point more steeply than 15
-degrees the engine's runs take the wide-angle equation, in which a building is two thin
-screens at its roof's height with no roof between them (`--only steep`). 60 m from a
-source 1 m up, behind a building 20 to 30 m away with its roof 8 m up, in 10 m/s
-downwind over rigid ground, the weather's effect steps by 0.24, 0.16, 0.14, 0.25 and
-0.60 dB at 125 Hz to 2 kHz between listeners 15 and 15.5 m up, either side of that
-angle. From 10 to 24 m up it is within 0.31 dB of the full-wave solution's at 125 Hz and
-0.14 dB at 250 Hz; the wide-angle equation alone within 0.09 and 0.15 dB, the
-narrow-angle one within 0.45 and 0.09 dB.
+degrees the engine's runs take the wide-angle equation, which holds a building's roof as
+a rigid floor on its height steps, as the narrow-angle one does between them (`--only
+steep`). 60 m from a source 1 m up, behind a building 20 to 30 m away with its roof 8 m
+up, in 10 m/s downwind over rigid ground, the weather's effect steps by 0.30, 0.05,
+0.02, 0.01 and 0.35 dB at 125 Hz to 2 kHz between listeners 15 and 15.5 m up, either
+side of that angle: the narrow-angle equation's own error below it. From 10 to 24 m up
+it is within 0.31 dB of the full-wave solution's at 125 Hz and 0.09 dB at 250 Hz; the
+wide-angle equation alone within 0.02 and 0.08 dB, the narrow-angle one within 0.45 and
+0.09 dB. A source or a listener on a roof starts or ends the march over it: from a
+source 1 m over a long rigid roof in still air both equations are within 0.11 dB of the
+source and its image in the roof 10 to 60 m away (`tests/test_parabolic_obstacles.py`).
 
 **Continuity.** How much the level steps as one thing changes a little, end to end
 (`simulate`, the coherent sum of the early paths), the most in any band, in the
@@ -3301,9 +3332,11 @@ source 1 m up over hard ground and a barrier 4 m high 15 m away across the way:
 | a building's roof 25 to 37 m away, 1 cm higher, from 6 to 6.3 m (listeners 60 and 120 m away, 5 m off its middle) | 0.14 | 0.021 | 0.1 a cell |
 | a listener 60 and 120 m away behind a barrier slanted at 63 degrees to the way, 0.01 degrees round, from 0.40 to 0.60 degrees | 0.017 | 0.018 | |
 | a listener 2 cm further, where the parabolic equation starts (a 1.5 m barrier 2 m from a source 0.5 m up) | 0.24 | 0.16 | |
-| a listener 10 cm across the shadow boundary of a barrier's end, 60 and 120 m away | 7.8 and 19 | 0.42 | 1 |
-| a listener 10 cm across a roof edge's shadow boundaries, of the direct sound and of the ground reflection, 28 and 43 m from a source 1 m over the roof (and the source and the listener swapped) | 0.28 and 1.79 | 0.09 and 0.04 | |
-| a listener 2 mm across the line of an end below the line of sight seen from above (a barrier 1 m high 30 m away), 100 and 200 m away | 12.8 and 6.3 | 0.02 | |
+| a listener 1 mm either side of the shadow boundary of a barrier's end, 60 and 120 m away | 0.04 and 0.22 | 0.04 and 0.17 | 1 |
+| a listener 10 cm across a roof edge's shadow boundaries, of the direct sound and of the ground reflection, 28 and 43 m from a source 1 m over the roof (and the source and the listener swapped) | 0.11 and 0.09 | 0.09 and 0.04 | |
+| a listener 2 cm further, where the parabolic equation starts, 12.75 m from a source 1 m over a roof 6 m high (and the two swapped) | 0.13 | 0.024 | |
+| a listener 1.5 m over a roof 45 m away, 1 mm either side of the shadow boundary of a barrier's end (and the two swapped) | 2.83 | 2.79 | |
+| a listener 1 mm either side of the line of an end below the line of sight seen from above (a barrier 1 m high 30 m away), 100 and 200 m away | 12.8 and 6.0 | 0.01 | |
 
 The wind's effect grows in proportion to the wind (500 Hz, 100 m away and 4 m up),
 with no step as it starts. The roof stands at its own height between the parabolic
@@ -3316,15 +3349,18 @@ degrees the listener takes both runs' effects, so the level turns smoothly round
 steps at a barrier's end come from the plane's two dimensions (see
 [What is not modelled yet](outdoor.md#what-is-not-modelled-yet)): the paths over the
 top take the barrier's effect, past the end too as they fade out there, and the direct
-sound and the paths round the end the open ground's. Across the end's shadow boundary
-the level steps by at most 1.0 dB from 63 to 500 Hz and 1.6 dB at 1 and 2 kHz, and at
-4 and 8 kHz, where the paths round the end keep their legs, by up to 7.8 and 19 dB
-downwind; across the line
-of an end below the line of sight, where the direct sound goes from the barrier's
-effect to the open ground's, by up to 1.2 dB from 63 to 250 Hz and 4.8 dB at 500 Hz to
-12.8 dB at 8 kHz above (see [Known issues](#known-issues)). Past a roof's edge, where
-the ground reflection comes into view, the open ground's bands go from the rays to the
-parabolic equation (see [Known issues](#known-issues)).
+sound the open ground's, and the paths round the end change as the open ground's
+field along their way does. Across the end's shadow boundary the level steps by at
+most 0.04 dB a millimetre 60 m away, 0.07 dB 120 m downwind and 0.22 dB 120 m upwind,
+where still air steps by 0.17 dB (more with eddies and at 4 and 8 kHz in weather
+zones); across the line of an end below the line of sight, where the direct sound goes
+from the barrier's effect to the open ground's, by up to 0.94 dB a millimetre from 63
+to 250 Hz, 4.7 dB from 500 Hz to 2 kHz 100 m away and 6.0 dB 200 m away, and 12.8 dB
+at 8 kHz upwind (see [Known issues](#known-issues)). From a source or to a
+listener on a roof the equation holds the building, and across the roof edge's shadow
+boundaries the weather's effect jumps by at most 0.04 dB in any band, octave or third
+octave, against the steps either side (`tests/test_barriers_in_wind.py`); where the
+equation starts, the effect steps by up to 0.12 dB (see [Known issues](#known-issues)).
 
 ## Levels over a long term
 
@@ -4700,37 +4736,123 @@ Results:
   [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
 - **A barrier's end in wind.** Behind a barrier the paths in the plane take the
   barrier's effect, and the paths over the top past its end, as they fade out there,
-  take it too; the direct sound and the paths round the end take the open ground's, in
-  the open ground's bands along their way and above them with their legs' own shadows.
-  10 cm across the end's shadow boundary in the `windy` preset the level steps by at
-  most 1.0 dB from 63 to 500 Hz and 1.6 dB at 1 and 2 kHz (0.42 dB in still air), and
-  120 m upwind by at most 0.92 dB in every band, but at 4 and 8 kHz, where the direct
-  sound takes the open ground's refraction and the paths round the end their legs', by
-  up to 7.8 dB 60 m downwind and 19 dB 120 m downwind, and by 5.2 dB at 4 kHz 60 m
-  upwind. Where the end
-  stands below the line of sight (a barrier 1 m high 30 m from a source 1 m up), a
-  listener 100 or 200 m away crossing the end's line seen from above goes from the
-  barrier's effect to the open ground's sound: 2 mm across it the level steps by up to
-  1.2 dB from 63 to 250 Hz (0.02 dB in still air), but by up to 4.8 dB from 500 Hz to
-  2 kHz and 12.8 dB upwind at 8 kHz (see
-  [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
-- **A roof's edge in wind.** Where the paths over edges keep their straight legs (a
-  source or a listener on a building, an object of the model file in the way), the bent
-  direct sound and its ground reflection are there where the straight ones are, and
-  the edges' terms, made for the straight paths, do not follow the bent rays' times and
-  levels. Walked in 10 cm steps across a roof edge's shadow boundaries in the `windy`
-  preset, down- and upwind (a source 1 m over a roof 6 m high, listeners 1.5 m up 28
-  and 43 m away, and the two swapped), the weather's effect steps across the direct
-  sound's boundary by at most 0.26 dB in octave bands and 0.63 dB in third octaves.
-  Across the ground reflection's, where it comes into view and the open ground's bands
-  (up to 2 kHz) go from the rays to the parabolic equation, it steps by up to 1.75 dB
-  at 500 Hz and 0.72 dB at 2 kHz (0.42 dB downwind) in octave bands and 3.2 dB at
-  400 Hz in third octaves, where with the rays on both sides it would step by 0.61,
-  0.14 and 1.2 dB; at 8 kHz by 0.83 dB (1.3 dB in its 10 kHz third octave) either way (a one-off
-  check; `tests/test_barriers_in_wind.py` bounds octave bands from 63 to 500 Hz). The
-  level itself, in the wind, steps by up to 0.28 and 1.79 dB in octave bands
-  ([Continuity](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
-  Blending the rays and the equation there would remove the switch's part.
+  take it too; the paths round the end change as the open ground's field along their
+  way unfolded does from the straight direct sound and ground reflection in still air
+  to the weather's, so that at the end's shadow boundary they jump by the open ground's
+  field, as the direct sound does. 1 mm either side of the boundary in the `windy`
+  preset (a barrier 4 m high 15 m from a source 1 m up, listeners 1.5 m up) the level
+  steps by at most 0.04 dB in octave bands 60 m down- and upwind and 0.07 dB 120 m
+  downwind, but 120 m upwind by 0.22 and 0.20 dB at 250 and 500 Hz, where still air
+  steps by 0.17 and 0.08 dB; in third octaves by 0.28 dB 120 m downwind (in the 50 Hz
+  one, where still air steps by 0.30 dB). With eddies it steps more at 4 and 8 kHz, and
+  in still air the same eddies step across the boundary too (largest step, dB, 1 mm
+  either side; in wind at 4 and 8 kHz, the lower bands as without eddies):
+
+  | eddies | wind, 60 m | wind, 120 m | still air, 60 m | still air, 120 m |
+  |---|---|---|---|---|
+  | weak | 0.02 and 0.01 | 0.03 and 0.10 | 0.19 at 4 kHz | 0.27 at 8 kHz |
+  | moderate | 0.08 and 0.02 | 0.13 and 0.34 | 0.60 at 4 kHz | 0.29 at 4 kHz |
+  | strong | 0.11 and 0.01 | 0.49 and 1.08 | 0.95 at 4 kHz | 0.81 at 2 kHz |
+
+  The eddies ease the decorrelation only of two paths with the same walls and edge
+  (`Eddies.wander`), and a path round the end shares neither with the open ground's
+  path it stands for nor, in still air, with the direct sound: with that easing taken
+  for every pair the step is at most 0.04 dB in still air (strong eddies, 60 m) and
+  0.01 dB at 4 and 8 kHz in wind. With weather zones (a zone from 30 m on with 1 m/s
+  of wind, 60 m downwind) it steps by at most 0.04 dB up to 2 kHz but by 0.20 and
+  0.76 dB at 4 and 8 kHz, where the eigenrays take the mean of the weathers along
+  their way: those shares, sampled every metre of each leg, come out 0.495 for the way
+  round the end and 0.49 along the listener's line (0.5 exactly); sampled every
+  millimetre, the step is 0.00 dB at 4 and 8 kHz. At a building's corner the paths
+  round its vertical edge stop where they would touch it above the roof, the edges of
+  a box's corner stopping as an endless edge would: past a building 6 m high (x 20 to
+  30 m, the source at the origin 1 m up) a listener at (60, 28) rising past that point
+  (15.808 m up) steps 1 mm by 1.3 to
+  3.0 dB in still air and by 0.7 to 2.6 dB in the `windy` preset downwind, where the
+  copies of those paths stop with them. 60 m downwind the level on the
+  boundary is the open ground's less 6.12 to 5.83 dB from 250 Hz to 8 kHz (half the
+  field, 6.02 dB, for a half-plane; 6.48 to 5.74 dB in still air) and 1 m into the lit
+  side within 0.32 dB of the half-plane's Fresnel factor from 1 to 8 kHz. 60 m upwind
+  at 4 and 8 kHz it is the open ground's less 1.77 dB and plus 4.30 dB with the
+  default frequencies, but less 1.56 and 4.13 dB with 8 an octave in the runs: it
+  depends on the frequencies they take. Where the
+  end stands below the line of sight (a barrier 1 m high 30 m from the source), a
+  listener 100 m away crossing the end's line seen from above, from the barrier's
+  effect to the open ground's sound, steps 1 mm across it by up to 0.94 dB from 63 to
+  250 Hz, 4.7 dB from 500 Hz to 2 kHz and 7.7 and 12.8 dB at 4 and 8 kHz upwind; 200 m
+  away by up to 0.57 dB from 63 to 250 Hz, 6.0 dB from 500 Hz to 2 kHz (downwind) and
+  1.1 dB at 4 and 8 kHz. Both are two estimates of the same field that disagree, not a
+  missing blend. In a deep upwind shadow the barrier's own runs at 4 and 8 kHz and the
+  open ground's shadow there (deepened from the 2 kHz band's) are 12 and 40 dB apart (a
+  barrier 5 cm high across the whole way 100 m upwind raises those bands by as much).
+  From 500 Hz to 2 kHz it is the barrier's side: 200 m downwind, 0.5 mm behind the
+  end's line, the wind's effect is the open ground's own there (the barrier moved
+  aside) less 5.8 dB at 500 Hz and plus 6.3 dB at 2 kHz, from the barrier's runs on the
+  paths in the plane, while 0.5 mm on the open side it is within 0.26 and 0.82 dB of
+  it and the paths round the end follow it within 0.14 dB on both sides. Where the
+  end's top comes onto the line of sight (200 m downwind, 0.5 m either side of the
+  end's line, the listener rising past 1 m) the paths round it of the direct sound's
+  kind stop, and the level steps 1 mm by up to 4.3 dB from 500 Hz to 2 kHz and 3.9 dB
+  at 8 kHz (0.16 dB in still air): the paths round the end step there as in still air
+  (6.0 and 5.9 dB at 1 and 2 kHz) and the other paths against them, which cancels in
+  still air; in wind the two weigh differently, by the disagreement above, and 1.8
+  and 4.3 dB are left at 1 and 2 kHz. In a breath of wind (0.05 m/s) the paths round
+  the end share the open ground's own departure from still air, its equation's ground
+  fitted from the absorption near grazing against the image sources' reflection: 60 m
+  downwind on the boundary by -0.07 to -0.85 dB from 63 Hz to 2 kHz and +0.62 dB at
+  4 kHz (10 m into the lit side as much, 10 m behind up to 0.27 dB), over grass, whose
+  impedance both share, by at most 0.21 dB.
+- **A model file's object in wind.** The parabolic equation's runs behind barriers and
+  buildings cannot hold the model file's objects, so where one stands in the way the
+  paths over its edges keep their straight legs, and the bent direct sound and its
+  ground reflection are there where the straight ones are: the edges' terms, made for
+  the straight paths, do not follow the bent rays' times and levels. Walked in 10 cm
+  steps across the shadow boundaries of a wall 4 m high 15 m from a source 8 m up in
+  the `windy` preset, down- and upwind, the weather's effect steps across the direct
+  sound's boundary by at most 0.13 dB in octave bands and 0.2 dB in third octaves, and
+  across the ground reflection's by up to 0.57 dB at 250 Hz upwind and 0.8 dB at 2 kHz
+  downwind in octave bands and 2.5 dB at 250 Hz in third octaves (a one-off check;
+  `tests/test_barriers_in_wind.py` bounds octave bands from 63 to 500 Hz). A source or
+  a listener on a building's roof takes the equation with the building inside, as
+  behind barriers and buildings, where those steps are gone (see
+  [Continuity](#barriers-and-buildings-in-wind-against-a-full-wave-solution)); there
+  the narrow-angle march from the roof and the one to it differ by up to 0.22 dB at
+  8 kHz 42.5 m away (0.6 dB in third octaves), the wide-angle one by 0.03 dB.
+- **Where the runs from a roof take over.** Nearer than 1.5 times the source's and the
+  listener's heights above the ground added, the paths over a roof's edge keep their
+  straight legs, which leave out the weather's effect close behind it: 12.75 m from a
+  source 1 m over a roof 6 m high, listeners 1.5 m up (and the two swapped), the effect
+  steps by up to 0.12 dB in 2 cm (0.10 dB at 125 Hz, where the full-wave solution's is
+  0.08 dB), down- and upwind, in either setting of the equation. Measured from the
+  roof, that distance
+  would put the runs close behind the wall, where the wide-angle equation is up to
+  0.26 dB off the full-wave solution at 250 Hz 6 m from the source and the runs'
+  frequencies fall in step with the ground's fringes 11.5 to 12.4 m away (up to 2.9 dB
+  at 8 kHz, 0.11 dB with 64 frequencies an octave).
+- **A barrier's end seen from a roof.** On the lit side of the shadow boundary of a
+  barrier's end the roof's near edge diffracts the direct sound and its ground
+  reflection, but no path goes round the end and then over that edge, so that 1.5 m
+  over a roof 6 m high 45 m from a source 1 m up the level steps 1 mm across the
+  boundary by up to 2.79 dB in still air (at 250 Hz; by up to 0.05 dB with no
+  building). In wind the paths round the end take there the lit side's runs with the
+  building inside, the paths over the barrier's top those with the barrier too, and
+  with the roof edge's paths stepping the weather's effect steps by up to 0.37 dB
+  downwind and 0.57 dB upwind at 500 Hz, and by up to 1.28 dB in the 400 Hz third
+  octave; without the roof edge's paths it steps by at most 0.02 dB (0.07 dB in third
+  octaves; `tests/test_barriers_in_wind.py`). Diffraction to the second order leaves
+  the still-air step (3.53 dB at 250 Hz). A path round the end and then over the roof's
+  edge would keep its straight legs in wind as the paths are routed now (it goes round a
+  vertical and then a horizontal edge), while the lit side's paths over that edge take
+  the building's runs, so supplying it in still air alone would not be known to remove
+  the step of the weather's effect: that is not measured. In other cases (one-off
+  checks): 0.8 m over the same roof the weather's effect steps by 0.82 dB at 4 kHz
+  (still air by 5.76 dB at 125 Hz); with a barrier 8 m high and the source on the roof
+  by 0.69 and 1.15 dB at 250 and 500 Hz; and where a second building 4 m high stands
+  with its corner's top 0.17 m under the line of sight from a source on a roof, by 3.3
+  and 4.5 dB at 1 and 2 kHz (up to 6.5 dB with the two swapped): there the direct
+  sound's own runs step as the way to the listener takes in that building at its
+  footprint's corner (their effect goes from 0.97 to -2.29 dB at 250 Hz), and the paths
+  over its roof's edge past the end keep straight legs.
 - **A caustic in the rays' bands.** Over the open ground in wind or a temperature
   gradient the bands above the parabolic equation's (4 and 8 kHz) come from the
   eigenrays, and where two of them merge (a caustic) each is capped at 10 dB over a
@@ -4744,25 +4866,134 @@ Results:
   1 and 2 kHz too short of half the way to the shadow, and those step at the same
   caustics by 10.5 and 12.0 dB in the wind and by 14.0 and 7.2 dB on the clear night (a
   one-off check).
-- **A ground dip in the crossover from the parabolic equation's bands to the rays'.**
-  Each band of the response keeps its own spectrum into the crossovers, held past its
-  last frequency, so a ground dip that falls in the crossover above the equation's top
-  band (2.4 to 3.4 kHz; 0.59 to 0.84 kHz short of half the way to the shadow with
-  `open_ground_frequencies: rays`) is missed: 100 m downwind in the benchmark's case 2 the dip at
-  2.85 kHz, 12.8 dB deep, comes out 1.3 dB too shallow and the response 2.0 dB too low
-  at 3 kHz, off by up to 2.0 dB from 2.75 to 3.2 kHz (`tests/test_ffp.py` checks
-  either side of it). More frequencies do not mend it: a model of the hold against the
-  program misses by 2.8 dB from the band's last of 8 an octave (2740 Hz) and 2.1 dB
-  from the last of 24 (2799 Hz).
+- **What the equation's field through the crossovers does not mend.** Between its
+  samples (59 Hz apart in the 2 kHz band) the field is drawn linearly in the complex
+  pressure, within h^2 / 8 times the sum of |a_i| (2 pi dtau_i)^2 for arrivals a_i
+  dtau_i away from the field's own delay (`engine/fine.py`'s `interpolation_bound`
+  reads it from the samples); a field that turns by half a period or more from one
+  sample to the next is not resolved. 300 m downwind in `windy` the equation's dip to
+  -10.1 dB at 2225 Hz reads -9.9 dB; 1 km downwind the estimate is 0.3 to 0.55 of the
+  band's level in its bands from 500 Hz up, and the equation's dip to -27 dB at 2090 Hz
+  is drawn at -50 dB 10 Hz below it (a one-off check). In the weather presets the rays' band above the
+  top crossover (2.4 to 3.4 kHz) is 5 to 22 dB off the equation inside it, 100 and 300 m
+  downwind in `windy` and on the clear night, while the equation's bands follow it
+  within 0.9 dB. Against the bands' own samples, whose two errors there partly cancel,
+  the response in the crossover comes closer to the equation in `windy` (rms 7.2 to
+  3.3 dB 100 m away, 4.3 to 3.1 dB 300 m away, though 3.5 dB further at 3010 Hz) and
+  goes further from it on the clear night (rms 1.4 to 1.8 and 1.2 to 1.7 dB, up to
+  2.4 dB further at 3075 Hz 100 m away; a one-off check). So it does in case 2 with the
+  source 1.5 m and the listener 1 m up, 300 m away, where the rays' band is 2.8 dB low
+  at 3.45 kHz: up to 0.42 dB further from the program at 2.8 to 2.95 kHz, though closer
+  over 2 to 3.45 kHz (worst 4.0 to 3.0 dB, rms 1.8 to 1.6; a one-off check). In the shadow the bands keep
+  their own samples, since the bands above the equation, deepened from the octave
+  below, are not continuous with its field: 18 dB (upwind in `windy` 100 m away) to
+  36 dB (`sunny_day` 300 m away) louder than it at 3.4 kHz. In case 3, 300 m away,
+  where they are within 0.3 dB of the equation at 3.4 and 3.9 kHz, the response in the
+  crossover is 8.6 dB below the program at 2.95 kHz. The paths round a barrier's end or
+  a building's corner take their way's runs at every frequency too, with each path in
+  still air drawn between its own frequencies (within 0.18 dB and 0.9 degrees of the
+  same path at 24 frequencies an octave from 0.7 to 4.5 kHz), and 60 and 120 m away,
+  downwind in `windy` and in case 2 over a Delany-Bazley ground of 200 kPa s/m², their
+  rendered third octaves through the crossovers are within 0.03 dB of runs 27 times as
+  dense (over an absorption of 0.02, 0.34 dB at 800 Hz 2.6 m up, as far as the way's
+  own field is off its dense run there; with `open_ground_frequencies: rays` 0.18 dB
+  at 400 Hz, where the band energies over 8 frequencies an octave leave the listener's
+  own field 0.10 dB off). Below an end's line of sight, where the straight paths along
+  the way all but cancel, they keep the weather's effect at the early paths'
+  frequencies (100 m downwind in `windy`, within 0.01 dB of the dense runs in the 2 and
+  2.5 kHz third octaves but up to 1.1 dB off them in the crossovers); the paths over a
+  roof's edge and behind barriers still take one ratio of the equation's band energies
+  a band through them (a one-off check).
+- **A ground given by absorption coefficients in wind.** The parabolic equation (the
+  bands up to 2 kHz in wind and temperature gradients) takes such a ground as a locally
+  reacting surface of the real admittance fitted to its absorption
+  (`engine/impedance.py`'s `fit_admittance`: 0.003 for 0.02, 0.051 for 0.3), whose
+  reflection goes to -1 at grazing incidence and adds a ground wave; still air's image
+  sources reflect off it with the square root of (1 - its absorption) at every angle
+  and that admittance's plane-wave phase, as off a floor. So a breath of wind
+  (0.05 m/s) moves the level, in `tests/test_barriers_in_wind.py`'s scene without its
+  barrier (scattering 0, a listener 1.5 m up 60 and 120 m away), from 63 Hz to 2 kHz
+  by -0.15 to -1.08 dB from a source 1 m up over an absorption of 0.02 (-0.11 to
+  -0.81 dB from 5 m up), and over 0.3 by up to +18 dB at 63 Hz from 1 m up (-4.8 to
+  +1.8 dB from 5 m up). Each against the fast field program over a locally reacting
+  ground of that admittance in its own air (still, and the scene's wind), the equation
+  is within 0.05 dB in every band of these cases, and the image sources are 0.10 to
+  0.91 dB above it over 0.02 and up to 18 dB off it over 0.3 (63 Hz, 60 m, from 1 m
+  up); the bending itself, the program's breath against its still air, is at most
+  0.11 dB of these moves but for 0.31 dB at 2 kHz 60 m from the source 1 m up and
+  0.38 dB at 1 kHz 120 m from 5 m up. The rays' bands, whose reflections take the
+  image sources' rule, move with the bending alone: +0.62 dB at 4 kHz 60 m from the
+  source 1 m up, where the ground reflection comes 4.0 µs later against the direct
+  sound than in still air and 0.16 dB louder, by the first interference dip (3.4 kHz),
+  and +2.2 dB at 8 kHz 120 m away (a one-off check). The paths round a barrier's end
+  follow the equation through the crossover too: on an end's shadow boundary 60 m away
+  (the source 1 m up, absorption 0.02), the 3.15 kHz third octave of
+  those paths moves by -0.56 dB at 0.01 m/s and -1.92 dB at 0.05 m/s against still air,
+  the open ground's by -0.57 and -1.93 dB, and the fast field program's, in the scene's
+  own wind and over that admittance, by -0.36 and -1.78 dB (its still air 0.27 dB below
+  the image sources'). Outdoors give the ground an
+  impedance ([The ground and the sky](outdoor.md#the-ground-and-the-sky)).
+- **The eddies downwind.** The eddies' coherence factor was fitted in still air and in
+  the shadow (see
+  [Turbulence](#turbulence-against-a-parabolic-equation-through-random-eddies)); downwind
+  it is checked only here. In `windy` with the `strong` eddies, over grass with a
+  scattering coefficient of 0, a source 5 m and a listener 1.5 m up, the eddies raise
+  the 1 kHz octave band by 0.33, 0.60 and -0.34 dB 100, 200 and 300 m away, where the
+  engine's narrow-angle parabolic equation marched at the band's 24 frequencies through
+  224 fields of these eddies (drawn as by `validation/turbulence.py`, Cn² the same at
+  every height) raises it by 0.62 ± 0.24, 2.39 ± 0.34 and 0.67 ± 0.34 dB (95 %
+  confidence): 0.3 to 1.8 dB apart (a one-off check). Since the eddies add the rays'
+  energy into the equation's bands, a step of the rays' at a caustic comes through:
+  in the same case, between 335.9 and 336.0 m away, the 125 Hz to 2 kHz bands step up
+  by 1.8 to 8.1 dB with the `strong` eddies and 0.5 to 6.2 dB with the `moderate`,
+  where without eddies they move by at most 0.012 dB.
+- **The eddies in a band's echogram.** Up to 500 Hz, where the early paths' energy over
+  time is read through each band's filter, each two paths' product still takes their
+  coherence factor as its mean over the band's frequencies, where the band's level
+  takes it at each frequency. In still air with the `strong` eddies, a listener 1.5 m
+  up over grass with a scattering coefficient of 0, the 500 Hz octave band's echogram
+  so sums to 0.02 dB more 50 m from a source 5 m up, and 0.06 and 0.12 dB more 100 and
+  200 m from one 10 m up, than with the coherence taken at each frequency (0.005 dB
+  over asphalt at 100 m; within 0.05 dB from 63 to 250 Hz, and within 0.01 dB in third
+  octaves at 100 m; a one-off check).
+- **A ground's scattering coefficient in wind.** The parabolic equation's bands over the
+  open ground (63 Hz to 2 kHz in wind or a temperature gradient) keep a ground's whole
+  reflection, while the rays and still air's image sources keep sqrt(1 - s) of it at
+  each bounce, s the ground's scattering coefficient. Over a ground with a scattering
+  coefficient of 0.1 this steps the level by 0.075 and 0.122 dB more at 1 and 2 kHz over
+  grass (0.196 and 0.151 dB over asphalt) where the rays take over with
+  `open_ground_frequencies: rays` (1 m/s of wind upwind, a source 10 m and a listener
+  1.5 m up, between 90.8 and 90.9 m away), takes 0.11 to 0.14 dB from the 4 and 8 kHz
+  bands but nothing from the 2 kHz band beside them (the same weather, 90.4 m away), and
+  changes by up to 0.23 dB how far a breath of wind is from still air (0.05 m/s, a
+  source 2 m and a listener 1.5 m up, 50 m away, 63 Hz to 2 kHz). With a scattering
+  coefficient of 0 only the models' own differences remain: up to 0.08 dB at the
+  hand-over, and between still air and the breath up to 0.07 dB from 63 to 500 Hz and
+  0.13 dB over grass and 0.19 dB over asphalt at 1 and 2 kHz (a one-off check;
+  `tests/test_refraction.py` holds the equation's bands the same with 0 and 0.1).
+- **The late part of a band read through its filter outdoors.** Between the
+  equation's samples h apart (11, 22 and 44 Hz in the 125, 250 and 500 Hz octave
+  bands) a band's spectrum is drawn linearly, which weighs the response about the
+  field's delay by sinc^2(t h) and repeats it faintly every 1/h: what comes 1/(2h)
+  later is 7.8 dB down, later still more, and images come in. Where C50 and C80 are 47
+  to 88 dB, the late part that far below the early sound, they so read up to 8.2 dB off
+  runs of the equation 27 and 81 times as dense, read the same way, 100 m downwind in
+  case 2 and 200 m downwind in `windy` (the bands' own samples up to 13.7 dB off);
+  closer than those in every case but C80 at 500 Hz, 6.5 to 7.4 and 2.3 to 4.8 dB off
+  against 4.6 to 5.6 and 0.4 to 2.2 dB, where the two dense runs differ by 0.9 and
+  2.6 dB. The dense run's own field, drawn on a 0.12 Hz grid and read through the same
+  octave filters outside the response's synthesis, gives its C50 and C80 at 250 and
+  500 Hz within 0.1 dB. What cuts the late part differs by the case: in case 2 mostly
+  the 500 Hz band's own samples (those alone at their own spacing move its C80 from
+  82.1 to 91.3 dB, the bands from 1 to 3.4 kHz alone to 83.9 dB), in `windy` the bands
+  from 1 to 3.4 kHz, which the 500 Hz filter reads through its skirts (alone they move
+  it from 73.1 to 84.6 dB). Denser samples close it only slowly: C80 at 500 Hz in
+  case 2 reads 88.4, 94.9, 87.0, 82.0 and 81.1 dB with 1, 3, 9, 27 and 81 times as
+  many from 63 Hz to 3.4 kHz (a one-off check).
 - **Coverage maps behind barriers** read the high bands higher than a listener at the
   same point: 130 m behind two barriers over grass by 0.6, 1.3, 3.8 and 13.5 dB at 1,
   2, 4 and 8 kHz, in still air as in 8 m/s of wind, where the weather's effect is the
   same in the map and at the point (a one-off check).
-- **A leg from a ground reflection a rounding error above the ground** (10⁻¹⁶ m) has no
-  refraction shadow, its shadow's start then being 10²⁸⁴ m out: 120 m upwind of a
-  source in the `windy` preset, as a listener moves 10 cm past a barrier's end the
-  path reflected off the ground round it lifts the level by up to 65 dB at 8 kHz (a
-  one-off check).
 - **Near a shadow boundary, in the bands that add in energy.** There the term of the
   edge's incident wave is part of the direct sound's wave, and the terms of the
   reflections off the edge's faces, which arrive with it, are part of the edge's
@@ -4971,7 +5202,9 @@ an hour in the hall, a loudspeaker of the hall in parts about 10 minutes, the co
 rooms against theory under a second, and the rooms' own decay 5.8 minutes. Since then
 the open ground's parabolic equation in wind runs up to 2 kHz, which on one core makes
 the outdoor measurements take about 15 times as long (case 1), the long term about 5.4
-times and the benchmark about 1.6 times; the others listed here do not reach that part
+times and the benchmark about 1.6 times (measured before its bands carried its field
+through the crossovers, which takes the equation 11 to 79 % longer for a listener, so
+these runs now take longer still); the others listed here do not reach that part
 of the engine.
 The cross-check's numbers come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the

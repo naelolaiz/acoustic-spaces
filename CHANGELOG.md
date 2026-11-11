@@ -262,6 +262,54 @@
   it passes the head's centre; the onset was added to the path's delay, which shortened
   the time between the ears as the pitch rose. A source passing 2 m away at 70 m/s was
   3.1 dB off the exact field's level at 1 kHz in 5 ms windows and is within 0.06 dB.
+- Fixed: in wind, a source or a listener on a building's roof left the building out of
+  the parabolic equation, so past the roof's edge the level stepped by up to 1.75 dB at
+  500 Hz in 10 cm and was up to 1.95 dB off a full-wave solution 200 m away. The
+  equation now holds the building, as behind barriers (and the paths off roofs take the
+  effect behind them, beside a building up to 3.7 dB off at 8 kHz before): within
+  0.12 dB of the full wave 27 to 43 m away, with a 0.12 dB step left where the equation
+  takes over (see [Known issues](docs/validation.md#known-issues)); such a listener
+  takes 4 to 180 times as long, a map 35 times.
+- Fixed: across the shadow boundary of a barrier's end or a building's corner in wind
+  the level stepped by up to 7.7 dB 60 m downwind and 18.8 dB 120 m downwind (1 mm
+  either side); the paths round the end now change as the open ground's field along
+  their way does, and the step is at most 0.07 dB downwind and 0.22 dB 120 m upwind
+  (where still air steps by 0.17 dB). Steps remain at 4 and 8 kHz with eddies (up to
+  1.08 dB) and in weather zones (0.76 dB), see
+  [Known issues](docs/validation.md#known-issues); wind behind a building costs a run
+  of the open ground's equation a way (a coverage map round one, 32 % more CPU).
+- Fixed: in wind, the paths round a barrier's end to a listener on a building's roof (or
+  from a source there) took the open ground's field and the paths over its top past the
+  end kept straight legs; they now take the runs the lit side's paths take, so that
+  1.5 m over a roof 45 m from a source 1 m up (and the two swapped), 1 mm either side of
+  the end's shadow boundary, the weather's effect steps by up to 0.57 dB in octave bands
+  (1.28 dB in third octaves) instead of 6.4 dB, the rest from the paths over the roof's
+  edge, which only the lit side has (see
+  [Known issues](docs/validation.md#known-issues)).
+- Fixed: a leg along the ground, a rounding error above it, had no refraction shadow.
+- Fixed (results change): outdoors in wind and temperature gradients, out of the
+  shadow, the parabolic equation's bands carry its field at every frequency its runs
+  took, on through the crossover above the top one and down to an octave below the
+  lowest, so a ground dip at a join between bands is no longer missed (case 2 of the
+  1995 benchmark, worst from 2 to 3.45 kHz against the fast field program: 2.0 and
+  5.3 dB off 100 and 300 m downwind before, 0.19 and 0.45 dB now). The equation takes
+  11 to 79 % longer for a listener; C50 and C80 below 1 kHz move with it, C80 at
+  500 Hz away from a dense run of the equation, and the top crossover moves where the
+  rays' band beside it is off (see [Known issues](docs/validation.md#known-issues)).
+- Fixed (results change): with eddies, the parabolic equation's bands over the open
+  ground took the rays' coherence as one mean a band; they take it at each frequency the
+  equation ran at, as the rays do, which brings 2 kHz in a breath of wind from 0.41 to
+  0.07 dB off still air's image sources (0.12 dB without eddies). Downwind in `windy`,
+  a source 5 m and a listener 1.5 m up over grass 25 to 600 m away, the 250 Hz to 2 kHz
+  bands move by up to 0.59 dB with the `strong` eddies and 0.50 dB with the `moderate`.
+- Fixed (results change): in wind, the paths round a barrier's end or a building's
+  corner carry their way's field through the crossovers between the parabolic
+  equation's bands, as a listener's own field does: 1 mm either side of an end's shadow
+  boundary 60 and 120 m downwind the rendered third octaves from 1.25 to 3.15 kHz
+  stepped by up to 1.0 dB more than in still air and now by at most 0.01 dB more. At
+  listeners and coverage map points with such paths, what the band filters read up to
+  500 Hz moves with them: the strength by up to 0.05 dB, and C50 and C80 by up to 11
+  and 13 dB where they are 65 to 90 dB.
 
 ## 4.2.1
 

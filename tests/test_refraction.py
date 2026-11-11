@@ -19,7 +19,7 @@ from test_ground import exact_reflection
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.parabolic import march
-from acoustic_spaces.engine.refracted import refraction_for
+from acoustic_spaces.engine.refracted import _FIRST_MODE, refraction_for
 from acoustic_spaces.engine.refraction import Profile, Rays, node_heights
 from acoustic_spaces.engine.shadow import shadow_start
 from acoustic_spaces.examples import example_path
@@ -171,6 +171,88 @@ def test_downwind_more_paths_upwind_a_shadow() -> None:
     # Past where the ray grazing the ground comes up, rays that turn just above it carry
     # on a little: the wind's log profile bends them less the higher they turn.
     assert len(rays.eigenrays(1.5, 2.0 * start, 3)) == 0
+
+
+def test_the_shadow_starts_continuously_as_the_heights_go_to_the_ground() -> None:
+    """Upwind in the ``windy`` preset the profile is linear below its first node, its
+    grazing ray a circle of radius R = c0 / |dc/dz|: the shadow starts at
+    sqrt(2 R z - z^2) a height, which goes to 0 with the heights, also below the first
+    height whose speed differs from c0 in floating point (1e-16 m) and on the ground,
+    where it was no shadow. At 1e-12 m the rays' own arithmetic rounds: 1.2e-3 off."""
+    up = Profile.of(Atmosphere.model_validate({"preset": "windy"}), 20.0, np.array([-1.0, 0.0]))
+    radius = float(up.c[0]) / abs(float(up.gradient[0]))
+    for z, rel in ((1e-6, 1e-8), (1e-12, 2e-3), (1e-16, 1e-12), (0.0, 0.0)):
+        limit = 2.0 * math.sqrt(2.0 * radius * z - z * z)
+        assert shadow_start(up, z, z) == pytest.approx(limit, rel=rel, abs=0.0)
+    assert shadow_start(up, 0.0, 1e-16) == pytest.approx(math.sqrt(2.0 * radius * 1e-16))
+
+
+def test_the_shadow_of_a_profile_level_at_the_ground_comes_from_its_rays() -> None:
+    """A measured profile level up to 0.5 m and falling above it: the ray that grazes the
+    ground stays level and never reaches 50 m, so the shadow starts beyond any distance
+    (above 1e299 m), from the ground and from inside the level layer alike; the limit of
+    a falling ground layer (R = c0 / |dc/dz|) does not apply where dc/dz = 0. A guard
+    (the rays alone pass it too): it catches that limit taken where dc/dz = 0, which
+    divides by zero."""
+    level = Profile(
+        np.array([0.0, 0.01, 0.5, 100.0]),
+        np.array([340.0, 340.0, 340.0, 330.0]),
+        np.array([0.0, 0.5, 100.0]),
+    )
+    for zs in (0.0, 0.3, 1.0):
+        start = shadow_start(level, zs, 50.0)
+        assert start is not None and start > 1e299
+
+
+def test_a_leg_along_the_ground_upwind_is_in_the_shadow() -> None:
+    """Legs 10 m upwind whose ends sink to the ground (a ground reflection to the foot of
+    an edge), 1e-3 m to 0: each falls into the shadow, 8 kHz attenuated as the first mode
+    of the ground's circle limit has it, exp(-2 Im kappa (10 m - start)), start =
+    2 sqrt(2 R z - z^2), within 0.1 dB (0.07 dB at 1e-12 m, where the rays' own
+    arithmetic rounds the start), down to the ground itself, which was left unattenuated.
+    One Refraction keeps one start a millimetre of heights and the heights it was found
+    for: a leg on the ground after one 0.4 mm up takes that leg's start and radius
+    (a radius from the start and the ground's heights divided by zero)."""
+    source = np.array([0.0, 0.0, 1.0])
+    scene = Scene.model_validate(
+        {
+            "geometry": {"ground": {"extent": [[-50.0, -20.0], [50.0, 20.0]], "sky": 20.0}},
+            "materials": {"hard": {"absorption": [0.02] * 8, "scattering": 0.0}},
+            "assignments": {"ground": "hard"},
+            "atmosphere": {"preset": "windy", "wind": {"direction_deg": 180}},
+            "sources": [{"name": "s", "position": list(source)}],
+            "listeners": [{"name": "l", "position": [20.0, 0.0, 1.5]}],
+        }
+    )
+    room = Room.from_scene(scene)
+
+    def refraction():
+        return refraction_for(
+            TraceModel.from_room(room),
+            source,
+            speed_of_sound=room.speed_of_sound(),
+            air=np.zeros(8),
+        )
+
+    def level(refraction, z: float) -> float:
+        return 10 * np.log10(
+            refraction._leg(np.array([0.0, 0.0, z]), np.array([10.0, 0.0, z]))[0][-1]
+        )
+
+    heights = (1e-3, 4e-4, 1e-6, 1e-12, 1e-16, 0.0)
+    levels = np.array([level(refraction(), z) for z in heights])
+    probe = refraction()
+    profile = probe.profile(probe._towards(np.array([1.0, 0.0])))
+    radius = float(profile.c[0]) / abs(float(profile.gradient[0]))
+    k = 2.0 * np.pi * 8000.0 / float(profile.c[0])
+    ell = (radius / (2.0 * k**2)) ** (1.0 / 3.0)
+    kappa = np.sqrt(k**2 - _FIRST_MODE * np.exp(1j * np.pi / 3.0) / ell**2 + 0j)
+    start = 2.0 * np.sqrt(2.0 * radius * np.array(heights) - np.square(heights))
+    expected = 10 * np.log10(np.exp(-2.0 * abs(kappa.imag) * (10.0 - start)))
+    np.testing.assert_allclose(levels, expected, atol=0.1)
+    shared = refraction()
+    first, ground = level(shared, 4e-4), level(shared, 0.0)
+    assert ground == first < -40.0
 
 
 def test_the_level_of_rays_that_turn_in_the_air() -> None:
@@ -1751,7 +1833,10 @@ def test_octave_and_third_octave_runs_end_the_equation_at_the_same_frequency(
     edge of the 2 kHz octave (2828 Hz), in octave and third-octave runs alike: 100 m
     downwind the equation runs in the octave bands from 63 Hz to 2 kHz and in the third
     octaves from 50 Hz to 2.5 kHz (its upper edge 2806 Hz, nominal centres), whose
-    frequencies all lie in those octaves, the highest within 5 % of the edge."""
+    frequencies all lie in those octaves, the highest within 5 % of the edge. One more
+    run takes the top band on through the crossover above it, past the edge, and the
+    lowest band's run goes on down to an octave below it (44 Hz), for the response's
+    shape there."""
     import acoustic_spaces.engine.parabolic as parabolic
 
     marched = []
@@ -1766,10 +1851,12 @@ def test_octave_and_third_octave_runs_end_the_equation_at_the_same_frequency(
     for bands, runs in (("octave", 6), ("third_octave", 18)):
         marched.clear()
         simulate(Room.from_scene(field({"preset": "windy"}, bands=bands)), threads=1)
-        assert len(marched) == runs, bands
-        frequencies = np.concatenate(marched)
+        skirt = [m for m in marched if m.min() > join / 1.05]
+        assert len(marched) == runs + 1 and len(skirt) == 1, bands
+        frequencies = np.concatenate([m for m in marched if m.min() <= join / 1.05])
         assert join / 1.05 < frequencies.max() < join, bands
-        assert frequencies.min() > 44.0, bands
+        under = frequencies[frequencies < 44.0]
+        assert len(under) and under.min() > 22.0 and len(marched[0]) > len(under), bands
 
 
 def test_the_shadow_deepens_alike_in_octave_and_third_octave_runs() -> None:
@@ -1798,12 +1885,12 @@ def test_a_silent_top_octave_leaves_the_bands_above_it_silent(monkeypatch) -> No
 
     place = refracted.Refraction._place
 
-    def silent_top(self, wave, pressure, energy, parts, listeners):
+    def silent_top(self, wave, pressure, energy, parts, listeners, runs=None, blur=None):
         energy = np.array(energy, dtype=float)
         octave = refracted.octave_of(self.model.bands)
         top = octave[np.flatnonzero(wave.bands)[-1]]
         energy[octave == top] = 0.0
-        return place(self, wave, pressure, energy, parts, listeners)
+        return place(self, wave, pressure, energy, parts, listeners, runs, blur)
 
     monkeypatch.setattr(refracted.Refraction, "_place", silent_top)
     scene = field({"preset": "windy"}, ((-100.0, 0.0, 1.5),), bands="third_octave")
@@ -2008,15 +2095,33 @@ def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatc
     """The setting reaches listeners, coverage maps and the places of a walking source
     alike: 24 or 8 frequencies in each run at 1 and 2 kHz over the open ground, and
     with ``rays`` none there, the source at the ground's end, everything downwind of it
-    or across the wind, short of any shadow."""
+    or across the wind, short of any shadow. A listener and a walk, whose responses are
+    rendered from the spectra, take one more run past the top band at its spacing (10
+    frequencies with 24, 4 with 8, 4 above the 500 Hz band with ``rays``); a map only
+    where its band filters read that crossover, with ``rays``. A map's point and a
+    listener there so keep the same samples of the equation's field in the bands read
+    through the filters (up to 500 Hz), from which the time parameters there are read."""
+    from acoustic_spaces.engine import refracted
+    from acoustic_spaces.engine.coherent import FILTERED_MAX_BAND_HZ, band_count
     from acoustic_spaces.engine.coverage import coverage_map
     from acoustic_spaces.scene import Coverage
     from acoustic_spaces.walkthrough import simulate_walk
 
     runs = _open_runs(monkeypatch)
+    kept, stage = {}, [""]
+    place = refracted.Refraction._place
+
+    def keep(self, wave, pressure, energy, parts, listeners, runs=None, blur=None):
+        place(self, wave, pressure, energy, parts, listeners, runs, blur)
+        if tuple(listeners[wave.listener]) == (-20.0, 0.0, 1.5):
+            kept[stage[0]] = parts[wave.listener][0].fine[wave.carrier]
+
+    monkeypatch.setattr(refracted.Refraction, "_place", keep)
+    filtered = band_count(FILTERED_MAX_BAND_HZ, 8)
     for choice, count in ((24, 24), (8, 8), ("rays", 0)):
+        kept.clear()
         early = {"method": "image_sources", "max_order": 1, "diffraction": "none"}
-        data = field({"preset": "windy"}, ((-40.0, 0.0, 1.5),), late={"rays": 50}).model_dump()
+        data = field({"preset": "windy"}, ((-20.0, 0.0, 1.5),), late={"rays": 50}).model_dump()
         data["simulation"]["early"] = {**early, "open_ground_frequencies": choice}
         data["sources"][0]["position"] = [-145.0, 0.0, 2.0]
         still = Scene.model_validate(data)
@@ -2027,7 +2132,7 @@ def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatc
             (
                 "map",
                 lambda still=still: coverage_map(
-                    Room.from_scene(still), settings=Coverage(spacing=40.0), threads=1
+                    Room.from_scene(still), settings=Coverage(spacing=40.0, height=1.5), threads=1
                 ),
             ),
             (
@@ -2038,10 +2143,109 @@ def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatc
             ),
         ):
             runs.clear()
+            stage[0] = name
             run()
-            high = [len(f) for f in runs if f.min() > 707.0]
-            assert len(runs) > len(high) > 0 if count else not high, (choice, name)
+            # The skirt: past 2 kHz's upper edge, or (with rays) 500 Hz's below 1 kHz.
+            above = [f for f in runs if f.min() > 707.0]
+            past = [f.min() > 2000.0 * math.sqrt(2.0) or f.max() < 1000.0 for f in above]
+            high = [len(f) for f, skirt in zip(above, past, strict=True) if not skirt]
+            skirts = [len(f) for f, skirt in zip(above, past, strict=True) if skirt]
+            assert len(runs) > len(high) > 0 if count else not high, (choice, name, high)
             assert all(n == count for n in high), (choice, name, high)
+            expected = {24: [10], 8: [4], "rays": [4]}[choice]
+            assert skirts == (expected if name != "map" or choice == "rays" else []), (
+                choice,
+                name,
+                skirts,
+            )
+        # The listener's and the map point's (at the same place) in the filtered bands.
+        listener, point = kept["listener"][:filtered], kept["map"][:filtered]
+        np.testing.assert_array_equal(listener, point, str(choice))
+
+
+def test_one_coherent_band_keeps_its_run_below_it() -> None:
+    """With ``coherent_max_band_hz: 63`` in octave bands, 100 m downwind in the windy
+    preset, the 63 Hz band is the only coherent one: it takes no skirt above, and its run
+    goes on down to half its lower edge as with more bands (four frequencies, 25 to 42
+    Hz), whose samples the carrier keeps. The band's run is the same as with 125, and so
+    is its level (+6.2750 dB re free field both, ``coh63.py``; 4e-8 dB apart, the 63 Hz
+    shape drawn with and without the 125 Hz band's samples beside it)."""
+    from acoustic_spaces.engine.fine import fine_frequencies
+
+    levels = []
+    for cap in (125, 63):
+        early = {"method": "image_sources", "max_order": 1, "diffraction": "none"}
+        scene = field({"preset": "windy"}, early={**early, "coherent_max_band_hz": cap})
+        response = simulate(Room.from_scene(scene), threads=1)["s", "l0"]
+        levels.append(response.relative_to_free_field()[0])
+    fine = response.early.fine
+    carrier = int(np.flatnonzero(np.isfinite(fine.real).any(axis=(1, 2)))[0])
+    under = fine_frequencies(8, 1)[0] < 44.0
+    assert under.sum() == 4 and np.isfinite(fine[carrier, 0, under].real).all()
+    assert levels[1] == pytest.approx(levels[0], abs=1e-6)
+
+
+def scattering_levels(scattering: float, zs: float, xs, atmosphere: dict) -> np.ndarray:
+    """(len(xs), bands) the early level (dB) of a source ``zs`` up over grass whose
+    scattering coefficient is ``scattering``, set here so that the scene's default does
+    not count, at listeners 1.5 m up ``xs`` m along x in ``atmosphere``."""
+    from acoustic_spaces.engine.coherent import total_energy
+
+    data = {
+        "name": "scattering",
+        "geometry": {"ground": {"extent": [[-50.0, -50.0], [250.0, 50.0]], "sky": 50.0}},
+        "materials": {"field": {"impedance": "grass", "scattering": scattering}},
+        "default_material": "field",
+        "sources": [{"name": "s", "position": [0.0, 0.0, zs]}],
+        "listeners": [{"name": f"l{k}", "position": [x, 0.0, 1.5]} for k, x in enumerate(xs)],
+        "atmosphere": atmosphere,
+        "simulation": {
+            "seed": 1,
+            "early": {"method": "image_sources", "max_order": 1, "diffraction": "none"},
+            "late": {"rays": 50},
+            "ir_length_s": 0.1,
+        },
+    }
+    result = simulate(Room.from_scene(Scene.model_validate(data)), threads=1)
+    return np.array(
+        [10.0 * np.log10(total_energy(result["s", f"l{k}"].early)) for k in range(len(xs))]
+    )
+
+
+@pytest.mark.parametrize(
+    "xs",
+    [(119.865, 119.8675, 119.870, 119.8725), (162.0, 162.25, 162.5, 162.75)],
+    ids=["caustic", "ray event"],
+)
+def test_the_equation_s_bands_leave_the_ground_s_scattering_and_go_on_across_the_rays(
+    xs,
+) -> None:
+    """Downwind in the ``windy`` preset, the source 2 m up: the parabolic equation's
+    bands (63 Hz to 2 kHz) are the same bit for bit over grass that scatters nothing and
+    over grass whose scattering coefficient is 0.1, and with 0.1 they go on across the
+    rays' caustic between 119.8675 and 119.870 m and where a ray comes in between 162.25
+    and 162.5 m as on either side: each step within a quarter more than the larger of its
+    neighbours' (at most 1.08 times measured: 0.0431 dB at 250 Hz at the ray event against
+    0.0400 dB beside it; at the caustic all steps within 0.0005 dB)."""
+    windy = {"preset": "windy", "wind": {"direction_deg": 0.0}}
+    smooth = scattering_levels(0.0, 2.0, xs, windy)[:, :6]
+    rough = scattering_levels(0.1, 2.0, xs, windy)[:, :6]
+    np.testing.assert_array_equal(rough, smooth)
+    steps = np.abs(np.diff(rough, axis=0))
+    assert np.all(steps[1] <= 1.25 * np.maximum(steps[0], steps[2]) + 0.001), steps
+
+
+def test_the_equation_s_bands_go_on_at_the_upwind_shadow_s_start() -> None:
+    """In 1 m/s of wind upwind, the source 10 m up over grass whose scattering
+    coefficient is 0.1, the rays stop arriving between 181.794 and 181.795 m: every
+    millimetre from 181.788 to 181.800 m the parabolic equation's bands (63 Hz to 2 kHz)
+    move by at most 0.002 dB (0.0016 measured, 250 Hz, the field's own slope), and are
+    those over grass that scatters nothing bit for bit."""
+    xs = np.round(np.arange(181.788, 181.8005, 0.001), 4)
+    upwind = {"wind": {"speed_m_s": 1.0, "direction_deg": 180.0}}
+    rough = scattering_levels(0.1, 10.0, xs, upwind)[:, :6]
+    np.testing.assert_array_equal(rough, scattering_levels(0.0, 10.0, xs, upwind)[:, :6])
+    assert np.abs(np.diff(rough, axis=0)).max() <= 0.002
 
 
 def test_the_open_ground_s_frequencies_change_nothing_in_still_air() -> None:
