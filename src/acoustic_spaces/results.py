@@ -108,8 +108,11 @@ def write_results(
     once all of them are, the report last, so that a run that fails or is cancelled
     while writing (a full disk, say) leaves ``out`` as it was. Each response is rendered
     and written in turn (on the run's threads, one each), so memory holds a response's
-    files at a time, not the whole run's; with ``normalize`` the files are scaled once
-    all are written, by one rounding to single precision more.
+    files at a time, not the whole run's, and its late part while its formats are
+    rendered; threads the responses leave free render the channels of each side by
+    side, a channel's band signals in memory for each, the channels in progress held
+    to a quarter of the computer's memory. With ``normalize`` the files are
+    scaled once all are written, by one rounding to single precision more.
     """
     out = results_folder(out)
     staging = Path(tempfile.mkdtemp(prefix=_STAGING, dir=out))
@@ -134,6 +137,7 @@ def write_results(
 def _write_results(result, out: Path, formats, sample_rate, normalize, plots, say) -> dict:
     """:func:`write_results`, its files written straight into ``out``."""
     from acoustic_spaces.spatial import Binaural, for_listener, from_output
+    from acoustic_spaces.spatial.render import channel_threads, sharing_late_parts
 
     if formats is None:
         formats = [from_output(o) for o in result.room.scene.outputs]
@@ -145,6 +149,9 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
     # would be alone, so the files and the report are the same as one after another.
     threads = worker_threads(result.settings.performance.threads)
     workers = max(1, min(threads, len(result.responses)))
+    # The threads the responses leave free render each one's channels side by side, as
+    # far as the memory lets that many channels be in progress at once.
+    inner = max(1, threads // workers)
 
     # File names that no two responses or formats share, though their names may give
     # the same (two binaural outputs with HRTF files of the same name, say).
@@ -174,22 +181,28 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
         response = result.responses[key]
         stem = stems[key]
         written, peak, ears, mono = [], 0.0, None, None
-        for k, (fmt, part) in enumerate(zip(formats, parts, strict=True)):
-            # The mono output through the listener's microphone, when it has a pattern.
-            heard = for_listener(fmt, listeners.get(listener))
-            say(f"{source} -> {listener}: rendering {heard.label}")
-            ir = response.spatial_impulse_response(heard, sample_rate)
-            peak = max(peak, float(abs(ir).max(initial=0.0)))
-            name = f"{stem}{part}.wav"
-            write_wav(out / name, ir, sample_rate, masks[k])
-            output = {"format": fmt.label, "wav": name, "channels": heard.channel_names}
-            if heard is not fmt:
-                output["microphone"] = heard.label
-            written.append(output)
-            if binaural and k == binaural[0]:
-                ears = ir
-            if mono_at and k == mono_at[0] and heard is fmt:
-                mono = ir[:, 0]
+        # The formats take the response's late part from the first that works it out.
+        with sharing_late_parts():
+            for k, (fmt, part) in enumerate(zip(formats, parts, strict=True)):
+                # The mono output through the listener's microphone, when it has a pattern.
+                heard = for_listener(fmt, listeners.get(listener))
+                say(f"{source} -> {listener}: rendering {heard.label}")
+                ir = response.spatial_impulse_response(
+                    heard,
+                    sample_rate,
+                    threads=channel_threads(response, sample_rate, inner, workers, heard),
+                )
+                peak = max(peak, float(abs(ir).max(initial=0.0)))
+                name = f"{stem}{part}.wav"
+                write_wav(out / name, ir, sample_rate, masks[k])
+                output = {"format": fmt.label, "wav": name, "channels": heard.channel_names}
+                if heard is not fmt:
+                    output["microphone"] = heard.label
+                written.append(output)
+                if binaural and k == binaural[0]:
+                    ears = ir
+                if mono_at and k == mono_at[0] and heard is fmt:
+                    mono = ir[:, 0]
         params = response.parameters()
         if ears is not None:
             params = dataclasses.replace(

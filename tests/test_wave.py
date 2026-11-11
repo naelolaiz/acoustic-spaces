@@ -1,4 +1,5 @@
 import dataclasses
+import functools
 import itertools
 import math
 from pathlib import Path
@@ -1216,6 +1217,271 @@ def test_fitted_admittances_absorb_as_their_materials(total: int, bands: int) ->
     assert flat.beta == pytest.approx(admittance(np.array([0.3]))[0])
     assert fit_admittance([0.0] * bands, total, rate).beta == 0.0
     np.testing.assert_allclose(fit_admittance([0.99] * bands, total, rate).achieved, MAX_ABSORPTION)
+
+
+def _same_bits(a, b) -> bool:
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    return a.shape == b.shape and a.tobytes() == b.tobytes()
+
+
+#: Fits (absorption, bands in all, time steps a second) for the tests of the fit's own
+#: forward differences.
+_FITS = [
+    # The bands' own quality factors are enough.
+    ([0.02, 0.02, 0.02, 0.03, 0.03, 0.04, 0.05, 0.05], 8, None),
+    # The quality factors are freed (a carpet's octaves, and as third octaves).
+    ([0.07, 0.07, 0.31, 0.49, 0.81, 0.66, 0.54, 0.48], 8, None),
+    (np.repeat([0.07, 0.07, 0.31, 0.49, 0.81, 0.66, 0.54, 0.48], 3).tolist(), 24, None),
+    # At a time step, as the wave solver fits its lowest bands.
+    ([0.07, 0.07, 0.31, 0.49], 8, 5512.5),
+    ([0.1, 0.1, 0.1, 0.4, 0.4, 0.4, 0.2, 0.2, 0.2], 24, 3472.0),
+]
+
+
+def _differing(a: np.ndarray, b: np.ndarray) -> int:
+    """How many of the values of ``a`` and ``b`` (real or complex, of one shape) are
+    not the same bits."""
+    a, b = (np.ascontiguousarray(v).view(np.uint64) for v in (a, b))
+    return int(np.count_nonzero(a != b))
+
+
+def _least_squares_differences(misses, x: np.ndarray, free: bool) -> np.ndarray:
+    """The forward differences of a fit's ``misses`` at ``x`` by the function
+    ``least_squares`` takes its own with for ``jac="2-point"``, between the fit's
+    bounds."""
+    from scipy.optimize._numdiff import approx_derivative
+
+    bounds = (misses.lower[: len(x)], misses.upper[: len(x)])
+    at = misses(x, free)
+    return approx_derivative(misses, x, method="2-point", f0=at, bounds=bounds, args=(free,))
+
+
+def _where_they_part(misses, x: np.ndarray, free: bool) -> str:
+    """Where the fit's differences at ``x`` leave those of one unknown moved at a time:
+    for each unknown, the first of the fit's stages whose values are not the same
+    bits."""
+    from acoustic_spaces.engine.impedance import random_incidence_absorption
+
+    moved, y = misses.moved(x, free)
+    absorption = misses.absorption(y)
+    bands = misses.absorbed(absorption)
+    notes = []
+    for k in range(len(x) + 1):
+        point = x.copy()
+        if k < len(x):
+            point[k] = moved[k]
+        alone = misses.admittance(point, free)
+        absorbed = random_incidence_absorption(alone)
+        stages = (
+            ("the admittance", y[k], alone),
+            ("the absorption of the same admittance", misses.absorption(alone[None])[0], absorbed),
+            ("the absorption", absorption[k], absorbed),
+            (
+                "the bands of a row in its place",
+                misses.weights @ absorption[k],
+                misses.weights @ absorption[k].copy(),
+            ),
+            ("the bands", bands[k], misses.weights @ absorbed),
+        )
+        for name, ours, plain in stages:
+            if count := _differing(ours, plain):
+                which = "none" if k == len(x) else f"{k} of {len(x)}"
+                notes.append(f"unknown {which}: {name}, {count} of {ours.size} values")
+                break
+    if notes:
+        return "; ".join(notes[:6]) + (f"; and {len(notes) - 6} more" if len(notes) > 6 else "")
+    return "the admittances and the bands are the same: the differences taken from them differ"
+
+
+@pytest.mark.parametrize(("absorption", "total", "rate"), _FITS)
+def test_the_fits_differences_are_those_least_squares_takes_itself(
+    monkeypatch, absorption, total: int, rate
+) -> None:
+    """At every step of a fit, the forward differences the fit takes a branch at a time
+    are, bit for bit and in the same layout in memory, those scipy's own function for
+    them takes of the fit's misses, which works the misses out again for each unknown
+    moved alone."""
+    from acoustic_spaces.engine import impedance
+
+    asked = []
+    slopes = impedance._Misses.slopes
+
+    def recorded(self, x, free):
+        out = slopes(self, x, free)
+        asked.append((self, x.copy(), free, out.copy(order="K")))
+        return out
+
+    monkeypatch.setattr(impedance._Misses, "slopes", recorded)
+    impedance._fit.cache_clear()
+    fit_admittance(absorption, total, rate)
+    impedance._fit.cache_clear()
+    assert asked
+    for step, (misses, x, free, found) in enumerate(asked):
+        plain = _least_squares_differences(misses, x, free)
+        # The layout too: the order least_squares' linear algebra adds in depends on it.
+        assert (found.shape, found.strides) == (plain.shape, plain.strides)
+        if count := _differing(found, plain):
+            pytest.fail(
+                f"step {step} of {len(asked)} (quality factors free: {free}), "
+                f"{count} of {found.size} differences: " + _where_they_part(misses, x, free)
+            )
+
+
+def _placed(values: np.ndarray, offset: int) -> np.ndarray:
+    """A copy of ``values`` (float64) whose data begin ``offset`` bytes past a multiple
+    of 64."""
+    values = np.asarray(values, dtype=float)
+    raw = np.empty(values.size + 16)
+    first = ((-raw.ctypes.data) % 64 + offset) // 8
+    out = raw[first : first + values.size].reshape(values.shape)
+    out[...] = values
+    assert out.ctypes.data % 64 == offset
+    return out
+
+
+def _products(jac: np.ndarray, f: np.ndarray, step: np.ndarray, at: int) -> dict:
+    """Products ``least_squares`` takes at every step, of the differences (laid as the
+    fit lays them, ``jac.T``), the misses ``f`` and a ``step``, each with one array
+    ``at`` bytes past a multiple of 64."""
+    rows, unknowns = jac.T.shape
+    misses = _placed(f, at)
+    return {
+        f"f.dot(f) of {rows} misses": np.dot(misses, misses),
+        f"J.T.dot(f) of {rows} misses and {unknowns} unknowns": _placed(jac, at).dot(f),
+        f"J.dot(step) of {rows} misses and {unknowns} unknowns": _placed(jac, at).T.dot(step),
+        f"J.dot(step), the step of {unknowns} unknowns": jac.T.dot(_placed(step, at)),
+    }
+
+
+@functools.cache
+def _rounded_by_place() -> str | None:
+    """A product ``least_squares`` takes at every step that this computer's linear
+    algebra rounds by where its numbers lie in memory, among the places a new array
+    gets (every 16 bytes), at the sizes of the fits of ``_FITS``; None where it rounds
+    none so. Where it does, a fit by ``least_squares`` depends on what was made in
+    memory before it, with the fit's differences or with its own: on an Intel Mac,
+    Apple's Accelerate adds the products of a vector with itself in another order
+    where the vector begins 16 bytes past a multiple of 32, and three of the five fits
+    of ``_FITS`` by ``least_squares``' own differences changed with a few small arrays
+    kept in memory beside them."""
+    rng = np.random.default_rng(3)
+    for unknowns, rows in ((11, 8), (21, 18), (27, 24), (53, 50), (7, 4), (13, 10), (12, 9)):
+        for _ in range(16):
+            jac = rng.normal(size=(unknowns, rows))
+            f, step = rng.normal(size=rows), rng.normal(size=unknowns)
+            found: dict[str, dict[bytes, list[int]]] = {}
+            for at in (0, 16, 32, 48):
+                for name, product in _products(jac, f, step, at).items():
+                    groups = found.setdefault(name, {})
+                    groups.setdefault(np.asarray(product).tobytes(), []).append(at)
+            for name, groups in found.items():
+                if len(groups) > 1:
+                    return f"{name}, by the bytes past a multiple of 64: {sorted(groups.values())}"
+    return None
+
+
+def _both_fits(monkeypatch, absorption, total: int, rate):
+    """The fit of ``absorption`` with the forward differences it takes itself, and with
+    those ``least_squares`` takes for ``jac="2-point"``."""
+    import scipy.optimize
+
+    from acoustic_spaces.engine import impedance
+
+    real = scipy.optimize.least_squares
+
+    def with_its_own_differences(fun, x0, jac=None, **options):
+        assert callable(jac)
+        return real(fun, x0, **options)
+
+    impedance._fit.cache_clear()
+    fit = fit_admittance(absorption, total, rate)
+    impedance._fit.cache_clear()
+    with monkeypatch.context() as patch:
+        patch.setattr(scipy.optimize, "least_squares", with_its_own_differences)
+        plain = fit_admittance(absorption, total, rate)
+    impedance._fit.cache_clear()
+    assert len(fit.conductance) > 0
+    return fit, plain
+
+
+@pytest.mark.parametrize(("absorption", "total", "rate"), _FITS)
+def test_the_fit_is_the_one_least_squares_own_differences_give(
+    monkeypatch, absorption, total: int, rate
+) -> None:
+    """The fit takes the forward differences of its misses itself, a branch at a time.
+    They are the ones scipy's ``least_squares`` takes with ``jac="2-point"``, and the fit
+    is the same down to the last bit. Not compared where the computer's linear algebra
+    rounds by where an array lies in memory (:func:`_rounded_by_place`): there
+    ``least_squares`` gives no one fit to compare with."""
+    if (rounded := _rounded_by_place()) is not None:
+        pytest.skip(
+            "a fit by least_squares changes with what else is in memory on this computer, "
+            f"whose linear algebra rounds {rounded}"
+        )
+    fit, plain = _both_fits(monkeypatch, absorption, total, rate)
+    for name in ("beta", "conductance", "quality", "frequency_hz", "achieved"):
+        assert _same_bits(getattr(fit, name), getattr(plain, name)), name
+
+
+@pytest.mark.parametrize(("absorption", "total", "rate"), _FITS)
+def test_the_fit_absorbs_what_least_squares_own_differences_give(
+    monkeypatch, absorption, total: int, rate
+) -> None:
+    """On any computer, also one where the test above has no one fit to compare with:
+    the fit absorbs in each band what the fit by ``least_squares``' own differences
+    does, to 0.001. A fit ends where a step changes its cost by less than a part in
+    10^8, so a product rounded another way in its last bit moves where it ends: by up
+    to 0.00002 of absorption in 2,000 of these fits with each miss and difference
+    moved up or down by its last bit or left, and by 0.0000002 between the two fits of
+    the carpet's third octaves on an Intel Mac. The fits miss their goals by up to
+    0.015."""
+    fit, plain = _both_fits(monkeypatch, absorption, total, rate)
+    np.testing.assert_allclose(fit.achieved, plain.achieved, rtol=0.0, atol=1e-3)
+
+
+def test_the_fits_steps_are_those_of_least_squares_between_bounds() -> None:
+    """Each unknown's step for the forward differences: scipy's, also where an unknown
+    lies at or next to a bound and the step turns back."""
+    from scipy.optimize import least_squares
+
+    from acoustic_spaces.engine.impedance import _forward_steps
+
+    lower = np.array([0.0, 0.0, 0.0, 0.0, -0.7, -0.7, -0.7, -1e-9])
+    upper = np.array([np.inf, np.inf, np.inf, np.inf, 2.3, 2.3, 2.3, 1e-9])
+    x = np.array([1e-4, 3.0, 0.02, 250.0, 2.3 - 1e-9, 0.3, -0.7 + 1e-12, 0.0])
+    asked = []
+
+    def record(values):
+        asked.append(np.array(values))
+        return values - 1.0
+
+    least_squares(record, x, jac="2-point", bounds=(lower, upper), max_nfev=1)
+    # The point (which least_squares takes a little inside its bounds), then one unknown
+    # moved at a time.
+    point = asked[0]
+    np.testing.assert_allclose(point, x, rtol=0.0, atol=1e-9)
+    moved = np.array([asked[1 + k][k] for k in range(len(x))])
+    assert _same_bits(moved, point + _forward_steps(point, lower, upper))
+    assert np.all(moved != point) and np.all((moved >= lower) & (moved <= upper))
+    # Next to the upper bound the step goes down; with no room either way, to the
+    # farther bound.
+    assert moved[4] < point[4] and moved[7] == upper[7]
+
+
+def test_a_sum_with_one_row_changed_is_the_sum_of_the_changed_array() -> None:
+    from acoustic_spaces.engine.impedance import _sums_with_one_changed
+
+    rng = np.random.default_rng(5)
+    for n, m in ((1, 7), (2, 5), (10, 245), (26, 373)):
+        rows = rng.normal(size=(n, m)) * 10.0 ** rng.uniform(-8, 8, (n, m)) + 1j * rng.normal(
+            size=(n, m)
+        )
+        changed = rows * (1.0 + 1e-8 * rng.normal(size=(n, m)))
+        sums = _sums_with_one_changed(rows, changed)
+        for k in range(n):
+            other = rows.copy()
+            other[k] = changed[k]
+            assert sums[k].tobytes() == other.sum(axis=0).tobytes()
 
 
 def _discrete_reflection(

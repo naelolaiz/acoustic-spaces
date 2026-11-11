@@ -78,6 +78,21 @@
   is read instead of holding a copy for the whole run: a walk of 201 places through the
   `church` example peaks at 336 MiB where it took 1,685 MiB, with the same results, and
   the memory estimate counts what is kept.
+- Changed: the draws of the materials' spread share what does not depend on the draw
+  (the paths' counts on each surface, the early paths' delay phases) and work out a
+  draw's octave echogram once for the parameters and the levels: with the faster fit
+  below, 400 draws of the `concert_hall` example take 70 to 75 s on four cores where
+  they took 157 to 158 s, with the same results.
+- Changed: the fit of an admittance to a material's absorption takes its forward
+  differences a branch at a time: the simulation of the `shoebox` example in
+  third-octave bands takes 20 s on four cores where it took 30 s, with the same results
+  (on an Intel Mac a fit changes with what else is in memory, as it did before: by
+  0.0000002 of absorption in a test).
+- Changed: a run's files are rendered on the threads its responses leave free, a
+  format's channels side by side as far as a quarter of the computer's memory holds
+  them: the files of the `shoebox` example in third-octave bands take 3.6 s on four
+  cores where they took 8.0 s, with the same results, and the run peaks at 1.1 GiB
+  where it peaked at 0.5 GiB.
 - Changed: the tests write every thread's stack to the log when one has run for 20
   minutes (pytest's `faulthandler_timeout`), to show where a hung job stands.
 - Added: the spread covers each listener's levels and speech results: the sound
