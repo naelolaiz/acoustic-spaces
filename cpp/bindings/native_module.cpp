@@ -1089,6 +1089,15 @@ NB_MODULE(_native, m) {
         .def_prop_ro("branch_states", &as::WaveSolver::branch_states)
         .def_prop_ro("layer_cells", &as::WaveSolver::layer_cells)
         .def_prop_ro("open", &as::WaveSolver::open)
+        .def_prop_ro(
+            "open_sides",
+            [](const as::WaveSolver &solver) {
+                const std::array<bool, 6> &sides = solver.open_sides();
+                return nb::make_tuple(sides[0], sides[1], sides[2], sides[3], sides[4],
+                                      sides[5]);
+            },
+            "Whether the air reaches each side of the grid (-x, +x, -y, +y, -z, +z): its "
+            "edge there, or the matched layer inside it.")
         .def_prop_ro("flowing", &as::WaveSolver::flowing)
         .def_prop_ro("stencil", &as::WaveSolver::stencil)
         .def_prop_ro("threads", &as::WaveSolver::threads)

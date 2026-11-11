@@ -7,7 +7,7 @@ import math
 import weakref
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
@@ -17,6 +17,9 @@ from acoustic_spaces.engine import coherent
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.wave import WaveResponse
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, band_centres, resolution_of, to_octaves
+
+if TYPE_CHECKING:
+    from acoustic_spaces.engine.reweight import Redraws
 
 #: The synthesized late part is smoothed over 10 ms from this long after the direct sound.
 SMOOTH_AFTER_S = 0.05
@@ -120,6 +123,11 @@ class Response:
     free_field: np.ndarray | None = None
     #: The early part as the echogram reads its coherent bands, with what it came from.
     _pressure: tuple | None = field(default=None, init=False, repr=False, compare=False)
+    #: What the coherent bands' echograms share with those of the other draws of the
+    #: absorption the response was re-weighted for (:meth:`reweighted` with ``redraws``).
+    _same_delays: coherent.SameDelays | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __getstate__(self) -> dict:
         """What a pickle or a copy of the response holds: its attributes, with the late
@@ -215,6 +223,7 @@ class Response:
                 exponent,
                 start=self.direct_delay_s,
                 cache=self._early_pressure(),
+                kept=self._same_delays,
             )
         if self.wave is not None:
             out[: self.wave.bands] = self.wave.energy(step, slots, axis, exponent)
@@ -301,6 +310,7 @@ class Response:
         ratio: np.ndarray,
         absorption: tuple[np.ndarray, np.ndarray] | None = None,
         admittance_of=None,
+        redraws: Redraws | None = None,
     ) -> Response:
         """This response for other absorption, without tracing again
         (:mod:`acoustic_spaces.engine.reweight`): ``face_group`` the group of each face
@@ -315,7 +325,10 @@ class Response:
         depends on the absorption too, and turns with it
         (:func:`~acoustic_spaces.engine.reweight.turned_paths`, with
         ``admittance_of`` if given): that needs ``absorption``, unless no path reflects
-        off a group whose absorption changes."""
+        off a group whose absorption changes. ``redraws`` (a
+        :class:`~acoustic_spaces.engine.reweight.Redraws` of this response's early paths),
+        for one of many draws of the absorption, holds what does not depend on the draw;
+        the response is the same with it as without it."""
         from acoustic_spaces.engine import reweight
 
         ratio = np.asarray(ratio, dtype=float)
@@ -329,7 +342,10 @@ class Response:
             )
         if self.wave is not None:
             raise ValueError("the wave solver's bands do not re-weight; trace without it")
-        counts = reweight.path_counts(self.early, face_group, groups)
+        if redraws is None:
+            counts = reweight.path_counts(self.early, face_group, groups)
+        else:
+            counts = redraws.counts(self.early, face_group, groups)
         early = reweight.reweighted_paths(self.early, counts, ratio)
         if self.early.spectrum is not None:
             if absorption is not None:
@@ -338,7 +354,8 @@ class Response:
                     raise ValueError(
                         f"expected the absorption of {groups} groups in {self.bands} bands"
                     )
-                early = reweight.turned_paths(early, face_group, old, new, admittance_of)
+                turn = reweight.turned_paths if redraws is None else redraws.turned
+                early = turn(early, face_group, old, new, admittance_of)
             elif len(counts) and np.any(counts[:, np.any(ratio != 0.0, axis=1)] > 0):
                 raise ValueError(
                     "the early paths add in pressure in the lowest bands, where the phase "
@@ -361,11 +378,14 @@ class Response:
                 exponent, directional.shape[2], self.direction_step, self.moment_step
             )
             directional = directional * factor[None]
-        return dataclasses.replace(
+        out = dataclasses.replace(
             self, early=early, late=late, late_directional=directional, late_batches=batches
         )
+        if redraws is not None:
+            out._same_delays = redraws.delays
+        return out
 
-    def parameters(self) -> iso3382.RoomParameters:
+    def parameters(self, energy: np.ndarray | None = None) -> iso3382.RoomParameters:
         """ISO 3382-1 parameters per octave band, straight from the energies.
 
         Those of a figure of eight with its null on the source (LF, LFC, LJ) and the
@@ -375,15 +395,17 @@ class Response:
         standard measures it 1 m away. IACC needs a binaural response:
         :func:`~acoustic_spaces.parameters.interaural_cross_correlation`. Outdoors (with
         :attr:`free_field`), G of a band that does not decay as a room's does is that of
-        the energy the response holds.
+        the energy the response holds. ``energy``: its :meth:`octave_energy`, when already
+        at hand.
         """
+        energy = self.octave_energy() if energy is None else energy
         side = self.lateral_axis()
 
         def weighted(axis, exponent=2):
             return to_octaves(self.weighted_energy(axis, exponent))
 
         return self._parameters(
-            self.octave_energy(),
+            energy,
             lateral=(weighted(side), weighted(side, 1)),
             directional=[weighted(self.orientation[:, k]) for k in range(3)],
         )
@@ -572,6 +594,7 @@ class Response:
         noise_db: float | Sequence[float] | None = None,
         talker: iso3382.Talker = "male",
         parameters: iso3382.RoomParameters | None = None,
+        energy: np.ndarray | None = None,
     ) -> iso3382.Levels:
         """The levels and speech results at the listener for a source of sound power
         ``level_db`` (dB re 1 pW, in all or per octave band), as a run's report gives
@@ -579,9 +602,10 @@ class Response:
         :meth:`speech` with background noise ``noise_db`` for ``talker``; and
         :meth:`relative_to_free_field`, with its A-weighted value (the A-weighted level
         less that of the same source in free field). ``parameters`` are this
-        response's, when already at hand."""
-        params = self.parameters() if parameters is None else parameters
-        return self._levels_and_speech(self.octave_energy(), level_db, noise_db, talker, params)
+        response's, and ``energy`` its :meth:`octave_energy`, when already at hand."""
+        params = self.parameters(energy) if parameters is None else parameters
+        energy = self.octave_energy() if energy is None else energy
+        return self._levels_and_speech(energy, level_db, noise_db, talker, params)
 
     def _levels_and_speech(
         self, energy: np.ndarray, level_db, noise_db, talker, params: iso3382.RoomParameters
@@ -678,14 +702,15 @@ class Response:
         return self.early.frozen(self.seed if seed is None else seed)
 
     def spatial_impulse_response(
-        self, fmt, sample_rate: int = 48_000, seed: int | None = None
+        self, fmt, sample_rate: int = 48_000, seed: int | None = None, *, threads: int = 1
     ) -> np.ndarray:
         """Impulse responses (samples, channels) in a format of
         :mod:`acoustic_spaces.spatial`: ``Ambisonics(order)``, ``Loudspeakers.layout(name)``,
-        ``Binaural(hrtf)`` or ``Mono()``."""
+        ``Binaural(hrtf)`` or ``Mono()``, its channels rendered on ``threads`` threads
+        (the same result with any number; at most the computer's cores)."""
         from acoustic_spaces.spatial.render import spatial_impulse_response
 
-        return spatial_impulse_response(self, fmt, sample_rate, seed)
+        return spatial_impulse_response(self, fmt, sample_rate, seed, threads=threads)
 
 
 class _LateArray:

@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -932,3 +933,229 @@ def test_loudspeakers_play_a_pressure_alike_everywhere_at_unit_power(name: str) 
     assert np.allclose(gains[mains], gains[mains][0]) and not np.any(gains[~mains])
     if layout.horizontal:
         assert np.allclose(layout.gains(np.array([[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]])), gains)
+
+
+#: A pattern that changes with frequency, rendered in two parts.
+_PER_BAND = ["omni", "omni", "subcardioid", "cardioid", "cardioid", "supercardioid", 0.1, 0.0]
+
+
+def test_threads_render_the_channels_as_one_thread_does(response) -> None:
+    # Each channel (binaurally each band of the late part and each ear) is worked out
+    # as alone, into its own place: the same to the last bit with any number of threads.
+    formats = [
+        Ambisonics(2),
+        Loudspeakers.layout("5.0"),
+        Binaural(),
+        first_order(_PER_BAND),
+        xy(100.0, "cardioid"),
+    ]
+    for fmt in formats:
+        one = response.spatial_impulse_response(fmt, FS)
+        for threads in (2, 3, 16):
+            more = response.spatial_impulse_response(fmt, FS, threads=threads)
+            assert np.array_equal(more, one), (fmt.label, threads)
+
+
+def test_the_formats_of_a_response_share_its_late_part(response, monkeypatch) -> None:
+    """Within ``sharing_late_parts`` the late part of a response is drawn once for its
+    formats, both parts of a microphone among them, and the result is the same as
+    drawn again for each; it is kept for that block and that response only."""
+    from acoustic_spaces.spatial import render
+
+    calls: list[tuple] = []
+    worked_out = render._worked_out_late_impulses
+
+    def counted(*args):
+        calls.append(args)
+        return worked_out(*args)
+
+    monkeypatch.setattr(render, "_worked_out_late_impulses", counted)
+    formats = [Ambisonics(1), Binaural(), first_order(_PER_BAND), Loudspeakers.layout("5.0")]
+    alone = [response.spatial_impulse_response(fmt, FS) for fmt in formats]
+    assert len(calls) == 5  # the microphone's two parts each draw it
+    calls.clear()
+    with render.sharing_late_parts():
+        shared = [response.spatial_impulse_response(fmt, FS) for fmt in formats]
+        assert len(calls) == 1
+        # Another seed, another rate, another response: each its own.
+        response.spatial_impulse_response(formats[0], FS, seed=3)
+        response.spatial_impulse_response(formats[0], 44_100)
+        dataclasses.replace(response).spatial_impulse_response(formats[0], FS)
+        assert len(calls) == 4
+    for one, other in zip(alone, shared, strict=True):
+        assert np.array_equal(one, other)
+    response.spatial_impulse_response(formats[0], FS)
+    assert len(calls) == 5
+    # The mono response draws its own noise, outside this.
+    with render.sharing_late_parts():
+        response.spatial_impulse_response(Mono(), FS)
+    assert len(calls) == 5
+
+
+def test_render_threads_are_at_most_the_cores(response, monkeypatch) -> None:
+    """``threads`` asked of spatial_impulse_response are capped at the cores (all of
+    them for 0), so that a caller cannot hold a channel in memory per thread past them."""
+    from acoustic_spaces.spatial import render
+
+    asked: list[int] = []
+    each = render.each_on_threads
+
+    def counted(function, items, threads):
+        asked.append(threads)
+        return each(function, items, threads)
+
+    monkeypatch.setattr(render, "each_on_threads", counted)
+    monkeypatch.setattr(os, "cpu_count", lambda: 2)
+    one = response.spatial_impulse_response(Ambisonics(1), FS)
+    for threads, used in ((64, 2), (0, 2), (2, 2), (1, 1)):
+        asked.clear()
+        more = response.spatial_impulse_response(Ambisonics(1), FS, threads=threads)
+        assert asked == [used] and np.array_equal(more, one)
+
+
+def test_the_channels_in_progress_are_held_to_the_memory(response, monkeypatch) -> None:
+    """No more threads render a format's channels than a quarter of the computer's
+    memory holds channels in progress, shared between the responses rendered side by
+    side; one at least, and all that are asked where the memory cannot be read. The
+    result is the same."""
+    from acoustic_spaces.spatial import render
+
+    n = render._samples(response, FS)
+    each = render.channel_bytes(response.bands, n, FS, len(response.early))
+    asked: list[int] = []
+    run = render.each_on_threads
+
+    def counted(function, items, threads):
+        asked.append(threads)
+        return run(function, items, threads)
+
+    monkeypatch.setattr(render, "each_on_threads", counted)
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    one = response.spatial_impulse_response(Ambisonics(1), FS)
+    cases = (
+        (None, 8, 8),
+        (4 * 8 * each, 8, 4),
+        (4 * 3 * each + 1, 3, 1),
+        (4 * each - 1, 1, 1),
+        (1, 1, 1),
+    )
+    for memory, alone, of_two in cases:
+        monkeypatch.setattr(render, "machine_memory", lambda memory=memory: memory)
+        asked.clear()
+        more = response.spatial_impulse_response(Ambisonics(1), FS, threads=8)
+        assert asked == [alone] and np.array_equal(more, one)
+        assert render.channel_threads(response, FS, 8) == alone
+        assert render.channel_threads(response, FS, 8, responses=2) == of_two
+    # The two ears of a binaural response too, each as long as the response and the
+    # HRTF (here their transform is twice as long as that of the response alone); the
+    # late part's bands, which hold no spectra while they are placed, take the threads
+    # that are asked.
+    binaural = Binaural()
+    taps = binaural.at(FS).taps
+    longer = _with_a_longer_transform_at_the_ears(response, taps)
+    ear = render.ear_bytes(response.bands, render._samples(longer, FS) + taps, FS)
+    monkeypatch.setattr(render, "machine_memory", lambda: None)
+    ears = longer.spatial_impulse_response(binaural, FS)
+    for memory, together in ((4 * 2 * ear, 2), (4 * 2 * ear - 1, 1)):
+        monkeypatch.setattr(render, "machine_memory", lambda memory=memory: memory)
+        asked.clear()
+        more = longer.spatial_impulse_response(binaural, FS, threads=8)
+        assert asked == [8, together] and np.array_equal(more, ears)
+        assert render.channel_threads(longer, FS, 8, fmt=binaural) == together
+
+
+def _with_a_longer_transform_at_the_ears(response, taps: int):
+    """``response`` at a length at which the transform of an ear, as long as the
+    response and an HRTF of ``taps`` samples, is twice as long as that of the response
+    alone."""
+    from acoustic_spaces import synthesis
+    from acoustic_spaces.spatial import render
+
+    size = synthesis.fft_size(render._samples(response, FS), FS)
+    length = (size - 2 * int(synthesis._PAD_S * FS) - taps // 2) / FS
+    longer = dataclasses.replace(response, length_s=length)
+    n = render._samples(longer, FS)
+    assert synthesis.fft_size(n, FS) == size and synthesis.fft_size(n + taps, FS) == 2 * size
+    return longer
+
+
+def _held_in_progress(monkeypatch, response, fmt) -> list[int]:
+    """The traced peak, in bytes above what was held before, of each run of
+    ``render.each_on_threads`` while ``response`` is rendered in ``fmt`` on one thread:
+    of a format's channels one after another, or binaurally of the late part's bands and
+    then of the two ears."""
+    import tracemalloc
+
+    from acoustic_spaces.spatial import render
+
+    held: list[int] = []
+    run = render.each_on_threads
+
+    def measured(function, items, threads):
+        tracemalloc.reset_peak()
+        before = tracemalloc.get_traced_memory()[0]
+        out = run(function, items, threads)
+        held.append(tracemalloc.get_traced_memory()[1] - before)
+        return out
+
+    with monkeypatch.context() as patch:
+        patch.setattr(render, "each_on_threads", measured)
+        tracemalloc.start()
+        try:
+            response.spatial_impulse_response(fmt, FS)
+        finally:
+            tracemalloc.stop()
+    return held
+
+
+def test_a_channel_in_progress_holds_what_its_estimate_says(response, monkeypatch) -> None:
+    """``channel_bytes`` and ``ear_bytes`` are what the arrays of a channel and of an
+    ear hold at their peak: the traced peak of a format's channels rendered one after
+    another is not above the estimate and not far below it, with paths that have quarter
+    turns, with so many paths that placing them takes more than combining the bands,
+    and for an ear whose transform is twice as long as the response's alone. The band
+    filters' gains are not kept beforehand: no channel or ear holds their making."""
+    from acoustic_spaces import synthesis
+    from acoustic_spaces.engine import coherent
+    from acoustic_spaces.spatial import render
+
+    n = render._samples(response, FS)
+    paths = len(response.early)
+    estimate = render.channel_bytes(response.bands, n, FS, paths)
+    own = coherent.with_own_phases
+
+    # As the paths are: none has a quarter turn, so the channel holds its band signals
+    # once and two arrays of spectra.
+    synthesis._band_gains.cache_clear()
+    plain = _held_in_progress(monkeypatch, response, Ambisonics(1))[0]
+    assert 0.55 * estimate <= plain <= estimate
+
+    def turned(early, seed, angles=None):
+        early = own(early, seed, angles)
+        return dataclasses.replace(early, own_phase=np.exp(1j * np.linspace(0.1, 3.0, len(early))))
+
+    # Each path turned by its own angle: the quarter turns' band signals and spectra too
+    # (a third array of spectra where NumPy does not work on a temporary one in place).
+    with monkeypatch.context() as patch:
+        patch.setattr(coherent, "with_own_phases", turned)
+        synthesis._band_gains.cache_clear()
+        quarter = _held_in_progress(monkeypatch, response, Ambisonics(1))[0]
+    assert quarter >= plain + 8 * response.bands * n
+    assert 0.65 * estimate <= quarter <= estimate
+
+    # 200 times the paths: placing them takes more than combining the bands.
+    more = dataclasses.replace(response, early=response.early[np.tile(np.arange(paths), 200)])
+    estimate = render.channel_bytes(response.bands, n, FS, 200 * paths)
+    assert estimate > render.channel_bytes(response.bands, n, FS, paths)
+    held = _held_in_progress(monkeypatch, more, Ambisonics(1))[0]
+    assert 0.8 * estimate <= held <= estimate
+
+    # An ear is as long as the response and the HRTF: here its transform is twice as
+    # long as that of the response alone.
+    binaural = Binaural()
+    taps = binaural.at(FS).taps
+    longer = _with_a_longer_transform_at_the_ears(response, taps)
+    estimate = render.ear_bytes(response.bands, render._samples(longer, FS) + taps, FS)
+    synthesis._band_gains.cache_clear()
+    held = _held_in_progress(monkeypatch, longer, binaural)[1]
+    assert 0.8 * estimate <= held <= estimate
