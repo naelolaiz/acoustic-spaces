@@ -95,11 +95,45 @@
 // equations, is left out (in a stratified wind it is a share of about |dv/dz| / omega of
 // the wind's effect). The carrying is the strong-stability-preserving Runge-Kutta
 // method of third order over the gradient's central differences, of fourth order where
-// two cells either side are air, second where one is; next to a face, the upwind
-// difference where the wind blows into it, none where it blows out of it. Over its
-// small steps (|v| T / h is under 0.1 for wind) it loses a little of the shortest
-// waves and no more, so the scheme stays stable. The surfaces' branch velocities, the
-// source and the probes stay where they are, and the matched layer's air is still.
+// two cells either side are air, second where one is. Over its small steps (|v| T / h
+// is under 0.1 for the weather's wind) it loses a little of the shortest waves. A
+// velocity of half a cell per step or more along an axis is refused, which is the
+// carrying's own bound and no promise for the two steps together: where the wind
+// changes or ends they keep no energy of their own. The surfaces' branch velocities,
+// the source and the probes stay where they are, and the matched layer's air is still;
+// at its border the moving air meets still air, where the wind comes out of the layer
+// with the layer's own sound and leaves into it. In the open, sound has been seen to
+// grow there at winds beyond the weather's (from 0.09 cells per step on, a wind at 45
+// degrees to the grid; not at 0.07), so a run in moving air is to be watched
+// (mean_square()).
+//
+// That equation keeps the sound's energy, (|q_t|^2 - c^2 <q, lap q> - |v . grad q|^2) / 2,
+// when the carrying operator A = v . grad is antisymmetric, which on the grid it is when
+// no wind crosses a face of the model and no cell has a net flux of air. A wind that
+// blows through a solid is neither: where it comes out of a face it carries the face's
+// own sound back into the air, where it goes in it takes sound away, and a room whose
+// walls it leaves more than it enters grows without bound. So where the given
+// velocities meet a face, or change along a row of cells, the wind is put on the cells'
+// faces and made to flow round the solids (set_up_round): the given wind u0 less a
+// correction k grad lambda, k the given speed at the face, with lambda (0 in the matched
+// layer) solved so that every cell's faces sum to zero with none through a face of the
+// model. That is the flow of least change, each face's change weighed by 1 / k, as
+// mass-consistent wind models make it. A wind that only changes with height is itself
+// k grad (the distance along the wind), so a closed room keeps still air and a dead
+// end nearly still air whatever the wind's profile, and far from the solids the wind is
+// the given one.
+// It has no wake and no eddies behind a solid, and at a sharp edge it is fast, the
+// faster the finer the grid. The carrying operator is then made of pairs of opposite
+// sign only: u / 2 over each open face, and for every three cells in a row joined by two
+// open faces the loop (first, second): a, (second, third): a, (first, third): -a, with a
+// the two faces' winds over 24. Where the wind is the same along the row that is the
+// fourth-order central difference; where it changes, the operator is of second order.
+// It is taken as differences of neighbours, so a uniform pressure is carried to the bit,
+// and is antisymmetric to within each cell's net flux, which is the solve's and single
+// precision's rounding. Where the given velocities meet no face and are the same along
+// each row (an open field over flat ground), they are taken as they are, cell by cell,
+// by the central differences: the same operator, but next to the matched layer, where
+// those are of second order.
 
 #pragma once
 
@@ -515,6 +549,13 @@ public:
     // there, or the matched layer inside it.
     const std::array<bool, 6> &open_sides() const { return open_sides_; }
     bool flowing() const { return !flow_mask_.empty(); }
+    // In moving air: whether the wind was made to flow round the model's solids (see the
+    // notes above), the fastest it then moves through a face between two cells (cells
+    // per step; else the largest of the given velocities' components along x and y), and
+    // the sweeps its solve took.
+    bool wind_round() const { return round_; }
+    double wind_fastest() const { return fastest_; }
+    std::size_t wind_sweeps() const { return sweeps_; }
     // In moving air, the pressure squared over the grid's air and the steps of the last
     // run(), on average (the pressure before each step, as the probes read it); 0 in
     // still air, where it is not summed.
@@ -555,6 +596,12 @@ public:
         put("flow_x", flow_x_);
         put("flow_y", flow_y_);
         put("flow_mask", flow_mask_);
+        static const char *const wind[3] = {"wind_x", "wind_y", "wind_z"};
+        static const char *const loop[3] = {"loop_x", "loop_y", "loop_z"};
+        for (int d = 0; d < 3; ++d) {
+            put(wind[d], wind_[d]);
+            put(loop[d], loop_[d]);
+        }
         // Per axis, the centres' then the faces' coefficients (see layer_coefficients).
         static const char *const keep[6] = {"keep_x", "keep_face_x", "keep_y",
                                             "keep_face_y", "keep_z", "keep_face_z"};
@@ -757,8 +804,11 @@ private:
     }
 
     // Moving air: each cell's shifts along x and y (cells per step; none in the matched
-    // layer or out of the air), and which of its neighbours along them the gradient may
-    // take: bits 0 to 3 for x (the one below, above, two below, two above), 4 to 7 for y.
+    // layer or out of the air). Where they meet no face of the model and are the same
+    // along each row of cells, each cell is carried by its own (the plain way): which of
+    // its neighbours along x and y the gradient may take is kept in flow_mask_, bits 0 to
+    // 3 for x (the one below, above, two below, two above), 4 to 7 for y. Otherwise the
+    // wind is made to flow round the solids (set_up_round).
     void set_up_flow(const std::vector<std::uint16_t> &cut, const float *fx, const float *fy) {
         const std::size_t n = nx_ * ny_ * nz_;
         flow_x_.assign(n, 0.0f);
@@ -774,12 +824,27 @@ private:
             }
             flow_x_[i] = fx[i];
             flow_y_[i] = fy[i];
+            fastest_ = std::max({fastest_, std::abs(fx[i]), std::abs(fy[i])});
             for (int k = 0; k < 4; ++k) {
                 const std::size_t j = neighbour(i, k);
                 if (!blocked(cut, i, k) && type_[j] != kSolid) near[i] |= std::uint8_t(1u << k);
             }
         }
-        for (std::size_t i = 0; i < n; ++i) {
+        // Plain: every cell the air moves along an axis has both its neighbours along it,
+        // moving as it does where they move at all.
+        bool plain = true;
+        for (std::size_t i = 0; i < n && plain; ++i) {
+            if (!moving(i)) continue;
+            for (int axis = 0; axis < 2 && plain; ++axis) {
+                const float *f = axis == 0 ? flow_x_.data() : flow_y_.data();
+                if (f[i] == 0.0f) continue;
+                for (int k = 2 * axis; k < 2 * axis + 2; ++k) {
+                    const std::size_t j = neighbour(i, k);
+                    plain = plain && (near[i] & (1u << k)) && (!moving(j) || f[j] == f[i]);
+                }
+            }
+        }
+        for (std::size_t i = 0; i < n && plain; ++i) {
             if (!moving(i)) continue;
             unsigned m = 0;
             for (int axis = 0; axis < 2; ++axis) {
@@ -793,14 +858,201 @@ private:
             }
             flow_mask_[i] = static_cast<std::uint8_t>(m);
         }
-        flow_t1_.assign(n, 0.0f);
+        if (!plain) set_up_round(cut);
+        flow_t1_.assign(n, 0.0f);  // (after the wind's solve, which takes room of its own)
         flow_t2_.assign(n, 0.0f);
+    }
+
+    // The wind round the solids (see the notes above), from the cells' given velocities
+    // in flow_x_ and flow_y_ (which it lets go of): the wind on each cell's faces towards
+    // +x, +y and +z (wind_; 0 on a face it does not cross), each row triple's loop
+    // (loop_), and in flow_mask_ whether the air moves the cell at all.
+    //
+    // A face is open to the wind between two cells of air that no face of the model
+    // parts, one of them at least outside the matched layer; without a matched layer
+    // (the grid's edge is then a wall to the wind), only between cells two or more from
+    // the edge, so that a carried cell's row of five lies on the grid. lambda solves
+    //   sum over a cell's open faces of k (lambda - lambda') = -(the given wind's net flux)
+    // by conjugate gradients on the diagonal's scale, in double precision, to a net flux
+    // of 1e-9 of the fastest given wind. Its sums are taken layer by layer along z, so
+    // the wind is the same whatever the number of threads.
+    void set_up_round(const std::vector<std::uint16_t> &cut) {
+        const std::size_t n = nx_ * ny_ * nz_;
+        const std::size_t stride[3] = {1, sy_, sz_};
+        auto moving = [&](std::size_t i) { return type_[i] == kInterior || type_[i] == kSpecial; };
+        std::vector<float> speed(n, 0.0f);  // the given speed, 0 where the air does not move
+        std::vector<std::uint8_t> faces(n, 0);  // bit d: the face towards +d is open
+        const float *given[2] = {flow_x_.data(), flow_y_.data()};
+        const std::size_t least = layer_ > 0 ? 1 : 2;
+        parallel_for(n, threads_, [&](std::size_t begin, std::size_t end, std::size_t) {
+            for (std::size_t i = begin; i < end; ++i) {
+                if (type_[i] == kSolid || depth(i) < least) continue;
+                speed[i] = moving(i) ? std::hypot(given[0][i], given[1][i]) : 0.0f;
+                for (int d = 0; d < 3; ++d) {
+                    const std::size_t j = i + stride[d];
+                    if (type_[j] == kSolid || depth(j) < least || blocked(cut, i, 2 * d + 1)) continue;
+                    if (moving(i) || moving(j)) faces[i] |= std::uint8_t(1u << d);
+                }
+            }
+        });
+        // A face's weight k and the given wind through it: the two cells' mean, or the
+        // moving one's beside the matched layer (whose cells hold 0 here).
+        auto mean = [&](const float *f, std::size_t i, std::size_t j) {
+            const double sum = static_cast<double>(f[i]) + static_cast<double>(f[j]);
+            return moving(i) && moving(j) ? 0.5 * sum : sum;
+        };
+        auto through = [&](std::size_t i, int d) {
+            return d < 2 ? mean(given[d], i, i + stride[d]) : 0.0;
+        };
+        std::vector<double> lambda(n, 0.0), residual(n, 0.0), direction(n, 0.0), image(n, 0.0);
+        std::vector<float> diagonal(n, 0.0f);
+        std::vector<double> slab(nz_, 0.0);
+        // term(i) summed (or its largest) over the cells, layer by layer along z.
+        auto over = [&](bool largest, auto &&term) {
+            parallel_for(nz_, threads_, [&](std::size_t begin, std::size_t end, std::size_t) {
+                for (std::size_t z = begin; z < end; ++z) {
+                    double total = 0.0;
+                    for (std::size_t i = z * sz_; i < (z + 1) * sz_; ++i) {
+                        if (!moving(i)) continue;
+                        const double v = term(i);
+                        total = largest ? std::max(total, v) : total + v;
+                    }
+                    slab[z] = total;
+                }
+            });
+            double total = 0.0;
+            for (const double v : slab) total = largest ? std::max(total, v) : total + v;
+            return total;
+        };
+        // The right side, minus the given wind's net flux out of each cell, and the
+        // diagonal.
+        const double top = over(true, [&](std::size_t i) {
+            double flux = 0.0, weights = 0.0;
+            for (int d = 0; d < 3; ++d) {
+                const std::size_t s = stride[d];
+                if (faces[i] & (1u << d)) {
+                    flux += through(i, d);
+                    weights += mean(speed.data(), i, i + s);
+                }
+                if (faces[i - s] & (1u << d)) {
+                    flux -= through(i - s, d);
+                    weights += mean(speed.data(), i - s, i);
+                }
+            }
+            residual[i] = weights > 0.0 ? -flux : 0.0;
+            diagonal[i] = static_cast<float>(weights);
+            return static_cast<double>(speed[i]);
+        });
+        auto scaled = [&](std::size_t i) {
+            return diagonal[i] > 0.0f ? residual[i] / static_cast<double>(diagonal[i]) : 0.0;
+        };
+        double carried_over = over(false, [&](std::size_t i) {
+            direction[i] = scaled(i);
+            return residual[i] * direction[i];
+        });
+        const double enough = 1e-9 * top;
+        double left = over(true, [&](std::size_t i) { return std::abs(residual[i]); });
+        const std::size_t most = 1000 + 50 * (nx_ + ny_ + nz_);
+        while (left > enough) {
+            if (++sweeps_ > most) {
+                throw std::runtime_error("the wind round the model's solids did not settle");
+            }
+            const double bent = over(false, [&](std::size_t i) {
+                double sum = 0.0;
+                for (int d = 0; d < 3; ++d) {
+                    const std::size_t s = stride[d];
+                    if (faces[i] & (1u << d)) {
+                        sum += mean(speed.data(), i, i + s) * (direction[i] - direction[i + s]);
+                    }
+                    if (faces[i - s] & (1u << d)) {
+                        sum += mean(speed.data(), i - s, i) * (direction[i] - direction[i - s]);
+                    }
+                }
+                image[i] = sum;
+                return direction[i] * sum;
+            });
+            if (!(bent > 0.0)) break;
+            const double step = carried_over / bent;
+            left = over(true, [&](std::size_t i) {
+                lambda[i] += step * direction[i];
+                residual[i] -= step * image[i];
+                return std::abs(residual[i]);
+            });
+            const double next = over(false, [&](std::size_t i) { return residual[i] * scaled(i); });
+            const double turn = next / carried_over;
+            carried_over = next;
+            over(false, [&](std::size_t i) {
+                direction[i] = scaled(i) + turn * direction[i];
+                return 0.0;
+            });
+        }
+        residual = {};
+        direction = {};
+        image = {};
+        // The faces' winds, and the fastest of them.
+        for (int d = 0; d < 3; ++d) wind_[d].assign(n, 0.0f);
+        parallel_for(nz_, threads_, [&](std::size_t begin, std::size_t end, std::size_t) {
+            for (std::size_t z = begin; z < end; ++z) {
+                double fastest = 0.0;
+                for (std::size_t i = z * sz_; i < (z + 1) * sz_; ++i) {
+                    for (int d = 0; d < 3; ++d) {
+                        if (!(faces[i] & (1u << d))) continue;
+                        const std::size_t j = i + stride[d];
+                        const double u =
+                            through(i, d) - mean(speed.data(), i, j) * (lambda[j] - lambda[i]);
+                        wind_[d][i] = static_cast<float>(u);
+                        fastest = std::max(fastest, std::abs(u));
+                    }
+                }
+                slab[z] = fastest;
+            }
+        });
+        fastest_ = 0.0f;
+        for (const double v : slab) fastest_ = std::max(fastest_, static_cast<float>(v));
+        // A wind that nowhere reaches a millionth of the given one (a closed room's) is
+        // none: still air, to the bit.
+        if (static_cast<double>(fastest_) <= 1e-6 * top) {
+            fastest_ = 0.0f;
+            for (int d = 0; d < 3; ++d) std::fill(wind_[d].begin(), wind_[d].end(), 0.0f);
+        }
+        if (!(fastest_ < 0.5f)) {
+            throw std::invalid_argument(
+                "the air must move less than half a cell per step, and the wind round the "
+                "model's solids moves " + std::to_string(fastest_) + " at its fastest");
+        }
+        lambda = {};
+        flow_x_ = {};
+        flow_y_ = {};
+        // The loops, and the cells the air moves at all.
+        for (int d = 0; d < 3; ++d) loop_[d].assign(n, 0.0f);
+        parallel_for(n, threads_, [&](std::size_t begin, std::size_t end, std::size_t) {
+            for (std::size_t i = begin; i < end; ++i) {
+                for (int d = 0; d < 3; ++d) {
+                    if (!(faces[i] & (1u << d)) || !(faces[i + stride[d]] & (1u << d))) continue;
+                    loop_[d][i] = (wind_[d][i] + wind_[d][i + stride[d]]) * (1.0f / 24.0f);
+                }
+            }
+        });
+        parallel_for(n, threads_, [&](std::size_t begin, std::size_t end, std::size_t) {
+            for (std::size_t i = begin; i < end; ++i) {
+                if (!moving(i) || depth(i) < 2) continue;  // none next to the edge
+                bool moved = false;
+                for (int d = 0; d < 3; ++d) {
+                    const std::size_t s = stride[d];
+                    moved = moved || wind_[d][i] != 0.0f || wind_[d][i - s] != 0.0f ||
+                            loop_[d][i] != 0.0f || loop_[d][i - s] != 0.0f ||
+                            loop_[d][i - 2 * s] != 0.0f;
+                }
+                flow_mask_[i] = moved ? 1 : 0;
+            }
+        });
+        round_ = true;
     }
 
     // q's change along an axis (stride s) at cell i, over a cell, from its neighbours
     // m allows (bits as in set_up_flow, shifted down to the axis): fourth-order central
-    // differences, second order, or next to a face the upwind difference for a shift
-    // into it and none for one out of it.
+    // differences, or second order. (The plain way's cells have both neighbours along
+    // every axis the air moves them; the one-sided differences are for none.)
     static float gradient(const float *q, std::size_t i, std::size_t s, unsigned m, float shift) {
         const bool below = m & 1u, above = m & 2u;
         if (below && above) {
@@ -814,11 +1066,28 @@ private:
         return above ? q[i + s] - q[i] : 0.0f;
     }
 
-    // -v . grad q at cell i, over a step.
+    // -v . grad q at cell i, over a step, the plain way.
     float carried(const float *q, std::size_t i) const {
         const float sx = flow_x_[i], sy = flow_y_[i];
         const unsigned m = flow_mask_[i];
         return -(sx * gradient(q, i, 1, m & 15u, sx) + sy * gradient(q, i, sy_, m >> 4, sy));
+    }
+
+    // The same with the wind round the solids: over each axis the two faces' winds times
+    // the differences across them, halved, and the three loops the cell is part of.
+    float carried_round(const float *q, std::size_t i) const {
+        const std::size_t stride[3] = {1, sy_, sz_};
+        const float c = q[i];
+        float sum = 0.0f;
+        for (int d = 0; d < 3; ++d) {
+            const std::size_t s = stride[d];
+            const float *w = wind_[d].data(), *l = loop_[d].data();
+            const float above = q[i + s], below = q[i - s];
+            sum += 0.5f * (w[i] * (above - c) + w[i - s] * (c - below)) +
+                   l[i] * (above - q[i + 2 * s]) + l[i - s] * (above - below) +
+                   l[i - 2 * s] * (q[i - 2 * s] - below);
+        }
+        return -sum;
     }
 
     // Carries q (cells ib to ie on this thread) along with the air for a step: the
@@ -826,10 +1095,23 @@ private:
     // stages' fields; cells the air does not move keep their values, to the bit.
     // Returns the sum of those cells' squares as they came.
     double carry(float *q, std::size_t ib, std::size_t ie, StepBarrier &barrier) {
+        if (round_) {
+            const std::uint8_t *moved = flow_mask_.data();
+            return carry(
+                q, ib, ie, barrier, [&](std::size_t i) { return !moved[i]; },
+                [&](const float *p, std::size_t i) { return carried_round(p, i); });
+        }
+        const float *fx = flow_x_.data(), *fy = flow_y_.data();
+        return carry(
+            q, ib, ie, barrier, [&](std::size_t i) { return fx[i] == 0.0f && fy[i] == 0.0f; },
+            [&](const float *p, std::size_t i) { return carried(p, i); });
+    }
+
+    template <typename Still, typename Carried>
+    double carry(float *q, std::size_t ib, std::size_t ie, StepBarrier &barrier, Still &&still,
+                 Carried &&carried) {
         float *t1 = flow_t1_.data(), *t2 = flow_t2_.data();
         const std::uint8_t *type = type_.data();
-        const float *fx = flow_x_.data(), *fy = flow_y_.data();
-        auto still = [&](std::size_t i) { return fx[i] == 0.0f && fy[i] == 0.0f; };
         double squares = 0.0;
         for (std::size_t i = ib; i < ie; ++i) {
             if (type[i] == kSolid) continue;
@@ -1323,9 +1605,16 @@ private:
     std::vector<std::size_t> run_begin_, run_end_;
     std::vector<float> u0_, u1_;
     // Moving air: each cell's shifts and gradient neighbours (see set_up_flow), and the
-    // carrying's two stages; all empty in still air.
+    // carrying's two stages; all empty in still air. With the wind round the solids
+    // (round_; see set_up_round) the shifts are let go of for the wind on the cells'
+    // faces towards +x, +y and +z and the loops of each three cells in a row from the
+    // cell on, and flow_mask_ says which cells the air moves.
     std::vector<float> flow_x_, flow_y_, flow_t1_, flow_t2_;
     std::vector<std::uint8_t> flow_mask_;
+    std::array<std::vector<float>, 3> wind_, loop_;
+    bool round_ = false;
+    float fastest_ = 0.0f;
+    std::size_t sweeps_ = 0;
 };
 
 }  // namespace acoustic_spaces

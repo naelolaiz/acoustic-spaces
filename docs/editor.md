@@ -258,7 +258,11 @@ the temperature over the ground and their **Eddies** (see
 [weather zone](outdoor.md#weather-zones)'s (**Add weather zone** draws one in the plan)
 or a [weather class](outdoor.md#levels-over-a-long-term)'s (**Add weather class**),
 each class with its share of the time in each period of the day. A material's page has
-a **Ground impedance** group, to make the material a ground. The **Simulation** entry
+a **Ground impedance** group, to make the material a ground: ticking it keeps the
+material's scattering unless that is 0.1 in every band, as a new material's is, since a
+ground scatters nothing unless its material says so, and unticking it gives a ground
+that scatters nothing 0.1 in every band (see
+[Ground impedance](outdoor.md#ground-impedance)). The **Simulation** entry
 adds the **Parabolic equation** (narrow-angle or wide-angle), **Frequencies behind
 barriers** (each choice with its largest error at 8 kHz), **Frequencies over open
 ground** (each choice with its largest error at 1 and 2 kHz) and, with buildings,

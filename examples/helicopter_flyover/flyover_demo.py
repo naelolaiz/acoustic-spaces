@@ -11,8 +11,9 @@ frequency with a pattern of its own, from the blades' steady lift, drag and thic
 and broadband noise by Pegg's method (--broadband bpm: each blade section's own noise in
 the flow past it, Brooks, Pope and Marcolini's). Each early path plays what the rotors
 send the way it leaves the helicopter, and the demo's scene gives the helicopter the
-sound power and the directivity of that sound, for its late part and the levels it
-reports; `--input helicopter=WAV` plays a dry recording of yours instead, sent with that
+sound power and the directivity of that sound, for the levels it reports and for a late
+part, which the meadow alone does not give; `--input helicopter=WAV` plays a dry
+recording of yours instead, sent with that
 directivity. Run it from the folder of the helicopter_flyover example (`acoustic-spaces
 examples --copy . helicopter_flyover && cd helicopter_flyover`), in the Python
 environment acoustic-spaces is installed in, with ffmpeg on the PATH:

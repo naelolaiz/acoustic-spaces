@@ -329,9 +329,9 @@ Outdoor acoustics, in steps:
   against the wind. Checked against the exact field in a uniform wind, a façade's echo
   against ray theory and the parabolic equation in the `windy` preset
   (`validation/wave_wind.py`). Runs on the CPU; the wind's shear term on the air's
-  motion stays out. Its wind blows through solids, which is not stable in a nearly
-  closed space such as a room with an opening: the run is watched and stops with an
-  error there. Without it nothing changes.
+  motion stays out. Its wind flows round the model's solids as an ideal fluid's (no
+  wake, no eddies), checked against the exact flow past a sphere. Without it nothing
+  changes.
 - [x] The wave solver's room for sound along its matched layer only on the sides that
   need it: a side the model's own surfaces close gets none, which saves a hall open at
   one end 1.8 to 2.0 times the cells (see Open models under
@@ -384,8 +384,12 @@ Outdoor acoustics, in steps:
 - [ ] A transition across a caustic for the rays' bands over the open ground (4 and
   8 kHz, and 1 and 2 kHz with `open_ground_frequencies: rays`), a uniform (Airy) form
   for the two paths that merge there: past it they vanish and the level steps by up to
-  12.9 dB within a centimetre (14.0 dB at 1 kHz with `rays`; see
+  15.5 dB within a centimetre (up to 14.0 dB at 1 and 2 kHz with `rays`; see
   [Known issues](validation.md#known-issues)).
+- [ ] The parabolic equation along a wall's reflection in wind and temperature
+  gradients, as over the open ground: the paths off façades and barriers are eigenrays
+  in every band, with the rays' ground effect up to 2 kHz and their steps at caustics
+  (see [Known issues](validation.md#known-issues)).
 - [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
   the shadow): out of the shadow the equation's field goes through it, but the rays'
@@ -410,9 +414,9 @@ Outdoor acoustics, in steps:
   flyover, but its error has no bound (0.12 dB past a 3 K step a centimetre above the
   source); until one holds, `open_ground_frequencies: rays` is the user's choice.
 - [x] The scattered sound of the reflections straight from the source found from each
-  listener too, shared with the late rays by how densely each finds it: an aircraft
-  overhead no longer brings a listener above grass bursts of it from the few rays that
-  land nearby.
+  listener too, shared with the late rays by how densely each finds it: under an
+  aircraft overhead a listener above a ground that scatters no longer gets bursts of it
+  from the few rays that land nearby.
 - [ ] The same where the rays bend in wind or a temperature gradient, scatter in plants
   before they reflect, or reach the listeners as secondary sources: there the
   scattered sound near a listener still comes from the few rays that land nearby.

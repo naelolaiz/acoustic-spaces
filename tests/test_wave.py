@@ -2116,21 +2116,22 @@ def test_duct_end_reflects_as_its_frequency_dependent_admittance_says(stencil: i
     assert measured[np.argmin(np.abs(f - 100))] < 0.25 < measured[np.argmin(np.abs(f - 40))]
 
 
-def _plate(
+def _plate_solver(
     h: float,
     pad: int,
     layer: int,
-    seconds: float,
     damping: float = LAYER_DAMPING,
     speed=None,
     flow=None,
     block: bool = False,
+    threads: int = 0,
 ):
-    """The pressure at three points round a rigid 8 x 6 m plate in the open, on a grid
-    that reaches two cells past the plate, the source and the points (with none of the
-    room :data:`LAYER_ROOM` leaves), then ``pad`` more cells and ``layer`` cells of
-    matched layer; ``speed`` and ``flow`` as for :func:`_solver`; ``block`` stands a
-    rigid block 0.8 x 3 x 2 m on the plate, across x from 4.6 m."""
+    """A wave solver round a rigid 8 x 6 m plate in the open, the source over it and three
+    points round it, on a grid that reaches two cells past the plate, the source and the
+    points (with none of the room :data:`LAYER_ROOM` leaves), then ``pad`` more cells and
+    ``layer`` cells of matched layer; ``speed`` and ``flow`` as for :func:`_solver`;
+    ``block`` stands a rigid block 0.8 x 3 x 2 m on the plate, across x from 4.6 m. With
+    it, its sample rate, where its grid starts and the grid's shape."""
     vertices = np.array([[0, 0, 0], [8, 0, 0], [8, 6, 0], [0, 6, 0]], float)
     faces = np.array([[0, 1, 2], [0, 2, 3]], np.int64)
     if block:
@@ -2158,10 +2159,17 @@ def _plate(
         listeners,
         layer=layer,
         layer_damping=damping,
+        threads=threads,
         speed=_speeds(speed, origin, h, shape),
         **_flows(flow, origin, h, shape),
     )
-    rate = C / (COURANT * h)
+    return solver, C / (COURANT * h), origin, shape
+
+
+def _plate(h: float, pad: int, layer: int, seconds: float, **how):
+    """The pressure at the three points of :func:`_plate_solver` over ``seconds``, its
+    solver and its sample rate."""
+    solver, rate, _, _ = _plate_solver(h, pad, layer, **how)
     return solver.run(_drive(rate, h, int(seconds * rate))), solver, rate
 
 
@@ -2835,27 +2843,41 @@ def _band_db(a: np.ndarray, b: np.ndarray, rate: float, band=(40.0, 150.0)) -> f
 
 
 def test_moving_air_carries_the_sound_downwind() -> None:
-    # Air moving along +x at a tenth of the speed of sound: 6 m downwind the sound comes
-    # 6 / (c + v) after it leaves, 6 m upwind 6 / (c - v), as loud as in still air (on
-    # the wind's axis the convected Green's function is 1 / r either way); across the
+    # Air moving along +x at a tenth of the speed of sound, in the open (a matched layer
+    # all round; the model is one small triangle in a corner): 6 m downwind the sound
+    # comes 6 / (c + v) after it leaves, 6 m upwind 6 / (c - v), as loud as in still air
+    # (on the wind's axis the convected Green's function is 1 / r either way); across the
     # wind it comes 6 / (c sqrt(1 - M^2)) after, louder by 1 / sqrt(1 - M^2). Against
     # the still air's run, whose grid disperses alike, in the band the grid is for.
-    mach = 0.1
+    mach, cell = 0.1, 0.2
+    vertices = np.array([[0.03, 0.03, 0.03], [0.09, 0.03, 0.03], [0.03, 0.09, 0.03]])
+    bvh = _native.Bvh(vertices, np.array([[0, 1, 2]], np.int64))
+    origin = -cell * (2.0 + LAYER_CELLS + np.array([0.0137, 0.0219, 0.0291]))
+    shape = np.ceil((20.0 - origin) / cell).astype(int) + 2 + LAYER_CELLS
+    rate = C / (COURANT * cell)
 
     def run(flow):
-        solver, rate = _solver(
-            (20.0, 20.0, 20.0),
-            lambda mesh: [1.0] * len(mesh.faces),
-            [10.0, 10.0, 10.0],
-            [[16.0, 10.0, 10.0], [4.0, 10.0, 10.0], [10.0, 16.0, 10.0]],
-            cell=0.2,
-            flow=flow,
+        solver = _native.WaveSolver(
+            bvh,
+            np.zeros(1, np.int64),
+            np.zeros(1),
+            np.zeros((0, 3)),
+            np.zeros(0, np.int64),
+            origin,
+            cell,
+            *map(int, shape),
+            np.array([10.0, 10.0, 10.0]),
+            np.array([[16.0, 10.0, 10.0], [4.0, 10.0, 10.0], [10.0, 16.0, 10.0]]),
+            layer=LAYER_CELLS,
+            layer_damping=LAYER_DAMPING,
+            **_flows(flow, origin, cell, shape),
         )
-        return solver.run(_drive(rate, 0.2, int(0.04 * rate))), rate
+        assert solver.open and solver.layer_cells > 0
+        return solver.run(_drive(rate, cell, int(0.04 * rate)))
 
-    still, rate = run(None)
+    still = run(None)
     shift = mach * COURANT  # cells per step
-    moving, _ = run(lambda centres: (np.full(len(centres), shift), np.zeros(len(centres))))
+    moving = run(lambda centres: (np.full(len(centres), shift), np.zeros(len(centres))))
     beta = math.sqrt(1.0 - mach**2)
     expected = [
         6.0 / (C * (1 + mach)) - 6.0 / C,
@@ -2866,6 +2888,152 @@ def test_moving_air_carries_the_sound_downwind() -> None:
     for k, want in enumerate(expected):
         assert _band_lag(moving[k], still[k], rate) == pytest.approx(want, abs=1.5e-5)
         assert _band_db(moving[k], still[k], rate) == pytest.approx(louder[k], abs=0.05)
+
+
+def _face_winds(solver) -> tuple[np.ndarray, list[np.ndarray], np.ndarray]:
+    """Of a solver whose wind flows round its model's solids: its cells' types (nz, ny,
+    nx; 0 solid, 1 and 2 the air that moves, 3 the matched layer), the wind on their
+    faces towards +x, +y and +z the same way (cells per step), and what leaves each cell
+    less what enters it."""
+    layout = solver.layout()
+    nx, ny, nz = (int(n) for n in layout["shape"])
+    winds = [layout[f"wind_{a}"].reshape(nz, ny, nx).astype(float) for a in "xyz"]
+    net = np.zeros((nz, ny, nx))
+    for axis, wind in zip((2, 1, 0), winds, strict=True):
+        net += wind
+        np.moveaxis(net, axis, 0)[1:] -= np.moveaxis(wind, axis, 0)[:-1]
+    return layout["types"].reshape(nz, ny, nx), winds, net
+
+
+def test_moving_air_s_wind_flows_round_the_model_s_solids() -> None:
+    """Where the given wind meets a face of the model, the solver makes it flow round
+    the solids, on the faces between its cells: none through a solid or through the
+    plate, every cell left by as much air as enters it (to single precision's rounding
+    of the faces' winds), faster than the given wind past the block's edges, and the
+    carrying takes it from there (the given velocities are let go of)."""
+
+    def flow(centres):
+        rising = np.clip((centres[:, 2] + 0.5) / 3.0, 0.0, 1.0)
+        return 0.06 * rising, 0.03 * rising
+
+    h = 0.25
+    solver, _, origin, shape = _plate_solver(h, LAYER_CELLS, LAYER_CELLS, flow=flow, block=True)
+    assert solver.flowing and solver.wind_round and solver.wind_sweeps > 0
+    layout = solver.layout()
+    assert len(layout["flow_x"]) == 0 and len(layout["flow_y"]) == 0
+    types, winds, net = _face_winds(solver)
+    moving = (types == 1) | (types == 2)
+    given = math.hypot(0.06, 0.03)
+    fastest = max(float(np.abs(wind).max()) for wind in winds)
+    assert solver.wind_fastest == pytest.approx(fastest, rel=1e-6)
+    assert 1.15 * given < fastest < 3.0 * given  # (the given wind's fastest, at the top)
+    assert np.abs(net[moving]).max() < 1e-6 * fastest
+    # No wind on a face with a solid cell on either side, nor (along z) through the plate.
+    for axis, wind in zip((2, 1, 0), winds, strict=True):
+        ahead = np.zeros_like(types)
+        np.moveaxis(ahead, axis, 0)[:-1] = np.moveaxis(types, axis, 0)[1:]
+        assert np.all(wind[(types == 0) | (ahead == 0)] == 0.0)
+    centres = _centres(origin, h, shape).reshape(*types.shape, 3)
+    x, y, z = centres[..., 0], centres[..., 1], centres[..., 2]
+    across = (x > 0) & (x < 8) & (y > 0) & (y < 6) & (z < 0) & (z + h > 0)
+    assert across.any() and np.all(winds[2][across] == 0.0)
+    # Upwind of the block, over the plate's edge and above the block's top, the wind is
+    # the given one to 3 %.
+    side = moving & (x < 0.2) & (np.abs(y - 3.0) < 2.0) & (z > 2.5) & (z < 3.4)
+    assert side.sum() > 50
+    assert winds[0][side] == pytest.approx(0.06, rel=0.03)
+    # In the open without the block the plate meets no wind: the given one is kept.
+    plain, *_ = _plate_solver(h, LAYER_CELLS, LAYER_CELLS, flow=flow)
+    assert plain.flowing and not plain.wind_round and plain.wind_sweeps == 0
+    assert plain.wind_fastest == pytest.approx(0.06)
+    assert len(plain.layout()["wind_x"]) == 0
+
+
+def test_moving_air_takes_a_weather_zone_s_wind_gradually() -> None:
+    """A wind that changes along its own way, as at a weather zone's border across it,
+    would leave the border's cells with more air coming in than going out. The solver
+    makes it flow so that no cell gains or loses air: along a row the wind falls
+    steadily from one zone's towards the next's, and at the border it lies between the
+    two. A border along the wind changes nothing along any row of cells, and that wind
+    is carried as given."""
+
+    def across(centres):  # the border at x = 4 m
+        return np.where(centres[:, 0] < 4.0, 0.06, 0.012), np.zeros(len(centres))
+
+    def along(centres):  # the border at y = 3 m
+        return np.where(centres[:, 1] < 3.0, 0.06, 0.012), np.zeros(len(centres))
+
+    h = 0.4
+    solver, _, origin, shape = _plate_solver(h, LAYER_CELLS, LAYER_CELLS, flow=across)
+    assert solver.flowing and solver.wind_round
+    types, winds, net = _face_winds(solver)
+    moving = (types == 1) | (types == 2)
+    assert np.abs(net[moving]).max() < 1e-6 * max(float(np.abs(wind).max()) for wind in winds)
+    centres = _centres(origin, h, shape).reshape(*types.shape, 3)
+    x, y, z = centres[..., 0], centres[..., 1], centres[..., 2]
+    row = moving & (np.abs(y - 3.0) < h / 2) & (np.abs(z - 1.5) < h / 2)
+    along_x = np.argsort(x[row])[:-1]  # (the last cell's face is the matched layer's)
+    wind, at = winds[0][row][along_x], x[row][along_x]
+    assert len(wind) > 15 and np.all(np.diff(wind) < 0.0)
+    assert 0.012 < wind[-1] < wind[0] < 0.06
+    assert 0.015 < float(wind[np.searchsorted(at, 4.0) - 1]) < 0.03  # (the border's face)
+    steady, *_ = _plate_solver(h, LAYER_CELLS, LAYER_CELLS, flow=along)
+    assert steady.flowing and not steady.wind_round
+    assert steady.wind_fastest == pytest.approx(0.06)
+
+
+def test_the_wind_round_the_solids_carries_as_the_given_wind_where_they_agree() -> None:
+    """A uniform wind over a plate in the open is carried as given, by fourth-order
+    central differences. With one cell's wind a hundred-thousandth off, the solver makes
+    the wind flow round (it changes along that cell's row), and it comes out the same
+    wind to that part: the faces' carrying is then the same operator, and the runs agree
+    to single precision's rounding, before the first sound is back from the matched
+    layer's edge, where the two meet the layer's still air each in its own way."""
+
+    def flow(nudge: float):
+        def given(centres):
+            fx, fy = np.full(len(centres), 0.2), np.full(len(centres), 0.1)
+            cell = int(np.argmin(np.linalg.norm(centres - [4.0, 3.0, 2.0], axis=1)))
+            fx[cell] *= 1.0 + nudge
+            return fx, fy
+
+        return given
+
+    as_given, plain, _ = _plate(0.3, 30, LAYER_CELLS, 0.04, flow=flow(0.0))
+    round_it, solver, _ = _plate(0.3, 30, LAYER_CELLS, 0.04, flow=flow(1e-5))
+    still, _, _ = _plate(0.3, 30, LAYER_CELLS, 0.04)
+    assert not plain.wind_round and solver.wind_round
+    assert solver.wind_fastest == pytest.approx(0.2, rel=2e-5)
+    assert np.abs(as_given - still).max() > 0.5 * np.abs(still).max()  # the wind is heard
+    assert np.abs(round_it - as_given).max() < 2e-6 * np.abs(as_given).max()
+
+
+def test_the_wind_round_the_solids_is_the_same_on_any_number_of_threads() -> None:
+    def flow(centres):
+        rising = np.clip((centres[:, 2] + 0.5) / 3.0, 0.0, 1.0)
+        return 0.06 * rising, -0.03 * rising
+
+    layouts = []
+    for threads in (1, 2):
+        solver, *_ = _plate_solver(
+            0.5, LAYER_CELLS, LAYER_CELLS, flow=flow, block=True, threads=threads
+        )
+        assert solver.threads == threads and solver.wind_round
+        layouts.append((solver.wind_sweeps, solver.wind_fastest, solver.layout()))
+    assert layouts[0][:2] == layouts[1][:2]
+    for name in ("wind_x", "wind_y", "wind_z", "loop_x", "loop_y", "loop_z", "flow_mask"):
+        assert np.array_equal(layouts[0][2][name], layouts[1][2][name]), name
+
+
+def test_the_wind_round_the_solids_must_stay_under_half_a_cell_a_step() -> None:
+    # The given wind is under half a cell a step everywhere; past the block's edges it
+    # is not.
+    def flow(centres):
+        return np.full(len(centres), 0.4), np.zeros(len(centres))
+
+    with pytest.raises(ValueError, match=r"the wind round the model's solids moves 0\.[5-9]"):
+        _plate_solver(0.5, LAYER_CELLS, LAYER_CELLS, flow=flow, block=True)
+    assert _plate_solver(0.5, LAYER_CELLS, LAYER_CELLS, flow=flow)[0].wind_fastest < 0.5
 
 
 def test_moving_air_stays_stable_round_walls_and_in_the_matched_layer() -> None:
@@ -2883,31 +3051,31 @@ def test_moving_air_stays_stable_round_walls_and_in_the_matched_layer() -> None:
     assert max(levels[6:]) < 1e-11 * levels[0]
 
 
-def test_moving_air_keeps_a_closed_room_s_mean() -> None:
-    # A rigid closed room in a uniform wind askew to the grid, over 100,000 steps. The
-    # carrying step keeps a uniform pressure to the bit: its last stage is written
-    # q + 2/3 (... - q), because the weights 1/3 and 2/3 of (1/3) q + (2/3) (...) add
-    # to 1 + 2^-25 in single precision, which made the room's mean grow 2.2 to 2.6 times
-    # per 10,000 steps (to 460 times the sound's level here). The mean of the last 4,000
-    # steps at a point, over which the sound averages out, stays under ten times the
-    # sound's early level (it is 1.6 times here: the mean still creeps, linearly).
+@pytest.mark.parametrize("sheared", [False, True])
+def test_a_closed_room_s_moving_air_is_still(sheared: bool) -> None:
+    # No wind blows through a closed room's walls: made to flow round them, a wind askew
+    # to the grid, uniform or growing with height, comes out as none (under a millionth
+    # of the given one, which the solver takes as still air), and the run is the still
+    # air's, to the bit.
     def flow(centres):
-        return np.full(len(centres), 0.03), np.full(len(centres), 0.017)
+        rising = np.clip(centres[:, 2] / 0.6, 0.1, 1.0) if sheared else np.ones(len(centres))
+        return 0.03 * rising, 0.017 * rising
 
-    solver, rate = _solver(
-        (0.9, 0.7, 0.6),
-        lambda mesh: [0.0] * len(mesh.faces),
-        [0.28, 0.3, 0.22],
-        [[0.63, 0.42, 0.33]],
-        flow=flow,
-    )
+    def run(flow):
+        solver, rate = _solver(
+            (0.9, 0.7, 0.6),
+            lambda mesh: [0.0] * len(mesh.faces),
+            [0.28, 0.3, 0.22],
+            [[0.63, 0.42, 0.33]],
+            flow=flow,
+        )
+        return solver, solver.run(_drive(rate, 0.1, 2_000))
+
+    solver, moving = run(flow)
     assert solver.flowing and not solver.open
-    chunk = 10_000
-    early = float(np.std(solver.run(_drive(rate, 0.1, chunk))[0, 6_000:]))
-    for _ in range(8):
-        solver.run(np.zeros(chunk, np.float32))
-    late = solver.run(np.zeros(chunk, np.float32))[0, -4_000:]
-    assert abs(float(np.mean(late))) < 10.0 * early
+    assert solver.wind_round and solver.wind_sweeps > 0 and solver.wind_fastest == 0.0
+    assert not solver.layout()["flow_mask"].any()
+    assert np.array_equal(moving, run(None)[1])
 
 
 def test_moving_air_tells_its_mean_square() -> None:
@@ -3110,44 +3278,169 @@ def test_wave_responses_carry_the_sound_with_the_wind() -> None:
         assert louder == pytest.approx(0.0, abs=0.1)
 
 
-@pytest.mark.parametrize("in_tenths", [False, True])
-def test_moving_air_that_grows_is_stopped(tmp_path: Path, monkeypatch, in_tenths: bool) -> None:
-    """The moving air's wind blows through the model's solids, which is not stable in a
-    nearly closed space: in a room with an opening, in a wind of 30 m/s, the sound
-    grows instead of dying away. The run is watched, the pressure squared over the grid
-    in pieces of at least a quarter second from the end of the source's pulse on, and
-    stops once that has doubled; so does a long run, which comes in tenths shorter than
-    that (here as if this one were long). With the wind as the effective speed of sound
-    the same scene runs."""
+def _opening_run(room, wind: str, length_s: float = 1.6, say=None):
+    """The wave solver's run of validation/wave_wind.py's room with an opening."""
+    import wave_wind
+
+    return wave_responses(
+        TraceModel.from_room(room),
+        np.array(wave_wind.ROOM_SOURCE),
+        np.array([wave_wind.ROOM_LISTENER]),
+        ["in"],
+        max_band_hz=63,
+        length_s=length_s,
+        sample_rate=FS,
+        speed_of_sound=room.speed_of_sound(),
+        wind=wind,
+        label="s",
+        **({} if say is None else {"say": say}),
+    )
+
+
+@pytest.fixture
+def wave_wind():
+    """validation/wave_wind.py, for its room with an opening."""
     import sys
 
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
+    try:
+        import wave_wind as module
+
+        yield module
+    finally:
+        sys.path.pop(0)
+
+
+def _solvers_made(monkeypatch, wrap=lambda solver: solver) -> list:
+    """Every wave solver made from here on with the arguments it was made from, in the
+    order they are made (the last is the run's own; the ones before it find the open
+    sides), each handed on as ``wrap`` gives it."""
+    made: list = []
+    real = _native.WaveSolver
+
+    def make(*args, **kwargs):
+        made.append((real(*args, **kwargs), args))
+        return wrap(made[-1][0])
+
+    monkeypatch.setattr(_native, "WaveSolver", make)
+    return made
+
+
+def test_moving_air_in_a_room_with_an_opening_does_not_grow(tmp_path, wave_wind) -> None:
+    """A rigid room with an opening downwind, in a wind of 30 m/s. A wind blowing
+    through its walls made the sound grow there (the watch stopped that run 1.5 s after
+    emission, 4.2 dB over its lowest level); made to flow round them it leaves the room
+    sheltered, and the sound stays as the effective speed of sound's does (nothing takes
+    it in but the opening): the last quarter second within 2 dB of the second. The run
+    says how fast the wind gets round the solids."""
+    room = wave_wind.room_with_an_opening(tmp_path / "room.obj", 30.0)
+    said: list[str] = []
+    (response,), info = _opening_run(room, "moving", say=said.append)
+    assert info["wave_moving_air"] == 1.0
+    assert 30.0 < info["wave_wind_fastest_m_s"] < 60.0
+    fastest = info["wave_wind_fastest_m_s"]
+    assert f"the air moving, round the model's solids at up to {fastest:.0f} m/s" in said[0]
+    quarter = int(0.25 * response.rate)
+    pressure = response.signals[round(response.lead_s * response.rate) :, 0]
+    rms = [float(np.std(pressure[k * quarter : (k + 1) * quarter])) for k in range(6)]
+    assert abs(20.0 * math.log10(rms[5] / rms[1])) < 2.0
+    (_,), info = _opening_run(room, "effective", 0.1)
+    assert "wave_moving_air" not in info and "wave_wind_fastest_m_s" not in info
+
+
+def test_a_room_with_an_opening_is_sheltered_from_a_wind_that_grows_with_height(
+    tmp_path, monkeypatch, wave_wind
+) -> None:
+    """The wind is made to flow round the solids by a correction weighed with the given
+    speed, so that a wind that grows with height (here the logarithmic profile, 15 m/s
+    10 m up) leaves a room with one opening nearly still: away from the opening, under
+    a hundredth of the wind at the roof's height. (A correction that did not weigh
+    would keep the profile's rotation, and leave an eddy of a sixth of that wind.)"""
+    room = wave_wind.room_with_an_opening(tmp_path / "room.obj", 15.0, profile="log")
+    made = _solvers_made(monkeypatch)
+    (response,), info = _opening_run(room, "moving", 0.02)
+    solver, args = made[-1]
+    assert solver.wind_round
+    origin, h, shape = args[5], args[6], args[7:10]
+    types, winds, _ = _face_winds(solver)
+    # Each cell's own wind (m/s): the mean of its two faces' along each axis.
+    speed = np.zeros(types.shape)
+    for axis, wind in zip((2, 1, 0), winds, strict=True):
+        below = np.zeros_like(wind)
+        np.moveaxis(below, axis, 0)[1:] = np.moveaxis(wind, axis, 0)[:-1]
+        speed += (0.5 * (wind + below)) ** 2
+    speed = np.sqrt(speed) * h * response.rate
+    at_roof = float(room.scene.atmosphere.wind_speed(np.array([3.8]))[0])
+    assert 8.0 < at_roof < 15.0
+    # The room is 4 x 4 x 3 m inside, round the origin, the opening in its wall at x = 2.
+    x, y, z = np.moveaxis(_centres(origin, h, shape).reshape(*types.shape, 3), -1, 0)
+    air = (types == 1) | (types == 2)
+    inside = air & (np.abs(y) < 2.0) & (x > -2.0) & (z > 0.0) & (z < 3.0)
+    assert (inside & (x < 1.0)).sum() > 300
+    assert speed[inside & (x < 1.0)].max() < 0.01 * at_roof
+    assert speed[inside & (x < 2.0)].max() < 0.05 * at_roof  # (and up to the opening)
+    assert speed[air].max() > at_roof  # past the roof's edges
+
+
+@pytest.mark.parametrize("in_tenths", [False, True])
+def test_moving_air_that_grows_is_stopped(
+    tmp_path: Path, monkeypatch, wave_wind, in_tenths: bool
+) -> None:
+    """Moving air is watched for sound that grows instead of dying away: the pressure
+    squared over the grid, in pieces of at least a quarter second from the end of the
+    source's pulse on, and the run stops once that has doubled; so does a long run,
+    which comes in tenths shorter than that (here as if this one were long). No run of
+    the solver's own grows so now that its wind flows round the model's solids, so the
+    growth is made up: a room with an opening in a wind of 30 m/s, what the solver reads
+    and its mean square raised by 0.005 dB a step (8 dB a second), about as the wind
+    through the room's walls made it grow. With the wind as the effective speed of
+    sound the same scene runs."""
     from acoustic_spaces.engine import wave as wave_module
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
-    import wave_wind
+    class Growing:
+        def __init__(self, solver) -> None:
+            self.solver, self.steps, self.mean_square = solver, 0, 0.0
+
+        def __getattr__(self, name: str):
+            return getattr(self.solver, name)
+
+        def run(self, signal: np.ndarray) -> np.ndarray:
+            read = self.solver.run(signal)
+            gain = 10.0 ** (0.005 * (self.steps + np.arange(read.shape[1])) / 20.0)
+            self.steps += read.shape[1]
+            self.mean_square = self.solver.mean_square * float(np.mean(gain**2))
+            return read * gain
 
     if in_tenths:
         monkeypatch.setattr(wave_module, "_LONG_RUN", 0.0)
     room = wave_wind.room_with_an_opening(tmp_path / "room.obj", 30.0)
+    with monkeypatch.context() as patch:
+        _solvers_made(patch, Growing)
+        with pytest.raises(ValueError, match="source 's': .* grew in the moving air .*effective"):
+            _opening_run(room, "moving")
+    responses, info = _opening_run(room, "effective")
+    assert "wave_moving_air" not in info and np.all(np.isfinite(responses[0].signals))
 
-    def run(wind: str):
-        return wave_responses(
-            TraceModel.from_room(room),
-            np.array(wave_wind.ROOM_SOURCE),
-            np.array([wave_wind.ROOM_LISTENER]),
-            ["in"],
-            max_band_hz=63,
-            length_s=1.6,
-            sample_rate=FS,
-            speed_of_sound=room.speed_of_sound(),
-            wind=wind,
-            label="s",
+
+def test_wave_responses_say_where_the_wind_gets_too_fast(tmp_path, monkeypatch, wave_wind) -> None:
+    # The solver refuses a wind that moves half a cell a step round the model's solids
+    # (see test_the_wind_round_the_solids_must_stay_under_half_a_cell_a_step; no wind the
+    # scene takes gets there on a grid this coarse, so the solver's refusal is made up):
+    # the run says what to do about it.
+    def refuse(*args, **kwargs):
+        raise ValueError(
+            "the air must move less than half a cell per step, and the wind round the "
+            "model's solids moves 0.612000 at its fastest"
         )
 
-    with pytest.raises(ValueError, match="source 's': .* grew in the moving air .*effective"):
-        run("moving")
-    responses, info = run("effective")
-    assert "wave_moving_air" not in info and np.all(np.isfinite(responses[0].signals))
+    room = wave_wind.room_with_an_opening(tmp_path / "room.obj", 30.0)
+    monkeypatch.setattr(_native, "WaveSolver", refuse)
+    with pytest.raises(
+        ValueError,
+        match="moves 0.612000 at its fastest .*sharp edge speeds the wind up.*"
+        "set simulation.wave.wind to effective, or lower max_band_hz or points_per_wavelength",
+    ):
+        _opening_run(room, "moving")
 
 
 def test_watched_moving_air_is_one_run(monkeypatch) -> None:
