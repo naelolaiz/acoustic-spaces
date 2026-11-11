@@ -19,7 +19,7 @@ from test_ground import exact_reflection
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.parabolic import march
-from acoustic_spaces.engine.refracted import refraction_for
+from acoustic_spaces.engine.refracted import _FIRST_MODE, refraction_for
 from acoustic_spaces.engine.refraction import Profile, Rays, node_heights
 from acoustic_spaces.engine.shadow import shadow_start
 from acoustic_spaces.examples import example_path
@@ -171,6 +171,88 @@ def test_downwind_more_paths_upwind_a_shadow() -> None:
     # Past where the ray grazing the ground comes up, rays that turn just above it carry
     # on a little: the wind's log profile bends them less the higher they turn.
     assert len(rays.eigenrays(1.5, 2.0 * start, 3)) == 0
+
+
+def test_the_shadow_starts_continuously_as_the_heights_go_to_the_ground() -> None:
+    """Upwind in the ``windy`` preset the profile is linear below its first node, its
+    grazing ray a circle of radius R = c0 / |dc/dz|: the shadow starts at
+    sqrt(2 R z - z^2) a height, which goes to 0 with the heights, also below the first
+    height whose speed differs from c0 in floating point (1e-16 m) and on the ground,
+    where it was no shadow. At 1e-12 m the rays' own arithmetic rounds: 1.2e-3 off."""
+    up = Profile.of(Atmosphere.model_validate({"preset": "windy"}), 20.0, np.array([-1.0, 0.0]))
+    radius = float(up.c[0]) / abs(float(up.gradient[0]))
+    for z, rel in ((1e-6, 1e-8), (1e-12, 2e-3), (1e-16, 1e-12), (0.0, 0.0)):
+        limit = 2.0 * math.sqrt(2.0 * radius * z - z * z)
+        assert shadow_start(up, z, z) == pytest.approx(limit, rel=rel, abs=0.0)
+    assert shadow_start(up, 0.0, 1e-16) == pytest.approx(math.sqrt(2.0 * radius * 1e-16))
+
+
+def test_the_shadow_of_a_profile_level_at_the_ground_comes_from_its_rays() -> None:
+    """A measured profile level up to 0.5 m and falling above it: the ray that grazes the
+    ground stays level and never reaches 50 m, so the shadow starts beyond any distance
+    (above 1e299 m), from the ground and from inside the level layer alike; the limit of
+    a falling ground layer (R = c0 / |dc/dz|) does not apply where dc/dz = 0. A guard
+    (the rays alone pass it too): it catches that limit taken where dc/dz = 0, which
+    divides by zero."""
+    level = Profile(
+        np.array([0.0, 0.01, 0.5, 100.0]),
+        np.array([340.0, 340.0, 340.0, 330.0]),
+        np.array([0.0, 0.5, 100.0]),
+    )
+    for zs in (0.0, 0.3, 1.0):
+        start = shadow_start(level, zs, 50.0)
+        assert start is not None and start > 1e299
+
+
+def test_a_leg_along_the_ground_upwind_is_in_the_shadow() -> None:
+    """Legs 10 m upwind whose ends sink to the ground (a ground reflection to the foot of
+    an edge), 1e-3 m to 0: each falls into the shadow, 8 kHz attenuated as the first mode
+    of the ground's circle limit has it, exp(-2 Im kappa (10 m - start)), start =
+    2 sqrt(2 R z - z^2), within 0.1 dB (0.07 dB at 1e-12 m, where the rays' own
+    arithmetic rounds the start), down to the ground itself, which was left unattenuated.
+    One Refraction keeps one start a millimetre of heights and the heights it was found
+    for: a leg on the ground after one 0.4 mm up takes that leg's start and radius
+    (a radius from the start and the ground's heights divided by zero)."""
+    source = np.array([0.0, 0.0, 1.0])
+    scene = Scene.model_validate(
+        {
+            "geometry": {"ground": {"extent": [[-50.0, -20.0], [50.0, 20.0]], "sky": 20.0}},
+            "materials": {"hard": {"absorption": [0.02] * 8, "scattering": 0.0}},
+            "assignments": {"ground": "hard"},
+            "atmosphere": {"preset": "windy", "wind": {"direction_deg": 180}},
+            "sources": [{"name": "s", "position": list(source)}],
+            "listeners": [{"name": "l", "position": [20.0, 0.0, 1.5]}],
+        }
+    )
+    room = Room.from_scene(scene)
+
+    def refraction():
+        return refraction_for(
+            TraceModel.from_room(room),
+            source,
+            speed_of_sound=room.speed_of_sound(),
+            air=np.zeros(8),
+        )
+
+    def level(refraction, z: float) -> float:
+        return 10 * np.log10(
+            refraction._leg(np.array([0.0, 0.0, z]), np.array([10.0, 0.0, z]))[0][-1]
+        )
+
+    heights = (1e-3, 4e-4, 1e-6, 1e-12, 1e-16, 0.0)
+    levels = np.array([level(refraction(), z) for z in heights])
+    probe = refraction()
+    profile = probe.profile(probe._towards(np.array([1.0, 0.0])))
+    radius = float(profile.c[0]) / abs(float(profile.gradient[0]))
+    k = 2.0 * np.pi * 8000.0 / float(profile.c[0])
+    ell = (radius / (2.0 * k**2)) ** (1.0 / 3.0)
+    kappa = np.sqrt(k**2 - _FIRST_MODE * np.exp(1j * np.pi / 3.0) / ell**2 + 0j)
+    start = 2.0 * np.sqrt(2.0 * radius * np.array(heights) - np.square(heights))
+    expected = 10 * np.log10(np.exp(-2.0 * abs(kappa.imag) * (10.0 - start)))
+    np.testing.assert_allclose(levels, expected, atol=0.1)
+    shared = refraction()
+    first, ground = level(shared, 4e-4), level(shared, 0.0)
+    assert ground == first < -40.0
 
 
 def test_the_level_of_rays_that_turn_in_the_air() -> None:

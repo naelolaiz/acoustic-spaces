@@ -600,16 +600,36 @@ is an arc of a circle, so its travel time and its length are exact.
   share of a refraction shadow as the open ground's sound does. The paths round a
   barrier's end or a building's corner alone, off nothing but the ground, where one of
   them reflects off the ground, for a listener behind the barrier or in the open beside
-  it alike, change as the open ground's field along their own way round the edges does
-  (its length seen from above, the wind's component along it) in the bands its
-  parabolic equation gives: in the bands added coherently, at each frequency, by the
-  ratio of its pressures in the weather and in still air (their ground's interference
-  and travel time change with it), and in the others by that of its band energies, so
-  that beside a building they take the open ground's effect with the direct sound
-  (within 0.7 dB from 63 to 500 Hz 3 m beside a wall 60 m away in the `windy` preset,
-  down- and upwind); above those bands, and
-  round other edges (over a top and round an end at once, a model file's objects), the
-  paths keep their straight legs as over an edge. Against a full-wave solution of rigid
+  it alike, change as the open ground's field along their own way unfolded round the
+  edges does (its length seen from above, the wind's component along it, the weathers
+  and grounds along it), from the straight direct sound and ground reflection in still
+  air, against which they were found, to the weather's. In the bands the open ground's
+  parabolic equation gives (every band in a refraction shadow) they become one path,
+  at each frequency of the bands added coherently their pressure times the equation's
+  field over the straight paths' (their band energies so in the others); where they
+  hold no path of a kind the straight ones have (off the ground or not: an end below
+  the line of sight) they keep the field's turn of phase at each frequency and take
+  its change of level over the band. Above those bands each eigenray takes a copy of
+  them of its kind, times its pressure over the straight path's and the share of the
+  edge it gets at its own height there over its straight partner's, at each frequency
+  (which goes to 0 as it rises past a barrier's top; at a building's corner, whose edge
+  goes on into the roof's, it stays whole, and the copies stop where the paths round
+  the corner do, at the roof's height, as in still air; where none of its kind goes
+  round the end, one that passes the end below the top takes the other kind's), as
+  much later or sooner. So at an
+  end's shadow boundary they jump by the weather's field, as the direct sound does,
+  and beside a building they take the open ground's effect with the direct sound
+  (within 0.45 dB from 63 to 500 Hz 3 m beside a wall 60 m away in the `windy` preset,
+  down- and upwind). Behind a building, where nothing else takes a run, this costs a
+  run of the open ground's equation a way, shared by the ways whose profiles agree: 85 m
+  from a source 1 m up, behind a building 10 m deep and 20 m wide 20 m from it, a
+  listener took 1.1 s of CPU instead of 0.16 s in the `windy` preset, and a coverage map
+  round it on a 10 m grid 33.7 s instead of 25.6 s (300 runs in its bands instead of
+  240); at that listener the wind's effect comes within 0.33 dB of the open ground's
+  along the way round the corner from 63 Hz to 2 kHz and 1.04 dB at 4 kHz. Round other
+  edges (over a top and round an end
+  at once, a model file's objects), the paths keep their straight legs as over an
+  edge. Against a full-wave solution of rigid
   barriers and blocks in wind from 63 to 500 Hz, and against a parabolic equation
   started behind a rigid barrier from its exact field from 125 Hz to 8 kHz, the
   weather's effect is within 0.71 dB behind one barrier or building in 5 m/s of wind
@@ -1629,18 +1649,21 @@ equation leaves out:
   level in still air by 0.4 to 0.9 dB from 0 to 45 degrees (Aballéa et al. 2007), which
   the ratio cancels in part. Against a run along the listener's own way the blend of two
   degrees is within 0.9 dB 120 m behind a barrier at 14 degrees to the way and 1.8 dB
-  within 3 m behind a wall at 45 degrees. The paths round an end take the open ground's
-  effect along their way, not the barrier's, and only in its bands, while those over
-  the top take the barrier's, past the end too as they fade out there: where a
-  listener crosses the shadow boundary of a barrier's end, 10 cm across it the level
-  steps by at most 1.0 dB from 63 to 500 Hz and 1.6 dB at 1 and 2 kHz (0.42 dB in still
-  air) and 0.92 dB 120 m upwind, but at 4 and 8 kHz, where the paths round the end keep
-  their legs while the direct sound takes the open ground's refraction, by up to 7.8 dB
-  60 m downwind and 19 dB 120 m away. Where the end stands below the line of sight (a barrier 1 m high), a
-  listener crossing the end's line seen from above (its way crossing the barrier on
-  one side, and on the other the open ground's sound) steps, 2 mm across it, by up to
-  1.2 dB from 63 to 250 Hz (0.02 dB in still air), but by up to 4.8 dB from 500 Hz to
-  2 kHz and 12.8 dB upwind at 8 kHz (see
+  within 3 m behind a wall at 45 degrees. The paths round an end change as the open
+  ground's field along their way does, not as the barrier's, while those over the top
+  take the barrier's, past the end too as they fade out there: across the shadow
+  boundary of a barrier's end the level steps by at most 0.07 dB a millimetre in octave
+  bands 60 m away and 120 m downwind, and by 0.22 dB 120 m upwind, where still air
+  steps by 0.17 dB (0.28 dB in the 50 Hz third octave, where still air steps by
+  0.30 dB), but at 4 and 8 kHz with eddies by up to 1.08 dB (strong ones, 120 m
+  downwind; in still air the same eddies step there by up to 0.95 dB) and with weather
+  zones by up to 0.76 dB. Where the
+  end stands below the line of sight (a barrier 1 m high), a listener crossing the
+  end's line seen from above (its way crossing the barrier on one side, and on the
+  other the open ground's sound) steps, 1 mm across it, by up to 0.94 dB from 63 to
+  250 Hz, but from 500 Hz to 2 kHz by up to 4.7 dB 100 m away and 6.0 dB 200 m
+  downwind, where the barrier's runs and the open ground's own field disagree, and
+  12.8 dB upwind at 8 kHz, where the barrier's runs and the open ground's shadow do (see
   [Validation](validation.md#known-issues)). No reference in three dimensions checks
   the paths round ends and corners, for listeners behind a barrier or in the open
   beside it.

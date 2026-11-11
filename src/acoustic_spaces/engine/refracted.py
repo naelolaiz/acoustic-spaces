@@ -39,8 +39,11 @@ through still air, both with the barriers and buildings on the way inside (the
 ``obstacles`` of :func:`~acoustic_spaces.engine.parabolic.march`), along the whole
 degrees either side of the way (:meth:`Refraction._cuts_for`). The paths round a
 barrier's end or a building's corner alone, where one of them reflects off the ground,
-take the open ground's ratio along their own way round the edges in its bands
-(:meth:`Refraction._ends`).
+change in every band as the open ground's field along their own way round the edges,
+unfolded, changes from the straight direct sound and ground reflection in still air to
+the weather's (the eigenrays, with the parabolic equation in its bands): at the end's
+shadow boundary they jump by the open ground's field, as the direct sound does
+(:meth:`Refraction._ends`, :meth:`Refraction._turned`).
 
 The late stage's rays bend too: the compiled tracer follows each one along its arcs
 through the layers, in chords (:func:`bending` gives it the atmosphere).
@@ -259,18 +262,30 @@ class _Barrier:
 
 @dataclass
 class _Way:
-    """Paths round the same ends of barriers and corners of buildings: the open ground's
-    runs of the parabolic equation along their way, unfolded round those edges, in the
-    weather and in still air, whose ratio scales them in ``bands``."""
+    """Paths round the same ends of barriers and corners of buildings, and the open
+    ground's field along their way, unfolded round those edges, with nothing in it
+    (:meth:`Refraction._open_way`), which changes them in the weather."""
 
     rows: np.ndarray  # theirs, of the listener's part of paths round ends
     key: object  # the profile's key along the way
     ground: tuple | None  # with ground zones, its grounds (:meth:`Refraction._grounds_round`)
+    #: With weather zones, the weathers along it (:meth:`Refraction._weathers_round`).
+    weathers: tuple | None
     range: float  # the way's length seen from above
     height: float
     top: float  # the runs' absorbing layer
-    bands: np.ndarray  # (bands,) bool
-    shift: float  # the delay (s) its paths took on, the first of them's along its legs
+    bands: np.ndarray  # (bands,) bool: those of the open ground's parabolic equation
+    #: The eigenrays along the way in the weather (before the equation is put in) and
+    #: the straight direct sound and ground reflection along it in still air.
+    weather: EarlyReflections
+    still: EarlyReflections
+    #: The open ground's request for a listener at the way's end (None: the rays alone),
+    #: which :meth:`Refraction._place` puts in ``weather`` with the way's run.
+    wave: _Wave | None
+    at: np.ndarray  # (3,) the listener
+    corners: np.ndarray  # (k + 2, 2) the way seen from above: the source, the edges, the listener
+    tops: np.ndarray  # (k,) the height (z) of the top of each of its edges
+    edges: tuple  # (k,) its edges (indices of the model's diffracting edges), in turn
 
 
 @dataclass
@@ -359,7 +374,7 @@ class Refraction:
         self._lock = threading.Lock()
         self.threads = run_size.worker_threads(int(threads))
         self.wide_angle = bool(wide_angle)
-        self._starts: dict[tuple, float | None] = {}
+        self._starts: dict[tuple, tuple] = {}
         self.eddies = Eddies.of(model, self.c)
         self.layout = room.outdoor
         self._cuts: dict[float, tuple] = {}
@@ -408,15 +423,7 @@ class Refraction:
         return self._profiles[key]
 
     def rays(self, key: float) -> Rays:
-        index = (self._weather, key, self.zs)
-        rays = _RAYS.get(index)
-        if rays is None:
-            rays = _RAYS[index] = Rays(self.profile(key), self.zs)
-            while len(_RAYS) > _KEPT_RAYS:
-                _RAYS.popitem(last=False)
-        else:
-            _RAYS.move_to_end(index)
-        return rays
+        return _kept((self._weather, key, self.zs), lambda: Rays(self.profile(key), self.zs))
 
     # -- all listeners -----------------------------------------------------------------
 
@@ -549,19 +556,18 @@ class Refraction:
                 past.part = len(out) - 1
                 asked.append(past)
         # The paths round the ends of barriers and the corners of buildings take the
-        # weather's effect on the open ground along their own way (:meth:`_ends`).
+        # weather's effect on the open ground along their own way (:meth:`_ends`), on
+        # either side of the shadow boundary, whatever the listener's own field.
         ends = None
-        if request is not None and bent:
+        if bent:
             ends = self._ends(k, listener, zr, paths, bent, cutoff, towards)
         if ends is not None:
-            chosen, high, low, request_ends = ends
+            chosen, low, request_ends = ends
             taken = set(chosen)
             bent = [i for i in bent if i not in taken]
         if bent:
             out.append(self._legs(paths[np.array(sorted(bent))]))
         if ends is not None:
-            if high is not None:
-                out.append(high)
             out.append(low)
             request_ends.part = len(out) - 1
             asked.append(request_ends)
@@ -584,15 +590,30 @@ class Refraction:
         )
         direct = bool(np.any((straight.order == 0) & (straight.edge < 0)))
         clear = direct and bool(np.all(visible))
+        if not clear:
+            return family, None
         shadow = len(found) == 0
-        if not clear or reach < WAVE_MIN_RANGE * (self.zs + zr):
-            return family, None
+        distance = float(np.linalg.norm(listener - self.source))
+        azimuth = self._azimuth(towards) if self.zones or self.zoned else None
+        run = (None if self.zoned else key, azimuth)
+        wave = self._wave(k, key, run, towards, reach, zr, family, highest, shadow, distance, r0)
+        return family, wave
+
+    def _wave(self, k, key, run, towards, reach, zr, family, highest, shadow, distance, ratio):
+        """The open ground's request for the parabolic equation for the listener ``k``
+        ``zr`` m up, ``reach`` m along the ground ``towards`` (2,) from the source and
+        ``distance`` m from it, whose eigenrays of profile ``key`` are the paths
+        ``family`` (the highest ``highest`` up; none in the refraction's ``shadow``),
+        sharing the runs of ``run``; None where the rays alone give the field: near the
+        source, where no path off the ground is asked for and a ray reaches, or in no
+        band."""
+        if reach < WAVE_MIN_RANGE * (self.zs + zr):
+            return None
         if not shadow and self.max_order < 1:
-            return family, None
+            return None
         top, bands = self._open_run(key, zr, reach, highest, shadow)
         if not bands.any():
-            return family, None
-        distance = float(np.linalg.norm(listener - self.source))
+            return None
         if shadow:
             departure = np.append(towards, 0.0)
             delay = distance / float(self.profile(key).c[0])
@@ -601,10 +622,9 @@ class Refraction:
             carrier = int(np.argmin(family.delay_s))
             departure = _departure(family.points[carrier])
             delay = float(family.delay_s[carrier])
-        azimuth = self._azimuth(towards) if self.zones or self.zoned else None
-        return family, _Wave(
+        return _Wave(
             listener=k,
-            key=(None if self.zoned else key, azimuth),
+            key=run,
             mix=key,
             direction=towards,
             range=reach,
@@ -614,7 +634,7 @@ class Refraction:
             shadow=shadow,
             distance=distance,
             departure=departure,
-            ratio=r0,
+            ratio=ratio,
             carrier=carrier,
             family=np.arange(len(family)),
             delay=delay,
@@ -666,7 +686,7 @@ class Refraction:
                 out[bounces] = (np.asarray(paths.points[i], dtype=float), face)
         return out
 
-    def _curved(self, rays, found, zr, corners, planes, listener, r0, r1, twins=None):
+    def _curved(self, rays, found, zr, corners, planes, listener, r0, r1, twins=None, clear=False):
         """The eigenrays ``found`` as paths along the horizontal ``corners`` (k + 2, 2)
         from the source to the listener, reflecting off the vertical ``planes`` (k,) at
         the inner corners; those blocked or passing a wall by are left out. With
@@ -727,7 +747,11 @@ class Refraction:
                 twin = twins.get(bounces)
                 if twin is None:
                     continue
-            share, crossed = self._passes(points, face)
+            if clear:
+                # The open ground's field along a way with nothing in it.
+                share, crossed = np.ones(self.bands), 0
+            else:
+                share, crossed = self._passes(points, face)
             if twin is not None and not np.any(share > 0.0):
                 share, crossed = self._passes(*twin)
             if not np.any(share > 0.0):
@@ -922,10 +946,12 @@ class Refraction:
         heights = za + (zb - za) * (np.arange(16) + 0.5) / 16.0
         shift = distance * float(np.mean(1.0 / profile.speed(heights))) - distance / self.c
         gain = np.ones(self.bands)
-        if across > 1e-9 and za + zb > 0.0:
-            start = self._start(key, za, zb)
+        if across > 1e-9:
+            # The start and the heights it was found for go together (the cache holds
+            # one start for heights within 1 mm, where the start goes as their roots).
+            start, za, zb = self._found(key, za, zb)
             if start is not None and across > start:
-                radius = equivalent_radius(start, za, zb)
+                radius = equivalent_radius(start, za, zb, profile)
                 k = 2.0 * np.pi * self.centres / float(profile.c[0])
                 ell = (radius / (2.0 * k**2)) ** (1.0 / 3.0)
                 kappa = np.sqrt(k**2 - _FIRST_MODE * np.exp(1j * np.pi / 3.0) / ell**2 + 0j)
@@ -936,9 +962,15 @@ class Refraction:
         return gain, shift
 
     def _start(self, key: float, za: float, zb: float) -> float | None:
+        return self._found(key, za, zb)[0]
+
+    def _found(self, key: float, za: float, zb: float) -> tuple:
+        """The start of the shadow of profile ``key`` for heights ``za`` and ``zb``
+        (:func:`~acoustic_spaces.engine.shadow.shadow_start`), as the cache holds it for
+        those heights to the millimetre, and the heights it was found for."""
         index = (key, round(za, 3), round(zb, 3))
         if index not in self._starts:
-            self._starts[index] = shadow_start(self.profile(key), za, zb)
+            self._starts[index] = (shadow_start(self.profile(key), za, zb), za, zb)
         return self._starts[index]
 
     # -- behind barriers and buildings ---------------------------------------------------
@@ -1185,15 +1217,15 @@ class Refraction:
         same edges reflect off the ground; for each such way, the open ground's runs
         of the parabolic equation along it, unfolded round the edges (its length seen
         from above, the wind's component along it as the lengths of its legs weigh
-        it), change its paths in the open ground's bands for it as the weather changes
-        the field along it (:meth:`_place_ends`), delayed as much as the first of them,
-        and above them give them their legs' own times and shadows (:meth:`_legs`). At
-        an end's shadow boundary its way is the listener's own, so its paths change as
-        the direct sound does there.
+        it; with weather zones through the weathers along its legs) and the open
+        ground's field along it with nothing in the way
+        (:meth:`_open_way`), which change its paths in every band as the weather changes
+        that field (:meth:`_place_ends`). At an end's shadow boundary its way is the
+        listener's own, so its paths change as the direct sound does there.
         Paths round the same edges none of which reflects off the ground keep their
         legs' (their partners off the ground left out, the ratio over the ground
-        holds no longer). Returns the paths taken (indices), those above the bands and
-        those in them (parts of the listener's) and the request; None for none."""
+        holds no longer). Returns the paths taken (indices), those paths (a part of the
+        listener's) and the request; None for none."""
         ways: dict[tuple, list[int]] = {}
         for i in rows:
             edges = self._round(paths, i)
@@ -1205,39 +1237,71 @@ class Refraction:
         chosen = sorted(i for found in ways.values() for i in found)
         at = {i: n for n, i in enumerate(chosen)}
         part = paths[np.array(chosen)]
-        inside = np.zeros((len(chosen), self.bands), dtype=bool)
-        delay = part.delay_s.copy()
         edges = self._edge_set()
         requested = []
         for way, found in ways.items():
             corners = np.array([self.source[:2], *(edges.start[e][:2] for e in way), listener[:2]])
-            legs = np.diff(corners, axis=0)
-            length = float(np.linalg.norm(legs, axis=1).sum())
-            if self.zoned:
-                key = self._mix(corners)
-            else:
-                key = self._key(float(self.wind @ legs.sum(axis=0)) / length)
-            rays = self.rays(key)
-            eigen = rays.eigenrays(zr, length, MAX_GROUND_BOUNCES, max_time=cutoff)
-            top, bands = self._open_run(key, zr, length, _highest(rays, eigen, zr), len(eigen) == 0)
-            first = paths.points[min(found, key=lambda i: float(paths.delay_s[i]))]
-            shift = sum(self._leg(a, b)[1] for a, b in zip(first[:-1], first[1:], strict=True))
+            tops = np.array([max(edges.start[e][2], edges.end[e][2]) for e in way], dtype=float)
             index = np.array([at[i] for i in found])
-            inside[index] = bands
-            delay[index] += shift
-            ground = self._grounds_round(corners)
-            requested.append(_Way(index, key, ground, length, zr, top, bands, shift))
-        legs = self._legs(part)
-        high = None
-        if not inside.all():
-            high = dataclasses.replace(legs, energy=np.where(inside, 0.0, legs.energy))
-        low = dataclasses.replace(
-            part,
-            energy=np.where(inside, part.energy, 0.0),
-            delay_s=delay,
-            spectrum=None if part.spectrum is None else part.spectrum.copy(),
+            requested.append(self._open_way(index, way, corners, tops, listener, zr, cutoff))
+        return chosen, part, _Ends(listener=k, part=-1, ways=requested)
+
+    def _straight_rays(self) -> Rays:
+        """The rays in still air of the speed of sound the paths in still air take."""
+        return _kept(("straight", self.c, self.zs), lambda: Rays(Profile.uniform(self.c), self.zs))
+
+    def _open_way(self, rows, edges, corners, tops, listener, zr, cutoff) -> _Way:
+        """The way round ends and corners along the horizontal ``corners`` (from the
+        source, past each of ``edges``, to ``listener``), unfolded: the open ground's paths along
+        it in the weather, as :meth:`_open_ground` finds them for a listener at its end
+        with nothing in the way (the eigenrays, and the request for the open ground's
+        parabolic equation under the same rules), and the straight direct sound and
+        ground reflection in still air, both by :meth:`_curved`."""
+        legs = np.diff(corners, axis=0)
+        length = float(np.linalg.norm(legs, axis=1).sum())
+        if self.zoned:
+            key = self._mix(corners)
+        else:
+            key = self._key(float(self.wind @ legs.sum(axis=0)) / length)
+        rays = self.rays(key)
+        cap = MAX_GROUND_BOUNCES if self.max_order >= 1 else 0
+        eigen = rays.eigenrays(zr, length, cap, max_time=cutoff)
+        one = np.ones(self.bands)
+        weather, _, highest = self._curved(
+            rays, eigen, zr, corners, (), listener, one, one, clear=True
         )
-        return chosen, high, low, _Ends(listener=k, part=-1, ways=requested)
+        straight = self._straight_rays()
+        flat = straight.eigenrays(zr, length, min(cap, 1))
+        still, _, _ = self._curved(straight, flat, zr, corners, (), listener, one, one, clear=True)
+        shadow = len(weather) == 0
+        towards = legs[0] / max(float(np.linalg.norm(legs[0])), 1e-300)
+        distance = math.hypot(length, float(listener[2]) - float(self.source[2]))
+        wave = self._wave(
+            0, key, (key, None), towards, length, zr, weather, highest, shadow, distance, one
+        )
+        if wave is not None:
+            top, bands = wave.top, wave.bands
+        else:
+            top = self._open_run(key, zr, length, highest, shadow)[0]
+            bands = np.zeros(self.bands, dtype=bool)
+        ground = self._grounds_round(corners)
+        return _Way(
+            rows,
+            key,
+            ground,
+            self._weathers_round(corners),
+            length,
+            zr,
+            top,
+            bands,
+            weather=weather,
+            still=still,
+            wave=wave,
+            at=np.asarray(listener, dtype=float),
+            corners=np.asarray(corners, dtype=float),
+            tops=tops,
+            edges=edges,
+        )
 
     def _round(self, paths: EarlyReflections, i: int) -> tuple | None:
         """The edges (indices, in turn) that the path ``i`` of ``paths`` goes round,
@@ -1413,31 +1477,262 @@ class Refraction:
         plane.delay_s += request.shift
 
     def _place_ends(self, request: _Ends, pressures: dict, parts: list) -> None:
-        """The paths of ``request`` round ends and corners changed, in the bands of each
-        way, as the open ground's field along it changes in the weather: in the coherent
-        bands their pressures, at each frequency, by the ratio of its runs' pressures
-        (``pressures``, by (the way's id, "wind" or "still", "pressure")), less the delay
-        they took on, so that together they change as that field does, its ground's
-        fringes and its travel time with it; in the others their energies by the ratio
-        of its runs' band energies (by (the way's id, "wind" or "still"))."""
+        """The paths of ``request`` round ends and corners changed, way by way, as the
+        open ground's field along the way changes from the straight paths in still air
+        to the weather's (:meth:`_turned`): its eigenrays with the way's run of the
+        parabolic equation put in (``pressures``, by (the way's id, "wind") its band
+        energies and by (the way's id, "wind", "pressure") its pressures) as
+        :meth:`_place` puts the open ground's in for a listener."""
         part = parts[request.listener][request.part]
         coherent = 0 if part.spectrum is None else part.spectrum.shape[1]
+        pieces = []
         for way in request.ways:
-            bands = np.flatnonzero(way.bands)
-            ratio = _ratio(pressures[(id(way), "wind")], pressures[(id(way), "still")])
-            rows = way.rows
-            for band in bands:
-                wind = pressures.get((id(way), "wind", "pressure"))
-                still = pressures.get((id(way), "still", "pressure"))
-                if band >= coherent or wind is None or not np.all(still[band] != 0.0):
-                    part.energy[rows, band] *= ratio[band]
+            weather = dataclasses.replace(
+                way.weather,
+                energy=way.weather.energy.copy(),
+                spectrum=None if way.weather.spectrum is None else way.weather.spectrum.copy(),
+                cosines=[c.copy() for c in way.weather.cosines],
+            )
+            collapsed = np.zeros(self.bands, dtype=bool)
+            if way.wave is not None:
+                virtual = [[weather]]
+                self._place(
+                    way.wave,
+                    pressures[(id(way), "wind", "pressure")],
+                    pressures[(id(way), "wind")],
+                    virtual,
+                    way.at[None],
+                )
+                weather = virtual[0][0]
+                # Where one path holds the open ground's field (the equation's, or the
+                # shadow's above its bands), the paths round the ends are one too.
+                collapsed = np.ones(self.bands, bool) if way.wave.shadow else way.wave.bands
+            pieces.append(self._turned(part[way.rows], way, weather, collapsed, coherent))
+        parts[request.listener][request.part] = EarlyReflections.concatenate(pieces, self.bands)
+
+    def _bounces(self, paths: EarlyReflections) -> np.ndarray:
+        """(n,) 0 for each of ``paths`` that reflects off no ground, 1 for those that do."""
+        return np.array([int(self._grounded(paths, i)) for i in range(len(paths))], dtype=np.int64)
+
+    def _pressure(self, paths, rows, band: int, ref: float) -> np.ndarray:
+        """(M,) the pressure of ``paths`` ``rows`` together at the early paths'
+        frequencies of ``band`` (a coherent one), time measured from ``ref`` (s)."""
+        f = self.frequencies[band]
+        level = np.sqrt(paths.energy[rows, band])[:, None]
+        late = (paths.delay_s[rows] - ref)[:, None]
+        return np.sum(level * paths.spectrum[rows, band] * np.exp(-2j * np.pi * f[None] * late), 0)
+
+    def _blocks(self, way: _Way, points: np.ndarray) -> bool:
+        """Whether the path through ``points`` (along ``way`` unfolded) passes one of
+        its edges below the top of what the edge belongs to, which stands in its way
+        there (in still air the paths round the edges make up for it)."""
+        return bool(np.any(_unfolded(points, way.corners)[1] < way.tops))
+
+    def _edge_shares(self, way: _Way, ends, rows, shift: np.ndarray, straight: float):
+        """(len(rows), bands, M) for each of the paths ``rows`` of ``ends`` round the
+        edges of ``way``, at the early paths' frequencies: the share of each edge that
+        the integral along it gives a path touching it ``shift`` (k,) m higher than the
+        path does over the share it gives the path itself, the product over the edges
+        (:func:`~acoustic_spaces.engine.diffraction.along_edge`). Each end that fades
+        fades all the way, its integrand that of the incident wave's term, whose shadow
+        boundary lies sqrt(2 k d / pi) away in the integral's argument, d the path's
+        length over ``straight``'s (m, its straight partner's): on the boundary both
+        shares are 1 inside the edge, so that the paths jump there by all of the field;
+        a few Fresnel zones inside an end both are 1; past a barrier's top the share goes
+        to 0 continuously. An end that does not fade
+        (:func:`~acoustic_spaces.engine.diffraction.end_fades`: the edge goes on there,
+        in another edge, at a box's corner or as its image in the ground) cuts nothing
+        off: a point moved past it counts as at it, so that the copies stop where the
+        paths round the edge stop, where those in still air do."""
+        from acoustic_spaces.engine.diffraction import _fade_reach, along_edge, end_fades
+
+        edges = self._edge_set()
+        if edges.fade is None or edges.corner is None or edges.closed is None:
+            edges.fade, edges.corner, edges.closed = end_fades(self.model, edges)
+        k = 2.0 * np.pi * self.frequencies / self.c  # (bands, M)
+        k_min = float(k.min())
+        out = np.ones((len(rows), *k.shape), dtype=complex)
+        for n, e in enumerate(way.edges):
+            if shift[n] == 0.0:
+                continue
+            direction = edges.direction[e]
+            fade = edges.fade[e]
+            fading = np.tile(fade > 0.0, (2, 1, 1))  # (2, 1, 2)
+            low = -np.inf if fade[0] > 0.0 else 0.0
+            high = np.inf if fade[1] > 0.0 else float(edges.length[e])
+            inside = np.ones((2, 1, 2), dtype=bool)
+            for m, i in enumerate(rows):
+                points = np.asarray(ends.points[i], dtype=float)
+                inner = points[1:-1]
+                index = np.full(len(inner), e)
+                c = 1 + int(np.argmin(_edge_distance(edges, index, inner)))
+                legs = np.linalg.norm(np.diff(points, axis=0), axis=1)
+                r1, r2 = float(legs[:c].sum()), float(legs[c:].sum())
+                incoming = (points[c] - points[c - 1]) / max(float(legs[c - 1]), 1e-300)
+                sin_beta = float(np.linalg.norm(np.cross(incoming, direction)))
+                own = float((points[c] - edges.start[e]) @ direction)
+                t_k = np.clip([own, own + shift[n] * float(direction[2])], low, high)
+                length = np.full(2, float(edges.length[e]))
+                # sin^2 beta sqrt(k / (pi L)), L = r1 r2 / (r1 + r2) sin^2 beta.
+                scale = sin_beta * np.sqrt(k * (r1 + r2) / (np.pi * r1 * r2))
+                scale = np.broadcast_to(scale, (2, *k.shape))
+                reach = _fade_reach(np.full(2, r1), np.full(2, r2), np.full(2, sin_beta), k_min)
+                boundary = np.sqrt(2.0 * k * max(r1 + r2 - straight, 0.0) / np.pi)
+                boundary = np.broadcast_to(boundary, (2, 1, *k.shape))
+                share = along_edge(
+                    t_k,
+                    length,
+                    scale,
+                    fading.astype(float)[:, 0],
+                    reach,
+                    inside=inside,
+                    alone=fading,
+                    boundary=boundary,
+                )[:, 0]  # (2, bands, M): the one wave's
+                held = share[0] != 0.0
+                out[m] *= np.divide(share[1], share[0], out=np.ones_like(share[1]), where=held)
+        return out
+
+    def _turned(self, ends, way: _Way, weather, collapsed, coherent: int) -> EarlyReflections:
+        """The paths ``ends`` round the edges of ``way`` changed as the open ground's
+        field along the way unfolded changes from the straight direct sound and ground
+        reflection in still air (``way.still``, the field the paths round the edges were
+        found against) to ``weather`` (the weather's), so that at an end's shadow
+        boundary, where they jump by the field the edges take away, they jump by the
+        weather's: a vertical edge in air that changes with height alone diffracts each
+        of its vertical modes alike. Each copy of them goes along the way at the height
+        of the path of ``weather`` it stands for, as the eddies see it.
+
+        In the bands ``collapsed``, where one path holds the weather's field (the
+        equation's, or the shadow's), they become one path along that one's way: where
+        among them are paths of each kind the straight ones are of (off the ground or
+        not), their pressures together at each frequency of the coherent bands times
+        the weather's over the straight paths', which they then follow at each of them;
+        where not (an end below the line of sight: the direct sound passes over the
+        top), their energy times the weather's band energy over the straight paths' (a
+        frequency where those cancel would otherwise come out without bound), their own
+        spectrum kept. In the other bands each path of ``weather`` takes a copy of those
+        of ``ends`` of its kind, times its pressure over the straight path's of that kind
+        and the share of the edges its height at them gives over its straight partner's
+        (:meth:`_edge_shares`), which goes to 0 as it rises past a barrier's top; where none
+        of its kind goes round the edges, one that the edges block (:meth:`_blocks`)
+        takes a copy of those of the other kind. Each copy is delayed as much as the
+        weather's paths it stands for are against the straight ones; in the bands that
+        add in energy, the energies change likewise. Their legs' own times and shadows
+        where the way has no open ground's field (``weather`` empty)."""
+        bands = self.bands
+        still = way.still
+        if not len(weather) or not len(still):
+            return self._legs(ends)
+        kinds_end, kinds_still = self._bounces(ends), self._bounces(still)
+        kinds_weather = self._bounces(weather)
+
+        def copy(rows_end, rows_weather, rows_still, which, along, whole, shares=None):
+            ref_end = int(rows_end[np.argmin(ends.delay_s[rows_end])])
+            t_end = float(ends.delay_s[ref_end])
+            t_weather = float(weather.delay_s[along])
+            t_still = float(still.delay_s[rows_still].min())
+            new = ends[np.array([ref_end])]
+            new.delay_s = new.delay_s + (t_weather - t_still)
+            new.points = [_unfolded(weather.points[along], way.corners)[0]]
+            new.energy = np.zeros((1, bands))
+            if new.spectrum is not None:
+                new.spectrum = np.ones_like(new.spectrum)
+            if new.cosines:
+                # Their phases are the open ground's now, not their faces'.
+                new.cosines = [np.full(len(new.cosines[0]), np.nan)]
+            for band in np.flatnonzero(which):
+                e_weather = float(weather.energy[rows_weather, band].sum())
+                e_still = float(still.energy[rows_still, band].sum())
+                if e_still <= 0.0 or e_weather <= 0.0:
                     continue
-                change = wind[band] / still[band]  # (M,)
-                gain = float(np.mean(np.abs(change) ** 2))
-                part.energy[rows, band] *= gain
+                if band >= coherent:
+                    e_rows = ends.energy[rows_end, band]
+                    if shares is not None:
+                        e_rows = e_rows * np.mean(np.abs(shares[:, band]) ** 2, axis=1)
+                    new.energy[0, band] = float(e_rows.sum()) * e_weather / e_still
+                    continue
+                if shares is None:
+                    p_end = self._pressure(ends, rows_end, band, t_end)
+                else:
+                    p_end = sum(
+                        self._pressure(ends, [r], band, t_end) * shares[m, band]
+                        for m, r in enumerate(rows_end)
+                    )
+                p_weather = self._pressure(weather, rows_weather, band, t_weather)
+                p_still = self._pressure(still, rows_still, band, t_still)
+                if not np.all(np.abs(p_still) > 0.0):
+                    p = p_end * math.sqrt(e_weather / e_still)
+                elif whole:
+                    p = p_end * p_weather / p_still
+                else:
+                    # The weather's turn of the field's phase at each frequency, its
+                    # level the band's: where the straight paths all but cancel, their
+                    # ratio would come out without bound.
+                    ratio = p_weather / p_still
+                    size = np.abs(ratio)
+                    turn = np.where(size > 0.0, ratio / np.where(size > 0.0, size, 1.0), 1.0)
+                    level = np.mean(np.abs(p_weather) ** 2) / np.mean(np.abs(p_still) ** 2)
+                    p = p_end * turn * math.sqrt(float(level))
+                gain = float(np.mean(np.abs(p) ** 2))
+                new.energy[0, band] = gain
                 if gain > 0.0:
-                    turn = np.exp(2j * np.pi * self.frequencies[band] * way.shift)
-                    part.spectrum[rows, band] *= (change * turn / math.sqrt(gain))[None, :]
+                    new.spectrum[0, band] = p / math.sqrt(gain)
+            return new
+
+        out = []
+        everything = np.arange(len(weather))
+        if collapsed.any():
+            heard = everything[weather.energy[:, collapsed].sum(axis=1) > 0.0]
+            if len(heard):
+                carrier = int(heard[np.argmin(weather.delay_s[heard])])
+                whole = set(kinds_still.tolist()) <= set(kinds_end.tolist())
+                out.append(
+                    copy(
+                        np.arange(len(ends)),
+                        everything,
+                        np.arange(len(still)),
+                        collapsed,
+                        carrier,
+                        whole,
+                    )
+                )
+        rest = ~collapsed
+        if rest.any():
+            for i in everything:
+                if not np.any(weather.energy[i, rest] > 0.0):
+                    continue
+                kind = int(kinds_weather[i])
+                shares = None
+                if np.any(kinds_end == kind):
+                    rows_still = np.flatnonzero(kinds_still == kind)
+                    if not len(rows_still):
+                        continue
+                    # The edges give it as much as they give the paths round them of its
+                    # kind, touching them as much higher as it passes them higher than
+                    # its straight partner (:meth:`_edge_shares`).
+                    partner = int(rows_still[np.argmin(still.delay_s[rows_still])])
+                    shift = (
+                        _unfolded(weather.points[i], way.corners)[1]
+                        - _unfolded(still.points[partner], way.corners)[1]
+                    )
+                    rows_end = np.flatnonzero(kinds_end == kind)
+                    corners = still.points[partner]
+                    straight = float(np.linalg.norm(np.diff(corners, axis=0), axis=1).sum())
+                    shares = self._edge_shares(way, ends, rows_end, shift, straight)
+                else:
+                    # None of its kind goes round the edges (an end below the line of
+                    # sight of its straight path): where the edges block it, a vertical
+                    # edge diffracts the other kind alike.
+                    if not self._blocks(way, weather.points[i]):
+                        continue
+                    kind = int(kinds_end[0])
+                    rows_still = np.flatnonzero(kinds_still == kind)
+                    if not len(rows_still):
+                        continue
+                    rows_end = np.flatnonzero(kinds_end == kind)
+                out.append(copy(rows_end, np.array([i]), rows_still, rest, i, True, shares))
+        return EarlyReflections.concatenate(out, bands)
 
     # -- the parabolic equation --------------------------------------------------------
 
@@ -1546,6 +1841,45 @@ class Refraction:
         faces = self._zone_faces(corners[leg] + part[:, None] * legs[leg])
         begins = np.flatnonzero(np.diff(faces, prepend=faces[0] - 1))
         return tuple((int(i), int(faces[i])) for i in begins)
+
+    def _weathers_round(self, corners: np.ndarray) -> tuple | None:
+        """With weather zones, the legs of the horizontal polyline ``corners`` (m + 1, 2)
+        unfolded, as the parabolic equation marches through the weathers along them
+        (:meth:`_weathers_on`): ((distance to the leg's start, its start x, y, its
+        direction rounded as a listener's run's is, :meth:`_azimuth`), ...), so that ways
+        alike share their runs; None without weather zones."""
+        if not self.zoned:
+            return None
+        corners = np.asarray(corners, dtype=float)
+        legs = np.diff(corners, axis=0)
+        lengths = np.linalg.norm(legs, axis=1)
+        out = []
+        start = 0.0
+        for corner, leg, length in zip(corners[:-1], legs, lengths, strict=True):
+            if length > 1e-12:
+                azimuth = self._azimuth(leg / length)
+                out.append((start, float(corner[0]), float(corner[1]), azimuth))
+            start += float(length)
+        return tuple(out)
+
+    def _weathers_on(self, weathers: tuple, reach: float):
+        """A function giving the speed function (of the height) of the weather at a
+        distance along a way whose legs are ``weathers`` (:meth:`_weathers_round`), up
+        to ``reach``: each leg's from :meth:`~acoustic_spaces.engine.weather.Weather.
+        along`, as a listener's run along a line takes it."""
+        starts = np.array([leg[0] for leg in weathers])
+        ends = np.append(starts[1:], max(float(reach), float(starts[-1])))
+        legs = []
+        for (start, x, y, azimuth), end in zip(weathers, ends, strict=True):
+            angle = math.radians(azimuth)
+            direction = np.array([math.cos(angle), math.sin(angle)])
+            legs.append(self.weather.along(np.array([x, y]), direction, end - start))
+
+        def speed_at(r: float):
+            leg = max(int(np.searchsorted(starts, r, side="right")) - 1, 0)
+            return legs[leg](r - float(starts[leg]))
+
+        return speed_at
 
     def _grounds_on(self, ground: tuple | None):
         """A function giving the face of the ground at a distance along a way whose
@@ -1754,24 +2088,25 @@ class _Job:
 
 
 def solve(plans: list[Planned]) -> list[dict]:
-    """Runs the parabolic equation for ``plans`` (:meth:`Refraction.plan`): for each, the
-    pressure (bands, M) of each of its requests by the request's id, and the band
-    energies (bands,) of the runs for the paths behind barriers and round ends by (the
-    id of the cut or the way, "wind" or "still"). A source's listeners that the sound
-    goes the same way to share a run (the same profile; with weather or ground zones the
-    same direction too). So do several sources' at one height over one ground, where the
-    weather and the grounds have no zones (the places of a walk, say): there a run from
-    one source holds for any other alike, the way along the ground being the same from
-    each. A run marches out to the farthest of its listeners under an absorbing layer
-    above the highest of their ``top``; in a run shared that way each listener is
-    reached by a last step of its own, off to the side of the march, so that it gets
-    what its own source's run would give it alone.
+    """Runs the parabolic equation for ``plans`` (:meth:`Refraction.plan`): for each,
+    the pressure (bands, M) of each of its requests by the request's id, and the band
+    energies (bands,) of the runs for the paths behind barriers by (the id of the cut,
+    "wind" or "still") and round ends by (the id of the way, "wind"). A source's
+    listeners that the sound goes the same way to share a run (the same profile; with
+    weather or ground zones the same direction too). So do several sources' at one
+    height over one ground, where the weather and the grounds have no zones (the places
+    of a walk, say): there a run from one source holds for any other alike, the way
+    along the ground being the same from each. A run marches out to the farthest of its
+    listeners under an absorbing layer above the highest of their ``top``; in a run
+    shared that way each listener is reached by a last step of its own, off to the side
+    of the march, so that it gets what its own source's run would give it alone.
 
     Behind barriers the runs in the weather share by the profile and what stands on the
-    way (the cut), those in still air by the cut and the absorbing layer alone; the
-    open ground's runs along the ways round ends, in the weather and in still air,
-    likewise with no cut. Every listener of theirs is reached by a last step of its
-    own.
+    way (the cut), those in still air by the cut and the absorbing layer alone; the open
+    ground's runs along the ways round ends, in the weather alone (the straight paths
+    are their reference in still air), likewise with no cut, and with weather zones
+    through the weathers along the way's legs (:meth:`Refraction._weathers_on`). Every
+    listener of theirs is reached by a last step of its own.
 
     The runs behind barriers in one band that differ in the cut and the listeners alone
     (in still air those of every direction under one absorbing layer; in the weather,
@@ -1795,7 +2130,10 @@ def solve(plans: list[Planned]) -> list[dict]:
                 behind.setdefault((owner, True, cut.key, azimuth, cut.cut), []).append((p, cut))
         for request in planned.ends:
             for way in request.ways:
-                behind.setdefault((owner, False, way.key, way.ground, ()), []).append((p, way))
+                # With weather zones, through the weathers along the way, as a listener's
+                # run goes through those along its line.
+                key = way.key if way.weathers is None else way.weathers
+                behind.setdefault((owner, False, key, way.ground, ()), []).append((p, way))
 
     def weather(refraction, key, direction, reach):
         if key is None:
@@ -1831,14 +2169,19 @@ def solve(plans: list[Planned]) -> list[dict]:
             if needing:
                 jobs.append(_Job(refraction, speed, speed_at, face_at, band, needing, top, alone))
 
-    # Behind barriers and along the ways round ends: the runs in the weather, and in
-    # still air shared by all with the same cut and absorbing layer.
+    # Behind barriers and along the ways round ends: the runs in the weather, and behind
+    # barriers in still air, shared by all with the same cut and absorbing layer.
     calm: dict[tuple, list] = {}
     for (owner, barrier, key, ground, cut), members in behind.items():
         refraction = plans[members[0][0]].refraction
         reach = max(m.range for _, m in members)
         direction, face_at = grounds(refraction, members, reach)
-        speed, speed_at = weather(refraction, key, direction, reach)
+        first = members[0][1]
+        if isinstance(first, _Way) and first.weathers is not None:
+            speed_at = refraction._weathers_on(first.weathers, reach)
+            speed = speed_at(0.0)
+        else:
+            speed, speed_at = weather(refraction, key, direction, reach)
         top = max(m.top for _, m in members)
         # Behind barriers, in a weather that is one all the way: a family's runs.
         alike = bool(cut) and speed_at is None
@@ -1861,9 +2204,12 @@ def solve(plans: list[Planned]) -> list[dict]:
                         family=(owner, barrier, key, top, band) if alike else None,
                     )
                 )
+        if not barrier:
+            # Round ends the weather's runs alone: the straight paths are the reference
+            # in still air (Refraction._turned).
+            continue
         c0 = float(np.asarray(speed(np.array([0.0])))[0])
-        if barrier:  # round ends ``ground`` is the way's already
-            ground = members[0][1].azimuth if refraction.zones else None
+        ground = members[0][1].azimuth if refraction.zones else None
         calm.setdefault((owner, barrier, c0, cut, top, ground), []).extend(members)
     for (owner, barrier, c0, cut, top, _), members in calm.items():
         refraction = plans[members[0][0]].refraction
@@ -2009,6 +2355,19 @@ def solve(plans: list[Planned]) -> list[dict]:
     return out
 
 
+def _kept(index: tuple, make) -> Rays:
+    """The rays kept under ``index`` (made by ``make()`` if not), now the most recently
+    used; the least recently used beyond ``_KEPT_RAYS`` let go."""
+    rays = _RAYS.get(index)
+    if rays is None:
+        rays = _RAYS[index] = make()
+        while len(_RAYS) > _KEPT_RAYS:
+            _RAYS.popitem(last=False)
+    else:
+        _RAYS.move_to_end(index)
+    return rays
+
+
 def _highest(rays: Rays, found, zr: float) -> float:
     """The greatest height (m) the eigenrays ``found`` to a listener ``zr`` up reach."""
     return max(
@@ -2016,10 +2375,19 @@ def _highest(rays: Rays, found, zr: float) -> float:
     )
 
 
-def _ratio(wind: np.ndarray, still: np.ndarray) -> np.ndarray:
-    """(bands,) the weather's effect: the energies ``wind`` over ``still`` (1 where both
-    are none)."""
-    return np.where(still > 0.0, wind / np.where(still > 0.0, still, 1.0), 1.0)
+def _unfolded(points: np.ndarray, corners: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The path through ``points`` (n, 3), which lie along the horizontal polyline
+    ``corners`` (k + 2, 2) from its first to its last (or go straight from the one to the
+    other), along the polyline with a point at each inner corner, at the path's height
+    there; and (k,) those heights."""
+    points = np.asarray(points, dtype=float)
+    run = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(points[:, :2], axis=0), axis=1))])
+    legs = np.linalg.norm(np.diff(corners, axis=0), axis=1)
+    at = np.cumsum(legs)[:-1] * (run[-1] / max(float(legs.sum()), 1e-300))
+    heights = np.interp(at, run, points[:, 2])
+    order = np.argsort(np.concatenate([run, at]), kind="stable")
+    path = np.concatenate([points, np.column_stack([corners[1:-1], heights])])[order]
+    return path, heights
 
 
 #: The kinds of the faces the parabolic equation's runs hold: barriers and buildings.

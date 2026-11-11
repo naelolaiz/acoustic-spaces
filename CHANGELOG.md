@@ -229,6 +229,15 @@
   0.12 dB of the full wave 27 to 43 m away, with a 0.12 dB step left where the equation
   takes over (see [Known issues](docs/validation.md#known-issues)); such a listener
   takes 4 to 180 times as long, a map 35 times.
+- Fixed: across the shadow boundary of a barrier's end or a building's corner in wind
+  the level stepped by up to 7.7 dB 60 m downwind and 18.8 dB 120 m downwind (1 mm
+  either side); the paths round the end now change as the open ground's field along
+  their way does, and the step is at most 0.07 dB downwind and 0.22 dB 120 m upwind
+  (where still air steps by 0.17 dB). Steps remain at 4 and 8 kHz with eddies (up to
+  1.08 dB) and in weather zones (0.76 dB), see
+  [Known issues](docs/validation.md#known-issues); wind behind a building costs a run
+  of the open ground's equation a way (a coverage map round one, 32 % more CPU).
+- Fixed: a leg along the ground, a rounding error above it, had no refraction shadow.
 
 ## 4.2.1
 

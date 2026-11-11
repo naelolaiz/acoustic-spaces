@@ -325,16 +325,18 @@ Outdoor acoustics, in steps:
   corner take the open ground's effect along their own way, for listeners in the open
   too. Still air is as before.
 - [ ] Barriers in wind, next: the barrier's own wind; the sound the eddies scatter over
-  a barrier's top into its shadow; a blend of the barrier's and the
-  open ground's effects across the line of a barrier's end below the line of sight, and
-  the open ground's refraction for the paths round an end above its equation's bands,
-  where the level steps across the end by up to 19 dB; the paths round ends checked
+  a barrier's top into its shadow; the barrier's runs at 4 and 8 kHz and the open
+  ground's shadow above its equation's bands made to agree in a deep upwind shadow,
+  where they are 12 to 40 dB apart and the level steps across the line of a barrier's
+  end below the line of sight by up to 12.8 dB; the paths round ends checked
   against a reference in three dimensions; the wide-angle equation behind barriers upwind in strong wind, where the narrow-angle one comes out low; the sound
   going back and forth between two barriers, which a one-way equation leaves out; and
   runs at 4 and 8 kHz, and at steep points, that cost less (see
   [Known issues](validation.md#known-issues)).
-- [ ] A leg from a ground reflection a rounding error above the ground takes the
-  shadow of one from the ground (see [Known issues](validation.md#known-issues)).
+- [ ] The eddies' decorrelation of a path round an edge against the path it stands for
+  (the direct sound in still air, the open ground's path in wind), which steps across
+  an end's shadow boundary by up to 0.95 dB in still air and 1.08 dB in wind (see
+  [Known issues](validation.md#known-issues)).
 - [ ] A transition across a caustic for the rays' bands over the open ground (4 and
   8 kHz, and 1 and 2 kHz with `open_ground_frequencies: rays`), a uniform (Airy) form
   for the two paths that merge there: past it they vanish and the level steps by up to
