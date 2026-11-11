@@ -848,8 +848,8 @@ def test_the_19_point_grid_gives_a_point_sources_level(ratio: float) -> None:
 def test_points_among_the_sources_cells_are_left_out_of_a_gradient() -> None:
     # By the listener's place in cells from the source, the points round it that do not
     # count (1 to 6: a cell along +x, -x, +y, -y, +z, -z; 7 to 12: two cells): on the
-    # 19-point grid those nearer the source than 1.5 cells, unless the listener is that
-    # near itself; on the 7-point grid none.
+    # 19-point grid those nearer the source than 1.5 cells and nearer it than the
+    # listener; on the 7-point grid none.
     cell, source = 0.4, np.array([5.0, 4.0, 3.0])
 
     def left_out(offset, missing=(), stencil=19) -> list[int]:
@@ -862,36 +862,48 @@ def test_points_among_the_sources_cells_are_left_out_of_a_gradient() -> None:
     assert left_out((3.0, 0.0, 0.0)) == [8]
     assert left_out((2.0, 0.0, 0.0)) == [2, 8]
     assert left_out((1.5, 0.0, 0.0)) == [2, 8]
-    assert left_out((1.49, 0.0, 0.0)) == []
-    assert left_out((0.5, 0.3, 0.2)) == []
     assert left_out((1.2, 1.2, 0.0)) == [2, 4, 8, 10]
     assert left_out((2.0, 0.8, 0.5)) == [2, 8]
     assert left_out((0.0, -2.5, 0.0)) == [9]  # the point 1.5 cells from the source stays
     assert left_out((0.0, 0.0, 3.4)) == [12]
     assert left_out((0.0, 0.0, 3.5)) == []
+    # A listener among the source's cells itself keeps the points that lie no nearer the
+    # source than it does: 1.49 cells away the two towards the source go, as from 1.5
+    # cells on; (0.9, 0.3, 0.1) loses the one 0.33 cells from the source and keeps those
+    # 1.14 to 1.45 cells from it (itself 0.95); (0.95, 0.9, 0), 1.31 cells away, loses
+    # those 0.90 and 0.96 cells from the source and keeps the two 1.38 and 1.45 cells
+    # from it; within half a cell of the source along every axis, every point lies
+    # further from it than the listener, or as far.
+    assert left_out((1.49, 0.0, 0.0)) == [2, 8]
+    assert left_out((0.9, 0.3, 0.1)) == [2]
+    assert left_out((0.95, 0.9, 0.0)) == [2, 4]
+    assert left_out((0.4, 0.3, 0.2)) == []
+    assert left_out((0.5, 0.0, 0.0)) == []
     assert left_out((2.0, 0.0, 0.0), stencil=7) == []
+    assert left_out((0.9, 0.3, 0.1), stencil=7) == []
     # A wall behind the listener, which hides the points away from the source: the axis
     # keeps the points towards it, or it would have none.
     assert left_out((2.0, 0.0, 0.0), missing=(1, 7)) == [1, 7]
     assert left_out((2.0, 0.8, 0.5), missing=(1, 7)) == [1, 7]
+    assert left_out((0.9, 0.3, 0.1), missing=(1, 7)) == [1, 7]
     assert left_out((0.0, -2.5, 0.0), missing=(4, 10)) == [4, 9, 10]
 
 
 def test_a_listener_next_to_the_source_leaves_the_sources_cells_out_of_its_gradient(
     monkeypatch,
 ) -> None:
-    # Listeners off the grid's axes, 2.2 and 0.6 cells from the source. The first has the
-    # two points towards the source along x among the cells the source feeds (1.4 and 0.9
-    # cells from it): on the 19-point grid its gradient goes without them, on the 7-point
-    # grid with them. The second lies among those cells itself and keeps its points. The
-    # gradient's main axis lies within 8 degrees of the line to the source (0.8 and 3.8
-    # degrees on the 19-point grid, 5.3 and 5.1 on the 7-point one; 32 degrees for the
-    # nearer listener without its points), and its part in step with the pressure points
-    # to the source.
+    # Listeners off the grid's axes, 2.2, 0.95 and 0.58 cells from the source. On the
+    # 19-point grid the first goes without the two points towards the source along x
+    # (1.4 and 0.9 cells from it), the second without the one a cell towards it (0.33
+    # cells from it), and the third, nearer the source than any of its points, keeps
+    # them all; on the 7-point grid all three keep theirs. The gradient's main axis lies
+    # within 8 degrees of the line to the source (0.8, 0.6 and 2.8 degrees on the
+    # 19-point grid, 5.3, 3.6 and 6.1 on the 7-point one), and its part in step with the
+    # pressure points to the source.
     room = _free_room((1.0,))
     cell = band_grid(0, FS, room.speed_of_sound(), 8.0, 8, ISOTROPIC_COURANT).cell
     source = np.array(room.scene.sources[0].position, dtype=float)
-    offsets = np.array([[2.0, 0.8, 0.5], [0.5, 0.3, 0.2]])
+    offsets = np.array([[2.0, 0.8, 0.5], [0.9, 0.3, 0.1], [0.45, 0.3, 0.2]])
     used = []
     real = wave_stage._first_order
 
@@ -900,13 +912,13 @@ def test_a_listener_next_to_the_source_leaves_the_sources_cells_out_of_its_gradi
         return real(probes, found, *args)
 
     monkeypatch.setattr(wave_stage, "_first_order", spy)
-    for scheme, without in (("isotropic", [[2, 8], []]), ("standard", [[], []])):
+    for scheme, without in (("isotropic", [[2, 8], [2], []]), ("standard", [[], [], []])):
         used.clear()
         responses, _ = wave_responses(
             TraceModel.from_room(room),
             source,
             source + cell * offsets,
-            ["far", "near"],
+            ["far", "near", "nearest"],
             max_band_hz=63,
             length_s=0.05,
             sample_rate=FS,

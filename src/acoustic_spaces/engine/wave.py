@@ -587,8 +587,8 @@ class _Weather:
 
 #: Points each listener takes the pressure at (see :func:`_probe_points`).
 _PROBES = 13
-#: A point round a listener that lies nearer the source than this many cells is left out
-#: of the listener's gradient, unless the listener itself lies that near (see
+#: A point round a listener that lies nearer the source than this many cells, and nearer
+#: it than the listener itself, is left out of the listener's gradient (see
 #: :func:`_off_the_source`), by the stencil's points: it reads the cells the source
 #: itself feeds, whose sound is not a point's. Measured against a point source's exact
 #: field over 18 places of the source within a cell and 50 directions, the grid's 26 and
@@ -597,11 +597,16 @@ _PROBES = 13
 #: source, the gradient's main axis is up to 26, 21, 10 and 7 degrees off the line to
 #: the source with those points and 16, 13, 10 and 7 without them, and its energy over
 #: the pressure's up to 9.2, 7.6, 13.2 and 6.6 dB off with them and 6.3, 4.5, 3.7 and
-#: 1.2 dB without. A listener nearer than 1.5 cells keeps them: one cell away its axis
-#: is up to 18 degrees off with them and up to 30 without. On the 7-point grid the
-#: same four distances give 21, 15, 5 and 4 degrees and 6.2, 5.4, 3.4 and 1.7 dB with
-#: the points, 17, 17, 5 and 4 degrees and 5.4, 4.3, 3.5 and 1.9 dB without: no clear
-#: gain, so it keeps them.
+#: 1.2 dB without. A listener nearer the source than 1.5 cells keeps the points that lie
+#: no nearer it than itself: 1 and 1.4 cells away its axis is then up to 11.4 and 16.0
+#: degrees off and its energy 7.31 and 6.54 dB (with every point 17.6 and 26.1 degrees,
+#: 7.56 and 9.25 dB; without any point nearer than 1.5 cells 27.8 and 20.4 degrees), and
+#: from one listener to the next 0.1 cells further out the energy changes by 2.4 dB at
+#: most from 0.9 cells on (by 15.3 dB at 1.5 cells if a listener nearer than that kept
+#: every point; one-off scans every 0.1 cells from 0.5 to 2, as ``places`` measures).
+#: On the 7-point grid 1.5, 2, 2.5 and 3 cells give 21, 15, 5 and 4 degrees and 6.2,
+#: 5.4, 3.4 and 1.7 dB with the points, 17, 17, 5 and 4 degrees and 5.4, 4.3, 3.5 and
+#: 1.9 dB without: no clear gain, so it keeps them.
 _SOURCE_CELLS = {7: 0.0, 19: 1.5}
 
 
@@ -610,14 +615,14 @@ def _off_the_source(
 ) -> np.ndarray:
     """``found`` (whether each of ``probes``, the :func:`_probe_points` of each listener
     in turn, counts) without the points among the source's own cells: those nearer the
-    source than :data:`_SOURCE_CELLS` cells, round a listener that is not itself that
-    near (that many cells to within rounding counts as that far). So far from the source
-    a listener loses at most one of the two points a cell from it along an axis. Where
-    the other one is not found either (a wall behind the listener), the axis keeps its
-    points."""
+    source than :data:`_SOURCE_CELLS` cells and nearer it than their listener (that many
+    cells, or as far as the listener, to within rounding counts as not nearer). Of the
+    two points a cell from a listener along an axis at most one lies nearer the source
+    than the listener, so the listener loses at most that one. Where the other one is
+    not found either (a wall behind the listener), the axis keeps its points."""
     limit = (_SOURCE_CELLS[stencil] - 1e-9) * cell
     away = np.linalg.norm(probes - source, axis=1).reshape(-1, _PROBES)
-    near = (away < limit) & (away[:, :1] >= limit)
+    near = (away < limit) & (away < away[:, :1] - 1e-9 * cell)
     before = np.asarray(found, dtype=bool).reshape(-1, _PROBES)
     after = before & ~near
     for axis in range(3):
