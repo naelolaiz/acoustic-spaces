@@ -268,12 +268,13 @@ def test_exhaustive_search_has_a_limit() -> None:
 
 
 def _open_field(early: dict) -> Room:
-    """Grass and the open sky: the ground is the only plane that reflects."""
+    """Grass that scatters 0.1 and the open sky: the ground is the only plane that
+    reflects, and what it scatters is the late part."""
     return Room.from_scene(
         Scene.model_validate(
             {
                 "geometry": {"ground": {"extent": [[-50, -50], [150, 50]], "sky": 30}},
-                "materials": {"field": {"impedance": "grass"}},
+                "materials": {"field": {"impedance": "grass", "scattering": 0.1}},
                 "default_material": "field",
                 "sources": [{"name": "s", "position": [0, 0, 2]}],
                 "listeners": [{"name": "l", "position": [100, 0, 1.5]}],
