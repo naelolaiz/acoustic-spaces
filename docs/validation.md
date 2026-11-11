@@ -4722,10 +4722,32 @@ field and façade grids of moving air or on the ground reflection's wave check.
 
 **One run for all bands.** A 7 x 5 x 3 m box whose absorption differs in every band
 (0.10 to 0.25 from 63 to 500 Hz), the wave solver up to the 500 Hz band: one run of
-868,701 cells and 3,997 steps of the 19-point stencil, 2.8 s on 4 cores with the fit and
-the grid's set-up, where 2.0.0 ran one per band. Timed on its own, the same grid runs in
-2.9 s with the walls' six branches and in 1.9 s with constant walls: the branches cost
-about 50 % more than a run with constant walls, and save three runs.
+868,701 cells and 5,617 steps of the 19-point stencil (the 0.5 s response and 0.2 s past
+its end), 5.7 s on 4 cores with the fit and the grid's set-up, where 2.0.0 ran one per
+band. Timed on its own over as many steps, the same grid runs in 5.5 s with the walls'
+six branches and in 4.1 s with constant walls: the branches cost about a third more
+than a run with constant walls, and save three runs.
+
+**The end of a response.** The bands' filters spread each arrival both ways in time, so
+they read a response's last slots from the run after them too, and a simulation steps
+the solver 0.2 s further than its responses last (0.4 s with third-octave bands). In a
+5 x 4 x 3 m box with 2 % absorption, the wave bands' energy per 10 ms of a 1 s response
+against the same slots of a 2 s response, the largest difference over two listeners and
+the bands up to 125 Hz:
+
+| bands | the run | last five slots (dB) | earlier slots (dB) |
+|---|---|---:|---:|
+| octave | stops at the response's end | 7.54 | 0.19 |
+| octave | goes on for 0.2 s | 0.0001 | 0.0000 |
+| third-octave | stops at the response's end | 15.72 | 1.67 |
+| third-octave | goes on for 0.4 s | 0.0016 | 0.0009 |
+
+The run that goes on also keeps a slow drift out of the bands. In single precision the
+19-point stencil's rounding lets a closed room's mean pressure creep. That is far below
+the bands, and only the end of a run brings it into them. In a one-off check of a rigid
+room against the same scheme in double precision, the mean was as large as the sound
+after 100 s: the bands' last five slots were then 5.9 dB off with a run that stopped at
+the response's end, and every slot within 0.012 dB with the run going on.
 
 **Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's energy
 in the 63 and 125 Hz bands along x from the source, in dB over the free-field level the

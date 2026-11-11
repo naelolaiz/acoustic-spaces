@@ -26,6 +26,7 @@ from acoustic_spaces.engine.wave import (
     LAYER_DAMPING,
     LAYER_ROOM,
     MAX_ABSORPTION,
+    PAST_END_S,
     WAVE_BANDS_HZ,
     WaveResponse,
     _first_order,
@@ -1086,6 +1087,22 @@ def test_a_run_from_before_emission_lands_within_half_a_sample_at_another_rate(
     assert abs(late) < 0.5
 
 
+def test_the_field_takes_the_run_that_follows_its_samples() -> None:
+    """The bands' filters spread each arrival both ways in time, so the field's last
+    samples hold some of the run that follows them: its first n samples do not depend on
+    n. (They were those of a run cut at n: here up to 0.41 of the field's peak off.)"""
+    rate = 2000.0
+    signals = np.random.default_rng(2).standard_normal((600, 4))  # 0.3 s
+    response = WaveResponse(rate, signals, 2, 0.2, lead_s=0.008)
+    n = 9600  # 0.2 s: the run goes on for another 0.092 s
+    whole = response.field(FS, 24_000)
+    peak = np.abs(whole).max()
+    np.testing.assert_allclose(response.field(FS, n), whole[:n], rtol=0, atol=1e-9 * peak)
+    fed = response.fed(np.ones(2), 0.05)
+    late = fed.field(FS, 24_000)[:n]
+    np.testing.assert_allclose(fed.field(FS, n), late, rtol=0, atol=1e-9 * peak)
+
+
 def test_velocity_is_in_step_with_the_pressure() -> None:
     # A plane wave from -x crosses the probe and its neighbours one and two cells away
     # (1 / COURANT steps a cell): X = -W sample by sample, not half a step ahead of it.
@@ -1357,6 +1374,50 @@ def test_simulate_with_the_wave_solver() -> None:
     for fmt in (Mono(), Ambisonics(2), Binaural(), Loudspeakers.layout("5.1")):
         out = response.spatial_impulse_response(fmt, FS, seed=1)
         assert out.shape == (n, fmt.channels) and np.all(np.isfinite(out))
+
+
+@pytest.mark.parametrize("resolution", ["octave", "third_octave"])
+def test_the_wave_solver_steps_past_the_response_s_end(resolution: str) -> None:
+    """A simulation steps the wave solver PAST_END_S further than its responses last: the
+    bands' filters spread each arrival both ways in time, so they read a response's last
+    slots from the run after it too. Those slots are then the ones a longer response has
+    (within 0.0002 dB in octave bands and 0.003 dB in third-octave bands here; with a run
+    that stopped at the response's end, the last 10 ms read 5.8 and 14.7 dB off)."""
+    length, step = 0.5, 0.01
+
+    def run(length_s: float):
+        bands = {"octave": 8, "third_octave": 24}[resolution]
+        scene = {
+            "geometry": {"box": [5.0, 4.0, 3.0]},
+            "materials": {"m": {"absorption": [0.02] * bands, "scattering": 0.1}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": [1.3, 1.1, 1.4]}],
+            "listeners": [
+                {"name": "a", "position": [3.8, 2.9, 1.7]},
+                {"name": "b", "position": [2.1, 3.2, 1.2]},
+            ],
+            "simulation": {
+                "bands": resolution,
+                "ir_length_s": length_s,
+                "seed": 1,
+                "late": {"rays": 500},
+                "early": {"max_order": 1},
+                "wave": {"enabled": True, "max_band_hz": 125},
+            },
+        }
+        result = simulate(Room.from_scene(Scene.model_validate(scene)))
+        return [result.responses[("s", name)].wave for name in "ab"], result.details["s"]
+
+    short, info = run(length)
+    whole, _ = run(length + 0.6)
+    past = PAST_END_S[resolution]
+    assert past == {"octave": 0.2, "third_octave": 0.4}[resolution]
+    assert info["wave_steps"] >= (length + past) * short[0].rate
+    assert info["wave_steps"] < (length + past + 0.05) * short[0].rate
+    slots = round(length / step)
+    for a, b in zip(short, whole, strict=True):
+        db = 10 * np.log10(a.energy(step, slots) / b.energy(step, slots))
+        assert np.abs(db).max() < 0.01
 
 
 def test_wave_responses_refuse_listeners_outside_and_huge_grids() -> None:
