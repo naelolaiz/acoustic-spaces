@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <cstdlib>
 #include <optional>
 #include <cstdint>
 #include <stdexcept>
@@ -915,7 +916,7 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
                       InArray source, Points probes, double edge_admittance, std::size_t layer,
                       double layer_damping, std::size_t threads, std::size_t stencil,
                       std::optional<Speeds> speed, std::optional<Speeds> flow_x,
-                      std::optional<Speeds> flow_y) {
+                      std::optional<Speeds> flow_y, std::size_t fitted) {
     if (face_material.shape(0) != bvh.face_count()) {
         throw std::invalid_argument("WaveSolver: one material per face");
     }
@@ -934,6 +935,11 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
     }
     const std::vector<as::Vec3> probe_points = points(probes);
     const as::Vec3 o = vec3(origin, "origin"), s = vec3(source, "source");
+    // PROTOTYPE: the fitted boundary for every solver (wave_responses, validation, tests)
+    // when ACOUSTIC_SPACES_FITTED holds its sample count.
+    if (fitted == 0) {
+        if (const char *env = std::getenv("ACOUSTIC_SPACES_FITTED")) fitted = std::strtoul(env, nullptr, 10);
+    }
     {
         nb::gil_scoped_release release;
         new (self) as::WaveSolver(bvh, face_material.data(), beta.data(), beta.shape(0),
@@ -941,7 +947,7 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
                                   nz, s, probe_points, edge_admittance, layer, layer_damping,
                                   threads, stencil, speed ? speed->data() : nullptr,
                                   flow_x ? flow_x->data() : nullptr,
-                                  flow_y ? flow_y->data() : nullptr);
+                                  flow_y ? flow_y->data() : nullptr, fitted);
     }
 }
 
@@ -1076,7 +1082,7 @@ NB_MODULE(_native, m) {
              nb::arg("probes"), nb::arg("edge_admittance") = 1.0, nb::arg("layer") = 0,
              nb::arg("layer_damping") = 0.0, nb::arg("threads") = 0, nb::arg("stencil") = 7,
              nb::arg("speed").none() = nb::none(), nb::arg("flow_x").none() = nb::none(),
-             nb::arg("flow_y").none() = nb::none(),
+             nb::arg("flow_y").none() = nb::none(), nb::arg("fitted") = 0,
              "face_material: each face's material; beta: each material's constant admittance; "
              "branches (n, 3): m, r and q of each mass-resistance-stiffness branch, of "
              "branch_material; layer: cells of matched layer inside the grid's edge; "
@@ -1100,6 +1106,21 @@ NB_MODULE(_native, m) {
             "edge there, or the matched layer inside it.")
         .def_prop_ro("flowing", &as::WaveSolver::flowing)
         .def_prop_ro("stencil", &as::WaveSolver::stencil)
+        .def_prop_ro(
+            "fit_stats",
+            [](const as::WaveSolver &solver) {
+                const auto &f = solver.fit_stats();
+                return nb::make_tuple(f[0], f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8], f[9], f[10], f[11], f[12], f[13], f[14], f[15]);
+            },
+            "PROTOTYPE: candidate cells, sample rays, cells whose volume was raised, the "
+            "largest raise, smallest and largest volume, face area dropped, set-up seconds, cells whose walls in several directions were "
+            "solved for.")
+        .def("fit_cells", [](const as::WaveSolver &solver) {
+                 const std::vector<double> v = solver.fit_cells();
+                 nb::list out;
+                 for (double x : v) out.append(x);
+                 return out;
+             })
         .def_prop_ro("threads", &as::WaveSolver::threads)
         .def("probe_found", &as::WaveSolver::probe_found, nb::arg("probe"))
         .def("run", &wave_run, nb::arg("signal"),

@@ -401,7 +401,11 @@ def _tables(layout: dict[str, np.ndarray]) -> tuple[np.ndarray, dict[str, int]]:
         if len(layout[f"keep_{axis}"])
     ]
     nx, ny, _ = (int(v) for v in layout["shape"])
-    steps = np.array(_STEPS[: len(layout["weights"])], np.int64)
+    # (PROTOTYPE: a fitted 7-point layout's special cells may link along edge diagonals.)
+    directions = len(layout["weights"])
+    if len(layout["link_direction"]):
+        directions = max(directions, int(np.max(layout["link_direction"])) + 1)
+    steps = np.array(_STEPS[:directions], np.int64)
     offsets = (steps @ np.array([1, nx, nx * ny])).astype(np.int32).view(np.uint32)
     link_table = np.column_stack(
         [layout["link_direction"].astype(np.uint32), _words(layout["link_weight"])]
