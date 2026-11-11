@@ -1277,14 +1277,29 @@ wavelengths up to 500 Hz, lowers the level by 0.6 to 1.1 dB; over three tops in 
 the level is 3.4 to 5.0 dB above that over one. Over a top 5 m wide and then a
 screen level with it, 5 m past it, the level a centimetre above their plane is the
 same with the source and the listener swapped, within 0.15 dB. Closer to the top or
-to the plane, the screen's top lies beside the reflection off the top, before the
-point of reflection one way round and after it the other, and takes its term on that
-leg: in five cases from a millimetre to a metre above the plane, the screen 0.1 to 5 m
+to the plane two things count. A path over the screen's top reflects off the top's
+plane where its own line meets that plane: with the two level, at the screen's top
+itself, where the top is not, so that it is no path, whatever the ray that looks for
+it meets from its start a millionth of the model's size off the edge; and the
+screen's top lies beside the reflection off the top, before the point of reflection
+one way round and after it the other, and takes its term on that leg. In six cases from a millimetre to a metre above the plane, the screen 0.1 to 5 m
 past the top, the two ways round agree within 0.05 dB (`tests/test_diffraction.py`),
-in three of them with every sequence of reflections tested (`method: image_sources`),
+in four of them with every sequence of reflections tested (`method: image_sources`),
 as the rays can find the reflection between the top's wall and the screen one way
-round only (see [Known issues](#known-issues)). Exactly in the plane of several
-flat tops the
+round only (see [Known issues](#known-issues)). With the screen 0.1 m past the top
+and its top a micrometre above the top's plane or below it, the level a centimetre
+above is that of a level top within 0.04 dB with `first_order` and, a micrometre
+above, within 0.13 dB up to 500 Hz with `second_order` (below the plane and above
+500 Hz it is not: see [Known issues](#known-issues)). Where such a screen ends 1 cm to
+0.5 m beside the way, the level 1 or 2 mm above the plane is, with `second_order`,
+that a centimetre above: between two tops within 0.23 dB (0.39 dB with the way
+through the screen's end), and 5 m before a top or 5 m past it within 0.64 dB, both
+ways round. A centimetre above, with the screen first and the way a centimetre inside
+its end, it is up to 500 Hz 0.5 to 1.2 dB above half the sum of the fields without
+the screen and with an endless one (Kirchhoff's approximation for the way through the
+screen's end, -6.2 to -6.8 dB), each from the two-dimensional wave calculation of the
+[Known issues](#known-issues); `first_order` is 7.4 to 9.3 dB below that. Exactly in
+the plane of several flat tops the
 level is off by more: 3.9 to 9.2 dB below that a centimetre above the plane of two
 tops, 2.5 to 6.9 dB below it over three and 2.8 to 5.3 dB below it over a screen and
 then a top, where a top and then a screen is within 1.7 dB of it. It is off within
@@ -1700,13 +1715,17 @@ theory gives +6.0 dB on both sides.
   swapping them changes the level by 0.4 to 0.6 dB with `second_order` and, with
   `first_order`, whose level there is 17 to 39 dB down, by up to 8.2 dB. Likewise just
   above a flat top and a screen level with it close past it, where the reflection
-  between the top's wall and the screen counts: a centimetre above their plane with the
-  screen 0.5 or 1 m past the top, swapping the source and the listener changes the
-  level by up to 2.3 and 2.9 dB up to 500 Hz with `second_order` (1.0 dB with
-  `first_order`), and a tenth of a metre above it with the screen 0.1 m or less past
-  the top by 1.4 to 1.5 dB (0.7 to 0.8 dB). With `method: image_sources`, which tests
-  every sequence of reflections, the two ways round agree within 0.05 dB there (0.23 dB
-  with the screen 1 cm past the top). A model of those
+  between the top's wall and the screen counts: swapping the source and the listener
+  changes the level up to 500 Hz by up to 0.4 dB a centimetre above their plane with
+  the screen 0.5 to 2 m past the top and a tenth of a metre above it with the screen
+  0.1 m or less past it, and by up to 0.7 dB a metre above it. With
+  `method: image_sources`, which tests every sequence of reflections, the two ways
+  round agree within 0.05 dB there (0.23 dB a tenth of a metre above with the screen
+  1 cm past the top). They do not past the end of a screen 5 m before a top 5 m wide
+  and level with it, a centimetre above their plane and 1 or 10 cm inside the screen's
+  end: one way round the fade follows the reflections off the top's wall with their
+  copies in the top's plane, the other way without them, and the levels are 0.7 to
+  1.3 dB apart up to 500 Hz (2.3 to 4.0 dB with `first_order`). A model of those
   corners and terms is an open item on the [roadmap](roadmap.md). `tests/test_walks.py`
   holds the garden's four largest steps to 1.5 dB in a band and 0.6 dB(A).
 - **Terms that cancel, in the bands that add in energy.** Indoors paths add in energy
@@ -4829,13 +4848,19 @@ Results:
   into a point source's (on a 2 cm grid, within 0.05 dB of the exact solution over the
   10 m top), up to 500 Hz, a centimetre above the plane of a flat top and a screen
   level with it: with the top 9 m wide and the screen 1 m past it the level is -6.3
-  to -6.9 dB, and `second_order` is 2.6 to 5.8 dB below that (`first_order` 0.3 to
-  3.2 dB below it); with the top 5 m wide and the screen 5 m past it, -7.6 to -8.4 dB,
-  `second_order` 2.3 to 3.4 dB below (`first_order` within 1.3 dB). The level also
-  steps with the height of the screen's top at that plane, by 12 to 15 dB over 4 mm:
-  past the 9 m top with `second_order` and every sequence of reflections tested
-  (`method: image_sources`), it is -13.1 to -16.0 dB with the screen's top 2 mm below
-  the plane, -9.9 to -11.6 dB with it level and -0.7 to -1.7 dB with it 2 mm above.
+  to -6.9 dB, and `second_order` is 3.2 to 5.8 dB below that (`first_order` 0.3 to
+  2.5 dB below it); with the top 5 m wide and the screen 5 m past it, -7.6 to -8.4 dB,
+  `second_order` 2.3 to 3.4 dB below (`first_order` within 1.3 dB), either way round
+  with the rays' own search for reflections. The level also steps with the height of
+  the screen's top at that plane, by 12 to 15 dB over 4 mm: past the 9 m top with
+  `second_order` and every sequence of reflections tested (`method: image_sources`),
+  it is -13.1 to -16.6 dB with the screen's top from 2 mm to a micrometre below the
+  plane, -9.4 to -12.0 dB with it level or up to 0.5 mm above, and -0.4 to -1.8 dB
+  from 0.55 mm above, from where the path over the screen's top reflects off the top
+  (0.53 mm above, it does so at the top's far edge). Above 500 Hz, where the bands add
+  in energy, the level is -10.1 dB with the screen's top level and -5.6 dB with it a
+  micrometre above. With it 10 µm to 0.5 mm above the plane, the two ways round are
+  also up to 1.0 dB apart (0.4 dB with the rays' own search).
 - **Exactly in the plane of several tops in a row.** With the source and the listener
   both exactly in the plane of two flat roofs of one height, or of a roof and a
   barrier's top, the paths over one edge and over two do not add up as they do just
@@ -4851,7 +4876,11 @@ Results:
   distance above the plane they miss paths that are there: a millimetre above the tops
   of three screens 5 m apart, the last of which ends a centimetre beside the way, the
   path round that end is not found and the level at 63 Hz is 1.5 dB below that 3 mm
-  above them.
+  above them. Likewise above a roof 5 m wide and a screen level with it, 5 m before
+  the roof or past it, that ends 1 cm to 0.1 m beside the way: the term of the
+  screen's upright end for the direct sound is missing up to 1.2 or 1.8 mm above the
+  plane, where the level up to 500 Hz is 0.2 to 0.6 dB below that a centimetre above
+  (0.5 to 1.1 dB with the way 1 cm outside the end).
 - **Reflections level with several tops.** With the source and the listener exactly
   level with the tops of two screens, the level is that just above the line for the
   direct sound and for a first reflection that passes level with the tops too (see

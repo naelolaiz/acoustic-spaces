@@ -32,7 +32,11 @@ band 0.4 dB, and from 500 Hz up the two agree within 0.1 dB.
 
 With ``first_order`` diffraction the same is done for the first-order reflections: sound
 that reflects off a plane and then bends over an edge, and sound that bends over an edge
-and then reflects.
+and then reflects. Where the path touches the edge closer to that plane than the rays
+that test it start from the edge, it counts by where the path itself reflects: at that
+very point where it lies in the plane, off a face that lies there (the ground an upright
+edge stands on), not off a face of the plane elsewhere (a roof level with a barrier's
+top).
 
 With ``second_order`` the direct sound also bends over two edges in turn: over a thick
 wall or a pillar, round both of its corners. Its shortest path touches each edge where
@@ -83,7 +87,7 @@ import numpy as np
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.clusters import Clusters
 from acoustic_spaces.engine.coherent import ground_factors, ground_wave_factors, reflection_phases
-from acoustic_spaces.engine.early import EarlyReflections
+from acoustic_spaces.engine.early import EarlyReflections, _face_at
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 from acoustic_spaces.geometry.cells import _components
 from acoustic_spaces.geometry.outdoor import ON_GROUND_M, on_ground
@@ -1442,6 +1446,23 @@ class EdgeDiffraction:
                 if image_kind == 2:
                     through = np.where(kind[via] == 3, plane2[via], through)
                 hit, where, face = _reflect(self.model, start[via], target, through, ends[via])
+                # Where the edge's point lies no farther from the plane the path is to
+                # reflect off than the ray starts from the point, the ray's start does not
+                # stand for the point: the ray can meet a face of that plane (a roof level
+                # with a barrier's top) where the path does not reflect. The path reflects
+                # where the line from the point to the image crosses the plane, at the
+                # point itself where that lies in the plane (the ground an upright edge
+                # stands on), and counts if a face of the plane lies there. From a point
+                # beyond the plane no line crosses it: the point, off every face, is tried.
+                at_edge = point[via]
+                normal = self.model.plane_normal[through]
+                height = np.einsum("ij,ij->i", normal, at_edge) - self.model.plane_offset[through]
+                beyond = np.einsum("ij,ij->i", normal, target) - self.model.plane_offset[through]
+                across = (height * beyond < 0.0) & (np.abs(height) > tolerance)
+                share = np.where(across, height / np.where(across, height - beyond, 1.0), 0.0)
+                crossing = at_edge + share[:, None] * (target - at_edge)
+                for i in np.flatnonzero(hit & (np.abs(height) <= offset)):
+                    hit[i] = _face_at(self.model, int(through[i]), crossing[i], tolerance) >= 0
                 ok[via] &= hit
                 rows = np.flatnonzero(via)
                 second = (kind[via] == 3) & (image_kind == 2)

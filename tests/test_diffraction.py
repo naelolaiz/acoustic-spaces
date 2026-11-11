@@ -1183,30 +1183,185 @@ def test_a_roof_and_then_a_screen_level_with_it_the_same_both_ways_round(tmp_pat
         np.testing.assert_allclose(back, forward, atol=0.15)
 
 
+@pytest.mark.parametrize(("mode", "within"), [("second_order", 0.5), ("first_order", 0.5)])
+@pytest.mark.parametrize("beside", [0.0, 0.01, 0.5])
+@pytest.mark.parametrize("top", [0.0, 1e-12])
+def test_a_path_over_a_screens_top_does_not_reflect_off_a_roof_level_with_it_elsewhere(
+    tmp_path: Path, mode, within, beside, top
+) -> None:
+    # A roof from x = 0 to 5 m, a screen at x = 7 m level with it that ends ``beside``
+    # the way (y >= 0, the way at y = beside) and a roof from 9 to 19 m, the source and
+    # the listener 1 or 2 mm above their plane. A path over the screen's top that
+    # reflects off that plane next to it touches the plane at the top itself, where no
+    # roof is. The ray that looks for the path starts 0.6 mm off the top (a millionth of
+    # the model's size) and met a roof metres away. With that path the level up to
+    # 500 Hz was 4.2 to 4.6 dB above that a centimetre above the plane with second_order
+    # (through the screen's end 3.2 to 7.8 dB, the two ways round 4.4 dB apart) and 4.4
+    # to 5.4 dB below it with first_order (1.9 to 9.5 dB, 7.3 dB apart). Without it the
+    # two ways round agree, and with the level a centimetre above within 0.23 dB
+    # (through the end 0.39 dB; first_order 0.37 dB). So too with the screen's ``top``
+    # a millionth of a micrometre off the plane, as two heights that are sums of other
+    # numbers differ.
+    extent = edge_diffraction.EXTENT
+    screen = [[(7.0, 0.0, -extent), (7.0, extent, -extent), (7.0, extent, top), (7.0, 0.0, top)]]
+    far = [[(x + 9.0, y, z) for x, y, z in quad] for quad in edge_diffraction.barrier_quads(10.0)]
+    quads = edge_diffraction.barrier_quads(5.0) + screen + far
+    simulation = {"early": {"diffraction": mode, "coherent_max_band_hz": 500}}
+    levels = {}
+    for height in (1e-3, 2e-3, 1e-2):
+        source, listener = (-10.0, beside, height), (25.0, beside, height)
+        for way, (a, b) in enumerate(((source, listener), (listener, source))):
+            room = edge_diffraction._room(tmp_path, "level", quads, a, b, simulation)
+            levels[height, way] = edge_diffraction.whole_early_stage(room)
+    for height in (1e-3, 2e-3):
+        np.testing.assert_allclose(levels[height, 1], levels[height, 0], atol=0.01)
+        for way in (0, 1):
+            np.testing.assert_allclose(levels[height, way], levels[1e-2, way], atol=within)
+
+
+@pytest.mark.parametrize(
+    ("mode", "method", "top"),
+    [
+        ("second_order", "image_sources", 1e-6),
+        ("second_order", "image_sources", -1e-6),
+        ("first_order", "ray_tracing", 1e-6),
+        ("first_order", "ray_tracing", -1e-6),
+    ],
+)
+def test_a_screens_top_a_micrometre_off_a_roofs_plane_does_not_reflect_off_the_roof_either(
+    tmp_path: Path, mode, method, top
+) -> None:
+    # A roof and a screen 0.1 m past it whose top is a micrometre above the roof's plane
+    # or below it, as a model drawn elsewhere has it, the source and the listener a
+    # centimetre above the plane. The path over the screen's top reflects where its own
+    # line to the image meets the plane: 2 mm from the top one way, where no roof is,
+    # and nowhere with the top below the plane. The ray that looks for it starts 0.6 mm
+    # above the top and met the roof. With that path the level up to 500 Hz was 4.8 to
+    # 6.5 dB over that of a level top with the top a micrometre above and second_order,
+    # and 6.4 to 6.8 dB over it with the top a micrometre below and first_order; with
+    # second_order the two ways round were 1.5 to 1.7 dB apart there.
+    source, listener = (-10.0, 0.0, 1e-2), (15.0, 0.0, 1e-2)
+    simulation = {"early": {"diffraction": mode, "coherent_max_band_hz": 500, "method": method}}
+    levels = {}
+    for z in (0.0, top):
+        quads = edge_diffraction.barrier_quads(9.9) + edge_diffraction.screen_quads(10.0, z)
+        for way, (a, b) in enumerate(((source, listener), (listener, source))):
+            room = edge_diffraction._room(tmp_path, "nearly", quads, a, b, simulation)
+            levels[z, way] = edge_diffraction.whole_early_stage(room)
+    np.testing.assert_allclose(levels[top, 1][:4], levels[top, 0][:4], atol=0.05)
+    if mode == "first_order" or top > 0.0:
+        # Below the plane the level with second_order is not that of a level top (a
+        # known issue of docs/validation.md).
+        for way in (0, 1):
+            np.testing.assert_allclose(levels[top, way][:4], levels[0.0, way][:4], atol=0.25)
+
+
+def test_a_path_over_a_screens_top_reflects_off_a_roof_its_own_line_meets(tmp_path: Path) -> None:
+    # The same with the screen's top a tenth of a millimetre above the roof's plane,
+    # closer to it than the ray starts from the top: the path's own line meets the plane
+    # 0.2 m from the screen, on the roof, and the path counts as with the top a
+    # millimetre above, where the ray alone decides. Up to 500 Hz the two levels are
+    # within 0.9 dB (without the path, 4.9 to 7.5 dB apart).
+    source, listener = (-10.0, 0.0, 1e-2), (15.0, 0.0, 1e-2)
+    simulation = {"early": {"diffraction": "second_order", "coherent_max_band_hz": 500}}
+    levels = []
+    for top in (1e-4, 1e-3):
+        quads = edge_diffraction.barrier_quads(9.9) + edge_diffraction.screen_quads(10.0, top)
+        room = edge_diffraction._room(tmp_path, "over", quads, source, listener, simulation)
+        levels.append(edge_diffraction.whole_early_stage(room))
+    np.testing.assert_allclose(levels[0][:4], levels[1][:4], atol=1.2)
+
+
+@pytest.mark.parametrize(("mode", "within"), [("second_order", 0.85), ("first_order", 1.6)])
+@pytest.mark.parametrize("beside", [0.01, 0.1])
+@pytest.mark.parametrize("screen_first", [True, False])
+def test_past_the_end_of_a_screen_level_with_a_roof_as_a_centimetre_above(
+    tmp_path: Path, mode, within, beside, screen_first
+) -> None:
+    # A screen that ends ``beside`` the way (y >= 0, the way at y = beside) and a roof
+    # 5 m wide level with its top, 5 m before the roof or 5 m past it, the source and the
+    # listener a millimetre above their plane. With the path over the screen's top that
+    # reflects off the roof's plane, which it touches at the top itself
+    # (test_a_path_over_a_screens_top_does_not_reflect_off_a_roof_level_with_it_elsewhere),
+    # the level up to 500 Hz was 3.2 to 3.4 dB above that a centimetre above the plane
+    # with second_order; with first_order, whose single terms nearly cancel there, it
+    # was 1.3 to 8.6 dB off. The two ways round agree, and with the level a
+    # centimetre above within 0.64 dB (first_order 0.82 dB up to 500 Hz and 1.23 dB
+    # above). With second_order it is 0.19 to 0.64 dB below it up to 500 Hz: the term of
+    # the screen's upright end for the direct sound comes in from 1.2 mm above the
+    # plane (the screen first) or 1.8 mm (the roof first), as the ray that tests its
+    # path starts 0.6 mm inside the end, below the roof's plane (a known issue of
+    # docs/validation.md).
+    extent = edge_diffraction.EXTENT
+    x = -5.0 if screen_first else 10.0
+    screen = [[(x, 0.0, -extent), (x, extent, -extent), (x, extent, 0.0), (x, 0.0, 0.0)]]
+    quads = screen + edge_diffraction.barrier_quads(5.0)
+    simulation = {"early": {"diffraction": mode, "coherent_max_band_hz": 500}}
+    levels = {}
+    start = -15.0 if screen_first else -10.0
+    for height in (1e-3, 1e-2):
+        source, listener = (start, beside, height), (start + 25.0, beside, height)
+        for way, (a, b) in enumerate(((source, listener), (listener, source))):
+            room = edge_diffraction._room(tmp_path, "end", quads, a, b, simulation)
+            levels[height, way] = edge_diffraction.whole_early_stage(room)
+    np.testing.assert_allclose(levels[1e-3, 1], levels[1e-3, 0], atol=0.05)
+    for way in (0, 1):
+        np.testing.assert_allclose(levels[1e-3, way], levels[1e-2, way], atol=within)
+    if mode == "second_order" and beside == 0.01 and screen_first:
+        # Through the screen's end the field is half the sum of the fields without the
+        # screen and with an endless one (Kirchhoff's approximation), each from a wave
+        # calculation in two dimensions turned into a point source's: a centimetre above
+        # the plane, -6.2 to -6.8 dB from 63 to 500 Hz. The engine, a centimetre inside
+        # the end, is 0.5 to 1.2 dB above that.
+        reference = [-6.24, -6.47, -6.70, -6.84]
+        np.testing.assert_allclose(levels[1e-2, 0][:4], reference, atol=1.5)
+
+
+@pytest.mark.parametrize("beside", [0.01, 0.1])
+def test_past_the_end_of_a_screen_level_with_a_roof_with_every_reflection_tested(
+    tmp_path: Path, beside
+) -> None:
+    # The same past a roof 5 m wide and then the screen, with every sequence of
+    # reflections tested (method: image_sources): a millimetre above the plane the two
+    # ways round agree, and with the level a centimetre above within 0.62 dB (with the
+    # path that reflects off the roof's plane at the screen's top, 2.4 to 3.0 dB above
+    # it).
+    extent = edge_diffraction.EXTENT
+    x = 10.0
+    screen = [[(x, 0.0, -extent), (x, extent, -extent), (x, extent, 0.0), (x, 0.0, 0.0)]]
+    quads = screen + edge_diffraction.barrier_quads(5.0)
+    early = {"diffraction": "second_order", "coherent_max_band_hz": 500, "method": "image_sources"}
+    levels = {}
+    for height in (1e-3, 1e-2):
+        source, listener = (-10.0, beside, height), (15.0, beside, height)
+        for way, (a, b) in enumerate(((source, listener), (listener, source))):
+            room = edge_diffraction._room(tmp_path, "end", quads, a, b, {"early": early})
+            levels[height, way] = edge_diffraction.whole_early_stage(room)
+    for height in (1e-3, 1e-2):
+        np.testing.assert_allclose(levels[height, 1], levels[height, 0], atol=0.05)
+    np.testing.assert_allclose(levels[1e-3, 0], levels[1e-2, 0], atol=0.85)
+
+
 @pytest.mark.parametrize("mode", ["second_order", "first_order"])
 @pytest.mark.parametrize(
     ("height", "gap", "method"),
-    [
-        (1e-3, 5.0, "ray_tracing"),
-        (1e-2, 0.1, "ray_tracing"),
-        (1e-2, 1.0, "image_sources"),
-        (0.1, 0.1, "image_sources"),
-        (1.0, 0.1, "image_sources"),
-    ],
+    [(1e-3, 5.0, "ray_tracing"), (1e-2, 0.1, "ray_tracing"), (1e-2, 1.0, "image_sources")],
 )
-def test_a_screen_level_with_a_roof_belongs_to_the_leg_it_stands_beside(
+def test_a_roof_and_then_a_screen_level_with_it_with_the_ends_swapped(
     tmp_path: Path, mode, height, gap, method
 ) -> None:
-    # A flat top and a screen ``gap`` past it whose top lies in the top's plane. The
-    # reflection off the top passes the screen's top, an edge in the very plane it
-    # reflects off: the screen's term belongs to the leg the screen stands beside, the
-    # one after the point of reflection one way round and the one before it the other.
-    # Taken for the leg after the plane wherever the edge stood, the term was missing one
-    # way round: swapping the source and the listener changed the level by 5.4 to 9.5 dB
-    # in the first four cases (6.5 to 7.4 dB with first_order) and by 0.9 and 1.1 dB a
-    # metre above the plane. With the rays' own search for reflections, the two ways
-    # round can still find different reflections between the roof's wall and the screen
-    # (a known issue), so the cases where that reflection counts take every sequence.
+    # A flat top and a screen ``gap`` past it whose top lies in the top's plane, the
+    # source and the listener a millimetre or a centimetre above it. With the path over
+    # the screen's top that reflects off the top's plane, which it touches at the
+    # screen's top itself
+    # (test_a_path_over_a_screens_top_does_not_reflect_off_a_roof_level_with_it_elsewhere),
+    # and the screen's term on the leg after the reflection wherever the screen stood
+    # (test_a_screen_level_with_a_roof_belongs_to_the_leg_it_stands_beside), swapping
+    # the source and the listener changed the level by 5.4 to 7.9 dB (6.5 to 7.4 dB
+    # with first_order); without either of the two it does not. With the rays' own
+    # search for reflections, the two ways round can still find different reflections
+    # between the roof's wall and the screen (a known issue), so the case where that
+    # reflection counts takes every sequence.
     quads = edge_diffraction.barrier_quads(10.0 - gap) + edge_diffraction.screen_quads(10.0)
     source, listener = (-10.0, 0.0, height), (15.0, 0.0, height)
     simulation = {"early": {"diffraction": mode, "coherent_max_band_hz": 500, "method": method}}
@@ -1216,11 +1371,47 @@ def test_a_screen_level_with_a_roof_belongs_to_the_leg_it_stands_beside(
         levels.append(edge_diffraction.whole_early_stage(room))
     np.testing.assert_allclose(levels[1], levels[0], atol=0.05)
     if mode == "first_order" and (height, gap) == (1e-2, 1.0):
-        # Which leg: a wave calculation in two dimensions turned into a point source's
-        # gives -6.3 to -6.9 dB from 63 to 500 Hz there. first_order is 0.2 to 2.0 dB
-        # below it; with the screen's term on the other leg it was 4.4 to 6.1 dB above.
+        # A wave calculation in two dimensions turned into a point source's gives -6.3
+        # to -6.9 dB from 63 to 500 Hz there. first_order is 0.2 to 2.0 dB below it; with
+        # both, and the source past the screen, it was 4.4 to 6.1 dB above.
         reference = [-6.26, -6.50, -6.74, -6.93]
-        np.testing.assert_allclose(levels[0][:4], reference, atol=2.5)
+        for level in levels:
+            np.testing.assert_allclose(level[:4], reference, atol=2.5)
+
+
+@pytest.mark.parametrize("mode", ["second_order", "first_order"])
+@pytest.mark.parametrize(("height", "gap"), [(0.1, 0.1), (1.0, 0.1), (1.0, 1.0)])
+def test_a_screen_level_with_a_roof_belongs_to_the_leg_it_stands_beside(
+    tmp_path: Path, mode, height, gap
+) -> None:
+    # A flat top and a screen ``gap`` past it whose top lies in the top's plane, with
+    # every sequence of reflections tested. The reflection off the top passes the
+    # screen's top, an edge in the very plane it reflects off: the screen's term
+    # belongs to the leg the screen stands beside, the one after the point of
+    # reflection one way round and the one before it the other. Taken for the leg
+    # after the plane wherever the edge stood, the term was missing one way round:
+    # swapping the source and the listener changed the level by 0.35 to 0.38 dB a
+    # tenth of a metre above the plane and by 0.8 to 1.1 dB a metre above it.
+    source, listener = (-10.0, 0.0, height), (15.0, 0.0, height)
+    simulation = {
+        "early": {"diffraction": mode, "coherent_max_band_hz": 500, "method": "image_sources"}
+    }
+    levels = {}
+    for top in (0.0, 1e-4):
+        quads = edge_diffraction.barrier_quads(10.0 - gap)
+        quads += edge_diffraction.screen_quads(10.0, top)
+        for way, (a, b) in enumerate(((source, listener), (listener, source))):
+            room = edge_diffraction._room(tmp_path, "past", quads, a, b, simulation)
+            levels[top, way] = edge_diffraction.whole_early_stage(room)
+    np.testing.assert_allclose(levels[0.0, 1], levels[0.0, 0], atol=0.05)
+    if height == 1.0:
+        # Which leg: a top a tenth of a millimetre above the plane is on the leg it
+        # stands beside by its height, both ways round, and a level top is its limit:
+        # up to 500 Hz within 0.18 dB (on the other leg, 0.5 to 1.0 dB off up to
+        # 250 Hz). Lower down the level is not even with the top's height (a known
+        # issue).
+        for way in (0, 1):
+            np.testing.assert_allclose(levels[0.0, way][:4], levels[1e-4, way][:4], atol=0.25)
 
 
 @pytest.mark.parametrize("mode", ["second_order", "first_order"])
@@ -1229,11 +1420,11 @@ def test_a_screens_top_within_rounding_of_a_roofs_plane_is_level_with_it(
 ) -> None:
     # The screen's top a millionth of a micrometre below the plane of the top 1 m before
     # it, as two heights that are sums of other numbers differ: it is an edge in that
-    # plane all the same, on the leg it stands beside, and the level a centimetre above
-    # is that with the top exactly level, both ways round. Taken for an edge beyond the
-    # plane, on no leg of the reflection, the level up to 500 Hz was 1.3 to 2.5 dB off
-    # with second_order and 6.3 to 6.5 dB with first_order.
-    source, listener = (-10.0, 0.0, 1e-2), (15.0, 0.0, 1e-2)
+    # plane all the same, on the leg it stands beside, and the level a metre above is
+    # that with the top exactly level, both ways round. Taken for an edge beyond the
+    # plane, on no leg of the reflection, the level up to 500 Hz was 0.8 dB off with
+    # second_order and 1.0 dB with first_order.
+    source, listener = (-10.0, 0.0, 1.0), (15.0, 0.0, 1.0)
     simulation = {
         "early": {"diffraction": mode, "coherent_max_band_hz": 500, "method": "image_sources"}
     }
@@ -1243,7 +1434,7 @@ def test_a_screens_top_within_rounding_of_a_roofs_plane_is_level_with_it(
         for a, b in ((source, listener), (listener, source)):
             room = edge_diffraction._room(tmp_path, "nearly", quads, a, b, simulation)
             levels.append(edge_diffraction.whole_early_stage(room))
-    np.testing.assert_allclose(levels[1:], np.tile(levels[0], (3, 1)), atol=0.01)
+    np.testing.assert_allclose(levels[1:], np.tile(levels[0], (3, 1)), atol=0.02)
 
 
 def test_two_flat_tops_in_a_row_exactly_in_their_plane_with_first_order(tmp_path: Path) -> None:

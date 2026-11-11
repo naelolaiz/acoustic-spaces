@@ -138,7 +138,7 @@ Edge diffraction:
 - [ ] Paths over more than two edges: just over three barriers or three flat roofs in
   a row, or a roof with a slot across it, the level is off by 1 to 5 dB, and over a
   roof and a screen level with it 2 to 6 dB too low against a wave calculation, with
-  a step of 12 to 15 dB as the screen's top passes the roof's plane;
+  steps of 12 to 15 dB in all as the screen's top rises through the roof's plane;
   behind three barriers with the source on the line of their tops there is next to no
   sound, and behind two flat roofs of one height with the source up to 0.5 m above
   their plane the level is 9 to 23 dB below that behind one roof as wide as both.
@@ -148,8 +148,11 @@ Edge diffraction:
   to 15 dB above that further below.
 - [ ] The same reflections whichever way round: the rays of the source and those of
   the listener can find different reflections between two faces, such as two screens
-  or a roof's wall and a screen level with the roof (up to 3 dB apart, and 8 dB where
-  the level is far down; see [Known issues](validation.md#known-issues)).
+  or a roof's wall and a screen level with the roof (up to 0.7 dB apart, and 8 dB
+  where the level is far down), and the edge fade follows the reflections off a
+  roof's wall one way round only past the end of a screen before the roof (up to
+  1.3 dB apart, 4 dB with `first_order`; see
+  [Known issues](validation.md#known-issues)).
 - [ ] Barriers with bends of less than a degree: beside each bend a strip up to
   centimetres wide has no path over the top or two (see
   [Known issues](validation.md#known-issues)).
