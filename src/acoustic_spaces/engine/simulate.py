@@ -171,11 +171,27 @@ def _pick(items, names, kind):
 
 
 def _candidates(
-    model: TraceModel, source: np.ndarray, method: str, order: int, rays: int, threads: int
+    model: TraceModel,
+    source: np.ndarray,
+    method: str,
+    order: int,
+    rays: int,
+    threads: int,
+    edges: _Edges | None = None,
+    diffraction: str = "none",
 ):
+    """The plane sequences the early stage tests at each listener. With edge diffraction
+    on, the rays' first reflections come with the planes of the faces of every
+    diffracting edge (``edges``) that ``source`` lies in front of, in its sight or not:
+    the terms at an edge continue the reflections off its faces, and the rays miss a
+    face the source sees nearly edge-on, such as a wall whose plane it stands close to,
+    or one behind an obstacle."""
     if method == "image_sources":
         return early_stage.exhaustive_candidates(model, source, order)
-    return early_stage.ray_traced_candidates(model, source, order, rays, threads)
+    found = early_stage.ray_traced_candidates(model, source, order, rays, threads)
+    if found and edges is not None and diffraction != "none":
+        found[0] = edges.with_faces(source, found[0])
+    return found
 
 
 class _Edges:
@@ -184,6 +200,37 @@ class _Edges:
     def __init__(self, model: TraceModel) -> None:
         self.model = model
         self._edges: Edges | None = None
+
+    def with_faces(self, source: np.ndarray, first: np.ndarray) -> np.ndarray:
+        """``first`` (n, 1), the planes of the first reflections the rays found, with
+        the planes of the diffracting edges' faces that ``source`` lies in front of, as
+        an edge's terms take it (round the edge from face 0, less than half a turn off
+        the face), and off its plane. Whether the source sees the face is not tested:
+        where something hides it, the reflection off it is a path that an edge cuts off,
+        which the edge fade's terms then stand for. No such face is open sky: the edges
+        the sky meets diffract nothing
+        (:func:`~acoustic_spaces.engine.diffraction.find_edges`)."""
+        model = self.model
+        if self._edges is None:
+            self._edges = find_edges(model)
+        edges = self._edges
+        if not len(edges):
+            return first
+        source = np.asarray(source, dtype=float)
+        _, rho, phi, inside = edges.frame(
+            np.arange(len(edges)), np.broadcast_to(source, (len(edges), 3))
+        )
+        reached = inside & (rho > 0.0)
+        planes = np.concatenate(
+            [
+                edges.plane[reached & (phi < np.pi), 0],
+                edges.plane[reached & (phi > (edges.wedge - 1.0) * np.pi), 1],
+            ]
+        )
+        planes = np.unique(planes)
+        distance = model.plane_normal[planes] @ source - model.plane_offset[planes]
+        planes = planes[np.abs(distance) > early_stage._ON_PLANE]
+        return np.unique(np.concatenate([first[:, 0], planes]))[:, None]
 
     def diffraction(
         self,
@@ -308,7 +355,16 @@ def early_paths(
             float(np.linalg.norm(target - position)) / room.speed_of_sound() + transition,
             length,
         )
-        candidates = _candidates(model, position, method or cfg.method, order, cfg.rays, threads)
+        candidates = _candidates(
+            model,
+            position,
+            method or cfg.method,
+            order,
+            cfg.rays,
+            threads,
+            edges,
+            diffraction or cfg.diffraction,
+        )
         paths = straight = early_stage.find_paths(
             model,
             position,
@@ -602,7 +658,14 @@ def simulate(
         started = time.perf_counter()
         say(f"{label}: early reflections ({early_cfg.method}, order {early_cfg.max_order})")
         candidates = _candidates(
-            model, position, early_cfg.method, early_cfg.max_order, early_cfg.rays, threads
+            model,
+            position,
+            early_cfg.method,
+            early_cfg.max_order,
+            early_cfg.rays,
+            threads,
+            edges,
+            early_cfg.diffraction,
         )
         paths = straight = [
             early_stage.find_paths(

@@ -45,6 +45,17 @@ half-plane, which is exact far from the edge, and the engine against it:
   each edge from end to end;
 - the level as the source rises through the plane of the barrier's top, where the path
   over the far corner alone appears, and as the listener does on the other side;
+- the source and the listener in sight of each other just over a block's top, 10 and
+  1 m wide: the whole early stage with paths over two edges and without, against BTM
+  with the geometric waves, where the paths add in pressure; and how much the level
+  differs between positions within a millimetre of the plane of the top, on both sides;
+- two thin screens in a row at grazing incidence, against the closed form for two knife
+  edges at high frequencies;
+- the limits that stay: the listener behind a block with the source above the plane of
+  its top, with paths over one edge alone, against BTM; screens and flat tops in a row
+  with the source and the listener just above their tops, exactly level with them and
+  just below; and the step in the bands that add in energy where the source or the
+  listener crosses the plane of a block's top;
 - the cost of the early stage with each mode, in a hall with alcoves.
 
 Every comparison is of the energy in each octave band, averaged over the engine's eight
@@ -530,6 +541,268 @@ def crossing(folder: Path) -> dict:
     return out
 
 
+#: Where the source and the listener stand just over a block's top, in sight of each
+#: other: the block's width, how far the source stands before it and the listener past
+#: it, and their heights above the plane of the top (m).
+IN_SIGHT = (
+    (10.0, 10.0, 5.0, (0.01, 0.01)),
+    (10.0, 10.0, 5.0, (0.5, 0.5)),
+    (10.0, 10.0, 5.0, (0.5, 0.05)),
+    (10.0, 10.0, 5.0, (1.0, 1.0)),
+    (10.0, 10.0, 5.0, (2.0, 2.0)),
+    (1.0, 3.0, 3.0, (0.05, 0.05)),
+    (1.0, 3.0, 3.0, (0.3, 0.3)),
+)
+#: The bands in which the scenes of :func:`in_sight` add paths in pressure: to 500 Hz.
+IN_SIGHT_COHERENT = 4
+
+
+def whole_early_stage(room: Room) -> np.ndarray:
+    """The level of the room's whole early stage (specular paths, edge diffraction and
+    the terms that make paths fade at edges, as a simulation has them) from its source
+    to its listener, per band in dB re the direct sound in free field, without the
+    air."""
+    source = np.array(room.scene.sources[0].position)
+    receiver = np.array(room.scene.listeners[0].position)
+    distance = float(np.linalg.norm(receiver - source))
+    energy = total_energy(early_paths(room)) * np.exp(room.air_attenuation() * distance)
+    with np.errstate(divide="ignore"):
+        return 10.0 * np.log10(energy * 4.0 * np.pi * distance**2)
+
+
+def btm_over_block(width: float, source, receiver, k=K) -> tuple[np.ndarray, np.ndarray]:
+    """The pressure at ``receiver`` from ``source`` (both at y = 0) over the block of
+    :func:`barrier_quads`, ``width`` m wide: the geometric waves (the direct sound and
+    its reflection off the top), the paths over each of the top's corners and the path
+    over both; and the same without the path over both."""
+    source, receiver = np.asarray(source, dtype=float), np.asarray(receiver, dtype=float)
+    e1 = Edge([0, 0, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1], 1.5)
+    e2 = Edge([width, 0, 0], [0, 1, 0], [-1, 0, 0], [0, 0, 1], 1.5)
+    run = receiver[0] - source[0]
+    first = np.zeros(len(k), dtype=complex)
+    # The line of sight clears the top where it passes above both corners.
+    above = [source[2] + (receiver[2] - source[2]) * (x - source[0]) / run for x in (0.0, width)]
+    if min(above) > 0.0:
+        distance = float(np.linalg.norm(receiver - source))
+        first += np.exp(-1j * k * distance) / distance
+    if source[2] > 0.0 and receiver[2] > 0.0:
+        at = source[0] + run * source[2] / (source[2] + receiver[2])
+        if 0.0 <= at <= width:
+            distance = math.hypot(run, source[2] + receiver[2])
+            first += np.exp(-1j * k * distance) / distance
+    if receiver[2] > 0.0:  # the near corner sees the listener
+        first += btm_first(e1, source, receiver, k)
+    if source[2] > 0.0:
+        first += btm_first(e2, source, receiver, k)
+    return first + btm_second(e1, e2, source, receiver, (0.0, 0.0), True, k), first
+
+
+def in_sight(folder: Path) -> list[dict]:
+    """The source and the listener in sight of each other just over a block's top, a
+    little above its plane on either side (:data:`IN_SIGHT`): BTM against the engine's
+    whole early stage with paths over two edges and without, in the bands where the
+    scene adds paths in pressure (to 500 Hz). The source's wave passes both corners
+    there, each takes its terms off it, and the path over both gives back what they
+    take twice."""
+    rows = []
+    for width, before, past, (hs, hr) in IN_SIGHT:
+        source, receiver = np.array([-before, 0.0, hs]), np.array([width + past, 0.0, hr])
+        distance = float(np.linalg.norm(receiver - source))
+        total, first = btm_over_block(width, source, receiver)
+        reference = band_level(total, distance)
+        row = {
+            "width": width,
+            "source": source.tolist(),
+            "receiver": receiver.tolist(),
+            "btm_db": reference.tolist(),
+            "btm_without_the_path_over_both_db": band_level(first, distance).tolist(),
+        }
+        for mode in ("second_order", "first_order"):
+            simulation = {"early": {"diffraction": mode, "coherent_max_band_hz": 500}}
+            room = _room(folder, "sight", barrier_quads(width), source, receiver, simulation)
+            row[f"{mode}_minus_btm_db"] = (whole_early_stage(room) - reference).tolist()
+        rows.append(row)
+    return rows
+
+
+def round_the_plane(folder: Path, heights=(-1e-3, -1e-6, 1e-6, 1e-3)) -> list[dict]:
+    """The whole early stage's level (``second_order``, as in :func:`in_sight`) for every
+    pair of ``heights`` of the source and the listener round the plane of a block's
+    top, for the two blocks of :data:`IN_SIGHT`: the largest difference between two
+    pairs in each band, the same with the pairs that have either exactly in the plane,
+    and the largest difference between a pair and the same heights swapped."""
+    rows = []
+    simulation = {"early": {"diffraction": "second_order", "coherent_max_band_hz": 500}}
+    for width, before, past in ((10.0, 10.0, 5.0), (1.0, 3.0, 3.0)):
+        every = sorted({*heights, 0.0})
+        levels = np.array(
+            [
+                [
+                    whole_early_stage(
+                        _room(
+                            folder,
+                            "round",
+                            barrier_quads(width),
+                            [-before, 0.0, hs],
+                            [width + past, 0.0, hr],
+                            simulation,
+                        )
+                    )
+                    for hr in every
+                ]
+                for hs in every
+            ]
+        )
+        off = [i for i, h in enumerate(every) if h != 0.0]
+        beside = levels[np.ix_(off, off)]
+        rows.append(
+            {
+                "width": width,
+                "heights": list(every),
+                "largest_difference_db": np.ptp(beside, axis=(0, 1)).tolist(),
+                "with_the_plane_db": np.ptp(levels, axis=(0, 1)).tolist(),
+                "swapped_db": np.abs(beside - beside.transpose(1, 0, 2)).max(axis=(0, 1)).tolist(),
+            }
+        )
+    return rows
+
+
+#: Two screens in a row and where the source and the listener stand to graze both tops:
+#: the source before the first, the screens apart, the listener past the second (m).
+GRAZING = (10.0, 10.0, 5.0)
+
+
+def grazing_two_screens(folder: Path, heights=(1e-3, -1e-3)) -> dict:
+    """Two thin screens in a row with their tops on one line, and the source and the
+    listener ``heights`` above that line (below it for negative ones), :data:`GRAZING`:
+    the engine's level over both against the field of two knife edges at grazing
+    incidence at high frequencies, 1/4 + atan(sqrt(a c / (b (a + b + c)))) / (2 pi) of
+    the free field for the source a before the first edge, the edges b apart and the
+    listener c past the second (1/3 for equal distances; one edge alone leaves 1/2, two
+    far apart 1/4)."""
+    a, b, c = GRAZING
+    limit = 0.25 + math.atan(math.sqrt(a * c / (b * (a + b + c)))) / (2.0 * math.pi)
+    out = {"distances": list(GRAZING), "closed_form_db": 20.0 * math.log10(limit), "rows": []}
+    quads = screen_quads() + screen_quads(b, 0.0)
+    for h in heights:
+        row = {"height": h}
+        for mode in ("second_order", "first_order"):
+            simulation = {"early": {"diffraction": mode}}
+            room = _room(folder, "grazing", quads, [-a, 0.0, h], [b + c, 0.0, h], simulation)
+            row[f"{mode}_db"] = whole_early_stage(room).tolist()
+        out["rows"].append(row)
+    return out
+
+
+#: Where the source stands above the plane of a 10 m block's top, 10 m before it, and
+#: the listener below it, 5 m past the block (m).
+BEHIND = ((0.01, -0.5), (0.01, -5.0), (0.5, -2.0), (2.0, -2.0))
+
+
+def behind_a_block(folder: Path) -> list[dict]:
+    """The listener behind a 10 m block, below the plane of its top, and the source
+    above that plane (:data:`BEHIND`): BTM against the engine's whole early stage with
+    paths over two edges and without, in the bands where the scene adds paths in
+    pressure (to 500 Hz). The far corner's path alone takes the source's wave as if the
+    near corner were not there; the path over both takes off what the near corner
+    does."""
+    rows = []
+    for hs, hr in BEHIND:
+        source, receiver = np.array([-10.0, 0.0, hs]), np.array([15.0, 0.0, hr])
+        distance = float(np.linalg.norm(receiver - source))
+        reference = band_level(btm_over_block(10.0, source, receiver)[0], distance)
+        row = {
+            "source": source.tolist(),
+            "receiver": receiver.tolist(),
+            "btm_db": reference.tolist(),
+        }
+        for mode in ("second_order", "first_order"):
+            simulation = {"early": {"diffraction": mode, "coherent_max_band_hz": 500}}
+            room = _room(folder, "behind", barrier_quads(10.0), source, receiver, simulation)
+            row[f"{mode}_minus_btm_db"] = (whole_early_stage(room) - reference).tolist()
+        rows.append(row)
+    return rows
+
+
+def _moved(quads: list, by: float) -> list:
+    return [[(x + by, y, z) for x, y, z in quad] for quad in quads]
+
+
+#: Screens and flat tops of one height in a row, by name: their faces and how far past
+#: x = 0 the listener stands (the source stands 10 m before it).
+IN_A_ROW = {
+    "two screens 10 m apart": (screen_quads() + screen_quads(10.0), 15.0),
+    "three screens 5 m apart": (screen_quads() + screen_quads(5.0) + screen_quads(10.0), 15.0),
+    "one top 10 m wide": (barrier_quads(10.0), 15.0),
+    "two tops 5 m wide, 5 m apart": (barrier_quads(5.0) + _moved(barrier_quads(5.0), 10.0), 20.0),
+    "a 10 m top with a 2 cm slot": (
+        barrier_quads(4.99) + _moved(barrier_quads(4.99), 5.01),
+        15.0,
+    ),
+    "three tops 3 m wide, 2 m apart": (
+        barrier_quads(3.0) + _moved(barrier_quads(3.0), 5.0) + _moved(barrier_quads(3.0), 10.0),
+        18.0,
+    ),
+    "a top 5 m wide, then a screen": (barrier_quads(5.0) + screen_quads(10.0), 15.0),
+    "a screen, then a top 5 m wide": (screen_quads() + _moved(barrier_quads(5.0), 5.0), 15.0),
+}
+
+
+def in_a_row(folder: Path, heights=(1e-2, 0.0, -1e-5, -1e-2), names=None) -> list[dict]:
+    """Screens and flat tops of one height in a row (:data:`IN_A_ROW`, or those of
+    ``names``), the source and the listener both ``heights`` above the plane of the
+    tops: the whole early stage's level with paths over two edges and without, with
+    the paths in pressure to 500 Hz and in energy in every band. No reference: the
+    levels show where the positions agree and where they do not. The rays that look for
+    the paths start 1e-6 of the model's size off the edges (0.6 mm here), so a height of
+    -1e-5 m is within their reach below the plane."""
+    rows = []
+    for name in names or IN_A_ROW:
+        quads, past = IN_A_ROW[name]
+        for h in heights:
+            row = {"scene": name, "height": h}
+            for mode in ("second_order", "first_order"):
+                for coherent in (500, None):
+                    simulation = {"early": {"diffraction": mode, "coherent_max_band_hz": coherent}}
+                    room = _room(folder, "row", quads, [-10.0, 0.0, h], [past, 0.0, h], simulation)
+                    key = f"{mode}_{'pressure_to_500' if coherent else 'energy'}_db"
+                    with np.errstate(divide="ignore"):
+                        row[key] = whole_early_stage(room).tolist()
+            rows.append(row)
+    return rows
+
+
+def across_the_plane(folder: Path, other: float = 0.5, step: float = 1e-3) -> list[dict]:
+    """The source, then the listener, ``step`` below and above the plane of a 10 m
+    block's top with the other ``other`` m above it: the whole early stage's level
+    (``second_order``) with every band in energy and with the paths in pressure to 500
+    Hz, and the step between the two heights. Above the plane the source has an image
+    in the top, which the bands that add in energy count as a wave of its own."""
+    rows = []
+    for who in ("source", "listener"):
+        for coherent in (None, 500):
+            simulation = {
+                "early": {"diffraction": "second_order", "coherent_max_band_hz": coherent}
+            }
+            levels = []
+            for h in (-step, step):
+                ends = ([-10.0, 0.0, h], [15.0, 0.0, other])
+                if who == "listener":
+                    ends = ([-10.0, 0.0, other], [15.0, 0.0, h])
+                room = _room(folder, "across", barrier_quads(10.0), *ends, simulation)
+                levels.append(whole_early_stage(room))
+            rows.append(
+                {
+                    "crossing": who,
+                    "bands": "pressure to 500 Hz" if coherent else "energy",
+                    "below_db": levels[0].tolist(),
+                    "above_db": levels[1].tolist(),
+                    "step_db": (levels[1] - levels[0]).tolist(),
+                }
+            )
+    return rows
+
+
 def screen_corner(
     folder: Path, angle: float = 90.0, turned: float = 0.0, ys=None, per_band: int | None = None
 ) -> dict:
@@ -924,6 +1197,62 @@ def main() -> None:
         for who, found in results["crossing"].items():
             for mode, row in found.items():
                 print(f"| {who} through the top's plane, {mode} | {_row(row['largest_step_db'])} |")
+
+        results["in_sight"] = in_sight(folder)
+        low = " | ".join(f"{f:g}" for f in OCTAVE_BANDS_HZ[:IN_SIGHT_COHERENT])
+        print(f"\n| just over a block's top, level re free field (dB) | {low} |")
+        print("|---|" + "---:|" * IN_SIGHT_COHERENT)
+        for row in results["in_sight"]:
+            heights = f"{row['source'][2]:g} and {row['receiver'][2]:g} m above"
+            print(f"| {row['width']:g} m wide, {heights}: BTM | {_row(row['btm_db'][:4])} |")
+            without = row["btm_without_the_path_over_both_db"][:IN_SIGHT_COHERENT]
+            print(f"| BTM without the path over both | {_row(without)} |")
+            for mode in ("second_order", "first_order"):
+                difference = row[f"{mode}_minus_btm_db"][:IN_SIGHT_COHERENT]
+                print(f"| {mode} - BTM | {_row(difference)} |")
+
+        results["round_the_plane"] = round_the_plane(folder)
+        print(f"\n| within 1 mm of the plane of a block's top (dB) | {header} |\n{rule}")
+        for row in results["round_the_plane"]:
+            wide = f"{row['width']:g} m wide"
+            print(f"| {wide}: largest difference | {_row(row['largest_difference_db'])} |")
+            print(f"| with either in the plane | {_row(row['with_the_plane_db'])} |")
+            print(f"| heights swapped | {_row(row['swapped_db'])} |")
+
+        results["grazing_two_screens"] = grazing = grazing_two_screens(folder)
+        print(f"\n| two screens at grazing incidence, level (dB) | {header} |\n{rule}")
+        print(f"(two knife edges at high frequencies: {grazing['closed_form_db']:.2f} dB)")
+        for row in grazing["rows"]:
+            for mode in ("second_order", "first_order"):
+                where = f"{row['height'] * 1000:+g} mm from the line of the tops, {mode}"
+                print(f"| {where} | {_row(row[f'{mode}_db'])} |")
+
+        results["behind_a_block"] = behind_a_block(folder)
+        print(f"\n| behind a 10 m block, source above its top's plane (dB) | {low} |")
+        print("|---|" + "---:|" * IN_SIGHT_COHERENT)
+        for row in results["behind_a_block"]:
+            heights = f"{row['source'][2]:g} m above and {-row['receiver'][2]:g} m below"
+            print(f"| {heights}: BTM | {_row(row['btm_db'][:IN_SIGHT_COHERENT])} |")
+            for mode in ("second_order", "first_order"):
+                difference = row[f"{mode}_minus_btm_db"][:IN_SIGHT_COHERENT]
+                print(f"| {mode} - BTM | {_row(difference)} |")
+
+        results["in_a_row"] = in_a_row(folder)
+        print(f"\n| edges in a row, both ends at one height, level (dB) | {header} |\n{rule}")
+        for row in results["in_a_row"]:
+            print(f"| {row['scene']}, {row['height'] * 1000:+g} mm from the tops' plane | |")
+            for key, values in row.items():
+                if key.endswith("_db"):
+                    print(f"| {key[:-3].replace('_', ' ')} | {_row(values)} |")
+
+        results["across_the_plane"] = across_the_plane(folder)
+        print(
+            f"\n| across the plane of a 10 m top, other end 0.5 m above (dB) | {header} |\n{rule}"
+        )
+        for row in results["across_the_plane"]:
+            for part in ("below", "above", "step"):
+                label = f"{row['crossing']} 1 mm {part}" if part != "step" else "step"
+                print(f"| {label}, {row['bands']} | {_row(row[f'{part}_db'])} |")
 
     results["timing"] = timing()
     t = results["timing"]
