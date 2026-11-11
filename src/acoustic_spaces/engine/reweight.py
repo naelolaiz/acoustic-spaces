@@ -64,7 +64,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from acoustic_spaces.engine.coherent import absorption_phases, sample_frequencies
+from acoustic_spaces.engine.coherent import SameDelays, absorption_phases, sample_frequencies
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.late import MAX_GROUPS, MOMENT_STEP
 from acoustic_spaces.materials.bands import THIRD_OCTAVE_BANDS_HZ
@@ -319,7 +319,21 @@ def turned_paths(
     if paths.spectrum is None or len(paths) == 0 or not paths.cosines:
         return paths
     old, new = (np.asarray(a, dtype=float) for a in (old, new))
-    changed = np.any(old != new, axis=1)
+    rows, groups, cosines = _turned_reflections(paths, face_group, np.any(old != new, axis=1))
+    if not rows:
+        return paths
+    f = sample_frequencies(old.shape[1], paths.spectrum.shape[1])
+    turn = absorption_phases(new[groups], cosines, f, admittance_of) * np.conj(
+        absorption_phases(old[groups], cosines, f, admittance_of)
+    )
+    return _turned(paths, rows, turn)
+
+
+def _turned_reflections(
+    paths: EarlyReflections, face_group: np.ndarray, changed: np.ndarray
+) -> tuple[list[int], np.ndarray, list[float]]:
+    """The reflections :func:`turned_paths` turns, those off a group ``changed`` (groups,)
+    at a known angle: the path of each, its group and its incidence cosine."""
     rows, groups, cosines = [], [], []
     for k, (faces, angles) in enumerate(zip(paths.faces, paths.cosines, strict=True)):
         group = face_group[np.asarray(faces, dtype=np.int64)]
@@ -329,20 +343,98 @@ def turned_paths(
         rows.extend([k] * int(mine.sum()))
         groups.extend(group[mine])
         cosines.extend(angles[mine])
-    if not rows:
-        return paths
-    groups = np.asarray(groups, dtype=np.int64)
-    f = sample_frequencies(old.shape[1], paths.spectrum.shape[1])
-    turn = absorption_phases(new[groups], cosines, f, admittance_of) * np.conj(
-        absorption_phases(old[groups], cosines, f, admittance_of)
-    )
+    return rows, np.asarray(groups, dtype=np.int64), cosines
+
+
+def _turned(paths: EarlyReflections, rows: list[int], turn: np.ndarray) -> EarlyReflections:
+    """``paths`` with the spectrum of path ``rows[i]`` times ``turn[i]``, in turn."""
     spectrum = paths.spectrum.copy()
     np.multiply.at(spectrum, np.asarray(rows), turn)
     return dataclasses.replace(paths, spectrum=spectrum)
 
 
+class Redraws:
+    """What re-weighting the early paths ``paths`` of one traced response
+    (:meth:`~acoustic_spaces.engine.response.Response.reweighted`) for draw after draw of
+    the absorption of ``groups`` groups of faces (``face_group``) takes that does not
+    depend on the draw: how often each path reflects off each group
+    (:func:`path_counts`); for each set of groups a draw changes, the reflections
+    :func:`turned_paths` turns and the phases of the absorption ``old`` as traced that it
+    turns them from, with ``admittance_of``; and what the coherent bands' echograms of
+    the draws share (``delays``, a :class:`~acoustic_spaces.engine.coherent.SameDelays`).
+    A draw comes out the same with it as without it: for other paths, groups, traced
+    absorption or admittances than its own, each is worked out as without it. Made from
+    its arguments alone, for one response's draws, and dropped after them."""
+
+    def __init__(
+        self,
+        paths: EarlyReflections,
+        face_group: np.ndarray,
+        groups: int,
+        old: np.ndarray,
+        admittance_of=None,
+    ) -> None:
+        self._paths, self._groups = paths, groups
+        self._face_group = np.array(face_group)
+        self._old = np.array(old, dtype=float)
+        self._admittance_of = admittance_of
+        self._counts = path_counts(paths, self._face_group, groups)
+        self._counts.flags.writeable = False
+        self._turned: dict[bytes, tuple] = {}
+        self.delays = SameDelays()
+
+    def _mine(self, paths: EarlyReflections, face_group: np.ndarray) -> bool:
+        return paths.faces is self._paths.faces and np.array_equal(face_group, self._face_group)
+
+    def counts(self, paths: EarlyReflections, face_group: np.ndarray, groups: int) -> np.ndarray:
+        """:func:`path_counts` of these arguments (read-only)."""
+        if paths is self._paths and groups == self._groups and self._mine(paths, face_group):
+            return self._counts
+        return path_counts(paths, face_group, groups)
+
+    def turned(
+        self,
+        paths: EarlyReflections,
+        face_group: np.ndarray,
+        old: np.ndarray,
+        new: np.ndarray,
+        admittance_of=None,
+    ) -> EarlyReflections:
+        """:func:`turned_paths` of these arguments, for ``paths`` that are this one's re-weighted
+        (:func:`reweighted_paths`)."""
+        old, new = (np.asarray(a, dtype=float) for a in (old, new))
+        if not (
+            paths.cosines is self._paths.cosines
+            and paths.spectrum is self._paths.spectrum
+            and admittance_of is self._admittance_of
+            and old.shape == self._old.shape
+            and np.array_equal(old, self._old)
+            and self._mine(paths, face_group)
+        ):
+            return turned_paths(paths, face_group, old, new, admittance_of)
+        if paths.spectrum is None or len(paths) == 0 or not paths.cosines:
+            return paths
+        changed = np.any(old != new, axis=1)
+        held = self._turned.get(changed.tobytes())
+        if held is None:
+            rows, groups, cosines = _turned_reflections(paths, face_group, changed)
+            back = None
+            f = sample_frequencies(old.shape[1], paths.spectrum.shape[1])
+            if rows:
+                back = np.conj(absorption_phases(old[groups], cosines, f, admittance_of))
+                back.flags.writeable = False
+            held = self._turned[changed.tobytes()] = (rows, groups, cosines, f, back)
+        rows, groups, cosines, f, back = held
+        if not rows:
+            return paths
+        return _turned(
+            paths, rows, absorption_phases(new[groups], cosines, f, admittance_of) * back
+        )
+
+
 __all__ = [
     "MOMENT_STEP",
+    "Redraws",
     "cannot_reweight",
     "face_groups",
     "groups_of",

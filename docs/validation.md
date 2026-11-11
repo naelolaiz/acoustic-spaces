@@ -224,7 +224,16 @@ request and checks:
   a wall thinner than a cell), and off an end whose admittance resonates (within 0.012
   of the grid's theory from 30 to 250 Hz); admittances fitted to four kinds of material
   (within 0.01 of their absorption in every band, passive); the free-field level of the
-  63 Hz band (within 0.3 dB of the rays), the arrival time and direction of the direct
+  63 Hz band (within 0.5 dB of the rays 2.5 cells from the source and 0.1 dB from 5
+  cells on), the source and the listeners read between the cells' centres (weights
+  that give a cubic's value exactly; next to a wall, a screen and a slot the cells on
+  the point's own side, linearly across the surface, none further than two cells from
+  the point; the level of the direct sound 13 cells away within 0.06 dB wherever the
+  two lie within their cells; along a wall at 45 degrees, no step over 0.4 dB; with a
+  wall behind a listener three cells from the source, none over 0.2 dB), the 19-point
+  stencil's direct sound 12 cells along the cube's diagonal (within 0.05 dB of a point
+  source's, also with a slower speed of sound, and 0.5 dB over it without the taps that
+  undo the grid's own gain), the arrival time and direction of the direct
   sound and the strength of its first-order field against a point source's (within 0.06
   dB 4 m away along a grid axis, a face diagonal and a body diagonal, with either
   stencil), the part of the source's pulse before emission kept for a listener near the
@@ -235,15 +244,20 @@ request and checks:
   field, within half a sample of its time), the source flat to the top of the highest
   band at 5 cells per wavelength (within 0.05 dB), the gradient's second-order and
   one-sided differences where a point two cells or one cell from the listener is
-  missing (exactly), the gradient at a listener just in front of a thin screen and at
+  missing (exactly, along each axis), the points among the source's own cells left out
+  of a gradient on the 19-point grid (those nearer the source than the listener, and
+  not where a wall leaves an axis no others; the gradient's main axis within 8 degrees
+  of the line to the source 0.6, 1 and 2.2 cells from it), the
+  gradient at a listener just in front of a thin screen and at
   one 1.5 cells in front of it, taken on the listeners' side, as in front of a solid
   block (within 1 dB and 0.5 dB), open models and thin screens (stable, and the sound
   leaves), the matched layer round an open model (what comes back 40 dB down or more,
   against a grid too large for anything to come back; stable for 9,500 steps; at 63 Hz
   the sound that runs along it 60 m over the ground under a sky 3 m up, 40 m along a
   strip of ground 3 m wide and 60 m under a plate within 0.05 dB of the same on a
-  taller, wider or deeper grid; the room it leaves, in whole cells off the model and
-  none under an outdoor ground), one run
+  taller, wider or deeper grid; the room it leaves, in whole cells off the model, none
+  under an outdoor ground and none on a side the model's surfaces close, found by
+  flooding the air once), one run
   for bands with their own absorption, and the level of the late part across the
   crossover to the rays (flat within 1 dB in sixth octaves);
 - the ray tracer against runs stored before its tree was rebuilt
@@ -1124,7 +1138,9 @@ level at 63 and 125 Hz 0.04 to 2.0 dB below the rigid block's, and the engine is
 below. The wave solver there is within 0.09 dB of BTM over the rigid blocks and within
 0.07 dB of the exact solution over a plane absorbing 0.2 to 0.8 (with the engine's
 fitted admittance, source and listener 0.1 m high and 7 m apart), and with 6.2 cm cells
-the level over the 3 m top absorbing 0.8 moves by 0.03 and 0.04 dB.
+the level over the 3 m top absorbing 0.8 moves by 0.03 and 0.04 dB (all of these with
+the wave solver's trilinear reading; its cubic one moves the rigid 3 m block's level by
+0.01 and 0.03 dB).
 
 As the source rises through the plane of the 1 m block's top, 3 m in front of it, it
 comes into sight of the far corner, and the path over that corner alone takes over
@@ -2023,41 +2039,47 @@ the vertical plane through the source and the listener with the effective speed 
 sound along it. Both take the same profiles; the wave solver steps the scene in three
 dimensions. Over grass (Miki's impedance, 200 kPa s/m²), the source 2 m up, the
 listeners 1.5 and 5 m up, 50 to 200 m away: the 63 Hz band from a grid for that band
-(8 points per wavelength, 26 to 27.5 million cells), the 125 Hz band from one for it
-(32 million cells), up to 100 m. The ground reaches three times the half-width of the
+(8 points per wavelength, 25.3 to 26.8 million cells), the 125 Hz band from one for it
+(31.9 to 36.8 million cells), up to 100 m. The ground reaches three times the
+half-width of the
 reflection's first Fresnel zone at the farthest listener to either side, and 30 m past
 it, so that its edges change little. Levels in dB over the free field, the mean square
 of the pressure over the band's slices, wave solver / parabolic equation:
 
 | 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
 |---|---|---|---|---|---|---|
-| still | +5.2 / +5.2 | +4.3 / +4.4 | +5.0 / +5.2 | +4.2 / +4.4 | +5.0 / +5.0 | +4.0 / +4.1 |
-| downwind | +5.2 / +5.7 | +3.9 / +4.4 | +5.8 / +6.3 | +4.2 / +4.9 | +6.9 / +7.2 | +5.0 / +5.4 |
-| upwind | +4.4 / +4.6 | +4.0 / +4.3 | +3.5 / +3.8 | +3.4 / +3.4 | +1.8 / +1.8 | +1.7 / +1.6 |
-| sunny day | +4.9 / +5.1 | +4.3 / +4.4 | +4.5 / +4.8 | +3.9 / +4.1 | +3.9 / +4.0 | +3.3 / +3.3 |
-| clear night | +5.1 / +5.4 | +4.1 / +4.4 | +5.2 / +5.6 | +4.1 / +4.6 | +5.6 / +5.8 | +4.4 / +4.6 |
+| still | +5.3 / +5.2 | +4.4 / +4.4 | +5.2 / +5.2 | +4.4 / +4.4 | +5.2 / +5.0 | +4.2 / +4.1 |
+| downwind | +5.7 / +5.7 | +4.3 / +4.4 | +6.3 / +6.3 | +4.7 / +4.9 | +7.2 / +7.2 | +5.4 / +5.4 |
+| upwind | +4.8 / +4.6 | +4.5 / +4.3 | +3.9 / +3.8 | +3.8 / +3.4 | +2.2 / +1.8 | +2.1 / +1.6 |
+| sunny day | +5.1 / +5.1 | +4.4 / +4.4 | +4.8 / +4.8 | +4.2 / +4.1 | +4.1 / +4.0 | +3.5 / +3.3 |
+| clear night | +5.5 / +5.4 | +4.5 / +4.4 | +5.6 / +5.6 | +4.6 / +4.6 | +6.0 / +5.8 | +4.8 / +4.6 |
 
 | 125 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up |
 |---|---|---|---|---|
-| still | +2.6 / +2.8 | +0.6 / +0.8 | +1.9 / +1.9 | +0.2 / +0.3 |
-| downwind | +2.9 / +3.3 | -0.5 / -0.2 | +2.6 / +2.9 | -1.0 / -0.9 |
-| upwind | +2.4 / +2.1 | +1.6 / +1.4 | +0.2 / +0.1 | +0.4 / +0.4 |
-| sunny day | +2.4 / +2.6 | +0.8 / +1.0 | +1.4 / +1.4 | +0.3 / +0.4 |
-| clear night | +3.0 / +3.0 | +0.6 / +0.5 | +2.5 / +2.3 | +0.2 / +0.0 |
+| still | +3.0 / +2.8 | +1.0 / +0.8 | +2.2 / +1.9 | +0.5 / +0.3 |
+| downwind | +3.1 / +3.3 | -0.3 / -0.2 | +3.0 / +2.9 | -0.7 / -0.9 |
+| upwind | +2.6 / +2.1 | +1.8 / +1.4 | +0.6 / +0.1 | +0.8 / +0.4 |
+| sunny day | +2.8 / +2.6 | +1.2 / +1.0 | +1.7 / +1.4 | +0.6 / +0.4 |
+| clear night | +3.2 / +3.0 | +0.8 / +0.5 | +2.6 / +2.3 | +0.3 / +0.0 |
 
 The weathers are the presets: downwind and upwind in the `windy` one (5 m/s 10 m up),
-`sunny_day` and `clear_night`. The wave solver is within 0.7 dB of the parabolic
-equation everywhere, 0.24 dB on average at 63 Hz and 0.17 dB at 125 Hz, and follows
-the weather as it does: 1.9 dB louder downwind than in still air at 200 m and 1.5 m up,
-3.2 dB quieter upwind (1.0 and 2.3 dB 5 m up). At 63 Hz it comes out a little low
-downwind and under the night's inversion (by up to 0.7 dB). Much of that is where the
-source and the listeners fall between the cell centres, from which the grid takes them
-trilinearly: on those weathers' grids, whose cell the slowest sound on them sets, that
-alone takes 0.36 to 0.49 dB off a wave along the ground, against 0.15 to 0.27 dB in
-still air (one-off estimates; a cell 0.15 % larger, of the downwind grid reaching 69 m
-up instead of 39 m, moved its levels by −0.08 to +0.23 dB, within 0.02 dB of the
-estimate, where the taller grid alone moved them by 0.02 dB at most). Upwind, on the
-downwind grid, it reads up to 0.6 dB above that estimate, for a reason not traced.
+`sunny_day` and `clear_night`. The wave solver is within 0.54 dB of the parabolic
+equation everywhere, 0.13 dB on average at 63 Hz and 0.25 dB at 125 Hz, and follows
+the weather as it does: 2 dB louder downwind than in still air at 200 m and 1.5 m up,
+3 dB quieter upwind (1.1 and 2.1 dB 5 m up). It reads above the parabolic equation
+more often than below. In still air, against the
+[exact solution](#ground-reflection-against-the-exact-solution) over grass, it is 0.06
+to 0.24 dB high at 63 Hz and 0.15 to 0.25 dB at 125 Hz, the parabolic equation within
+0.05 dB. In one-off checks of the 63 Hz band, much of that is sound off the edges of
+the scene's ground, which neither the exact solution nor the parabolic equation has.
+The 0.23 and 0.24 dB at 200 m are the sound off the ground's far end, 30 m past those
+listeners, which follows the direct sound by 175 ms: with the ground 120 m longer the
+wave solver reads −0.01 and +0.03 dB against the exact solution there. With every edge
+far enough for its sound to fall outside the response (160 m to either side, 60 m
+behind, 150 m past, the response cut 300 ms after the direct sound) it is 0.03 to
+0.07 dB over the exact solution at the three distances (on the scene's ground 0.06 to
+0.10 dB at 50 and 100 m). Upwind the wave solver reads
+0.1 to 0.5 dB above the parabolic equation in both bands, which was not traced further.
 Neither the deep shadow upwind (it
 starts a few hundred metres away at these heights) nor reflections off buildings, where
 the effective speed of sound along the horizontal from the source stands in for the
@@ -2076,19 +2098,21 @@ to it. In a uniform wind each path (the direct sound and the ground's image) is 
 convected Green's function, an impulse of height 1 / R* at (R* - M x) / (c (1 - M²)),
 R* = √(x² + (1 - M²)(y² + z²)), x along the wind. The grid's own dispersion puts the
 still air's sound 0.61 ms late along the grid's axes at 30 m (0.15 ms at 45 degrees),
-its level within 0.4 dB of the exact one, and is the same with and without wind, so
+its level within 0.01 dB of the exact one along them and 0.25 dB over it at 45 degrees
+(the 7-point stencil's own gain along a face's diagonal, see
+[Free field](#wave-based-solver)), and is the same with and without wind, so
 each windy run is compared with the still air's run on the same grid, moved by the
 exact change of its arrival and scaled by R / R*. Level and arrival over the arrival
 (30 ms before to 50 ms after), and the waveform's error:
 
 | 15 m/s, 30 m | downwind | upwind | across | 45 degrees |
 |---|---|---|---|---|
-| level, effective / moving (dB) | -0.90 / +0.02 | +0.79 / -0.04 | -0.28 / -0.00 | -0.75 / +0.00 |
-| arrival, effective / moving (ms) | -0.03 / -0.07 | +0.03 / +0.09 | -0.15 / +0.00 | -0.04 / +0.00 |
-| waveform's error, effective / moving (dB) | -19.8 / -30.1 | -20.1 / -28.0 | -22.9 / -65.1 | -21.4 / -45.0 |
+| level, effective / moving (dB) | -0.78 / +0.00 | +0.84 / -0.00 | -0.14 / +0.00 | -0.63 / -0.01 |
+| arrival, effective / moving (ms) | -0.03 / -0.07 | +0.03 / +0.09 | -0.15 / +0.00 | -0.03 / +0.00 |
+| waveform's error, effective / moving (dB) | -20.9 / -30.1 | -19.6 / -28.0 | -23.6 / -65.6 | -22.9 / -45.1 |
 
-Moving air is within 0.05 dB and 0.1 ms of the exact solution in every direction. The
-effective speed of sound gets the arrival about right but not the level, up to 0.9 dB
+Moving air is within 0.02 dB and 0.1 ms of the exact solution in every direction. The
+effective speed of sound gets the arrival about right but not the level, up to 0.84 dB
 off: a speed of sound that changes with the bearing is not a moving medium.
 
 **A façade downwind.** A rigid building 40 m downwind of the source, its façade across
@@ -2101,7 +2125,7 @@ air. Against the still air's run on the same grid:
 | Façade echo | later than in still air | off by |
 |---|---|---|
 | exact (ray theory) | +1.78 ms | |
-| effective speed of sound | -8.81 ms | -10.58 ms |
+| effective speed of sound | -8.81 ms | -10.59 ms |
 | moving air | +1.80 ms | +0.02 ms |
 
 The effective speed of sound sends the echo back at the speed of sound going away from
@@ -2122,19 +2146,19 @@ equation:
 | 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
 |---|---|---|---|---|---|---|
 | downwind, parabolic equation | +5.7 | +4.4 | +6.3 | +4.9 | +7.2 | +5.4 |
-| downwind, effective | +5.2 | +3.9 | +5.8 | +4.2 | +6.9 | +5.0 |
-| downwind, moving | +5.7 | +4.4 | +6.3 | +4.7 | +7.5 | +5.5 |
+| downwind, effective | +5.7 | +4.3 | +6.3 | +4.7 | +7.2 | +5.4 |
+| downwind, moving | +5.9 | +4.5 | +6.5 | +4.9 | +7.7 | +5.7 |
 | upwind, parabolic equation | +4.6 | +4.3 | +3.8 | +3.4 | +1.8 | +1.6 |
-| upwind, effective | +4.4 | +4.0 | +3.5 | +3.4 | +1.8 | +1.7 |
-| upwind, moving | +4.5 | +4.2 | +3.5 | +3.3 | +1.8 | +1.5 |
+| upwind, effective | +4.8 | +4.5 | +3.9 | +3.8 | +2.2 | +2.1 |
+| upwind, moving | +4.6 | +4.3 | +3.7 | +3.6 | +2.1 | +1.8 |
 
-Moving air is within 0.31 dB of the parabolic equation, 0.11 dB on average; the
-effective speed of sound within 0.70 dB, 0.34 dB on average. Downwind at 50 m and at
-100 m 1.5 m up, where the effective speed of sound comes out about 0.5 dB low, moving
-air is within 0.03 dB on its own grid, whose 40 cm cells (against 39 cm) take 0.23 to
-0.33 dB less off there by the estimate
-[above](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation); at
-100 m 5 m up the effective speed of sound is 0.70 dB low and moving air 0.23 dB.
+Moving air is within 0.53 dB of the parabolic equation, 0.16 dB on average; the
+effective speed of sound within 0.52 dB, 0.20 dB on average. Downwind the effective
+speed of sound is within 0.3 dB of it and moving air 0.0 to 0.5 dB above it (most at
+200 m, 1.5 m up); upwind moving air is within 0.3 dB and the effective speed of sound
+0.1 to 0.5 dB above. At the farthest listeners both read at or above it, as the wave
+solver does in still air (see
+[above](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
 
 Moving air takes 3.8 to 4.7 times as long as the effective speed of sound: 15 s
 against 3.9 s in the free field (3.2 million cells), 34 s against 7.6 s with the façade
@@ -4354,7 +4378,7 @@ as exp(−βP/(2A)) per metre (perimeter P, cross-section A), whatever the cell 
 | walls β = 0.05, 0.6 x 0.6 m duct, amplitude after 10 m | theory | 10 cm cells | 5 cm cells |
 |---|---:|---:|---:|
 | 7-point stencil | 0.1889 | 0.1900 | 0.1906 |
-| 19-point stencil | 0.1889 | 0.1906 | 0.1907 |
+| 19-point stencil | 0.1889 | 0.1905 | 0.1907 |
 
 **Walls that absorb as their materials do.** The wave solver gives each material an
 admittance that changes with frequency: a constant and resonant mass-spring-damper
@@ -4380,24 +4404,23 @@ reflection, which the grid returns whole at every frequency:
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 7-point: normal-incidence absorption, fitted admittance | 0.030 | 0.022 | 0.022 | 0.037 | 0.075 | 0.138 | 0.259 | 0.366 | 0.567 | 0.597 |
 | 7-point: the grid's theory | 0.030 | 0.022 | 0.022 | 0.037 | 0.074 | 0.137 | 0.253 | 0.355 | 0.542 | 0.571 |
-| 7-point: wave solver | 0.030 | 0.022 | 0.022 | 0.037 | 0.075 | 0.136 | 0.254 | 0.353 | 0.540 | 0.566 |
+| 7-point: wave solver | 0.030 | 0.022 | 0.022 | 0.037 | 0.074 | 0.137 | 0.253 | 0.355 | 0.542 | 0.571 |
 | 19-point: normal-incidence absorption, fitted admittance | 0.030 | 0.022 | 0.022 | 0.037 | 0.072 | 0.143 | 0.268 | 0.346 | 0.532 | 0.659 |
 | 19-point: the grid's theory | 0.030 | 0.022 | 0.022 | 0.036 | 0.072 | 0.142 | 0.262 | 0.338 | 0.509 | 0.651 |
-| 19-point: wave solver | 0.030 | 0.023 | 0.022 | 0.037 | 0.073 | 0.140 | 0.265 | 0.341 | 0.507 | 0.647 |
+| 19-point: wave solver | 0.030 | 0.022 | 0.022 | 0.036 | 0.072 | 0.142 | 0.262 | 0.338 | 0.509 | 0.651 |
 
 (Each stencil has its own time step, so its own fit.) The wave solver matches the grid's
 theory (a plane wave on the grid, the wall half a cell past the last cell centres)
-within 0.005 with the 7-point stencil and within 0.007 with the 19-point one, from 30 to
-720 Hz. Most of the 19-point stencil's difference is the analysis's: its source reaches
-up to waves near the most the grid carries, which travel slowly enough for the windows
-that cut out the incident wave and end the runs to cut them. The rigid end, which the
-grid returns whole, measures up to 1.1 % from 1 below 500 Hz and 1.3 % at 707 Hz (0.24 %
-below 500 Hz with the source's low-pass at 0.2 of the sample rate instead of 0.3), and
-with the runs low-passed to 0.15 of the sample rate before the windows the difference
-falls to 0.003. The half cell between the last cell centres and the wall takes a little
-of the absorption away as the wavelength shortens: within 0.015 (7-point) and 0.013
-(19-point) of the fitted admittance's below 360 Hz, 0.027 and 0.025 less at 500 Hz with
-14 cells per wavelength. The fit does not correct for it.
+within 0.0002 with either stencil, from 30 to 720 Hz, and the rigid end, which the grid
+returns whole, measures within 0.0002 of 1. (The source also excites the 20 cm duct's
+first symmetric cross mode, which rings on just above its cut-on, 1.59 kHz on the 7-point grid,
+for as long as a run lasts, and an abrupt cut spreads it over every frequency. So the
+runs' end fades over 20 ms, which brings the absorption that close, and so does the
+window that cuts out the incident wave, which brings the rigid end that close.) The
+half cell between the last cell centres and the wall takes a little of the absorption
+away as the wavelength shortens: within 0.013 (7-point) and 0.009 (19-point) of the fitted
+admittance's below 360 Hz, 0.025 and 0.023 less at 500 Hz with 14 cells per wavelength.
+The fit does not correct for it.
 
 **Open models.** Round a model whose air reaches the edge of the grid, the grid grows
 by a perfectly matched layer (split-field, its damping growing as the square of the
@@ -4405,46 +4428,54 @@ depth). A rigid 8 x 6 m plate in the open, the source 1.5 m above it, three list
 round it, 25 to 250 Hz (20 cm cells, the 7-point stencil, the only one with the
 matched layer), against a grid 16 m larger all round, from whose
 edge nothing comes back in the 90 ms of the runs: what differs, relative to the sound
-itself,
+itself (the runs' last 10 ms fade out: between 500 Hz and 1 kHz, where a wavelength has
+fewer than four of these cells, the 8-cell layer returns sound only 15 to 30 dB below
+the sound there, in a one-off check, and an abrupt end spreads some of it over the bands
+compared),
 
 | boundary of the grid | listener 1 (dB) | listener 2 | listener 3 | air cells |
 |---|---:|---:|---:|---:|
-| the grid's edge alone (admittance 1, as in 2.0.0) | −6.5 | −13.5 | −11.0 | 28,380 |
-| matched layer, 6 cells | −60.2 | −64.8 | −56.6 | 79,200 |
-| matched layer, 8 cells (the default) | −66.6 | −74.0 | −69.7 | 104,076 |
-| matched layer, 12 cells | −73.6 | −77.0 | −62.4 | 168,036 |
+| the grid's edge alone (admittance 1, as in 2.0.0) | −6.6 | −13.5 | −11.0 | 28,380 |
+| matched layer, 6 cells | −61.7 | −64.9 | −60.0 | 79,200 |
+| matched layer, 8 cells (the default) | −72.2 | −74.1 | −74.4 | 104,076 |
+| matched layer, 12 cells | −80.7 | −81.7 | −82.2 | 168,036 |
 
-The edge alone absorbs only sound that meets it head-on. At listener 3, by the plate's
-edge 0.9 m from the layer, the 12-cell layer does worse than the 8-cell one: what comes
-back there in the first 50 ms falls with the layer's depth, but not later in the run,
-for a reason not traced. Runs take 8 cells, which is not a setting. In the layer the sound keeps
-falling over 59,409 steps (20 s): 79 dB below the first second's level after one second,
-at least 134 dB below it through the second half.
+The edge alone absorbs only sound that meets it head-on; what a layer returns falls
+with its depth at every listener. Runs take 8 cells, which is not a setting. In the
+layer the sound keeps falling over 59,409 steps (20 s): 78 dB below the first second's
+level after one second, at least 134 dB below it through the second half.
 
 Sound that runs along the layer meets it near grazing, where it sends much more back. In
-one-off checks over a rigid plate (open below), the source and the listener 1.5 m above
-it, a layer only a few cells above them puts the level below the exact solution over a
-rigid plane by 0.64 dB at 125 Hz 20 m away and by 1.7 and 2.1 dB at 63 and 125 Hz 40 m
-away (20 cm cells), and at 63 Hz by 3.7 dB 80 m away and 11.1 dB 160 m away (40 cm
-cells), where the same runs on far taller grids read 0.36, 0.13 and 0.41, 0.54 and
-0.34 dB below it (with 10 cm cells, 20 m away, 0.04 dB); with 5 cm cells, the two 0.1 m
-up and 7 m apart, it reads 6.66 dB over the free field at 125 Hz, where the exact value
-is 6.02. So the grid reaches past the source and the listeners, on each side, by 15 % of
-the farthest a listener lies from the source along that side (none under an outdoor
-ground, and in whole cells, so that the grid keeps its place on the model). In the same
-checks this brings the plate within 0.06 dB of the far taller grids 10 to 160 m away,
-to 5.99 and 5.96 dB over the free field at 63 and 125 Hz with the 5 cm cells, within
-0.01 dB of a wider grid at 125 Hz beside the plate's edge, and over the rigid 3 m block
-of the edge diffraction checks, at 6.2 cm cells, to −9.00 and −11.21 dB against BTM's
-−9.04 and −11.25. One case stays 0.13 and 0.14 dB off at 63 and 125 Hz: the source and
-the listener 0.1 m up and 20 m apart with 10 cm cells, whose layer is 0.8 m deep; 12
-cells of layer, or 25 % of room, bring it within 0.02 dB.
-It costs cells on every side where the model reaches less far than that room, whether
-the model's own walls close that side or not: in these checks 2.3 times as many 40 m
-away at 20 cm cells, 2.8 and 4.9 times 80 and 160 m away at 40 cm cells and 3 % more
-over the block; in a dry layout of a hall 40 x 20 x 4 m open at one end, its listeners
-8 to 33 m from the source, 2.1 and 2.4 times as many at 125 and 250 Hz, mostly under
-its floor and over its roof. Outdoors, where nothing is added under the ground, only
+one-off checks over a rigid plate (open below), against the exact solution over a rigid
+plane, a layer only a few cells above the source and the listener, both 1.5 m above the
+plate, puts the level 0.26 dB low at 125 Hz 20 m away, 0.50 and 1.71 dB low at 63 and
+125 Hz 40 m away (20 cm cells), and at 63 Hz 2.84 dB low 80 m away and 9.63 dB low
+160 m away (40 cm cells); with 5 cm cells, the two 0.1 m up and 7 m apart, 0.63 dB high
+at 125 Hz. So the grid reaches past the source and the listeners, on each side the
+model leaves open to them, by 15 % of the farthest a listener lies from the source along
+that side (none under an outdoor ground, and in whole cells, so that the grid keeps its
+place on the model). With that room the same runs are within 0.03 dB of the exact
+solution 20 to 160 m away, where three times the room moves them by 0.02 dB at most
+(to 80 m away; 160 m away that grid has more cells than a run takes), and within
+0.04 dB with the 5 cm cells. One case stays 0.07 and 0.15 dB off at 63 and
+125 Hz: the source and the listener 0.1 m up and 20 m apart with 10 cm cells, whose
+layer is 0.8 m deep; 25 % of room brings it within 0.01 dB. (In two more one-off
+checks, with the trilinear reading: beside the plate's edge the room brought the level
+at 125 Hz within 0.01 dB of a wider grid's, and over the rigid 3 m block of the edge
+diffraction checks, at 6.2 cm cells, to −9.00 and −11.21 dB against BTM's −9.04 and
+−11.25. Set up again, that block reads −9.07 and −11.35 dB trilinearly and −9.06 and
+−11.31 dB with the cubic reading.)
+It costs cells on each open side where the model reaches less far than that room: in
+these checks 1.5 and 2.0 times as many 20 and 40 m away at 20 cm cells and 2.2 and 3.5
+times 80 and 160 m away at 40 cm cells. A side that the model's own surfaces close
+round the source and the listeners gets none: the air round them, flooded over the
+grid's cells within that room, reaches no layer there (so the plate's grids grow above
+it and to its sides, not below it). In a dry layout of a hall 40 x 20 x 4 m open at one
+end, its listeners 8 to 33 m from the source, the grid stays on the hall, where room on
+every side would take 1.8 and 2.0 times the cells at 125 and 250 Hz, under its floor
+and over its roof; its levels are within 0.001 dB of those on a grid with three times
+the room.
+Outdoors, where nothing is added under the ground, only
 where the sky (by default 30 m above the highest building) or the ground's edge lies
 nearer than that room: 13 % more on the 63 Hz grids of
 [the wave solver in wind and temperature](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)
@@ -4460,16 +4491,96 @@ the grid's set-up, where 2.0.0 ran one per band. Timed on its own, the same grid
 about 50 % more than a run with constant walls, and save three runs.
 
 **Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's energy
-in the 63 and 125 Hz bands at 1 to 8 m along x from the source is within 0.2 dB of the
-free-field level the rays give with the 19-point stencil (−0.05 to +0.04 dB at 63 Hz,
-+0.05 to +0.20 dB at 125 Hz), and within 0.35 dB with the 7-point one (−0.05 to −0.13 dB
-at 63 Hz, −0.16 to −0.33 dB at 125 Hz). That is for one place of the source within its
-cell: the source covers the eight cells round it, weighted trilinearly (see
-[Simulation](simulation.md#low-frequencies-the-wave-solver)). Over 18 places within a
-cell, with listeners at the same distances along the grid's 26 axes and diagonals (in a
-34 m cube, so that no reflection comes sooner after the direct sound than here), the
-19-point stencil gives −0.09 to +0.11 dB at 63 Hz and −0.19 to +0.35 dB at 125 Hz, the
-7-point one −0.15 to +0.11 dB and −0.55 to +0.24 dB.
+in the 63 and 125 Hz bands along x from the source, in dB over the free-field level the
+rays give:
+
+| distance | 19-point, 63 Hz | 19-point, 125 Hz | 7-point, 63 Hz | 7-point, 125 Hz |
+|---:|---:|---:|---:|---:|
+| 1 m | −0.03 | +0.01 | +0.06 | +0.08 |
+| 2 m | −0.02 | −0.00 | +0.00 | +0.01 |
+| 4 m | −0.01 | −0.01 | −0.00 | −0.01 |
+| 8 m | −0.04 | −0.02 | −0.04 | −0.02 |
+
+That is for one place of the source within its cell and one direction. The source and
+each point a listener samples lie between the cells' centres and take four cells a side,
+weighted as a cubic through their centres (see
+[Simulation](simulation.md#low-frequencies-the-wave-solver)). Over 18 places of the
+source within a cell, with listeners in 50 directions, the grid's 26 axes and diagonals
+and 24 others (in a rigid cube large enough for nothing to come back within the direct
+sound's first 50 ms), against the exact field of a point source with the same pulse:
+the pressure's energy, and the energy of the pressure's gradient (the first-order
+field's X, Y and Z) over the pressure's, each in dB over the exact one, from the least
+to the most; and how far the gradient's main axis lies off the line to the source at
+most, in the worse of the two bands:
+
+| cells from the source | 19-point: pressure, 63 Hz | 125 Hz | gradient over pressure, 63 Hz | 125 Hz | off the line | 7-point: pressure, 63 Hz | 125 Hz | gradient over pressure, 63 Hz | 125 Hz | off the line |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | −1.76 to +2.86 | −1.79 to +2.64 | −7.30 to −0.01 | −6.49 to +0.16 | 11.4° | −1.62 to +2.38 | −1.49 to +2.35 | −5.87 to +3.86 | −5.53 to +3.57 | 14.9° |
+| 1.5 | −1.36 to +1.53 | −1.19 to +1.17 | −6.29 to +0.69 | −5.12 to +0.88 | 15.6° | −0.88 to +1.68 | −0.70 to +1.60 | −0.96 to +6.18 | −0.88 to +5.53 | 21.2° |
+| 2 | −0.59 to +0.61 | −0.57 to +0.37 | −4.48 to +0.61 | −3.64 to +0.45 | 13.4° | −0.31 to +0.67 | −0.21 to +0.64 | −1.49 to +5.41 | −1.20 to +4.58 | 14.6° |
+| 2.5 | −0.44 to +0.42 | −0.38 to +0.10 | −0.80 to +3.66 | −0.66 to +2.64 | 9.8° | −0.20 to +0.83 | −0.11 to +0.58 | −3.41 to +2.23 | −2.10 to +1.78 | 5.3° |
+| 3 | −0.13 to +0.31 | −0.03 to +0.05 | −0.75 to +1.20 | −0.71 to +0.59 | 7.2° | −0.07 to +0.32 | +0.18 to +0.26 | −1.68 to +0.74 | −0.99 to +0.42 | 4.4° |
+| 4 | −0.04 to +0.04 | −0.04 to +0.02 | −0.43 to +0.27 | −0.15 to +0.18 | 2.3° | −0.02 to +0.16 | +0.12 to +0.25 | −0.33 to +0.24 | −0.10 to +0.24 | 1.5° |
+| 8 | −0.00 to +0.00 | −0.02 to +0.01 | −0.01 to +0.01 | +0.01 to +0.02 | 0.1° | +0.03 to +0.04 | +0.02 to +0.32 | −0.04 to +0.05 | −0.03 to +0.09 | 0.4° |
+| 12 | −0.00 to +0.00 | −0.02 to +0.00 | +0.00 to +0.00 | +0.01 to +0.02 | 0.1° | +0.01 to +0.05 | −0.01 to +0.34 | −0.02 to +0.03 | −0.02 to +0.06 | 0.4° |
+
+From four cells on the 19-point stencil's level is within 0.04 dB wherever the source
+and the listener lie within their cells and in every direction. A grid has a gain of its
+own on a point source's sound, more the higher the frequency. The 19-point stencil's is
+the same in every direction within 0.01 dB over a band, 9 / (5 + 4 cos ωT) in pressure
+(0.06 and 0.35 dB over these two bands), and three taps in the source's signal undo it.
+The 7-point stencil's changes with the direction, so no signal can: twelve cells away
+in the 125 Hz band it reads −0.01 to +0.01 dB along an axis, +0.25 dB along a face's
+diagonal and +0.32 to +0.34 dB along the cube's (the 19-point one −0.02 to +0.00 dB in
+all three).
+
+Within three cells of the source its sound on the grid is not a point's. There a
+listener's points take the eight cells round them, weighted trilinearly, which read the
+19-point grid's pressure and the 7-point grid's gradient closer than the cubic does
+(not the 7-point grid's pressure: 2.5 cells away it is up to 0.83 dB off, against
+0.35 dB with the cubic). Where the reading changes, three cells from the source, the
+level steps by up to 0.37 dB in the octave up to 8 cells per wavelength and 0.15 dB in
+the one below (40 directions, in a one-off check). A listener's
+gradient comes from points up to two cells from it and settles a cell further out. On
+the 19-point grid it goes without a point that lies nearer the source than 1.5 cells
+and nearer it than the listener: with those points its main axis is up to 26 and 21
+degrees off the line 1.5 and 2 cells away and its energy up to 13.2 dB off 2.5 cells
+away (16 and 13 degrees and 3.7 dB without them). A listener nearer the source than
+1.5 cells so keeps the points on its far side, and from 0.9 cells out the gradient's
+energy changes by 2.4 dB at most from one listener to the next 0.1 cells further out
+(a one-off scan every 0.1 cells from 0.5 to 2). On the 7-point grid leaving the points
+out gains nothing clear, and it keeps them.
+From two cells away the gradient's energy is at some distances further off than with
+everything read trilinearly: 3.2 to 3.8 cells away on the 19-point grid (up to 1.4 dB
+against 0.8 dB) and 4.4 to 4.8 (0.41 against 0.29), and 2 to 3.8 cells away on the
+7-point one (5.4 dB against 3.8 dB at 2 cells, 3.3 against 1.6 at 2.6, 0.62 against
+0.45 at 3.8); elsewhere it is closer. Its main axis lies up to 3.4 degrees further off
+the line (12.2 against 8.8 degrees, 2.2 cells away on the 19-point grid; one-off scans
+every 0.2 cells from 2 to 5.6 along the grid's 26 directions, the worse of the two
+bands).
+
+Next to a surface along the grid (a floor, a wall, flat ground) a point leaves out the
+cells behind it: across the surface it reads the two cells round it, weighted linearly
+(within half a cell of the surface the one layer on its side), and along the surface
+still the cubic. A source and a listener 0.3 to 2.5 cells above a rigid plate and 20 m
+apart, with 20 cm cells, read the 125 Hz band within 0.02 dB of the exact solution
+wherever they lie within their cells (0.26 to 0.47 dB low read trilinearly, in one-off
+checks). Sound that arrives across such a surface is read linearly along its way: within
+1.5 cells of a wall along the grid, the source 8.3 cells from the wall and 7 to 11.6
+cells from the listeners, the level in the octave up to 8 cells per wavelength is 0.14
+to 0.39 dB low on the 19-point grid, and between 0.42 dB low and 0.25 dB high on the
+7-point one.
+
+Next to a surface at an angle to the grid, an edge or an opening, where the cells round
+a point are not all its own, it reads the cells it sees, weighted trilinearly (up to
+0.7 dB low at 8 cells per wavelength, halfway between two centres along an axis). Along
+such a wall, listeners 0.05 cells apart differ from one to the next, in the octave up to
+8 cells per wavelength, by up to 0.51 dB 0.3 cells from it (0.24 dB at 45 degrees) and
+1.2 dB 0.1 cells from it, as they do read trilinearly everywhere. Where the reading
+changes to the cubic, 1.5 to 2 cells from the wall, the level steps by up to 0.41 dB
+(0.12 dB read trilinearly everywhere, which reads low instead; walls at 3 to 45
+degrees), and 1 to 2 cells above the top of a screen along the grid by up to 0.37 dB
+(0.09 dB; all in one-off checks).
 
 **A whole room.** A 7 x 5 x 3 m box with 15 % absorption on every surface, simulated
 with the wave solver switched on at its default settings (the 63 and 125 Hz bands,
@@ -4480,10 +4591,10 @@ analysed alike (ISO 3382-1, octave filters):
 | model | G 63 Hz (dB) | G 125 Hz | EDT 63 Hz (s) | EDT 125 Hz | T20 63 Hz (s) | T20 125 Hz |
 |---|---:|---:|---:|---:|---:|---:|
 | sum of the modes | 20.3 | 23.5 | 1.02 | 0.96 | 0.94 | 0.90 |
-| wave solver | 21.1 | 22.9 | 1.04 | 0.95 | 0.94 | 0.87 |
-| wave solver, 7-point stencil | 21.1 | 22.9 | 1.04 | 0.94 | 0.94 | 0.86 |
-| wave solver, 16 cells per wavelength | 20.8 | 23.7 | 1.01 | 0.85 | 0.90 | 0.90 |
-| rays only | 25.6 | 21.8 | 0.72 | 0.78 | 0.91 | 0.79 |
+| wave solver | 21.1 | 22.8 | 1.04 | 0.95 | 0.94 | 0.87 |
+| wave solver, 7-point stencil | 21.1 | 23.1 | 1.04 | 0.94 | 0.94 | 0.87 |
+| wave solver, 16 cells per wavelength | 20.8 | 23.7 | 1.01 | 0.84 | 0.90 | 0.90 |
+| rays only | 25.5 | 21.5 | 0.69 | 0.77 | 0.92 | 0.78 |
 
 ![Transfer function of the box from the sum of its modes, the wave solver and rays](images/wave.png)
 
@@ -4492,9 +4603,12 @@ mostly from where the grid puts the walls: within half a cell of the model's, he
 6.93 x 4.95 x 2.97 m with 20 cm cells, which moves each mode by up to 1 %. In a room
 this sparse in modes, that moves G by up to 1 dB, EDT by up to 12 % and T20 by up to
 5 %; more cells per wavelength move the walls but do not make every figure converge.
-The two stencils agree within 0.01 s: in this band their dispersion moves the modes
-less than the walls' placement does. Rays give the average over the room instead: 5.3 dB more at this seat in the 63 Hz
-band, where the listener sits near the nodes of most modes.
+The two stencils' times agree within 0.02 s: in this band their dispersion moves the
+modes less than the walls' placement does. The 7-point one's G is 0.3 dB higher at
+125 Hz, where its own gain on the source's sound is not undone (see Free field):
+without its taps the 19-point one's is within 0.01 dB of it. Rays give the
+average over the room instead: 5.2 dB more at this seat in the 63 Hz band, where the
+listener sits near the nodes of most modes.
 
 **On a GPU.** `validation/wave_gpu.py` computes the wave bands (up to 125 Hz, 0.5 s) of
 the first source of three example rooms to every listener on the CPU and on the GPU,
@@ -4913,8 +5027,8 @@ python validation/bras_room_energy.py --results bras.json   # what scattering do
 
 On 4 cores of a cloud machine without a GPU, each run alone on the machine (30 and 31
 October 2026), the cross-check takes about 10 minutes, the convolver benchmark half a
-minute, the wave solver's checks 1.2 minutes (both stencils), the edge diffraction's 40
-seconds, the fade at edges' 53 minutes, the walks' 14, the ground's 5.5 (51 s of them
+minute, the wave solver's checks 3.2 minutes (both stencils, 11 November), the edge
+diffraction's 40 seconds, the fade at edges' 53 minutes, the walks' 14, the ground's 5.5 (51 s of them
 the wave solver's, 100 s the parabolic equation's), the outdoor measurements' 3.1 (3.0
 with turbulence, 20 seconds in still air), the turbulence's 3.9 (3.8 with `--profile`),
 the vegetation's 5.2, the leaves' 2.6, the wave solver's outdoors 12.6 and the moving

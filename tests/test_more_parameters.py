@@ -192,6 +192,32 @@ def test_directional_decay_follows_each_axis() -> None:
     assert (p.t30 > 1.0).all() and (p.t30 < 2.0).all()
 
 
+def test_a_directional_decay_time_is_the_t30_of_its_echogram() -> None:
+    """The decay times along the axes are each band's T30 as the pressure's echogram
+    gives it, to the last bit: of a decay, of one that stops before it has fallen far
+    enough, of a band without energy, and of one sparse late arrival."""
+    from acoustic_spaces.parameters import _band_parameters
+
+    step, slots = 1e-3, 1500
+    rng = np.random.default_rng(6)
+    t = np.arange(slots) * step
+    rows = [np.exp(-t * 6.9 / t60) * rng.uniform(0.5, 1.5, slots) for t60 in (0.4, 1.2, 9.0)]
+    rows.append(np.zeros(slots))
+    sparse = np.zeros(slots)
+    sparse[[20, 900]] = [1.0, 0.3]
+    rows.append(sparse)
+    rows += [np.exp(-t * 6.9 / 0.8) * (t < 0.05), np.ones(slots), np.exp(-t * 6.9)]
+    energy = np.array(rows)
+    onset = 0.0153
+    found = from_energy(energy, step, onset, directional=[energy, energy[::-1], energy])
+    first = int(onset / step)
+    each = [_band_parameters(row[first:], step, onset - first * step, None)["t30"] for row in rows]
+    assert np.isnan(each).sum() >= 3 and np.isfinite(each).sum() >= 3
+    np.testing.assert_array_equal(found.t30_x, each)
+    np.testing.assert_array_equal(found.t30_y, each[::-1])
+    np.testing.assert_array_equal(found.t30_x, found.t30)
+
+
 def test_directional_decay_from_first_order_ambisonics() -> None:
     rng = np.random.default_rng(3)
     n = 3 * FS
