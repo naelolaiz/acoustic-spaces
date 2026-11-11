@@ -648,8 +648,15 @@ only as an impedance's does, and absorb at most 95 % at random incidence; next t
 much more absorbing band, a band absorbs somewhat more than its material says (the
 fit reports how much, as `wave_absorption_miss`); near the top of the highest band the
 grid's walls absorb a little less than their admittance (0.025 less at 500 Hz with 14
-cells per wavelength); walls on the grid lie within half a cell of the model's, which can move a small
-room's modes by a few percent (more `points_per_wavelength` moves them less); waves on
+cells per wavelength); the grid puts every wall on cell faces, a wall along the grid up to
+half a cell from the model's and one at an angle to it in steps: in a rigid 4.13 x 3.37 x
+2.71 m box moved within a cell or turned against the grid (seven placements), that moves
+the modes of the grid's highest band by up to 11 % on the 63 Hz band's grid, 6.4 % on the
+125 Hz band's (the default's) and 2.8 % on the 250 Hz band's (more `points_per_wavelength`
+moves them less), and from 8 to 16 points per wavelength the level 1.5 to 6.5 cells in
+front of a wall is 1.5 dB rms off with the wall 0.4 cell off a cell face and up to 1.2 dB
+rms with it at 3 to 25 degrees to the grid (19-point stencil;
+[validation report](validation.md#wave-based-solver)); waves on
 the grid travel slower the shorter they are, at the top of the highest band with 8
 points per wavelength by 0.67 % in closed rooms and up to 1.7 % round open models
 (along the grid's axes, not at all along its body diagonals; `wave_slow_percent` in the

@@ -287,6 +287,12 @@
 - Docs: the cost of the wave solver's moving air is given as four to five times the
   effective speed of sound's (`validation/wave_wind.py` measures 4.0 to 5.1 times), where
   the help, the editor's tip and the docs said three to four times.
+- New validation: `validation/wave_walls.py`, what the wave solver's walls on cell faces
+  cost: in seven placements of a rigid box moved within a cell or turned against the grid,
+  its modes are up to 11 %, 6.4 % and 2.8 % off on the 63, 125 and 250 Hz bands' grids
+  (19-point stencil), and the level in front of a wall 0.4 cell off a cell face is 1.5 dB
+  rms off at 8 to 16 cells per wavelength (see
+  [Validation](docs/validation.md#wave-based-solver)).
 - Changed: CI runs again by itself, up to twice, the jobs of a run that failed only
   because GitHub lost their runner or a step that fetches system packages failed
   (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`). A pull request runs one job on
