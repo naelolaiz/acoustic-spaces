@@ -217,6 +217,12 @@
   theory (it showed 0.005 to 0.007), and the default matched layer returns 72 to 74 dB
   less than the sound (67 to 74). Its near-source table takes 50 directions and gives
   the gradient's direction.
+- Changed: `validation/wave_outdoor.py`'s ground reaches 63 m (63 Hz band) and 60 m
+  (125 Hz band) past the farthest listener instead of 30 m, so that the sound off its
+  far end comes after the end of the run. Without that sound the 63 Hz band reads 0.14
+  to 0.29 dB lower at 200 m in every weather, and the 125 Hz band between 0.17 dB lower
+  and 0.11 dB higher at 100 m (see
+  [Validation](docs/validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
 - Changed: CI runs again by itself, up to twice, the jobs of a run that failed only
   because GitHub lost their runner or a step that fetches system packages failed
   (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`). A pull request runs one job on

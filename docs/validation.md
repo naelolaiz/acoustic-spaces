@@ -2039,47 +2039,48 @@ the vertical plane through the source and the listener with the effective speed 
 sound along it. Both take the same profiles; the wave solver steps the scene in three
 dimensions. Over grass (Miki's impedance, 200 kPa s/m²), the source 2 m up, the
 listeners 1.5 and 5 m up, 50 to 200 m away: the 63 Hz band from a grid for that band
-(8 points per wavelength, 25.3 to 26.8 million cells), the 125 Hz band from one for it
-(31.9 to 36.8 million cells), up to 100 m. The ground reaches three times the
-half-width of the
-reflection's first Fresnel zone at the farthest listener to either side, and 30 m past
-it, so that its edges change little. Levels in dB over the free field, the mean square
+(8 points per wavelength, 28.6 to 30.2 million cells), the 125 Hz band from one for it
+(38.1 to 44.0 million cells), up to 100 m. The ground reaches three times the
+half-width of the reflection's first Fresnel zone at the farthest listener to either
+side, 20 m behind the source, and 63 m (63 Hz) or 60 m (125 Hz) past the farthest
+listener: far enough that the sound off its far end, which runs there and back, comes
+after the end of the run at every listener, even at 350 m/s (the run lasts the farthest
+distance over 330 m/s, plus 0.3 s). Levels in dB over the free field, the mean square
 of the pressure over the band's slices, wave solver / parabolic equation:
 
 | 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
 |---|---|---|---|---|---|---|
-| still | +5.3 / +5.2 | +4.4 / +4.4 | +5.2 / +5.2 | +4.4 / +4.4 | +5.2 / +5.0 | +4.2 / +4.1 |
-| downwind | +5.7 / +5.7 | +4.3 / +4.4 | +6.3 / +6.3 | +4.7 / +4.9 | +7.2 / +7.2 | +5.4 / +5.4 |
-| upwind | +4.8 / +4.6 | +4.5 / +4.3 | +3.9 / +3.8 | +3.8 / +3.4 | +2.2 / +1.8 | +2.1 / +1.6 |
-| sunny day | +5.1 / +5.1 | +4.4 / +4.4 | +4.8 / +4.8 | +4.2 / +4.1 | +4.1 / +4.0 | +3.5 / +3.3 |
-| clear night | +5.5 / +5.4 | +4.5 / +4.4 | +5.6 / +5.6 | +4.6 / +4.6 | +6.0 / +5.8 | +4.8 / +4.6 |
+| still | +5.3 / +5.2 | +4.4 / +4.4 | +5.2 / +5.2 | +4.4 / +4.4 | +5.0 / +5.0 | +4.0 / +4.1 |
+| downwind | +5.7 / +5.7 | +4.3 / +4.4 | +6.3 / +6.3 | +4.7 / +4.9 | +7.1 / +7.2 | +5.1 / +5.4 |
+| upwind | +4.8 / +4.6 | +4.5 / +4.3 | +3.9 / +3.8 | +3.8 / +3.4 | +2.0 / +1.8 | +2.0 / +1.6 |
+| sunny day | +5.1 / +5.1 | +4.4 / +4.4 | +4.8 / +4.8 | +4.2 / +4.1 | +3.9 / +4.0 | +3.3 / +3.3 |
+| clear night | +5.5 / +5.4 | +4.5 / +4.4 | +5.6 / +5.6 | +4.6 / +4.6 | +5.8 / +5.8 | +4.6 / +4.6 |
 
 | 125 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up |
 |---|---|---|---|---|
 | still | +3.0 / +2.8 | +1.0 / +0.8 | +2.2 / +1.9 | +0.5 / +0.3 |
-| downwind | +3.1 / +3.3 | -0.3 / -0.2 | +3.0 / +2.9 | -0.7 / -0.9 |
-| upwind | +2.6 / +2.1 | +1.8 / +1.4 | +0.6 / +0.1 | +0.8 / +0.4 |
-| sunny day | +2.8 / +2.6 | +1.2 / +1.0 | +1.7 / +1.4 | +0.6 / +0.4 |
-| clear night | +3.2 / +3.0 | +0.8 / +0.5 | +2.6 / +2.3 | +0.3 / +0.0 |
+| downwind | +3.1 / +3.3 | -0.3 / -0.2 | +2.8 / +2.9 | -0.9 / -0.9 |
+| upwind | +2.6 / +2.1 | +1.8 / +1.4 | +0.7 / +0.1 | +0.9 / +0.4 |
+| sunny day | +2.8 / +2.6 | +1.2 / +1.0 | +1.7 / +1.4 | +0.7 / +0.4 |
+| clear night | +3.2 / +3.0 | +0.8 / +0.5 | +2.5 / +2.3 | +0.3 / +0.0 |
 
 The weathers are the presets: downwind and upwind in the `windy` one (5 m/s 10 m up),
-`sunny_day` and `clear_night`. The wave solver is within 0.54 dB of the parabolic
-equation everywhere, 0.13 dB on average at 63 Hz and 0.25 dB at 125 Hz, and follows
+`sunny_day` and `clear_night`. The wave solver is within 0.60 dB of the parabolic
+equation everywhere, 0.10 dB on average at 63 Hz and 0.25 dB at 125 Hz, and follows
 the weather as it does: 2 dB louder downwind than in still air at 200 m and 1.5 m up,
 3 dB quieter upwind (1.1 and 2.1 dB 5 m up). It reads above the parabolic equation
 more often than below. In still air, against the
-[exact solution](#ground-reflection-against-the-exact-solution) over grass, it is 0.06
-to 0.24 dB high at 63 Hz and 0.15 to 0.25 dB at 125 Hz, the parabolic equation within
-0.05 dB. In one-off checks of the 63 Hz band, much of that is sound off the edges of
-the scene's ground, which neither the exact solution nor the parabolic equation has.
-The 0.23 and 0.24 dB at 200 m are the sound off the ground's far end, 30 m past those
-listeners, which follows the direct sound by 175 ms: with the ground 120 m longer the
-wave solver reads −0.01 and +0.03 dB against the exact solution there. With every edge
-far enough for its sound to fall outside the response (160 m to either side, 60 m
-behind, 150 m past, the response cut 300 ms after the direct sound) it is 0.03 to
-0.07 dB over the exact solution at the three distances (on the scene's ground 0.06 to
-0.10 dB at 50 and 100 m). Upwind the wave solver reads
-0.1 to 0.5 dB above the parabolic equation in both bands, which was not traced further.
+[exact solution](#ground-reflection-against-the-exact-solution) over grass, it is
+−0.01 to +0.10 dB from it at 63 Hz and 0.16 to 0.20 dB over it at 125 Hz, the
+parabolic equation within 0.05 dB. Part of that is sound off the sides of the scene's
+ground and off its end behind the source, which reaches the listeners within the run
+and which neither the exact solution nor the parabolic equation has. In one-off checks
+with every edge too far for its sound to come within the response (63 Hz: 160 m to
+either side, 60 m behind, 150 m past, the response cut 300 ms after the direct sound;
+125 Hz: 60 m to either side, 50 m behind, the response cut 130 ms after it), the wave
+solver is 0.03 to 0.07 dB over the exact solution at 63 Hz and 0.09 to 0.13 dB at
+125 Hz. Upwind the wave solver reads 0.14 to 0.39 dB above the parabolic equation at
+63 Hz and 0.41 to 0.60 dB at 125 Hz, which was not traced further.
 Neither the deep shadow upwind (it
 starts a few hundred metres away at these heights) nor reflections off buildings, where
 the effective speed of sound along the horizontal from the source stands in for the
@@ -2146,24 +2147,24 @@ equation:
 | 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
 |---|---|---|---|---|---|---|
 | downwind, parabolic equation | +5.7 | +4.4 | +6.3 | +4.9 | +7.2 | +5.4 |
-| downwind, effective | +5.7 | +4.3 | +6.3 | +4.7 | +7.2 | +5.4 |
-| downwind, moving | +5.9 | +4.5 | +6.5 | +4.9 | +7.7 | +5.7 |
+| downwind, effective | +5.7 | +4.3 | +6.3 | +4.7 | +7.1 | +5.1 |
+| downwind, moving | +5.9 | +4.5 | +6.5 | +4.9 | +7.4 | +5.4 |
 | upwind, parabolic equation | +4.6 | +4.3 | +3.8 | +3.4 | +1.8 | +1.6 |
-| upwind, effective | +4.8 | +4.5 | +3.9 | +3.8 | +2.2 | +2.1 |
-| upwind, moving | +4.6 | +4.3 | +3.7 | +3.6 | +2.1 | +1.8 |
+| upwind, effective | +4.8 | +4.5 | +3.9 | +3.8 | +2.0 | +2.0 |
+| upwind, moving | +4.6 | +4.3 | +3.7 | +3.6 | +1.9 | +1.6 |
 
-Moving air is within 0.53 dB of the parabolic equation, 0.16 dB on average; the
-effective speed of sound within 0.52 dB, 0.20 dB on average. Downwind the effective
-speed of sound is within 0.3 dB of it and moving air 0.0 to 0.5 dB above it (most at
-200 m, 1.5 m up); upwind moving air is within 0.3 dB and the effective speed of sound
-0.1 to 0.5 dB above. At the farthest listeners both read at or above it, as the wave
-solver does in still air (see
-[above](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
+Moving air is within 0.25 dB of the parabolic equation, 0.09 dB on average; the
+effective speed of sound within 0.39 dB, 0.19 dB on average. Downwind the effective
+speed of sound is 0.02 to 0.29 dB below it and moving air −0.02 to +0.25 dB from it
+(most at 200 m, 1.5 m up); upwind moving air is within 0.13 dB and the effective speed
+of sound 0.14 to 0.39 dB above.
 
-Moving air takes 3.8 to 4.7 times as long as the effective speed of sound: 15 s
-against 3.9 s in the free field (3.2 million cells), 34 s against 7.6 s with the façade
-(6 million) and 4.5 minutes against 58 s with the preset (25.8 against 26.8 million),
-on 4 cores with nothing else running (10 November 2026).
+Moving air takes 3.8 to 4.5 times as long as the effective speed of sound: 15 s
+against 3.9 s in the free field (3.2 million cells) and 34 s against 7.6 s with the
+façade (6 million), on 4 cores with nothing else running (10 November 2026). With the
+preset (29.2 against 30.2 million cells) it took 4.3 and 4.4 times as long, 6.6 and
+7.5 minutes against 92 and 102 s, on 4 cores that other work shared (11 November
+2026).
 
 ## Outdoor results against exact solutions
 
