@@ -593,8 +593,8 @@ simulation:
   not depend on where the two lie within their cells (within 0.04 dB with the 19-point
   stencil). Nearer the source its sound on the grid is not a point's: the pressure is
   up to 2.9, 0.7 and 0.32 dB off a point source's one, two and three cells away, and
-  the gradient's ratio to it up to 7.6, 5.4, 1.7 and 0.43 dB off, its direction up to
-  18, 15, 8 and 3 degrees, one to four cells away (each stencil's figures, and the
+  the gradient's ratio to it up to 7.3, 5.4, 1.7 and 0.43 dB off, its direction up to
+  15, 15, 8 and 3 degrees, one to four cells away (each stencil's figures, and the
   7-point one's own gain along the grid's diagonals, under Free field in
   [Validation](validation.md#wave-based-solver)).
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177

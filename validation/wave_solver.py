@@ -266,8 +266,8 @@ def _fade(count: int, rate: float, until: float, over: float) -> np.ndarray:
     """A window over ``count`` samples at ``rate``: one, falling to nothing (a raised
     cosine) over the ``over`` seconds before ``until`` seconds, and nothing after. Sound
     far above the bands a check looks at can still be passing where the check cuts a run
-    (in the duct, its first cross mode: see :func:`impedance_duct`), and an abrupt cut
-    spreads it over every frequency."""
+    (in the duct, its first symmetric cross mode: see :func:`impedance_duct`), and an
+    abrupt cut spreads it over every frequency."""
     t = np.arange(count) / rate
     return 0.5 - 0.5 * np.cos(np.pi * np.clip((until - t) / over, 0.0, 1.0))
 

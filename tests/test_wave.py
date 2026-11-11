@@ -709,9 +709,8 @@ def test_a_reading_next_to_a_slanted_surface_does_not_jump_along_it(stencil: int
     # the wall holds cells on the listener's side too: each reads the cells round it that
     # it sees, weighted trilinearly (three of their four columns, or one), none across
     # the wall. The direct sound's level in the octave up to 8 cells per wavelength
-    # changes by 0.26 dB at most from one listener to the next (1.3 dB with one cell's
-    # row along x or y wherever a layer of the eight lies across the wall; 0.24 dB read
-    # trilinearly everywhere).
+    # changes by 0.24 dB at most from one listener to the next, as it does with every
+    # point read trilinearly.
     cell, size = 0.1, (4.0, 4.0, 2.4)
     across, along = np.array([1.0, 1.0, 0.0]) / math.sqrt(2.0), np.array([-1.0, 1.0, 0.0])
     along /= math.sqrt(2.0)
@@ -736,7 +735,7 @@ def test_a_reading_next_to_a_slanted_surface_does_not_jump_along_it(stencil: int
         size, lambda mesh: [0.0] * len(mesh.faces), source, probes, mesh=mesh, stencil=stencil
     )
     for probe, (at, weights) in zip(probes, _readings(solver, cell)[:-1], strict=True):
-        assert np.all((at - on_wall) @ across > 0.0)
+        assert np.all((at - on_wall) @ across > 0.0) and len(weights) <= 8
         assert np.abs(at[:, :2] - probe[:2]).max() < cell and weights.sum() == pytest.approx(1.0)
     signal, delay = source_signal(rate, cell, _courant(stencil))
     farthest = np.linalg.norm(probes - source, axis=1).max()

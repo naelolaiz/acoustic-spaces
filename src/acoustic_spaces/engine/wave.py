@@ -599,10 +599,10 @@ _PROBES = 13
 #: the pressure's up to 9.2, 7.6, 13.2 and 6.6 dB off with them and 6.3, 4.5, 3.7 and
 #: 1.2 dB without. A listener nearer the source than 1.5 cells keeps the points that lie
 #: no nearer it than itself: 1 and 1.4 cells away its axis is then up to 11.4 and 16.0
-#: degrees off and its energy 7.31 and 6.54 dB (with every point 17.6 and 26.1 degrees,
-#: 7.56 and 9.25 dB; without any point nearer than 1.5 cells 27.8 and 20.4 degrees), and
+#: degrees off and its energy 7.30 and 6.54 dB (with every point 17.6 and 26.0 degrees,
+#: 7.56 and 9.25 dB; without any point nearer than 1.5 cells 27.7 and 20.4 degrees), and
 #: from one listener to the next 0.1 cells further out the energy changes by 2.4 dB at
-#: most from 0.9 cells on (by 15.3 dB at 1.5 cells if a listener nearer than that kept
+#: most from 0.9 cells on (by 15.2 dB at 1.5 cells if a listener nearer than that kept
 #: every point; one-off scans every 0.1 cells from 0.5 to 2, as ``places`` measures).
 #: On the 7-point grid 1.5, 2, 2.5 and 3 cells give 21, 15, 5 and 4 degrees and 6.2,
 #: 5.4, 3.4 and 1.7 dB with the points, 17, 17, 5 and 4 degrees and 5.4, 4.3, 3.5 and
@@ -666,7 +666,7 @@ def _open_sides(
 
     It can where the air round the points reaches the layer inside the box that lies the
     room past them along every axis (and five cells, for the cells the points take: a
-    listener's gradient points lie two cells from it, and each reads three further). The
+    listener's gradient points lie two cells from it, and each reads up to two further). The
     air is flooded from the source over the grid's cells in that box, as the solver
     floods its own, and from every listener it does not reach. Where it reaches no
     layer, a surface of the model lies between: sound from a point to that side's layer

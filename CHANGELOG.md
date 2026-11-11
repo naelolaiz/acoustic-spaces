@@ -213,7 +213,7 @@
   bands), which that loss had hidden.
 - Changed: `validation/wave_solver.py` fades the cuts of its duct and open-model checks,
   which an abrupt cut had filled with sound from far above the bands they look at (in
-  the duct, its first cross mode): the duct's absorption is within 0.0002 of the grid's
+  the duct, its first symmetric cross mode): the duct's absorption is within 0.0002 of the grid's
   theory (it showed 0.005 to 0.007), and the default matched layer returns 72 to 74 dB
   less than the sound (67 to 74). Its near-source table takes 50 directions and gives
   the gradient's direction.
