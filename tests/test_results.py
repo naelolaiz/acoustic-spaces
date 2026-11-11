@@ -273,18 +273,24 @@ def test_the_threads_for_the_channels_are_held_to_the_memory(
     result, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Two responses on eight threads have four each for their channels; with memory for
-    # five channels in progress they share it, two each. The files are the same.
+    # one channel in progress each, which holds two ears or more, they share it: one
+    # thread for a format's channels, those the memory holds for the ears. The files
+    # are the same.
     from acoustic_spaces.spatial import render
 
     monkeypatch.setattr(os, "cpu_count", lambda: 8)
     response = result["talker", "seat-a"]
-    each = render.channel_bytes(response.bands, render._samples(response, 48_000), 48_000)
-    given: list[int] = []
+    binaural = Binaural()
+    n = render._samples(response, 48_000)
+    each = render.channel_bytes(response.bands, n, 48_000, len(response.early))
+    ear = render.ear_bytes(response.bands, n + binaural.at(48_000).taps, 48_000)
+    room = max(each, 2 * ear)
+    given: list[tuple[str, int]] = []
     rendered = render.spatial_impulse_response
 
-    def counted(*args, threads=1):
-        given.append(threads)
-        return rendered(*args, threads=threads)
+    def counted(response, fmt, *args, threads=1):
+        given.append((fmt.label, threads))
+        return rendered(response, fmt, *args, threads=threads)
 
     monkeypatch.setattr(render, "spatial_impulse_response", counted)
     performance = result.settings.performance.model_copy(update={"threads": 8})
@@ -293,15 +299,17 @@ def test_the_threads_for_the_channels_are_held_to_the_memory(
         responses={("talker", "a"): response, ("talker", "b"): response},
         settings=result.settings.model_copy(update={"performance": performance}),
     )
-    for memory, threads in ((None, 4), (4 * 5 * each, 2)):
+    formats = [Ambisonics(1), binaural]
+    for memory, channels, ears in ((None, 4, 4), (4 * 2 * room, 1, min(4, room // ear))):
         monkeypatch.setattr(render, "machine_memory", lambda memory=memory: memory)
         given.clear()
-        write_results(two, tmp_path / str(threads), [Ambisonics(1)], sample_rate=48_000)
-        assert given == [threads, threads]
+        write_results(two, tmp_path / str(channels), formats, sample_rate=48_000)
+        asked = 2 * [(formats[0].label, channels), (binaural.label, ears)]
+        assert sorted(given) == sorted(asked)
     names = sorted(path.name for path in (tmp_path / "4").iterdir() if path.suffix == ".wav")
-    assert len(names) == 2
+    assert len(names) == 4
     for name in names:
-        assert (tmp_path / "4" / name).read_bytes() == (tmp_path / "2" / name).read_bytes()
+        assert (tmp_path / "4" / name).read_bytes() == (tmp_path / "1" / name).read_bytes()
 
 
 def test_the_results_folder_is_checked(result, tmp_path: Path) -> None:

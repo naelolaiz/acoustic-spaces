@@ -190,7 +190,7 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
                 ir = response.spatial_impulse_response(
                     heard,
                     sample_rate,
-                    threads=channel_threads(response, sample_rate, inner, workers),
+                    threads=channel_threads(response, sample_rate, inner, workers, heard),
                 )
                 peak = max(peak, float(abs(ir).max(initial=0.0)))
                 name = f"{stem}{part}.wav"

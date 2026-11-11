@@ -181,32 +181,57 @@ def _worked_out_late_impulses(response: Response, n: int, sample_rate: float, se
     return signals, at, np.clip(chosen, 0, count - 1), directions
 
 
-def channel_bytes(bands: int, n: int, sample_rate: float) -> int:
-    """Bytes the arrays of a channel of ``n`` samples in ``bands`` bands take at most
-    while :func:`_render_gains` renders it: its band signals and those of the paths'
-    quarter turns (bands, n each) and, while they are combined
-    (:func:`~acoustic_spaces.synthesis.combine_bands`), three arrays of the size of
-    their spectra (two where NumPy works on a temporary array in place, and for an ear
-    of a binaural response, which has no quarter turns apart)."""
+def channel_bytes(bands: int, n: int, sample_rate: float, paths: int = 0) -> int:
+    """Bytes the arrays of a channel of ``n`` samples in ``bands`` bands hold at their
+    peak while :func:`_render_gains` renders it from ``paths`` early paths: its band
+    signals and those of the paths' quarter turns (bands, n each) and, beside them, the
+    larger of what placing the paths takes (two arrays (paths, bands) of their
+    amplitudes and :func:`~acoustic_spaces.synthesis.placing_bytes`) and what combining
+    the bands takes (:func:`~acoustic_spaces.synthesis.combine_bands`: three arrays of
+    the size of their spectra, two where NumPy works on a temporary array in place, and
+    a band's spectrum and signal more for their sum and the transforms' buffers)."""
     bins = synthesis.fft_size(n, sample_rate) // 2 + 1
-    return 16 * bands * (n + 3 * bins)
+    placing = paths * (16 * bands + 32) + synthesis.placing_bytes(paths) + 8 * n
+    combining = 48 * bands * bins + 32 * bins
+    return 16 * bands * n + max(placing, combining)
+
+
+def ear_bytes(bands: int, n: int, sample_rate: float) -> int:
+    """Bytes the arrays of an ear of ``n`` samples (the response's and the HRTF's) in
+    ``bands`` bands hold at their peak while :func:`_render_binaural` combines its
+    bands, which lie in an array of both ears': two arrays of the size of their spectra,
+    a band's spectrum and signal more for their sum and the transform's buffers, and the
+    other ear's signal where that is ready."""
+    bins = synthesis.fft_size(n, sample_rate) // 2 + 1
+    return 32 * bands * bins + 48 * bins
 
 
 def channel_threads(
-    response: Response, sample_rate: float, threads: int, responses: int = 1
+    response: Response,
+    sample_rate: float,
+    threads: int,
+    responses: int = 1,
+    fmt: Format | None = None,
 ) -> int:
-    """The most of ``threads`` (one at least) that may each have a channel of
-    ``response`` in progress at ``sample_rate``, while ``responses`` such responses are
-    rendered side by side, for the channels in progress to hold (:func:`channel_bytes`)
-    at most ``CHANNELS_MEMORY_SHARE`` of the computer's memory
-    (:func:`~acoustic_spaces.engine.run_size.machine_memory`); ``threads`` where that
-    cannot be read."""
+    """The most of ``threads`` (one at least; they are the threads to use, not
+    ``performance.threads``, whose 0 stands for all cores) that may each have a channel
+    of ``response`` in ``fmt`` in progress at ``sample_rate``, while ``responses`` such
+    responses are rendered side by side, for the channels in progress to hold no more
+    than ``CHANNELS_MEMORY_SHARE`` of the computer's memory
+    (:func:`~acoustic_spaces.engine.run_size.machine_memory`): each an ear
+    (:func:`ear_bytes`) where ``fmt`` is a :class:`Binaural`, else a channel
+    (:func:`channel_bytes`). ``threads``, one at least, where the memory cannot be
+    read."""
     memory = machine_memory()
     if memory is None:
         return max(1, threads)
     n = _samples(response, sample_rate)
+    if isinstance(fmt, Binaural):
+        each = ear_bytes(response.bands, n + fmt.at(sample_rate).taps, sample_rate)
+    else:
+        each = channel_bytes(response.bands, n, sample_rate, len(response.early))
     room = CHANNELS_MEMORY_SHARE * memory / max(1, responses)
-    return max(1, min(threads, int(room // channel_bytes(response.bands, n, sample_rate))))
+    return max(1, min(threads, int(room // each)))
 
 
 def _samples(response: Response, sample_rate: float) -> int:
@@ -220,10 +245,10 @@ def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed, thr
 
     The channels are rendered on ``threads`` threads, each into its own column, which
     bounds the channels in progress at once to ``threads``. A channel in progress holds
-    its band signals and their spectra (some 70 MB for 3.5 s at 48 kHz in 8 bands, with
-    the quarter turns of paths over edges, in proportion to the length and the bands:
-    :func:`channel_bytes`), and the peak memory grows by as much for each thread past
-    the first. So no more threads are used than the memory lets have a channel in
+    its band signals and their spectra (some 75 MB for 3.5 s at 48 kHz in 8 bands, in
+    proportion to the length and the bands, and more with tens of thousands of early
+    paths: :func:`channel_bytes`), and the peak memory grows by as much for each thread
+    past the first. So no more threads are used than the memory lets have a channel in
     progress (:func:`channel_threads`). One thread renders the channels one after
     another."""
     threads = channel_threads(response, sample_rate, threads)
@@ -303,11 +328,16 @@ def _render_binaural(
             )
 
         each_on_threads(place, range(signals.shape[0]), threads)
-        # An ear in progress holds its bands' spectra, as a channel does.
+        # An ear in progress holds its bands' spectra, as a channel does. The band
+        # filters' gains are worked out before the ears: where they are not kept yet,
+        # each ear would work them out and hold that beside its spectra.
+        synthesis.band_gains(
+            synthesis.fft_size(out.shape[1], sample_rate), sample_rate, signals.shape[0]
+        )
         heard = each_on_threads(
             lambda ear: synthesis.combine_bands(ears[:, ear], sample_rate),
             range(2),
-            channel_threads(response, sample_rate, threads),
+            channel_threads(response, sample_rate, threads, fmt=fmt),
         )
         for ear in range(2):
             out[ear] += heard[ear]
@@ -396,9 +426,9 @@ def spatial_impulse_response(
     by side, each as it is rendered alone, so the result is the same with any number.
     They are at most the computer's cores (all of them for 0 or fewer, as
     ``performance.threads``), and each past the first holds one channel's band signals
-    more (some 70 MB for 3.5 s at 48 kHz in 8 bands), so a format's channels take no
-    more of them than the computer's memory lets have a channel in progress
-    (:func:`channel_threads`).
+    and their spectra more (some 75 MB for 3.5 s at 48 kHz in 8 bands), so a format's
+    channels take no more of them than the computer's memory lets have a channel in
+    progress (:func:`channel_threads`).
     """
     from acoustic_spaces.spatial.microphone import Microphone
 
@@ -431,6 +461,7 @@ __all__ = [
     "Mono",
     "channel_bytes",
     "channel_threads",
+    "ear_bytes",
     "from_output",
     "sharing_late_parts",
     "spatial_impulse_response",
