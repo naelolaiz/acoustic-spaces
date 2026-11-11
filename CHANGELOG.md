@@ -269,6 +269,12 @@
   2 to 2.6 times per 10,000 steps, from single-precision rounding in its carrying
   step, which now keeps a uniform pressure to the bit. Open models change by rounding
   only.
+- Fixed (results change): the wave solver stopped at the response's end, where the
+  bands' filters still read the run that follows: the last 50 ms of the wave bands'
+  energy were up to 7.5 dB off (15.7 dB with third-octave bands) in a room of 2 %
+  absorption. It now steps 0.2 s further (0.4 s with third-octave bands), which also
+  keeps the 19-point stencil's slow drift of a closed room's mean pressure out of the
+  bands.
 - Docs: the distances at which the wave solver's gradient (X, Y, Z) near its source is
   further off a point source's than read from eight cells, from a finer scan, and why:
   the source's spread over four cells a side from 2 to 3.4 cells away, the listener's

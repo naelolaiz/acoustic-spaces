@@ -112,6 +112,11 @@ WAVE_BANDS_HZ = OCTAVE_BANDS_HZ[:4]
 #: pressure comes back to rest. Its length in seconds; twice, it is flat within 0.2 dB
 #: above 20 Hz.
 HIGH_PASS_S = 0.12
+#: How much further than a response's end a simulation steps the solver (s), by the
+#: resolution of its bands. The bands' filters spread each arrival both ways in time, so
+#: they read the last of a response from the run after it too: a run that stops at the
+#: response's end is silent there, and the room is not.
+PAST_END_S = {"octave": 0.2, "third_octave": 0.4}
 #: Cells of the matched layer round an open model, and its damping at the grid's edge
 #: (the damping rate times half a time step). Sound leaving the model comes back from
 #: it 72 to 74 dB down; from the grid's edge alone, 7 to 14 dB down (docs/validation.md,
@@ -325,8 +330,10 @@ class WaveResponse:
         return np.ones(self.bands) if self.band_gain is None else np.sqrt(self.band_gain)
 
     def _resampled(self, sample_rate: float, n: int) -> tuple[np.ndarray, int]:
-        """The run at ``sample_rate`` (before + n, 4), still broadband, and ``before``:
-        how many of its samples come before emission (those of the run that do)."""
+        """The run at ``sample_rate`` (at least before + n, 4), still broadband, and
+        ``before``: how many of its samples come before emission (those of the run that
+        do). What the run has after the n samples from emission stays, for the bands'
+        filters."""
         from acoustic_spaces.render import resample
 
         key = (float(sample_rate), int(n))
@@ -337,10 +344,10 @@ class WaveResponse:
             # samples at 44.1 kHz).
             start = int(round((self.delay_s - self.lead_s) * sample_rate))
             before = max(0, -start)
-            out = np.zeros((before + n, 4))
+            x = resample(self.signals, self.rate, sample_rate)
+            out = np.zeros((before + max(n, start + len(x)), 4))
             # Impulse responses scale with the sample period: an impulse of height a at
             # one rate is a * rate / sample_rate at another.
-            x = resample(self.signals, self.rate, sample_rate)[: max(0, n - start)]
             out[before + start : before + start + len(x)] = x * (self.rate / sample_rate)
             self._cache = {key: (out, before)}
         return self._cache[key]
@@ -348,7 +355,8 @@ class WaveResponse:
     def field(self, sample_rate: float, n: int) -> np.ndarray:
         """The first-order sound field (n, 4) of the wave bands together, from emission:
         W, X, Y, Z. The bands' filters take the run before emission too, and what they
-        spread to before emission is left out, as it is of the rays' sound."""
+        spread to before emission is left out, as it is of the rays' sound. They take
+        the run after the n samples as well, where it goes on (:data:`PAST_END_S`)."""
         run, before = self._resampled(sample_rate, n)
         n_fft = synthesis.fft_size(len(run), sample_rate)
         gains = wave_gains(n_fft, sample_rate, self.bands, self.total_bands)
