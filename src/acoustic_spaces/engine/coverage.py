@@ -1045,6 +1045,7 @@ def _trace_part(
         barrier_frequencies=sim.early.barrier_frequencies,
         open_ground_frequencies=sim.early.open_ground_frequencies,
         edges=None if diffraction is None else diffraction.edges,
+        rendered=False,
     )
     if refraction is not None:
         say(f"{label}: paths bent by the wind and the temperature")

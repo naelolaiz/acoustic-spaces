@@ -105,6 +105,20 @@ class EarlyReflections:
     #: gives each path beyond the one held from those bands
     #: (:func:`~acoustic_spaces.engine.coherent.with_own_phases`); None outside one.
     own_phase: np.ndarray | None = None
+    #: (n, C, K) where a path carries the field the parabolic equation gives over the open
+    #: ground (outdoors in wind or temperature gradients, out of the shadow): in each
+    #: coherent band its pressure, unnormalised, relative to its delay, at the frequencies
+    #: of the layout (:func:`~acoustic_spaces.engine.fine.fine_frequencies`) the equation
+    #: ran at there (in the lowest band down to an octave below it, in its top band
+    #: through the upper crossover too where a response is rendered or the band filters
+    #: read it); NaN where a path has none. Its band's shape is drawn from these and
+    #: its neighbours' (:func:`~acoustic_spaces.engine.coherent.shaped`); its level stays
+    #: the one its energy gives. None when no path carries one.
+    fine: np.ndarray | None = None
+    #: (n,) the delay (s) past :attr:`delay_s` whose phase :attr:`fine`'s samples follow
+    #: on average (:func:`~acoustic_spaces.engine.fine.reference_delay`), relative to
+    #: which they are interpolated; 0 for paths without them. None with :attr:`fine`.
+    fine_delay: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         if self.edge is None:
@@ -136,6 +150,8 @@ class EarlyReflections:
             lag=None if self.lag is None else self.lag[rows],
             cosines=[self.cosines[i] for i in rows] if self.cosines else [],
             own_phase=None if self.own_phase is None else self.own_phase[rows],
+            fine=None if self.fine is None else self.fine[rows],
+            fine_delay=None if self.fine_delay is None else self.fine_delay[rows],
         )
 
     @property
@@ -225,6 +241,8 @@ class EarlyReflections:
             wander=Wander.stacked([p.wander for p in parts], [len(p) for p in parts]),
             lag=_lags(parts, bands),
             cosines=_cosines(parts),
+            fine=_fines(parts),
+            fine_delay=_fine_delays(parts),
         )
         return out.sorted()
 
@@ -247,6 +265,31 @@ def _cosines(parts: list[EarlyReflections]) -> list[np.ndarray]:
         else:
             out.extend(np.zeros(0) for _ in range(len(p)))
     return out
+
+
+def _fines(parts: list[EarlyReflections]) -> np.ndarray | None:
+    """The parts' :attr:`~EarlyReflections.fine` one above the other (NaN for paths
+    without one); None when no part has one."""
+    fines = [p.fine for p in parts if p.fine is not None]
+    if not fines:
+        return None
+    shape = fines[0].shape[1:]
+    return np.concatenate(
+        [
+            np.full((len(p), *shape), np.nan, dtype=complex) if p.fine is None else p.fine
+            for p in parts
+        ]
+    )
+
+
+def _fine_delays(parts: list[EarlyReflections]) -> np.ndarray | None:
+    """The parts' :attr:`~EarlyReflections.fine_delay` one after the other (zero for
+    paths without one); None when no part has one."""
+    if all(p.fine_delay is None for p in parts):
+        return None
+    return np.concatenate(
+        [np.zeros(len(p)) if p.fine_delay is None else p.fine_delay for p in parts]
+    )
 
 
 def _lags(parts: list[EarlyReflections], bands: int) -> np.ndarray | None:

@@ -1207,7 +1207,7 @@ def test_the_paths_over_the_top_and_over_the_open_ground_stay_as_they_were() -> 
         1.30810958966448e-08,
     ]
     expected_ground = [
-        9.200246099526841e-05,
+        9.200513444254311e-05,
         0.00010677352415635575,
         0.00011699229865428902,
         7.143885680548765e-05,

@@ -344,10 +344,12 @@ Outdoor acoustics, in steps:
   [Known issues](validation.md#known-issues)).
 - [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
-  the shadow):
-  a band's spectrum held past its last frequency misses a ground dip there, by up to
-  2.0 dB 100 m downwind in the benchmark's case 2 (see
-  [Known issues](validation.md#known-issues)).
+  the shadow): out of the shadow the equation's field goes through it, but the rays'
+  band beside it is 5 to 22 dB off the equation there in the weather presets, the paths
+  round a barrier's end still hold the weather's effect at their bands' last
+  frequencies there, and in the shadow, where the bands above the equation deepen from
+  the octave below 18 to 36 dB louder than its field, the bands keep their own samples
+  (8.6 dB low in case 3 300 m away; see [Known issues](validation.md#known-issues)).
 - [ ] Steep sound over the open ground in wind (as under a flyover) left to the rays at
   1 and 2 kHz by a rule, where they match the equation at a fraction of its time: one
   studied (the vertical wavenumber changing by at most 3 % over one of its own lengths

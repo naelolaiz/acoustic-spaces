@@ -381,9 +381,10 @@ def test_the_scene_chooses_the_parabolic_equation(monkeypatch) -> None:
 
         monkeypatch.setattr(module, "march", counted)
     narrow = simulate(Room.from_scene(field({})))
-    assert calls == {"narrow": 6, "wide": 0}  # the bands up to 2 kHz
+    # The bands up to 2 kHz, and the run on through the crossover above them.
+    assert calls == {"narrow": 7, "wide": 0}
     wide = simulate(Room.from_scene(field({"parabolic_equation": "wide_angle"})))
-    assert calls == {"narrow": 6, "wide": 6}
+    assert calls == {"narrow": 7, "wide": 7}
     a = narrow["s", "l"].relative_to_free_field()[:6]
     b = wide["s", "l"].relative_to_free_field()[:6]
     np.testing.assert_allclose(b, a, atol=0.3)

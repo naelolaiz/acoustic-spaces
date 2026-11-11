@@ -58,6 +58,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from acoustic_spaces import synthesis
+from acoustic_spaces.engine.fine import fine_rows, fine_shape
 from acoustic_spaces.materials.bands import (
     BANDS_PER_OCTAVE,
     OCTAVE_BANDS_HZ,
@@ -324,7 +325,13 @@ def _surface_factors(model, faces, cosines, rows, distance, spherical, f) -> np.
 
 
 def shaped(
-    spectrum: np.ndarray, bands: int, f: np.ndarray, amplitude: np.ndarray, gains: np.ndarray
+    spectrum: np.ndarray,
+    bands: int,
+    f: np.ndarray,
+    amplitude: np.ndarray,
+    gains: np.ndarray,
+    fine: np.ndarray | None = None,
+    fine_delay: np.ndarray | None = None,
 ) -> np.ndarray:
     """(n, len(f)) the coherent bands' amplitudes (n, count) through the synthesis's
     band ``gains`` (count, len(f)) at frequencies ``f`` (Hz), each band's times the
@@ -333,7 +340,12 @@ def shaped(
     the band's own samples and held beyond them. A band so carries its own sound into
     the crossovers with its neighbours, not theirs: outdoors a path's bands below the
     parabolic equation's top band hold the whole sound over the ground and those above
-    it the path's own, and a shape drawn across that edge would notch the sum."""
+    it the path's own, and a shape drawn across that edge would notch the sum.
+
+    Paths with the parabolic equation's samples in a band (``fine`` (n, count, K) and
+    ``fine_delay`` (n,), :attr:`EarlyReflections.fine`) take its shape through those
+    and the neighbouring bands' instead (:func:`~acoustic_spaces.engine.fine.
+    fine_shape`), so that both bands of a crossover give the field it has there."""
     n, count, per_band = spectrum.shape
     samples = np.log2(sample_frequencies(bands, count))  # (count, M)
     x = np.log2(np.maximum(np.asarray(f, dtype=float), 1e-6))
@@ -343,6 +355,16 @@ def shaped(
         if len(support) == 0:
             continue
         lo, hi = int(support[0]), int(support[-1]) + 1
+        live = amplitude[:, b]
+        if fine is not None and fine_delay is not None:
+            # The paths with the equation's samples here, apart from the others.
+            rows = fine_rows(fine, b, bands)
+            if len(rows):
+                out[rows, lo:hi] += (amplitude[rows, b, None] * gains[b, lo:hi]) * fine_shape(
+                    fine[rows], fine_delay[rows], bands, b, np.asarray(f, dtype=float)[lo:hi]
+                )
+                live = live.copy()
+                live[rows] = 0.0
         own = spectrum[:, b]
         if per_band == 1:
             shape = np.repeat(own, hi - lo, axis=1)
@@ -355,7 +377,7 @@ def shaped(
             level = magnitude[:, j] * (1.0 - w) + magnitude[:, j + 1] * w
             angle = phase[:, j] * (1.0 - w) + phase[:, j + 1] * w
             shape = level * np.exp(1j * angle)
-        out[:, lo:hi] += (amplitude[:, b, None] * gains[b, lo:hi]) * shape
+        out[:, lo:hi] += (live[:, None] * gains[b, lo:hi]) * shape
     return out
 
 
@@ -545,7 +567,15 @@ def amplitude_spectra(
     count = paths.coherent_bands
     amplitude = np.sqrt(synthesis.ENERGY_TO_IR * paths.energy)
     if count:
-        low = shaped(paths.spectrum, bands, f, amplitude[:, :count], gains[:count])
+        low = shaped(
+            paths.spectrum,
+            bands,
+            f,
+            amplitude[:, :count],
+            gains[:count],
+            paths.fine,
+            paths.fine_delay,
+        )
     else:
         low = np.zeros((len(paths), len(f)), dtype=complex)
     if not only_coherent:

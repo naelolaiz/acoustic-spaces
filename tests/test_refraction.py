@@ -1833,7 +1833,10 @@ def test_octave_and_third_octave_runs_end_the_equation_at_the_same_frequency(
     edge of the 2 kHz octave (2828 Hz), in octave and third-octave runs alike: 100 m
     downwind the equation runs in the octave bands from 63 Hz to 2 kHz and in the third
     octaves from 50 Hz to 2.5 kHz (its upper edge 2806 Hz, nominal centres), whose
-    frequencies all lie in those octaves, the highest within 5 % of the edge."""
+    frequencies all lie in those octaves, the highest within 5 % of the edge. One more
+    run takes the top band on through the crossover above it, past the edge, and the
+    lowest band's run goes on down to an octave below it (44 Hz), for the response's
+    shape there."""
     import acoustic_spaces.engine.parabolic as parabolic
 
     marched = []
@@ -1848,10 +1851,12 @@ def test_octave_and_third_octave_runs_end_the_equation_at_the_same_frequency(
     for bands, runs in (("octave", 6), ("third_octave", 18)):
         marched.clear()
         simulate(Room.from_scene(field({"preset": "windy"}, bands=bands)), threads=1)
-        assert len(marched) == runs, bands
-        frequencies = np.concatenate(marched)
+        skirt = [m for m in marched if m.min() > join / 1.05]
+        assert len(marched) == runs + 1 and len(skirt) == 1, bands
+        frequencies = np.concatenate([m for m in marched if m.min() <= join / 1.05])
         assert join / 1.05 < frequencies.max() < join, bands
-        assert frequencies.min() > 44.0, bands
+        under = frequencies[frequencies < 44.0]
+        assert len(under) and under.min() > 22.0 and len(marched[0]) > len(under), bands
 
 
 def test_the_shadow_deepens_alike_in_octave_and_third_octave_runs() -> None:
@@ -1880,12 +1885,12 @@ def test_a_silent_top_octave_leaves_the_bands_above_it_silent(monkeypatch) -> No
 
     place = refracted.Refraction._place
 
-    def silent_top(self, wave, pressure, energy, parts, listeners):
+    def silent_top(self, wave, pressure, energy, parts, listeners, runs=None):
         energy = np.array(energy, dtype=float)
         octave = refracted.octave_of(self.model.bands)
         top = octave[np.flatnonzero(wave.bands)[-1]]
         energy[octave == top] = 0.0
-        return place(self, wave, pressure, energy, parts, listeners)
+        return place(self, wave, pressure, energy, parts, listeners, runs)
 
     monkeypatch.setattr(refracted.Refraction, "_place", silent_top)
     scene = field({"preset": "windy"}, ((-100.0, 0.0, 1.5),), bands="third_octave")
@@ -2090,15 +2095,33 @@ def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatc
     """The setting reaches listeners, coverage maps and the places of a walking source
     alike: 24 or 8 frequencies in each run at 1 and 2 kHz over the open ground, and
     with ``rays`` none there, the source at the ground's end, everything downwind of it
-    or across the wind, short of any shadow."""
+    or across the wind, short of any shadow. A listener and a walk, whose responses are
+    rendered from the spectra, take one more run past the top band at its spacing (10
+    frequencies with 24, 4 with 8, 4 above the 500 Hz band with ``rays``); a map only
+    where its band filters read that crossover, with ``rays``. A map's point and a
+    listener there so keep the same samples of the equation's field in the bands read
+    through the filters (up to 500 Hz), from which the time parameters there are read."""
+    from acoustic_spaces.engine import refracted
+    from acoustic_spaces.engine.coherent import FILTERED_MAX_BAND_HZ, band_count
     from acoustic_spaces.engine.coverage import coverage_map
     from acoustic_spaces.scene import Coverage
     from acoustic_spaces.walkthrough import simulate_walk
 
     runs = _open_runs(monkeypatch)
+    kept, stage = {}, [""]
+    place = refracted.Refraction._place
+
+    def keep(self, wave, pressure, energy, parts, listeners, runs=None):
+        place(self, wave, pressure, energy, parts, listeners, runs)
+        if tuple(listeners[wave.listener]) == (-20.0, 0.0, 1.5):
+            kept[stage[0]] = parts[wave.listener][0].fine[wave.carrier]
+
+    monkeypatch.setattr(refracted.Refraction, "_place", keep)
+    filtered = band_count(FILTERED_MAX_BAND_HZ, 8)
     for choice, count in ((24, 24), (8, 8), ("rays", 0)):
+        kept.clear()
         early = {"method": "image_sources", "max_order": 1, "diffraction": "none"}
-        data = field({"preset": "windy"}, ((-40.0, 0.0, 1.5),), late={"rays": 50}).model_dump()
+        data = field({"preset": "windy"}, ((-20.0, 0.0, 1.5),), late={"rays": 50}).model_dump()
         data["simulation"]["early"] = {**early, "open_ground_frequencies": choice}
         data["sources"][0]["position"] = [-145.0, 0.0, 2.0]
         still = Scene.model_validate(data)
@@ -2109,7 +2132,7 @@ def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatc
             (
                 "map",
                 lambda still=still: coverage_map(
-                    Room.from_scene(still), settings=Coverage(spacing=40.0), threads=1
+                    Room.from_scene(still), settings=Coverage(spacing=40.0, height=1.5), threads=1
                 ),
             ),
             (
@@ -2120,10 +2143,46 @@ def test_the_open_ground_s_frequencies_reach_listeners_maps_and_walks(monkeypatc
             ),
         ):
             runs.clear()
+            stage[0] = name
             run()
-            high = [len(f) for f in runs if f.min() > 707.0]
-            assert len(runs) > len(high) > 0 if count else not high, (choice, name)
+            # The skirt: past 2 kHz's upper edge, or (with rays) 500 Hz's below 1 kHz.
+            above = [f for f in runs if f.min() > 707.0]
+            past = [f.min() > 2000.0 * math.sqrt(2.0) or f.max() < 1000.0 for f in above]
+            high = [len(f) for f, skirt in zip(above, past, strict=True) if not skirt]
+            skirts = [len(f) for f, skirt in zip(above, past, strict=True) if skirt]
+            assert len(runs) > len(high) > 0 if count else not high, (choice, name, high)
             assert all(n == count for n in high), (choice, name, high)
+            expected = {24: [10], 8: [4], "rays": [4]}[choice]
+            assert skirts == (expected if name != "map" or choice == "rays" else []), (
+                choice,
+                name,
+                skirts,
+            )
+        # The listener's and the map point's (at the same place) in the filtered bands.
+        listener, point = kept["listener"][:filtered], kept["map"][:filtered]
+        np.testing.assert_array_equal(listener, point, str(choice))
+
+
+def test_one_coherent_band_keeps_its_run_below_it() -> None:
+    """With ``coherent_max_band_hz: 63`` in octave bands, 100 m downwind in the windy
+    preset, the 63 Hz band is the only coherent one: it takes no skirt above, and its run
+    goes on down to half its lower edge as with more bands (four frequencies, 25 to 42
+    Hz), whose samples the carrier keeps. The band's run is the same as with 125, and so
+    is its level (+6.2750 dB re free field both, ``coh63.py``; 4e-8 dB apart, the 63 Hz
+    shape drawn with and without the 125 Hz band's samples beside it)."""
+    from acoustic_spaces.engine.fine import fine_frequencies
+
+    levels = []
+    for cap in (125, 63):
+        early = {"method": "image_sources", "max_order": 1, "diffraction": "none"}
+        scene = field({"preset": "windy"}, early={**early, "coherent_max_band_hz": cap})
+        response = simulate(Room.from_scene(scene), threads=1)["s", "l0"]
+        levels.append(response.relative_to_free_field()[0])
+    fine = response.early.fine
+    carrier = int(np.flatnonzero(np.isfinite(fine.real).any(axis=(1, 2)))[0])
+    under = fine_frequencies(8, 1)[0] < 44.0
+    assert under.sum() == 4 and np.isfinite(fine[carrier, 0, under].real).all()
+    assert levels[1] == pytest.approx(levels[0], abs=1e-6)
 
 
 def test_the_open_ground_s_frequencies_change_nothing_in_still_air() -> None:

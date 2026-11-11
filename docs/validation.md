@@ -2531,13 +2531,32 @@ equation too: within 0.07 dB to 1 km, downwind and upwind, and at 2 km downwind 
 low with the gradient going on to 1000 m, as the bands below it there, and 0.38 dB high
 with it stopping at 100 m.
 
-At the join between the parabolic equation's bands and the rays' each band of the
-response keeps its own spectrum into the crossovers, since a blend of spectra that
-stand for different sound (the whole field over the ground on one path, each ray's own
-on the others) would put a notch in it, and a path that carries nothing in a band is
-left out of that band's reading, where its higher bands would count against it. A
-ground dip that falls in the crossover above the 2 kHz band is missed (see
-[Known issues](#known-issues)).
+At the join between the parabolic equation's bands and the rays' each ray band keeps
+its own spectrum, since a blend of spectra that stand for different sound (the whole
+field over the ground on one path, each ray's own on the others) would put a notch in
+it, and a path that carries nothing in a band is left out of that band's reading. The
+equation's bands carry its field at every frequency its runs took, and out of the shadow
+the top one on through the crossover above it (`engine/fine.py`), so both bands of a
+crossover give the same field there: in case 2 the dip in the crossover above the 2 kHz
+band, 12.8 dB deep at 2.85 kHz 100 m away, comes out within 0.19 dB of the program from
+2 to 3.45 kHz at 100 m, 0.05 and 0.28 dB at 150 and 200 m and 0.45 dB at 300 m (on the
+rays' side, 3.1 kHz), alike with 8 frequencies an octave and with the wide-angle
+equation, the join of the equation's 500 Hz and 1 kHz bands within 0.07 dB, and
+third-octave runs within 0.12 and 0.58 dB at 100 and 300 m (`tests/test_ffp.py`). In
+the shadow the bands keep their own samples (see [Known issues](#known-issues)).
+
+Up to 500 Hz the echogram reads the bands through band filters from that field, the
+63 Hz band's run going on down to an octave below it, where its filter still reads it.
+100 m downwind in case 2 and 200 m downwind in `windy`, C50 and C80 at 63 Hz are within
+0.01 and 0.08 dB and within 0.05 and 0.10 dB of a run of the equation 27 times as dense
+going on down to 11 Hz, read through the same filters (27 and 81 times, to 11 or
+5.5 Hz, agree within 0.06 dB), where the band's own samples were 0.30 and 0.29 dB and
+0.91 and 0.19 dB off, and EDT within a step of the echogram (1 ms), where `windy`'s was
+1.8 ms off (`tests/test_ffp.py`); a coverage map's point keeps the same samples in these
+bands as a listener there (`tests/test_refraction.py`). That run's lowest frequency, 25 Hz,
+thickens its absorbing layer, which moves the 63 Hz band's level by 0.002 and 0.003 dB,
+to within 0.0001 dB of a thicker one still. Above 63 Hz, where C50 and C80 are 47 to
+88 dB, see [Known issues](#known-issues).
 
 ## The wide-angle parabolic equation
 
@@ -4666,16 +4685,51 @@ Results:
   1 and 2 kHz too short of half the way to the shadow, and those step at the same
   caustics by 10.5 and 12.0 dB in the wind and by 14.0 and 7.2 dB on the clear night (a
   one-off check).
-- **A ground dip in the crossover from the parabolic equation's bands to the rays'.**
-  Each band of the response keeps its own spectrum into the crossovers, held past its
-  last frequency, so a ground dip that falls in the crossover above the equation's top
-  band (2.4 to 3.4 kHz; 0.59 to 0.84 kHz short of half the way to the shadow with
-  `open_ground_frequencies: rays`) is missed: 100 m downwind in the benchmark's case 2 the dip at
-  2.85 kHz, 12.8 dB deep, comes out 1.3 dB too shallow and the response 2.0 dB too low
-  at 3 kHz, off by up to 2.0 dB from 2.75 to 3.2 kHz (`tests/test_ffp.py` checks
-  either side of it). More frequencies do not mend it: a model of the hold against the
-  program misses by 2.8 dB from the band's last of 8 an octave (2740 Hz) and 2.1 dB
-  from the last of 24 (2799 Hz).
+- **What the equation's field through the crossovers does not mend.** Between its
+  samples (59 Hz apart in the 2 kHz band) the field is drawn linearly in the complex
+  pressure, within h^2 / 8 times the sum of |a_i| (2 pi dtau_i)^2 for arrivals a_i
+  dtau_i away from the field's own delay (`engine/fine.py`'s `interpolation_bound`
+  reads it from the samples); a field that turns by half a period or more from one
+  sample to the next is not resolved. 300 m downwind in `windy` the equation's dip to
+  -10.1 dB at 2225 Hz reads -9.9 dB; 1 km downwind the estimate is 0.3 to 0.55 of the
+  band's level in its bands from 500 Hz up, and the equation's dip to -27 dB at 2090 Hz
+  is drawn at -50 dB 10 Hz below it (a one-off check). In the weather presets the rays' band above the
+  top crossover (2.4 to 3.4 kHz) is 5 to 22 dB off the equation inside it, 100 and 300 m
+  downwind in `windy` and on the clear night, while the equation's bands follow it
+  within 0.9 dB. Against the bands' own samples, whose two errors there partly cancel,
+  the response in the crossover comes closer to the equation in `windy` (rms 7.2 to
+  3.3 dB 100 m away, 4.3 to 3.1 dB 300 m away, though 3.5 dB further at 3010 Hz) and
+  goes further from it on the clear night (rms 1.4 to 1.8 and 1.2 to 1.7 dB, up to
+  2.4 dB further at 3075 Hz 100 m away; a one-off check). So it does in case 2 with the
+  source 1.5 m and the listener 1 m up, 300 m away, where the rays' band is 2.8 dB low
+  at 3.45 kHz: up to 0.42 dB further from the program at 2.8 to 2.95 kHz, though closer
+  over 2 to 3.45 kHz (worst 4.0 to 3.0 dB, rms 1.8 to 1.6; a one-off check). In the shadow the bands keep
+  their own samples, since the bands above the equation, deepened from the octave
+  below, are not continuous with its field: 18 dB (upwind in `windy` 100 m away) to
+  36 dB (`sunny_day` 300 m away) louder than it at 3.4 kHz. In case 3, 300 m away,
+  where they are within 0.3 dB of the equation at 3.4 and 3.9 kHz, the response in the
+  crossover is 8.6 dB below the program at 2.95 kHz. The paths round a barrier's end
+  still take the weather's effect at the early paths' frequencies, held through the
+  crossover above the equation's top band, where it moves by 14 to 17 dB in case 2.
+- **The late part of a band read through its filter outdoors.** Between the
+  equation's samples h apart (11, 22 and 44 Hz in the 125, 250 and 500 Hz octave
+  bands) a band's spectrum is drawn linearly, which weighs the response about the
+  field's delay by sinc^2(t h) and repeats it faintly every 1/h: what comes 1/(2h)
+  later is 7.8 dB down, later still more, and images come in. Where C50 and C80 are 47
+  to 88 dB, the late part that far below the early sound, they so read up to 8.2 dB off
+  runs of the equation 27 and 81 times as dense, read the same way, 100 m downwind in
+  case 2 and 200 m downwind in `windy` (the bands' own samples up to 13.7 dB off);
+  closer than those in every case but C80 at 500 Hz, 6.5 to 7.4 and 2.3 to 4.8 dB off
+  against 4.6 to 5.6 and 0.4 to 2.2 dB, where the two dense runs differ by 0.9 and
+  2.6 dB. The dense run's own field, drawn on a 0.12 Hz grid and read through the same
+  octave filters outside the response's synthesis, gives its C50 and C80 at 250 and
+  500 Hz within 0.1 dB. What cuts the late part differs by the case: in case 2 mostly
+  the 500 Hz band's own samples (those alone at their own spacing move its C80 from
+  82.1 to 91.3 dB, the bands from 1 to 3.4 kHz alone to 83.9 dB), in `windy` the bands
+  from 1 to 3.4 kHz, which the 500 Hz filter reads through its skirts (alone they move
+  it from 73.1 to 84.6 dB). Denser samples close it only slowly: C80 at 500 Hz in
+  case 2 reads 88.4, 94.9, 87.0, 82.0 and 81.1 dB with 1, 3, 9, 27 and 81 times as
+  many from 63 Hz to 3.4 kHz (a one-off check).
 - **Coverage maps behind barriers** read the high bands higher than a listener at the
   same point: 130 m behind two barriers over grass by 0.6, 1.3, 3.8 and 13.5 dB at 1,
   2, 4 and 8 kHz, in still air as in 8 m/s of wind, where the weather's effect is the
@@ -4888,7 +4942,9 @@ an hour in the hall, a loudspeaker of the hall in parts about 10 minutes, the co
 rooms against theory under a second, and the rooms' own decay 5.8 minutes. Since then
 the open ground's parabolic equation in wind runs up to 2 kHz, which on one core makes
 the outdoor measurements take about 15 times as long (case 1), the long term about 5.4
-times and the benchmark about 1.6 times; the others listed here do not reach that part
+times and the benchmark about 1.6 times (measured before its bands carried its field
+through the crossovers, which takes the equation 11 to 79 % longer for a listener, so
+these runs now take longer still); the others listed here do not reach that part
 of the engine.
 The cross-check's numbers come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the

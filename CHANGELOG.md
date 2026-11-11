@@ -238,6 +238,15 @@
   [Known issues](docs/validation.md#known-issues); wind behind a building costs a run
   of the open ground's equation a way (a coverage map round one, 32 % more CPU).
 - Fixed: a leg along the ground, a rounding error above it, had no refraction shadow.
+- Fixed (results change): outdoors in wind and temperature gradients, out of the
+  shadow, the parabolic equation's bands carry its field at every frequency its runs
+  took, on through the crossover above the top one and down to an octave below the
+  lowest, so a ground dip at a join between bands is no longer missed (case 2 of the
+  1995 benchmark, worst from 2 to 3.45 kHz against the fast field program: 2.0 and
+  5.3 dB off 100 and 300 m downwind before, 0.19 and 0.45 dB now). The equation takes
+  11 to 79 % longer for a listener; C50 and C80 below 1 kHz move with it, C80 at
+  500 Hz away from a dense run of the equation, and the top crossover moves where the
+  rays' band beside it is off (see [Known issues](docs/validation.md#known-issues)).
 
 ## 4.2.1
 

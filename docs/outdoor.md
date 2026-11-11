@@ -310,7 +310,11 @@ and the yard has its own dip at 2 kHz.
 So that the dip shows in every band, outdoors the early paths add in pressure in every
 band by default (`simulation.early.coherent_max_band_hz: 8000`; a room takes 500 at
 most, see [Low frequencies: early reflections in pressure](simulation.md#low-frequencies-early-reflections-in-pressure)):
-outdoors the paths are few. Up to 500 Hz they go through the band filters as indoors;
+outdoors the paths are few. Up to 500 Hz they go through the band filters as indoors,
+and the time parameters there are read from them (in wind and temperature gradients,
+out of the shadow, the parabolic equation's path from its field at every frequency its
+runs took, which in the 63 Hz band goes on down to an octave below it; see
+[Validation](validation.md#outdoor-sound-in-wind-against-a-fast-field-program));
 higher up each pair of paths adds its cross term as far as the band leaves the two
 coherent, which it does less the more their delays differ. The points of a line or
 surface source still add in energy, as they are uncorrelated; the paths from each point
@@ -712,8 +716,9 @@ is an arc of a circle, so its travel time and its length are exact.
 - **The animation's particles** and **the drawn paths** (`view --paths`, the Blender
   export) curve as the sound does.
 
-Bending takes time: on one core the `open_air_stage` example takes about 13 times as
-long as in still air and its coverage map on a 10 m grid about 22 times, the parabolic
+Bending takes time: on one core the `open_air_stage` example's listeners, each simulated
+alone, take about 20 times as long as in still air and its coverage map on a 40 m grid
+about 38 times, the parabolic
 equation running up to 2 kHz for each point (less with `open_ground_frequencies`, see
 below), and its late rays take about four times as
 long; `simulation.performance.threads` shares the work out over the cores. Behind barriers and buildings the parabolic
@@ -739,15 +744,16 @@ the source 10 m up), at 290 points within 60 dB of free field in 18 cases
 10 m up over grass downwind and on the clear night, listeners 1.5 and 4 m up 50 m to
 1 km away, 500 m in the upward cases), the early sound at 1 and 2 kHz is off by, in dB
 (mean, nine in ten, largest), and a run takes on one core, against the rays, for the
-`open_air_stage` example's listeners, its coverage map on a 10 m grid,
-`helicopter_flyover` (the wide-angle equation from 150 m up; the example itself sets
-`rays`, which are within 0.11 dB of the default along its track) and one weather class of
-`validation/long_term.py`'s scene:
+`open_air_stage` example's four listeners each simulated alone, its coverage map on a
+40 m grid, `helicopter_flyover`'s listener under the track with the helicopter held
+300 m short of it (the wide-angle equation from 150 m up; the example itself sets
+`rays`, which are within 0.11 dB of the default along its track) and the listener
+200 m downwind in `validation/long_term.py`'s scene in its own weather:
 
 | `open_ground_frequencies` | 1 and 2 kHz | the stage | its map | the helicopter | a class |
 |---|---|---|---|---|---|
-| 24 (the default) | 0.07, 0.14, 0.75 | 2.3 times | 3.2 times | 30 times | 12 times |
-| 8 | 0.17, 0.35, 4.0 | 1.2 times | 1.4 times | 10 times | 4.5 times |
+| 24 (the default) | 0.07, 0.14, 0.75 | 2.0 times | 3.3 times | 24 times | 9.4 times |
+| 8 | 0.17, 0.35, 4.0 | 1.2 times | 1.4 times | 8.9 times | 3.4 times |
 | `rays` | 0.67, 1.8, 8.5 | 1 | 1 | 1 | 1 |
 
 With 24 the largest error is the parabolic equation's own, 43 dB deep in the shadow
@@ -757,6 +763,22 @@ night's inversion, and they step at a caustic by up to 14 dB a centimetre at 1 k
 shadow, where 4 and 8 kHz deepen from the 1 and 2 kHz levels: 8 and `rays` move them
 there by up to 0.33 dB within 60 dB of free field in these cases, and by up to 5.0 dB
 deeper (88 dB below it, 8 kHz upwind). Nothing changes in still air.
+
+Through the crossovers between the bands the equation's bands carry its field at every
+frequency the runs took, and one more run takes the top band on through the crossover
+above it at the same spacing, so a ground dip at a join is kept; the lowest band's run
+goes on down to an octave below it, which its band filter reads (out of the shadow: in
+it, where the bands above the equation deepen from the octave below, the bands keep
+their own samples)
+([Validation](validation.md#outdoor-sound-in-wind-against-a-fast-field-program)). On one
+core these take the equation from 0.75 to 1.27 s for a listener 100 m downwind in the
+benchmark's case 2, from 4.9 to 6.0 s 300 m away, and in `windy` from 2.0 to 2.9 s
+200 m downwind, 22 to 29 s 600 m and 38 to 66 s 1 km downwind (in third octaves from
+0.87 to 0.97, 4.0 to 4.6 and 1.6 to 1.9 s in the first three; with 8 an octave from
+0.29 to 0.52 s 100 m away in case 2 and from 12 to 21 s 1 km downwind). A coverage map, which
+reads the bands above 500 Hz from their energies, takes the run above the top band only
+with `rays`, where its 500 Hz band filter reads that crossover (8 of the 76 runs of the
+stage's map on a 40 m grid, 0.2 of its 8.6 s).
 
 Behind barriers and buildings the runs take 32 frequencies an octave at 8 kHz and 16
 at 4 kHz, where the ground's interference fringes are densest; below, 8, as the early
