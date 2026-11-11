@@ -568,10 +568,11 @@ simulation:
   the exact solution within 0.12 dB from 40 to 315 Hz. One run covers all the bands.
 - Closed rooms, open models and thin screens all work. Round an open model the grid
   grows by a perfectly matched layer of 8 cells, which takes in the sound leaving it:
-  what comes back is 67 to 74 dB down, against 7 to 14 dB from the grid's edge alone.
+  what comes back is 72 to 74 dB down, against 7 to 14 dB from the grid's edge alone.
   Sound that runs along the layer it sends back far more, so the grid reaches past the
-  source and the listeners, on each side, by 15 % of the farthest a listener lies from
-  the source along that side (none under an outdoor ground).
+  source and the listeners, on each side the model leaves open, by 15 % of the farthest
+  a listener lies from the source along that side (none under an outdoor ground, and
+  none on a side that the model's own surfaces close round them).
 - Outdoors in wind and temperature (an [atmosphere](outdoor.md#wind-and-temperature)
   in which sound bends), the speed of sound changes from cell to cell: the still air's
   at the cell's height, plus the wind's component along the horizontal from the source.
@@ -581,15 +582,21 @@ simulation:
   sound a building sends back towards the source goes against the wind; it costs three
   to four times as much and runs on the CPU.
 - The listener records the pressure and its gradient, so the low end keeps its direction
-  in Ambisonics, binaural and loudspeaker outputs (to first order). Near the source what
-  a listener records depends on where the source lies within its cell, as the source and
-  each point the listener samples spread over the eight cells round them, weighted
-  trilinearly (a cell is 0.2 m on the grid up to the 125 Hz band). Over 18 source
-  positions across a cell and the grid's 26 axis and diagonal directions, with either
-  stencil, in the 63 and 125 Hz bands (the direct sound's band energy over its first
-  50 ms), the pressure was up to 4.1, 1.8, 0.78 and 0.55 dB off a point source's from
-  one, two, three and four cells away on, and the gradient's ratio to it up to 8.3 (7.5
-  exactly one cell away), 7.0, 1.7 and 0.63 dB, and 0.18 dB from eight cells on.
+  in Ambisonics, binaural and loudspeaker outputs (to first order). The source and each
+  point a listener samples lie between the grid's cell centres (a cell is 0.2 m on the
+  grid up to the 125 Hz band) and take four cells a side, weighted as a cubic through
+  their centres. Next to a floor, a wall or flat ground along the grid they leave out
+  the cells behind it and read across it from the two cells round the point; next to a
+  surface at an angle to the grid, an edge or an opening, and for a listener's points
+  nearer the source than three cells, they take the eight cells round the point that
+  it sees, weighted trilinearly. From four cells from the source on, the level does
+  not depend on where the two lie within their cells (within 0.04 dB with the 19-point
+  stencil). Nearer the source its sound on the grid is not a point's: the pressure is
+  up to 2.9, 0.7 and 0.32 dB off a point source's one, two and three cells away, and
+  the gradient's ratio to it up to 7.3, 5.4, 1.7 and 0.43 dB off, its direction up to
+  15, 15, 8 and 3 degrees, one to four cells away (each stencil's figures, and the
+  7-point one's own gain along the grid's diagonals, under Free field in
+  [Validation](validation.md#wave-based-solver)).
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177
   Hz for 125), through the same crossovers the impulse response synthesis uses. The
   parameters of those bands come from it too.
@@ -618,7 +625,7 @@ long as the CPU solver in a whole run with an earlier version of the script (the
 
 In a 7 x 5 x 3 m box with 15 % absorption, the wave solver follows the sum of the box's
 modes from 22 Hz up; rays give the average level instead. In the 63 and 125 Hz bands,
-G is within 1 dB of the modes and T20 within 5 %; rays are up to 5.3 dB and 12 % off.
+G is within 1 dB of the modes and T20 within 5 %; rays are up to 5.2 dB and 13 % off.
 
 What it leaves out: surfaces react locally, so their absorption changes with the angle
 only as an impedance's does, and absorb at most 95 % at random incidence; next to a
@@ -883,9 +890,10 @@ is checked against the exact solutions for a half-plane and for wedges, against
 Maekawa's chart, and over two edges against the exact BTM solution. The
 wave solver matches the frequencies of a box's modes within 0.25 % and their decay rates
 within 2 % with walls whose admittance changes with frequency, the reflection and
-absorption of walls, and the free-field level within 0.35 dB (0.55 dB over the source's
-positions within a cell), and round an open model
-what comes back from the grid's edge is 67 dB down or more. Sound
+absorption of walls, and the free-field level within 0.04 dB from four cells from the
+source on (the 19-point stencil, wherever the source and the listener lie within their
+cells), and round an open model
+what comes back from the grid's edge is 72 dB down or more. Sound
 through a partition reaches the level behind it that diffuse-field theory gives within
 0.3 dB, and coupled rooms decay in the two slopes of the two-room model.
 The [validation report](validation.md)
