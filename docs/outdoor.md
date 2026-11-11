@@ -788,10 +788,10 @@ is an arc of a circle, so its travel time and its length are exact.
   export) curve as the sound does.
 
 Bending takes time: on one core the `open_air_stage` example's listeners, each simulated
-alone, take about 20 times as long as in still air and its coverage map on a 40 m grid
+alone, take about 26 times as long as in still air and its coverage map on a 40 m grid
 about 38 times, the parabolic
 equation running up to 2 kHz for each point (less with `open_ground_frequencies`, see
-below), and its late rays take about four times as
+below), and its late rays take about seven times as
 long; `simulation.performance.threads` shares the work out over the cores. Behind barriers and buildings the parabolic
 equation runs in every band, in the weather and in still air, for each degree of
 direction, the runs of a source that differ only past their first obstacle sharing the

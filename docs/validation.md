@@ -4791,9 +4791,9 @@ field and façade grids of moving air or on the ground reflection's wave check.
 **One run for all bands.** A 7 x 5 x 3 m box whose absorption differs in every band
 (0.10 to 0.25 from 63 to 500 Hz), the wave solver up to the 500 Hz band: one run of
 868,701 cells and 5,617 steps of the 19-point stencil (the 0.5 s response and 0.2 s past
-its end), 5.7 s on 4 cores with the fit and the grid's set-up, where 2.0.0 ran one per
-band. Timed on its own over as many steps, the same grid runs in 5.5 s with the walls'
-six branches and in 4.1 s with constant walls: the branches cost about a third more
+its end), 5.0 s on 4 cores with the fit and the grid's set-up, where 2.0.0 ran one per
+band. Timed on its own over as many steps, the same grid runs in 4.2 s with the walls'
+six branches and in 3.3 s with constant walls: the branches cost about a quarter more
 than a run with constant walls, and save three runs.
 
 **The end of a response.** The bands' filters spread each arrival both ways in time, so
@@ -5746,7 +5746,7 @@ python validation/bras_room_energy.py --results bras.json   # what scattering do
 
 On 4 cores of a cloud machine without a GPU, each run alone on the machine (30 and 31
 October 2026), the cross-check takes about 10 minutes, the convolver benchmark half a
-minute, the wave solver's checks 3.2 minutes (both stencils, 11 November), the edge
+minute, the wave solver's checks 3.0 minutes (both stencils, 11 November), the edge
 diffraction's 40 seconds, the fade at edges' 53 minutes, the walks' 14, the ground's 5.5 (51 s of them
 the wave solver's, 100 s the parabolic equation's), the outdoor measurements' 3.1 (3.0
 with turbulence, 20 seconds in still air), the turbulence's 3.9 (3.8 with `--profile`),
@@ -5766,7 +5766,9 @@ the outdoor measurements take about 15 times as long (case 1), the long term abo
 times and the benchmark about 1.6 times (measured before its bands carried its field
 through the crossovers, which takes the equation 11 to 79 % longer for a listener, so
 these runs now take longer still); the others listed here do not reach that part
-of the engine.
+of the engine. Since 11 November the ray tracer and the wave solver do less work on the
+CPU for the same results: the seminar room's BRAS run takes 10 to 12 % less, and of the
+others only the wave solver's checks were timed again.
 The cross-check's numbers come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the
 onset in every response).

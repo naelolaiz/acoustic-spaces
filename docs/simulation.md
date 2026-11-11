@@ -704,7 +704,7 @@ simulation:
   find the same surfaces at the same distances; where a ray meets two faces at exactly
   the same point (a shared edge) the other tree may take the other one. In BRAS's
   chamber music hall (2,309 triangles, five listeners) one band of 50,000 rays takes
-  5.7 s on four cores with `sah` and 17 s with `median`.
+  6.2 s on four cores with `sah` and 21 s with `median`.
 
 `simulate`, `map` and `calibrate` take `--threads N` and `--ray-tree sah|median` to
 override them, `view`, `export` and `walkthrough` `--threads`; the editor's Simulation
