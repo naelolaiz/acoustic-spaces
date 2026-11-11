@@ -86,8 +86,14 @@ def march(
     ``obstacles``, on ``threads`` threads, ``steps_per_wavelength`` height steps a
     wavelength at the highest frequency. The self-starter reaches the first step, or the
     nearest range or obstacle if that is nearer; ``independent`` starts each range
-    nearer than a step on its own. A building here is two thin screens at its roof's
-    height, its front face and its back face."""
+    nearer than a step on its own. A building's front face screens as a thin screen at
+    its roof's height; over the roof the field marches on the heights from the roof up,
+    over a rigid floor at the roof, and behind its back face the field below the roof
+    starts from nothing. A source over a roof starts there, its image in the roof the
+    operator's own. The roof under the source, else the first one on the way short of
+    the farthest point, stands on a height step exactly (the steps made finer, by one
+    step in that roof's height at most), the others on the step nearest them, at most
+    half a step off."""
     from acoustic_spaces import _native
     from acoustic_spaces.engine.parabolic import _obstacles, open_share
 
@@ -96,7 +102,12 @@ def march(
     heights = np.asarray(heights, dtype=float)
     c0 = float(np.asarray(speed(np.array([0.0])))[0])
     ka = 2.0 * math.pi * f / c0  # (F,)
-    n, dz, thickness = _grid(f, c0, top, steps_per_wavelength)
+    obstacles = _obstacles(obstacles)
+    # The roof the source stands over, else the first the march meets, falls on a height
+    # step: the steps a little finer where it needs.
+    reach = float(ranges.max()) if len(ranges) else 0.0
+    roofs = [top_at for near, far, top_at in obstacles if far > near and near < reach]
+    n, dz, thickness = _grid(f, c0, top, steps_per_wavelength, roofs[0] if roofs else None)
     z = np.arange(n) * dz
     absorbing = 1j * LAYER_STRENGTH * np.clip((z - top) / thickness, 0.0, 1.0) ** 2
     step = RANGE_STEP_WAVELENGTHS * c0 / f.max()
@@ -116,31 +127,69 @@ def march(
             a[row], b[row] = rational(ka[row] * scales, TERMS, alpha, nu)
         return _native.RationalSteps(weights, operator, a, b, threads)
 
+    # Where the march meets the obstacles, in order along the way: (range, what, height),
+    # a screen's top, or a building's roof at its front face ("roof") and its back face
+    # ("behind"). A roof stands on the height step nearest it, at most half a step off.
+    highest = (n - 3) * dz
+    events = []
+    for near, far, top_at in obstacles:
+        if far == near:
+            events.append((near, "screen", top_at))
+        else:
+            events.append((near, "roof", min(top_at, highest)))
+            events.append((far, "behind", min(top_at, highest)))
+    events.sort(key=lambda e: e[0])
+    # A source over a roof: the march starts from it. Screens at the source are none.
+    roofs_over = [value for at, what, value in events if at <= 1e-9 and what == "roof"]
+    events = [e for e in events if e[0] > 1e-9]
+
     current = speed
     key = impedances(0.0)
-    weights, operator = _operators(f, ka, current(z), absorbing, key, dz)
+
+    def build() -> None:
+        # The operators on the heights from the floor up: the ground's impedance at the
+        # ground, rigid on a roof.
+        nonlocal weights, operator
+        bottom = key if floor == 0 else np.full(len(f), np.inf, dtype=complex)
+        weights, operator = _operators(f, ka, current(z)[floor:], absorbing[floor:], bottom, dz)
+        made.clear()
+
+    made: dict[float, object] = {}
+    weights = operator = None
+    # The height step the field stands on: 0 the ground, else that of the roof it is
+    # over, the heights from it up marched over a rigid floor there and nothing below.
+    floor = int(round(max(roofs_over) / dz)) if roofs_over else 0
+    build()
     order = np.argsort(ranges, kind="stable")
     out = np.zeros((len(f), len(ranges)), dtype=complex)
 
+    def apply(rational_steps, psi: np.ndarray) -> None:
+        # The steps on the heights from the floor up, in place.
+        if floor == 0:
+            rational_steps.apply(psi, threads)
+            return
+        part = np.ascontiguousarray(psi[:, floor:])
+        rational_steps.apply(part, threads)
+        psi[:, floor:] = part
+
     def start(r: float) -> np.ndarray:
         # The self-starter: the delta at the source's height, smoothed by (1 - X)^-2,
-        # then the rest of the field at r as one rational function.
+        # then the rest of the field at r as one rational function, on the heights from
+        # the floor up (the source's image in a rigid roof under it is the operator's).
         psi = np.zeros((len(f), n), dtype=complex)
-        at = min(zs / dz, n - 2.0)
+        at = min(max(zs - z[floor], 0.0) / dz, n - floor - 2.0) + floor
         below = int(at)
         weight = np.sqrt(2.0 * math.pi / ka) * np.exp(0.25j * math.pi) / dz
         psi[:, below] = (1.0 - (at - below)) * weight
         psi[:, below + 1] = (at - below) * weight
         smooth = np.zeros((len(f), 2), dtype=complex)
-        _native.RationalSteps(weights, operator, smooth, smooth - 1.0, threads).apply(psi, threads)
-        steps(weights, operator, r, alpha=-0.25, nu=1).apply(psi, threads)
+        apply(_native.RationalSteps(weights, operator, smooth, smooth - 1.0, threads), psi)
+        apply(steps(weights, operator, r, alpha=-0.25, nu=1), psi)
         return psi
-
-    made: dict[float, object] = {}
 
     def advance(psi: np.ndarray, r: float, dr: float) -> None:
         # psi a step dr further on from r, in place.
-        nonlocal key, current, weights, operator
+        nonlocal key, current
         value = impedances(r + 0.5 * dr)
         changed = not np.array_equal(value, key)
         if speed_at is not None:
@@ -150,8 +199,7 @@ def march(
                 changed = True
         if changed:
             key = value
-            weights, operator = _operators(f, ka, current(z), absorbing, key, dz)
-            made.clear()
+            build()
         if dr not in made:
             if len(made) > 1:
                 # The full step stays compiled; a shorter one makes way for the next.
@@ -161,24 +209,36 @@ def march(
         if screen is not None:
             half = np.exp(0.5j * ka[:, None] * screen(r, dr, z)[None, :])
             psi *= half
-        made[dr].apply(psi, threads)
+        apply(made[dr], psi)
         if screen is not None:
             psi *= half
+
+    def meet(psi: np.ndarray, event) -> None:
+        # The field just past an obstacle, in place: above a screen's top or a front
+        # face's (each sample weighed by the share of its cell above it), over the
+        # highest roof the march is over, and behind a back face nothing below the roof
+        # it leaves to start with.
+        nonlocal floor
+        _, what, value = event
+        if what in ("screen", "roof"):
+            psi *= open_share(z, value)[None, :]
+        if what == "screen":
+            return
+        if what == "roof":
+            roofs_over.append(value)
+        else:
+            roofs_over.remove(value)
+        floor = int(round(max(roofs_over) / dz)) if roofs_over else 0
+        psi[:, :floor] = 0.0
+        build()
 
     def place(index: int, psi: np.ndarray, r: float) -> None:
         p = psi * (np.exp(1j * ka * r) / math.sqrt(r))[:, None]
         h = heights[index]
         out[:, index] = [np.interp(h, z, row.real) + 1j * np.interp(h, z, row.imag) for row in p]
 
-    # The thin screens in order along the way: a building's front and back faces.
-    cuts = sorted(
-        (at, top_at)
-        for near, far, top_at in _obstacles(obstacles)
-        for at in ((near,) if far == near else (near, far))
-        if at > 1e-9
-    )
-    # The self-starter reaches no further than the first screen.
-    first = cuts[0][0] if cuts else math.inf
+    # The self-starter reaches no further than the first obstacle.
+    first = events[0][0] if events else math.inf
     if independent:
         near = [index for index in order if ranges[index] < min(step, first)]
         for index in near:
@@ -192,16 +252,16 @@ def march(
     for index in order:
         goal = ranges[index]
         while True:
-            if cuts and cuts[0][0] <= r + 1e-9:
-                psi *= open_share(z, cuts.pop(0)[1])[None, :]
+            if events and events[0][0] <= r + 1e-9:
+                meet(psi, events.pop(0))
                 continue
             if goal - r <= 1e-9:
                 break
-            # The march stops at each screen on the way, one at the goal included, and at
-            # the goal.
-            screen_first = bool(cuts) and cuts[0][0] <= goal + 1e-9
-            dr = min(step, (cuts[0][0] if screen_first else goal) - r)
-            if independent and dr < step and not screen_first:
+            # The march stops at each obstacle on the way, one at the goal included, and
+            # at the goal.
+            obstacle_first = bool(events) and events[0][0] <= goal + 1e-9
+            dr = min(step, (events[0][0] if obstacle_first else goal) - r)
+            if independent and dr < step and not obstacle_first:
                 break
             advance(psi, r, dr)
             r += dr
@@ -304,11 +364,18 @@ def _operators(f, ka, speed, absorbing, zg, dz) -> tuple[np.ndarray, np.ndarray]
 
 
 def _grid(
-    f: np.ndarray, c0: float, top: float, steps_per_wavelength: float = STEPS_PER_WAVELENGTH
+    f: np.ndarray,
+    c0: float,
+    top: float,
+    steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
+    roof: float | None = None,
 ) -> tuple[int, float, float]:
     """The heights' count and spacing, and the absorbing layer's thickness, for the
-    frequencies ``f`` under an absorbing layer from ``top``."""
+    frequencies ``f`` under an absorbing layer from ``top``; with ``roof`` (m) a step
+    or more up, a spacing a little finer that puts a height step on it."""
     dz = c0 / f.max() / steps_per_wavelength
+    if roof is not None and roof >= dz:
+        dz = roof / math.ceil(roof / dz - 1e-9)
     thickness = max(LAYER_WAVELENGTHS * c0 / f.min(), LAYER_MIN_M)
     return int(math.ceil((top + thickness) / dz)) + 1, dz, thickness
 
@@ -317,7 +384,8 @@ def footprint(
     frequencies, c0: float, top: float, steps_per_wavelength: float = STEPS_PER_WAVELENGTH
 ) -> int:
     """About the memory (bytes) :func:`march` takes for ``frequencies`` under an
-    absorbing layer from ``top`` in air of speed ``c0`` on the ground."""
+    absorbing layer from ``top`` in air of speed ``c0`` on the ground (a roof that the
+    height steps are fitted to adds up to a step in its height more of them)."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     n = _grid(f, c0, top, steps_per_wavelength)[0]
     # Two steps' factors and diagonals, the operators and the field.

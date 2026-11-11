@@ -221,6 +221,14 @@
   2.3 to 30 times faster); in the shadow 4 and 8 kHz, which deepen from those bands,
   move with them (by up to 0.33 dB within 60 dB of free field). `helicopter_flyover`,
   whose sound comes down steeply, sets the rays, there within 0.11 dB of the default.
+- Fixed: in wind, a source or a listener on a building's roof left the building out of
+  the parabolic equation, so past the roof's edge the level stepped by up to 1.75 dB at
+  500 Hz in 10 cm and was up to 1.95 dB off a full-wave solution 200 m away. The
+  equation now holds the building, as behind barriers (and the paths off roofs take the
+  effect behind them, beside a building up to 3.7 dB off at 8 kHz before): within
+  0.12 dB of the full wave 27 to 43 m away, with a 0.12 dB step left where the equation
+  takes over (see [Known issues](docs/validation.md#known-issues)); such a listener
+  takes 4 to 180 times as long, a map 35 times.
 
 ## 4.2.1
 

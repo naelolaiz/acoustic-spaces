@@ -571,7 +571,7 @@ is an arc of a circle, so its travel time and its length are exact.
   falls as a creeping wave's does.
 - **Behind barriers and buildings**, where the listener's way seen from above crosses
   one, the paths in the vertical plane through the source and the listener (off the
-  ground, and over the tops across it) keep their levels in still air, and in every
+  ground and the roofs, and over the tops across it) keep their levels in still air, and in every
   band the weather changes them by its effect in a parabolic equation with the barriers
   and buildings on the way inside: the band energy marched through the weather over
   that marched through still air, both from the source along whole degrees of
@@ -586,10 +586,13 @@ is an arc of a circle, so its travel time and its length are exact.
   (up to 11 dB 3 to 10 m behind, steeply below the top), and a roof is a rigid floor
   at its own height, between the equation's heights, over which the field goes on; the
   ratio cancels most of that. Where the sound reaches a point more steeply than 15
-  degrees the wide-angle equation runs, in which a building is two thin screens at its
-  roof's height with no roof between them: behind a building in 10 m/s the effect steps
-  by 0.14 to 0.25 dB from 125 Hz to 1 kHz and 0.6 dB at 2 kHz where the points cross that
-  angle ([Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
+  degrees the wide-angle equation runs, in which a roof is a rigid floor on its height
+  steps: behind a building in 10 m/s the effect steps by 0.01 to 0.05 dB from 250 Hz to
+  1 kHz, 0.30 dB at 125 Hz and 0.35 dB at 2 kHz where the points cross that angle, the
+  narrow-angle equation's error below it
+  ([Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
+  A source or a listener on a building's roof takes the same runs, with the building
+  inside: they start from the roof, the source's image in it, or end over it.
   A listener on a barrier's line or a building's wall, seen
   from above, keeps the paths' straight legs: the equation would take it past them,
   where nothing gets through below the top. These paths arrive as
@@ -617,16 +620,14 @@ is an arc of a circle, so its travel time and its length are exact.
   within 0.5 dB (see
   [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   Nearer than 1.5 times the source's and the listener's heights added, where an object
-  of a model file stands in the way, where the source or the listener stands on a
-  building, or where no path lies in the plane, the paths go over the edges as above,
-  and the bent direct sound and its bent reflection off the ground are there where the
-  straight ones the edges' terms make up for are: walked across a roof edge's or a
-  model file's wall's shadow boundaries in 10 cm steps in the `windy` preset, the
-  weather's effect changes by at most 0.2 dB a step from 63 to 500 Hz in octave bands
-  across the direct sound's, and by 0.6 dB across the ground reflection's behind the
-  wall; past a roof's edge, where the reflection comes into view and the parabolic
-  equation takes over from the rays, and in third octaves, by more (see
-  [Known issues](validation.md#known-issues)).
+  of a model file stands in the way, or where no path lies in the plane, the paths go
+  over the edges as above, and the bent direct sound and its bent reflection off the
+  ground are there where the straight ones the edges' terms make up for are: walked
+  across a model file's wall's shadow boundaries in 10 cm steps in the `windy` preset,
+  the weather's effect changes by at most 0.2 dB a step from 63 to 500 Hz in octave
+  bands across the direct sound's, and by 0.6 dB across the ground reflection's behind
+  the wall; in third octaves by more. From a source on a roof the effect steps by
+  0.12 dB where the equation takes over (see [Known issues](validation.md#known-issues)).
 - **The direct sound's time** in the results is when the bent direct sound arrives:
   sooner downwind, later upwind (the time along the ground in the shadow); where
   nothing clears the way, the earliest path's where it comes sooner than the straight
@@ -757,7 +758,13 @@ in ten, largest), and a coverage map of 96 points over grass behind two barriers
 
 These come on top of the parabolic equation's own error (see
 [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)),
-and the bands below 4 kHz do not change. The places of a walking source share the parabolic
+and the bands below 4 kHz do not change. A source or a listener on a building's roof costs what a
+listener behind a building does: from a source 1 m over a roof 6 m high, upwind in the
+`windy` preset, one listener 43 m away takes 4.2 s on one core and one 200 m away
+15.7 s (1.0 and 2.8 s when the building was left out), but ones 20 and 25 m away, close
+behind the edge where the wide-angle equation runs, 18.7 and 25 s (0.1 and 0.2 s), 16 s
+of the first in its 8 kHz run; a map of 22 points round the building takes 159 s
+(4.6 s), 105 s with `barrier_frequencies: 16` and 54 s with 8. The places of a walking source share the parabolic
 equation's runs where they stand at one height over one ground and neither the weather
 nor the ground has zones: a run from one place serves the listeners of every other that
 the sound goes the same way to, each reached by a last step of its own, so that it gets

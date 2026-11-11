@@ -328,11 +328,8 @@ Outdoor acoustics, in steps:
   a barrier's top into its shadow; a blend of the barrier's and the
   open ground's effects across the line of a barrier's end below the line of sight, and
   the open ground's refraction for the paths round an end above its equation's bands,
-  where the level steps across the end by up to 19 dB; a blend of the rays and the open
-  ground's equation where a ground reflection comes into view past a roof's edge; the paths round ends checked
-  against a reference in three dimensions; a building's rigid roof in the
-  wide-angle equation (the effect steps by 0.6 dB at 2 kHz where the points cross the
-  steep angle behind one in 10 m/s); the wide-angle equation behind barriers upwind in strong wind, where the narrow-angle one comes out low; the sound
+  where the level steps across the end by up to 19 dB; the paths round ends checked
+  against a reference in three dimensions; the wide-angle equation behind barriers upwind in strong wind, where the narrow-angle one comes out low; the sound
   going back and forth between two barriers, which a one-way equation leaves out; and
   runs at 4 and 8 kHz, and at steep points, that cost less (see
   [Known issues](validation.md#known-issues)).

@@ -153,7 +153,7 @@ def test_who_asks_for_the_runs_behind_barriers(runs, asked, tmp_path) -> None:
         # takes part as the edge fades it out: asks, along the way just inside the end.
         (30.0, 60.0, 1.5),
         (16.0, 0.0, 12.0),  # nearer than 1.5 times the heights added: does not
-        (-30.0, 0.0, 7.0),  # on the shed's roof: does not
+        (-30.0, 0.0, 7.0),  # on the shed's roof: asks, the runs ending over it
         (-50.0, 0.0, 1.5),  # behind the shed (over its roof's two edges): asks
         (35.0, -10.0, 15.0),  # high over the barrier, which is below the line of sight: asks
     )
@@ -162,7 +162,7 @@ def test_who_asks_for_the_runs_behind_barriers(runs, asked, tmp_path) -> None:
             scene(listeners=listeners, buildings=[building], diffraction="second_order")
         )
     )
-    assert sorted(asked) == [0, 1, 4, 5]
+    assert sorted(asked) == [0, 1, 3, 4, 5]
     cuts = {run["obstacles"] for run in runs if "obstacles" in run and run["obstacles"]}
     assert {((15.0, 15.0, 4.0),), ((25.0, 35.0, 6.0),)} <= cuts
     # No paths over edges behind the barrier: none in the plane but where the barrier is
@@ -234,6 +234,27 @@ def test_the_paths_in_the_plane_take_the_weather_s_effect(runs) -> None:
     np.testing.assert_array_equal(windy.spectrum[again], still.spectrum[plane])
     shift = windy.delay_s[again] - still.delay_s[plane]
     assert np.ptp(shift) < 1e-12 and shift[0] < -1e-4  # downwind: sooner
+
+
+def test_the_reflection_off_a_roof_takes_the_weather_s_effect_behind_it(runs) -> None:
+    """A source and a listener 10 m up either side of a building 6 m high: the path off
+    its roof is in the plane, which the runs with the building inside hold, and takes
+    their effect (2 here) as the direct sound does. Against the full-wave solution 40
+    to 50 m away (``validation/barrier_wind.py``'s ``mast``) the weather's effect is
+    then within 0.03 dB from 63 to 500 Hz downwind, where with the path's own straight
+    legs it was 0.56 dB off, and 1.4 to 3.7 dB at 2 to 8 kHz 50 m away."""
+    ends = {"sources": ((0.0, 0.0, 10.0),), "listeners": ((50.0, 0.0, 10.0),)}
+    still = early_paths(scene(atmosphere=None, barriers=(), buildings=(ROOF,), **ends))
+    windy = early_paths(scene(barriers=(), buildings=(ROOF,), **ends))
+    off_roof = [
+        i
+        for i in range(len(still))
+        if still.edge[i] < 0 and still.order[i] == 1 and abs(still.points[i][1][2] - 6.0) < 1e-9
+    ]
+    assert len(off_roof) == 1
+    i = off_roof[0]
+    again = int(np.flatnonzero(windy.distance_m == still.distance_m[i])[0])
+    np.testing.assert_allclose(windy.energy[again], 2.0 * still.energy[i], rtol=1e-12)
 
 
 def test_the_paths_round_an_end_take_the_open_ground_s_effect_on_both_sides(runs) -> None:
@@ -546,59 +567,194 @@ def _steps(effect: np.ndarray) -> np.ndarray:
     return np.abs(np.diff(effect, axis=0)).max(axis=0)
 
 
-# Where the barrier's equation does not run (a source or a listener on a building, an
-# object of the model file), the direct ray and the one off the ground are there where
-# the straight paths the edges' terms make up for are. The same wall as a scene's
-# barrier, where the equation runs, changes the weather's effect by at most 0.1 dB in
-# 10 cm from 63 to 500 Hz across the direct sound's shadow boundary and 0.04 dB (-0.7
-# to 1.3 dB effect) across the ground reflection's, source 8 m up. Here the bent rays'
-# level and time, which the edges' terms do not follow, step by up to 0.2 dB across
-# the direct sound's boundary and 0.6 dB across the reflection's behind the wall:
-# bounds 0.3 and 0.7 dB. Past a roof's edge, where the reflection comes into view, the
-# open ground's parabolic equation takes over from the rays in those bands and the
-# effect steps by up to 1.75 dB at 500 Hz (0.6 dB with the rays on both sides): the
-# 2 dB bound there admits that known issue (docs/validation.md), it is no accuracy.
-# Unbent, the paths' sets disagreed between the straight and the bent boundary by 4 to
-# 10 dB.
+# Where the barrier's equation does not run (an object of the model file), the direct
+# ray and the one off the ground are there where the straight paths the edges' terms
+# make up for are. The same wall as a scene's barrier, where the equation runs, changes
+# the weather's effect by at most 0.1 dB in 10 cm from 63 to 500 Hz across the direct
+# sound's shadow boundary and 0.04 dB (-0.7 to 1.3 dB effect) across the ground
+# reflection's, source 8 m up. Here the bent rays' level and time, which the edges'
+# terms do not follow, step by up to 0.2 dB across the direct sound's boundary and
+# 0.6 dB across the reflection's behind the wall: bounds 0.3 and 0.7 dB. Unbent, the
+# paths' sets disagreed between the straight and the bent boundary by 4 to 10 dB.
 
 #: The largest steps (dB) a 10 cm walk across the boundaries may take, see above.
-DIRECT_STEP, REFLECTION_STEP, ROOF_SWITCH_STEP = 0.3, 0.7, 2.0
+DIRECT_STEP, REFLECTION_STEP = 0.3, 0.7
 
 
+@pytest.fixture
+def bent(monkeypatch):
+    """By source position, the band levels (dB) of the paths to each listener as the
+    weather bends them (:meth:`~acoustic_spaces.engine.refracted.Planned.finish`)."""
+    found = {}
+    finish = refracted.Planned.finish
+
+    def spy(self, pressures):
+        paths = finish(self, pressures)
+        found[tuple(self.refraction.source)] = [10.0 * np.log10(total_energy(p)) for p in paths]
+        return paths
+
+    monkeypatch.setattr(refracted.Planned, "finish", spy)
+    return found
+
+
+#: The roof walks' effects, by :func:`_roof_walk`'s arguments: the walk from the roof's
+#: source downwind in octave bands also serves the points close behind the edge.
+_ROOF_WALKS: dict[tuple, np.ndarray] = {}
+
+
+def _roof_walk(
+    bent, on_roof: str, towards: float, bands: str, xs, equation: str = "narrow_angle"
+) -> np.ndarray:
+    """(points, bands) the weather's effect (dB, the ``windy`` preset towards
+    ``towards`` degrees over still air) between the point over ``ROOF`` (``on_roof``:
+    the "source" or the "listener") and points 1.5 m up at ``xs`` on the x axis, with
+    ``simulation.early.parabolic_equation: equation``. The runs behind the building take
+    16 frequencies an octave at 8 kHz, half the default, for speed; from the source in
+    third octaves the default, as with 16 the 10 kHz band's fringes there curve by up to
+    0.09 dB over three 10 cm steps (0.03 dB with 32; to the listener 0.013 dB with 16)."""
+    key = (on_roof, towards, bands, tuple(xs), equation)
+    if key in _ROOF_WALKS:
+        return _ROOF_WALKS[key]
+    ground = [(x, 0.0, 1.5) for x in xs]
+    if on_roof == "source":
+        ends = {"sources": (ON_ROOF,), "listeners": ground}
+        pairs = [("s", f"l{k}") for k in range(len(xs))]
+    else:
+        ends = {"sources": ground, "listeners": (ON_ROOF,)}
+        pairs = [(f"s{k}", "l0") for k in range(len(xs))]
+    levels = []
+    for atmosphere in (None, {"preset": "windy", "wind": {"direction_deg": towards}}):
+        made = scene(
+            atmosphere=atmosphere,
+            barriers=(),
+            buildings=(ROOF,),
+            barrier_frequencies=16 if bands == "octave" or on_roof == "listener" else 32,
+            parabolic_equation=equation,
+            **ends,
+        )
+        made.simulation.bands = bands
+        made.simulation.late.rays = 20  # the early paths alone are looked at
+        room = Room.from_scene(made)
+        if atmosphere is None:
+            levels.append(
+                [10.0 * np.log10(total_energy(early_paths(room, s, r))) for s, r in pairs]
+            )
+            continue
+        bent.clear()
+        simulate(room)  # every listener of a source in one plan, as a map takes them
+        if on_roof == "source":
+            levels.append(bent[ON_ROOF])
+        else:
+            levels.append([bent[point][0] for point in ground])
+    _ROOF_WALKS[key] = np.subtract(levels[1], levels[0])
+    return _ROOF_WALKS[key]
+
+
+def _jump(effect: np.ndarray) -> np.ndarray:
+    """(bands,) how much the middle of three 10 cm steps of ``effect`` (4 points, bands)
+    differs from the mean of the steps either side of it: a gradient gives none."""
+    steps = np.diff(effect, axis=0)
+    return np.abs(steps[1] - 0.5 * (steps[0] + steps[2]))
+
+
+#: How much the weather's effect may jump (dB, in any band, octave or third octave) in
+#: a 10 cm step across a roof edge's straight shadow boundary, of the direct sound
+#: (x = 47.5 to 47.6) or of the ground reflection (62.5 to 62.6), from a point 1 m over
+#: the roof (20 m along the x axis), against the mean of the steps either side. With
+#: the building inside the parabolic equation there, whose effect scales the paths in
+#: the plane on both sides, it jumps by at most 0.04 dB (0.012 dB in octave bands);
+#: mixing bent rays with the
+#: straight paths over the edge, and the open ground's equation where the reflection
+#: came into view, it jumped by up to 1.71 dB at 500 Hz and 3.11 dB at 400 Hz in third
+#: octaves.
+ROOF_JUMP = 0.1
+
+
+#: The weather's effect (dB, 63 to 500 Hz) 27.5 and 42.5 m from a source 1 m over a
+#: roof 6 m up, 1.5 m up, downwind (0) and upwind (180) in the ``windy`` preset: the
+#: full-wave solution of ``validation/barrier_wind.py`` (``full_wave_levels``, a rigid
+#: ring block from the axis to 5 m, its roof on the solution's cells, rigid ground).
+ROOFTOP_FULL_WAVE = {
+    0.0: [[-0.011, -0.483, 1.079, -0.086], [0.092, -0.376, -2.089, 1.345]],
+    180.0: [[0.003, 0.46, -1.227, 0.151], [-0.127, 0.266, 2.36, -2.904]],
+}
+
+
+#: Points on the x axis, 1.5 m up: across the straight shadow boundary of the roof
+#: edge's direct sound and of its ground reflection, and close behind the edge in its
+#: shadow (12.8 and 16.3 m from the source over the roof).
+DIRECT_WALK = [47.4, 47.5, 47.6, 47.7]
+REFLECTION_WALK = [62.4, 62.5, 62.6, 62.7]
+NEAR_EDGE = [32.8, 36.3]
+
+
+@pytest.mark.parametrize("bands", ["octave", "third_octave"])
 @pytest.mark.parametrize("towards", [0.0, 180.0])
-def test_a_source_on_a_roof_in_wind_has_no_strips_at_the_edge_s_shadows(towards) -> None:
+def test_a_source_on_a_roof_in_wind_has_no_strips_at_the_edge_s_shadows(
+    bent, towards, bands
+) -> None:
     """Listeners 1.5 m up walked in 10 cm steps across the straight shadow boundaries
-    of the roof's edge, of the direct sound (x = 47.6) and of the ground reflection
-    (x = 62.6), from a source on the roof, down- and upwind."""
-    direct, reflection = np.arange(46.5, 48.05, 0.1), np.arange(59.5, 63.55, 0.1)
-    xs = np.round(np.concatenate([direct, reflection]), 2)
-    effect = _walked(
-        [("s", f"l{k}") for k in range(len(xs))],
-        towards,
-        sources=(ON_ROOF,),
-        listeners=[(x, 0.0, 1.5) for x in xs],
-        buildings=(ROOF,),
-    )
-    assert np.all(_steps(effect[: len(direct)]) < DIRECT_STEP)
-    assert np.all(_steps(effect[len(direct) :]) < ROOF_SWITCH_STEP)
+    of the roof's edge, from a source on the roof, down- and upwind; at the boundaries,
+    from 63 to 500 Hz, the weather's effect is within 0.3 dB of the full-wave solution's
+    (0.12 dB here; 0.91 dB off where the equation took no building). In third octaves
+    the ground reflection's boundary alone, where the open ground's equation took over
+    (3.11 dB); across the direct sound's they jump by 0.014 dB (a one-off check)."""
+    if bands == "octave":
+        near = NEAR_EDGE if towards == 0.0 else []  # for the test after this one
+        effect = _roof_walk(bent, "source", towards, bands, near + DIRECT_WALK + REFLECTION_WALK)
+        effect = effect[len(near) :]
+        assert np.all(_jump(effect[:4]) < ROOF_JUMP)
+        np.testing.assert_allclose(effect[[1, 5], :4], ROOFTOP_FULL_WAVE[towards], atol=0.3)
+        effect = effect[4:]
+    else:
+        effect = _roof_walk(bent, "source", towards, bands, REFLECTION_WALK)
+    assert np.all(_jump(effect) < ROOF_JUMP)
 
 
+@pytest.mark.parametrize("bands", ["octave", "third_octave"])
 @pytest.mark.parametrize("towards", [0.0, 180.0])
-def test_a_listener_on_a_roof_in_wind_has_no_strips_at_the_edge_s_shadows(towards) -> None:
-    """Sources 1.5 m up walked in 10 cm steps across the roof edge's straight shadow
-    boundaries, of the direct sound and of the ground reflection, from a listener on
-    the roof."""
-    direct, reflection = np.arange(47.1, 48.15, 0.1), np.arange(62.1, 63.15, 0.1)
-    xs = np.round(np.concatenate([direct, reflection]), 2)
-    effect = _walked(
-        [(f"s{k}", "l0") for k in range(len(xs))],
-        towards,
-        sources=[(x, 0.0, 1.5) for x in xs],
-        listeners=(ON_ROOF,),
-        buildings=(ROOF,),
-    )
-    assert np.all(_steps(effect[: len(direct)]) < DIRECT_STEP)
-    assert np.all(_steps(effect[len(direct) :]) < ROOF_SWITCH_STEP)
+def test_a_listener_on_a_roof_in_wind_has_no_strips_at_the_edge_s_shadows(
+    bent, towards, bands
+) -> None:
+    """Sources 1.5 m up walked in 10 cm steps across the straight shadow boundary of
+    the ground reflection off the roof's edge, to a listener on the roof (the direct
+    sound's boundary, 27 m away where the wide-angle equation runs for each source, is
+    the source's walk's)."""
+    effect = _roof_walk(bent, "listener", towards, bands, [62.4, 62.5, 62.6, 62.7])
+    assert np.all(_jump(effect) < ROOF_JUMP)
+
+
+#: The weather's effect (dB, 63 to 500 Hz) 12.8 and 16.3 m downwind of the source over
+#: the roof, 1.5 m up: the full-wave solution as for ``ROOFTOP_FULL_WAVE``.
+NEAR_EDGE_FULL_WAVE = [[0.022, 0.078, 0.067, 0.073], [-0.021, 0.200, 0.061, 0.192]]
+#: How much the weather may change the sound (dB) close behind the edge above 500 Hz:
+#: the effect of the travel times it changes, along the edge's straight leg to the
+#: listener and the one off the ground, at most 0.092 dB in any band 12.5 to 16.3 m
+#: away (by hand: each leg's travel time to first order in the profile, their band
+#: energy averaged over 4001 frequencies), and the rest the full-wave solution shows
+#: from 63 to 500 Hz beyond that, at most 0.112 dB (500 Hz, 16.3 m). At 4 kHz the runs'
+#: 16 frequencies take up to 0.21 dB more (``BARRIER_SAMPLES``); 8 kHz, sampled 16
+#: times here, is left out.
+NEAR_EDGE_BOUND = 0.092 + 0.112
+
+
+@pytest.mark.parametrize("equation", ["narrow_angle", "wide_angle"])
+def test_close_behind_a_roof_s_edge_the_weather_changes_little(bent, equation) -> None:
+    """Listeners 1.5 m up 12.8 and 16.3 m downwind of a source 1 m over the roof, in
+    its edge's shadow, where the sound goes down steeply behind the edge: the wide-angle
+    equation, with the roof inside, gives them in either setting. From 63 to 500 Hz the
+    weather's effect is within 0.05 dB of the full-wave solution's (0.032 dB here;
+    0.12 dB off, at 500 Hz 16.3 m away, with the open ground's rule there), and above it within
+    ``NEAR_EDGE_BOUND`` (0.13 dB at 1 kHz; 0.33 dB at 4 kHz 16.3 m away, 0.25 dB with 64
+    frequencies; the narrow-angle march there was 1.2 dB off at 2 kHz)."""
+    if equation == "narrow_angle":  # the default: the source's walk's runs
+        xs = NEAR_EDGE + DIRECT_WALK + REFLECTION_WALK
+    else:
+        xs = NEAR_EDGE
+    effect = _roof_walk(bent, "source", 0.0, "octave", xs, equation)[: len(NEAR_EDGE)]
+    np.testing.assert_allclose(effect[:, :4], NEAR_EDGE_FULL_WAVE, atol=0.05)
+    assert np.all(np.abs(effect[:, 4:6]) < NEAR_EDGE_BOUND)
+    assert np.all(np.abs(effect[:, 6]) < NEAR_EDGE_BOUND + 0.21)
 
 
 @pytest.mark.parametrize("towards", [0.0, 180.0])

@@ -367,6 +367,7 @@ class Refraction:
         self._objects: np.ndarray | None = None
         self._edges = edges
         self._laid: np.ndarray | None = None
+        self._roofs: np.ndarray | None = None
 
     # -- profiles ----------------------------------------------------------------------
 
@@ -505,7 +506,17 @@ class Refraction:
         # In line with an end or a corner, the way on the side the paths in still air
         # are on (:meth:`_edge_side`).
         way = self._edge_side(listener, towards, reach)
-        barrier = self._barrier(k, listener, way, reach, zr, paths, groups[()], bent, cutoff)
+        # The specular paths off roofs (and the ground) alone, which the runs with the
+        # buildings inside hold.
+        roof_rows = [
+            i
+            for planes, rows in groups.items()
+            if planes and all(self._roof_plane(p) for p in planes)
+            for i in rows
+        ]
+        barrier = self._barrier(
+            k, listener, way, reach, zr, paths, groups[()], bent, cutoff, roof_rows
+        )
         request = None
         for planes, rows in groups.items():
             vertical = all(abs(float(self.model.plane_normal[p][2])) <= _VERTICAL for p in planes)
@@ -932,18 +943,25 @@ class Refraction:
 
     # -- behind barriers and buildings ---------------------------------------------------
 
-    def _barrier(self, k, listener, towards, reach, zr, paths, open_rows, edge_rows, cutoff):
+    def _barrier(
+        self, k, listener, towards, reach, zr, paths, open_rows, edge_rows, cutoff, roof_rows=()
+    ):
         """Behind barriers and buildings in the weather: the paths in the vertical plane
         through the source and the listener (``open_rows``, those off the ground alone,
         and those of ``edge_rows`` over edges across the plane, see :meth:`_in_plane`)
         keep their level in still air, which the weather changes by the ratio of the
         parabolic equation's sound in it to that in still air, both with the barriers
         and buildings on the way inside (:meth:`_cuts_for`, :meth:`_place_barrier`).
+        The plane takes the specular paths off roofs and the ground alone
+        (``roof_rows``) too, and the paths over edges that reflect off roofs, which
+        the runs hold; where the source or the listener stands over a building's roof,
+        the runs start from the roof or end over it.
         Returns those paths (indices) and the request; None where the way ``reach``
         along ``towards`` from the source, seen from above (the listener's, or the way
         :meth:`_edge_side` gives in line with an end or a corner), crosses no barrier or
         building, an object of the model file stands in the listener's straight line,
-        the source or the listener stands on a building, the listener is nearer than
+        the source or the listener stands inside a building (over its footprint, not
+        above its roof), the listener is nearer than
         the open ground's parabolic equation goes (``WAVE_MIN_RANGE``), stands on a
         barrier's line or a building's wall seen from above (``ON_OBSTACLE_M``), the
         paths have no order, or none lies in the plane."""
@@ -952,15 +970,21 @@ class Refraction:
             return None
         if self.max_order < 1 or reach < WAVE_MIN_RANGE * (self.zs + zr):
             return None
-        own = self._above(layout.obstacles_along(self.source[:2], towards, reach))
+        # What stands on the way short of the listener, out past it to the ground's edge:
+        # the building a listener stands on keeps its far wall where it is.
+        x0, y0, x1, y1 = layout.extent
+        edge = max(reach, math.hypot(x1 - x0, y1 - y0))
+        own = self._above(layout.obstacles_along(self.source[:2], towards, edge))
+        own = tuple(o for o in own if o[0] < reach)
         if not own or _at(own, reach):
             return None
-        ends = np.array([self.source[:2], listener[:2]])
-        if any(in_polygon(ends, footprint).any() for _, footprint, _ in layout.buildings):
-            return None
+        ends = np.array([self.source, listener])
+        for _, footprint, roof in layout.buildings:
+            if np.any(in_polygon(ends[:, :2], footprint) & (ends[:, 2] <= roof + 1e-9)):
+                return None
         if self._blocked(listener):
             return None
-        plane = list(open_rows)
+        plane = list(open_rows) + list(roof_rows)
         plane += [i for i in edge_rows if self._in_plane(paths, i, towards, reach)]
         if not plane:
             return None
@@ -1059,6 +1083,9 @@ class Refraction:
             if len(short) != len(own) or _at(cut, reach):
                 continue
             fit = (reach - max(far for _, far, _ in short)) / (BARRIER_CLOSE * behind)
+            if max(far for _, far, _ in own) > reach:
+                # A listener over a roof: over it along this way too, or not at all.
+                fit = 1.0 if max(far for _, far, _ in short) > reach else 0.0
             weight *= min(max(fit, 0.0), 1.0)
             if weight > 1e-9:
                 picked.append((azimuth, cut, weight))
@@ -1271,11 +1298,11 @@ class Refraction:
     def _in_plane(self, paths: EarlyReflections, i: int, towards, reach: float) -> bool:
         """Whether the path ``i`` of ``paths`` goes over edges that all cross the vertical
         plane through the source and the listener between them, none vertical, and
-        reflects off nothing but the ground."""
+        reflects off nothing but the ground and the buildings' roofs."""
         if paths.edge[i] < 0:
             return False
         faces = paths.faces[i] if paths.faces else np.zeros(0, dtype=np.int64)
-        if len(faces) and not np.all(self.flat[faces]):
+        if len(faces) and not np.all((self.flat | self._roof_faces())[faces]):
             return False
         edges = self._edge_set()
         # Only the barriers' and buildings' edges: the parabolic equation's runs leave the
@@ -1296,6 +1323,21 @@ class Refraction:
             ):
                 return False
         return True
+
+    def _roof_faces(self) -> np.ndarray:
+        """(faces,) bool: the buildings' roofs, their faces facing straight up, which the
+        parabolic equation's runs hold as rigid floors."""
+        if self._roofs is None:
+            mesh = self.model.room.mesh
+            kinds = np.array([_kind(label) == "buildings" for label in mesh.labels] or [False])
+            normal = self.model.plane_normal[self.model.face_plane]
+            self._roofs = kinds[mesh.face_labels] & (normal[:, 2] >= 1.0 - 1e-9)
+        return self._roofs
+
+    def _roof_plane(self, plane: int) -> bool:
+        """Whether the plane ``plane`` holds a building's roof."""
+        faces = self.model.face_plane == plane
+        return bool(np.any(self._roof_faces() & faces))
 
     def _across(self, edges, index: np.ndarray, towards, reach: float) -> np.ndarray:
         """Whether each of the edges ``index`` is not vertical and crosses the way from
