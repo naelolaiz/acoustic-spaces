@@ -794,12 +794,15 @@ def test_the_19_point_grids_source_undoes_the_grids_own_gain() -> None:
     slow, _ = source_signal(rate, cell, ISOTROPIC_COURANT, 0.9)
     side = 2 / (9 * 0.9**2)
     assert slow == pytest.approx(np.convolve(plain, [side, 1 - 2 * side, side]), abs=1e-12)
-    np.testing.assert_array_equal(
-        source_signal(rate, cell, COURANT, 0.9)[0], source_signal(rate, cell)[0]
-    )
-    np.testing.assert_array_equal(
-        source_signal(rate, cell, level=False)[0], source_signal(rate, cell)[0]
-    )
+    # (Two calls, so within 1e-12 and not to the bit: np.convolve's sums are BLAS dot
+    # products, which Accelerate on an Intel Mac rounds by where their vectors lie in
+    # memory. Taps here would show as two samples more, or as 0.2 in the samples.)
+    seven, start = source_signal(rate, cell)
+    for other, at in (
+        source_signal(rate, cell, COURANT, 0.9),
+        source_signal(rate, cell, level=False),
+    ):
+        assert at == start and other == pytest.approx(seven, abs=1e-12)
 
 
 @pytest.mark.parametrize("ratio", [1.0, 0.8])
