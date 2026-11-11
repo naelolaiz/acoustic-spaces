@@ -551,9 +551,11 @@ def _readings(solver, cell: float) -> list[tuple[np.ndarray, np.ndarray]]:
     return [*out, (centres(np.asarray(layout["special"])[fed]), source)]
 
 
-def _polynomial(degree: int, seed: int = 3):
-    """A polynomial of ``degree`` along each of x, y and z, of points (n, 3)."""
-    c = np.random.default_rng(seed).normal(size=(degree + 1,) * 3)
+def _polynomial(degree: int | tuple[int, int, int], seed: int = 3):
+    """A polynomial of ``degree`` along each of x, y and z (or of one degree for each),
+    of points (n, 3)."""
+    degrees = (degree,) * 3 if isinstance(degree, int) else degree
+    c = np.random.default_rng(seed).normal(size=tuple(d + 1 for d in degrees))
     return lambda p: np.polynomial.polynomial.polyval3d(p[..., 0], p[..., 1], p[..., 2], c)
 
 
@@ -580,12 +582,14 @@ def test_a_point_between_cells_takes_a_cubic_through_four_cells_a_side(stencil: 
 
 def test_a_reading_keeps_to_its_side_of_a_surface() -> None:
     # A screen across the box at x = 2 m (y 0.5 to 2.5, floor to 2 m) and another 0.25 m
-    # behind it. A probe 0.12 m from the box's wall: four cells a side still, all inside
-    # the box, the row along x starting at the wall. A probe 7 cm in front of the first
-    # screen, with a cell's centre between it and the screen: four cells a side, none
-    # across the screen. One 4 cm in front of it, the next centre across it: the one
-    # layer of cells on its side (four by four). One in the slot between the screens,
-    # 2.5 cells wide: the two cells round it along x, four along y and z.
+    # behind it. The four cells a side round a probe 1.2 cells from the box's wall, or
+    # 0.7 cells in front of the first screen, hold a layer behind that surface: without
+    # it, the two cells round the probe along x, weighted linearly, and four by four
+    # along y and z, weighted by the cubic. A probe 0.4 cells in front of the screen,
+    # the next centre across it: the one layer on its side. One in the slot between the
+    # screens, 2.5 cells wide: the two cells round it. One by the screen's upper edge,
+    # which sees some of the cells across it: the cells round it that it sees, weighted
+    # trilinearly. No reading reaches past the two cells either side of its probe.
     box = box_mesh((4.0, 3.0, 3.0))
     screens = [[[x, 0.5, 0.0], [x, 2.5, 0.0], [x, 2.5, 2.0], [x, 0.5, 2.0]] for x in (2.0, 2.25)]
     n = len(box.vertices)
@@ -596,58 +600,117 @@ def test_a_reading_keeps_to_its_side_of_a_surface() -> None:
         faces=np.vstack([box.faces, plates]),
         face_labels=np.append(box.face_labels, [0, 0, 0, 0]),
     )
-    wall, front, close, slot = np.array(
-        [[0.12, 1.52, 1.47], [1.93, 1.38, 1.01], [1.96, 1.38, 1.01], [2.13, 1.55, 0.93]]
+    probes = np.array(
+        [
+            [0.12, 1.52, 1.47],
+            [1.93, 1.38, 1.01],
+            [1.96, 1.38, 1.01],
+            [2.13, 1.55, 0.93],
+            [1.96, 1.38, 1.97],
+        ]
     )
+    wall, front, close, slot, edge = probes
     solver, _ = _solver(
-        (4.0, 3.0, 3.0),
-        lambda mesh: [0.0] * len(mesh.faces),
-        (1.0, 1.5, 1.5),
-        [wall, front, close, slot],
-        mesh=mesh,
+        (4.0, 3.0, 3.0), lambda mesh: [0.0] * len(mesh.faces), (1.0, 1.5, 1.5), probes, mesh=mesh
     )
-    cubic = _polynomial(3)
-    (wall_at, wall_w), (front_at, front_w), (close_at, close_w), (slot_at, slot_w), _ = _readings(
-        solver, 0.1
-    )
-    assert len(wall_w) == 64 and wall_at[:, 0].min() > 0.0
-    assert wall_at[:, 0].max() == pytest.approx(wall_at[:, 0].min() + 0.3)
-    assert wall_w @ cubic(wall_at) == pytest.approx(cubic(wall), rel=1e-10)
-    assert len(front_w) == 64 and front_at[:, 0].max() < 2.0
-    assert front_w @ cubic(front_at) == pytest.approx(cubic(front), rel=1e-10)
-    assert len(close_w) == 16 and close_w.sum() == pytest.approx(1.0)
-    assert np.ptp(close_at[:, 0]) < 1e-9 and 1.9 < close_at[0, 0] < 2.0
-    assert len(slot_w) == 32 and slot_w.sum() == pytest.approx(1.0)
-    assert slot_at[:, 0].min() > 2.0 and slot_at[:, 0].max() < 2.25
-    assert len(np.unique(np.round(slot_at[:, 0], 6))) == 2
+    across, along = _polynomial((1, 3, 3)), _polynomial((0, 3, 3))
+    readings = _readings(solver, 0.1)[:-1]
+    for probe, (at, weights) in zip(probes, readings, strict=True):
+        assert weights.sum() == pytest.approx(1.0, abs=1e-12)
+        assert np.abs(at - probe).max() < 0.2 + 1e-9
+    (wall_at, wall_w), (front_at, front_w), (close_at, close_w), (slot_at, slot_w), _ = readings
+    for probe, at, weights, low, high in (
+        (wall, wall_at, wall_w, 0.0, 0.2),
+        (front, front_at, front_w, 1.8, 2.0),
+        (slot, slot_at, slot_w, 2.0, 2.2),
+    ):
+        assert len(weights) == 32 and len(np.unique(np.round(at[:, 0], 6))) == 2
+        assert low < at[:, 0].min() < probe[0] < at[:, 0].max() < high
+        assert weights @ across(at) == pytest.approx(across(probe), rel=1e-10)
+    assert len(close_w) == 16 and np.ptp(close_at[:, 0]) < 1e-9 and 1.9 < close_at[0, 0] < 2.0
+    assert close_w @ along(close_at) == pytest.approx(along(close), rel=1e-10)
+    edge_at, edge_w = readings[4]
+    assert 4 < len(edge_w) < 8 and edge_w.min() > 0.0
+    assert np.abs(edge_at - edge).max() < 0.1 and np.any(edge_at[:, 0] > 2.0)
 
 
 def test_the_source_next_to_a_wall_keeps_its_cells_in_the_room() -> None:
     # The source 0.3 cells from the wall x = 0, nearer it than the first centres of cells
     # in the room: that layer of cells alone along x, four by four along y and z, whose
     # weights give a cubic's value at the source's place in that layer (as a listener
-    # there takes them). 1.2 cells from the wall: four cells a side, from the wall on.
-    cubic = _polynomial(3)
-    for x, cells in ((0.03, 16), (0.12, 64)):
+    # there takes them). 1.2 cells from the wall: the first two layers, weighted linearly
+    # along x.
+    for x, cells, polynomial in (
+        (0.03, 16, _polynomial((0, 3, 3))),
+        (0.12, 32, _polynomial((1, 3, 3))),
+    ):
         source = np.array([x, 1.52, 1.47])
         solver, _ = _solver((4.0, 3.0, 3.0), lambda mesh: [0.0] * 12, source, [[2.0, 1.5, 1.5]])
         _, (at, weights) = _readings(solver, 0.1)
         assert len(weights) == cells and weights.sum() == pytest.approx(1.0, abs=1e-6)
         assert 0.0 < at[:, 0].min() < 0.1
-        assert at[:, 0].max() == pytest.approx(at[:, 0].min() + (0.0 if cells == 16 else 0.3))
-        stands_for = np.array([at[0, 0], 1.52, 1.47]) if cells == 16 else source
-        assert weights @ cubic(at) == pytest.approx(cubic(stands_for), rel=1e-5)  # float32
+        assert at[:, 0].max() == pytest.approx(at[:, 0].min() + (0.0 if cells == 16 else 0.1))
+        assert weights @ polynomial(at) == pytest.approx(polynomial(source), rel=1e-5)  # float32
+
+
+@STENCILS
+def test_a_wall_behind_a_listener_does_not_turn_its_reading_to_the_source(stencil: int) -> None:
+    # A listener 0.6 cells in front of a wall along the grid, and the source 2.99 and
+    # 3.01 cells from it, on the other side: from three cells on the listener takes the
+    # cubic along the wall and the two cells round it across the wall, none nearer the
+    # source than the cells round the listener. The direct sound and the wall's, in the
+    # octaves up to 8 and 16 cells per wavelength, change by under 0.2 dB between the two
+    # (0.09 to 0.11 dB; with four cells pushed to the listener's side of the wall, which
+    # reach to within a cell of the source, 0.24 and 0.36 dB in the lower octave).
+    cell, size = 0.1, (4.0, 4.0, 4.0)
+    origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+    listener = origin + (np.array([20.37, 20.16, 21.29]) + 0.5) * cell
+    wall_y = origin[1] + (20.16 - 0.61 + 0.5) * cell
+    box = box_mesh(size)
+    far = 10.0
+    wall = [[-far, wall_y, -far], [far, wall_y, -far], [far, wall_y, far], [-far, wall_y, far]]
+    n = len(box.vertices)
+    mesh = dataclasses.replace(
+        box,
+        vertices=np.vstack([box.vertices, wall]),
+        faces=np.vstack([box.faces, [[n, n + 1, n + 2], [n, n + 2, n + 3]]]),
+        face_labels=np.append(box.face_labels, [0, 0]),
+    )
+    levels = []
+    for away in (2.99, 3.01):
+        source = listener + cell * np.array([0.05, away, -0.04])
+        solver, rate = _solver(
+            size,
+            lambda mesh: [0.0] * len(mesh.faces),
+            source,
+            [listener],
+            mesh=mesh,
+            stencil=stencil,
+        )
+        (at, weights), _ = _readings(solver, cell)
+        assert np.abs(at - listener).max() < (1.0 if away < 3.0 else 2.0) * cell + 1e-9
+        assert np.all(at[:, 1] > wall_y) and len(weights) == (8 if away < 3.0 else 32)
+        signal, delay = source_signal(rate, cell, _courant(stencil))
+        steps = 2 * delay + round(0.006 * rate)  # before the box's walls' sound
+        heard = solver.run(_drive(rate, cell, steps, stencil))[0]
+        f = np.fft.rfftfreq(1 << 12, 1.0 / rate)
+        spectrum = np.abs(np.fft.rfft(heard, 1 << 12)) ** 2
+        levels.append(
+            [10 * np.log10(spectrum[(f >= low) & (f <= 2 * low)].sum()) for low in (215.0, 107.5)]
+        )
+    assert np.abs(np.diff(levels, axis=0)).max() < 0.2
 
 
 @STENCILS
 def test_a_reading_next_to_a_slanted_surface_does_not_jump_along_it(stencil: int) -> None:
     # A wall at 45 degrees to the grid across the box, and listeners along it 0.3 cells
-    # from it, 0.05 cells apart. Of the eight cells round each, those on its side are no
-    # box (three of their four columns, or one): each reads the cells round it that it
-    # sees, weighted trilinearly, or the one column, none across the wall. The direct
-    # sound's level in the octave up to 8 cells per wavelength changes by 0.26 dB at most
-    # from one listener to the next (1.3 dB with one cell's row along x or y wherever a
-    # layer of the eight lies across the wall; 0.24 dB read trilinearly everywhere).
+    # from it, 0.05 cells apart. Of the four cells a side round each, every layer across
+    # the wall holds cells on the listener's side too: each reads the cells round it that
+    # it sees, weighted trilinearly (three of their four columns, or one), none across
+    # the wall. The direct sound's level in the octave up to 8 cells per wavelength
+    # changes by 0.26 dB at most from one listener to the next (1.3 dB with one cell's
+    # row along x or y wherever a layer of the eight lies across the wall; 0.24 dB read
+    # trilinearly everywhere).
     cell, size = 0.1, (4.0, 4.0, 2.4)
     across, along = np.array([1.0, 1.0, 0.0]) / math.sqrt(2.0), np.array([-1.0, 1.0, 0.0])
     along /= math.sqrt(2.0)
@@ -1962,7 +2025,7 @@ def test_a_source_among_the_layers_cells_is_refused() -> None:
     # A grid of 36 cells a side with 8 of matched layer inside each edge, round a plate
     # far below. The source 9.25 cells from the grid's start along x: of the eight cells
     # round it, the four of the layer's last cells are the layer's. 9.75 cells from it:
-    # four cells a side, from the first cells past the layer on.
+    # the two cells round it along x, past the layer, and four a side along y and z.
     plate = np.array([[-50.0, -50, -5], [50, -50, -5], [50, 50, -5], [-50, 50, -5]])
     bvh = _native.Bvh(plate, np.array([[0, 1, 2], [0, 2, 3]], np.int64))
     cell, origin = 0.1, np.full(3, 0.0013)
@@ -1988,7 +2051,7 @@ def test_a_source_among_the_layers_cells_is_refused() -> None:
         solver(9.25)
     layout = solver(9.75).layout()
     fed = np.asarray(layout["special"])[np.flatnonzero(np.asarray(layout["source"]))]
-    assert len(fed) == 64 and (fed % 36).min() == 9
+    assert len(fed) == 32 and sorted(set(fed % 36)) == [9, 10]
 
 
 def test_matched_layer_stays_stable() -> None:
