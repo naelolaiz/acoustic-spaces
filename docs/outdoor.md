@@ -505,8 +505,8 @@ is an arc of a circle, so its travel time and its length are exact.
   by a quarter period (a factor j, time going as e^(jωt)); past the caustic the two paths that merged there are gone, with
   nothing in their place (no transition zone), so in the bands the rays give over the
   open ground (4 and 8 kHz, and short of half the way to the shadow 1 and 2 kHz with
-  `open_ground_frequencies: rays`) the level steps there by 10.5 to 12.9 dB within a
-  centimetre (7.2 to 14.0 dB at 1 and 2 kHz; see
+  `open_ground_frequencies: rays`) the level steps there by up to 15.5 dB within a
+  centimetre (up to 14.0 dB at 1 and 2 kHz; see
   [Validation](validation.md#known-issues)). Against an independent ray tracer on the
   smooth profile of the `windy` preset downwind, the levels of three such paths 100
   and 300 m away are within 0.05 dB (the tests allow 0.2 dB); no such check is made
@@ -572,7 +572,9 @@ is an arc of a circle, so its travel time and its length are exact.
   ten times.
 - **Off façades and barriers** the paths bend the same way, in the vertical plane the
   reflections fold them into, with the wind's mean component over their legs. A path
-  that would pass over the wall, or through something on the way, is left out.
+  that would pass over the wall, or through something on the way, is left out. These
+  paths (those over no edge) are eigenrays in every band, without the parabolic
+  equation (see [Known issues](validation.md#known-issues)).
 - **Over an edge** (a roof, the top of a barrier) each leg keeps its straight course and
   takes the travel time of its heights, and past the start of the shadow its level
   falls as a creeping wave's does.
