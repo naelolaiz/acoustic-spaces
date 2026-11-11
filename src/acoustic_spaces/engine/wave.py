@@ -114,7 +114,7 @@ WAVE_BANDS_HZ = OCTAVE_BANDS_HZ[:4]
 HIGH_PASS_S = 0.12
 #: Cells of the matched layer round an open model, and its damping at the grid's edge
 #: (the damping rate times half a time step). Sound leaving the model comes back from
-#: it 67 to 74 dB down; from the grid's edge alone, 7 to 14 dB down (docs/validation.md,
+#: it 72 to 74 dB down; from the grid's edge alone, 7 to 14 dB down (docs/validation.md,
 #: Open models).
 LAYER_CELLS = 8
 LAYER_DAMPING = 0.5
@@ -124,11 +124,11 @@ LAYER_DAMPING = 0.5
 #: outdoor ground, not at all. Sound that runs along the layer meets it near grazing,
 #: where the layer sends much of it back: in one-off checks over a rigid plate, the
 #: source and the listener 1.5 m above it and the layer a few cells above them (20 cm
-#: cells), the level read 0.64 dB below the exact one at 125 Hz 20 m away, and 1.7 and
-#: 2.1 dB below it at 63 and 125 Hz 40 m away, where far taller grids read 0.36, and
-#: 0.13 and 0.41 dB below it. With this room it is within 0.06 dB of the taller grids,
-#: 10 to 160 m away (docs/validation.md, Open models). A side that the model's own
-#: surfaces close off from the source and the listeners gets none (:func:`_open_sides`).
+#: cells), the level read 0.26 dB below the exact one at 125 Hz 20 m away, and 0.50 and
+#: 1.71 dB below it at 63 and 125 Hz 40 m away. With this room it is within 0.03 dB of
+#: the exact one, 20 to 160 m away (docs/validation.md, Open models). A side that the
+#: model's own surfaces close off from the source and the listeners gets none
+#: (:func:`_open_sides`).
 LAYER_ROOM = 0.15
 #: The wave solver's part of a response starts here (Hz), with the synthesis's
 #: crossover shape round it: an octave below the 63 Hz band's lower edge, so that band,
