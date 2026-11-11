@@ -24,7 +24,7 @@ import numpy as np
 
 from acoustic_spaces import synthesis
 from acoustic_spaces.engine import coherent
-from acoustic_spaces.engine.run_size import each_on_threads, worker_threads
+from acoustic_spaces.engine.run_size import each_on_threads, machine_memory, worker_threads
 from acoustic_spaces.spatial.directions import fibonacci_sphere, to_head
 from acoustic_spaces.spatial.hrtf import HRTF, spherical_head
 
@@ -39,6 +39,8 @@ _KERNEL_S = 0.3
 _CHUNK = 64
 #: Length of the windowed sinc for fractional delays, as in ``synthesis.place_impulses``.
 _SINC_TAPS = 32
+#: The share of the computer's memory that the channels in progress at once may hold.
+CHANNELS_MEMORY_SHARE = 0.25
 #: The late parts worked out within :func:`sharing_late_parts` in this thread, by
 #: (id of the response, samples, sample rate, seed), each with its response.
 _LATE_PARTS: ContextVar[dict | None] = ContextVar("late_parts", default=None)
@@ -179,6 +181,39 @@ def _worked_out_late_impulses(response: Response, n: int, sample_rate: float, se
     return signals, at, np.clip(chosen, 0, count - 1), directions
 
 
+def channel_bytes(bands: int, n: int, sample_rate: float) -> int:
+    """Bytes the arrays of a channel of ``n`` samples in ``bands`` bands take at most
+    while :func:`_render_gains` renders it: its band signals and those of the paths'
+    quarter turns (bands, n each) and, while they are combined
+    (:func:`~acoustic_spaces.synthesis.combine_bands`), three arrays of the size of
+    their spectra (two where NumPy works on a temporary array in place, and for an ear
+    of a binaural response, which has no quarter turns apart)."""
+    bins = synthesis.fft_size(n, sample_rate) // 2 + 1
+    return 16 * bands * (n + 3 * bins)
+
+
+def channel_threads(
+    response: Response, sample_rate: float, threads: int, responses: int = 1
+) -> int:
+    """The most of ``threads`` (one at least) that may each have a channel of
+    ``response`` in progress at ``sample_rate``, while ``responses`` such responses are
+    rendered side by side, for the channels in progress to hold (:func:`channel_bytes`)
+    at most ``CHANNELS_MEMORY_SHARE`` of the computer's memory
+    (:func:`~acoustic_spaces.engine.run_size.machine_memory`); ``threads`` where that
+    cannot be read."""
+    memory = machine_memory()
+    if memory is None:
+        return max(1, threads)
+    n = _samples(response, sample_rate)
+    room = CHANNELS_MEMORY_SHARE * memory / max(1, responses)
+    return max(1, min(threads, int(room // channel_bytes(response.bands, n, sample_rate))))
+
+
+def _samples(response: Response, sample_rate: float) -> int:
+    """The samples of ``response`` rendered at ``sample_rate``."""
+    return int(math.ceil(response.length_s * sample_rate))
+
+
 def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed, threads: int = 1):
     """``response`` in ``fmt`` (n, channels), and its early paths alone when the wave
     solver's bands are to take their place (else None).
@@ -186,12 +221,12 @@ def _render_gains(response: Response, fmt, n: int, sample_rate: float, seed, thr
     The channels are rendered on ``threads`` threads, each into its own column, which
     bounds the channels in progress at once to ``threads``. A channel in progress holds
     its band signals and their spectra (some 70 MB for 3.5 s at 48 kHz in 8 bands, with
-    the quarter turns of paths over edges, in proportion to the length), and the peak
-    memory grows by as much for each thread past the first. That is what a channel
-    takes in a response rendered on one thread, so ``write_results``, which gives the
-    responses its threads and each the threads they leave free, holds no more channels
-    at once than it holds when there are as many responses as threads, one on each.
-    One thread renders the channels one after another."""
+    the quarter turns of paths over edges, in proportion to the length and the bands:
+    :func:`channel_bytes`), and the peak memory grows by as much for each thread past
+    the first. So no more threads are used than the memory lets have a channel in
+    progress (:func:`channel_threads`). One thread renders the channels one after
+    another."""
+    threads = channel_threads(response, sample_rate, threads)
     early = coherent.with_own_phases(response.moment(seed), response.seed if seed is None else seed)
     early_gains = fmt.gains(to_head(early.direction, response.orientation))
     low = coherent.signal(early, n, sample_rate, early_gains)
@@ -219,7 +254,8 @@ def _render_binaural(
     response: Response, fmt: Binaural, n: int, sample_rate, seed, threads: int = 1
 ):
     """As :func:`_render_gains`, at the two ears: the late part's bands placed and the
-    two ears' bands combined on ``threads`` threads, each into its own row."""
+    two ears' bands combined on ``threads`` threads, each into its own row, the ears
+    side by side where the memory lets two be in progress (:func:`channel_threads`)."""
     hrtf = fmt.at(sample_rate)
     out = np.zeros((2, n + hrtf.taps))
 
@@ -267,8 +303,11 @@ def _render_binaural(
             )
 
         each_on_threads(place, range(signals.shape[0]), threads)
+        # An ear in progress holds its bands' spectra, as a channel does.
         heard = each_on_threads(
-            lambda ear: synthesis.combine_bands(ears[:, ear], sample_rate), range(2), threads
+            lambda ear: synthesis.combine_bands(ears[:, ear], sample_rate),
+            range(2),
+            channel_threads(response, sample_rate, threads),
         )
         for ear in range(2):
             out[ear] += heard[ear]
@@ -357,7 +396,9 @@ def spatial_impulse_response(
     by side, each as it is rendered alone, so the result is the same with any number.
     They are at most the computer's cores (all of them for 0 or fewer, as
     ``performance.threads``), and each past the first holds one channel's band signals
-    more (some 70 MB for 3.5 s at 48 kHz in 8 bands).
+    more (some 70 MB for 3.5 s at 48 kHz in 8 bands), so a format's channels take no
+    more of them than the computer's memory lets have a channel in progress
+    (:func:`channel_threads`).
     """
     from acoustic_spaces.spatial.microphone import Microphone
 
@@ -370,7 +411,7 @@ def spatial_impulse_response(
         out = spatial_impulse_response(response, steady, sample_rate, seed, threads=threads)
         rest = spatial_impulse_response(response, scaled, sample_rate, seed, threads=threads)
         return out + synthesis.equalized(rest, sample_rate, fmt.a_in(response.bands))
-    n = int(math.ceil(response.length_s * sample_rate))
+    n = _samples(response, sample_rate)
     if isinstance(fmt, Mono):
         return response.impulse_response(sample_rate, seed)[:, None]
     if isinstance(fmt, Binaural):
@@ -388,6 +429,8 @@ __all__ = [
     "Binaural",
     "Format",
     "Mono",
+    "channel_bytes",
+    "channel_threads",
     "from_output",
     "sharing_late_parts",
     "spatial_impulse_response",

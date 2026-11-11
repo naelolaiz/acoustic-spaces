@@ -110,7 +110,8 @@ def write_results(
     and written in turn (on the run's threads, one each), so memory holds a response's
     files at a time, not the whole run's, and its late part while its formats are
     rendered; threads the responses leave free render the channels of each side by
-    side, a channel's band signals in memory for each. With ``normalize`` the files are
+    side, a channel's band signals in memory for each, the channels in progress held
+    to a quarter of the computer's memory. With ``normalize`` the files are
     scaled once all are written, by one rounding to single precision more.
     """
     out = results_folder(out)
@@ -136,7 +137,7 @@ def write_results(
 def _write_results(result, out: Path, formats, sample_rate, normalize, plots, say) -> dict:
     """:func:`write_results`, its files written straight into ``out``."""
     from acoustic_spaces.spatial import Binaural, for_listener, from_output
-    from acoustic_spaces.spatial.render import sharing_late_parts
+    from acoustic_spaces.spatial.render import channel_threads, sharing_late_parts
 
     if formats is None:
         formats = [from_output(o) for o in result.room.scene.outputs]
@@ -148,7 +149,8 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
     # would be alone, so the files and the report are the same as one after another.
     threads = worker_threads(result.settings.performance.threads)
     workers = max(1, min(threads, len(result.responses)))
-    # The threads the responses leave free render each one's channels side by side.
+    # The threads the responses leave free render each one's channels side by side, as
+    # far as the memory lets that many channels be in progress at once.
     inner = max(1, threads // workers)
 
     # File names that no two responses or formats share, though their names may give
@@ -185,7 +187,11 @@ def _write_results(result, out: Path, formats, sample_rate, normalize, plots, sa
                 # The mono output through the listener's microphone, when it has a pattern.
                 heard = for_listener(fmt, listeners.get(listener))
                 say(f"{source} -> {listener}: rendering {heard.label}")
-                ir = response.spatial_impulse_response(heard, sample_rate, threads=inner)
+                ir = response.spatial_impulse_response(
+                    heard,
+                    sample_rate,
+                    threads=channel_threads(response, sample_rate, inner, workers),
+                )
                 peak = max(peak, float(abs(ir).max(initial=0.0)))
                 name = f"{stem}{part}.wav"
                 write_wav(out / name, ir, sample_rate, masks[k])

@@ -1011,3 +1011,74 @@ def test_render_threads_are_at_most_the_cores(response, monkeypatch) -> None:
         asked.clear()
         more = response.spatial_impulse_response(Ambisonics(1), FS, threads=threads)
         assert asked == [used] and np.array_equal(more, one)
+
+
+def test_the_channels_in_progress_are_held_to_the_memory(response, monkeypatch) -> None:
+    """No more threads render a format's channels than a quarter of the computer's
+    memory holds channels in progress, shared between the responses rendered side by
+    side; one at least, and all that are asked where the memory cannot be read. The
+    result is the same."""
+    from acoustic_spaces.spatial import render
+
+    each = render.channel_bytes(response.bands, render._samples(response, FS), FS)
+    asked: list[int] = []
+    run = render.each_on_threads
+
+    def counted(function, items, threads):
+        asked.append(threads)
+        return run(function, items, threads)
+
+    monkeypatch.setattr(render, "each_on_threads", counted)
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    one = response.spatial_impulse_response(Ambisonics(1), FS)
+    cases = (
+        (None, 8, 8),
+        (4 * 8 * each, 8, 4),
+        (4 * 3 * each + 1, 3, 1),
+        (4 * each - 1, 1, 1),
+        (1, 1, 1),
+    )
+    for memory, alone, of_two in cases:
+        monkeypatch.setattr(render, "machine_memory", lambda memory=memory: memory)
+        asked.clear()
+        more = response.spatial_impulse_response(Ambisonics(1), FS, threads=8)
+        assert asked == [alone] and np.array_equal(more, one)
+        assert render.channel_threads(response, FS, 8) == alone
+        assert render.channel_threads(response, FS, 8, responses=2) == of_two
+    # The two ears of a binaural response too; the late part's bands, which hold no
+    # spectra while they are placed, take the threads that are asked.
+    ears = response.spatial_impulse_response(Binaural(), FS)
+    for memory, together in ((4 * 2 * each, 2), (4 * 2 * each - 1, 1)):
+        monkeypatch.setattr(render, "machine_memory", lambda memory=memory: memory)
+        asked.clear()
+        more = response.spatial_impulse_response(Binaural(), FS, threads=8)
+        assert asked == [8, together] and np.array_equal(more, ears)
+
+
+def test_a_channel_in_progress_holds_what_its_estimate_says(response, monkeypatch) -> None:
+    """``channel_bytes`` is what the arrays of one channel take at most while it is
+    rendered: the traced peak of the channels of a format rendered one after another
+    is not above it, and not far below."""
+    import tracemalloc
+
+    from acoustic_spaces.spatial import render
+
+    held: list[int] = []
+    run = render.each_on_threads
+
+    def measured(function, items, threads):
+        tracemalloc.reset_peak()
+        before = tracemalloc.get_traced_memory()[0]
+        out = run(function, items, threads)
+        held.append(tracemalloc.get_traced_memory()[1] - before)
+        return out
+
+    response.spatial_impulse_response(Ambisonics(1), FS)  # the band filters' gains are kept
+    monkeypatch.setattr(render, "each_on_threads", measured)
+    tracemalloc.start()
+    try:
+        response.spatial_impulse_response(Ambisonics(1), FS)
+    finally:
+        tracemalloc.stop()
+    estimate = render.channel_bytes(response.bands, render._samples(response, FS), FS)
+    assert 0.5 * estimate <= held[0] <= estimate

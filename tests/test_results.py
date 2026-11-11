@@ -269,6 +269,41 @@ def test_threads_a_response_leaves_free_render_its_channels_to_the_same_bits(
         assert (tmp_path / "1" / name).read_bytes() == (tmp_path / "4" / name).read_bytes()
 
 
+def test_the_threads_for_the_channels_are_held_to_the_memory(
+    result, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Two responses on eight threads have four each for their channels; with memory for
+    # five channels in progress they share it, two each. The files are the same.
+    from acoustic_spaces.spatial import render
+
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    response = result["talker", "seat-a"]
+    each = render.channel_bytes(response.bands, render._samples(response, 48_000), 48_000)
+    given: list[int] = []
+    rendered = render.spatial_impulse_response
+
+    def counted(*args, threads=1):
+        given.append(threads)
+        return rendered(*args, threads=threads)
+
+    monkeypatch.setattr(render, "spatial_impulse_response", counted)
+    performance = result.settings.performance.model_copy(update={"threads": 8})
+    two = dataclasses.replace(
+        result,
+        responses={("talker", "a"): response, ("talker", "b"): response},
+        settings=result.settings.model_copy(update={"performance": performance}),
+    )
+    for memory, threads in ((None, 4), (4 * 5 * each, 2)):
+        monkeypatch.setattr(render, "machine_memory", lambda memory=memory: memory)
+        given.clear()
+        write_results(two, tmp_path / str(threads), [Ambisonics(1)], sample_rate=48_000)
+        assert given == [threads, threads]
+    names = sorted(path.name for path in (tmp_path / "4").iterdir() if path.suffix == ".wav")
+    assert len(names) == 2
+    for name in names:
+        assert (tmp_path / "4" / name).read_bytes() == (tmp_path / "2" / name).read_bytes()
+
+
 def test_the_results_folder_is_checked(result, tmp_path: Path) -> None:
     file = tmp_path / "file"
     file.write_text("x")
