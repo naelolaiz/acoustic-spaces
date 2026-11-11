@@ -157,8 +157,8 @@ given in third octaves where one of them reaches 1. Scene files of 4.2.1 load un
   with reflections up to the third order. It now has the paths and the level it has just
   beside the line in the shadow, in still air and in wind; a point on that wall itself
   keeps the level it had. With a second building's wall in the same plane, a listener on
-  that wall still reads 6.9 dB over the point 10 µm in front of it at 63 Hz (9.3 dB
-  before).
+  that wall reads 1.3 dB over the point 10 µm in front of it at 63 Hz with `first_order`
+  (9.3 dB before) and 2.5 dB under it with `second_order`.
 - Fixed: with `second_order` diffraction, sound that just clears two edges in a row (a
   source and a listener in sight of each other over a flat roof, a thick wall or two
   barriers, or along a wall in line with both) was far too low, 15 to 26 dB across the

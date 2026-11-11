@@ -1631,23 +1631,26 @@ turns to -1 at grazing incidence, so that the reflection cancels the incident so
 there. With a rigid wall the dip is gone. A face with an absorption coefficient does the
 same in the bands that add in pressure, which take only the phase of that factor: it is
 turned over while the incidence cosine is below the fitted admittance, so for a source
-(not a listener: the path is then not the same both ways round) that close to the
-face's plane. A source 0 to 1 cm above the plane of the top of the 1 m block of
+(not a listener: the path is then not the same both ways round) that close to the face's
+plane. A source 0 to 1 cm above the plane of the top of the 1 m block of
 `tests/test_diffraction.py` (absorbing 0.02, admittance 0.0026), 3 m in front of it,
 hears the far corner 14.9 to 18.7 dB below the reversed path, and the paths over both
-corners (`second_order`), which continue that path there, 2.9 to 6.1 dB below; from about
-1 cm up the two agree again. Each of these reflections turns over at its own cosine: the
-specular one off the top at its reflection point, those of the paths over each corner at
-the source's cosine to that corner. With the source and a listener rising together 3 m
-either side of that block, the level at 63 and 125 Hz is therefore above the rigid
-block's from the height where the near corner's turns to where the far corner's does: by
-up to 16 dB with only the top absorbing 0.2 (9.2 to 12.3 cm, the most at 10.8 cm) and
-9.6 dB at 0.5 (31.2 to 41.6 cm), with `second_order` (14.9 and 9.2 dB with
-`first_order`). The reflection off the ground takes the
-factor of a spherical wave instead (see
-[Ground reflection](#ground-reflection-against-the-exact-solution)), as does the wave
-along a face from one edge to the next on a path over both; whether that factor would
-also be the better one here is not checked.
+corners (`second_order`), which continue that path there, 2.9 to 6.1 dB below; from
+about 1 cm up the two agree again. Each of these reflections turns over at its own
+cosine: the specular one off the top at its reflection point, those of the paths over
+each corner at the source's cosine to that corner. With the source and a listener rising
+together 3 m either side of that block, the level at 63 and 125 Hz therefore leaves the
+rigid block's from the height where the near corner's turns to where the far corner's
+does: 9.2 to 12.3 cm with only the top absorbing 0.2 and 31.2 to 41.6 cm at 0.5, in two
+parts that meet where the specular one turns (10.8 and 36.5 cm). With `first_order` it
+is above the rigid block's over both parts, by up to 14.9 dB at 0.2 and 9.2 dB at 0.5.
+With `second_order`, which adds the path over both corners, it is 3.3 to 4.2 dB below
+the rigid block's over the first part and 8.0 to 8.3 dB above it over the second at 0.2,
+and 13.5 to 14.4 dB below and 5.1 to 6.0 dB above at 0.5. The reflection off the ground
+takes the factor of a spherical wave instead (see [Ground
+reflection](#ground-reflection-against-the-exact-solution)), as does the wave along a
+face from one edge to the next on a path over both; whether that factor would also be
+the better one here is not checked.
 
 Where the source or the listener rises through the plane of an absorbing top, the level
 steps. Below the plane only the paths over both corners reach, and they take the ground
@@ -5077,17 +5080,19 @@ Results:
   over that material gives +3.3 and +2.2 dB, and it steps by 16.7 dB where the
   reflection point leaves a 1 m square. Over an edge each reflection turns over at its
   own cosine, so the path is not the same both ways round: just above a 1 m block whose
-  top alone absorbs, the level at 63 and 125 Hz is up to 16 dB above the rigid block's
-  (absorption 0.2) and 9.6 dB (0.5), with `second_order`; where a source or a listener
-  crosses the plane of an absorbing top the level steps by up to 12.9 dB at 8 kHz
-  (absorption 0.5; 28.7 dB over a top 10 m wide); and where the street's car crosses the
-  plane of the houses' end wall the sound over their corner dips by up to 10 dB at 63 Hz
-  within 2 cm (see [Edge diffraction](#edge-diffraction-against-the-exact-solution)).
+  top alone absorbs, the level at 63 and 125 Hz is up to 4.2 dB below the rigid block's
+  and then up to 8.3 dB above it (absorption 0.2), and 14.4 dB below and 6.0 dB above
+  (0.5), with `second_order`; where a source or a listener crosses the plane of an
+  absorbing top the level steps by up to 12.9 dB at 8 kHz (absorption 0.5; 28.7 dB over
+  a top 10 m wide); and where the street's car crosses the plane of the houses' end wall
+  the sound over their corner dips by up to 10 dB at 63 Hz within 2 cm (see [Edge
+  diffraction](#edge-diffraction-against-the-exact-solution)).
 - **Two walls in one plane.** A listener on a building's wall that lies in the plane of
-  another building's wall reads 6.9 dB over the point 10 µm in front of it at 63 Hz (a
-  one-off check): the paths over the first building's far corner and the second's near
-  corner are one ray, as a leg that runs in a solid face's plane past the face counts as
-  clear.
+  another building's wall reads 1.3 dB over the point 10 µm in front of it at 63 Hz with
+  `first_order` (-0.4 to +2.5 dB across the bands) and 2.5 dB under it with
+  `second_order` (3.9 dB under at 250 Hz, 3.3 dB over at 2 kHz; a one-off check): on the
+  line one corner's path carries the direct sound and the other takes its term off it,
+  and those terms differ from the ones just beside the line.
 - **A barrier's end in wind.** Behind a barrier the paths in the plane take the
   barrier's effect, and the paths over the top past its end, as they fade out there,
   take it too; the paths round the end change as the open ground's field along their
