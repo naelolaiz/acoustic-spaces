@@ -260,6 +260,10 @@
   to 0.29 dB lower at 200 m in every weather, and the 125 Hz band between 0.17 dB lower
   and 0.11 dB higher at 100 m (see
   [Validation](docs/validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
+- Docs: the distances at which the wave solver's gradient (X, Y, Z) near its source is
+  further off a point source's than read from eight cells, from a finer scan, and why:
+  the source's spread over four cells a side from 2 to 3.4 cells away, the listener's
+  reading beyond (Free field under [Validation](docs/validation.md#wave-based-solver)).
 - Changed: CI runs again by itself, up to twice, the jobs of a run that failed only
   because GitHub lost their runner or a step that fetches system packages failed
   (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`). A pull request runs one job on
