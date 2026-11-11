@@ -282,6 +282,84 @@ def test_each_band_keeps_its_own_shape_into_the_crossovers() -> None:
     np.testing.assert_allclose(np.angle(out[inside]), phase, atol=1e-12)
 
 
+def _shaped_bin_by_bin(spectrum, bands, f, amplitude, gains) -> np.ndarray:
+    """:func:`~acoustic_spaces.engine.coherent.shaped` with the shape worked out in each
+    bin, those beyond the band's samples too."""
+    n, count, per_band = spectrum.shape
+    samples = np.log2(sample_frequencies(bands, count))
+    x = np.log2(np.maximum(np.asarray(f, dtype=float), 1e-6))
+    out = np.zeros((n, len(f)), dtype=complex)
+    for b in range(count):
+        support = np.flatnonzero(gains[b] > 0.0)
+        lo, hi = int(support[0]), int(support[-1]) + 1
+        own = spectrum[:, b]
+        xs = np.clip(x[lo:hi], samples[b, 0], samples[b, -1])
+        j = np.clip(np.searchsorted(samples[b], xs, side="right") - 1, 0, per_band - 2)
+        w = (xs - samples[b, j]) / (samples[b, j + 1] - samples[b, j])
+        magnitude = np.abs(own)
+        phase = np.unwrap(np.angle(own), axis=1)
+        level = magnitude[:, j] * (1.0 - w) + magnitude[:, j + 1] * w
+        angle = phase[:, j] * (1.0 - w) + phase[:, j + 1] * w
+        out[:, lo:hi] += (amplitude[:, b, None] * gains[b, lo:hi]) * (level * np.exp(1j * angle))
+    return out
+
+
+def test_the_shape_beyond_a_band_s_samples_is_held_bit_for_bit() -> None:
+    """Below a band's first sample and above its last its shape is held, worked out
+    once for those bins: the same to the last bit as bin by bin, at the echogram's
+    rates and a rendered response's, for two coherent bands and for all eight."""
+    from acoustic_spaces import synthesis
+    from acoustic_spaces.engine.coherent import shaped
+
+    rng = np.random.default_rng(4)
+    for count, n_fft, rate in ((2, 1 << 12, 4000.0), (8, 1 << 14, 16000.0), (2, 1 << 15, 48000.0)):
+        f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+        gains = synthesis.band_gains(n_fft, rate, 8)[:count]
+        size = (30, count, 8)
+        spectrum = rng.uniform(0.2, 1.5, size) * np.exp(1j * rng.uniform(-np.pi, np.pi, size))
+        amplitude = rng.uniform(0.0, 2.0, (30, count))
+        np.testing.assert_array_equal(
+            shaped(spectrum, 8, f, amplitude, gains),
+            _shaped_bin_by_bin(spectrum, 8, f, amplitude, gains),
+        )
+
+
+def test_the_echograms_of_draws_read_what_they_share_as_their_own() -> None:
+    """Paths that differ in their energies and phases only (draws of the absorption)
+    share their delay phases and band grids (:class:`SameDelays`), and a draw's
+    echograms each band's filtered pressure: the echograms are bit for bit those read
+    without, and so when nothing may be kept."""
+    from acoustic_spaces.engine.coherent import EarlyPressure, SameDelays, with_mean_phases
+
+    delay = np.concatenate([0.01 + np.linspace(0.0, 0.002, 6), [0.03, 0.0301, 0.05]])
+    paths = _arriving(delay, 1e-3, edge=True, together=3)
+    paths.edge[[6, 7]] = -1  # two reflections among the paths over edges
+    rng = np.random.default_rng(2)
+    kept, none = SameDelays(), SameDelays(limit=0)
+    for _ in range(3):
+        drawn = dataclasses.replace(
+            paths,
+            energy=paths.energy * rng.uniform(0.5, 1.5, paths.energy.shape),
+            spectrum=np.exp(1j * rng.uniform(-1.0, 1.0, paths.spectrum.shape)),
+        )
+        plain = EarlyPressure(with_mean_phases(drawn))
+        for store in (kept, none):
+            shared = EarlyPressure(with_mean_phases(drawn, store), kept=store)
+            for axis, exponent in ((None, 2), ([0.6, 0.8, 0.0], 2), ([0.0, 1.0, 0.0], 1)):
+                for _again in range(2):
+                    np.testing.assert_array_equal(
+                        shared.energy(1e-3, 120, axis, exponent, 0.0, 0.01),
+                        plain.energy(1e-3, 120, axis, exponent, 0.0, 0.01),
+                    )
+    assert kept._phases and kept._grids and 0 < kept.size <= kept.limit
+    assert not any(a.flags.writeable for a in kept._phases.values())
+    assert none.size == 0 and not none._phases and not none._grids
+    # A band's filtered pressure is read once per draw, and is read-only.
+    first = shared.band(0, 1e-3, 120, 0.0, 0.01)
+    assert shared.band(0, 1e-3, 120, 0.0, 0.01) is first and not first[0].flags.writeable
+    assert plain.band(0, 1e-3, 120, 0.0, 0.01)[0] is not plain.band(0, 1e-3, 120, 0.0, 0.01)[0]
+
+
 def _arriving(delay, energy: float, edge: bool, together: int = 1) -> early_stage.EarlyReflections:
     """Paths straight ahead at ``delay`` (s), over edges of their own or reflections, with
     ``energy`` in all in each band. In the two coherent bands they are in phase, each

@@ -650,7 +650,7 @@ is an arc of a circle, so its travel time and its length are exact.
   the rays, the parabolic equation and the wave solver bend sound alike. Its grid is
   fine enough for the slowest sound and steps in time for the fastest, a few percent
   more cells and steps than in still air in the `windy` preset. Over grass, 50 to 200
-  m from the source, in the 63 and 125 Hz bands, it is within 0.7 dB of the parabolic
+  m from the source, in the 63 and 125 Hz bands, it is within 0.55 dB of the parabolic
   equation, 0.2 dB on average (see [Validation](validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
   It runs on the CPU or on the GPU alike (`simulation.wave.device`), the two agreeing
   to rounding. The run's details give the slowest and the fastest speed of sound on the
@@ -662,11 +662,11 @@ is an arc of a circle, so its travel time and its length are exact.
   editor's Simulation page) the air moves instead: each cell keeps the still air's
   speed of sound, and the wind carries the sound along with it, so that sound goes at
   c + v downwind and c − v upwind, whichever way it turned. In a uniform wind of 15
-  m/s it is within 0.05 dB and 0.1 ms of the exact solution in every direction, where
-  the effective speed of sound is up to 0.9 dB off; the echo of a façade 40 m
+  m/s it is within 0.02 dB and 0.1 ms of the exact solution in every direction, where
+  the effective speed of sound is up to 0.84 dB off; the echo of a façade 40 m
   downwind comes within 0.02 ms of ray theory's, where the effective speed of sound
-  brings it 10.6 ms early; in the `windy` preset over grass it is within 0.31 dB of the
-  parabolic equation, where the effective speed of sound is within 0.70 dB (see
+  brings it 10.6 ms early; in the `windy` preset over grass both are within 0.55 dB of
+  the parabolic equation, 0.2 dB on average (see
   [Validation](validation.md#moving-air-in-the-wave-solver)).
   It costs three to four times as much as the effective speed of sound, on the CPU only
   (asked for the GPU, it says so and stays on the CPU), and the run's details say

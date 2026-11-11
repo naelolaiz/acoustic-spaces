@@ -2,7 +2,7 @@
 
     python validation/wave_solver.py [--json results.json] [--plot wave.png]
 
-Nine checks, printed as Markdown tables, each with both of the solver's stencils (the
+Ten checks, printed as Markdown tables, each with both of the solver's stencils (the
 7-point one and the 19-point one) where both apply:
 
 - the speed of sound along an axis and along a diagonal at about 8 cells per
@@ -25,6 +25,10 @@ Nine checks, printed as Markdown tables, each with both of the solver's stencils
   7-point stencil, the only one with a matched layer);
 - the level of the direct sound in the 63 and 125 Hz bands, in a large and very
   absorbing room, against the free-field level the rays give;
+- the direct sound a listener records 1 to 12 cells from the source, its pressure and
+  its pressure gradient (how large and which way), over 18 places of the source within
+  a cell and 50 directions (the grid's 26 axis and diagonal ones and 24 others), against
+  the exact field of a point source;
 - a 7 x 5 x 3 m box with 15 % absorption on every surface, simulated with the wave
   solver on at its default settings (the 63 and 125 Hz bands), against the sum of the
   box's modes with those decay rates: G, EDT and T20 in both bands, also with the 7-point
@@ -49,13 +53,17 @@ from acoustic_spaces.engine.impedance import (
     admittance,
     fit_admittance,
 )
+from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.wave import (
     COURANT,
     LAYER_CELLS,
     LAYER_DAMPING,
     STENCILS,
+    band_grid,
     grid_phase,
     source_signal,
+    wave_gains,
+    wave_responses,
 )
 from acoustic_spaces.geometry import box_mesh
 from acoustic_spaces.parameters import from_impulse_response
@@ -254,6 +262,16 @@ def modes(stencil: int = 7) -> list[dict]:
     return sorted(rows, key=lambda row: row["theory_hz"])
 
 
+def _fade(count: int, rate: float, until: float, over: float) -> np.ndarray:
+    """A window over ``count`` samples at ``rate``: one, falling to nothing (a raised
+    cosine) over the ``over`` seconds before ``until`` seconds, and nothing after. Sound
+    far above the bands a check looks at can still be passing where the check cuts a run
+    (in the duct, its first symmetric cross mode: see :func:`impedance_duct`), and an
+    abrupt cut spreads it over every frequency."""
+    t = np.arange(count) / rate
+    return 0.5 - 0.5 * np.cos(np.pi * np.clip((until - t) / over, 0.0, 1.0))
+
+
 def duct(stencil: int = 7) -> list[dict]:
     size, cell = (80.0, 0.6, 0.6), 0.1
     rows = []
@@ -330,7 +348,13 @@ def impedance_duct(stencil: int = 7) -> dict:
     The reflected wave is the far end's run less a run in a duct long enough for nothing
     to come back from its far end in time; the incident wave is that run before the sound
     off the near end arrives. Each over a rigid end's, which the grid reflects whole at
-    every frequency, so what the grid does on the way cancels out.
+    every frequency, so what the grid does on the way cancels out. The source also
+    excites the 20 cm duct's first symmetric cross mode, which rings on just above its
+    cut-on (1.59 kHz on the 7-point grid with these cells, 1.72 kHz off the grid) for as
+    long as a run lasts, far above the frequencies compared. So the runs' end fades over
+    20 ms (see :func:`_fade`), which sets how close the absorption comes, and so does the
+    cut before the near end's sound, which sets how close the rigid end's reflection over
+    the incident wave comes to 1.
     """
     cell, width = 0.05, 0.2
     courant = COURANTS[stencil]
@@ -339,7 +363,8 @@ def impedance_duct(stencil: int = 7) -> dict:
     source_x, probe_x, seconds = 60.0, 110.0, 0.6
     run = (cell, source_x, probe_x, seconds, stencil)
     reference, _ = _plane_wave_runs((200.0, width, width), None, *run)
-    incident = np.where(np.arange(len(reference)) / rate < 0.48, reference, 0.0)
+    incident = reference * _fade(len(reference), rate, 0.48, 0.02)
+    tail = _fade(len(reference), rate, len(reference) / rate, 0.02)
     n_fft = 1 << 15
     f = np.fft.rfftfreq(n_fft, 1.0 / rate)
     band = (f > 30) & (f < 720)
@@ -347,9 +372,12 @@ def impedance_duct(stencil: int = 7) -> dict:
 
     def reflection(end):
         far, _ = _plane_wave_runs((130.0, width, width), end, *run)
-        return np.fft.rfft(far - reference, n_fft)[band] / np.fft.rfft(incident, n_fft)[band]
+        return (
+            np.fft.rfft((far - reference) * tail, n_fft)[band] / np.fft.rfft(incident, n_fft)[band]
+        )
 
-    measured = 1.0 - np.abs(reflection(fit) / reflection(None)) ** 2
+    rigid = reflection(None)
+    measured = 1.0 - np.abs(reflection(fit) / rigid) ** 2
     y = fit(f)
     theory = 1.0 - np.abs((1.0 - y) / (1.0 + y)) ** 2
     grid = 1.0 - np.abs(grid_reflection(f, rate, np.conj(fit(f, rate)), courant)) ** 2
@@ -371,6 +399,7 @@ def impedance_duct(stencil: int = 7) -> dict:
         "max_difference": float(np.max(np.abs(measured - theory))),
         "max_difference_below_360": float(np.max(np.abs(measured - theory)[below])),
         "max_difference_grid": float(np.max(np.abs(measured - grid))),
+        "rigid_end": float(np.max(np.abs(np.abs(rigid) - 1.0))),
         "material": list(POROUS),
         "fitted": [float(a) for a in fit.achieved],
         "branches": len(fit.conductance),
@@ -380,7 +409,10 @@ def impedance_duct(stencil: int = 7) -> dict:
 def open_boundary() -> list[dict]:
     """A rigid 8 x 6 m plate in the open, 25 to 250 Hz at three listeners round it: what
     differs from a grid 16 m larger all round (nothing comes back from its edge in the 90
-    ms the runs last), with the grid's edge alone and with matched layers."""
+    ms the runs last), with the grid's edge alone and with matched layers. The runs' last
+    10 ms fade out (see :func:`_fade`): between 500 Hz and 1 kHz, with fewer than four of
+    these cells per wavelength, the 8-cell layer returns sound only 15 to 30 dB below the
+    sound there (a one-off check)."""
     h, seconds = 0.2, 0.09
     vertices = np.array([[0, 0, 0], [8, 0, 0], [8, 6, 0], [0, 6, 0]], float)
     bvh = _native.Bvh(vertices, np.array([[0, 1, 2], [0, 2, 3]], np.int64))
@@ -415,6 +447,7 @@ def open_boundary() -> list[dict]:
     gain = np.clip((f - 25) / 10, 0, 1) * np.clip((250 - f) / 50, 0, 1)
 
     def band(x):
+        x = x * _fade(x.shape[1], rate, x.shape[1] / rate, 0.01)
         return np.fft.irfft(np.fft.rfft(x, n_fft, axis=1) * gain, n_fft, axis=1)[:, : x.shape[1]]
 
     reference = band(run(80, 0)[0])
@@ -505,6 +538,152 @@ def free_field(scheme: str = "auto") -> list[dict]:
             }
         )
     return rows
+
+
+def places(
+    scheme: str,
+    count: int = 18,
+    distances=(1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 8.0, 12.0),
+    others: int = 24,
+) -> dict:
+    """What a listener records of the direct sound ``distances`` cells from the source,
+    against the exact field of a point source: the pressure's energy in the 63 and
+    125 Hz bands over the sound's first 50 ms, and the energy of the pressure gradient's
+    part (X, Y and Z) over the pressure's, each in dB over the exact one, at least and
+    at most over ``count`` places of the source within a cell (a cell's centre, a corner
+    and others at random) and the grid's 26 axis and diagonal directions with ``others``
+    more at random; and the largest angle between the gradient's main axis in a band
+    (the direction X, Y and Z have most of their energy along) and the line to the
+    source, in degrees.
+
+    The exact field, from the pulse the source's signal stands for (the signal over the
+    grid's scale, and on the 19-point grid over the gain of the three taps that undo the
+    grid's own): p = pulse(t - r / c) / r, and along the radius X = (1 + 1 / (i k r)) p.
+    The room is a rigid cube large enough that nothing comes back within the window.
+    """
+    points, courant = STENCILS[scheme]
+    window = 0.05
+    cell = band_grid(1, FS, C, 8.0, 8, courant).cell
+    reach = max(distances) * cell
+    side = 2.0 * (reach + C * window / 2.0 + 1.5)
+    room = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"box": [side] * 3},
+                "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+                "default_material": "hard",
+                "sources": [{"name": "s", "position": [side / 2] * 3}],
+                "listeners": [{"name": "l", "position": [side / 2 + 1.0, side / 2, side / 2]}],
+            }
+        )
+    )
+    model = TraceModel.from_room(room)
+    # The grid's cells, as wave_responses lays them round a box from the origin.
+    origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+    centre = origin + (np.floor((side / 2 - origin) / cell) + 0.5) * cell
+    directions = np.array([d for d in itertools.product((-1, 0, 1), repeat=3) if any(d)], float)
+    directions = np.vstack([directions, np.random.default_rng(11).normal(size=(others, 3))])
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+    offsets = np.array([d * direction for d in distances for direction in directions]) * cell
+    radii = np.repeat(distances, len(directions)) * cell
+    within = np.random.default_rng(7).random((count, 3))
+    within[:2] = np.array([[0.0] * 3, [0.5] * 3])[:count]
+    levels, ratios, angles = [], [], []
+    for place in within:
+        source = centre + place * cell
+        responses, _ = wave_responses(
+            model,
+            source,
+            source + offsets,
+            [str(k) for k in range(len(offsets))],
+            max_band_hz=125,
+            length_s=window + reach / C + 0.01,
+            sample_rate=FS,
+            speed_of_sound=C,
+            scheme=scheme,
+        )
+        rate = responses[0].rate
+        assert responses[0].cell == cell
+        signal, delay = source_signal(rate, cell, courant)
+        lead = round(responses[0].lead_s * rate)
+        steps = len(responses[0].signals)
+        n_fft = 1 << 14
+        assert lead + len(signal) + steps < n_fft
+        f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+        k = 2.0 * np.pi * f / C
+        gains = wave_gains(n_fft, rate, 2) ** 2
+        pulse = np.fft.rfft(signal, n_fft) / (4.0 * math.pi * courant**2 / cell)
+        if points == 19:
+            pulse = pulse * 9.0 / (5.0 + 4.0 * np.cos(2.0 * np.pi * f / rate))
+        pulse = pulse * np.exp(-2j * np.pi * f / rate * (lead - delay))  # as the run starts
+
+        def spectrum(x: np.ndarray, r: float, rate=rate, lead=lead, delay=delay):
+            start = lead + round(r / C * rate)
+            first = max(0, start - 3 * delay)
+            part = np.array(x[first : start + round(window * rate)], dtype=float)
+            taper = round(0.006 * rate)
+            shape = (taper,) + (1,) * (part.ndim - 1)
+            part[-taper:] *= (0.5 * (1.0 + np.cos(np.linspace(0.0, np.pi, taper)))).reshape(shape)
+            return np.fft.rfft(part, 1 << 14, axis=0)
+
+        def energy(x: np.ndarray, r: float, gains=gains):
+            power = np.abs(spectrum(x, r)) ** 2
+            return gains @ (power.sum(axis=1) if power.ndim == 2 else power)
+
+        def off_line(x: np.ndarray, r: float, towards: np.ndarray, gains=gains) -> list[float]:
+            """Degrees between the main axis of X, Y and Z in each band and ``towards``."""
+            parts = spectrum(x, r)
+            out = []
+            for gain in gains:
+                both = np.einsum("b,bj,bk->jk", gain, parts, np.conj(parts)).real
+                main = np.linalg.eigh(both)[1][:, -1]
+                out.append(math.degrees(math.acos(min(1.0, abs(float(main @ towards))))))
+            return out
+
+        towards = offsets / radii[:, None]
+        for response, r, line in zip(responses, radii, towards, strict=True):
+            exact = pulse * np.exp(-1j * k * r) / r
+            near = np.zeros(len(f), dtype=complex)
+            near[1:] = 1.0 / (1j * k[1:] * r)
+            exact_p = np.fft.irfft(exact, n_fft)[:steps]
+            exact_x = np.fft.irfft(exact * (1.0 + near), n_fft)[:steps]
+            pressure = energy(response.signals[:, 0], r)
+            gradient = energy(response.signals[:, 1:], r)
+            levels.append(10 * np.log10(pressure / energy(exact_p, r)))
+            ratios.append(
+                10 * np.log10(gradient / pressure * energy(exact_p, r) / energy(exact_x, r))
+            )
+            angles.append(off_line(response.signals[:, 1:], r, line))
+    shape = (count, len(distances), len(directions), 2)
+    levels, ratios, angles = (np.reshape(x, shape) for x in (levels, ratios, angles))
+    grid = np.arange(len(directions)) < 26
+    axis = grid & np.isclose(np.abs(directions).max(axis=1), 1.0)
+    corner = grid & np.isclose(np.abs(directions).min(axis=1), 1.0 / math.sqrt(3.0))
+    rows = [
+        {
+            "cells": d,
+            "pressure_db": [levels[:, i].min((0, 1)).tolist(), levels[:, i].max((0, 1)).tolist()],
+            "gradient_db": [ratios[:, i].min((0, 1)).tolist(), ratios[:, i].max((0, 1)).tolist()],
+            "gradient_deg": angles[:, i].max((0, 1)).tolist(),
+        }
+        for i, d in enumerate(distances)
+    ]
+    # The farthest listeners, by the direction they lie in: along an axis, a face's
+    # diagonal and the cube's diagonal.
+    far = {
+        name: [
+            levels[:, -1, rows_].min(axis=(0, 1)).tolist(),
+            levels[:, -1, rows_].max(axis=(0, 1)).tolist(),
+        ]
+        for name, rows_ in (("axis", axis), ("face", grid & ~axis & ~corner), ("cube", corner))
+    }
+    return {
+        "cell_m": cell,
+        "places": count,
+        "directions": len(directions),
+        "rows": rows,
+        "far_by_direction": far,
+    }
 
 
 def grazing(stencil: int = 7) -> list[dict]:
@@ -806,7 +985,8 @@ def main() -> None:
         print(
             f"\n{stencil}-point: largest difference from 30 to 720 Hz: "
             f"{impedance['max_difference']:.4f} ({impedance['max_difference_below_360']:.4f} "
-            f"below 360 Hz, {impedance['max_difference_grid']:.4f} from the grid's theory); "
+            f"below 360 Hz, {impedance['max_difference_grid']:.4f} from the grid's theory; "
+            f"the rigid end's reflection within {impedance['rigid_end']:.4f} of 1); "
             f"random-incidence absorption, material {impedance['material']}, fitted "
             + ", ".join(f"{a:.3f}" for a in impedance["fitted"])
             + f" ({impedance['branches']} branches)"
@@ -832,7 +1012,7 @@ def main() -> None:
     print(
         f"\nmatched layer over {results['layer_stability']['steps']:,} steps: each second's "
         f"level against the first's, {levels[1]:.0f} dB after one second, at most "
-        f"{max(levels[len(levels) // 2 :]):.0f} dB in the second half"
+        f"{max(levels[len(levels) // 2 :]):.1f} dB in the second half"
     )
 
     results["free_field"] = {scheme: free_field(scheme) for scheme in ("isotropic", "standard")}
@@ -846,6 +1026,43 @@ def main() -> None:
         print(
             f"| {wide['distance_m']:g} m | {wide['db_63']:+.2f} | {wide['db_125']:+.2f} | "
             f"{narrow['db_63']:+.2f} | {narrow['db_125']:+.2f} |"
+        )
+
+    results["places"] = {scheme: places(scheme) for scheme in ("isotropic", "standard")}
+    print(
+        f"\nover {results['places']['isotropic']['places']} places of the source within a "
+        f"cell and {results['places']['isotropic']['directions']} directions, dB re a point "
+        "source's field, least to most, and the gradient's main axis off the line to the "
+        "source, at most (the larger of the two bands):"
+        "\n\n| cells from the source | 19-point: pressure 63 Hz | 125 Hz | gradient over "
+        "pressure 63 Hz | 125 Hz | off the line | 7-point: pressure 63 Hz | 125 Hz | gradient "
+        "over pressure 63 Hz | 125 Hz | off the line |"
+        "\n|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
+    )
+    for wide, narrow in zip(
+        results["places"]["isotropic"]["rows"], results["places"]["standard"]["rows"], strict=True
+    ):
+        cells = []
+        for row in (wide, narrow):
+            cells += [
+                f"{row[key][0][band]:+.2f} to {row[key][1][band]:+.2f}"
+                for key in ("pressure_db", "gradient_db")
+                for band in (0, 1)
+            ]
+            cells.append(f"{max(row['gradient_deg']):.1f}°")
+        print(f"| {wide['cells']:g} | " + " | ".join(cells) + " |")
+    for scheme, name in (("isotropic", "19-point"), ("standard", "7-point")):
+        far = results["places"][scheme]["far_by_direction"]
+        print(
+            f"\n{name}, {results['places'][scheme]['rows'][-1]['cells']:g} cells away, 125 Hz, "
+            + "; ".join(
+                f"{label} {far[key][0][1]:+.3f} to {far[key][1][1]:+.3f} dB"
+                for key, label in (
+                    ("axis", "along an axis"),
+                    ("face", "along a face's diagonal"),
+                    ("cube", "along the cube's diagonal"),
+                )
+            )
         )
 
     rows, curves = box()
