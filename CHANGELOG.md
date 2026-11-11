@@ -78,6 +78,21 @@
   is read instead of holding a copy for the whole run: a walk of 201 places through the
   `church` example peaks at 336 MiB where it took 1,685 MiB, with the same results, and
   the memory estimate counts what is kept.
+- Changed: the draws of the materials' spread share what does not depend on the draw
+  (the paths' counts on each surface, the early paths' delay phases) and work out a
+  draw's octave echogram once for the parameters and the levels: with the faster fit
+  below, 400 draws of the `concert_hall` example take 70 to 75 s on four cores where
+  they took 157 to 158 s, with the same results.
+- Changed: the fit of an admittance to a material's absorption takes its forward
+  differences a branch at a time: the simulation of the `shoebox` example in
+  third-octave bands takes 20 s on four cores where it took 30 s, with the same results
+  (on an Intel Mac a fit changes with what else is in memory, as it did before: by
+  0.0000002 of absorption in a test).
+- Changed: a run's files are rendered on the threads its responses leave free, a
+  format's channels side by side as far as a quarter of the computer's memory holds
+  them: the files of the `shoebox` example in third-octave bands take 3.6 s on four
+  cores where they took 8.0 s, with the same results, and the run peaks at 1.1 GiB
+  where it peaked at 0.5 GiB.
 - Changed: the tests write every thread's stack to the log when one has run for 20
   minutes (pytest's `faulthandler_timeout`), to show where a hung job stands.
 - Added: the spread covers each listener's levels and speech results: the sound
@@ -195,13 +210,28 @@
   itself keeps the level it had.
 - Fixed (results change): round an open model the wave solver's matched layer lay a few
   cells past the model, the source and the listeners and sent back much of the sound
-  that ran along it: over a rigid plate, with 40 cm cells, the 63 Hz band read 3.2 and
-  10.8 dB below far taller grids 80 and 160 m away. The grid now reaches past the source
-  and the listeners on each side (not under an outdoor ground) by 15 % of how far the
-  listeners lie from the source along that side, which brings those checks within
-  0.02 dB of the taller grids and costs cells wherever the model reaches less far:
-  1.13 times as many on validation/wave_outdoor.py's 63 Hz grids, 2.1 to 2.4 times in a
-  hall open at one end.
+  that ran along it: over a rigid plate, with 40 cm cells, the 63 Hz band read 3.1 and
+  9.8 dB below the exact solution 80 and 160 m away. The grid now reaches past the
+  source and the listeners on each side (not under an outdoor ground) by 15 % of how far
+  the listeners lie from the source along that side, which brings those checks within
+  0.03 dB of it and costs cells wherever an open side of the model reaches less far
+  (1.13 times as many on validation/wave_outdoor.py's 63 Hz grids); a side that the
+  model's own surfaces close gets none.
+- Fixed (results change): the wave solver took its source and each point a listener
+  samples from the eight cells round them, weighted trilinearly, which read the 125 Hz
+  band up to 0.53 dB low by their place within a cell (8 points per wavelength at the
+  band's top). They now take a cubic through four cells a side (along a floor, a wall or
+  flat ground, across it the two cells round them; next to other surfaces and within
+  three cells of the source the eight cells as before), within 0.02 dB of a point
+  source's level from eight cells on in closed rooms, where the source's signal also
+  undoes the 19-point grid's own gain on a point source (0.06 and 0.35 dB in the two
+  bands), which that loss had hidden.
+- Changed: `validation/wave_solver.py` fades the cuts of its duct and open-model checks,
+  which an abrupt cut had filled with sound from far above the bands they look at (in
+  the duct, its first symmetric cross mode): the duct's absorption is within 0.0002 of the grid's
+  theory (it showed 0.005 to 0.007), and the default matched layer returns 72 to 74 dB
+  less than the sound (67 to 74). Its near-source table takes 50 directions and gives
+  the gradient's direction.
 - Changed: CI runs again by itself, up to twice, the jobs of a run that failed only
   because GitHub lost their runner or a step that fetches system packages failed
   (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`). A pull request runs one job on

@@ -408,23 +408,14 @@ def _band_parameters(
     if total <= 0:
         return undefined
 
-    remaining = np.concatenate([np.cumsum(e[::-1])[::-1], [0.0]]) + tail
-    # Against the curve's own start, which is then 0 dB exactly: summed in another order,
-    # the total can come out a rounding below it, and EDT's fit would skip the onset.
-    with np.errstate(divide="ignore"):
-        level = 10.0 * np.log10(np.maximum(remaining / remaining[0], 0.0))  # -inf: none left
+    remaining, level = _decay_level(e, tail)
     out: dict[str, float] = {}
     for name, (top, bottom) in DECAY_RANGES.items():
         out[name], xi = _decay_time(level, edges, top, bottom)
         if name != "edt":
             out[f"xi_{name}"] = xi
     out["curvature"] = _curvature(out["t20"], out["t30"])
-    # A response that stops before its decay has fallen to _MIN_DECAY_DB leaves too much
-    # to the estimated tail: nothing can be read from it, as T20 and T30 already cannot.
-    # The fall counts at the end of the curve, tail included (-inf when nothing is left
-    # to it), or along the early decay's slope, as one strong ray late in a sparse tail
-    # can hold the end of the curve up.
-    if level[-1] > _MIN_DECAY_DB and not 60.0 * edges[-1] / out["edt"] >= -_MIN_DECAY_DB:
+    if _too_short(level, edges, out["edt"]):
         if open_air and reference:
             # Outdoors the response holds what arrives: no reverberation goes on past its
             # end to be extrapolated, and its level is that of its energy.
@@ -448,6 +439,42 @@ def _band_parameters(
             part -= _arrived(edges, cumulative, tail, rate, start)
             out[name] = 10.0 * math.log10(part / direct) if part > 0 and direct > 0 else nan
     return out
+
+
+def _decay_level(e: np.ndarray, tail: float) -> tuple[np.ndarray, np.ndarray]:
+    """The energy still to come at each slot edge of ``e`` (one band's energies, from
+    the slot holding the onset), ``tail`` after the last, and its level (dB) against the
+    start; -inf where none is left."""
+    remaining = np.concatenate([np.cumsum(e[::-1])[::-1], [0.0]]) + tail
+    # Against the curve's own start, which is then 0 dB exactly: summed in another order,
+    # the total can come out a rounding below it, and EDT's fit would skip the onset.
+    with np.errstate(divide="ignore"):
+        level = 10.0 * np.log10(np.maximum(remaining / remaining[0], 0.0))  # -inf: none left
+    return remaining, level
+
+
+def _too_short(level: np.ndarray, edges: np.ndarray, edt: float) -> bool:
+    """Whether a response whose decay curve ``level`` at the slot ``edges`` gives the EDT
+    ``edt`` stops before its decay has fallen to _MIN_DECAY_DB: it leaves too much to the
+    estimated tail, and nothing can be read from it, as T20 and T30 already cannot. The
+    fall counts at the end of the curve, tail included (-inf when nothing is left to
+    it), or along the early decay's slope, as one strong ray late in a sparse tail can
+    hold the end of the curve up."""
+    return bool(level[-1] > _MIN_DECAY_DB and not 60.0 * edges[-1] / edt >= -_MIN_DECAY_DB)
+
+
+def _band_t30(e: np.ndarray, dt: float, offset: float) -> float:
+    """The T30 :func:`_band_parameters` gives of one band, without its other
+    parameters."""
+    edges = np.arange(len(e) + 1) * dt - offset
+    tail, _ = _tail(e, dt)
+    if float(e.sum()) + tail <= 0:
+        return math.nan
+    _, level = _decay_level(e, tail)
+    edt, _ = _decay_time(level, edges, *DECAY_RANGES["edt"])
+    if _too_short(level, edges, edt):
+        return math.nan
+    return _decay_time(level, edges, *DECAY_RANGES["t30"])[0]
 
 
 def _lateral(
@@ -538,9 +565,7 @@ def from_energy(
     if directional is not None:
         for axis, x in zip("xyz", directional, strict=True):
             x = np.atleast_2d(np.asarray(x, dtype=float))
-            more[f"t30_{axis}"] = np.array(
-                [_band_parameters(row[first:], time_step, offset, None)["t30"] for row in x]
-            )
+            more[f"t30_{axis}"] = np.array([_band_t30(row[first:], time_step, offset) for row in x])
     return _collect(per_band, **more)
 
 
