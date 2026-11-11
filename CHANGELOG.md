@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added: a solver for sound that passes close over a whole row of roofs and barriers
+  in still air (`acoustic_spaces.engine.rows`: the parabolic equation marched over the
+  row, with the terms of its rigid edges), within 0.38 dB of a wave calculation near
+  grazing incidence in free space and 0.65 dB there over roofs on a rigid ground,
+  0.74 dB up from a source at street level and 1.24 dB down to a listener there;
+  between rigid screens on a rigid ground up to 3.4 dB low, and with an error for the
+  ends it cannot hold, such as a source on a roof close to a parapet
+  (`validation/rows.py`). Simulations do not use it yet.
 - Fixed: with `second_order` diffraction, sound that just clears two edges in a row (a
   source and a listener in sight of each other over a flat roof, a thick wall or two
   barriers, or along a wall in line with both) was far too low, 15 to 26 dB across the
