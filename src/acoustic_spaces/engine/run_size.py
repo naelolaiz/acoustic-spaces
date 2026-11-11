@@ -27,10 +27,11 @@ import dataclasses
 import math
 import os
 import sys
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
 
@@ -39,6 +40,9 @@ from acoustic_spaces.materials.bands import band_centres
 if TYPE_CHECKING:
     from acoustic_spaces.room import Room
     from acoustic_spaces.scene.model import Simulation
+
+_Item = TypeVar("_Item")
+_Result = TypeVar("_Result")
 
 #: Bytes of one value of the late part's arrays.
 VALUE_BYTES = 8
@@ -123,6 +127,20 @@ def worker_threads(threads: int) -> int:
     many as the computer has cores for 0 or more."""
     cores = os.cpu_count() or 1
     return cores if threads <= 0 else min(int(threads), cores)
+
+
+def each_on_threads(
+    function: Callable[[_Item], _Result], items: Iterable[_Item], threads: int
+) -> list[_Result]:
+    """``function`` of each of ``items``, in their order, on at most ``threads`` threads
+    at once, so that at most ``threads`` of the calls are in progress at any time. With
+    one thread (or one item) the calls run one after another in the calling thread,
+    with no pool."""
+    todo = list(items)
+    if threads <= 1 or len(todo) <= 1:
+        return [function(item) for item in todo]
+    with ThreadPoolExecutor(min(int(threads), len(todo))) as pool:
+        return list(pool.map(function, todo))
 
 
 @dataclass(frozen=True)
@@ -491,6 +509,7 @@ def map_need(
 __all__ = [
     "Need",
     "check",
+    "each_on_threads",
     "held_bytes",
     "late_call",
     "late_devices",

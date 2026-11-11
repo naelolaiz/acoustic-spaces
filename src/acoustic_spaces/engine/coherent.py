@@ -368,17 +368,41 @@ def shaped(
         own = spectrum[:, b]
         if per_band == 1:
             shape = np.repeat(own, hi - lo, axis=1)
-        else:
-            xs = np.clip(x[lo:hi], samples[b, 0], samples[b, -1])
-            j = np.clip(np.searchsorted(samples[b], xs, side="right") - 1, 0, per_band - 2)
-            w = (xs - samples[b, j]) / (samples[b, j + 1] - samples[b, j])
-            magnitude = np.abs(own)
-            phase = np.unwrap(np.angle(own), axis=1)
-            level = magnitude[:, j] * (1.0 - w) + magnitude[:, j + 1] * w
-            angle = phase[:, j] * (1.0 - w) + phase[:, j + 1] * w
-            shape = level * np.exp(1j * angle)
-        out[:, lo:hi] += (live[:, None] * gains[b, lo:hi]) * shape
+            out[:, lo:hi] += (live[:, None] * gains[b, lo:hi]) * shape
+            continue
+        xs = np.clip(x[lo:hi], samples[b, 0], samples[b, -1])
+        j = np.clip(np.searchsorted(samples[b], xs, side="right") - 1, 0, per_band - 2)
+        w = (xs - samples[b, j]) / (samples[b, j + 1] - samples[b, j])
+        magnitude = np.abs(own)
+        phase = np.unwrap(np.angle(own), axis=1)
+        # The frequencies below the band's first sample and above its last are held to
+        # it, so all of them have the same shape: worked out once for each run of them
+        # at the ends, the same in each of its bins.
+        first = _run(xs == samples[b, 0])
+        last = len(xs) - _run(xs[::-1] == samples[b, -1])
+        last = max(last, first)
+        for start, stop, held in ((0, first, True), (first, last, False), (last, len(xs), True)):
+            if stop > start:
+                at = slice(start, start + 1) if held else slice(start, stop)
+                shape = _between(magnitude, phase, j[at], w[at])
+                out[:, lo + start : lo + stop] += (
+                    live[:, None] * gains[b, lo + start : lo + stop]
+                ) * shape
     return out
+
+
+def _between(magnitude: np.ndarray, phase: np.ndarray, j: np.ndarray, w: np.ndarray):
+    """(n, len(j)) the magnitude and the phase (n, M) taken a share ``w`` of the way from
+    sample ``j`` to the next, as a complex value."""
+    level = magnitude[:, j] * (1.0 - w) + magnitude[:, j + 1] * w
+    angle = phase[:, j] * (1.0 - w) + phase[:, j + 1] * w
+    return level * np.exp(1j * angle)
+
+
+def _run(flags: np.ndarray) -> int:
+    """How many of ``flags`` from the first are true."""
+    off = np.flatnonzero(~flags)
+    return int(off[0]) if len(off) else len(flags)
 
 
 def held_phase(paths: EarlyReflections) -> np.ndarray:
@@ -430,32 +454,35 @@ def own_phases(
     return np.exp(1j * angles * _turns(paths))
 
 
-def with_mean_phases(paths: EarlyReflections) -> EarlyReflections:
+def with_mean_phases(paths: EarlyReflections, kept: SameDelays | None = None) -> EarlyReflections:
     """``paths`` as the echogram reads the coherent bands from them
     (:class:`EarlyPressure`), through filters that let in a little of the bands above:
     each path over an edge with the mean over seeds of the phase factor
     :func:`own_phases` gives it there, sinc of how far it is turned. One turned all the
     way adds nothing to the others there in pressure, as on average in a rendered
-    response. The same paths without such bands or such paths."""
+    response. The same paths without such bands or such paths. ``kept``: as for
+    :func:`arriving_with`."""
     if paths.coherent_bands >= paths.energy.shape[1] or not paths.diffracted.any():
         return paths
-    return dataclasses.replace(paths, own_phase=np.sinc(_turns(paths)).astype(complex))
+    return dataclasses.replace(paths, own_phase=np.sinc(_turns(paths, kept)).astype(complex))
 
 
-def _turns(paths: EarlyReflections) -> np.ndarray:
+def _turns(paths: EarlyReflections, kept: SameDelays | None = None) -> np.ndarray:
     """(n,) how far each path over an edge is turned, as a share of its angle: how loud
     the other paths' sound is where it arrives against its own (:func:`arriving_with`),
     up to one; zero for reflections."""
-    return np.where(paths.diffracted, np.minimum(arriving_with(paths), 1.0), 0.0)
+    return np.where(paths.diffracted, np.minimum(arriving_with(paths, kept), 1.0), 0.0)
 
 
-def arriving_with(paths: EarlyReflections) -> np.ndarray:
+def arriving_with(paths: EarlyReflections, kept: SameDelays | None = None) -> np.ndarray:
     """(n,) for each path, the largest over the bands above the coherent ones of how loud
     the other paths' sound is where it arrives against its own, each path with the
     phase held from the coherent bands: the magnitude of the sum over the others of
     their pressure times the band filter's autocorrelation at the difference of their
     delays, over its pressure. Zero for a path that arrives alone; about one or more
-    for one that others arrive with."""
+    for one that others arrive with. ``kept`` (a :class:`SameDelays`) keeps what each
+    band's reading takes from the delays and which paths carry the band alone, for the
+    same paths with other energies and phases."""
     bands = paths.energy.shape[1]
     held = _top_phase(paths)
     out = np.zeros(len(paths))
@@ -466,20 +493,42 @@ def arriving_with(paths: EarlyReflections) -> np.ndarray:
             continue
         delay = paths.delay_s if paths.lag is None else paths.delay_s + paths.lag[:, b]
         own = amplitude * held
-        others = np.abs(_band_field(delay, own, b, bands, live) - own)
+        others = np.abs(_band_field(delay, own, b, bands, live, kept) - own)
         out = np.maximum(out, np.where(live, others / np.where(live, amplitude, 1.0), 0.0))
     return out
 
 
 def _band_field(
-    delay: np.ndarray, values: np.ndarray, b: int, bands: int, live: np.ndarray
+    delay: np.ndarray,
+    values: np.ndarray,
+    b: int,
+    bands: int,
+    live: np.ndarray,
+    kept: SameDelays | None = None,
 ) -> np.ndarray:
     """(n,) the sound of all ``values`` (n,) (complex pressures at ``delay`` s) in band
     ``b`` where each arrives: their sum, each times the autocorrelation of the band's
     filter (its gains squared, positive frequencies) at the difference of their delays,
     over its value at zero, so that a path alone gives its own value. On a grid of
     :data:`_OVERSAMPLE` times the band's highest frequency, the paths placed and read
-    with a windowed sinc."""
+    with a windowed sinc (:func:`_band_grid`, kept in ``kept`` if given)."""
+    if kept is None:
+        kernel, index, size, power, alone = _band_grid(delay, b, bands, live)
+    else:
+        kernel, index, size, power, alone = kept.band_grid(delay, b, bands, live)
+    placed = (np.where(live, values, 0.0)[:, None] * kernel).ravel()
+    grid = np.bincount(index, placed.real, size) + 1j * np.bincount(index, placed.imag, size)
+    field = np.fft.ifft(np.fft.fft(grid) * power)
+    return (field[index].reshape(kernel.shape) * kernel).sum(axis=1) / alone
+
+
+def _band_grid(
+    delay: np.ndarray, b: int, bands: int, live: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, int, np.ndarray, np.ndarray]:
+    """What :func:`_band_field` takes from the delays and which paths are ``live``
+    alone: the windowed sinc of each path (n, taps), the grid sample each of its taps
+    falls on (n * taps,), the grid's size, the band filter's power on the grid's
+    frequencies, and each path's own value read back (n,)."""
     lo, hi = _band_support(b, bands)
     rate = _OVERSAMPLE * hi
     pad = _PAD / (hi - lo)
@@ -496,10 +545,7 @@ def _band_field(
     power = np.where(f > 0, _band_shape(np.abs(f), b, bands) ** 2, 0.0)
     correlation = np.fft.ifft(power)[(taps[:, None] - taps[None, :]) % size]
     alone = np.einsum("nk,kl,nl->n", kernel, correlation, kernel).real
-    placed = (np.where(live, values, 0.0)[:, None] * kernel).ravel()
-    grid = np.bincount(index, placed.real, size) + 1j * np.bincount(index, placed.imag, size)
-    field = np.fft.ifft(np.fft.fft(grid) * power)
-    return (field[index].reshape(kernel.shape) * kernel).sum(axis=1) / alone
+    return kernel, index, size, power, alone
 
 
 def _band_edges(bands: int) -> tuple[np.ndarray, float]:
@@ -698,6 +744,7 @@ def pair_energy(
     axis: np.ndarray | None = None,
     exponent: int = 2,
     origin: float = 0.0,
+    memo: dict | None = None,
 ) -> np.ndarray:
     """(len(bands), slots) energy per time slot of ``time_step`` (slot 0 at ``origin``,
     s from emission) in ``bands`` of the paths' coherent ones, adding them in pressure:
@@ -706,7 +753,9 @@ def pair_energy(
     coherence factor in turbulence), shared between the two paths' slots as their
     energies are (a slot that would go below zero is left at zero). With ``axis``, that
     of a figure of eight facing it (``exponent`` as in :meth:`EarlyPressure.energy`; with
-    1 the cross terms take the geometric mean of the two paths' weights)."""
+    1 the cross terms take the geometric mean of the two paths' weights). ``memo`` (a
+    dict), if given, keeps what each band takes whatever the axis (:func:`_pair_terms`)
+    for the next call on the same paths."""
     from acoustic_spaces.engine.diffraction import band_frequencies
 
     out = np.zeros((len(bands), slots))
@@ -715,32 +764,48 @@ def pair_energy(
     f, width = band_frequencies(bands=resolution_of(paths.energy.shape[1]))
     slot = np.floor((paths.delay_s - origin) / time_step + 1e-9).astype(np.int64)
     keep = (slot >= 0) & (slot < slots)
-    apart = paths.delay_s[:, None] - paths.delay_s[None, :]
     weight = np.ones(len(paths))
     if axis is not None:
         cosine = paths.direction @ np.asarray(axis, dtype=float)
         weight = cosine if exponent == 2 else np.sqrt(np.abs(cosine))
     for row, b in enumerate(bands):
-        energy = paths.energy[:, b]
-        pressure = np.sqrt(energy)[:, None] * paths.spectrum[:, b]
-        pressure = pressure * np.exp(-2j * np.pi * np.outer(paths.delay_s, f[b]))
-        lagged = lag_phase(paths, f[b])
-        if lagged is not None:
-            pressure = pressure * lagged
-        if paths.wander is None:
-            cross = np.real(pressure @ pressure.conj().T) / f.shape[1]
-        else:
-            together = paths.wander.coherence(f[b])
-            cross = np.einsum("im,jm,ijm->ij", pressure, pressure.conj(), together).real
-            cross /= f.shape[1]
-        cross *= np.sinc(apart * width[b]) * np.outer(weight, weight)
-        # A pair's cross terms, 2 Re(p_i p_j*), shared between its two paths.
-        total = energy[:, None] + energy[None, :]
-        share = np.divide(2.0 * energy[:, None], total, out=np.zeros_like(cross), where=total > 0)
-        np.fill_diagonal(share, 1.0)
+        held = None if memo is None else memo.get(b)
+        if held is None:
+            held = _pair_terms(paths, b, f, width)
+            if memo is not None:
+                memo[b] = held
+        plain, sinc, share = held
+        cross = plain * (sinc * np.outer(weight, weight))
         mine = np.sum(cross * share, axis=1)
         np.add.at(out[row], slot[keep], mine[keep])
     return np.maximum(out, 0.0)
+
+
+def _pair_terms(paths, b, f, width) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """What :func:`pair_energy` takes of band ``b`` whatever the axis: each pair's cross
+    term averaged over the band's frequencies ``f[b]`` (with their coherence in
+    turbulence), the sinc of how far apart they arrive over the band's width, and the
+    share of it each path takes (read-only)."""
+    energy = paths.energy[:, b]
+    pressure = np.sqrt(energy)[:, None] * paths.spectrum[:, b]
+    pressure = pressure * np.exp(-2j * np.pi * np.outer(paths.delay_s, f[b]))
+    lagged = lag_phase(paths, f[b])
+    if lagged is not None:
+        pressure = pressure * lagged
+    if paths.wander is None:
+        cross = np.real(pressure @ pressure.conj().T) / f.shape[1]
+    else:
+        together = paths.wander.coherence(f[b])
+        cross = np.einsum("im,jm,ijm->ij", pressure, pressure.conj(), together).real
+        cross /= f.shape[1]
+    sinc = np.sinc((paths.delay_s[:, None] - paths.delay_s[None, :]) * width[b])
+    # A pair's cross terms, 2 Re(p_i p_j*), shared between its two paths.
+    total = energy[:, None] + energy[None, :]
+    share = np.divide(2.0 * energy[:, None], total, out=np.zeros_like(cross), where=total > 0)
+    np.fill_diagonal(share, 1.0)
+    for a in (cross, sinc, share):
+        a.flags.writeable = False
+    return cross, sinc, share
 
 
 def coherent_energy(
@@ -752,6 +817,7 @@ def coherent_energy(
     origin: float = 0.0,
     start: float | None = None,
     cache: dict | None = None,
+    kept: SameDelays | None = None,
 ) -> np.ndarray:
     """(coherent bands, slots) the coherent bands' energy per time slot (arguments as
     for :meth:`EarlyPressure.energy`): through the band filters up to
@@ -760,32 +826,108 @@ def coherent_energy(
     energy. The band filters let in a little of the bands above, where each path over an
     edge has the mean of the phase a rendered response turns it by
     (:func:`with_mean_phases`). ``cache`` (a dict) keeps the :class:`EarlyPressure` of
-    each point between calls on the same paths."""
+    each point between calls on the same paths; ``kept`` (a :class:`SameDelays`) what
+    they take from the paths' delays alone, between calls on paths that differ in their
+    energies and spectra only."""
     count = paths.coherent_bands
     filtered = filtered_bands(paths)
     points = np.unique(paths.point)
     if len(points) <= 1 and count == filtered:
-        pressure = _pressure(paths, 0, cache)
+        pressure = _pressure(paths, 0, cache, kept)
         return pressure.energy(time_step, slots, axis, exponent, origin, start)
     out = np.zeros((count, slots))
+    # With ``kept`` (the draws of a spread), each point's paths and what pair_energy
+    # takes from them whatever the axis are kept in ``cache`` for the draw's echograms.
+    keep = cache is not None and kept is not None
     for point in points:
-        part = paths[paths.point == point] if len(points) > 1 else paths
+        if len(points) <= 1:
+            part = paths
+        elif keep and ("paths", int(point)) in cache:
+            part = cache["paths", int(point)]
+        else:
+            part = paths[paths.point == point]
+            if keep:
+                cache["paths", int(point)] = part
         if filtered:
-            pressure = _pressure(part, int(point), cache)
+            pressure = _pressure(part, int(point), cache, kept)
             out[:filtered] += pressure.energy(time_step, slots, axis, exponent, origin, start)
         if count > filtered:
+            memo = cache.setdefault(("pairs", int(point)), {}) if keep else None
             out[filtered:] += pair_energy(
-                part, range(filtered, count), time_step, slots, axis, exponent, origin
+                part, range(filtered, count), time_step, slots, axis, exponent, origin, memo
             )
     return out
 
 
-def _pressure(paths: EarlyReflections, point: int, cache: dict | None) -> EarlyPressure:
+def _pressure(
+    paths: EarlyReflections, point: int, cache: dict | None, kept: SameDelays | None = None
+) -> EarlyPressure:
     if cache is None:
-        return EarlyPressure(with_mean_phases(paths))
+        return EarlyPressure(with_mean_phases(paths, kept), kept=kept)
     if point not in cache:
-        cache[point] = EarlyPressure(with_mean_phases(paths))
+        cache[point] = EarlyPressure(with_mean_phases(paths, kept), kept=kept)
     return cache[point]
+
+
+class SameDelays:
+    """What :class:`EarlyPressure` and :func:`arriving_with` take from the early paths'
+    delays alone (and which paths carry a band), kept for paths that differ in nothing
+    else but their energies and spectra: those of one traced response re-weighted for
+    draw after draw of the absorption
+    (:func:`~acoustic_spaces.engine.uncertainty.material_spread`). Each value is kept
+    under the bytes of the arrays it is made from, as every echogram slices each
+    point's paths anew, and is read-only. An :class:`EarlyPressure` given one also keeps
+    each band's filtered pressure (:meth:`EarlyPressure.band`) for the echograms that
+    read it.
+
+    The delay phases are the most of it: a complex value for each path and frequency
+    of the echogram's spectra, about 6 MB for a hall's response of 200 paths, up to
+    110 MB for a line source of 10 points outdoors (examples/street, in wind and
+    turbulence too). What is kept stops at ``limit`` bytes in all (128 MiB by default);
+    past it, each value is worked out again each time, as without one. The filtered
+    pressures and what :func:`coherent_energy` keeps for a draw's echograms are not
+    counted in it: they go with the draw's response, about 25 MB for the street's."""
+
+    def __init__(self, limit: int = 1 << 27) -> None:
+        self.limit = limit
+        self.size = 0
+        self._phases: dict[tuple, np.ndarray] = {}
+        self._grids: dict[tuple, tuple] = {}
+
+    def _keep(self, *arrays: np.ndarray) -> bool:
+        """Whether ``arrays`` fit within the limit, counted in if so and made read-only."""
+        size = sum(a.nbytes for a in arrays)
+        if self.size + size > self.limit:
+            return False
+        self.size += size
+        for a in arrays:
+            a.flags.writeable = False
+        return True
+
+    def delay_phases(self, shift: np.ndarray, n_fft: int, rate: float) -> np.ndarray:
+        """exp(-2j pi outer(``shift``, f)): the phase of paths ``shift`` s late at the
+        frequencies f of an rFFT of ``n_fft`` points at ``rate``."""
+        key = (shift.tobytes(), n_fft, rate)
+        held = self._phases.get(key)
+        if held is None:
+            f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+            held = np.exp(-2j * np.pi * np.outer(shift, f))
+            if self._keep(held):
+                self._phases[key] = held
+        return held
+
+    def band_grid(
+        self, delay: np.ndarray, b: int, bands: int, live: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, int, np.ndarray, np.ndarray]:
+        """:func:`_band_grid` of these arguments."""
+        key = (delay.tobytes(), b, bands, live.tobytes())
+        held = self._grids.get(key)
+        if held is None:
+            held = _band_grid(delay, b, bands, live)
+            kernel, index, _, power, alone = held
+            if self._keep(kernel, index, power, alone):
+                self._grids[key] = held
+        return held
 
 
 @functools.lru_cache(maxsize=8)
@@ -810,9 +952,17 @@ class EarlyPressure:
     filters of the impulse response's bands overlap with them. What is left is the
     paths' interference, which in turbulence takes each two paths' coherence factor:
     there each path's spectrum is kept, and :meth:`energy` adds the filtered paths'
-    products."""
+    products.
 
-    def __init__(self, paths: EarlyReflections, weights: np.ndarray | None = None) -> None:
+    With ``kept`` (a :class:`SameDelays`), the paths' delay phases are taken from it
+    and kept in it, and each band's filtered pressure is kept for the next reading."""
+
+    def __init__(
+        self,
+        paths: EarlyReflections,
+        weights: np.ndarray | None = None,
+        kept: SameDelays | None = None,
+    ) -> None:
         bands = paths.energy.shape[1]
         self.bands = bands
         self.count = filtered_bands(paths)
@@ -848,13 +998,19 @@ class EarlyPressure:
         ]
         self._spectra_of = {b: np.zeros_like(self.spectra) for b in partly}
         self._alone_of = {b: np.zeros(len(f)) for b in partly}
+        self._bands: dict[tuple, tuple[np.ndarray, np.ndarray, float]] | None = (
+            None if kept is None else {}
+        )
         for start in range(0, len(paths), _CHUNK):
             part = slice(start, start + _CHUNK)
             spectra = amplitude_spectra(paths[part], f, gains)
             squared = np.abs(spectra) ** 2
             self._alone += np.sum(squared, axis=0)
             shift = paths.delay_s[part] + self.lead - 0.5 / self.rate
-            spectra *= np.exp(-2j * np.pi * np.outer(shift, f))
+            if kept is None:
+                spectra *= np.exp(-2j * np.pi * np.outer(shift, f))
+            else:
+                spectra *= kept.delay_phases(shift, self.n_fft, self.rate)
             self.spectra += weights[part].T @ spectra
             for b in partly:
                 heard = ~self._silent[part, b]
@@ -878,10 +1034,17 @@ class EarlyPressure:
         The filters ring before an arrival as much as after it: what they spread to
         before ``start`` (s from emission; default ``origin``), the arrival of the
         direct sound, counts as arriving with it, as in the analysis of a measured
-        response."""
+        response. Kept for the next reading of the same arguments (read-only) when
+        the pressure was made with a :class:`SameDelays`."""
+        key = (b, time_step, slots, origin, start)
+        if self._bands is not None and key in self._bands:
+            return self._bands[key]
         gain, keep, slot, scale = self._filter(b, time_step, slots, origin, start)
         spectra = self._spectra_of.get(b, self.spectra)
         pressure = np.fft.irfft(gain * spectra, self.n_fft, axis=1)[:, keep]
+        if self._bands is not None:
+            pressure.flags.writeable = slot.flags.writeable = False
+            self._bands[key] = (pressure, slot, scale)
         return pressure, slot, scale
 
     def _filter(self, b, time_step, slots, origin, start):
@@ -951,6 +1114,7 @@ class EarlyPressure:
 __all__ = [
     "FILTERED_MAX_BAND_HZ",
     "EarlyPressure",
+    "SameDelays",
     "absorption_phases",
     "amplitude_spectra",
     "arriving_with",

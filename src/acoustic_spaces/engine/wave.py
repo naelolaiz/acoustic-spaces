@@ -28,7 +28,8 @@ octave bands replace the ray-traced ones.
   rooms, open models and thin screens all work. Round an open model, whose air reaches
   the edge of the grid, the grid grows by a perfectly matched layer of
   :data:`LAYER_CELLS` cells that takes in the sound leaving it, and leaves room
-  (:data:`LAYER_ROOM`) for sound that runs along it. Openings are not
+  (:data:`LAYER_ROOM`) for sound that runs along it, on the sides where no surface of
+  the model lies between that sound and the layer (:func:`_open_sides`). Openings are not
   surfaces here: the air flows through them. Surfaces that let only part of the sound
   through are not modelled, so a model with any stops the wave solver with an error.
 - At these frequencies the source radiates the same way in all directions. The
@@ -113,7 +114,7 @@ WAVE_BANDS_HZ = OCTAVE_BANDS_HZ[:4]
 HIGH_PASS_S = 0.12
 #: Cells of the matched layer round an open model, and its damping at the grid's edge
 #: (the damping rate times half a time step). Sound leaving the model comes back from
-#: it 67 to 74 dB down; from the grid's edge alone, 7 to 14 dB down (docs/validation.md,
+#: it 72 to 74 dB down; from the grid's edge alone, 7 to 14 dB down (docs/validation.md,
 #: Open models).
 LAYER_CELLS = 8
 LAYER_DAMPING = 0.5
@@ -123,10 +124,11 @@ LAYER_DAMPING = 0.5
 #: outdoor ground, not at all. Sound that runs along the layer meets it near grazing,
 #: where the layer sends much of it back: in one-off checks over a rigid plate, the
 #: source and the listener 1.5 m above it and the layer a few cells above them (20 cm
-#: cells), the level read 0.64 dB below the exact one at 125 Hz 20 m away, and 1.7 and
-#: 2.1 dB below it at 63 and 125 Hz 40 m away, where far taller grids read 0.36, and
-#: 0.13 and 0.41 dB below it. With this room it is within 0.06 dB of the taller grids,
-#: 10 to 160 m away (docs/validation.md, Open models).
+#: cells), the level read 0.26 dB below the exact one at 125 Hz 20 m away, and 0.50 and
+#: 1.71 dB below it at 63 and 125 Hz 40 m away. With this room it is within 0.03 dB of
+#: the exact one, 20 to 160 m away (docs/validation.md, Open models). A side that the
+#: model's own surfaces close off from the source and the listeners gets none
+#: (:func:`_open_sides`).
 LAYER_ROOM = 0.15
 #: The wave solver's part of a response starts here (Hz), with the synthesis's
 #: crossover shape round it: an octave below the 63 Hz band's lower edge, so that band,
@@ -237,13 +239,35 @@ def _cutoff(courant: float) -> float:
     return _LOW_PASS_CUTOFF * courant / COURANT
 
 
-def source_signal(rate: float, cell: float, courant: float = COURANT) -> tuple[np.ndarray, int]:
+def source_signal(
+    rate: float, cell: float, courant: float = COURANT, speed: float = 1.0, *, level: bool = True
+) -> tuple[np.ndarray, int]:
     """What the source adds to the grid on each step, and its delay in steps.
 
     An impulse, low-passed (so the grid carries no frequencies it cannot) and
     high-passed twice (so it leaves no air in the room), scaled so that in free field the
     pressure at r metres is that impulse over r. ``courant`` is the stencil's Courant
-    number, which sets the low-pass's cutoff too (:func:`_cutoff`).
+    number, which says which stencil it is for and sets the low-pass's cutoff
+    (:func:`_cutoff`); ``speed`` the speed of sound at the source over the grid's (1
+    where it is the same everywhere).
+
+    On the 19-point grid a point source's sound comes out louder than what the source
+    adds, the more the higher the frequency: by 9 / (5 + 4 cos wT) in pressure, w T the
+    frequency's turn over a time step (the far field of the scheme's own response to one
+    cell, by stationary phase: 3 / (2 + cos kh) along an axis, kh the turn over a cell
+    there, which the scheme ties to the frequency by cos kh = 1 - 4 (1 - cos wT) / 3).
+    That is the gain along the axes and the cube's diagonals; along a face's diagonals
+    it is up to 0.03 dB more at eight cells per wavelength, and the same within 0.01 dB
+    over a band: 0.06 and 0.35 dB over the 63 and 125 Hz bands of a grid up to the
+    125 Hz band. Three taps, 2/9, 5/9 and 2/9, have the inverse gain exactly and are
+    part of the signal, with a step of delay (where the source's speed of sound is
+    ``speed`` times the grid's, the side taps are over the square of ``speed``, the
+    middle one what is left of one); ``level=False`` gives the signal without them, the
+    impulse that the signal with them stands for. The 7-point grid's gain changes with
+    the direction (twelve cells away, over that 125 Hz band: none along an axis, 0.25 dB
+    along a face's diagonals and 0.32 to 0.34 dB along the cube's, by the places of the
+    source and the listener within their cells; validation/wave_solver.py), so no signal
+    can undo it.
     """
     half = _LOW_PASS_TAPS // 2
     k = np.arange(-half, half + 1)
@@ -255,7 +279,13 @@ def source_signal(rate: float, cell: float, courant: float = COURANT) -> tuple[n
     high = -window / window.sum()
     high[0] += 1.0
     signal = np.convolve(np.convolve(low, high), high)
-    return 4.0 * math.pi * courant**2 / cell * signal, half
+    delay = half
+    # (The 19-point stencil, known by its Courant number.)
+    if level and math.isclose(courant, ISOTROPIC_COURANT, rel_tol=1e-9):
+        side = 2.0 / (9.0 * speed**2)
+        signal = np.convolve(signal, [side, 1.0 - 2.0 * side, side])
+        delay += 1
+    return 4.0 * math.pi * courant**2 / cell * signal, delay
 
 
 @dataclass
@@ -557,6 +587,49 @@ class _Weather:
 
 #: Points each listener takes the pressure at (see :func:`_probe_points`).
 _PROBES = 13
+#: A point round a listener that lies nearer the source than this many cells, and nearer
+#: it than the listener itself, is left out of the listener's gradient (see
+#: :func:`_off_the_source`), by the stencil's points: it reads the cells the source
+#: itself feeds, whose sound is not a point's. Measured against a point source's exact
+#: field over 18 places of the source within a cell and 50 directions, the grid's 26 and
+#: others (``places`` of validation/wave_solver.py, with this at 0 and at 1.5; the worse
+#: of the 63 and 125 Hz bands). On the 19-point grid, 1.5, 2, 2.5 and 3 cells from the
+#: source, the gradient's main axis is up to 26, 21, 10 and 7 degrees off the line to
+#: the source with those points and 16, 13, 10 and 7 without them, and its energy over
+#: the pressure's up to 9.2, 7.6, 13.2 and 6.6 dB off with them and 6.3, 4.5, 3.7 and
+#: 1.2 dB without. A listener nearer the source than 1.5 cells keeps the points that lie
+#: no nearer it than itself: 1 and 1.4 cells away its axis is then up to 11.4 and 16.0
+#: degrees off and its energy 7.30 and 6.54 dB (with every point 17.6 and 26.0 degrees,
+#: 7.56 and 9.25 dB; without any point nearer than 1.5 cells 27.7 and 20.4 degrees), and
+#: from one listener to the next 0.1 cells further out the energy changes by 2.4 dB at
+#: most from 0.9 cells on (by 15.2 dB at 1.5 cells if a listener nearer than that kept
+#: every point; one-off scans every 0.1 cells from 0.5 to 2, as ``places`` measures).
+#: On the 7-point grid 1.5, 2, 2.5 and 3 cells give 21, 15, 5 and 4 degrees and 6.2,
+#: 5.4, 3.4 and 1.7 dB with the points, 17, 17, 5 and 4 degrees and 5.4, 4.3, 3.5 and
+#: 1.9 dB without: no clear gain, so it keeps them.
+_SOURCE_CELLS = {7: 0.0, 19: 1.5}
+
+
+def _off_the_source(
+    found: np.ndarray, probes: np.ndarray, source: np.ndarray, cell: float, stencil: int
+) -> np.ndarray:
+    """``found`` (whether each of ``probes``, the :func:`_probe_points` of each listener
+    in turn, counts) without the points among the source's own cells: those nearer the
+    source than :data:`_SOURCE_CELLS` cells and nearer it than their listener (that many
+    cells, or as far as the listener, to within rounding counts as not nearer). Of the
+    two points a cell from a listener along an axis at most one lies nearer the source
+    than the listener, so the listener loses at most that one. Where the other one is
+    not found either (a wall behind the listener), the axis keeps its points."""
+    limit = (_SOURCE_CELLS[stencil] - 1e-9) * cell
+    away = np.linalg.norm(probes - source, axis=1).reshape(-1, _PROBES)
+    near = (away < limit) & (away < away[:, :1] - 1e-9 * cell)
+    before = np.asarray(found, dtype=bool).reshape(-1, _PROBES)
+    after = before & ~near
+    for axis in range(3):
+        points = [1 + 2 * axis, 2 + 2 * axis, 7 + 2 * axis, 8 + 2 * axis]
+        empty = ~(after[:, points[0]] | after[:, points[1]])
+        after[np.ix_(empty, points)] = before[np.ix_(empty, points)]
+    return after.reshape(-1)
 
 
 def _probe_points(listener: np.ndarray, cell: float) -> np.ndarray:
@@ -573,6 +646,70 @@ def _spans_across(source: np.ndarray, listeners: np.ndarray) -> np.ndarray:
     offsets = listeners - source
     across = np.sum(offsets**2, axis=1)[:, None] - offsets**2
     return np.sqrt(np.max(across, axis=0, initial=0.0))
+
+
+def _open_sides(
+    bvh,
+    points: np.ndarray,
+    room: np.ndarray,
+    origin: np.ndarray,
+    cell: float,
+    shape,
+    layer: int,
+    threads: int = 0,
+) -> np.ndarray:
+    """(3, 2) for each axis's low and high side, whether sound that runs between
+    ``points`` (the source, then the listeners) can meet the matched layer on that side
+    of the grid (of ``shape`` cells of ``cell`` metres from ``origin``, ``layer`` of them
+    matched layer inside each edge) near grazing: whether the layer there needs its
+    ``room`` (3,) (see :data:`LAYER_ROOM`).
+
+    It can where the air round the points reaches the layer inside the box that lies the
+    room past them along every axis (and five cells, for the cells the points take: a
+    listener's gradient points lie two cells from it, and each reads up to two further). The
+    air is flooded from the source over the grid's cells in that box, as the solver
+    floods its own, and from every listener it does not reach. Where it reaches no
+    layer, a surface of the model lies between: sound from a point to that side's layer
+    and back to a point leaves the box across one of its faces, so it runs at least as
+    far as a reflection off a layer that lies that face's axis's room past the points,
+    which a grid with room on every side has too. A side of the box that ends short of
+    the layer counts as open (its room lies inside the grid).
+    """
+    from acoustic_spaces import _native
+
+    shape = np.asarray(shape, dtype=np.int64)
+    first, last = np.full(3, layer + 1), shape - 2 - layer  # the cells inside the layer
+    low = np.floor((points.min(axis=0) - room - origin) / cell).astype(np.int64) - 5
+    high = np.floor((points.max(axis=0) + room - origin) / cell).astype(np.int64) + 5
+    start, stop = np.maximum(first, low), np.minimum(last, high)
+    reached = np.zeros((3, 2), dtype=bool)
+    left = list(range(len(points)))  # the points whose air is not flooded yet
+    while left:
+        seed, left = left[0], left[1:]
+        try:
+            # A grid of the box's cells and one more round them, where its air ends.
+            part = _native.WaveSolver(
+                bvh,
+                np.zeros(bvh.face_count, np.int64),
+                np.zeros(1),
+                np.zeros((0, 3)),
+                np.zeros(0, np.int64),
+                origin + (start - 1) * cell,
+                cell,
+                *(int(n) for n in stop - start + 3),
+                np.ascontiguousarray(points[seed]),
+                np.ascontiguousarray(points[left].reshape(-1, 3)),
+                1.0,
+                0,
+                0.0,
+                threads,
+            )
+        except ValueError:
+            continue  # a point in no air: the run's own grid says which, and stops
+        reached |= np.array(part.open_sides, dtype=bool).reshape(3, 2)
+        left = [p for k, p in enumerate(left) if not part.probe_found(k)]
+    at_layer = np.column_stack([start == first, stop == last])
+    return reached | ~at_layer
 
 
 def _in_sight(bvh, listeners: np.ndarray, probes: np.ndarray) -> np.ndarray:
@@ -737,6 +874,8 @@ def wave_responses(
         weathers = weather.weathers if weather.zones is not None else [weather.atmosphere]
         moving = any(np.any(np.asarray(w.wind_speed(z - model.ground)) != 0.0) for w in weathers)
 
+    open_sides: list[np.ndarray] = []  # the sides whose layer needs room, once found
+
     def layout(courant: float, layer: int, speed: float, per_wavelength: float):
         """The grid for the stencil's ``courant``, with ``layer`` cells of matched
         layer, its time step set by ``speed``, ``per_wavelength`` cells per wavelength
@@ -749,17 +888,29 @@ def wave_responses(
         # model's planes.
         low = np.minimum(mesh.vertices.min(axis=0), points.min(axis=0) - 2.0 * h)
         high = np.maximum(mesh.vertices.max(axis=0), points.max(axis=0) + 2.0 * h)
+        offset = h * (2.0 + layer + np.array([0.0137, 0.0219, 0.0291]))
         if layer:
             # Room for sound that runs along the layer (see LAYER_ROOM), below in whole
             # cells so that the grid keeps its place on the model; none under an outdoor
-            # scene, whose ground closes the grid there.
+            # scene, whose ground closes the grid there, nor on a side the model's own
+            # surfaces close (found once, on the first grid that would grow).
             room = LAYER_ROOM * _spans_across(points[0], points[1:])
             below = np.ceil(np.maximum(low - (points.min(axis=0) - room), 0.0) / h)
             if outdoor:
                 below[2] = 0.0
-            low = low - h * below
-            high = np.maximum(high, points.max(axis=0) + room)
-        origin = low - h * (2.0 + layer + np.array([0.0137, 0.0219, 0.0291]))
+            above = np.maximum(high, points.max(axis=0) + room)
+            if not open_sides and (below.any() or np.any(above > high)):
+                bare = np.ceil((high - low + offset) / h).astype(np.int64) + 2 + layer
+                if int(np.prod(bare)) > MAX_CELLS:  # refused below, with or without room
+                    open_sides.append(np.ones((3, 2), dtype=bool))
+                else:
+                    open_sides.append(
+                        _open_sides(bvh, points, room, low - offset, h, bare, layer, threads)
+                    )
+            if open_sides:
+                low = low - h * np.where(open_sides[0][:, 0], below, 0.0)
+                high = np.where(open_sides[0][:, 1], above, high)
+        origin = low - offset
         shape = np.ceil((high - origin) / h).astype(np.int64) + 2 + layer
         return grid, origin, shape
 
@@ -878,7 +1029,11 @@ def wave_responses(
         built = prepare("standard", LAYER_CELLS)
     solver, grid, fits, probes, courant, extremes, still = built
     h = grid.cell
-    signal, delay = source_signal(grid.rate, h, courant)
+    at_source = 1.0  # the speed of sound at the source over the grid's
+    if weather is not None:
+        here = weather.still_at(source) if moving else weather.at(source)[0]
+        at_source = min(float(here) / (courant * h * grid.rate), 1.0)
+    signal, delay = source_signal(grid.rate, h, courant, at_source)
     samples = int(math.ceil(length_s * grid.rate))
     # The run starts `lead` steps before emission, where the source's pulse starts (or a
     # little before, so that the lead is a whole number of the output's samples), and
@@ -891,8 +1046,10 @@ def wave_responses(
     drive[lead - delay : lead - delay + len(signal)] = signal[: steps - lead + delay]
     # Before any step: a listener outside the source's air, or a source closed in. A
     # point round a listener counts only where the listener sees it.
-    found = [solver.probe_found(p) for p in range(len(probes))]
-    found = (np.array(found) & _in_sight(bvh, listeners, probes)).tolist()
+    found = np.array([solver.probe_found(p) for p in range(len(probes))])
+    found &= _in_sight(bvh, listeners, probes)
+    found = _off_the_source(found, probes, np.asarray(source, dtype=float), h, solver.stencil)
+    found = found.tolist()
     missing = [listener for i, listener in enumerate(names) if not found[_PROBES * i]]
     if missing:
         air, volume = solver.air_cells * h**3, model.room.volume_m3

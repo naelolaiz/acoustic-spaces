@@ -55,6 +55,30 @@ def test_threads_above_the_cores_run_as_the_cores(monkeypatch) -> None:
     assert [run_size.worker_threads(t) for t in (0, 1, 4, 6, 7, 100)] == [6, 1, 4, 6, 6, 6]
 
 
+def test_each_on_threads_keeps_the_order_with_at_most_its_threads_at_once(monkeypatch) -> None:
+    import threading
+    import time
+
+    lock, running, most = threading.Lock(), [0], [0]
+
+    def square(k: int) -> int:
+        with lock:
+            running[0] += 1
+            most[0] = max(most[0], running[0])
+        time.sleep(0.002 * (k % 4))  # the later ones finish first now and then
+        with lock:
+            running[0] -= 1
+        return k * k
+
+    assert run_size.each_on_threads(square, range(12), 3) == [k * k for k in range(12)]
+    assert 1 <= most[0] <= 3
+    # One thread, or one item: the calls in the calling thread, without a pool.
+    monkeypatch.setattr(run_size, "ThreadPoolExecutor", None)
+    here = threading.get_ident()
+    assert run_size.each_on_threads(lambda _: threading.get_ident(), range(3), 1) == [here] * 3
+    assert run_size.each_on_threads(lambda _: threading.get_ident(), [0], 4) == [here]
+
+
 def test_the_tracer_runs_threads_above_the_cores_as_the_cores() -> None:
     """The sum over threads depends on how many there are, so asking for more than the
     cores gives what the cores do only where the tracer takes no more than them."""
