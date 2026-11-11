@@ -515,6 +515,10 @@ public:
     // there, or the matched layer inside it.
     const std::array<bool, 6> &open_sides() const { return open_sides_; }
     bool flowing() const { return !flow_mask_.empty(); }
+    // In moving air, the pressure squared over the grid's air and the steps of the last
+    // run(), on average (the pressure before each step, as the probes read it); 0 in
+    // still air, where it is not summed.
+    double mean_square() const { return mean_square_; }
     std::size_t probes() const { return probe_cells_.size(); }
     bool probe_found(std::size_t p) const { return !probe_cells_.at(p).empty(); }
     std::size_t stencil() const { return stencil_; }
@@ -582,6 +586,7 @@ public:
         StepBarrier barrier(t_count);
         float *u0 = u0_.data(), *u1 = u1_.data();
         float *w0 = w0_.data(), *w1 = w1_.data();
+        std::vector<double> squares(t_count, 0.0);  // each thread's sum, in moving air
         auto work = [&](std::size_t t) {
             FlushDenormals flush;
             const std::size_t ib = n * t / t_count, ie = n * (t + 1) / t_count;
@@ -612,12 +617,14 @@ public:
             float *a = u0, *b = u1;  // a: the previous step, then the next; b: the current
             float *wa = w0, *wb = w1;  // branch velocities, the same way
             const bool flowing = !flow_mask_.empty();
+            double squared = 0.0;
             for (std::size_t step = 0; step < steps; ++step) {
                 if (t == 0) record(b, step, steps, out);
                 if (flowing) {
                     // Both pressures carried along with the air (b's last pass waits for
-                    // two barriers, by when thread 0 has recorded it).
-                    carry(b, ib, ie, barrier);
+                    // two barriers, by when thread 0 has recorded it), and b's squares
+                    // summed on the way, for mean_square().
+                    squared += carry(b, ib, ie, barrier);
                     carry(a, ib, ie, barrier);
                 }
                 for (std::size_t r = first_run; r < runs && run_begin[r] < ie; ++r) {
@@ -660,12 +667,18 @@ public:
                 std::swap(a, b);
                 std::swap(wa, wb);
             }
+            squares[t] = squared;
         };
         {
             std::vector<std::thread> pool;
             for (std::size_t t = 1; t < t_count; ++t) pool.emplace_back(work, t);
             work(0);
             for (auto &thread : pool) thread.join();
+        }
+        mean_square_ = 0.0;
+        if (steps > 0 && air_ > 0) {
+            for (const double sum : squares) mean_square_ += sum;
+            mean_square_ /= static_cast<double>(steps) * static_cast<double>(air_);
         }
         if (steps % 2 == 1) {
             std::swap(u0_, u1_);
@@ -681,6 +694,7 @@ public:
         std::fill(w0_.begin(), w0_.end(), 0.0f);
         std::fill(w1_.begin(), w1_.end(), 0.0f);
         std::fill(layer_state_.begin(), layer_state_.end(), 0.0f);
+        mean_square_ = 0.0;
     }
 
 private:
@@ -797,13 +811,16 @@ private:
     // Carries q (cells ib to ie on this thread) along with the air for a step: the
     // strong-stability-preserving Runge-Kutta method of third order, through the two
     // stages' fields; cells the air does not move keep their values, to the bit.
-    void carry(float *q, std::size_t ib, std::size_t ie, StepBarrier &barrier) {
+    // Returns the sum of those cells' squares as they came.
+    double carry(float *q, std::size_t ib, std::size_t ie, StepBarrier &barrier) {
         float *t1 = flow_t1_.data(), *t2 = flow_t2_.data();
         const std::uint8_t *type = type_.data();
         const float *fx = flow_x_.data(), *fy = flow_y_.data();
         auto still = [&](std::size_t i) { return fx[i] == 0.0f && fy[i] == 0.0f; };
+        double squares = 0.0;
         for (std::size_t i = ib; i < ie; ++i) {
             if (type[i] == kSolid) continue;
+            squares += static_cast<double>(q[i]) * static_cast<double>(q[i]);
             t1[i] = still(i) ? q[i] : q[i] + carried(q, i);
         }
         barrier.wait();
@@ -820,6 +837,7 @@ private:
             q[i] = q[i] + (2.0f / 3.0f) * ((t2[i] + carried(t2, i)) - q[i]);
         }
         barrier.wait();
+        return squares;
     }
 
     // Cell i's s: the square of its speed of sound over the grid's (1 without a field).
@@ -1286,6 +1304,7 @@ private:
     std::vector<std::int64_t> layer_cells_;
     std::vector<float> layer_state_;
     std::array<std::vector<float>, 6> layer_keep_, layer_push_;
+    double mean_square_ = 0.0;
     std::vector<std::vector<std::size_t>> probe_cells_;
     std::vector<std::vector<double>> probe_weights_;
     std::vector<std::size_t> run_begin_, run_end_;

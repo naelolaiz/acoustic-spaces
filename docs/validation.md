@@ -2372,12 +2372,42 @@ speed of sound is 0.02 to 0.29 dB below it and moving air −0.02 to +0.25 dB fr
 (most at 200 m, 1.5 m up); upwind moving air is within 0.13 dB and the effective speed
 of sound 0.14 to 0.39 dB above.
 
-Moving air takes 3.8 to 4.5 times as long as the effective speed of sound: 15 s
-against 3.9 s in the free field (3.2 million cells) and 34 s against 7.6 s with the
-façade (6 million), on 4 cores with nothing else running (10 November 2026). With the
-preset (29.2 against 30.2 million cells) it took 4.3 and 4.4 times as long, 6.6 and
-7.5 minutes against 92 and 102 s, on 4 cores that other work shared (11 November
-2026).
+Moving air takes 4.0 to 5.1 times as long as the effective speed of sound: 16 s
+against 3.9 s in the free field (3.2 million cells), 38 s against 7.4 s with the
+façade (6 million) and, with the preset (29.2 against 30.2 million cells), 324 and
+316 s against 66 s downwind and upwind, on 4 cores with nothing else running (11
+November 2026).
+
+**A room with an opening.** Moving air's wind blows through the model's solids, and
+where a solid has air on both sides along the wind the solver's sound grows instead of
+dying away (the scheme's doing, not the room's). In a nearly closed space that cannot
+leak away, and it builds up without bound. The solver therefore watches each run in
+moving air: from the end of the source's pulse on, the pressure squared over the
+grid's air, averaged over pieces of at least a quarter second, may not rise to twice
+its lowest level so far, or the run stops with an error (a rise that stays under a
+millionth of the run's largest piece is let be). A rigid room on rigid ground, 4 × 4 × 3 m
+inside, its walls and roof 0.8 m thick, with an opening of 0.8 × 0.8 m in its wall
+downwind, the source and a listener in it, a response of 3 s in the 63 Hz band:
+
+| wind (m/s) | moving air | listener's level, last quarter second over the second (dB) | the same with the effective speed of sound (dB) |
+|---:|---|---:|---:|
+| 5 | runs its 3 s | +1.5 | -0.4 |
+| 15 | stopped 2.5 s after emission, 3.5 dB over its lowest level | | -0.2 |
+| 30 | stopped 1.5 s after emission, 4.2 dB over its lowest level | | -0.1 |
+
+At 5 m/s the sound grows too slowly for the watch within 3 s: the response it lets
+through gains 1.5 dB where the effective speed of sound's loses 0.4 dB. The watch does
+not make moving air right in such a room, it stops the runs that fail outright: take
+the wind as the effective speed of sound there.
+
+One-off checks of the solver alone, on the 63 Hz band's grid with rigid surfaces over
+10 s, the levels those of the grid's last quarter second under its first: at 5 m/s the
+same room is stopped after 5.25 s; at 15 m/s with its opening upwind it loses 20 dB
+and is not stopped. In the open, at 15 m/s, a yard closed on four sides (4 × 4 m,
+walls 4 m high), a street 3 m wide between two buildings 5 m high and a façade
+downwind of the source die away steadily, by 91, 73 and 87 dB. A façade upwind of the
+source falls 36 dB in 1.5 s and then lingers, 40 dB down after 10 s (within 1.3 times
+its lowest level, so not stopped); what holds it there is not traced.
 
 ## Outdoor results against exact solutions
 

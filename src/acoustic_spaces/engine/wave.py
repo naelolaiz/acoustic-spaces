@@ -57,9 +57,12 @@ octave bands replace the ray-traced ones.
   c + v, upwind at c - v whichever way it turned. Where the wind changes, the term
   of the linearised Euler equations that the wind's shear puts on the air's velocity is
   left out, about ``|dv/dz| / omega`` of the rest. The air moves no more than half a cell a
-  step, and the matched layer's air is still. It takes about four times as long as the
+  step, and the matched layer's air is still. It takes four to five times as long as the
   effective speed of sound's run, and runs on the CPU (asked for the GPU, it says so and stays
-  there).
+  there). Its wind blows through the model's solids, which is not stable in a nearly
+  closed space such as a room with an opening, so the run is watched: once the source's
+  pulse has ended, the pressure squared over the grid's air, averaged over pieces of
+  ``WATCH_S``, may not rise to ``WATCH_RISE`` times its lowest so far (a ``ValueError``).
 - The grid is laid out on the CPU and stepped there, or with ``device`` on a GPU,
   through WebGPU (:mod:`acoustic_spaces.engine.gpu`); the two agree to rounding, in
   wind and temperature too (with the effective speed of sound).
@@ -149,6 +152,15 @@ _LOW_PASS_TAPS = 33
 _LOW_PASS_CUTOFF = 0.2
 #: Runs of more cell updates than this (a few seconds' work) report their progress.
 _LONG_RUN = 2e9
+#: Moving air is watched for sound that grows: its wind blows through the model's
+#: solids, which is not stable in a nearly closed space. The pressure squared over the
+#: grid's air is averaged over pieces of the run at least this long (s); from the end of
+#: the source's pulse on, a piece more than WATCH_RISE times the lowest before it, and
+#: more than WATCH_FLOOR of the largest (rounding's own level lies far below that),
+#: stops the run.
+WATCH_S = 0.25
+WATCH_RISE = 2.0
+WATCH_FLOOR = 1e-6
 
 
 def band_top(band: int, total: int = len(OCTAVE_BANDS_HZ)) -> float:
@@ -1096,19 +1108,55 @@ def wave_responses(
         f"{steps:,} steps{where})"
     )
     stepper = GpuWaveSolver(solver) if on_gpu else solver
-    # Long runs report every tenth (which is also where a cancelled run stops).
-    chunks = 10 if solver.air_cells * steps > _LONG_RUN else 1
+    who = f"source {label!r}" if label else "the source"
+    unstable = (
+        "The wind blows through the model's solids, which is not stable in a nearly "
+        "closed space such as a room with an opening: set simulation.wave.wind to effective"
+    )
+    # Long runs report every tenth (which is also where a cancelled run stops), and
+    # moving air runs in the pieces it is watched over (see WATCH_S).
+    tenths = 10 if solver.air_cells * steps > _LONG_RUN else 1
+    watch = max(1, round(WATCH_S * grid.rate))  # the steps of a watched piece, at least
+    chunks = max(tenths, steps // watch) if solver.flowing else tenths
     if chunks == 1:
         recorded = stepper.run(drive)
     else:
-        # Into one array as each tenth comes, not all ten joined at the end (twice the
+        # Into one array as each piece comes, not all joined at the end (twice the
         # memory).
         recorded = np.empty((len(probes), steps))
         bounds = np.linspace(0, steps, chunks + 1).astype(np.int64)
+        ended = lead - delay + len(signal)  # the first step after the source's pulse
+        lowest, largest = math.inf, 0.0
+        squares, since = 0.0, 0  # the watched piece so far: its squares' sum, its first step
         for c in range(chunks):
-            if c:
-                say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
+            if c and c * tenths // chunks > (c - 1) * tenths // chunks:
+                say(f"{label}: wave solver, {name}, {100 * (c * tenths // chunks) // tenths} %")
             recorded[:, bounds[c] : bounds[c + 1]] = stepper.run(drive[bounds[c] : bounds[c + 1]])
+            if not solver.flowing:
+                continue
+            squares += solver.mean_square * float(bounds[c + 1] - bounds[c])
+            if not math.isfinite(squares):
+                recorded[:, bounds[c + 1] :] = math.nan  # refused below
+                break
+            if bounds[c + 1] - since < watch:
+                continue  # (a long run's tenths can be shorter than a watched piece)
+            level = squares / float(bounds[c + 1] - since)
+            start, squares, since = since, 0.0, int(bounds[c + 1])
+            largest = max(largest, level)
+            if start >= ended:
+                if level > WATCH_RISE * lowest and level > WATCH_FLOOR * largest:
+                    raise ValueError(
+                        f"{who}: the wave solver's sound grew in the moving air instead "
+                        f"of dying away ({10 * math.log10(level / lowest):.1f} dB over its "
+                        f"lowest level, {(since - lead) / grid.rate:.1f} s after "
+                        f"emission). {unstable}"
+                    )
+                lowest = min(lowest, level)
+    if not np.all(np.isfinite(recorded)):
+        raise ValueError(
+            f"{who}: the wave solver's run did not stay finite"
+            + (f". {unstable}" if solver.flowing else "")
+        )
     info: dict[str, float] = {
         "wave_cells": float(solver.air_cells),
         "wave_cell_m": h,
