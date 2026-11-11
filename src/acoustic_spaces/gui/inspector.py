@@ -62,6 +62,7 @@ from acoustic_spaces.materials.ground import PRESETS
 from acoustic_spaces.room import UNASSIGNED, matching_name
 from acoustic_spaces.scene.model import (
     ATMOSPHERE_PRESETS,
+    DEFAULT_SCATTERING,
     INDOOR_COHERENT_MAX_BAND_HZ,
     LAYOUT_NAMES,
     TURBULENCE_PRESETS,
@@ -2670,6 +2671,9 @@ class MaterialPage(Page):
                 "Ticked, the material is a porous ground (grass, soil, snow, gravel, "
                 "asphalt): its absorption and its reflection come from its impedance, with "
                 "the phase and the ground wave that make the dip over the ground outdoors. "
+                "A ground scatters nothing unless it is given a scattering: ticking takes "
+                "away a scattering of 0.1 in every band, as a new material has, and "
+                "unticking gives it to a ground that scatters nothing. "
                 "Unticked, the absorption is as given"
             )
         )
@@ -2996,11 +3000,15 @@ class MaterialPage(Page):
                 out["reaction"] = "extended"
         return out
 
-    def _set_impedance(self) -> None:
+    def _set_impedance(self, scattering: bool = True) -> None:
+        """Give the material the impedance the ground controls show, with its
+        ``scattering`` or, without, with a ground's (none)."""
         if self._loading or not self.ground.isChecked():
             return
         material = self.document.scene.materials[self.key]
-        fields = {"impedance": self._impedance(), "scattering": material.scattering}
+        fields: dict = {"impedance": self._impedance()}
+        if scattering:
+            fields["scattering"] = material.scattering
         if material.audience:
             fields["audience"] = True
         if material.impedance is not None and material.uncertainty is not None:
@@ -3011,11 +3019,18 @@ class MaterialPage(Page):
         if self._loading:
             return
         if checked:
-            self._set_impedance()
+            # A scattering of 0.1 in every band, given or the default a new material has,
+            # is taken away: a ground scatters nothing unless its scattering says so.
+            # Any other is kept.
+            scattering = self.document.scene.materials[self.key].scattering
+            self._set_impedance(any(value != DEFAULT_SCATTERING for value in scattering))
             return
-        # The absorption the impedance gave stays, as values of the material's own.
+        # The absorption the impedance gave stays, as values of the material's own, and
+        # so does a scattering; a ground that scatters nothing takes a surface's 0.1.
         fields = self._fields()
         fields.pop("impedance", None)
+        if "scattering" not in self.document.scene.materials[self.key].to_data():
+            fields.pop("scattering", None)
         fields["source"] = "edited from a ground impedance"
         self.run(lambda: self.document.set_material(self.key, fields))
 
@@ -4226,7 +4241,8 @@ class SimulationPage(Page):
                 "Outdoors, how it takes the wind: as a speed of sound that the wind along the "
                 "way from the source changes, as the rays do, or as air that moves, so that "
                 "sound going against the wind is slower whichever way it turned, off a "
-                "building too (four to five times the work, on the CPU)"
+                "building too (four to five times the work over open ground, more round "
+                "buildings, on the CPU)"
             )
         )
         wave_form.addRow(self.wave)

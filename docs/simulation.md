@@ -37,8 +37,8 @@ or in a corner. Sound that bends round edges is added to them (see
     surfaces it sees, and the rays and those directions share that sound by how
     densely each finds it (the balance heuristic of multiple importance sampling): the
     rays near the source, the listener's directions near the listener. The expected
-    energy is the same, but a ray that lands next to a listener (above grass, an
-    aircraft overhead) brings it no burst of scattered sound.
+    energy is the same, but a ray that lands next to a listener (above a ground that
+    scatters, an aircraft overhead) brings it no burst of scattered sound.
   - `secondary_sources`: all reflected energy radiates that way, as in ODEON's late
     method. Much smoother tails, but it treats specular energy as diffuse: in the
     example box (smooth walls, absorbing ceiling) EDT comes out about 20 % shorter.
@@ -171,8 +171,9 @@ interference of reflections close in time.
 ## Scattering
 
 A surface's scattering coefficient (ISO 17497-1) is the share of the reflected energy
-that leaves it diffusely rather than specularly. `simulation.scattering` says how rays
-carry it out:
+that leaves it diffusely rather than specularly (that of a ground with an impedance is
+0 unless its material gives one, see [Ground impedance](outdoor.md#ground-impedance)).
+`simulation.scattering` says how rays carry it out:
 
 ```yaml
 simulation:
@@ -591,8 +592,9 @@ simulation:
   The grid is then fine enough for the slowest sound and steps in time for the fastest,
   on the CPU or on the GPU alike (see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
   With `wind: moving` (`simulate --wave-wind moving`) the air moves instead, so that
-  sound a building sends back towards the source goes against the wind; it takes four
-  to five times as long and runs on the CPU.
+  sound a building sends back towards the source goes against the wind, which flows
+  round the model's solids; it takes four to five times as long over open ground,
+  more round buildings, and runs on the CPU.
 - The listener records the pressure and its gradient, so the low end keeps its direction
   in Ambisonics, binaural and loudspeaker outputs (to first order). The source and each
   point a listener samples lie between the grid's cell centres (a cell is 0.2 m on the
@@ -648,8 +650,15 @@ only as an impedance's does, and absorb at most 95 % at random incidence; next t
 much more absorbing band, a band absorbs somewhat more than its material says (the
 fit reports how much, as `wave_absorption_miss`); near the top of the highest band the
 grid's walls absorb a little less than their admittance (0.025 less at 500 Hz with 14
-cells per wavelength); walls on the grid lie within half a cell of the model's, which can move a small
-room's modes by a few percent (more `points_per_wavelength` moves them less); waves on
+cells per wavelength); the grid puts every wall on cell faces, a wall along the grid up to
+half a cell from the model's and one at an angle to it in steps: in a rigid 4.13 x 3.37 x
+2.71 m box moved within a cell or turned against the grid (seven placements), that moves
+the modes of the grid's highest band by up to 11 % on the 63 Hz band's grid, 6.4 % on the
+125 Hz band's (the default's) and 2.8 % on the 250 Hz band's (more `points_per_wavelength`
+moves them less), and from 8 to 16 points per wavelength the level 1.5 to 6.5 cells in
+front of a wall is 1.5 dB rms off with the wall 0.4 cell off a cell face and up to 1.2 dB
+rms with it at 3 to 25 degrees to the grid (19-point stencil;
+[validation report](validation.md#wave-based-solver)); waves on
 the grid travel slower the shorter they are, at the top of the highest band with 8
 points per wavelength by 0.67 % in closed rooms and up to 1.7 % round open models
 (along the grid's axes, not at all along its body diagonals; `wave_slow_percent` in the

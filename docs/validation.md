@@ -2304,7 +2304,8 @@ flow, were checked (moving air is, [below](#moving-air-in-the-wave-solver)).
 `validation/wave_wind.py` checks the wave solver's moving air (`simulation.wave.wind:
 moving`, see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound))
 against exact solutions, and the effective speed of sound beside it, in the 63 Hz band
-(40 to 90 Hz, its edges a third of an octave wide) from a grid for that band.
+(40 to 90 Hz, its edges a third of an octave wide) from a grid for that band; and the
+wind it makes flow round the model's solids against an ideal fluid's.
 
 **Free field in a uniform wind.** A wind of 15 m/s over a rigid ground, the source 2 m
 up, listeners 1.5 m up 30 m away downwind, upwind, across the wind and at 45 degrees
@@ -2329,27 +2330,62 @@ Moving air is within 0.02 dB and 0.1 ms of the exact solution in every direction
 effective speed of sound gets the arrival about right but not the level, up to 0.84 dB
 off: a speed of sound that changes with the bearing is not a moving medium.
 
+**The wind round a dome.** Where the atmosphere's wind meets a surface of the model,
+moving air first makes it flow round the solids (see
+[How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)). A rigid
+half sphere of 4 m radius on rigid ground in a uniform wind of 15 m/s: the wind of the
+run's own solver, on the faces between its cells over the ground, against the flow of
+an ideal fluid past a sphere, the gradient of U (x + a³ x / (2 r³)), which the ground,
+a plane of symmetry, leaves as it is. The difference across each face in per cent of the
+wind, its root mean square and (in brackets) its largest:
+
+| distance from the dome's centre | 63 Hz band's grid (cells of 38 cm) | 125 Hz band's grid (19 cm) |
+|---|---|---|
+| within two cells of the dome | 8.8 % (58.6 %) | 9.2 % (150 %) |
+| from there to 1.5 radii | 1.5 % (8.3 %) | 0.88 % (9.7 %) |
+| 1.5 to 2 radii | 0.59 % (2.9 %) | 0.37 % (1.6 %) |
+| 2 to 3 radii | 0.35 % (1.6 %) | 0.32 % (1.0 %) |
+| beyond 3 radii | 0.28 % (2.1 %) | 0.29 % (2.2 %) |
+
+Next to the dome the grid's cells make a staircase of it, and the wind is fast round
+each of its corners: the fastest wind on the grid is 1.55 and 1.64 times the given one,
+where the ideal fluid's is 1.5 times, over the top. From two cells off the surface the
+wind is the ideal fluid's to 1.5 % and 0.9 %, and less farther out. Beyond 3 radii the
+difference no longer falls with the cell: the grid ends 4 radii from the centre along
+the ground and 3.5 radii up, and the wind's correction with it (a one-off run with the
+ground 7 radii away and the sky 6.5 gives 0.06 % there and 0.17 % from 2 to 3 radii).
+
 **A façade downwind.** A rigid building 40 m downwind of the source, its façade across
 the wind, 30 m high and 50 m wide, and a listener 10 m upwind of the source, both 2 m
-up: the façade sends the sound back against the wind. Ray theory in a uniform wind
-gives its arrival (a ray goes at c n + v for its wave normal n; off the façade the wave
-keeps its frequency and its wavenumber along the façade), 1.78 ms later than in still
-air. Against the still air's run on the same grid:
+up: the façade sends the sound back against the wind. In a uniform wind of 15 m/s ray
+theory gives its arrival (a ray goes at c n + v for its wave normal n; off the façade
+the wave keeps its frequency and its wavenumber along the façade), 1.78 ms later than
+in still air. Moving air's wind is not uniform there: it slows towards the façade and
+flows round the building, 13.9 m/s at the listener, 13.2 m/s at the source, 2.8 m/s
+5 m before the façade and up to 49.5 m/s past the building's edges. Its reference is
+the time along the still air's paths through the wind the run's solver made, each
+piece of a path at the speed of a ray along it, v · s + √(c² − |v|² + (v · s)²) (bending
+the paths changes the time only to the second order; the same sum through the uniform
+wind gives its exact rays' arrival to within 0.001 ms). Against the still air's run on the
+same grid:
 
 | Façade echo | later than in still air | off by |
 |---|---|---|
-| exact (ray theory) | +1.78 ms | |
+| ray theory, the uniform wind | +1.78 ms | |
 | effective speed of sound | -8.81 ms | -10.59 ms |
-| moving air | +1.80 ms | +0.02 ms |
+| ray theory, the wind round the building | +1.38 ms | |
+| moving air | +1.38 ms | +0.00 ms |
 
 The effective speed of sound sends the echo back at the speed of sound going away from
-the source: over its 40 m back to the source that makes it 80 v / (c² - v²) = 10.2 ms
+the source: over its 40 m back to the source that makes it 80 v / (c² − v²) = 10.2 ms
 too soon, and the run gives 10.6 ms. The 0.4 ms between the two is not fully traced:
 the effective run's grid steps for the fastest sound, c + v, and the still air's for
 c, so the two disperse differently, which accounts for part of it. Moving air gets the
-echo within 0.02 ms. The wind is the uniform profile everywhere, the
-building included: the check is of the sound in moving air, not of the flow round a
-building, which the engine does not compute.
+echo within 0.01 ms of the rays through its own wind, 0.40 ms sooner than a uniform wind
+would bring it: before the façade the air is nearly still. That wind is an ideal
+fluid's, without the wake and the eddies of a real building's, and at the building's
+edges it is 3.3 times the given wind on this grid, where a real wind separates (see
+[What is not modelled yet](outdoor.md#what-is-not-modelled-yet)).
 
 **A wind that grows with height.** The `windy` preset (5 m/s 10 m up, logarithmic) over
 grass, downwind and upwind, the scene of [the check above](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation),
@@ -2372,42 +2408,41 @@ speed of sound is 0.02 to 0.29 dB below it and moving air −0.02 to +0.25 dB fr
 (most at 200 m, 1.5 m up); upwind moving air is within 0.13 dB and the effective speed
 of sound 0.14 to 0.39 dB above.
 
-Moving air takes 4.0 to 5.1 times as long as the effective speed of sound: 16 s
-against 3.9 s in the free field (3.2 million cells), 38 s against 7.4 s with the
-façade (6 million) and, with the preset (29.2 against 30.2 million cells), 324 and
-316 s against 66 s downwind and upwind, on 4 cores with nothing else running (11
-November 2026).
+Moving air takes 3.8 to 5.0 times as long as the effective speed of sound where its
+wind is carried as given: 16 s against 4.1 s in the free field (3.2 million
+cells) and, with the preset (29.2 against 30.2 million cells), 319 and 332 s against
+66 s downwind and upwind. Round the façade's building it takes 10.5 times as long for
+the façade's response of 0.45 s, 86 s against 8.2 s (6 million cells): 37 s to make the
+wind flow round the building (962 sweeps of its solve), which a run does once whatever
+its length, and its steps 6.9 times the effective speed of sound's. On 4 cores with
+nothing else running (11 November 2026).
 
-**A room with an opening.** Moving air's wind blows through the model's solids, and
-where a solid has air on both sides along the wind the solver's sound grows instead of
-dying away (the scheme's doing, not the room's). In a nearly closed space that cannot
-leak away, and it builds up without bound. The solver therefore watches each run in
-moving air: from the end of the source's pulse on, the pressure squared over the
-grid's air, averaged over pieces of at least a quarter second, may not rise to twice
-its lowest level so far, or the run stops with an error (a rise that stays under a
-millionth of the run's largest piece is let be). A rigid room on rigid ground, 4 × 4 × 3 m
-inside, its walls and roof 0.8 m thick, with an opening of 0.8 × 0.8 m in its wall
-downwind, the source and a listener in it, a response of 3 s in the 63 Hz band:
+**A room with an opening.** A wind blown through a room's walls makes the solver's
+sound grow there without bound (the scheme keeps the sound's energy only where no wind
+crosses a surface); made to flow round them, it leaves the room sheltered. A rigid room
+on rigid ground, 4 × 4 × 3 m inside, its walls and roof 0.8 m thick, with an opening of
+0.8 × 0.8 m in its wall downwind, the source and a listener in it, a response of 3 s in
+the 63 Hz band:
 
-| wind (m/s) | moving air | listener's level, last quarter second over the second (dB) | the same with the effective speed of sound (dB) |
-|---:|---|---:|---:|
-| 5 | runs its 3 s | +1.5 | -0.4 |
-| 15 | stopped 2.5 s after emission, 3.5 dB over its lowest level | | -0.2 |
-| 30 | stopped 1.5 s after emission, 4.2 dB over its lowest level | | -0.1 |
+| wind (m/s) | fastest wind round the room (m/s) | fastest wind in the room (m/s) | moving air: listener's level, last quarter second over the second (dB) | the same with the effective speed of sound (dB) |
+|---:|---:|---:|---:|---:|
+| 5 | 7.8 | 0.01 | -0.5 | -0.4 |
+| 15 | 23.6 | 0.03 | -0.8 | -0.2 |
+| 30 | 46.9 | 0.05 | -1.0 | -0.1 |
 
-At 5 m/s the sound grows too slowly for the watch within 3 s: the response it lets
-through gains 1.5 dB where the effective speed of sound's loses 0.4 dB. The watch does
-not make moving air right in such a room, it stops the runs that fail outright: take
-the wind as the effective speed of sound there.
+Nothing takes the room's sound in but the opening, with either way of taking the wind.
+The solver still watches each run in moving air: from the end of the source's pulse on,
+the pressure squared over the grid's air, averaged over pieces of at least a quarter
+second, may not rise to twice its lowest level so far, or the run stops with an error
+(a rise that stays under a millionth of the run's largest piece is let be). None of
+these runs is stopped.
 
 One-off checks of the solver alone, on the 63 Hz band's grid with rigid surfaces over
-10 s, the levels those of the grid's last quarter second under its first: at 5 m/s the
-same room is stopped after 5.25 s; at 15 m/s with its opening upwind it loses 20 dB
-and is not stopped. In the open, at 15 m/s, a yard closed on four sides (4 × 4 m,
-walls 4 m high), a street 3 m wide between two buildings 5 m high and a façade
-downwind of the source die away steadily, by 91, 73 and 87 dB. A façade upwind of the
-source falls 36 dB in 1.5 s and then lingers, 40 dB down after 10 s (within 1.3 times
-its lowest level, so not stopped); what holds it there is not traced.
+10 s at 15 m/s, the levels those of the grid's last quarter second under its first:
+the same room loses 1.1 dB with its opening downwind (1.1 and 1.2 dB at 5 and 30 m/s) and
+1.0 dB with it upwind. In the open, a yard closed on four sides (4 × 4 m, walls 4 m
+high), a street 3 m wide between two buildings 5 m high, a façade downwind of the
+source and one upwind of it die away steadily, by 68, 72, 110 and 121 dB.
 
 ## Outdoor results against exact solutions
 
@@ -3224,7 +3259,9 @@ and without an atmosphere, agree the same way; a tree belt of 17 media is declin
 its reason and traced on the CPU.
 
 **Whole runs.** `validation/outdoor_gpu.py` simulates the outdoor examples with their own
-settings once per device and once more on the CPU with the next seed, and compares the
+settings, but for grounds that scatter 0.1 where the examples' scatter nothing (over
+those no late ray reaches the stage's listeners or the hillside's crest), once per
+device and once more on the CPU with the next seed, and compares the
 late sound's level per band and its centre time at every listener (the mean absolute
 difference over listeners and bands); the next seed shows how much the ray count's noise
 alone moves them:
@@ -3630,11 +3667,11 @@ the long term and L_den (5 dB in the evening, 10 at night), in dB(A):
 
 | | downwind | upwind | still | inversion | day | evening | night | long term | L_den |
 |---|---|---|---|---|---|---|---|---|---|
-| 50 m | 47.0 | 36.6 | 47.4 | 47.6 | 45.8 | 46.2 | 46.8 | 46.2 | 53.0 |
-| 100 m | 41.7 | 21.6 | 38.9 | 41.0 | 38.8 | 39.3 | 40.0 | 39.3 | 46.2 |
-| 200 m | 34.3 | 10.5 | 26.3 | 35.7 | 30.0 | 31.9 | 33.7 | 31.9 | 39.6 |
-| 400 m | 24.0 | -2.8 | 12.0 | 29.4 | 19.1 | 23.9 | 26.8 | 23.8 | 32.5 |
-| 800 m | 12.9 | -20.2 | -1.6 | 20.0 | 7.9 | 14.0 | 17.2 | 13.9 | 22.8 |
+| 50 m | 47.1 | 36.6 | 47.6 | 47.7 | 46.0 | 46.3 | 46.9 | 46.3 | 53.1 |
+| 100 m | 41.8 | 21.6 | 39.1 | 41.0 | 38.9 | 39.4 | 40.1 | 39.4 | 46.3 |
+| 200 m | 34.5 | 10.5 | 26.5 | 35.8 | 30.1 | 32.0 | 33.8 | 32.0 | 39.7 |
+| 400 m | 24.1 | -2.8 | 11.8 | 29.5 | 19.2 | 23.9 | 26.8 | 23.9 | 32.5 |
+| 800 m | 12.9 | -20.2 | -2.1 | 20.0 | 7.9 | 14.0 | 17.2 | 13.9 | 22.8 |
 
 **The arithmetic.** The script works the period levels, the long-term levels and L_den
 out again from each class's own run: the energy mean over the classes by their shares
@@ -3647,18 +3684,18 @@ clear nights bring, and takes the long-term level from it as L_LT = L_DW - C_met
 C_met = C_0 (1 - 10 (h_s + h_r) / d_p) beyond d_p = 10 (h_s + h_r) and 0 nearer, where
 C_0 lies between 0 and 5 dB by the local weather statistics. The engine's C_met is the
 A-weighted level in the favourable classes (downwind and the inversion, combined by
-their shares of the whole day) less the long-term level. With C_0 fitted to it at 3.37
+their shares of the whole day) less the long-term level. With C_0 fitted to it at 3.36
 dB, within the standard's range:
 
 | distance | engine | ISO 9613-2 | difference |
 |---|---|---|---|
-| 50 m | 1.03 | 1.68 | -0.65 |
-| 100 m | 2.04 | 2.53 | -0.49 |
-| 200 m | 3.14 | 2.95 | +0.19 |
-| 400 m | 3.46 | 3.16 | +0.30 |
-| 800 m | 3.51 | 3.26 | +0.25 |
+| 50 m | 1.00 | 1.68 | -0.68 |
+| 100 m | 2.01 | 2.52 | -0.51 |
+| 200 m | 3.14 | 2.94 | +0.20 |
+| 400 m | 3.46 | 3.15 | +0.31 |
+| 800 m | 3.51 | 3.25 | +0.26 |
 
-The engine's correction follows the standard's shape within 0.65 dB, the most at 50 m,
+The engine's correction follows the standard's shape within 0.68 dB, the most at 50 m,
 where the standard's formula is only a step past d_p = 25 m and the ground's own
 pattern still differs from one weather to the next. This is a check of plausibility,
 not of accuracy: the standard's correction is an empirical fit, and the engine's comes
@@ -3849,11 +3886,12 @@ listener sees them), by 0.33 % with 0.125 m and 0.08 % with 0.0625 m; panning to
 by 1.5 %, 0.26 % and 0.14 %.
 
 **The levels.** White noise through the car's walk over grass (Miki's impedance, 200
-kPa s/m²), 16 noises up to 18 kHz: the energy of the sound in each octave band over the
-pass-by, relative to the source's, against the noise through each place's own impulse
-response for the time its sound is heard (Doppler moves the sound in time and pitch but
-keeps its energy), and against the sound exposure level `pass_by` gives from the
-places' band levels:
+kPa s/m², scattering 0.1, which gives the walk a late part over the open ground), 16
+noises up to 18 kHz: the energy of the sound in each octave band over the pass-by,
+relative to the source's, against the noise through each place's own impulse response
+for the time its sound is heard (Doppler moves the sound in time and pitch but keeps its
+energy), and against the sound exposure level `pass_by` gives from the places' band
+levels:
 
 | band | rendered | responses | pass-by | early part alone: rendered | responses |
 |---|---|---|---|---|---|
@@ -4142,13 +4180,13 @@ microphone stands, and M. Toward et al., "Sound propagation and audibility of tr
 horns", ISVR and RSSB, measured train horns 1.5 m up), each harmonic's reflection off
 the ballast added in pressure and taken out of its sound power. The engine, which
 averages a reflection's interference over each band, gives the high note 108.8 dB(C)
-there and the low one 108.9, and 109.6 and 109.1 in a free field. Sounded together as
+there and the low one 109.0, and 109.6 and 109.1 in a free field. Sounded together as
 a chord (`--horn chord`), which EN 15153-2 allows, the two notes are made to 109 dB(C)
 together, its level for a group of horns; the engine gives 108.9 dB(C) there and 109.3
 in a free field. Toward et al. measured a train horn of 368 Hz over ballast with the
 horn from 0.5 to 3.0 m up and
 found virtually no difference at 25 m; the low note's A-weighted level there changes by
-+1.5 to 0 dB over those heights by its harmonics and by 0 to -0.5 dB in the engine.
++1.5 to 0 dB over those heights by its harmonics and by +0.1 to -0.5 dB in the engine.
 A-weighted, the low note is 2.4 dB under its C-weighted level harmonic by harmonic
 (Toward et al. take 2 dB off the rules' C-weighted levels for their A-weighted ones)
 and 1.4 dB under it by octave bands, as the engine weights it; the high note 0.5 and
@@ -4209,16 +4247,16 @@ ground's attenuation (A_gr,B, equation 14, 0 dB this near):
 
 | train | speed | 7.5 m: engine | Schall 03 | 25 m: engine | Schall 03 |
 |---|---:|---:|---:|---:|---:|
-| S-Bahn | 80 km/h | 87.2 | 91.1 | 80.7 | 84.7 |
-| regional train | 160 km/h | 97.1 | 100.9 | 91.5 | 94.5 |
+| S-Bahn | 80 km/h | 87.0 | 91.1 | 80.5 | 84.7 |
+| regional train | 160 km/h | 97.0 | 100.9 | 91.5 | 94.5 |
 
-The engine gives 2.9 to 4.0 dB(A) less; by octave band, 7.5 m from the S-Bahn, +2.7,
-+2.0, +0.7, -2.1, -5.8, -4.1, -1.0 and -2.3 dB from 63 Hz to 8 kHz. The two reckon the
+The engine gives 3.0 to 4.1 dB(A) less; by octave band, 7.5 m from the S-Bahn, +2.9,
++2.2, +0.8, -2.1, -6.1, -4.3, -1.0 and -2.2 dB from 63 Hz to 8 kHz. The two reckon the
 ground in different ways. Schall 03 adds the reflection's energy, about as much again
 as the direct sound's at every frequency. The engine adds the reflection with its phase
 (+6 dB where the two arrive together, at 63 and 125 Hz, a dip where they cancel), off
 a ground whose impedance it weighs over the reflection's Fresnel zone. Traced at 7.5 m
-from the S-Bahn: of the 3.9 dB, 0.7 dB is the ballast taking sound where a hard bed
+from the S-Bahn: of the 4.0 dB, 0.9 dB is the ballast taking sound where a hard bed
 would not (87.9 dB(A) with the bed hard), 1.2 dB is the dip of a point at the rail top
 and its reflection in step with each other at 1 to 2 kHz (89.1 dB(A) with the bed hard
 and the reflection's energy added, `coherent_max_band_hz: 63`), and the last 2.0 dB is
@@ -4236,13 +4274,13 @@ Commission Regulation (EU) No 1304/2014 (the TSI Noise, table 4) for new units t
 
 | unit | Tp | engine | Schall 03 | limit |
 |---|---:|---:|---:|---:|
-| electric multiple unit (the S-Bahn, 67.4 m) | 3.03 s | 82.3 | 86.2 | 80 |
-| electric locomotive (19.0 m) | 0.86 s | 87.7 | 90.4 | 84 |
-| coach (26.4 m) | 1.19 s | 84.0 | 88.0 | 79 |
-| freight wagon with composite blocks, not a tank wagon (17.8 m) | 0.80 s | 85.9 | 89.9 | 83 |
+| electric multiple unit (the S-Bahn, 67.4 m) | 3.03 s | 82.2 | 86.2 | 80 |
+| electric locomotive (19.0 m) | 0.85 s | 87.7 | 90.4 | 84 |
+| coach (26.4 m) | 1.19 s | 83.9 | 88.0 | 79 |
+| freight wagon with composite blocks, not a tank wagon (17.8 m) | 0.80 s | 85.7 | 89.9 | 83 |
 
 (dB(A)). Schall 03's units are 6.2 to 9.0 dB over the limits by its own reckoning, and
-2.3 to 5.0 dB over them in the engine. The limits are for new units on a track of low
+2.2 to 4.9 dB over them in the engine. The limits are for new units on a track of low
 roughness (EN ISO 3095:2013, 6.2); Schall 03's levels are for units of the German fleet
 on rails in average condition, rougher than the TSI's track. That Schall 03 is over the limits says that, not that
 either is wrong; no measured pass-by is compared here.
@@ -4410,7 +4448,8 @@ straight).
 landing](demos.md#aircraft-taking-off-and-landing)) against Doc 29's own levels: JETW's
 source (`doc29.source`), simulated in the engine, against its NPD curves in the
 scene's air, and the example's flights against Doc 29's sum over the same flight
-path's segments. The late rays are seeded, so a run gives these numbers.
+path's segments. Over the meadow and the runway, which scatter nothing, the late rays
+bring the microphones no sound.
 
 **The source against its NPD curves.** JETW flies straight and level at 160 kt, the
 NPD curves' speed, over a microphone 1.2 m above grass, at 15,000 lb of thrust an
@@ -4418,12 +4457,12 @@ engine departing and 5,000 lb arriving:
 
 | distance | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| 200 ft (61 m) | 99.8 (102.5) | 104.0 (104.0) | 95.8 (98.4) | 100.0 (101.8) |
-| 400 ft (122 m) | 94.2 (95.4) | 100.2 (100.2) | 90.1 (91.2) | 96.1 (98.0) |
-| 630 ft (192 m) | 90.2 (90.6) | 97.5 (97.4) | 86.0 (86.5) | 93.3 (95.2) |
-| 1000 ft (305 m) | 85.7 (85.8) | 94.5 (94.4) | 81.5 (81.6) | 90.4 (92.1) |
-| 2000 ft (610 m) | 78.2 (78.2) | 89.5 (89.3) | 74.2 (74.0) | 85.6 (87.0) |
-| 4000 ft (1219 m) | 69.7 (70.0) | 83.7 (83.6) | 66.1 (65.9) | 80.0 (81.4) |
+| 200 ft (61 m) | 99.7 (102.5) | 104.0 (104.0) | 95.7 (98.4) | 99.9 (101.8) |
+| 400 ft (122 m) | 94.2 (95.4) | 100.1 (100.2) | 90.1 (91.2) | 96.0 (98.0) |
+| 630 ft (192 m) | 90.1 (90.6) | 97.4 (97.4) | 86.0 (86.5) | 93.3 (95.2) |
+| 1000 ft (305 m) | 85.6 (85.8) | 94.5 (94.4) | 81.5 (81.6) | 90.3 (92.1) |
+| 2000 ft (610 m) | 78.1 (78.2) | 89.5 (89.3) | 74.1 (74.0) | 85.5 (87.0) |
+| 4000 ft (1219 m) | 69.7 (70.0) | 83.7 (83.6) | 66.0 (65.9) | 79.9 (81.4) |
 
 (dB(A); the NPD curves' in brackets, with Doc 29's impedance adjustment.) The engine's
 pass is measured as Doc 29 defines its levels (Volume 2's glossary, section 4.1 and its
@@ -4431,13 +4470,13 @@ footnote 15): L_ASmax is the highest of its A-weighted level through a sound lev
 meter's slow time weighting, and the SEL is taken over the time that level is within 10
 dB of it. The source is made to the NPD curves' L_Amax 1000 ft away, raised by the 0.29
 dB the slow time weighting takes off a point source's loudest moment there, and the
-engine gives it back within 0.1 dB. Nearer, the NPD curves' L_Amax grows faster than one
-point source's with one spectrum: at 200 ft the engine reads 2.8 dB (departure) and 2.6
+engine gives it back within 0.2 dB. Nearer, the NPD curves' L_Amax grows faster than one
+point source's with one spectrum: at 200 ft the engine reads 2.8 dB (departure) and 2.7
 dB (arrival) under them. With no time weighting, the highest level of the places is 2.0
 dB over L_ASmax at 200 ft, 1.0 dB at 400 ft, 0.6 dB at 630 ft and less farther out (0.3
-dB at 1000 ft, under 0.1 dB at 4000 ft), and the SEL of the whole walk is 0.35 to 0.46
+dB at 1000 ft, under 0.1 dB at 4000 ft), and the SEL of the whole walk is 0.34 to 0.46
 dB over the 10 dB-down one. The departure's SEL is
-within 0.3 dB of its NPD curves, the arrival's 1.4 to 1.9 dB under: JETW's arrival
+within 0.2 dB of its NPD curves, the arrival's 1.5 to 2.0 dB under: JETW's arrival
 curves have SEL - L_Amax = 10 lg(πd/V) within 0.22 dB out to 1000 ft, the SEL of a point
 source's whole pass over its level as it passes, with no time weighting and in air that
 absorbs nothing. Measured as Doc 29 defines its levels, that source's SEL - L_ASmax is
@@ -4450,24 +4489,23 @@ each listener, their level following their thrust:
 
 | listener | departure: L_ASmax | SEL | arrival: L_ASmax | SEL |
 |---|---:|---:|---:|---:|
-| departure_4km | 87.2 (87.2) | 96.0 (96.0) | 49.9 (43.1) | 64.1 (60.7) |
-| lateral_450m | 85.1 (85.1) | 95.5 (94.5) | 43.1 (54.4) | 57.3 (68.8) |
-| approach_2000m | 51.9 (54.8) | 67.8 (68.6) | 90.6 (91.5) | 96.9 (98.8) |
+| departure_4km | 87.1 (87.2) | 95.9 (96.0) | 50.2 (43.1) | 64.4 (60.7) |
+| lateral_450m | 85.0 (85.1) | 95.5 (94.5) | 41.8 (54.4) | 56.4 (68.8) |
+| approach_2000m | 52.0 (54.8) | 67.3 (68.6) | 90.5 (91.5) | 96.8 (98.8) |
 
-(dB(A); Doc 29's in brackets.) Where the jet is heard rolling, the walk starts or ends
+(dB(A); Doc 29's in brackets.) Where the arrival is heard rolling, the walk starts or ends
 less than 10 dB under its L_ASmax, so its SEL there is over less than the 10 dB-down
 time. Where the jet is heard in the air, they agree within 1.0 dB but for the arrival's
-SEL, 1.9 dB under as its NPD curves have it. Where it is heard rolling on the runway
+SEL, 2.0 dB under as its NPD curves have it. Where it is heard rolling on the runway
 they part, as the two reckon sound running along the ground differently. Doc 29 takes
 off its lateral attenuation, 10.9 dB at grazing for a listener ahead of a landing roll
 or behind a take-off roll, from measurements and so averaged over their weather, and
 behind a take-off roll adds its start-of-roll directivity (5.1 dB down at
 approach_2000m). The engine reckons the scene's ground in still air: the hard runway
-reflects the sound back up, so the arrival's roll-out is 6.7 dB over Doc 29 at
+reflects the sound back up, so the arrival's roll-out is 7.1 dB over Doc 29 at
 departure_4km, 2.4 km ahead of it along the runway, while the meadow takes much of it
-away from 250 Hz up, so it is 11.3 dB under at lateral_450m, 1 km away across the grass
-(at 250 Hz the roll-out's end is 14 dB quieter there than at departure_4km); the
-departure's take-off roll is 2.9 dB under at approach_2000m.
+away from 250 Hz up, so it is 12.6 dB under at lateral_450m, 1 km away across the grass;
+the departure's take-off roll is 2.8 dB under at approach_2000m.
 
 ## Ground-borne vibration against the FTA's manual
 
@@ -4911,6 +4949,83 @@ without its taps the 19-point one's is within 0.01 dB of it. Rays give the
 average over the room instead: 5.2 dB more at this seat in the 63 Hz band, where the
 listener sits near the nodes of most modes.
 
+**Where the grid puts the walls.** `validation/wave_walls.py` measures what walls on
+cell faces cost (the leftover under A whole room, above), with both stencils on the
+grids the solver takes when its highest band is the 63, 125 or 250 Hz one, at 8 points
+per wavelength (a run up to 125 Hz, the default, takes the 19.8 cm grid for every band).
+A rigid 4.13 x 3.37 x 2.71 m box, whose sides are no whole number of cells, is placed as
+the solver places a room whose source and listeners lie more than two cells from its
+walls, moved from there by parts of a cell along the axes (0, 0, 0; 0.25, 0.5, 0.75;
+0.5, 0.25, 0.4), turned by 3, 8 and 14 degrees about the vertical, and turned by 8 and
+tilted by 5 degrees. Its modes are the eigenvalues of the grid's own update, each
+analytic mode taken at the eigenvector its shape correlates with best. With every side
+rounded to whole cells and the walls on cell faces, the grid's modes follow the
+stencil's dispersion relation within 2e-6 (the 2⁻¹⁹ by which the solver slows sound,
+above): what is off there is the dispersion alone. In each grid's own band (sharp edges
+at the synthesis's crossovers, 89.1, 176.8 and 353.6 Hz), the worst mode (and the
+largest root-mean-square) over the placements:
+
+| stencil | grid | sides in whole cells, walls on cell faces | moved within a cell | turned or tilted |
+|---|---|---:|---:|---:|
+| 19-point | 63 Hz band's (40.5 cm) | −0.4 % (0.3 %) | +11.3 % (7.0 %) | −6.7 % (4.4 %) |
+| 19-point | 125 Hz band's (19.8 cm) | −0.4 % (0.3 %) | +4.9 % (2.0 %) | −6.4 % (3.2 %) |
+| 19-point | 250 Hz band's (9.9 cm) | −0.4 % (0.3 %) | −2.6 % (1.2 %) | −2.8 % (1.3 %) |
+| 7-point | 63 Hz band's (39.6 cm) | −1.1 % (0.6 %) | −6.1 % (4.0 %) | −10.3 % (5.7 %) |
+| 7-point | 125 Hz band's (19.8 cm) | −1.0 % (0.5 %) | +4.5 % (2.0 %) | −7.0 % (3.6 %) |
+| 7-point | 250 Hz band's (9.9 cm) | −1.0 % (0.4 %) | −3.2 % (1.2 %) | −3.7 % (1.6 %) |
+
+A box turned against the grid couples modes that lie close together, and a mode's
+shape then spreads over several eigenvectors: on their own grids, 1 to 11 of the 31
+modes in the 125 Hz band and 22 to 120 of the 195 in the 250 Hz band correlate less than
+0.8 with the one they match best (19-point; 0 to 11 and 4 to 117 with the 7-point one;
+none on the 63 Hz band's grids or in a box moved within a cell). Of the modes that keep
+their shape, the worst turned or tilted on those two grids is −4.5 % and −2.5 % off
+(19-point; −6.8 % and −3.7 % 7-point); the furthest eigenvector that holds a quarter of
+a mode's shape (a squared correlation of 0.25), −6.4 % and −3.6 % (−7.4 % and −4.2 %).
+These are samples, not bounds: which placement is worst depends on how each side rounds
+to whole cells (on the 9.9 cm grid the first two placements round every side alike), and
+cells 0.06 % smaller (at 343.0 m/s instead of 343.2) move the worst modes by up to 0.25
+percentage points; which modes keep their shape hangs on the 0.8: in the tilted box on
+the 7-point 125 Hz band's grid, those smaller cells take the worst of them from −6.8 %
+to −4.6 % (one-off checks).
+
+The band levels at five listeners 0.74 to 1.19 m from the nearest wall, the source 0.41
+to 0.53 m from three (on the 63 Hz band's grids that is within two cells, where the
+solver would start its grid less than a cell further out: the placements are samples
+either way), against the box's image sources with the solver's own pulse (more images
+and a longer FFT move them by less than 0.001 dB), in the same sharp-edged bands (the
+63 Hz one from 44.5 Hz), are off by up to 2.7 / 2.8 dB (first 100 / 300 ms) in the
+63 Hz band on its grid, 2.5 / 4.3 dB in the 125 Hz band and 4.4 / 2.8 dB in the 250 Hz
+band with the 19-point stencil (3.3 / 2.9, 2.4 / 4.6 and 4.0 / 3.7 dB with the 7-point
+one), the most over the listeners and the seven placements; with the walls on cell
+faces, 0.56 / 0.30, 0.24 / 0.12 and 0.15 / 0.15 dB (19-point). On the 19-point grid an
+octave finer than a band's own, the 63 Hz band is off by up to 1.2 / 1.9 dB and the
+125 Hz band by up to 1.4 / 0.8 dB.
+
+A single rigid wall, against the same grid's free field driven by the source and by its
+image in the model's wall (so that the grid's dispersion and the source are the same on
+both sides): the root-mean-square error over the cell centres 1.5 to 6.5 cells in front
+of it, by octave of cells per wavelength, with the 19-point stencil (the 7-point one
+within 0.08 dB of it), and the place of the wall that fits the error best in the first
+octave, along its normal in steps of 0.01 cell (negative: behind the model's wall, away
+from the air). The walls along the grid lie that share of a cell into the air from a
+cell face:
+
+| wall | 8–16 cells per wavelength | 16–32 | 32–64 | place fitted (cells) |
+|---|---:|---:|---:|---:|
+| along the grid, 0.1 cell off a cell face | 0.35 dB | 0.21 dB | 0.10 dB | −0.10 |
+| along the grid, 0.25 cell off | 0.91 dB | 0.53 dB | 0.24 dB | −0.25 |
+| along the grid, 0.4 cell off | 1.50 dB | 0.85 dB | 0.38 dB | −0.40 |
+| at 3 degrees to the grid | 1.17 dB | 0.39 dB | 0.22 dB | −0.04 |
+| at 8 degrees | 0.93 dB | 0.07 dB | 0.03 dB | −0.04 |
+| at 14 degrees | 0.68 dB | 0.20 dB | 0.05 dB | −0.06 |
+| at 25 degrees | 0.54 dB | 0.15 dB | 0.07 dB | −0.04 |
+
+Along the grid the place is the whole error: against the source's image in the cell face
+the grid puts the wall on, what is left is below 0.001 dB, as it is with the model's wall
+on a cell face. At an angle, the wall's place that fits the error best lies within 0.08
+cells of the model's wall with either stencil, and the error is in the steps.
+
 **On a GPU.** `validation/wave_gpu.py` computes the wave bands (up to 125 Hz, 0.5 s) of
 the first source of three example rooms to every listener on the CPU and on the GPU,
 and compares the two. The tests do the same with resonant walls and with the matched
@@ -5009,7 +5124,7 @@ Results:
   temperature gradient, scatter in plants before they reflect, or reach the listeners
   as secondary sources, the scattered sound of a reflection near a listener comes from
   the few rays that land there, not from the listener's own gather: a run with a far
-  source over grass has bursts of it that change with the seed.
+  source over a ground that scatters has bursts of it that change with the seed.
 - **Paths over two edges take no reflections.** With `second_order` a path over two
   edges reflects nowhere before, between or after them, so behind a thick barrier on a
   hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from
@@ -5535,7 +5650,7 @@ Files and runs:
   against measured pass-bys (see
   [Sirens and road vehicles](#sirens-and-road-vehicles-against-their-rules)).
   The trains' sound power is Schall 03's as published: a pass in the engine is checked
-  against Schall 03's own sum, exact in a free field and 2.9 to 4.0 dB(A) under it over
+  against Schall 03's own sum, exact in a free field and 3.0 to 4.1 dB(A) under it over
   the railway example's ground, which the two reckon otherwise, not against measured
   pass-bys (see [Trains](#trains-against-schall-03-and-the-eus-limits)).
   The road works' machines are rows of Defra's database for construction sites as
@@ -5559,9 +5674,10 @@ Files and runs:
   (in the tests, to within 1 % of the tone's amplitude).
   The wave solver in wind and temperature is checked against the parabolic equation
   over open ground up to 200 m, not against measurements, nor round buildings; its
-  moving air against the exact field in a uniform wind and a façade's echo against
-  ray theory, with the wind the weather's profile everywhere, not the flow round a
-  building (see [Moving air](#moving-air-in-the-wave-solver)).
+  moving air against the exact field in a uniform wind, its wind round a dome against
+  an ideal fluid's and a façade's echo against ray theory through that wind, not
+  against a measured wind round a building, whose wake it leaves out (see
+  [Moving air](#moving-air-in-the-wave-solver)).
   The level relative to free field and a barrier's insertion loss are checked against
   exact solutions, not against measurements; the path reflected both before and after
   a barrier is checked over a rigid ground only, and the sound that goes over a
@@ -5582,6 +5698,7 @@ python -m pip install pyroomacoustics matplotlib
 python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs/validation
 python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
+python validation/wave_walls.py --json wave_walls.json   # 18 to 25 min; --bands 63 125: 10 less
 python validation/edge_diffraction.py --json diffraction.json
 python validation/edge_fade.py --json edge_fade.json
 python validation/walks.py --json walks.json   # --walks gallery archway street

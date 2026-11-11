@@ -53,6 +53,14 @@ def field(atmosphere=None, listeners=((100.0, 0.0, 1.5),), **simulation) -> Scen
     return Scene.model_validate(data)
 
 
+def scattering_lawn(scene: Scene) -> Scene:
+    """``scene`` (:func:`field`) with a lawn that scatters 0.1: its rays lose that share
+    at the ground and the late rays scatter it, which is the scene's late part."""
+    data = scene.to_data()
+    data["materials"]["lawn"]["scattering"] = 0.1
+    return Scene.model_validate(data)
+
+
 # -- the atmosphere ------------------------------------------------------------------
 
 
@@ -1489,10 +1497,11 @@ def test_flat_sound_and_still_air_keep_the_narrow_angle_equation(monkeypatch) ->
 
 
 def test_still_air_changes_nothing() -> None:
+    # The lawn scatters 0.1: over a ground that scatters nothing there is no late part.
     listeners = ((60.0, 0.0, 1.5), (-60.0, 5.0, 1.5))
-    plain = simulate(Room.from_scene(field(None, listeners)))
-    neutral = simulate(Room.from_scene(field({"preset": "neutral"}, listeners)))
-    calm = simulate(Room.from_scene(field({"wind": {"speed_m_s": 0}}, listeners)))
+    plain = simulate(Room.from_scene(scattering_lawn(field(None, listeners))))
+    neutral = simulate(Room.from_scene(scattering_lawn(field({"preset": "neutral"}, listeners))))
+    calm = simulate(Room.from_scene(scattering_lawn(field({"wind": {"speed_m_s": 0}}, listeners))))
     for other in (neutral, calm):
         for key in plain.responses:
             a, b = plain[key], other[key]
@@ -1632,9 +1641,10 @@ def test_sources_share_the_air_s_profiles_and_keep_no_plan_once_finished(monkeyp
 def test_uniform_rows_trace_the_late_rays_as_straight_ones(monkeypatch) -> None:
     """The compiled tracer's bent rays, in an atmosphere where they go straight, give
     the straight tracer's late energy: the same ray paths, times and losses (without the
-    listeners' gather of the first reflections, which bent rays leave to the rain)."""
+    listeners' gather of the first reflections, which bent rays leave to the rain). The
+    lawn scatters 0.1: over a ground that scatters nothing there is no late part."""
     pytest.importorskip("acoustic_spaces._native")
-    scene = field(None, ((60.0, 0.0, 1.5), (-30.0, 10.0, 3.0)))
+    scene = scattering_lawn(field(None, ((60.0, 0.0, 1.5), (-30.0, 10.0, 3.0))))
     room = Room.from_scene(scene)
     monkeypatch.setattr(late, "FIRST_GATHER", 0)
     straight = simulate(room)
@@ -1785,7 +1795,8 @@ def test_a_coverage_map_point_in_wind_reads_as_a_listener_there() -> None:
 def test_still_air_traces_the_late_part_as_before() -> None:
     """Without an atmosphere that bends the sound every reflection counts towards the
     early order as before: the late part of a closed room and of a field in neutral air
-    as computed before the late rays learnt the bent early stage's paths."""
+    as computed before the late rays learnt the bent early stage's paths (the field's
+    lawn scatters 0.1: over a ground that scatters nothing there is no late part)."""
     box = Scene.model_validate(
         {
             "name": "box",
@@ -1797,7 +1808,7 @@ def test_still_air_traces_the_late_part_as_before() -> None:
             "simulation": {"seed": 3, "ir_length_s": 0.2, "late": {"rays": 300}},
         }
     )
-    neutral = field({"preset": "neutral"}, ((60.0, 0.0, 1.5), (-30.0, 10.0, 3.0)))
+    neutral = scattering_lawn(field({"preset": "neutral"}, ((60.0, 0.0, 1.5), (-30.0, 10.0, 3.0))))
     before = (1.6025686813266748, 8.349338904503138e-07, 8.012851349037927e-06)
     found = []
     for scene in (box, neutral):
@@ -2047,11 +2058,11 @@ def test_the_open_ground_s_frequencies_choose_how_1_and_2_khz_are_found() -> Non
         np.testing.assert_allclose(levels[choice][others], levels[24][others], atol=1e-9)
 
 
-#: ``windy`` upwind of a source 2 m up over a lawn (:func:`field`), listeners 1.5 m up
-#: 10, 20 and 70 m away, the shadow starting 31.4 m away: the level re free field (dB)
-#: at 1 and 2 kHz as release 4.2.1 gave it (measured on the code before the parabolic
-#: equation took those bands over): from the rays short of half the way to the shadow,
-#: from the equation beyond.
+#: ``windy`` upwind of a source 2 m up over a lawn that scatters 0.1
+#: (:func:`scattering_lawn`), listeners 1.5 m up 10, 20 and 70 m away, the shadow
+#: starting 31.4 m away: the level re free field (dB) at 1 and 2 kHz as release 4.2.1
+#: gave it (measured on the code before the parabolic equation took those bands over):
+#: from the rays short of half the way to the shadow, from the equation beyond.
 RAYS_WINDY_UPWIND = [[0.2317, 0.5340], [1.9875, 1.0129], [-9.7644, -11.8441]]
 
 
@@ -2063,8 +2074,12 @@ def test_the_open_ground_s_rays_give_way_to_the_equation_near_a_shadow() -> None
     listeners = ((-10.0, 0.0, 1.5), (-20.0, 0.0, 1.5), (-70.0, 0.0, 1.5))
     levels = {}
     for choice in (8, "rays"):
-        scene = field(
-            {"preset": "windy"}, listeners, early={**early, "open_ground_frequencies": choice}
+        scene = scattering_lawn(
+            field(
+                {"preset": "windy"},
+                listeners,
+                early={**early, "open_ground_frequencies": choice},
+            )
         )
         result = simulate(Room.from_scene(scene), threads=1)
         levels[choice] = np.array(
@@ -2079,13 +2094,16 @@ def test_the_open_ground_s_frequencies_move_4_and_8_khz_in_the_shadow_alone() ->
     """The bands above 2 kHz do not change with ``open_ground_frequencies`` where rays
     reach the listener; in the shadow they deepen from the 1 and 2 kHz octave bands
     (the 2 kHz level and its fall from 1 kHz per octave), so there they move with them:
-    by the 2 kHz change plus once (4 kHz) and twice (8 kHz) the change of that fall."""
+    by the 2 kHz change plus once (4 kHz) and twice (8 kHz) the change of that fall. The
+    lawn scatters 0.1, so that the levels hold a late part."""
     early = {"method": "image_sources", "max_order": 1, "diffraction": "none"}
     listeners = ((-10.0, 0.0, 1.5), (-100.0, 0.0, 1.5))  # lit, and deep in the shadow
     levels = {}
     for choice in (24, 8):
-        scene = field(
-            {"preset": "windy"}, listeners, early={**early, "open_ground_frequencies": choice}
+        scene = scattering_lawn(
+            field(
+                {"preset": "windy"}, listeners, early={**early, "open_ground_frequencies": choice}
+            )
         )
         result = simulate(Room.from_scene(scene), threads=1)
         levels[choice] = np.array([result["s", f"l{k}"].relative_to_free_field() for k in range(2)])
@@ -2188,7 +2206,7 @@ def test_one_coherent_band_keeps_its_run_below_it() -> None:
     preset, the 63 Hz band is the only coherent one: it takes no skirt above, and its run
     goes on down to half its lower edge as with more bands (four frequencies, 25 to 42
     Hz), whose samples the carrier keeps. The band's run is the same as with 125, and so
-    is its level (+6.2750 dB re free field both, ``coh63.py``; 4e-8 dB apart, the 63 Hz
+    is its level (+6.2726 dB re free field both, ``coh63.py``; 4e-8 dB apart, the 63 Hz
     shape drawn with and without the 125 Hz band's samples beside it)."""
     from acoustic_spaces.engine.fine import fine_frequencies
 
@@ -2455,16 +2473,21 @@ def test_weather_zones_in_a_scene() -> None:
     from acoustic_spaces.engine.refracted import bending
     from acoustic_spaces.engine.wave import _Weather
 
-    plain = simulate(Room.from_scene(zoned(None)))
+    # The lawn scatters 0.1: over a ground that scatters nothing there is no late part.
+    plain = simulate(Room.from_scene(scattering_lawn(zoned(None))))
     # A zone that restates the weather changes nothing worth the name.
     same = simulate(
-        Room.from_scene(zoned([{"polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 5.0}}]))
+        Room.from_scene(
+            scattering_lawn(zoned([{"polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 5.0}}]))
+        )
     )
     for name in ("l0", "l1"):
         a, b = plain["s", name].energy(), same["s", name].energy()
         np.testing.assert_allclose(10 * np.log10(b.sum(axis=1) / a.sum(axis=1)), 0.0, atol=1e-6)
     # The wind dropping over the downwind half tells downwind; upwind nothing crosses it.
-    room = Room.from_scene(zoned([{"polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 0.5}}]))
+    room = Room.from_scene(
+        scattering_lawn(zoned([{"polygon": DOWNWIND_HALF, "wind": {"speed_m_s": 0.5}}]))
+    )
     lee = simulate(room)
     down = 10 * np.log10(
         lee["s", "l0"].energy().sum(axis=1) / plain["s", "l0"].energy().sum(axis=1)

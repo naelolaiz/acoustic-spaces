@@ -587,8 +587,9 @@ step in turn, leaving out what is there already (the music, the scenes, the simu
   130 dB) on the ground at the stage front, 2 m nearer the audience and delayed 6 ms so
   that both arrive together there, playing both channels, rolled off above 125 Hz. The
   system is tuned at the audience as a system engineer tunes it (`eq_db`: the arrays' low
-  mids up, their top octave up for the air): at 30 m every octave from 250 Hz to 4 kHz is
-  within 1 dB of 1 kHz, 8 kHz 1.5 dB down and 63 and 125 Hz 2 dB up. `scenes` also takes
+  mids up, their top octave up for the air): at 30 m, in the evening's weather, every
+  octave from 500 Hz to 4 kHz is within 1 dB of 1 kHz, 250 Hz 1.3 dB down, 8 kHz 1.8 dB
+  down and 63 and 125 Hz 1.8 to 1.9 dB up. `scenes` also takes
   in the example's listener 140 m behind the stage, upwind (`behind_stage`, left out as
   the system is), and lets the responses run 3.5 s past the latest direct sound, the far
   shore's, 1.6 s late (5.2 s in all).
@@ -602,11 +603,13 @@ step in turn, leaving out what is there already (the music, the scenes, the simu
   is 0.7 dB quieter, and on the boat 0.9 dB quieter (the example's `simulation.seed`,
   1; with rays of their own, two other runs gave up to 6.0 dB at the window and 0.5 dB
   behind the stage). These figures are from before the 1 and 2 kHz bands over the open
-  ground came from the parabolic equation and have not been run again since: for the
-  line arrays that change lowers those two bands in the evening's weather by up to 2.7
-  dB at the window and 3.5 dB in the garden and raises them by up to 1.6 dB on the boat,
-  and leaves the other bands, the place behind the stage and still air as they were, so
-  the gains at the window and in the garden can only have shrunk, by at most that much.
+  ground came from the parabolic equation, and from before the lawn and the water
+  scattered nothing, and have not been run again since. For the line arrays the first
+  change lowers those two bands in the evening's weather by up to 2.7 dB at the window
+  and 3.5 dB in the garden and raises them by up to 1.6 dB on the boat, and leaves the
+  other bands, the place behind the stage and still air as they were; the second moves
+  what the weather adds by 0.3 dB(A) at most at these four places (every source at its
+  sound power, one run each).
   The far shore gains most: what the weather bends down comes in off the water as well
   as straight, and at the window the house's wall gives back each of those again.
 - **How loud.** From the audience to the far shore the sound drops by more than 20 dB(A),
@@ -902,10 +905,10 @@ three, the car's with its horn) in its Movement box.
   the truck in the lane on the yard's side the other way at 70 km/h, heard at the verge,
   23 and 48 m away over the grass and 27 m away over the paved yard (from the car as it
   passes; the truck passes 4 m farther from the meadow's listeners and nearer the
-  yard's). The car's pass peaks at 76.3 dB(A) at the verge, 5.7 m away (SEL 76.2
-  dB(A)), 54.3 and 43.5 dB(A) over the grass and 63.2 dB(A) over the yard; the truck's
-  at 84.4 dB(A) at the verge, 9.6 m away (SEL 85.3 dB(A)), 67.5 and 56.5 dB(A) over the
-  grass and 76.7 dB(A) over the yard, 23.0 m away. Over the grass the ground takes away
+  yard's). The car's pass peaks at 76.4 dB(A) at the verge, 5.7 m away (SEL 76.3
+  dB(A)), 54.0 and 42.7 dB(A) over the grass and 63.4 dB(A) over the yard; the truck's
+  at 84.6 dB(A) at the verge, 9.6 m away (SEL 85.5 dB(A)), 67.4 and 56.1 dB(A) over the
+  grass and 76.9 dB(A) over the yard, 23.0 m away. Over the grass the ground takes away
   much of the middle and the treble, the more the farther away, while over the yard its
   reflection adds to the direct sound. At the verge the engine's tone falls 1.4
   semitones as the car passes and 1.9 as the truck does, as the geometry says.
@@ -1063,7 +1066,7 @@ in the street, at the speed of its walk (50 km/h) unless `--speed` says.
   (`acoustic_spaces.facade`); for traffic's spectrum that is Rw + Ctr + 9.6 = 29 - 4 +
   9.6 = 34.6 dB, with ISO 717-1's rating of AGC's values in octave bands, 29 (-1; -4) dB
   (AGC's 30 is rated from third octaves); the S-Bahn's, higher in frequency, loses 39.6
-  dB(A) at the railway's house (86.8 dB(A) outdoors, 47.1 in the room). That level is
+  dB(A) at the railway's house (87.2 dB(A) outdoors, 47.6 in the room). That level is
   the listener's own where it stands 2 m out, as `house_18m` and the pavement do;
   nearer, where the wall's reflection makes the 63 to 250 Hz bands louder or quieter,
   the vehicle is simulated once more, as one more listener (`balcony_2m`, the street example's, ticked off), at the point
@@ -1090,7 +1093,7 @@ in the street, at the speed of its walk (50 km/h) unless `--speed` says.
   engine's pass of the S-Bahn at 80 km/h and of the regional train at 160 km/h, 7.5 m
   from the track 1.2 m above the rail top and 25 m away 3.5 m above it, gives the same
   SEL as Schall 03 summing the same stretch of track in pieces of 0.1 m, within 0.01 dB
-  in every octave band. Over the railway example's ground the engine gives 2.9 to 4.0 dB(A) less than Schall 03
+  in every octave band. Over the railway example's ground the engine gives 3.0 to 4.1 dB(A) less than Schall 03
   with its own terms for the ground, which reckon the ground's reflection otherwise (see
   [Validation](validation.md#trains-against-schall-03-and-the-eus-limits), which also
   sets Schall 03's units beside the EU's limits for new trains).
@@ -1103,17 +1106,22 @@ in the street, at the speed of its walk (50 km/h) unless `--speed` says.
 
   | | regional, 160 km/h | S-Bahn, 120 km/h | intercity, 200 km/h | freight, 100 km/h |
   |---|---:|---:|---:|---:|
-  | 7.5 m | 94.5 (98.5) | 88.7 (90.8) | 97.5 (103.7) | 90.5 (101.7) |
-  | meadow, 25 m | 85.3 (90.6) | 79.6 (82.7) | 88.5 (95.9) | 81.7 (93.6) |
-  | behind the barrier, 25 m | 78.3 (79.3) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (82.6) |
-  | house, 18 m | 92.1 (97.2) | 86.8 (89.5) | 95.1 (102.5) | 88.5 (100.3) |
+  | 7.5 m | 94.4 (98.4) | 88.6 (90.7) | 97.3 (103.6) | 90.3 (101.6) |
+  | meadow, 25 m | 85.3 (90.6) | 79.6 (82.8) | 88.5 (96.0) | 81.8 (93.6) |
+  | behind the barrier, 25 m | 78.2 (79.2) | 66.2 (69.8) | 82.3 (83.3) | 74.8 (82.6) |
+  | house, 18 m | 92.5 (97.8) | 87.2 (90.1) | 95.4 (103.0) | 89.1 (100.9) |
+
+  The scene fixes no seed, so each run draws its own late rays: over five runs the peaks
+  by the house vary by up to 0.2 dB and their SELs by 0.04 dB, over four runs those on
+  the meadow by 0.05 dB, and at 7.5 m and behind the barrier two runs agree within
+  0.01 dB.
 
   The longer a train, the more its SEL is over its L_Amax: the freight train, 446 m
   long, takes 16 s to pass at 100 km/h, the S-Bahn, 67 m, 2 s at 120 km/h. The barrier,
   3 m high and 4 m from the track, hides the rail top from the listener behind it, but
   not the roof (4 m up) or the pantograph (5 m up): behind it the regional train peaks
-  7.0 dB(A) under its level on the meadow's side, the S-Bahn, whose rail top is 20 dB
-  over its roof in sound power (the regional train's 16 dB), 13.4 dB(A) under.
+  7.1 dB(A) under its level on the meadow's side, the S-Bahn, whose rail top is 20 dB
+  over its roof in sound power (the regional train's 16 dB), 13.3 dB(A) under.
 - **The tram in the street**: the tram runs down the middle of the street at 50 km/h, 4.0 m from the
   pavement's listener, and peaks at 95.6 dB(A) on the pavement (SEL 99.3), 91.1 on the
   balcony (95.4) and 73.7 in the garden (80.3): louder than the bus, which passes 2.5 m
@@ -1159,8 +1167,9 @@ take 14.3 s at 63 m/s.
 - **Its sound** is what the rotors send each way: each harmonic of each rotor's blade
   passing frequency with a pattern and a phase of its own, and broadband noise. Each
   early path plays what is sent the way it leaves the helicopter, at the time it leaves
-  ([the sound sent each way](spatial-audio.md#moving-sources-and-doppler)); the late
-  sound plays it averaged over the directions. It fades in and out over its first and
+  ([the sound sent each way](spatial-audio.md#moving-sources-and-doppler)); a late
+  sound, which the meadow alone does not give, plays it averaged over the directions. It
+  fades in and out over its first and
   last second. `demo/helicopter/below.wav` is what they send straight down, dry, to
   listen to. `--input helicopter=WAV` plays a dry recording instead, mixed down to mono,
   at least as long as the pass, sent every way with the rotors' directivity; the
@@ -1236,11 +1245,11 @@ listeners.
   `helicopter` its rotors' sound, `scene` the helicopter alone (`scene_overhead.yaml`)
   with the sound power and the directivity of its rotors at 63 m/s through still air
   (137.1 dB, 132.8 dB(A)), and `walk` the helicopter every 4 m along its flight at
-  each of the 12 listeners, with Doppler. At the mix position it peaks at about
-  81 dB(A) (about 74 from 330 m), where the sound system's loudspeakers, simulated at
+  each of the 12 listeners, with Doppler. At the mix position it peaks between 81 and
+  82 dB(A) (about 74 from 330 m), where the sound system's loudspeakers, simulated at
   their sound power, give 97 dB(A): it is some 15 dB under the music, heard most in the
-  song's quiet passages. High in the north stand, under the roof, it peaks 8 to 11 dB
-  lower (two runs): the sound there is almost all late sound, which a few rays can lift
+  song's quiet passages. High in the north stand, under the roof, it peaks 10 to 12 dB
+  lower (four runs): the sound there is almost all late sound, which a few rays can lift
   by several decibels at one place.
 - **The mix.** `mix` adds the helicopter's pass at each listener to the concert's mix
   there (`demo/seats`), the helicopter over the centre spot at `--at`. The feeds stand
@@ -1402,9 +1411,9 @@ listeners it is simulated and heard at.
   dry, as long as the flight. `--input departure=WAV` plays a dry recording instead, at
   least as long as the flight, its level following the recording's.
 - **The pass**: the jet every 4 m along its flight at each listener in turn, through
-  the direct sound and its reflection off the ground; the late sound is crossfaded from
-  place to place. Places 4 m apart follow the exact field of a flyover closely from 100
-  m away and more ([validation](validation.md#moving-sources-against-the-exact-field)).
+  the direct sound and its reflection off the ground. Places 4 m apart follow the exact
+  field of a flyover closely from 100 m away and more
+  ([validation](validation.md#moving-sources-against-the-exact-field)).
   A flight of 6.5 km is some 1600 places at each listener, which takes a while.
 
 The captions give the pass's L_Amax, the highest level of the jet's places, each as
@@ -1415,7 +1424,7 @@ time that level is within 10 dB of its highest.
 
 While the jet is in the air, what each listener hears is within 1.0 dB of Doc 29's own
 sum over the same flight path's segments, but for the arrival's SEL at
-approach_2000m, 1.9 dB under. While it rolls on the runway they part by up to 11.3 dB,
+approach_2000m, 2.0 dB under. While it rolls on the runway they part by up to 12.6 dB,
 as the engine reckons the sound running along the ground in still air over the scene's
 runway and meadow, where Doc 29 takes off an attenuation it has from measurements
 ([the check](validation.md#an-aircraft-in-the-engine-against-doc-29)).
