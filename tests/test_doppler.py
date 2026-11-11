@@ -41,10 +41,15 @@ RATE = 48_000
 
 @pytest.fixture
 def short(monkeypatch: pytest.MonkeyPatch):
-    """The validation's pass-by, 30 m long."""
+    """The validation's pass-by, 30 m long. A walking listener's ears take a quarter of
+    the room the validation gives the rest of each response (``EARS_ROOM``): these
+    short lines have none of the long road's deep dips of the ground far from the
+    pass, where the longer room counts (the close pass at the ears comes out the same
+    to 0.001 dB with either)."""
     monkeypatch.setattr(reference, "X0", -15.0)
     monkeypatch.setattr(reference, "X1", 15.0)
     monkeypatch.setattr(reference, "MARGIN_S", (0.1, 0.05))
+    monkeypatch.setattr(reference, "EARS_ROOM", 4)
     return reference
 
 
@@ -123,6 +128,66 @@ def test_hermite_goes_through_its_points_and_holds_at_the_ends() -> None:
     line = dp.hermite(x, 2.0 * x + 1.0, at, hold=False)
     assert np.allclose(line, 2.0 * at + 1.0)
     assert np.all(dp.hermite([1.0], [4.0], at) == 4.0)
+
+
+def test_the_slope_of_the_curve_through_the_points() -> None:
+    x = np.array([0.0, 1.0, 2.5, 3.0, 5.0])
+    y = np.sin(x)
+    at = np.linspace(0.01, 4.99, 499)
+    step = 1e-6
+    chords = (dp.hermite(x, y, at + step) - dp.hermite(x, y, at - step)) / (2.0 * step)
+    assert np.allclose(dp._slope(x, y, at), chords, rtol=0.0, atol=1e-5)
+    # Held beyond its ends, the curve has no slope there; nor has one point's.
+    assert np.all(dp._slope(x, y, np.array([-1.0, 6.0])) == 0.0)
+    assert np.all(dp._slope(np.array([1.0]), np.array([4.0]), at) == 0.0)
+
+
+def test_an_ear_hears_what_passed_the_head_an_onset_earlier() -> None:
+    """A walking source's sound passes the head's centre at a time s and reaches an ear
+    at s + onset(s). From the times heard, ``passed`` gives s, and how much of s goes
+    by in each moment heard: one over (1 + the onset's slope), here up to 0.2 % either
+    way. Each sample's time is its own, whichever samples are asked for with it."""
+    received = np.linspace(0.0, 1.0, 21)
+    turn = 3e-4 * np.sin(2.0 * np.pi * received)
+    onsets = 1e-3 + np.column_stack([turn, -turn])
+    track = dp.Track(
+        np.ones(21, dtype=bool), np.zeros(21, dtype=np.int64), received, np.full(21, 0.01)
+    )
+    reading = dp._Reading(track, np.arange(21), 0, 0, 1.0, None, onsets)
+    t = np.linspace(0.1, 0.9, 2001)
+    for ear in (0, 1):
+        s, share = reading.passed(t, ear)
+        assert np.allclose(s + reading.onset(s, ear), t, rtol=0.0, atol=1e-10)
+        assert np.allclose(share[1:-1], np.gradient(s, t)[1:-1], rtol=0.0, atol=5e-6)
+        assert 1.5e-3 < np.abs(share - 1.0).max() < 2e-3
+        some, its_share = reading.passed(t[::7], ear)
+        assert np.array_equal(some, s[::7])
+        assert np.array_equal(its_share, share[::7])
+
+
+@pytest.mark.parametrize("jump", [43.0, -17.0, -20.0, -43.0])
+def test_an_ear_whose_onset_changes_as_fast_as_time_passes_still_has_its_time(jump) -> None:
+    """Ears of few directions start many samples apart from one place to the next:
+    here by ``jump`` samples between two places heard 21.5 samples apart, so the onset
+    rises twice as fast as time passes, or falls 0.8, 0.9 or 2 times as fast (between
+    the places the curve through them is steeper still: with -20 and -43 the onset
+    falls faster than time passes, and sound that passed the centre later arrives
+    first). The time found fits in each case, within a tenth of a nanosecond, between
+    the time heard less the most onset and less the least, and no more than twice as
+    much of it passes in a moment heard."""
+    received = np.arange(40) * 21.5 / RATE
+    onset = (30.0 + np.where(np.arange(40) >= 20, jump, 0.0)) / RATE
+    track = dp.Track(
+        np.ones(40, dtype=bool), np.zeros(40, dtype=np.int64), received, np.full(40, 0.01)
+    )
+    reading = dp._Reading(track, np.arange(40), 0, 0, 1.0, None, np.column_stack([onset, onset]))
+    t = np.linspace(received[0] - 1e-3, received[-1] + 3e-3, 5001)
+    s, share = reading.passed(t, 0)
+    least, most = onset.min(), onset.max()
+    heard = s + np.clip(reading.onset(s, 0), least, most)
+    assert np.allclose(heard, t, rtol=0.0, atol=1e-10)
+    assert np.all((s >= t - most) & (s <= t - least))
+    assert 0.0 < share.min() and share.max() <= 2.0
 
 
 def test_read_delays_a_signal_by_a_fraction_of_a_sample() -> None:
@@ -231,6 +296,46 @@ def test_a_filter_goes_linearly_from_one_place_to_the_next() -> None:
 
     growing, steady = heard(responses, [0.1, 0.3]), heard(responses[:1], [0.0])
     assert _error_db(growing, np.interp(t, [0.1, 0.3], [1.0, 2.0]) * steady) < -70.0
+    # Places heard 6 ms apart, more than three within one hop of the filter (HOP_S),
+    # the path twice as loud at every other one: the filter is taken at each place's
+    # time too, so the tone still goes linearly from each place to the next. Taken
+    # every HOP_S alone it skipped places, and the difference was 17 % of the tone (RMS).
+    times = 0.1 + 0.006 * np.arange(34)
+    gains = 1.0 + np.arange(34) % 2
+    waving = heard([responses[k % 2] for k in range(34)], list(times))
+    assert _error_db(waving, np.interp(t, times, gains) * steady) < -70.0
+
+
+def test_the_windows_of_a_filter_add_up_to_one_and_turn_at_the_places() -> None:
+    """The filter is taken at every block's centre and at the places' times between
+    them; each time's window is one there and falls linearly to nothing at the times on
+    either side, so together they add up to one at every sample."""
+    hop, rate, blocks = 960, RATE, 8
+    received = np.array([0.0, 0.0213, 0.0251, 0.04, 0.0537, 0.2])
+    when, at, block = dp._turns(received, rate, hop, blocks)
+    # A place heard at a block's centre (0 and 0.04 s) adds no time of its own, nor
+    # does one heard past the last block's centre (0.2 s).
+    assert when.tolist() == [0.0213, 0.0251, 0.0537]
+    assert np.allclose(at, when * rate) and block.tolist() == [1, 1, 2]
+    assert dp._turns(received[:1], rate, hop, blocks)[0].size == 0
+    reading = dp._Reading(dp.Track(*[np.zeros(0)] * 4), np.zeros(0), 0, 7, 1.0, None, None)
+    plain = reading.taken(3, hop, rate)
+    assert plain[0] == [3 * hop / rate] and plain[1].tolist() == [2 * hop, 3 * hop, 4 * hop]
+    reading = dataclasses.replace(reading, turn_s=when, turn_at=at, turn_block=block)
+    samples = np.arange(0, 5 * hop)
+    total = np.zeros(len(samples))
+    for j in range(0, 6):
+        whens, turns = reading.taken(j, hop, rate)
+        assert whens[0] == j * hop / rate and whens[1:] == when[block == j].tolist()
+        windows = dp._windows(turns, samples)
+        assert windows.shape == (len(whens), len(samples))
+        # One at its own time, nothing at the others' nor from the times on either side on.
+        assert np.array_equal(dp._windows(turns, turns[1:-1]), np.eye(len(whens)))
+        assert not np.any(windows[:, (samples <= turns[0]) | (samples >= turns[-1])])
+        total += windows.sum(axis=0)
+    np.testing.assert_allclose(total, 1.0, rtol=0.0, atol=1e-12)
+    # The block after the place at 0.0537 s rises from it, not from the centre before.
+    assert reading.taken(3, hop, rate)[1].tolist() == [0.0537 * rate, 3 * hop, 4 * hop]
 
 
 def _late_only(walker: str, monkeypatch: pytest.MonkeyPatch):
@@ -360,17 +465,35 @@ def test_a_passing_source_and_listener_sound_as_the_exact_field(short) -> None:
 
 
 @pytest.mark.parametrize("walker", ["source", "listener"])
-def test_a_fast_walker_passing_close_keeps_the_level_of_the_exact_field(short, walker) -> None:
-    """At 70 m/s, 2 m from the other's line, the distance changes by more than half of
-    itself within one window of a path's filter (``HOP_S``): the level follows one over
-    the distance sample by sample, here in windows a quarter of that long."""
+@pytest.mark.parametrize("heard_by", ["mono", "cardioid", "ears"])
+def test_a_fast_walker_passing_close_keeps_the_level_of_the_exact_field(
+    short, walker, heard_by
+) -> None:
+    """At 70 m/s, 2 m from the other's line, the distance changes by up to 40 % of
+    itself within ``HOP_S``, and the walker passes more than five places: the level
+    follows one over the distance sample by sample, and through a cardioid microphone
+    aimed at the walker's line the pattern from place to place (the filter is taken at
+    each place's time), here in windows a quarter of ``HOP_S`` long. Between two places
+    0.25 m apart a straight line strays from the capsule's 0.5 + 0.5 cos by 0.01 dB at
+    most (a chord's sag, an eighth of the step squared times the curvature, at the pass
+    0.5 × 2 / 2.06³ per square metre).
+
+    At the ears of a listener the walker passes on one side, a walking source's sound
+    is what a standing head makes of the pressure at its centre, each sample of it
+    through the ears' responses to the direction it arrives from, and a walking
+    listener's ears are each a point their onset further along the path
+    (``reference._at_ears``). The level stays within 0.02 dB there. With a source's
+    onset added to its delay instead, it was 2.7 dB off and the difference from the
+    field 61 % of the field; with the filter taken every ``HOP_S`` alone, a walking
+    listener's level was 0.27 dB off."""
     speed, tone = 70.0, 1000.0
     line = dataclasses.replace(short.road(), x0=-8.0, x1=8.0, d=2.0)
     walked = (line.x1 - line.x0) / speed
     t = np.arange(int((walked + 0.5) * RATE)) / RATE
     dry = np.sin(2 * np.pi * tone * t)
-    _, (wet,) = short.run(walker, speed, "hard", True, [dry], short.CLOSE_STEP_M, line)
-    field = short.exact(walker, speed, tone, len(wet), line=line)
+    step = short.CLOSE_STEP_M
+    _, (wet,) = short.run(walker, speed, "hard", True, [dry], step, line, heard_by)
+    field = short.exact(walker, speed, tone, len(wet), line=line, heard_by=heard_by)
     found = short.errors(wet, field, walked, window_s=dp.HOP_S / 4)
     assert found["level_max_db"] < 0.05
     assert found["waveform_db"] < -45.0
@@ -424,6 +547,21 @@ def test_the_sound_sent_each_way_as_the_exact_field(short, directivity) -> None:
         errors = short.errors(wet, field, walked)
         assert errors["waveform_db"] < -45.0, walker
         assert errors["level_max_db"] < 0.1, walker
+
+
+def test_the_sound_sent_each_way_as_the_exact_field_at_the_ears(short) -> None:
+    """At the ears of a listener a source passes, the sound each path is sent the way
+    it leaves is read at the time it passed the head's centre, as one signal is."""
+    speed, tone = 30.0, 1000.0
+    walked = (short.X1 - short.X0) / speed
+    sent = short.emission(tone, int((walked + 0.5) * RATE))
+    room = Room.from_scene(short.scene("source", speed, "hard", True))
+    walk = simulate_walk(room, step_m=short.STEP_M, late_step_m=None)
+    wet = render_walk(walk, {"s": sent}, Binaural())
+    field = short.exact("source", speed, tone, len(wet), sent=True, heard_by="ears")
+    errors = short.errors(wet, field, walked)
+    assert errors["waveform_db"] < -45.0
+    assert errors["level_max_db"] < 0.1
 
 
 def test_the_same_sound_sent_every_way_is_the_signal_itself(short) -> None:

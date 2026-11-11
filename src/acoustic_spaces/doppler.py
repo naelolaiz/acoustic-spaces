@@ -38,17 +38,33 @@ place to place along the walk:
   impulse response has it, without its delay and times its delay at the place, which
   the division by the delay takes back there (a path bent over an edge spreads
   otherwise: what of that is not one over its length stays in the filter). The filter
-  is taken every :data:`HOP_S`, between the places on either side in proportion to how
-  near they are; the delayed signal goes through it in windows that half overlap
-  (triangles, which add up to one), so from one window's centre to the next the filter
-  goes linearly from one to the other, and a path heard from one place alone gives
-  exactly the convolution with its response.
+  is known at the places, and between two of them it is theirs in proportion to how
+  near they are. It is taken every :data:`HOP_S` and, between those times, at the time
+  each place's sound is heard; the delayed signal goes through it in windows that
+  overlap, each rising from the time before its own and falling to the time after
+  (triangles, which add up to one), so the filter goes linearly from each place to the
+  next however fast the walker passes them, and a path heard from one place alone
+  gives exactly the convolution with its response.
 - **The ears.** Where each ear's response starts (its onset, as the ears are mixed
   between measured directions: :meth:`~acoustic_spaces.spatial.hrtf.HRTF.interpolate`)
   is a delay too: it goes into that ear's delay, read through the cubic and the sinc
   as the path's is, and out of its filter. Measured ears can start a few samples apart
   from one direction to the next; filters that start apart, mixed between two places
-  or in the overlapping windows, would cancel the treble there.
+  or in the overlapping windows, would cancel the treble there. A walking listener's
+  ear is, at each moment, that much further along the path than the head's centre: the
+  onset adds to the path's delay then. A walking source's sound passes the head's
+  centre and reaches the ear an onset later, so at each sample the ear hears what
+  passed the centre an onset earlier: the path's delay, its spreading and how far its
+  filter is between two places are all taken at that earlier time. And while the
+  onset grows, what passed the centre in one sample takes more than one to reach the
+  ear (less while it shrinks), so the sound is divided by one plus the onset's slope:
+  the ear's Doppler factor over the centre's, which the two ears do not share (the
+  centre's own, the convective amplification, is left out: see below).
+  The ears then hear what a standing head makes of the pressure at its centre: each
+  moment of it through the ears' responses to the direction it arrives from. Added to
+  the delay instead, the onset would be a time of the sound sent, not of the sound
+  heard, and the time between the two ears would shrink as the pitch rises and grow
+  as it falls (by up to a fifth at 70 m/s, straight ahead and behind).
 - **The eddies.** In turbulence the eddies move each path's delay from one moment to
   the next (by microseconds, as :class:`~acoustic_spaces.engine.turbulence.Gusts`
   draws them): the top band's goes into the path's delay, taken between the places and
@@ -95,7 +111,8 @@ from acoustic_spaces.engine import coherent
 from acoustic_spaces.engine.model import source_weights
 from acoustic_spaces.room import MIN_SOURCE_DISTANCE_M
 
-#: How often each path's filter is taken (s): the hop of the half-overlapping windows.
+#: How often each path's filter is taken at least (s): the hop of the blocks, between
+#: whose centres it is also taken at each place's time (:func:`_turns`).
 HOP_S = 0.02
 #: Length of a path's filter (s), as the binaural early paths have it.
 KERNEL_S = 0.3
@@ -106,6 +123,10 @@ _BETA = 9.0
 _PHASES = 4096
 #: Samples read through a delay at once.
 _CHUNK = 1 << 15
+#: The most steps in which the time a sound passed the head's centre is found from the
+#: time an ear hears it (:meth:`_Reading.passed`): twice those that halve a
+#: millisecond down to the tenth of a nanosecond it is found within.
+_STEPS = 48
 
 
 @dataclass
@@ -240,11 +261,7 @@ def hermite(x: np.ndarray, y: np.ndarray, at: np.ndarray, *, hold: bool = True) 
     x, y, at = (np.asarray(v, dtype=float) for v in (x, y, at))
     if len(x) == 1:
         return np.full(at.shape, y[0])
-    h = np.diff(x)
-    chords = np.diff(y) / h
-    slopes = np.empty(len(x))
-    slopes[0], slopes[-1] = chords[0], chords[-1]
-    slopes[1:-1] = (h[1:] * chords[:-1] + h[:-1] * chords[1:]) / (h[:-1] + h[1:])
+    h, slopes = _slopes(x, y)
     j = np.clip(np.searchsorted(x, at, side="right") - 1, 0, len(x) - 2)
     u = (at - x[j]) / h[j]
     u2, u3 = u * u, u * u * u
@@ -260,6 +277,35 @@ def hermite(x: np.ndarray, y: np.ndarray, at: np.ndarray, *, hold: bool = True) 
     else:
         out[before] = y[0] + slopes[0] * (at[before] - x[0])
         out[after] = y[-1] + slopes[-1] * (at[after] - x[-1])
+    return out
+
+
+def _slopes(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The steps of ``x`` and the slope of :func:`hermite`'s curve at each point."""
+    h = np.diff(x)
+    chords = np.diff(y) / h
+    slopes = np.empty(len(x))
+    slopes[0], slopes[-1] = chords[0], chords[-1]
+    slopes[1:-1] = (h[1:] * chords[:-1] + h[:-1] * chords[1:]) / (h[:-1] + h[1:])
+    return h, slopes
+
+
+def _slope(x: np.ndarray, y: np.ndarray, at: np.ndarray) -> np.ndarray:
+    """The slope of :func:`hermite`'s curve through (``x``, ``y``) at ``at``: nothing
+    beyond the ends, where the curve is held."""
+    x, y, at = (np.asarray(v, dtype=float) for v in (x, y, at))
+    if len(x) == 1:
+        return np.zeros(at.shape)
+    h, slopes = _slopes(x, y)
+    j = np.clip(np.searchsorted(x, at, side="right") - 1, 0, len(x) - 2)
+    u = (at - x[j]) / h[j]
+    u2 = u * u
+    out = (
+        6 * (u2 - u) * (y[j] - y[j + 1]) / h[j]
+        + (3 * u2 - 4 * u + 1) * slopes[j]
+        + (3 * u2 - 2 * u) * slopes[j + 1]
+    )
+    out[(at < x[0]) | (at > x[-1])] = 0.0
     return out
 
 
@@ -558,6 +604,23 @@ class _Reading:
     ways: np.ndarray | None = None
     #: (N, 2) at the ears, where each ear's response starts at each place (s).
     onsets: np.ndarray | None = None
+    #: The places' times between the blocks' centres, where the filter is taken too
+    #: (:func:`_turns`): when (s), at what sample, and after which block's centre.
+    turn_s: np.ndarray = dataclasses.field(default_factory=lambda: np.zeros(0))
+    turn_at: np.ndarray = dataclasses.field(default_factory=lambda: np.zeros(0))
+    turn_block: np.ndarray = dataclasses.field(default_factory=lambda: np.zeros(0, dtype=np.int64))
+
+    def taken(self, j: int, hop: int, rate: int) -> tuple[list[float], np.ndarray]:
+        """When the filter is taken in block ``j`` (s): at the block's centre, and at
+        each place's time from there to the next block's centre. And the samples its
+        windows turn at, one more than those on either side: the time taken before the
+        centre (the centre of the block before, or the last place's time since), each
+        of the block's own, and the next block's centre. A time's window rises from the
+        one before it and falls to the one after it (:func:`_windows`)."""
+        a, b = np.searchsorted(self.turn_block, [j, j + 1])
+        before = self.turn_at[a - 1] if a > 0 and self.turn_block[a - 1] == j - 1 else (j - 1) * hop
+        at = np.concatenate([[before, j * hop], self.turn_at[a:b], [(j + 1) * hop]])
+        return [j * hop / rate, *(float(s) for s in self.turn_s[a:b])], at
 
     def sent(self, emission: Emission, positions: np.ndarray, rate: int) -> np.ndarray:
         """``emission`` read at ``positions`` (its samples): at each, the sound sent the
@@ -583,6 +646,55 @@ class _Reading:
         assert self.onsets is not None
         return hermite(self.track.received[self.heard], self.onsets[self.heard, ear], t)
 
+    def passed(self, t: np.ndarray, ear: int) -> tuple[np.ndarray, np.ndarray]:
+        """When the sound ``ear`` hears at times ``t`` (s) passed the head's centre:
+        the ear's onset earlier, the onset of the direction it passed from (kept
+        between the least and the most of the places'), so the time s at which
+        s + onset(s) is t. And how much of that time passes in each moment heard: one
+        over (1 + the onset's slope then), twice at most.
+
+        Each sample's time is found on its own, within a tenth of a nanosecond, so it
+        does not depend on the samples asked for with it. It lies between t less the
+        most onset and t less the least; from t less the onset at t, each step goes on
+        along the onset's slope (Newton's step), or to the middle of the times it is
+        known to lie between where that step would leave them or the one before did
+        not halve the miss. So the time is found whatever the onsets do, also where
+        one changes as fast as time passes; where one falls faster than that (sound
+        that passed later would arrive first), it is one of the times that fit."""
+        assert self.onsets is not None
+        received, onsets = self.track.received[self.heard], self.onsets[self.heard, ear]
+        lo, hi = float(np.min(onsets)), float(np.max(onsets))
+        t = np.asarray(t, dtype=float)
+
+        def heard(at: np.ndarray, of: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+            """How much later than samples ``of`` of ``t`` the sound that passed at
+            ``at`` is heard, and 1 + the onset's slope there (0.5 at least)."""
+            onset = hermite(received, onsets, at)
+            kept = (onset >= lo) & (onset <= hi)
+            slope = np.where(kept, _slope(received, onsets, at), 0.0)
+            return at + np.clip(onset, lo, hi) - t[of], np.maximum(1.0 + slope, 0.5)
+
+        s = t - np.clip(hermite(received, onsets, t), lo, hi)
+        low, high = t - hi, t - lo
+        rate, missed = np.ones(len(t)), np.full(len(t), np.inf)
+        left = np.arange(len(t))
+        for _ in range(_STEPS):
+            late, rate[left] = heard(s[left], left)
+            more = np.abs(late) >= 1e-10
+            left, late = left[more], late[more]
+            if len(left) == 0:
+                break
+            at = s[left]
+            low[left] = np.where(late < 0.0, at, low[left])
+            high[left] = np.where(late > 0.0, at, high[left])
+            step = at - late / rate[left]
+            fits = (np.abs(late) <= 0.5 * missed[left]) & (step > low[left]) & (step < high[left])
+            missed[left] = np.abs(late)
+            s[left] = np.where(fits, step, 0.5 * (low[left] + high[left]))
+        else:
+            _, rate[left] = heard(s[left], left)
+        return s, 1.0 / rate
+
     def delays(self, t: np.ndarray, walk_last: int) -> tuple[np.ndarray, np.ndarray]:
         """The path's delay at times ``t`` (s), carried on along its slope past the
         path's own ends, and the same delay held at its ends instead (inside the places
@@ -602,6 +714,34 @@ class _Reading:
                 ends |= t > track.received[last_k]
             delay[ends] = carried[ends]
         return delay, held
+
+
+def _turns(
+    received: np.ndarray, rate: int, hop: int, blocks: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The times in ``received`` (s, when the sound of each place of a walk is heard)
+    that fall between the centres of the blocks, ``hop`` samples apart: the times, the
+    samples they are at (fractions included), and the block whose centre each follows.
+    A path's filter goes linearly from one place's time to the next's and turns there,
+    so it is taken there too; with one place alone it never turns."""
+    if len(received) < 2:
+        return np.zeros(0), np.zeros(0), np.zeros(0, dtype=np.int64)
+    when = np.unique(received)
+    at = when * rate
+    block = np.floor(at / hop).astype(np.int64)
+    inside = (at > block * hop) & (block >= 0) & (block < blocks - 1)
+    return when[inside], at[inside], block[inside]
+
+
+def _windows(at: np.ndarray, samples: np.ndarray) -> np.ndarray:
+    """(len(at) - 2, len(samples)) the windows of the times a filter is taken at, at
+    ``samples``: ``at`` (rising) has the samples they are at between the one before
+    them and the one after. Each window is one at its own time, goes linearly to
+    nothing at the times on either side and is nothing beyond: with their neighbours'
+    they add up to one, and what goes through them goes linearly from each time's
+    filter to the next's."""
+    own = np.eye(len(at))[1:-1]
+    return np.array([np.interp(samples, at, row, left=0.0, right=0.0) for row in own])
 
 
 #: Blocks of :data:`HOP_S` whose delayed signals are read at once.
@@ -670,17 +810,35 @@ def render(
     hop = max(int(round(HOP_S * rate)), 1)
     kernel = 1 << int(math.ceil(math.log2(KERNEL_S * rate)))
     half = kernel // 2
-    taps = fmt.at(rate).taps if isinstance(fmt, Binaural) else 0
-    n_fft = 1 << int(math.ceil(math.log2(2 * hop + kernel + taps)))
-    blocks = int(math.ceil((length + half) / hop)) + 1
+    hrtf = fmt.at(rate) if isinstance(fmt, Binaural) else None
+    taps = 0 if hrtf is None else hrtf.taps
+    starts: list[np.ndarray | None] = [None] * len(followed)
+    if hrtf is not None:
+        starts = [_onsets(responses, track, hrtf, rate) for track in followed]
+    # At the ears, a walking source's sound is heard an onset after it passes the
+    # head's centre (see the module's description): each block's windows then reach
+    # this many samples before its own (an onset below zero) and after them.
+    passing = hrtf is not None and source_walks and len(followed) > 0
+    ahead = behind = 0
+    if passing:
+        ends = np.concatenate(
+            [
+                onsets[track.present].ravel()
+                for track, onsets in zip(followed, starts, strict=True)
+                if onsets is not None
+            ]
+        )
+        ahead = max(int(math.ceil(-ends.min() * rate)), 0)
+        behind = max(int(math.ceil(ends.max() * rate)), 0)
+    width = ahead + 2 * hop + behind
+    n_fft = 1 << int(math.ceil(math.log2(width + kernel + taps)))
+    blocks = int(math.ceil((length + half + ahead) / hop)) + 1
     last = len(times) - 1
     leaving = [_ways(paths) for paths in places] if emission is not None else []
-    hrtf = fmt.at(rate) if isinstance(fmt, Binaural) else None
     readings = []
-    for track in followed:
+    for track, onsets in zip(followed, starts, strict=True):
         first_k, last_k = track.span
         heard = np.flatnonzero(track.present)
-        onsets = None if hrtf is None else _onsets(responses, track, hrtf, rate)
         # Heard from the place before its first to the place after its last, or to
         # either end of the sound where it is heard at the walk's.
         lo = 0.0 if first_k == 0 else track.received[first_k - 1]
@@ -692,7 +850,15 @@ def render(
             else min(int(math.ceil(hi * rate / hop)), blocks - 1)
         )
         speed = 1.0
-        if len(heard) > 1:
+        if len(heard) > 1 and passing and onsets is not None:
+            # The sound is read at s - delay(s), s the time it passed the centre, an
+            # onset before the time heard t: by the rate of the one times the other's.
+            between = np.diff(track.received[heard])[:, None]
+            sent = 1.0 - np.diff(track.delays[heard])[:, None] / between
+            speed = float(
+                np.max(sent / np.maximum(1.0 + np.diff(onsets[heard], axis=0) / between, 0.5))
+            )
+        elif len(heard) > 1:
             total = track.delays[heard, None] + (0.0 if onsets is None else onsets[heard])
             speed = float(
                 np.max(1.0 - np.diff(total, axis=0) / np.diff(track.received[heard])[:, None])
@@ -705,7 +871,8 @@ def render(
         # The cutoff 0.97 / speed rounded down to 32 / n, n the taps it needs on each
         # side, so that the paths share a few tables (:func:`_table`).
         cutoff = _ZEROS / _reach(0.97 / max(speed, 1.0))
-        readings.append(_Reading(track, heard, j0, j1, cutoff, ways, onsets))
+        turned = _turns(track.received, rate, hop, blocks)
+        readings.append(_Reading(track, heard, j0, j1, cutoff, ways, onsets, *turned))
     filters = Filters(
         responses,
         fmt,
@@ -722,73 +889,99 @@ def render(
     window = 1.0 - np.abs(np.arange(2 * hop) - hop) / hop
     begin, end = (0, length) if span is None else (max(int(span[0]), 0), int(span[1]))
     end = min(end, length)
-    # Block j adds to the samples from (j - 1) hops on, heard half a kernel later: the
-    # blocks that reach samples begin to end, and ``out`` from block j_lo's first.
-    j_lo = max((begin + half - n_fft) // hop + 1, 0)
-    j_hi = min(-(-(end + half) // hop) + 1, blocks)
+    # Block j adds to the samples from (j - 1) hops (less ``ahead``) on, heard half a
+    # kernel later: the blocks that reach samples begin to end, and ``out`` from block
+    # j_lo's first.
+    j_lo = max((begin + half + ahead - n_fft) // hop + 1, 0)
+    j_hi = min(-(-(end + half + ahead) // hop) + 1, blocks)
     # The first and last block that takes each place's filters at each moment, so each
     # is worked out once and kept no longer.
     uses: dict[tuple[int, int], tuple[int, int]] = {}
     for reading in readings:
         for j in range(max(reading.first, j_lo), min(reading.last + 1, j_hi)):
-            for place, moment, _ in _parts(reading.track, j * hop / rate, gusts):
-                first, last_j = uses.get((place, moment), (j, j))
-                uses[place, moment] = (min(first, j), max(last_j, j))
+            for when in reading.taken(j, hop, rate)[0]:
+                for place, moment, _ in _parts(reading.track, when, gusts):
+                    first, last_j = uses.get((place, moment), (j, j))
+                    uses[place, moment] = (min(first, j), max(last_j, j))
     filters.plan(uses)
-    base = (j_lo - 1) * hop
+    base = (j_lo - 1) * hop - ahead
     out = np.zeros((max(j_hi - j_lo + 2, 0) * hop + n_fft + most, fmt.channels))
     # Fewer blocks at once with more signals, which each read every path's delays.
     chunk = max(_BLOCKS // len(signals), 1)
     for c0 in range(j_lo, j_hi, chunk):
         c1 = min(c0 + chunk, j_hi)
-        n0, n1 = (c0 - 1) * hop, (c1 + 1) * hop
+        n0, n1 = (c0 - 1) * hop - ahead, (c1 + 1) * hop + behind
         t = np.arange(n0, n1) / rate
         active = []
         for reading in readings:
             if reading.first > c1 - 1 or reading.last < c0:
                 continue
-            delay, held = reading.delays(t, last)
-            # The path's spreading, which its filter leaves to the delay: one over the
-            # delay at each sample, before the eddies move it and without an ear's
-            # onset; between places no nearer than a listener may stand to a source.
-            # Past the path's ends, where it fades in or out, the delay held there: the
-            # fade is then the filter's, from the level at the place it is heard from.
-            spread = 1.0 / np.maximum(held, nearest)
-            if turbulent:
-                delay = delay + _moved(filters, reading.track, t, gusts)
-            # At the ears, each ear's own delay (its onset added): (samples, 2).
-            ears = (
-                [delay] if reading.onsets is None else [delay + reading.onset(t, e) for e in (0, 1)]
-            )
+            # When the sound heard at each sample passed the listener: then, or at the
+            # ears of a walking source's listener an onset earlier, each ear its own.
+            passed = [reading.passed(t, e) for e in (0, 1)] if passing else [(t, None)]
+            reads: list[tuple[np.ndarray, np.ndarray]] = []
+            for s, share in passed:
+                delay, held = reading.delays(s, last)
+                # The path's spreading, which its filter leaves to the delay: one over
+                # the delay at each sample, before the eddies move it and without an
+                # ear's onset; between places no nearer than a listener may stand to a
+                # source. Past the path's ends, where it fades in or out, the delay
+                # held there: the fade is then the filter's, from the level at the
+                # place it is heard from.
+                spread = 1.0 / np.maximum(held, nearest)
+                if turbulent:
+                    delay = delay + _moved(filters, reading.track, s, gusts)
+                if share is not None:
+                    # What passed the centre in one sample reaches the ear in more or
+                    # less than one, as its onset grows or shrinks.
+                    reads.append((s * rate - delay * rate, spread * share))
+                elif reading.onsets is None:
+                    reads.append((np.arange(n0, n1) - delay * rate, spread))
+                else:
+                    # At a walking listener's ears, each ear's own delay (its onset
+                    # added).
+                    for e in (0, 1):
+                        each = delay + reading.onset(t, e)
+                        reads.append((np.arange(n0, n1) - each * rate, spread))
             at_ears: list[np.ndarray] = []
             for _, signal in signals:
-                reads = []
-                for each in ears:
-                    positions = np.arange(n0, n1) - each * rate
-                    if emission is not None:
-                        reads.append(reading.sent(emission, positions, rate) * spread)
-                    else:
-                        reads.append(read(signal, positions, reading.cutoff) * spread)
-                at_ears.append(np.column_stack(reads))
-            active.append((reading, at_ears))
+                if emission is not None:
+                    sounds = [reading.sent(emission, where, rate) * by for where, by in reads]
+                else:
+                    sounds = [read(signal, where, reading.cutoff) * by for where, by in reads]
+                at_ears.append(np.column_stack(sounds))
+            centres = np.column_stack([s for s, _ in passed]) * rate if passing else None
+            active.append((reading, at_ears, centres))
         if not active:
             continue
         for j in range(c0, c1):
-            start = (j - 1) * hop
-            centre = j * hop / rate
+            start = (j - 1) * hop - ahead
+            off = start - n0
             totals: list = [None] * len(signals)
-            for reading, at_ears in active:
+            for reading, at_ears, centre in active:
                 if j < reading.first or j > reading.last:
                     continue
-                spectrum = _filter_at(filters, reading.track, centre, gusts)
-                if spectrum is None:
-                    continue
-                for i, sound in enumerate(at_ears):
-                    piece = sound[start - n0 : start - n0 + 2 * hop] * window[:, None]
-                    if not np.any(piece):
+                whens, turns = reading.taken(j, hop, rate)
+                if centre is not None:
+                    # Each ear's windows at the times its sound passed the centre.
+                    windows = np.stack(
+                        [_windows(turns, centre[off : off + width, e]) for e in (0, 1)], axis=-1
+                    )
+                elif len(whens) == 1 and turns[0] == start:
+                    # With no place's time within a block of the centre, the one triangle.
+                    windows = window[None, :, None]
+                else:
+                    windows = _windows(turns, np.arange(start, start + width))[:, :, None]
+                for when, rising in zip(whens, windows, strict=True):
+                    spectrum = _filter_at(filters, reading.track, when, gusts)
+                    if spectrum is None:
                         continue
-                    part = np.fft.rfft(piece, n_fft, axis=0).T * spectrum
-                    totals[i] = part if totals[i] is None else totals[i] + part
+                    for i, sound in enumerate(at_ears):
+                        piece = sound[off : off + width] * rising
+                        if not np.any(piece):
+                            continue
+                        part = np.fft.rfft(piece, n_fft, axis=0).T * spectrum
+                        totals[i] = part if totals[i] is None else totals[i] + part
             filters.done(j)
             for (lag, _), total in zip(signals, totals, strict=True):
                 if total is None:
@@ -837,8 +1030,8 @@ def _moved(filters: Filters, track: Track, t: np.ndarray, gusts) -> np.ndarray:
 def _parts(track: Track, centre: float, gusts) -> list[tuple[int, int, float]]:
     """The places and moments the track's filter at time ``centre`` (s) is taken
     between, each (place, moment, weight): the places on either side in proportion to
-    how near they are (only those it is heard from), and in turbulence the moments on
-    either side."""
+    how near they are (only those it is heard from; at a place's own time, that place
+    alone), and in turbulence the moments on either side."""
     received = track.received
     last = len(received) - 1
     j = int(np.searchsorted(received, centre, side="right")) - 1
