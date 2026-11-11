@@ -2324,7 +2324,7 @@ exact change of its arrival and scaled by R / R*. Level and arrival over the arr
 |---|---|---|---|---|
 | level, effective / moving (dB) | -0.78 / +0.00 | +0.84 / -0.00 | -0.14 / +0.00 | -0.63 / -0.01 |
 | arrival, effective / moving (ms) | -0.03 / -0.07 | +0.03 / +0.09 | -0.15 / +0.00 | -0.03 / +0.00 |
-| waveform's error, effective / moving (dB) | -20.9 / -30.1 | -19.6 / -28.0 | -23.6 / -65.6 | -22.9 / -45.1 |
+| waveform's error, effective / moving (dB) | -20.9 / -30.1 | -19.6 / -28.0 | -23.6 / -65.5 | -22.9 / -45.1 |
 
 Moving air is within 0.02 dB and 0.1 ms of the exact solution in every direction. The
 effective speed of sound gets the arrival about right but not the level, up to 0.84 dB
@@ -2374,14 +2374,14 @@ same grid:
 | ray theory, the uniform wind | +1.78 ms | |
 | effective speed of sound | -8.81 ms | -10.59 ms |
 | ray theory, the wind round the building | +1.38 ms | |
-| moving air | +1.38 ms | +0.00 ms |
+| moving air | +1.39 ms | +0.01 ms |
 
 The effective speed of sound sends the echo back at the speed of sound going away from
 the source: over its 40 m back to the source that makes it 80 v / (c² − v²) = 10.2 ms
 too soon, and the run gives 10.6 ms. The 0.4 ms between the two is not fully traced:
 the effective run's grid steps for the fastest sound, c + v, and the still air's for
 c, so the two disperse differently, which accounts for part of it. Moving air gets the
-echo within 0.01 ms of the rays through its own wind, 0.40 ms sooner than a uniform wind
+echo 0.01 ms off the rays through its own wind, 0.39 ms sooner than a uniform wind
 would bring it: before the façade the air is nearly still. That wind is an ideal
 fluid's, without the wake and the eddies of a real building's, and at the building's
 edges it is 3.3 times the given wind on this grid, where a real wind separates (see
@@ -2402,20 +2402,21 @@ equation:
 | upwind, effective | +4.8 | +4.5 | +3.9 | +3.8 | +2.0 | +2.0 |
 | upwind, moving | +4.6 | +4.3 | +3.7 | +3.6 | +1.9 | +1.6 |
 
-Moving air is within 0.25 dB of the parabolic equation, 0.09 dB on average; the
+Moving air is within 0.26 dB of the parabolic equation, 0.09 dB on average; the
 effective speed of sound within 0.39 dB, 0.19 dB on average. Downwind the effective
-speed of sound is 0.02 to 0.29 dB below it and moving air −0.02 to +0.25 dB from it
+speed of sound is 0.02 to 0.29 dB below it and moving air −0.01 to +0.26 dB from it
 (most at 200 m, 1.5 m up); upwind moving air is within 0.13 dB and the effective speed
 of sound 0.14 to 0.39 dB above.
 
-Moving air takes 3.8 to 5.0 times as long as the effective speed of sound where its
-wind is carried as given: 16 s against 4.1 s in the free field (3.2 million
-cells) and, with the preset (29.2 against 30.2 million cells), 319 and 332 s against
-66 s downwind and upwind. Round the façade's building it takes 10.5 times as long for
-the façade's response of 0.45 s, 86 s against 8.2 s (6 million cells): 37 s to make the
-wind flow round the building (962 sweeps of its solve), which a run does once whatever
-its length, and its steps 6.9 times the effective speed of sound's. On 4 cores with
-nothing else running (11 November 2026).
+Moving air takes 3.9 to 4.9 times as long as the effective speed of sound where its
+wind is carried as given: 15 s against 3.7 s in the free field (3.2 million
+cells) and, with the preset (29.2 against 30.2 million cells), 324 and 312 s against
+66 and 69 s downwind and upwind. Round the façade's building it takes 12 times as long
+for the façade's response of 0.45 s, 92 s against 7.6 s (6 million cells): 37 s to make
+the wind flow round the building (962 sweeps of its solve), which a run does once
+whatever its length, and its steps 8.3 times the effective speed of sound's. On 4 cores
+with nothing else running (11 November 2026); run twice more, the façade's case took
+94 and 89 s with moving air and 7.9 and 6.9 s with the effective speed of sound.
 
 **A room with an opening.** A wind blown through a room's walls makes the solver's
 sound grow there without bound (the scheme keeps the sound's energy only where no wind
@@ -2428,7 +2429,7 @@ the 63 Hz band:
 |---:|---:|---:|---:|---:|
 | 5 | 7.8 | 0.01 | -0.5 | -0.4 |
 | 15 | 23.6 | 0.03 | -0.8 | -0.2 |
-| 30 | 46.9 | 0.05 | -1.0 | -0.1 |
+| 30 | 46.9 | 0.05 | -1.1 | -0.1 |
 
 Nothing takes the room's sound in but the opening, with either way of taking the wind.
 The solver still watches each run in moving air: from the end of the source's pulse on,
@@ -2440,9 +2441,56 @@ these runs is stopped.
 One-off checks of the solver alone, on the 63 Hz band's grid with rigid surfaces over
 10 s at 15 m/s, the levels those of the grid's last quarter second under its first:
 the same room loses 1.1 dB with its opening downwind (1.1 and 1.2 dB at 5 and 30 m/s) and
-1.0 dB with it upwind. In the open, a yard closed on four sides (4 × 4 m, walls 4 m
+1.1 dB with it upwind. In the open, a yard closed on four sides (4 × 4 m, walls 4 m
 high), a street 3 m wide between two buildings 5 m high, a façade downwind of the
-source and one upwind of it die away steadily, by 68, 72, 110 and 121 dB.
+source and one upwind of it die away steadily, by 68, 73, 131 and 131 dB.
+
+**The border of the moving air.** The air of the grid's absorbing layer is still, and
+the wind crosses the border between the two. Through each face of that border the
+cell's own sound goes out with the wind and silence comes in, which takes energy from
+the sound and adds none (see the notes of `fdtd.hpp`); carried with the layer's own
+values instead, the sound grows there in fast winds: in one-off runs over open ground
+on a grid 4 m tall, the slowest wind in which it did was 53 m/s, at 45 degrees to the
+grid. The tests hold a wind of 0.3 cells per time step along both axes over open
+ground (178 m/s along each) and one of 0.3 along the grid past a block, round which it
+gets to 0.45 (266 m/s): from 1,500 steps on, the sound over the grid stays more than
+60 dB under its level over the first 500. In one-off runs of the solver alone on
+cells of 25 cm, none of 39
+runs (28 set-ups, some at several wind speeds) grows over 20,000 to 40,000 steps in
+given winds of up to 0.45 cells per step (267 m/s): open ground with the wind along
+the grid, at 15, 30, 45 and 60 degrees to it and rising with height, on grids 2.5 and
+4 m tall; a block, one next to the downwind border, stairs, a barrier, walls with a
+slit and with a hole, a pit, streets along and across the wind, and rooms with an
+opening downwind, upwind and to the side. Those in the open fall by 106 to 189 dB
+within their runs: 18 of the 30 until they stop falling, 181 to 189 dB down, and end
+up to 9 dB above their lowest, 173 to 183 dB down; a run in almost still air on the
+4 m grid (1e-7 cells per step) ends 171 dB down, 3 dB above its lowest, which makes
+that single precision's rounding and not the wind. The other 12 were still falling at
+their end. The rooms lose 8 to 30 dB through their openings. More than 200 further
+one-off runs of 3,000 to 16,000 steps (other directions and shapes of wind, other
+proportions of the grid, solids one to three cells from the border) grow in none
+either.
+
+A wave that leaves the moving air for the layer's still air comes back in part, by
+about half the wind's Mach number, and so it does carried with the layer's own values
+(a one-off run of this check then gives 34 to 42 dB at 10 m/s). The plate of
+[the open model's check](#wave-based-solver) in a uniform wind, 25 to 150 Hz on cells
+of 30 cm, with the default layer against a grid 45 cells larger all round, whose
+border sends nothing back in the 70 ms of the runs (their last 10 ms faded out): what
+differs at the three listeners, in dB relative to the sound itself,
+
+| wind (m/s) | along the grid | at 45 degrees to it | half the Mach number |
+|---:|---|---|---:|
+| 0 | −74.0, −78.0, −75.0 | | |
+| 5 | −39.7, −45.6, −44.2 | −37.8, −45.5, −40.0 | −42.7 |
+| 10 | −34.0, −39.8, −38.4 | −32.0, −39.7, −34.2 | −36.7 |
+| 20 | −28.4, −34.2, −32.9 | −26.3, −34.0, −28.6 | −30.7 |
+| 40 | −23.1, −28.8, −27.8 | −21.0, −28.6, −23.2 | −24.7 |
+
+In still air the layer returns 74 to 78 dB less than the sound; in a uniform wind of
+5 m/s, the `windy` preset's 10 m up, 38 to 46 dB less. Taking that away needs a layer
+made for moving air, which the solver does not have (see
+[What is not modelled yet](outdoor.md#what-is-not-modelled-yet)).
 
 ## Outdoor results against exact solutions
 
