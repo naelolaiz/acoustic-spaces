@@ -109,8 +109,13 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
 #include <stdexcept>
+#include <chrono>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -145,6 +150,35 @@ inline void update_interior(float *__restrict a, const float *__restrict b, std:
                             b[i - 1 - sz] + b[i + 1 - sz] + b[i - 1 + sz] + b[i + 1 + sz] +
                             b[i - sy - sz] + b[i + sy - sz] + b[i - sy + sz] + b[i + sy + sz];
         a[i] = centre * b[i] + axial * sum + diagonal * edges - a[i];
+    }
+}
+
+// PROTOTYPE (round 2, ACOUSTIC_SPACES_DIFF_UPDATE=1): the same updates written in the
+// differences p_k - p, p+ = p + (p - p-) + sum_k g_k (p_k - p), so that a uniform pressure is
+// kept exactly in single precision (the products centre * p and g * sum p round in
+// proportion to the pressure's mean, which made the 19-point grid's mean grow).
+inline void update_interior_diff(float *__restrict a, const float *__restrict b, std::size_t lo,
+                                 std::size_t hi, std::size_t sy, std::size_t sz, float axial) {
+    for (std::size_t i = lo; i < hi; ++i) {
+        const float p = b[i];
+        const float sum = (b[i - 1] - p) + (b[i + 1] - p) + (b[i - sy] - p) + (b[i + sy] - p) +
+                          (b[i - sz] - p) + (b[i + sz] - p);
+        a[i] = p + (p - a[i]) + axial * sum;
+    }
+}
+
+inline void update_interior_diff(float *__restrict a, const float *__restrict b, std::size_t lo,
+                                 std::size_t hi, std::size_t sy, std::size_t sz, float axial,
+                                 float diagonal) {
+    for (std::size_t i = lo; i < hi; ++i) {
+        const float p = b[i];
+        const float sum = (b[i - 1] - p) + (b[i + 1] - p) + (b[i - sy] - p) + (b[i + sy] - p) +
+                          (b[i - sz] - p) + (b[i + sz] - p);
+        const float edges = (b[i - 1 - sy] - p) + (b[i + 1 - sy] - p) + (b[i - 1 + sy] - p) +
+                            (b[i + 1 + sy] - p) + (b[i - 1 - sz] - p) + (b[i + 1 - sz] - p) +
+                            (b[i - 1 + sz] - p) + (b[i + 1 + sz] - p) + (b[i - sy - sz] - p) +
+                            (b[i + sy - sz] - p) + (b[i - sy + sz] - p) + (b[i + sy + sz] - p);
+        a[i] = p + (p - a[i]) + (axial * sum + diagonal * edges);
     }
 }
 
@@ -246,9 +280,39 @@ public:
                const std::vector<Vec3> &probes, double edge_admittance, std::size_t layer,
                double layer_damping, std::size_t threads, std::size_t stencil = 7,
                const float *speed = nullptr, const float *flow_x = nullptr,
-               const float *flow_y = nullptr)
+               const float *flow_y = nullptr, std::size_t fitted = 0)
         : origin_(origin), cell_(cell), nx_(nx), ny_(ny), nz_(nz), sy_(nx), sz_(nx * ny),
           layer_(layer), stencil_(stencil) {
+        fitted_ = fitted;
+        if (const char *d = std::getenv("ACOUSTIC_SPACES_DIFF_UPDATE")) diff_update_ = std::strtoul(d, nullptr, 10) > 0;
+        // PROTOTYPE (round 2): the lumped wall, ACOUSTIC_SPACES_LUMPED=S: the voxel operator
+        // as today, each boundary cell's volume its air sampled S^3 (slivers behind the
+        // voxel faces lumped into the nearest air cell that sees them), raised to the cube
+        // bound (see lumped_bounds) where it is below it.
+        if (const char *lv = std::getenv("ACOUSTIC_SPACES_LUMPED")) {
+            const std::size_t S = std::strtoul(lv, nullptr, 10);
+            if (S > 0) {
+                fitted_ = S;
+                lumped_ = true;
+                // ACOUSTIC_SPACES_LUMPED_OUT=1: first take out of the air every cell whose cube
+                // holds some solid (see demote), so that every wall's air lies beyond the voxel
+                // faces and is lumped outward (V >= 1).
+                const char *out = std::getenv("ACOUSTIC_SPACES_LUMPED_OUT");
+                lumped_out_ = out && std::strtoul(out, nullptr, 10) > 0;
+                // ACOUSTIC_SPACES_LUMPED_AREA=1: also weigh each link by the open area of the
+                // lumped regions it couples (at least 1; see lumped_scale), so that a lumped
+                // sliver is as stiff along the wall as it is compliant.
+                const char *area = std::getenv("ACOUSTIC_SPACES_LUMPED_AREA");
+                lumped_area_ = area && std::strtoul(area, nullptr, 10) > 0;
+            }
+        }
+        // 19-point: no stable fitted variant that helps was found (prototype). The fit is
+        // used only when an experimental variant is named: "area" (unstable) or "volume".
+        const char *v19 = std::getenv("ACOUSTIC_SPACES_FIT19");
+        if (stencil == 19 && !lumped_ && !(v19 && (std::strcmp(v19, "volume") == 0 || std::strcmp(v19, "area") == 0))) {
+            fitted_ = 0;
+        }
+        if (v19) fit19_volume_ = std::strcmp(v19, "volume") == 0;
         if (stencil != 7 && stencil != 19) {
             throw std::invalid_argument("the stencil has 7 or 19 points");
         }
@@ -381,27 +445,50 @@ public:
             }
         }
 
+        // PROTOTYPE (fitted > 0): each air cell's share of air and each link's open share,
+        // sampled fitted x fitted (x fitted) per cell (see fit_boundary).
+        std::vector<std::uint8_t> candidate;
+        if (fitted_ > 0) {
+            const auto t0 = std::chrono::steady_clock::now();
+            if (lumped_) lumped_region();
+            if (lumped_ && lumped_out_) demote(bvh, near, cut);
+            candidate = fit_boundary(bvh, near, cut);
+            fit_stats_[7] = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        }
+        auto raw = [&](std::size_t i, double *w) {
+            if (lumped_area_) {
+                lumped_raw(cut, i, w);
+            } else if (fitted_ > 0 && !lumped_) {
+                raw_fitted(cut, i, w);
+            } else {
+                raw_weights(cut, i, w);
+            }
+        };
         // Boundary cells: a link cut or at the grid's edge (mark 1), or a neighbour of
         // one whose folded links reach it (mark 2), whose weights averaging changes.
         std::vector<std::uint8_t> mark(n, 0);
         for (std::size_t i = 0; i < n; ++i) {
             if (type_[i] != kInterior) continue;
             for (int k = 0; k < directions_ && !mark[i]; ++k) mark[i] = blocked(cut, i, k);
+            if (fitted_ > 0 && candidate[i]) mark[i] = 1;
         }
         std::array<double, 18> wi{}, wj{};
         for (std::size_t i = 0; i < n; ++i) {
             if (mark[i] != 1) continue;
-            raw_weights(cut, i, wi.data());
+            raw(i, wi.data());
             for (int k = 0; k < directions_; ++k) {
                 const std::size_t j = neighbour(i, k);
-                if (wi[k] != exact_[k] && type_[j] == kInterior && !mark[j]) mark[j] = 2;
+                if ((fitted_ > 0 || wi[k] != exact_[k]) && type_[j] == kInterior && !mark[j]) mark[j] = 2;
             }
         }
+        // PROTOTYPE (lumped): each boundary cell's least volume (see lumped_bounds).
+        std::unordered_map<std::size_t, double> least;
+        if (lumped_) least = lumped_bounds(cut, mark);
         for (std::size_t i = 0; i < n; ++i) {
             if (type_[i] != kInterior) continue;
             ++air_;
             if (!mark[i]) continue;
-            raw_weights(cut, i, wi.data());
+            raw(i, wi.data());
             std::array<double, 18> weight{};
             double beta_sum = 0.0;
             std::array<std::int32_t, 18> crossed{};  // materials of the cut links,
@@ -409,18 +496,55 @@ public:
             std::size_t kinds = 0;
             // A cut link's boundary weight goes to the face it crosses nearest the cell;
             // an edge link's, to the wall behind each of its steps that one is behind.
+            double met = 0.0;  // the boundary weight handed to meet
+            // PROTOTYPE (fitted): the walls met, by direction (up to 3), and each meet's
+            // material (-1: the grid's edge) and weight.
+            std::array<Vec3, 3> wall_normal{};
+            std::size_t walls = 0;
+            bool many_walls = false;
+            std::array<std::int32_t, 40> entry_material{};
+            std::array<double, 40> entry_weight{};
+            std::array<std::size_t, 40> entry_wall{};
+            std::size_t entries = 0;
+            auto record = [&](Vec3 nrm, const Vec3 &dir, std::int32_t m, double w) {
+                if (fitted_ == 0) return;
+                if (dot(nrm, dir) < 0.0) nrm = nrm * -1.0;
+                std::size_t g = 0;
+                while (g < walls && dot(wall_normal[g], nrm) < 0.999) ++g;
+                if (g == walls) {
+                    if (walls == 3) {
+                        many_walls = true;
+                        g = 0;
+                    } else {
+                        wall_normal[walls++] = nrm;
+                    }
+                }
+                if (entries < entry_weight.size()) {
+                    entry_material[entries] = m;
+                    entry_weight[entries] = w;
+                    entry_wall[entries++] = g;
+                } else {
+                    many_walls = true;
+                }
+            };
             auto meet = [&](int k, double w) {
+                met += w;
                 const std::size_t j = neighbour(i, k);
                 if (edge(j)) {
                     beta_sum += w * edge_admittance;
+                    record(unit(k) * (1.0 / norm(unit(k))), unit(k), -1, w);
                     open_ = true;
                     reach_sides(j, 0);
                     return;
                 }
                 Hit hit = bvh.intersect(centre(i), unit(k), length(k), -1);
                 if (!hit.found()) hit = bvh.intersect(centre(j), unit(opposite(k)), length(k), -1);
+                if (!hit.found() && lumped_out_) {  // a link to a demoted cell: the face beyond it
+                    hit = bvh.intersect(centre(i), unit(k), 2.5 * length(k), -1);
+                }
                 if (!hit.found()) return;  // grazing a face's edge: as if rigid
                 const auto m = static_cast<std::int32_t>(face_material[hit.face]);
+                record(bvh.normal(static_cast<std::size_t>(hit.face)), unit(k), m, w);
                 beta_sum += w * beta[m];
                 std::size_t kind = 0;
                 while (kind < kinds && crossed[kind] != m) ++kind;
@@ -430,7 +554,7 @@ public:
             for (int k = 0; k < directions_; ++k) {
                 const std::size_t j = neighbour(i, k);
                 if (!edge(j) && type_[j] != kSolid && type_[j] != kLayer && mark[j]) {
-                    raw_weights(cut, j, wj.data());
+                    raw(j, wj.data());
                     weight[k] = 0.5 * (wi[k] + wj[opposite(k)]);
                 } else if (!edge(j) && type_[j] != kSolid) {
                     weight[k] = 0.5 * (wi[k] + exact_[k]);
@@ -446,6 +570,107 @@ public:
                 if (behind_b) meet(kb, boundary_[k]);
                 if (!behind_a && !behind_b) meet(k, boundary_[k]);
             }
+            double volume = 1.0;
+            if (fitted_ > 0) {
+                // The wall's area in the cell: the open faces' area vector, closed by it.
+                Vec3 net{0.0, 0.0, 0.0};
+                for (int k = 0; k < 6; ++k) net = net + unit(k) * axial_area(cut, i, k);
+                const double area = norm(net);
+                const double plane = 0.5 * std::sqrt(exact_[0] + 4.0 * exact_[6]);  // L / 2
+                const double fit = plane * area;
+                // Walls in more than one direction (a corner, an edge of the room, the
+                // grid's edge): |net| is not their area. The wall vector -net is the sum of
+                // each wall's area times its normal; solve for the areas (least squares).
+                std::array<double, 3> wall_area{};
+                bool solved = false;
+                if (met > 0.0 && walls >= 2 && !many_walls) {
+                    const Vec3 W = net * -1.0;
+                    double M[3][4] = {};
+                    for (std::size_t a = 0; a < walls; ++a) {
+                        for (std::size_t b = 0; b < walls; ++b) M[a][b] = dot(wall_normal[a], wall_normal[b]);
+                        M[a][3] = dot(wall_normal[a], W);
+                    }
+                    solved = true;
+                    for (std::size_t c = 0; c < walls && solved; ++c) {  // Gauss-Jordan
+                        std::size_t p = c;
+                        for (std::size_t r = c + 1; r < walls; ++r)
+                            if (std::abs(M[r][c]) > std::abs(M[p][c])) p = r;
+                        if (std::abs(M[p][c]) < 1e-6) { solved = false; break; }
+                        for (int q = 0; q < 4; ++q) std::swap(M[c][q], M[p][q]);
+                        for (std::size_t r = 0; r < walls; ++r) {
+                            if (r == c) continue;
+                            const double f = M[r][c] / M[c][c];
+                            for (int q = 0; q < 4; ++q) M[r][q] -= f * M[c][q];
+                        }
+                    }
+                    for (std::size_t a = 0; a < walls && solved; ++a) {
+                        wall_area[a] = M[a][3] / M[a][a];
+                        if (wall_area[a] < -1e-6) solved = false;
+                        wall_area[a] = std::max(wall_area[a], 0.0);
+                    }
+                    if (solved) fit_stats_[8] += 1.0;
+                }
+                if (solved) {
+                    // each wall's fitted weight, shared among its meets by their weights
+                    std::array<double, 3> wall_met{};
+                    for (std::size_t e = 0; e < entries; ++e) wall_met[entry_wall[e]] += entry_weight[e];
+                    beta_sum = 0.0;
+                    crossed_weight.fill(0.0);
+                    for (std::size_t e = 0; e < entries; ++e) {
+                        const std::size_t g = entry_wall[e];
+                        const double w = plane * wall_area[g] * entry_weight[e] / wall_met[g];
+                        const std::int32_t m = entry_material[e];
+                        if (m < 0) {
+                            beta_sum += w * edge_admittance;
+                            continue;
+                        }
+                        beta_sum += w * beta[m];
+                        std::size_t kind = 0;
+                        while (kind < kinds && crossed[kind] != m) ++kind;
+                        if (kind == kinds) crossed[kinds++] = m;
+                        crossed_weight[kind] += w;
+                    }
+                } else if (met > 0.0) {
+                    const double scale = fit / met;
+                    beta_sum *= scale;
+                    for (std::size_t kind = 0; kind < kinds; ++kind) crossed_weight[kind] *= scale;
+                } else if (fit > 1e-9) {
+                    Hit hit = bvh.intersect(centre(i), net * (-1.0 / area), 1.5 * cell_, -1);
+                    if (hit.found()) {
+                        const auto m = static_cast<std::int32_t>(face_material[hit.face]);
+                        beta_sum += fit * beta[m];
+                        std::size_t kind = 0;
+                        while (kind < kinds && crossed[kind] != m) ++kind;
+                        if (kind == kinds) crossed[kinds++] = m;
+                        crossed_weight[kind] += fit;
+                    }
+                }
+                volume = fit_volume(i);
+                if (lumped_novol_) volume = 1.0;  // test: the weights alone (symmetry check)
+                fit_stats_[4] = std::min(fit_stats_[4], volume);
+                fit_stats_[5] = std::max(fit_stats_[5], volume);
+                double total = 0.0;
+                for (int k = 0; k < directions_; ++k) total += weight[k];
+                // 7-point: sum of the weights within 2 V bounds the largest eigenvalue by
+                // 4 (proof: (p_i - p_j)^2 <= 2 p_i^2 + 2 p_j^2). 19-point: no such bound;
+                // a cell is kept no stiffer for its volume than an interior one (3).
+                const double limit = stencil_ == 7 ? 2.0 : 3.0;
+                if (lumped_ && !lumped_novol_) {
+                    const auto it = least.find(i);
+                    const double bound = it == least.end() ? 1.0 : it->second;
+                    fit_stats_[9] = std::min(fit_stats_[9], bound);  // lumped: the lowest bound
+                    if (volume < bound) {
+                        if (bound - volume > 1e-12) fit_stats_[2] += 1.0;
+                        fit_stats_[3] = std::max(fit_stats_[3], bound - volume);  // (lumped: the largest raise)
+                        fit_stats_[10] += bound - volume;  // lumped: volume added by the bound
+                        volume = bound;
+                    }
+                } else if (!lumped_ && total > limit * volume) {
+                    fit_stats_[2] += 1.0;
+                    fit_stats_[3] = std::max(fit_stats_[3], total / (limit * volume));
+                    volume = total / limit;
+                }
+            }
             // One set of branch velocities per material the cell meets, standing for its
             // cut links of that material.
             double g = beta_sum;
@@ -455,10 +680,10 @@ public:
                 for (const std::int32_t j : own) {
                     g += crossed_weight[kind] * (0.5 / branch_a_[static_cast<std::size_t>(j)]);
                     state_branch_.push_back(j);
-                    state_weight_.push_back(static_cast<float>(r * crossed_weight[kind]));
+                    state_weight_.push_back(static_cast<float>(r * crossed_weight[kind] / volume));
                 }
             }
-            add_special(i, weight.data(), g);
+            add_special(i, weight.data(), g, volume);
         }
         boundary_cells_ = special_.size();
 
@@ -472,7 +697,7 @@ public:
         for (const auto &[i, w] : reading_cells(bvh, cut, source, true)) {
             std::size_t k = special_index(i);
             if (k == npos) k = add_special(i, exact_.data(), 0.0);
-            source_[k] += static_cast<float>(cell_scale(i) * w);
+            source_[k] += static_cast<float>(cell_scale(i) * w / special_volume_[k]);
         }
         for (const Vec3 &p : probes) {
             // (kNear cells away to within rounding counts as that far.)
@@ -518,6 +743,10 @@ public:
     std::size_t probes() const { return probe_cells_.size(); }
     bool probe_found(std::size_t p) const { return !probe_cells_.at(p).empty(); }
     std::size_t stencil() const { return stencil_; }
+    // PROTOTYPE: fitted boundary's figures: candidate cells, sample rays, cells whose
+    // volume was raised for stability, the largest raise, smallest and largest volume,
+    // face area dropped (cells), set-up seconds.
+    const std::array<double, 12> &fit_stats() const { return fit_stats_; }
     std::size_t threads() const { return threads_; }
 
     // Hands each array of the grid's layout to put(name, vector), for stepping the grid
@@ -612,6 +841,7 @@ public:
             float *a = u0, *b = u1;  // a: the previous step, then the next; b: the current
             float *wa = w0, *wb = w1;  // branch velocities, the same way
             const bool flowing = !flow_mask_.empty();
+            const bool diff = diff_update_;
             for (std::size_t step = 0; step < steps; ++step) {
                 if (t == 0) record(b, step, steps, out);
                 if (flowing) {
@@ -623,7 +853,13 @@ public:
                 for (std::size_t r = first_run; r < runs && run_begin[r] < ie; ++r) {
                     const std::size_t lo = std::max(run_begin[r], ib);
                     const std::size_t hi = std::min(run_end[r], ie);
-                    if (scale != nullptr && wide) {
+                    if (diff && scale == nullptr) {
+                        if (wide) {
+                            update_interior_diff(a, b, lo, hi, sy, sz, axial, diagonal);
+                        } else {
+                            update_interior_diff(a, b, lo, hi, sy, sz, axial);
+                        }
+                    } else if (scale != nullptr && wide) {
                         update_interior(a, b, scale, lo, hi, sy, sz, axial, diagonal, total);
                     } else if (scale != nullptr) {
                         update_interior(a, b, scale, lo, hi, sy, sz, axial, total);
@@ -637,9 +873,17 @@ public:
                 for (std::size_t k = sb; k < se; ++k) {
                     const std::size_t i = static_cast<std::size_t>(index[k]);
                     float sum = 0.0f;
-                    for (std::size_t l = link_start[k]; l < link_start[k + 1]; ++l) {
-                        const std::ptrdiff_t j = static_cast<std::ptrdiff_t>(i) + offset[link_direction[l]];
-                        sum += link_weight[l] * b[j];
+                    if (diff) {
+                        const float p = b[i];
+                        for (std::size_t l = link_start[k]; l < link_start[k + 1]; ++l) {
+                            const std::ptrdiff_t j = static_cast<std::ptrdiff_t>(i) + offset[link_direction[l]];
+                            sum += link_weight[l] * (b[j] - p);
+                        }
+                    } else {
+                        for (std::size_t l = link_start[k]; l < link_start[k + 1]; ++l) {
+                            const std::ptrdiff_t j = static_cast<std::ptrdiff_t>(i) + offset[link_direction[l]];
+                            sum += link_weight[l] * b[j];
+                        }
                     }
                     float flow = 0.0f;
                     for (std::size_t j = start[k]; j < start[k + 1]; ++j) {
@@ -647,8 +891,9 @@ public:
                         flow += state_weight[j] * (now[br] * wb[j] - before[br] * wa[j]);
                     }
                     const float previous = a[i];
-                    const float next =
-                        (ca[k] * b[i] + sum - cb[k] * previous - flow + src[k] * s) * ci[k];
+                    const float next = diff
+                        ? (b[i] + (b[i] - cb[k] * previous) + sum - flow + src[k] * s) * ci[k]
+                        : (ca[k] * b[i] + sum - cb[k] * previous - flow + src[k] * s) * ci[k];
                     a[i] = next;
                     for (std::size_t j = start[k]; j < start[k + 1]; ++j) {
                         const std::size_t br = static_cast<std::size_t>(branch[j]);
@@ -1203,19 +1448,25 @@ private:
     // the branch velocities added since the last one.
     // With a speed field its links weigh s times as much, its boundary terms g (and its
     // branch velocities' weights, set by the caller) r times.
-    std::size_t add_special(std::size_t i, const double *w, double g) {
+    // (PROTOTYPE: `volume`, the cell's share of air, divides its links and boundary terms;
+    // the caller divides its branch velocities' weights.)
+    std::size_t add_special(std::size_t i, const double *w, double g, double volume = 1.0) {
         type_[i] = kSpecial;
         special_.push_back(static_cast<std::int64_t>(i));
-        const double s = cell_scale(i), r = std::sqrt(s);
-        double total = 0.0;
+        special_volume_.push_back(volume);
+        const double s = cell_scale(i) / volume, r = std::sqrt(cell_scale(i)) / volume;
+        double total = 0.0, taken = 0.0;
         for (int k = 0; k < directions_; ++k) {
             if (!(w[k] > 0.0)) continue;
             total += w[k];
             link_direction_.push_back(static_cast<std::uint8_t>(k));
             link_weight_.push_back(lowered(s * w[k]));
+            taken += static_cast<double>(link_weight_.back());
         }
         link_start_.push_back(link_direction_.size());
-        coef_a_.push_back(static_cast<float>(2.0 - s * total * (1.0 - kMargin)));
+        // (PROTOTYPE: with a volume, the centre is 2 less the links as taken, so that the
+        // uniform pressure stays; without, as before, to the bit.)
+        coef_a_.push_back(static_cast<float>(volume != 1.0 ? 2.0 - taken : 2.0 - s * total * (1.0 - kMargin)));
         coef_b_.push_back(static_cast<float>(1.0 - r * g));
         coef_inv_.push_back(static_cast<float>(1.0 / (1.0 + r * g)));
         source_.push_back(0.0f);
@@ -1238,6 +1489,493 @@ private:
             out[p * steps + step] = value;
         }
     }
+
+    // ---- PROTOTYPE (round 2): the lumped wall's cube bound ------------------------------
+    // The update with volumes is V (p+ - 2 p + p-) = -A p, A the voxel operator (symmetric,
+    // weights >= 0), stable while every eigenvalue of V^-1 A is within 4. Write A as a sum
+    // over the grid's 2 x 2 x 2 blocks of cells: each cell's raw contribution along
+    // direction k (its link, or the axial link it is folded onto; raw_weights), halved as
+    // the weights are averaged between the two ends, goes in equal parts to the blocks
+    // that hold the original link (4 for an axial link, 2 for an edge link; a folded link
+    // lies in the same blocks as the edge link it stands for). Then p^T A p = sum_b
+    // p_b^T B_b p_b <= sum_b m_b |p_b|^2, m_b the largest eigenvalue of block b's 8 x 8
+    // Laplacian, and V^-1 A is stable when V_i >= (1/4) sum of m_b over the 8 blocks that
+    // hold cell i. In the interior m_b = 1/2 on both stencils (7 points: the cube graph's
+    // 6 times 1/12; 19 points: 8 times 1/16, the complete graph of 8 less the 4 body
+    // diagonals), so the bound is 1 there, and exactly 4 is reached: it is tight.
+    // Matched-layer cells count as air with the interior's raw weights (heuristic: their
+    // update is not this Laplacian).
+    static double largest_eigenvalue8(double M[8][8]) {
+        double a[8][8];
+        std::memcpy(a, M, sizeof(a));
+        for (int sweep = 0; sweep < 60; ++sweep) {
+            double off = 0.0;
+            for (int p = 0; p < 8; ++p)
+                for (int q = p + 1; q < 8; ++q) off += a[p][q] * a[p][q];
+            if (off < 1e-30) break;
+            for (int p = 0; p < 8; ++p) {
+                for (int q = p + 1; q < 8; ++q) {
+                    if (std::abs(a[p][q]) < 1e-300) continue;
+                    const double theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
+                    const double t = (theta >= 0 ? 1.0 : -1.0) / (std::abs(theta) + std::sqrt(theta * theta + 1.0));
+                    const double c = 1.0 / std::sqrt(t * t + 1.0), sn = t * c;
+                    for (int r = 0; r < 8; ++r) {
+                        const double arp = a[r][p], arq = a[r][q];
+                        a[r][p] = c * arp - sn * arq;
+                        a[r][q] = sn * arp + c * arq;
+                    }
+                    for (int r = 0; r < 8; ++r) {
+                        const double apr = a[p][r], aqr = a[q][r];
+                        a[p][r] = c * apr - sn * aqr;
+                        a[q][r] = sn * apr + c * aqr;
+                    }
+                }
+            }
+        }
+        double top = 0.0;
+        for (int p = 0; p < 8; ++p) top = std::max(top, a[p][p]);
+        return top;
+    }
+
+    std::unordered_map<std::size_t, double> lumped_bounds(const std::vector<std::uint16_t> &cut,
+                                                          const std::vector<std::uint8_t> &mark) const {
+        std::unordered_map<std::size_t, double> least;
+        auto air = [&](std::size_t c) { return !edge(c) && (type_[c] == kInterior || type_[c] == kLayer); };
+        std::unordered_map<std::size_t, double> block_top;  // by the block's lowest cell
+        auto block = [&](std::size_t o) {
+            const auto it = block_top.find(o);
+            if (it != block_top.end()) return it->second;
+            double M[8][8] = {};
+            std::size_t cells[8];
+            for (int c = 0; c < 8; ++c)
+                cells[c] = o + static_cast<std::size_t>(c & 1) + ((c >> 1) & 1) * sy_ + ((c >> 2) & 1) * sz_;
+            auto slot = [&](std::size_t x) {
+                for (int c = 0; c < 8; ++c)
+                    if (cells[c] == x) return c;
+                return -1;
+            };
+            for (int c = 0; c < 8; ++c) {
+                const std::size_t i = cells[c];
+                if (!air(i)) continue;
+                for (int k = 0; k < directions_; ++k) {
+                    const int far = slot(neighbour(i, k));
+                    if (far < 0) continue;  // the link leaves the block
+                    const double share = 0.5 * exact_[k] / (k < 6 ? 4.0 : 2.0);
+                    const bool layer_here = type_[i] == kLayer;
+                    // The part of a contribution above its interior weight (a sliver's face
+                    // area) goes to those of the original link's blocks that hold a cell out
+                    // of the air (where the sliver lies), the rest to all its blocks equally.
+                    const double excess_share = [&] {
+                        if (!lumped_area_) return share;
+                        int holding = 0, total = 0;
+                        bool here = false;
+                        const int *d = kSteps[k];
+                        for (int c2 = 0; c2 < 8; ++c2) {
+                            // block origins round the link: offsets 0 or -1 on the axes the link does not step along
+                            int off[3];
+                            bool ok = true;
+                            for (int a = 0; a < 3; ++a) {
+                                const int bit = (c2 >> a) & 1;
+                                if (d[a] != 0) {
+                                    if (bit) { ok = false; break; }
+                                    off[a] = d[a] < 0 ? -1 : 0;
+                                } else {
+                                    off[a] = -bit;
+                                }
+                            }
+                            if (!ok) continue;
+                            const std::size_t bo = i + static_cast<std::size_t>(static_cast<std::ptrdiff_t>(off[0]) +
+                                                   off[1] * static_cast<std::ptrdiff_t>(sy_) + off[2] * static_cast<std::ptrdiff_t>(sz_));
+                            ++total;
+                            bool any = false;
+                            for (int c3 = 0; c3 < 8 && !any; ++c3)
+                                any = !air(bo + static_cast<std::size_t>(c3 & 1) + ((c3 >> 1) & 1) * sy_ + ((c3 >> 2) & 1) * sz_);
+                            if (any) ++holding;
+                            if (bo == o) here = any;
+                        }
+                        if (holding == 0) return share;  // equally, as the base
+                        return here ? 0.5 * exact_[k] / holding : 0.0;
+                    }();
+                    auto scale = [&](int d) { return layer_here ? 1.0 : lumped_scale(cut, i, d); };
+                    auto amount = [&](double sc) { return share + excess_share * (sc - 1.0); };
+                    auto add = [&](int to, double w) {
+                        M[c][c] += w; M[to][to] += w; M[c][to] -= w; M[to][c] -= w;
+                    };
+                    const bool layer_cell = type_[i] == kLayer;
+                    if (layer_cell || !blocked(cut, i, k)) {
+                        if (air(neighbour(i, k))) add(far, amount(scale(k)));
+                        continue;
+                    }
+                    if (k < 6 || edge(neighbour(i, k))) continue;
+                    const auto [ka, kb] = steps_of(k);
+                    const bool behind_a = blocked(cut, i, ka), behind_b = blocked(cut, i, kb);
+                    if (behind_a && behind_b) continue;
+                    const int ta = slot(neighbour(i, ka)), tb = slot(neighbour(i, kb));
+                    if (behind_a) {
+                        add(tb, amount(scale(kb)));
+                    } else if (behind_b) {
+                        add(ta, amount(scale(ka)));
+                    } else {
+                        add(ta, 0.5 * amount(scale(ka)));
+                        add(tb, 0.5 * amount(scale(kb)));
+                    }
+                }
+            }
+            const double top = largest_eigenvalue8(M);
+            block_top.emplace(o, top);
+            return top;
+        };
+        for (std::size_t i = 0; i < mark.size(); ++i) {
+            if (!mark[i] || type_[i] != kInterior) continue;
+            double sum = 0.0;
+            for (int c = 0; c < 8; ++c) {
+                const std::size_t o = i - static_cast<std::size_t>(c & 1) - ((c >> 1) & 1) * sy_ - ((c >> 2) & 1) * sz_;
+                sum += block(o);
+            }
+            least.emplace(i, 0.25 * sum);
+        }
+        return least;
+    }
+    bool lumped_ = false, lumped_out_ = false, lumped_area_ = false;
+    bool lumped_novol_ = std::getenv("ACOUSTIC_SPACES_LUMPED_NOVOL") != nullptr;  // test only
+    // Lumped wall with areas: the factor on cell i's raw contribution along direction k:
+    // an axial link by the open area of the face between the two cells' regions (round 1's
+    // sampled face areas, slivers included), an edge link by the least of the four axial
+    // faces round it (so a link that leaves the sliver's layer keeps its weight), never below 1.
+    double lumped_scale(const std::vector<std::uint16_t> &cut, std::size_t i, int k) const {
+        if (!lumped_area_) return 1.0;
+        if (k < 6) return std::max(1.0, axial_area(cut, i, k));
+        // the four faces round the link: two of i's, two of its far end j's (symmetric in i, j)
+        const auto [ka, kb] = steps_of(k);
+        const std::size_t j = neighbour(i, k);
+        // (any cell not solid: cells already made special during the set-up count too)
+        auto area = [&](std::size_t c, int d) { return type_[c] != kSolid && !edge(c) ? std::max(1.0, axial_area(cut, c, d)) : 1.0; };
+        return std::min({area(i, ka), area(i, kb), area(j, opposite(ka)), area(j, opposite(kb))});
+    }
+    // raw_weights with those factors (lumped wall with areas).
+    void lumped_raw(const std::vector<std::uint16_t> &cut, std::size_t i, double *w) const {
+        for (int k = 0; k < 18; ++k) w[k] = 0.0;
+        for (int k = 0; k < directions_; ++k) {
+            if (!blocked(cut, i, k)) {
+                w[k] += exact_[k] * lumped_scale(cut, i, k);
+                continue;
+            }
+            if (k < 6 || edge(neighbour(i, k))) continue;
+            const auto [ka, kb] = steps_of(k);
+            const bool behind_a = blocked(cut, i, ka), behind_b = blocked(cut, i, kb);
+            if (behind_a && behind_b) continue;
+            if (behind_a) {
+                w[kb] += exact_[k] * lumped_scale(cut, i, kb);
+            } else if (behind_b) {
+                w[ka] += exact_[k] * lumped_scale(cut, i, ka);
+            } else {
+                w[ka] += 0.5 * exact_[k] * lumped_scale(cut, i, ka);
+                w[kb] += 0.5 * exact_[k] * lumped_scale(cut, i, kb);
+            }
+        }
+    }
+    bool diff_update_ = false;  // PROTOTYPE (round 2): see update_interior_diff
+    // Test speed-up (PROTOTYPE): ACOUSTIC_SPACES_LUMPED_REGION="x,y,z,r" samples only cells
+    // within r metres of (x, y, z); others keep the voxel wall (V = 1).
+    double region_[4] = {0.0, 0.0, 0.0, -1.0};
+    void lumped_region() {
+        if (const char *r = std::getenv("ACOUSTIC_SPACES_LUMPED_REGION")) {
+            std::sscanf(r, "%lf,%lf,%lf,%lf", &region_[0], &region_[1], &region_[2], &region_[3]);
+        }
+    }
+    bool in_region(std::size_t i) const {
+        if (region_[3] < 0.0) return true;
+        const Vec3 c = centre(i);
+        const double dx = c.x - region_[0], dy = c.y - region_[1], dz = c.z - region_[2];
+        return dx * dx + dy * dy + dz * dz <= region_[3] * region_[3];
+    }
+
+    // Lumped wall, outward (PROTOTYPE): an air cell whose cube holds a solid sample point
+    // (one that no air cell round it sees, see owner; S^3 points) leaves the air, and its
+    // links to air are cut; its air is then lumped into the air cells round it that see it.
+    // Thin screens (air on both sides of a cube) take no cell out. Counts in fit_stats_[11].
+    void demote(const Bvh &bvh, const std::vector<std::uint8_t> &near, std::vector<std::uint16_t> &cut) {
+        const std::size_t n = nx_ * ny_ * nz_;
+        const int S = static_cast<int>(fitted_);
+        std::vector<std::size_t> out;
+        for (std::size_t c = 0; c < n; ++c) {
+            if (!near[c] || edge(c) || type_[c] != kInterior || !in_region(c)) continue;
+            const Vec3 o = centre(c);
+            bool solid = false;
+            for (int a = 0; a < S && !solid; ++a)
+                for (int b = 0; b < S && !solid; ++b)
+                    for (int d = 0; d < S && !solid; ++d) {
+                        const Vec3 x = o + Vec3{((a + 0.5) / S - 0.5) * cell_, ((b + 0.5) / S - 0.5) * cell_,
+                                                ((d + 0.5) / S - 0.5) * cell_};
+                        solid = owner(bvh, x, c) == npos;
+                    }
+            if (solid) out.push_back(c);
+        }
+        for (const std::size_t c : out) type_[c] = kSolid;
+        for (const std::size_t c : out) {
+            for (int k = 0; k < directions_; ++k) {
+                const std::size_t j = neighbour(c, k);
+                if (edge(j) || type_[j] == kSolid) continue;
+                if (bit_[k] >= 0) {
+                    cut[c] = static_cast<std::uint16_t>(cut[c] | (1u << bit_[k]));
+                } else {
+                    cut[j] = static_cast<std::uint16_t>(cut[j] | (1u << bit_[opposite(k)]));
+                }
+            }
+        }
+        fit_stats_[11] = static_cast<double>(out.size());
+    }
+
+    // ---- PROTOTYPE: fitted (cut-cell) boundary ------------------------------------------
+    // Air for the fit: the matched layer's cells too (no face reaches them).
+    bool fit_air(std::size_t i) const { return type_[i] == kInterior || type_[i] == kLayer; }
+
+    // Whether segment a-b crosses no face.
+    bool sees(const Bvh &bvh, const Vec3 &a, const Vec3 &b) const {
+        const Vec3 d = b - a;
+        const double l = norm(d);
+        if (l < 1e-12) return true;
+        ++fit_rays_;
+        return !bvh.intersect(a, d / l, l, -1).found();
+    }
+
+    // The air cell point x (in cell c's cube) belongs to: c when c is air and its centre
+    // sees x; otherwise the nearest of c's axial neighbours, then of its edge neighbours,
+    // that is air and sees x; npos when none.
+    std::size_t owner(const Bvh &bvh, const Vec3 &x, std::size_t c) const {
+        if (fit_air(c) && sees(bvh, centre(c), x)) return c;
+        if (edge(c)) return npos;
+        for (int pass = 0; pass < 2; ++pass) {
+            std::size_t best = npos;
+            double best_d = 1e300;
+            for (int k = pass == 0 ? 0 : 6; k < (pass == 0 ? 6 : 18); ++k) {
+                const std::size_t j = neighbour(c, k);
+                if (!fit_air(j)) continue;
+                const double d = norm(centre(j) - x);
+                if (d < best_d && sees(bvh, centre(j), x)) {
+                    best = j;
+                    best_d = d;
+                }
+            }
+            if (best != npos) return best;
+        }
+        return npos;
+    }
+
+    int direction_to(std::size_t a, std::size_t b) const {
+        const std::ptrdiff_t d = static_cast<std::ptrdiff_t>(b) - static_cast<std::ptrdiff_t>(a);
+        for (int k = 0; k < 18; ++k) {
+            if (offset_[k] == d) return k;
+        }
+        return -1;
+    }
+
+    // Samples, for every cell a face passes near (and the cells round those), the share
+    // of its cube each air cell owns (slivers of cells whose centre lies behind a face go
+    // to a neighbour, see owner), the open share of each face between two cubes, by the
+    // owners of the air on its two sides, and on the 19-point stencil each edge link's
+    // open share: the share of the unit square across its middle that both its cells
+    // see. Returns the candidate cells (air ones become boundary cells).
+    std::vector<std::uint8_t> fit_boundary(const Bvh &bvh, const std::vector<std::uint8_t> &near,
+                                           const std::vector<std::uint16_t> &cut) {
+        const std::size_t n = nx_ * ny_ * nz_;
+        const int S = static_cast<int>(fitted_);
+        const double unit_volume = 1.0 / (static_cast<double>(S) * S * S);
+        const double unit_area = 1.0 / (static_cast<double>(S) * S);
+        std::vector<std::uint8_t> candidate(n, 0);
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!near[i] || edge(i) || !in_region(i)) continue;
+            candidate[i] = 1;
+            for (int k = 0; k < 18; ++k) {
+                const std::size_t j = neighbour(i, k);
+                if (!edge(j) && !candidate[j]) candidate[j] = 2;
+            }
+        }
+        // A near cell whose centre sees its cube's 26 corners, edge middles and face
+        // middles is taken as clear (PROTOTYPE shortcut: a face poking into the cube
+        // between those points is missed; production would clip the faces to the cube).
+        std::vector<std::uint8_t> clear(n, 0);
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!near[i] || edge(i) || !fit_air(i)) continue;
+            bool all = true;
+            for (int a = -1; a <= 1 && all; ++a) {
+                for (int b = -1; b <= 1 && all; ++b) {
+                    for (int d = -1; d <= 1 && all; ++d) {
+                        if (a == 0 && b == 0 && d == 0) continue;
+                        all = sees(bvh, centre(i), centre(i) + Vec3{0.5 * a, 0.5 * b, 0.5 * d} * cell_);
+                    }
+                }
+            }
+            clear[i] = all;
+        }
+        auto is_near = [&](std::size_t i) { return near[i] && !clear[i]; };
+        fit_stats_[4] = 1e300;
+        auto add_area = [&](std::size_t a, int k, double v) {
+            fit_area_[a * 18 + static_cast<std::size_t>(k)] += v;
+        };
+        for (std::size_t c = 0; c < n; ++c) {
+            if (!candidate[c]) continue;
+            fit_stats_[0] += 1.0;
+            const Vec3 o = centre(c);
+            // the cube's air
+            if (!is_near(c)) {
+                if (fit_air(c)) fit_volume_[c] += 1.0;
+            } else {
+                for (int a = 0; a < S; ++a) {
+                    for (int b = 0; b < S; ++b) {
+                        for (int d = 0; d < S; ++d) {
+                            const Vec3 x = o + Vec3{((a + 0.5) / S - 0.5) * cell_,
+                                                    ((b + 0.5) / S - 0.5) * cell_,
+                                                    ((d + 0.5) / S - 0.5) * cell_};
+                            const std::size_t w = owner(bvh, x, c);
+                            if (w != npos) fit_volume_[w] += unit_volume;
+                        }
+                    }
+                }
+            }
+            // its faces (each once)
+            for (int k = 0; k < 6; ++k) {
+                const std::size_t j = neighbour(c, k);
+                if (edge(j) || (candidate[j] && j < c)) continue;
+                if (fit_air(c)) fit_done_[c * 18 + static_cast<std::size_t>(k)] = 1;
+                if (fit_air(j)) fit_done_[j * 18 + static_cast<std::size_t>(opposite(k))] = 1;
+                if (!is_near(c) && !is_near(j)) {
+                    if (fit_air(c) && fit_air(j)) {
+                        add_area(c, k, 1.0);
+                        add_area(j, opposite(k), 1.0);
+                    }
+                    continue;
+                }
+                const int axis = k / 2;
+                const Vec3 e = unit(k);
+                const Vec3 mid = o + e * (0.5 * cell_);
+                for (int a = 0; a < S; ++a) {
+                    for (int b = 0; b < S; ++b) {
+                        double u[3] = {0.0, 0.0, 0.0};
+                        u[(axis + 1) % 3] = ((a + 0.5) / S - 0.5) * cell_;
+                        u[(axis + 2) % 3] = ((b + 0.5) / S - 0.5) * cell_;
+                        const Vec3 y = mid + Vec3{u[0], u[1], u[2]};
+                        const std::size_t o1 = owner(bvh, y - e * (1e-6 * cell_), c);
+                        if (o1 == npos) continue;
+                        const std::size_t o2 = owner(bvh, y + e * (1e-6 * cell_), j);
+                        if (o2 == npos || o2 == o1) continue;
+                        const int kk = direction_to(o1, o2);
+                        if (kk < 0 || kk >= 6) {
+                            fit_stats_[6] += unit_area;
+                            continue;
+                        }
+                        add_area(o1, kk, unit_area);
+                        add_area(o2, opposite(kk), unit_area);
+                        fit_done_[o1 * 18 + static_cast<std::size_t>(kk)] = 1;
+                        fit_done_[o2 * 18 + static_cast<std::size_t>(opposite(kk))] = 1;
+                    }
+                }
+            }
+            // the 19-point stencil's edge links (each once)
+            if (stencil_ != 19 || !fit_air(c)) continue;
+            for (int k = 6; k < 18; ++k) {
+                const std::size_t j = neighbour(c, k);
+                if (edge(j) || !fit_air(j) || (candidate[j] && j < c)) continue;
+                if (blocked(cut, c, k)) continue;
+                double share = 1.0;
+                if (is_near(c) || is_near(j)) {
+                    const auto [ka, kb] = steps_of(k);
+                    const Vec3 ua = unit(ka), ub = unit(kb);
+                    const Vec3 across = (ua - ub) * (1.0 / std::sqrt(2.0));
+                    Vec3 third{1.0, 1.0, 1.0};
+                    third = third - Vec3{std::abs(ua.x) + std::abs(ub.x), std::abs(ua.y) + std::abs(ub.y),
+                                         std::abs(ua.z) + std::abs(ub.z)};
+                    const Vec3 mid = (centre(c) + centre(j)) * 0.5;
+                    int seen = 0;
+                    for (int a = 0; a < S; ++a) {
+                        for (int b = 0; b < S; ++b) {
+                            const Vec3 y = mid + across * (((a + 0.5) / S - 0.5) * cell_) +
+                                           third * (((b + 0.5) / S - 0.5) * cell_);
+                            if (sees(bvh, centre(c), y) && sees(bvh, centre(j), y)) ++seen;
+                        }
+                    }
+                    share = seen * unit_area;
+                }
+                fit_area_[c * 18 + static_cast<std::size_t>(k)] = share;
+                fit_area_[j * 18 + static_cast<std::size_t>(opposite(k))] = share;
+                fit_done_[c * 18 + static_cast<std::size_t>(k)] = 1;
+                fit_done_[j * 18 + static_cast<std::size_t>(opposite(k))] = 1;
+            }
+        }
+        // air cells that only received slivers keep their own cube
+        for (auto &[c, v] : fit_volume_) {
+            if (!candidate[c]) v += 1.0;
+        }
+        fit_stats_[1] = static_cast<double>(fit_rays_);
+        return candidate;
+    }
+
+    double fit_volume(std::size_t i) const {
+        const auto it = fit_volume_.find(i);
+        return it == fit_volume_.end() ? 1.0 : it->second;
+    }
+
+    // The open area of air cell i's cube face along axial direction k (fitted).
+    double axial_area(const std::vector<std::uint16_t> &cut, std::size_t i, int k) const {
+        const std::size_t key = i * 18 + static_cast<std::size_t>(k);
+        if (fit_done_.count(key)) {
+            const auto it = fit_area_.find(key);
+            return it == fit_area_.end() ? 0.0 : it->second;
+        }
+        return blocked(cut, i, k) ? 0.0 : 1.0;
+    }
+
+    // The weights of air cell i's links before averaging, fitted: axial links by their
+    // faces' open area; on the 19-point stencil an open edge link by its share, and a
+    // blocked one folded as raw_weights does, by the open area of the axial face it
+    // folds onto.
+    void raw_fitted(const std::vector<std::uint16_t> &cut, std::size_t i, double *w) const {
+        if (stencil_ == 19 && fit19_volume_) {
+            // Variant: the voxel weights, every link of a cell with less than a whole cube
+            // of air scaled by the smaller of its two cells' shares (at most 1).
+            raw_weights(cut, i, w);
+            const double vi = std::min(1.0, fit_volume(i));
+            for (int k = 0; k < directions_; ++k) {
+                if (w[k] > 0.0) w[k] *= std::min(vi, std::min(1.0, fit_volume(neighbour(i, k))));
+            }
+            return;
+        }
+        for (int k = 0; k < 18; ++k) w[k] = 0.0;
+        for (int k = 0; k < 6; ++k) w[k] += exact_[k] * axial_area(cut, i, k);
+        for (int k = 6; k < directions_; ++k) {
+            const std::size_t key = i * 18 + static_cast<std::size_t>(k);
+            if (!blocked(cut, i, k)) {
+                double share = 1.0;
+                if (fit_done_.count(key)) {
+                    const auto it = fit_area_.find(key);
+                    share = it == fit_area_.end() ? 0.0 : it->second;
+                }
+                w[k] += exact_[k] * share;
+                continue;
+            }
+            if (edge(neighbour(i, k))) continue;
+            const auto [ka, kb] = steps_of(k);
+            const bool behind_a = blocked(cut, i, ka), behind_b = blocked(cut, i, kb);
+            if (behind_a && behind_b) continue;
+            if (behind_a) {
+                w[kb] += exact_[k] * axial_area(cut, i, kb);
+            } else if (behind_b) {
+                w[ka] += exact_[k] * axial_area(cut, i, ka);
+            } else {
+                w[ka] += 0.5 * exact_[k] * axial_area(cut, i, ka);
+                w[kb] += 0.5 * exact_[k] * axial_area(cut, i, kb);
+            }
+        }
+    }
+
+    std::size_t fitted_ = 0;
+    bool fit19_volume_ = false;
+    std::unordered_map<std::size_t, double> fit_volume_, fit_area_;
+    std::unordered_map<std::size_t, std::uint8_t> fit_done_;
+    std::vector<double> special_volume_;
+    std::array<double, 12> fit_stats_{0, 0, 0, 0, 0, 0, 0, 0, 0, 1e300, 0, 0};
+    mutable std::size_t fit_rays_ = 0;
+    // ---- end PROTOTYPE ---------------------------------------------------------------------
 
     Vec3 origin_;
     double cell_;
