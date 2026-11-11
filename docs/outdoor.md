@@ -668,7 +668,7 @@ is an arc of a circle, so its travel time and its length are exact.
   0.25 dB of the parabolic equation and the effective speed of sound within 0.39 dB,
   0.1 and 0.2 dB on average (see
   [Validation](validation.md#moving-air-in-the-wave-solver)).
-  It costs three to four times as much as the effective speed of sound, on the CPU only
+  It takes about four times as long as the effective speed of sound, on the CPU only
   (asked for the GPU, it says so and stays on the CPU), and the run's details say
   `wave_moving_air`. Its grid is fine enough for sound going against the fastest wind
   in the slowest air.
