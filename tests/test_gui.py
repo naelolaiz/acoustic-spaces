@@ -2662,6 +2662,11 @@ def test_ground_impedance_and_zones(window) -> None:
     assert window.document.scene.materials[new].impedance is not None
     assert window.document.scene.materials[new].scattering == [0.0] * 8
     assert "scattering" not in window.document.scene.to_data()["materials"][new]
+    page.ground.setChecked(False)  # a surface again: it scatters what a surface does
+    assert window.document.scene.materials[new].impedance is None
+    assert window.document.scene.materials[new].scattering == [0.1] * 8
+    page.ground.setChecked(True)
+    assert window.document.scene.materials[new].scattering == [0.0] * 8
     page.table.item(1, 2).setText("0.25")  # the third third-octave band
     assert window.document.scene.materials[new].scattering == [0.0, 0.0, 0.25] + [0.0] * 21
     window.select("material", "meadow")

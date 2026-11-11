@@ -2671,8 +2671,9 @@ class MaterialPage(Page):
                 "Ticked, the material is a porous ground (grass, soil, snow, gravel, "
                 "asphalt): its absorption and its reflection come from its impedance, with "
                 "the phase and the ground wave that make the dip over the ground outdoors. "
-                "Ticking it takes away a scattering of 0.1 in every band, as a new material "
-                "has: a ground scatters nothing unless it is given a scattering. "
+                "A ground scatters nothing unless it is given a scattering: ticking takes "
+                "away a scattering of 0.1 in every band, as a new material has, and "
+                "unticking gives it to a ground that scatters nothing. "
                 "Unticked, the absorption is as given"
             )
         )
@@ -3018,15 +3019,18 @@ class MaterialPage(Page):
         if self._loading:
             return
         if checked:
-            # The 0.1 in every band that a material has without a scattering of its own,
-            # and that the editor gives a new one, was not chosen for a ground, which
-            # scatters nothing unless its scattering says so: any other is kept.
+            # A scattering of 0.1 in every band, given or the default a new material has,
+            # is taken away: a ground scatters nothing unless its scattering says so.
+            # Any other is kept.
             scattering = self.document.scene.materials[self.key].scattering
             self._set_impedance(any(value != DEFAULT_SCATTERING for value in scattering))
             return
-        # The absorption the impedance gave stays, as values of the material's own.
+        # The absorption the impedance gave stays, as values of the material's own, and
+        # so does a scattering; a ground that scatters nothing takes a surface's 0.1.
         fields = self._fields()
         fields.pop("impedance", None)
+        if "scattering" not in self.document.scene.materials[self.key].to_data():
+            fields.pop("scattering", None)
         fields["source"] = "edited from a ground impedance"
         self.run(lambda: self.document.set_material(self.key, fields))
 
