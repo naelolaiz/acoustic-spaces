@@ -36,7 +36,7 @@ these checks measure how far it does.
 - ``convergence``: the engine's parabolic equation alone, its grid and its frequencies
   against finer ones.
 - ``steep``: behind a building, the effect where the points cross the angle above which
-  the wide-angle equation runs (the building two thin screens there, no roof), from
+  the wide-angle equation runs (the roof a rigid floor in both equations), from
   each equation and the full-wave solution (listed, not judged).
 
 Each check also tests itself: the full-wave solution against the exact two-path field
@@ -99,6 +99,10 @@ LIMITS = {
     ("steep45", "ring", 10.0): 1.0,
     ("steep60", "ring", 5.0): 0.55,
     ("steep60", "ring", 10.0): 0.5,
+    ("rooftop", "ring", 5.0): 0.2,
+    ("rooftop", "ring", 10.0): 0.35,
+    ("mast", "ring", 5.0): 0.05,
+    ("mast", "ring", 10.0): 0.1,
     ("two", "ring", 5.0): 1.7,
     ("two", "ring", 10.0): 1.65,
     ("two", "plane", 5.0): 1.65,
@@ -158,6 +162,12 @@ FULL_WAVE = {
         "references": ("ring", "plane"),
         "top_upwind": 60.0,
     },
+    "rooftop": {
+        "zs": 7.0,
+        "cut": [(0.0, 5.0, 6.0)],
+        "at": [(27.5, 1.5), (42.5, 1.5), (100.0, 1.5)],
+    },
+    "mast": {"zs": 10.0, "cut": [(15.0, 25.0, 6.0)], "at": [(40, 10.0), (45, 10.0), (50, 10.0)]},
     "near_up": {
         "zs": 1.0,
         "cut": [(15.0, 15.0, 4.0)],
@@ -361,7 +371,8 @@ def full_wave(f, speed, zs, at, zmax, cut=(), ground=None, h=None, plane=False) 
     the points ``at`` (range, height) from a source ``zs`` m up on the axis, at ``f`` Hz
     in air of effective speed ``speed(z)``, over a ground of normalised impedance
     ``ground`` (None: rigid), with ``cut`` (near, far, top) round the axis: thin rigid
-    ring screens (near is far) and rigid ring blocks. Tops lie on the cells' faces (a
+    ring screens (near is far) and rigid ring blocks, one from the axis (near 0) a block
+    the source stands on, over its roof. Tops lie on the cells' faces (a
     multiple of ``h``, by default a twentieth of the wavelength). With ``plane``, a line
     source across a plane instead (free field i H0(kR) / 4) with straight screens and
     blocks along it: the two dimensions of the engine's parabolic equation.
@@ -388,6 +399,11 @@ def full_wave(f, speed, zs, at, zmax, cut=(), ground=None, h=None, plane=False) 
             walls.append((far, "back", int(round(top / h))))
     walls.sort()
     regions = [base]
+    if walls and walls[0][0] <= 0.0 and walls[0][1] == "front":
+        # A block round the axis: the source stands over its roof, the first stretch's
+        # floor, and its back face is the first wall.
+        regions = [_Modes(f, speed, h, cells, walls[0][2], **common)]
+        walls = walls[1:]
     for _, kind, roof in walls:
         regions.append(_Modes(f, speed, h, cells, roof, **common) if kind == "front" else base)
     last = len(regions) - 1
@@ -402,7 +418,9 @@ def full_wave(f, speed, zs, at, zmax, cut=(), ground=None, h=None, plane=False) 
     point = np.zeros(cells, dtype=complex)
     point[below] = (1 - (t - below)) / h
     point[below + 1] = (t - below) / h
-    alpha = (base.shapes.T @ (base.weight * point)) / base.norms
+    first = regions[0]
+    point = point[first.floor :]
+    alpha = (first.shapes.T @ (first.weight * point)) / first.norms
 
     def source(region, r, derivative):
         """Each mode's part of the source's own field at range ``r`` (or its range
@@ -907,8 +925,9 @@ def check_started(names, quick: bool, only_bands=None) -> dict:
 
 
 def engine_scene(case: dict, u10: float | None):
-    """A scene of a ``full_wave`` case: its obstacles 1 km long across the x axis, rigid
-    ground, the listeners along the axis, in a wind of ``u10`` (None: still air)."""
+    """A scene of a ``full_wave`` case: its obstacles 1 km long across the x axis (a
+    block from the axis as far behind the source as before it), rigid ground, the
+    listeners along the axis, in a wind of ``u10`` (None: still air)."""
     from acoustic_spaces import Scene
 
     barriers, buildings = [], []
@@ -918,6 +937,7 @@ def engine_scene(case: dict, u10: float | None):
                 {"name": f"b{k}", "path": [[near, -500.0], [near, 500.0]], "height": top}
             )
         else:
+            near = -far if near <= 0.0 else near
             footprint = [[near, -500.0], [far, -500.0], [far, 500.0], [near, 500.0]]
             buildings.append({"name": f"h{k}", "footprint": footprint, "height": top})
     reach = max(r for r, _ in case["at"])
@@ -1110,9 +1130,9 @@ STEEP_HEIGHTS = (10.0, 12.0, 14.0, 15.0, 15.5, 16.0, 18.0, 20.0, 24.0)
 
 def check_steep(quick: bool, only_bands=None) -> dict:
     """Behind a building, the weather's effect where the points cross the steep angle:
-    as the engine's march gives it (the narrow-angle equation below, with the roof a
-    rigid floor, the wide-angle one above, the building two thin screens), each
-    equation's alone, and the full-wave solution's (rigid block) at 125 and 250 Hz."""
+    as the engine's march gives it (the narrow-angle equation below, the wide-angle one
+    above, both with the roof a rigid floor), each equation's alone, and the full-wave
+    solution's (rigid block) at 125 and 250 Hz."""
     print("(e) Steep points behind a building: the weather's effect (dB) by height")
     at = [(60.0, z) for z in STEEP_HEIGHTS]
     speed = wind(10.0)
@@ -1155,7 +1175,8 @@ def group_of(check: str, row: dict) -> tuple:
     if check in ("started", "engine"):
         return (check,)
     case = row["case"]
-    family = case if case in ("steep45", "steep60", "two", "two40", "near_up") else "one"
+    own = ("steep45", "steep60", "two", "two40", "near_up", "rooftop", "mast")
+    family = case if case in own else "one"
     return (family, row.get("reference", "ring"), abs(row["wind"]))
 
 

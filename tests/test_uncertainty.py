@@ -8,7 +8,13 @@ import numpy as np
 import pytest
 
 from acoustic_spaces import Room, Scene, simulate
-from acoustic_spaces.engine.reweight import groups_of, log_ratio, reweighted_result
+from acoustic_spaces.engine.reweight import (
+    groups_of,
+    log_ratio,
+    path_counts,
+    reweighted_result,
+    turned_paths,
+)
 from acoustic_spaces.engine.uncertainty import (
     ADAPTIVE,
     ADAPTIVE_BATCH,
@@ -392,6 +398,91 @@ def test_the_errors_over_edges_are_those_of_the_run_s_settings():
     result = simulate(room, settings=settings, groups=face_group)
     spread = material_spread(result, scene, face_group, materials, draws=4, rays=False)
     assert list(spread["s", "a"].not_counted) == ["one edge", "two edges", "corners of edges"]
+
+
+def test_the_draws_come_out_the_same_with_what_they_share_as_each_alone():
+    """The draws of a response share what does not depend on them
+    (:class:`~acoustic_spaces.engine.reweight.Redraws`: the paths' counts and the
+    reflections they turn, the delay phases and band grids of the coherent bands'
+    echograms, each band's filtered pressure within a draw, one echogram in octave
+    bands for the parameters and the levels): each draw's results are bit for bit those
+    of the draw re-weighted and read alone, in a room with paths over an edge."""
+    from acoustic_spaces.engine.coherent import arriving_with
+    from acoustic_spaces.engine.reweight import Redraws
+    from acoustic_spaces.engine.uncertainty import _redrawn
+    from acoustic_spaces.parameters import Levels, RoomParameters
+
+    data = _box({"absorption": 0.03}).to_data()
+    data["geometry"] = {
+        "floor_plan": [[0, 0], [8, 0], [8, 4], [4, 4], [4, 8], [0, 8]],
+        "height": 3,
+    }
+    data["assignments"] = {"floor": "floor", "ceiling": "ceiling", "default": "walls"}
+    data["sources"] = [{"name": "s", "position": [7.0, 2.0, 1.5]}]
+    data["listeners"] = [{"name": "a", "position": [2.0, 7.0, 1.2]}]
+    scene = Scene.model_validate(data)
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    response = simulate(room, groups=face_group)["s", "a"]
+    early = response.early
+    assert early.spectrum is not None and early.diffracted.any()
+    traced = np.array([scene.materials[n].coefficients("octave")[0] for n in materials])
+    taken, deviates, widths = _draws(scene, materials, 6, 5)
+    limits = [_limits(scene.materials[n], own) for n, own in zip(materials, traced, strict=True)]
+    admittance_of = _Admittances(traced, widths, limits)
+    admittance_of.over(taken, deviates)
+    ratios = [log_ratio(traced, drawn) for drawn in taken]
+    inputs = scene.level_inputs("s")
+    told: list[int] = []
+    found, heard = _redrawn(
+        response, face_group, traced, taken, ratios, admittance_of, inputs, told.append
+    )
+    assert told == [0]
+    for k, (ratio, drawn) in enumerate(zip(ratios, taken, strict=True)):
+        alone = response.reweighted(
+            face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
+        )
+        parameters = alone.parameters()
+        levels = alone.levels_and_speech(*inputs, parameters)
+        for kind, fast, plain in (
+            (RoomParameters, found[k], parameters),
+            (Levels, heard[k], levels),
+        ):
+            for f in dataclasses.fields(kind):
+                np.testing.assert_array_equal(getattr(fast, f.name), getattr(plain, f.name))
+    # What is kept: the delay phases and the band grids of the bands above the coherent
+    # ones, read-only.
+    redraws = Redraws(early, face_group, len(materials), traced, admittance_of)
+    moved = response.reweighted(
+        face_group,
+        ratios[0],
+        absorption=(traced, taken[0]),
+        admittance_of=admittance_of,
+        redraws=redraws,
+    )
+    moved.parameters()
+    kept = redraws.delays
+    assert kept._phases and kept._grids and 0 < kept.size <= kept.limit
+    assert not any(a.flags.writeable for a in kept._phases.values())
+    assert not redraws.counts(early, face_group, len(materials)).flags.writeable
+    # In this room each path over an edge arrives alone or with others at least as loud
+    # as itself, so its mean phase is 1 or sinc(1) = 0 whatever the band grids give: they
+    # are compared here as the draws read them, before that limit.
+    grids = len(kept._grids)
+    np.testing.assert_array_equal(arriving_with(moved.early, kept), arriving_with(moved.early))
+    assert len(kept._grids) == grids
+    # Paths, groups or a traced absorption other than its own are re-weighted as alone.
+    other = traced.copy()
+    other[0] = np.minimum(other[0] + 0.01, 0.99)
+    np.testing.assert_array_equal(
+        redraws.turned(early, face_group, other, taken[0], admittance_of).spectrum,
+        turned_paths(early, face_group, other, taken[0], admittance_of).spectrum,
+    )
+    fewer = early[: len(early) // 2]
+    np.testing.assert_array_equal(
+        redraws.counts(fewer, face_group, len(materials)),
+        path_counts(fewer, face_group, len(materials)),
+    )
 
 
 #: A ceiling that absorbs everything at 500 Hz and 1 kHz, as five of the built-in

@@ -295,14 +295,15 @@ Outdoor acoustics, in steps:
   against ray theory and the parabolic equation in the `windy` preset
   (`validation/wave_wind.py`). Runs on the CPU; the wind's shear term on the air's
   motion stays out. Without it nothing changes.
-- [ ] The wave solver's room for sound along its matched layer only on the sides that
-  need it: it is added on every side of an open model, also those the model's own
-  walls close, which costs a hall open at one end 2.1 to 2.4 times the cells (see
-  Open models under [Wave-based solver](validation.md#wave-based-solver)).
-- [ ] The wave solver's source and listeners read between the cell centres to a
-  higher order: read trilinearly, a wave along the ground loses an estimated 0.15 to
-  0.49 dB at 63 Hz with 8 points per wavelength (see
-  [Validation](validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
+- [x] The wave solver's room for sound along its matched layer only on the sides that
+  need it: a side the model's own surfaces close gets none, which saves a hall open at
+  one end 1.8 to 2.0 times the cells (see Open models under
+  [Wave-based solver](validation.md#wave-based-solver)).
+- [x] The wave solver's source and listeners read between the cell centres to a
+  higher order: a cubic through four cells a side, where two a side read the 125 Hz
+  band up to 0.53 dB low by their place within a cell (8 points per wavelength at the
+  band's top; see Free field under
+  [Wave-based solver](validation.md#wave-based-solver)).
 - [x] O19 Whole cities: edge diffraction skips the pairs of an edge and a wall or roof
   that no path can use before it traces a ray, on every core, with the same results:
   900 buildings simulate in about 2 s on four cores instead of 81 s, and 3,600 in
@@ -325,19 +326,24 @@ Outdoor acoustics, in steps:
   corner take the open ground's effect along their own way, for listeners in the open
   too. Still air is as before.
 - [ ] Barriers in wind, next: the barrier's own wind; the sound the eddies scatter over
-  a barrier's top into its shadow; a blend of the barrier's and the
-  open ground's effects across the line of a barrier's end below the line of sight, and
-  the open ground's refraction for the paths round an end above its equation's bands,
-  where the level steps across the end by up to 19 dB; a blend of the rays and the open
-  ground's equation where a ground reflection comes into view past a roof's edge; the paths round ends checked
-  against a reference in three dimensions; a building's rigid roof in the
-  wide-angle equation (the effect steps by 0.6 dB at 2 kHz where the points cross the
-  steep angle behind one in 10 m/s); the wide-angle equation behind barriers upwind in strong wind, where the narrow-angle one comes out low; the sound
+  a barrier's top into its shadow; the barrier's runs at 4 and 8 kHz and the open
+  ground's shadow above its equation's bands made to agree in a deep upwind shadow,
+  where they are 12 to 40 dB apart and the level steps across the line of a barrier's
+  end below the line of sight by up to 12.8 dB; the paths round ends checked
+  against a reference in three dimensions; the wide-angle equation behind barriers upwind in strong wind, where the narrow-angle one comes out low; the sound
   going back and forth between two barriers, which a one-way equation leaves out; and
   runs at 4 and 8 kHz, and at steep points, that cost less (see
   [Known issues](validation.md#known-issues)).
-- [ ] A leg from a ground reflection a rounding error above the ground takes the
-  shadow of one from the ground (see [Known issues](validation.md#known-issues)).
+- [ ] The eddies' decorrelation of a path round an edge against the path it stands for
+  (the direct sound in still air, the open ground's path in wind), which steps across
+  an end's shadow boundary by up to 0.95 dB in still air and 1.08 dB in wind (see
+  [Known issues](validation.md#known-issues)).
+- [ ] The path round a barrier's end and then over a roof's edge, without which the level
+  1.5 m over a roof 45 m from a source 1 m up (and the two swapped) steps across the
+  end's shadow boundary by up to 2.79 dB in still air and the weather's effect by up to
+  0.57 dB (see [Known issues](validation.md#known-issues)); in wind it would also
+  need the lit side's runs, which the routing in `engine/refracted.py` does not give a
+  path round a vertical and then a horizontal edge.
 - [ ] A transition across a caustic for the rays' bands over the open ground (4 and
   8 kHz, and 1 and 2 kHz with `open_ground_frequencies: rays`), a uniform (Airy) form
   for the two paths that merge there: past it they vanish and the level steps by up to
@@ -345,10 +351,20 @@ Outdoor acoustics, in steps:
   [Known issues](validation.md#known-issues)).
 - [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
-  the shadow):
-  a band's spectrum held past its last frequency misses a ground dip there, by up to
-  2.0 dB 100 m downwind in the benchmark's case 2 (see
-  [Known issues](validation.md#known-issues)).
+  the shadow): out of the shadow the equation's field goes through it, but the rays'
+  band beside it is 5 to 22 dB off the equation there in the weather presets, the paths
+  round a barrier's end below its line of sight still hold the weather's effect at
+  their bands' early frequencies there (1.1 dB off denser runs 100 m downwind in
+  `windy`), the paths over a roof's edge and behind barriers take one ratio of the
+  equation's band energies a band there, and in the shadow, where the bands above the
+  equation deepen from
+  the octave below 18 to 36 dB louder than its field, the bands keep their own samples
+  (8.6 dB low in case 3 300 m away; see [Known issues](validation.md#known-issues)).
+- [ ] The eddies downwind: their coherence factor, fitted in still air and in the
+  shadow, leaves the 1 kHz band 0.3 to 1.8 dB from a parabolic equation through random
+  eddies 100 to 300 m downwind, and with eddies a step of the rays at a caustic comes
+  into the equation's bands; and the echogram of the bands up to 500 Hz, which takes
+  the coherence as a band's mean (see [Known issues](validation.md#known-issues)).
 - [ ] Steep sound over the open ground in wind (as under a flyover) left to the rays at
   1 and 2 kHz by a rule, where they match the equation at a fraction of its time: one
   studied (the vertical wavenumber changing by at most 3 % over one of its own lengths

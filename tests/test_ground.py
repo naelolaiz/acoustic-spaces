@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.calibration import calibrate
 from acoustic_spaces.cli import main
-from acoustic_spaces.engine.coherent import coherent_energy, total_energy
+from acoustic_spaces.engine.coherent import SameDelays, coherent_energy, total_energy
 from acoustic_spaces.engine.impedance import (
     Admittance,
     band_weights,
@@ -353,6 +353,15 @@ def test_the_points_of_a_line_source_add_in_energy_outdoors() -> None:
         for p in points
     )
     assert together == pytest.approx(apart, rel=1e-9)
+    # A draw of a spread keeps each point's paths and the pairs' terms for its echograms
+    # (with a SameDelays): they read the same to the last bit.
+    cache: dict = {}
+    for axis, exponent in ((None, 2), ([0.0, 1.0, 0.0], 2), ([0.0, 1.0, 0.0], 1), (None, 2)):
+        np.testing.assert_array_equal(
+            coherent_energy(early, step, slots, axis, exponent, cache=cache, kept=SameDelays()),
+            coherent_energy(early, step, slots, axis, exponent),
+        )
+    assert early.coherent_bands > 4 and all(("pairs", int(p)) in cache for p in points)
 
 
 def test_calibration_leaves_grounds_alone() -> None:

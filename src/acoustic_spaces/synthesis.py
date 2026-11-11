@@ -186,6 +186,13 @@ def place_impulses(
     return out
 
 
+def placing_bytes(paths: int, taps: int = 32) -> int:
+    """Bytes :func:`place_impulses` holds beside its output while it places ``paths``
+    impulses: six arrays (paths, taps) of eight bytes an element, one of one byte, and
+    three (paths,)."""
+    return paths * (8 * (6 * taps + 3) + taps)
+
+
 def _slots(n: int, sample_rate: float, time_step: float) -> np.ndarray:
     """The time slot of ``time_step`` each of ``n`` samples falls in."""
     return np.floor(np.arange(n) / (sample_rate * time_step) + 1e-9).astype(np.int64)

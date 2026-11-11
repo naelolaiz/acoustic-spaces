@@ -233,9 +233,12 @@ public:
     // q of each (see above). The grid's edge, which only an open model's air reaches, has
     // `edge_admittance`, or with `layer` > 0 a matched layer of that many cells inside
     // it, damped up to `layer_damping` (s T / 2, s the damping rate) at the edge. The
-    // source and every probe take the air cells round them that they can see, weighted
-    // trilinearly. `speed`, when given, holds each cell's speed of sound over the grid's
-    // (in (0, 1], x fastest; see above); without it the speed is the same everywhere.
+    // source and every probe take the four air cells a side round them, weighted by a
+    // cubic through their centres; next to a surface along the grid fewer along the axis
+    // across it; next to another surface or to the source the cells round them that they
+    // see, weighted trilinearly (see reading_cells). `speed`, when
+    // given, holds each cell's speed of sound over the grid's (in (0, 1], x fastest; see
+    // above); without it the speed is the same everywhere.
     WaveSolver(const Bvh &bvh, const std::int64_t *face_material, const double *beta,
                std::size_t materials, const double *branches, const std::int64_t *branch_material,
                std::size_t branch_count, const Vec3 &origin, double cell, std::size_t nx,
@@ -367,6 +370,7 @@ public:
             layer_cells_.push_back(static_cast<std::int64_t>(i));
             ++air_;
             open_ = true;
+            reach_sides(i, layer_);
         }
         if (!layer_cells_.empty()) {
             layer_damping_ = layer_damping;
@@ -410,6 +414,7 @@ public:
                 if (edge(j)) {
                     beta_sum += w * edge_admittance;
                     open_ = true;
+                    reach_sides(j, 0);
                     return;
                 }
                 Hit hit = bvh.intersect(centre(i), unit(k), length(k), -1);
@@ -457,17 +462,22 @@ public:
         }
         boundary_cells_ = special_.size();
 
-        // The source's cells (made special, so one update adds the source).
+        // The source's cells (made special, so one update adds the source): none of the
+        // cells round it in the matched layer, whichever cells it then takes.
         for (const auto &[i, w] : visible_cells(bvh, source, &type_)) {
             if (type_[i] == kLayer) {
                 throw std::invalid_argument("the source is in the matched layer");
             }
+        }
+        for (const auto &[i, w] : reading_cells(bvh, cut, source, true)) {
             std::size_t k = special_index(i);
             if (k == npos) k = add_special(i, exact_.data(), 0.0);
             source_[k] += static_cast<float>(cell_scale(i) * w);
         }
         for (const Vec3 &p : probes) {
-            auto cells = visible_cells(bvh, p, &type_);
+            // (kNear cells away to within rounding counts as that far.)
+            const bool near = norm(p - source) < (kNear - 1e-9) * cell;
+            auto cells = reading_cells(bvh, cut, p, !near);
             probe_cells_.push_back({});
             probe_weights_.push_back({});
             for (const auto &[i, w] : cells) {
@@ -501,6 +511,9 @@ public:
     std::size_t branch_states() const { return state_branch_.size(); }
     std::size_t layer_cells() const { return layer_cells_.size(); }
     bool open() const { return open_; }
+    // Whether the air reaches each side of the grid (-x, +x, -y, +y, -z, +z): its edge
+    // there, or the matched layer inside it.
+    const std::array<bool, 6> &open_sides() const { return open_sides_; }
     bool flowing() const { return !flow_mask_.empty(); }
     std::size_t probes() const { return probe_cells_.size(); }
     bool probe_found(std::size_t p) const { return !probe_cells_.at(p).empty(); }
@@ -876,6 +889,16 @@ private:
                 origin_.z + (static_cast<double>(z) + 0.5) * cell_};
     }
 
+    // Marks as reached by the air (open_sides) the sides of the grid that cell i lies
+    // within `within` cells of.
+    void reach_sides(std::size_t i, std::size_t within) {
+        const std::size_t at[3] = {i % nx_, (i / nx_) % ny_, i / sz_};
+        const std::size_t size[3] = {nx_, ny_, nz_};
+        for (std::size_t a = 0; a < 3; ++a) {
+            if (at[a] <= within) open_sides_[2 * a] = true;
+            if (at[a] + 1 + within >= size[a]) open_sides_[2 * a + 1] = true;
+        }
+    }
     bool edge(std::size_t i) const {
         const std::size_t x = i % nx_, y = (i / nx_) % ny_, z = i / sz_;
         return x == 0 || y == 0 || z == 0 || x + 1 == nx_ || y + 1 == ny_ || z + 1 == nz_;
@@ -980,6 +1003,160 @@ private:
         return near;
     }
 
+    // A reading takes this many cells a side where it can (see reading_cells), and a
+    // probe nearer the source than kNear cells the eight round it.
+    static constexpr int kReach = 4;
+    static constexpr double kNear = 3.0;
+
+    // The cells that stand for point p, with weights that sum to one: the source spreads
+    // over them, and a probe reads them. With `cubic`, the kReach cells a side round p
+    // (two to either side of it along each axis), weighted along each axis by Lagrange's
+    // cubic through their centres. Halfway between two centres they read a wave of eight
+    // cells per wavelength along the axis 0.85 % low, where the two cells round p,
+    // weighted linearly, read it 7.6 % low (9/8 cos(kh/2) - 1/8 cos(3kh/2) against
+    // cos(kh/2)), and the level of a point source's sound twelve cells from it changes
+    // with the places of the source and of the probe within their cells by 0.02 dB on
+    // the 19-point grid (docs/validation.md, Free field).
+    //
+    // A cell is p's when it is air outside the matched layer and p sees its centre. A
+    // layer of that box none of whose cells is p's lies behind a face along the grid (a
+    // floor, a wall, the layer's start), and the box goes without it: along that axis
+    // the reading is then of the two cells round p, weighted linearly, or of the one on
+    // p's side, and along the other two still the cubic. So a point low over flat ground
+    // keeps the cubic along the ground. All the cells left must be p's, with no face
+    // between neighbours; next to a face at an angle to the grid, an edge or an opening
+    // they are not, and the reading is of the cells round p that it sees, weighted
+    // trilinearly (visible_cells), as without `cubic`. The reading never reaches past
+    // the box round p: rows of four cells pushed to p's side of a surface were tried and
+    // are not taken, as they reach a cell further to that side, and where the field
+    // there is not smooth (the source's own cells, the edges of an opening) the level
+    // stepped by up to 0.7 dB from one probe to the next.
+    //
+    // The source takes the cubic. Within a few cells of it its sound is not that of a
+    // point, and a probe nearer it than kNear cells reads without `cubic`. The table of
+    // docs/validation.md (Free field) gives the level and the gradient by the distance
+    // from the source, and with kNear changed they come out further off at the places
+    // that decide it: with every probe taking the cubic (kNear 0), the 19-point grid's
+    // level two cells from the source is up to 2.1 dB off where it is 0.6 dB, and the
+    // 7-point grid's gradient three cells from it 6.8 dB where it is 1.7 dB; with the
+    // cubic only from four cells on (kNear 4), the 19-point grid's level in the 125 Hz
+    // band three cells from the source is 0.28 dB off where it is 0.05 dB. (The 7-point
+    // grid's level 2.5 cells from the source is closer with the cubic, 0.35 dB off
+    // against 0.83 dB.)
+    std::vector<std::pair<std::size_t, double>> reading_cells(
+        const Bvh &bvh, const std::vector<std::uint16_t> &cut, const Vec3 &p, bool cubic) const {
+        if (!cubic) return visible_cells(bvh, p, &type_);
+        const double q[3] = {(p.x - origin_.x) / cell_ - 0.5, (p.y - origin_.y) / cell_ - 0.5,
+                             (p.z - origin_.z) / cell_ - 0.5};
+        const std::size_t size[3] = {nx_, ny_, nz_};
+        long long start[3];
+        double weight[3][kReach];
+        for (int a = 0; a < 3; ++a) {
+            // The box lies in the grid, and the two cells round p inside its edge cells
+            // (as visible_cells has them).
+            if (!(q[a] >= 1.0 && q[a] < static_cast<double>(size[a]) - 3.0)) {
+                return visible_cells(bvh, p, &type_);
+            }
+            start[a] = static_cast<long long>(std::floor(q[a])) - (kReach / 2 - 1);
+            const double x = q[a] - static_cast<double>(start[a]);
+            for (int j = 0; j < kReach; ++j) {
+                double w = 1.0;
+                for (int m = 0; m < kReach; ++m) {
+                    if (m != j) w *= (x - m) / static_cast<double>(j - m);
+                }
+                weight[a][j] = w;
+            }
+        }
+        // Which of the box's cells are p's.
+        auto index = [&](int x, int y, int z) {
+            return static_cast<std::size_t>(start[0] + x) +
+                   static_cast<std::size_t>(start[1] + y) * sy_ +
+                   static_cast<std::size_t>(start[2] + z) * sz_;
+        };
+        bool own[kReach][kReach][kReach];
+        for (int z = 0; z < kReach; ++z) {
+            for (int y = 0; y < kReach; ++y) {
+                for (int x = 0; x < kReach; ++x) {
+                    const std::size_t i = index(x, y, z);
+                    bool seen = type_[i] == kInterior || type_[i] == kSpecial;
+                    if (seen) {
+                        const Vec3 to = centre(i) - p;
+                        const double distance = norm(to);
+                        seen = !(distance > 0.0 &&
+                                 bvh.intersect(p, to / distance, distance, -1).found());
+                    }
+                    own[z][y][x] = seen;
+                }
+            }
+        }
+        // The box goes without a layer none of whose cells is p's (found again until no
+        // layer goes, as a layer counts over the layers the other axes keep).
+        bool keep[3][kReach];
+        for (auto &axis : keep) std::fill(std::begin(axis), std::end(axis), true);
+        for (bool changed = true; changed;) {
+            changed = false;
+            for (int a = 0; a < 3; ++a) {
+                const int b = (a + 1) % 3, c = (a + 2) % 3;
+                for (int j = 0; j < kReach; ++j) {
+                    if (!keep[a][j]) continue;
+                    bool any = false;
+                    int at[3];
+                    at[a] = j;
+                    for (at[b] = 0; at[b] < kReach && !any; ++at[b]) {
+                        for (at[c] = 0; at[c] < kReach && !any; ++at[c]) {
+                            any = keep[b][at[b]] && keep[c][at[c]] && own[at[2]][at[1]][at[0]];
+                        }
+                    }
+                    if (!any) {
+                        keep[a][j] = false;
+                        changed = true;
+                    }
+                }
+            }
+        }
+        // Along each axis: all four cells and the cubic; without an outer one, the two
+        // round p, weighted linearly; without one of those two, the other.
+        int from[3], count[3];
+        for (int a = 0; a < 3; ++a) {
+            const int inner = kReach / 2 - 1;
+            if (keep[a][0] && keep[a][1] && keep[a][2] && keep[a][3]) {
+                from[a] = 0;
+                count[a] = kReach;
+            } else if (keep[a][inner] && keep[a][inner + 1]) {
+                from[a] = inner;
+                count[a] = 2;
+                const double t = q[a] - std::floor(q[a]);
+                weight[a][inner] = 1.0 - t;
+                weight[a][inner + 1] = t;
+            } else if (keep[a][inner] || keep[a][inner + 1]) {
+                from[a] = keep[a][inner] ? inner : inner + 1;
+                count[a] = 1;
+                weight[a][from[a]] = 1.0;
+            } else {
+                return visible_cells(bvh, p, &type_);
+            }
+        }
+        // Every cell left must be p's, with no face between neighbours: next to a face
+        // at an angle to the grid, an edge or an opening they are not.
+        std::vector<std::pair<std::size_t, double>> out;
+        out.reserve(static_cast<std::size_t>(count[0] * count[1] * count[2]));
+        for (int z = from[2]; z < from[2] + count[2]; ++z) {
+            for (int y = from[1]; y < from[1] + count[1]; ++y) {
+                for (int x = from[0]; x < from[0] + count[0]; ++x) {
+                    const std::size_t i = index(x, y, z);
+                    if (!own[z][y][x] || (x + 1 < from[0] + count[0] && is_cut(cut, i, 1)) ||
+                        (y + 1 < from[1] + count[1] && is_cut(cut, i, 3)) ||
+                        (z + 1 < from[2] + count[2] && is_cut(cut, i, 5))) {
+                        return visible_cells(bvh, p, &type_);
+                    }
+                    const double w = weight[0][x] * weight[1][y] * weight[2][z];
+                    if (w != 0.0) out.emplace_back(i, w);
+                }
+            }
+        }
+        return out;
+    }
+
     // The cells round point p (up to eight) whose centres p sees, with trilinear weights
     // that sum to one; only air cells when `air` is given.
     std::vector<std::pair<std::size_t, double>> visible_cells(
@@ -1071,6 +1248,7 @@ private:
     std::size_t threads_ = 1;
     std::size_t air_ = 0, boundary_cells_ = 0;
     bool open_ = false;
+    std::array<bool, 6> open_sides_{};
     // The stencil: its directions, their weights (exact, and as the update uses them),
     // the weight of a cut link as a boundary, the offset to the neighbour, the bit of
     // the + half's directions in the cut mask (-1: the - half), and the centre's weight.

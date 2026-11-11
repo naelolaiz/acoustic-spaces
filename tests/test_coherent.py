@@ -282,6 +282,84 @@ def test_each_band_keeps_its_own_shape_into_the_crossovers() -> None:
     np.testing.assert_allclose(np.angle(out[inside]), phase, atol=1e-12)
 
 
+def _shaped_bin_by_bin(spectrum, bands, f, amplitude, gains) -> np.ndarray:
+    """:func:`~acoustic_spaces.engine.coherent.shaped` with the shape worked out in each
+    bin, those beyond the band's samples too."""
+    n, count, per_band = spectrum.shape
+    samples = np.log2(sample_frequencies(bands, count))
+    x = np.log2(np.maximum(np.asarray(f, dtype=float), 1e-6))
+    out = np.zeros((n, len(f)), dtype=complex)
+    for b in range(count):
+        support = np.flatnonzero(gains[b] > 0.0)
+        lo, hi = int(support[0]), int(support[-1]) + 1
+        own = spectrum[:, b]
+        xs = np.clip(x[lo:hi], samples[b, 0], samples[b, -1])
+        j = np.clip(np.searchsorted(samples[b], xs, side="right") - 1, 0, per_band - 2)
+        w = (xs - samples[b, j]) / (samples[b, j + 1] - samples[b, j])
+        magnitude = np.abs(own)
+        phase = np.unwrap(np.angle(own), axis=1)
+        level = magnitude[:, j] * (1.0 - w) + magnitude[:, j + 1] * w
+        angle = phase[:, j] * (1.0 - w) + phase[:, j + 1] * w
+        out[:, lo:hi] += (amplitude[:, b, None] * gains[b, lo:hi]) * (level * np.exp(1j * angle))
+    return out
+
+
+def test_the_shape_beyond_a_band_s_samples_is_held_bit_for_bit() -> None:
+    """Below a band's first sample and above its last its shape is held, worked out
+    once for those bins: the same to the last bit as bin by bin, at the echogram's
+    rates and a rendered response's, for two coherent bands and for all eight."""
+    from acoustic_spaces import synthesis
+    from acoustic_spaces.engine.coherent import shaped
+
+    rng = np.random.default_rng(4)
+    for count, n_fft, rate in ((2, 1 << 12, 4000.0), (8, 1 << 14, 16000.0), (2, 1 << 15, 48000.0)):
+        f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+        gains = synthesis.band_gains(n_fft, rate, 8)[:count]
+        size = (30, count, 8)
+        spectrum = rng.uniform(0.2, 1.5, size) * np.exp(1j * rng.uniform(-np.pi, np.pi, size))
+        amplitude = rng.uniform(0.0, 2.0, (30, count))
+        np.testing.assert_array_equal(
+            shaped(spectrum, 8, f, amplitude, gains),
+            _shaped_bin_by_bin(spectrum, 8, f, amplitude, gains),
+        )
+
+
+def test_the_echograms_of_draws_read_what_they_share_as_their_own() -> None:
+    """Paths that differ in their energies and phases only (draws of the absorption)
+    share their delay phases and band grids (:class:`SameDelays`), and a draw's
+    echograms each band's filtered pressure: the echograms are bit for bit those read
+    without, and so when nothing may be kept."""
+    from acoustic_spaces.engine.coherent import EarlyPressure, SameDelays, with_mean_phases
+
+    delay = np.concatenate([0.01 + np.linspace(0.0, 0.002, 6), [0.03, 0.0301, 0.05]])
+    paths = _arriving(delay, 1e-3, edge=True, together=3)
+    paths.edge[[6, 7]] = -1  # two reflections among the paths over edges
+    rng = np.random.default_rng(2)
+    kept, none = SameDelays(), SameDelays(limit=0)
+    for _ in range(3):
+        drawn = dataclasses.replace(
+            paths,
+            energy=paths.energy * rng.uniform(0.5, 1.5, paths.energy.shape),
+            spectrum=np.exp(1j * rng.uniform(-1.0, 1.0, paths.spectrum.shape)),
+        )
+        plain = EarlyPressure(with_mean_phases(drawn))
+        for store in (kept, none):
+            shared = EarlyPressure(with_mean_phases(drawn, store), kept=store)
+            for axis, exponent in ((None, 2), ([0.6, 0.8, 0.0], 2), ([0.0, 1.0, 0.0], 1)):
+                for _again in range(2):
+                    np.testing.assert_array_equal(
+                        shared.energy(1e-3, 120, axis, exponent, 0.0, 0.01),
+                        plain.energy(1e-3, 120, axis, exponent, 0.0, 0.01),
+                    )
+    assert kept._phases and kept._grids and 0 < kept.size <= kept.limit
+    assert not any(a.flags.writeable for a in kept._phases.values())
+    assert none.size == 0 and not none._phases and not none._grids
+    # A band's filtered pressure is read once per draw, and is read-only.
+    first = shared.band(0, 1e-3, 120, 0.0, 0.01)
+    assert shared.band(0, 1e-3, 120, 0.0, 0.01) is first and not first[0].flags.writeable
+    assert plain.band(0, 1e-3, 120, 0.0, 0.01)[0] is not plain.band(0, 1e-3, 120, 0.0, 0.01)[0]
+
+
 def _arriving(delay, energy: float, edge: bool, together: int = 1) -> early_stage.EarlyReflections:
     """Paths straight ahead at ``delay`` (s), over edges of their own or reflections, with
     ``energy`` in all in each band. In the two coherent bands they are in phase, each
@@ -437,3 +515,171 @@ def test_sound_along_a_ground_zone_without_an_impedance_takes_its_fitted_admitta
     q = ground_wave_factors(model, bed[:1], np.array([10.0]))[0]
     level = 10 * np.log10(np.mean(np.abs(0.5 * (1.0 + q)) ** 2, axis=1))
     np.testing.assert_allclose(level, hand, atol=0.05)
+
+
+# -- the parabolic equation's field at fine frequencies -----------------------------------
+
+
+def _two_arrivals(f, delay: float = 0.29e-3, reflected: float = -0.8):
+    """The pressure relative to the first arrival of two, the second ``delay`` s later
+    (as the ground's reflection 100 m downwind in the benchmark's case 2)."""
+    return 1.0 + reflected * np.exp(-2j * np.pi * np.asarray(f) * delay)
+
+
+def test_a_band_s_shape_through_the_equation_s_samples_meets_its_bound() -> None:
+    """A field of two arrivals 0.29 ms apart, sampled as the parabolic equation's runs
+    take it in the 1 and 2 kHz bands (the 2 kHz band through its upper crossover):
+    across both crossovers the shape is within the bound of linear interpolation of the
+    complex pressure, h^2 / 8 times the sum of |a_i| (2 pi dtau_i)^2 (h = 58.9 Hz, the
+    2 kHz band's spacing), and the estimate read from the samples gives the error
+    found within 1 %. Held past the band's own eight samples the shape is off by more
+    than 20 times the bound."""
+    from acoustic_spaces.engine import fine as fine_stage
+    from acoustic_spaces.engine.coherent import _band_shape, shaped
+
+    bands = count = 8
+    runs = {
+        4: [
+            (at, _two_arrivals(at)) for at in [fine_stage.band_fine_frequencies(8, 4, True, False)]
+        ],
+        5: [(at, _two_arrivals(at)) for at in [fine_stage.band_fine_frequencies(8, 5, True)]],
+    }
+    fine = fine_stage.placed(bands, count, runs, 0.0)[None]
+    delay = np.array([fine_stage.reference_delay(fine[0], bands)])
+    f = np.arange(1000.0, 3364.0, 1.0)
+    gains = np.array([_band_shape(f, b, bands) for b in range(bands)])
+    amplitude = np.zeros((1, bands))
+    for band in (4, 5):
+        amplitude[0, band] = np.sqrt(np.mean(np.abs(_two_arrivals(runs[band][0][0][:24])) ** 2))
+    out = shaped(np.ones((1, count, 8), dtype=complex), bands, f, amplitude, gains, fine, delay)[0]
+    expected = _two_arrivals(f) * (gains[4] + gains[5])
+    # Relative to the reference delay (between 0 and 0.29 ms) each arrival's dtau is at
+    # most 0.29 ms.
+    bound = 58.93**2 / 8.0 * (1.0 + 0.8) * (2.0 * np.pi * 0.29e-3) ** 2
+    error = np.abs(out - expected)
+    assert error.max() <= bound, (error.max(), bound)
+    estimate = fine_stage.interpolation_bound(fine, delay, bands)[0, 4:6] * amplitude[0, 4:6]
+    assert np.all(estimate <= bound) and np.isclose(estimate.max(), error.max(), rtol=0.01)
+    # The same field held past the band's own eight samples, as without fine samples.
+    at = sample_frequencies(bands, count)
+    spectrum = np.ones((1, count, 8), dtype=complex)
+    spectrum[0, 4:6] = _two_arrivals(at[4:6]) / amplitude[0, 4:6, None]
+    held = shaped(spectrum, bands, f, amplitude, gains)[0]
+    assert np.abs(held - expected).max() > 20 * bound
+
+
+def test_the_layout_holds_every_run_s_frequencies() -> None:
+    """In octave and third-octave bands the fine layout holds the frequencies of the
+    open ground's runs at 24 an octave from 1 kHz and at the early paths' 8 (their
+    skirts too, each at its own spacing, the last at or past the top of the band's upper
+    crossover), the early paths' own among them; a frequency off it is an error."""
+    from acoustic_spaces import synthesis
+    from acoustic_spaces.engine import fine as fine_stage
+
+    for bands in (8, 24):
+        layout = fine_stage.fine_frequencies(bands, bands)
+        early = sample_frequencies(bands, bands)
+        top = synthesis.crossover_frequencies(bands) * 2.0 ** (synthesis.crossover_width(bands) / 2)
+        for band in range(bands):
+            row = layout[band][np.isfinite(layout[band])]
+            for dense in (True, False):
+                at = fine_stage.band_fine_frequencies(bands, band, dense, band + 1 < bands)
+                assert np.all(np.isclose(row[np.searchsorted(row, at - 1e-6)], at, rtol=1e-9))
+                if band + 1 < bands:
+                    assert at[-1] >= top[band] and at[-2] < top[band]
+            plain = fine_stage.band_fine_frequencies(bands, band, False, skirt=False)
+            np.testing.assert_allclose(plain, early[band], rtol=1e-12)
+    with pytest.raises(ValueError, match="not on its layout"):
+        fine_stage.placed(8, 8, {5: [(np.array([2000.5]), np.ones(1))]}, 0.0)
+
+
+def test_paths_without_the_equation_s_samples_are_shaped_as_before() -> None:
+    """Rows without fine samples take the band's own spectrum exactly as before (bit for
+    bit), whatever the other rows carry; a room's paths carry none."""
+    from acoustic_spaces.engine import fine as fine_stage
+    from acoustic_spaces.engine.coherent import _band_shape, shaped
+
+    rng = np.random.default_rng(1)
+    spectrum = rng.normal(size=(3, 8, 8)) + 1j * rng.normal(size=(3, 8, 8))
+    amplitude = rng.uniform(0.5, 1.0, size=(3, 8))
+    f = np.arange(20.0, 8000.0, 3.0)
+    gains = np.array([_band_shape(f, b, 8) for b in range(8)])
+    plain = shaped(spectrum, 8, f, amplitude, gains)
+    layout = fine_stage.fine_frequencies(8, 8)
+    fine = np.full((3, 8, layout.shape[1]), np.nan, dtype=complex)
+    np.testing.assert_array_equal(
+        shaped(spectrum, 8, f, amplitude, gains, fine, np.zeros(3)), plain
+    )
+    fine[1] = fine_stage.placed(8, 8, {5: [(layout[5][:24], np.ones(24))]}, 0.0)
+    mixed = shaped(spectrum, 8, f, amplitude, gains, fine, np.zeros(3))
+    np.testing.assert_array_equal(mixed[[0, 2]], plain[[0, 2]])
+    assert not np.allclose(mixed[1], plain[1])
+    response = simulate(_box(500), threads=1)[("s", "l")]
+    assert response.early.fine is None and response.early.fine_delay is None
+
+
+def _digest(values) -> list[float]:
+    """Three sums of an array that any change in it moves: of the values, of their
+    squares and of the values times their index."""
+    x = np.asarray(values, dtype=float).ravel()
+    return [float(np.sum(x)), float(np.sum(x * x)), float(np.sum(x * np.arange(len(x))))]
+
+
+def test_a_room_s_early_signal_and_echogram_are_those_without_the_equation() -> None:
+    """An indoor box with first-order diffraction: the early paths' coherent signal
+    (8192 samples at 16 kHz) and their echogram (1 ms bins) are, to 1e-12, those of the
+    main checkout at ae79163, which has no fine samples (``main_values.py box``,
+    /mnt/project-files/wind-fixes-2026-11-10/crossover/build-scripts/)."""
+    from acoustic_spaces.engine import coherent
+
+    room = _box(500, early={"diffraction": "first_order", "coherent_max_band_hz": 500})
+    early = simulate(room, threads=1)[("s", "l")].early
+    signal = coherent.signal(early, 8192, 16000.0)[:, 0]
+    echogram = coherent.EarlyPressure(early).energy(0.001, 200)
+    np.testing.assert_allclose(
+        _digest(signal), [5.665402896963265, 0.12028315532403483, 2405.64534965662], rtol=1e-12
+    )
+    np.testing.assert_allclose(
+        _digest(echogram),
+        [0.20203985979353015, 0.0007957309819662612, 60.02199481586753],
+        rtol=1e-12,
+    )
+
+
+def test_the_equation_s_samples_go_with_their_path() -> None:
+    """A path's fine samples and their delay survive picking, sorting, joining with paths
+    that have none (NaN and 0 for those) and replacing other fields; re-weighting for
+    another absorption turns none of them, as the carrier's reflections have no phase of
+    the faces' to turn (their cosines NaN)."""
+    from acoustic_spaces.engine.early import EarlyReflections
+    from acoustic_spaces.engine.reweight import turned_paths
+
+    def paths(n, fine):
+        return EarlyReflections(
+            order=np.arange(n),
+            delay_s=np.linspace(0.1, 0.2, n),
+            distance_m=np.full(n, 34.0),
+            direction=np.tile([1.0, 0.0, 0.0], (n, 1)),
+            energy=np.ones((n, 8)),
+            faces=[np.zeros(k, dtype=np.int64) for k in range(n)],
+            spectrum=np.ones((n, 8, 8), dtype=complex),
+            cosines=[np.full(k, np.nan) for k in range(n)],
+            fine=None if fine is None else np.full((n, 8, 5), fine, dtype=complex),
+            fine_delay=None if fine is None else np.full(n, 1e-4),
+        )
+
+    carrier = paths(2, 2.0 + 1.0j)
+    joined = EarlyReflections.concatenate([paths(1, None), carrier], 8)
+    assert joined.fine is not None and joined.fine_delay is not None
+    np.testing.assert_array_equal(np.isnan(joined.fine.real).all(axis=(1, 2)), [True, False, False])
+    np.testing.assert_array_equal(joined.fine_delay, [0.0, 1e-4, 1e-4])
+    picked = joined[[2]]
+    np.testing.assert_array_equal(picked.fine, carrier.fine[[1]])
+    kept = dataclasses.replace(picked, energy=2.0 * picked.energy)
+    assert kept.fine is picked.fine and kept.fine_delay is picked.fine_delay
+    turned = turned_paths(
+        carrier, np.zeros(1, dtype=np.int64), np.full((1, 8), 0.1), np.full((1, 8), 0.5)
+    )
+    np.testing.assert_array_equal(turned.spectrum, carrier.spectrum)
+    np.testing.assert_array_equal(turned.fine, carrier.fine)
+    assert paths(1, None).fine is None
