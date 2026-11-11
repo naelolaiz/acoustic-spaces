@@ -35,8 +35,9 @@ sets scattering runs through an opening (`apartment`'s bed by 0.04 dB(A)); the w
 solver's low bands round an open model, on a larger grid; Doc 29's L_Amax ahead of and
 behind a segment (up to 1.0 dB on Volume 3's departures; the airport example does not
 change); a walk with Doppler passing close to a listener (a ripple of up to 0.73 dB
-gone); and the spread: its combined standard uncertainty and its mean, within the draws'
-noise, every response after the first in a run of several, materials that absorb
+gone), through a directional microphone (up to 0.25 dB) or in binaural (up to 3.1 dB at
+1 kHz); and the spread: its combined standard uncertainty and its mean, within the
+draws' noise, every response after the first in a run of several, materials that absorb
 everything in some band, grounds with an impedance, and draws of much more absorption
 than was traced; and a calibrated material given in third octaves where one of them
 reaches 1. Scene files of 4.2.1 load unchanged.
@@ -167,8 +168,6 @@ reaches 1. Scene files of 4.2.1 load unchanged.
   2.3 to 30 times faster); in the shadow 4 and 8 kHz, which deepen from those bands,
   move with them (by up to 0.33 dB within 60 dB of free field). `helicopter_flyover`,
   whose sound comes down steeply, sets the rays, there within 0.11 dB of the default.
-
-
 - Fixed: in wind or a temperature gradient the late rays counted again the curved paths
   off the ground that the early part already holds (those with more bounces than
   `max_order`, up to ten), so over a ground that scatters little the level rose with the
@@ -250,6 +249,17 @@ reaches 1. Scene files of 4.2.1 load unchanged.
   0.73 dB and is now within 0.01 dB of the exact field (1 kHz, 5 ms windows). The
   filters from place to place are joined linearly (triangles, not squared sines), which
   also moves a source heard through turbulence by up to 0.03 dB in its 5 ms levels.
+- Fixed: a walk with Doppler takes each path's filter (a microphone's pattern, the ears,
+  panning, the source's directivity, the ground) at every place the walker passes, not
+  every 20 ms alone: through a cardioid microphone a source passing 1 m away at 70 m/s
+  missed the exact field's level by 0.25 dB in 5 ms windows and is within 0.03 dB. The
+  early part takes 1.1 to 1.2 times as long to render with places 1 m apart at 30 to
+  80 m/s (1.3 times in binaural), 2.6 times at 70 m/s with places 0.25 m apart (the
+  whole rendering 1.4 times, 1.9 times in binaural).
+- Fixed: in binaural, a walking source's sound reaches each ear that ear's onset after
+  it passes the head's centre; the onset was added to the path's delay, which shortened
+  the time between the ears as the pitch rose. A source passing 2 m away at 70 m/s was
+  3.1 dB off the exact field's level at 1 kHz in 5 ms windows and is within 0.06 dB.
 - Fixed: a demo's tour fits each crossfade to the stops it joins; a stop shorter than
   the crossfade was played twice (+6 dB) or stopped the demo with an error.
 - Docs: a moving monopole's convective amplification, which the engine leaves out, is
