@@ -4775,9 +4775,50 @@ Results:
   below, are not continuous with its field: 18 dB (upwind in `windy` 100 m away) to
   36 dB (`sunny_day` 300 m away) louder than it at 3.4 kHz. In case 3, 300 m away,
   where they are within 0.3 dB of the equation at 3.4 and 3.9 kHz, the response in the
-  crossover is 8.6 dB below the program at 2.95 kHz. The paths round a barrier's end
-  still take the weather's effect at the early paths' frequencies, held through the
-  crossover above the equation's top band, where it moves by 14 to 17 dB in case 2.
+  crossover is 8.6 dB below the program at 2.95 kHz. The paths round a barrier's end or
+  a building's corner take their way's runs at every frequency too, with each path in
+  still air drawn between its own frequencies (within 0.18 dB and 0.9 degrees of the
+  same path at 24 frequencies an octave from 0.7 to 4.5 kHz), and 60 and 120 m away,
+  downwind in `windy` and in case 2 over a Delany-Bazley ground of 200 kPa s/m², their
+  rendered third octaves through the crossovers are within 0.03 dB of runs 27 times as
+  dense (over an absorption of 0.02, 0.34 dB at 800 Hz 2.6 m up, as far as the way's
+  own field is off its dense run there; with `open_ground_frequencies: rays` 0.18 dB
+  at 400 Hz, where the band energies over 8 frequencies an octave leave the listener's
+  own field 0.10 dB off). Below an end's line of sight, where the straight paths along
+  the way all but cancel, they keep the weather's effect at the early paths'
+  frequencies (100 m downwind in `windy`, within 0.01 dB of the dense runs in the 2 and
+  2.5 kHz third octaves but up to 1.1 dB off them in the crossovers); the paths over a
+  roof's edge and behind barriers still take one ratio of the equation's band energies
+  a band through them (a one-off check).
+- **A ground given by absorption coefficients in wind.** The parabolic equation (the
+  bands up to 2 kHz in wind and temperature gradients) takes such a ground as a locally
+  reacting surface of the real admittance fitted to its absorption
+  (`engine/impedance.py`'s `fit_admittance`: 0.003 for 0.02, 0.051 for 0.3), whose
+  reflection goes to -1 at grazing incidence and adds a ground wave; still air's image
+  sources reflect off it with the square root of (1 - its absorption) at every angle
+  and that admittance's plane-wave phase, as off a floor. So a breath of wind
+  (0.05 m/s) moves the level, in `tests/test_barriers_in_wind.py`'s scene without its
+  barrier (scattering 0, a listener 1.5 m up 60 and 120 m away), from 63 Hz to 2 kHz
+  by -0.15 to -1.08 dB from a source 1 m up over an absorption of 0.02 (-0.11 to
+  -0.81 dB from 5 m up), and over 0.3 by up to +18 dB at 63 Hz from 1 m up (-4.8 to
+  +1.8 dB from 5 m up). Each against the fast field program over a locally reacting
+  ground of that admittance in its own air (still, and the scene's wind), the equation
+  is within 0.05 dB in every band of these cases, and the image sources are 0.10 to
+  0.91 dB above it over 0.02 and up to 18 dB off it over 0.3 (63 Hz, 60 m, from 1 m
+  up); the bending itself, the program's breath against its still air, is at most
+  0.11 dB of these moves but for 0.31 dB at 2 kHz 60 m from the source 1 m up and
+  0.38 dB at 1 kHz 120 m from 5 m up. The rays' bands, whose reflections take the
+  image sources' rule, move with the bending alone: +0.62 dB at 4 kHz 60 m from the
+  source 1 m up, where the ground reflection comes 4.0 µs later against the direct
+  sound than in still air and 0.16 dB louder, by the first interference dip (3.4 kHz),
+  and +2.2 dB at 8 kHz 120 m away (a one-off check). The paths round a barrier's end
+  follow the equation through the crossover too: on an end's shadow boundary 60 m away
+  (the source 1 m up, absorption 0.02), the 3.15 kHz third octave of
+  those paths moves by -0.56 dB at 0.01 m/s and -1.92 dB at 0.05 m/s against still air,
+  the open ground's by -0.57 and -1.93 dB, and the fast field program's, in the scene's
+  own wind and over that admittance, by -0.36 and -1.78 dB (its still air 0.27 dB below
+  the image sources'). Outdoors give the ground an
+  impedance ([The ground and the sky](outdoor.md#the-ground-and-the-sky)).
 - **The eddies downwind.** The eddies' coherence factor was fitted in still air and in
   the shadow (see
   [Turbulence](#turbulence-against-a-parabolic-equation-through-random-eddies)); downwind

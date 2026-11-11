@@ -1323,3 +1323,230 @@ def test_the_paths_round_an_end_over_a_roof_scale_by_1_in_still_air(monkeypatch)
             int(np.flatnonzero(windy.distance_m == still.distance_m[i])[0]) for i in ends_still
         ]
         np.testing.assert_allclose(windy.energy[again], still.energy[ends_still], rtol=1e-12)
+
+
+@pytest.fixture
+def round_ends(monkeypatch):
+    """By listener (index), the paths round ends and corners as the weather changed them
+    (:meth:`~acoustic_spaces.engine.refracted.Refraction._place_ends`)."""
+    found = {}
+    place = refracted.Refraction._place_ends
+
+    def spy(self, request, pressures, parts):
+        place(self, request, pressures, parts)
+        found[request.listener] = parts[request.listener][request.part]
+
+    monkeypatch.setattr(refracted.Refraction, "_place_ends", spy)
+    return found
+
+
+def _rendered(paths, low: float, high: float) -> tuple[np.ndarray, np.ndarray]:
+    """The frequencies (Hz) from ``low`` to ``high`` and the spectrum there of ``paths``'
+    early response as it is rendered (:func:`~acoustic_spaces.engine.coherent.signal`,
+    16 kHz, 2 s)."""
+    from acoustic_spaces.engine import coherent
+
+    n, rate = 1 << 15, 16000.0
+    f = np.fft.rfftfreq(n, 1.0 / rate)
+    keep = (f >= low) & (f <= high)
+    return f[keep], np.fft.rfft(coherent.signal(paths, n, rate)[:, 0])[keep]
+
+
+#: The third octaves through the crossovers of the 1 and 2 kHz bands (Hz).
+CROSSOVER_THIRDS = (1250, 1600, 2000, 2500, 3150)
+
+
+def _thirds(paths) -> np.ndarray:
+    """The levels (dB) of ``paths``' rendered early response in ``CROSSOVER_THIRDS``."""
+    f, spectrum = _rendered(paths, 1000.0, 4000.0)
+    return np.array(
+        [
+            10.0
+            * np.log10(
+                np.sum(np.abs(spectrum[(f >= c / 2 ** (1 / 6)) & (f < c * 2 ** (1 / 6))]) ** 2)
+            )
+            for c in CROSSOVER_THIRDS
+        ]
+    )
+
+
+@pytest.fixture
+def denser(monkeypatch):
+    """Makes the open ground's runs (listeners' and ways') take the given number of times
+    the early paths' frequencies from 1 kHz up; the layout's caches let go after."""
+    from acoustic_spaces.engine import fine
+
+    def apply(times: int) -> None:
+        monkeypatch.setattr(fine, "OPEN_DENSE", times)
+        monkeypatch.setattr(refracted, "OPEN_DENSE", times)
+        fine._grid.cache_clear()
+        fine._fine_frequencies.cache_clear()
+
+    yield apply
+    monkeypatch.undo()
+    fine._grid.cache_clear()
+    fine._fine_frequencies.cache_clear()
+
+
+def _beside_end(atmosphere, listeners):
+    """The early paths at ``listeners`` (1.5 m up) past the barrier ``END`` from (0, 0, 1)
+    over hard ground, in ``atmosphere``."""
+    room = Room.from_scene(
+        scene(
+            atmosphere=atmosphere,
+            listeners=[(x, y, 1.5) for x, y in listeners],
+            barriers=[END],
+            extent=((-60.0, -60.0), (90.0, 60.0)),
+            barrier_frequencies=8,
+        )
+    )
+    return [early_paths(room, listener=f"l{k}", threads=1) for k in range(len(listeners))]
+
+
+def test_no_step_across_an_end_s_shadow_boundary_through_the_crossovers() -> None:
+    """60 m downwind in the windy preset, 1 mm either side of the end's shadow boundary,
+    the rendered early response steps in the third octaves from 1.25 to 3.15 kHz by no
+    more than 0.1 dB over still air's step there (at most 0.011 dB over it measured;
+    still air's 0.011 dB at most): the paths round the end carry the weather's field at
+    every frequency the way's runs took, as the lit side's own does. Holding the
+    weather's change at the early paths' frequencies they stepped by 0.50, 0.17, 0.11,
+    0.09 and 0.07 dB."""
+    pair = [(60.0, -0.001), (60.0, 0.001)]
+    steps = []
+    for atmosphere in (WINDY, None):
+        minus, plus = _beside_end(atmosphere, pair)
+        steps.append(np.abs(_thirds(plus) - _thirds(minus)))
+    assert np.all(steps[0] < 0.1 + steps[1]), steps
+
+
+def _equation_s_bands(paths):
+    """``paths`` with the bands above the parabolic equation's (4 and 8 kHz) left out."""
+    out = paths[np.arange(len(paths))]
+    out.energy = out.energy.copy()
+    out.energy[:, 6:] = 0.0
+    return out
+
+
+@pytest.mark.parametrize("dense", [None, 9], ids=["own", "denser"])
+def test_the_paths_round_an_end_carry_half_the_open_ground_s_field_through_the_crossover(
+    round_ends, denser, dense
+) -> None:
+    """60 m downwind in the windy preset, 1 mm behind the end's shadow boundary, the
+    paths round the end (15, 0) (not those round the barrier's far end), in the
+    equation's bands, are half the lit side's own field 1 mm across it (its carrier's,
+    drawn through the equation's samples) at every frequency from 1.6 to 3.2 kHz, through
+    the 2 kHz band's upper crossover: within 0.2 dB of -6.02 dB (-5.94 to -5.90 dB
+    measured); and so against a run three times as dense for the lit side (9 times the
+    early paths' frequencies; -5.94 to -5.90 dB). Holding the weather's change at the
+    early paths' frequencies they were -6.04 to -2.13 dB."""
+    _beside_end(WINDY, [(60.0, -0.001)])
+    ends = round_ends.pop(0)
+    near = np.flatnonzero(ends.delay_s < ends.delay_s.min() + 0.01)
+    f, end = _rendered(_equation_s_bands(ends[near]), 1600.0, 3200.0)
+    if dense is not None:
+        denser(dense)
+    lit = _beside_end(WINDY, [(60.0, 0.001)])[0]
+    carrier = np.flatnonzero(~lit.diffracted & np.isfinite(lit.fine.real).any(axis=(1, 2)))
+    assert len(carrier) == 1
+    _, field = _rendered(_equation_s_bands(lit[carrier]), 1600.0, 3200.0)
+    level = 20.0 * np.log10(np.abs(end) / np.abs(field))
+    assert np.all(np.abs(level + 6.02) < 0.2), (level.min(), level.max())
+
+
+def test_with_eddies_the_paths_round_an_end_keep_the_equation_s_shape(round_ends) -> None:
+    """With strong eddies, 60 m downwind in the windy preset 1 mm behind the end's shadow
+    boundary, the path the paths round the end become in the equation's bands keeps the
+    way's field at every frequency its runs took, and its band energy is the blurred
+    one: each of those bands rendered alone holds the same share of its energy as
+    without eddies (to 1e-9 dB), while the eddies move the energies (by 0.17 and
+    -0.56 dB at 1 and 2 kHz)."""
+    import dataclasses
+
+    from acoustic_spaces.engine import coherent
+
+    shares, energies = [], []
+    for turbulence in (None, "strong"):
+        atmosphere = dict(WINDY)
+        if turbulence is not None:
+            atmosphere["turbulence"] = {"preset": turbulence}
+        _beside_end(atmosphere, [(60.0, -0.001)])
+        ends = round_ends.pop(0)
+        assert ends.fine is not None
+        path = int(np.flatnonzero(np.isfinite(ends.fine.real).any(axis=(1, 2)))[0])
+        share = []
+        for band in range(6):
+            energy = np.zeros_like(ends.energy)
+            energy[path, band] = ends.energy[path, band]
+            alone = dataclasses.replace(ends, energy=energy, wander=None)
+            signal = coherent.signal(alone, 1 << 15, 16000.0)[:, 0]
+            share.append(np.sum(signal**2) / energy[path, band])
+        shares.append(10.0 * np.log10(share))
+        energies.append(ends.energy[path, :6])
+    assert np.abs(10.0 * np.log10(energies[1] / energies[0])).max() > 0.1
+    np.testing.assert_allclose(shares[1], shares[0], atol=1e-9)
+
+
+def test_below_the_line_of_sight_the_paths_round_an_end_keep_their_level_in_the_band() -> None:
+    """The scene of test_the_paths_round_an_end_below_the_line_of_sight_follow_the_open_ground
+    (where the straight paths along the way all but cancel in the 2 kHz band): the paths
+    round the end change from still air in the rendered 2 and 2.5 kHz third octaves by
+    3.79 and 2.91 dB, as with the way's runs at 27 times their frequencies drawn through
+    them (3.79 and 2.91 dB; 3.72 and 2.88 dB at 9 times), within 0.1 dB. The weather's
+    turn of the phase there swings by up to 118 degrees from one of the way's samples to
+    the next; drawn through them linearly the two would come out 2.78 and 1.92 dB."""
+
+    def thirds(atmosphere):
+        room = Room.from_scene(
+            scene(
+                atmosphere=atmosphere,
+                listeners=((100.0, 0.001, 4.6),),
+                barriers=[{"name": "low", "path": [[30, -20], [30, 0]], "height": 1}],
+                extent=((-60.0, -60.0), (130.0, 60.0)),
+                ir_length_s=0.6,
+                open_ground_frequencies=8,
+                barrier_frequencies=8,
+            )
+        )
+        paths = early_paths(room, threads=1)
+        rows = [
+            i
+            for i in range(len(paths))
+            if paths.edge[i] >= 0 and any(np.allclose(c[:2], [30.0, 0.0]) for c in paths.points[i])
+        ]
+        return _thirds(paths[np.array(rows)])[2:4]
+
+    change = thirds(WINDY) - thirds(None)
+    np.testing.assert_allclose(change, [3.79, 2.91], atol=0.1)
+
+
+def test_a_map_matches_listeners_beside_a_barrier_s_end_in_wind() -> None:
+    """A coverage map's points 40 and 60 m away on the shadow boundary of a barrier's
+    end, downwind in the windy preset, read C50 and C80 from 63 to 500 Hz as listeners
+    at those points do, within 0.5 dB (0.12 and 0.03 dB measured, where they are 36 to
+    88 dB), and the strength within 0.002 dB: the paths round the end carry their way's
+    field through a map's band filters as through a listener's. With a map's paths held
+    at the early paths' frequencies they would be up to 10.5 dB and 0.014 dB apart."""
+    from acoustic_spaces.engine.coverage import coverage_map
+
+    data = scene(
+        atmosphere=WINDY,
+        listeners=((60.0, 0.0, 1.5),),
+        barriers=[{"name": "screen", "path": [[15, -5], [15, 0]], "height": 4}],
+        extent=((-5.0, -10.0), (65.0, 10.0)),
+        barrier_frequencies=8,
+    ).model_dump()
+    data["simulation"]["late"] = {"rays": 100}
+    data["coverage"] = {"spacing": 20.0, "height": 1.5, "rays": 100}
+    coverage = coverage_map(Room.from_scene(Scene.model_validate(data)), threads=1)
+    values = coverage.maps["s"].values
+    points = np.asarray(coverage.grid.points)
+    picks = [k for k, point in enumerate(points) if point[0] >= 30.0]
+    assert len(picks) == 2
+    del data["coverage"]
+    data["listeners"] = [{"name": f"p{k}", "position": points[k].tolist()} for k in picks]
+    responses = simulate(Room.from_scene(Scene.model_validate(data)), threads=1)
+    for k in picks:
+        p = responses["s", f"p{k}"].parameters()
+        np.testing.assert_allclose(values["g"][k, :4], p.g[:4], atol=0.002)
+        np.testing.assert_allclose(values["c50"][k, :4], p.c50[:4], atol=0.5)
+        np.testing.assert_allclose(values["c80"][k, :4], p.c80[:4], atol=0.5)

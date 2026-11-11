@@ -779,7 +779,10 @@ deeper (88 dB below it, 8 kHz upwind). Nothing changes in still air.
 
 Through the crossovers between the bands the equation's bands carry its field at every
 frequency the runs took, and one more run takes the top band on through the crossover
-above it at the same spacing, so a ground dip at a join is kept; the lowest band's run
+above it at the same spacing, so a ground dip at a join is kept (so do the paths round a
+barrier's end or a building's corner, from their way's runs, each path in still air
+drawn between its own frequencies, unless the end is below the line of sight); the
+lowest band's run
 goes on down to an octave below it, which its band filter reads (out of the shadow: in
 it, where the bands above the equation deepen from the octave below, the bands keep
 their own samples)

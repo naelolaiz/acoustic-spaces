@@ -272,6 +272,14 @@
   0.07 dB off still air's image sources (0.12 dB without eddies). Downwind in `windy`,
   a source 5 m and a listener 1.5 m up over grass 25 to 600 m away, the 250 Hz to 2 kHz
   bands move by up to 0.59 dB with the `strong` eddies and 0.50 dB with the `moderate`.
+- Fixed (results change): in wind, the paths round a barrier's end or a building's
+  corner carry their way's field through the crossovers between the parabolic
+  equation's bands, as a listener's own field does: 1 mm either side of an end's shadow
+  boundary 60 and 120 m downwind the rendered third octaves from 1.25 to 3.15 kHz
+  stepped by up to 1.0 dB more than in still air and now by at most 0.01 dB more. At
+  listeners and coverage map points with such paths, what the band filters read up to
+  500 Hz moves with them: the strength by up to 0.05 dB, and C50 and C80 by up to 11
+  and 13 dB where they are 65 to 90 dB.
 
 ## 4.2.1
 

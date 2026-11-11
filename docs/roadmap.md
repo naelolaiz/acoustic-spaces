@@ -352,8 +352,11 @@ Outdoor acoustics, in steps:
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
   the shadow): out of the shadow the equation's field goes through it, but the rays'
   band beside it is 5 to 22 dB off the equation there in the weather presets, the paths
-  round a barrier's end still hold the weather's effect at their bands' last
-  frequencies there, and in the shadow, where the bands above the equation deepen from
+  round a barrier's end below its line of sight still hold the weather's effect at
+  their bands' early frequencies there (1.1 dB off denser runs 100 m downwind in
+  `windy`), the paths over a roof's edge and behind barriers take one ratio of the
+  equation's band energies a band there, and in the shadow, where the bands above the
+  equation deepen from
   the octave below 18 to 36 dB louder than its field, the bands keep their own samples
   (8.6 dB low in case 3 300 m away; see [Known issues](validation.md#known-issues)).
 - [ ] The eddies downwind: their coherence factor, fitted in still air and in the
