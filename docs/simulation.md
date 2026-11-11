@@ -442,8 +442,8 @@ or the listener faces, which in a whole city grows with the square of the buildi
 Most of those pairs cannot carry a path, because the plane's faces lie nowhere near
 where a ray from the edge would meet the plane: the engine leaves them out before it
 traces a ray, on `simulation.performance.threads` threads, and the results are the
-same bit for bit. A city of 900 buildings simulates in about 17 s on four cores, and
-3,600 in about 56 s, of which the fade's terms take about 14 and 32 s (see [Outdoor scenes](outdoor.md#buildings-from-a-map) and the
+same bit for bit. A city of 900 buildings simulates in about 13 s on four cores, and
+3,600 in about 48 s, of which the fade's terms take about 10 and 24 s (see [Outdoor scenes](outdoor.md#buildings-from-a-map) and the
 [validation report](validation.md#edge-diffraction-in-whole-cities)).
 
 ## Low frequencies: early reflections in pressure

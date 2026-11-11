@@ -4421,14 +4421,17 @@ cores of a cloud machine with nothing else running:
 
 | Buildings | Faces | Edges | Build (s) | Simulation (s) | Of it diffraction (s) | Pairs tested | Peak memory |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 100 | 1,012 | 800 | 0.1 | 2.1 | 1.7 | 8.5 % | 0.3 GB |
-| 400 | 4,012 | 3,200 | 0.5 | 5.1 | 4.6 | 4.3 % | 0.3 GB |
-| 900 | 9,012 | 7,200 | 1.2 | 9.3 | 8.6 | 2.9 % | 0.4 GB |
-| 1,600 | 16,012 | 12,800 | 2.2 | 12.9 | 12.1 | 2.7 % | 0.5 GB |
-| 3,600 | 36,012 | 28,800 | 5.5 | 33.3 | 32.1 | 3.3 % | 1.7 GB |
+| 100 | 1,012 | 800 | 0.1 | 3.1 | 2.1 | 8.5 % | 0.3 GB |
+| 400 | 4,012 | 3,200 | 0.4 | 7.0 | 6.4 | 4.3 % | 0.3 GB |
+| 900 | 9,012 | 7,200 | 1.0 | 12.9 | 12.1 | 2.9 % | 0.4 GB |
+| 1,600 | 16,012 | 12,800 | 2.1 | 17.9 | 16.9 | 2.7 % | 0.5 GB |
+| 3,600 | 36,012 | 28,800 | 5.3 | 48.1 | 46.7 | 3.3 % | 1.8 GB |
 
-Diffraction includes the terms that make the other specular paths fade at the edges
-([above](#reflections-that-fade-at-edges-against-the-exact-solution)). In a one-off
+Diffraction includes finding the model's edges and where they end, and the terms that
+make the other specular paths fade at the edges
+([above](#reflections-that-fade-at-edges-against-the-exact-solution)): those terms took
+three quarters of the simulation of 900 buildings and half of that of 3,600, and
+finding the edges about a fifth of the latter. In a one-off
 check when the culling was written, on a run where 900 buildings simulated in 16.6 s
 (15.6 s of it diffraction), 1,600 in 21.4 s (20.1 s) and 3,600 in 56.4 s (54.5 s),
 they did so without those terms in 2.6 s (1.6 s), 4.8 s (3.6 s) and 24.4 s (22.4 s).
@@ -4443,8 +4446,8 @@ grows with the edges alone.
 turned at random angles and paths that reflect on both sides of an edge. It runs two
 sources, one in a street and one over the roofs, to two listeners, once as the engine
 runs, on one thread and on every core, and once with every pair tested. Every path, its
-energy and its spectrum come out the same bit for bit; the early paths took 0.7 s
-instead of 1.9 s. When the culling was written, the same comparison over every example
+energy and its spectrum come out the same bit for bit; the early paths took 0.9 s
+instead of 3.0 s. When the culling was written, the same comparison over every example
 and three test cities, with paths reflecting on one side and on both sides of an edge
 and over two edges, found no difference either (a one-off check; the script repeats
 the 4 by 4 city). The tests check the culling against

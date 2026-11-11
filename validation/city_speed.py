@@ -19,9 +19,9 @@ those pairs grow with the square of the buildings. Most cannot carry a path, as 
 plane's faces lie nowhere near where a ray from the edge would meet the plane, and are
 left out before the ray tests (:func:`acoustic_spaces.engine.diffraction._reflecting_pairs`).
 For each size the script prints the time to build the room, to run the simulation and
-how much of it went to edge diffraction (with the terms that make the other specular
-paths fade at the edges), the share of pairs tested, and the peak memory where the
-system reports it.
+how much of it went to edge diffraction (with finding the model's edges and where they
+end, and the terms that make the other specular paths fade at the edges), the share of
+pairs tested, and the peak memory where the system reports it.
 
 The check runs a smaller city with buildings at random angles (``--check`` blocks a
 side), with paths reflecting on both sides of an edge, from two sources to two listeners,
@@ -36,6 +36,7 @@ import dataclasses
 import json
 import os
 import platform
+import sys
 import time
 from pathlib import Path
 
@@ -44,6 +45,8 @@ import numpy as np
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import diffraction, edge_fade
 from acoustic_spaces.engine.simulate import early_paths
+
+_RUN = sys.modules[early_paths.__module__]  # the module: the package's `simulate` is the function
 
 BLOCK, STREET = 20.0, 12.0
 
@@ -95,13 +98,15 @@ def city(n: int, seed: int = 1, turned: bool = False, both_sides: bool = False) 
 
 class _Counted:
     """The pairs of an edge and a plane tested, all there were, and the time edge
-    diffraction took (finding the source's sides of the edges, then each listener's,
-    and the terms that make the other specular paths fade at the edges)."""
+    diffraction took (finding the model's edges and where they end, the source's sides
+    of them, then each listener's, and the terms that make the other specular paths
+    fade at the edges)."""
 
     def __init__(self) -> None:
         self.kept = self.all = 0
         self.seconds = 0.0
         self._culled = diffraction._reflecting_pairs
+        self._edges = _RUN.find_edges
         self._init = diffraction.EdgeDiffraction.__init__
         self._apply = diffraction.EdgeDiffraction.apply
         self._terms = edge_fade.EdgeFade.terms
@@ -125,6 +130,7 @@ class _Counted:
             return run
 
         diffraction._reflecting_pairs = counting
+        _RUN.find_edges = timed(self._edges)
         diffraction.EdgeDiffraction.__init__ = timed(self._init)
         diffraction.EdgeDiffraction.apply = timed(self._apply)
         edge_fade.EdgeFade.terms = timed(self._terms)
@@ -133,6 +139,7 @@ class _Counted:
 
     def __exit__(self, *exc) -> None:
         diffraction._reflecting_pairs = self._culled
+        _RUN.find_edges = self._edges
         diffraction.EdgeDiffraction.__init__ = self._init
         diffraction.EdgeDiffraction.apply = self._apply
         edge_fade.EdgeFade.terms = self._terms
