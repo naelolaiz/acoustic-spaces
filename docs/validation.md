@@ -4909,6 +4909,83 @@ without its taps the 19-point one's is within 0.01 dB of it. Rays give the
 average over the room instead: 5.2 dB more at this seat in the 63 Hz band, where the
 listener sits near the nodes of most modes.
 
+**Where the grid puts the walls.** `validation/wave_walls.py` measures what walls on
+cell faces cost (the leftover under A whole room, above), with both stencils on the
+grids the solver takes when its highest band is the 63, 125 or 250 Hz one, at 8 points
+per wavelength (a run up to 125 Hz, the default, takes the 19.8 cm grid for every band).
+A rigid 4.13 x 3.37 x 2.71 m box, whose sides are no whole number of cells, is placed as
+the solver places a room whose source and listeners lie more than two cells from its
+walls, moved from there by parts of a cell along the axes (0, 0, 0; 0.25, 0.5, 0.75;
+0.5, 0.25, 0.4), turned by 3, 8 and 14 degrees about the vertical, and turned by 8 and
+tilted by 5 degrees. Its modes are the eigenvalues of the grid's own update, each
+analytic mode taken at the eigenvector its shape correlates with best. With every side
+rounded to whole cells and the walls on cell faces, the grid's modes follow the
+stencil's dispersion relation within 2e-6 (the 2⁻¹⁹ by which the solver slows sound,
+above): what is off there is the dispersion alone. In each grid's own band (sharp edges
+at the synthesis's crossovers, 89.1, 176.8 and 353.6 Hz), the worst mode (and the
+largest root-mean-square) over the placements:
+
+| stencil | grid | sides in whole cells, walls on cell faces | moved within a cell | turned or tilted |
+|---|---|---:|---:|---:|
+| 19-point | 63 Hz band's (40.5 cm) | −0.4 % (0.3 %) | +11.3 % (7.0 %) | −6.7 % (4.4 %) |
+| 19-point | 125 Hz band's (19.8 cm) | −0.4 % (0.3 %) | +4.9 % (2.0 %) | −6.4 % (3.2 %) |
+| 19-point | 250 Hz band's (9.9 cm) | −0.4 % (0.3 %) | −2.6 % (1.2 %) | −2.8 % (1.3 %) |
+| 7-point | 63 Hz band's (39.6 cm) | −1.1 % (0.6 %) | −6.1 % (4.0 %) | −10.3 % (5.7 %) |
+| 7-point | 125 Hz band's (19.8 cm) | −1.0 % (0.5 %) | +4.5 % (2.0 %) | −7.0 % (3.6 %) |
+| 7-point | 250 Hz band's (9.9 cm) | −1.0 % (0.4 %) | −3.2 % (1.2 %) | −3.7 % (1.6 %) |
+
+A box turned against the grid couples modes that lie close together, and a mode's
+shape then spreads over several eigenvectors: on their own grids, 1 to 11 of the 31
+modes in the 125 Hz band and 22 to 120 of the 195 in the 250 Hz band correlate less than
+0.8 with the one they match best (19-point; 0 to 11 and 4 to 117 with the 7-point one;
+none on the 63 Hz band's grids or in a box moved within a cell). Of the modes that keep
+their shape, the worst turned or tilted on those two grids is −4.5 % and −2.5 % off
+(19-point; −6.8 % and −3.7 % 7-point); the furthest eigenvector that holds a quarter of
+a mode's shape (a squared correlation of 0.25), −6.4 % and −3.6 % (−7.4 % and −4.2 %).
+These are samples, not bounds: which placement is worst depends on how each side rounds
+to whole cells (on the 9.9 cm grid the first two placements round every side alike), and
+cells 0.06 % smaller (at 343.0 m/s instead of 343.2) move the worst modes by up to 0.25
+percentage points; which modes keep their shape hangs on the 0.8: in the tilted box on
+the 7-point 125 Hz band's grid, those smaller cells take the worst of them from −6.8 %
+to −4.6 % (one-off checks).
+
+The band levels at five listeners 0.74 to 1.19 m from the nearest wall, the source 0.41
+to 0.53 m from three (on the 63 Hz band's grids that is within two cells, where the
+solver would start its grid less than a cell further out: the placements are samples
+either way), against the box's image sources with the solver's own pulse (more images
+and a longer FFT move them by less than 0.001 dB), in the same sharp-edged bands (the
+63 Hz one from 44.5 Hz), are off by up to 2.7 / 2.8 dB (first 100 / 300 ms) in the
+63 Hz band on its grid, 2.5 / 4.3 dB in the 125 Hz band and 4.4 / 2.8 dB in the 250 Hz
+band with the 19-point stencil (3.3 / 2.9, 2.4 / 4.6 and 4.0 / 3.7 dB with the 7-point
+one), the most over the listeners and the seven placements; with the walls on cell
+faces, 0.56 / 0.30, 0.24 / 0.12 and 0.15 / 0.15 dB (19-point). On the 19-point grid an
+octave finer than a band's own, the 63 Hz band is off by up to 1.2 / 1.9 dB and the
+125 Hz band by up to 1.4 / 0.8 dB.
+
+A single rigid wall, against the same grid's free field driven by the source and by its
+image in the model's wall (so that the grid's dispersion and the source are the same on
+both sides): the root-mean-square error over the cell centres 1.5 to 6.5 cells in front
+of it, by octave of cells per wavelength, with the 19-point stencil (the 7-point one
+within 0.08 dB of it), and the place of the wall that fits the error best in the first
+octave, along its normal in steps of 0.01 cell (negative: behind the model's wall, away
+from the air). The walls along the grid lie that share of a cell into the air from a
+cell face:
+
+| wall | 8–16 cells per wavelength | 16–32 | 32–64 | place fitted (cells) |
+|---|---:|---:|---:|---:|
+| along the grid, 0.1 cell off a cell face | 0.35 dB | 0.21 dB | 0.10 dB | −0.10 |
+| along the grid, 0.25 cell off | 0.91 dB | 0.53 dB | 0.24 dB | −0.25 |
+| along the grid, 0.4 cell off | 1.50 dB | 0.85 dB | 0.38 dB | −0.40 |
+| at 3 degrees to the grid | 1.17 dB | 0.39 dB | 0.22 dB | −0.04 |
+| at 8 degrees | 0.93 dB | 0.07 dB | 0.03 dB | −0.04 |
+| at 14 degrees | 0.68 dB | 0.20 dB | 0.05 dB | −0.06 |
+| at 25 degrees | 0.54 dB | 0.15 dB | 0.07 dB | −0.04 |
+
+Along the grid the place is the whole error: against the source's image in the cell face
+the grid puts the wall on, what is left is below 0.001 dB, as it is with the model's wall
+on a cell face. At an angle, the wall's place that fits the error best lies within 0.08
+cells of the model's wall with either stencil, and the error is in the steps.
+
 **On a GPU.** `validation/wave_gpu.py` computes the wave bands (up to 125 Hz, 0.5 s) of
 the first source of three example rooms to every listener on the CPU and on the GPU,
 and compares the two. The tests do the same with resonant walls and with the matched
@@ -5541,6 +5618,7 @@ python -m pip install pyroomacoustics matplotlib
 python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs/validation
 python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
+python validation/wave_walls.py --json wave_walls.json   # 18 to 25 min; --bands 63 125: 10 less
 python validation/edge_diffraction.py --json diffraction.json
 python validation/edge_fade.py --json edge_fade.json
 python validation/walks.py --json walks.json   # --walks gallery archway street
