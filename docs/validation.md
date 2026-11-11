@@ -3516,18 +3516,20 @@ dB of the field's in 5 ms windows. A straight line between two places 0.25 m apa
 strays from the pattern by 0.026 dB in the direct sound 1.12 m from the capsule (by
 hand: an eighth of the step squared times the pattern's curvature over its value).
 
-At the ears a walking source's field is exact too: the head stands still and scatters
-what arrives, so each sample of the pressure at its centre goes through the ears'
-responses to the direction it arrives from, and the responses add up where they land.
+At the ears a walking source's field is exact too, for ears whose responses depend on
+the direction alone, as the engine's do: the head stands still, so each sample of the
+pressure at its centre goes through the ears' responses to the direction it arrives
+from, and the responses add up where they land.
 The engine keeps where each ear's response starts as a delay and takes what passed the
 head's centre that much earlier (see
 [Moving sources and Doppler](spatial-audio.md#moving-sources-and-doppler)). The level
 stays within 0.06 dB at 1 kHz, the most 1.9 m after the pass at 70 m/s, 2 m away, where
 the ground's reflection takes the field 15 dB down. At 4 kHz it is within 0.13 dB: at
-70 m/s the air's again where the comparison starts, at 30 m/s (0.105 dB) the far ear's
-0.4 m before the pass, the field 12 dB down. With the places 0.125 m apart the two are
-0.015 and 0.034 dB (a one-off check, not repeated by the script), so they are the
-straight line between the places. A walking listener's head moves through the field,
+70 m/s the most is where the comparison starts, as in mono (0.13 dB there too), at 30
+m/s (0.105 dB) the far ear's 0.3 m before the pass, the field 12 dB down. With the
+places 0.125 m apart the 0.06 dB at 1 kHz and this 0.105 dB are 0.015 and 0.034 dB (a
+one-off check, not repeated by the script), so they come mostly from the straight line
+between the places. A walking listener's head moves through the field,
 which has no exact solution of this kind: its rows compare the engine with its own
 model worked out sample by sample, each ear a point its onset further along the path at
 the moment it hears, and what arrives there through the rest of the ear's response.
@@ -3576,15 +3578,19 @@ on the kind of source: a point monopole's far-field pressure goes as (1 − M co
 M cos θ its Mach number towards the listener as the sound leaves, so its level as
 40 lg 1/(1 − M cos θ), up to 1.6 dB louder straight ahead of it at 30 m/s and 4.0 dB
 at 70 m/s, 1.5 and 3.2 dB quieter straight behind), and so is the
-Doppler shift of the late part, which is crossfaded. At the ears, a walking source is
+Doppler shift of the late part, which is crossfaded. At the ears what is left out is
+the amplification at the head's centre: each ear keeps its own Doppler factor over the
+centre's, as the exact field above has it (up to 0.15 dB at an ear at 70 m/s, 1 m
+away, a one-off check). The ears' responses depend on the direction a sound arrives
+from, not on how far its source is: one passing 1 m away is heard through the responses
+of a far one. A walking source is
 checked against the exact field above; a walking listener's moving head has none, and
 is checked against the engine's model worked out sample by sample, as above; and both
 against the convolution with a response when the walker stands still (to within 45 dB
 at each ear in the tests). A test drives a
 source past a listener whose ears' responses start 4 samples apart from one direction
 to the next, as a measured set's may, and holds its treble (6 to 16 kHz, frame by
-frame) within 0.3 dB of the same walk with ears that start together; before each ear's
-onset went into its delay, it lost 5.4 dB between places.
+frame) within 0.3 dB of the same walk with ears that start together.
 
 ## Helicopter rotors against theory and a certified level
 

@@ -225,14 +225,13 @@
   panning, the source's directivity, the ground) at every place the walker passes, not
   every 20 ms alone: through a cardioid microphone a source passing 1 m away at 70 m/s
   missed the exact field's level by 0.25 dB in 5 ms windows and is within 0.03 dB. The
-  early part takes 1.2 to 1.3 times as long to render with places 1 m apart at 30 to
-  80 m/s, 2.6 times at 70 m/s with places 0.25 m apart (the whole rendering 1.4 times,
-  1.9 times in binaural).
+  early part takes 1.1 to 1.2 times as long to render with places 1 m apart at 30 to
+  80 m/s (1.3 times in binaural), 2.6 times at 70 m/s with places 0.25 m apart (the
+  whole rendering 1.4 times, 1.9 times in binaural).
 - Fixed: in binaural, a walking source's sound reaches each ear that ear's onset after
   it passes the head's centre; the onset was added to the path's delay, which shortened
-  the time between the ears as the pitch rose and moved the direct sound against the
-  ground's reflection. A source passing 2 m away at 70 m/s was 3.1 dB off the exact
-  field's level at 1 kHz in 5 ms windows and is within 0.06 dB.
+  the time between the ears as the pitch rose. A source passing 2 m away at 70 m/s was
+  3.1 dB off the exact field's level at 1 kHz in 5 ms windows and is within 0.06 dB.
 
 ## 4.2.1
 

@@ -436,7 +436,8 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   that start apart, mixed, would cancel the treble between them. A walking listener's
   ear is that much further along the path; a walking source's sound reaches the ear
   that long after it passes the head's centre, so the time between the two ears is the
-  head's own whatever the pitch does.
+  head's own whatever the pitch does, and each ear's sound is divided by one plus its
+  onset's slope (the ear's Doppler factor over the centre's).
 - The late part is crossfaded from place to place by weights that add up to one, its
   pitch unshifted: the places' tails, drawn from one random sequence, are alike (in a
   shoebox room, neighbouring places 25 cm apart, each traced, correlate by 0.97 or more
@@ -460,7 +461,9 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   within 38 dB of the field, 4 m apart only within 18 dB. What depends on the direction
   a path arrives from (a microphone's pattern, the ears, panning, Ambisonics) goes in a
   straight line between two places, so a walker that passes close wants them close as
-  the listener sees them: a few degrees apart for Ambisonics or panning.
+  the listener sees them: 7° apart left third-order Ambisonics 0.3 % from the field over
+  a pass, 14° apart 1.3 % (a one-off check, see
+  [Validation](validation.md#moving-sources-against-the-exact-field)).
 - The source is quasi-static: its sound power and directivity are those of a source
   standing at each place. A moving source's convective amplification, which makes it
   louder ahead of it and quieter behind, is left out. Its size depends on the kind of
