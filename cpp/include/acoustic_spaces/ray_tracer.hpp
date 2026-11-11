@@ -22,8 +22,10 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -769,6 +771,268 @@ inline double wrapped_cauchy_angle(double rho, Rng &rng) {
     return 2.0 * std::atan((1.0 - rho) / (1.0 + rho) * std::tan(kPi * (u - 0.5)));
 }
 
+// The direction nearest to `arrival` of those at the indices [first, last) of
+// `directions` (ascending): the first of the strictly largest dot product, of those
+// above -2 (index 0, as nearest_of_all gives, if none is).
+inline std::size_t nearest_of(const std::vector<Vec3> &directions, const std::uint32_t *first,
+                              const std::uint32_t *last, const Vec3 &arrival) {
+    std::size_t best = 0;
+    double best_dot = -2.0;
+    for (const std::uint32_t *k = first; k != last; ++k) {
+        const double v = dot(arrival, directions[*k]);
+        if (v > best_dot) {
+            best_dot = v;
+            best = *k;
+        }
+    }
+    return best;
+}
+
+// As nearest_of over all of `directions`.
+inline std::size_t nearest_of_all(const std::vector<Vec3> &directions, const Vec3 &arrival) {
+    std::size_t best = 0;
+    double best_dot = -2.0;
+    for (std::size_t d = 0; d < directions.size(); ++d) {
+        const double v = dot(arrival, directions[d]);
+        if (v > best_dot) {
+            best_dot = v;
+            best = d;
+        }
+    }
+    return best;
+}
+
+// A cube map over the sphere that lists, for each of its 6 x kSide x kSide cells, the
+// directions that can be nearest_of_all's answer for an arrival in the cell, in
+// ascending order: nearest_of over the list of an arrival's cell gives the same index.
+//
+// Why the list holds the answer. An arrival a goes to the cube face of its largest
+// component (in size), a choice made without rounding, and to the cell that its other
+// two components divided by that one fall in. The edges of a cell lie on great circles,
+// so a cell is the spherical quadrilateral of its four corners, and every unit vector in
+// it lies within the angle rho of the unit vector c through the cell's centre, rho the
+// largest angle from c to a corner (a cap smaller than a hemisphere holds the shortest
+// arcs between its points). The rounding of the division and of the cell's index moves
+// a past a cell's edge by less than 1e-15 rad, so a / |a| lies within rho' = rho + 1e-9
+// rad of c. A direction d at the angle theta from c then lies between theta - rho' and
+// theta + rho' from a, and a . d / |a| lies between L = |d| cos(min(pi, theta + rho'))
+// and U = |d| cos(max(0, theta - rho')). The dot product the scan computes, (a.x d.x +
+// a.y d.y) + a.z d.z, is off from a . d by at most 3.4e-16 |a| |d| (each of its three
+// products and two sums rounds once, and |a.x d.x| + |a.y d.y| + |a.z d.z| <= |a| |d|).
+// The direction the scan picks has a computed dot product as large as any other's, so
+// its U is at least the largest L less 6.8e-16 N, N the length of the longest direction.
+// The list holds every direction whose U is at least the largest L less 1e-9 N, with U
+// and L computed to within 1e-14 N (the angles by atan2, which stays accurate near 0 and
+// pi where acos does not). Both margins, 1e-9 rad and 1e-9 N, are thus about a million
+// times what rounding can take, and any direction that ties or nearly ties with the
+// answer is in the list too. The scan of the list takes the first listed direction of
+// the largest computed dot product; the answer is listed, and no direction before it,
+// listed or not, has as large a one, so the scan takes the answer.
+//
+// The rounding errors above assume no overflow and no underflow that matters, so the
+// table serves arrivals with finite components whose largest (in size) is between
+// 2^-200 and 2^200, and is made for 1 to kMaxDirections directions with finite
+// components and lengths between 2^-200 and 2^200. Other arrivals and other directions
+// are scanned in full (candidates returns false), as are directions whose lists would
+// hold more than half of them on average, where the table would save little.
+class DirectionTable {
+public:
+    static constexpr int kSide = 8;
+    static constexpr std::size_t kCells = 6 * kSide * kSide;
+    static constexpr std::size_t kMaxDirections = 4096;
+
+    explicit DirectionTable(const std::vector<Vec3> &directions) : directions_(directions) {
+        const std::size_t n = directions.size();
+        if (n == 0 || n > kMaxDirections) return;
+        std::vector<double> length(n), angle(n);
+        double longest = 0.0;
+        for (std::size_t k = 0; k < n; ++k) {
+            const Vec3 &d = directions[k];
+            if (!(std::isfinite(d.x) && std::isfinite(d.y) && std::isfinite(d.z))) return;
+            length[k] = norm(d);
+            if (!(length[k] >= kLow && length[k] <= kHigh)) return;
+            longest = std::max(longest, length[k]);
+        }
+        const double side = 2.0 / kSide;
+        start_.assign(kCells + 1, 0);
+        for (std::size_t cell = 0; cell < kCells; ++cell) {
+            const int face = static_cast<int>(cell / (kSide * kSide));
+            const double u0 = -1.0 + side * static_cast<double>((cell / kSide) % kSide);
+            const double v0 = -1.0 + side * static_cast<double>(cell % kSide);
+            const Vec3 c = normalized(on_face(face, u0 + 0.5 * side, v0 + 0.5 * side));
+            double rho = 0.0;
+            for (const double u : {u0, u0 + side}) {
+                for (const double v : {v0, v0 + side}) {
+                    rho = std::max(rho, angle_between(c, on_face(face, u, v)));
+                }
+            }
+            rho += kMargin;
+            double best_low = -std::numeric_limits<double>::infinity();
+            for (std::size_t k = 0; k < n; ++k) {
+                angle[k] = angle_between(c, directions[k]);
+                best_low = std::max(best_low, length[k] * std::cos(std::min(kPi, angle[k] + rho)));
+            }
+            const double bar = best_low - kMargin * longest;
+            for (std::size_t k = 0; k < n; ++k) {
+                if (length[k] * std::cos(std::max(0.0, angle[k] - rho)) >= bar) {
+                    index_.push_back(static_cast<std::uint32_t>(k));
+                }
+            }
+            if (2 * index_.size() > kCells * n) {
+                start_ = {};
+                index_ = {};
+                return;
+            }
+            start_[cell + 1] = static_cast<std::uint32_t>(index_.size());
+        }
+        index_.shrink_to_fit();
+        usable_ = true;
+    }
+
+    // The directions the table was made for.
+    const std::vector<Vec3> &directions() const { return directions_; }
+
+    // Whether the table was made (if not, every arrival is scanned in full).
+    bool usable() const { return usable_; }
+
+    // The list of cell `cell` (0 to kCells - 1) of a usable table, in [first, last).
+    void list(std::size_t cell, const std::uint32_t *&first, const std::uint32_t *&last) const {
+        first = index_.data() + start_[cell];
+        last = index_.data() + start_[cell + 1];
+    }
+
+    // Whether the table serves `arrival`, and if so its cell's list in [first, last).
+    bool candidates(const Vec3 &arrival, const std::uint32_t *&first,
+                    const std::uint32_t *&last) const {
+        if (!usable_) return false;
+        if (!(std::isfinite(arrival.x) && std::isfinite(arrival.y) && std::isfinite(arrival.z))) {
+            return false;
+        }
+        const double ax = std::abs(arrival.x), ay = std::abs(arrival.y), az = std::abs(arrival.z);
+        int face = 0;
+        double m = 0.0, u = 0.0, v = 0.0;
+        if (ax >= ay && ax >= az) {
+            face = arrival.x > 0.0 ? 0 : 1;
+            m = ax;
+            u = arrival.y;
+            v = arrival.z;
+        } else if (ay >= az) {
+            face = arrival.y > 0.0 ? 2 : 3;
+            m = ay;
+            u = arrival.x;
+            v = arrival.z;
+        } else {
+            face = arrival.z > 0.0 ? 4 : 5;
+            m = az;
+            u = arrival.x;
+            v = arrival.y;
+        }
+        if (!(m >= kLow && m <= kHigh)) return false;
+        // u / m and v / m lie in [-1, 1], so the cells counted from -1 in [0, kSide].
+        const auto at = [m](double t) {
+            return std::min(kSide - 1, static_cast<int>((t / m + 1.0) * (0.5 * kSide)));
+        };
+        list(static_cast<std::size_t>((face * kSide + at(u)) * kSide + at(v)), first, last);
+        return true;
+    }
+
+private:
+    static constexpr double kMargin = 1e-9;
+    static constexpr double kLow = 0x1p-200, kHigh = 0x1p200;
+
+    // The point (u, v) of cube face `face` (+x, -x, +y, -y, +z, -z; u and v along the
+    // other two axes in order).
+    static Vec3 on_face(int face, double u, double v) {
+        const double s = face % 2 == 0 ? 1.0 : -1.0;
+        if (face / 2 == 0) return {s, u, v};
+        if (face / 2 == 1) return {u, s, v};
+        return {u, v, s};
+    }
+
+    static double angle_between(const Vec3 &p, const Vec3 &q) {
+        return std::atan2(norm(cross(p, q)), dot(p, q));
+    }
+
+    std::vector<Vec3> directions_;
+    std::vector<std::uint32_t> start_, index_;  // cell c's list: index_[start_[c], start_[c + 1])
+    bool usable_ = false;
+};
+
+// The index of the direction of `directions` nearest to `arrival` (nearest_of_all),
+// through `table` (made for these directions, or null) where it serves the arrival.
+inline std::size_t nearest_direction(const std::vector<Vec3> &directions,
+                                     const DirectionTable *table, const Vec3 &arrival) {
+    const std::uint32_t *first = nullptr, *last = nullptr;
+    if (table != nullptr && table->candidates(arrival, first, last)) {
+        return nearest_of(directions, first, last, arrival);
+    }
+    return nearest_of_all(directions, arrival);
+}
+
+// The DirectionTables made for the tracer's calls: get gives the one kept from an earlier
+// call with directions of the same bits, else a new one. Only the last kKept made are
+// kept, so their memory stays bounded while calls that take turns with a few sets of
+// directions find theirs. Safe to use from several threads at once; a table never
+// changes once made, and a call holds on to its own until it ends.
+//
+// Making a table takes time in proportion to the number of directions (about 1.5 ms of
+// one core for 64, 90 ms for 4096), paid on every call whose directions are not kept,
+// however few rays it traces. The callers trace a run with one set of directions, so
+// they pay it once per run; calls that take turns with more than kKept sets pay it each
+// time (their results are the same either way). A table that is not usable is kept too
+// and takes a slot like any other, so that a set whose lists run over half is not made
+// again on every call.
+class DirectionTables {
+public:
+    static constexpr std::size_t kKept = 4;
+
+    // The table for `directions`; null for none or more than kMaxDirections.
+    std::shared_ptr<const DirectionTable> get(const std::vector<Vec3> &directions) {
+        if (directions.empty() || directions.size() > DirectionTable::kMaxDirections) {
+            return nullptr;
+        }
+        {
+            const std::lock_guard<std::mutex> lock(mutex_);
+            if (auto table = find(directions)) return table;
+        }
+        // Made without the lock, so that other threads' calls do not wait for it.
+        auto made = std::make_shared<const DirectionTable>(directions);
+        const std::lock_guard<std::mutex> lock(mutex_);
+        if (auto table = find(directions)) return table;
+        tables_.insert(tables_.begin(), made);
+        if (tables_.size() > kKept) tables_.pop_back();
+        return made;
+    }
+
+    // How many tables are kept.
+    std::size_t size() {
+        const std::lock_guard<std::mutex> lock(mutex_);
+        return tables_.size();
+    }
+
+private:
+    std::shared_ptr<const DirectionTable> find(const std::vector<Vec3> &directions) const {
+        for (const auto &table : tables_) {
+            const std::vector<Vec3> &own = table->directions();
+            if (own.size() == directions.size() &&
+                std::memcmp(own.data(), directions.data(), directions.size() * sizeof(Vec3)) == 0) {
+                return table;
+            }
+        }
+        return nullptr;
+    }
+
+    std::mutex mutex_;
+    std::vector<std::shared_ptr<const DirectionTable>> tables_;  // the newest first
+};
+
+// The process's DirectionTables, never destroyed, so that a thread still tracing as the
+// process exits finds them whole.
+inline DirectionTables &direction_tables() {
+    static DirectionTables *const tables = new DirectionTables;
+    return *tables;
+}
+
 struct Accumulator {
     const StochasticScene &scene;
     const StochasticSettings &settings;
@@ -778,18 +1042,11 @@ struct Accumulator {
     double *energy_sum = out.energy.data();
     double *directional_sum = out.directional.data();
     double *moment_sum = out.moments.data();
+    // Optional: the table of scene.directions that finds the nearest of them faster.
+    const DirectionTable *direction_table = nullptr;
 
     std::size_t nearest_direction(const Vec3 &arrival) const {
-        std::size_t best = 0;
-        double best_dot = -2.0;
-        for (std::size_t d = 0; d < scene.directions.size(); ++d) {
-            const double v = dot(arrival, scene.directions[d]);
-            if (v > best_dot) {
-                best_dot = v;
-                best = d;
-            }
-        }
-        return best;
+        return detail::nearest_direction(scene.directions, direction_table, arrival);
     }
 
     // Adds energy[b] * factor * air(distance) arriving from `arrival` at `distance`, from
@@ -802,7 +1059,9 @@ struct Accumulator {
         if (bin >= out.bins) return;
         const std::size_t bands = scene.bands;
         double *moments = nullptr;
-        std::array<double, 1 + kMaxGroups + kMaxGroups * (kMaxGroups + 1) / 2> terms{};
+        // Not zeroed: read only with moments, and then only its first moment_terms (1 +
+        // groups + groups (groups + 1) / 2), all of them written just below.
+        std::array<double, 1 + kMaxGroups + kMaxGroups * (kMaxGroups + 1) / 2> terms;
         if (out.moment_terms > 0) {
             const std::size_t mbin = std::min(
                 out.moment_bins - 1, static_cast<std::size_t>(time / settings.moment_time_step));
@@ -1120,11 +1379,14 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
 
     std::vector<StochasticResult> partial(threads);
     for (auto &p : partial) p = detail::zero_result(scene, settings);
+    const std::shared_ptr<const detail::DirectionTable> direction_table =
+        detail::direction_tables().get(scene.directions);
 
     parallel_for(settings.rays, threads, [&](std::size_t begin, std::size_t end,
                                              std::size_t worker) {
         StochasticResult &out = partial[worker];
         detail::Accumulator acc{scene, settings, out};
+        acc.direction_table = direction_table.get();
         acc.map_bottom = map_bottom;
         acc.map_top = map_top;
         std::array<double, kMaxBands> reflected{}, rain{}, scatter{}, counted{}, through{},
@@ -1900,8 +2162,11 @@ inline void gather_first_scattering(const StochasticScene &scene,
                       turn[3] * f.x + turn[4] * f.y + turn[5] * f.z,
                       turn[6] * f.x + turn[7] * f.y + turn[8] * f.z};
     }
+    const std::shared_ptr<const detail::DirectionTable> direction_table =
+        detail::direction_tables().get(scene.directions);
     parallel_for(n_rec, settings.threads, [&](std::size_t begin, std::size_t end, std::size_t) {
         detail::Accumulator acc{scene, settings, out};
+        acc.direction_table = direction_table.get();
         acc.energy_sum = energy;
         acc.directional_sum = directional;
         acc.moment_sum = moments;
