@@ -990,7 +990,14 @@ def _trace_part(
     t = time.perf_counter()
     say(f"{label}: early reflections at {len(grid)} points")
     candidates = _candidates(
-        model, position, sim.early.method, sim.early.max_order, sim.early.rays, threads
+        model,
+        position,
+        sim.early.method,
+        sim.early.max_order,
+        sim.early.rays,
+        threads,
+        edges,
+        sim.early.diffraction,
     )
     # Maps do not run the wave solver, so the lowest bands add in pressure up to
     # coherent_max_band_hz whatever simulation.wave says. Indoors a line's or a

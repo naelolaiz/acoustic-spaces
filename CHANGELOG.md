@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Fixed: with `second_order` diffraction, sound that just clears two edges in a row (a
+  source and a listener in sight of each other over a flat roof, a thick wall or two
+  barriers, or along a wall in line with both) was far too low, 15 to 26 dB across the
+  bands a centimetre above a 10 m roof and 6.7 dB at 63 Hz half a metre above it: the
+  path over both edges was left out there. `first_order` has no such path and stays
+  low there.
+- Fixed: with a source and a listener both exactly level with the tops of two or
+  three barriers in a row, each top's path stood for the whole direct sound, about
+  10 dB too high over two. The level is now that just above the tops, which
+  `first_order` and `direct` have far too low there (they have no path over two edges).
+- Changed: with edge diffraction, the first reflections the rays look for include the
+  faces of every diffracting edge the source stands in front of, which a ray misses
+  where the source sees a face nearly edge-on or an obstacle hides it. Levels near
+  such a face can move with every diffraction mode (by 0.2 dB at 63 Hz at one of eight
+  positions in two cities with `first_order`), and a whole city simulates up to about
+  15 % slower.
 - Added: a coverage map gives the uncertainty of its values from the materials'
   absorption uncertainty, an insertion loss and the long-term levels too:
   `coverage.spread: true`, `map --spread` or the tick box under **Uncertainty** on the

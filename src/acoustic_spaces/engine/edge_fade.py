@@ -715,11 +715,18 @@ class EdgeFade:
         """The terms at the edges of ``paths`` (the specular paths at ``listener``) and
         of the paths just missed there, up to ``max_delay_s``: for :meth:`join`. With
         ``bent``, the paths the edge diffraction finds at ``listener``, the terms leave
-        out exactly those of its paths over an edge; without, those it adds where it
-        bends an event, as it does where nothing else stops its paths."""
+        out exactly those of its paths over an edge (also those it keeps
+        :attr:`~acoustic_spaces.engine.diffraction.EdgeDiffraction.unheard`); without,
+        those it adds where it bends an event, as it does where nothing else stops its
+        paths."""
         hand_back()  # what the last listener's pieces left
         listener = np.asarray(listener, dtype=float)
-        self._bent = None if bent is None else self._bent_index(bent)
+        self._bent = None
+        if bent is not None:
+            # With the edge diffraction's paths that carry too little to be among them.
+            unheard = self.d.unheard
+            more = [unheard[1]] if unheard is not None and unheard[0] is bent else []
+            self._bent = self._bent_index(bent, *more)
         top = max([int(paths.order.max()) if len(paths) else 0, *self.candidates])
         self._top = top
         groups = []
@@ -2061,15 +2068,20 @@ class EdgeFade:
         kept = single if heard.all() else single[heard]
         return {"heard": heard, "pressure": self._pages.keep(kept) if len(kept) else kept}
 
-    def _bent_index(self, bent: EarlyReflections) -> dict:
+    def _bent_index(self, *bent: EarlyReflections) -> dict:
         """The lengths of the paths over each edge in ``bent``, their rows there and
         their points, by the edge and the planes the path reflects off."""
         index: dict[tuple, list] = {}
-        for i in np.flatnonzero(bent.edge >= 0):
-            planes = tuple(self.model.face_plane[np.asarray(bent.faces[i], dtype=np.int64)])
-            index.setdefault((int(bent.edge[i]), planes), []).append(i)
+        for part in bent:
+            for i in np.flatnonzero(part.edge >= 0):
+                planes = tuple(self.model.face_plane[np.asarray(part.faces[i], dtype=np.int64)])
+                index.setdefault((int(part.edge[i]), planes), []).append((part, i))
         return {
-            key: (bent.distance_m[rows], np.array(rows), [bent.points[i] for i in rows])
+            key: (
+                np.array([part.distance_m[i] for part, i in rows]),
+                np.array([i for _, i in rows]),
+                [part.points[i] for part, i in rows],
+            )
             for key, rows in index.items()
         }
 

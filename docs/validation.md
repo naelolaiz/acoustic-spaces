@@ -1134,6 +1134,166 @@ the source and 0.72 dB for the listener at 63 Hz with the waves added in energy,
 with them in pressure (the default in that band), and at most 0.07 dB from 1 kHz up.
 With `first_order` the level drops from the path over one corner to nothing.
 
+Just over the top, with the source and the listener both a little above its plane and
+in sight of each other, the source's wave passes both corners. Each corner's terms take
+their part off the direct sound and off its reflection off the top, and the path over
+both gives back what they take twice: at grazing incidence the direct sound, the
+reflection and the two corners' terms come to nothing, and the path over both is all
+there is, half the direct sound at high frequencies. The whole early stage
+(`early_paths`, with the paths in pressure up to 500 Hz and the air's absorption over
+the direct distance taken off) against BTM with the geometric waves, over a block 10 m
+wide with the source 10 m before it and the listener 5 m past it, and over the 1 m
+block with both 3 m off, by their heights above the plane of the top:
+
+| just over a block's top, engine - BTM (dB) | 63 | 125 | 250 | 500 |
+|---|---:|---:|---:|---:|
+| 10 m, both 1 cm above, BTM -5.2 to -5.6 dB: `second_order` | -0.02 | -0.03 | -0.04 | -0.05 |
+| `first_order` | -12.63 | -15.33 | -18.10 | -20.66 |
+| 10 m, both 0.5 m above, BTM -3.6 to -1.1 dB: `second_order` | -0.02 | +0.01 | +0.03 | +0.04 |
+| `first_order` | -6.45 | -4.57 | -2.58 | -0.90 |
+| 10 m, 0.5 and 0.05 m above, BTM -4.5 to -3.7 dB: `second_order` | -0.06 | -0.04 | -0.02 | -0.00 |
+| `first_order` | -10.33 | -9.54 | -7.59 | -5.31 |
+| 10 m, both 1 m above, BTM -2.1 to 2.5 dB: `second_order` | +0.02 | +0.04 | +0.03 | +0.01 |
+| `first_order` | -2.65 | -1.02 | +0.18 | +0.72 |
+| 10 m, both 2 m above, BTM -1.8 to 3.5 dB: `second_order` | +0.05 | +0.03 | +0.01 | +0.02 |
+| `first_order` | +0.06 | +0.65 | +0.52 | -0.08 |
+| 1 m, both 5 cm above, BTM -4.4 to -4.9 dB: `second_order` | -1.17 | -0.72 | -0.75 | -0.62 |
+| `first_order` | -9.01 | -11.05 | -12.59 | -12.59 |
+| 1 m, both 0.3 m above, BTM -3.4 to -1.9 dB: `second_order` | -0.67 | -0.13 | -0.03 | +0.10 |
+| `first_order` | -6.51 | -5.55 | -3.76 | -1.89 |
+
+With `second_order` the engine is within 0.06 dB of BTM over the 10 m top, and within
+1.2 dB over the 1 m top, whose corners are 0.18 wavelengths apart at 63 Hz. A
+centimetre above the 10 m top it is at -5.84 to -5.91 dB from 1 kHz up, 0.22 to 0.28 dB
+below BTM, where half the direct sound is -6.02 dB. `first_order` has no path over two
+edges and is low by what that path carries (see [Known issues](#known-issues)). From
+1 kHz up the scene adds the direct sound and its reflection off the top in energy,
+which BTM adds with their phases: half a metre and more above the top the two then
+differ by up to 4.5 dB in a band, with either setting. Swapping the source and the
+listener leaves every level of the table as it is. Within a millimetre of the plane,
+above it or below on either side of the 10 m block, the level is the same within
+0.11 dB in every band; with the source or the listener exactly in the plane it differs
+by up to 0.8 dB at 63 Hz and 0.29 dB at 500 Hz, and no more from 1 kHz up (at a gable
+roof's slope by 1.5 dB at 63 Hz, in a one-off check). Over the 1 m
+top it differs by up to 1.7 dB at 63 Hz and 0.8 dB from 1 kHz up between those
+positions. With a top absorbing 0.5, the level 1 mm and 1 cm above the plane of the 1 m
+top is below the rigid top's by the ground wave's loss over the top (0.9 dB at 63 Hz to
+9.3 dB at 8 kHz) within 0.5 dB, as it is just below the plane within 0.12 dB
+(`tests/test_diffraction.py`).
+
+Behind the block, with the source still above the plane of its top, the source's wave
+passes the near corner on its way to the far one, round which the listener hears it:
+the near corner's terms take their part off it, and the path over both carries that.
+Over the 10 m block, the source 10 m before it and the listener 5 m past it:
+
+| behind a 10 m block, engine - BTM (dB) | 63 | 125 | 250 | 500 |
+|---|---:|---:|---:|---:|
+| source 1 cm above, listener 0.5 m below, BTM -6.2 to -8.6 dB: `second_order` | +0.06 | +0.09 | +0.08 | +0.04 |
+| `first_order` | +5.67 | +5.81 | +5.87 | +5.88 |
+| 1 cm above, 5 m below, BTM -12.2 to -21.5 dB: `second_order` | -0.43 | +0.03 | +0.25 | +0.19 |
+| `first_order` | +5.17 | +5.75 | +6.05 | +6.03 |
+| 0.5 m above, 2 m below, BTM -8.2 to -13.5 dB: `second_order` | +0.02 | -0.01 | -0.02 | -0.03 |
+| `first_order` | +5.09 | +4.93 | +4.65 | +4.23 |
+| 2 m above, 2 m below, BTM -6.4 to -9.0 dB: `second_order` | -0.01 | -0.02 | -0.02 | -0.00 |
+| `first_order` | +3.38 | +2.55 | +1.43 | +0.10 |
+
+`first_order` has the path over the far corner as if the near one were not there, up to
+6 dB too high (see [Known issues](#known-issues)).
+
+Two thin screens in a row with their tops on one line, 10 m apart, the source 10 m
+before the first and the listener 5 m past the second: the Fresnel-Kirchhoff integral
+over both half-planes (Millington, Hewitt and Immirzi, 1962) leaves, at grazing
+incidence and high frequencies, 1/4 + atan(√(a c / (b (a + b + c)))) / (2π) of the free
+field for the distances a, b and c along the way: a third for equal ones, where one
+edge alone leaves a half and two far apart a quarter, and -9.98 dB here. A wave bent at
+the first edge and again, as a wave of its own, at the second does not hold there, as
+the second edge stands in the transition zone of the first: BTM's second order and the
+product of two UTD coefficients both leave about a quarter, -12 dB. With the source and
+the listener 1 mm above the line of the tops the engine (`second_order`, the whole
+early stage) is at -10.97 to -11.29 dB from 2 kHz up, 1.0 to 1.3 dB low; 1 mm below
+it, where the path over both is all there is, at -12.08 to -12.11 dB, 2.1 dB low (see
+[Known issues](#known-issues)). `first_order` is at -30.5 to -36.2 dB above the line
+and has nothing below it.
+With both exactly on the line no ray finds the direct sound, while the rays that look
+for the paths over the tops, which start just off the edges, find those, and each
+top's path alone would stand for all of the direct sound. The engine takes the level
+there to be the one just above the line: every top on the way takes its term off the
+direct sound, as on the lit side of its boundary, by the share its edge gives where
+the way passes near its end or beside it, and one top's path carries the direct sound.
+The level is that 1 mm above the line within 0.1 dB in every band, and within 0.15 dB
+where one of the two screens ends a centimetre beside the way, where both end 10 and
+15 cm beside it, and where the way passes through the end of a screen at 45 degrees to
+it (`tests/test_diffraction.py`; higher above the end of an oblique screen it is not,
+see [Known issues](#known-issues)). A reflection that passes level with the tops is
+taken the same way where both tops stand on one leg of it. With a wall beside two
+screens, where the reflection off the wall lies between the tops, the terms that make
+reflections fade at edges take the product of the two tops' terms for it, the level
+just below the line: the whole level is that 1 mm above the line within 0.1 dB (it was
+9.3 to 11.3 dB above that). `first_order` has no path over a top and the upright
+end of the next screen, which holds the terms of that end's faces on the line: where
+a screen ends near the way it is up to 1.2 dB below its level 1 mm above the line at
+63 Hz. With one of the two on the line and the other 0.5 m above it, the level is that
+with it 1 mm above the line, and 0.5 dB (the source) or 1.0 dB (the listener) above
+that with it 1 mm below at 63 Hz, 0.1 dB (the source) or 0.3 dB (the listener) at
+2 kHz.
+
+More edges in a row, the source 10 m before the first and the listener 5 m past the
+last, both at one height from the plane of the tops (the whole early stage with the
+paths in pressure up to 500 Hz):
+
+| edges in a row, `second_order`, level (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| two screens 10 m apart, 1 cm above | -8.89 | -9.48 | -9.86 | -9.89 | -10.28 | -10.26 | -10.27 | -10.46 |
+| in the plane | -9.34 | -9.90 | -10.32 | -10.42 | -10.87 | -10.91 | -11.00 | -11.28 |
+| 1 cm below | -9.91 | -10.58 | -11.06 | -11.41 | -12.17 | -12.25 | -12.34 | -12.46 |
+| three screens 5 m apart, 1 cm above | -9.75 | -7.96 | -8.07 | -8.00 | -7.41 | -7.45 | -7.58 | -8.08 |
+| in the plane | -9.28 | -7.48 | -7.55 | -7.47 | -6.82 | -6.87 | -7.02 | -7.57 |
+| 1 cm below | -9.91 | -10.58 | -11.06 | -11.41 | -12.17 | -12.25 | -12.34 | -12.46 |
+| one top 10 m wide, 1 cm above | -5.25 | -5.46 | -5.61 | -5.69 | -5.91 | -5.91 | -5.89 | -5.84 |
+| in the plane | -5.17 | -5.43 | -5.60 | -5.73 | -6.02 | -6.02 | -6.02 | -6.02 |
+| 1 cm below | -5.23 | -5.50 | -5.71 | -5.86 | -6.09 | -6.17 | -6.27 | -6.40 |
+| two tops 5 m wide, 5 m apart, 1 cm above | -7.05 | -6.21 | -6.31 | -6.34 | -6.25 | -6.25 | -6.26 | -6.31 |
+| in the plane | -10.94 | -12.29 | -13.19 | -13.97 | -14.38 | -14.53 | -14.78 | -15.55 |
+| 1 cm below | -5.26 | -5.52 | -5.71 | -5.85 | -6.08 | -6.16 | -6.27 | -6.39 |
+| a 10 m top with a 2 cm slot, 1 cm above | -6.35 | -6.46 | -6.32 | -6.27 | -6.66 | -6.65 | -6.61 | -6.57 |
+| in the plane | -7.76 | -9.48 | -10.54 | -11.12 | -11.75 | -11.88 | -11.96 | -12.01 |
+| 1 cm below | -5.23 | -5.50 | -5.71 | -5.86 | -6.09 | -6.17 | -6.27 | -6.40 |
+| three tops 3 m wide, 2 m apart, 1 cm above | -1.89 | -1.75 | -1.45 | -1.28 | -0.94 | -0.93 | -0.95 | -1.03 |
+| in the plane | -8.80 | -4.77 | -4.70 | -4.47 | -3.71 | -3.62 | -3.59 | -3.70 |
+| 1 cm below | -5.25 | -5.51 | -5.70 | -5.85 | -6.08 | -6.16 | -6.27 | -6.39 |
+| a top 5 m wide, then a screen, 1 cm above | -11.00 | -10.39 | -10.65 | -10.83 | -10.85 | -10.82 | -10.81 | -10.86 |
+| in the plane | -11.37 | -12.06 | -11.26 | -10.86 | -10.34 | -10.34 | -10.39 | -10.61 |
+| 1 cm below | -10.52 | -11.01 | -11.36 | -11.62 | -12.15 | -12.23 | -12.33 | -12.44 |
+| a screen, then a top 5 m wide, 1 cm above | -10.82 | -10.13 | -10.42 | -10.59 | -10.64 | -10.62 | -10.59 | -10.67 |
+| in the plane | -13.67 | -14.28 | -14.57 | -14.89 | -14.94 | -15.02 | -15.24 | -15.99 |
+| 1 cm below | -10.65 | -11.09 | -11.42 | -11.66 | -12.14 | -12.22 | -12.31 | -12.44 |
+
+Over one top the level is within 0.9 dB of half the direct sound, above its plane, in
+it and below. A path over two edges is all the engine has of more edges in a row, and
+there is no exact solution here to hold it against. Three screens leave 1.5 to 2.9 dB
+more than two from 125 Hz up, a centimetre above their tops, where a screen more
+should leave less; a slot 2 cm wide across the 10 m top, far narrower than the
+wavelengths up to 500 Hz, lowers the level by 0.6 to 1.1 dB; over three tops in a row
+the level is 3.4 to 5.0 dB above that over one. Over a top 5 m wide and then a
+screen level with it, 5 m past it, the level a centimetre above their plane is the
+same with the source and the listener swapped, within 0.15 dB
+(`tests/test_diffraction.py`), and within 0.25 dB with a top up to 8 m wide and the
+screen 2 m or more past it; closer to the top or to the plane it is not (see
+[Known issues](#known-issues)). Exactly in the plane of several flat tops the
+level is off by more: 3.9 to 9.2 dB below that a centimetre above the plane of two
+tops, 2.5 to 6.9 dB below it over three and 2.9 to 5.3 dB below it over a screen and
+then a top, where a top and then a screen is within 1.7 dB of it. It is off within
+two millionths of the model's size below the plane too (1.2 mm here), where the rays
+that look for paths over edges, which start a millionth of the model's size off the
+edges, find paths that are not there: 0.01 mm below the plane of two tops the level
+is at +3.3 to +4.1 dB, and below that of three at +9.1 to +10.0 dB. In the bands that
+add in energy the levels up to 500 Hz are those of the table within 1.7 dB, but at
+63 Hz for three screens above their tops and level with them (2.5 and 2.6 dB higher),
+exactly in the plane of a slotted top (2.1 dB lower) and of three tops (4.9 dB
+higher). `first_order`
+has no path over two edges: a centimetre above two tops it is at -0.4 to -1.5 dB, and
+above three at +4.9 to +5.8 dB (see [Known issues](#known-issues)).
+
 At the corner of a thin screen, the quarter of the plane x = 0 below y = 0 and z = 0,
 the source at (-5, -3, -1) and the listener walking from (5, 2.5, -2) to (5, 4, -2)
 1 cm at a time with `direct` and every band in pressure, the direct sound comes round
@@ -1216,7 +1376,7 @@ A model of such corners is an open item on the [roadmap](roadmap.md).
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
 sight, takes 44 ms per source and listener on four cores without diffraction (23
-paths), 525 ms with `first_order` (979 paths) and 600 ms with `second_order` (994
+paths), 525 ms with `first_order` (979 paths) and 600 ms with `second_order` (993
 paths): the median of four timings, each the mean of three runs after a first one,
 with nothing else running on the machine (10 November 2026, the middle of three such
 medians). The terms that make the other specular paths fade at the edges (next section)
@@ -1512,7 +1672,28 @@ theory gives +6.0 dB on both sides.
   for the fade's terms of paths the edge diffraction does not have, such as second-order
   reflections that an edge cuts off. Near a solid block's corners the level steps by up
   to 2.4 dB at 63 Hz and is up to 2.3 dB from BTM (see above); along the street such
-  terms step by up to 1.11 dB in one band and 0.55 dB(A) (see above). A model of those
+  terms step by up to 1.11 dB in one band and 0.55 dB(A) (see above). A path over two
+  edges stops likewise where it leaves the end of one of them, while the paths over
+  each edge alone fade out past the end: just over the tops of two barriers in a row,
+  the source and the listener both within a centimetre of the line of the tops, the
+  level steps by 3.5 dB at 63 Hz and 5.5 to 6.2 dB from 1 kHz up where the way passes
+  the end of one of the two (by 3.5 to 4.3 dB up to 1 kHz with both 0.1 m above the
+  line, and by 2.8 dB at 63 Hz and 0.5 dB or less from 1 kHz up with both 0.5 m above
+  it; a one-off check). At the end the level is, by symmetry, midway in pressure between
+  those over one barrier and over both: from 2 kHz up the engine is 4.1 dB below that
+  just outside the end and 2.0 dB above it just inside. Over the end of a barrier that
+  stands oblique to the way, the point where the path over both tops touches that top
+  moves along it with the height above the tops: with the way through the end of a
+  barrier at 40 degrees to it, 10 m behind a long one, the level is at -6.2 dB (63 Hz)
+  and -8.5 dB (8 kHz) up to 2.5 mm above the tops, as over a square end, and from 3 mm
+  up at -4.8 and -6.0 dB with the barrier turning one way and at -7.7 and -11.8 dB with
+  it turning the other (at 70 degrees from 1 mm up). The fade's terms of a
+  reflection that an edge cuts off belong to the reflections the source's rays find,
+  so those of the reflection off a second screen and back off the first are there
+  with the source on one side and not with the two swapped: level with the tops of two
+  screens 10 m apart, a centimetre beside where the first one's top drops by a metre,
+  swapping them changes the level by 0.4 to 0.6 dB with `second_order` and, with
+  `first_order`, whose level there is 17 to 39 dB down, by up to 8.2 dB. A model of those
   corners and terms is an open item on the [roadmap](roadmap.md). `tests/test_walks.py`
   holds the garden's four largest steps to 1.5 dB in a band and 0.6 dB(A).
 - **Terms that cancel, in the bands that add in energy.** Indoors paths add in energy
@@ -1533,16 +1714,16 @@ theory gives +6.0 dB on both sides.
   (x = 7.6 m, y = 5.3 to 7.8 m), where the reflection off the arch's jamb, 40 cm deep,
   appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz, between y = 5.39
   and 5.40 m (see the next item), and by at most 0.16 dB from 2 kHz up. The edge
-  diffraction's own paths, without the fade, step there by up to 0.74 dB at 63 Hz,
-  1.18 dB at 125 Hz and 1.88 dB from 250 Hz up. Averaged over the walk, in a one-off
+  diffraction's own paths, without the fade, step there by up to 0.73 dB at 63 Hz,
+  1.46 dB at 125 Hz and 1.88 dB from 250 Hz up. Averaged over the walk, in a one-off
   check, the level was 0.15 dB below that with every band in pressure
   (`coherent_max_band_hz: 8000`) at 250 Hz, 0.67 and 0.58 dB above it at 500 and
   1000 Hz and 0.11 to 0.43 dB below it from 2 kHz up. Before the paths over two edges
   along an absorbing face took the ground wave, which in pressure they had all but lost,
   it was 0.39, 1.12 and 0.73 dB above it at 250, 500 and 1000 Hz; the rest of the
   difference is not traced.
-- **Cut off by a thick end.** Behind the `archway`'s wall the level steps by 0.57 dB at
-  63 Hz and 0.28 dB at 125 Hz between y = 5.39 and 5.40 m (at 63 Hz by 0.29 dB more
+- **Cut off by a thick end.** Behind the `archway`'s wall the level steps by 0.56 dB at
+  63 Hz and 0.27 dB at 125 Hz between y = 5.39 and 5.40 m (at 63 Hz by 0.28 dB more
   to 5.41 m), and by 0.08 dB or less from 250 Hz up, as it did with every band in pressure in a one-off check. Reflections
   that the end of the arch's jamb cuts off are followed while the leg they are cut off
   on hits the end's
@@ -4584,6 +4765,114 @@ Results:
   hard ground the engine has one of the four paths over it: 1.7 to 5.7 dB low from
   500 Hz up, and off by up to 9.9 dB below (see
   [Reflections that fade at edges](#reflections-that-fade-at-edges-against-the-exact-solution)).
+  In sight just over a building's roof the path over both of its edges has no copies
+  off the ground either. In a one-off check against the package's wave solver (8
+  points per wavelength), with the source and the listener 0.3 to 1.5 m above the roof
+  of a building 4 m wide and 2 m high on a rigid ground, the early stage was within
+  0.9 dB at 125 Hz for a building 4 m long (three positions) and 1.9 dB high for one
+  40 m long (one position); at 63 Hz, where the building is also less than half a
+  wavelength high, it was 0.5 to 6.6 dB low for the short building and 6.4 dB high for
+  the long one (`first_order`: 3.8 dB low to 7.8 dB high at 63 Hz, 0.9 to 2.4 dB high
+  at 125 Hz). The difference at 63 Hz is not traced further; the wave solver
+  (`simulation.wave`) is the tool for those bands.
+- **Sound that just clears two edges in a row, without paths over two edges.** Each
+  edge the direct sound passes takes its terms off it, and with `first_order` (the
+  default) or `direct` nothing gives back what two edges in a row take twice: where
+  the source and the listener see each other just over both edges of a flat roof, a
+  thick wall or two barriers, or along a wall in line with both, the level is too low.
+  Over a top 10 m wide, the source 10 m before it and the listener 5 m past it, it is
+  12.6 to 20.7 dB low from 63 to 500 Hz a centimetre above the top's plane, 6.4 to
+  0.9 dB half a metre above it, 2.6 and 1.0 dB at 63 and 125 Hz a metre above it, and
+  within 0.7 dB two metres above it. Behind the top with the source above its plane
+  the level is too high, the path over the far corner taking nothing off for the near
+  one: by 5.7 to 5.9 dB with the source a centimetre above the plane and the listener
+  half a metre below it, 5.1 to 4.2 dB with them 0.5 m above and 2 m below, and 3.4 to
+  0.1 dB with both 2 m off it. `second_order` has the path over both and is within
+  0.09 dB in all of these (see
+  [Edge diffraction against the exact solution](#edge-diffraction-against-the-exact-solution));
+  its reflected copies, off a ground, are missing as in the item above.
+- **More than two edges in a row near grazing incidence.** A path bends over two edges
+  at most (`second_order`), so where sound just clears three edges or more in a row
+  (three barriers, two flat roofs of one height, a roof with a slot across it), what
+  their terms take off it more than twice is not given back. Just over three screens
+  5 m apart the level is 1.5 to 2.9 dB above that over two from 125 Hz up; a 2 cm slot
+  across a 10 m top lowers the level by 0.6 to 1.1 dB; over three tops in a row it is
+  3.4 to 5.0 dB above that over one. Behind three screens with the source on the line
+  of their tops and the listener 0.5 m below it, the path over the last top and the
+  paths over each of the others and the last cancel: the level is at -20.8 to -54.3 dB
+  where two screens leave -10.7 to -21.7 dB, and with the source 0.5 m above the line
+  it is 9.1 dB (63 Hz) to 1.4 dB (8 kHz) below the two screens'. Behind two flat roofs
+  5 m wide and 5 m apart, the listener 0.5 m below their plane, the level up to 500 Hz
+  is at -21.1 to -32.0 dB with the source a centimetre above the plane, at -18.4 to
+  -15.7 dB with it 0.5 m above and at -9.9 to -4.1 dB with it 2 m above, where one roof
+  15 m wide, with no gap, leaves -6.2 to -8.6, -5.6 to -6.8 and -3.7 to -2.1 dB; with
+  the source below the plane the two are the same. With `first_order`
+  the level a centimetre above two tops in a row is at -0.4 to -1.5 dB and above three
+  at +4.9 to +5.8 dB, where one top leaves -5.3 to -5.9 dB. There is no exact solution
+  for these in the report.
+- **Exactly in the plane of several tops in a row.** With the source and the listener
+  both exactly in the plane of two flat roofs of one height, or of a roof and a
+  barrier's top, the paths over one edge and over two do not add up as they do just
+  above it. The level is 3.9 to 9.2 dB below that a centimetre above the plane of two
+  tops 5 m apart, 2.5 to 6.9 dB below it over three tops, 1.4 to 5.4 dB below it with
+  a 2 cm slot across a 10 m top and 2.9 to 5.3 dB below it over a screen and then a
+  top; over a top and then a screen it is within 1.7 dB of it (in pressure up to
+  500 Hz and in the bands that add in energy). Within two millionths of the model's
+  size below that plane, the rays that look for paths over edges, which start a
+  millionth of it off the edges, find paths that the tops hide: the level is then 9.4
+  to 9.7 dB above that a centimetre below the plane of two tops, 15 dB above it for
+  three tops, and 8.9 to 9.9 dB behind a top and a screen in either order. Within that
+  distance above the plane they miss paths that are there: a millimetre above the tops
+  of three screens 5 m apart, the last of which ends a centimetre beside the way, the
+  path round that end is not found and the level at 63 Hz is 1.5 dB below that 3 mm
+  above them.
+- **Reflections level with several tops.** With the source and the listener exactly
+  level with the tops of two screens, the level is that just above the line for the
+  direct sound and for a first reflection that passes level with the tops too (see
+  [Edge diffraction against the exact solution](#edge-diffraction-against-the-exact-solution)).
+  The terms that make reflections fade at edges, which have the reflections of second
+  order and up, count each top for the whole of one that passes level with both: with
+  a wall 2 m behind the source, which sends such reflections off the first screen and
+  the wall, the level on the line is 4.6 to 5.7 dB above that 1 mm above it (11.5 to
+  13.4 dB above it before, when each top stood for all of the direct sound and of the
+  first reflection as well).
+- **A way through a corner of a flat top.** Where the straight way between the source
+  and the listener, both in the plane of a flat top, passes exactly through a corner
+  of the top (a box turned so that only its corner touches the way), no ray finds the
+  direct sound and no path over the top's edges stands for it: over the box alone
+  there is no sound at all, where a millimetre above the plane the level is at +0.6 to
+  -3.0 dB. With a screen on the way too, its paths are all there is: where a screen
+  ends on the way 7 m before the corner, the level is 8 to 28 dB below that a
+  millimetre above the plane (the screen's paths stood for the direct sound there
+  before, within 2.2 dB of it).
+- **A flat top and then a barrier level with it, the source and the listener
+  swapped.** Just above the plane of a flat top and of a barrier's top past it, the
+  level changes with the source and the listener swapped where the barrier stands
+  close to the top or the two are close to the plane: by 5.5 to 7.9 dB a centimetre
+  above the plane with the barrier a metre or less past the top, by 5.7 to 7.6 dB a
+  millimetre above it with the barrier up to 5 m past the top, and by 10.9 to 12.2 dB
+  a tenth of a metre above it with the barrier 0.1 m or less past the top (the top's
+  first corner 10 m before the barrier, the source 10 m before that corner and the
+  listener 5 m past the barrier). From 2 m past the top a centimetre above the plane,
+  and from 0.5 m past it a tenth of a metre above, the two agree within 0.4 dB.
+- **A slight bend of a barrier.** Where a barrier's top goes on in another across a
+  bend of less than a degree in plan, neither edge fades at the joint, and the point a
+  path touches can fall past the end of both (no path over the top) or on both (two
+  paths). Behind a barrier with a bend of 0.95 degrees, the source 10 m before it and
+  the listener 15 m behind it, the level on a strip beside the plane through the bend
+  is nothing at all or 6.0 dB too high, as the bend turns: the strip is 1 mm wide with
+  both 2 m below the top, and 4.6 cm wide with the listener 20 m below it. Bends of a
+  degree or more fade (see
+  [Edge diffraction against the exact solution](#edge-diffraction-against-the-exact-solution)).
+- **Two separate edges in each other's transition zones.** A path over two edges takes
+  the product of the two edges' coefficients, the second's with the curvature of the
+  first edge's wave. Where the second edge stands in the transition zone of the first
+  and no face joins them (two screens in a row, near grazing incidence over both),
+  that leaves too little at high frequencies: a quarter of the free field just below
+  the line of two tops 10 m apart, where two knife edges leave 0.317 of it, 2.1 dB low
+  from 2 kHz up, and 1.0 to 1.3 dB low just above it. As the source or the listener
+  alone crosses the line of the tops, the level steps by 0.5 and 1.0 dB at 63 Hz. The
+  corners of one block or wall, joined by a face, are not affected.
 - **A barrier's end in wind.** Behind a barrier the paths in the plane take the
   barrier's effect, and the paths over the top past its end, as they fade out there,
   take it too; the direct sound and the paths round the end take the open ground's, in
@@ -4663,6 +4952,14 @@ Results:
   indoors from 250 Hz up by default; in pressure, as the 63 and 125 Hz bands and
   outdoors every band do by default, the level is within 0.08 dB. Keeping the cross
   term, weighted by how coherent the terms are over the band, would remove it.
+  Likewise where the source or the listener crosses the plane of a top that the other
+  sees from above: the path over both of its edges continues the path over one below
+  the plane and gives back what both edges take above it, and its pieces add up
+  differently in energy on the two sides. Half a metre above a 10 m top the level
+  steps by up to 1.1 dB as the other of the two crosses the top's plane (by 1.5 dB at
+  a gable roof's slope in a one-off check), and by 0.01 dB in pressure. Over a top
+  1 m wide absorbing 0.5, the level 0.3 m above its plane was 0.56 dB above the rigid
+  top's at 4 kHz (a one-off check).
 
 Models:
 
