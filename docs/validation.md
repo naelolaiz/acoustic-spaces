@@ -5262,7 +5262,46 @@ Results:
   at 4 and 8 kHz). With `simulation.early.open_ground_frequencies: rays` the rays give
   1 and 2 kHz too short of half the way to the shadow, and those step at the same
   caustics by 10.5 and 12.0 dB in the wind and by 14.0 and 7.2 dB on the clear night (a
-  one-off check).
+  one-off check). In one-off checks against `validation/ffp.py`'s fast field program
+  on twelve walks over the open ground (a ground of 200 kPa s/m² by Delany and
+  Bazley's model with a scattering coefficient of 0, image sources to the first order,
+  no diffraction; in `windy` 20 to 400 m from the source, downwind from a source 1 m
+  up to listeners 1.5 and 3 m up, from one 3.5 m up to 1.5 and 3 m, from one 7 m up to
+  1.5 and 7 m and from one 2.5 m up to 2.5 m, 60° off downwind from a source 2 m up to
+  listeners 1.5 m up, and downwind over a ground of 20000 kPa s/m² from a source 1 m
+  up to listeners 1.5 m up; in `clear_night` listeners 0.2 to 6 m up 150 and 300 m from
+  a source 1.5 m up and 200 m from one 0.8 m up), the level steps on eleven of them
+  where paths appear: between listeners a centimetre apart, placed where the level
+  changes most between listeners a metre apart (all the way up on the clear night),
+  the largest change on each is 7.2 to 15.5 dB at 4 kHz, where the program's level
+  changes by 0.04 dB at most (6.5 to 15.1 dB at 8 kHz). On ten of them two paths
+  appear there together; on the walk from 1 m up to 3 m up the engine finds one of the
+  two from 200.99 m and the other from 208.40 m, where the level steps again, by 2.5
+  and 3.1 dB at 4 and 8 kHz. At listeners a metre apart (a centimetre apart in height
+  on the clear night) the 4 kHz band of the eleven is rms 0.9 to 2.1 dB from the
+  program and at its worst 4.0 to 15.2 dB above it, within a metre of such a step on
+  the side of the paths it adds. On the twelfth (the source 7 m and the listeners
+  1.5 m up), where the 4 kHz band changes by 0.49 dB at most between listeners a
+  centimetre apart all along the walk, it is rms 0.14 dB from the program and at its
+  worst 0.54 dB below it. On a thirteenth with `rays` (a source 3.5 m and listeners
+  1.5 m up in `windy`, 15 to 400 m downwind), the 1 and 2 kHz bands are rms 1.0 and
+  1.1 dB from the program at listeners a metre apart and step by 8.2 and 9.1 dB.
+- **A wall's reflection in wind and temperature gradients.** There the paths off a
+  façade or a barrier's face are eigenrays in every band, where the open ground's own
+  sound is the parabolic equation's up to 2 kHz by default: such a reflection steps at
+  its rays' caustics in every band, and up to 2 kHz its ground effect is the rays'. In
+  one-off checks in `clear_night` with the default early settings, a source 1 m and
+  listeners 1.5 m up over a ground of 200 kPa s/m² by Delany and Bazley's model, 5 m
+  beside a rigid wall 40 m high along their way (from 40 m behind the source to 340 m
+  ahead of it; scattering coefficients of 0), against `validation/ffp.py`'s fast field
+  program, its direct sound and that of the source's image in the wall added in
+  pressure (an endless wall): from 50 to 150 m, at listeners a metre apart, the 63 and
+  125 Hz bands are rms 0.60 and 0.45 dB from it and the 500 Hz band rms 4.75 dB,
+  10.4 dB above it at 150 m; at the caustic of the wall's rays 166.6 m away every band
+  steps within a centimetre, by 6.1 dB at 2 kHz to 19.4 dB at 500 Hz; and from 168 to
+  300 m the 500 Hz band is 12.5 dB above the program on average. Without the wall the
+  same listeners, 50 to 300 m away, are within rms 0.20 dB of the program's direct
+  sound in every band up to 2 kHz.
 - **What the equation's field through the crossovers does not mend.** Between its
   samples (59 Hz apart in the 2 kHz band) the field is drawn linearly in the complex
   pressure, within h^2 / 8 times the sum of |a_i| (2 pi dtau_i)^2 for arrivals a_i

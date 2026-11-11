@@ -365,6 +365,10 @@
   listeners and coverage map points with such paths, what the band filters read up to
   500 Hz moves with them: the strength by up to 0.05 dB, and C50 and C80 by up to 11
   and 13 dB where they are 65 to 90 dB.
+- Known issues, measured: the steps at caustics in wind and temperature gradients
+  against a fast field program on thirteen walks (up to 15.5 dB within a centimetre at
+  4 kHz), and a wall's reflection there, whose paths are eigenrays in every band (see
+  [Known issues](docs/validation.md#known-issues)).
 
 ## 4.2.1
 
