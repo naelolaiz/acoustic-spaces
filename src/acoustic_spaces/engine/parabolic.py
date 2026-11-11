@@ -36,10 +36,10 @@ top, each height step the share of its cell above it, so that the field changes 
 with the top's height (a zero-field, or Kirchhoff, screen: Salomons 1994, J. Acoust. Soc.
 Am. 95, 3109). A building's front face does the same at its roof's height; over the roof
 the field marches on the heights from the roof up, over a rigid floor there, and behind
-its back face the field below the roof starts from nothing. Such a screen lets through
-less than a rigid one does (0.7 to 7.4 dB less 2 to 90 m behind it, up to 11 dB 3 to
-10 m behind it steeply below its top), by an amount that hangs on the geometry and hardly
-on the weather.
+its back face the field below the roof starts from nothing; a source over a roof starts
+with its image in it. Such a screen lets through less than a rigid one does (0.7 to
+7.4 dB less 2 to 90 m behind it, up to 11 dB 3 to 10 m behind it steeply below its top),
+by an amount that hangs on the geometry and hardly on the weather.
 
 The frequencies of one band are marched together, on the grid and in the steps of the
 highest, under the absorbing layer of the lowest.
@@ -429,10 +429,15 @@ class _Steps:
             self.here = _Ground(value, self.ka, self.kz, self.z, self.width)
         return self.here
 
-    def start(self) -> np.ndarray:
-        """(F, n) the starting field, at the source."""
+    def start(self, roof: float = 0.0) -> np.ndarray:
+        """(F, n) the starting field, at the source: with its image in the ground, or
+        over a rigid roof ``roof`` m up (above 0) in the roof."""
         ka, z, zs = self.ka, self.z, self.zs
         here = self.ground(0.0)
+        if roof > 0.0:
+            return np.sqrt(1j * ka)[:, None] * (
+                _starter(ka[:, None] * (z - zs)) + _starter(ka[:, None] * (z - (2.0 * roof - zs)))
+            )
         return np.sqrt(1j * ka)[:, None] * (
             _starter(ka[:, None] * (z - zs))
             + here.normal[:, None] * _starter(ka[:, None] * (z + zs))
@@ -632,6 +637,11 @@ class _Steps:
         events.sort(key=lambda e: e[0])
         roofs_over: list[float] = []  # the roofs the march is over (m)
         self.roof = 0.0
+        # A source over a roof starts with its image in it, which the trunk (started over
+        # the ground) does not hold.
+        under = max((e[2] for e in events if e[1] == "roof" and e[0] <= 1e-9), default=0.0)
+        if under > 0.0:
+            trunk = None
         # Of the runs before it, a run keeps the full steps' tables alone.
         for other in [dr for dr in self.steps if dr != step]:
             del self.steps[other]
@@ -667,7 +677,7 @@ class _Steps:
                 psi, r = trunk._psi.copy(), trunk._range
         if psi is None:
             self.here = None
-            psi = self.start()
+            psi = self.start(under)
         side = None  # a point's own last step
         last = None  # the range of the last point, while the march stays where it was
         for index in order:

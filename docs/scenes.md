@@ -339,9 +339,9 @@ bounds and the errors over edges, and `parameters.json` holds them all (`uncerta
 warning when a material gives an uncertainty of its own; so does the editor, in its
 messages. The editor shows each run's results at once, draws the spread
 after them and gives it in the results table's tips. The draws add to a run: in the
-concert hall example (five built-in materials, six responses) 400 draws took 160 s after
-an 11 s run, over half of it the lowest bands' paths added in pressure for each draw;
-`presets: none` leaves the built-in materials out.
+concert hall example (five built-in materials, six responses) 400 draws take 70 to 75 s
+after a 15 s run on four cores, about half of it the lowest bands' paths added in
+pressure for each draw; `presets: none` leaves the built-in materials out.
 
 `simulation.uncertainty.draws` is the number of draws: 400 unless the scene says
 otherwise, 0 for no spread (`--spread-draws` on the command line, **Draws** in the

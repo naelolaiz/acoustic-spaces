@@ -23,7 +23,7 @@ def _largest_steps(walk: dict) -> np.ndarray:
 
 def test_the_archway_walk() -> None:
     """Behind the archway's wall, the whole walk (x = 7.6 m, y = 5.30 to 7.80 m): at most
-    0.57 and 0.28 dB at 63 and 125 Hz, where a thick end cuts reflections off (a known
+    0.56 and 0.27 dB at 63 and 125 Hz, where a thick end cuts reflections off (a known
     issue), 0.08 dB from 250 Hz to 2 kHz, and 0.16 dB above, where the level swings
     smoothly over a few centimetres."""
     steps = _largest_steps(walks.archway(True))

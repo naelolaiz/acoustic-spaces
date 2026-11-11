@@ -515,11 +515,11 @@ class Eddies:
 
         height = max(math.sqrt(max(zs, 0.0) * max(zr, 0.0)), 0.1)
         fall = float(profile.c[0] - profile.speed(np.array([height]))[0])
-        if fall <= 0.0 or start <= 0.0:
+        if fall <= 0.0:
             return np.zeros(len(centres))
         spread = self.speed_spread * math.sqrt(float(self.strength(height)))
         share = SHAKEN_SHARE * (spread / fall) ** 2
-        radius = equivalent_radius(start, max(zs, 0.0), max(zr, 0.0))
+        radius = equivalent_radius(start, max(zs, 0.0), max(zr, 0.0), profile)
         k = 2.0 * math.pi * centres / float(profile.c[0])
         scale = (radius / (2.0 * k**2)) ** (1.0 / 3.0)
         return share / (1.0 + (scale / (SHAKEN_HEIGHT * height)) ** SHAKEN_POWER)

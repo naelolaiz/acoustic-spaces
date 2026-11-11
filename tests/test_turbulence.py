@@ -369,6 +369,152 @@ def test_scattering_into_a_shadow_grows_with_the_eddies() -> None:
     assert weak._single(Profile(z, 340.0 + 0.1 * z), 2.0, 1.5, 300.0, centres).sum() == 0.0
 
 
+def near_still(turbulence=None, wind: float | None = 0.05, **simulation) -> Scene:
+    """A source 5 m up over grass that scatters nothing (set here), a listener 1.5 m up
+    100 m away, in ``wind`` m/s along the way (None: still air, image sources), where
+    0.05 m/s runs the parabolic equation in every band to 2 kHz while it hardly bends
+    the sound; with eddies of the ``turbulence`` preset."""
+    data = field(listeners=((100.0, 0.0, 1.5),), **simulation).model_dump(exclude_none=True)
+    data["materials"]["lawn"]["scattering"] = 0.0
+    data["sources"][0]["position"] = [0.0, 0.0, 5.0]
+    atmosphere = {} if wind is None else {"wind": {"speed_m_s": wind, "direction_deg": 0.0}}
+    if turbulence is not None:
+        atmosphere["turbulence"] = turbulence
+    if atmosphere:
+        data["atmosphere"] = atmosphere
+    return Scene.model_validate(data)
+
+
+def test_the_equation_s_bands_take_the_eddies_frequency_by_frequency() -> None:
+    """In 0.05 m/s of wind with strong eddies the parabolic equation's 500 Hz to 2 kHz
+    bands come as close to still air's image sources with the same eddies (the paths
+    exact, the eddies' coherence taken at each frequency) as they do without eddies,
+    within 0.01 dB (0.003 dB measured, at 1 kHz). A band's mean coherence put 2 kHz
+    0.41 dB off them where without eddies it is 0.12 dB off (a source 5 m and a listener
+    1.5 m up over grass with a scattering coefficient of 0, 100 m apart)."""
+    levels = {}
+    for wind in (None, 0.05):
+        for turbulence in (None, "strong"):
+            response = simulate(Room.from_scene(near_still(turbulence, wind)), threads=1)
+            levels[wind, turbulence] = 10.0 * np.log10(total_energy(response["s", "l0"].early))
+    own = np.abs(levels[0.05, None] - levels[None, None])[3:6]
+    blurred = np.abs(levels[0.05, "strong"] - levels[None, "strong"])[3:6]
+    assert np.all(blurred <= own + 0.01), (blurred, own)
+
+
+@pytest.mark.parametrize(
+    "bands, choice, mapped, equation",
+    [
+        ("octave", 24, False, "narrow_angle"),
+        ("octave", 8, False, "narrow_angle"),
+        ("third_octave", 24, False, "narrow_angle"),
+        ("octave", 24, True, "narrow_angle"),
+        ("octave", 24, False, "wide_angle"),
+    ],
+)
+def test_the_blur_takes_each_frequency_the_equation_ran_at(
+    monkeypatch, bands, choice, mapped, equation
+) -> None:
+    """With eddies, each of the parabolic equation's bands is the eddies' model taken at
+    each frequency its run took, E(f) = C(f) E_pe(f) + (1 - C(f)) E_rays averaged over
+    them (C(f) the rays' pairs' coherence weighted by sqrt(E_i E_j)), to 1e-9: in octave
+    bands with 24 and 8 an octave, in third-octave bands, in a coverage map and with the
+    wide-angle equation."""
+    from acoustic_spaces.engine import refracted
+    from acoustic_spaces.materials.bands import band_limits, resolution_of
+
+    found, runs = [], []
+    place, blurred = refracted.Refraction._place, refracted.Refraction._blurred
+
+    def keep_place(self, wave, pressure, energy, parts, listeners, run=None, *rest):
+        runs.append(run)
+        return place(self, wave, pressure, energy, parts, listeners, run, *rest)
+
+    def keep_blurred(self, energy, rays, bands, *rest):
+        out = blurred(self, energy, rays, bands, *rest)
+        found.append((self, energy.copy(), rays[np.arange(len(rays))], bands, out, runs[-1]))
+        return out
+
+    monkeypatch.setattr(refracted.Refraction, "_place", keep_place)
+    monkeypatch.setattr(refracted.Refraction, "_blurred", keep_blurred)
+    early = {"method": "image_sources", "max_order": 1, "diffraction": "none"}
+    scene = near_still(
+        "strong",
+        bands=bands,
+        early={**early, "open_ground_frequencies": choice, "parabolic_equation": equation},
+    )
+    if mapped:
+        settings = Coverage(spacing=50.0, rays=100, height=1.5)
+        coverage_map(Room.from_scene(scene), settings=settings, threads=1)
+    else:
+        simulate(Room.from_scene(scene), threads=1)
+    assert found
+    checked = 0
+    for refraction, energy, rays, given, out, run in found:
+        low, high = band_limits(resolution_of(len(energy)))
+        wander = refraction.eddies.wander(rays)
+        off = ~np.eye(len(rays), dtype=bool)
+        for band in np.flatnonzero(given):
+            f = np.concatenate([at for at, _ in run[band]])
+            p = np.concatenate([values for _, values in run[band]])
+            own = (f >= low[band]) & (f <= high[band])
+            f, power = f[own], np.abs(p[own]) ** 2
+            weights = np.sqrt(np.outer(rays.energy[:, band], rays.energy[:, band]))[off]
+            coherence = weights @ wander.coherence(f)[off] / weights.sum()
+            expected = np.mean(
+                coherence * energy[band] * power / power.mean()
+                + (1.0 - coherence) * rays.energy[:, band].sum()
+            )
+            assert out[band] == pytest.approx(expected, rel=1e-9), band
+            checked += 1
+    assert checked >= len(found) * 6
+
+
+def test_a_family_of_one_ray_keeps_the_equation_s_bands(monkeypatch) -> None:
+    """A family cut to one ray has no pair to blur: with eddies the parabolic equation's
+    bands are those without them, bit for bit."""
+    from acoustic_spaces.engine import refracted
+
+    plain = simulate(Room.from_scene(near_still()), threads=1)["s", "l0"].early
+    coherence = refracted.Refraction._coherence_of
+    monkeypatch.setattr(
+        refracted.Refraction, "_coherence_of", lambda self, rays: coherence(self, rays[[0]])
+    )
+    alone = simulate(Room.from_scene(near_still("strong")), threads=1)["s", "l0"].early
+    carrier = int(np.argmax(plain.energy[:, 0]))
+    np.testing.assert_array_equal(alone.energy[carrier, :6], plain.energy[carrier, :6])
+
+
+def test_with_eddies_a_band_rendered_from_the_equation_s_samples_keeps_its_energy() -> None:
+    """With eddies the carrier keeps the equation's field at every frequency it ran at
+    and its band energy is the blurred one: each of the equation's bands rendered alone
+    holds the same share of its energy as without eddies (to 1e-9 dB), 100 m downwind
+    in the windy preset over grass that scatters nothing (set here)."""
+    from acoustic_spaces.engine import coherent
+
+    data = field(listeners=((100.0, 0.0, 1.5),)).model_dump(exclude_none=True)
+    data["materials"]["lawn"]["scattering"] = 0.0
+    shares, energies = [], []
+    for turbulence in (None, "strong"):
+        data["atmosphere"] = {"preset": "windy"}
+        if turbulence:
+            data["atmosphere"]["turbulence"] = turbulence
+        early = simulate(Room.from_scene(Scene.model_validate(data)), threads=1)["s", "l0"].early
+        carrier = int(np.flatnonzero(np.isfinite(early.fine.real).any(axis=(1, 2)))[0])
+        share = []
+        for band in range(6):
+            energy = np.zeros_like(early.energy)
+            energy[carrier, band] = early.energy[carrier, band]
+            alone = dataclasses.replace(early, energy=energy, wander=None)
+            signal = coherent.signal(alone, 1 << 14, 16000.0)[:, 0]
+            share.append(np.sum(signal**2) / energy[carrier, band])
+        shares.append(10.0 * np.log10(share))
+        energies.append(early.energy[carrier, :6])
+    # The eddies move the band energies, and the rendered bands with them.
+    assert np.abs(10.0 * np.log10(energies[1] / energies[0])).max() > 1.0
+    np.testing.assert_allclose(shares[1], shares[0], atol=1e-9)
+
+
 def test_coverage_maps_take_the_eddies() -> None:
     settings = Coverage(spacing=10.0, rays=200, height=1.5)
     maps = [

@@ -1,4 +1,5 @@
 import dataclasses
+import functools
 import itertools
 import math
 from pathlib import Path
@@ -7,6 +8,7 @@ import numpy as np
 import pytest
 
 from acoustic_spaces import Room, Scene, _native, simulate, synthesis
+from acoustic_spaces.engine import wave as wave_stage
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.impedance import (
     Admittance,
@@ -27,6 +29,8 @@ from acoustic_spaces.engine.wave import (
     WAVE_BANDS_HZ,
     WaveResponse,
     _first_order,
+    _off_the_source,
+    _open_sides,
     _probe_points,
     _spans_across,
     absorption_of_impedance,
@@ -233,7 +237,8 @@ def test_source_is_flat_to_the_top_of_the_highest_band(stencil: int) -> None:
     top up to it, within 0.05 dB (0.023 dB at most). The 19-point grid's time step is 1.5
     times the 7-point one's for the same cell, so the band's top lies 1.5 times higher in
     its sample rate, and the low-pass's cutoff with it; with the 7-point stencil's cutoff
-    it fell 0.6 to 1.6 dB by the top."""
+    it fell 0.6 to 1.6 dB by the top. (The 19-point grid's signal as its grid sends it
+    out: with the grid's own gain on a point source's sound, which the signal undoes.)"""
     courant = _courant(stencil)
     for total in (8, 24):
         per_octave = total // 8
@@ -243,6 +248,8 @@ def test_source_is_flat_to_the_top_of_the_highest_band(stencil: int) -> None:
             n_fft = 1 << 18
             f = np.fft.rfftfreq(n_fft, 1.0 / grid.rate)
             spectrum = np.abs(np.fft.rfft(signal, n_fft))
+            if stencil == 19:
+                spectrum *= 9.0 / (5.0 + 4.0 * np.cos(2.0 * np.pi * f / grid.rate))
             top = band_top(band, total)
             level = 20 * np.log10(spectrum[(f >= top / 2) & (f <= top)] / spectrum[f >= top / 2][0])
             assert np.abs(level).max() < 0.05, (total, band)
@@ -276,7 +283,8 @@ def test_isotropic_stencil_disperses_less() -> None:
     # The axial modes of a 6 m tube (rigid, 10 cm cells) at 12, 8 and 5 cells per
     # wavelength: each stencil's frequencies fall short of the tube's as much as
     # slow_by says its waves along an axis are slow, and the 19-point stencil's by less
-    # than half as much as the 7-point one's.
+    # than half as much as the 7-point one's. (The source 0.17 m from the tube's end, off
+    # the node that the mode of 5 cells per wavelength has 0.125 m from it.)
     size, h = (6.0, 0.3, 0.2), 0.1
     spacing = C / (2 * size[0])  # between the tube's modes
     error = {}
@@ -284,7 +292,7 @@ def test_isotropic_stencil_disperses_less() -> None:
         solver, rate = _solver(
             size,
             lambda m: np.zeros(len(m.faces)),
-            (0.13, 0.12, 0.07),
+            (0.17, 0.12, 0.07),
             (5.84, 0.17, 0.12),
             stencil=stencil,
         )
@@ -515,9 +523,419 @@ def test_free_field_level_matches_the_rays() -> None:
         energy = response.energy()
         t = np.arange(energy.shape[1]) * response.time_step
         direct = energy[:, t < (d + 6.5) / C].sum(axis=1) * 4 * math.pi * d * d
-        # The wave solver: -0.24, -0.15 and -0.01 dB at 1, 2 and 4 m.
-        assert 10 * math.log10(direct[0]) == pytest.approx(0.0, abs=0.3)
+        # The wave solver: -0.39, -0.05 and -0.01 dB at 1, 2 and 4 m, which are 2.5, 4.9
+        # and 9.9 cells from the source. Within three cells of it a listener reads two
+        # cells a side, and the level changes with the source's place in its cell and
+        # the direction: -0.59 to +0.61 dB two cells away and -0.13 to +0.31 dB three
+        # cells away (the table of places in docs/validation.md, Free field).
+        assert 10 * math.log10(direct[0]) == pytest.approx(0.0, abs=0.5 if d < 2 else 0.1)
         assert 10 * math.log10(direct[1]) == pytest.approx(0.0, abs=0.1)  # rays
+
+
+def _readings(solver, cell: float) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Of a solver laid out by :func:`_solver`: the centres (n, 3) and the weights (n,)
+    of the cells each probe reads, then of the cells the source feeds."""
+    layout = solver.layout()
+    nx, ny, _ = (int(n) for n in layout["shape"])
+    origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+
+    def centres(cells) -> np.ndarray:
+        cells = np.asarray(cells, dtype=np.int64)
+        index = np.column_stack([cells % nx, cells // nx % ny, cells // (nx * ny)])
+        return origin + (index + 0.5) * cell
+
+    start = np.asarray(layout["probe_start"], dtype=np.int64)
+    cells = np.asarray(layout["probe_cells"])
+    weights = np.asarray(layout["probe_weights"], dtype=float)
+    out = [(centres(cells[a:b]), weights[a:b]) for a, b in itertools.pairwise(start)]
+    fed = np.flatnonzero(np.asarray(layout["source"]))
+    source = np.asarray(layout["source"], dtype=float)[fed]
+    return [*out, (centres(np.asarray(layout["special"])[fed]), source)]
+
+
+def _polynomial(degree: int | tuple[int, int, int], seed: int = 3):
+    """A polynomial of ``degree`` along each of x, y and z (or of one degree for each),
+    of points (n, 3)."""
+    degrees = (degree,) * 3 if isinstance(degree, int) else degree
+    c = np.random.default_rng(seed).normal(size=tuple(d + 1 for d in degrees))
+    return lambda p: np.polynomial.polynomial.polyval3d(p[..., 0], p[..., 1], p[..., 2], c)
+
+
+@STENCILS
+def test_a_point_between_cells_takes_a_cubic_through_four_cells_a_side(stencil: int) -> None:
+    # The source and a probe 15 cells from it, neither on a cell's centre: 4 x 4 x 4
+    # cells each, whose weights give any cubic's value at the point from its values at
+    # the cells' centres (and sum to one). A probe 1.7 cells from the source: the 8 cells
+    # round it, weighted trilinearly.
+    source = np.array([1.03, 1.52, 1.47])
+    far, near = np.array([2.51, 1.38, 1.61]), np.array([1.20, 1.50, 1.45])
+    solver, _ = _solver((4.0, 3.0, 3.0), lambda mesh: [0.0] * 12, source, [far, near])
+    cubic, line = _polynomial(3), _polynomial(1)
+    (far_at, far_w), (near_at, near_w), (source_at, source_w) = _readings(solver, 0.1)
+    assert len(far_w) == 64 and far_w.sum() == pytest.approx(1.0, abs=1e-12)
+    assert far_w @ cubic(far_at) == pytest.approx(cubic(far), rel=1e-10)
+    assert np.abs(far_at - far).max() < 0.2 + 1e-9
+    assert len(source_w) == 64 and source_w.sum() == pytest.approx(1.0, abs=1e-6)
+    assert source_w @ cubic(source_at) == pytest.approx(cubic(source), rel=1e-5)  # float32
+    assert len(near_w) == 8 and near_w.min() > 0.0 and near_w.sum() == pytest.approx(1.0)
+    assert near_w @ line(near_at) == pytest.approx(line(near), rel=1e-10)
+    assert not np.isclose(near_w @ cubic(near_at), cubic(near), rtol=1e-6)
+
+
+def test_a_reading_keeps_to_its_side_of_a_surface() -> None:
+    # A screen across the box at x = 2 m (y 0.5 to 2.5, floor to 2 m) and another 0.25 m
+    # behind it. The four cells a side round a probe 1.2 cells from the box's wall, or
+    # 0.7 cells in front of the first screen, hold a layer behind that surface: without
+    # it, the two cells round the probe along x, weighted linearly, and four by four
+    # along y and z, weighted by the cubic. A probe 0.4 cells in front of the screen,
+    # the next centre across it: the one layer on its side. One in the slot between the
+    # screens, 2.5 cells wide: the two cells round it. One by the screen's upper edge,
+    # which sees some of the cells across it: the cells round it that it sees, weighted
+    # trilinearly. No reading reaches past the two cells either side of its probe.
+    box = box_mesh((4.0, 3.0, 3.0))
+    screens = [[[x, 0.5, 0.0], [x, 2.5, 0.0], [x, 2.5, 2.0], [x, 0.5, 2.0]] for x in (2.0, 2.25)]
+    n = len(box.vertices)
+    plates = [[k, k + 1, k + 2] for k in (n, n + 4)] + [[k, k + 2, k + 3] for k in (n, n + 4)]
+    mesh = dataclasses.replace(
+        box,
+        vertices=np.vstack([box.vertices, *screens]),
+        faces=np.vstack([box.faces, plates]),
+        face_labels=np.append(box.face_labels, [0, 0, 0, 0]),
+    )
+    probes = np.array(
+        [
+            [0.12, 1.52, 1.47],
+            [1.93, 1.38, 1.01],
+            [1.96, 1.38, 1.01],
+            [2.13, 1.55, 0.93],
+            [1.96, 1.38, 1.97],
+        ]
+    )
+    wall, front, close, slot, edge = probes
+    solver, _ = _solver(
+        (4.0, 3.0, 3.0), lambda mesh: [0.0] * len(mesh.faces), (1.0, 1.5, 1.5), probes, mesh=mesh
+    )
+    across, along = _polynomial((1, 3, 3)), _polynomial((0, 3, 3))
+    readings = _readings(solver, 0.1)[:-1]
+    for probe, (at, weights) in zip(probes, readings, strict=True):
+        assert weights.sum() == pytest.approx(1.0, abs=1e-12)
+        assert np.abs(at - probe).max() < 0.2 + 1e-9
+    (wall_at, wall_w), (front_at, front_w), (close_at, close_w), (slot_at, slot_w), _ = readings
+    for probe, at, weights, low, high in (
+        (wall, wall_at, wall_w, 0.0, 0.2),
+        (front, front_at, front_w, 1.8, 2.0),
+        (slot, slot_at, slot_w, 2.0, 2.2),
+    ):
+        assert len(weights) == 32 and len(np.unique(np.round(at[:, 0], 6))) == 2
+        assert low < at[:, 0].min() < probe[0] < at[:, 0].max() < high
+        assert weights @ across(at) == pytest.approx(across(probe), rel=1e-10)
+    assert len(close_w) == 16 and np.ptp(close_at[:, 0]) < 1e-9 and 1.9 < close_at[0, 0] < 2.0
+    assert close_w @ along(close_at) == pytest.approx(along(close), rel=1e-10)
+    edge_at, edge_w = readings[4]
+    assert 4 < len(edge_w) < 8 and edge_w.min() > 0.0
+    assert np.abs(edge_at - edge).max() < 0.1 and np.any(edge_at[:, 0] > 2.0)
+
+
+def test_the_source_next_to_a_wall_keeps_its_cells_in_the_room() -> None:
+    # The source 0.3 cells from the wall x = 0, nearer it than the first centres of cells
+    # in the room: that layer of cells alone along x, four by four along y and z, whose
+    # weights give a cubic's value at the source's place in that layer (as a listener
+    # there takes them). 1.2 cells from the wall: the first two layers, weighted linearly
+    # along x.
+    for x, cells, polynomial in (
+        (0.03, 16, _polynomial((0, 3, 3))),
+        (0.12, 32, _polynomial((1, 3, 3))),
+    ):
+        source = np.array([x, 1.52, 1.47])
+        solver, _ = _solver((4.0, 3.0, 3.0), lambda mesh: [0.0] * 12, source, [[2.0, 1.5, 1.5]])
+        _, (at, weights) = _readings(solver, 0.1)
+        assert len(weights) == cells and weights.sum() == pytest.approx(1.0, abs=1e-6)
+        assert 0.0 < at[:, 0].min() < 0.1
+        assert at[:, 0].max() == pytest.approx(at[:, 0].min() + (0.0 if cells == 16 else 0.1))
+        assert weights @ polynomial(at) == pytest.approx(polynomial(source), rel=1e-5)  # float32
+
+
+@STENCILS
+def test_a_wall_behind_a_listener_does_not_turn_its_reading_to_the_source(stencil: int) -> None:
+    # A listener 0.6 cells in front of a wall along the grid, and the source 2.99 and
+    # 3.01 cells from it, on the other side: from three cells on the listener takes the
+    # cubic along the wall and the two cells round it across the wall, none nearer the
+    # source than the cells round the listener. The direct sound and the wall's, in the
+    # octaves up to 8 and 16 cells per wavelength, change by under 0.2 dB between the two
+    # (0.09 to 0.11 dB; with four cells pushed to the listener's side of the wall, which
+    # reach to within a cell of the source, 0.24 and 0.36 dB in the lower octave).
+    cell, size = 0.1, (4.0, 4.0, 4.0)
+    origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+    listener = origin + (np.array([20.37, 20.16, 21.29]) + 0.5) * cell
+    wall_y = origin[1] + (20.16 - 0.61 + 0.5) * cell
+    box = box_mesh(size)
+    far = 10.0
+    wall = [[-far, wall_y, -far], [far, wall_y, -far], [far, wall_y, far], [-far, wall_y, far]]
+    n = len(box.vertices)
+    mesh = dataclasses.replace(
+        box,
+        vertices=np.vstack([box.vertices, wall]),
+        faces=np.vstack([box.faces, [[n, n + 1, n + 2], [n, n + 2, n + 3]]]),
+        face_labels=np.append(box.face_labels, [0, 0]),
+    )
+    levels = []
+    for away in (2.99, 3.01):
+        source = listener + cell * np.array([0.05, away, -0.04])
+        solver, rate = _solver(
+            size,
+            lambda mesh: [0.0] * len(mesh.faces),
+            source,
+            [listener],
+            mesh=mesh,
+            stencil=stencil,
+        )
+        (at, weights), _ = _readings(solver, cell)
+        assert np.abs(at - listener).max() < (1.0 if away < 3.0 else 2.0) * cell + 1e-9
+        assert np.all(at[:, 1] > wall_y) and len(weights) == (8 if away < 3.0 else 32)
+        signal, delay = source_signal(rate, cell, _courant(stencil))
+        steps = 2 * delay + round(0.006 * rate)  # before the box's walls' sound
+        heard = solver.run(_drive(rate, cell, steps, stencil))[0]
+        f = np.fft.rfftfreq(1 << 12, 1.0 / rate)
+        spectrum = np.abs(np.fft.rfft(heard, 1 << 12)) ** 2
+        levels.append(
+            [10 * np.log10(spectrum[(f >= low) & (f <= 2 * low)].sum()) for low in (215.0, 107.5)]
+        )
+    assert np.abs(np.diff(levels, axis=0)).max() < 0.2
+
+
+@STENCILS
+def test_a_reading_next_to_a_slanted_surface_does_not_jump_along_it(stencil: int) -> None:
+    # A wall at 45 degrees to the grid across the box, and listeners along it 0.3 cells
+    # from it, 0.05 cells apart. Of the four cells a side round each, every layer across
+    # the wall holds cells on the listener's side too: each reads the cells round it that
+    # it sees, weighted trilinearly (three of their four columns, or one), none across
+    # the wall. The direct sound's level in the octave up to 8 cells per wavelength
+    # changes by 0.24 dB at most from one listener to the next, as it does with every
+    # point read trilinearly.
+    cell, size = 0.1, (4.0, 4.0, 2.4)
+    across, along = np.array([1.0, 1.0, 0.0]) / math.sqrt(2.0), np.array([-1.0, 1.0, 0.0])
+    along /= math.sqrt(2.0)
+    on_wall, far = np.array([1.5, 2.0, 1.2]), np.array([0.0, 0.0, 10.0])
+    box = box_mesh(size)
+    wall = [on_wall + a * 10.0 * along + b * far for a, b in ((1, -1), (-1, -1), (-1, 1), (1, 1))]
+    n = len(box.vertices)
+    mesh = dataclasses.replace(
+        box,
+        vertices=np.vstack([box.vertices, wall]),
+        faces=np.vstack([box.faces, [[n, n + 1, n + 2], [n, n + 2, n + 3]]]),
+        face_labels=np.append(box.face_labels, [0, 0]),
+    )
+    source = on_wall + cell * (2.3 * across + 0.37 * along + [0.0, 0.0, 0.21])
+    probes = np.array(
+        [
+            on_wall + cell * (0.3 * across + k * along + [0.0, 0.0, 0.13])
+            for k in np.arange(4.0, 10.0, 0.05)
+        ]
+    )
+    solver, rate = _solver(
+        size, lambda mesh: [0.0] * len(mesh.faces), source, probes, mesh=mesh, stencil=stencil
+    )
+    for probe, (at, weights) in zip(probes, _readings(solver, cell)[:-1], strict=True):
+        assert np.all((at - on_wall) @ across > 0.0) and len(weights) <= 8
+        assert np.abs(at[:, :2] - probe[:2]).max() < cell and weights.sum() == pytest.approx(1.0)
+    signal, delay = source_signal(rate, cell, _courant(stencil))
+    farthest = np.linalg.norm(probes - source, axis=1).max()
+    steps = 2 * delay + round((farthest / C + 0.006) * rate)  # before the box's walls' sound
+    heard = solver.run(_drive(rate, cell, steps, stencil))
+    n_fft = 1 << 12
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+    energy = np.sum(
+        np.abs(np.fft.rfft(heard, n_fft, axis=1)[:, (f >= 215.0) & (f <= 430.0)]) ** 2, 1
+    )
+    assert np.abs(np.diff(10 * np.log10(energy))).max() < 0.4
+
+
+@STENCILS
+def test_the_level_does_not_change_with_the_place_within_a_cell(stencil: int) -> None:
+    # The source and a listener 13 cells from it, moved together across a cell: the
+    # direct sound's energy from 215 to 430 Hz (16 down to 8 cells per wavelength) stays
+    # within 0.06 dB of what it is with both on cells' centres (0.03 to 0.04 dB under
+    # it; read from the eight cells round each point, 0.67 to 0.81 dB under it).
+    cell, size = 0.1, (6.0, 5.0, 5.0)
+    origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+    source = origin + (np.array([22, 25, 25]) + 0.5) * cell
+    listener = source + cell * np.array([12.0, 4.0, 3.0])
+
+    def level(shift) -> float:
+        solver, rate = _solver(
+            size,
+            lambda mesh: [0.0] * 12,
+            source + cell * np.array(shift),
+            [listener + cell * np.array(shift)],
+            stencil=stencil,
+        )
+        _, delay = source_signal(rate, cell, _courant(stencil))
+        arrival = delay + round(1.3 * rate / C)
+        count, taper = round(0.006 * rate), round(0.002 * rate)
+        heard = solver.run(_drive(rate, cell, arrival + count, stencil))[0]
+        heard[-taper:] *= 0.5 * (1.0 + np.cos(np.linspace(0.0, np.pi, taper)))
+        n_fft = 1 << 12
+        f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+        return float(np.sum(np.abs(np.fft.rfft(heard, n_fft)[(f >= 215.0) & (f <= 430.0)]) ** 2))
+
+    centred = level((0.0, 0.0, 0.0))
+    for shift in ((0.5, 0.5, 0.5), (0.5, 0.0, 0.0), (0.3, 0.7, 0.45)):
+        assert 10 * math.log10(level(shift) / centred) == pytest.approx(0.0, abs=0.06), shift
+
+
+def test_the_19_point_grids_source_undoes_the_grids_own_gain() -> None:
+    # The 19-point grid's signal is the one without them (level=False) through three
+    # taps, a step later; with a slower speed of sound at the source, the side taps over
+    # its square. The 7-point grid's has none either way.
+    rate, cell = 2000.0, 0.2
+    plain, delay = source_signal(rate, cell, ISOTROPIC_COURANT, level=False)
+    signal, later = source_signal(rate, cell, ISOTROPIC_COURANT)
+    assert later == delay + 1
+    assert signal == pytest.approx(np.convolve(plain, [2 / 9, 5 / 9, 2 / 9]), abs=1e-12)
+    slow, _ = source_signal(rate, cell, ISOTROPIC_COURANT, 0.9)
+    side = 2 / (9 * 0.9**2)
+    assert slow == pytest.approx(np.convolve(plain, [side, 1 - 2 * side, side]), abs=1e-12)
+    # (Two calls, so within 1e-12 and not to the bit: np.convolve's sums are BLAS dot
+    # products, which Accelerate on an Intel Mac rounds by where their vectors lie in
+    # memory. Taps here would show as two samples more, or as 0.2 in the samples.)
+    seven, start = source_signal(rate, cell)
+    for other, at in (
+        source_signal(rate, cell, COURANT, 0.9),
+        source_signal(rate, cell, level=False),
+    ):
+        assert at == start and other == pytest.approx(seven, abs=1e-12)
+
+
+@pytest.mark.parametrize("ratio", [1.0, 0.8])
+def test_the_19_point_grid_gives_a_point_sources_level(ratio: float) -> None:
+    # The direct sound 12 cells from the source along the cube's diagonal, in the octave
+    # up to 8 cells per wavelength, against the exact field of a point source, the
+    # signal without its taps delayed and over the distance: within 0.05 dB (-0.02 dB),
+    # also where the speed of sound is 0.8 times the grid's everywhere and the taps
+    # follow it. Without the taps the grid's own gain shows: 0.5 dB over it.
+    cell, r = 0.1, 1.2
+    source = np.array([1.83, 1.86, 1.81])
+    probe = source + r / math.sqrt(3.0)
+    n_fft = 1 << 13
+
+    def level(taps: bool) -> float:
+        solver, rate = _solver(
+            (4.4, 4.4, 4.4),
+            lambda mesh: [0.0] * 12,
+            source,
+            [probe],
+            stencil=19,
+            speed=None if ratio == 1.0 else lambda centres: np.full(len(centres), ratio),
+        )
+        plain, start = source_signal(rate, cell, ISOTROPIC_COURANT, level=False)
+        f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+        band = (f >= 215.0 * ratio) & (f <= 430.0 * ratio)
+        signal, delay = source_signal(rate, cell, ISOTROPIC_COURANT, ratio, level=taps)
+        steps = delay + round((r / (C * ratio) + 0.005) * rate)  # the walls' sound is later
+        drive = np.zeros(steps, np.float32)
+        drive[: len(signal)] = signal[:steps]
+        heard = solver.run(drive)[0]
+        late = np.exp(-2j * np.pi * f * (r / (C * ratio) + (delay - start) / rate))
+        exact = np.fft.irfft(np.fft.rfft(plain, n_fft) * late, n_fft)[:steps]
+        exact /= r * 4.0 * math.pi * ISOTROPIC_COURANT**2 / cell
+        window = np.ones(steps)
+        taper = round(0.002 * rate)
+        window[-taper:] = 0.5 * (1.0 + np.cos(np.linspace(0.0, np.pi, taper)))
+        energy = [np.sum(np.abs(np.fft.rfft(x * window, n_fft)[band]) ** 2) for x in (heard, exact)]
+        return 10 * math.log10(energy[0] / energy[1])
+
+    assert level(True) == pytest.approx(0.0, abs=0.05)
+    assert level(False) == pytest.approx(0.5, abs=0.05)
+
+
+def test_points_among_the_sources_cells_are_left_out_of_a_gradient() -> None:
+    # By the listener's place in cells from the source, the points round it that do not
+    # count (1 to 6: a cell along +x, -x, +y, -y, +z, -z; 7 to 12: two cells): on the
+    # 19-point grid those nearer the source than 1.5 cells and nearer it than the
+    # listener; on the 7-point grid none.
+    cell, source = 0.4, np.array([5.0, 4.0, 3.0])
+
+    def left_out(offset, missing=(), stencil=19) -> list[int]:
+        probes = _probe_points(source + cell * np.array(offset, dtype=float), cell)
+        found = np.ones(13, dtype=bool)
+        found[list(missing)] = False
+        kept = _off_the_source(found, probes, source, cell, stencil)
+        return [k for k, ok in enumerate(kept) if not ok]
+
+    assert left_out((3.0, 0.0, 0.0)) == [8]
+    assert left_out((2.0, 0.0, 0.0)) == [2, 8]
+    assert left_out((1.5, 0.0, 0.0)) == [2, 8]
+    assert left_out((1.2, 1.2, 0.0)) == [2, 4, 8, 10]
+    assert left_out((2.0, 0.8, 0.5)) == [2, 8]
+    assert left_out((0.0, -2.5, 0.0)) == [9]  # the point 1.5 cells from the source stays
+    assert left_out((0.0, 0.0, 3.4)) == [12]
+    assert left_out((0.0, 0.0, 3.5)) == []
+    # A listener among the source's cells itself keeps the points that lie no nearer the
+    # source than it does: 1.49 cells away the two towards the source go, as from 1.5
+    # cells on; (0.9, 0.3, 0.1) loses the one 0.33 cells from the source and keeps those
+    # 1.14 to 1.45 cells from it (itself 0.95); (0.95, 0.9, 0), 1.31 cells away, loses
+    # those 0.90 and 0.96 cells from the source and keeps the two 1.38 and 1.45 cells
+    # from it; within half a cell of the source along every axis, every point lies
+    # further from it than the listener, or as far.
+    assert left_out((1.49, 0.0, 0.0)) == [2, 8]
+    assert left_out((0.9, 0.3, 0.1)) == [2]
+    assert left_out((0.95, 0.9, 0.0)) == [2, 4]
+    assert left_out((0.4, 0.3, 0.2)) == []
+    assert left_out((0.5, 0.0, 0.0)) == []
+    assert left_out((2.0, 0.0, 0.0), stencil=7) == []
+    assert left_out((0.9, 0.3, 0.1), stencil=7) == []
+    # A wall behind the listener, which hides the points away from the source: the axis
+    # keeps the points towards it, or it would have none.
+    assert left_out((2.0, 0.0, 0.0), missing=(1, 7)) == [1, 7]
+    assert left_out((2.0, 0.8, 0.5), missing=(1, 7)) == [1, 7]
+    assert left_out((0.9, 0.3, 0.1), missing=(1, 7)) == [1, 7]
+    assert left_out((0.0, -2.5, 0.0), missing=(4, 10)) == [4, 9, 10]
+
+
+def test_a_listener_next_to_the_source_leaves_the_sources_cells_out_of_its_gradient(
+    monkeypatch,
+) -> None:
+    # Listeners off the grid's axes, 2.2, 0.95 and 0.58 cells from the source. On the
+    # 19-point grid the first goes without the two points towards the source along x
+    # (1.4 and 0.9 cells from it), the second without the one a cell towards it (0.33
+    # cells from it), and the third, nearer the source than any of its points, keeps
+    # them all; on the 7-point grid all three keep theirs. The gradient's main axis lies
+    # within 8 degrees of the line to the source (0.8, 0.6 and 2.8 degrees on the
+    # 19-point grid, 5.3, 3.6 and 6.1 on the 7-point one), and its part in step with the
+    # pressure points to the source.
+    room = _free_room((1.0,))
+    cell = band_grid(0, FS, room.speed_of_sound(), 8.0, 8, ISOTROPIC_COURANT).cell
+    source = np.array(room.scene.sources[0].position, dtype=float)
+    offsets = np.array([[2.0, 0.8, 0.5], [0.9, 0.3, 0.1], [0.45, 0.3, 0.2]])
+    used = []
+    real = wave_stage._first_order
+
+    def spy(probes, found, *args):
+        used.append([k for k, ok in enumerate(found) if not ok])
+        return real(probes, found, *args)
+
+    monkeypatch.setattr(wave_stage, "_first_order", spy)
+    for scheme, without in (("isotropic", [[2, 8], [2], []]), ("standard", [[], [], []])):
+        used.clear()
+        responses, _ = wave_responses(
+            TraceModel.from_room(room),
+            source,
+            source + cell * offsets,
+            ["far", "near", "nearest"],
+            max_band_hz=63,
+            length_s=0.05,
+            sample_rate=FS,
+            speed_of_sound=room.speed_of_sound(),
+            scheme=scheme,
+        )
+        assert used == without, scheme
+        for response, offset in zip(responses, offsets, strict=True):
+            line = offset / np.linalg.norm(offset)
+            gradient = response.signals[:, 1:]
+            main = np.linalg.eigh(gradient.T @ gradient)[1][:, -1]
+            angle = math.degrees(math.acos(min(1.0, abs(float(main @ line)))))
+            assert angle < 8.0, (scheme, offset)
+            assert (response.signals[:, :1] * gradient).sum(axis=0) @ line < 0.0
 
 
 def test_a_long_run_records_its_tenths_as_one_run_does(monkeypatch) -> None:
@@ -686,34 +1104,50 @@ def test_velocity_falls_back_to_the_points_it_has() -> None:
     either side, the second-order one over one cell where a point two cells away is not
     found, and the one-sided difference to the listener where a point one cell away is
     not; a point not found never counts (its row is noise here). With no gain divided out
-    (cutoff 0), X is c times the trapezoidal rule's integral of that difference, exactly."""
+    (cutoff 0), X is c times the trapezoidal rule's integral of that difference, exactly;
+    and Y and Z likewise, from their own points."""
     t = np.arange(400.0)
     shift = 1.0 / COURANT
-    p = np.zeros((13, len(t)))
-    for k, cells in ((0, 0), (1, 1), (2, -1), (7, 2), (8, -2)):
-        p[k] = np.exp(-(((t - 200.0 - cells * shift) / 16.0) ** 2))
-    fourth = (8 * (p[1] - p[2]) - (p[7] - p[8])) / 12
-    second = 0.5 * (p[1] - p[2])
+    wave_at = {
+        cells: np.exp(-(((t - 200.0 - cells * shift) / 16.0) ** 2)) for cells in range(-2, 3)
+    }
+    fourth = (8 * (wave_at[1] - wave_at[-1]) - (wave_at[2] - wave_at[-2])) / 12
+    second = 0.5 * (wave_at[1] - wave_at[-1])
+    ahead, behind = wave_at[1] - wave_at[0], wave_at[0] - wave_at[-1]
+    # By the points missing, as they are numbered along x: 1 and 2 a cell either side,
+    # 7 and 8 two cells either side.
     cases = {
         (): fourth,
         (7,): second,
         (8,): second,
         (7, 8): second,
-        (1,): p[0] - p[2],
-        (1, 7): p[0] - p[2],
-        (2,): p[1] - p[0],
-        (2, 8): p[1] - p[0],
+        (1,): behind,
+        (1, 7): behind,
+        (1, 8): behind,
+        (1, 7, 8): behind,
+        (2,): ahead,
+        (2, 8): ahead,
+        (2, 7): ahead,
+        (2, 7, 8): ahead,
         (1, 2): np.zeros(len(t)),
+        (1, 2, 7, 8): np.zeros(len(t)),
     }
     noise = np.random.default_rng(2).standard_normal(len(t))
-    for missing, difference in cases.items():
-        probes, found = p.copy(), [True] * 13
-        for k in missing:
-            probes[k], found[k] = noise, False
-        field = _first_order(probes, found, "l", cutoff=0.0)
-        expected = COURANT * (np.cumsum(difference) - 0.5 * difference)
-        np.testing.assert_allclose(field[:, 1], expected, rtol=0, atol=1e-12, err_msg=str(missing))
-        assert not np.any(field[:, 2:])
+    for axis in range(3):
+        p = np.zeros((13, len(t)))
+        p[0] = wave_at[0]
+        for k, cells in ((1, 1), (2, -1), (7, 2), (8, -2)):
+            p[k + 2 * axis] = wave_at[cells]
+        for missing, difference in cases.items():
+            probes, found = p.copy(), [True] * 13
+            for k in missing:
+                probes[k + 2 * axis], found[k + 2 * axis] = noise, False
+            field = _first_order(probes, found, "l", cutoff=0.0)
+            expected = COURANT * (np.cumsum(difference) - 0.5 * difference)
+            np.testing.assert_allclose(
+                field[:, 1 + axis], expected, rtol=0, atol=1e-12, err_msg=f"{axis} {missing}"
+            )
+            assert not np.any(np.delete(field[:, 1:], axis, axis=1))
 
 
 def test_first_order_field_points_to_the_source() -> None:
@@ -1218,6 +1652,271 @@ def test_fitted_admittances_absorb_as_their_materials(total: int, bands: int) ->
     np.testing.assert_allclose(fit_admittance([0.99] * bands, total, rate).achieved, MAX_ABSORPTION)
 
 
+def _same_bits(a, b) -> bool:
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    return a.shape == b.shape and a.tobytes() == b.tobytes()
+
+
+#: Fits (absorption, bands in all, time steps a second) for the tests of the fit's own
+#: forward differences.
+_FITS = [
+    # The bands' own quality factors are enough.
+    ([0.02, 0.02, 0.02, 0.03, 0.03, 0.04, 0.05, 0.05], 8, None),
+    # The quality factors are freed (a carpet's octaves, and as third octaves).
+    ([0.07, 0.07, 0.31, 0.49, 0.81, 0.66, 0.54, 0.48], 8, None),
+    (np.repeat([0.07, 0.07, 0.31, 0.49, 0.81, 0.66, 0.54, 0.48], 3).tolist(), 24, None),
+    # At a time step, as the wave solver fits its lowest bands.
+    ([0.07, 0.07, 0.31, 0.49], 8, 5512.5),
+    ([0.1, 0.1, 0.1, 0.4, 0.4, 0.4, 0.2, 0.2, 0.2], 24, 3472.0),
+]
+
+
+def _differing(a: np.ndarray, b: np.ndarray) -> int:
+    """How many of the values of ``a`` and ``b`` (real or complex, of one shape) are
+    not the same bits."""
+    a, b = (np.ascontiguousarray(v).view(np.uint64) for v in (a, b))
+    return int(np.count_nonzero(a != b))
+
+
+def _least_squares_differences(misses, x: np.ndarray, free: bool) -> np.ndarray:
+    """The forward differences of a fit's ``misses`` at ``x`` by the function
+    ``least_squares`` takes its own with for ``jac="2-point"``, between the fit's
+    bounds."""
+    from scipy.optimize._numdiff import approx_derivative
+
+    bounds = (misses.lower[: len(x)], misses.upper[: len(x)])
+    at = misses(x, free)
+    return approx_derivative(misses, x, method="2-point", f0=at, bounds=bounds, args=(free,))
+
+
+def _where_they_part(misses, x: np.ndarray, free: bool) -> str:
+    """Where the fit's differences at ``x`` leave those of one unknown moved at a time:
+    for each unknown, the first of the fit's stages whose values are not the same
+    bits."""
+    from acoustic_spaces.engine.impedance import random_incidence_absorption
+
+    moved, y = misses.moved(x, free)
+    absorption = misses.absorption(y)
+    bands = misses.absorbed(absorption)
+    notes = []
+    for k in range(len(x) + 1):
+        point = x.copy()
+        if k < len(x):
+            point[k] = moved[k]
+        alone = misses.admittance(point, free)
+        absorbed = random_incidence_absorption(alone)
+        stages = (
+            ("the admittance", y[k], alone),
+            ("the absorption of the same admittance", misses.absorption(alone[None])[0], absorbed),
+            ("the absorption", absorption[k], absorbed),
+            (
+                "the bands of a row in its place",
+                misses.weights @ absorption[k],
+                misses.weights @ absorption[k].copy(),
+            ),
+            ("the bands", bands[k], misses.weights @ absorbed),
+        )
+        for name, ours, plain in stages:
+            if count := _differing(ours, plain):
+                which = "none" if k == len(x) else f"{k} of {len(x)}"
+                notes.append(f"unknown {which}: {name}, {count} of {ours.size} values")
+                break
+    if notes:
+        return "; ".join(notes[:6]) + (f"; and {len(notes) - 6} more" if len(notes) > 6 else "")
+    return "the admittances and the bands are the same: the differences taken from them differ"
+
+
+@pytest.mark.parametrize(("absorption", "total", "rate"), _FITS)
+def test_the_fits_differences_are_those_least_squares_takes_itself(
+    monkeypatch, absorption, total: int, rate
+) -> None:
+    """At every step of a fit, the forward differences the fit takes a branch at a time
+    are, bit for bit and in the same layout in memory, those scipy's own function for
+    them takes of the fit's misses, which works the misses out again for each unknown
+    moved alone."""
+    from acoustic_spaces.engine import impedance
+
+    asked = []
+    slopes = impedance._Misses.slopes
+
+    def recorded(self, x, free):
+        out = slopes(self, x, free)
+        asked.append((self, x.copy(), free, out.copy(order="K")))
+        return out
+
+    monkeypatch.setattr(impedance._Misses, "slopes", recorded)
+    impedance._fit.cache_clear()
+    fit_admittance(absorption, total, rate)
+    impedance._fit.cache_clear()
+    assert asked
+    for step, (misses, x, free, found) in enumerate(asked):
+        plain = _least_squares_differences(misses, x, free)
+        # The layout too: the order least_squares' linear algebra adds in depends on it.
+        assert (found.shape, found.strides) == (plain.shape, plain.strides)
+        if count := _differing(found, plain):
+            pytest.fail(
+                f"step {step} of {len(asked)} (quality factors free: {free}), "
+                f"{count} of {found.size} differences: " + _where_they_part(misses, x, free)
+            )
+
+
+def _placed(values: np.ndarray, offset: int) -> np.ndarray:
+    """A copy of ``values`` (float64) whose data begin ``offset`` bytes past a multiple
+    of 64."""
+    values = np.asarray(values, dtype=float)
+    raw = np.empty(values.size + 16)
+    first = ((-raw.ctypes.data) % 64 + offset) // 8
+    out = raw[first : first + values.size].reshape(values.shape)
+    out[...] = values
+    assert out.ctypes.data % 64 == offset
+    return out
+
+
+def _products(jac: np.ndarray, f: np.ndarray, step: np.ndarray, at: int) -> dict:
+    """Products ``least_squares`` takes at every step, of the differences (laid as the
+    fit lays them, ``jac.T``), the misses ``f`` and a ``step``, each with one array
+    ``at`` bytes past a multiple of 64."""
+    rows, unknowns = jac.T.shape
+    misses = _placed(f, at)
+    return {
+        f"f.dot(f) of {rows} misses": np.dot(misses, misses),
+        f"J.T.dot(f) of {rows} misses and {unknowns} unknowns": _placed(jac, at).dot(f),
+        f"J.dot(step) of {rows} misses and {unknowns} unknowns": _placed(jac, at).T.dot(step),
+        f"J.dot(step), the step of {unknowns} unknowns": jac.T.dot(_placed(step, at)),
+    }
+
+
+@functools.cache
+def _rounded_by_place() -> str | None:
+    """A product ``least_squares`` takes at every step that this computer's linear
+    algebra rounds by where its numbers lie in memory, among the places a new array
+    gets (every 16 bytes), at the sizes of the fits of ``_FITS``; None where it rounds
+    none so. Where it does, a fit by ``least_squares`` depends on what was made in
+    memory before it, with the fit's differences or with its own: on an Intel Mac,
+    Apple's Accelerate adds the products of a vector with itself in another order
+    where the vector begins 16 bytes past a multiple of 32, and three of the five fits
+    of ``_FITS`` by ``least_squares``' own differences changed with a few small arrays
+    kept in memory beside them."""
+    rng = np.random.default_rng(3)
+    for unknowns, rows in ((11, 8), (21, 18), (27, 24), (53, 50), (7, 4), (13, 10), (12, 9)):
+        for _ in range(16):
+            jac = rng.normal(size=(unknowns, rows))
+            f, step = rng.normal(size=rows), rng.normal(size=unknowns)
+            found: dict[str, dict[bytes, list[int]]] = {}
+            for at in (0, 16, 32, 48):
+                for name, product in _products(jac, f, step, at).items():
+                    groups = found.setdefault(name, {})
+                    groups.setdefault(np.asarray(product).tobytes(), []).append(at)
+            for name, groups in found.items():
+                if len(groups) > 1:
+                    return f"{name}, by the bytes past a multiple of 64: {sorted(groups.values())}"
+    return None
+
+
+def _both_fits(monkeypatch, absorption, total: int, rate):
+    """The fit of ``absorption`` with the forward differences it takes itself, and with
+    those ``least_squares`` takes for ``jac="2-point"``."""
+    import scipy.optimize
+
+    from acoustic_spaces.engine import impedance
+
+    real = scipy.optimize.least_squares
+
+    def with_its_own_differences(fun, x0, jac=None, **options):
+        assert callable(jac)
+        return real(fun, x0, **options)
+
+    impedance._fit.cache_clear()
+    fit = fit_admittance(absorption, total, rate)
+    impedance._fit.cache_clear()
+    with monkeypatch.context() as patch:
+        patch.setattr(scipy.optimize, "least_squares", with_its_own_differences)
+        plain = fit_admittance(absorption, total, rate)
+    impedance._fit.cache_clear()
+    assert len(fit.conductance) > 0
+    return fit, plain
+
+
+@pytest.mark.parametrize(("absorption", "total", "rate"), _FITS)
+def test_the_fit_is_the_one_least_squares_own_differences_give(
+    monkeypatch, absorption, total: int, rate
+) -> None:
+    """The fit takes the forward differences of its misses itself, a branch at a time.
+    They are the ones scipy's ``least_squares`` takes with ``jac="2-point"``, and the fit
+    is the same down to the last bit. Not compared where the computer's linear algebra
+    rounds by where an array lies in memory (:func:`_rounded_by_place`): there
+    ``least_squares`` gives no one fit to compare with."""
+    if (rounded := _rounded_by_place()) is not None:
+        pytest.skip(
+            "a fit by least_squares changes with what else is in memory on this computer, "
+            f"whose linear algebra rounds {rounded}"
+        )
+    fit, plain = _both_fits(monkeypatch, absorption, total, rate)
+    for name in ("beta", "conductance", "quality", "frequency_hz", "achieved"):
+        assert _same_bits(getattr(fit, name), getattr(plain, name)), name
+
+
+@pytest.mark.parametrize(("absorption", "total", "rate"), _FITS)
+def test_the_fit_absorbs_what_least_squares_own_differences_give(
+    monkeypatch, absorption, total: int, rate
+) -> None:
+    """On any computer, also one where the test above has no one fit to compare with:
+    the fit absorbs in each band what the fit by ``least_squares``' own differences
+    does, to 0.001. A fit ends where a step changes its cost by less than a part in
+    10^8, so a product rounded another way in its last bit moves where it ends: by up
+    to 0.00002 of absorption in 2,000 of these fits with each miss and difference
+    moved up or down by its last bit or left, and by 0.0000002 between the two fits of
+    the carpet's third octaves on an Intel Mac. The fits miss their goals by up to
+    0.015."""
+    fit, plain = _both_fits(monkeypatch, absorption, total, rate)
+    np.testing.assert_allclose(fit.achieved, plain.achieved, rtol=0.0, atol=1e-3)
+
+
+def test_the_fits_steps_are_those_of_least_squares_between_bounds() -> None:
+    """Each unknown's step for the forward differences: scipy's, also where an unknown
+    lies at or next to a bound and the step turns back."""
+    from scipy.optimize import least_squares
+
+    from acoustic_spaces.engine.impedance import _forward_steps
+
+    lower = np.array([0.0, 0.0, 0.0, 0.0, -0.7, -0.7, -0.7, -1e-9])
+    upper = np.array([np.inf, np.inf, np.inf, np.inf, 2.3, 2.3, 2.3, 1e-9])
+    x = np.array([1e-4, 3.0, 0.02, 250.0, 2.3 - 1e-9, 0.3, -0.7 + 1e-12, 0.0])
+    asked = []
+
+    def record(values):
+        asked.append(np.array(values))
+        return values - 1.0
+
+    least_squares(record, x, jac="2-point", bounds=(lower, upper), max_nfev=1)
+    # The point (which least_squares takes a little inside its bounds), then one unknown
+    # moved at a time.
+    point = asked[0]
+    np.testing.assert_allclose(point, x, rtol=0.0, atol=1e-9)
+    moved = np.array([asked[1 + k][k] for k in range(len(x))])
+    assert _same_bits(moved, point + _forward_steps(point, lower, upper))
+    assert np.all(moved != point) and np.all((moved >= lower) & (moved <= upper))
+    # Next to the upper bound the step goes down; with no room either way, to the
+    # farther bound.
+    assert moved[4] < point[4] and moved[7] == upper[7]
+
+
+def test_a_sum_with_one_row_changed_is_the_sum_of_the_changed_array() -> None:
+    from acoustic_spaces.engine.impedance import _sums_with_one_changed
+
+    rng = np.random.default_rng(5)
+    for n, m in ((1, 7), (2, 5), (10, 245), (26, 373)):
+        rows = rng.normal(size=(n, m)) * 10.0 ** rng.uniform(-8, 8, (n, m)) + 1j * rng.normal(
+            size=(n, m)
+        )
+        changed = rows * (1.0 + 1e-8 * rng.normal(size=(n, m)))
+        sums = _sums_with_one_changed(rows, changed)
+        for k in range(n):
+            other = rows.copy()
+            other[k] = changed[k]
+            assert sums[k].tobytes() == other.sum(axis=0).tobytes()
+
+
 def _discrete_reflection(
     f: np.ndarray, rate: float, y: np.ndarray, courant: float = COURANT
 ) -> np.ndarray:
@@ -1546,6 +2245,144 @@ def test_the_room_for_the_layer_keeps_the_grid_on_the_model(tmp_path: Path, monk
     assert origin[0] == pytest.approx(-4.0 - h * margin[0])
 
 
+def _hall(path: Path) -> str:
+    """A model file of a hall 40 x 20 x 4 m of single faces, open at its end x = 40 m:
+    floor, roof, both long walls and the wall at x = 0."""
+    path.write_text(
+        "v 0 0 0\nv 40 0 0\nv 40 20 0\nv 0 20 0\nv 0 0 4\nv 40 0 4\nv 40 20 4\nv 0 20 4\n"
+        "f 1 2 3 4\nf 5 6 7 8\nf 1 2 6 5\nf 4 3 7 8\nf 1 4 8 5\n"
+    )
+    return str(path)
+
+
+def test_the_layer_gets_no_room_where_the_models_surfaces_close_the_side(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # In a hall open at one end, the source and a listener 33 m apart inside it: the
+    # floor and the roof lie between them and the layer under and over the hall, so the
+    # grid stays on the model there (5 m of room each way otherwise: 1.5 times the
+    # cells). With the listener 4 m outside the open end, the air round it reaches the
+    # layer both ways, and the grid leaves the room under and over the two.
+    obj = _hall(tmp_path / "hall.obj")
+    margin = 2.0 + LAYER_CELLS + np.array([0.0137, 0.0219, 0.0291])
+    origin, h, shape = _laid_grid(monkeypatch, {"file": obj}, [3.0, 7.0, 1.5], [36.0, 9.0, 1.2])
+    assert origin == pytest.approx(-h * margin)
+    assert shape[2] == math.ceil((4.0 - origin[2]) / h) + 2 + LAYER_CELLS
+    origin, h, shape = _laid_grid(monkeypatch, {"file": obj}, [3.0, 7.0, 1.5], [44.0, 9.0, 1.2])
+    room = LAYER_ROOM * math.hypot(41.0, 2.0)
+    assert origin[2] + h * margin[2] <= 1.2 - room + 1e-9
+    assert origin[2] + h * (shape[2] - 2 - LAYER_CELLS) >= 1.5 + room
+
+
+def test_open_sides_floods_the_air_of_every_point() -> None:
+    # The grid round the hall of :func:`_hall`, as wave_responses lays it before any
+    # room. From points inside, the air reaches no layer under or over the hall within
+    # the box the room spans (along x and y that box ends inside the hall, where the air
+    # reaches its edge).
+    # A point outside the hall's closed end, whose air the source's flood does not reach
+    # within the box, is flooded on its own, and reaches the layer under, over and
+    # behind it. A point in no air (in a closed box smaller than a cell, standing in the
+    # hall) is passed over: the sides are those without it.
+    # Under a canopy 26 m over the hall the grid reaches far above the box: its top ends
+    # short of the layer and counts as open (its room lies inside the grid), though the
+    # roof keeps the air from it.
+    hall = np.array(list(itertools.product((0.0, 40.0), (0.0, 20.0), (0.0, 4.0))))
+    quads = [(0, 2, 6, 4), (1, 3, 7, 5), (0, 4, 5, 1), (2, 6, 7, 3), (0, 1, 3, 2)]
+    walls = np.array([[a, b, c] for q in quads for a, b, c in (q[:3], (q[0], q[2], q[3]))])
+    h = 0.4
+
+    def sides(points, more_vertices=None, more_faces=None) -> np.ndarray:
+        corners, faces = hall, walls
+        if more_vertices is not None:
+            corners = np.vstack([hall, more_vertices])
+            faces = np.vstack([walls, np.asarray(more_faces) + len(hall)])
+        bvh = _native.Bvh(corners, faces)
+        points = np.array(points, dtype=float)
+        low = np.minimum(corners.min(axis=0), points.min(axis=0) - 2 * h)
+        high = np.maximum(corners.max(axis=0), points.max(axis=0) + 2 * h)
+        origin = low - h * (2.0 + LAYER_CELLS + np.array([0.0137, 0.0219, 0.0291]))
+        shape = np.ceil((high - origin) / h).astype(int) + 2 + LAYER_CELLS
+        room = LAYER_ROOM * _spans_across(points[0], points[1:])
+        return _open_sides(bvh, points, room, origin, h, shape, LAYER_CELLS)
+
+    inside = sides([[3.0, 7.0, 1.5], [36.0, 9.0, 1.2]])
+    assert inside.tolist() == [[True, True], [True, True], [False, False]]
+    behind = sides([[3.0, 7.0, 1.5], [36.0, 9.0, 1.2], [-3.0, 9.0, 1.2]])
+    assert behind.tolist() == [[True, True], [True, True], [True, True]]
+    crate = box_mesh((0.1, 0.1, 0.1))
+    shut_in = sides(
+        [[3.0, 7.0, 1.5], [36.0, 9.0, 1.2], [20.05, 10.0, 2.0]],
+        crate.vertices + [20.0, 9.95, 1.95],
+        crate.faces,
+    )
+    assert shut_in.tolist() == inside.tolist()
+    canopy = [[0.0, 0.0, 30.0], [40.0, 0.0, 30.0], [40.0, 20.0, 30.0], [0.0, 20.0, 30.0]]
+    under = sides([[3.0, 7.0, 1.5], [36.0, 9.0, 1.2]], canopy, [[0, 1, 2], [0, 2, 3]])
+    assert under.tolist() == [[True, True], [True, True], [False, True]]
+
+
+def test_wave_solver_tells_the_sides_its_air_reaches() -> None:
+    # A closed box on a grid that ends halfway along it: the air reaches the grid's edge
+    # at +x alone. On a grid round the whole box: nowhere. Round a plate in the open,
+    # with a matched layer: everywhere.
+    mesh = box_mesh((4.0, 3.0, 3.0))
+    bvh = _native.Bvh(mesh.vertices, mesh.faces)
+    origin = -0.1 * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+
+    def solver(size):
+        shape = np.ceil((np.array(size) - origin) / 0.1).astype(int) + 2
+        return _native.WaveSolver(
+            bvh,
+            np.zeros(12, np.int64),
+            np.zeros(1),
+            np.zeros((0, 3)),
+            np.zeros(0, np.int64),
+            origin,
+            0.1,
+            *map(int, shape),
+            np.array([1.0, 1.5, 1.5]),
+            np.zeros((0, 3)),
+        )
+
+    assert solver((2.0, 3.0, 3.0)).open_sides == (False, True, False, False, False, False)
+    assert solver((4.0, 3.0, 3.0)).open_sides == (False,) * 6
+    _, plate, _ = _plate(0.2, LAYER_CELLS, LAYER_CELLS, 0.001)
+    assert plate.open_sides == (True,) * 6
+
+
+def test_a_source_among_the_layers_cells_is_refused() -> None:
+    # A grid of 36 cells a side with 8 of matched layer inside each edge, round a plate
+    # far below. The source 9.25 cells from the grid's start along x: of the eight cells
+    # round it, the four of the layer's last cells are the layer's. 9.75 cells from it:
+    # the two cells round it along x, past the layer, and four a side along y and z.
+    plate = np.array([[-50.0, -50, -5], [50, -50, -5], [50, 50, -5], [-50, 50, -5]])
+    bvh = _native.Bvh(plate, np.array([[0, 1, 2], [0, 2, 3]], np.int64))
+    cell, origin = 0.1, np.full(3, 0.0013)
+
+    def solver(x_cells: float):
+        return _native.WaveSolver(
+            bvh,
+            np.zeros(2, np.int64),
+            np.zeros(1),
+            np.zeros((0, 3)),
+            np.zeros(0, np.int64),
+            origin,
+            cell,
+            36,
+            36,
+            36,
+            origin + cell * np.array([x_cells, 18.3, 18.2]),
+            np.zeros((0, 3)),
+            layer=8,
+        )
+
+    with pytest.raises(ValueError, match="the source is in the matched layer"):
+        solver(9.25)
+    layout = solver(9.75).layout()
+    fed = np.asarray(layout["special"])[np.flatnonzero(np.asarray(layout["source"]))]
+    assert len(fed) == 32 and sorted(set(fed % 36)) == [9, 10]
+
+
 def test_matched_layer_stays_stable() -> None:
     pressure, _, rate = _plate(0.5, LAYER_CELLS, LAYER_CELLS, 8.0)
     tenth = pressure.shape[1] // 10
@@ -1657,7 +2494,12 @@ def test_a_slower_speed_of_sound_arrives_later_as_loud() -> None:
             np.abs(np.fft.rfft(window * field[:, k], n_fft) / impulse)[(f > 80) & (f < 300)]
             for k in (0, 1)
         )
-        peak = int(np.argmax(np.abs(field[:, 0])))
+        # The peak, between the samples (a parabola through the three round it): the
+        # sound arrives 36 and 46 steps after it leaves, and a whole step is 2 to 3 % of
+        # that.
+        k = int(np.argmax(np.abs(field[:, 0])))
+        before, at, after = np.abs(field[k - 1 : k + 2, 0])
+        peak = k + 0.5 * (before - after) / (before - 2.0 * at + after)
         return (peak - delay) / rate, 2.0 * pressure.mean(), velocity.mean() / pressure.mean()
 
     fast, slow = run(1.0), run(0.8)
@@ -1698,6 +2540,55 @@ def _warming(table) -> Room:
             }
         )
     )
+
+
+class _Stopped(Exception):
+    """What the source's signal was asked for: the rate, the cell, the Courant number and
+    the speed of sound at the source over the grid's."""
+
+
+def test_the_source_takes_its_own_speed_of_sound_and_the_sides_are_found_once(
+    monkeypatch,
+) -> None:
+    # Air warming with height: the grid is laid out more than once, as its cells follow
+    # the slowest sound and its time step the fastest, but the sides whose layer needs
+    # room are found once. The source's signal takes the speed of sound at the source,
+    # 30 m up, over the grid's, the fastest: the speed's square grows evenly with height,
+    # so the root of the mean of the slowest's and the fastest's squares, over the
+    # fastest.
+    room = _warming([[0, 10, 0], [60, 130, 0]])
+    calls = {"grids": 0, "sides": 0}
+    grid_of, sides_of = wave_stage.band_grid, wave_stage._open_sides
+
+    def grid(*args, **more):
+        calls["grids"] += 1
+        return grid_of(*args, **more)
+
+    def sides(*args):
+        calls["sides"] += 1
+        return sides_of(*args)
+
+    def signal(*args):
+        raise _Stopped(*args)
+
+    monkeypatch.setattr(wave_stage, "band_grid", grid)
+    monkeypatch.setattr(wave_stage, "_open_sides", sides)
+    monkeypatch.setattr(wave_stage, "source_signal", signal)
+    with pytest.raises(_Stopped) as stopped:
+        wave_responses(
+            TraceModel.from_room(room),
+            np.array([0.0, 0.0, 30.0]),
+            [[60.0, 0.0, 30.0]],
+            ["l"],
+            max_band_hz=63,
+            length_s=0.25,
+            sample_rate=FS,
+            speed_of_sound=room.speed_of_sound(),
+        )
+    rate, cell, courant, speed = stopped.value.args
+    assert calls["grids"] > 1 and calls["sides"] == 1
+    assert courant == COURANT and courant * cell * rate == pytest.approx(402.5, rel=1e-3)
+    assert speed == pytest.approx(math.sqrt((337.3**2 + 402.5**2) / 2.0) / 402.5, rel=1e-3)
 
 
 def test_a_speed_of_sound_that_grows_with_height_bends_the_sound_as_the_rays_do() -> None:

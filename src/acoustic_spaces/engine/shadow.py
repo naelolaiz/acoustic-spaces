@@ -123,22 +123,44 @@ def shadow_start(profile, zs: float, zr: float) -> float | None:
     the listener's height; None where no shadow forms (the speed does not fall from the
     ground to either height). In a profile whose gradient eases with height (the wind's
     log profile), rays that turn just above the ground reach farther (three quarters as
-    far again 5 m up in the ``windy`` preset): the shadow proper begins there."""
+    far again 5 m up in the ``windy`` preset): the shadow proper begins there. Below the
+    first height whose speed differs from the ground's in floating point (and on the
+    ground), the profile's own law there, linear up to its first node, decides: the
+    speed falls if its gradient is negative, and the grazing ray, a circle of radius
+    R = c0 / |dc/dz|, reaches height z at sqrt(2 R z - z**2), so that the start goes to
+    0 continuously with the heights. Where the first layer is level (dc/dz = 0) the
+    ray fan alone decides, as above it."""
     from acoustic_spaces.engine.refraction import _Fan
 
     c0 = float(profile.c[0])
-    if np.any(profile.speed(np.linspace(0.0, max(zs, zr), 64)[1:]) >= c0) or max(zs, zr) <= 0.0:
+    gradient = float(profile.gradient[0])
+    heights = np.linspace(0.0, max(zs, zr, 0.0), 64)[1:]
+    speeds = profile.speed(heights)
+    level = (speeds == c0) & (heights < profile.z[1]) & (gradient != 0.0)
+    if not np.all(np.where(level, gradient < 0.0, speeds < c0)):
         return None
     fan = _Fan(profile, np.array([1.0 / c0]), 0.0)
     if not np.isinf(fan.hi[0]) and fan.hi[0] < max(zs, zr):
         return None
-    x = fan.at(np.array([[zs, zr]]))[0, :, 0] - fan.at(np.array([[0.0]]))[0, 0, 0]
-    return float(x.sum())
+    out = 0.0
+    for z in (max(zs, 0.0), max(zr, 0.0)):
+        if gradient < 0.0 and profile.speed(z) == c0:
+            radius = c0 / abs(gradient)
+            out += math.sqrt(max(2.0 * radius * z - z * z, 0.0))
+        else:
+            out += float(fan.at(np.array([[z]]))[0, 0, 0] - fan.at(np.array([[0.0]]))[0, 0, 0])
+    return out
 
 
-def equivalent_radius(start: float, zs: float, zr: float) -> float:
+def equivalent_radius(start: float, zs: float, zr: float, profile) -> float:
     """The radius R of the linear profile whose shadow starts at ``start`` m for heights
-    ``zs`` and ``zr``: its grazing ray reaches height z at sqrt(2 R z)."""
+    ``zs`` and ``zr``: its grazing ray reaches height z at sqrt(2 R z). With both heights
+    on the ground, the limit as they go to 0, whatever ``start``: that of ``profile``'s
+    own law there (see :func:`shadow_start`), c0 / |dc/dz| (infinite where its first
+    layer is level, where no creeping wave forms)."""
+    if zs + zr <= 0.0:
+        gradient = abs(float(profile.gradient[0]))
+        return float(profile.c[0]) / gradient if gradient > 0.0 else math.inf
     return start**2 / (2.0 * (math.sqrt(zs) + math.sqrt(zr)) ** 2)
 
 

@@ -823,3 +823,20 @@ def test_particles_stop_at_their_last_reflection() -> None:
     assert particles.order[-1].max() == MAX_REFLECTIONS
     lo, hi = np.array(room.report.bounds_min), np.array(room.report.bounds_max)
     assert np.all((particles.positions >= lo - 1e-9) & (particles.positions <= hi + 1e-9))
+
+
+@pytest.mark.parametrize(
+    "base, k",
+    [(7, 1), (7, 3), (500, 4), (3_000_000, 2), (3_000_000, 3), (2, 62), (2, 63), (2, 64)],
+)
+def test_distinct_plane_sequences_are_those_of_unique_rows(base, k):
+    """The rows through one number each (where a row fits in 64 bits) are np.unique's:
+    the same rows in the same order and of the same type."""
+    rng = np.random.default_rng(base + k)
+    rows = rng.integers(0, base, size=(40, k))
+    rows[0], rows[1] = 0, base - 1  # the smallest and the largest number of a row
+    rows = rows[rng.integers(0, len(rows), size=400)]
+    found = early_stage._distinct_rows(rows, base)
+    wanted = np.unique(rows, axis=0)
+    assert found.dtype == wanted.dtype
+    assert np.array_equal(found, wanted)
