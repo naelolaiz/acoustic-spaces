@@ -2651,6 +2651,20 @@ def test_ground_impedance_and_zones(window) -> None:
     assert page.preset.isEnabled() and material.source == "edited from a ground impedance"
     page.ground.setChecked(True)
     assert impedance() is not None and impedance().flow_resistivity == 300.0
+    # A ground again, with the scattering it was given.
+    assert window.document.scene.materials["meadow"].scattering == [0.4] + [0.0] * 23
+    # A new material scatters 0.1 as a surface; made a ground it scatters nothing, as a
+    # ground does without a scattering of its own, until one is typed.
+    new = window.document.add_material()
+    window.select("material", new)
+    assert window.document.scene.materials[new].scattering == [0.1] * 8
+    page.ground.setChecked(True)
+    assert window.document.scene.materials[new].impedance is not None
+    assert window.document.scene.materials[new].scattering == [0.0] * 8
+    assert "scattering" not in window.document.scene.to_data()["materials"][new]
+    page.table.item(1, 2).setText("0.25")  # the third third-octave band
+    assert window.document.scene.materials[new].scattering == [0.0, 0.0, 0.25] + [0.0] * 21
+    window.select("material", "meadow")
 
     window.select("geometry", None)
     geometry = window.inspector.pages["geometry"]

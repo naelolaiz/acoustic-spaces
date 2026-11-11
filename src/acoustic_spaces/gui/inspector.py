@@ -62,6 +62,7 @@ from acoustic_spaces.materials.ground import PRESETS
 from acoustic_spaces.room import UNASSIGNED, matching_name
 from acoustic_spaces.scene.model import (
     ATMOSPHERE_PRESETS,
+    DEFAULT_SCATTERING,
     INDOOR_COHERENT_MAX_BAND_HZ,
     LAYOUT_NAMES,
     TURBULENCE_PRESETS,
@@ -2996,11 +2997,15 @@ class MaterialPage(Page):
                 out["reaction"] = "extended"
         return out
 
-    def _set_impedance(self) -> None:
+    def _set_impedance(self, scattering: bool = True) -> None:
+        """Give the material the impedance the ground controls show, with its
+        ``scattering`` or, without, with a ground's (none)."""
         if self._loading or not self.ground.isChecked():
             return
         material = self.document.scene.materials[self.key]
-        fields = {"impedance": self._impedance(), "scattering": material.scattering}
+        fields: dict = {"impedance": self._impedance()}
+        if scattering:
+            fields["scattering"] = material.scattering
         if material.audience:
             fields["audience"] = True
         if material.impedance is not None and material.uncertainty is not None:
@@ -3011,7 +3016,11 @@ class MaterialPage(Page):
         if self._loading:
             return
         if checked:
-            self._set_impedance()
+            # The 0.1 in every band that a material has without a scattering of its own,
+            # and that the editor gives a new one, was not chosen for a ground, which
+            # scatters nothing unless its scattering says so: any other is kept.
+            scattering = self.document.scene.materials[self.key].scattering
+            self._set_impedance(any(value != DEFAULT_SCATTERING for value in scattering))
             return
         # The absorption the impedance gave stays, as values of the material's own.
         fields = self._fields()

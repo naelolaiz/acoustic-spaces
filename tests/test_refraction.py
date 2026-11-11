@@ -53,6 +53,15 @@ def field(atmosphere=None, listeners=((100.0, 0.0, 1.5),), **simulation) -> Scen
     return Scene.model_validate(data)
 
 
+def scattering_lawn(scene: Scene) -> Scene:
+    """``scene`` (:func:`field`) with a lawn that scatters 0.1, as a ground did without
+    a ``scattering`` of its own when the values some tests hold were computed: its rays
+    lose that share at the ground, and the late rays scatter it."""
+    data = scene.to_data()
+    data["materials"]["lawn"]["scattering"] = 0.1
+    return Scene.model_validate(data)
+
+
 # -- the atmosphere ------------------------------------------------------------------
 
 
@@ -1683,7 +1692,8 @@ def test_a_coverage_map_point_in_wind_reads_as_a_listener_there() -> None:
 def test_still_air_traces_the_late_part_as_before() -> None:
     """Without an atmosphere that bends the sound every reflection counts towards the
     early order as before: the late part of a closed room and of a field in neutral air
-    as computed before the late rays learnt the bent early stage's paths."""
+    as computed before the late rays learnt the bent early stage's paths (the field's
+    lawn scatters 0.1: over a ground that scatters nothing there is no late part)."""
     box = Scene.model_validate(
         {
             "name": "box",
@@ -1695,7 +1705,7 @@ def test_still_air_traces_the_late_part_as_before() -> None:
             "simulation": {"seed": 3, "ir_length_s": 0.2, "late": {"rays": 300}},
         }
     )
-    neutral = field({"preset": "neutral"}, ((60.0, 0.0, 1.5), (-30.0, 10.0, 3.0)))
+    neutral = scattering_lawn(field({"preset": "neutral"}, ((60.0, 0.0, 1.5), (-30.0, 10.0, 3.0))))
     before = (1.6025686813266748, 8.349338904503138e-07, 8.012851349037927e-06)
     found = []
     for scene in (box, neutral):
@@ -1940,11 +1950,12 @@ def test_the_open_ground_s_frequencies_choose_how_1_and_2_khz_are_found() -> Non
         np.testing.assert_allclose(levels[choice][others], levels[24][others], atol=1e-9)
 
 
-#: ``windy`` upwind of a source 2 m up over a lawn (:func:`field`), listeners 1.5 m up
-#: 10, 20 and 70 m away, the shadow starting 31.4 m away: the level re free field (dB)
-#: at 1 and 2 kHz as release 4.2.1 gave it (measured on the code before the parabolic
-#: equation took those bands over): from the rays short of half the way to the shadow,
-#: from the equation beyond.
+#: ``windy`` upwind of a source 2 m up over a lawn that scatters 0.1
+#: (:func:`scattering_lawn`, a ground's default then), listeners 1.5 m up 10, 20 and
+#: 70 m away, the shadow starting 31.4 m away: the level re free field (dB) at 1 and
+#: 2 kHz as release 4.2.1 gave it (measured on the code before the parabolic equation
+#: took those bands over): from the rays short of half the way to the shadow, from the
+#: equation beyond.
 RAYS_WINDY_UPWIND = [[0.2317, 0.5340], [1.9875, 1.0129], [-9.7644, -11.8441]]
 
 
@@ -1956,8 +1967,12 @@ def test_the_open_ground_s_rays_give_way_to_the_equation_near_a_shadow() -> None
     listeners = ((-10.0, 0.0, 1.5), (-20.0, 0.0, 1.5), (-70.0, 0.0, 1.5))
     levels = {}
     for choice in (8, "rays"):
-        scene = field(
-            {"preset": "windy"}, listeners, early={**early, "open_ground_frequencies": choice}
+        scene = scattering_lawn(
+            field(
+                {"preset": "windy"},
+                listeners,
+                early={**early, "open_ground_frequencies": choice},
+            )
         )
         result = simulate(Room.from_scene(scene), threads=1)
         levels[choice] = np.array(

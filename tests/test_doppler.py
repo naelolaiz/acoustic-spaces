@@ -236,10 +236,11 @@ def test_a_filter_goes_linearly_from_one_place_to_the_next() -> None:
 def _late_only(walker: str, monkeypatch: pytest.MonkeyPatch):
     """The short pass-by of a walking ``walker``, 1 m between places, each with its own
     late part, and the early paths left out of its renders: the walk and each place's
-    late part as it plays it (the response without its early paths)."""
-    walk = simulate_walk(
-        Room.from_scene(reference.scene(walker, 30.0, "grass")), step_m=1.0, late_step_m=None
-    )
+    late part as it plays it (the response without its early paths). Its grass scatters
+    0.1: over a ground that scatters nothing there is no late part."""
+    data = reference.scene(walker, 30.0, "grass").to_data()
+    data["materials"]["ground"]["scattering"] = 0.1
+    walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=1.0, late_step_m=None)
     monkeypatch.setattr(dp, "render", lambda *args, **kwargs: 0.0)
     seed = walk.result.settings.seed
     irs = []

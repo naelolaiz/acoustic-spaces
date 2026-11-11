@@ -233,7 +233,8 @@ Each entry in `materials` takes coefficients from one of:
 (`acoustic-spaces materials --kind scattering` lists them; `theatre_audience`, measured
 over rows of seated people, rises from 0.3 at 125 Hz to 0.7 from 1 kHz up, and stands
 for the rows of an audience area modelled as one raked plane, as CATT-Acoustic and ODEON
-models do).
+models do). Without it a material scatters 0.1 in every band, and a ground with an
+`impedance` nothing (see [Ground impedance](outdoor.md#ground-impedance)).
 File data with more than one value in some octave (third-octave tables) stays in
 third-octave bands; other data is averaged onto octaves. Bands with no data (63 Hz in
 most tables) take the nearest band's value and the material's `source` says which.

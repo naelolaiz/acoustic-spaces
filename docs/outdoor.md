@@ -286,7 +286,16 @@ A material with an impedance takes its absorption from it: the random-incidence
 absorption of its impedance (Paris's formula), in third-octave bands, which the late
 part's rays use and `inspect` shows (grass absorbs 0.18 at 63 Hz and 0.89 at 8 kHz). It
 takes no `preset`, `file` or transmission, and any `absorption` given with it is
-replaced; its `scattering` is its own.
+replaced.
+
+A ground scatters nothing unless its material gives a `scattering`: the early paths keep
+the whole reflection its impedance gives, as the exact solutions for a flat ground do
+(roughness takes little from sound that grazes a ground: by Kirchhoff's approximation,
+heights of 2 cm rms take 0.4 % out of a reflection 5° off the ground at 1 kHz). A
+`scattering` given to a ground is a share lost at every reflection off it in the image
+sources, the curved rays and the paths over a barrier's edge, which the late rays
+scatter; the parabolic equation and the paths over a terrain's crests keep the whole
+reflection.
 
 The early paths use the impedance itself. A point source's spherical wave does not
 reflect off a ground as a plane wave does: near grazing incidence, where the plane wave's

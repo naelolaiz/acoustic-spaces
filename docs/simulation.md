@@ -168,8 +168,9 @@ interference of reflections close in time.
 ## Scattering
 
 A surface's scattering coefficient (ISO 17497-1) is the share of the reflected energy
-that leaves it diffusely rather than specularly. `simulation.scattering` says how rays
-carry it out:
+that leaves it diffusely rather than specularly (an outdoor ground's is 0 unless its
+material gives one, see [Ground impedance](outdoor.md#ground-impedance)).
+`simulation.scattering` says how rays carry it out:
 
 ```yaml
 simulation:
