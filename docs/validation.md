@@ -5298,11 +5298,11 @@ Results:
   ahead of it; scattering coefficients of 0), against `validation/ffp.py`'s fast field
   program, its direct sound and that of the source's image in the wall added in
   pressure (an endless wall): from 50 to 150 m, at listeners a metre apart, the 63 and
-  125 Hz bands are rms 0.60 and 0.45 dB from it and the 500 Hz band rms 4.75 dB,
+  125 Hz bands are rms 0.67 and 0.51 dB from it and the 500 Hz band rms 4.74 dB,
   10.4 dB above it at 150 m; at the caustic of the wall's rays 166.6 m away every band
   steps within a centimetre, by 6.1 dB at 2 kHz to 19.4 dB at 500 Hz; and from 168 to
   300 m the 500 Hz band is 12.5 dB above the program on average. Without the wall the
-  same listeners, 50 to 300 m away, are within rms 0.20 dB of the program's direct
+  same listeners, 50 to 300 m away, are within rms 0.11 dB of the program's direct
   sound in every band up to 2 kHz.
 - **What the equation's field through the crossovers does not mend.** Between its
   samples (59 Hz apart in the 2 kHz band) the field is drawn linearly in the complex
