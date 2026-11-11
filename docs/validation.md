@@ -3048,16 +3048,18 @@ to 0.89 dB (125 Hz, from 60 m up to 4 m up, upwind in 10 m/s of wind over the ha
 ground), per third octave from 50 to 500 Hz by 0.26 dB and up to 2.2 dB, where the level
 is above -15 dB re free field; at the five largest jumps in each kind of band the
 wide-angle side is within 0.31 dB of the program and the narrow-angle side up to 2.2 dB
-off. Other listeners in the same direction, whose ranges break a run's steps, move a
-steep level by less than 0.001 dB, the wide-angle equation being converged at its step,
-and a flatter one as before, by up to 0.53 dB per third octave from 50 to 500 Hz and 0.17
-dB per octave band (a source 30 m up, downwind in the `windy` preset, listeners 47 m to 1
-km away). At 1 and 2 kHz, in a one-off check, the steep points' level is within 0.03 dB
-of the program at 32 points: from sources 5, 10 and 30 m up to a listener 1.5 m up and
-from 1.5 m up to 30 m up, down- and upwind in the `windy` preset over grass. The steep
-listeners' bands take the wide-angle equation's time: about 3.5 times the narrow-angle
-one's on one core for three listeners 10 to 20 m up, 30 to 60 m from a source 1 m up
-over a lawn in the `windy` preset.
+off. Other listeners in the same direction leave a level as it is alone, each being
+reached by a last step of its own off the march, but for the run's absorbing layer,
+which lies as high as the farthest of them needs: in a one-off check (a source 30 m up
+over grass, downwind in the `windy` preset, seven listeners 1.5 m up 47 m to 1 km away,
+each alone and all together) that moves the two steep ones' levels by less than 0.0001
+dB and the flatter ones' by up to 0.006 dB per third octave and 0.001 dB per octave
+band, in every band the equation gives. At 1 and 2 kHz, in a one-off check, the steep
+points' level is within 0.03 dB of the program at 32 points: from sources 5, 10 and 30 m
+up to a listener 1.5 m up and from 1.5 m up to 30 m up, down- and upwind in the `windy`
+preset over grass. The steep listeners' bands take the wide-angle equation's time: about
+3.5 times the narrow-angle one's on one core for three listeners 10 to 20 m up, 30 to 60
+m from a source 1 m up over a lawn in the `windy` preset.
 
 ## Terrain against closed forms and the exact wedge
 

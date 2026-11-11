@@ -180,6 +180,14 @@
   reflection, as in the early part. An open face 1 m over a floor had taken 6.3 dB from
   the floor's scattered sound at 125 Hz; in `apartment` the bed's level drops by
   0.04 dB(A).
+- Fixed: in wind or a temperature gradient a listener's or map point's bands up to
+  2 kHz depended on the others in its direction, whose ranges broke up the steps of the
+  parabolic equation's march: by 0.12 dB at 63 Hz behind one listener 10 m nearer,
+  0.65 dB among 201 listeners 10 cm apart and 10 dB at 250 Hz at the far end of 2001 a
+  centimetre apart (a source 7 m and listeners 1.5 m up over a ground of 200 kPa s/m²,
+  40 to 60 m downwind in `windy`). Each is now reached by a last step of its own off the
+  march and reads what it reads alone; a line of listeners a metre apart or closer takes
+  1.4 to 1.7 times as long, listeners far apart as long as before.
 - Fixed: in wind, a listener or map point exactly in line with the source and a
   barrier's end takes the weather's effect on the paths round the end, whichever way
   the line rounds; it read up to 9.3 dB low downwind from 63 to 500 Hz and up to

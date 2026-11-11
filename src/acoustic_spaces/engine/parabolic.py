@@ -132,7 +132,7 @@ def march(
     shorter last step. Unless ``independent``, the march goes on from there, so that the
     ranges asked for break up each other's steps; ``independent`` takes each one's last
     step off to the side, so that each range gets what a march to it alone gives, whatever
-    else is asked for (the places of a walk sharing a run, say).
+    else is asked for (the engine's runs: :func:`acoustic_spaces.engine.refracted.solve`).
 
     In wind or temperature gradients the points the reflection off the ground reaches
     more steeply than STEEP_DEG are given by the wide-angle equation

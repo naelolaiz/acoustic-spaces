@@ -1561,6 +1561,26 @@ def test_sources_alike_share_the_parabolic_equation_s_runs(monkeypatch) -> None:
         np.testing.assert_allclose(10 * np.log10(b / a), 0.0, atol=0.01)
 
 
+def test_a_listener_in_wind_reads_the_same_whoever_else_stands_in_its_direction() -> None:
+    """Downwind of a source over a lawn, each of three listeners gets the same bands with
+    eighteen more between them, a metre apart, as without them: each is reached by a last
+    step of its own, off the parabolic equation's march, whose steps the others' ranges
+    would break up (that moved the level 50 m away by 0.10 dB at 250 Hz). The farthest
+    listener is the same in both runs, and so is the absorbing layer."""
+    atmosphere = {"preset": "windy", "wind": {"direction_deg": 0.0}}
+    few = (40.0, 50.0, 60.0)
+    dense = tuple(float(x) for x in range(40, 61))
+    levels = []
+    for ranges in (few, dense):
+        scene = field(atmosphere, [(x, 0.0, 1.5) for x in ranges])
+        result = simulate(Room.from_scene(scene), threads=1)
+        levels.append(
+            {x: result["s", f"l{k}"].relative_to_free_field() for k, x in enumerate(ranges)}
+        )
+    for x in few:
+        np.testing.assert_allclose(levels[1][x], levels[0][x], rtol=0.0, atol=1e-9)
+
+
 def test_sources_share_the_air_s_profiles_and_keep_no_plan_once_finished(monkeypatch) -> None:
     """The sources of a run find each profile of the air once, as a source finds it on
     its own; and of the plans waiting for the parabolic equation, each is gone once its

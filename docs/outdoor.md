@@ -523,7 +523,10 @@ is an arc of a circle, so its travel time and its length are exact.
   the ground's fringes come closer in frequency (fewer there, or the rays, with
   `simulation.early.open_ground_frequencies`, see below), within 0.1 dB of the program
   in those cases; in third octaves it gives the three of each of those octave bands, to
-  2.5 kHz. In the shadow, above those
+  2.5 kHz. A source's listeners and map points that the sound goes the same way to
+  share a march, each reached by a last step of its own off it, so that each reads what
+  it reads alone (see [Validation](validation.md#the-wide-angle-parabolic-equation)).
+  In the shadow, above those
   bands, the shadow deepens with frequency as it does over the octave below. At 4 and
   8 kHz the rays give the sound: against the program, 50 to 300 m from a source 2 m
   up, they are up to 2.4 dB off at 4 kHz and 0.9 dB at 8 kHz in `windy` downwind and

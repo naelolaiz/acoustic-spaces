@@ -2307,7 +2307,6 @@ class _Job:
     band: int
     members: list  # (plan, request, slot): slot None for the open ground's pressure
     top: float
-    alone: bool
     obstacles: tuple = ()
     #: Whether the air bends sound (None: as the march finds).
     refracting: bool | None = None
@@ -2360,9 +2359,9 @@ def solve(plans: list[Planned]) -> list[dict]:
     height over one ground, where the weather and the grounds have no zones (the places
     of a walk, say): there a run from one source holds for any other alike, the way along
     the ground being the same from each. A run marches out to the farthest of its
-    listeners under an absorbing layer above the highest of their ``top``; in a run
-    shared that way each listener is reached by a last step of its own, off to the side
-    of the march, so that it gets what its own source's run would give it alone.
+    listeners under an absorbing layer above the highest of their ``top``; each listener
+    is reached by a last step of its own, off to the side of the march, so that it gets
+    what a march to it alone under that layer gives, whoever shares the run.
 
     Behind barriers the runs in the weather share by the profile and what stands on the
     way (the cut), those in still air by the cut and the absorbing layer alone; the open
@@ -2442,24 +2441,20 @@ def solve(plans: list[Planned]) -> list[dict]:
         if topmost and read and band + 1 < refraction.coherent:
             jobs.append(job(topmost, skirt=True))
 
-    for (owner, (key, azimuth)), members in groups.items():
+    for (_, (key, azimuth)), members in groups.items():
         refraction = plans[members[0][0]].refraction
         direction = members[0][1].direction if azimuth is None else towards(azimuth)
         reach = max(m.range for _, m in members)
         face_at = refraction._grounds_along(direction, reach)
         speed, speed_at = weather(refraction, key, direction, reach)
         top = max(m.top for _, m in members)
-        # A shared run gives each listener what a run of its own would.
-        alone = owner[0] == "shared"
         for band in range(refraction.bands):
             needing = [(p, m, None) for p, m in members if m.bands[band]]
             open_ground(
                 refraction,
                 band,
                 needing,
-                functools.partial(
-                    _Job, refraction, speed, speed_at, face_at, band, top=top, alone=alone
-                ),
+                functools.partial(_Job, refraction, speed, speed_at, face_at, band, top=top),
             )
 
     # Behind barriers and along the ways round ends: the runs in the weather, and behind
@@ -2488,7 +2483,6 @@ def solve(plans: list[Planned]) -> list[dict]:
                 face_at,
                 band,
                 top=top,
-                alone=True,
                 obstacles=cut,
                 refracting=True,
                 barrier=barrier,
@@ -2522,7 +2516,6 @@ def solve(plans: list[Planned]) -> list[dict]:
                         band,
                         needing,
                         top,
-                        True,
                         obstacles=cut,
                         refracting=True,
                         barrier=barrier,
@@ -2580,7 +2573,9 @@ def solve(plans: list[Planned]) -> list[dict]:
             heights,
             job.top,
             speed_at=job.speed_at,
-            independent=job.alone,
+            # Each listener by a last step of its own: what it gets does not depend on
+            # the ranges of the others, which would break up the march's steps.
+            independent=True,
             threads=share,
             **extra,
         )
