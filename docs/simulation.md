@@ -37,8 +37,8 @@ or in a corner. Sound that bends round edges is added to them (see
     surfaces it sees, and the rays and those directions share that sound by how
     densely each finds it (the balance heuristic of multiple importance sampling): the
     rays near the source, the listener's directions near the listener. The expected
-    energy is the same, but a ray that lands next to a listener (above grass, an
-    aircraft overhead) brings it no burst of scattered sound.
+    energy is the same, but a ray that lands next to a listener (above a ground that
+    scatters, an aircraft overhead) brings it no burst of scattered sound.
   - `secondary_sources`: all reflected energy radiates that way, as in ODEON's late
     method. Much smoother tails, but it treats specular energy as diffuse: in the
     example box (smooth walls, absorbing ceiling) EDT comes out about 20 % shorter.
@@ -171,8 +171,9 @@ interference of reflections close in time.
 ## Scattering
 
 A surface's scattering coefficient (ISO 17497-1) is the share of the reflected energy
-that leaves it diffusely rather than specularly. `simulation.scattering` says how rays
-carry it out:
+that leaves it diffusely rather than specularly (that of a ground with an impedance is
+0 unless its material gives one, see [Ground impedance](outdoor.md#ground-impedance)).
+`simulation.scattering` says how rays carry it out:
 
 ```yaml
 simulation:

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Changed: an outdoor ground (a material with an `impedance`) scatters nothing unless
+  its material gives a `scattering`, where it took 0.1 like any material: the early
+  level over grass is within 0.05 dB of the exact solution 20 and 100 m away (it was
+  0.3 and 0.5 dB off at 500 Hz), the ground dips in still air are deeper, and flat
+  open ground alone gives no late part. `scattering: 0.1` on the ground gives the
+  earlier results.
 - Fixed: with `second_order` diffraction, sound that just clears two edges in a row (a
   source and a listener in sight of each other over a flat roof, a thick wall or two
   barriers, or along a wall in line with both) was far too low, 15 to 26 dB across the
