@@ -459,6 +459,16 @@ of them reaches 1. Scene files of 4.2.1 load unchanged.
 - Docs: the cost of the wave solver's moving air is given as four to five times the
   effective speed of sound's (`validation/wave_wind.py` measures 4.0 to 5.1 times), where
   the help, the editor's tip and the docs said three to four times.
+- New validation: `validation/wave_walls.py`, what the wave solver's walls on cell faces
+  cost: in seven placements of a rigid box moved within a cell or turned against the grid,
+  its modes are up to 11 %, 6.4 % and 2.8 % off on the 63, 125 and 250 Hz bands' grids
+  (19-point stencil), and the level in front of a wall 0.4 cell off a cell face is 1.5 dB
+  rms off at 8 to 16 cells per wavelength (see
+  [Validation](docs/validation.md#wave-based-solver)).
+- Known issues, measured: the steps at caustics in wind and temperature gradients
+  against a fast field program on thirteen walks (up to 15.5 dB within a centimetre at
+  4 kHz), and a wall's reflection there, whose paths are eigenrays in every band (see
+  [Known issues](docs/validation.md#known-issues)).
 
 **Tests and CI**
 
