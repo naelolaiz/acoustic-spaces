@@ -119,6 +119,10 @@ PARABOLIC_EQUATIONS = [("narrow_angle", N_("narrow angle")), ("wide_angle", N_("
 #: effect behind barriers at 8 kHz that each gives against 64 frequencies an octave in
 #: validation/barrier_wind.py's convergence cases (dB; docs/outdoor.md has the table).
 BARRIER_FREQUENCIES = ((32, 0.51), (16, 6.4), (8, 14.0))
+#: simulation.early.open_ground_frequencies' choices, with the largest error at 1 and
+#: 2 kHz over the open ground that each gives against a fast field program in
+#: validation/open_ground_frequencies.py's cases (dB; docs/outdoor.md has the table).
+OPEN_GROUND_FREQUENCIES = ((24, 0.75), (8, 4.0), ("rays", 8.5))
 LATE_METHODS = [
     ("stochastic_ray_tracing", N_("stochastic_ray_tracing")),
     ("statistical", N_("statistical")),
@@ -4045,6 +4049,27 @@ class SimulationPage(Page):
                 "How the simulation bends sound)"
             )
         )
+        self.open_ground_frequencies = QComboBox()
+        for choice, error in OPEN_GROUND_FREQUENCIES:
+            label = (
+                _("rays, off by up to {error:g} dB at 1 and 2 kHz")
+                if choice == "rays"
+                else _("{count}, off by up to {error:g} dB at 1 and 2 kHz")
+            )
+            self.open_ground_frequencies.addItem(label.format(count=choice, error=error), choice)
+        self.open_ground_frequencies.setToolTip(
+            _(
+                "Outdoors over the open ground in wind or temperature gradients, the "
+                "frequencies an octave the parabolic equation takes at 1 and 2 kHz (below "
+                "1 kHz always 8), or the rays, which give those bands where one reaches the "
+                "listener short of half the way to the shadow's start. Fewer take less time "
+                "and leave those bands further off, and in the shadow the bands above, which "
+                "deepen from them: each choice says by how much at most at 1 and 2 kHz, "
+                "against a fast field "
+                "program in the validation cases. The documentation has the errors and the "
+                "run times measured (Outdoor scenes, How the simulation bends sound)"
+            )
+        )
         self.coherent = QComboBox()
         _fill(self.coherent, [(None, N_("none"))] + [(f, str(f)) for f in COHERENT_BANDS_HZ])
         self.coherent.setToolTip(
@@ -4062,6 +4087,7 @@ class SimulationPage(Page):
         early_form.addRow(_("Reflections over an edge"), self.diffraction_reflections)
         early_form.addRow(_("Parabolic equation"), self.parabolic_equation)
         early_form.addRow(_("Frequencies behind barriers"), self.barrier_frequencies)
+        early_form.addRow(_("Frequencies over open ground"), self.open_ground_frequencies)
         early_form.addRow(_("In pressure up to"), self.coherent)
         layout.addWidget(early)
 
@@ -4394,6 +4420,11 @@ class SimulationPage(Page):
                 "early.barrier_frequencies", self.barrier_frequencies.itemData(index)
             )
         )
+        self.open_ground_frequencies.currentIndexChanged.connect(
+            lambda index: self._set(
+                "early.open_ground_frequencies", self.open_ground_frequencies.itemData(index)
+            )
+        )
         for combo, key in ((self.late_device, "late.device"), (self.wave_device, "wave.device")):
             combo.currentIndexChanged.connect(
                 lambda _index, combo=combo, key=key: self._set(key, _device(combo))
@@ -4450,6 +4481,8 @@ class SimulationPage(Page):
         self.parabolic_equation.setEnabled(weather)
         _choose(self.barrier_frequencies, s.early.barrier_frequencies)
         self.barrier_frequencies.setEnabled(weather)
+        _choose(self.open_ground_frequencies, s.early.open_ground_frequencies)
+        self.open_ground_frequencies.setEnabled(weather)
         for row in range(self.coherent.count()):  # the bands above 500 Hz are outdoors only
             value = self.coherent.itemData(row)
             if value is not None and value > INDOOR_COHERENT_MAX_BAND_HZ:

@@ -72,9 +72,8 @@
   results.
 - Changed: the wide-angle parabolic equation's steps take up to four frequencies
   together, two to an SSE2 register: listeners the sound reaches steeply behind a
-  barrier or a building take about 60 s on one core where they took 115 s, and the
-  equation over open ground two to two and a half times the narrow-angle one's time
-  where it took three to four, with the same results.
+  barrier or a building take about 60 s on one core where they took 115 s, with the
+  same results.
 - Changed: a walk's places between those traced for their late part mix theirs when it
   is read instead of holding a copy for the whole run: a walk of 201 places through the
   `church` example peaks at 336 MiB where it took 1,685 MiB, with the same results, and
@@ -169,7 +168,7 @@
   15 dB off the smooth one's; it now takes the fitted one. Against the smooth profiles
   (`validation/curved_rays.py`, paths near a caustic apart) the most a path is off goes
   from 15.3 to 2.4 dB where the sound bends down and from 3.1 to 1.1 dB where it bends
-  up; from 1 kHz up a listener 300 m downwind of the `open_air_stage` source and 4.61 m
+  up; at 4 and 8 kHz a listener 300 m downwind of the `open_air_stage` source and 4.61 m
   up gains about 2 dB, and the shipped examples' own listeners move by 0.02 dB at most.
 - Fixed: `early.method: image_sources` with `max_order` 3 or more (the default order)
   stopped with "need at least one array to concatenate" where the ground is the only
@@ -207,6 +206,21 @@
   because GitHub lost their runner or a step that fetches system packages failed
   (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`). A pull request runs one job on
   the Intel Mac, the tests with Python 3.10; main and tags run all four.
+- Fixed: in wind or a temperature gradient the sound over the open ground at 1 and 2 kHz
+  (630 Hz to 2.5 kHz in third octaves) came from rays outside the shadow, which were up
+  to 3.2 dB off a fast field program in `windy` and 8.5 dB in `clear_night` and stepped
+  by up to 14 dB a centimetre at a caustic; it now comes from the parabolic equation
+  there too, at 24 frequencies an octave, which moves the examples' bands by up to
+  2.8 dB (3.3 dB read from a third-octave run) and makes runs over open ground in wind
+  take longer, `open_air_stage` about 2.3 times as long on one core (see
+  [Outdoor scenes](docs/outdoor.md)).
+- Added: `simulation.early.open_ground_frequencies` (**Frequencies over open ground** in
+  the editor) picks how those 1 and 2 kHz bands are found: 24 frequencies an octave (the
+  default, up to 0.75 dB off the program), 8 (4.0 dB, 2 to 3 times faster on one core)
+  or the rays short of half the way to the shadow, as 4.2.1 did in octave bands (8.5 dB,
+  2.3 to 30 times faster); in the shadow 4 and 8 kHz, which deepen from those bands,
+  move with them (by up to 0.33 dB within 60 dB of free field). `helicopter_flyover`,
+  whose sound comes down steeply, sets the rays, there within 0.11 dB of the default.
 
 ## 4.2.1
 

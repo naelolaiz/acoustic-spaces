@@ -1215,10 +1215,11 @@ A model of such corners is an open item on the [roadmap](roadmap.md).
 
 The early stage of a hall 30 x 20 x 10 m with four alcoves along each long wall
 (16 vertical edges), with the source and the listener in alcoves out of each other's
-sight, takes 38 ms per source and listener on four cores without diffraction (23
-paths), 540 ms with `first_order` (979 paths) and 630 ms with `second_order` (994
+sight, takes 44 ms per source and listener on four cores without diffraction (23
+paths), 525 ms with `first_order` (979 paths) and 600 ms with `second_order` (994
 paths): the median of four timings, each the mean of three runs after a first one,
-with nothing else running on the machine. The terms that make the other specular paths fade at the edges (next section)
+with nothing else running on the machine (10 November 2026, the middle of three such
+medians). The terms that make the other specular paths fade at the edges (next section)
 give most of the paths, as each term is a path over its edge, and so is each product of
 terms. In a one-off check when they were written, on a run where the early stage took
 650 ms with `first_order` and 710 ms with `second_order`, they took about 580 ms of the
@@ -1728,23 +1729,23 @@ loss over the bands. Each pair is at 535 m / 845 m, in dB:
 
 | case | weather | overall, measured | published model | this package | mean difference, published model | this package |
 |---|---|---|---|---|---|---|
-| 1 | light downwind | 22.6 / 27.5 | 21.6 / 26.6 | 23.3 / 28.9 | 1.8 / 3.2 | 1.7 / 2.3 |
+| 1 | light downwind | 22.6 / 27.5 | 21.6 / 26.6 | 23.3 / 28.9 | 1.8 / 3.2 | 1.8 / 2.3 |
 | 2 | light downwind | 22.2 / 26.7 | 21.6 / 26.8 | 23.4 / 28.9 | 1.6 / 2.8 | 1.9 / 2.7 |
 | 3 | cross/downwind | 20.8 / 26.5 | 21.4 / 26.8 | 23.1 / 28.7 | 1.8 / 2.7 | 2.2 / 2.7 |
-| 4 | cross/downwind | 20.6 / 26.3 | 21.3 / 26.9 | 23.1 / 28.6 | 2.0 / 2.7 | 2.3 / 2.6 |
-| 5 | cross/upwind | 21.0 / 26.6 | 21.0 / 25.9 | 23.0 / 28.3 | 1.9 / 2.5 | 2.0 / 2.3 |
-| 6 | cross/upwind | 20.6 / 25.7 | 20.9 / 26.0 | 22.9 / 28.2 | 1.7 / 2.8 | 2.4 / 2.7 |
+| 4 | cross/downwind | 20.6 / 26.3 | 21.3 / 26.9 | 23.1 / 28.6 | 2.0 / 2.7 | 2.4 / 2.7 |
+| 5 | cross/upwind | 21.0 / 26.6 | 21.0 / 25.9 | 23.0 / 28.2 | 1.9 / 2.5 | 2.0 / 2.3 |
+| 6 | cross/upwind | 20.6 / 25.7 | 20.9 / 26.0 | 22.9 / 28.2 | 1.7 / 2.8 | 2.3 / 2.7 |
 | 7 | light upwind | 21.9 / 26.2 | 20.7 / 24.9 | 22.7 / 27.7 | 2.0 / 2.2 | 2.2 / 2.2 |
-| 8 | light upwind | 22.2 / 27.0 | 20.5 / 25.1 | 22.7 / 27.9 | 2.2 / 2.2 | 2.3 / 2.1 |
+| 8 | light upwind | 22.2 / 27.0 | 20.5 / 25.1 | 22.6 / 27.9 | 2.2 / 2.2 | 2.3 / 2.1 |
 | 9 | strong upwind | 23.1 / 27.4 | 19.9 / 52.3 | 22.0 / 27.8 | 3.2 / 8.3 | 1.9 / 2.6 |
 | 10 | strong upwind | 23.1 / 27.2 | 19.9 / 50.0 | 22.1 / 27.9 | 3.1 / 7.7 | 2.0 / 2.5 |
 
 In the eight cases other than strong upwind (light winds, and cross winds in cases 3 to
-6), this package is about as close to the measurements as the authors' model: 1.7 to 2.4 dB per band on average at 535 m, 2.1 to 2.7 dB at 845
+6), this package is about as close to the measurements as the authors' model: 1.8 to 2.4 dB per band on average at 535 m, 2.1 to 2.7 dB at 845
 m, against their 1.6 to 2.2 and 2.2 to 3.2 dB; the spread of the measurements over the
 five minutes is 1 to 3 dB. From 80 to 160 Hz this package loses more than was
 measured, 2.6 to 6.0 dB on average over those bands at 845 m and up to 4.2 dB at 535 m,
-which puts its overall loss at 845 m 0.9 to 2.6 dB above the measured one. With the
+which puts its overall loss at 845 m 0.9 to 2.5 dB above the measured one. With the
 same inputs the authors' model loses 3.4 to 5.2 dB less than this package in those
 bands, from 4.3 dB less to 1.3 dB more than was measured. This package's parabolic
 equation matches the exact solution in still air from the hub within 0.1 dB from
@@ -2135,10 +2136,10 @@ air is within 0.03 dB on its own grid, whose 40 cm cells (against 39 cm) take 0.
 [above](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation); at
 100 m 5 m up the effective speed of sound is 0.70 dB low and moving air 0.23 dB.
 
-Moving air takes 2.7 and 3.4 times as long as the effective speed of sound: 11.6 s
-against 4.3 s in the free field (3.2 million cells) and 26 s against 7.6 s with the
-façade (6 million), on 4 cores with nothing else running. With the preset its grid has
-25.8 million cells of air and the effective speed of sound's 26.8 million.
+Moving air takes 3.8 to 4.7 times as long as the effective speed of sound: 15 s
+against 3.9 s in the free field (3.2 million cells), 34 s against 7.6 s with the façade
+(6 million) and 4.5 minutes against 58 s with the preset (25.8 against 26.8 million),
+on 4 cores with nothing else running (10 November 2026).
 
 ## Outdoor results against exact solutions
 
@@ -2312,7 +2313,7 @@ engine's a von Kármán one, checked in
 First the engine's parabolic equations alone, at the benchmark's pure tones: the
 narrow-angle one (`acoustic_spaces.engine.parabolic`, the Green's function parabolic
 equation of Gilbert and Di, the default, which gives the engine's sound over the open
-ground in the bands up to 500 Hz and in a shadow up to 2 kHz) and the wide-angle one
+ground in the bands up to 2 kHz) and the wide-angle one
 (`acoustic_spaces.engine.wide_angle`, see
 [The wide-angle parabolic equation](#the-wide-angle-parabolic-equation)); the program's
 level re free field and each equation's difference from it (`-`: deeper than -60 dB):
@@ -2375,8 +2376,8 @@ parabolic equation carries. With the gradient stopping 100 m up, which turns bac
 the sound within 14 degrees of the horizontal, the parabolic equation is within 0.05 dB
 at 100 Hz and 0.35 dB at 1 kHz up to 1 km downwind, 1 to 3 dB at 2 km, where the bent
 paths interfere and the two place a dip a little apart, within 2 dB at 5 km, and 3 dB
-at 10 km at 100 Hz (11 dB at 1 kHz, 47 dB down, a band the engine's rays give
-downwind anyway). Upwind, in the shadow, it is within 0.1 dB at 100 Hz and 1 kHz until the
+at 10 km at 100 Hz (11 dB at 1 kHz, 47 dB down; the engine's 1 kHz band comes from
+this equation there too, not compared as a band beyond 2 km). Upwind, in the shadow, it is within 0.1 dB at 100 Hz and 1 kHz until the
 sound is 20 dB down (0.33 dB at 1 kHz 500 m, 52 dB down) and strays by up to 6 dB
 deeper in (100 Hz, 2 km, 46 dB down; 1.4 dB at 10 Hz, 5 km, 44 dB down), below where the eddies keep a shadow in practice (see
 [Turbulence](outdoor.md#turbulence)). With the benchmark's gradient going on to 1000 m,
@@ -2400,8 +2401,9 @@ at 19.6 °C (343 m/s at the ground) and 50 % humidity, and the engine's defaults
 otherwise (the early paths as image sources up to one reflection, 50,000 late rays). The
 level relative to free field the engine reports per octave band from 63 Hz to 1 kHz
 ([Outdoor scenes](outdoor.md#results-outdoors)) against the program averaged over the
-band as the engine reads it (eight frequencies per band; 24 at 1 kHz, where the rays
-average the paths' interference exactly), and in the bands up to 500 Hz also against the
+band as the engine reads it (eight frequencies per band; 24 at 1 kHz, as the parabolic
+equation takes there, and in still air the rays average the paths' interference
+exactly), and in the bands up to 500 Hz also against the
 program read through the engine's band filters, as the barrier check above is (*through
 the filters*). The engine's rays carry the air's absorption along their own paths and the
 program runs without it, a difference of the path lengths only, under 0.01 dB here:
@@ -2431,28 +2433,28 @@ program runs without it, a difference of the path lengths only, under 0.01 dB he
 | distance | 63 | 125 | 250 | 500 | 1k | |
 |---|---|---|---|---|---|---|
 | 100 m | 5.55 | 3.42 | -2.27 | -5.22 | 2.55 | ffp, dB |
-| | -0.05 | -0.05 | -0.04 | -0.07 | +0.04 | engine - ffp |
-| | +0.00 | +0.06 | -0.04 | -0.68 | +0.04 | through the filters |
+| | -0.05 | -0.05 | -0.04 | -0.07 | -0.04 | engine - ffp |
+| | +0.00 | +0.06 | -0.04 | -0.68 | -0.04 | through the filters |
 | 200 m | 6.21 | 2.97 | -5.67 | -6.00 | 2.28 | ffp, dB |
-| | -0.04 | -0.04 | -0.05 | -0.07 | -0.12 | engine - ffp |
-| | +0.03 | +0.09 | -0.27 | -0.69 | -0.12 | through the filters |
+| | -0.04 | -0.04 | -0.05 | -0.07 | -0.05 | engine - ffp |
+| | +0.03 | +0.09 | -0.27 | -0.69 | -0.05 | through the filters |
 | 500 m | 9.03 | 1.29 | -2.98 | -2.74 | 5.07 | ffp, dB |
-| | -0.03 | -0.04 | -0.06 | -0.05 | -1.76 | engine - ffp |
-| | +0.12 | -0.19 | -0.12 | -0.82 | -1.76 | through the filters |
+| | -0.03 | -0.04 | -0.06 | -0.05 | -0.06 | engine - ffp |
+| | +0.12 | -0.19 | -0.12 | -0.82 | -0.06 | through the filters |
 | 1 km | 6.79 | 1.37 | 1.43 | 1.55 | 6.63 | ffp, dB |
-| | +0.03 | -0.05 | -0.04 | -0.11 | +0.55 | engine - ffp |
-| | -0.22 | -0.15 | +0.12 | -0.19 | +0.55 | through the filters |
+| | +0.03 | -0.05 | -0.04 | -0.11 | -0.05 | engine - ffp |
+| | -0.22 | -0.15 | +0.12 | -0.19 | -0.05 | through the filters |
 | 2 km | 5.93 | 5.97 | -0.51 | 4.14 | 4.18 | ffp, dB |
-| | -0.02 | +0.07 | -0.53 | -0.75 | -0.76 | engine - ffp |
-| | -0.32 | +0.34 | -1.32 | -0.45 | -0.76 | through the filters |
+| | -0.02 | +0.07 | -0.53 | -0.75 | -0.90 | engine - ffp |
+| | -0.32 | +0.34 | -1.32 | -0.45 | -0.90 | through the filters |
 
 **case 3, upward refraction 0.1/s**
 
 | distance | 63 | 125 | 250 | 500 | 1k | |
 |---|---|---|---|---|---|---|
 | 100 m | 4.78 | 2.82 | -2.44 | -7.68 | -0.30 | ffp, dB |
-| | -0.01 | -0.02 | -0.09 | -0.06 | -0.17 | engine - ffp |
-| | +0.04 | +0.08 | -0.04 | -0.60 | -0.17 | through the filters |
+| | -0.01 | -0.02 | -0.09 | -0.06 | -0.04 | engine - ffp |
+| | +0.04 | +0.08 | -0.04 | -0.60 | -0.04 | through the filters |
 | 200 m | 3.72 | 0.85 | -7.14 | -16.62 | -11.46 | ffp, dB |
 | | -0.01 | -0.02 | -0.02 | -0.07 | -0.05 | engine - ffp |
 | | +0.05 | +0.11 | -0.11 | -0.53 | -0.05 | through the filters |
@@ -2471,34 +2473,34 @@ program runs without it, a difference of the path lengths only, under 0.01 dB he
 | distance | 63 | 125 | 250 | 500 | 1k | |
 |---|---|---|---|---|---|---|
 | 100 m | 5.55 | 3.42 | -2.27 | -5.22 | 2.55 | ffp, dB |
-| | -0.05 | -0.05 | -0.04 | -0.06 | +0.04 | engine - ffp |
-| | +0.00 | +0.06 | -0.04 | -0.68 | +0.04 | through the filters |
+| | -0.05 | -0.05 | -0.04 | -0.06 | -0.04 | engine - ffp |
+| | +0.00 | +0.06 | -0.04 | -0.68 | -0.04 | through the filters |
 | 200 m | 6.21 | 2.97 | -5.67 | -6.00 | 2.28 | ffp, dB |
-| | -0.04 | -0.04 | -0.05 | -0.07 | -0.12 | engine - ffp |
-| | +0.03 | +0.09 | -0.27 | -0.69 | -0.12 | through the filters |
+| | -0.04 | -0.04 | -0.05 | -0.07 | -0.05 | engine - ffp |
+| | +0.03 | +0.09 | -0.27 | -0.69 | -0.05 | through the filters |
 | 500 m | 9.03 | 1.29 | -2.98 | -2.74 | 5.07 | ffp, dB |
-| | -0.03 | -0.03 | -0.06 | -0.05 | -1.76 | engine - ffp |
-| | +0.12 | -0.18 | -0.12 | -0.82 | -1.76 | through the filters |
+| | -0.03 | -0.03 | -0.06 | -0.05 | -0.06 | engine - ffp |
+| | +0.12 | -0.18 | -0.12 | -0.82 | -0.06 | through the filters |
 | 1 km | 6.74 | 1.38 | 1.43 | 1.55 | 6.63 | ffp, dB |
-| | +0.04 | -0.04 | -0.04 | -0.11 | +0.55 | engine - ffp |
-| | -0.21 | -0.14 | +0.13 | -0.19 | +0.55 | through the filters |
+| | +0.04 | -0.04 | -0.04 | -0.11 | -0.05 | engine - ffp |
+| | -0.21 | -0.14 | +0.13 | -0.19 | -0.05 | through the filters |
 | 2 km | 3.80 | -1.16 | -2.85 | -5.93 | 1.15 | ffp, dB |
-| | -0.07 | +0.01 | -0.09 | +0.44 | -0.96 | engine - ffp |
-| | -0.42 | -0.16 | -0.00 | -0.46 | -0.96 | through the filters |
+| | -0.07 | +0.01 | -0.09 | +0.44 | +0.38 | engine - ffp |
+| | -0.42 | -0.16 | -0.00 | -0.46 | +0.38 | through the filters |
 
 **-0.1/s up to 100 m**
 
 | distance | 63 | 125 | 250 | 500 | 1k | |
 |---|---|---|---|---|---|---|
 | 100 m | 4.78 | 2.82 | -2.44 | -7.68 | -0.30 | ffp, dB |
-| | -0.02 | -0.02 | -0.03 | -0.07 | -0.17 | engine - ffp |
-| | +0.03 | +0.08 | +0.01 | -0.60 | -0.17 | through the filters |
+| | -0.02 | -0.02 | -0.03 | -0.07 | -0.04 | engine - ffp |
+| | +0.03 | +0.08 | +0.01 | -0.60 | -0.04 | through the filters |
 | 200 m | 3.72 | 0.85 | -7.14 | -16.62 | -11.46 | ffp, dB |
 | | -0.01 | -0.02 | -0.03 | -0.08 | -0.05 | engine - ffp |
 | | +0.05 | +0.11 | -0.12 | -0.53 | -0.05 | through the filters |
 | 500 m | -0.84 | -6.20 | -20.66 | -44.81 | -52.68 | ffp, dB |
-| | -0.01 | -0.00 | -0.04 | -0.21 | -0.11 | engine - ffp |
-| | +0.08 | +0.08 | -0.89 | -2.40 | -0.11 | through the filters |
+| | -0.01 | -0.00 | -0.04 | -0.21 | -0.06 | engine - ffp |
+| | +0.08 | +0.08 | -0.89 | -2.40 | -0.06 | through the filters |
 | 1 km | -10.87 | -19.88 | -43.62 | -66.43 | -66.91 | ffp, dB |
 | | -0.02 | -0.09 | +1.46 | - | - | engine - ffp |
 | | +0.03 | -0.23 | -1.96 | - | - | through the filters |
@@ -2512,33 +2514,30 @@ to 200 m and within 0.3 dB at 1 km, 0.5 dB at 2 km, where the ground dip at 250 
 29 dB deep and the engine's reflection factor is an approximation (see
 [Ground reflection](#ground-reflection-against-the-exact-solution)); from 1 kHz up,
 where the rays average the paths' interference over the band exactly, within
-0.005 dB. In wind the bands up to 500 Hz come from the parabolic equation, whose band
-levels are the averages over its eight frequencies, and the engine reports them as
-computed, so there the plain average is the row to read: within 0.11 dB to 1 km in
-every case downwind, and upwind with the benchmark's gradient (upwind with the
-gradient stopping at 100 m, see below); at 2 km downwind 0.5 to 0.8 dB with the gradient
+0.005 dB. In wind the bands up to 2 kHz come from the parabolic equation, whose band
+levels are the averages over its frequencies (eight an octave, 24 from 1 kHz up), and
+the engine reports them as
+computed, so there the plain average is the row to read: from 63 to 500 Hz within
+0.11 dB to 1 km in every case downwind, and upwind with the benchmark's gradient
+(upwind with the gradient stopping at 100 m, see below); at 2 km downwind 0.5 to 0.8 dB with the gradient
 going on to 1000 m, where the pure tones above show the parabolic equation itself
 parting from the program, and 0.1 (0.4 at 500 Hz) with it stopping at 100 m. Upwind
 the engine follows the program into the shadow within 0.1 dB to 500 m and 45 dB below
 free field (0.21 dB with the gradient stopping at 100 m, at 500 Hz), and within 1.5 dB
 at 1 km with the gradient stopping at 100 m (250 Hz,
 44 dB down, where the pure tones above show the parabolic equation straying deep in
-the shadow); the comparison stops 60 dB down. The 1 kHz band comes from the rays: within
-0.55 dB but for 1.8 dB at 500 m downwind, under a caustic, where ray theory is least
-reliable and the engine caps the level (see
-[Outdoor scenes](outdoor.md#how-the-simulation-bends-sound)), and 1 dB at 2 km, where
-the bent paths crowd.
+the shadow); the comparison stops 60 dB down. The 1 kHz band comes from the parabolic
+equation too: within 0.07 dB to 1 km, downwind and upwind, and at 2 km downwind 0.9 dB
+low with the gradient going on to 1000 m, as the bands below it there, and 0.38 dB high
+with it stopping at 100 m.
 
-This comparison found two faults at the join between the parabolic equation's bands
-and the rays', fixed in the same change (see the changelog): the response had a notch
-up to 3 dB deep around 700 Hz (around 2.8 kHz in the penumbra of a shadow), as the
-join blended spectra that stand for different sound, the whole field over the ground
-on one path and each ray's own on the others, and the 500 Hz band of the level
-relative to free field came out 0.5 to 1.2 dB too low, as the silent paths' higher
-bands counted against its reading. Each band of the response now keeps its own
-spectrum into the crossovers, and a path that carries nothing in a band is left out
-of that band's reading; rooms change by under a hundred-thousandth of the response's
-peak, and the still-air tables above by up to 0.2 dB in one cell.
+At the join between the parabolic equation's bands and the rays' each band of the
+response keeps its own spectrum into the crossovers, since a blend of spectra that
+stand for different sound (the whole field over the ground on one path, each ray's own
+on the others) would put a notch in it, and a path that carries nothing in a band is
+left out of that band's reading, where its higher bands would count against it. A
+ground dip that falls in the crossover above the 2 kHz band is missed (see
+[Known issues](#known-issues)).
 
 ## The wide-angle parabolic equation
 
@@ -2600,6 +2599,12 @@ centre tones:
 | `windy`, downwind, 500 Hz | -6.43 | -6.84 | -3.53 | 0.20 | ffp, dB |
 | | -0.07 | -0.05 | +0.06 | +0.06 | narrow - ffp |
 | | +0.03 | +0.03 | +0.04 | +0.04 | wide - ffp |
+| `windy`, downwind, 1 kHz | 3.78 | 5.02 | 3.98 | 3.25 | ffp, dB |
+| | +0.00 | -0.02 | +0.01 | +0.01 | narrow - ffp |
+| | +0.01 | +0.01 | +0.03 | +0.03 | wide - ffp |
+| `windy`, downwind, 2 kHz | -0.02 | 4.78 | -2.11 | 3.92 | ffp, dB |
+| | +0.13 | -0.00 | +0.17 | -0.06 | narrow - ffp |
+| | -0.00 | +0.00 | +0.02 | +0.01 | wide - ffp |
 | `windy`, upwind, 63 Hz | 4.86 | 3.93 | 1.91 | -0.24 | ffp, dB |
 | | +0.19 | +0.10 | -0.07 | -0.17 | narrow - ffp |
 | | -0.03 | -0.05 | -0.09 | -0.12 | wide - ffp |
@@ -2612,6 +2617,12 @@ centre tones:
 | `windy`, upwind, 500 Hz | -6.16 | -14.45 | -33.95 | -56.97 | ffp, dB |
 | | -0.16 | -0.16 | -0.14 | -0.12 | narrow - ffp |
 | | +0.05 | +0.06 | +0.05 | +0.02 | wide - ffp |
+| `windy`, upwind, 1 kHz | -2.40 | -21.33 | -75.77 | -89.89 | ffp, dB |
+| | -0.15 | -0.21 | - | - | narrow - ffp |
+| | +0.01 | +0.02 | - | - | wide - ffp |
+| `windy`, upwind, 2 kHz | 1.76 | -39.93 | -105.59 | -100.79 | ffp, dB |
+| | -0.15 | -0.36 | - | - | narrow - ffp |
+| | +0.00 | +0.04 | - | - | wide - ffp |
 | `sunny_day`, 63 Hz | 5.32 | 5.02 | 4.36 | 3.66 | ffp, dB |
 | | +0.07 | +0.05 | +0.02 | +0.00 | narrow - ffp |
 | | -0.01 | -0.01 | -0.02 | -0.03 | wide - ffp |
@@ -2624,6 +2635,12 @@ centre tones:
 | `sunny_day`, 500 Hz | -7.51 | -13.17 | -22.26 | -30.27 | ffp, dB |
 | | -0.09 | -0.10 | -0.10 | -0.09 | narrow - ffp |
 | | +0.01 | +0.02 | +0.02 | +0.03 | wide - ffp |
+| `sunny_day`, 1 kHz | 0.67 | -7.25 | -22.60 | -38.38 | ffp, dB |
+| | -0.07 | -0.08 | -0.10 | -0.11 | narrow - ffp |
+| | -0.00 | +0.00 | +0.00 | -0.00 | wide - ffp |
+| `sunny_day`, 2 kHz | 5.04 | -3.35 | -31.56 | -68.48 | ffp, dB |
+| | -0.03 | -0.08 | -0.11 | - | narrow - ffp |
+| | -0.00 | +0.00 | +0.00 | - | wide - ffp |
 | `clear_night`, 63 Hz | 5.73 | 5.97 | 6.41 | 6.78 | ffp, dB |
 | | -0.05 | -0.04 | -0.01 | -0.00 | narrow - ffp |
 | | +0.01 | +0.01 | +0.02 | +0.02 | wide - ffp |
@@ -2636,12 +2653,20 @@ centre tones:
 | `clear_night`, 500 Hz | -8.15 | -11.48 | -13.57 | -13.55 | ffp, dB |
 | | -0.08 | -0.07 | -0.04 | -0.04 | narrow - ffp |
 | | -0.00 | -0.00 | -0.00 | +0.00 | wide - ffp |
+| `clear_night`, 1 kHz | 2.67 | 1.04 | 1.68 | 3.96 | ffp, dB |
+| | -0.01 | -0.01 | -0.02 | -0.02 | narrow - ffp |
+| | +0.00 | +0.00 | +0.00 | +0.00 | wide - ffp |
+| `clear_night`, 2 kHz | -0.83 | 4.32 | 5.06 | 3.97 | ffp, dB |
+| | -0.11 | -0.05 | -0.04 | -0.04 | narrow - ffp |
+| | +0.00 | +0.00 | +0.00 | +0.00 | wide - ffp |
 
-The narrow-angle equation is within 0.11 dB of the program on average and 0.48 dB at
-most (125 Hz, 300 m upwind in `windy`), the wide-angle one within 0.04 dB on average
-and 0.18 dB at most. Over each band as the engine reads it, the mean energy over its
-eight frequencies, the narrow-angle equation is within 0.08 dB on average and 0.38 dB
-at most, the wide-angle one within 0.02 dB and 0.12 dB. In the weather near the
+The narrow-angle equation is within 0.10 dB of the program on average and 0.48 dB at
+most (125 Hz, 300 m upwind in `windy`), the wide-angle one within 0.03 dB on average
+and 0.18 dB at most, where the program is no deeper than 60 dB below free field (-).
+Over each band as the engine reads it, the mean energy over its frequencies (eight an
+octave, 24 at 1 and 2 kHz), the narrow-angle equation is within 0.07 dB on average and
+0.38 dB at most, the
+wide-angle one within 0.02 dB and 0.12 dB. In the weather near the
 ground both hold, so the narrow-angle equation stays the default, being the faster
 of the two.
 
@@ -2654,34 +2679,34 @@ of the two.
 | distance | 63 | 125 | 250 | 500 | 1k | |
 |---|---|---|---|---|---|---|
 | 100 m | 5.55 | 3.42 | -2.27 | -5.22 | 2.55 | ffp, dB |
-| | +0.00 | +0.00 | -0.00 | -0.00 | +0.04 | engine - ffp |
-| | +0.05 | +0.11 | +0.00 | -0.61 | +0.04 | through the filters |
+| | +0.00 | +0.00 | -0.00 | -0.00 | -0.00 | engine - ffp |
+| | +0.05 | +0.11 | +0.00 | -0.61 | -0.00 | through the filters |
 | 200 m | 6.21 | 2.97 | -5.67 | -6.00 | 2.28 | ffp, dB |
-| | +0.00 | +0.00 | -0.00 | -0.00 | -0.12 | engine - ffp |
-| | +0.07 | +0.13 | -0.22 | -0.62 | -0.12 | through the filters |
+| | +0.00 | +0.00 | -0.00 | -0.00 | -0.00 | engine - ffp |
+| | +0.07 | +0.13 | -0.22 | -0.62 | -0.00 | through the filters |
 | 500 m | 9.03 | 1.29 | -2.98 | -2.74 | 5.07 | ffp, dB |
-| | +0.00 | -0.00 | -0.00 | -0.00 | -1.76 | engine - ffp |
-| | +0.15 | -0.15 | -0.06 | -0.76 | -1.76 | through the filters |
+| | +0.00 | -0.00 | -0.00 | -0.00 | -0.00 | engine - ffp |
+| | +0.15 | -0.15 | -0.06 | -0.76 | -0.00 | through the filters |
 | 1 km | 6.79 | 1.37 | 1.43 | 1.55 | 6.63 | ffp, dB |
-| | -0.00 | +0.00 | -0.00 | -0.00 | +0.55 | engine - ffp |
-| | -0.25 | -0.10 | +0.16 | -0.08 | +0.55 | through the filters |
+| | -0.00 | +0.00 | -0.00 | -0.00 | -0.00 | engine - ffp |
+| | -0.25 | -0.10 | +0.16 | -0.08 | -0.00 | through the filters |
 | 2 km | 5.93 | 5.97 | -0.51 | 4.14 | 4.18 | ffp, dB |
-| | -0.01 | -0.00 | -0.00 | -0.00 | -0.76 | engine - ffp |
-| | -0.31 | +0.27 | -0.79 | +0.29 | -0.76 | through the filters |
+| | -0.01 | -0.00 | -0.00 | -0.00 | -0.00 | engine - ffp |
+| | -0.31 | +0.27 | -0.79 | +0.29 | -0.00 | through the filters |
 
 **case 3, upward refraction 0.1/s**
 
 | distance | 63 | 125 | 250 | 500 | 1k | |
 |---|---|---|---|---|---|---|
 | 100 m | 4.78 | 2.82 | -2.44 | -7.68 | -0.30 | ffp, dB |
-| | -0.00 | -0.00 | +0.00 | +0.00 | -0.17 | engine - ffp |
-| | +0.04 | +0.10 | +0.04 | -0.54 | -0.17 | through the filters |
+| | -0.00 | -0.00 | +0.00 | +0.00 | -0.00 | engine - ffp |
+| | +0.04 | +0.10 | +0.04 | -0.54 | -0.00 | through the filters |
 | 200 m | 3.72 | 0.85 | -7.14 | -16.62 | -11.46 | ffp, dB |
 | | -0.00 | -0.00 | +0.00 | +0.00 | -0.00 | engine - ffp |
 | | +0.06 | +0.12 | -0.08 | -0.45 | -0.00 | through the filters |
 | 500 m | -0.84 | -6.20 | -20.67 | -44.90 | -52.70 | ffp, dB |
-| | -0.01 | -0.01 | -0.00 | +0.01 | +0.00 | engine - ffp |
-| | +0.08 | +0.08 | -0.86 | -2.22 | +0.00 | through the filters |
+| | -0.01 | -0.01 | -0.00 | +0.01 | +0.01 | engine - ffp |
+| | +0.08 | +0.08 | -0.86 | -2.22 | +0.01 | through the filters |
 | 1 km | -10.83 | -19.87 | -43.44 | -90.90 | -100.23 | ffp, dB |
 | | -0.01 | -0.01 | +0.01 | - | - | engine - ffp |
 | | +0.06 | -0.14 | -3.41 | - | - | through the filters |
@@ -2689,18 +2714,16 @@ of the two.
 | | -0.03 | -0.03 | - | - | - | engine - ffp |
 | | -0.15 | -0.96 | - | - | - | through the filters |
 
-In the bands the parabolic equation gives, the engine's levels are within 0.03 dB of
-the program's band averages to 2 km, downwind and upwind, where with the narrow-angle
-equation they are 0.5 to 0.8 dB off at 2 km downwind; upwind, in the shadow, where the
-parabolic equation gives the 1 kHz band too, within 0.01 dB to 500 m, 53 dB down. The
-1 kHz band downwind comes from the rays and does not change.
+From 63 Hz to 1 kHz the engine's levels are within 0.03 dB of the program's band
+averages to 2 km, downwind and upwind (at 1 kHz upwind to 500 m, 53 dB down), where
+with the narrow-angle equation they are 0.5 to 0.9 dB off at 2 km downwind.
 
 Each band of the wide-angle equation marches a grid of twenty points per wavelength of
 its highest frequency in steps of three wavelengths, ten tridiagonal solves a step,
 where the narrow-angle one takes a pair of Fourier transforms a step on a grid half as
-fine, in steps of five wavelengths: two to two and a half times the time (1.9 to 2.6 on
-one core, for listeners 100 m to 2 km out over grass in the `windy` preset and over
-hard ground in `clear_night`), all of it in the bands the parabolic equation gives. Neither equation is checked against measurements
+fine, in steps of five wavelengths: three to seven times the time (3.6 to 4.4 on one
+core for a listener 100 m out, 5.5 to 6.6 at 500 m and 3.3 to 3.7 at 2 km, over grass
+in the `windy` preset and over asphalt in `clear_night`), all of it in the bands the parabolic equation gives. Neither equation is checked against measurements
 in strong refraction, and neither is combined with a terrain yet (see
 [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
 
@@ -2742,8 +2765,11 @@ off. Other listeners in the same direction, whose ranges break a run's steps, mo
 steep level by less than 0.001 dB, the wide-angle equation being converged at its step,
 and a flatter one as before, by up to 0.53 dB per third octave from 50 to 500 Hz and 0.17
 dB per octave band (a source 30 m up, downwind in the `windy` preset, listeners 47 m to 1
-km away). The steep listeners' bands take the wide-angle equation's time: 0.6 s instead
-of 0.1 s on one core for three listeners 10 to 20 m up, 30 to 60 m from a source 1 m up
+km away). At 1 and 2 kHz, in a one-off check, the steep points' level is within 0.03 dB
+of the program at 32 points: from sources 5, 10 and 30 m up to a listener 1.5 m up and
+from 1.5 m up to 30 m up, down- and upwind in the `windy` preset over grass. The steep
+listeners' bands take the wide-angle equation's time: about 3.5 times the narrow-angle
+one's on one core for three listeners 10 to 20 m up, 30 to 60 m from a source 1 m up
 over a lawn in the `windy` preset.
 
 ## Terrain against closed forms and the exact wedge
@@ -3020,8 +3046,8 @@ about 1.5 dB.
 **The mean profile along the way.** The early paths bend through one profile, the mean
 along their way, each zone's weighted by the length of the way over it. The parabolic
 equation through that mean profile against the parabolic equation through the zones,
-in the bands the rays give (500 Hz, 1 kHz and 2 kHz, averaged over the band's
-frequencies), from 200 m on (nearer, the way lies under one weather); the level re free
+at 500 Hz, 1 kHz and 2 kHz (averaged over the band's frequencies; the profile the
+rays' bands, 4 and 8 kHz, take), from 200 m on (nearer, the way lies under one weather); the level re free
 field through the zones, and in brackets the mean profile's difference from it:
 
 | case, band | 200 m | 400 m | 800 m |
@@ -3052,8 +3078,8 @@ and 6.6 dB at most (2 kHz, 800 m downwind of the shelter), but up to 2.7 dB less
 800 m past the gust and 0.7 dB less at 1 kHz 400 m past the shelter: one profile
 cannot both bend the sound down over the first 150 m and let it go straight after,
 and bends it a little the whole way instead. That is the cost of the equivalent profile the standards
-take (Nord2000, Harmonoise), and the reason the bands up to 500 Hz, and up to 2 kHz in
-a shadow, come from the parabolic equation, which goes through the zones.
+take (Nord2000, Harmonoise), and a reason the bands up to 2 kHz come from the
+parabolic equation, which goes through the zones.
 
 ## Barriers and buildings in wind against a full-wave solution
 
@@ -3251,7 +3277,7 @@ source 1 m up over hard ground and a barrier 4 m high 15 m away across the way:
 | a building's roof 25 to 37 m away, 1 cm higher, from 6 to 6.3 m (listeners 60 and 120 m away, 5 m off its middle) | 0.14 | 0.021 | 0.1 a cell |
 | a listener 60 and 120 m away behind a barrier slanted at 63 degrees to the way, 0.01 degrees round, from 0.40 to 0.60 degrees | 0.017 | 0.018 | |
 | a listener 2 cm further, where the parabolic equation starts (a 1.5 m barrier 2 m from a source 0.5 m up) | 0.24 | 0.16 | |
-| a listener 10 cm across the shadow boundary of a barrier's end, 60 and 120 m away | 7.8 and 20 | 0.42 | 1 |
+| a listener 10 cm across the shadow boundary of a barrier's end, 60 and 120 m away | 7.8 and 19 | 0.42 | 1 |
 | a listener 10 cm across a roof edge's shadow boundaries, of the direct sound and of the ground reflection, 28 and 43 m from a source 1 m over the roof (and the source and the listener swapped) | 0.28 and 1.79 | 0.09 and 0.04 | |
 | a listener 2 mm across the line of an end below the line of sight seen from above (a barrier 1 m high 30 m away), 100 and 200 m away | 12.8 and 6.3 | 0.02 | |
 
@@ -3267,8 +3293,9 @@ steps at a barrier's end come from the plane's two dimensions (see
 [What is not modelled yet](outdoor.md#what-is-not-modelled-yet)): the paths over the
 top take the barrier's effect, past the end too as they fade out there, and the direct
 sound and the paths round the end the open ground's. Across the end's shadow boundary
-the level steps by at most 1.0 dB from 63 to 500 Hz, and from 1 kHz up, where the
-paths round the end keep their legs, by up to 7.8 and 20 dB downwind; across the line
+the level steps by at most 1.0 dB from 63 to 500 Hz and 1.6 dB at 1 and 2 kHz, and at
+4 and 8 kHz, where the paths round the end keep their legs, by up to 7.8 and 19 dB
+downwind; across the line
 of an end below the line of sight, where the direct sound goes from the barrier's
 effect to the open ground's, by up to 1.2 dB from 63 to 250 Hz and 4.8 dB at 500 Hz to
 12.8 dB at 8 kHz above (see [Known issues](#known-issues)). Past a roof's edge, where
@@ -3291,17 +3318,17 @@ a weather statistic might give them:
 | still | `neutral` (still air) | 40 % | 30 % | 20 % |
 | inversion | `clear_night` (air warming with height) | 0 % | 20 % | 50 % |
 
-The downwind class is the scene's own weather, so the four classes take four runs,
-15 s together. The level in each class, each period (12, 4 and 8 hours), over
+The downwind class is the scene's own weather, so the four classes take four runs. The
+level in each class, each period (12, 4 and 8 hours), over
 the long term and L_den (5 dB in the evening, 10 at night), in dB(A):
 
 | | downwind | upwind | still | inversion | day | evening | night | long term | L_den |
 |---|---|---|---|---|---|---|---|---|---|
-| 50 m | 46.5 | 36.6 | 47.4 | 47.6 | 45.6 | 46.1 | 46.8 | 46.1 | 53.0 |
-| 100 m | 42.9 | 21.6 | 38.9 | 40.6 | 39.5 | 39.8 | 40.1 | 39.8 | 46.4 |
-| 200 m | 33.5 | 10.5 | 26.3 | 36.1 | 29.2 | 31.8 | 33.9 | 31.7 | 39.8 |
-| 400 m | 22.2 | -2.8 | 12.0 | 28.5 | 17.5 | 22.7 | 25.8 | 22.7 | 31.4 |
-| 800 m | 12.2 | -20.2 | -1.6 | 17.7 | 7.2 | 12.0 | 15.0 | 12.0 | 20.7 |
+| 50 m | 47.0 | 36.6 | 47.4 | 47.6 | 45.8 | 46.2 | 46.8 | 46.2 | 53.0 |
+| 100 m | 41.7 | 21.6 | 38.9 | 41.0 | 38.8 | 39.3 | 40.0 | 39.3 | 46.2 |
+| 200 m | 34.3 | 10.5 | 26.3 | 35.7 | 30.0 | 31.9 | 33.7 | 31.9 | 39.6 |
+| 400 m | 24.0 | -2.8 | 12.0 | 29.4 | 19.1 | 23.9 | 26.8 | 23.8 | 32.5 |
+| 800 m | 12.9 | -20.2 | -1.6 | 20.0 | 7.9 | 14.0 | 17.2 | 13.9 | 22.8 |
 
 **The arithmetic.** The script works the period levels, the long-term levels and L_den
 out again from each class's own run: the energy mean over the classes by their shares
@@ -3319,13 +3346,13 @@ dB, within the standard's range:
 
 | distance | engine | ISO 9613-2 | difference |
 |---|---|---|---|
-| 50 m | 0.92 | 1.69 | -0.76 |
-| 100 m | 2.21 | 2.53 | -0.32 |
-| 200 m | 3.12 | 2.95 | +0.17 |
-| 400 m | 3.43 | 3.16 | +0.27 |
-| 800 m | 3.49 | 3.27 | +0.22 |
+| 50 m | 1.03 | 1.68 | -0.65 |
+| 100 m | 2.04 | 2.53 | -0.49 |
+| 200 m | 3.14 | 2.95 | +0.19 |
+| 400 m | 3.46 | 3.16 | +0.30 |
+| 800 m | 3.51 | 3.26 | +0.25 |
 
-The engine's correction follows the standard's shape within 0.76 dB, the most at 50 m,
+The engine's correction follows the standard's shape within 0.65 dB, the most at 50 m,
 where the standard's formula is only a step past d_p = 25 m and the ground's own
 pattern still differs from one weather to the next. This is a check of plausibility,
 not of accuracy: the standard's correction is an empirical fit, and the engine's comes
@@ -4520,15 +4547,16 @@ Results:
   take it too; the direct sound and the paths round the end take the open ground's, in
   the open ground's bands along their way and above them with their legs' own shadows.
   10 cm across the end's shadow boundary in the `windy` preset the level steps by at
-  most 1.0 dB from 63 to 500 Hz (0.42 dB in still air), and 120 m upwind by at most
-  0.91 dB in every band, but from 1 kHz up, where the direct sound takes the open
-  ground's refraction and the paths round the end their legs', by up to 7.8 dB 60 m
-  downwind and 20 dB 120 m downwind, and by 5.2 dB at 4 kHz 60 m upwind. Where the end
+  most 1.0 dB from 63 to 500 Hz and 1.6 dB at 1 and 2 kHz (0.42 dB in still air), and
+  120 m upwind by at most 0.92 dB in every band, but at 4 and 8 kHz, where the direct
+  sound takes the open ground's refraction and the paths round the end their legs', by
+  up to 7.8 dB 60 m downwind and 19 dB 120 m downwind, and by 5.2 dB at 4 kHz 60 m
+  upwind. Where the end
   stands below the line of sight (a barrier 1 m high 30 m from a source 1 m up), a
   listener 100 or 200 m away crossing the end's line seen from above goes from the
   barrier's effect to the open ground's sound: 2 mm across it the level steps by up to
-  1.2 dB from 63 to 250 Hz (0.02 dB in still air), but by up to 4.8 dB at 500 Hz,
-  10.6 dB downwind at 1 kHz and 12.8 dB upwind at 8 kHz (see
+  1.2 dB from 63 to 250 Hz (0.02 dB in still air), but by up to 4.8 dB from 500 Hz to
+  2 kHz and 12.8 dB upwind at 8 kHz (see
   [Barriers and buildings in wind](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
 - **A roof's edge in wind.** Where the paths over edges keep their straight legs (a
   source or a listener on a building, an object of the model file in the way), the bent
@@ -4539,14 +4567,37 @@ Results:
   and 43 m away, and the two swapped), the weather's effect steps across the direct
   sound's boundary by at most 0.26 dB in octave bands and 0.63 dB in third octaves.
   Across the ground reflection's, where it comes into view and the open ground's bands
-  (up to 500 Hz, and to 2 kHz upwind) go from the rays to the parabolic equation, it
-  steps by up to 1.75 dB at 500 Hz and 0.76 dB at 2 kHz in octave bands and 3.2 dB at
+  (up to 2 kHz) go from the rays to the parabolic equation, it steps by up to 1.75 dB
+  at 500 Hz and 0.72 dB at 2 kHz (0.42 dB downwind) in octave bands and 3.2 dB at
   400 Hz in third octaves, where with the rays on both sides it would step by 0.61,
-  0.14 and 1.2 dB; at 8 kHz by 0.83 dB (1.3 dB in third octaves) either way (a one-off
+  0.14 and 1.2 dB; at 8 kHz by 0.83 dB (1.3 dB in its 10 kHz third octave) either way (a one-off
   check; `tests/test_barriers_in_wind.py` bounds octave bands from 63 to 500 Hz). The
   level itself, in the wind, steps by up to 0.28 and 1.79 dB in octave bands
   ([Continuity](#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   Blending the rays and the equation there would remove the switch's part.
+- **A caustic in the rays' bands.** Over the open ground in wind or a temperature
+  gradient the bands above the parabolic equation's (4 and 8 kHz) come from the
+  eigenrays, and where two of them merge (a caustic) each is capped at 10 dB over a
+  straight path's on one side and both are gone on the other, with no transition
+  (Airy) zone between: the level steps by 11.1 and 12.9 dB at 4 and 8 kHz between
+  listeners 1 cm apart 119.86 and 119.87 m downwind in the `windy` preset (a source 2 m
+  and a listener 1.5 m up over grass), and by 10.5 dB at both between 2.04 and 2.05 m
+  up 250 m away in `clear_night` (a source 0.5 m up), where up to 2 kHz the level
+  changes by at most 0.05 dB a centimetre (`tests/test_refraction.py`, a one-off check
+  at 4 and 8 kHz). With `simulation.early.open_ground_frequencies: rays` the rays give
+  1 and 2 kHz too short of half the way to the shadow, and those step at the same
+  caustics by 10.5 and 12.0 dB in the wind and by 14.0 and 7.2 dB on the clear night (a
+  one-off check).
+- **A ground dip in the crossover from the parabolic equation's bands to the rays'.**
+  Each band of the response keeps its own spectrum into the crossovers, held past its
+  last frequency, so a ground dip that falls in the crossover above the equation's top
+  band (2.4 to 3.4 kHz; 0.59 to 0.84 kHz short of half the way to the shadow with
+  `open_ground_frequencies: rays`) is missed: 100 m downwind in the benchmark's case 2 the dip at
+  2.85 kHz, 12.8 dB deep, comes out 1.3 dB too shallow and the response 2.0 dB too low
+  at 3 kHz, off by up to 2.0 dB from 2.75 to 3.2 kHz (`tests/test_ffp.py` checks
+  either side of it). More frequencies do not mend it: a model of the hold against the
+  program misses by 2.8 dB from the band's last of 8 an octave (2740 Hz) and 2.1 dB
+  from the last of 24 (2799 Hz).
 - **Coverage maps behind barriers** read the high bands higher than a listener at the
   same point: 130 m behind two barriers over grass by 0.6, 1.3, 3.8 and 13.5 dB at 1,
   2, 4 and 8 kHz, in still air as in 8 m/s of wind, where the weather's effect is the
@@ -4716,6 +4767,7 @@ python validation/terrain.py --json terrain.json
 python validation/ffp.py --json ffp.json
 python validation/curved_rays.py --json curved_rays.json   # about 30 min
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
+python validation/open_ground_frequencies.py --json open_ground.json   # --cache DIR --part K/N to share it
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
 python validation/barrier_wind.py --json barrier_wind.json   # about 4 h; --quick: fewer bands
 python validation/long_term.py --json long_term.json
@@ -4750,9 +4802,9 @@ minute, the wave solver's checks 1.2 minutes (both stencils), the edge diffracti
 seconds, the fade at edges' 53 minutes, the walks' 14, the ground's 5.5 (51 s of them
 the wave solver's, 100 s the parabolic equation's), the outdoor measurements' 3.1 (3.0
 with turbulence, 20 seconds in still air), the turbulence's 3.9 (3.8 with `--profile`),
-the vegetation's 5.2, the leaves' 2.6, the wave solver's outdoors 11, the moving air's
-9.3, the insertion loss's 1.8, the terrain's 41 seconds (2 November), the fast field
-program's 5.7, the benchmark's 55 (much longer with `--far`), the weather zones' 7.2
+the vegetation's 5.2, the leaves' 2.6, the wave solver's outdoors 12.6 and the moving
+air's 12.3 (both 10 November), the insertion loss's 1.8, the terrain's 41 seconds
+(2 November), the fast field program's 5.7, the benchmark's 55 (much longer with `--far`), the weather zones' 7.2
 (46 s of them the parabolic equation's, 6.4 minutes the mean profile's), the long term's
 16 seconds, the moving sources' 5.6 minutes, the rotors' 3.3, the sirens' 4 seconds, the
 cities' 22 (1.3 minutes with `--sizes 10 20 30 40 60`), each BRAS run of the coupled
@@ -4760,7 +4812,11 @@ rooms, the seminar room or the auditorium 2 to 4 minutes (4 to 9 calibrated, 5 t
 third-octave bands) and of the hall about 1.5 hours (5.2 calibrated, 3.4 in third-octave
 bands), the binaural comparison 10 minutes in the seminar room, 6 in the auditorium and
 an hour in the hall, a loudspeaker of the hall in parts about 10 minutes, the coupled
-rooms against theory under a second, and the rooms' own decay 5.8 minutes.
+rooms against theory under a second, and the rooms' own decay 5.8 minutes. Since then
+the open ground's parabolic equation in wind runs up to 2 kHz, which on one core makes
+the outdoor measurements take about 15 times as long (case 1), the long term about 5.4
+times and the benchmark about 1.6 times; the others listed here do not reach that part
+of the engine.
 The cross-check's numbers come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the
 onset in every response).
