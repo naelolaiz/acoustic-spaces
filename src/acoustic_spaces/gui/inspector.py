@@ -2671,6 +2671,8 @@ class MaterialPage(Page):
                 "Ticked, the material is a porous ground (grass, soil, snow, gravel, "
                 "asphalt): its absorption and its reflection come from its impedance, with "
                 "the phase and the ground wave that make the dip over the ground outdoors. "
+                "Ticking it takes away a scattering of 0.1 in every band, as a new material "
+                "has: a ground scatters nothing unless it is given a scattering. "
                 "Unticked, the absorption is as given"
             )
         )

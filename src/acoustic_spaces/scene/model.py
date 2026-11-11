@@ -1112,7 +1112,9 @@ class Material(_Model):
     database entry (``preset``). The file may also be a material library of
     CATT-Acoustic or ODEON, with ``entry`` naming the material in it (see
     :mod:`acoustic_spaces.materials.libraries`). ``scattering`` may also name a
-    scattering entry of the built-in database. Data at other frequencies is mapped onto
+    scattering entry of the built-in database; a material that gives none scatters
+    :data:`DEFAULT_SCATTERING` in every band, and :data:`GROUND_SCATTERING`, nothing,
+    where it has an ``impedance``. Data at other frequencies is mapped onto
     third-octave bands when it has more than one value in some octave band, else onto
     octave bands; bands without data take the nearest band's value, and ``source`` says
     which ones.
