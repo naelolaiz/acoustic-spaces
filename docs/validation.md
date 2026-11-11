@@ -2304,7 +2304,8 @@ flow, were checked (moving air is, [below](#moving-air-in-the-wave-solver)).
 `validation/wave_wind.py` checks the wave solver's moving air (`simulation.wave.wind:
 moving`, see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound))
 against exact solutions, and the effective speed of sound beside it, in the 63 Hz band
-(40 to 90 Hz, its edges a third of an octave wide) from a grid for that band.
+(40 to 90 Hz, its edges a third of an octave wide) from a grid for that band; and the
+wind it makes flow round the model's solids against an ideal fluid's.
 
 **Free field in a uniform wind.** A wind of 15 m/s over a rigid ground, the source 2 m
 up, listeners 1.5 m up 30 m away downwind, upwind, across the wind and at 45 degrees
@@ -2329,27 +2330,62 @@ Moving air is within 0.02 dB and 0.1 ms of the exact solution in every direction
 effective speed of sound gets the arrival about right but not the level, up to 0.84 dB
 off: a speed of sound that changes with the bearing is not a moving medium.
 
+**The wind round a dome.** Where the atmosphere's wind meets a surface of the model,
+moving air first makes it flow round the solids (see
+[How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)). A rigid
+half sphere of 4 m radius on rigid ground in a uniform wind of 15 m/s: the wind of the
+run's own solver, on the faces between its cells over the ground, against the flow of
+an ideal fluid past a sphere, the gradient of U (x + a³ x / (2 r³)), which the ground,
+a plane of symmetry, leaves as it is. The difference across each face in per cent of the
+wind, its root mean square and (in brackets) its largest:
+
+| distance from the dome's centre | 63 Hz band's grid (cells of 38 cm) | 125 Hz band's grid (19 cm) |
+|---|---|---|
+| within two cells of the dome | 8.8 % (58.6 %) | 9.2 % (150 %) |
+| from there to 1.5 radii | 1.5 % (8.3 %) | 0.88 % (9.7 %) |
+| 1.5 to 2 radii | 0.59 % (2.9 %) | 0.37 % (1.6 %) |
+| 2 to 3 radii | 0.35 % (1.6 %) | 0.32 % (1.0 %) |
+| beyond 3 radii | 0.28 % (2.1 %) | 0.29 % (2.2 %) |
+
+Next to the dome the grid's cells make a staircase of it, and the wind is fast round
+each of its corners: the fastest wind on the grid is 1.55 and 1.64 times the given one,
+where the ideal fluid's is 1.5 times, over the top. From two cells off the surface the
+wind is the ideal fluid's to 1.5 % and 0.9 %, and less farther out. Beyond 3 radii the
+difference no longer falls with the cell: the grid ends 4 radii from the centre along
+the ground and 3.5 radii up, and the wind's correction with it (a one-off run with the
+ground 7 radii away and the sky 6.5 gives 0.06 % there and 0.17 % from 2 to 3 radii).
+
 **A façade downwind.** A rigid building 40 m downwind of the source, its façade across
 the wind, 30 m high and 50 m wide, and a listener 10 m upwind of the source, both 2 m
-up: the façade sends the sound back against the wind. Ray theory in a uniform wind
-gives its arrival (a ray goes at c n + v for its wave normal n; off the façade the wave
-keeps its frequency and its wavenumber along the façade), 1.78 ms later than in still
-air. Against the still air's run on the same grid:
+up: the façade sends the sound back against the wind. In a uniform wind of 15 m/s ray
+theory gives its arrival (a ray goes at c n + v for its wave normal n; off the façade
+the wave keeps its frequency and its wavenumber along the façade), 1.78 ms later than
+in still air. Moving air's wind is not uniform there: it slows towards the façade and
+flows round the building, 13.9 m/s at the listener, 13.2 m/s at the source, 2.8 m/s
+5 m before the façade and up to 49.5 m/s past the building's edges. Its reference is
+the time along the still air's paths through the wind the run's solver made, each
+piece of a path at the speed of a ray along it, v · s + √(c² − |v|² + (v · s)²) (bending
+the paths changes the time only to the second order; the same sum through the uniform
+wind gives its exact rays' arrival to within 0.001 ms). Against the still air's run on the
+same grid:
 
 | Façade echo | later than in still air | off by |
 |---|---|---|
-| exact (ray theory) | +1.78 ms | |
+| ray theory, the uniform wind | +1.78 ms | |
 | effective speed of sound | -8.81 ms | -10.59 ms |
-| moving air | +1.80 ms | +0.02 ms |
+| ray theory, the wind round the building | +1.38 ms | |
+| moving air | +1.38 ms | +0.00 ms |
 
 The effective speed of sound sends the echo back at the speed of sound going away from
-the source: over its 40 m back to the source that makes it 80 v / (c² - v²) = 10.2 ms
+the source: over its 40 m back to the source that makes it 80 v / (c² − v²) = 10.2 ms
 too soon, and the run gives 10.6 ms. The 0.4 ms between the two is not fully traced:
 the effective run's grid steps for the fastest sound, c + v, and the still air's for
 c, so the two disperse differently, which accounts for part of it. Moving air gets the
-echo within 0.02 ms. The wind is the uniform profile everywhere, the
-building included: the check is of the sound in moving air, not of the flow round a
-building, which the engine does not compute.
+echo within 0.01 ms of the rays through its own wind, 0.40 ms sooner than a uniform wind
+would bring it: before the façade the air is nearly still. That wind is an ideal
+fluid's, without the wake and the eddies of a real building's, and at the building's
+edges it is 3.3 times the given wind on this grid, where a real wind separates (see
+[What is not modelled yet](outdoor.md#what-is-not-modelled-yet)).
 
 **A wind that grows with height.** The `windy` preset (5 m/s 10 m up, logarithmic) over
 grass, downwind and upwind, the scene of [the check above](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation),
@@ -2372,42 +2408,41 @@ speed of sound is 0.02 to 0.29 dB below it and moving air −0.02 to +0.25 dB fr
 (most at 200 m, 1.5 m up); upwind moving air is within 0.13 dB and the effective speed
 of sound 0.14 to 0.39 dB above.
 
-Moving air takes 4.0 to 5.1 times as long as the effective speed of sound: 16 s
-against 3.9 s in the free field (3.2 million cells), 38 s against 7.4 s with the
-façade (6 million) and, with the preset (29.2 against 30.2 million cells), 324 and
-316 s against 66 s downwind and upwind, on 4 cores with nothing else running (11
-November 2026).
+Moving air takes 3.8 to 5.0 times as long as the effective speed of sound where its
+wind is carried as given: 16 s against 4.1 s in the free field (3.2 million
+cells) and, with the preset (29.2 against 30.2 million cells), 319 and 332 s against
+66 s downwind and upwind. Round the façade's building it takes 10.5 times as long for
+the façade's response of 0.45 s, 86 s against 8.2 s (6 million cells): 37 s to make the
+wind flow round the building (962 sweeps of its solve), which a run does once whatever
+its length, and its steps 6.9 times the effective speed of sound's. On 4 cores with
+nothing else running (11 November 2026).
 
-**A room with an opening.** Moving air's wind blows through the model's solids, and
-where a solid has air on both sides along the wind the solver's sound grows instead of
-dying away (the scheme's doing, not the room's). In a nearly closed space that cannot
-leak away, and it builds up without bound. The solver therefore watches each run in
-moving air: from the end of the source's pulse on, the pressure squared over the
-grid's air, averaged over pieces of at least a quarter second, may not rise to twice
-its lowest level so far, or the run stops with an error (a rise that stays under a
-millionth of the run's largest piece is let be). A rigid room on rigid ground, 4 × 4 × 3 m
-inside, its walls and roof 0.8 m thick, with an opening of 0.8 × 0.8 m in its wall
-downwind, the source and a listener in it, a response of 3 s in the 63 Hz band:
+**A room with an opening.** A wind blown through a room's walls makes the solver's
+sound grow there without bound (the scheme keeps the sound's energy only where no wind
+crosses a surface); made to flow round them, it leaves the room sheltered. A rigid room
+on rigid ground, 4 × 4 × 3 m inside, its walls and roof 0.8 m thick, with an opening of
+0.8 × 0.8 m in its wall downwind, the source and a listener in it, a response of 3 s in
+the 63 Hz band:
 
-| wind (m/s) | moving air | listener's level, last quarter second over the second (dB) | the same with the effective speed of sound (dB) |
-|---:|---|---:|---:|
-| 5 | runs its 3 s | +1.5 | -0.4 |
-| 15 | stopped 2.5 s after emission, 3.5 dB over its lowest level | | -0.2 |
-| 30 | stopped 1.5 s after emission, 4.2 dB over its lowest level | | -0.1 |
+| wind (m/s) | fastest wind round the room (m/s) | fastest wind in the room (m/s) | moving air: listener's level, last quarter second over the second (dB) | the same with the effective speed of sound (dB) |
+|---:|---:|---:|---:|---:|
+| 5 | 7.8 | 0.01 | -0.5 | -0.4 |
+| 15 | 23.6 | 0.03 | -0.8 | -0.2 |
+| 30 | 46.9 | 0.05 | -1.0 | -0.1 |
 
-At 5 m/s the sound grows too slowly for the watch within 3 s: the response it lets
-through gains 1.5 dB where the effective speed of sound's loses 0.4 dB. The watch does
-not make moving air right in such a room, it stops the runs that fail outright: take
-the wind as the effective speed of sound there.
+Nothing takes the room's sound in but the opening, with either way of taking the wind.
+The solver still watches each run in moving air: from the end of the source's pulse on,
+the pressure squared over the grid's air, averaged over pieces of at least a quarter
+second, may not rise to twice its lowest level so far, or the run stops with an error
+(a rise that stays under a millionth of the run's largest piece is let be). None of
+these runs is stopped.
 
 One-off checks of the solver alone, on the 63 Hz band's grid with rigid surfaces over
-10 s, the levels those of the grid's last quarter second under its first: at 5 m/s the
-same room is stopped after 5.25 s; at 15 m/s with its opening upwind it loses 20 dB
-and is not stopped. In the open, at 15 m/s, a yard closed on four sides (4 × 4 m,
-walls 4 m high), a street 3 m wide between two buildings 5 m high and a façade
-downwind of the source die away steadily, by 91, 73 and 87 dB. A façade upwind of the
-source falls 36 dB in 1.5 s and then lingers, 40 dB down after 10 s (within 1.3 times
-its lowest level, so not stopped); what holds it there is not traced.
+10 s at 15 m/s, the levels those of the grid's last quarter second under its first:
+the same room loses 1.1 dB with its opening downwind (1.1 and 1.2 dB at 5 and 30 m/s) and
+1.0 dB with it upwind. In the open, a yard closed on four sides (4 × 4 m, walls 4 m
+high), a street 3 m wide between two buildings 5 m high, a façade downwind of the
+source and one upwind of it die away steadily, by 68, 72, 110 and 121 dB.
 
 ## Outdoor results against exact solutions
 
@@ -5634,9 +5669,10 @@ Files and runs:
   (in the tests, to within 1 % of the tone's amplitude).
   The wave solver in wind and temperature is checked against the parabolic equation
   over open ground up to 200 m, not against measurements, nor round buildings; its
-  moving air against the exact field in a uniform wind and a façade's echo against
-  ray theory, with the wind the weather's profile everywhere, not the flow round a
-  building (see [Moving air](#moving-air-in-the-wave-solver)).
+  moving air against the exact field in a uniform wind, its wind round a dome against
+  an ideal fluid's and a façade's echo against ray theory through that wind, not
+  against a measured wind round a building, whose wake it leaves out (see
+  [Moving air](#moving-air-in-the-wave-solver)).
   The level relative to free field and a barrier's insertion loss are checked against
   exact solutions, not against measurements; the path reflected both before and after
   a barrier is checked over a rigid ground only, and the sound that goes over a

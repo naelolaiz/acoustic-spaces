@@ -49,20 +49,34 @@ octave bands replace the ray-traced ones.
   a building, keeps the speed of sound of sound going away from it.
 - With ``wind="moving"`` the air moves instead: each cell keeps the still air's speed
   of sound, and before each step both of the leapfrog's pressure levels are carried
-  along with the wind, dq/dt = -v . grad q (fourth-order central differences, second
-  order or upwind next to a face, the strong-stability-preserving Runge-Kutta method
-  of third order); the still air's step follows, its boundaries, the matched layer and
-  the source fixed to the ground. In the air's own frame that is the still air's step
-  exactly, so a uniform wind gives the convected wave equation: downwind sound at
-  c + v, upwind at c - v whichever way it turned. Where the wind changes, the term
-  of the linearised Euler equations that the wind's shear puts on the air's velocity is
-  left out, about ``|dv/dz| / omega`` of the rest. The air moves no more than half a cell a
-  step, and the matched layer's air is still. It takes four to five times as long as the
-  effective speed of sound's run, and runs on the CPU (asked for the GPU, it says so and stays
-  there). Its wind blows through the model's solids, which is not stable in a nearly
-  closed space such as a room with an opening, so the run is watched: once the source's
-  pulse has ended, the pressure squared over the grid's air, averaged over pieces of
-  ``WATCH_S``, may not rise to ``WATCH_RISE`` times its lowest so far (a ``ValueError``).
+  along with the wind, dq/dt = -v . grad q (the strong-stability-preserving
+  Runge-Kutta method of third order); the still air's step follows, its boundaries, the
+  matched layer and the source fixed to the ground. In the air's own frame that is the
+  still air's step exactly, so a uniform wind gives the convected wave equation:
+  downwind sound at c + v, upwind at c - v whichever way it turned. Where the wind
+  changes, the term of the linearised Euler equations that the wind's shear puts on the
+  air's velocity is left out, about ``|dv/dz| / omega`` of the rest. That scheme keeps
+  the sound's energy only where no wind crosses a surface of the model and no cell
+  gains or loses air, so the atmosphere's wind is first made to flow round the model's
+  solids: on the faces between the cells, the wind of least change from the given one
+  (each face's change weighed by one over the given speed there) that crosses no
+  surface and leaves every cell as much as it enters it. A dead end, such as a room
+  with one opening, then holds nearly still air whatever the wind's profile. It is a
+  flow without wakes or eddies behind the solids, and at a sharp edge it speeds up, the
+  more the finer the grid; the run says how fast it gets through a face between two
+  cells (``wave_wind_fastest_m_s``), which must stay under half a cell a step. The
+  carrying is of fourth order where the wind is the same along a row of cells and of
+  second order where it changes; over open, flat ground, where the given wind already
+  crosses nothing, it is carried as given, by fourth-order central differences. Over
+  open ground it takes four to five times as long as the effective speed of sound's
+  run; round solids its steps take about seven times as long, after the solve of the
+  wind (see ``validation/wave_wind.py``). It runs on the CPU (asked for the GPU, it
+  says so and stays there). The matched layer's air is still, and where the moving air
+  meets it sound can build up at winds beyond the weather's (see the notes of
+  ``fdtd.hpp``). So the run is watched all the same: once the source's pulse has
+  ended, the pressure squared over the grid's air, averaged over pieces of
+  ``WATCH_S``, may not rise to ``WATCH_RISE`` times its lowest so far (a
+  ``ValueError``).
 - The grid is laid out on the CPU and stepped there, or with ``device`` on a GPU,
   through WebGPU (:mod:`acoustic_spaces.engine.gpu`); the two agree to rounding, in
   wind and temperature too (with the effective speed of sound).
@@ -152,12 +166,12 @@ _LOW_PASS_TAPS = 33
 _LOW_PASS_CUTOFF = 0.2
 #: Runs of more cell updates than this (a few seconds' work) report their progress.
 _LONG_RUN = 2e9
-#: Moving air is watched for sound that grows: its wind blows through the model's
-#: solids, which is not stable in a nearly closed space. The pressure squared over the
-#: grid's air is averaged over pieces of the run at least this long (s); from the end of
-#: the source's pulse on, a piece more than WATCH_RISE times the lowest before it, and
-#: more than WATCH_FLOOR of the largest (rounding's own level lies far below that),
-#: stops the run.
+#: Moving air is watched for sound that grows (its scheme keeps the sound's energy with
+#: the wind that flows round the model's solids; the watch is for what that does not
+#: cover). The pressure squared over the grid's air is averaged over pieces of the run
+#: at least this long (s); from the end of the source's pulse on, a piece more than
+#: WATCH_RISE times the lowest before it, and more than WATCH_FLOOR of the largest
+#: (rounding's own level lies far below that), stops the run.
 WATCH_S = 0.25
 WATCH_RISE = 2.0
 WATCH_FLOOR = 1e-6
@@ -1005,27 +1019,37 @@ def wave_responses(
             [np.full(len(b), m, dtype=np.int64) for m, b in enumerate(branches)]
         )
         probes = np.vstack([_probe_points(p, h) for p in listeners])
-        solver = _native.WaveSolver(
-            bvh,
-            np.ascontiguousarray(face_material.reshape(-1), dtype=np.int64),
-            np.array([fit.beta for fit in fits]),
-            np.ascontiguousarray(np.vstack(branches)),
-            branch_material,
-            origin,
-            h,
-            int(shape[0]),
-            int(shape[1]),
-            int(shape[2]),
-            np.asarray(source, dtype=float),
-            np.ascontiguousarray(probes),
-            1.0,
-            layer,
-            LAYER_DAMPING,
-            threads,
-            size,
-            speeds,
-            *flow,
-        )
+        try:
+            solver = _native.WaveSolver(
+                bvh,
+                np.ascontiguousarray(face_material.reshape(-1), dtype=np.int64),
+                np.array([fit.beta for fit in fits]),
+                np.ascontiguousarray(np.vstack(branches)),
+                branch_material,
+                origin,
+                h,
+                int(shape[0]),
+                int(shape[1]),
+                int(shape[2]),
+                np.asarray(source, dtype=float),
+                np.ascontiguousarray(probes),
+                1.0,
+                layer,
+                LAYER_DAMPING,
+                threads,
+                size,
+                speeds,
+                *flow,
+            )
+        except ValueError as error:
+            if "the wind round the model's solids" not in str(error):
+                raise
+            raise ValueError(
+                f"the wave solver's moving air: {error} (on cells of {100 * h:.0f} cm; a "
+                "sharp edge speeds the wind up, the more the finer the grid): set "
+                "simulation.wave.wind to effective, or lower max_band_hz or "
+                "points_per_wavelength"
+            ) from error
         return solver, grid, fits, probes, courant, extremes, still
 
     def kept(stencil: str, layer: int, still_air: bool = False):
@@ -1099,20 +1123,21 @@ def wave_responses(
         where += f", sound at {extremes[0]:.0f} to {extremes[1]:.0f} m/s"
     if still_inside:
         where += ", the wind left out: the air inside the closed model is still"
+    # The fastest wind round the model's solids (m/s), where it was made to flow round them.
+    fastest = solver.wind_fastest * h * grid.rate if solver.wind_round else None
     if solver.flowing:
         where += ", the air moving" + (
             " (on the CPU: the GPU steps still air)" if gpu_wanted else ""
         )
+    if fastest is not None:
+        where += f", round the model's solids at up to {fastest:.0f} m/s"
     say(
         f"{label}: wave solver, {name} ({solver.air_cells:,} cells of {100 * h:.0f} cm, "
         f"{steps:,} steps{where})"
     )
     stepper = GpuWaveSolver(solver) if on_gpu else solver
     who = f"source {label!r}" if label else "the source"
-    unstable = (
-        "The wind blows through the model's solids, which is not stable in a nearly "
-        "closed space such as a room with an opening: set simulation.wave.wind to effective"
-    )
+    unstable = "set simulation.wave.wind to effective"
     # Long runs report every tenth (which is also where a cancelled run stops), and
     # moving air runs in the pieces it is watched over (see WATCH_S).
     tenths = 10 if solver.air_cells * steps > _LONG_RUN else 1
@@ -1149,13 +1174,13 @@ def wave_responses(
                         f"{who}: the wave solver's sound grew in the moving air instead "
                         f"of dying away ({10 * math.log10(level / lowest):.1f} dB over its "
                         f"lowest level, {(since - lead) / grid.rate:.1f} s after "
-                        f"emission). {unstable}"
+                        f"emission): {unstable}"
                     )
                 lowest = min(lowest, level)
     if not np.all(np.isfinite(recorded)):
         raise ValueError(
             f"{who}: the wave solver's run did not stay finite"
-            + (f". {unstable}" if solver.flowing else "")
+            + (f": {unstable}" if solver.flowing else "")
         )
     info: dict[str, float] = {
         "wave_cells": float(solver.air_cells),
@@ -1171,6 +1196,8 @@ def wave_responses(
         info["wave_speed_min_m_s"], info["wave_speed_max_m_s"] = extremes
     if solver.flowing:
         info["wave_moving_air"] = 1.0
+    if fastest is not None:
+        info["wave_wind_fastest_m_s"] = fastest
     if still_inside:
         info["wave_still_inside"] = 1.0
     # How much slower than it should sound travels at the top of the highest band along

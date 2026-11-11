@@ -458,7 +458,8 @@ walls round it up to the wind's height.
 has two: a concert on a lawn by a lake, heard across it, with cool air and a stronger
 breeze over the water and a weaker breeze among the houses on the far shore.
 
-A zone's border is a step: the wind does not die away gradually into the lee. How
+A zone's border is a step: the wind does not die away gradually into the lee (only
+the wave solver's moving air makes it pass gradually from one zone's to the next's). How
 each stage of the simulation takes the zones is described below; the parabolic
 equation and the wave solver go through them, and the early paths, whose arcs need one
 profile, take the mean along their way.
@@ -703,25 +704,47 @@ is an arc of a circle, so its travel time and its length are exact.
   c + v downwind and c − v upwind, whichever way it turned. In a uniform wind of 15
   m/s it is within 0.02 dB and 0.1 ms of the exact solution in every direction, where
   the effective speed of sound is up to 0.84 dB off; the echo of a façade 40 m
-  downwind comes within 0.02 ms of ray theory's, where the effective speed of sound
-  brings it 10.6 ms early; in the `windy` preset over grass moving air is within
+  downwind comes within 0.01 ms of ray theory's through the wind round the building,
+  where the effective speed of sound brings it about 10 ms early; in the `windy`
+  preset over grass moving air is within
   0.25 dB of the parabolic equation and the effective speed of sound within 0.39 dB,
   0.1 and 0.2 dB on average (see
   [Validation](validation.md#moving-air-in-the-wave-solver)).
-  It takes four to five times as long as the effective speed of sound, on the CPU only
+  It takes four to five times as long as the effective speed of sound over open
+  ground; round buildings its steps take about seven times as long, after the wind is
+  made to flow round them (37 s on the 6 million cells of the validation's façade). It
+  runs on the CPU only
   (asked for the GPU, it says so and stays on the CPU), and the run's details say
   `wave_moving_air`. Its grid is fine enough for sound going against the fastest wind
-  in the slowest air.
-- **Moving air in a room with an opening.** The moving air's wind blows through the
-  model's solids as over open ground, and where a solid has air on both sides along
-  the wind the solver's sound grows there instead of dying away. In the open it
-  leaks away, all or most of it; in a nearly closed space, such as a room with an
-  opening, it stays and builds up without bound. Each run in moving air is therefore watched: once the
-  source's pulse has ended, the pressure squared over the grid's air, averaged over
-  pieces of at least a quarter second, may not rise to twice its lowest level so far,
-  or the run stops with an error. A growth too slow for that within the response is not caught
-  (see [Validation](validation.md#moving-air-in-the-wave-solver)): for a source or a
-  listener in a room with an opening, take the wind as the effective speed of sound.
+  of the atmosphere in the slowest air.
+- **The moving air's wind round buildings.** Moving air keeps the sound's energy only
+  where no wind crosses a surface and no cell of the grid gains or loses air; a wind
+  blown through a building as over open ground makes the sound grow there. So where
+  the atmosphere's wind meets a surface of the model (a building, a barrier, terrain)
+  or changes along its own way (weather zones), the solver first makes it flow round
+  the solids, on the faces between its cells: the wind of least change from the
+  atmosphere's, each face's change weighed by one over the wind's speed there, that
+  crosses no surface and leaves every cell as much as it enters it. It slows to nothing
+  before a façade, is faster past a building's edges and over its roof, leaves a room
+  with one opening sheltered whatever the wind's profile, and far from the solids is
+  the atmosphere's wind. Against an ideal fluid's flow past a sphere it
+  is within 1.5 % of the wind (root mean square) from two cells off the surface (see
+  [Validation](validation.md#moving-air-in-the-wave-solver)). It is such a fluid's flow:
+  without a wake or eddies (behind a building it closes in as it parted in front), and
+  at a sharp edge it speeds up, the more the finer the grid, 3.3 times the wind at the
+  edges of the validation's building on cells of 38 cm. The run says how fast it gets
+  through a face between two cells (`wave_wind_fastest_m_s` in its details) and is
+  refused if that reaches half a cell a time step. The wind is solved on the wave grid
+  and ends with it: a solid near the scene's edge has its flow cut short there. It
+  takes about 40 bytes a cell while it is solved, and 16 bytes a cell more than over
+  open ground during the run. Over open, flat ground the atmosphere's wind crosses
+  nothing and is carried as it is. The air of the grid's
+  absorbing layer is still, and where the moving air meets it the sound can build up
+  in winds beyond the weather's (in one-off runs from 53 m/s on, a wind at 45 degrees
+  to the grid over open ground, and not at 42 m/s). So each run in moving air is
+  watched all the same: once the source's pulse has ended, the pressure squared over
+  the grid's air, averaged over pieces of at least a quarter second, may not rise to
+  twice its lowest level so far, or the run stops with an error.
 - **A source shut in a closed building.** No wind blows through closed walls. Where the
   wave solver's grid is closed (the source and its listeners in a building without an
   opening), it takes the still air's speed of sound, with either way of taking the
@@ -729,7 +752,14 @@ is an arc of a circle, so its travel time and its length are exact.
   details).
 - **Through weather zones** the parabolic equation marches zone by zone, changing its
   speed of sound where its path crosses a border, and the wave solver takes each cell's
-  zone. The early paths, whose arcs need one profile, take the mean profile along their
+  zone. Its moving air then lets no cell gain or lose air (see the wind round buildings
+  above): where the wind changes from one zone to the next along its way, it does so
+  gradually, and what one zone's wind has more than the next's leaves sideways and
+  upwards through the grid's edges, the more gradually the farther the grid reaches
+  from the border. In a one-off check with a wind that drops to a fifth, half of the
+  drop lies 2 m before the border on a grid 6 m wide and 8 m before it on one 36 m
+  wide, four fifths of it at the border on both; this passage is not checked against a
+  reference. The early paths, whose arcs need one profile, take the mean profile along their
   way, each zone's weighted by the length of the way over it (the equivalent profile
   of Nord2000 and Harmonoise), with the wind's component along the way from each
   zone's own direction; so do the paths off façades and barriers, over their legs. The
@@ -1670,12 +1700,12 @@ The editor builds and edits outdoor scenes too: see
 The wave solver's moving air (`simulation.wave.wind: moving`) runs on the CPU only,
 and leaves out the term of the linearised Euler equations that the wind's change with
 height puts on the air's own motion, about |dv/dz| / ω of the rest (under 0.3 % at 63
-Hz a metre above the ground in the `windy` preset). Its wind is the weather's profile
-everywhere, as for the rays: no flow is computed round buildings, so the wind blows into
-a façade as over open ground and a building's lee is as windy as the open (only a
-closed building round a shut-in source has still air). Blowing through solids, it is
-not stable in a nearly closed space such as a room with an opening, where the run
-stops with an error. By default
+Hz a metre above the ground in the `windy` preset). Round the model's solids its wind
+is an ideal fluid's (see
+[How the simulation bends sound](#how-the-simulation-bends-sound)): no wake and no
+eddies behind a building, whose lee is as windy as its front, and no separation at a
+sharp edge, within a few metres of which it is too fast. Between weather zones its
+wind passes gradually, over a distance that grows with the grid's reach. By default
 it takes the wind as
 the rays and the parabolic equation do, as an effective speed of sound, so sound that
 a building sends back towards the source travels at the speed of sound going away from
@@ -1743,7 +1773,7 @@ refraction-modified wedges) are not offered.
 
 The eddies are the same over the whole scene (weather zones change the wind and the
 temperature, not the eddies), and the eddies' largest size is the same at every
-height. A weather zone's border is a step, and the early paths take one mean profile
+height. A weather zone's border is a step (but for the wave solver's moving air), and the early paths take one mean profile
 along their way, so a wind that changes on the way tells on them by a few decibels in
 the bands the rays give (see [Weather zones](#weather-zones)). The ground reacts locally unless
 `reaction: extended` says otherwise, and the wave solver's ground always does: one
