@@ -260,6 +260,11 @@
   to 0.29 dB lower at 200 m in every weather, and the 125 Hz band between 0.17 dB lower
   and 0.11 dB higher at 100 m (see
   [Validation](docs/validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
+- Fixed: with `simulation.wave.wind: moving`, the sound in a nearly closed space such
+  as a room with an opening grew without bound (the moving air's wind blows through
+  the model's solids), up to results that were not numbers. Each run in moving air is
+  now watched and stops with an error once its sound grows instead of dying away, and
+  a wave solver's run that does not stay finite is refused.
 - Fixed (results change): outdoors, the wave solver took the wind into a closed building
   round a shut-in source, whose air is still. In a 15 m/s wind a 6 m hut's band
   energies were up to 1.7 dB off the still air's with the effective speed of sound and
