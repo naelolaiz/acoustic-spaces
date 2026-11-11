@@ -3083,8 +3083,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--wave-wind",
         choices=("effective", "moving"),
         help="override simulation.wave.wind: outdoors, the wave solver takes the wind as an "
-        "effective speed of sound or as air that moves (four to five times the work, on the "
-        "CPU)",
+        "effective speed of sound or as air that moves (four to five times the work over "
+        "open ground, more round buildings, on the CPU)",
     )
     simulate.add_argument(
         "--late-device",

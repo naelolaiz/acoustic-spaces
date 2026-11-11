@@ -1099,6 +1099,16 @@ NB_MODULE(_native, m) {
             "Whether the air reaches each side of the grid (-x, +x, -y, +y, -z, +z): its "
             "edge there, or the matched layer inside it.")
         .def_prop_ro("flowing", &as::WaveSolver::flowing)
+        .def_prop_ro("wind_round", &as::WaveSolver::wind_round,
+                     "In moving air, whether the wind was made to flow round the model's "
+                     "solids (the given velocities met a face, or changed along a row of "
+                     "cells).")
+        .def_prop_ro("wind_fastest", &as::WaveSolver::wind_fastest,
+                     "The fastest the air moves along an axis of the grid, in cells per "
+                     "step: through a face between two cells when wind_round, else the "
+                     "largest of the given velocities' components; 0 in still air.")
+        .def_prop_ro("wind_sweeps", &as::WaveSolver::wind_sweeps,
+                     "The sweeps the solve of the wind round the solids took; 0 without one.")
         .def_prop_ro("mean_square", &as::WaveSolver::mean_square,
                      "In moving air, the pressure squared over the grid's air and the steps "
                      "of the last run, on average; 0 in still air.")

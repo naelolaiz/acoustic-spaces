@@ -17,8 +17,8 @@ foot, in line with a barrier's end or a wall, across a barrier end's shadow boun
 wind, from and to roofs in wind, with eddies at each frequency, to the late rays in wind
 and through plants, curved rays near a profile's nodes, the wave solver round open
 models, between its cells, at a response's end and round a closed building in wind, and
-its moving air kept stable, Doc 29's maximum levels and tables, Doppler walks and the
-spread itself.
+its moving air flowing round solids, Doc 29's maximum levels and tables, Doppler walks
+and the spread itself.
 
 Results change from 4.2.1: outdoors in wind or a temperature gradient at 1 and 2 kHz
 over the open ground, now from the parabolic equation (that change alone moves the
@@ -61,7 +61,12 @@ to 3.1 dB at 1 kHz); and the spread: its combined standard uncertainty and its m
 within the draws' noise, every response after the first in a run of several, materials
 that absorb everything in some band, grounds with an impedance, and draws of much more
 absorption than was traced; and a calibrated material given in third octaves where one
-of them reaches 1. Scene files of 4.2.1 load unchanged.
+of them reaches 1. An outdoor ground with an `impedance` and no `scattering` now
+scatters nothing (it took 0.1: the early level over grass moves by up to 0.5 dB at 500
+Hz, ground dips in still air deepen, flat open ground alone has no late part;
+`scattering: 0.1` gives the earlier results), and the wave solver's moving air flows
+round solids and passes between weather zones gradually (results near buildings and
+across zones change). Scene files of 4.2.1 load unchanged.
 
 **Error estimates**
 
@@ -297,6 +302,12 @@ of them reaches 1. Scene files of 4.2.1 load unchanged.
   reflection, as in the early part. An open face 1 m over a floor had taken 6.3 dB from
   the floor's scattered sound at 125 Hz; in `apartment` the bed's level drops by
   0.04 dB(A).
+- Changed: an outdoor ground (a material with an `impedance`) scatters nothing unless
+  its material gives a `scattering`, where it took 0.1 like any material: the early
+  level over grass is within 0.05 dB of the exact solution 20 and 100 m away (it was
+  0.3 and 0.5 dB off at 500 Hz), the ground dips in still air are deeper, and flat
+  open ground alone gives no late part. `scattering: 0.1` on the ground gives the
+  earlier results.
 
 **The wave solver**
 
@@ -318,11 +329,15 @@ of them reaches 1. Scene files of 4.2.1 load unchanged.
   source's level from eight cells on in closed rooms, where the source's signal also
   undoes the 19-point grid's own gain on a point source (0.06 and 0.35 dB in the two
   bands), which that loss had hidden.
-- Fixed: with `simulation.wave.wind: moving`, the sound in a nearly closed space such
-  as a room with an opening grew without bound (the moving air's wind blows through
-  the model's solids), up to results that were not numbers. Each run in moving air is
-  now watched and stops with an error once its sound grows instead of dying away, and
-  a wave solver's run that does not stay finite is refused.
+- Fixed (results change): with `simulation.wave.wind: moving`, the wind blew through
+  the model's solids, which made the sound in a nearly closed space such as a room
+  with an opening grow without bound; it now flows round them as an ideal fluid's, so
+  results near buildings change (the validation's façade echo comes 0.42 ms sooner)
+  and runs there take longer. Where weather zones change the wind along its way, it
+  now passes from one zone's wind to the next's gradually, no cell gaining or losing
+  air, which changes results there too; open, flat ground in one weather is as before,
+  to the bit. Each run in moving air is also watched and stops with an error should
+  its sound grow, and a wave solver's run that does not stay finite is refused.
 - Fixed (results change): outdoors, the wave solver took the wind into a closed building
   round a shut-in source, whose air is still. In a 15 m/s wind a 6 m hut's band
   energies were up to 1.7 dB off the still air's with the effective speed of sound and
@@ -457,8 +472,10 @@ of them reaches 1. Scene files of 4.2.1 load unchanged.
   the source's spread over four cells a side from 2 to 3.4 cells away, the listener's
   reading beyond (Free field under [Validation](docs/validation.md#wave-based-solver)).
 - Docs: the cost of the wave solver's moving air is given as four to five times the
-  effective speed of sound's (`validation/wave_wind.py` measures 4.0 to 5.1 times), where
-  the help, the editor's tip and the docs said three to four times.
+  effective speed of sound's over open ground and more round buildings
+  (`validation/wave_wind.py` measures 3.8 to 5.0 times, and 10.5 times round its
+  façade's building), where the help, the editor's tip and the docs said three to four
+  times.
 - New validation: `validation/wave_walls.py`, what the wave solver's walls on cell faces
   cost: in seven placements of a rigid box moved within a cell or turned against the grid,
   its modes are up to 11 %, 6.4 % and 2.8 % off on the 63, 125 and 250 Hz bands' grids

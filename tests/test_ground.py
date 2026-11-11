@@ -12,6 +12,7 @@ from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.calibration import calibrate
 from acoustic_spaces.cli import main
 from acoustic_spaces.engine.coherent import SameDelays, coherent_energy, total_energy
+from acoustic_spaces.engine.diffraction import band_frequencies
 from acoustic_spaces.engine.impedance import (
     Admittance,
     band_weights,
@@ -255,6 +256,57 @@ def test_a_material_with_an_impedance() -> None:
         "Miki: 20000 kPa s/m², 0.05 m thick"
         in Impedance(flow_resistivity=20000.0, thickness=0.05).describe()
     )
+
+
+def test_a_ground_scatters_nothing_unless_its_material_says_so() -> None:
+    """A material with an impedance scatters nothing without a ``scattering`` of its
+    own, and reads back from the scene file the one it was given; a material without an
+    impedance keeps the default of 0.1. Over such a ground the reflection keeps all the
+    energy its impedance leaves it and, in the open, nothing arrives late; a ground
+    given a scattering of 0.1 loses that share of the reflection, which arrives late."""
+    lawn = Material.model_validate({"impedance": "grass"})
+    assert lawn.scattering == [0.0] * 8 and "scattering" not in lawn.to_data()
+    rough = Material.model_validate({"impedance": "grass", "scattering": 0.1})
+    assert rough.scattering == [0.1] * 8 and rough.to_data()["scattering"] == [0.1] * 8
+    assert Material.model_validate(rough.to_data()).scattering == [0.1] * 8
+    smooth = Material.model_validate({"impedance": "grass", "scattering": 0.0})
+    assert smooth.scattering == lawn.scattering and "scattering" not in smooth.to_data()
+    assert Material.model_validate({"absorption": [0.2] * 8}).scattering == [0.1] * 8
+
+    grounds = ({"impedance": "grass"}, {"impedance": "grass", "scattering": 0.0}, rough.to_data())
+    plain, zero, tenth = (simulate(Room.from_scene(ground_scene(g)))["s", "l"] for g in grounds)
+    for response in (plain, zero, tenth):
+        assert response.early.order.tolist() == [0, 1]
+    np.testing.assert_array_equal(plain.early.energy, zero.early.energy)
+    np.testing.assert_array_equal(plain.early.spectrum, zero.early.spectrum)
+    np.testing.assert_allclose(tenth.early.energy[1], 0.9 * plain.early.energy[1], rtol=1e-12)
+    np.testing.assert_array_equal(tenth.early.energy[0], plain.early.energy[0])
+    assert not plain.late.any() and not zero.late.any()
+    assert np.all(tenth.late.sum(axis=1) > 0.0)
+
+
+@pytest.mark.parametrize(("zs", "zr", "r"), [(1.0, 1.5, 20.0), (2.0, 1.5, 100.0)])
+def test_the_early_level_over_a_ground_is_the_exact_solution_s(zs, zr, r) -> None:
+    """Over a ground without a ``scattering`` the direct sound and the reflection add up
+    to the exact (Sommerfeld) solution in every octave band, at the frequencies the
+    engine takes for each: within 0.1 dB 20 and 100 m away (0.05 dB as computed). A
+    ground that scatters 0.1 misses it by 0.3 and 0.5 dB at 500 Hz."""
+    places = {"source": (0, 0, zs), "listener": (r, 0, zr)}
+    scene = ground_scene({"impedance": "grass"}, extent=150, **places)
+    c = Room.from_scene(scene).speed_of_sound()
+    r1, r2 = math.hypot(r, zs - zr), math.hypot(r, zs + zr)
+    exact = []
+    for band in band_frequencies()[0]:
+        energy = 0.0
+        for f in band:
+            k = 2 * math.pi * f / c
+            beta = complex(1.0 / surface_impedance(np.array(f), 200.0, speed_of_sound=c))
+            reflected = exact_reflection(beta, k, r, zs, zr)
+            energy += abs(1.0 + r1 / r2 * reflected * np.exp(-1j * k * (r2 - r1))) ** 2
+        exact.append(10.0 * math.log10(energy / len(band)))
+    np.testing.assert_allclose(early_level(scene), exact, rtol=0.0, atol=0.1)
+    rough = ground_scene({"impedance": "grass", "scattering": 0.1}, extent=150, **places)
+    assert np.max(np.abs(early_level(rough) - exact)) > 0.25
 
 
 @pytest.mark.parametrize(

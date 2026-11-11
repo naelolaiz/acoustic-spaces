@@ -82,8 +82,9 @@ sources:
   # as a system engineer tunes it (eq_db per octave band, 63 Hz to 8 kHz): the
   # subwoofers rolled off above 125 Hz and 3 dB over the arrays together, the arrays'
   # low mids up and their top octave up by what 30 m of air takes, so that at the
-  # audience every octave from 250 Hz to 4 kHz is within 1 dB of 1 kHz, 8 kHz 1.5 dB
-  # down and the two lowest 2 dB up.
+  # audience, in this scene's weather, every octave from 500 Hz to 4 kHz is within
+  # 1 dB of 1 kHz, 250 Hz 1.3 dB down, 8 kHz 1.8 dB down and the two lowest 1.8 to
+  # 1.9 dB up.
   - name: main_left
     channel: left
     group: PA

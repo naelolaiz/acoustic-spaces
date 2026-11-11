@@ -136,9 +136,9 @@ def _scattered(source, listener, radius: float = 0.5, max_time: float = 1.0) -> 
 
 
 def test_a_jet_overhead_lands_no_burst_of_scattered_sound() -> None:
-    # The aircraft landing demo's case: a source 305 m up, 300 m off, and a listener
-    # 1.2 m above grass. A ray that lands near the listener's foot brings it most of the
-    # scattered sound at once; the gather finds it there every time.
+    # The aircraft landing demo's geometry: a source 305 m up, 300 m off, and a listener
+    # 1.2 m above a ground that scatters. A ray that lands near the listener's foot brings
+    # it most of the scattered sound at once; the gather finds it there every time.
     source, listener, more = (-300.0, 0.0, 305.0), [(0.0, 0.0, 1.2)], {"max_time": 3.0}
     rays = _rain(source, listener, 24, 0, **more)[:, 0]
     shared = _rain(source, listener, 24, late.FIRST_GATHER, **more)[:, 0]

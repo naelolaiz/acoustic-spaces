@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 from pydantic import ValidationError
-from test_refraction import field
+from test_refraction import field, scattering_lawn
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine.coherent import total_energy
@@ -36,10 +36,12 @@ def eddies(cn2: float = 1e-5, scale: float = 10.0) -> Eddies:
 
 
 def in_turbulence(preset="strong", atmosphere=None, **kwargs) -> Scene:
+    """The field in turbulence, its lawn scattering 0.1: over a ground that scatters
+    nothing there is no late part."""
     atmosphere = dict(atmosphere or {})
     if preset is not None:
         atmosphere["turbulence"] = preset
-    return field(atmosphere, **kwargs)
+    return scattering_lawn(field(atmosphere, **kwargs))
 
 
 # -- the scene -----------------------------------------------------------------------

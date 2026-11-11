@@ -943,6 +943,12 @@ class Geometry(_Model):
 
 
 DEFAULT_SCATTERING = 0.1
+#: What a material with an ``impedance`` scatters unless it gives a ``scattering``:
+#: nothing. An outdoor ground is smooth to sound that grazes it, as the fast field
+#: program, the parabolic equation and the engineering methods (ISO 9613-2, CNOSSOS-EU,
+#: Nord2000's roughness class N) have it: by Kirchhoff's approximation, heights of 2 cm
+#: rms take 0.4 % out of a reflection 5 degrees off the ground at 1 kHz.
+GROUND_SCATTERING = 0.0
 
 
 class Impedance(_Model):
@@ -1106,7 +1112,9 @@ class Material(_Model):
     database entry (``preset``). The file may also be a material library of
     CATT-Acoustic or ODEON, with ``entry`` naming the material in it (see
     :mod:`acoustic_spaces.materials.libraries`). ``scattering`` may also name a
-    scattering entry of the built-in database. Data at other frequencies is mapped onto
+    scattering entry of the built-in database; a material that gives none scatters
+    :data:`DEFAULT_SCATTERING` in every band, and :data:`GROUND_SCATTERING`, nothing,
+    where it has an ``impedance``. Data at other frequencies is mapped onto
     third-octave bands when it has more than one value in some octave band, else onto
     octave bands; bands without data take the nearest band's value, and ``source`` says
     which ones.
@@ -1300,7 +1308,8 @@ class Material(_Model):
             origin = None
         if scattering is not None:
             self._clipped += _outside("scattering", scattering, scattering_from)
-        self.scattering = _clip(scattering or [DEFAULT_SCATTERING] * len(OCTAVE_BANDS_HZ))
+        default = DEFAULT_SCATTERING if self.impedance is None else GROUND_SCATTERING
+        self.scattering = _clip(scattering or [default] * len(OCTAVE_BANDS_HZ))
         if passing is not None:
             thirds = len(THIRD_OCTAVE_BANDS_HZ) in (len(passing), len(self.absorption))
             fine = "third_octave" if thirds else "octave"
@@ -2762,7 +2771,7 @@ class WaveStage(_Model):
             "component along the way from the source changes, as the rays and the parabolic "
             "equation take it) or moving (the air moves, so sound going against the wind is "
             "slower whichever way it turned, off a building too; four to five times the "
-            "work, on the CPU)"
+            "work over open ground, more round buildings, on the CPU)"
         ),
     )
     device: Literal["cpu", "gpu", "auto"] | None = Field(
