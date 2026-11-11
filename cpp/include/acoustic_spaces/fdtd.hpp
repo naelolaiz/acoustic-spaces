@@ -29,7 +29,8 @@
 // The grid's cells are air when they can be reached from the source without crossing
 // a face of the model, so closed rooms, open models and thin screens all work. A link
 // whose segment between cell centres crosses a face is cut: it is part of the
-// boundary, of the material of the face it crosses nearest the cell, with weight
+// boundary, of the material of the face it crosses nearest the cell (a centre on a
+// face lies on its side towards +x, else +y, else +z: see kTie), with weight
 // w_k = g_k / (2 L). (A cell's cut links through a plane wall weigh L / 2 together, as
 // the one face of the 7-point stencil does.) The material's specific admittance (normal
 // velocity times rho c over pressure) is a constant and parallel
@@ -238,7 +239,11 @@ public:
     // across it; next to another surface or to the source the cells round them that they
     // see, weighted trilinearly (see reading_cells). `speed`, when
     // given, holds each cell's speed of sound over the grid's (in (0, 1], x fastest; see
-    // above); without it the speed is the same everywhere.
+    // above); without it the speed is the same everywhere. The probes come in groups of
+    // `probes_per_listener`, the first of each a listener's own point and the others
+    // round it: a source on a face lies on a side of it chosen by the listeners its air
+    // reaches (see place_on_face), and each probe is in sight of its group's listener
+    // or not (see probe_in_sight).
     WaveSolver(const Bvh &bvh, const std::int64_t *face_material, const double *beta,
                std::size_t materials, const double *branches, const std::int64_t *branch_material,
                std::size_t branch_count, const Vec3 &origin, double cell, std::size_t nx,
@@ -246,11 +251,14 @@ public:
                const std::vector<Vec3> &probes, double edge_admittance, std::size_t layer,
                double layer_damping, std::size_t threads, std::size_t stencil = 7,
                const float *speed = nullptr, const float *flow_x = nullptr,
-               const float *flow_y = nullptr)
+               const float *flow_y = nullptr, std::size_t probes_per_listener = 1)
         : origin_(origin), cell_(cell), nx_(nx), ny_(ny), nz_(nz), sy_(nx), sz_(nx * ny),
           layer_(layer), stencil_(stencil) {
         if (stencil != 7 && stencil != 19) {
             throw std::invalid_argument("the stencil has 7 or 19 points");
+        }
+        if (probes_per_listener == 0 || probes.size() % probes_per_listener != 0) {
+            throw std::invalid_argument("the probes come in whole groups, one per listener");
         }
         if (layer > 0 && stencil != 7) {
             throw std::invalid_argument("the matched layer needs the 7-point stencil");
@@ -307,55 +315,66 @@ public:
         // one.
         // Only cells a face passes near can have such links, so only they cast rays.
         const std::vector<std::uint8_t> near = near_faces(bvh);
+        // The cells whose centre lies on a face (see kTie), found once for their links,
+        // among those a face's plane passes that near.
+        std::vector<std::uint8_t> centre_on_face(n, 0);
+        parallel_for(n, threads_, [&](std::size_t begin, std::size_t end, std::size_t) {
+            for (std::size_t i = begin; i < end; ++i) {
+                if (near[i] & kNearPlane) centre_on_face[i] = on_face(bvh, centre(i));
+            }
+        });
+        const auto centre_end = [&](std::size_t i) {
+            return End{centre(i), {}, centre_on_face[i] != 0};
+        };
         std::vector<std::uint16_t> cut(n, 0);
         parallel_for(n, threads_, [&](std::size_t begin, std::size_t end, std::size_t) {
             for (std::size_t i = begin; i < end; ++i) {
                 if (!near[i]) continue;
+                const End from = centre_end(i);
                 const long long at[3] = {static_cast<long long>(i % nx),
                                          static_cast<long long>((i / nx) % ny),
                                          static_cast<long long>(i / sz_)};
                 const long long size[3] = {static_cast<long long>(nx), static_cast<long long>(ny),
                                            static_cast<long long>(nz)};
-                const Vec3 c = centre(i);
                 for (int k = 0; k < directions_; ++k) {
                     if (bit_[k] < 0) continue;
                     bool inside = true;
+                    long long to[3];
                     for (int a = 0; a < 3; ++a) {
-                        const long long to = at[a] + kSteps[k][a];
-                        inside = inside && to >= 0 && to < size[a];
+                        to[a] = at[a] + kSteps[k][a];
+                        inside = inside && to[a] >= 0 && to[a] < size[a];
                     }
                     if (!inside) continue;
-                    if (bvh.intersect(c, unit(k), length(k), -1).found()) {
+                    // (The neighbour's centre as centre() has it, from its coordinates.)
+                    const End there{centre_at(to[0], to[1], to[2]), {},
+                                    centre_on_face[neighbour(i, k)] != 0};
+                    if (crossing(bvh, from, there, unit(k), length(k)) >= 0) {
                         cut[i] = static_cast<std::uint16_t>(cut[i] | (1u << bit_[k]));
                     }
                 }
             }
         });
 
-        // Air: every cell reachable from the cells the source sees.
-        type_.assign(n, kSolid);
-        std::vector<std::size_t> queue;
-        for (const auto &[i, w] : visible_cells(bvh, source, nullptr)) {
-            (void)w;
-            if (type_[i] == kSolid) {
-                type_[i] = kInterior;
-                queue.push_back(i);
-            }
-        }
-        if (queue.empty()) {
-            throw std::invalid_argument("the source sees no cell of the wave grid");
-        }
-        while (!queue.empty()) {
-            const std::size_t i = queue.back();
-            queue.pop_back();
-            for (int k = 0; k < directions_; ++k) {
-                if (blocked(cut, i, k)) continue;
-                const std::size_t j = neighbour(i, k);
-                if (type_[j] == kSolid) {
-                    type_[j] = kInterior;
-                    queue.push_back(j);
+        // Air: every cell reachable from the cells the source sees (for a source on a
+        // face, see place_on_face).
+        static_assert(kSolid == 0, "flood marks the cells still 0");
+        source_on_face_ = on_face(bvh, source);
+        if (source_on_face_) {
+            place_on_face(bvh, cut, source, probes, probes_per_listener);
+        } else {
+            type_.assign(n, kSolid);
+            std::vector<std::size_t> queue;
+            for (const auto &[i, w] : visible_cells(bvh, source, nullptr)) {
+                (void)w;
+                if (type_[i] == kSolid) {
+                    type_[i] = kInterior;
+                    queue.push_back(i);
                 }
             }
+            if (queue.empty()) {
+                throw std::invalid_argument("the source sees no cell of the wave grid");
+            }
+            flood(cut, queue, type_, kInterior);
         }
 
         // The matched layer's air, which must meet no face.
@@ -417,10 +436,10 @@ public:
                     reach_sides(j, 0);
                     return;
                 }
-                Hit hit = bvh.intersect(centre(i), unit(k), length(k), -1);
-                if (!hit.found()) hit = bvh.intersect(centre(j), unit(opposite(k)), length(k), -1);
-                if (!hit.found()) return;  // grazing a face's edge: as if rigid
-                const auto m = static_cast<std::int32_t>(face_material[hit.face]);
+                std::int64_t face = crossing(bvh, centre_end(i), centre_end(j));
+                if (face < 0) face = crossing(bvh, centre_end(j), centre_end(i));
+                if (face < 0) return;  // grazing a face's edge: as if rigid
+                const auto m = static_cast<std::int32_t>(face_material[face]);
                 beta_sum += w * beta[m];
                 std::size_t kind = 0;
                 while (kind < kinds && crossed[kind] != m) ++kind;
@@ -464,26 +483,47 @@ public:
 
         // The source's cells (made special, so one update adds the source): none of the
         // cells round it in the matched layer, whichever cells it then takes.
-        for (const auto &[i, w] : visible_cells(bvh, source, &type_)) {
+        for (const auto &[i, w] : visible_cells(bvh, source, &type_, source_lean_)) {
             if (type_[i] == kLayer) {
                 throw std::invalid_argument("the source is in the matched layer");
             }
         }
-        for (const auto &[i, w] : reading_cells(bvh, cut, source, true)) {
+        for (const auto &[i, w] : reading_cells(bvh, cut, source, true, source_lean_)) {
             std::size_t k = special_index(i);
             if (k == npos) k = add_special(i, exact_.data(), 0.0);
             source_[k] += static_cast<float>(cell_scale(i) * w);
         }
+        std::vector<End> probe_ends;  // each probe, and its lean (see kTie)
         for (const Vec3 &p : probes) {
             // (kNear cells away to within rounding counts as that far.)
             const bool near = norm(p - source) < (kNear - 1e-9) * cell;
-            auto cells = reading_cells(bvh, cut, p, !near);
+            // A probe on faces (see kTie) reads with the first of its leans (see leans)
+            // that has air, the rule's sides, or where those have none (a listener on a
+            // ceiling, in a room's corner, on a pillar's edge) other sides; on an edge or in
+            // a corner, the widest of those (see widest).
+            Vec3 lean{};
+            if (on_face(bvh, p)) {
+                const Leans candidates = leans(bvh, p);
+                const auto has_air = [&](std::size_t k) {
+                    return !reading_cells(bvh, cut, p, !near, candidates.all[k]).empty();
+                };
+                lean = widest(bvh, p, candidates, has_air).second;
+            }
+            const auto cells = reading_cells(bvh, cut, p, !near, lean);
+            probe_ends.push_back(End{p, lean, true});
             probe_cells_.push_back({});
             probe_weights_.push_back({});
             for (const auto &[i, w] : cells) {
                 probe_cells_.back().push_back(i);
                 probe_weights_.back().push_back(w);
             }
+        }
+        // Whether each probe's listener sees it, each with the lean its reading takes: a
+        // probe across a surface from its listener (a screen, a balcony's front) can have
+        // air of its own, and a difference across the surface is no gradient there.
+        for (std::size_t k = 0; k < probes.size(); ++k) {
+            const std::size_t l = k - k % probes_per_listener;
+            probe_in_sight_.push_back(k == l || crossing(bvh, probe_ends[l], probe_ends[k]) < 0);
         }
         // The runs of consecutive interior cells, which the update streams through.
         for (std::size_t i = 0; i < n;) {
@@ -517,6 +557,12 @@ public:
     bool flowing() const { return !flow_mask_.empty(); }
     std::size_t probes() const { return probe_cells_.size(); }
     bool probe_found(std::size_t p) const { return !probe_cells_.at(p).empty(); }
+    // Whether probe p's listener (the first probe of its group) sees it, each point with
+    // the lean its reading takes (see kTie); a listener sees its own point.
+    bool probe_in_sight(std::size_t p) const { return probe_in_sight_.at(p) != 0; }
+    // Whether the source lies on a face (see kTie), and so sends sound into the space
+    // on one side of it only (see place_on_face).
+    bool source_on_face() const { return source_on_face_; }
     std::size_t stencil() const { return stencil_; }
     std::size_t threads() const { return threads_; }
 
@@ -883,7 +929,12 @@ private:
     }
 
     Vec3 centre(std::size_t i) const {
-        const std::size_t x = i % nx_, y = (i / nx_) % ny_, z = i / sz_;
+        return centre_at(static_cast<long long>(i % nx_), static_cast<long long>((i / nx_) % ny_),
+                         static_cast<long long>(i / sz_));
+    }
+
+    // The centre of the cell at grid coordinates x, y, z.
+    Vec3 centre_at(long long x, long long y, long long z) const {
         return {origin_.x + (static_cast<double>(x) + 0.5) * cell_,
                 origin_.y + (static_cast<double>(y) + 0.5) * cell_,
                 origin_.z + (static_cast<double>(z) + 0.5) * cell_};
@@ -959,13 +1010,18 @@ private:
         a[i] = total;
     }
 
-    // The cells some face passes within the cube of half-width one cell round their
-    // centre, which holds the links of the + half of every stencil: those within its
-    // bounding box, grown by a cell, that are no further from its plane than the
-    // cube's corners. Every cell when the faces' boxes hold too many cells to visit.
+    // Of each cell, kNearFace when some face passes within the cube of half-width one cell
+    // round its centre, which holds the links of the + half of every stencil: the cells
+    // within its bounding box, grown by a cell, that are no further from its plane than
+    // the cube's corners; and kNearPlane too when that face's plane passes within kTie
+    // cells of the centre (as a face the centre lies on does, see kTie). Both for
+    // every cell when the faces' boxes hold too many cells to visit.
+    static constexpr std::uint8_t kNearFace = 1, kNearPlane = 2;
+
     std::vector<std::uint8_t> near_faces(const Bvh &bvh) const {
         const std::size_t n = nx_ * ny_ * nz_;
         const double reach = cell_ * (1.0 + 1e-9), radius = std::sqrt(3.0) * reach;
+        const double tie = kTie * cell_;
         const double low[3] = {origin_.x, origin_.y, origin_.z};
         const std::size_t size[3] = {nx_, ny_, nz_};
         std::vector<std::uint8_t> near(n, 0);
@@ -989,13 +1045,16 @@ private:
             }
             if (count == 0) continue;
             visits += count;
-            if (visits > 8 * n) return std::vector<std::uint8_t>(n, 1);
+            if (visits > 8 * n) return std::vector<std::uint8_t>(n, kNearFace | kNearPlane);
             const Vec3 &normal = bvh.normal(f);
             for (std::size_t z = from[2]; z <= to[2]; ++z) {
                 for (std::size_t y = from[1]; y <= to[1]; ++y) {
                     for (std::size_t x = from[0]; x <= to[0]; ++x) {
                         const std::size_t i = x + y * sy_ + z * sz_;
-                        if (std::abs(dot(normal, centre(i) - p[0])) <= radius) near[i] = 1;
+                        const double off = std::abs(dot(normal, centre(i) - p[0]));
+                        if (off <= radius) {
+                            near[i] |= off <= tie ? kNearFace | kNearPlane : kNearFace;
+                        }
                     }
                 }
             }
@@ -1043,21 +1102,26 @@ private:
     // band three cells from the source is 0.28 dB off where it is 0.05 dB. (The 7-point
     // grid's level 2.5 cells from the source is closer with the cubic, 0.35 dB off
     // against 0.83 dB.)
+    //
+    // p, on faces, takes `lean` (see kTie), and its place among the centres (see grid_place).
     std::vector<std::pair<std::size_t, double>> reading_cells(
-        const Bvh &bvh, const std::vector<std::uint16_t> &cut, const Vec3 &p, bool cubic) const {
-        if (!cubic) return visible_cells(bvh, p, &type_);
-        const double q[3] = {(p.x - origin_.x) / cell_ - 0.5, (p.y - origin_.y) / cell_ - 0.5,
-                             (p.z - origin_.z) / cell_ - 0.5};
+        const Bvh &bvh, const std::vector<std::uint16_t> &cut, const Vec3 &p, bool cubic,
+        const Vec3 &lean = {}) const {
+        if (!cubic) return visible_cells(bvh, p, &type_, lean);
+        const GridPlace g = grid_place(bvh, p, lean);
+        const double *q = g.q;
         const std::size_t size[3] = {nx_, ny_, nz_};
-        long long start[3];
+        long long below[3], start[3];  // the centre at or below p (on p's side of a tie)
         double weight[3][kReach];
         for (int a = 0; a < 3; ++a) {
             // The box lies in the grid, and the two cells round p inside its edge cells
             // (as visible_cells has them).
-            if (!(q[a] >= 1.0 && q[a] < static_cast<double>(size[a]) - 3.0)) {
-                return visible_cells(bvh, p, &type_);
+            below[a] = static_cast<long long>(std::floor(q[a]));
+            if (g.tied[a] && g.side[a].sign < 0) --below[a];
+            if (!(q[a] >= 1.0 && q[a] < static_cast<double>(size[a]) - 3.0 && below[a] >= 1)) {
+                return visible_cells(bvh, p, &type_, lean);
             }
-            start[a] = static_cast<long long>(std::floor(q[a])) - (kReach / 2 - 1);
+            start[a] = below[a] - (kReach / 2 - 1);
             const double x = q[a] - static_cast<double>(start[a]);
             for (int j = 0; j < kReach; ++j) {
                 double w = 1.0;
@@ -1079,12 +1143,7 @@ private:
                 for (int x = 0; x < kReach; ++x) {
                     const std::size_t i = index(x, y, z);
                     bool seen = type_[i] == kInterior || type_[i] == kSpecial;
-                    if (seen) {
-                        const Vec3 to = centre(i) - p;
-                        const double distance = norm(to);
-                        seen = !(distance > 0.0 &&
-                                 bvh.intersect(p, to / distance, distance, -1).found());
-                    }
+                    if (seen) seen = crossing(bvh, End{p, lean}, End{centre(i)}) < 0;
                     own[z][y][x] = seen;
                 }
             }
@@ -1125,7 +1184,7 @@ private:
             } else if (keep[a][inner] && keep[a][inner + 1]) {
                 from[a] = inner;
                 count[a] = 2;
-                const double t = q[a] - std::floor(q[a]);
+                const double t = q[a] - static_cast<double>(below[a]);
                 weight[a][inner] = 1.0 - t;
                 weight[a][inner + 1] = t;
             } else if (keep[a][inner] || keep[a][inner + 1]) {
@@ -1133,7 +1192,7 @@ private:
                 count[a] = 1;
                 weight[a][from[a]] = 1.0;
             } else {
-                return visible_cells(bvh, p, &type_);
+                return visible_cells(bvh, p, &type_, lean);
             }
         }
         // Every cell left must be p's, with no face between neighbours: next to a face
@@ -1147,7 +1206,7 @@ private:
                     if (!own[z][y][x] || (x + 1 < from[0] + count[0] && is_cut(cut, i, 1)) ||
                         (y + 1 < from[1] + count[1] && is_cut(cut, i, 3)) ||
                         (z + 1 < from[2] + count[2] && is_cut(cut, i, 5))) {
-                        return visible_cells(bvh, p, &type_);
+                        return visible_cells(bvh, p, &type_, lean);
                     }
                     const double w = weight[0][x] * weight[1][y] * weight[2][z];
                     if (w != 0.0) out.emplace_back(i, w);
@@ -1157,13 +1216,354 @@ private:
         return out;
     }
 
+    // Ties: a point within kTie cells of a face's plane, its foot on the face (a cell
+    // centre, the source or a probe), lies on the face. It then counts as lying an
+    // infinitesimal step off it: along its lean, a direction the source and the probes
+    // may have (see leans; none for a cell centre), then a far smaller step along +x, a
+    // smaller one still along +y and one along +z. The first of those steps not parallel
+    // to the face (a lean whose part along the face's normal is at most 1e-9, an axis
+    // along which the normal's part is at most 1e-12, counts as parallel) says which side
+    // of the face the point lies on, and all of them together where on the face it lies:
+    // inside it, or past one of its edges (see crossing). Without a lean this is the
+    // rule: a point on a face lies on the side of it that x grows into (else y, else z),
+    // the same for every face whichever way its normal points, as if every face lay an
+    // infinitesimal step further along -x (then -y, then -z) than it does. So a wall
+    // through a plane of centres acts as one just below it on every link, every sight
+    // line and either stencil, and a cell on the wall's plane is air on the side above
+    // it. Only the source and the probes take leans (see place_on_face and the probes in
+    // the constructor).
+    static constexpr double kTie = 1e-10;
+
+    // One end of a segment for crossing: the point; its lean (see kTie; zero for none, a
+    // unit vector otherwise); and whether a face may pass through it (false where that is
+    // known not to be so, which spares the search for those faces).
+    struct End {
+        Vec3 at;
+        Vec3 lean{};
+        bool ties = true;
+    };
+
+    // The side of a face with unit normal n that a point on its plane lies on with
+    // `lean` (see kTie): the sign of an offset from the plane, +1 or -1, and the step that
+    // puts it there: 0 its lean, 1 to 3 the steps along x, y and z.
+    struct Side {
+        int step;
+        int sign;
+    };
+
+    static Side side_of(const Vec3 &n, const Vec3 &lean) {
+        const double along = dot(n, lean);
+        if (std::abs(along) > 1e-9) return {0, along > 0.0 ? 1 : -1};
+        if (std::abs(n.x) > 1e-12) return {1, n.x > 0.0 ? 1 : -1};
+        if (std::abs(n.y) > 1e-12) return {2, n.y > 0.0 ? 1 : -1};
+        return {3, n.z > 0.0 ? 1 : -1};
+    }
+
+    // Whether p lies on a face (see kTie).
+    bool on_face(const Bvh &bvh, const Vec3 &p) const {
+        bool any = false;
+        bvh.each_face_through(p, kTie * cell_, [&](std::size_t) { any = true; });
+        return any;
+    }
+
+    // The leans a point p on faces takes in turn: for each choice of sides of the planes
+    // of the faces through p (of the first eight planes; the rule's sides first, then
+    // fewest sides changed from the rule's), the sum of those planes' unit normals
+    // towards the chosen sides, normalised, where it puts p on the chosen side of every
+    // one of those faces (no lean, for the rule's sides, where that sum does not); then
+    // the 26 directions from a cell to its neighbours, which reach choices the sums
+    // miss. A point in a room's corner, on a pillar's edge or between a slab's faces so
+    // has a lean into each part of the space round it that the faces through it bound,
+    // and on an edge it leans away from both faces, as a point just off the edge sees
+    // the cells the edge's point itself sees past the faces (with no lean, the rule's
+    // step along x would put it over one face, which hides cells past the other).
+    struct Leans {
+        std::vector<Vec3> all;
+        bool edge = false;  // p lies on faces of two planes or more
+    };
+
+    Leans leans(const Bvh &bvh, const Vec3 &p) const {
+        std::vector<std::size_t> faces;
+        bvh.each_face_through(p, kTie * cell_, [&](std::size_t f) { faces.push_back(f); });
+        std::sort(faces.begin(), faces.end());
+        std::vector<Vec3> planes;  // each plane's normal towards the side the rule gives
+        std::vector<std::size_t> plane_of;
+        for (const std::size_t f : faces) {
+            const Vec3 &n = bvh.normal(f);
+            const Vec3 m = side_of(n, {}).sign > 0 ? n : -n;
+            std::size_t j = 0;
+            while (j < planes.size() && dot(planes[j], m) < 1.0 - 1e-9) ++j;
+            if (j == planes.size()) planes.push_back(m);
+            plane_of.push_back(j);
+        }
+        Leans leans;
+        leans.edge = planes.size() > 1;
+        std::vector<Vec3> &out = leans.all;
+        const std::size_t choices = std::min<std::size_t>(planes.size(), 8);
+        for (std::size_t changed = 0; changed <= choices; ++changed) {
+            if (changed == 1 && out.empty()) out.push_back(Vec3{});  // the rule's own steps
+            for (unsigned mask = 0; mask < (1u << choices); ++mask) {
+                std::size_t count = 0;
+                for (unsigned m = mask; m != 0; m &= m - 1) ++count;
+                if (count != changed) continue;
+                const auto flipped = [&](std::size_t j) {
+                    return j < choices && ((mask >> j) & 1u) != 0;
+                };
+                Vec3 sum{};
+                for (std::size_t j = 0; j < planes.size(); ++j) {
+                    sum = sum + (flipped(j) ? -planes[j] : planes[j]);
+                }
+                const double length = norm(sum);
+                if (!(length > 1e-9)) continue;
+                const Vec3 lean = sum / length;
+                bool fits = true;
+                for (std::size_t k = 0; k < faces.size() && fits; ++k) {
+                    const Vec3 &n = bvh.normal(faces[k]);
+                    const int rule = side_of(n, {}).sign;
+                    fits = side_of(n, lean).sign == (flipped(plane_of[k]) ? -rule : rule);
+                }
+                if (fits) out.push_back(lean);
+            }
+        }
+        if (out.empty()) out.push_back(Vec3{});
+        for (int z = -1; z <= 1; ++z) {
+            for (int y = -1; y <= 1; ++y) {
+                for (int x = -1; x <= 1; ++x) {
+                    if (x == 0 && y == 0 && z == 0) continue;
+                    out.push_back(normalized(Vec3{static_cast<double>(x),
+                                                  static_cast<double>(y),
+                                                  static_cast<double>(z)}));
+                }
+            }
+        }
+        return leans;
+    }
+
+    // Which of 64 directions spread evenly round p (bit k for the k-th) p sees with
+    // `lean`: towards the point 1e-7 cells off p along each (see widest).
+    std::uint64_t view(const Bvh &bvh, const Vec3 &p, const Vec3 &lean) const {
+        constexpr int kCount = 64;
+        const double golden = 3.141592653589793 * (3.0 - std::sqrt(5.0));
+        std::uint64_t seen = 0;
+        for (int k = 0; k < kCount; ++k) {
+            const double z = 1.0 - (2.0 * k + 1.0) / kCount, r = std::sqrt(1.0 - z * z);
+            const Vec3 d{r * std::cos(golden * k), r * std::sin(golden * k), z};
+            if (crossing(bvh, End{p, lean}, End{p + d * (1e-7 * cell_)}) < 0) {
+                seen |= std::uint64_t{1} << k;
+            }
+        }
+        return seen;
+    }
+
+    // Of `leans` of p, the first for which usable(k) holds, k its index in leans.all; for
+    // p on faces of two planes or more (an edge or a corner), then in turn each later
+    // usable one that sees every direction round p the one before sees and more (see
+    // view): a point on a pillar's edge leans into the middle of the air round the edge,
+    // and sees the cells the edge's point itself sees past both faces, where leaning
+    // across one face's plane it sees fewer. Whether one is usable, and the lean.
+    template <typename Usable>
+    std::pair<bool, Vec3> widest(const Bvh &bvh, const Vec3 &p, const Leans &leans,
+                                 Usable usable) const {
+        const Vec3 *chosen = nullptr;
+        std::uint64_t seen = 0;
+        for (std::size_t k = 0; k < leans.all.size(); ++k) {
+            const Vec3 &lean = leans.all[k];
+            if (chosen && !leans.edge) break;
+            if (!usable(k)) continue;
+            if (!chosen) {
+                chosen = &lean;
+                if (leans.edge) seen = view(bvh, p, lean);
+                continue;
+            }
+            const std::uint64_t more = view(bvh, p, lean);
+            if ((more & seen) == seen && more != seen) {
+                chosen = &lean;
+                seen = more;
+            }
+        }
+        return {chosen != nullptr, chosen ? *chosen : Vec3{}};
+    }
+
+    // The face nearest a that the segment from a to b crosses, or -1. A face is crossed
+    // when a and b lie on different sides of it and the segment meets it, an end on a
+    // face lying an infinitesimal step off it (see kTie). So a segment in a face's plane
+    // crosses it only from a point on the face to a point on its plane on the other side,
+    // and a segment from a point on a face's edge crosses the face only where it leaves
+    // that point into the face. A segment of length zero (a source or a probe at a cell
+    // centre) crosses a face through its point where its two ends lie on different sides
+    // of it (see kTie).
+    std::int64_t crossing(const Bvh &bvh, const End &a, const End &b) const {
+        const Vec3 to = b.at - a.at;
+        const double distance = norm(to);
+        if (!(distance > 0.0)) return crossing(bvh, a, b, Vec3{}, 0.0);
+        return crossing(bvh, a, b, to / distance, distance);
+    }
+
+    // The same, given the direction from a to b and their distance (a link's; for a
+    // distance of zero, any direction).
+    std::int64_t crossing(const Bvh &bvh, const End &a, const End &b, const Vec3 &dir,
+                          double distance) const {
+        const double tie = kTie * cell_;
+        std::int64_t nearest = -1;
+        double nearest_t = 0.0;
+        const auto take = [&](std::size_t f, double t) {
+            if (nearest < 0 || t < nearest_t) {
+                nearest = static_cast<std::int64_t>(f);
+                nearest_t = t;
+            }
+        };
+        // Whether face f, whose plane lies `offset` from end e, passes through e.
+        const auto through_end = [&](const End &e, std::size_t f, double offset) {
+            return e.ties && std::abs(offset) <= tie && bvh.holds_foot(f, e.at);
+        };
+        // Faces through neither end: those the segment meets between its ends. The cast,
+        // from before a (the tree skips hits within its min_distance of the origin) to
+        // past b, meets them whatever its angle to them, as the segment's ends lie on
+        // different sides of them (a face whose plane passes within kTie of an end
+        // outside the face too: its plane meets the segment's line on the segment). A
+        // segment of length zero meets none.
+        const double back = bvh.min_distance() + tie;
+        const bool leaned = norm(a.lean) > 0.0 || norm(b.lean) > 0.0;
+        // A face the cast meets at t, past its start.
+        const auto meets = [&](std::size_t f, double t) {
+            const double sa = bvh.offset(f, a.at), sb = bvh.offset(f, b.at);
+            if (through_end(a, f, sa) || through_end(b, f, sb)) return;  // below
+            const Vec3 &n = bvh.normal(f);
+            const bool above_a = sa != 0.0 ? sa > 0.0 : side_of(n, a.lean).sign > 0;
+            const bool above_b = sb != 0.0 ? sb > 0.0 : side_of(n, b.lean).sign > 0;
+            if (above_a == above_b) return;
+            if (sb != sa) {
+                // The ends' leans, then the rule's steps along x, y and z (see kTie), move
+                // the segment, and where it meets the plane, by infinitesimal steps:
+                // through an edge of the face (a link along a pillar's face in a plane of
+                // centres, past the end of the face next to it; a segment from a leaned
+                // point along a face's plane to a point past the next face's edge), they
+                // say whether it meets the face (see holds_towards). A segment that meets
+                // the face inside it meets it.
+                Vec3 steps[4];
+                std::size_t count = 0;
+                if (leaned) {
+                    const double along = (t - back) / distance;
+                    const double moved =
+                        (1.0 - along) * dot(n, a.lean) + along * dot(n, b.lean);
+                    steps[count++] = a.lean * (1.0 - along) + b.lean * along -
+                                     (b.at - a.at) * (moved / (sb - sa));
+                }
+                const Vec3 axes[3] = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+                for (int x = 0; x < 3; ++x) {
+                    const double part = std::abs(n[x]) > 1e-12 ? n[x] : 0.0;
+                    steps[count++] = axes[x] - (b.at - a.at) * (part / (sb - sa));
+                }
+                if (!bvh.holds_towards(f, a.at + dir * (t - back), steps, count)) return;
+            }
+            take(f, t - back);
+        };
+        if (distance > 0.0) {
+            bvh.each_hit(a.at - dir * back, dir, distance + 2.0 * back, meets);
+        }
+        // Faces through an end: found from the end itself, since the segment's line can
+        // meet their plane anywhere (far off, for a segment nearly in it).
+        const auto through = [&](const End &e, const End &other, double t) {
+            if (!e.ties) return;
+            bvh.each_face_through(e.at, tie, [&](std::size_t f) {
+                const Vec3 &n = bvh.normal(f);
+                const Side at_e = side_of(n, e.lean);
+                const double s = bvh.offset(f, other.at);
+                if (std::abs(s) > tie) {
+                    if ((at_e.sign > 0) == (s > 0.0)) return;
+                    // The segment from e moved by an infinitesimal step d meets the plane
+                    // d - (n.d / s)(other - e) from e (the part of d along n counted as
+                    // side_of counts it): with e's steps in turn, where on the face.
+                    const Vec3 to = other.at - e.at;
+                    const double along = dot(n, e.lean);
+                    Vec3 steps[4];
+                    std::size_t count = 0;
+                    if (norm(e.lean) > 0.0) {
+                        steps[count++] = e.lean - to * ((std::abs(along) > 1e-9 ? along : 0.0) / s);
+                    }
+                    const Vec3 axes[3] = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+                    for (int x = 0; x < 3; ++x) {
+                        const double part = std::abs(n[x]) > 1e-12 ? n[x] : 0.0;
+                        steps[count++] = axes[x] - to * (part / s);
+                    }
+                    if (bvh.holds_towards(f, e.at, steps, count)) take(f, t);
+                    return;
+                }
+                // Both ends on the plane, on different sides: the segment meets it at the
+                // end the smaller step puts off it, or between two ends their leans put
+                // off it, in proportion.
+                const Side at_other = side_of(n, other.lean);
+                if (at_e.sign == at_other.sign) return;
+                Vec3 meet = e.at;
+                if (at_other.step > at_e.step) {
+                    meet = other.at;
+                } else if (at_other.step == at_e.step) {
+                    const double from_e = std::abs(dot(n, e.lean));
+                    const double from_other = std::abs(dot(n, other.lean));
+                    meet = e.at + (other.at - e.at) * (from_e / (from_e + from_other));
+                }
+                if (bvh.holds_foot(f, meet)) take(f, t);
+            });
+        };
+        through(a, b, 0.0);
+        through(b, a, distance);
+        return nearest;
+    }
+
     // The cells round point p (up to eight) whose centres p sees, with trilinear weights
-    // that sum to one; only air cells when `air` is given.
+    // that sum to one; only air cells when `air` is given. p, on faces, takes `lean` (see
+    // crossing).
     std::vector<std::pair<std::size_t, double>> visible_cells(
-        const Bvh &bvh, const Vec3 &p, const std::vector<std::uint8_t> *air) const {
+        const Bvh &bvh, const Vec3 &p, const std::vector<std::uint8_t> *air,
+        const Vec3 &lean = {}) const {
+        return seen_cells(bvh, p, lean, [air](std::size_t i) {
+            return air == nullptr || (*air)[i] != kSolid;
+        });
+    }
+
+    // Where p lies among the cell centres along each axis, for its weights: q, its grid
+    // coordinate (in cells from the first centre). A point on faces (see kTie) within
+    // kTie cells of a plane of centres across an axis lies on that plane (tied, and q the
+    // plane's coordinate) and an infinitesimal step off it, to the side that its lean,
+    // then the rule's steps, put it on, as for a face in that plane (side, see side_of):
+    // the centre on the plane is the near one along that axis, and the one past the plane
+    // on that side has a weight of the size of that step (see seen_cells). So such a point
+    // has the weights the same point moved off the face along its lean has, in the limit,
+    // whichever way its coordinate rounds.
+    struct GridPlace {
+        double q[3];
+        bool tied[3] = {false, false, false};
+        Side side[3] = {};
+    };
+
+    GridPlace grid_place(const Bvh &bvh, const Vec3 &p, const Vec3 &lean) const {
+        GridPlace g{{(p.x - origin_.x) / cell_ - 0.5, (p.y - origin_.y) / cell_ - 0.5,
+                     (p.z - origin_.z) / cell_ - 0.5}};
+        bool near = false;
+        for (const double q : g.q) near = near || std::abs(q - std::round(q)) <= kTie;
+        if (!near || !on_face(bvh, p)) return g;
+        const Vec3 axes[3] = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
+        for (int a = 0; a < 3; ++a) {
+            const double plane = std::round(g.q[a]);
+            if (std::abs(g.q[a] - plane) > kTie) continue;
+            g.q[a] = plane;
+            g.tied[a] = true;
+            g.side[a] = side_of(axes[a], lean);
+        }
+        return g;
+    }
+
+    // The same, of the cells for which keep(i) holds. Of a point on faces (see
+    // grid_place), a cell past a plane of centres the point is tied to has a weight
+    // smaller than any of finite size, and those past more such planes, or past one by
+    // a smaller step, smaller still; only the seen cells whose weights are of the largest
+    // size seen are kept (the limit of the weights of the point moved off the face).
+    template <typename Keep>
+    std::vector<std::pair<std::size_t, double>> seen_cells(const Bvh &bvh, const Vec3 &p,
+                                                           const Vec3 &lean, Keep keep) const {
         std::vector<std::pair<std::size_t, double>> out;
-        const double q[3] = {(p.x - origin_.x) / cell_ - 0.5, (p.y - origin_.y) / cell_ - 0.5,
-                             (p.z - origin_.z) / cell_ - 0.5};
+        const GridPlace g = grid_place(bvh, p, lean);
+        const double *q = g.q;
         const double size[3] = {static_cast<double>(nx_), static_cast<double>(ny_),
                                 static_cast<double>(nz_)};
         long long base[3];
@@ -1171,32 +1571,175 @@ private:
         for (int a = 0; a < 3; ++a) {
             if (!(q[a] >= 1.0 && q[a] <= size[a] - 3.0)) return out;  // outside the grid
             base[a] = static_cast<long long>(std::floor(q[a]));
+            if (g.tied[a] && g.side[a].sign < 0 && --base[a] < 1) return out;
             frac[a] = q[a] - static_cast<double>(base[a]);
         }
-        double total = 0.0;
+        // The seen cells, with their weights and how small those are: 0 for a finite
+        // weight, else the sum over the tied planes the cell lies past of 4^step for the
+        // step that puts p off that plane (step 0, its lean, at most three times; a larger
+        // sum is a smaller weight).
+        std::pair<std::size_t, double> seen[8];
+        int smallness[8], count = 0, least = 0;
         for (int corner = 0; corner < 8; ++corner) {
             double w = 1.0;
+            int small = 0;
             std::size_t i = 0, stride = 1;
             for (int a = 0; a < 3; ++a) {
                 const int up = (corner >> a) & 1;
-                w *= up ? frac[a] : 1.0 - frac[a];
+                if (!g.tied[a]) {
+                    w *= up ? frac[a] : 1.0 - frac[a];
+                } else if (up == (g.side[a].sign > 0 ? 1 : 0)) {  // past the plane
+                    small += 1 << (2 * g.side[a].step);
+                    if (g.side[a].step == 0) w *= std::abs(lean[a]);
+                }
                 i += static_cast<std::size_t>(base[a] + up) * stride;
                 stride *= a == 0 ? nx_ : (a == 1 ? ny_ : 1);
             }
             if (w <= 0.0) continue;
-            if (air != nullptr && (*air)[i] == kSolid) continue;
-            const Vec3 to = centre(i) - p;
-            const double distance = norm(to);
-            if (distance > 0.0 && bvh.intersect(p, to / distance, distance, -1).found()) continue;
-            out.emplace_back(i, w);
-            total += w;
+            if (!keep(i)) continue;
+            if (crossing(bvh, End{p, lean}, End{centre(i)}) >= 0) continue;
+            if (count == 0 || small < least) least = small;
+            seen[count] = {i, w};
+            smallness[count++] = small;
         }
-        if (total < 1e-9) {
+        double total = 0.0;
+        for (int k = 0; k < count; ++k) {
+            if (smallness[k] != least) continue;
+            out.push_back(seen[k]);
+            total += seen[k].second;
+        }
+        if (least == 0 && total < 1e-9) {
             out.clear();
             return out;
         }
         for (auto &cell_weight : out) cell_weight.second /= total;
         return out;
+    }
+
+    // Marks with `value` every cell still marked 0 in `mark` that the cells in `queue`
+    // (marked already) reach through links that are not blocked; empties the queue.
+    void flood(const std::vector<std::uint16_t> &cut, std::vector<std::size_t> &queue,
+               std::vector<std::uint8_t> &mark, std::uint8_t value) const {
+        while (!queue.empty()) {
+            const std::size_t i = queue.back();
+            queue.pop_back();
+            for (int k = 0; k < directions_; ++k) {
+                if (blocked(cut, i, k)) continue;
+                const std::size_t j = neighbour(i, k);
+                if (mark[j] == 0) {
+                    mark[j] = value;
+                    queue.push_back(j);
+                }
+            }
+        }
+    }
+
+    // The air (type_) and the lean (source_lean_) of a source on faces (see kTie). Its
+    // air is the one it sees with the rule's sides, unless that reaches no listener: then
+    // that of the first of its other leans (see leans) whose air does. A listener on the
+    // plane of a face through the source does not count for this, as from either side of
+    // that face it can see the source's air (the outside of a room's wall, the inside of
+    // a pillar): where only such listeners are reached, the one air that reaches them is
+    // taken, and a source whose airs on different sides reach them is refused. A source
+    // whose air reaches no listener takes the first air it sees (the errors that follow
+    // say so), and one that sees no cell with any lean is refused. A listener reaches an
+    // air when it sees a cell of it with one of its own leans. Of the leans that see
+    // that air, the source takes the first, or on an edge or in a corner the widest (see
+    // widest).
+    void place_on_face(const Bvh &bvh, const std::vector<std::uint16_t> &cut,
+                       const Vec3 &source, const std::vector<Vec3> &probes,
+                       std::size_t per_listener) {
+        const std::size_t n = nx_ * ny_ * nz_;
+        const double tie = kTie * cell_;
+        // The airs the source's cells lie in, each flooded once: region[i] is 1 + the
+        // index of the air of cell i, 0 for none. All leans see some of the same eight
+        // cells, so there are at most eight.
+        std::vector<std::uint8_t> region(n, 0);
+        std::uint8_t regions = 0;
+        struct Option {
+            Vec3 lean;
+            unsigned airs;  // bit r for air r
+        };
+        std::vector<Option> options;  // the leans that see cells, each set of airs once
+        const Leans candidates = leans(bvh, source);
+        std::vector<unsigned> airs_of;  // of each candidate
+        for (const Vec3 &lean : candidates.all) {
+            unsigned airs = 0;
+            for (const auto &[i, w] : visible_cells(bvh, source, nullptr, lean)) {
+                (void)w;
+                if (region[i] == 0) {
+                    region[i] = ++regions;
+                    std::vector<std::size_t> queue{i};
+                    flood(cut, queue, region, regions);
+                }
+                airs |= 1u << (region[i] - 1);
+            }
+            airs_of.push_back(airs);
+            bool known = airs == 0;
+            for (const Option &o : options) known = known || o.airs == airs;
+            if (!known) options.push_back({lean, airs});
+        }
+        if (options.empty()) {
+            throw std::invalid_argument(
+                "the source lies on a surface of the model and sees no cell of the wave grid "
+                "on any side of it");
+        }
+        std::vector<std::size_t> faces;
+        bvh.each_face_through(source, tie, [&](std::size_t f) { faces.push_back(f); });
+        // Whether listener l (probe l of the groups) sees a cell of `airs`, and whether
+        // it lies on the plane of a face through the source.
+        const auto reaches = [&](std::size_t l, unsigned airs) {
+            const auto in = [&](std::size_t i) {
+                return region[i] != 0 && ((airs >> (region[i] - 1)) & 1u) != 0;
+            };
+            const Vec3 &p = probes[l];
+            if (!seen_cells(bvh, p, Vec3{}, in).empty()) return true;
+            if (!on_face(bvh, p)) return false;
+            for (const Vec3 &lean : leans(bvh, p).all) {
+                if (!seen_cells(bvh, p, lean, in).empty()) return true;
+            }
+            return false;
+        };
+        const auto beside = [&](std::size_t l) {
+            for (const std::size_t f : faces) {
+                if (std::abs(bvh.offset(f, probes[l])) <= tie) return true;
+            }
+            return false;
+        };
+        const Option *chosen = nullptr;
+        for (const Option &o : options) {
+            for (std::size_t l = 0; l < probes.size() && !chosen; l += per_listener) {
+                if (!beside(l) && reaches(l, o.airs)) chosen = &o;
+            }
+            if (chosen) break;
+        }
+        if (!chosen) {
+            const Option *first = nullptr;  // the first that reaches a listener beside it
+            for (const Option &o : options) {
+                bool reached = false;
+                for (std::size_t l = 0; l < probes.size() && !reached; l += per_listener) {
+                    reached = beside(l) && reaches(l, o.airs);
+                }
+                if (!reached) continue;
+                if (first) {
+                    throw std::invalid_argument(
+                        "the source lies on a surface of the model, and the only listeners "
+                        "its sound reaches lie on that surface too, where they hear it from "
+                        "either side: move the source or the listeners off the surface");
+                }
+                first = &o;
+            }
+            chosen = first ? first : &options.front();
+        }
+        const unsigned airs = chosen->airs;
+        const auto same_air = [&](std::size_t k) { return airs_of[k] == airs; };
+        source_lean_ = widest(bvh, source, candidates, same_air).second;
+        type_.assign(n, kSolid);
+        for (std::size_t i = 0; i < n; ++i) {
+            if (region[i] != 0 && ((airs >> (region[i] - 1)) & 1u) != 0) {
+                type_[i] = kInterior;
+            }
+        }
     }
 
     // Makes cell i special, with the weights w of its links along each direction and
@@ -1286,6 +1829,10 @@ private:
     std::vector<std::vector<std::size_t>> probe_cells_;
     std::vector<std::vector<double>> probe_weights_;
     std::vector<std::size_t> run_begin_, run_end_;
+    std::vector<std::uint8_t> probe_in_sight_;
+    // The source lies on a face (see kTie); and the lean it takes there.
+    bool source_on_face_ = false;
+    Vec3 source_lean_{};
     std::vector<float> u0_, u1_;
     // Moving air: each cell's shifts and gradient neighbours (see set_up_flow), and the
     // carrying's two stages; all empty in still air.

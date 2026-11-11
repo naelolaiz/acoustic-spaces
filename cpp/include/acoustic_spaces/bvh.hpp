@@ -100,6 +100,12 @@ public:
     // Unit normal of a face, following the right-hand rule on its vertex order.
     const Vec3 &normal(std::size_t face) const { return tri_[place_[face]].normal; }
 
+    // How far p lies from a face's plane, along its normal.
+    double offset(std::size_t face, const Vec3 &p) const {
+        const Triangle &t = tri_[place_[face]];
+        return dot(t.normal, p - t.v0);
+    }
+
     // The corners of a face, in its vertex order.
     std::array<Vec3, 3> corners(std::size_t face) const {
         const Triangle &t = tri_[place_[face]];
@@ -148,6 +154,90 @@ public:
             return true;
         }, limit);
         return any;
+    }
+
+    // Calls visit(face, t) for every face hit with t in (min_distance(), t_max), in no
+    // particular order.
+    template <typename Visit>
+    void each_hit(const Vec3 &origin, const Vec3 &dir, double t_max, Visit visit) const {
+        double limit = t_max;
+        traverse(origin, dir, -1, [&](std::size_t face, double t) {
+            visit(face, t);
+            return false;
+        }, limit);
+    }
+
+    // Calls visit(face) for every face whose plane passes within `tolerance` of p and
+    // whose triangle holds the foot of p on that plane (its edges widened as a ray's
+    // hit widens them), in no particular order: the faces p lies on.
+    template <typename Visit>
+    void each_face_through(const Vec3 &p, double tolerance, Visit visit) const {
+        std::array<std::uint32_t, kMaxDepth + 4> stack{};
+        std::size_t top = 0;
+        std::uint32_t current = 0;
+        for (;;) {
+            const Node &node = nodes_[current];
+            const Box &box = node.box;
+            bool inside = true;
+            for (int a = 0; a < 3; ++a) {
+                inside = inside && p[a] >= box.lo[a] - tolerance && p[a] <= box.hi[a] + tolerance;
+            }
+            if (inside && node.count > 0) {
+                for (std::uint32_t i = node.first; i < node.first + node.count; ++i) {
+                    const Triangle &tri = tri_[i];
+                    if (std::abs(dot(tri.normal, p - tri.v0)) <= tolerance && holds_foot(tri, p)) {
+                        visit(static_cast<std::size_t>(order_[i]));
+                    }
+                }
+            } else if (inside) {
+                if (top == stack.size()) {
+                    throw std::runtime_error("Bvh: traversal stack overflow");
+                }
+                stack[top++] = node.first + 1;
+                current = node.first;
+                continue;
+            }
+            if (top == 0) return;
+            current = stack[--top];
+        }
+    }
+
+    // Whether the foot of p on a face's plane lies in the face, its edges widened as a
+    // ray's hit widens them (as each_face_through has it).
+    bool holds_foot(std::size_t face, const Vec3 &p) const {
+        return holds_foot(tri_[place_[face]], p);
+    }
+
+    // Whether a face holds the point p + e_0 d[0] + e_1 d[1] + ... of its plane, for
+    // infinitesimal e_0 >> e_1 >> ... > 0 (p's foot, the d's along the plane): where the
+    // foot lies on an edge (to within the widening of holds_foot), the first d that leaves
+    // the edge's line says whether the point goes into the face or out of it; along all of
+    // them the point stays on the edge, and is held.
+    bool holds_towards(std::size_t face, const Vec3 &p, const Vec3 *d, std::size_t count) const {
+        const Triangle &tri = tri_[place_[face]];
+        if (!holds_foot(tri, p)) return false;
+        const Vec3 h = cross(tri.normal, tri.e2);
+        const double inv_det = 1.0 / dot(tri.e1, h);
+        // The gradients, along the plane, of the foot's barycentric coordinates, each 0
+        // on one edge.
+        const Vec3 gu = h * inv_det, gv = cross(tri.e1, tri.normal) * inv_det;
+        const Vec3 gradient[3] = {gu, gv, -(gu + gv)};
+        const Vec3 s = p - tri.v0;
+        const double u = dot(s, gu), v = dot(s, gv);
+        const double at[3] = {u, v, 1.0 - u - v};
+        for (int e = 0; e < 3; ++e) {
+            if (at[e] > kEdge) continue;  // off that edge
+            const double steep = norm(gradient[e]);
+            for (std::size_t i = 0; i < count; ++i) {
+                const double length = norm(d[i]);
+                if (!(length > 0.0)) continue;
+                const double g = dot(gradient[e], d[i]) / length;
+                if (std::abs(g) <= 1e-9 * steep) continue;  // along the edge
+                if (g < 0.0) return false;
+                break;
+            }
+        }
+        return true;
     }
 
     // The tree as flat arrays, for tracing elsewhere (on a GPU), through
@@ -356,6 +446,21 @@ private:
         const double v = dot(dir, q) * inv_det;
         if (v < -kEdge || u + v > 1.0 + kEdge) return -1.0;
         return dot(tri.e2, q) * inv_det;
+    }
+
+    // Whether the foot of p on the triangle's plane lies in it, its edges widened by
+    // kEdge as in hit_triangle (whose test this is, along the normal); false for a
+    // triangle of no area.
+    static bool holds_foot(const Triangle &tri, const Vec3 &p) {
+        const Vec3 h = cross(tri.normal, tri.e2);
+        const double det = dot(tri.e1, h);
+        if (std::abs(det) < 1e-300) return false;
+        const double inv_det = 1.0 / det;
+        const Vec3 s = p - tri.v0;
+        const double u = dot(s, h) * inv_det;
+        if (u < -kEdge || u > 1.0 + kEdge) return false;
+        const double v = dot(tri.normal, cross(s, tri.e1)) * inv_det;
+        return v >= -kEdge && u + v <= 1.0 + kEdge;
     }
 
     // Calls visit(face, t) for faces hit with t in (t_min, limit); visit returns true to

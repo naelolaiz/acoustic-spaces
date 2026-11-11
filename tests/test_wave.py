@@ -1,6 +1,7 @@
 import dataclasses
 import itertools
 import math
+import types
 from pathlib import Path
 
 import numpy as np
@@ -64,13 +65,15 @@ def _solver(
     stencil=7,
     speed=None,
     flow=None,
+    probes_per_listener=1,
 ):
     """A wave solver in a box from (0, 0, 0) to ``size`` (or in ``mesh``, within it), laid
     out as wave_responses does, and its sample rate. ``admittances(mesh)`` gives each
     face's constant admittance, each face its own material; ``branches``, a list of
     (face, Admittance), adds the branches of those admittances; ``speed(centres)`` gives
     the cells' speed of sound over the grid's, from their centres (n, 3), and
-    ``flow(centres)`` the air's motion along x and y (cells per step)."""
+    ``flow(centres)`` the air's motion along x and y (cells per step); the probes come in
+    groups of ``probes_per_listener``, the first of each a listener's own point."""
     mesh = box_mesh(size) if mesh is None else mesh
     bvh = _native.Bvh(mesh.vertices, mesh.faces)
     origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
@@ -97,6 +100,7 @@ def _solver(
         stencil=stencil,
         speed=_speeds(speed, origin, cell, shape),
         **_flows(flow, origin, cell, shape),
+        probes_per_listener=probes_per_listener,
     )
     return solver, rate
 
@@ -2636,3 +2640,692 @@ def test_the_wave_stage_takes_its_wind_model() -> None:
     assert _windy_ground(15.0, "moving").scene.simulation.wave.wind == "moving"
     with pytest.raises(ValueError, match="wind"):
         WaveStage.model_validate({"wind": "sideways"})
+
+
+# Points and cell centres on faces (ties). A point within 1e-10 cells of a face's plane,
+# its foot on the face, lies on the face and counts as lying an infinitesimal step off it.
+# A cell centre steps by the rule, as if every face lay an infinitesimal step further
+# along -x (then -y, then -z) than it does: it lies on a face's +x side (else +y, +z),
+# the same for every face, every link, every sight line and either stencil. The source
+# and the points round a listener step along a lean: off the faces through them on the
+# rule's sides where the source's air there reaches a listener (for a point, where it has
+# air), else on others (a pillar's outside, a room's inside, the inside of a room's
+# corner), and on an edge or in a corner leaning into the middle of the air round it. A
+# listener on the plane of a face through the source does not count for this, as it can
+# see the air on either side of that face: where only such listeners are reached, the
+# source takes the one air that reaches them, and is refused where airs on both sides
+# do. A point on a face within 1e-10 cells of a plane of centres has the trilinear
+# weights of the point moved off it along its lean, in the limit.
+
+_TIE_CELL = 0.1
+_TIE_ORIGIN = -_TIE_CELL * (2.0 + np.array([0.0137, 0.0219, 0.0291]))  # as _solver lays it out
+_TIE_PLANE = _TIE_ORIGIN + (20 + 0.5) * _TIE_CELL  # the centres of index 20, as the solver has them
+
+
+def _tie_quad(axis: int, at: float, half: float = 20.0) -> np.ndarray:
+    """A square across ``axis`` at ``at``, ``half`` metres a side round (2, 2, 2)."""
+    corners = []
+    for sb, sc in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+        p = np.full(3, 2.0)
+        p[axis] = at
+        p[(axis + 1) % 3] += sb * half
+        p[(axis + 2) % 3] += sc * half
+        corners.append(p)
+    return np.array(corners)
+
+
+def _tie_run(stencil: int, quads, source, probes, steps: int = 250):
+    """The pressure at ``probes`` in a rigid 4 m box with ``quads`` in it."""
+    box = box_mesh((4.0, 4.0, 4.0))
+    n = len(box.vertices)
+    faces = [box.faces] + [
+        [[n + 4 * q, n + 4 * q + 1, n + 4 * q + 2], [n + 4 * q, n + 4 * q + 2, n + 4 * q + 3]]
+        for q in range(len(quads))
+    ]
+    mesh = dataclasses.replace(
+        box,
+        vertices=np.vstack([box.vertices, *quads]),
+        faces=np.vstack(faces),
+        face_labels=np.append(box.face_labels, [0] * (2 * len(quads))),
+    )
+    solver, rate = _solver(
+        (4.0, 4.0, 4.0), lambda m: [0.0] * len(m.faces), source, probes, mesh=mesh, stencil=stencil
+    )
+    return solver, solver.run(_drive(rate, _TIE_CELL, steps, stencil))
+
+
+@STENCILS
+@pytest.mark.parametrize("axis", [0, 1, 2])
+def test_a_wall_through_a_plane_of_centres_acts_as_one_just_below_it(
+    stencil: int, axis: int
+) -> None:
+    # A wall across `axis` exactly through the centres of index 20, the source and the
+    # listeners on either side of it: the run is the run with the wall 1e-6 cells lower,
+    # to the bit, and not the one with it 1e-6 cells higher. Before: the cells on the
+    # wall's plane read across a screen (10 dB low), and a wall within 1e-9 times the
+    # model's size above the plane was not there at all.
+    for side in (1, -1):
+        source = np.array([2.037, 2.021, 2.013])
+        source[axis] = _TIE_PLANE[axis] + side * 0.13
+        probes = []
+        for d in (0.03, 0.08, 0.17):
+            p = source.copy()
+            p[axis] = _TIE_PLANE[axis] + side * d
+            p[(axis + 1) % 3] += 1.2
+            probes.append(p)
+        runs = [
+            _tie_run(stencil, [_tie_quad(axis, _TIE_PLANE[axis] + shift)], source, probes)[1]
+            for shift in (0.0, -1e-7, 1e-7)
+        ]
+        assert np.array_equal(runs[0], runs[1])
+        assert not np.array_equal(runs[0], runs[2])
+
+
+@STENCILS
+@pytest.mark.parametrize(("cells", "like"), [(1e-12, -1e-3), (1e-9, 1e-3), (1e-6, 1e-3)])
+def test_a_wall_just_past_a_plane_of_centres_is_a_wall(
+    stencil: int, cells: float, like: float
+) -> None:
+    # Within the tree's least distance of a link's start (1e-9 times the model's size)
+    # the wall was missed: on the 7-point grid it let all the sound through, and on the
+    # 19-point grid the wall across x or y cut only half of the edge links, and the run
+    # grew without bound. Now the grid is the one of the wall 1e-3 cells past the plane,
+    # or below it within 1e-10 cells of the plane (a tie).
+    for axis in (0, 1):
+        source = np.array([2.037, 2.021, 2.013])
+        source[axis] = _TIE_PLANE[axis] + 0.13
+        probe = source + np.eye(3)[(axis + 1) % 3] * 1.2
+        near, run = _tie_run(
+            stencil,
+            [_tie_quad(axis, _TIE_PLANE[axis] + cells * _TIE_CELL)],
+            source,
+            [probe],
+            steps=1500,
+        )
+        far, _ = _tie_run(
+            stencil,
+            [_tie_quad(axis, _TIE_PLANE[axis] + like * _TIE_CELL)],
+            source,
+            [probe],
+            steps=5,
+        )
+        assert (near.air_cells, near.boundary_cells) == (far.air_cells, far.boundary_cells)
+        assert np.all(np.isfinite(run)) and np.abs(run[:, 750:]).max() < np.abs(run[:, :750]).max()
+
+
+def test_a_reading_beside_a_screen_through_centres_keeps_to_its_side() -> None:
+    # A screen through the centres of index 20 along x, a listener 0.3 cells from it on
+    # the -x side: it reads only cells below the screen's plane (before, it took 0.68 of
+    # its reading from the cells on the plane, across the screen).
+    w = _TIE_PLANE[0]
+    listener = np.array([w - 0.03, 2.021, 2.013])
+    for stencil in (7, 19):
+        solver, _ = _tie_run(
+            stencil,
+            [_tie_quad(0, w, half=1.5)],
+            listener + [-0.13, 0.0, 0.0],
+            [listener + [0.0, 1.2, 0.0]],
+            steps=1,
+        )
+        (at, weights), _ = _readings(solver, _TIE_CELL)
+        assert at[:, 0].max() < w and weights.sum() == pytest.approx(1.0)
+
+
+def test_a_wall_at_45_degrees_through_centres_stays_stable() -> None:
+    # The wall x - y = const through the centres (i, i): the 19-point grid's edge links lie
+    # in it. Before, it, or the same wall 1e-9 cells off, grew without bound or lost the
+    # wall; now it is the wall moved a little along -x, to the bit.
+    p0 = np.array([_TIE_PLANE[0], _TIE_PLANE[1], 2.0])
+    u, n = np.array([1.0, 1.0, 0.0]) / math.sqrt(2.0), np.array([1.0, -1.0, 0.0]) / math.sqrt(2.0)
+    ez = np.array([0.0, 0.0, 1.0])
+
+    def wall(shift):
+        q = p0 + [shift, 0.0, 0.0]
+        return np.array(
+            [q - 9 * u - 9 * ez, q + 9 * u - 9 * ez, q + 9 * u + 9 * ez, q - 9 * u + 9 * ez]
+        )
+
+    source = p0 + 0.13 * n + 0.037 * u + [0.0, 0.0, 0.013]
+    probes = [p0 + d * n + 1.1 * u for d in (0.03, 0.08, 0.17)]
+    runs = [_tie_run(19, [wall(s)], source, probes, steps=1500)[1] for s in (0.0, -1e-7)]
+    assert np.all(np.isfinite(runs[0])) and np.array_equal(runs[0], runs[1])
+
+
+@pytest.mark.parametrize("what", ["listener", "source"])
+def test_a_point_on_a_wall_of_a_closed_room_is_in_the_room(what: str) -> None:
+    # A listener or the source exactly on a wall, on the ceiling and at x = 7 m (where the
+    # rule's side is outside) and on the floor (where it is the room's): W, X, Y and Z are
+    # those of the point a micrometre inside. Before, a source on a wall fed both sides
+    # (6 dB low) or found no closed grid.
+    size = np.array([7.0, 5.0, 3.0])
+    room = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"box": size.tolist()},
+                "materials": {"m": {"absorption": [0.15] * 8, "scattering": 0.1}},
+                "default_material": "m",
+                "sources": [{"name": "s", "position": [1.3, 1.1, 1.4]}],
+                "listeners": [{"name": "l", "position": [5.8, 3.9, 1.7]}],
+            }
+        )
+    )
+    c = room.speed_of_sound()
+    for axis, at, inward in ((2, size[2], -1.0), (0, size[0], -1.0), (2, 0.0, 1.0)):
+        out = []
+        for eps in (0.0, 1e-6):
+            point = size * [0.6, 0.55, 0.45]
+            point[axis] = at + inward * eps
+            source = point if what == "source" else size * [0.2, 0.3, 0.4]
+            listener = point if what == "listener" else size * [0.7, 0.6, 0.5]
+            (response,), _ = wave_responses(
+                TraceModel.from_room(room),
+                source,
+                listener[None, :],
+                ["l"],
+                max_band_hz=63,
+                length_s=0.1,
+                sample_rate=FS,
+                speed_of_sound=c,
+                threads=1,
+            )
+            out.append(response.signals)
+        assert np.abs(out[0] - out[1]).max() <= 1e-4 * np.abs(out[1][:, 0]).max()
+
+
+def test_a_plate_through_the_first_centres_inside_the_matched_layer_reaches_into_it() -> None:
+    # An open plate through the centres of the first cell inside a matched layer of 8: it
+    # counts as just below them, so its links cut the layer's last cells and it is refused,
+    # as a plate a millimetre lower; a millimetre higher is not. Before, a plate 1e-12 to
+    # 1e-9 cells higher was missed altogether and the run went without it.
+    cell, layer, shape = 0.1, 8, (40, 40, 40)
+    origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+    z = origin[2] + (layer + 1 + 0.5) * cell
+
+    def solver(at):
+        v = np.array([[1.2, 1.2, at], [2.8, 1.2, at], [2.8, 2.8, at], [1.2, 2.8, at]])
+        return _native.WaveSolver(
+            _native.Bvh(v, np.array([[0, 1, 2], [0, 2, 3]], np.int64)),
+            np.zeros(2, np.int64),
+            np.zeros(1),
+            np.zeros((0, 3)),
+            np.zeros(0, np.int64),
+            origin,
+            cell,
+            *shape,
+            np.array([2.07, 1.91, at + 0.53]),
+            np.array([[2.5, 1.91, at + 0.53]]),
+            edge_admittance=1.0,
+            layer=layer,
+            layer_damping=1.0,
+            threads=1,
+        )
+
+    for at in (z, z + 1e-12 * cell, z - 1e-4 * cell):
+        with pytest.raises(ValueError, match="reaches into the matched layer"):
+            solver(at)
+    assert solver(z + 1e-9 * cell).boundary_cells > 0
+
+
+# A box for the tests below; the planes of x centres lie at 0.04863 + 0.1 i.
+_SMALL = (2.4, 2.4, 2.4)
+
+
+def _box_part(lo, hi) -> tuple[np.ndarray, np.ndarray]:
+    """The corners and triangles of a closed box from ``lo`` to ``hi``."""
+    box = box_mesh(tuple(np.subtract(hi, lo)))
+    return box.vertices + np.asarray(lo, dtype=float), box.faces
+
+
+def _parts_run(stencil: int, parts, source, probes, steps: int = 150, **kwargs):
+    """The solver over the faces of ``parts`` (corners and triangles each) in the grid
+    :func:`_solver` lays out round :data:`_SMALL`, and the pressure at ``probes``."""
+    vertices, faces, n = [], [], 0
+    for corners, triangles in parts:
+        vertices.append(np.asarray(corners, dtype=float))
+        faces.append(np.asarray(triangles, dtype=np.int64) + n)
+        n += len(corners)
+    mesh = types.SimpleNamespace(vertices=np.vstack(vertices), faces=np.vstack(faces))
+    solver, rate = _solver(
+        _SMALL, lambda m: [0.0] * len(m.faces), source, probes, mesh=mesh, stencil=stencil, **kwargs
+    )
+    return solver, solver.run(_drive(rate, _TIE_CELL, steps, stencil))
+
+
+def _same_run_off_the_face(stencil: int, parts, point, off, listeners):
+    """The source at ``point``, on a face, gives the grid and the run of the source at
+    ``point + off``, off it; the solver of the source on the face."""
+    on, run_on = _parts_run(stencil, parts, point, listeners)
+    away, run_away = _parts_run(stencil, parts, np.add(point, off), listeners)
+    assert (on.air_cells, on.boundary_cells) == (away.air_cells, away.boundary_cells)
+    assert np.abs(run_on - run_away).max() <= 1e-5 * np.abs(run_away).max()
+    assert on.source_on_face and not away.source_on_face
+    return on
+
+
+@STENCILS
+@pytest.mark.parametrize("room", [True, False], ids=["room", "open"])
+def test_a_source_on_a_face_of_a_closed_object_sends_its_sound_into_the_air(
+    stencil: int, room: bool
+) -> None:
+    # A source exactly on the -x or the +x face of a pillar, of a slab with a plane of
+    # centres inside it and of a slab thinner than a cell (no centre inside), in a rigid
+    # room or in an open grid: the grid and the run are those of the source 1e-6 cells off
+    # the face into the air. On the -x face the rule's side is the object's inside, where
+    # the air reaches no listener (or the source sees no cell, in the thin slab). Before,
+    # the source took cells on both sides of the pillar and of the slab with centres inside
+    # (3 to 12 dB low).
+    objects = [
+        ((0.82, 0.9, 0.0), (1.42, 1.5, 2.4)),  # a pillar, floor to ceiling
+        ((0.82, 0.4, 0.4), (0.88, 2.0, 2.0)),  # the centres x = 0.84863 inside
+        ((0.855, 0.4, 0.4), (0.882, 2.0, 2.0)),  # none inside
+    ]
+    listeners = [(0.35, 0.5, 0.7), (1.9, 1.8, 1.6)]
+    for lo, hi in objects:
+        parts = ([_box_part((0, 0, 0), _SMALL)] if room else []) + [_box_part(lo, hi)]
+        for x, outward in ((lo[0], -1.0), (hi[0], 1.0)):
+            point = (x, 1.213, 1.121)
+            _same_run_off_the_face(stencil, parts, point, (outward * 1e-7, 0, 0), listeners)
+
+
+@STENCILS
+def test_a_source_on_a_wall_of_the_room_sends_its_sound_into_the_room(stencil: int) -> None:
+    # The source exactly on a wall of a rigid room: at x = 0 and on the floor, where the
+    # rule's side is the room's, and at x = 2.4 m and on the ceiling, where it is outside:
+    # the grid and the run are those of the source 1e-6 cells inside. Before, it fed both
+    # sides (6 dB low).
+    parts = [_box_part((0, 0, 0), _SMALL)]
+    for axis, at, inward in ((0, 0.0, 1.0), (0, 2.4, -1.0), (2, 0.0, 1.0), (2, 2.4, -1.0)):
+        point, off = np.array([1.213, 1.121, 0.937]), np.zeros(3)
+        point[axis], off[axis] = at, inward * 1e-7
+        _same_run_off_the_face(stencil, parts, point, off, [(0.35, 0.5, 0.7), (1.9, 1.8, 1.6)])
+
+
+def test_a_source_on_a_surface_whose_air_reaches_no_listener_says_so(tmp_path: Path) -> None:
+    # The source on a wall of the room, its listener shut in a closed box in the room: the
+    # air on neither side of the wall reaches it, and the error says where the source is.
+    room, box = box_mesh((6.0, 5.0, 3.0)), box_mesh((1.0, 1.0, 1.0))
+    n = len(room.vertices)
+    lines = [f"v {x} {y} {z}" for x, y, z in [*room.vertices, *(box.vertices + [3.0, 3.0, 1.0])]]
+    lines += ["g room", *(f"f {' '.join(str(i + 1) for i in f)}" for f in room.faces)]
+    lines += ["g box", *(f"f {' '.join(str(n + i + 1) for i in f)}" for f in box.faces)]
+    obj = tmp_path / "shut.obj"
+    obj.write_text("\n".join(lines) + "\n")
+    shut = Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": str(obj)},
+                "materials": {"m": {"absorption": [0.2] * 8, "scattering": 0.0}},
+                "default_material": "m",
+                "sources": [{"name": "s", "position": [0.0, 2.1, 1.3]}],
+                "listeners": [{"name": "l", "position": [3.5, 3.5, 1.5]}],
+            }
+        )
+    )
+    with pytest.raises(
+        ValueError, match=r"not in the air of the wave grid \(the source lies on a surface"
+    ):
+        wave_responses(
+            TraceModel.from_room(shut),
+            np.array([0.0, 2.1, 1.3]),
+            [[3.5, 3.5, 1.5]],
+            ["l"],
+            max_band_hz=63,
+            length_s=0.05,
+            sample_rate=FS,
+            speed_of_sound=C,
+        )
+
+
+def test_the_points_round_a_listener_on_a_surface_are_seen_from_its_side() -> None:
+    # A listener exactly on a screen with air on both sides is read on the rule's side
+    # (+x): the points round it on that side and in the screen's plane are in its sight,
+    # those across the screen (-x) are not. A listener exactly on the room's wall at
+    # x = 2.4 m is read inside (the rule's side is outside): the points outside are not in
+    # its sight, those inside and those on the wall are.
+    screen = (
+        np.array([[1.23, 0.4, 0.4], [1.23, 2.0, 0.4], [1.23, 2.0, 2.0], [1.23, 0.4, 2.0]]),
+        [[0, 1, 2], [0, 2, 3]],
+    )
+    room = _box_part((0, 0, 0), _SMALL)
+    across = {"screen": [2, 8], "wall": [1, 7]}  # -x, -2x; +x, +2x (see _probe_points)
+    for name, parts, listener in (
+        ("screen", [room, screen], (1.23, 1.213, 1.121)),
+        ("wall", [room], (2.4, 1.213, 1.121)),
+    ):
+        probes = _probe_points(np.array(listener), _TIE_CELL)
+        solver, _ = _parts_run(
+            7, parts, (0.53, 0.61, 0.73), probes, steps=1, probes_per_listener=13
+        )
+        seen = [solver.probe_found(k) and solver.probe_in_sight(k) for k in range(13)]
+        assert seen == [k not in across[name] for k in range(13)], name
+
+
+@pytest.mark.parametrize("scheme", ["standard", "isotropic"])
+def test_a_listener_on_a_screen_takes_its_gradient_on_one_side(tmp_path: Path, scheme: str) -> None:
+    # A listener exactly on a thin screen with air on both sides: W, X, Y and Z are those of
+    # the listener 1e-6 cells off it on the rule's side (+x). Before, its points across the
+    # screen counted as in its sight, and X was a difference across the screen (16 to 43 dB
+    # high).
+    room = box_mesh((6.0, 5.0, 3.0))
+    n = len(room.vertices)
+    corners = [[3.0, 1.0, 0.0], [3.0, 4.0, 0.0], [3.0, 4.0, 2.5], [3.0, 1.0, 2.5]]
+    lines = [f"v {x} {y} {z}" for x, y, z in [*room.vertices, *corners]]
+    lines += ["g room", *(f"f {' '.join(str(i + 1) for i in f)}" for f in room.faces)]
+    lines += ["g screen", f"f {n + 1} {n + 2} {n + 3} {n + 4}"]
+    obj = tmp_path / "screen.obj"
+    obj.write_text("\n".join(lines) + "\n")
+    model = TraceModel.from_room(
+        Room.from_scene(
+            Scene.model_validate(
+                {
+                    "geometry": {"file": str(obj)},
+                    "materials": {
+                        "a": {"absorption": [0.3] * 8, "scattering": 0.0},
+                        "hard": {"absorption": [0.02] * 8, "scattering": 0.0},
+                    },
+                    "assignments": {"room": "a", "screen": "hard"},
+                    "sources": [{"name": "s", "position": [1.2, 2.47, 1.43]}],
+                    "listeners": [{"name": "l", "position": [3.0, 2.53, 1.21]}],
+                }
+            )
+        )
+    )
+    out, cell = [], 0.0
+    for off in (0.0, 1e-6):  # on the screen, then 1e-6 cells off it
+        (response,), info = wave_responses(
+            model,
+            np.array([1.2, 2.47, 1.43]),
+            [[3.0 + off * cell, 2.53, 1.21]],
+            ["l"],
+            max_band_hz=63,
+            length_s=0.08,
+            sample_rate=FS,
+            speed_of_sound=C,
+            scheme=scheme,
+        )
+        out.append(response.signals)
+        cell = info["wave_cell_m"]
+    assert np.abs(out[0] - out[1]).max() <= 1e-4 * np.abs(out[1][:, 0]).max()
+
+
+@STENCILS
+def test_a_wall_nearly_along_a_link_cuts_it_at_a_centre_on_the_wall(stencil: int) -> None:
+    # A wall across y turned 1e-4 off the x axis, through a column of centres to within
+    # 1e-10 cells, so that they lie on it (on its +y side, by the rule): the x links from
+    # those centres meet its plane up to 5e-7 cells past their far end, beyond a search
+    # along the link. The grid and the run are those of the wall moved 1e-6 cells along its
+    # normal to that side. Before, at -0.5e-10 cells such a link was not cut and the two
+    # halves of the box were one air.
+    normal = np.array([1e-4, 1.0, 0.0]) / math.hypot(1e-4, 1.0)
+    along = np.array([normal[1], -normal[0], 0.0])
+    centre = _TIE_ORIGIN + np.array([10.5, 12.5, 0.5]) * _TIE_CELL  # the column x10, y12
+
+    def wall(offset: float):
+        p0 = centre - offset * _TIE_CELL * normal
+        corners = [p0 + a * along + [0, 0, z] for a, z in ((-2, -1), (2, -1), (2, 3.4), (-2, 3.4))]
+        return np.array(corners), [[0, 1, 2], [0, 2, 3]]
+
+    room, listeners = _box_part((0, 0, 0), _SMALL), [(0.35, 0.5, 0.7), (1.9, 0.3, 1.6)]
+    there, run_there = _parts_run(stencil, [room, wall(1e-6)], (1.213, 0.537, 1.121), listeners)
+    for offset in (-0.5e-10, 0.0, 0.5e-10):
+        on, run_on = _parts_run(stencil, [room, wall(offset)], (1.213, 0.537, 1.121), listeners)
+        assert (on.air_cells, on.boundary_cells) == (there.air_cells, there.boundary_cells)
+        assert np.array_equal(run_on, run_there)
+
+
+@STENCILS
+@pytest.mark.parametrize("tie", [False, True], ids=["off the centres", "through centres"])
+def test_a_link_through_an_edge_or_a_vertex_of_a_wall_meets_the_wall(
+    stencil: int, tie: bool
+) -> None:
+    # A wall across x made of two triangles whose shared edge runs exactly through the
+    # points where x links cross it, or of four round a vertex at one of them, 0.37 cells
+    # off a plane of centres or exactly through one (where the centres on the edge lie on
+    # both triangles): the grid and the run are those of the same wall split elsewhere.
+    x = _TIE_ORIGIN[0] + 10.5 * _TIE_CELL + (0.0 if tie else 0.037)
+    y, z = _TIE_ORIGIN[1:] + np.array([12.5, 13.5]) * _TIE_CELL  # a crossing, on y - z = c
+
+    def split(shift: float):
+        c = y - z + shift  # the shared edge, along y - z = c
+        corners = [(x, -1, -1 - c), (x, 3.4 + c, -1 - c), (x, 3.4 + c, 3.4), (x, -1, 3.4)]
+        return np.array(corners, dtype=float), [[0, 1, 2], [0, 2, 3]]
+
+    fan = (
+        np.array([(x, -1, -1), (x, 3.4, -1), (x, 3.4, 3.4), (x, -1, 3.4), (x, y, z)], dtype=float),
+        [[0, 1, 4], [1, 2, 4], [2, 3, 4], [3, 0, 4]],
+    )
+    room = _box_part((0, 0, 0), _SMALL)
+    source, listeners = (x - 0.613, 1.913, 1.021), [(x - 0.53, 0.63, 1.37), (x - 0.25, 1.9, 2.1)]
+    there, run_there = _parts_run(stencil, [room, split(0.037)], source, listeners)
+    for wall in (split(0.0), fan):
+        on, run_on = _parts_run(stencil, [room, wall], source, listeners)
+        assert (on.air_cells, on.boundary_cells) == (there.air_cells, there.boundary_cells)
+        assert np.array_equal(run_on, run_there)
+
+
+def test_the_probes_come_in_whole_groups() -> None:
+    with pytest.raises(ValueError, match="whole groups"):
+        _parts_run(
+            7,
+            [_box_part((0, 0, 0), _SMALL)],
+            (0.5, 0.6, 0.7),
+            [(1, 1, 1)] * 3,
+            steps=1,
+            probes_per_listener=2,
+        )
+
+
+def _same_run_off_the_point(stencil: int, parts, source, listeners, at, off, **kwargs) -> None:
+    """The run with the point ``at`` (an index into ``listeners``, or None for the source)
+    on faces gives the grid, the points found and in sight and the run of that point moved
+    by ``off`` into the air, off them, to 1e-5 of the run."""
+
+    def moved(point, k):
+        return np.add(point, off) if k == at else point
+
+    on, run_on = _parts_run(stencil, parts, source, listeners, **kwargs)
+    away, run_away = _parts_run(
+        stencil,
+        parts,
+        moved(source, None),
+        [moved(p, k) for k, p in enumerate(listeners)],
+        **kwargs,
+    )
+    assert (on.air_cells, on.boundary_cells) == (away.air_cells, away.boundary_cells)
+    for k in range(len(listeners)):
+        assert (on.probe_found(k), on.probe_in_sight(k)) == (
+            away.probe_found(k),
+            away.probe_in_sight(k),
+        )
+    assert np.abs(run_on - run_away).max() <= 1e-5 * np.abs(run_away).max()
+
+
+@STENCILS
+def test_a_point_in_an_edge_or_a_corner_of_the_room_is_in_the_room(stencil: int) -> None:
+    # The source or a listener exactly where two walls of a rigid room meet whose rule's
+    # sides disagree (x = 2.4 m and the floor, x = 0 and the ceiling) or in a corner of
+    # three: the grid and the run are those of the point 1e-6 cells into the room along the
+    # corner's middle. Before, such a point could take the rule's side of every face or the
+    # other side of every face, both outside the room: the source filled the outside and
+    # the listeners were not found, and a listener there was not found.
+    room = [_box_part((0, 0, 0), _SMALL)]
+    listeners = [(0.35, 0.5, 0.7), (1.9, 1.8, 1.6)]
+    for corner, inward in (
+        ((2.4, 1.213, 0.0), (-1, 0, 1)),
+        ((0.0, 1.213, 2.4), (1, 0, -1)),
+        ((2.4, 2.4, 0.0), (-1, -1, 1)),
+    ):
+        off = 1e-7 * np.array(inward) / np.linalg.norm(inward)
+        _same_run_off_the_point(stencil, room, corner, listeners, None, off)
+        _same_run_off_the_point(stencil, room, (1.1, 1.3, 1.7), [*listeners, corner], 2, off)
+
+
+@STENCILS
+def test_a_point_on_an_edge_or_a_vertex_of_a_box_sees_past_both_faces(stencil: int) -> None:
+    # The source or a listener exactly on an edge or a vertex of a box in a rigid room,
+    # where the rule's sides are inside the box (-x and -z), across one of its faces (-x
+    # and +z) or outside it (+x, +y and +z): the run is that of the point 1e-6 cells off
+    # along the edge's or vertex's middle. Before, a point on an edge saw only the cells
+    # beyond both faces' planes (one quarter of the air round it, 0.05 to 0.5 dB off).
+    parts = [_box_part((0, 0, 0), _SMALL), _box_part((0.82, 0.9, 0.7), (1.42, 1.5, 1.6))]
+    listeners = [(0.35, 0.5, 0.7), (1.9, 1.8, 1.6)]
+    for point, out in (
+        ((0.82, 1.213, 0.7), (-1, 0, -1)),
+        ((0.82, 1.213, 1.6), (-1, 0, 1)),
+        ((1.42, 1.5, 1.6), (1, 1, 1)),
+    ):
+        off = 1e-7 * np.array(out) / np.linalg.norm(out)
+        _same_run_off_the_point(stencil, parts, point, listeners, None, off)
+        _same_run_off_the_point(stencil, parts, (2.1, 0.4, 2.0), [*listeners, point], 2, off)
+
+
+def test_the_points_round_a_listener_on_an_edge_are_seen_from_the_edge() -> None:
+    # A listener exactly on the vertical edge (-x, -y) of a pillar 0.15 m thick in y: its
+    # 13 points (see _probe_points) are found, in its sight or not, and read as those of
+    # the listener 1e-6 cells off the edge along its middle; one of them lies in the -x
+    # face's plane past the pillar's far side, which the segment to it passes along the
+    # face to the +y face's edge. Before, the points beside the faces were out of its
+    # sight, and through wave_responses its X and Y were zero.
+    pillar = _box_part((0.82, 0.9, 0.0), (1.42, 1.05, 2.4))
+    listener = np.array([0.82, 0.9, 1.121])
+    on, away = (
+        _parts_run(
+            7,
+            [_box_part((0, 0, 0), _SMALL), pillar],
+            (1.9, 1.8, 1.6),
+            _probe_points(point, _TIE_CELL),
+            steps=1,
+            probes_per_listener=13,
+        )[0]
+        for point in (listener, listener + 1e-7 * np.array([-1.0, -1.0, 0.0]) / math.sqrt(2.0))
+    )
+    seen = [(on.probe_found(k), on.probe_in_sight(k)) for k in range(13)]
+    assert seen == [(away.probe_found(k), away.probe_in_sight(k)) for k in range(13)]
+    assert seen[9] == (True, True)  # +2y, past the pillar along its -x face
+    for (at, w), (at_away, w_away) in zip(
+        _readings(on, _TIE_CELL), _readings(away, _TIE_CELL), strict=True
+    ):
+        assert np.array_equal(at, at_away) and np.allclose(w, w_away, atol=1e-5)
+
+
+@STENCILS
+def test_a_source_and_a_listener_on_one_face_are_in_the_room(stencil: int) -> None:
+    # The source and a listener exactly on the wall at x = 2.4 m (the rule's side is
+    # outside) or on the -x face of a box (inside it), and a listener off the face: both
+    # are in the room, as 1e-6 cells into it. A listener on the face's plane does not
+    # choose the source's side, since it sees the air on either side: with that listener
+    # alone the source is refused. Before, the listener on the face chose the outside of
+    # the room or the inside of the box (18 dB low, 36 dB high), with no error when it was
+    # alone.
+    room = _box_part((0, 0, 0), _SMALL)
+    for parts, source, listener in (
+        ([room], (2.4, 1.213, 1.121), (2.4, 0.61, 1.73)),
+        (
+            [room, _box_part((0.82, 0.9, 0.7), (1.42, 1.5, 1.6))],
+            (0.82, 1.213, 1.121),
+            (0.82, 1.4, 0.8),
+        ),
+    ):
+        inward = np.array([-1e-7, 0.0, 0.0])  # the room's air lies on the face's -x side
+        on, run_on = _parts_run(stencil, parts, source, [(1.9, 0.4, 2.0), listener])
+        away, run_away = _parts_run(
+            stencil, parts, np.add(source, inward), [(1.9, 0.4, 2.0), np.add(listener, inward)]
+        )
+        assert (on.air_cells, on.boundary_cells) == (away.air_cells, away.boundary_cells)
+        assert np.abs(run_on - run_away).max() <= 1e-5 * np.abs(run_away).max()
+        with pytest.raises(
+            ValueError, match="only listeners its sound reaches lie on that surface"
+        ):
+            _parts_run(stencil, parts, source, [listener], steps=1)
+
+
+@STENCILS
+def test_a_face_whose_plane_passes_a_centre_past_its_edge_cuts_the_links_it_crosses(
+    stencil: int,
+) -> None:
+    # A plate of slope 1e-5 whose plane passes 0.5e-10 cells above a row of centres, its edge
+    # 1e-6 cells past them (the centres' feet off the plate): their +x links cross the plate
+    # 5e-6 cells from them, and the grid and the run are those of the plate 3e-10 cells above
+    # them, beyond a tie, to the bit. Before, the plate was skipped as through the centres
+    # and found as through neither, and the links were not cut.
+    x0, z0 = _TIE_ORIGIN[0] + 10.5 * _TIE_CELL, _TIE_ORIGIN[2] + 10.5 * _TIE_CELL
+
+    def plate(d: float):
+        def z(x: float) -> float:
+            return z0 + d * _TIE_CELL - 1e-5 * (x - x0)
+
+        edge = x0 + 1e-6 * _TIE_CELL
+        corners = [
+            (edge, -0.3, z(edge)),
+            (2.7, -0.3, z(2.7)),
+            (2.7, 2.7, z(2.7)),
+            (edge, 2.7, z(edge)),
+        ]
+        return np.array(corners), [[0, 1, 2], [0, 2, 3]]
+
+    room, listeners = _box_part((0, 0, 0), _SMALL), [(1.9, 1.3, 0.4), (1.7, 0.6, 1.5)]
+    runs = [
+        _parts_run(stencil, [room, plate(d)], (0.53, 0.61, 1.73), listeners)
+        for d in (0.5e-10, 3e-10)
+    ]
+    (on, run_on), (there, run_there) = runs
+    assert (on.air_cells, on.boundary_cells) == (there.air_cells, there.boundary_cells)
+    assert np.array_equal(run_on, run_there)
+    if stencil == 7:  # (the 19-point grid's diagonal links meet the plate either way)
+        below, _ = _parts_run(7, [room, plate(-0.5e-10)], (0.53, 0.61, 1.73), listeners, steps=1)
+        assert below.boundary_cells != on.boundary_cells
+
+
+def _pillar_in_a_plane_of_centres(i: int, room: bool, shift: float = 0.0):
+    """The parts of a pillar from floor to ceiling whose -x face lies exactly in the plane
+    of the centres of x index ``i`` (as the solver has them), moved by ``shift`` along x,
+    in the rigid room or alone, and the plane's x."""
+    x = _TIE_ORIGIN[0] + (i + 0.5) * _TIE_CELL
+    pillar = _box_part((x + shift, 0.9, 0.0), (x + shift + 0.6, 1.5, 2.4))
+    return ([_box_part((0, 0, 0), _SMALL)] if room else []) + [pillar], x
+
+
+# A point on that face: anywhere on it, and at a cell centre of it.
+_ON_THE_PLANE = [(1.213, 1.121), tuple(_TIE_ORIGIN[1:] + (np.array([12, 11]) + 0.5) * _TIE_CELL)]
+
+
+@STENCILS
+@pytest.mark.parametrize("room", [True, False], ids=["room", "open"])
+def test_a_source_on_a_face_in_a_plane_of_centres_sends_its_sound_into_the_air(
+    stencil: int, room: bool
+) -> None:
+    # The source on a pillar's -x face that lies in a plane of centres, anywhere on it and at
+    # a cell centre of it: the grid and the run are those of the source 1e-6 cells off the
+    # face into the air, and the grid that of the pillar 1e-7 cells further along -x. Its
+    # cells in the air have trilinear weights of 0, or of rounding's size, which the
+    # weights of the point leaning into the air take in the limit. Before, the source took
+    # the pillar's inside, or at a centre fed the cell on the face inside the pillar. (The
+    # pillar's +x face lies in a plane of centres too, and the links along it pass through
+    # the ends of the -y and +y faces, which they do not meet: before, they were cut, 44
+    # boundary cells too many on the 7-point grid in the room.)
+    listeners = [(0.35, 0.5, 0.7), (1.9, 1.8, 1.6)]
+    for i in (8, 11):
+        parts, x = _pillar_in_a_plane_of_centres(i, room)
+        below, _ = _pillar_in_a_plane_of_centres(i, room, -1e-8)
+        for y, z in _ON_THE_PLANE:
+            on = _same_run_off_the_face(stencil, parts, (x, y, z), (-1e-7, 0, 0), listeners)
+            off, _ = _parts_run(stencil, below, (x - 1e-7, y, z), listeners, steps=1)
+            assert (on.air_cells, on.boundary_cells) == (off.air_cells, off.boundary_cells)
+
+
+@STENCILS
+def test_a_listener_on_a_face_in_a_plane_of_centres_reads_the_air(stencil: int) -> None:
+    # A listener on that face, anywhere on it and at a cell centre of it, far from the source
+    # (the cubic reading) and two cells from it (the eight-cell reading): the grid, the
+    # points found and in sight and the run are those of the listener 1e-6 cells off the
+    # face into the air, and the grid that of the pillar 1e-7 cells further along -x.
+    # Before, it was not found.
+    parts, x = _pillar_in_a_plane_of_centres(8, True)
+    below, _ = _pillar_in_a_plane_of_centres(8, True, -1e-8)
+    for y, z in _ON_THE_PLANE:
+        for source in ((0.4, 0.45, 1.9), (x - 2 * _TIE_CELL, y, z)):
+            listeners = [(x, y, z), (1.9, 1.8, 1.6)]
+            _same_run_off_the_point(stencil, parts, source, listeners, 0, (-1e-7, 0, 0))
+            on, _ = _parts_run(stencil, parts, source, listeners, steps=1)
+            off, _ = _parts_run(stencil, below, source, listeners, steps=1)
+            assert (on.air_cells, on.boundary_cells) == (off.air_cells, off.boundary_cells)
