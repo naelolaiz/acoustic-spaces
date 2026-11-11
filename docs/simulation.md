@@ -585,14 +585,17 @@ simulation:
   in Ambisonics, binaural and loudspeaker outputs (to first order). The source and each
   point a listener samples lie between the grid's cell centres (a cell is 0.2 m on the
   grid up to the 125 Hz band) and take four cells a side, weighted as a cubic through
-  their centres, on their own side of any surface; within a cell of a surface at an
-  angle to the grid, the eight cells round the point that it sees, weighted
-  trilinearly. From four cells from the source on, the level does not depend on where
-  the two lie within their cells (within 0.04 dB with the 19-point stencil). Nearer the
-  source its sound on the grid is not a point's: the pressure is up to 2.9, 0.7 and 0.3
-  dB off a point source's one, two and three cells away, and the gradient's ratio to it
-  up to 7.3, 5.4, 1.7 and 0.35 dB off one to four cells away (each stencil's figures,
-  and the 7-point one's own gain along the grid's diagonals, under Free field in
+  their centres. Next to a floor, a wall or flat ground along the grid they leave out
+  the cells behind it and read across it from the two cells round the point; next to a
+  surface at an angle to the grid, an edge or an opening, and for a listener's points
+  nearer the source than three cells, they take the eight cells round the point that
+  it sees, weighted trilinearly. From four cells from the source on, the level does
+  not depend on where the two lie within their cells (within 0.04 dB with the 19-point
+  stencil). Nearer the source its sound on the grid is not a point's: the pressure is
+  up to 2.9, 0.7 and 0.32 dB off a point source's one, two and three cells away, and
+  the gradient's ratio to it up to 7.6, 5.4, 1.7 and 0.43 dB off, its direction up to
+  18, 15, 8 and 3 degrees, one to four cells away (each stencil's figures, and the
+  7-point one's own gain along the grid's diagonals, under Free field in
   [Validation](validation.md#wave-based-solver)).
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177
   Hz for 125), through the same crossovers the impulse response synthesis uses. The
@@ -622,7 +625,7 @@ long as the CPU solver in a whole run with an earlier version of the script (the
 
 In a 7 x 5 x 3 m box with 15 % absorption, the wave solver follows the sum of the box's
 modes from 22 Hz up; rays give the average level instead. In the 63 and 125 Hz bands,
-G is within 1 dB of the modes and T20 within 5 %; rays are up to 5.3 dB and 12 % off.
+G is within 1 dB of the modes and T20 within 5 %; rays are up to 5.2 dB and 13 % off.
 
 What it leaves out: surfaces react locally, so their absorption changes with the angle
 only as an impedance's does, and absorb at most 95 % at random incidence; next to a

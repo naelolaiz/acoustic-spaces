@@ -661,8 +661,8 @@ is an arc of a circle, so its travel time and its length are exact.
   editor's Simulation page) the air moves instead: each cell keeps the still air's
   speed of sound, and the wind carries the sound along with it, so that sound goes at
   c + v downwind and c − v upwind, whichever way it turned. In a uniform wind of 15
-  m/s it is within 0.01 dB and 0.1 ms of the exact solution in every direction, where
-  the effective speed of sound is up to 0.8 dB off; the echo of a façade 40 m
+  m/s it is within 0.02 dB and 0.1 ms of the exact solution in every direction, where
+  the effective speed of sound is up to 0.84 dB off; the echo of a façade 40 m
   downwind comes within 0.02 ms of ray theory's, where the effective speed of sound
   brings it 10.6 ms early; in the `windy` preset over grass both are within 0.55 dB of
   the parabolic equation, 0.2 dB on average (see

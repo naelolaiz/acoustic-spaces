@@ -195,25 +195,28 @@
   itself keeps the level it had.
 - Fixed (results change): round an open model the wave solver's matched layer lay a few
   cells past the model, the source and the listeners and sent back much of the sound
-  that ran along it: over a rigid plate, with 40 cm cells, the 63 Hz band read 2.8 and
-  9.6 dB below the exact solution 80 and 160 m away. The grid now reaches past the
+  that ran along it: over a rigid plate, with 40 cm cells, the 63 Hz band read 3.1 and
+  9.8 dB below the exact solution 80 and 160 m away. The grid now reaches past the
   source and the listeners on each side (not under an outdoor ground) by 15 % of how far
   the listeners lie from the source along that side, which brings those checks within
   0.03 dB of it and costs cells wherever an open side of the model reaches less far
   (1.13 times as many on validation/wave_outdoor.py's 63 Hz grids); a side that the
   model's own surfaces close gets none.
 - Fixed (results change): the wave solver took its source and each point a listener
-  samples from the eight cells round them, weighted trilinearly, which moved the 63 and
-  125 Hz bands by up to 0.5 dB with their place within a cell (8 points per wavelength).
-  They now take a cubic through four cells a side, within 0.02 dB of a point source's
-  level from eight cells on in closed rooms, where the source's signal also undoes the
-  19-point grid's own gain on a point source (0.06 and 0.35 dB in the two bands), which
-  that loss had hidden.
+  samples from the eight cells round them, weighted trilinearly, which read the 125 Hz
+  band up to 0.53 dB low by their place within a cell (8 points per wavelength at the
+  band's top). They now take a cubic through four cells a side (along a floor, a wall or
+  flat ground, across it the two cells round them; next to other surfaces and within
+  three cells of the source the eight cells as before), within 0.02 dB of a point
+  source's level from eight cells on in closed rooms, where the source's signal also
+  undoes the 19-point grid's own gain on a point source (0.06 and 0.35 dB in the two
+  bands), which that loss had hidden.
 - Changed: `validation/wave_solver.py` fades the cuts of its duct and open-model checks,
-  which an abrupt cut had filled with the grid's slowest waves from far above the bands
-  they look at: the duct's absorption is within 0.0002 of the grid's theory (it showed
-  0.005 to 0.007), and the default matched layer returns 72 to 74 dB less than the sound
-  (67 to 74).
+  which an abrupt cut had filled with sound from far above the bands they look at (in
+  the duct, its first cross mode): the duct's absorption is within 0.0002 of the grid's
+  theory (it showed 0.005 to 0.007), and the default matched layer returns 72 to 74 dB
+  less than the sound (67 to 74). Its near-source table takes 50 directions and gives
+  the gradient's direction.
 - Changed: CI runs again by itself, up to twice, the jobs of a run that failed only
   because GitHub lost their runner or a step that fetches system packages failed
   (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`). A pull request runs one job on

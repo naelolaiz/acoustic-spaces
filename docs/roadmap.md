@@ -300,8 +300,9 @@ Outdoor acoustics, in steps:
   one end 1.8 to 2.0 times the cells (see Open models under
   [Wave-based solver](validation.md#wave-based-solver)).
 - [x] The wave solver's source and listeners read between the cell centres to a
-  higher order: a cubic through four cells a side, where two a side cost up to 0.5 dB
-  with their place within a cell at 8 points per wavelength (see Free field under
+  higher order: a cubic through four cells a side, where two a side read the 125 Hz
+  band up to 0.53 dB low by their place within a cell (8 points per wavelength at the
+  band's top; see Free field under
   [Wave-based solver](validation.md#wave-based-solver)).
 - [x] O19 Whole cities: edge diffraction skips the pairs of an edge and a wall or roof
   that no path can use before it traces a ray, on every core, with the same results:
