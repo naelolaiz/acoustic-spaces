@@ -96,9 +96,16 @@
 // the wind's effect). The carrying is the strong-stability-preserving Runge-Kutta
 // method of third order over the gradient's central differences, of fourth order where
 // two cells either side are air, second where one is. Over its small steps (|v| T / h
-// is under 0.1 for the weather's wind, and is kept under 0.5) it loses a little of the
-// shortest waves and no more. The surfaces' branch velocities, the source and the
-// probes stay where they are, and the matched layer's air is still.
+// is under 0.1 for the weather's wind) it loses a little of the shortest waves. A
+// velocity of half a cell per step or more along an axis is refused, which is the
+// carrying's own bound and no promise for the two steps together: where the wind
+// changes or ends they keep no energy of their own. The surfaces' branch velocities,
+// the source and the probes stay where they are, and the matched layer's air is still;
+// at its border the moving air meets still air, where the wind comes out of the layer
+// with the layer's own sound and leaves into it. In the open, sound has been seen to
+// grow there at winds beyond the weather's (from 0.09 cells per step on, a wind at 45
+// degrees to the grid; not at 0.07), so a run in moving air is to be watched
+// (mean_square()).
 //
 // That equation keeps the sound's energy, (|q_t|^2 - c^2 <q, lap q> - |v . grad q|^2) / 2,
 // when the carrying operator A = v . grad is antisymmetric, which on the grid it is when
@@ -112,8 +119,9 @@
 // layer) solved so that every cell's faces sum to zero with none through a face of the
 // model. That is the flow of least change, each face's change weighed by 1 / k, as
 // mass-consistent wind models make it. A wind that only changes with height is itself
-// k grad (the distance along the wind), so a closed room or a dead end keeps still
-// air whatever the wind's profile, and far from the solids the wind is the given one.
+// k grad (the distance along the wind), so a closed room keeps still air and a dead
+// end nearly still air whatever the wind's profile, and far from the solids the wind is
+// the given one.
 // It has no wake and no eddies behind a solid, and at a sharp edge it is fast, the
 // faster the finer the grid. The carrying operator is then made of pairs of opposite
 // sign only: u / 2 over each open face, and for every three cells in a row joined by two
@@ -542,8 +550,9 @@ public:
     const std::array<bool, 6> &open_sides() const { return open_sides_; }
     bool flowing() const { return !flow_mask_.empty(); }
     // In moving air: whether the wind was made to flow round the model's solids (see the
-    // notes above), the fastest it then moves (cells per step; else the fastest given
-    // velocity), and the sweeps its solve took.
+    // notes above), the fastest it then moves through a face between two cells (cells
+    // per step; else the largest of the given velocities' components along x and y), and
+    // the sweeps its solve took.
     bool wind_round() const { return round_; }
     double wind_fastest() const { return fastest_; }
     std::size_t wind_sweeps() const { return sweeps_; }

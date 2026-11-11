@@ -2351,9 +2351,9 @@ Next to the dome the grid's cells make a staircase of it, and the wind is fast r
 each of its corners: the fastest wind on the grid is 1.55 and 1.64 times the given one,
 where the ideal fluid's is 1.5 times, over the top. From two cells off the surface the
 wind is the ideal fluid's to 1.5 % and 0.9 %, and less farther out. Beyond 3 radii the
-difference no longer falls with the cell: the grid ends 4 radii from the centre, and
-the wind's correction with it (a one-off run with the ground and the sky 7 radii away
-gives 0.06 % there and 0.17 % from 2 to 3 radii).
+difference no longer falls with the cell: the grid ends 4 radii from the centre along
+the ground and 3.5 radii up, and the wind's correction with it (a one-off run with the
+ground 7 radii away and the sky 6.5 gives 0.06 % there and 0.17 % from 2 to 3 radii).
 
 **A façade downwind.** A rigid building 40 m downwind of the source, its façade across
 the wind, 30 m high and 50 m wide, and a listener 10 m upwind of the source, both 2 m

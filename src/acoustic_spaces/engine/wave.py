@@ -63,16 +63,18 @@ octave bands replace the ray-traced ones.
   surface and leaves every cell as much as it enters it. A dead end, such as a room
   with one opening, then holds nearly still air whatever the wind's profile. It is a
   flow without wakes or eddies behind the solids, and at a sharp edge it speeds up, the
-  more the finer the grid; the run says how fast it gets (``wave_wind_fastest_m_s``),
-  and it must stay under half a cell a step. The carrying is of fourth order where the
-  wind is the same along a row of cells and of second order where it changes; over
-  open, flat ground, where the given wind already crosses nothing, it is carried as
-  given, by fourth-order central differences. The matched layer's air is still. Over
+  more the finer the grid; the run says how fast it gets through a face between two
+  cells (``wave_wind_fastest_m_s``), which must stay under half a cell a step. The
+  carrying is of fourth order where the wind is the same along a row of cells and of
+  second order where it changes; over open, flat ground, where the given wind already
+  crosses nothing, it is carried as given, by fourth-order central differences. Over
   open ground it takes four to five times as long as the effective speed of sound's
   run; round solids its steps take about seven times as long, after the solve of the
   wind (see ``validation/wave_wind.py``). It runs on the CPU (asked for the GPU, it
-  says so and stays there). The run is watched all the same: once the source's pulse
-  has ended, the pressure squared over the grid's air, averaged over pieces of
+  says so and stays there). The matched layer's air is still, and where the moving air
+  meets it sound can build up at winds beyond the weather's (see the notes of
+  ``fdtd.hpp``). So the run is watched all the same: once the source's pulse has
+  ended, the pressure squared over the grid's air, averaged over pieces of
   ``WATCH_S``, may not rise to ``WATCH_RISE`` times its lowest so far (a
   ``ValueError``).
 - The grid is laid out on the CPU and stepped there, or with ``device`` on a GPU,

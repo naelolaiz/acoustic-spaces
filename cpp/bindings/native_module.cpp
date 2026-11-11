@@ -1104,8 +1104,9 @@ NB_MODULE(_native, m) {
                      "solids (the given velocities met a face, or changed along a row of "
                      "cells).")
         .def_prop_ro("wind_fastest", &as::WaveSolver::wind_fastest,
-                     "The fastest the air moves, in cells per step: round the model's solids "
-                     "when wind_round, else of the given velocities; 0 in still air.")
+                     "The fastest the air moves along an axis of the grid, in cells per "
+                     "step: through a face between two cells when wind_round, else the "
+                     "largest of the given velocities' components; 0 in still air.")
         .def_prop_ro("wind_sweeps", &as::WaveSolver::wind_sweeps,
                      "The sweeps the solve of the wind round the solids took; 0 without one.")
         .def_prop_ro("mean_square", &as::WaveSolver::mean_square,

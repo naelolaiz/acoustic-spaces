@@ -2853,6 +2853,39 @@ def test_moving_air_s_wind_flows_round_the_model_s_solids() -> None:
     assert len(plain.layout()["wind_x"]) == 0
 
 
+def test_moving_air_takes_a_weather_zone_s_wind_gradually() -> None:
+    """A wind that changes along its own way, as at a weather zone's border across it,
+    would leave the border's cells with more air coming in than going out. The solver
+    makes it flow so that no cell gains or loses air: along a row the wind falls
+    steadily from one zone's towards the next's, and at the border it lies between the
+    two. A border along the wind changes nothing along any row of cells, and that wind
+    is carried as given."""
+
+    def across(centres):  # the border at x = 4 m
+        return np.where(centres[:, 0] < 4.0, 0.06, 0.012), np.zeros(len(centres))
+
+    def along(centres):  # the border at y = 3 m
+        return np.where(centres[:, 1] < 3.0, 0.06, 0.012), np.zeros(len(centres))
+
+    h = 0.4
+    solver, _, origin, shape = _plate_solver(h, LAYER_CELLS, LAYER_CELLS, flow=across)
+    assert solver.flowing and solver.wind_round
+    types, winds, net = _face_winds(solver)
+    moving = (types == 1) | (types == 2)
+    assert np.abs(net[moving]).max() < 1e-6 * max(float(np.abs(wind).max()) for wind in winds)
+    centres = _centres(origin, h, shape).reshape(*types.shape, 3)
+    x, y, z = centres[..., 0], centres[..., 1], centres[..., 2]
+    row = moving & (np.abs(y - 3.0) < h / 2) & (np.abs(z - 1.5) < h / 2)
+    along_x = np.argsort(x[row])[:-1]  # (the last cell's face is the matched layer's)
+    wind, at = winds[0][row][along_x], x[row][along_x]
+    assert len(wind) > 15 and np.all(np.diff(wind) < 0.0)
+    assert 0.012 < wind[-1] < wind[0] < 0.06
+    assert 0.015 < float(wind[np.searchsorted(at, 4.0) - 1]) < 0.03  # (the border's face)
+    steady, *_ = _plate_solver(h, LAYER_CELLS, LAYER_CELLS, flow=along)
+    assert steady.flowing and not steady.wind_round
+    assert steady.wind_fastest == pytest.approx(0.06)
+
+
 def test_the_wind_round_the_solids_carries_as_the_given_wind_where_they_agree() -> None:
     """A uniform wind over a plate in the open is carried as given, by fourth-order
     central differences. With one cell's wind a hundred-thousandth off, the solver makes

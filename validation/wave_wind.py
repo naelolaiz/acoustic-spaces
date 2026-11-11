@@ -9,7 +9,7 @@ The wave solver takes the wind in one of two ways (:mod:`acoustic_spaces.engine.
 source changes, as the rays and the parabolic equation take it, or ``moving``, air that
 moves, so that sound goes at c + v downwind and c - v upwind whichever way it turned.
 Moving air's wind flows round the model's solids. Six checks, in the 63 Hz octave band
-from a grid for that band:
+from a grid for that band (the dome's on the 125 Hz band's grid too):
 
 - **Free field over a rigid ground in a uniform wind** of 15 m/s. The source 2 m up,
   listeners 1.5 m up 30 m away downwind, upwind, across the wind and at 45 degrees. In
