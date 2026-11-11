@@ -7,7 +7,10 @@ reaches the listeners.
 Needs the ``gpu`` extra (wgpu) and a GPU driver: Vulkan, Metal or Direct3D 12. The
 scenes bend their rays in wind and temperature (the open-air stage), send them through
 vegetation (the tree belt) and over a terrain (the hillside), which the GPU traces as
-the CPU does. Each scene is simulated with its own settings once per device
+the CPU does. A ground that scatters nothing (a material with an ``impedance``, unless
+it gives a ``scattering``) scatters 0.1 here: over the examples' own grounds no late ray
+reaches the stage's listeners or the hillside's crest, and there is no late sound to
+compare there. Each scene is simulated with its own settings otherwise, once per device
 (``simulation.late.device``), and once more on the CPU with the next seed, which shows
 how much two runs differ by the ray count's noise alone. The settings come first, then
 a Markdown table with aligned columns: where the late rays went, the late stage's time
@@ -26,7 +29,7 @@ from pathlib import Path
 
 import numpy as np
 
-from acoustic_spaces import Room, simulate
+from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import gpu, ray_device
 from acoustic_spaces.engine.model import TraceModel
 
@@ -36,6 +39,8 @@ SCENES = [
     ROOT / "examples" / "tree_belt" / "scene.yaml",
     ROOT / "examples" / "hillside" / "scene.yaml",
 ]
+#: What a ground that scatters nothing scatters in this comparison.
+GROUND_SCATTERING = 0.1
 COLUMNS = (
     "Scene",
     "Faces",
@@ -71,6 +76,18 @@ def _table(rows: list[tuple[str, ...]]) -> str:
 
     rule = ["-" * w if i in text else "-" * (w - 1) + ":" for i, w in enumerate(widths)]
     return "\n".join([line(COLUMNS), line(rule), *(line(row) for row in rows)])
+
+
+def _room(path: Path) -> Room:
+    """The scene's room, each ground that scatters nothing scattering
+    :data:`GROUND_SCATTERING`: without it the stage's listeners and the hillside's crest
+    get no late rays to compare."""
+    data = Scene.from_yaml(path).to_data()
+    for material in data["materials"].values():
+        if "impedance" in material:
+            # Left out of the data where it is the default, which is to scatter nothing.
+            material.setdefault("scattering", GROUND_SCATTERING)
+    return Room.from_scene(Scene.model_validate(data))
 
 
 def _run(room: Room, device: str, rays: int | None, seed_step: int = 0):
@@ -138,7 +155,7 @@ def main() -> None:
     print()
     rows = []
     for path in args.scenes:
-        room = Room.from_yaml(path)
+        room = _room(path)
         if room.scene.simulation.late.method != "stochastic_ray_tracing":
             print(f"{path.parent.name}: skipped, its late stage traces no rays", flush=True)
             continue

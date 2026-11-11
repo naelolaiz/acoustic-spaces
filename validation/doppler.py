@@ -33,7 +33,8 @@ walker goes (:mod:`acoustic_spaces.doppler`). Five checks:
   at 1 kHz also as a cardioid microphone aimed level at the walker's line hears it,
   each path times the capsule's 0.5 + 0.5 cos of the angle it arrives at.
 - **The pass-by levels.** White noise through the car's walk over grass (Miki's
-  impedance, 200 kPa s/m²): the energy of the sound in each octave band against that of
+  impedance, 200 kPa s/m², scattering 0.1, which gives the walk its late part over the
+  open ground): the energy of the sound in each octave band against that of
   the noise through each place's own impulse response for as long as its sound is heard
   (Doppler moves the sound in time and pitch, but keeps its energy), and against the
   sound exposure level :func:`~acoustic_spaces.walkthrough.pass_by` gives from the
@@ -151,7 +152,8 @@ def scene(
         source["directivity"] = directivity
     material = {"absorption": [0.0] * 8, "scattering": 0.0}
     if ground == "grass":
-        material = {"impedance": {"preset": "grass"}}
+        # Grass that scatters a tenth: what it scatters is the walk's late part.
+        material = {"impedance": {"preset": "grass"}, "scattering": 0.1}
     farthest = math.hypot(max(abs(line.x0), abs(line.x1)), line.d, line.zs + line.zr)
     extent = [[min(-100.0, line.x0 - 40.0), -40.0], [max(100.0, line.x1 + 40.0), 40.0]]
     return Scene.model_validate(

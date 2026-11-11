@@ -48,20 +48,9 @@ def short(monkeypatch: pytest.MonkeyPatch):
     return reference
 
 
-def _scattering(scene: Scene) -> Scene:
-    """``scene`` (the validation's pass-by over grass) with grass that scatters 0.1: over
-    a ground that scatters nothing there is no late part."""
-    data = scene.to_data()
-    data["materials"]["ground"]["scattering"] = 0.1
-    return Scene.model_validate(data)
-
-
 def _standing(ground: str, doppler: bool = True) -> Scene:
-    """A source that walks a hair's breadth: Doppler should change nothing. Its grass
-    scatters 0.1 (:func:`_scattering`), so that it has a late part."""
+    """A source that walks a hair's breadth: Doppler should change nothing."""
     scene = reference.scene("source", 30.0, ground, doppler)
-    if ground == "grass":
-        scene = _scattering(scene)
     source = scene.sources[0]
     walk = source.walk.model_copy(update={"to": [(-20.0 + 1e-7, 0.0, 1.0)], "speed_m_s": 1.0})
     source = source.model_copy(update={"position": (-20.0, 0.0, 1.0), "walk": walk})
@@ -247,10 +236,10 @@ def test_a_filter_goes_linearly_from_one_place_to_the_next() -> None:
 def _late_only(walker: str, monkeypatch: pytest.MonkeyPatch):
     """The short pass-by of a walking ``walker``, 1 m between places, each with its own
     late part, and the early paths left out of its renders: the walk and each place's
-    late part as it plays it (the response without its early paths). Its grass scatters
-    0.1 (:func:`_scattering`)."""
-    scene = _scattering(reference.scene(walker, 30.0, "grass"))
-    walk = simulate_walk(Room.from_scene(scene), step_m=1.0, late_step_m=None)
+    late part as it plays it (the response without its early paths)."""
+    walk = simulate_walk(
+        Room.from_scene(reference.scene(walker, 30.0, "grass")), step_m=1.0, late_step_m=None
+    )
     monkeypatch.setattr(dp, "render", lambda *args, **kwargs: 0.0)
     seed = walk.result.settings.seed
     irs = []
@@ -460,14 +449,15 @@ def test_the_sound_sent_each_way_needs_a_walk_with_doppler(short) -> None:
 
 
 def test_the_late_part_and_the_eddies_go_along(short) -> None:
-    grass = _scattering(short.scene("source", 30.0, "grass"))
-    data = grass.model_dump(mode="json", exclude_none=True)
+    data = short.scene("source", 30.0, "grass").model_dump(mode="json", exclude_none=True)
     data["atmosphere"] = {"turbulence": "strong"}
     walk = simulate_walk(Room.from_scene(Scene.model_validate(data)), step_m=2.0, late_step_m=4.0)
     dry = _noise(1.5)
     wet = render_walk(walk, {"s": dry}, Mono())
     assert np.isfinite(wet).all() and np.max(np.abs(wet)) > 0.0
-    calm = simulate_walk(Room.from_scene(grass), step_m=2.0, late_step_m=4.0)
+    calm = simulate_walk(
+        Room.from_scene(short.scene("source", 30.0, "grass")), step_m=2.0, late_step_m=4.0
+    )
     still = render_walk(calm, {"s": dry}, Mono())
     assert not np.allclose(wet, still)
     # Rendered again, the same: the eddies and the late part are drawn the same way.
@@ -627,9 +617,7 @@ def test_sounds_that_follow_the_walker_are_heard_as_its_own_later(short) -> None
     part: exactly a render of its own, delayed, but for the filters' faint lead-in that
     such a render cuts at its start."""
     walk = simulate_walk(
-        Room.from_scene(_scattering(short.scene("source", 30.0, "grass"))),
-        step_m=2.0,
-        late_step_m=4.0,
+        Room.from_scene(short.scene("source", 30.0, "grass")), step_m=2.0, late_step_m=4.0
     )
     lead, behind = _noise(1.0, seed=3), _noise(1.0, seed=4)
     first = render_walk(walk, {"s": lead}, Mono())
