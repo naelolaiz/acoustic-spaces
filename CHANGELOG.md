@@ -278,8 +278,8 @@
   further off a point source's than read from eight cells, from a finer scan, and why:
   the source's spread over four cells a side from 2 to 3.4 cells away, the listener's
   reading beyond (Free field under [Validation](docs/validation.md#wave-based-solver)).
-- Docs: the cost of the wave solver's moving air is given as about four times the
-  effective speed of sound's (`validation/wave_wind.py` measures 3.8 to 4.5 times), where
+- Docs: the cost of the wave solver's moving air is given as four to five times the
+  effective speed of sound's (`validation/wave_wind.py` measures 4.0 to 5.1 times), where
   the help, the editor's tip and the docs said three to four times.
 - Changed: CI runs again by itself, up to twice, the jobs of a run that failed only
   because GitHub lost their runner or a step that fetches system packages failed

@@ -2372,12 +2372,11 @@ speed of sound is 0.02 to 0.29 dB below it and moving air −0.02 to +0.25 dB fr
 (most at 200 m, 1.5 m up); upwind moving air is within 0.13 dB and the effective speed
 of sound 0.14 to 0.39 dB above.
 
-Moving air takes 3.8 to 4.5 times as long as the effective speed of sound: 15 s
-against 3.9 s in the free field (3.2 million cells) and 34 s against 7.6 s with the
-façade (6 million), on 4 cores with nothing else running (10 November 2026). With the
-preset (29.2 against 30.2 million cells) it took 4.3 and 4.4 times as long, 6.6 and
-7.5 minutes against 92 and 102 s, on 4 cores that other work shared (11 November
-2026).
+Moving air takes 4.0 to 5.1 times as long as the effective speed of sound: 16 s
+against 3.9 s in the free field (3.2 million cells), 38 s against 7.4 s with the
+façade (6 million) and, with the preset (29.2 against 30.2 million cells), 324 and
+316 s against 66 s downwind and upwind, on 4 cores with nothing else running (11
+November 2026).
 
 **A room with an opening.** Moving air's wind blows through the model's solids, and
 where a solid has air on both sides along the wind the solver's sound grows instead of

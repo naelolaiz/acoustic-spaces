@@ -57,7 +57,7 @@ octave bands replace the ray-traced ones.
   c + v, upwind at c - v whichever way it turned. Where the wind changes, the term
   of the linearised Euler equations that the wind's shear puts on the air's velocity is
   left out, about ``|dv/dz| / omega`` of the rest. The air moves no more than half a cell a
-  step, and the matched layer's air is still. It takes about four times as long as the
+  step, and the matched layer's air is still. It takes four to five times as long as the
   effective speed of sound's run, and runs on the CPU (asked for the GPU, it says so and stays
   there). Its wind blows through the model's solids, which is not stable in a nearly
   closed space such as a room with an opening, so the run is watched: once the source's
