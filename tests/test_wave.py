@@ -1546,26 +1546,7 @@ def test_outdoor_models_make_only_the_grid_with_the_layer(monkeypatch) -> None:
         made.clear()
         _, info, _ = _windy_run(room, "effective", scheme=scheme)
         assert info["wave_open"] == 1.0 and made == [(7, LAYER_CELLS)]
-    hut = Room.from_scene(
-        Scene.model_validate(
-            {
-                "geometry": {
-                    "ground": {"extent": [[-10, -6], [10, 6]], "sky": 5},
-                    "buildings": [
-                        {
-                            "name": "hut",
-                            "footprint": [[-3, -3], [3, -3], [3, 3], [-3, 3]],
-                            "height": 4,
-                        }
-                    ],
-                },
-                "materials": {"m": {"absorption": [0.2] * 8, "scattering": 0.0}},
-                "default_material": "m",
-                "sources": [{"name": "s", "position": [0, 0, 1.5]}],
-                "listeners": [{"name": "in", "position": [1.2, 0.7, 1.4]}],
-            }
-        )
-    )
+    hut = _windy_hut(0.0)
     for scheme, stencil in (("auto", 19), ("standard", 7)):
         made.clear()
         _, info, _ = _windy_run(hut, "effective", scheme=scheme)
@@ -2745,6 +2726,33 @@ def test_moving_air_stays_stable_round_walls_and_in_the_matched_layer() -> None:
     assert max(levels[6:]) < 1e-11 * levels[0]
 
 
+def test_moving_air_keeps_a_closed_room_s_mean() -> None:
+    # A rigid closed room in a uniform wind askew to the grid, over 100,000 steps. The
+    # carrying step keeps a uniform pressure to the bit: its last stage is written
+    # q + 2/3 (... - q), because the weights 1/3 and 2/3 of (1/3) q + (2/3) (...) add
+    # to 1 + 2^-25 in single precision, which made the room's mean grow 2.2 to 2.6 times
+    # per 10,000 steps (to 460 times the sound's level here). The mean of the last 4,000
+    # steps at a point, over which the sound averages out, stays under ten times the
+    # sound's early level (it is 1.6 times here: the mean still creeps, linearly).
+    def flow(centres):
+        return np.full(len(centres), 0.03), np.full(len(centres), 0.017)
+
+    solver, rate = _solver(
+        (0.9, 0.7, 0.6),
+        lambda mesh: [0.0] * len(mesh.faces),
+        [0.28, 0.3, 0.22],
+        [[0.63, 0.42, 0.33]],
+        flow=flow,
+    )
+    assert solver.flowing and not solver.open
+    chunk = 10_000
+    early = float(np.std(solver.run(_drive(rate, 0.1, chunk))[0, 6_000:]))
+    for _ in range(8):
+        solver.run(np.zeros(chunk, np.float32))
+    late = solver.run(np.zeros(chunk, np.float32))[0, -4_000:]
+    assert abs(float(np.mean(late))) < 10.0 * early
+
+
 def test_wave_solver_checks_the_air_s_motion() -> None:
     mesh = box_mesh((2.0, 2.0, 2.0))
     bvh = _native.Bvh(mesh.vertices, mesh.faces)
@@ -2807,6 +2815,28 @@ def _windy_ground(wind: float, model: str, temperature=None) -> Room:
     return Room.from_scene(Scene.model_validate(data))
 
 
+def _windy_hut(wind: float) -> Room:
+    """A closed building on the ground with the source and a listener shut in it, in a
+    uniform wind ``wind`` (m/s) along +x."""
+    data = {
+        "geometry": {
+            "ground": {"extent": [[-10, -6], [10, 6]], "sky": 5},
+            "buildings": [
+                {"name": "hut", "footprint": [[-3, -3], [3, -3], [3, 3], [-3, 3]], "height": 4}
+            ],
+        },
+        "materials": {"m": {"absorption": [0.2] * 8, "scattering": 0.0}},
+        "default_material": "m",
+        "sources": [{"name": "s", "position": [0, 0, 1.5]}],
+        "listeners": [{"name": "in", "position": [1.2, 0.7, 1.4]}],
+    }
+    if wind:
+        data["atmosphere"] = {
+            "wind": {"speed_m_s": wind, "direction_deg": 0.0, "profile": "constant"}
+        }
+    return Room.from_scene(Scene.model_validate(data))
+
+
 def _windy_run(
     room: Room, wind: str, per_wavelength: float = 8.0, device="cpu", scheme: str = "auto"
 ):
@@ -2842,6 +2872,24 @@ def test_still_air_takes_no_moving_air() -> None:
         assert "wave_moving_air" not in moving_info and "the air moving" not in said[0]
         for a, b in zip(effective, moving, strict=True):
             assert a.rate == b.rate and np.array_equal(a.signals, b.signals)
+
+
+@pytest.mark.parametrize("wind", ["effective", "moving"])
+def test_the_air_in_a_closed_model_is_still(wind) -> None:
+    # A source shut in a closed building outdoors: no wind blows through its walls, so
+    # in a wind of 15 m/s, taken either way, the run is the still air's (on the still
+    # air's grid, within single precision's rounding) and says that it left the wind
+    # out.
+    still, still_info, still_said = _windy_run(_windy_hut(0.0), wind)
+    windy, info, said = _windy_run(_windy_hut(15.0), wind)
+    assert "wave_open" not in info and info["wave_still_inside"] == 1.0
+    assert "wave_moving_air" not in info and "the air moving" not in said[0]
+    assert "the wind left out: the air inside the closed model is still" in said[0]
+    assert "wave_still_inside" not in still_info and "the wind left out" not in still_said[0]
+    assert info["wave_cells"] == still_info["wave_cells"]
+    for a, b in zip(windy, still, strict=True):
+        assert a.rate == b.rate and a.cell == b.cell
+        assert np.abs(a.signals - b.signals).max() <= 1e-6 * np.abs(b.signals).max()
 
 
 def test_wave_responses_carry_the_sound_with_the_wind() -> None:

@@ -865,14 +865,14 @@ def wave_responses(
 
     outdoor = model.room.outdoor is not None
     weather = _Weather.of(model, source)
-    moving = False
-    if weather is not None and wind == "moving":
-        # The wind blows somewhere over the scene (temperature alone needs no moving air).
+    windy = False  # the wind blows somewhere over the scene
+    if weather is not None:
         heights = model.room.mesh.vertices[:, 2]
         top = max(float(heights.max()), float(points[:, 2].max())) + 100.0
         z = np.linspace(model.ground, top, 512)
         weathers = weather.weathers if weather.zones is not None else [weather.atmosphere]
-        moving = any(np.any(np.asarray(w.wind_speed(z - model.ground)) != 0.0) for w in weathers)
+        windy = any(np.any(np.asarray(w.wind_speed(z - model.ground)) != 0.0) for w in weathers)
+    moving = windy and wind == "moving"  # (temperature alone needs no moving air)
 
     open_sides: list[np.ndarray] = []  # the sides whose layer needs room, once found
 
@@ -925,24 +925,28 @@ def wave_responses(
                 "max_band_hz or points_per_wavelength"
             )
 
-    def prepare(stencil: str, layer: int):
+    def prepare(stencil: str, layer: int, still_air: bool = False):
         """The solver, grid, fits and probes for the stencil, with ``layer`` cells of
-        matched layer."""
+        matched layer; with ``still_air``, in the weather's still air, without its wind
+        (for a closed model's air, which no wind blows through)."""
         size, courant = STENCILS[stencil]
         speeds, extremes, flow = None, None, (None, None)
         still = speed_of_sound  # the slowest still air's speed of sound on the grid
         if weather is None:
             grid, origin, shape = layout(courant, layer, speed_of_sound, points_per_wavelength)
             check_size(shape, layer)
-        elif moving:
+        elif moving or still_air:
             # Fine enough for sound going against the fastest wind in the slowest air, in
-            # time steps for the fastest still air (the air's motion is carried apart).
+            # time steps for the fastest still air (the air's motion is carried apart;
+            # still air has none).
             slowest = fastest = float(weather.at(source)[0])
             for _ in range(8):
                 grid, origin, shape = layout(
                     courant, layer, fastest, points_per_wavelength * fastest / slowest
                 )
                 low, high, top = weather.moving_extremes(origin, grid.cell, shape)
+                if still_air:
+                    top = 0.0
                 if low - top >= slowest and high <= fastest:
                     break
                 slowest, fastest = min(slowest, low - top), max(fastest, high)
@@ -951,6 +955,8 @@ def wave_responses(
             speeds, *flow = weather.moving_fields(
                 origin, grid.cell, shape, step, 1.0 / (grid.cell * grid.rate)
             )
+            if still_air:
+                flow = [None, None]
             extremes, still = (low - top, high + top), low
         else:
             # Fine enough for the slowest sound and in time steps for the fastest, over
@@ -1002,10 +1008,10 @@ def wave_responses(
         )
         return solver, grid, fits, probes, courant, extremes, still
 
-    def kept(stencil: str, layer: int):
+    def kept(stencil: str, layer: int, still_air: bool = False):
         """What ``prepare`` gives, where its grid is closed without a matched layer or
         open with one; otherwise None, and its grid goes before the next is made."""
-        built = prepare(stencil, layer)
+        built = prepare(stencil, layer, still_air)
         return built if built[0].open == bool(layer) else None
 
     # The isotropic stencil, but round an open model the standard one with its matched
@@ -1019,7 +1025,9 @@ def wave_responses(
         )
     built = kept("standard", LAYER_CELLS) if outdoor else None
     if built is None:
-        built = kept("standard" if scheme == "standard" else "isotropic", 0)
+        # A closed model's air is still, whichever way the wind is taken: no wind blows
+        # through its walls (outdoors, a source shut in a closed building).
+        built = kept("standard" if scheme == "standard" else "isotropic", 0, windy)
     if built is None:
         if scheme == "isotropic":
             raise ValueError(
@@ -1028,10 +1036,12 @@ def wave_responses(
             )
         built = prepare("standard", LAYER_CELLS)
     solver, grid, fits, probes, courant, extremes, still = built
+    still_inside = windy and not solver.open  # the wind left out of a closed model
+    stilled = moving or still_inside  # the grid's speeds are the still air's
     h = grid.cell
     at_source = 1.0  # the speed of sound at the source over the grid's
     if weather is not None:
-        here = weather.still_at(source) if moving else weather.at(source)[0]
+        here = weather.still_at(source) if stilled else weather.at(source)[0]
         at_source = min(float(here) / (courant * h * grid.rate), 1.0)
     signal, delay = source_signal(grid.rate, h, courant, at_source)
     samples = int(math.ceil(length_s * grid.rate))
@@ -1067,6 +1077,8 @@ def wave_responses(
     where = f" on {gpu_name()}" if on_gpu else ""
     if extremes is not None:
         where += f", sound at {extremes[0]:.0f} to {extremes[1]:.0f} m/s"
+    if still_inside:
+        where += ", the wind left out: the air inside the closed model is still"
     if solver.flowing:
         where += ", the air moving" + (
             " (on the CPU: the GPU steps still air)" if gpu_wanted else ""
@@ -1103,6 +1115,8 @@ def wave_responses(
         info["wave_speed_min_m_s"], info["wave_speed_max_m_s"] = extremes
     if solver.flowing:
         info["wave_moving_air"] = 1.0
+    if still_inside:
+        info["wave_still_inside"] = 1.0
     # How much slower than it should sound travels at the top of the highest band along
     # the grid's axes: the slowest sound's cells per wavelength there, stepped as the
     # slowest air is (in moving air, the still air's step in the air's own frame;
@@ -1123,7 +1137,7 @@ def wave_responses(
         local = courant  # the Courant number at the listener
         if weather is not None:
             # In moving air the still air's (the wind's share of the gradient is left out).
-            here = weather.still_at(listeners[i]) if moving else weather.at(listeners[i])[0]
+            here = weather.still_at(listeners[i]) if stilled else weather.at(listeners[i])[0]
             local *= float(here) / (courant * h * grid.rate)
         # X, Y and Z from the first step on, where the grid is still at rest.
         signals = _first_order(recorded[part], found[part], listener, local, _cutoff(courant))

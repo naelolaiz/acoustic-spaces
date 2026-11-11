@@ -260,6 +260,15 @@
   to 0.29 dB lower at 200 m in every weather, and the 125 Hz band between 0.17 dB lower
   and 0.11 dB higher at 100 m (see
   [Validation](docs/validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
+- Fixed (results change): outdoors, the wave solver took the wind into a closed building
+  round a shut-in source, whose air is still. In a 15 m/s wind a 6 m hut's band
+  energies were up to 1.7 dB off the still air's with the effective speed of sound and
+  up to 1.2 dB with `wind: moving`, which also grew there instead of dying away. A
+  closed model now takes still air, and the run says so (`wave_still_inside`).
+- Fixed: the wave solver's moving air let a closed rigid room's mean pressure grow
+  2 to 2.6 times per 10,000 steps, from single-precision rounding in its carrying
+  step, which now keeps a uniform pressure to the bit. Open models change by rounding
+  only.
 - Docs: the distances at which the wave solver's gradient (X, Y, Z) near its source is
   further off a point source's than read from eight cells, from a finer scan, and why:
   the source's spread over four cells a side from 2 to 3.4 cells away, the listener's
