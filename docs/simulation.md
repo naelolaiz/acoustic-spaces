@@ -650,10 +650,18 @@ simulation:
   coverage maps, calibration), of the wave solver on the CPU, and of writing the
   responses' files (`simulate --out`, the editor's Export). Fewer leave the
   computer free for other work while a long run goes on; more than the computer's
-  cores run as its cores (see [Memory](#memory)). Results do not depend on it beyond
-  rounding: each thread sums its share of the rays, and the shares add up in another
-  order (in the shoebox example, the late energy moved by 7 × 10⁻¹⁶ of its peak between
-  1, 2 and 4 threads, and the early paths were the same to the bit).
+  cores run as its cores (see [Memory](#memory)). The responses' files are rendered
+  side by side, and the threads the responses leave free render the channels of each
+  side by side too. A channel in progress holds its band signals and their spectra,
+  which the run counts as 67 MiB for 2.5 s at 48 kHz in octave bands and 192 MiB in
+  third-octave bands (more for a response of tens of thousands of early paths), so the
+  channels in progress at once are held to a quarter of the computer's memory (or of
+  its container's limit), shared between the responses rendered at once, one channel
+  for each at least. Results do not depend on it beyond rounding: each thread
+  sums its share of the rays, and the shares add up in another order (in the shoebox
+  example, the late energy moved by 7 × 10⁻¹⁶ of its peak between 1, 2 and 4 threads,
+  and the early paths were the same to the bit); the files are rendered to the same
+  samples on any number of threads.
 - `ray_tree`: the bounding volume hierarchy that finds the surface a ray meets, and
   whether a listener can see a reflection, which is nearly all of the run time. `sah`
   splits it by the surface area heuristic and walks the nearer box first; `median`
@@ -714,23 +722,24 @@ paths beside 495 MiB of late energy). The editor's note counts a map's late part
 `threads` above the computer's cores run as its cores: more would only take turns on
 them, each with its copy.
 
-The estimate leaves out the model, a simulation's early paths and a GPU driver's own
-memory. The early paths take little beside the late part at a few listeners, but not in
-a room of many facets with edge diffraction, where the edge fade keeps the pieces of
-the waves round the edges in single precision: about 17 million at the third listener of
-BRAS CR3 in third-octave bands. Its run peaks at 10.0 GiB (11.8 GiB in third-octave
-bands), nearly all of it at one listener: the edge fade hands it back before the next,
-and in third-octave bands each listener's starts from less than 0.9 GiB.
-`python validation/late_memory.py` measures the estimate against what runs take (on
-Linux): on the CPU it came within 2 MiB of the late part's peak in `shoebox` at 1, 4 and
-64 threads (4 cores), with responses of 30 to 480 s and both kinds of scattering. Whole
-runs, counted from the memory the process held before them, came near it or a little
-above: `stadium_concert` at 8 s (19 sources, 12 listeners) at 1,020 MiB against 1,014,
-`orchestra` at 6 s at 815 MiB against 758 (890 against 896 and 724 against 668 in one
-batch). Traced on a software GPU (SwiftShader's Vulkan) at 120 s, the late part peaked
-59 to 66 MiB above the GPU's estimate, the driver's own; with both, at 30 and 120 s, 58
-to 117 MiB above the estimate, which takes the CPU's part and the GPU's at their peaks
-at once.
+The estimate leaves out the model, a simulation's early paths, a GPU driver's own memory
+and the writing of the responses' files (see `threads` under
+[Performance](#performance)). The early paths take little beside the late part at a few
+listeners, but not in a room of many facets with edge diffraction, where the edge fade
+keeps the pieces of the waves round the edges in single precision: about 17 million at
+the third listener of BRAS CR3 in third-octave bands. Its run peaks at 10.0 GiB (11.8
+GiB in third-octave bands), nearly all of it at one listener: the edge fade hands it
+back before the next, and in third-octave bands each listener's starts from less than
+0.9 GiB. `python validation/late_memory.py` measures the estimate against what runs take
+(on Linux): on the CPU it came within 2 MiB of the late part's peak in `shoebox` at 1, 4
+and 64 threads (4 cores), with responses of 30 to 480 s and both kinds of scattering.
+Whole runs, counted from the memory the process held before them, came near it or a
+little above: `stadium_concert` at 8 s (19 sources, 12 listeners) at 1,020 MiB against
+1,014, `orchestra` at 6 s at 815 MiB against 758 (890 against 896 and 724 against 668 in
+one batch). Traced on a software GPU (SwiftShader's Vulkan) at 120 s, the late part
+peaked 59 to 66 MiB above the GPU's estimate, the driver's own; with both, at 30 and 120
+s, 58 to 117 MiB above the estimate, which takes the CPU's part and the GPU's at their
+peaks at once.
 
 ### The late stage on a GPU
 
