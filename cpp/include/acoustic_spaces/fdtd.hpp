@@ -814,7 +814,10 @@ private:
         barrier.wait();
         for (std::size_t i = ib; i < ie; ++i) {
             if (type[i] == kSolid || still(i)) continue;
-            q[i] = (1.0f / 3.0f) * q[i] + (2.0f / 3.0f) * (t2[i] + carried(t2, i));
+            // (1/3) q + (2/3) (t2 + D t2), written from q so that a uniform pressure
+            // stays to the bit: those two weights add to 1 + 2^-25 in single precision,
+            // which let a closed room's mean grow.
+            q[i] = q[i] + (2.0f / 3.0f) * ((t2[i] + carried(t2, i)) - q[i]);
         }
         barrier.wait();
     }

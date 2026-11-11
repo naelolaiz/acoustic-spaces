@@ -710,6 +710,11 @@ is an arc of a circle, so its travel time and its length are exact.
   (asked for the GPU, it says so and stays on the CPU), and the run's details say
   `wave_moving_air`. Its grid is fine enough for sound going against the fastest wind
   in the slowest air.
+- **A source shut in a closed building.** No wind blows through closed walls. Where the
+  wave solver's grid is closed (the source and its listeners in a building without an
+  opening), it takes the still air's speed of sound, with either way of taking the
+  wind, and the run says that it left the wind out (`wave_still_inside` in its
+  details).
 - **Through weather zones** the parabolic equation marches zone by zone, changing its
   speed of sound where its path crosses a border, and the wave solver takes each cell's
   zone. The early paths, whose arcs need one profile, take the mean profile along their
@@ -1655,7 +1660,8 @@ and leaves out the term of the linearised Euler equations that the wind's change
 height puts on the air's own motion, about |dv/dz| / ω of the rest (under 0.3 % at 63
 Hz a metre above the ground in the `windy` preset). Its wind is the weather's profile
 everywhere, as for the rays: no flow is computed round buildings, so the wind blows into
-a façade as over open ground and a building's lee is as windy as the open. By default
+a façade as over open ground and a building's lee is as windy as the open (only a
+closed building round a shut-in source has still air). By default
 it takes the wind as
 the rays and the parabolic equation do, as an effective speed of sound, so sound that
 a building sends back towards the source travels at the speed of sound going away from
