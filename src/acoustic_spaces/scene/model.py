@@ -2770,7 +2770,7 @@ class WaveStage(_Model):
             "outdoors, how it takes the wind: effective (a speed of sound that the wind's "
             "component along the way from the source changes, as the rays and the parabolic "
             "equation take it) or moving (the air moves, so sound going against the wind is "
-            "slower whichever way it turned, off a building too; three to four times the "
+            "slower whichever way it turned, off a building too; four to five times the "
             "work, on the CPU)"
         ),
     )

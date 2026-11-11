@@ -2252,47 +2252,48 @@ the vertical plane through the source and the listener with the effective speed 
 sound along it. Both take the same profiles; the wave solver steps the scene in three
 dimensions. Over grass (Miki's impedance, 200 kPa s/m²), the source 2 m up, the
 listeners 1.5 and 5 m up, 50 to 200 m away: the 63 Hz band from a grid for that band
-(8 points per wavelength, 25.3 to 26.8 million cells), the 125 Hz band from one for it
-(31.9 to 36.8 million cells), up to 100 m. The ground reaches three times the
-half-width of the
-reflection's first Fresnel zone at the farthest listener to either side, and 30 m past
-it, so that its edges change little. Levels in dB over the free field, the mean square
+(8 points per wavelength, 28.6 to 30.2 million cells), the 125 Hz band from one for it
+(38.1 to 44.0 million cells), up to 100 m. The ground reaches three times the
+half-width of the reflection's first Fresnel zone at the farthest listener to either
+side, 20 m behind the source, and 63 m (63 Hz) or 60 m (125 Hz) past the farthest
+listener: far enough that the sound off its far end, which runs there and back, comes
+after the end of the run at every listener, even at 350 m/s (the run lasts the farthest
+distance over 330 m/s, plus 0.3 s). Levels in dB over the free field, the mean square
 of the pressure over the band's slices, wave solver / parabolic equation:
 
 | 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
 |---|---|---|---|---|---|---|
-| still | +5.3 / +5.2 | +4.4 / +4.4 | +5.2 / +5.2 | +4.4 / +4.4 | +5.2 / +5.0 | +4.2 / +4.1 |
-| downwind | +5.7 / +5.7 | +4.3 / +4.4 | +6.3 / +6.3 | +4.7 / +4.9 | +7.2 / +7.2 | +5.4 / +5.4 |
-| upwind | +4.8 / +4.6 | +4.5 / +4.3 | +3.9 / +3.8 | +3.8 / +3.4 | +2.2 / +1.8 | +2.1 / +1.6 |
-| sunny day | +5.1 / +5.1 | +4.4 / +4.4 | +4.8 / +4.8 | +4.2 / +4.1 | +4.1 / +4.0 | +3.5 / +3.3 |
-| clear night | +5.5 / +5.4 | +4.5 / +4.4 | +5.6 / +5.6 | +4.6 / +4.6 | +6.0 / +5.8 | +4.8 / +4.6 |
+| still | +5.3 / +5.2 | +4.4 / +4.4 | +5.2 / +5.2 | +4.4 / +4.4 | +5.0 / +5.0 | +4.0 / +4.1 |
+| downwind | +5.7 / +5.7 | +4.3 / +4.4 | +6.3 / +6.3 | +4.7 / +4.9 | +7.1 / +7.2 | +5.1 / +5.4 |
+| upwind | +4.8 / +4.6 | +4.5 / +4.3 | +3.9 / +3.8 | +3.8 / +3.4 | +2.0 / +1.8 | +2.0 / +1.6 |
+| sunny day | +5.1 / +5.1 | +4.4 / +4.4 | +4.8 / +4.8 | +4.2 / +4.1 | +3.9 / +4.0 | +3.3 / +3.3 |
+| clear night | +5.5 / +5.4 | +4.5 / +4.4 | +5.6 / +5.6 | +4.6 / +4.6 | +5.8 / +5.8 | +4.6 / +4.6 |
 
 | 125 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up |
 |---|---|---|---|---|
 | still | +3.0 / +2.8 | +1.0 / +0.8 | +2.2 / +1.9 | +0.5 / +0.3 |
-| downwind | +3.1 / +3.3 | -0.3 / -0.2 | +3.0 / +2.9 | -0.7 / -0.9 |
-| upwind | +2.6 / +2.1 | +1.8 / +1.4 | +0.6 / +0.1 | +0.8 / +0.4 |
-| sunny day | +2.8 / +2.6 | +1.2 / +1.0 | +1.7 / +1.4 | +0.6 / +0.4 |
-| clear night | +3.2 / +3.0 | +0.8 / +0.5 | +2.6 / +2.3 | +0.3 / +0.0 |
+| downwind | +3.1 / +3.3 | -0.3 / -0.2 | +2.8 / +2.9 | -0.9 / -0.9 |
+| upwind | +2.6 / +2.1 | +1.8 / +1.4 | +0.7 / +0.1 | +0.9 / +0.4 |
+| sunny day | +2.8 / +2.6 | +1.2 / +1.0 | +1.7 / +1.4 | +0.7 / +0.4 |
+| clear night | +3.2 / +3.0 | +0.8 / +0.5 | +2.5 / +2.3 | +0.3 / +0.0 |
 
 The weathers are the presets: downwind and upwind in the `windy` one (5 m/s 10 m up),
-`sunny_day` and `clear_night`. The wave solver is within 0.54 dB of the parabolic
-equation everywhere, 0.13 dB on average at 63 Hz and 0.25 dB at 125 Hz, and follows
+`sunny_day` and `clear_night`. The wave solver is within 0.60 dB of the parabolic
+equation everywhere, 0.10 dB on average at 63 Hz and 0.25 dB at 125 Hz, and follows
 the weather as it does: 2 dB louder downwind than in still air at 200 m and 1.5 m up,
 3 dB quieter upwind (1.1 and 2.1 dB 5 m up). It reads above the parabolic equation
 more often than below. In still air, against the
-[exact solution](#ground-reflection-against-the-exact-solution) over grass, it is 0.06
-to 0.24 dB high at 63 Hz and 0.15 to 0.25 dB at 125 Hz, the parabolic equation within
-0.05 dB. In one-off checks of the 63 Hz band, much of that is sound off the edges of
-the scene's ground, which neither the exact solution nor the parabolic equation has.
-The 0.23 and 0.24 dB at 200 m are the sound off the ground's far end, 30 m past those
-listeners, which follows the direct sound by 175 ms: with the ground 120 m longer the
-wave solver reads −0.01 and +0.03 dB against the exact solution there. With every edge
-far enough for its sound to fall outside the response (160 m to either side, 60 m
-behind, 150 m past, the response cut 300 ms after the direct sound) it is 0.03 to
-0.07 dB over the exact solution at the three distances (on the scene's ground 0.06 to
-0.10 dB at 50 and 100 m). Upwind the wave solver reads
-0.1 to 0.5 dB above the parabolic equation in both bands, which was not traced further.
+[exact solution](#ground-reflection-against-the-exact-solution) over grass, it is
+−0.01 to +0.10 dB from it at 63 Hz and 0.16 to 0.20 dB over it at 125 Hz, the
+parabolic equation within 0.05 dB. Part of that is sound off the sides of the scene's
+ground and off its end behind the source, which reaches the listeners within the run
+and which neither the exact solution nor the parabolic equation has. In one-off checks
+with every edge too far for its sound to come within the response (63 Hz: 160 m to
+either side, 60 m behind, 150 m past, the response cut 300 ms after the direct sound;
+125 Hz: 60 m to either side, 50 m behind, the response cut 130 ms after it), the wave
+solver is 0.03 to 0.07 dB over the exact solution at 63 Hz and 0.09 to 0.13 dB at
+125 Hz. Upwind the wave solver reads 0.14 to 0.39 dB above the parabolic equation at
+63 Hz and 0.41 to 0.60 dB at 125 Hz, which was not traced further.
 Neither the deep shadow upwind (it
 starts a few hundred metres away at these heights) nor reflections off buildings, where
 the effective speed of sound along the horizontal from the source stands in for the
@@ -2359,24 +2360,54 @@ equation:
 | 63 Hz | 50 m, 1.5 m up | 50 m, 5 m up | 100 m, 1.5 m up | 100 m, 5 m up | 200 m, 1.5 m up | 200 m, 5 m up |
 |---|---|---|---|---|---|---|
 | downwind, parabolic equation | +5.7 | +4.4 | +6.3 | +4.9 | +7.2 | +5.4 |
-| downwind, effective | +5.7 | +4.3 | +6.3 | +4.7 | +7.2 | +5.4 |
-| downwind, moving | +5.9 | +4.5 | +6.5 | +4.9 | +7.7 | +5.7 |
+| downwind, effective | +5.7 | +4.3 | +6.3 | +4.7 | +7.1 | +5.1 |
+| downwind, moving | +5.9 | +4.5 | +6.5 | +4.9 | +7.4 | +5.4 |
 | upwind, parabolic equation | +4.6 | +4.3 | +3.8 | +3.4 | +1.8 | +1.6 |
-| upwind, effective | +4.8 | +4.5 | +3.9 | +3.8 | +2.2 | +2.1 |
-| upwind, moving | +4.6 | +4.3 | +3.7 | +3.6 | +2.1 | +1.8 |
+| upwind, effective | +4.8 | +4.5 | +3.9 | +3.8 | +2.0 | +2.0 |
+| upwind, moving | +4.6 | +4.3 | +3.7 | +3.6 | +1.9 | +1.6 |
 
-Moving air is within 0.53 dB of the parabolic equation, 0.16 dB on average; the
-effective speed of sound within 0.52 dB, 0.20 dB on average. Downwind the effective
-speed of sound is within 0.3 dB of it and moving air 0.0 to 0.5 dB above it (most at
-200 m, 1.5 m up); upwind moving air is within 0.3 dB and the effective speed of sound
-0.1 to 0.5 dB above. At the farthest listeners both read at or above it, as the wave
-solver does in still air (see
-[above](#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
+Moving air is within 0.25 dB of the parabolic equation, 0.09 dB on average; the
+effective speed of sound within 0.39 dB, 0.19 dB on average. Downwind the effective
+speed of sound is 0.02 to 0.29 dB below it and moving air −0.02 to +0.25 dB from it
+(most at 200 m, 1.5 m up); upwind moving air is within 0.13 dB and the effective speed
+of sound 0.14 to 0.39 dB above.
 
-Moving air takes 3.8 to 4.7 times as long as the effective speed of sound: 15 s
-against 3.9 s in the free field (3.2 million cells), 34 s against 7.6 s with the façade
-(6 million) and 4.5 minutes against 58 s with the preset (25.8 against 26.8 million),
-on 4 cores with nothing else running (10 November 2026).
+Moving air takes 4.0 to 5.1 times as long as the effective speed of sound: 16 s
+against 3.9 s in the free field (3.2 million cells), 38 s against 7.4 s with the
+façade (6 million) and, with the preset (29.2 against 30.2 million cells), 324 and
+316 s against 66 s downwind and upwind, on 4 cores with nothing else running (11
+November 2026).
+
+**A room with an opening.** Moving air's wind blows through the model's solids, and
+where a solid has air on both sides along the wind the solver's sound grows instead of
+dying away (the scheme's doing, not the room's). In a nearly closed space that cannot
+leak away, and it builds up without bound. The solver therefore watches each run in
+moving air: from the end of the source's pulse on, the pressure squared over the
+grid's air, averaged over pieces of at least a quarter second, may not rise to twice
+its lowest level so far, or the run stops with an error (a rise that stays under a
+millionth of the run's largest piece is let be). A rigid room on rigid ground, 4 × 4 × 3 m
+inside, its walls and roof 0.8 m thick, with an opening of 0.8 × 0.8 m in its wall
+downwind, the source and a listener in it, a response of 3 s in the 63 Hz band:
+
+| wind (m/s) | moving air | listener's level, last quarter second over the second (dB) | the same with the effective speed of sound (dB) |
+|---:|---|---:|---:|
+| 5 | runs its 3 s | +1.5 | -0.4 |
+| 15 | stopped 2.5 s after emission, 3.5 dB over its lowest level | | -0.2 |
+| 30 | stopped 1.5 s after emission, 4.2 dB over its lowest level | | -0.1 |
+
+At 5 m/s the sound grows too slowly for the watch within 3 s: the response it lets
+through gains 1.5 dB where the effective speed of sound's loses 0.4 dB. The watch does
+not make moving air right in such a room, it stops the runs that fail outright: take
+the wind as the effective speed of sound there.
+
+One-off checks of the solver alone, on the 63 Hz band's grid with rigid surfaces over
+10 s, the levels those of the grid's last quarter second under its first: at 5 m/s the
+same room is stopped after 5.25 s; at 15 m/s with its opening upwind it loses 20 dB
+and is not stopped. In the open, at 15 m/s, a yard closed on four sides (4 × 4 m,
+walls 4 m high), a street 3 m wide between two buildings 5 m high and a façade
+downwind of the source die away steadily, by 91, 73 and 87 dB. A façade upwind of the
+source falls 36 dB in 1.5 s and then lingers, 40 dB down after 10 s (within 1.3 times
+its lowest level, so not stopped); what holds it there is not traced.
 
 ## Outdoor results against exact solutions
 
@@ -4724,10 +4755,32 @@ field and façade grids of moving air or on the ground reflection's wave check.
 
 **One run for all bands.** A 7 x 5 x 3 m box whose absorption differs in every band
 (0.10 to 0.25 from 63 to 500 Hz), the wave solver up to the 500 Hz band: one run of
-868,701 cells and 3,997 steps of the 19-point stencil, 2.8 s on 4 cores with the fit and
-the grid's set-up, where 2.0.0 ran one per band. Timed on its own, the same grid runs in
-2.9 s with the walls' six branches and in 1.9 s with constant walls: the branches cost
-about 50 % more than a run with constant walls, and save three runs.
+868,701 cells and 5,617 steps of the 19-point stencil (the 0.5 s response and 0.2 s past
+its end), 5.7 s on 4 cores with the fit and the grid's set-up, where 2.0.0 ran one per
+band. Timed on its own over as many steps, the same grid runs in 5.5 s with the walls'
+six branches and in 4.1 s with constant walls: the branches cost about a third more
+than a run with constant walls, and save three runs.
+
+**The end of a response.** The bands' filters spread each arrival both ways in time, so
+they read a response's last slots from the run after them too, and a simulation steps
+the solver 0.2 s further than its responses last (0.4 s with third-octave bands). In a
+5 x 4 x 3 m box with 2 % absorption, the wave bands' energy per 10 ms of a 1 s response
+against the same slots of a 2 s response, the largest difference over two listeners and
+the bands up to 125 Hz:
+
+| bands | the run | last five slots (dB) | earlier slots (dB) |
+|---|---|---:|---:|
+| octave | stops at the response's end | 7.54 | 0.19 |
+| octave | goes on for 0.2 s | 0.0001 | 0.0000 |
+| third-octave | stops at the response's end | 15.72 | 1.67 |
+| third-octave | goes on for 0.4 s | 0.0016 | 0.0009 |
+
+The run that goes on also keeps a slow drift out of the bands. In single precision the
+19-point stencil's rounding lets a closed room's mean pressure creep. That is far below
+the bands, and only the end of a run brings it into them. In a one-off check of a rigid
+room against the same scheme in double precision, the mean was as large as the sound
+after 100 s: the bands' last five slots were then 5.9 dB off with a run that stopped at
+the response's end, and every slot within 0.012 dB with the run going on.
 
 **Free field.** In a 30 x 24 x 24 m room with 95 % absorption, the direct sound's energy
 in the 63 and 125 Hz bands along x from the source, in dB over the free-field level the
@@ -4789,14 +4842,24 @@ away (16 and 13 degrees and 3.7 dB without them). A listener nearer the source t
 energy changes by 2.4 dB at most from one listener to the next 0.1 cells further out
 (a one-off scan every 0.1 cells from 0.5 to 2). On the 7-point grid leaving the points
 out gains nothing clear, and it keeps them.
-From two cells away the gradient's energy is at some distances further off than with
-everything read trilinearly: 3.2 to 3.8 cells away on the 19-point grid (up to 1.4 dB
-against 0.8 dB) and 4.4 to 4.8 (0.41 against 0.29), and 2 to 3.8 cells away on the
-7-point one (5.4 dB against 3.8 dB at 2 cells, 3.3 against 1.6 at 2.6, 0.62 against
-0.45 at 3.8); elsewhere it is closer. Its main axis lies up to 3.4 degrees further off
-the line (12.2 against 8.8 degrees, 2.2 cells away on the 19-point grid; one-off scans
-every 0.2 cells from 2 to 5.6 along the grid's 26 directions, the worse of the two
-bands).
+At some distances the gradient's energy over the pressure's is further off than with the
+source and every point read trilinearly and no point left out: 3.0 to 3.9 and 4.1 to
+4.8 cells away on the 19-point grid (1.6 dB against 0.6 dB at 3.5 cells, 0.41 against
+0.29 at 4.4), and 1.2 to 3.9 cells away on the 7-point one (5.4 dB against 3.8 dB at 2
+cells, 3.3 against 1.6 at 2.6, 0.62 against 0.45 at 3.8); elsewhere it is closer. Its
+main axis lies up to 4.9 degrees further off the line (12.3 against 7.4 degrees, 2.3
+cells away on the 19-point grid). From 2 to 3.4 cells away that comes mostly from the
+source: spread over four cells a side, its sound is not a point's within about two cells
+of it, where some of a listener's gradient points lie (two cells away on the 7-point
+grid, 4.0 dB off with the source over its eight cells and everything else the same),
+and on the 19-point grid an axis that goes without a point near the source is a
+second-order difference. From 3.4 to 3.8 cells away on the 7-point grid, and 3.8 and 4.4
+to 4.8 cells away on the 19-point one, it comes from the listener's reading, and part of
+it from the measure: read trilinearly, the pressure loses about as much as the gradient,
+which cancels in their ratio (up to 0.16 dB), while the pressure read as here is the
+closer of the two (3.6 cells away on the 7-point grid, 0.24 dB off against 0.36 dB).
+(One-off scans every 0.1 cells from 1 to 6, over 18 places of the source and 50
+directions, the worse of the two bands.)
 
 Next to a surface along the grid (a floor, a wall, flat ground) a point leaves out the
 cells behind it: across the surface it reads the two cells round it, weighted linearly

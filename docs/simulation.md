@@ -592,8 +592,8 @@ simulation:
   The grid is then fine enough for the slowest sound and steps in time for the fastest,
   on the CPU or on the GPU alike (see [How the simulation bends sound](outdoor.md#how-the-simulation-bends-sound)).
   With `wind: moving` (`simulate --wave-wind moving`) the air moves instead, so that
-  sound a building sends back towards the source goes against the wind; it costs three
-  to four times as much and runs on the CPU.
+  sound a building sends back towards the source goes against the wind; it takes four
+  to five times as long and runs on the CPU.
 - The listener records the pressure and its gradient, so the low end keeps its direction
   in Ambisonics, binaural and loudspeaker outputs (to first order). The source and each
   point a listener samples lie between the grid's cell centres (a cell is 0.2 m on the
@@ -613,6 +613,10 @@ simulation:
 - The result replaces the rays from 22 Hz up to the top of the highest wave band (177
   Hz for 125), through the same crossovers the impulse response synthesis uses. The
   parameters of those bands come from it too.
+- The solver steps 0.2 s further than the responses last (0.4 s with third-octave
+  bands): the bands' filters spread each arrival both ways in time, so they read a
+  response's last 50 ms from the run after it too (The end of a response in
+  [Validation](validation.md#wave-based-solver)).
 
 ```sh
 acoustic-spaces simulate examples/concert_hall/scene.yaml --out hall --wave
@@ -624,8 +628,8 @@ acoustic-spaces simulate examples/room_modes/scene.yaml --out rays --no-wave
 
 The editor's Simulation page has the same switch, and where to run it. Each octave
 higher costs about 16 times as much: on 4 cores, up to the 125 Hz band, the studio takes
-0.4 s, the concert hall (9,400 m³, 3.5 s responses) 15 s, and the church (7 s
-responses) 28 s per source; 8 s and 19 s with `scheme: standard`, at the cost of its
+0.1 s, the concert hall (9,400 m³, 3.5 s responses) 7 s, and the church (7 s
+responses) 13 s per source; 6 s and 11 s with `scheme: standard`, at the cost of its
 dispersion. Grids of more than 40 million cells are refused, and on a GPU so is a grid
 with a buffer larger than the GPU binds: the field's or, round an open model, the
 matched layer's, of nine values a cell. `python
@@ -651,6 +655,9 @@ the grid travel slower the shorter they are, at the top of the highest band with
 points per wavelength by 0.67 % in closed rooms and up to 1.7 % round open models
 (along the grid's axes, not at all along its body diagonals; `wave_slow_percent` in the
 run's details), which nothing corrects, so the modes there come out up to that much low;
+in single precision the 19-point stencil's rounding lets a closed room's mean pressure
+creep, far below the bands (see The end of a response in
+[Validation](validation.md#wave-based-solver));
 sources radiate equally in all directions in the wave bands; and air absorption,
 negligible there, is left out.
 

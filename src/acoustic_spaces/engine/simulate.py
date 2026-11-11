@@ -875,7 +875,8 @@ def simulate(
                 listener_pos,
                 [listener.name for listener in chosen_listeners],
                 max_band_hz=settings.wave.max_band_hz,
-                length_s=length,
+                # Past the response's end, for the bands' filters.
+                length_s=length + wave_stage.PAST_END_S[model.bands],
                 sample_rate=settings.sample_rate,
                 speed_of_sound=c,
                 points_per_wavelength=settings.wave.points_per_wavelength,

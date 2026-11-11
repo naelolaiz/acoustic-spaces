@@ -4241,7 +4241,7 @@ class SimulationPage(Page):
                 "Outdoors, how it takes the wind: as a speed of sound that the wind along the "
                 "way from the source changes, as the rays do, or as air that moves, so that "
                 "sound going against the wind is slower whichever way it turned, off a "
-                "building too (three to four times the work, on the CPU)"
+                "building too (four to five times the work, on the CPU)"
             )
         )
         wave_form.addRow(self.wave)
