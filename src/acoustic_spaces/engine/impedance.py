@@ -285,11 +285,118 @@ def fit_admittance(
     return _fit(target, int(total), None if rate is None else float(rate))
 
 
+class _Misses:
+    """What a fit of the lowest bands of the ``total`` to ``goal`` misses by, and its
+    forward differences. The unknowns are the constant, the branches' conductances
+    and, when the quality factors are ``free``, their logarithms too (else the bands'
+    own): calling it gives the misses in each band, with the cost of the quality
+    factors that are free after them."""
+
+    def __init__(self, goal: np.ndarray, total: int, rate: float | None) -> None:
+        from acoustic_spaces.materials.bands import (
+            BANDS_PER_OCTAVE,
+            exact_centres,
+            resolution_of,
+        )
+
+        self.goal = goal
+        self.bands = bands = len(goal)
+        self.rate = rate
+        resolution = resolution_of(total)
+        step = 2.0 ** (1.0 / BANDS_PER_OCTAVE[resolution])
+        fm = exact_centres(resolution)[:bands]
+        self.resonance = np.concatenate([[fm[0] / step], fm, [fm[-1] * step]])
+        self.own_quality = 1.0 / (math.sqrt(step) - 1.0 / math.sqrt(step))
+        self.f = _frequencies(bands, total)
+        self.weights = band_weights(self.f, bands, total)
+        self.n = n = len(self.resonance)
+        self.own = self.own_quality * np.ones(n)
+        self.log_own = math.log(self.own_quality)
+        # The branches at the bands' own quality factors, which the fit starts with, are
+        # the same at every step but for their conductances.
+        self.own_terms = _branch_terms(self.f, self.own, self.resonance, rate)
+        self.lower = np.concatenate([np.zeros(1 + n), np.full(n, math.log(_QUALITY[0]))])
+        self.upper = np.concatenate([np.full(1 + n, np.inf), np.full(n, math.log(_QUALITY[1]))])
+
+    def terms(self, x: np.ndarray, free: bool) -> tuple[np.ndarray | None, np.ndarray]:
+        """:func:`_branch_terms` of the branches at the unknowns ``x``."""
+        if not free:
+            return self.own_terms
+        return _branch_terms(self.f, np.exp(x[1 + self.n :]), self.resonance, self.rate)
+
+    def admittance(self, x: np.ndarray, free: bool) -> np.ndarray:
+        """(frequencies,) the admittance at the unknowns ``x``."""
+        n = self.n
+        return x[0] + _with_conductances(x[1 : 1 + n], *self.terms(x, free)).sum(axis=0)
+
+    def __call__(self, x: np.ndarray, free: bool) -> np.ndarray:
+        found = self.weights @ random_incidence_absorption(self.admittance(x, free))
+        if not free:
+            return found - self.goal
+        cost = _QUALITY_COST * (x[1 + self.n :] - self.log_own)
+        return np.concatenate([found - self.goal, cost])
+
+    def moved(self, x: np.ndarray, free: bool) -> tuple[np.ndarray, np.ndarray]:
+        """Each unknown moved by its forward step (``least_squares``' own), and
+        (unknowns + 1, frequencies) the admittance with each unknown moved in turn,
+        and last as it is. Moving one unknown changes one branch (the constant, none):
+        each row takes that branch's values and adds the others, which are the same
+        for all, in the order :meth:`admittance` adds them."""
+        n = self.n
+        step = _forward_steps(x, self.lower[: len(x)], self.upper[: len(x)])
+        moved = x + step
+        terms = self.terms(x, free)
+        rows = _with_conductances(x[1 : 1 + n], *terms)
+        y = np.empty((len(x) + 1, len(self.f)), dtype=complex)
+        summed = rows.sum(axis=0)
+        y[-1] = x[0] + summed
+        y[0] = moved[0] + summed
+        changed = _with_conductances(moved[1 : 1 + n], *terms)
+        y[1 : 1 + n] = x[0] + _sums_with_one_changed(rows, changed)
+        if free:
+            changed = _with_conductances(x[1 : 1 + n], *self.terms(moved, free))
+            y[1 + n : -1] = x[0] + _sums_with_one_changed(rows, changed)
+        return moved, y
+
+    def absorption(self, y: np.ndarray) -> np.ndarray:
+        """(rows, frequencies) the random-incidence absorption at the admittances ``y``
+        (rows, frequencies), each row as :func:`random_incidence_absorption` gives it
+        alone."""
+        return _paris(
+            np.ascontiguousarray(y.real),
+            np.ascontiguousarray(y.imag),
+            _row_by_row(np.arctan),
+            _row_by_row(np.log),
+        )
+
+    def absorbed(self, y: np.ndarray) -> np.ndarray:
+        """(rows, bands) the absorption in each band at the admittances ``y``
+        (rows, frequencies), each row's as :meth:`__call__` finds its own."""
+        return np.array([self.weights @ row for row in self.absorption(y)])
+
+    def slopes(self, x: np.ndarray, free: bool) -> np.ndarray:
+        """(misses, unknowns) the misses' forward differences: those ``least_squares``
+        takes itself for ``jac="2-point"``, value for value, at a fraction of their
+        cost (:meth:`moved`)."""
+        n, bands = self.n, self.bands
+        moved, y = self.moved(x, free)
+        found = self.absorbed(y) - self.goal
+        # A row for each unknown, transposed at the end: the layout of least_squares'
+        # own differences, on which the order its linear algebra adds in depends.
+        out = np.empty((len(x), bands + (n if free else 0)))
+        out[:, :bands] = (found[:-1] - found[-1]) / (moved - x)[:, None]
+        if free:
+            cost = np.zeros((len(x), n))
+            cost[1 + n + np.arange(n), np.arange(n)] = _QUALITY_COST * (
+                moved[1 + n :] - self.log_own
+            ) - _QUALITY_COST * (x[1 + n :] - self.log_own)
+            out[:, bands:] = cost / (moved - x)[:, None]
+        return out.T
+
+
 @functools.lru_cache(maxsize=256)
 def _fit(target: tuple[float, ...], total: int, rate: float | None) -> Admittance:
     from scipy.optimize import least_squares
-
-    from acoustic_spaces.materials.bands import BANDS_PER_OCTAVE, exact_centres, resolution_of
 
     goal = np.array(target)
     bands = len(goal)
@@ -300,87 +407,27 @@ def _fit(target: tuple[float, ...], total: int, rate: float | None) -> Admittanc
         out = Admittance(beta)
         return Admittance(beta, achieved=band_absorption(out, bands, total, rate))
 
-    resolution = resolution_of(total)
-    step = 2.0 ** (1.0 / BANDS_PER_OCTAVE[resolution])
-    fm = exact_centres(resolution)[:bands]
-    resonance = np.concatenate([[fm[0] / step], fm, [fm[-1] * step]])
-    own_quality = 1.0 / (math.sqrt(step) - 1.0 / math.sqrt(step))
-    f = _frequencies(bands, total)
-    weights = band_weights(f, bands, total)
-    n = len(resonance)
-    own = own_quality * np.ones(n)
-    log_own = math.log(own_quality)
-    # The branches at the bands' own quality factors, which the fit starts with, are
-    # the same at every step but for their conductances.
-    own_terms = _branch_terms(f, own, resonance, rate)
-
-    def terms_of(x, free):
-        return _branch_terms(f, np.exp(x[1 + n :]), resonance, rate) if free else own_terms
-
-    def misses(x, free):
-        y = x[0] + _with_conductances(x[1 : 1 + n], *terms_of(x, free)).sum(axis=0)
-        found = weights @ random_incidence_absorption(y)
-        if not free:
-            return found - goal
-        return np.concatenate([found - goal, _QUALITY_COST * (x[1 + n :] - log_own)])
-
-    lower = np.concatenate([np.zeros(1 + n), np.full(n, math.log(_QUALITY[0]))])
-    upper = np.concatenate([np.full(1 + n, np.inf), np.full(n, math.log(_QUALITY[1]))])
-
-    def slopes(x, free):
-        """(misses, unknowns) the misses' forward differences: those ``least_squares``
-        takes itself for ``jac="2-point"``, value for value, at a fraction of their
-        cost. Moving one unknown changes one branch (the constant, none): each
-        difference takes that branch's values and adds the others, which are the
-        same for all, in the order :func:`misses` adds them."""
-        step = _forward_steps(x, lower[: len(x)], upper[: len(x)])
-        moved = x + step
-        terms = terms_of(x, free)
-        rows = _with_conductances(x[1 : 1 + n], *terms)
-        # The admittance with each unknown moved in turn, and last as it is.
-        y = np.empty((len(x) + 1, len(f)), dtype=complex)
-        summed = rows.sum(axis=0)
-        y[-1] = x[0] + summed
-        y[0] = moved[0] + summed
-        changed = _with_conductances(moved[1 : 1 + n], *terms)
-        y[1 : 1 + n] = x[0] + _sums_with_one_changed(rows, changed)
-        if free:
-            changed = _with_conductances(x[1 : 1 + n], *terms_of(moved, free))
-            y[1 + n : -1] = x[0] + _sums_with_one_changed(rows, changed)
-        absorption = _paris(
-            np.ascontiguousarray(y.real),
-            np.ascontiguousarray(y.imag),
-            _row_by_row(np.arctan),
-            _row_by_row(np.log),
-        )
-        found = np.array([weights @ row for row in absorption]) - goal
-        # A row for each unknown, transposed at the end: the layout of least_squares'
-        # own differences, on which the order its linear algebra adds in depends.
-        out = np.empty((len(x), bands + (n if free else 0)))
-        out[:, :bands] = (found[:-1] - found[-1]) / (moved - x)[:, None]
-        if free:
-            cost = np.zeros((len(x), n))
-            cost[1 + n + np.arange(n), np.arange(n)] = _QUALITY_COST * (
-                moved[1 + n :] - log_own
-            ) - _QUALITY_COST * (x[1 + n :] - log_own)
-            out[:, bands:] = cost / (moved - x)[:, None]
-        return out.T
-
+    misses = _Misses(goal, total, rate)
+    n = misses.n
     # Start from the lowest band's constant, each branch adding the rest of its band's.
     base = float(admittance(np.array([goal.min()]))[0])
     ends = np.concatenate([[goal[0]], goal, [goal[-1]]])
     start = np.concatenate([[base], np.maximum(admittance(ends) - base, 1e-4)])
-    fixed = least_squares(misses, start, jac=slopes, bounds=(0.0, np.inf), args=(False,))
-    x, quality = fixed.x, own
+    fixed = least_squares(misses, start, jac=misses.slopes, bounds=(0.0, np.inf), args=(False,))
+    x, quality = fixed.x, misses.own
     if np.abs(fixed.fun).max() > _TOLERANCE:
-        log_q = np.full(n, log_own)
+        log_q = np.full(n, misses.log_own)
         free = least_squares(
-            misses, np.concatenate([x, log_q]), jac=slopes, bounds=(lower, upper), args=(True,)
+            misses,
+            np.concatenate([x, log_q]),
+            jac=misses.slopes,
+            bounds=(misses.lower, misses.upper),
+            args=(True,),
         )
         if np.abs(free.fun[:bands]).max() < np.abs(fixed.fun).max():
             x, quality = free.x[: 1 + n], np.exp(free.x[1 + n :])
     used = x[1:] > 1e-9
-    out = Admittance(float(x[0]), x[1:][used], quality[used], resonance[used])
+    out = Admittance(float(x[0]), x[1:][used], quality[used], misses.resonance[used])
     return Admittance(
         out.beta,
         out.conductance,

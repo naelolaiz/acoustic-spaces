@@ -1223,19 +1223,111 @@ def _same_bits(a, b) -> bool:
     return a.shape == b.shape and a.tobytes() == b.tobytes()
 
 
-@pytest.mark.parametrize(
-    ("absorption", "total", "rate"),
-    [
-        # The bands' own quality factors are enough.
-        ([0.02, 0.02, 0.02, 0.03, 0.03, 0.04, 0.05, 0.05], 8, None),
-        # The quality factors are freed (a carpet's octaves, and as third octaves).
-        ([0.07, 0.07, 0.31, 0.49, 0.81, 0.66, 0.54, 0.48], 8, None),
-        (np.repeat([0.07, 0.07, 0.31, 0.49, 0.81, 0.66, 0.54, 0.48], 3).tolist(), 24, None),
-        # At a time step, as the wave solver fits its lowest bands.
-        ([0.07, 0.07, 0.31, 0.49], 8, 5512.5),
-        ([0.1, 0.1, 0.1, 0.4, 0.4, 0.4, 0.2, 0.2, 0.2], 24, 3472.0),
-    ],
-)
+#: Fits (absorption, bands in all, time steps a second) for the tests of the fit's own
+#: forward differences.
+_FITS = [
+    # The bands' own quality factors are enough.
+    ([0.02, 0.02, 0.02, 0.03, 0.03, 0.04, 0.05, 0.05], 8, None),
+    # The quality factors are freed (a carpet's octaves, and as third octaves).
+    ([0.07, 0.07, 0.31, 0.49, 0.81, 0.66, 0.54, 0.48], 8, None),
+    (np.repeat([0.07, 0.07, 0.31, 0.49, 0.81, 0.66, 0.54, 0.48], 3).tolist(), 24, None),
+    # At a time step, as the wave solver fits its lowest bands.
+    ([0.07, 0.07, 0.31, 0.49], 8, 5512.5),
+    ([0.1, 0.1, 0.1, 0.4, 0.4, 0.4, 0.2, 0.2, 0.2], 24, 3472.0),
+]
+
+
+def _differing(a: np.ndarray, b: np.ndarray) -> int:
+    """How many of the values of ``a`` and ``b`` (real or complex, of one shape) are
+    not the same bits."""
+    a, b = (np.ascontiguousarray(v).view(np.uint64) for v in (a, b))
+    return int(np.count_nonzero(a != b))
+
+
+def _one_unknown_at_a_time(misses, x: np.ndarray, free: bool) -> np.ndarray:
+    """The forward differences of a fit's ``misses`` at ``x`` as ``least_squares``
+    takes them itself: the misses once more for each unknown, moved by its step
+    alone."""
+    from acoustic_spaces.engine.impedance import _forward_steps
+
+    steps = np.diag(_forward_steps(x, misses.lower[: len(x)], misses.upper[: len(x)]))
+    at = misses(x, free)
+    out = np.empty((len(x), len(at)))
+    for k in range(len(x)):
+        moved = x + steps[k]
+        out[k] = (misses(moved, free) - at) / (moved[k] - x[k])
+    return out.T
+
+
+def _where_they_part(misses, x: np.ndarray, free: bool) -> str:
+    """Where the fit's differences at ``x`` leave those of one unknown moved at a time:
+    for each unknown, the first of the fit's stages whose values are not the same
+    bits."""
+    from acoustic_spaces.engine.impedance import random_incidence_absorption
+
+    moved, y = misses.moved(x, free)
+    absorption = misses.absorption(y)
+    bands = misses.absorbed(y)
+    notes = []
+    for k in range(len(x) + 1):
+        point = x.copy()
+        if k < len(x):
+            point[k] = moved[k]
+        alone = misses.admittance(point, free)
+        absorbed = random_incidence_absorption(alone)
+        stages = (
+            ("the admittance", y[k], alone),
+            ("the absorption of the same admittance", misses.absorption(alone[None])[0], absorbed),
+            ("the absorption", absorption[k], absorbed),
+            (
+                "the bands of a row in its place",
+                misses.weights @ absorption[k],
+                misses.weights @ absorption[k].copy(),
+            ),
+            ("the bands", bands[k], misses.weights @ absorbed),
+        )
+        for name, ours, plain in stages:
+            if count := _differing(ours, plain):
+                which = "none" if k == len(x) else f"{k} of {len(x)}"
+                notes.append(f"unknown {which}: {name}, {count} of {ours.size} values")
+                break
+    if notes:
+        return "; ".join(notes[:6]) + (f"; and {len(notes) - 6} more" if len(notes) > 6 else "")
+    return "the admittances and the bands are the same: the differences taken from them differ"
+
+
+@pytest.mark.parametrize(("absorption", "total", "rate"), _FITS)
+def test_the_fits_differences_are_those_of_one_unknown_moved_at_a_time(
+    monkeypatch, absorption, total: int, rate
+) -> None:
+    """At every step of a fit, the forward differences the fit takes a branch at a time
+    are, bit for bit, those of its misses worked out again for each unknown moved
+    alone."""
+    from acoustic_spaces.engine import impedance
+
+    asked = []
+    slopes = impedance._Misses.slopes
+
+    def recorded(self, x, free):
+        out = slopes(self, x, free)
+        asked.append((self, x.copy(), free, out.copy()))
+        return out
+
+    monkeypatch.setattr(impedance._Misses, "slopes", recorded)
+    impedance._fit.cache_clear()
+    fit_admittance(absorption, total, rate)
+    impedance._fit.cache_clear()
+    assert asked
+    for step, (misses, x, free, found) in enumerate(asked):
+        plain = _one_unknown_at_a_time(misses, x, free)
+        if found.shape != plain.shape or _differing(found, plain):
+            pytest.fail(
+                f"step {step} of {len(asked)} (quality factors free: {free}): "
+                + _where_they_part(misses, x, free)
+            )
+
+
+@pytest.mark.parametrize(("absorption", "total", "rate"), _FITS)
 def test_the_fit_is_the_one_least_squares_own_differences_give(
     monkeypatch, absorption, total: int, rate
 ) -> None:
