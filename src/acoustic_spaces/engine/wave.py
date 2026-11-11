@@ -57,9 +57,12 @@ octave bands replace the ray-traced ones.
   c + v, upwind at c - v whichever way it turned. Where the wind changes, the term
   of the linearised Euler equations that the wind's shear puts on the air's velocity is
   left out, about ``|dv/dz| / omega`` of the rest. The air moves no more than half a cell a
-  step, and the matched layer's air is still. It costs three to four times the
+  step, and the matched layer's air is still. It takes four to five times as long as the
   effective speed of sound's run, and runs on the CPU (asked for the GPU, it says so and stays
-  there).
+  there). Its wind blows through the model's solids, which is not stable in a nearly
+  closed space such as a room with an opening, so the run is watched: once the source's
+  pulse has ended, the pressure squared over the grid's air, averaged over pieces of
+  ``WATCH_S``, may not rise to ``WATCH_RISE`` times its lowest so far (a ``ValueError``).
 - The grid is laid out on the CPU and stepped there, or with ``device`` on a GPU,
   through WebGPU (:mod:`acoustic_spaces.engine.gpu`); the two agree to rounding, in
   wind and temperature too (with the effective speed of sound).
@@ -112,6 +115,11 @@ WAVE_BANDS_HZ = OCTAVE_BANDS_HZ[:4]
 #: pressure comes back to rest. Its length in seconds; twice, it is flat within 0.2 dB
 #: above 20 Hz.
 HIGH_PASS_S = 0.12
+#: How much further than a response's end a simulation steps the solver (s), by the
+#: resolution of its bands. The bands' filters spread each arrival both ways in time, so
+#: they read the last of a response from the run after it too: a run that stops at the
+#: response's end is silent there, and the room is not.
+PAST_END_S = {"octave": 0.2, "third_octave": 0.4}
 #: Cells of the matched layer round an open model, and its damping at the grid's edge
 #: (the damping rate times half a time step). Sound leaving the model comes back from
 #: it 72 to 74 dB down; from the grid's edge alone, 7 to 14 dB down (docs/validation.md,
@@ -144,6 +152,15 @@ _LOW_PASS_TAPS = 33
 _LOW_PASS_CUTOFF = 0.2
 #: Runs of more cell updates than this (a few seconds' work) report their progress.
 _LONG_RUN = 2e9
+#: Moving air is watched for sound that grows: its wind blows through the model's
+#: solids, which is not stable in a nearly closed space. The pressure squared over the
+#: grid's air is averaged over pieces of the run at least this long (s); from the end of
+#: the source's pulse on, a piece more than WATCH_RISE times the lowest before it, and
+#: more than WATCH_FLOOR of the largest (rounding's own level lies far below that),
+#: stops the run.
+WATCH_S = 0.25
+WATCH_RISE = 2.0
+WATCH_FLOOR = 1e-6
 
 
 def band_top(band: int, total: int = len(OCTAVE_BANDS_HZ)) -> float:
@@ -325,8 +342,10 @@ class WaveResponse:
         return np.ones(self.bands) if self.band_gain is None else np.sqrt(self.band_gain)
 
     def _resampled(self, sample_rate: float, n: int) -> tuple[np.ndarray, int]:
-        """The run at ``sample_rate`` (before + n, 4), still broadband, and ``before``:
-        how many of its samples come before emission (those of the run that do)."""
+        """The run at ``sample_rate`` (at least before + n, 4), still broadband, and
+        ``before``: how many of its samples come before emission (those of the run that
+        do). What the run has after the n samples from emission stays, for the bands'
+        filters."""
         from acoustic_spaces.render import resample
 
         key = (float(sample_rate), int(n))
@@ -337,10 +356,10 @@ class WaveResponse:
             # samples at 44.1 kHz).
             start = int(round((self.delay_s - self.lead_s) * sample_rate))
             before = max(0, -start)
-            out = np.zeros((before + n, 4))
+            x = resample(self.signals, self.rate, sample_rate)
+            out = np.zeros((before + max(n, start + len(x)), 4))
             # Impulse responses scale with the sample period: an impulse of height a at
             # one rate is a * rate / sample_rate at another.
-            x = resample(self.signals, self.rate, sample_rate)[: max(0, n - start)]
             out[before + start : before + start + len(x)] = x * (self.rate / sample_rate)
             self._cache = {key: (out, before)}
         return self._cache[key]
@@ -348,7 +367,8 @@ class WaveResponse:
     def field(self, sample_rate: float, n: int) -> np.ndarray:
         """The first-order sound field (n, 4) of the wave bands together, from emission:
         W, X, Y, Z. The bands' filters take the run before emission too, and what they
-        spread to before emission is left out, as it is of the rays' sound."""
+        spread to before emission is left out, as it is of the rays' sound. They take
+        the run after the n samples as well, where it goes on (:data:`PAST_END_S`)."""
         run, before = self._resampled(sample_rate, n)
         n_fft = synthesis.fft_size(len(run), sample_rate)
         gains = wave_gains(n_fft, sample_rate, self.bands, self.total_bands)
@@ -865,14 +885,14 @@ def wave_responses(
 
     outdoor = model.room.outdoor is not None
     weather = _Weather.of(model, source)
-    moving = False
-    if weather is not None and wind == "moving":
-        # The wind blows somewhere over the scene (temperature alone needs no moving air).
+    windy = False  # the wind blows somewhere over the scene
+    if weather is not None:
         heights = model.room.mesh.vertices[:, 2]
         top = max(float(heights.max()), float(points[:, 2].max())) + 100.0
         z = np.linspace(model.ground, top, 512)
         weathers = weather.weathers if weather.zones is not None else [weather.atmosphere]
-        moving = any(np.any(np.asarray(w.wind_speed(z - model.ground)) != 0.0) for w in weathers)
+        windy = any(np.any(np.asarray(w.wind_speed(z - model.ground)) != 0.0) for w in weathers)
+    moving = windy and wind == "moving"  # (temperature alone needs no moving air)
 
     open_sides: list[np.ndarray] = []  # the sides whose layer needs room, once found
 
@@ -925,24 +945,28 @@ def wave_responses(
                 "max_band_hz or points_per_wavelength"
             )
 
-    def prepare(stencil: str, layer: int):
+    def prepare(stencil: str, layer: int, still_air: bool = False):
         """The solver, grid, fits and probes for the stencil, with ``layer`` cells of
-        matched layer."""
+        matched layer; with ``still_air``, in the weather's still air, without its wind
+        (for a closed model's air, which no wind blows through)."""
         size, courant = STENCILS[stencil]
         speeds, extremes, flow = None, None, (None, None)
         still = speed_of_sound  # the slowest still air's speed of sound on the grid
         if weather is None:
             grid, origin, shape = layout(courant, layer, speed_of_sound, points_per_wavelength)
             check_size(shape, layer)
-        elif moving:
+        elif moving or still_air:
             # Fine enough for sound going against the fastest wind in the slowest air, in
-            # time steps for the fastest still air (the air's motion is carried apart).
+            # time steps for the fastest still air (the air's motion is carried apart;
+            # still air has none).
             slowest = fastest = float(weather.at(source)[0])
             for _ in range(8):
                 grid, origin, shape = layout(
                     courant, layer, fastest, points_per_wavelength * fastest / slowest
                 )
                 low, high, top = weather.moving_extremes(origin, grid.cell, shape)
+                if still_air:
+                    top = 0.0
                 if low - top >= slowest and high <= fastest:
                     break
                 slowest, fastest = min(slowest, low - top), max(fastest, high)
@@ -951,6 +975,8 @@ def wave_responses(
             speeds, *flow = weather.moving_fields(
                 origin, grid.cell, shape, step, 1.0 / (grid.cell * grid.rate)
             )
+            if still_air:
+                flow = [None, None]
             extremes, still = (low - top, high + top), low
         else:
             # Fine enough for the slowest sound and in time steps for the fastest, over
@@ -1002,10 +1028,10 @@ def wave_responses(
         )
         return solver, grid, fits, probes, courant, extremes, still
 
-    def kept(stencil: str, layer: int):
+    def kept(stencil: str, layer: int, still_air: bool = False):
         """What ``prepare`` gives, where its grid is closed without a matched layer or
         open with one; otherwise None, and its grid goes before the next is made."""
-        built = prepare(stencil, layer)
+        built = prepare(stencil, layer, still_air)
         return built if built[0].open == bool(layer) else None
 
     # The isotropic stencil, but round an open model the standard one with its matched
@@ -1019,7 +1045,9 @@ def wave_responses(
         )
     built = kept("standard", LAYER_CELLS) if outdoor else None
     if built is None:
-        built = kept("standard" if scheme == "standard" else "isotropic", 0)
+        # A closed model's air is still, whichever way the wind is taken: no wind blows
+        # through its walls (outdoors, a source shut in a closed building).
+        built = kept("standard" if scheme == "standard" else "isotropic", 0, windy)
     if built is None:
         if scheme == "isotropic":
             raise ValueError(
@@ -1028,10 +1056,12 @@ def wave_responses(
             )
         built = prepare("standard", LAYER_CELLS)
     solver, grid, fits, probes, courant, extremes, still = built
+    still_inside = windy and not solver.open  # the wind left out of a closed model
+    stilled = moving or still_inside  # the grid's speeds are the still air's
     h = grid.cell
     at_source = 1.0  # the speed of sound at the source over the grid's
     if weather is not None:
-        here = weather.still_at(source) if moving else weather.at(source)[0]
+        here = weather.still_at(source) if stilled else weather.at(source)[0]
         at_source = min(float(here) / (courant * h * grid.rate), 1.0)
     signal, delay = source_signal(grid.rate, h, courant, at_source)
     samples = int(math.ceil(length_s * grid.rate))
@@ -1067,6 +1097,8 @@ def wave_responses(
     where = f" on {gpu_name()}" if on_gpu else ""
     if extremes is not None:
         where += f", sound at {extremes[0]:.0f} to {extremes[1]:.0f} m/s"
+    if still_inside:
+        where += ", the wind left out: the air inside the closed model is still"
     if solver.flowing:
         where += ", the air moving" + (
             " (on the CPU: the GPU steps still air)" if gpu_wanted else ""
@@ -1076,19 +1108,55 @@ def wave_responses(
         f"{steps:,} steps{where})"
     )
     stepper = GpuWaveSolver(solver) if on_gpu else solver
-    # Long runs report every tenth (which is also where a cancelled run stops).
-    chunks = 10 if solver.air_cells * steps > _LONG_RUN else 1
+    who = f"source {label!r}" if label else "the source"
+    unstable = (
+        "The wind blows through the model's solids, which is not stable in a nearly "
+        "closed space such as a room with an opening: set simulation.wave.wind to effective"
+    )
+    # Long runs report every tenth (which is also where a cancelled run stops), and
+    # moving air runs in the pieces it is watched over (see WATCH_S).
+    tenths = 10 if solver.air_cells * steps > _LONG_RUN else 1
+    watch = max(1, round(WATCH_S * grid.rate))  # the steps of a watched piece, at least
+    chunks = max(tenths, steps // watch) if solver.flowing else tenths
     if chunks == 1:
         recorded = stepper.run(drive)
     else:
-        # Into one array as each tenth comes, not all ten joined at the end (twice the
+        # Into one array as each piece comes, not all joined at the end (twice the
         # memory).
         recorded = np.empty((len(probes), steps))
         bounds = np.linspace(0, steps, chunks + 1).astype(np.int64)
+        ended = lead - delay + len(signal)  # the first step after the source's pulse
+        lowest, largest = math.inf, 0.0
+        squares, since = 0.0, 0  # the watched piece so far: its squares' sum, its first step
         for c in range(chunks):
-            if c:
-                say(f"{label}: wave solver, {name}, {100 * c // chunks} %")
+            if c and c * tenths // chunks > (c - 1) * tenths // chunks:
+                say(f"{label}: wave solver, {name}, {100 * (c * tenths // chunks) // tenths} %")
             recorded[:, bounds[c] : bounds[c + 1]] = stepper.run(drive[bounds[c] : bounds[c + 1]])
+            if not solver.flowing:
+                continue
+            squares += solver.mean_square * float(bounds[c + 1] - bounds[c])
+            if not math.isfinite(squares):
+                recorded[:, bounds[c + 1] :] = math.nan  # refused below
+                break
+            if bounds[c + 1] - since < watch:
+                continue  # (a long run's tenths can be shorter than a watched piece)
+            level = squares / float(bounds[c + 1] - since)
+            start, squares, since = since, 0.0, int(bounds[c + 1])
+            largest = max(largest, level)
+            if start >= ended:
+                if level > WATCH_RISE * lowest and level > WATCH_FLOOR * largest:
+                    raise ValueError(
+                        f"{who}: the wave solver's sound grew in the moving air instead "
+                        f"of dying away ({10 * math.log10(level / lowest):.1f} dB over its "
+                        f"lowest level, {(since - lead) / grid.rate:.1f} s after "
+                        f"emission). {unstable}"
+                    )
+                lowest = min(lowest, level)
+    if not np.all(np.isfinite(recorded)):
+        raise ValueError(
+            f"{who}: the wave solver's run did not stay finite"
+            + (f". {unstable}" if solver.flowing else "")
+        )
     info: dict[str, float] = {
         "wave_cells": float(solver.air_cells),
         "wave_cell_m": h,
@@ -1103,6 +1171,8 @@ def wave_responses(
         info["wave_speed_min_m_s"], info["wave_speed_max_m_s"] = extremes
     if solver.flowing:
         info["wave_moving_air"] = 1.0
+    if still_inside:
+        info["wave_still_inside"] = 1.0
     # How much slower than it should sound travels at the top of the highest band along
     # the grid's axes: the slowest sound's cells per wavelength there, stepped as the
     # slowest air is (in moving air, the still air's step in the air's own frame;
@@ -1123,7 +1193,7 @@ def wave_responses(
         local = courant  # the Courant number at the listener
         if weather is not None:
             # In moving air the still air's (the wind's share of the gradient is left out).
-            here = weather.still_at(listeners[i]) if moving else weather.at(listeners[i])[0]
+            here = weather.still_at(listeners[i]) if stilled else weather.at(listeners[i])[0]
             local *= float(here) / (courant * h * grid.rate)
         # X, Y and Z from the first step on, where the grid is still at rest.
         signals = _first_order(recorded[part], found[part], listener, local, _cutoff(courant))

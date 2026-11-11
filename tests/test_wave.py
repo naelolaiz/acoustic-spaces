@@ -26,6 +26,7 @@ from acoustic_spaces.engine.wave import (
     LAYER_DAMPING,
     LAYER_ROOM,
     MAX_ABSORPTION,
+    PAST_END_S,
     WAVE_BANDS_HZ,
     WaveResponse,
     _first_order,
@@ -1182,6 +1183,22 @@ def test_a_run_from_before_emission_lands_within_half_a_sample_at_another_rate(
     assert abs(late) < 0.5
 
 
+def test_the_field_takes_the_run_that_follows_its_samples() -> None:
+    """The bands' filters spread each arrival both ways in time, so the field's last
+    samples hold some of the run that follows them: its first n samples do not depend on
+    n. (They were those of a run cut at n: here up to 0.41 of the field's peak off.)"""
+    rate = 2000.0
+    signals = np.random.default_rng(2).standard_normal((600, 4))  # 0.3 s
+    response = WaveResponse(rate, signals, 2, 0.2, lead_s=0.008)
+    n = 9600  # 0.2 s: the run goes on for another 0.092 s
+    whole = response.field(FS, 24_000)
+    peak = np.abs(whole).max()
+    np.testing.assert_allclose(response.field(FS, n), whole[:n], rtol=0, atol=1e-9 * peak)
+    fed = response.fed(np.ones(2), 0.05)
+    late = fed.field(FS, 24_000)[:n]
+    np.testing.assert_allclose(fed.field(FS, n), late, rtol=0, atol=1e-9 * peak)
+
+
 def test_velocity_is_in_step_with_the_pressure() -> None:
     # A plane wave from -x crosses the probe and its neighbours one and two cells away
     # (1 / COURANT steps a cell): X = -W sample by sample, not half a step ahead of it.
@@ -1455,6 +1472,50 @@ def test_simulate_with_the_wave_solver() -> None:
         assert out.shape == (n, fmt.channels) and np.all(np.isfinite(out))
 
 
+@pytest.mark.parametrize("resolution", ["octave", "third_octave"])
+def test_the_wave_solver_steps_past_the_response_s_end(resolution: str) -> None:
+    """A simulation steps the wave solver PAST_END_S further than its responses last: the
+    bands' filters spread each arrival both ways in time, so they read a response's last
+    slots from the run after it too. Those slots are then the ones a longer response has
+    (within 0.0002 dB in octave bands and 0.003 dB in third-octave bands here; with a run
+    that stopped at the response's end, the last 10 ms read 5.8 and 14.7 dB off)."""
+    length, step = 0.5, 0.01
+
+    def run(length_s: float):
+        bands = {"octave": 8, "third_octave": 24}[resolution]
+        scene = {
+            "geometry": {"box": [5.0, 4.0, 3.0]},
+            "materials": {"m": {"absorption": [0.02] * bands, "scattering": 0.1}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": [1.3, 1.1, 1.4]}],
+            "listeners": [
+                {"name": "a", "position": [3.8, 2.9, 1.7]},
+                {"name": "b", "position": [2.1, 3.2, 1.2]},
+            ],
+            "simulation": {
+                "bands": resolution,
+                "ir_length_s": length_s,
+                "seed": 1,
+                "late": {"rays": 500},
+                "early": {"max_order": 1},
+                "wave": {"enabled": True, "max_band_hz": 125},
+            },
+        }
+        result = simulate(Room.from_scene(Scene.model_validate(scene)))
+        return [result.responses[("s", name)].wave for name in "ab"], result.details["s"]
+
+    short, info = run(length)
+    whole, _ = run(length + 0.6)
+    past = PAST_END_S[resolution]
+    assert past == {"octave": 0.2, "third_octave": 0.4}[resolution]
+    assert info["wave_steps"] >= (length + past) * short[0].rate
+    assert info["wave_steps"] < (length + past + 0.05) * short[0].rate
+    slots = round(length / step)
+    for a, b in zip(short, whole, strict=True):
+        db = 10 * np.log10(a.energy(step, slots) / b.energy(step, slots))
+        assert np.abs(db).max() < 0.01
+
+
 def test_wave_responses_refuse_listeners_outside_and_huge_grids() -> None:
     room = Room.from_yaml(SHOEBOX)
     model = TraceModel.from_room(room)
@@ -1642,26 +1703,7 @@ def test_outdoor_models_make_only_the_grid_with_the_layer(monkeypatch) -> None:
         made.clear()
         _, info, _ = _windy_run(room, "effective", scheme=scheme)
         assert info["wave_open"] == 1.0 and made == [(7, LAYER_CELLS)]
-    hut = Room.from_scene(
-        Scene.model_validate(
-            {
-                "geometry": {
-                    "ground": {"extent": [[-10, -6], [10, 6]], "sky": 5},
-                    "buildings": [
-                        {
-                            "name": "hut",
-                            "footprint": [[-3, -3], [3, -3], [3, 3], [-3, 3]],
-                            "height": 4,
-                        }
-                    ],
-                },
-                "materials": {"m": {"absorption": [0.2] * 8, "scattering": 0.0}},
-                "default_material": "m",
-                "sources": [{"name": "s", "position": [0, 0, 1.5]}],
-                "listeners": [{"name": "in", "position": [1.2, 0.7, 1.4]}],
-            }
-        )
-    )
+    hut = _windy_hut(0.0)
     for scheme, stencil in (("auto", 19), ("standard", 7)):
         made.clear()
         _, info, _ = _windy_run(hut, "effective", scheme=scheme)
@@ -2841,6 +2883,67 @@ def test_moving_air_stays_stable_round_walls_and_in_the_matched_layer() -> None:
     assert max(levels[6:]) < 1e-11 * levels[0]
 
 
+def test_moving_air_keeps_a_closed_room_s_mean() -> None:
+    # A rigid closed room in a uniform wind askew to the grid, over 100,000 steps. The
+    # carrying step keeps a uniform pressure to the bit: its last stage is written
+    # q + 2/3 (... - q), because the weights 1/3 and 2/3 of (1/3) q + (2/3) (...) add
+    # to 1 + 2^-25 in single precision, which made the room's mean grow 2.2 to 2.6 times
+    # per 10,000 steps (to 460 times the sound's level here). The mean of the last 4,000
+    # steps at a point, over which the sound averages out, stays under ten times the
+    # sound's early level (it is 1.6 times here: the mean still creeps, linearly).
+    def flow(centres):
+        return np.full(len(centres), 0.03), np.full(len(centres), 0.017)
+
+    solver, rate = _solver(
+        (0.9, 0.7, 0.6),
+        lambda mesh: [0.0] * len(mesh.faces),
+        [0.28, 0.3, 0.22],
+        [[0.63, 0.42, 0.33]],
+        flow=flow,
+    )
+    assert solver.flowing and not solver.open
+    chunk = 10_000
+    early = float(np.std(solver.run(_drive(rate, 0.1, chunk))[0, 6_000:]))
+    for _ in range(8):
+        solver.run(np.zeros(chunk, np.float32))
+    late = solver.run(np.zeros(chunk, np.float32))[0, -4_000:]
+    assert abs(float(np.mean(late))) < 10.0 * early
+
+
+def test_moving_air_tells_its_mean_square() -> None:
+    """In moving air the solver sums the pressure squared over its air and the steps of a
+    run. With a probe at the centre of every cell of a small rigid room, that is the
+    mean of the probes' squares (they read the pressure before each step), of each run
+    on its own; still air sums nothing, and a reset clears it."""
+    size, cell = (0.9, 0.7, 0.6), 0.1
+    origin = -cell * (2.0 + np.array([0.0137, 0.0219, 0.0291]))
+    shape = np.ceil((np.array(size) - origin) / cell).astype(int) + 2
+    centres = _centres(origin, cell, shape)
+    inside = centres[np.all((centres > 0.0) & (centres < np.array(size)), axis=1)]
+    source = [0.33, 0.41, 0.27]
+
+    def flow(c):
+        return np.full(len(c), 0.03), np.full(len(c), 0.017)
+
+    def rigid(mesh):
+        return [0.0] * len(mesh.faces)
+
+    solver, rate = _solver(size, rigid, source, inside, cell=cell, flow=flow)
+    assert solver.flowing and solver.air_cells == len(inside)
+    assert solver.mean_square == 0.0
+    drive = _drive(rate, cell, 400)
+    first = solver.run(drive[:250])
+    assert solver.mean_square == pytest.approx(np.mean(first**2), rel=1e-6)
+    second = solver.run(drive[250:])
+    assert solver.mean_square == pytest.approx(np.mean(second**2), rel=1e-6)
+    assert np.mean(second**2) > 0.0
+    solver.reset()
+    assert solver.mean_square == 0.0
+    still, _ = _solver(size, rigid, source, inside, cell=cell)
+    still.run(drive[:250])
+    assert not still.flowing and still.mean_square == 0.0
+
+
 def test_wave_solver_checks_the_air_s_motion() -> None:
     mesh = box_mesh((2.0, 2.0, 2.0))
     bvh = _native.Bvh(mesh.vertices, mesh.faces)
@@ -2903,6 +3006,28 @@ def _windy_ground(wind: float, model: str, temperature=None) -> Room:
     return Room.from_scene(Scene.model_validate(data))
 
 
+def _windy_hut(wind: float) -> Room:
+    """A closed building on the ground with the source and a listener shut in it, in a
+    uniform wind ``wind`` (m/s) along +x."""
+    data = {
+        "geometry": {
+            "ground": {"extent": [[-10, -6], [10, 6]], "sky": 5},
+            "buildings": [
+                {"name": "hut", "footprint": [[-3, -3], [3, -3], [3, 3], [-3, 3]], "height": 4}
+            ],
+        },
+        "materials": {"m": {"absorption": [0.2] * 8, "scattering": 0.0}},
+        "default_material": "m",
+        "sources": [{"name": "s", "position": [0, 0, 1.5]}],
+        "listeners": [{"name": "in", "position": [1.2, 0.7, 1.4]}],
+    }
+    if wind:
+        data["atmosphere"] = {
+            "wind": {"speed_m_s": wind, "direction_deg": 0.0, "profile": "constant"}
+        }
+    return Room.from_scene(Scene.model_validate(data))
+
+
 def _windy_run(
     room: Room, wind: str, per_wavelength: float = 8.0, device="cpu", scheme: str = "auto"
 ):
@@ -2940,6 +3065,24 @@ def test_still_air_takes_no_moving_air() -> None:
             assert a.rate == b.rate and np.array_equal(a.signals, b.signals)
 
 
+@pytest.mark.parametrize("wind", ["effective", "moving"])
+def test_the_air_in_a_closed_model_is_still(wind) -> None:
+    # A source shut in a closed building outdoors: no wind blows through its walls, so
+    # in a wind of 15 m/s, taken either way, the run is the still air's (on the still
+    # air's grid, within single precision's rounding) and says that it left the wind
+    # out.
+    still, still_info, still_said = _windy_run(_windy_hut(0.0), wind)
+    windy, info, said = _windy_run(_windy_hut(15.0), wind)
+    assert "wave_open" not in info and info["wave_still_inside"] == 1.0
+    assert "wave_moving_air" not in info and "the air moving" not in said[0]
+    assert "the wind left out: the air inside the closed model is still" in said[0]
+    assert "wave_still_inside" not in still_info and "the wind left out" not in still_said[0]
+    assert info["wave_cells"] == still_info["wave_cells"]
+    for a, b in zip(windy, still, strict=True):
+        assert a.rate == b.rate and a.cell == b.cell
+        assert np.abs(a.signals - b.signals).max() <= 1e-6 * np.abs(b.signals).max()
+
+
 def test_wave_responses_carry_the_sound_with_the_wind() -> None:
     # A uniform wind of 15 m/s along +x over rigid ground: against the still air's run
     # on the same grid (as fine as sound against the wind needs), the moving air's sound
@@ -2965,6 +3108,108 @@ def test_wave_responses_carry_the_sound_with_the_wind() -> None:
         assert lag == pytest.approx(want, abs=2.5e-5)
         louder = _band_db(a.signals[:, 0], b.signals[:, 0], a.rate, band=(40.0, 90.0))
         assert louder == pytest.approx(0.0, abs=0.1)
+
+
+@pytest.mark.parametrize("in_tenths", [False, True])
+def test_moving_air_that_grows_is_stopped(tmp_path: Path, monkeypatch, in_tenths: bool) -> None:
+    """The moving air's wind blows through the model's solids, which is not stable in a
+    nearly closed space: in a room with an opening, in a wind of 30 m/s, the sound
+    grows instead of dying away. The run is watched, the pressure squared over the grid
+    in pieces of at least a quarter second from the end of the source's pulse on, and
+    stops once that has doubled; so does a long run, which comes in tenths shorter than
+    that (here as if this one were long). With the wind as the effective speed of sound
+    the same scene runs."""
+    import sys
+
+    from acoustic_spaces.engine import wave as wave_module
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
+    import wave_wind
+
+    if in_tenths:
+        monkeypatch.setattr(wave_module, "_LONG_RUN", 0.0)
+    room = wave_wind.room_with_an_opening(tmp_path / "room.obj", 30.0)
+
+    def run(wind: str):
+        return wave_responses(
+            TraceModel.from_room(room),
+            np.array(wave_wind.ROOM_SOURCE),
+            np.array([wave_wind.ROOM_LISTENER]),
+            ["in"],
+            max_band_hz=63,
+            length_s=1.6,
+            sample_rate=FS,
+            speed_of_sound=room.speed_of_sound(),
+            wind=wind,
+            label="s",
+        )
+
+    with pytest.raises(ValueError, match="source 's': .* grew in the moving air .*effective"):
+        run("moving")
+    responses, info = run("effective")
+    assert "wave_moving_air" not in info and np.all(np.isfinite(responses[0].signals))
+
+
+def test_watched_moving_air_is_one_run(monkeypatch) -> None:
+    """Moving air runs in the pieces it is watched over: over open ground, where its
+    sound dies away, the responses are those of one run, to the bit."""
+    from acoustic_spaces.engine import wave as wave_module
+
+    room = _windy_ground(5.0, "moving")
+
+    def run():
+        responses, info = wave_responses(
+            TraceModel.from_room(room),
+            np.array([0.0, 0.0, 1.5]),
+            np.array([listener.position for listener in room.scene.listeners], dtype=float),
+            [listener.name for listener in room.scene.listeners],
+            max_band_hz=63,
+            length_s=0.4,
+            sample_rate=FS,
+            speed_of_sound=room.speed_of_sound(),
+            wind="moving",
+        )
+        assert info["wave_moving_air"] == 1.0
+        return [response.signals for response in responses]
+
+    monkeypatch.setattr(wave_module, "WATCH_S", 10.0)
+    once = run()
+    monkeypatch.setattr(wave_module, "WATCH_S", 0.03)
+    for a, b in zip(run(), once, strict=True):
+        np.testing.assert_array_equal(a, b)
+    # (And in a long run's tenths, here shorter than a watched piece.)
+    monkeypatch.setattr(wave_module, "WATCH_S", 0.1)
+    monkeypatch.setattr(wave_module, "_LONG_RUN", 0.0)
+    for a, b in zip(run(), once, strict=True):
+        np.testing.assert_array_equal(a, b)
+
+
+def test_a_run_that_does_not_stay_finite_is_refused(monkeypatch) -> None:
+    # (No run of the solver's own has done so: the source's pulse made infinite here.)
+    from acoustic_spaces.engine import wave as wave_module
+
+    room = _free_room((4.0,))
+    source = np.array(room.scene.sources[0].position)
+    signal_of = wave_module.source_signal
+
+    def broken(*args, **kwargs):
+        signal, delay = signal_of(*args, **kwargs)
+        signal = signal.copy()
+        signal[5] = math.inf
+        return signal, delay
+
+    monkeypatch.setattr(wave_module, "source_signal", broken)
+    with pytest.raises(ValueError, match="the wave solver's run did not stay finite"):
+        wave_responses(
+            TraceModel.from_room(room),
+            source,
+            [source + [4.0, 0.0, 0.0]],
+            ["r"],
+            max_band_hz=63,
+            length_s=0.1,
+            sample_rate=FS,
+            speed_of_sound=room.speed_of_sound(),
+        )
 
 
 def test_moving_air_stays_on_the_cpu(monkeypatch) -> None:

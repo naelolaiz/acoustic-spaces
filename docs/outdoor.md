@@ -687,7 +687,7 @@ is an arc of a circle, so its travel time and its length are exact.
   the rays, the parabolic equation and the wave solver bend sound alike. Its grid is
   fine enough for the slowest sound and steps in time for the fastest, a few percent
   more cells and steps than in still air in the `windy` preset. Over grass, 50 to 200
-  m from the source, in the 63 and 125 Hz bands, it is within 0.55 dB of the parabolic
+  m from the source, in the 63 and 125 Hz bands, it is within 0.60 dB of the parabolic
   equation, 0.2 dB on average (see [Validation](validation.md#the-wave-solver-in-wind-and-temperature-against-a-parabolic-equation)).
   It runs on the CPU or on the GPU alike (`simulation.wave.device`), the two agreeing
   to rounding. The run's details give the slowest and the fastest speed of sound on the
@@ -702,13 +702,29 @@ is an arc of a circle, so its travel time and its length are exact.
   m/s it is within 0.02 dB and 0.1 ms of the exact solution in every direction, where
   the effective speed of sound is up to 0.84 dB off; the echo of a façade 40 m
   downwind comes within 0.02 ms of ray theory's, where the effective speed of sound
-  brings it 10.6 ms early; in the `windy` preset over grass both are within 0.55 dB of
-  the parabolic equation, 0.2 dB on average (see
+  brings it 10.6 ms early; in the `windy` preset over grass moving air is within
+  0.25 dB of the parabolic equation and the effective speed of sound within 0.39 dB,
+  0.1 and 0.2 dB on average (see
   [Validation](validation.md#moving-air-in-the-wave-solver)).
-  It costs three to four times as much as the effective speed of sound, on the CPU only
+  It takes four to five times as long as the effective speed of sound, on the CPU only
   (asked for the GPU, it says so and stays on the CPU), and the run's details say
   `wave_moving_air`. Its grid is fine enough for sound going against the fastest wind
   in the slowest air.
+- **Moving air in a room with an opening.** The moving air's wind blows through the
+  model's solids as over open ground, and where a solid has air on both sides along
+  the wind the solver's sound grows there instead of dying away. In the open it
+  leaks away, all or most of it; in a nearly closed space, such as a room with an
+  opening, it stays and builds up without bound. Each run in moving air is therefore watched: once the
+  source's pulse has ended, the pressure squared over the grid's air, averaged over
+  pieces of at least a quarter second, may not rise to twice its lowest level so far,
+  or the run stops with an error. A growth too slow for that within the response is not caught
+  (see [Validation](validation.md#moving-air-in-the-wave-solver)): for a source or a
+  listener in a room with an opening, take the wind as the effective speed of sound.
+- **A source shut in a closed building.** No wind blows through closed walls. Where the
+  wave solver's grid is closed (the source and its listeners in a building without an
+  opening), it takes the still air's speed of sound, with either way of taking the
+  wind, and the run says that it left the wind out (`wave_still_inside` in its
+  details).
 - **Through weather zones** the parabolic equation marches zone by zone, changing its
   speed of sound where its path crosses a border, and the wave solver takes each cell's
   zone. The early paths, whose arcs need one profile, take the mean profile along their
@@ -1654,7 +1670,10 @@ and leaves out the term of the linearised Euler equations that the wind's change
 height puts on the air's own motion, about |dv/dz| / ω of the rest (under 0.3 % at 63
 Hz a metre above the ground in the `windy` preset). Its wind is the weather's profile
 everywhere, as for the rays: no flow is computed round buildings, so the wind blows into
-a façade as over open ground and a building's lee is as windy as the open. By default
+a façade as over open ground and a building's lee is as windy as the open (only a
+closed building round a shut-in source has still air). Blowing through solids, it is
+not stable in a nearly closed space such as a room with an opening, where the run
+stops with an error. By default
 it takes the wind as
 the rays and the parabolic equation do, as an effective speed of sound, so sound that
 a building sends back towards the source travels at the speed of sound going away from

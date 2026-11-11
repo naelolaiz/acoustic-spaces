@@ -2,7 +2,7 @@
 
     python validation/wave_solver.py [--json results.json] [--plot wave.png]
 
-Ten checks, printed as Markdown tables, each with both of the solver's stencils (the
+Eleven checks, printed as Markdown tables, each with both of the solver's stencils (the
 7-point one and the 19-point one) where both apply:
 
 - the speed of sound along an axis and along a diagonal at about 8 cells per
@@ -34,7 +34,10 @@ Ten checks, printed as Markdown tables, each with both of the solver's stencils 
   box's modes with those decay rates: G, EDT and T20 in both bands, also with the 7-point
   stencil, with twice as many cells per wavelength and from the rays alone; with
   ``--plot`` (needs matplotlib), the transfer functions from 15 to 250 Hz;
-- the run count and time of a box whose absorption differs in every band up to 500 Hz.
+- the run count and time of a box whose absorption differs in every band up to 500 Hz;
+- the last 10 ms slots of a response's wave bands, in octave and in third-octave bands,
+  against the same slots of a response one second longer: with the run a simulation
+  asks for, which goes on past the response's end, and with a run that stops there.
 """
 
 from __future__ import annotations
@@ -58,6 +61,7 @@ from acoustic_spaces.engine.wave import (
     COURANT,
     LAYER_CELLS,
     LAYER_DAMPING,
+    PAST_END_S,
     STENCILS,
     band_grid,
     grid_phase,
@@ -855,11 +859,13 @@ def one_run() -> dict:
     constant, rate = _solver(BOX, lambda m: [0.05] * len(m.faces), *points)
     fitted = fit_admittance(absorption[:4], 8, rate)
     branched, _ = _solver(BOX, lambda m: [fitted] * len(m.faces), *points)
-    steps = int(0.5 * rate)
+    # As many steps as the simulation's run took: the response's, those the solver
+    # steps past its end and the lead before emission.
+    steps = int(details["wave_steps"])
     timings = []
     for solver in (constant, branched):
         begin = time.perf_counter()
-        _run(solver, rate, cell, 0.5)
+        _run(solver, rate, cell, (steps + 0.5) / rate)
         timings.append(time.perf_counter() - begin)
     return {
         "bands": 4,
@@ -874,6 +880,61 @@ def one_run() -> dict:
         "branches_s": timings[1],
         "branches": len(fitted.conductance),
     }
+
+
+def response_end(length: float = 1.0, step: float = 0.01) -> list[dict]:
+    """The wave bands' energy per ``step`` of a response of ``length`` seconds in a
+    5 x 4 x 3 m box with 2 % absorption, at two listeners, against the same slots of a
+    response one second longer: from a run that stops at the response's end, and from
+    the run a simulation asks for, PAST_END_S longer. The bands' filters spread each
+    arrival both ways in time, so they read the last slots from the run after them too.
+    The largest difference (dB) in the last five slots and in the earlier ones."""
+    rows = []
+    source = np.array([1.3, 1.1, 1.4])
+    listeners = np.array([[3.8, 2.9, 1.7], [2.1, 3.2, 1.2]])
+    slots = round(length / step)
+    for resolution, bands in (("octave", 8), ("third_octave", 24)):
+        room = Room.from_scene(
+            Scene.model_validate(
+                {
+                    "geometry": {"box": [5.0, 4.0, 3.0]},
+                    "materials": {"m": {"absorption": [0.02] * bands, "scattering": 0.1}},
+                    "default_material": "m",
+                    "sources": [{"name": "s", "position": source.tolist()}],
+                    "listeners": [{"name": "a", "position": listeners[0].tolist()}],
+                    "simulation": {"bands": resolution},
+                }
+            )
+        )
+        model = TraceModel.from_room(room)
+
+        def energy(seconds: float, model=model) -> np.ndarray:
+            responses, _ = wave_responses(
+                model,
+                source,
+                listeners,
+                ["a", "b"],
+                max_band_hz=125,
+                length_s=seconds,
+                sample_rate=FS,
+                speed_of_sound=C,
+            )
+            return np.array([response.energy(step, slots) for response in responses])
+
+        past = PAST_END_S[resolution]
+        longer = energy(length + 1.0 + past)
+        for run, seconds in (("stops at the response's end", length), ("goes on", length + past)):
+            db = np.abs(10 * np.log10(energy(seconds) / longer))
+            rows.append(
+                {
+                    "bands": resolution,
+                    "run": run,
+                    "past_s": seconds - length,
+                    "last_db": float(db[..., -5:].max()),
+                    "earlier_db": float(db[..., :-5].max()),
+                }
+            )
+    return rows
 
 
 def plot(curves: dict, path: str) -> None:
@@ -1088,6 +1149,16 @@ def main() -> None:
         f"{run['absorption_miss']:.4f}); the same grid {run['constant_s']:.1f} s with constant "
         f"walls, {run['branches_s']:.1f} s with {run['branches']} branches"
     )
+    results["response_end"] = response_end()
+    print(
+        "\n| bands | the run | past the response's end (s) | last five 10 ms slots (dB) | "
+        "earlier slots (dB) |\n|---|---|---:|---:|---:|"
+    )
+    for row in results["response_end"]:
+        print(
+            f"| {row['bands'].replace('_', '-')} | {row['run']} | {row['past_s']:g} | "
+            f"{row['last_db']:.4f} | {row['earlier_db']:.4f} |"
+        )
     if args.plot:
         plot(curves, args.plot)
     if args.json:
