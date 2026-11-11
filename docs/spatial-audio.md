@@ -424,15 +424,20 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   So each path shifts in pitch as its own length changes: the ground's reflection
   shifts a little differently from the direct sound, and their interference sweeps as
   it does by a road. Each path keeps its filter (the ground's, the air's, a barrier's,
-  the ears' in binaural), which changes from one place to the next as before, but for
-  its spreading: each sample is divided by the path's delay then, so the level follows
-  one over the distance from sample to sample, as the pitch does. In
+  a microphone's pattern, the ears' in binaural), which goes in a straight line from
+  one place's to the next's as their sound is heard, however fast the walker passes
+  them, but for its spreading: each sample is divided by the path's delay then, so the
+  level follows one over the distance from sample to sample, as the pitch does. In
   turbulence the eddies drift past as in any walkthrough, the delay they give each path
   in its delay. In binaural, where each ear's
   response starts goes into that ear's delay instead of its filter: measured ears start
   a few samples apart from one direction to the next (KEMAR's far ear by up to 11
   samples between places 1 m apart along a road 25 m away), and two places' filters
-  that start apart, mixed, would cancel the treble between them.
+  that start apart, mixed, would cancel the treble between them. A walking listener's
+  ear is that much further along the path; a walking source's sound reaches the ear
+  that long after it passes the head's centre, so the time between the two ears is the
+  head's own whatever the pitch does, and each ear's sound is divided by one plus its
+  onset's slope (the ear's Doppler factor over the centre's).
 - The late part is crossfaded from place to place by weights that add up to one, its
   pitch unshifted: the places' tails, drawn from one random sequence, are alike (in a
   shoebox room, neighbouring places 25 cm apart, each traced, correlate by 0.97 or more
@@ -446,13 +451,19 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
   of that the air's absorption, which the engine takes at the pitch heard and that
   field at the pitch sent. A source
   passing 1 m from the listener's line at 70 m/s, its places 25 cm apart, keeps its
-  level within 0.01 dB of the field's at 1 kHz in every 5 ms.
+  level within 0.01 dB of the field's at 1 kHz in every 5 ms, and within 0.03 dB
+  through a cardioid microphone and at the ears.
   Crossfading from place to place instead misses the level by 2.7 to 4.1 dB at most, and
   by 12 dB for the train at 4 kHz, where the field's two paths cancel for a moment and
   the places' do not (see
   [Validation](validation.md#moving-sources-against-the-exact-field)). The places should
   be no more than 1 m apart (the default `--step` is 25 cm): 2 m apart the sound is
-  within 38 dB of the field, 4 m apart only within 18 dB.
+  within 38 dB of the field, 4 m apart only within 18 dB. What depends on the direction
+  a path arrives from (a microphone's pattern, the ears, panning, Ambisonics) goes in a
+  straight line between two places, so a walker that passes close wants them close as
+  the listener sees them: 7° apart left third-order Ambisonics 0.3 % from the field over
+  a pass, 14° apart 1.3 % (a one-off check, see
+  [Validation](validation.md#moving-sources-against-the-exact-field)).
 - The source is quasi-static: its sound power and directivity are those of a source
   standing at each place. A moving source's convective amplification, which makes it
   louder ahead of it and quieter behind, is left out. Its size depends on the kind of
