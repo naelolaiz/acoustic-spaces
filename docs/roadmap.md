@@ -384,8 +384,12 @@ Outdoor acoustics, in steps:
 - [ ] A transition across a caustic for the rays' bands over the open ground (4 and
   8 kHz, and 1 and 2 kHz with `open_ground_frequencies: rays`), a uniform (Airy) form
   for the two paths that merge there: past it they vanish and the level steps by up to
-  12.9 dB within a centimetre (14.0 dB at 1 kHz with `rays`; see
+  15.5 dB within a centimetre (up to 14.0 dB at 1 and 2 kHz with `rays`; see
   [Known issues](validation.md#known-issues)).
+- [ ] The parabolic equation along a wall's reflection in wind and temperature
+  gradients, as over the open ground: the paths off façades and barriers are eigenrays
+  in every band, with the rays' ground effect up to 2 kHz and their steps at caustics
+  (see [Known issues](validation.md#known-issues)).
 - [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
   the shadow): out of the shadow the equation's field goes through it, but the rays'
