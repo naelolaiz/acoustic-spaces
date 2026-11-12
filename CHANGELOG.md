@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added: a solver for sound that passes close over a whole row of roofs and barriers
+  in still air (`acoustic_spaces.engine.rows`: the parabolic equation marched over the
+  row, with the terms of its rigid edges), within 0.38 dB of a wave calculation near
+  grazing incidence in free space and 0.65 dB there over roofs on a rigid ground,
+  0.74 dB up from a source at street level and 1.24 dB down to a listener there;
+  between rigid screens on a rigid ground up to 3.4 dB low, and with an error for the
+  ends it cannot hold, such as a source on a roof close to a parapet
+  (`validation/rows.py`). Simulations do not use it yet.
 - Changed: an outdoor ground (a material with an `impedance`) scatters nothing unless
   its material gives a `scattering`, where it took 0.1 like any material: the early
   level over grass is within 0.05 dB of the exact solution 20 and 100 m away (it was
