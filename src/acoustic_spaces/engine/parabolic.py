@@ -68,9 +68,10 @@ RANGE_STEP_MIN_M = 1.2
 #: that comes in steeply, at any step. The points that the reflection off the ground
 #: reaches more steeply than STEEP_DEG (degrees from the horizontal) get the wide-angle
 #: equation's field (:mod:`~acoustic_spaces.engine.wide_angle`): in 28 cases of wind and
-#: temperature gradients their octave bands up to 500 Hz are within 0.09 dB of the fast
-#: field program, where this equation is up to 0.96 dB off (1.10 dB at the flatter
-#: points; ``validation/steep_sound.py``, docs/validation.md, "Steep sound").
+#: temperature gradients their octave bands (63 to 500 Hz in ten of the cases, 63 and
+#: 125 Hz in the others) are within 0.09 dB of the fast field program, where this
+#: equation is up to 0.96 dB off (1.10 dB at the flatter points;
+#: ``validation/steep_sound.py``, docs/validation.md, "Steep sound").
 STEEP_DEG = 15.0
 #: The pole of the ground's reflection factor is left to the field continued below the
 #: ground within this many sample spacings below the real axis (where that field stays

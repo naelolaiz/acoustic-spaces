@@ -566,13 +566,13 @@ is an arc of a circle, so its travel time and its length are exact.
   default, `narrow_angle`, takes the refraction as a phase shift at each step, which
   holds for sound within some 15 degrees of the horizontal and a speed of sound close to
   the ground's, so the listeners whose reflection off the ground comes in more steeply
-  get the wide-angle one's level: in the bands up to 500 Hz, in 28 cases of wind and
-  temperature gradients, within 0.09 dB of a fast field program per octave band (0.29 dB
-  per third octave, compared in 24 of them), where the narrow-angle one is up to 0.96 dB
-  off (2.2 dB), and within 0.03 dB at 1 and 2 kHz (a one-off check in the `windy`
-  preset); flatter, the narrow-angle one is up to 1.10 dB off per octave band in those
-  bands, and 5.7 dB in a third octave 14 dB below free field, these two in 10 m/s of
-  wind over a hard ground (see
+  get the wide-angle one's level: in 28 cases of wind and temperature gradients, in the
+  octave bands compared (63 to 500 Hz in ten of them, 63 and 125 Hz in the others),
+  within 0.09 dB of a fast field program (0.29 dB per third octave, compared in 24 of
+  them), where the narrow-angle one is up to 0.96 dB off (2.2 dB), and within 0.03 dB at
+  1 and 2 kHz (a one-off check in the `windy` preset); flatter, the narrow-angle one is
+  up to 1.10 dB off per octave band in those bands, and 5.7 dB in a third octave 14 dB
+  below free field, these two in 10 m/s of wind over a hard ground (see
   [Validation](validation.md#the-wide-angle-parabolic-equation)). The wide-angle one (split-step Padé, as in Collins' RAM) marches the field
   with the exact one-way operator, written as a rational function of ten terms, on
   finite differences of fourth order in height, with the ground's impedance as its
