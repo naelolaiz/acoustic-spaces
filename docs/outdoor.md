@@ -714,14 +714,14 @@ is an arc of a circle, so its travel time and its length are exact.
   c + v downwind and c − v upwind, whichever way it turned. In a uniform wind of 15
   m/s it is within 0.02 dB and 0.1 ms of the exact solution in every direction, where
   the effective speed of sound is up to 0.84 dB off; the echo of a façade 40 m
-  downwind comes within 0.01 ms of ray theory's through the wind round the building,
+  downwind comes 0.01 ms off ray theory's through the wind round the building,
   where the effective speed of sound brings it about 10 ms early; in the `windy`
   preset over grass moving air is within
-  0.25 dB of the parabolic equation and the effective speed of sound within 0.39 dB,
+  0.26 dB of the parabolic equation and the effective speed of sound within 0.39 dB,
   0.1 and 0.2 dB on average (see
   [Validation](validation.md#moving-air-in-the-wave-solver)).
   It takes four to five times as long as the effective speed of sound over open
-  ground; round buildings its steps take about seven times as long, after the wind is
+  ground; round buildings its steps take about eight times as long, after the wind is
   made to flow round them (37 s on the 6 million cells of the validation's façade). It
   runs on the CPU only
   (asked for the GPU, it says so and stays on the CPU), and the run's details say
@@ -749,9 +749,12 @@ is an arc of a circle, so its travel time and its length are exact.
   takes about 40 bytes a cell while it is solved, and 16 bytes a cell more than over
   open ground during the run. Over open, flat ground the atmosphere's wind crosses
   nothing and is carried as it is. The air of the grid's
-  absorbing layer is still, and where the moving air meets it the sound can build up
-  in winds beyond the weather's (in one-off runs from 53 m/s on, a wind at 45 degrees
-  to the grid over open ground, and not at 42 m/s). So each run in moving air is
+  absorbing layer is still. Where the wind crosses its border, each cell's own sound is
+  carried out and silence in, which adds no energy there; and a wave that leaves the
+  moving air for the layer's still air comes back by about half the wind's Mach number:
+  32 to 40 dB below the sound at 10 m/s, against 74 to 78 dB in still air in the same
+  check (25 to 150 Hz on cells of 30 cm; see
+  [Validation](validation.md#moving-air-in-the-wave-solver)). Each run in moving air is
   watched all the same: once the source's pulse has ended, the pressure squared over
   the grid's air, averaged over pieces of at least a quarter second, may not rise to
   twice its lowest level so far, or the run stops with an error.
@@ -1719,7 +1722,9 @@ is an ideal fluid's (see
 [How the simulation bends sound](#how-the-simulation-bends-sound)): no wake and no
 eddies behind a building, whose lee is as windy as its front, and no separation at a
 sharp edge, within a few metres of which it is too fast. Between weather zones its
-wind passes gradually, over a distance that grows with the grid's reach. By default
+wind passes gradually, over a distance that grows with the grid's reach. The air of
+the grid's absorbing layer is still, so a wave that leaves the moving air comes back
+from its border by about half the wind's Mach number. By default
 it takes the wind as
 the rays and the parabolic equation do, as an effective speed of sound, so sound that
 a building sends back towards the source travels at the speed of sound going away from

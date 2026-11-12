@@ -8,8 +8,9 @@ The wave solver takes the wind in one of two ways (:mod:`acoustic_spaces.engine.
 ``effective``, a speed of sound that the wind's component along the horizontal from the
 source changes, as the rays and the parabolic equation take it, or ``moving``, air that
 moves, so that sound goes at c + v downwind and c - v upwind whichever way it turned.
-Moving air's wind flows round the model's solids. Six checks, in the 63 Hz octave band
-from a grid for that band (the dome's on the 125 Hz band's grid too):
+Moving air's wind flows round the model's solids. Seven checks, in the 63 Hz octave band
+from a grid for that band (the dome's on the 125 Hz band's grid too, the border's on
+a grid of its own):
 
 - **Free field over a rigid ground in a uniform wind** of 15 m/s. The source 2 m up,
   listeners 1.5 m up 30 m away downwind, upwind, across the wind and at 45 degrees. In
@@ -48,8 +49,15 @@ from a grid for that band (the dome's on the 125 Hz band's grid too):
   listener in it, in uniform winds of 5, 15 and 30 m/s: over 3 s, how the listener's
   level changes from the second quarter second to the last, against the effective
   speed of sound's run, the fastest wind round the room and the fastest inside it.
+- **The border of the moving air.** The air of the grid's matched layer is still, and
+  a wave that leaves the moving air for it comes back in part, by about half the wind's
+  Mach number. The rigid 8 x 6 m plate of ``wave_solver.py``'s open model in uniform
+  winds of 5 to 40 m/s along the grid and at 45 degrees to it, 25 to 150 Hz on cells of
+  30 cm: what differs at its three listeners from a grid 45 cells larger all round,
+  whose border sends nothing back in the 70 ms of the runs (their last 10 ms faded
+  out), relative to the sound itself.
 - **The time it takes**, moving air against the effective speed of sound, from the
-  runs above.
+  free field's runs and the facade's.
 """
 
 from __future__ import annotations
@@ -768,6 +776,64 @@ def check_room_with_an_opening(winds=(5.0, 15.0, 30.0), length_s: float = 3.0) -
     return rows
 
 
+#: The border's check: its uniform winds (m/s), its cell (m), its runs (s), its band's
+#: edges (Hz, with the widths over which they fade) and how many cells larger all round
+#: the grid of reference is.
+BORDER_WINDS = (5.0, 10.0, 20.0, 40.0)
+BORDER_CELL, BORDER_S, BORDER_FAR = 0.3, 0.07, 45
+BORDER_BAND = ((25.0, 10.0), (150.0, 30.0))
+
+
+def check_border() -> list[dict]:
+    """What the border of the moving air sends back: the plate of ``wave_solver.py``'s
+    open model in still air and in uniform winds along the grid and at 45 degrees to it,
+    on a grid with the default matched layer against one ``BORDER_FAR`` cells larger all
+    round, whose border sends nothing back in the time of the runs. What differs at the
+    three listeners, relative to the sound itself (the runs' last 10 ms fade out, as in
+    that check), and half the wind's Mach number."""
+    import wave_solver
+
+    from acoustic_spaces.engine.wave import COURANT, LAYER_CELLS
+
+    c, h = wave_solver.C, BORDER_CELL
+    rate = c / (COURANT * h)
+    n_fft = 1 << 12
+    (low, rise), (high, fall) = BORDER_BAND
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+    gain = np.clip((f - low) / rise, 0, 1) * np.clip((high - f) / fall, 0, 1)
+
+    def band(pad: int, flow) -> np.ndarray:
+        solver, _ = wave_solver.plate_solver(h, pad, LAYER_CELLS, flow=flow)
+        x = wave_solver._run(solver, rate, h, BORDER_S)[0]
+        x = x * wave_solver._fade(x.shape[1], rate, x.shape[1] / rate, 0.01)
+        return np.fft.irfft(np.fft.rfft(x, n_fft, axis=1) * gain, n_fft, axis=1)[:, : x.shape[1]]
+
+    def back(flow) -> list[float]:
+        reference = band(BORDER_FAR + LAYER_CELLS, flow)
+        miss = band(LAYER_CELLS, flow) - reference
+        ratio = np.sum(miss**2, axis=1) / np.sum(reference**2, axis=1)
+        return [float(x) for x in 10 * np.log10(ratio)]
+
+    slant = math.sqrt(0.5)
+    print(
+        "| wind (m/s) | along the grid: listener 1 (dB) | 2 | 3 | at 45 degrees: 1 | 2 | 3 "
+        "| half the Mach number (dB) |"
+    )
+    print("|---:|---:|---:|---:|---:|---:|---:|---:|")
+    still = back(None)
+    rows = [{"wind_m_s": 0.0, "along_db": still, "at_45_db": None, "half_mach_db": None}]
+    print(f"| 0 | {' | '.join(f'{x:.1f}' for x in still)} | | | | |")
+    for wind in BORDER_WINDS:
+        shift = wind * COURANT / c  # cells per step
+        along, at_45 = back((shift, 0.0)), back((shift * slant, shift * slant))
+        half_mach = 20 * math.log10(wind / (2 * c))
+        rows.append(
+            {"wind_m_s": wind, "along_db": along, "at_45_db": at_45, "half_mach_db": half_mach}
+        )
+        print(f"| {wind:g} | {' | '.join(f'{x:.1f}' for x in along + at_45)} | {half_mach:.1f} |")
+    return rows
+
+
 def costs(free: list[dict], facade: list[dict]) -> dict:
     """How long moving air took against the effective speed of sound, from the free
     field's rows (the wind carried as given) and the facade's (the wind made to flow
@@ -812,6 +878,8 @@ def main(argv=None) -> int:
         profiles = check_profiles()
     print("\nA room with an opening downwind, over 3 s\n")
     opening = check_room_with_an_opening()
+    print("\nWhat the border of the moving air sends back, 25 to 150 Hz\n")
+    border = check_border()
     print("\nThe time it takes (alone on the machine, or the times mean nothing)\n")
     took = costs(free, facade)
     print(f"\n{time.perf_counter() - started:.0f} s")
@@ -822,6 +890,7 @@ def main(argv=None) -> int:
             "facade": facade,
             "profiles": profiles,
             "opening": opening,
+            "border": border,
             "costs": took,
         }
         args.json.write_text(json.dumps(out, indent=2))

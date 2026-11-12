@@ -2987,8 +2987,8 @@ def test_the_wind_round_the_solids_carries_as_the_given_wind_where_they_agree() 
     central differences. With one cell's wind a hundred-thousandth off, the solver makes
     the wind flow round (it changes along that cell's row), and it comes out the same
     wind to that part: the faces' carrying is then the same operator, and the runs agree
-    to single precision's rounding, before the first sound is back from the matched
-    layer's edge, where the two meet the layer's still air each in its own way."""
+    to single precision's rounding. So they do with the matched layer two cells from the
+    plate and sound back from its border, which the two ways close by the same rule."""
 
     def flow(nudge: float):
         def given(centres):
@@ -3006,6 +3006,69 @@ def test_the_wind_round_the_solids_carries_as_the_given_wind_where_they_agree() 
     assert solver.wind_fastest == pytest.approx(0.2, rel=2e-5)
     assert np.abs(as_given - still).max() > 0.5 * np.abs(still).max()  # the wind is heard
     assert np.abs(round_it - as_given).max() < 2e-6 * np.abs(as_given).max()
+    as_given, plain, _ = _plate(0.3, LAYER_CELLS, LAYER_CELLS, 0.08, flow=flow(0.0))
+    round_it, solver, _ = _plate(0.3, LAYER_CELLS, LAYER_CELLS, 0.08, flow=flow(1e-5))
+    assert not plain.wind_round and solver.wind_round
+    assert np.abs(round_it - as_given).max() < 2e-6 * np.abs(as_given).max()
+
+
+def test_moving_air_adds_no_sound_at_the_matched_layer_s_border() -> None:
+    """In the open the moving air meets the matched layer's still air, which is not
+    carried. Through the faces between them each cell's own value goes out and silence
+    comes in, which takes energy and adds none: in winds far beyond the weather's the
+    sound dies away. Carried with the layer's own values it grew at that border, within
+    these steps: under a wind at 45 degrees to the grid over the open plate (carried as
+    given) and under a wind along x past a block (the wind round it)."""
+    h = 0.5
+
+    def levels(flow, block: bool):
+        solver, rate, _, _ = _plate_solver(h, LAYER_CELLS, LAYER_CELLS, flow=flow, block=block)
+        solver.run(_drive(rate, h, 500))
+        first, later = solver.mean_square, []
+        for _ in range(7):
+            solver.run(np.zeros(500, np.float32))
+            later.append(solver.mean_square)
+        return solver, first, later
+
+    def slanted(centres):
+        return np.full(len(centres), 0.3), np.full(len(centres), 0.3)
+
+    def along(centres):
+        return np.full(len(centres), 0.3), np.zeros(len(centres))
+
+    solver, first, later = levels(slanted, False)
+    assert solver.flowing and not solver.wind_round
+    assert max(later[2:]) < 1e-6 * first
+    solver, first, later = levels(along, True)
+    assert solver.wind_round and 0.4 < solver.wind_fastest < 0.5
+    assert max(later[2:]) < 1e-6 * first
+
+
+def test_moving_air_s_border_sends_back_about_half_the_wind_s_mach_number() -> None:
+    """A wave that leaves the moving air for the matched layer's still air comes back by
+    about half the wind's Mach number (1.5 % at 10 m/s, 37 dB down). That is a limit of
+    the still layer, which this test records: with either rule at the border it is
+    about half the Mach number (for the layer in still air see
+    test_matched_layer_takes_in_the_sound_leaving_an_open_model). Against a grid 45
+    cells larger all round, from whose edge nothing comes back in time."""
+    h, seconds = 0.4, 0.07
+
+    def flow(centres):  # 10 m/s along x
+        return np.full(len(centres), 10.0 * COURANT / C), np.zeros(len(centres))
+
+    reference, _, rate = _plate(h, 45 + LAYER_CELLS, LAYER_CELLS, seconds, flow=flow)
+    pressure, solver, _ = _plate(h, LAYER_CELLS, LAYER_CELLS, seconds, flow=flow)
+    assert solver.flowing and solver.layer_cells > 0
+    n_fft = 1 << 12
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+    gain = np.clip((f - 25) / 10, 0, 1) * np.clip((150 - f) / 30, 0, 1)
+
+    def band(x):
+        return np.fft.irfft(np.fft.rfft(x, n_fft, axis=1) * gain, n_fft, axis=1)[:, : x.shape[1]]
+
+    miss = band(pressure) - band(reference)
+    back = 10 * np.log10(np.sum(miss**2, axis=1) / np.sum(band(reference) ** 2, axis=1))
+    assert np.all(back < -32) and np.all(back > -43)
 
 
 def test_the_wind_round_the_solids_is_the_same_on_any_number_of_threads() -> None:
