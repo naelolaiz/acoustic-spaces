@@ -163,9 +163,14 @@ Edge diffraction:
   ends, on a ground with an impedance, or with the ends closer to each other than about
   a quarter of its height, both within about a twentieth of it from the barrier, or
   between the two; only a barrier alone on a rigid ground or roof is taken as the strip
-  it makes with its image), and steps; a wall given as a thin building (up to 0.4 dB
-  low); the tops' place in the march's cells (up to 0.2 dB); edges that end beside the
-  way, absorbing roofs and walls, the bands above 500 Hz, and wind.
+  it makes with its image), and steps; a row that the way crosses at a slant where an
+  end's way to it, or its image's in the ground, is steep (refused; not tried yet: each
+  combination of the ends' waves and their images on its own way, with the far end's own
+  field in place of the march's arrival there), edges in a row turned more than 60° and
+  one edge more than 75° (refused), and edges at different slants (not measured); a wall
+  given as a thin building (up to 0.4 dB low); the tops' place in the march's cells (up
+  to 0.2 dB); edges that end beside the way, absorbing roofs and walls, the bands above
+  500 Hz, and wind.
 - [ ] Paths over edges tested from the edge itself, not from a millionth of the
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9

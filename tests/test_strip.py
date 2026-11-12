@@ -537,3 +537,239 @@ def test_the_density_takes_more_terms_for_an_end_close_to_the_barrier(monkeypatc
         away = math.hypot(listener[0], 1.5 - 1.1)  # from the barrier's top
         assert terms == math.ceil(furthest * 1.1 + 12 + 5.0 * 1.1 / away)
     assert asked[2][1] - asked[1][1] > 7
+
+
+# -- ends offset along the barrier: a way that crosses it at a slant ---------------------------
+
+
+@pytest.mark.parametrize(
+    "wavenumber, reach, along, within, field_within",
+    [
+        (0.8, 5.5, 3.0, 2e-7, 1e-6),
+        (3.0, 5.5, 9.5, 2e-6, 1e-5),
+        (9.0, 5.5, 9.5, 2e-5, 2e-5),
+        (0.8, 2.0, 7.4, 2e-4, 5e-3),
+        (3.0, 5.5, 20.5, 5e-5, 5e-4),
+    ],
+)
+def test_a_point_source_s_field_is_the_sum_for_ends_offset_along_the_barrier(
+    wavenumber: float, reach: float, along: float, within: float, field_within: float
+) -> None:
+    """For ends ``along`` m apart along the barrier, the sum over the wavenumbers along
+    it (in from the second quadrant, along the real axis, out into the fourth) gives a
+    point source's field exp(ikR) / R, R the distance with the offset, and that
+    field's rate of change across the barrier, which is what the strip's shed sound is
+    made of: for the straight way and for longer ones, up to the longest that the
+    points on the real axis are set by. The rate of change holds to 2e-7 at 29
+    degrees from across the barrier, 2e-6 to 2e-5 at 60 and 5e-5 to 2e-4 at 75; the
+    field itself, a logarithm at the wavenumber across the barrier of 0, close to
+    which the line out passes at a steep slant, to 1e-6, 2e-5 and 5e-3. Nowhere does
+    the sum leave the quarter plane in which the strip's equation is solved."""
+    longest = 1.6 * reach + 4.0
+    kappa, weights = strip._offset(wavenumber, reach, along, longest)
+    assert np.all(kappa.real >= 0.0) and np.all(kappa.imag >= 0.0)
+    for r in (reach, 1.2 * reach, longest):
+        distance = math.hypot(r, along)
+        exact = np.exp(1j * wavenumber * distance) / distance
+        field = np.sum(weights * 0.25j * hankel1(0, kappa * r))
+        assert abs(field - exact) < field_within * abs(exact)
+        rate = (1j * wavenumber - 1.0 / distance) * exact * r / distance
+        summed = np.sum(weights * -0.25j * kappa * hankel1(1, kappa * r))
+        assert abs(summed - rate) < within * abs(rate)
+
+
+def test_the_sum_for_offset_ends_takes_more_nodes_at_a_steep_slant() -> None:
+    """The sum's nodes: ``RAY_NODES`` in and as many out up to 45 degrees from across
+    the barrier (beyond that the cotangent of the angle between the way and the
+    barrier times as many), and on the real axis ``REAL_POINTS`` and one for each
+    radian that the phase of the longest wave, against the straight way's, turns
+    over a radian of the points' angle where it turns fastest: from one point to the
+    next it turns by less than half a turn."""
+    reach, longest = 5.5, 12.0
+    for wavenumber, along in ((0.8, 3.0), (9.0, 5.5), (3.0, 9.5), (9.0, 20.5), (30.0, 20.5)):
+        beta = math.atan2(reach, along)
+        out = math.ceil(strip.RAY_NODES * max(1.0, 1.0 / math.tan(min(0.5 * math.pi, beta))))
+        kappa, weights = strip._offset(wavenumber, reach, along, longest)
+        on_the_axis = len(kappa) - strip.RAY_NODES - out
+        assert len(kappa) == len(weights)
+        # The points' angle t, x = cos(t), sweeps theta from a right angle down to beta.
+        t = np.linspace(0.0, math.pi, 20001)
+        span = 0.5 * math.pi - beta
+        fastest = np.max(np.cos(beta + 0.5 * span * (1.0 + np.cos(t))) * 0.5 * span * np.sin(t))
+        turns = wavenumber * (longest - reach) * float(fastest)
+        assert on_the_axis == strip.REAL_POINTS + math.ceil(turns)
+        real = kappa[strip.RAY_NODES : strip.RAY_NODES + on_the_axis]
+        assert np.all(real.imag == 0.0) and np.all(np.diff(real.real) < 0.0)
+        assert np.max(np.abs(np.diff((longest - reach) * real.real))) < math.pi
+    assert len(strip._offset(9.0, reach, 20.5, longest)[0]) > 2 * len(
+        strip._offset(9.0, reach, 5.5, longest)[0]
+    )
+
+
+def test_the_points_on_the_real_axis_hold_the_sum_behind_a_barrier_of_many_wavelengths(
+    monkeypatch,
+) -> None:
+    """The strip's waves that cross it from one of its edges to the other, the
+    barrier's top and the top's image, are each twice the barrier's height longer than
+    the one before, and the points on the real axis have to hold them. At k H = 31 and
+    60 degrees, 6 and 10 m from a barrier 1 m high: with ``CROSSINGS`` of them the
+    sound shed is within 2e-7 of that with twice as many and three times
+    ``REAL_POINTS`` (7e-8), where two crossings leave it 1.32e-2 off."""
+    k, ends, slant = np.array([31.0]), ((6.0, 0.5), (10.0, 1.5)), math.radians(60.0)
+    found = strip.beyond_screen(k, 1.0, *ends, slant=slant)
+    monkeypatch.setattr(strip, "CROSSINGS", 2 * strip.CROSSINGS)
+    monkeypatch.setattr(strip, "REAL_POINTS", 3 * strip.REAL_POINTS)
+    finer = strip.beyond_screen(k, 1.0, *ends, slant=slant)
+    assert abs(found[0] - finer[0]) < 2e-7 * abs(finer[0])
+    monkeypatch.setattr(strip, "CROSSINGS", 2)
+    monkeypatch.setattr(strip, "REAL_POINTS", 16)
+    fewer = strip.beyond_screen(k, 1.0, *ends, slant=slant)
+    assert abs(fewer[0] - finer[0]) > 5e-3 * abs(finer[0])
+
+
+def test_the_longest_wave_that_the_points_hold_is_from_image_to_image(monkeypatch) -> None:
+    """The longest of the strip's waves that the points on the real axis have to hold
+    goes from the image of one end in the plane over the barrier's top to the image of
+    the other, and ``CROSSINGS`` times across the strip, from the top to the top's
+    image: its length is what ``beyond_screen`` hands to the sum, with the straight
+    way's length across the barrier and how far apart the ends are along it."""
+    seen = []
+    offset = strip._offset
+
+    def watched(wavenumber, reach, along, longest):
+        seen.append((reach, along, longest))
+        return offset(wavenumber, reach, along, longest)
+
+    monkeypatch.setattr(strip, "_offset", watched)
+    height, (ds, zs), (dl, zl), slant = 1.0, (1.0, 3.0), (2.0, 2.5), math.radians(40.0)
+    assert strip.beyond_screen(np.array([2.0]), height, (ds, zs), (dl, zl), slant=slant) is not None
+    ((reach, along, longest),) = seen
+    # Across the barrier: the barrier at 0, the ends' images below the plane.
+    top = np.array([0.0, height])
+    images = np.array([-ds * math.cos(slant), -zs]), np.array([dl * math.cos(slant), -zl])
+    over = sum(float(np.linalg.norm(image - top)) for image in images)
+    assert longest == pytest.approx(over + strip.CROSSINGS * 2.0 * height, rel=1e-12)
+    assert reach == pytest.approx(math.hypot((ds + dl) * math.cos(slant), zl - zs), rel=1e-12)
+    assert along == pytest.approx((ds + dl) * math.sin(slant), rel=1e-12)
+
+
+@pytest.mark.parametrize(
+    "height, source, listener, slant, hertz, within",
+    [
+        (1.0, (2.0, 0.5), (3.5, 1.5), 30.0, (44.5, 250.0), 2e-6),
+        (1.0, (2.0, 0.5), (3.5, 1.5), 60.0, (44.5, 250.0), 4e-5),
+        (0.3, (5.0, 1.0), (10.0, 1.5), 75.0, (125.0, 500.0), 4e-5),
+        (2.0, (3.0, 0.3), (50.0, 4.0), 45.0, (63.0,), 1e-6),
+    ],
+)
+def test_what_the_rigid_barrier_sheds_at_a_slant_against_the_reference_written_apart(
+    monkeypatch, height, source, listener, slant, hertz, within
+) -> None:
+    """The rigid strip's shed sound for a way that crosses the barrier at a slant (the
+    screen's part taken out of :func:`strip.beyond_screen`), against the reference's
+    for ends offset along the barrier (validation/barrier_strip.py: the sum over the
+    real wavenumbers along the barrier and the decaying ones, each times the cosine
+    of the wavenumber times the offset): within 2e-6 of itself at 30 degrees and
+    4e-5 at 60 and 75. The ends' distances are along the way: across the barrier
+    they are those times the slant's cosine."""
+    slant = math.radians(slant)
+    k = 2.0 * math.pi * np.array(hertz) / 343.2
+    with monkeypatch.context() as patched:
+        patched.setattr(strip, "_screen", lambda kappa, *rest: np.zeros(len(kappa), dtype=complex))
+        found = strip.beyond_screen(k, height, source, listener, slant)
+        head_on = strip.beyond_screen(k, height, source, listener)
+    across = (-source[0] * math.cos(slant), source[1]), (listener[0] * math.cos(slant), listener[1])
+    along = (source[0] + listener[0]) * math.sin(slant)
+    _, exact = barrier_strip.point(height, k, *across, along=along)
+    assert np.all(np.abs(found - exact) < within * np.abs(exact))
+    # The offset matters: across the barrier at the same distances it sheds another sound.
+    _, level = barrier_strip.point(height, k, *across)
+    assert np.all(np.abs(found - level) > 0.05 * np.abs(exact))
+    # The screen's part, the marches', is that of a screen across the way.
+    whole = strip.beyond_screen(k, height, source, listener, slant)
+    screen = head_on - strip.beyond_screen(k, height, source, listener)
+    np.testing.assert_allclose(found - whole, screen, rtol=1e-12)
+
+
+def test_a_slant_that_tends_to_none_gives_the_sound_across_the_barrier() -> None:
+    """As the slant tends to 0 the sum for offset ends tends to the one across the
+    barrier (the real axis's part to nothing, the two lines to the ray and its
+    mirror), by the slant's square: to 2e-12 at a millionth of a radian. The slant's
+    sign does not count, nor which end is the source. A slant so small that the ends
+    are no distance apart along the barrier gives the sound across it. Beyond
+    ``SLANT_MOST_DEG`` the sum is not measured, and refused, above ``MOST_KH`` too."""
+    k = np.array([0.8, 4.6])
+    ends = (2.0, 0.5), (3.5, 1.5)
+    head_on = strip.beyond_screen(k, 1.0, *ends)
+    np.testing.assert_allclose(strip.beyond_screen(k, 1.0, *ends, slant=1e-6), head_on, rtol=1e-11)
+    np.testing.assert_allclose(strip.beyond_screen(k, 1.0, *ends, slant=1e-3), head_on, rtol=1e-5)
+    turned = strip.beyond_screen(k, 1.0, *ends, slant=0.7)
+    assert np.all(np.abs(turned - head_on) > 0.05 * np.abs(head_on))
+    np.testing.assert_array_equal(strip.beyond_screen(k, 1.0, *ends, slant=-0.7), turned)
+    np.testing.assert_array_equal(strip.beyond_screen(k, 1.0, *ends[::-1], slant=0.7), turned)
+    most = math.radians(strip.SLANT_MOST_DEG)
+    assert strip.beyond_screen(k, 1.0, *ends, slant=most) is not None
+    for beyond in (most + 0.01, -most - 0.01, 0.5 * math.pi, math.inf, math.nan):
+        with pytest.raises(ValueError, match="a slant of 75 degrees at most"):
+            strip.beyond_screen(k, 1.0, *ends, slant=beyond)
+    above = np.array([1.25 * strip.MOST_KH])
+    assert strip.beyond_screen(above, 1.0, *ends, slant=most) is None
+    with pytest.raises(ValueError, match="a slant of 75 degrees at most"):
+        strip.beyond_screen(above, 1.0, *ends, slant=most + 0.01)
+    # Half a metre between the ends times the sine of the least number is nothing.
+    close = (0.2, 0.5), (0.3, 1.5)
+    np.testing.assert_array_equal(
+        strip.beyond_screen(k, 1.0, *close, slant=5e-324), strip.beyond_screen(k, 1.0, *close)
+    )
+
+
+def test_from_where_the_strip_s_equation_is_solved_at_each_slant(monkeypatch) -> None:
+    """With both ends halfway up a barrier and as far from it as each other along the
+    way, the equation is solved at k H = ``MOST_KH`` from 0.14 of the barrier's height
+    from it across it, 0.16 at 15 degrees, 0.20 at 30, 0.27 at 45, 0.41 at 60 and 0.83 at
+    75, and at k H = 0.15 from 0.35 at 60 degrees and 0.69 at 75: there, and not a
+    hundredth of the height closer. Whether it is solved is decided before it is: the
+    solution is left out here."""
+    monkeypatch.setattr(strip, "_rigid", lambda kappa, *rest: np.zeros(len(kappa), dtype=complex))
+    height = 3.0
+
+    def solved(kh: float, degrees: float, hundredths: int) -> bool:
+        off = 0.01 * hundredths
+        ends = (off * height, 0.5 * height), (off * height, 0.5 * height)
+        k = np.array([kh / height])
+        return strip.beyond_screen(k, height, *ends, slant=math.radians(degrees)) is not None
+
+    highest = zip((0.0, 15.0, 30.0, 45.0, 60.0, 75.0), (14, 16, 20, 27, 41, 83), strict=True)
+    for kh, slants in ((strip.MOST_KH, highest), (0.15, ((60.0, 35), (75.0, 69)))):
+        for slant, first in slants:
+            assert solved(kh, slant, first) and not solved(kh, slant, first - 1), (kh, slant)
+
+
+def test_where_the_strip_s_equation_is_not_solved_at_a_slant() -> None:
+    """At a slant the ends are closer to the barrier across it and the sum reaches
+    further out, so the density's terms run out earlier: with both ends halfway up a
+    barrier and 0.4 of its height from it along the way, the equation is solved up to
+    60 degrees and not at 75; with 0.2 of the height, up to 30 degrees; with 0.8, at
+    75 as well (k H = 0.15; at a higher k H the terms run out further off). ``MOST_KH``
+    is the same at any slant."""
+    low = np.array([0.05])
+    for off, solved in ((0.2, (True, True, False, False)), (0.4, (True, True, True, False))):
+        ends = (off * 3.0, 1.5), (off * 3.0, 1.5)
+        found = [
+            strip.beyond_screen(low, 3.0, *ends, slant=math.radians(slant)) is not None
+            for slant in (0.0, 30.0, 60.0, 75.0)
+        ]
+        assert tuple(found) == solved
+    ends = (0.8 * 3.0, 1.5), (0.8 * 3.0, 1.5)
+    assert strip.beyond_screen(low, 3.0, *ends, slant=math.radians(75.0)) is not None
+    # The distance across the barrier counts: 0.6 and 0.7 of the height from it along
+    # the way at 75 degrees, the ends are 0.16 and 0.18 of it away across.
+    ends = (0.6, 0.5), (0.7, 0.5)
+    assert (
+        strip.beyond_screen(np.array([2.0, 8.0]), 1.0, *ends, slant=math.radians(60.0)) is not None
+    )
+    assert strip.beyond_screen(np.array([2.0, 8.0]), 1.0, *ends, slant=math.radians(75.0)) is None
+    k = np.array([1.0, 2.0])
+    ends = (5.0, 1.0), (5.0, 1.0)
+    assert strip.beyond_screen(k, 0.5 * strip.MOST_KH, *ends, slant=0.5) is not None
+    assert strip.beyond_screen(k, 0.5 * strip.MOST_KH + 0.01, *ends, slant=0.5) is None

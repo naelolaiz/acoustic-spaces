@@ -42,10 +42,12 @@ def level(p: np.ndarray, distance: float) -> float:
     return 10.0 * math.log10(float(np.mean(np.abs(p) ** 2)) * distance**2)
 
 
-def over(obstacles, source, listener, lift: float = LIFT, ground=None, bands=F) -> list[rows.Row]:
+def over(
+    obstacles, source, listener, lift: float = LIFT, ground=None, bands=F, slants=None
+) -> list[rows.Row]:
     """The row's sound in the four bands (or in ``bands``) for a ``source`` and a
     ``listener`` (x, z), the ``obstacles`` (near x, far x, top z) lifted ``lift`` m
-    with them."""
+    with them, turned from across the way by ``slants``."""
     reach = listener[0] - source[0]
     found = []
     for f in bands:
@@ -54,8 +56,18 @@ def over(obstacles, source, listener, lift: float = LIFT, ground=None, bands=F) 
         ends = (up + source[1], reach, up + listener[1])
         # Lifted, the ground's reflection is too steep for the march, and is left out.
         steep = "leave out" if lift else "raise"
-        found.append(rows.over_row(f, C, ground, *ends, standing, steep_reflections=steep))
+        found.append(
+            rows.over_row(f, C, ground, *ends, standing, steep_reflections=steep, slants=slants)
+        )
     return found
+
+
+def turned(place, slant: float, height: float | None = None) -> np.ndarray:
+    """A ``place`` (m along the way from an edge, m up) as the edge has it where the
+    way crosses it ``slant`` radians from across: (m across the edge, m along it, m
+    up, or ``height``)."""
+    up = place[1] if height is None else height
+    return np.array([place[0] * math.cos(slant), place[0] * math.sin(slant), up])
 
 
 def levels(found: list[rows.Row], source, listener, part: str = "pressure") -> np.ndarray:
@@ -316,24 +328,38 @@ def test_screens_level_with_both_ends_let_through_one_over_their_number_plus_one
         assert np.all(np.abs(row.pressure) > np.abs(row.marched))
 
 
-def over_one_screen(source, listener, heights_from: float = 0.0) -> np.ndarray:
-    """(4,) the level (dB re free field) in the four bands behind a rigid half-plane
-    with its top at x = 0, z = ``heights_from``. In free space the exact solution: the
-    direct sound, where the listener sees the source, and the Biot-Tolstoy-Medwin
-    integral over the edge. With ``heights_from`` above 0, on a rigid ground at z = 0:
-    the four paths over the top, by the images of the source and the listener in the
-    ground, without the sound that goes from the top down the screen to the ground
-    and back."""
+def edge_integral(edge, a: np.ndarray, b: np.ndarray, band: np.ndarray) -> np.ndarray:
+    """The Biot-Tolstoy-Medwin integral over ``edge`` from ``a`` to ``b`` (across it,
+    along it, up); for ends apart along the edge over three times that distance of
+    it either way where that is more than its usual length."""
+    apart = abs(float(b[1] - a[1]))
+    if apart == 0.0:
+        return edge_diffraction.btm_first(edge, a, b, band)
+    reach = max(edge_diffraction.HALF_LENGTH, 3.0 * apart)
+    return edge_diffraction.btm_first(edge, a, b, band, half_length=reach)
+
+
+def over_one_screen(
+    source, listener, heights_from: float = 0.0, slant: float = 0.0, bands=F
+) -> np.ndarray:
+    """(4,) the level (dB re free field) in the four bands (or in ``bands``) behind a
+    rigid half-plane with its top at x = 0, z = ``heights_from``. In free space the
+    exact solution: the direct sound, where the listener sees the source, and the
+    Biot-Tolstoy-Medwin integral over the edge. With ``heights_from`` above 0, on a
+    rigid ground at z = 0: the four paths over the top, by the images of the source
+    and the listener in the ground, without the sound that goes from the top down the
+    screen to the ground and back. With a ``slant`` (radians) the way between the
+    ends, along which their x is, crosses the half-plane that far from across it."""
     edge = edge_diffraction.Edge([0, 0, heights_from], [0, 1, 0], [0, 0, -1], [1, 0, 0], 2.0)
     signs = (1.0, -1.0) if heights_from > 0.0 else (1.0,)
     distance = math.hypot(listener[0] - source[0], listener[1] - source[1])
     out = []
-    for band in 2.0 * math.pi * F / C:
+    for band in 2.0 * math.pi * np.asarray(bands) / C:
         p = np.zeros(len(band), dtype=complex)
         for zs in (sign * source[1] for sign in signs):
             for zl in (sign * listener[1] for sign in signs):
-                a, b = np.array([source[0], 0.0, zs]), np.array([listener[0], 0.0, zl])
-                p += edge_diffraction.btm_first(edge, a, b, band)
+                a, b = turned(source, slant, zs), turned(listener, slant, zl)
+                p += edge_integral(edge, a, b, band)
                 if zs + (zl - zs) * -source[0] / (listener[0] - source[0]) > heights_from:
                     way = float(np.linalg.norm(b - a))
                     p += np.exp(-1j * band * way) / way  # in sight over the top
@@ -438,10 +464,13 @@ def test_the_exact_levels_are_the_reference_s(top, source, listener, band) -> No
     np.testing.assert_allclose(found, EXACT[top, source, listener][band], atol=2e-3)
 
 
-def on_a_rigid_ground(top: float, source, listener) -> list[rows.Row]:
-    """The four bands' sound over one rigid screen ``top`` m high on a rigid ground."""
+def on_a_rigid_ground(top: float, source, listener, slant=None) -> list[rows.Row]:
+    """The four bands' sound over one rigid screen ``top`` m high on a rigid ground,
+    turned ``slant`` radians from across the way."""
     reach, row = listener[0] - source[0], [(-source[0], -source[0], top)]
-    return [rows.over_row(f, C, None, source[1], reach, listener[1], row) for f in F]
+    turn = None if slant is None else [slant]
+    ends = (source[1], reach, listener[1])
+    return [rows.over_row(f, C, None, *ends, row, slants=turn) for f in F]
 
 
 @pytest.mark.parametrize(
@@ -1413,7 +1442,7 @@ def test_a_source_lying_on_grass_lights_the_first_edge_with_its_image_s_reflecti
         way = rows._march_from(
             f, C, reach, top, parabolic.STEPS_PER_WAVELENGTH, lambda r, z=ground: z, 0.0, zr, row
         )()
-        (own, a, _, _), (image, also, _, _) = rows._lit(way, k, ("screen", 20.0, 0.05))
+        (own, a, *_), (image, also, *_) = rows._lit(way, k, ("screen", 20.0, 0.05))
         assert a == also == math.hypot(20.0, 0.05)
         at_top = np.conj(spherical_reflection(np.conj(1.0 / ground), 0.05 / a, k, a))
         np.testing.assert_allclose(image / own, at_top, rtol=1e-12)
@@ -1612,24 +1641,26 @@ def test_a_march_that_begins_at_its_end_takes_the_way_up_to_the_tops() -> None:
         assert abs(level(changing.pressure, reach) - level(same.pressure, reach)) < 0.25
 
 
-def over_a_corner(source, listener, roof: float = -1.0) -> np.ndarray:
+def over_a_corner(source, listener, roof: float = -1.0, slant: float = 0.0) -> np.ndarray:
     """(4,) the exact level (dB re free field) in the four bands at the corner, at
     x = 0 and z = 0, of a rigid roof that goes on without end before it (``roof`` -1:
     its far corner) or past it (1: its near corner), with its wall below the corner:
     the direct sound and the reflection off the roof, where the listener sees the
     source and its image in the roof, and the Biot-Tolstoy-Medwin integral over the
-    corner, a wedge open over three right angles."""
+    corner, a wedge open over three right angles. With a ``slant`` (radians) the way
+    between the ends, along which their x is, crosses the corner that far from
+    across it."""
     edge = edge_diffraction.Edge([0, 0, 0], [0, 1, 0], [roof, 0, 0], [0, 0, 1], 1.5)
-    a, b = np.array([source[0], 0.0, source[1]]), np.array([listener[0], 0.0, listener[1]])
+    a, b = turned(source, slant), turned(listener, slant)
     round_s = math.atan2(source[1], roof * source[0]) % (2.0 * math.pi)
     round_l = math.atan2(listener[1], roof * listener[0]) % (2.0 * math.pi)
     seen = (abs(round_l - round_s) < math.pi, round_l + round_s < math.pi)
     out = []
     for band in 2.0 * math.pi * F / C:
-        p = edge_diffraction.btm_first(edge, a, b, band)
+        p = edge_integral(edge, a, b, band)
         for there, height in zip(seen, (a[2], -a[2]), strict=True):
             if there:
-                way = float(np.linalg.norm(b - np.array([a[0], 0.0, height])))
+                way = float(np.linalg.norm(b - np.array([a[0], a[1], height])))
                 p = p + np.exp(-1j * band * way) / way
         out.append(level(p, float(np.linalg.norm(b - a))))
     return np.array(out)
@@ -2017,8 +2048,11 @@ def test_an_end_over_a_roof_lights_its_first_top_with_its_image_in_the_roof(monk
     ready = (f, C, reach, top, parabolic.STEPS_PER_WAVELENGTH, lambda r: grass)
     way = rows._march_from(*ready, 2.5, zr, row)()
     assert (way.first, way.under) == (4.0, 2.0) and np.all(np.isinf(way.ground))
-    (own, a, to_own, apart), (image, b, to_image, also) = rows._lit(way, k, ("screen", 4.0, 3.0))
+    (own, a, to_own, apart, path), (image, b, to_image, also, below) = rows._lit(
+        way, k, ("screen", 4.0, 3.0)
+    )
     assert apart and also
+    assert (path, below) == ([(0.0, 2.5), (4.0, 3.0)], [(0.0, 1.5), (4.0, 3.0)])
     assert (a, to_own) == (math.hypot(4.0, 0.5), (-4.0, -0.5))
     assert (b, to_image) == (math.hypot(4.0, 1.5), (-4.0, -1.5))
     np.testing.assert_allclose(own, np.exp(1j * k * a) / math.sqrt(a))
@@ -2035,7 +2069,7 @@ def test_an_end_over_a_roof_lights_its_first_top_with_its_image_in_the_roof(monk
     np.testing.assert_allclose(field(z), both / 2.0, rtol=1e-12)
     on_it = rows._march_from(*ready, 2.0, zr, row)()
     np.testing.assert_allclose(given[1][1](z), 2.0 * rows._wave(k, np.hypot(4.0, z - 2.0)) / 2.0)
-    (own, a, to_own, _), (image, b, to_image, _) = rows._lit(on_it, k, ("screen", 4.0, 3.0))
+    (own, a, to_own, *_), (image, b, to_image, *_) = rows._lit(on_it, k, ("screen", 4.0, 3.0))
     assert (a, to_own) == (b, to_image) and np.array_equal(own, image)
     # Any other edge is lit by the marched field.
     assert [wave[3] for wave in rows._lit(way, k, ("screen", 10.0, 2.5))] == [False]
@@ -2050,9 +2084,9 @@ def test_a_roof_s_corner_is_told_the_own_waves_of_an_end_over_the_roof(monkeypat
     told = []
     real = rows._corner
 
-    def spy(k, kl, outside, along, inside=None):
+    def spy(k, kl, outside, along, inside=None, slant=None):
         told.append((outside, along, inside))
-        return real(k, kl, outside, along, inside)
+        return real(k, kl, outside, along, inside, slant)
 
     monkeypatch.setattr(rows, "_corner", spy)
     # A source 1 m above a roof 2 m up, 2 m before its far corner; a listener 6 m past
@@ -2142,3 +2176,524 @@ def test_the_absorbing_layer_starts_above_everything_and_rises_with_the_range() 
     assert rows.layer_top(1.5, 4.0, 100.0, [(40.0, 50.0, 8.0)]) == 8.0 + rows.HEADROOM_M
     assert rows.layer_top(30.0, 4.0, 100.0, []) == 30.0 + rows.HEADROOM_M
     assert rows.layer_top(1.5, 1.5, 1000.0, [(40.0, 50.0, 8.0)]) == rows.TOP_SLOPE * 1000.0
+
+
+# -- ways that cross the row at a slant ------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "source, listener, slant, within, lacking",
+    [
+        ((-10.0, -0.5), (15.0, -0.5), 30.0, 0.05, 0.08),
+        ((-10.0, -0.5), (15.0, -0.5), 75.0, 0.05, 1.4),
+        ((-3.0, -2.0), (3.0, -2.0), 60.0, 0.1, 1.2),
+        ((-10.0, -2.0), (5.0, 0.5), 60.0, 0.05, 0.7),
+        ((-1.0, -3.0), (20.0, -1.0), 30.0, 0.1, 0.55),
+        ((-1.0, -3.0), (20.0, -1.0), 75.0, 0.1, 4.3),
+    ],
+)
+def test_one_rigid_screen_at_a_slant_against_the_exact_edge_integral(
+    source, listener, slant, within, lacking
+) -> None:
+    """A rigid half-plane that the way between the ends crosses 30 to 75 degrees from
+    across it, the ends 1 to 20 m from it along the way: within 0.05 to 0.1 dB of the
+    direct sound plus the Biot-Tolstoy-Medwin integral over the edge in every band.
+    Taken as an edge across the way, as the vertical section along the way shows it,
+    the same solver is 0.08 to 5.3 dB low."""
+    turn = math.radians(slant)
+    exact = over_one_screen(source, listener, slant=turn)
+    found = over([(0.0, 0.0, 0.0)], source, listener, slants=[turn])
+    np.testing.assert_allclose(levels(found, source, listener), exact, atol=within)
+    across = over([(0.0, 0.0, 0.0)], source, listener)
+    assert np.all(levels(across, source, listener) < exact - lacking)
+
+
+@pytest.mark.parametrize(
+    "source, listener, slant, within, lacking",
+    [
+        ((-8.0, 1.0), (15.0, -2.0), 60.0, 0.05, 0.25),
+        ((-5.0, 0.3), (15.0, -3.0), 30.0, 0.05, 0.07),
+        ((-5.0, 0.3), (15.0, -3.0), 60.0, 0.1, 0.45),
+        ((-3.0, 1.5), (15.0, -6.0), 60.0, 0.1, 0.1),
+        ((-1.0, 0.0), (2.0, -8.0), 30.0, 0.15, 0.35),
+        ((-1.0, 0.0), (2.0, -8.0), 60.0, 0.4, 1.7),
+    ],
+)
+def test_a_roof_s_corner_at_a_slant_against_the_exact_edge_integral(
+    source, listener, slant, within, lacking
+) -> None:
+    """A source on a rigid roof or up to 1.5 m above it, 1 to 8 m along the way before
+    the roof's far corner, which the way crosses 30 or 60 degrees from across it, and
+    a listener past the corner, 2 to 8 m below the roof: within 0.05 to 0.15 dB of
+    the exact solution for the corner (the direct sound, the reflection off the roof
+    and the edge integral), and 0.4 dB with the source on the roof a metre before the
+    corner at 60 degrees, where it is a quarter of that across the corner; from
+    either end. With the corner taken as across the way the solver is 0.07 to 2.9 dB
+    low."""
+    turn = math.radians(slant)
+    exact = over_a_corner(source, listener, slant=turn)
+    found = over([(-30.0, 0.0, 0.0)], source, listener, slants=[turn])
+    np.testing.assert_allclose(levels(found, source, listener), exact, atol=within)
+    across = over([(-30.0, 0.0, 0.0)], source, listener)
+    assert np.all(levels(across, source, listener) < exact - lacking)
+    swapped = (-listener[0], listener[1]), (-source[0], source[1])
+    found = over([(0.0, 30.0, 0.0)], *swapped, slants=[turn])
+    np.testing.assert_allclose(levels(found, *swapped), exact, atol=within)
+
+
+@pytest.mark.parametrize(
+    "source, listener, slant, lacking",
+    [((-10.0, 1.5), (15.0, 1.5), 60.0, 1.9), ((-5.0, 0.5), (20.0, 2.0), 30.0, 0.7)],
+)
+def test_a_high_screen_on_a_rigid_ground_at_a_slant_against_the_four_paths(
+    source, listener, slant, lacking
+) -> None:
+    """A screen 8 m high on a rigid ground, crossed 30 or 60 degrees from across it, in
+    the 500 Hz band (k H is 52 and more: the edges' terms, lit by the end and by its
+    image in the ground, each from its own direction): within 0.05 dB of the four
+    paths over the top, each by the exact edge integral; 0.7 and 1.9 dB off with the
+    screen taken as across the way."""
+    turn, band = math.radians(slant), F[3:]
+    exact = over_one_screen(source, listener, heights_from=8.0, slant=turn, bands=band)
+    reach, row = listener[0] - source[0], [(-source[0], -source[0], 8.0)]
+    ends = (band[0], C, None, source[1], reach, listener[1], row)
+    found = [rows.over_row(*ends, slants=[turn])]
+    np.testing.assert_allclose(levels(found, source, listener), exact, atol=0.05)
+    assert abs(levels([rows.over_row(*ends)], source, listener)[0] - exact[0]) > lacking
+
+
+def test_slants_of_zero_change_nothing() -> None:
+    """With every slant 0 the sound is the same as without slants, bit for bit: over
+    screens and roofs high above the ground, a barrier on a rigid ground (the strip)
+    and a source over a roof with a barrier on it."""
+    lifted = [(a + 9.99, b + 9.99, LIFT + h) for a, b, h in ROOF_AND_SCREEN + THREE_SCREENS]
+    for ends, row, more in (
+        ((LIFT + 0.5, 25.0, LIFT - 1.0), lifted, {"steep_reflections": "leave out"}),
+        ((1.5, 25.0, 1.5), [(10.0, 10.0, 2.0)], {}),
+        ((9.0, 30.0, 1.5), [(-5.0, 10.0, 8.0), (10.0, 10.0, 9.1)], {}),
+    ):
+        plain = rows.over_row(F[1], C, None, *ends, row, **more)
+        for slants in ([0.0] * len(row), [(0.0, -0.0)] * len(row)):
+            flat = rows.over_row(F[1], C, None, *ends, row, slants=slants, **more)
+            assert np.array_equal(flat.marched, plain.marched)
+            assert np.array_equal(flat.edges, plain.edges)
+            assert np.any(plain.edges != 0.0)
+
+
+@pytest.mark.parametrize(
+    "row, slants",
+    [
+        (ROOF_AND_SCREEN, [(0.3, 0.9), 0.5]),
+        (THREE_SCREENS, [0.2, 0.7, 1.0]),
+        (TWO_ROOFS, [(0.6, 0.6), (1.0, 0.2)]),
+    ],
+)
+def test_the_sound_is_the_same_with_the_ends_swapped_at_a_slant(row, slants) -> None:
+    """Edges at different slants, and the two corners of a roof each at its own: the
+    same sound from either end, with the row and the sides' slants the other way
+    round; and not the sound of the row across the way."""
+    f = F[3]
+    reach, zs, zr = 25.0, LIFT + 0.5, LIFT - 1.0
+    standing = [(a + 9.99, b + 9.99, LIFT + h) for a, b, h in row]
+    mirrored = [(reach - b, reach - a, h) for a, b, h in standing]
+    back = [slant[::-1] if isinstance(slant, tuple) else slant for slant in slants]
+    more = {"steep_reflections": "leave out"}
+    one = rows.over_row(f, C, None, zs, reach, zr, standing, slants=slants, **more)
+    other = rows.over_row(f, C, None, zr, reach, zs, mirrored, slants=back, **more)
+    np.testing.assert_allclose(other.pressure, one.pressure, rtol=1e-6)
+    np.testing.assert_allclose(other.edges, one.edges, rtol=1e-6)
+    across = rows.over_row(f, C, None, zs, reach, zr, standing, **more)
+    assert np.all(np.abs(one.edges - across.edges) > 0.02 * np.abs(across.pressure))
+
+
+#: A thin rigid barrier on a rigid plane that the way between the ends crosses at a
+#: slant: by its height (m), the source's and the listener's place (m along the way
+#: from its foot, m up) and the way's angle from across it (degrees), the exact level
+#: (dB re free field) in each of the four bands that ends at k H = 32 or below, None
+#: in the others. From ``validation/barrier_strip.py`` for ends offset along the
+#: barrier (:func:`test_the_exact_levels_at_a_slant_are_the_reference_s` holds it to
+#: these numbers); with twice the nodes of its sums the levels are the same to the
+#: last digit given.
+EXACT_AT_A_SLANT = {
+    (2.0, (-10.0, 1.5), (15.0, 1.5), 60.0): [5.213, -1.451, -11.719, -6.488],
+    (1.0, (-10.0, 2.0), (15.0, 0.2), 45.0): [6.571, 3.108, -1.195, 1.290],
+    (3.0, (-5.0, 0.0), (20.0, 1.5), 30.0): [1.153, -1.937, -9.160, None],
+    (3.0, (-5.0, 0.0), (20.0, 1.5), 75.0): [5.110, -0.105, -8.261, None],
+    (1.0, (-0.5, 0.5), (15.0, 1.5), 60.0): [6.847, 4.346, -6.239, -8.041],
+    (0.1, (-0.5, 0.01), (5.0, 1.51), 60.0): [6.018, 6.055, 6.173, 6.438],
+    (1.0, (-2.0, 0.5), (3.5, 1.5), 45.0): [5.282, -1.687, -10.157, -7.215],
+}
+
+
+@pytest.mark.parametrize(
+    "top, source, listener, slant, band",
+    [
+        (1.0, (-10.0, 2.0), (15.0, 0.2), 45.0, 0),
+        (0.1, (-0.5, 0.01), (5.0, 1.51), 60.0, 2),
+    ],
+)
+def test_the_exact_levels_at_a_slant_are_the_reference_s(
+    top, source, listener, slant, band
+) -> None:
+    """The levels of :data:`EXACT_AT_A_SLANT` are what ``validation/barrier_strip.py``
+    computes with the ends where they are across the barrier (their distances along
+    the way times the slant's cosine) and offset along it."""
+    k = 2.0 * math.pi * F[band : band + 1] / C
+    cosine, sine = math.cos(math.radians(slant)), math.sin(math.radians(slant))
+    across = (source[0] * cosine, source[1]), (listener[0] * cosine, listener[1])
+    along = (listener[0] - source[0]) * sine
+    found = barrier_strip.levels(top, *across, k, along=along)
+    np.testing.assert_allclose(
+        found, EXACT_AT_A_SLANT[top, source, listener, slant][band], atol=2e-3
+    )
+
+
+@pytest.mark.parametrize(
+    "top, source, listener, slant, within, not_turned",
+    [
+        (2.0, (-10.0, 1.5), (15.0, 1.5), 60.0, 0.03, (3.2, 3.5)),
+        (1.0, (-10.0, 2.0), (15.0, 0.2), 45.0, 0.02, (1.0, 1.15)),
+        (3.0, (-5.0, 0.0), (20.0, 1.5), 30.0, 0.06, (0.48, 0.58)),
+        (3.0, (-5.0, 0.0), (20.0, 1.5), 75.0, 0.04, (3.8, 4.2)),
+        (1.0, (-0.5, 0.5), (15.0, 1.5), 60.0, 0.09, (7.2, 8.0)),
+        (0.1, (-0.5, 0.01), (5.0, 1.51), 60.0, 0.04, (0.17, 0.25)),
+        (1.0, (-2.0, 0.5), (3.5, 1.5), 45.0, 0.1, (1.9, 2.2)),
+    ],
+)
+def test_a_barrier_on_a_rigid_ground_at_a_slant_against_the_exact_levels(
+    top, source, listener, slant, within, not_turned
+) -> None:
+    """A rigid barrier 10 cm to 3 m high on a rigid ground that the way crosses 30 to
+    75 degrees from across it, the ends 0.5 to 20 m from it along the way: within
+    0.02 to 0.1 dB of the exact level (:data:`EXACT_AT_A_SLANT`) in the bands that
+    end at k H = 32 or below, where the solver takes the strip that the barrier
+    makes with its image in the ground, for ends offset along it. Given as the way
+    meets it but not turned, as if it stood across the way, the same barrier comes
+    out 0.2 to 7.6 dB from that level."""
+    exact = np.array(EXACT_AT_A_SLANT[top, source, listener, slant], dtype=float)
+    known = ~np.isnan(exact)
+    found = on_a_rigid_ground(top, source, listener, math.radians(slant))
+    got = levels(found, source, listener)
+    np.testing.assert_allclose(got[known], exact[known], atol=within)
+    across = levels(on_a_rigid_ground(top, source, listener), source, listener)
+    assert not_turned[0] < np.max(np.abs(across - exact)[known]) < not_turned[1]
+
+
+def test_a_low_barrier_at_a_slant_gives_the_same_sound_with_the_ends_swapped() -> None:
+    """A barrier 2 m high on a rigid ground (the strip), crossed 50 degrees from across
+    it: the same sound from either end, to the digit."""
+    turn = [math.radians(50.0)]
+    one = rows.over_row(F[1], C, None, 0.5, 25.0, 1.5, [(10.0, 10.0, 2.0)], slants=turn)
+    other = rows.over_row(F[1], C, None, 1.5, 25.0, 0.5, [(15.0, 15.0, 2.0)], slants=turn)
+    np.testing.assert_allclose(other.pressure, one.pressure, rtol=1e-9)
+    across = rows.over_row(F[1], C, None, 0.5, 25.0, 1.5, [(10.0, 10.0, 2.0)])
+    assert np.all(np.abs(one.edges - across.edges) > 0.05 * np.abs(across.pressure))
+
+
+def test_a_barrier_turned_beyond_the_strip_s_slant_keeps_the_edges_terms(monkeypatch) -> None:
+    """The strip's sum is measured up to its own slant (``strip.SLANT_MOST_DEG``, as
+    shipped the row's own ``SLANT_MOST_DEG``, beyond which the row is out of reach).
+    With the strip's set below the row's, a barrier turned between the two keeps the
+    edges' terms, as where the strip's equation is not solved."""
+    ends = (F[0], C, None, 1.5, 25.0, 1.5, [(10.0, 10.0, 2.0)])
+    turn = [math.radians(60.0)]
+    as_a_strip = rows.over_row(*ends, slants=turn)
+    with monkeypatch.context() as patched:
+        patched.setattr(strip, "beyond_screen", lambda *given, **more: None)
+        by_its_edge = rows.over_row(*ends, slants=turn)
+    assert np.all(np.abs(as_a_strip.edges - by_its_edge.edges) > 0.02 * np.abs(by_its_edge.edges))
+    monkeypatch.setattr(strip, "SLANT_MOST_DEG", 59.0)
+    np.testing.assert_array_equal(rows.over_row(*ends, slants=turn).edges, by_its_edge.edges)
+
+
+def test_what_the_slants_have_to_be(monkeypatch) -> None:
+    """One slant for each obstacle, a real number (not a string of digits, a truth
+    value or a complex number) or, for a roof, one for each of its two sides; its sign
+    does not count, and the obstacles may be given once (an iterator).
+    An edge turned more than ``SLANT_MOST_DEG`` from across the way, or more than
+    ``SLANT_ROW_MOST_DEG`` where a march lights it, is out of reach before either march
+    runs, but not one that sheds no sound: what stands before the source or past the
+    listener, and a corner that a higher roof stands against."""
+    ends = (F[0], C, None, 1.5, 30.0, 1.5)
+    row = [(10.0, 10.0, 3.0), (15.0, 20.0, 4.0)]
+    for count in ([0.1], [0.1, 0.2, 0.3], 0.1):
+        with pytest.raises(ValueError, match="one slant for each obstacle"):
+            rows.over_row(*ends, row, slants=count)
+    for wrong in (math.nan, (0.1, 0.2, 0.3), (0.1, math.inf), [[0.1, 0.2]], None):
+        with pytest.raises(ValueError, match="an angle in radians, or one for each"):
+            rows.over_row(*ends, row, slants=[0.1, wrong])
+    for wrong in ("0.3", b"0.3", 0.3 + 0j, True, {0.3}, (0.1, "0.2"), [0.1, [0.2]]):
+        with pytest.raises(ValueError, match="an angle in radians, or one for each"):
+            rows.over_row(*ends, row, slants=[0.1, wrong])
+    # Whole numbers and numpy's are numbers.
+    whole = rows.over_row(*ends, row, slants=[0, np.float32(0.0)])
+    assert np.array_equal(whole.pressure, rows.over_row(*ends, row).pressure)
+    with pytest.raises(ValueError, match="an angle in radians") as raised:
+        rows.over_row(*ends, row, slants=[0.1, math.nan])
+    assert not isinstance(raised.value, rows.OutOfReach)
+    # A barrier has one top: a slant for each side must be the same one.
+    with pytest.raises(ValueError, match="a barrier has one top, and one slant"):
+        rows.over_row(*ends, row, slants=[(0.2, 0.7), 0.1])
+    # An obstacle given back to front is that, with a slant for each side too.
+    with pytest.raises(ValueError, match="far side lies before its near side"):
+        rows.over_row(*ends, [(12.0, 8.0, 2.0)], slants=[(0.3, 0.6)])
+    one = rows.over_row(*ends, row, slants=[0.4, (0.2, 0.9)])
+    other = rows.over_row(*ends, row, slants=[(-0.4, 0.4), (-0.2, 0.9)])
+    assert np.array_equal(one.pressure, other.pressure)
+    once = rows.over_row(*ends, iter(row), slants=iter([0.4, (0.2, 0.9)]))
+    assert np.array_equal(one.pressure, once.pressure)
+    assert np.max(np.abs(one.edges)) > 0.1 * np.max(np.abs(one.pressure))
+
+    steep = math.radians(rows.SLANT_MOST_DEG + 1.0)
+    marched = []
+    march = parabolic.march
+    monkeypatch.setattr(
+        parabolic, "march", lambda *a, **more: marched.append(1) or march(*a, **more)
+    )
+    for slants in ([steep, 0.0], [0.0, (steep, 0.0)], [0.0, (0.0, steep)]):
+        with pytest.raises(rows.OutOfReach, match="turned 76.0 degrees from across it"):
+            rows.over_row(*ends, row, slants=slants)
+    # An edge that a march lights takes ``SLANT_ROW_MOST_DEG``: each of the row's three.
+    in_a_row = math.radians(rows.SLANT_ROW_MOST_DEG)
+    for slants in ([in_a_row + 0.02, 0.0], [0.0, (in_a_row + 0.02, 0.0)], [0.0, (0.0, 1.3)]):
+        with pytest.raises(rows.OutOfReach, match="that a march lights: .* take 60 degrees"):
+            rows.over_row(*ends, row, slants=slants)
+    assert not marched
+    # Up to there the marches run (whether the sound holds is seen after them).
+    monkeypatch.setattr(rows, "SLANT_APART_MOST", math.inf)
+    rows.over_row(*ends, row, slants=[in_a_row, (in_a_row, in_a_row)])
+    assert len(marched) == 2
+    # The one edge between the ends, which both light themselves, takes
+    # ``SLANT_MOST_DEG``: a barrier, and the far corner of the roof under the source.
+    at_most = math.radians(rows.SLANT_MOST_DEG)
+    for alone in ([(10.0, 10.0, 3.0)], [(-5.0, 10.0, 1.0)]):
+        rows.over_row(*ends, alone, slants=[at_most])
+        with pytest.raises(rows.OutOfReach, match="turned 76.0 degrees from across it"):
+            rows.over_row(*ends, alone, slants=[steep])
+    assert len(marched) == 6
+    # Before the source, past the listener, and a corner against a higher roof.
+    beside = [(-5.0, -5.0, 3.0), *row, (35.0, 40.0, 3.0), (20.0, 25.0, 6.0)]
+    found = rows.over_row(*ends, beside, slants=[steep, 0.4, (0.2, steep), steep, 0.3])
+    assert np.all(np.isfinite(found.pressure))
+
+
+def test_each_edge_takes_the_slant_of_its_obstacle_s_side() -> None:
+    """A barrier's top takes the barrier's slant, a roof's near corner that of the
+    near side of the building whose roof it is and its far corner that of the far
+    side, whatever the skyline joins or hides; of obstacles with one side and one
+    top in common, the first given."""
+    row = [(5.0, 5.0, 2.0), (10.0, 20.0, 6.0), (20.0, 30.0, 4.0), (25.0, 25.0, 7.0)]
+    turned = rows._slants(row, [0.1, (0.2, 0.3), (0.4, 0.5), -0.6])
+    edges = rows.edges_of(rows.skyline(row))
+    assert edges == [
+        ("screen", 5.0, 2.0),
+        ("roof", 10.0, 6.0),
+        ("behind", 20.0, 6.0),
+        ("behind", 30.0, 4.0),
+        ("screen", 25.0, 7.0),
+    ]
+    assert [rows._slant_of(turned, *edge) for edge in edges] == [0.1, 0.2, 0.3, 0.5, 0.6]
+    # Two buildings level with each other that touch are one roof: its corners are
+    # the first one's near side and the second one's far side.
+    joined = [(10.0, 15.0, 6.0), (15.0, 22.0, 6.0)]
+    turned = rows._slants(joined, [(0.1, 0.2), (0.3, 0.4)])
+    assert [rows._slant_of(turned, *e) for e in rows.edges_of(rows.skyline(joined))] == [0.1, 0.4]
+    # The same side given twice: the first.
+    twice = [(10.0, 15.0, 6.0), (10.0, 12.0, 6.0), (8.0, 8.0, 3.0), (8.0, 8.0, 3.0)]
+    turned = rows._slants(twice, [(0.1, 0.2), (0.3, 0.4), 0.5, 0.6])
+    assert rows._slant_of(turned, "roof", 10.0, 6.0) == 0.1
+    assert rows._slant_of(turned, "screen", 8.0, 3.0) == 0.5
+    with pytest.raises(ValueError, match="no obstacle has a side"):
+        rows._slant_of(turned, "behind", 10.0, 6.0)
+    # Whatever the row, every edge that sheds sound is a side of one of its obstacles.
+    rng = np.random.default_rng(5)
+    for _ in range(300):
+        near = rng.integers(0, 12, 7).astype(float)
+        wide = rng.integers(0, 4, 7).astype(float)
+        tops = rng.integers(1, 4, 7).astype(float)
+        row = list(zip(near, near + wide, tops, strict=True))
+        turned = rows._slants(row, list(0.01 * (1.0 + np.arange(7))))
+        for edge in rows.edges_of(rows.skyline(row)):
+            assert rows._slant_of(turned, *edge) in 0.01 * (1.0 + np.arange(7))
+
+
+#: Rows in free space as the wave calculation has them (``WAVE``), with the ends offset
+#: along the edges so that the way between them crosses the row at a slant (degrees):
+#: the row, the ends' heights, the slant, the wave calculation's level (dB re free
+#: field, ``validation/rows.py``), how far the row's level may be from it (dB) and how
+#: far below it the level is at least in some band with the row not turned.
+WAVE_AT_A_SLANT = [
+    # Not turned the row is 0.15 dB low at the most here, and turned within 0.13 dB.
+    (TWO_ROOFS, 0.01, -0.49, 30.0, [-7.424, -8.112, -8.911, -9.959], 0.13, 0.14),
+    (TWO_ROOFS, 0.01, -0.49, 60.0, [-6.798, -7.435, -8.313, -9.101], 0.2, 0.7),
+    (THREE_SCREENS, 0.01, -0.49, 30.0, [-10.474, -11.562, -12.307, -13.686], 0.25, 0.3),
+    # In the 63 Hz band 0.54 dB low. (Across their edges the screens are a third to
+    # two thirds of a wavelength apart there, as across the way an octave lower,
+    # where the solver is 0.30 to 0.33 dB low.)
+    (THREE_SCREENS, 0.01, -0.49, 60.0, [-9.114, -10.719, -11.726, -12.747], 0.6, 1.7),
+    # The sound bends down by 22 degrees behind the row.
+    (ROOF_AND_SCREEN, 2.01, -1.99, 60.0, [-6.42, -7.609, -8.523, -9.667], 0.2, 1.2),
+    ([(0.0, 10.0, 0.0)], 0.01, -1.99, 60.0, [-7.256, -8.712, -10.518, -12.565], 0.15, 0.85),
+]
+
+
+def along_a_slant(row, source, listener, degrees: float) -> tuple:
+    """A row and its ends (m across the edges, m up) as the way that crosses them
+    ``degrees`` from across meets them: every distance along the way over the slant's
+    cosine."""
+    stretch = 1.0 / math.cos(math.radians(degrees))
+    standing = [(a * stretch, b * stretch, h) for a, b, h in row]
+    return standing, (source[0] * stretch, source[1]), (listener[0] * stretch, listener[1])
+
+
+@pytest.mark.parametrize("row, zs, zr, slant, wave, within, lacking", WAVE_AT_A_SLANT)
+def test_rows_in_free_space_at_a_slant_against_a_wave_calculation(
+    row, zs, zr, slant, wave, within, lacking
+) -> None:
+    standing, source, listener = along_a_slant(row, (-9.99, zs), (15.01, zr), slant)
+    turn = [math.radians(slant)] * len(row)
+    got = levels(over(standing, source, listener, slants=turn), source, listener)
+    np.testing.assert_allclose(got, wave, atol=within)
+    if slant == 60.0 and row is THREE_SCREENS:
+        assert got[0] - wave[0] < -0.45 and np.max(np.abs(got[1:] - wave[1:])) < 0.1
+    # Not turned, as the vertical section along the way shows it, the row is low, and
+    # further from the wave calculation than turned.
+    across = levels(over(standing, source, listener), source, listener)
+    assert np.all(across < wave) and np.min(across - wave) < -lacking
+    assert np.max(np.abs(got - wave)) < np.max(np.abs(across - wave))
+
+
+#: Two roofs 6 m high on a rigid ground, 4 m wide and 2 m apart, the ends 10 m before
+#: and 5 m past them across the edges.
+ROOFS_ON_GROUND = [(0.0, 4.0, 6.0), (6.0, 10.0, 6.0)]
+
+
+def test_a_row_between_street_level_ends_at_a_slant_is_out_of_reach(monkeypatch) -> None:
+    """From 6 m up to a listener 1.5 m above the ground behind two roofs 6 m high, the
+    way 60 degrees from across them: seen across the edges the way down to the
+    listener is 42 degrees steep and its image's 56 (24 and 37 degrees in the
+    vertical plane along the way). In the 500 Hz band the solver takes none of it;
+    given the row all the same, it would be 6.4 dB above the wave calculation."""
+    standing, source, listener = along_a_slant(ROOFS_ON_GROUND, (-9.99, 6.01), (15.01, 1.51), 60.0)
+    reach = listener[0] - source[0]
+    row = [(a - source[0], b - source[0], h) for a, b, h in standing]
+    ends = (F[3], C, None, source[1], reach, listener[1], row)
+    turn = [math.radians(60.0)] * 2
+    with pytest.raises(rows.OutOfReach, match="at a slant with an end's way to the row so steep"):
+        rows.over_row(*ends, slants=turn)
+    monkeypatch.setattr(rows, "SLANT_APART_MOST", math.inf)
+    given = level(rows.over_row(*ends, slants=turn).pressure, math.hypot(reach, 4.5))
+    assert 6.0 < given - -19.214 < 6.7
+
+
+def test_a_row_on_a_ground_at_a_slant_where_it_is_taken() -> None:
+    """The same roofs from 1.5 m above the ground to a listener level with them, the
+    way 30 degrees from across them: in the 63 Hz band the solver takes the row,
+    0.68 dB above the wave calculation (across the row 0.30 dB above it); in the
+    others it does not."""
+    standing, source, listener = along_a_slant(ROOFS_ON_GROUND, (-9.99, 1.51), (15.01, 6.01), 30.0)
+    reach = listener[0] - source[0]
+    row = [(a - source[0], b - source[0], h) for a, b, h in standing]
+    turn = [math.radians(30.0)] * 2
+    low = rows.over_row(F[0], C, None, source[1], reach, listener[1], row, slants=turn)
+    assert level(low.pressure, math.hypot(reach, 4.5)) == pytest.approx(-10.445 + 0.68, abs=0.1)
+    for f in F[1:]:
+        with pytest.raises(rows.OutOfReach, match="so steep"):
+            rows.over_row(f, C, None, source[1], reach, listener[1], row, slants=turn)
+
+
+def test_where_the_two_ways_phases_change_the_sound_too_much(monkeypatch) -> None:
+    """The row is out of reach where the section's phase on the terms of the slanted
+    edges that a march lights would change the sound by more than ``SLANT_APART_MOST``
+    of it, as root mean squares over the frequencies; an edge that both ends light
+    themselves adds nothing to that, however steep the ways to it."""
+    sound = np.array([1.0 + 0.0j, 0.0 + 2.0j, -1.0 + 1.0j])
+    rows._on_one_way(np.zeros(3, dtype=complex), sound)
+    rows._on_one_way(0.99 * rows.SLANT_APART_MOST * sound, sound)
+    # Over the frequencies together: 0.18 of the sound at one of them, 0.098 of it all.
+    rows._on_one_way(np.array([0.0, 0.0, 0.26j]), sound)
+    with pytest.raises(rows.OutOfReach, match="differ by 0.11 of the sound: the solver takes 0.10"):
+        rows._on_one_way(1.1 * rows.SLANT_APART_MOST * sound, sound)
+    with pytest.raises(rows.OutOfReach, match="differ by 0.15 of the sound"):
+        rows._on_one_way(np.array([0.0, 0.0, 0.4j]), sound)
+    # What the solver hands to the check: nothing for one screen 75 degrees from
+    # across the way with ways 72 and 3 degrees steep to it, something for two roofs.
+    handed = []
+    check = rows._on_one_way
+    monkeypatch.setattr(
+        rows, "_on_one_way", lambda apart, sound: handed.append(apart) or check(apart, sound)
+    )
+    over([(0.0, 0.0, 0.0)], (-1.0, -3.0), (20.0, -1.0), slants=[math.radians(75.0)])
+    assert len(handed) == 4 and not any(np.any(apart) for apart in handed)
+    standing, source, listener = along_a_slant(TWO_ROOFS, (-9.99, 0.01), (15.01, -0.49), 60.0)
+    over(standing, source, listener, slants=[math.radians(60.0)] * 2)
+    assert len(handed) == 8 and all(np.any(apart) for apart in handed[4:])
+
+
+def _shortest(source, listener, edges) -> tuple[float, list]:
+    """The length of the shortest way from ``source`` to ``listener`` (x, y, z) over
+    ``edges`` ((a point, a direction) lines, in order), and where it meets each."""
+    from scipy.optimize import minimize
+
+    def points(t):
+        return [
+            source,
+            *(np.asarray(p) + s * np.asarray(d) for s, (p, d) in zip(t, edges, strict=True)),
+            listener,
+        ]
+
+    def length(t):
+        way = points(t)
+        return sum(float(np.linalg.norm(b - a)) for a, b in zip(way[:-1], way[1:], strict=True))
+
+    best = minimize(
+        length, np.zeros(len(edges)), method="Nelder-Mead", options={"xatol": 1e-10, "fatol": 1e-14}
+    )
+    return float(best.fun), points(best.x)
+
+
+def test_the_sound_s_way_over_an_edge_at_a_slant_is_the_shortest_from_end_to_end() -> None:
+    """What an edge's terms take at a slant (:func:`rows._slanted`) is the geometry of
+    the shortest way from end to end over the edge, found here by a search: its
+    length (the phase of the turn), its angle to the edge, and the distance
+    parameter k s s' sin^2(beta) / (s + s') of its two legs s' and s, with the
+    spreading sqrt(a b (a + b) / (s s' (s + s'))) over that of the section along the
+    way. Over two edges, with the other one turned as this one is."""
+    k = np.array([0.7, 2.0])
+    slant, reach = 0.9, 11.0
+    along = np.array([math.sin(slant), math.cos(slant), 0.0])
+    source, listener = np.array([0.0, 0.0, 1.0]), np.array([reach, 0.0, 2.0])
+    # The edge 4 m along the way and 3 m up, lit by the end itself.
+    before, after = [(0.0, 1.0), (4.0, 3.0)], [(0.0, 2.0), (7.0, 3.0)]
+    a, b = math.hypot(4.0, 2.0), math.hypot(7.0, 1.0)
+    found = rows._slanted(k, a, b, before, after, slant, reach)
+    whole, way = _shortest(source, listener, [((4.0, 0.0, 3.0), along)])
+    far, near = float(np.linalg.norm(way[1] - way[0])), float(np.linalg.norm(way[2] - way[1]))
+    cosine = float((way[1] - way[0]) @ along) / far
+    assert found.cosine == math.cos(slant)
+    assert found.sine == pytest.approx(math.sqrt(1.0 - cosine**2), rel=1e-7)
+    np.testing.assert_allclose(found.kl, k * far * near * found.sine**2 / whole, rtol=1e-7)
+    spread = math.sqrt(a * b * (a + b) / (far * near * whole))
+    np.testing.assert_allclose(found.turn, spread * np.exp(1j * k * (whole - a - b)), rtol=1e-7)
+    # It meets the edge 0.28 m to the side of the section and is 17 mm shorter than
+    # the section's way, so this is not the section's geometry found again.
+    assert way[1][1] == pytest.approx(0.2848, abs=1e-3)
+    assert a + b - whole == pytest.approx(0.0169, abs=1e-3)
+    # Lit over another edge 2 m along the way and 2.5 m up, which the string bends at.
+    before = [(0.0, 1.0), (2.0, 2.5), (4.0, 3.0)]
+    a = math.hypot(2.0, 1.5) + math.hypot(2.0, 0.5)
+    found = rows._slanted(k, a, b, before, after, slant, reach)
+    whole, way = _shortest(source, listener, [((2.0, 0.0, 2.5), along), ((4.0, 0.0, 3.0), along)])
+    far = float(np.linalg.norm(way[1] - way[0]) + np.linalg.norm(way[2] - way[1]))
+    near = float(np.linalg.norm(way[3] - way[2]))
+    cosine = float((way[2] - way[1]) @ along / np.linalg.norm(way[2] - way[1]))
+    assert found.sine == pytest.approx(math.sqrt(1.0 - cosine**2), rel=1e-6)
+    np.testing.assert_allclose(found.kl, k * far * near * found.sine**2 / whole, rtol=1e-6)
+    np.testing.assert_allclose(
+        np.angle(found.turn * np.exp(-1j * k * (whole - a - b))), 0.0, atol=1e-6
+    )
+    # Across the way nothing turns.
+    flat = rows._slanted(k, a, b, before, after, 0.0, reach)
+    assert (flat.cosine, flat.sine) == (1.0, 1.0)
+    np.testing.assert_allclose(flat.kl, k * a * b / (a + b), rtol=1e-12)
+    np.testing.assert_allclose(flat.turn, 1.0, rtol=1e-12)

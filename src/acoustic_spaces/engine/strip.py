@@ -51,6 +51,21 @@ path's length, with which the solver for rows makes a point source's field of th
 march's, does not hold for this field: at 44.5 Hz behind a barrier 1 m high it is
 13 % off with the source 2 m before the barrier and the listener 3.5 m past it, and
 3 % with the two 10 and 15 m from it (tests/test_strip.py).
+
+Where the way between the ends crosses the barrier at a slant, the ends are apart along
+it, by y, and p = 2 int g(sqrt(k^2 - q^2)) exp(i q y) dq over every q. A path's field
+then turns slowest at q = k cos(beta), tan(beta) = l / y, and would grow on the ray. The
+sum goes in from the second quadrant to q = 0, along the real axis to the q of the
+straight way between the ends, and out into the fourth quadrant on a line on which every
+path's field falls off, with the wavenumber across the barrier in the quarter plane in
+which the strip's equation is solved all the way (:func:`_offset`). That is the strip's
+part; the screen's is the marches', which run in the vertical plane along the way over a
+screen across it, and is summed on the ray as before. Against the reference's sum over
+the real wavenumbers for ends apart along the barrier (validation/barrier_strip.py;
+eight places, 44.5 to 500 Hz) the rigid strip's shed sound is within 1.4e-5 of itself at
+15 degrees from across the barrier, 4.2e-6 at 45, 7.6e-6 at 60 and 3.0e-5 at 75, with
+113 to 179 wavenumbers up to 45 degrees, 147 to 261 at 60 and 242 to 411 at 75, where
+the ray has 48.
 """
 
 from __future__ import annotations
@@ -76,7 +91,8 @@ MOST_KH = 32.0
 #: close to each other the ray reaches 30 over the distance between them, and the
 #: count is about 30 H over that distance and 5 H over the farther end's distance
 #: from the barrier, and 12: beyond ``TERMS_MOST`` where 6 H over the first and H
-#: over the second come to more than 30 together. That is where the ends are closer
+#: over the second come to more than 30 together (for a way across the barrier; at a
+#: slant more: :func:`beyond_screen`). That is where the ends are closer
 #: to each other than about a quarter of the barrier's height (at one height: both
 #: within about an eighth of it from the barrier, or one at its face and the other
 #: within a quarter), where both are within about a twentieth of its height from the
@@ -95,6 +111,25 @@ RAY_NODES = 48
 #: (rad).
 PANEL_NODES = 12
 PANEL_TURN = 4.0
+#: The sum for ends offset along the barrier (:func:`_offset`). The line on which it
+#: leaves the real axis goes down at ``TILT`` of the angle between the straight way and
+#: the barrier (45 degrees at most), with ``RAY_NODES`` nodes times the cotangent of
+#: twice the line's angle where that is more than 1 (along it the summed function's
+#: phase turns that many times as often). On the real axis the strip's part is taken at
+#: ``REAL_POINTS`` Chebyshev points and one more for each radian that the phase of its
+#: longest wave that counts turns, where it turns fastest, over a radian of the points'
+#: angle: the wave that crosses the strip ``CROSSINGS`` times from one of its edges, the
+#: barrier's top and the top's image, to the other (with 6 crossings the sound shed is
+#: within 2e-7 of that with 16 and four times the points at k H = 8 to 31 and slants of
+#: 15 to 75 degrees, with 4 up to 2.6e-5 off and with 2 up to 1.4e-2). Between the
+#: points it is summed with a rule of that many nodes, ``SUM_NODES`` and one more for
+#: each radian of the phase of the straight way's wave.
+TILT = 0.5
+REAL_POINTS = 16
+CROSSINGS = 6
+SUM_NODES = 32
+#: The sum for ends offset along the barrier is measured up to this slant (degrees).
+SLANT_MOST_DEG = 75.0
 #: Below this |kappa zeta| the kernel's remainder is summed from its series.
 _SERIES_BELOW = 0.5
 #: The factor of the remainder's logarithm is faded out where Im(kappa) zeta passes
@@ -103,7 +138,7 @@ _FADE_AT = 12.0
 _EULER = 0.5772156649015329
 
 
-def beyond_screen(k, height: float, source, listener) -> np.ndarray | None:
+def beyond_screen(k, height: float, source, listener, slant: float = 0.0) -> np.ndarray | None:
     """(F,) what a thin rigid barrier ``height`` m high on a rigid plane sheds at the
     listener beyond a screen with no field behind it (the mean of the two marches'),
     at the wavenumbers ``k`` (F,, rad/m), for a point source (free field
@@ -114,14 +149,34 @@ def beyond_screen(k, height: float, source, listener) -> np.ndarray | None:
     the ends and the height over the farther end's distance from the barrier come to
     more than 30 together: the ends closer to each other than about a quarter of the
     height, both within about a twentieth of it from the barrier, or between the
-    two)."""
+    two).
+
+    With a ``slant`` (radians, ``SLANT_MOST_DEG`` degrees at most: a ValueError
+    beyond) the barrier is turned by that angle from across the way between the ends,
+    seen from above, and the ends' distances from it are along that way: across the
+    barrier they are those times the slant's cosine, and along it the ends are the two
+    distances' sum times its sine apart. The strip's part is summed for ends that far
+    apart along it (:func:`_offset`); the screen's part is the marches', which run
+    along the way: that of a screen across the way. At a slant the ends are closer to
+    the barrier across it and the sum reaches further out, so the density needs more
+    terms, and None comes with the ends further from the barrier than the rule above
+    gives for a way across it: with both ends halfway up the barrier and as far from it
+    as each other along the way, the equation is solved from 0.14 of its height across
+    the barrier, 0.16 at 15 degrees, 0.20 at 30, 0.27 at 45, 0.41 at 60 and 0.83 at 75
+    at k H = ``MOST_KH``, and from closer at a lower k H (0.35 and 0.69 at 60 and 75
+    degrees at k H = 0.15)."""
     k = np.atleast_1d(np.asarray(k, dtype=float))
     height = float(height)
     (ds, zs), (dl, zl) = source, listener
     if height <= 0.0 or ds <= 0.0 or dl <= 0.0 or zs < 0.0 or zl < 0.0:
         raise ValueError("a barrier above the plane, between two ends on or above the plane")
+    if not abs(slant) <= math.radians(SLANT_MOST_DEG):
+        raise ValueError(f"a slant of {SLANT_MOST_DEG:.0f} degrees at most")
     if float(np.max(k)) * height > MOST_KH:
         return None
+    if (ds + dl) * abs(math.sin(slant)) == 0.0:
+        # Ends that are no distance apart along the barrier: the way across it.
+        slant = 0.0
     # The density is solved for the end farther from the barrier, whose field on it is
     # the smoother one, and summed against the nearer one's: the sound is the same with
     # the two swapped.
@@ -129,12 +184,29 @@ def beyond_screen(k, height: float, source, listener) -> np.ndarray | None:
     near, far = ends[0], ends[1]
     reach = math.hypot(ds + dl, zl - zs)
     out = np.empty(len(k), dtype=complex)
+    if slant:
+        cosine, along = math.cos(slant), (ds + dl) * abs(math.sin(slant))
+        across = sorted(((ds * cosine, zs), (dl * cosine, zl)), key=lambda end: _away(end, height))
+        straight = math.hypot((ds + dl) * cosine, zl - zs)
+        # The longest of the strip's waves that counts for the points on the real axis:
+        # from the image of one end over the top to the image of the other, and
+        # ``CROSSINGS`` times across the strip, twice the barrier's height.
+        longest = sum(math.hypot(end[0], height + end[1]) for end in across)
+        longest += 2.0 * CROSSINGS * height
     for index, wavenumber in enumerate(k):
         kappa, weights = _ray(float(wavenumber), reach)
+        if slant:
+            marched = np.sum(weights * _screen(kappa, height, far, near))
+            kappa, weights = _offset(float(wavenumber), straight, along, longest)
         most = float(np.max(np.abs(kappa)))
-        terms = math.ceil(most * height + TERMS_OVER + TERMS_NEAR * height / _away(far, height))
+        closest = _away(across[1] if slant else far, height)
+        terms = math.ceil(most * height + TERMS_OVER + TERMS_NEAR * height / closest)
         if terms > TERMS_MOST:
             return None
+        if slant:
+            rigid = _rigid(kappa, height, across[1], across[0], terms)
+            out[index] = np.sum(weights * rigid) - marched
+            continue
         shed = _rigid(kappa, height, far, near, terms) - _screen(kappa, height, far, near)
         out[index] = np.sum(weights * shed)
     return out
@@ -154,6 +226,77 @@ def _ray(wavenumber: float, reach: float) -> tuple[np.ndarray, np.ndarray]:
     g, w = np.polynomial.legendre.leggauss(RAY_NODES)
     s, w = 0.5 * furthest * (g + 1.0), 0.5 * furthest * w
     return np.sqrt(wavenumber**2 + 1j * s**2), 4.0 * np.exp(-0.25j * math.pi) * w
+
+
+def _offset(
+    wavenumber: float, reach: float, along: float, longest: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """The wavenumbers in the plane across the barrier and the weights with which a
+    point source's field is the sum of the fields in two dimensions, for ends
+    ``along`` m apart along the barrier and ``reach`` m apart across it by the
+    straight way: p = 2 int g(sqrt(k^2 - q^2)) exp(i q along) dq over all q.
+
+    A wave of g with a path l m long across the barrier turns as
+    exp(i (sqrt(k^2 - q^2) l + q along)), slowest at q = k cos(beta), where
+    tan(beta) = l / along: that of the straight way furthest out, at q0, and every
+    longer one before it. The sum goes where nothing grows and the wavenumber across
+    stays in the quarter plane in which the strip's equation is solved (its real and
+    imaginary parts not negative): in from the ray q = -exp(-i pi / 4) s to 0, as
+    head-on; along the real axis from 0 to q0; and out on the line
+    q = q0 + exp(-i phi) s, with phi less than beta, on which a wave of the path l
+    falls off as exp(-s (l cos(phi) - along sin(phi))) far out. On the real axis the
+    waves turn fast but g times exp(-i kappa reach) does not: it is taken at
+    Chebyshev points of the angle theta, q = k cos(theta), as many as hold its wave
+    of the path ``longest`` (m), the longest that counts, and summed against the
+    straight way's wave with a rule fine enough for that wave."""
+    whole = math.hypot(reach, along)
+    beta = math.atan2(reach, along)
+    g, w = np.polynomial.legendre.leggauss(RAY_NODES)
+    # In from the second quadrant: exp(i q along) falls off as exp(-s along / sqrt(2)).
+    furthest = max(6.5 * math.sqrt(wavenumber / reach), 30.0 / reach)
+    furthest = min(furthest, 30.0 * math.sqrt(2.0) / along)
+    s, ws = 0.5 * furthest * (g + 1.0), 0.5 * furthest * w
+    kappa_in = np.sqrt(wavenumber**2 + 1j * s**2)
+    turn = np.exp(1j * np.exp(0.75j * math.pi) * s * along)
+    weights_in = 2.0 * np.exp(-0.25j * math.pi) * ws * turn
+    # The real axis, by the angle theta from beta to a right angle.
+    span = 0.5 * math.pi - beta
+    # The points are evenly spaced in the angle t, x = cos(t), and hold a wave whose
+    # phase turns by less than half a turn from one to the next where it turns fastest.
+    spaced = np.linspace(0.0, math.pi, 181)
+    swept = beta + 0.5 * span * (1.0 + np.cos(spaced))
+    fastest = float(np.max(np.cos(swept) * 0.5 * span * np.sin(spaced)))
+    count = REAL_POINTS + math.ceil(wavenumber * (longest - reach) * fastest)
+    at = math.pi * (2.0 * np.arange(count) + 1.0) / (2.0 * count)
+    x = np.cos(at)
+    kappa_real = wavenumber * np.sin(beta + 0.5 * span * (x + 1.0)) + 0.0j
+    nodes = count + SUM_NODES + math.ceil(wavenumber * (whole - reach))
+    t, wt = np.polynomial.legendre.leggauss(nodes)
+    theta = beta + 0.5 * span * (t + 1.0)
+    carrier = np.exp(1j * wavenumber * (reach * np.sin(theta) + along * np.cos(theta)))
+    carrier = carrier * (wavenumber * np.sin(theta) * 0.5 * span * wt)
+    # The polynomial through the points, at the rule's nodes (the barycentric form).
+    gap = t[:, None] - x[None, :]
+    on = np.abs(gap) < 1e-14
+    basis = ((-1.0) ** np.arange(count) * np.sin(at))[None, :] / np.where(on, 1.0, gap)
+    basis = np.where(on.any(axis=1)[:, None], on.astype(float), basis)
+    basis = basis / basis.sum(axis=1)[:, None]
+    weights_real = 2.0 * (carrier @ basis) * np.exp(-1j * kappa_real * reach)
+    # Out into the fourth quadrant.
+    phi = min(0.25 * math.pi, TILT * beta)
+    width = math.sin(beta) * math.sqrt(wavenumber / (whole * math.sin(2.0 * phi)))
+    furthest = max(6.5 * width, 30.0 / (math.sqrt(2.0) * whole * math.sin(beta - phi)))
+    g, w = np.polynomial.legendre.leggauss(
+        math.ceil(RAY_NODES * max(1.0, 1.0 / math.tan(2.0 * phi)))
+    )
+    s, ws = 0.5 * furthest * (g + 1.0), 0.5 * furthest * w
+    q = wavenumber * math.cos(beta) + np.exp(-1j * phi) * s
+    kappa_out = np.sqrt(wavenumber**2 - q**2)
+    weights_out = 2.0 * np.exp(-1j * phi) * ws * np.exp(1j * q * along)
+    return (
+        np.concatenate([kappa_in, kappa_real, kappa_out]),
+        np.concatenate([weights_in, weights_real, weights_out]),
+    )
 
 
 def _line(kappa: np.ndarray, distance: np.ndarray) -> np.ndarray:
