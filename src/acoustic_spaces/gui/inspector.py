@@ -123,7 +123,7 @@ BARRIER_FREQUENCIES = ((32, 0.51), (16, 6.4), (8, 14.0))
 #: simulation.early.open_ground_frequencies' choices, with the largest error at 1 and
 #: 2 kHz over the open ground that each gives against a fast field program in
 #: validation/open_ground_frequencies.py's cases (dB; docs/outdoor.md has the table).
-OPEN_GROUND_FREQUENCIES = ((24, 0.75), (8, 4.0), ("rays", 8.5))
+OPEN_GROUND_FREQUENCIES = ((24, 0.75), (8, 4.1), ("rays", 8.4))
 LATE_METHODS = [
     ("stochastic_ray_tracing", N_("stochastic_ray_tracing")),
     ("statistical", N_("statistical")),
