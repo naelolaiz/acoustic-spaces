@@ -1751,8 +1751,8 @@ private:
                 next = true;
                 int s = 0;
                 bool near = std::abs(offset(g)) <= tie;
-                if constexpr (segment) s = side(g);
-                if constexpr (paired) near = close(g);
+                if constexpr (!std::is_same_v<Side, std::nullptr_t>) s = side(g);
+                if constexpr (!std::is_same_v<Close, std::nullptr_t>) near = close(g);
                 if (s != 0 && near) {
                     sided = (s > 0) == (bvh.offset(g, opposite) > 0.0) ? 1 : -1;
                 } else {
@@ -1803,7 +1803,7 @@ private:
                     return;
                 }
                 const double s = offset(g);
-                if constexpr (paired) {
+                if constexpr (!std::is_same_v<Close, std::nullptr_t>) {
                     if (!close(g)) return;
                 } else if (!(std::abs(s) <= tie)) {
                     return;
@@ -2034,7 +2034,7 @@ private:
         };
         const Vec3 spread = b.lean - a.lean;
         const Vec3 axes[3] = {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}};
-        // The meet's moves (steps, kSteps of them) for the ends at pa and pb, qa and qb off
+        // The meet's moves (steps, kMoves of them) for the ends at pa and pb, qa and qb off
         // the plane, and where on the segment it lies (lambda); false for a segment
         // parallel to the plane.
         // The planes both ends lie on (faces of them, see kTie): across them the ends' places
@@ -2058,7 +2058,7 @@ private:
             for (std::size_t k = 0; k < planes; ++k) v = v - across[k] * dot(v, across[k]);
             return v;
         };
-        constexpr std::size_t kSteps = 14;
+        constexpr std::size_t kMoves = 14;
         const auto series = [&](const Vec3 &pa, double qa, const Vec3 &pb, double qb, Vec3 *steps,
                                 double *lambda) {
             const double l0 = qb - qa;
@@ -2081,9 +2081,9 @@ private:
             // direction must be read from.
             std::size_t count = 0;
             const auto put = [&](const Vec3 &x, const Vec3 &y, const Vec3 &z) {
-                const auto part = [](double a, double b, double c) {
-                    const double sum = a + b + c;
-                    return std::abs(sum) > 1e-9 * (std::abs(a) + std::abs(b) + std::abs(c)) ? sum
+                const auto part = [](double u, double v, double w) {
+                    const double sum = u + v + w;
+                    return std::abs(sum) > 1e-9 * (std::abs(u) + std::abs(v) + std::abs(w)) ? sum
                                                                                             : 0.0;
                 };
                 steps[count++] =
@@ -2107,7 +2107,7 @@ private:
             }
             return true;
         };
-        Vec3 steps[kSteps];
+        Vec3 steps[kMoves];
         double lambda[4];  // where on the segment the meet lies, from a
         if (!series(a.at, sa, b.at, sb, steps, lambda)) return false;
         // A meet at an end on the plane (offset 0) is that end, to the bit: its coordinates and
@@ -2123,7 +2123,7 @@ private:
         // or two of their places), not by the ends, and is taken as along the edges (see
         // Bvh::holds_towards). So the side of an edge a segment that passes through it
         // passes is the same on both faces that share the edge.
-        Vec3 moved[12 * kSteps];
+        Vec3 moved[12 * kMoves];
         std::size_t variants = 0;
         const auto largest = [](const Vec3 &v) {
             return std::max({std::abs(v.x), std::abs(v.y), std::abs(v.z)});
@@ -2138,14 +2138,14 @@ private:
                     const double moved_q = q == 0.0 ? 0.0 : q + dot(n, step);
                     double unused[4];
                     const bool ok = end == 0 ? series(a.at + step, moved_q, b.at, sb,
-                                                      moved + variants * kSteps, unused)
+                                                      moved + variants * kMoves, unused)
                                              : series(a.at, sa, b.at + step, moved_q,
-                                                      moved + variants * kSteps, unused);
+                                                      moved + variants * kMoves, unused);
                     if (ok) ++variants;
                 }
             }
         }
-        return Bvh::holds_towards(coordinates(at, lambda[1]), steps, kSteps, moved, variants);
+        return Bvh::holds_towards(coordinates(at, lambda[1]), steps, kMoves, moved, variants);
     }
 
     // The face nearest a that the segment from a to b crosses, or -1. A face is crossed
