@@ -354,8 +354,9 @@ Outdoor acoustics, in steps:
   against ray theory and the parabolic equation in the `windy` preset
   (`validation/wave_wind.py`). Runs on the CPU; the wind's shear term on the air's
   motion stays out. Its wind flows round the model's solids as an ideal fluid's (no
-  wake, no eddies), checked against the exact flow past a sphere. Without it nothing
-  changes.
+  wake, no eddies), checked against the exact flow past a sphere. The air of the grid's
+  absorbing layer is still, and its border sends back about half the wind's Mach number
+  of the sound that leaves. Without it nothing changes.
 - [x] The wave solver's room for sound along its matched layer only on the sides that
   need it: a side the model's own surfaces close gets none, which saves a hall open at
   one end 1.8 to 2.0 times the cells (see Open models under

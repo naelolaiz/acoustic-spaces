@@ -116,6 +116,13 @@
   is read instead of holding a copy for the whole run: a walk of 201 places through the
   `church` example peaks at 336 MiB where it took 1,685 MiB, with the same results, and
   the memory estimate counts what is kept.
+- Changed: on the CPU, the ray tracer finds the nearest of a run's directions for an
+  arrival in a table instead of going through them all and no longer clears its work
+  arrays for every ray, and the wave solver works out each state's term of a wall's
+  branches once a step instead of twice: the late part of the `concert_hall` example
+  takes 9.8 s on four cores where it took 13.6 s (the `lecture_hall`'s 7.4 s where it
+  took 9.5 s), and the wave solver's run of the `room_modes` example up to the 500 Hz
+  band 5.5 s where it took 6.8 s, with the same results.
 - Changed: the draws of the materials' spread share what does not depend on the draw
   (the paths' counts on each surface, the early paths' delay phases) and work out a
   draw's octave echogram once for the parameters and the levels: with the faster fit
@@ -279,12 +286,21 @@
 - Fixed (results change): with `simulation.wave.wind: moving`, the wind blew through
   the model's solids, which made the sound in a nearly closed space such as a room
   with an opening grow without bound; it now flows round them as an ideal fluid's, so
-  results near buildings change (the validation's façade echo comes 0.42 ms sooner)
+  results near buildings change (the validation's façade echo comes 0.41 ms sooner)
   and runs there take longer. Where weather zones change the wind along its way, it
   now passes from one zone's wind to the next's gradually, no cell gaining or losing
-  air, which changes results there too; open, flat ground in one weather is as before,
-  to the bit. Each run in moving air is also watched and stops with an error should
-  its sound grow, and a wave solver's run that does not stay finite is refused.
+  air, which changes results there too. Each run in moving air is also watched and
+  stops with an error should its sound grow, and a wave solver's run that does not
+  stay finite is refused.
+- Fixed (results change): in the wave solver's moving air, sound could build up in fast
+  winds where the wind crosses the border of the grid's absorbing layer, whose air is
+  still (in the runs made, the slowest wind in which it did was 53 m/s, at 45 degrees
+  to the grid over open ground on a grid 4 m tall). Each cell's own sound now goes out
+  through that border and silence comes in, which adds no energy there, and every
+  result in moving air changes a little (the validation's levels by up to 0.012 dB,
+  its façade echo by 0.011 ms); as before, the border sends back about half the wind's
+  Mach number of the sound that leaves, 32 to 40 dB below it at 10 m/s (see
+  [Validation](docs/validation.md#moving-air-in-the-wave-solver)).
 - Fixed (results change): outdoors, the wave solver took the wind into a closed building
   round a shut-in source, whose air is still. In a 15 m/s wind a 6 m hut's band
   energies were up to 1.7 dB off the still air's with the effective speed of sound and
@@ -306,7 +322,7 @@
   reading beyond (Free field under [Validation](docs/validation.md#wave-based-solver)).
 - Docs: the cost of the wave solver's moving air is given as four to five times the
   effective speed of sound's over open ground and more round buildings
-  (`validation/wave_wind.py` measures 3.8 to 5.0 times, and 10.5 times round its
+  (`validation/wave_wind.py` measures 3.9 to 4.9 times, and 12 times round its
   façade's building), where the help, the editor's tip and the docs said three to four
   times.
 - New validation: `validation/wave_walls.py`, what the wave solver's walls on cell faces
