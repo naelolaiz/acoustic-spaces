@@ -37,7 +37,11 @@ parameter a b / (a + b) and for the string's directions at the edge:
 - for a roof's corner, along whose top the wave runs, the two terms of the incident wave
   of the right-angled wedge, seen from the source (the near corner) or the listener (the
   far one), less cos(bend / 2) of those of the half-plane that the wall is to the
-  march.
+  march. A corner that an end over its roof lights itself takes the end's own wave and
+  that of the end's image in the roof apart: the wedge's two terms of the incident
+  wave for the one and its two of the reflection off the roof for the other, each less
+  cos(bend / 2) of the half-plane's two of the incident wave, for the angle between
+  the wave's way to the corner and its way on.
 
 The march goes both ways, and the listener takes the mean of the two, so that the sound
 from A to B is that from B to A. Each begins at its first obstacle, from the field in
@@ -46,7 +50,10 @@ function, which a wavelength and more from the end is exp(ikR) / sqrt(R); the im
 with the spherical wave's reflection factor over a ground with an impedance): the
 parabolic equation's own starting field holds for sound within some 35 degrees of the
 horizontal, and the way from the street up to a roof is steeper. The first obstacle's
-edge is lit by the end and by its image apart, each from its own direction.
+edge is lit by the end and by its image apart, each from its own direction. An end
+over a roof has its own field up to the first top past it, a barrier on the roof, what
+stands against the roof's far side, or that side: its march begins there, with the
+end's image in the roof, which is rigid.
 
 Sound that leaves an end almost straight up crosses the march's absorbing layer in too
 short a range for the layer to take it, and would come back down from the top of the
@@ -58,12 +65,13 @@ more is not marched: :func:`over_row` raises :class:`OutOfReach` for an end leve
 with its first top and closer to it than 3.7 to 3.9 cm (the 63 to 500 Hz octave
 bands), for one close before it and high above its top (10 cm before it, more than
 2.6 m above in the 500 Hz band, 5.2 m in the 250 Hz band), and for a way from an end
-to its first top, or from the end's image in the ground, that is too steep (in the
-500 Hz band beyond 88.2 degrees from an end a metre before a wall and 87.4 degrees
-from one 10 cm before it, in the 250 Hz band beyond 89.1 and 88.7, in the 125 Hz
-band beyond 89.6 and 89.4, in the 63 Hz band beyond 89.8 and 89.7). Only the
-reflection off the ground can be left out on demand (``steep_reflections``), which
-is how a row high above a ground stands in free space.
+to its first top, or from the end's image in the ground or in the roof under it,
+that is too steep (in the 500 Hz band beyond 88.2 degrees from an end a metre before
+a wall and 87.4 degrees from one 10 cm before it, in the 250 Hz band beyond 89.1 and
+88.7, in the 125 Hz band beyond 89.6 and 89.4, in the 63 Hz band beyond 89.8 and
+89.7). Only the reflection off the ground can be left out on demand
+(``steep_reflections``), which is how a row high above a ground stands in free
+space; a roof's cannot.
 
 Deep in a shadow close behind a high top, where the sound is weak, the level depends
 on the height of the march's grid of heights: behind a wall 20 m high on a rigid
@@ -87,25 +95,35 @@ of the field in two dimensions far from the ends alone: ends closer to each othe
 over the tops than ``STRING_WAVELENGTHS`` wavelengths of the lowest frequency are
 out of reach too.
 
-Where the ground changes before an end's first obstacle, the end stands over a roof,
-or nothing stands between the ends, that end's march begins at the end, with the
-parabolic equation's starting field. That field is the end's own within some 35
-degrees of the horizontal and from about a wavelength on, and :func:`over_row` raises
-:class:`OutOfReach` beyond: for a way on from such an end, or from its image in the
-ground or the roof, steeper than ``FROM_END_DEG``, and for a first top, or the other
-end with no top before it, closer than ``FROM_END_WAVELENGTHS`` wavelengths of the
-lowest frequency (:func:`_from_its_end`), whatever ``steep_reflections`` is: a march
-from its end has the reflection in its starting field. Within those such a march is
-within 0.5 dB of the edge integrals of the four paths over a barrier on a roof or
-behind a change of the ground, of the exact solution for a roof's corner, and of the
-direct sound and the reflection with nothing between the ends; at 50 degrees it would
-be 1.0 dB low, and a quarter of a wavelength before a barrier on a roof up to 1.0 dB
-low.
+Where the ground changes before an end's first obstacle, nothing stands between the
+ends, or the roof under an end goes on to the other end with no barrier on it between
+the two, that end's march begins at the end, with the parabolic equation's starting
+field. That field is the end's own within some 35 degrees of the horizontal and from
+about a wavelength on, and :func:`over_row` raises :class:`OutOfReach` beyond: for a
+way on from such an end, or from its image in the ground or the roof, steeper than
+``FROM_END_DEG``, and for a first top, or the other end with no top before it, closer
+than ``FROM_END_WAVELENGTHS`` wavelengths of the lowest frequency
+(:func:`_from_its_end`), whatever ``steep_reflections`` is: a march from its end has
+the reflection in its starting field. Within those such a march is within 0.5 dB of
+the edge integrals of the four paths over a barrier behind a change of the ground,
+and of the direct sound and the reflection with nothing between the ends; at 50
+degrees it would be 1.0 dB low, and a quarter of a wavelength before a barrier on a
+rigid ground up to 1.0 dB low.
 
 The marches take the row's skyline (:func:`skyline`): over buildings that overlap, the
 highest roof; roofs level with each other that touch as one roof. A corner that
 something at least as high stands against (a lower roof against a wall) sheds nothing
 (:func:`edges_of`).
+
+The edges' terms take a barrier for a half-plane, lit by the end and by its image in
+the surface it stands on: the sound that goes on between its top and a rigid roof or
+ground under it is not in them. Against a wave calculation, a barrier on a rigid roof
+under both ends is within 0.4 dB where it is 0.7 wavelengths high or more, within
+1.2 dB from a quarter to half a wavelength, and up to 3 dB off below a quarter (one
+10 cm high, which changes next to nothing, 2.4 dB too high in the 63 Hz band with
+the source half a metre before it); a parapet on the edge of the roof under an end is
+within 0.8 dB from a quarter of a wavelength on and 1.3 dB below that
+(docs/validation.md, "Rows of roofs and barriers against a wave calculation").
 
 A march one way has no sound that comes back, and what stands behind an end does
 nothing: a roof under an end goes on behind it without end (at the roof's edge there
@@ -140,13 +158,13 @@ GROUND_STEP_M = 0.25
 #: A wave that leaves a march's start almost straight up crosses the absorbing layer in
 #: too short a range for it to take the wave, and comes back down from the top of the
 #: march's grid. The layer is made thick enough to leave this share at most of the
-#: waves a march's start needs: those of the end and of its image in the ground to the
-#: start from the first top up to the upper end of the first Fresnel zone of their
-#: strings over the tops, and round that as far as ``FRESNEL_RADII`` radii of the zone
-#: of a string straight across the start, and ``START_WAVELENGTHS`` wavelengths at
-#: least (the start of an end closer than a wavelength). It grows to ``LAYER_MOST``
-#: times its usual thickness at most; a start that needs more is out of the solver's
-#: reach (:class:`OutOfReach`).
+#: waves a march's start needs: those of the end and of its image in the ground (or in
+#: the roof under it) to the start from the first top up to the upper end of the first
+#: Fresnel zone of their strings over the tops, and round that as far as
+#: ``FRESNEL_RADII`` radii of the zone of a string straight across the start, and
+#: ``START_WAVELENGTHS`` wavelengths at least (the start of an end closer than a
+#: wavelength). It grows to ``LAYER_MOST`` times its usual thickness at most; a start
+#: that needs more is out of the solver's reach (:class:`OutOfReach`).
 STEEP_LEFT = 1e-3
 FRESNEL_RADII = 3.0
 START_WAVELENGTHS = 1.0
@@ -190,13 +208,13 @@ _PLANE, _CORNER, _ACROSS = np.asarray(2.0), np.asarray(1.5), np.asarray(1.0)
 class OutOfReach(ValueError):
     """Raised by :func:`over_row` for ends closer to each other over the tops than
     ``STRING_WAVELENGTHS`` wavelengths, and for an end whose march cannot hold what
-    its start needs. Where the march begins at the end's first obstacle: a thicker
-    absorbing layer than ``LAYER_MOST`` times the usual one, for an end close to that
-    obstacle with a way past its top (or its image's) that is too steep. Where it
-    begins at the end itself (:func:`_from_its_end`): a way on from the end, or from
-    its image in the ground or the roof under it, steeper than ``FROM_END_DEG``, or a
-    first top, or the other end with no top before it, closer than
-    ``FROM_END_WAVELENGTHS`` wavelengths."""
+    its start needs. Where the march begins at the end's first obstacle (over a roof:
+    at the first top past the end): a thicker absorbing layer than ``LAYER_MOST``
+    times the usual one, for an end close to that obstacle with a way past its top
+    (or its image's) that is too steep. Where it begins at the end itself
+    (:func:`_from_its_end`): a way on from the end, or from its image in the ground
+    or the roof under it, steeper than ``FROM_END_DEG``, or a first top, or the other
+    end with no top before it, closer than ``FROM_END_WAVELENGTHS`` wavelengths."""
 
 
 @dataclass(frozen=True)
@@ -228,9 +246,12 @@ class _Way:
     height: float
     tops: list
     #: Where the march began from its end's own field (m along it: at its first
-    #: obstacle), or None where it began at the end with the parabolic equation's.
+    #: obstacle, or over a roof at the first top past the end), or None where it began
+    #: at the end with the parabolic equation's.
     first: float | None
-    #: (F,) the ground's impedance before the first obstacle (infinite: rigid).
+    #: What the end stands over up to there (m up: the ground, 0, or a roof), and its
+    #: impedance (F,; infinite: rigid, as a roof is).
+    under: float
     ground: np.ndarray
     #: What :func:`_kept` takes for the waves of the march's start.
     through: float
@@ -275,7 +296,7 @@ def over_row(
     much of it as the march's layer still takes (:func:`_kept`): a row high above a
     ground then stands in free space. That is for a march that begins at its first
     obstacle; one that begins at its end cannot leave its reflection out, and is
-    refused as before."""
+    refused as before, as is an end over a roof for its reflection off the roof."""
     if steep_reflections not in ("raise", "leave out"):
         raise ValueError('steep_reflections is "raise" or "leave out"')
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
@@ -304,16 +325,17 @@ def over_row(
     for what, x, h in edges_of(row):
         if not _SAME_M < x < reach - _SAME_M:
             continue
-        for from_source, a, to_source in _lit(forward, k, (what, x, h)):
-            for from_listener, b, onwards in _lit(backward, k, (seen_back[what], reach - x, h)):
+        mirrored_edge = (seen_back[what], reach - x, h)
+        for from_source, a, to_source, source_s in _lit(forward, k, (what, x, h)):
+            for from_listener, b, onwards, listener_s in _lit(backward, k, mirrored_edge):
                 to_listener = (-onwards[0], onwards[1])
                 kl = k * a * b / (a + b)
                 if what == "screen":
                     shed = _screen(k, kl, to_source, to_listener)
                 elif what == "roof":
-                    shed = _corner(k, kl, to_source, 1.0)
+                    shed = _corner(k, kl, to_source, 1.0, to_listener if listener_s else None)
                 else:
-                    shed = _corner(k, kl, to_listener, -1.0)
+                    shed = _corner(k, kl, to_listener, -1.0, to_source if source_s else None)
                 added += from_source * from_listener * shed / math.sqrt(a + b)
     return Row(marched=0.5 * (forward.pressure + backward.pressure), edges=added)
 
@@ -358,8 +380,8 @@ def _march_from(
         close = min(math.hypot(reach - x, h - z1) for x, h in tops)
         fine = CELLS_TO_TOP * c / float(np.max(f)) / close
         steps_per_wavelength = min(max(steps_per_wavelength, fine), FINEST * steps_per_wavelength)
-    first = _first(f, impedance, reach, row)
-    ground = _impedances(impedance, 0.0, len(f))
+    first, under = _first(f, impedance, reach, row)
+    ground = _impedances(impedance if under == 0.0 else None, 0.0, len(f))
     start, layer, through = None, None, math.inf
     #: The parabolic equation's starting field is a point source's on the way along the
     #: ground; up or down a path it is that times the root of the path's cosine.
@@ -367,17 +389,19 @@ def _march_from(
     if first is not None:
         cosine = 1.0
 
-        below = string([(0.0, -z0), *tops, (reach, z1)])
+        # The end's image in what it stands over: the ground, or the roof under it.
+        mirror = 2.0 * under - z0
+        below = string([(0.0, mirror), *tops, (reach, z1)])
         mirrored = _length(below)
 
         def field(z):
             # The image's wave by the root of its longer path less, which the path's
             # length at the other end then takes it for.
             direct = np.hypot(first, z - z0)
-            image = np.hypot(first, z + z0)
-            reflected = _reflection(ground, k, (z + z0) / image, image)
+            image = np.hypot(first, z - mirror)
+            reflected = _reflection(ground, k, (z - mirror) / image, image)
             u = _kept(through, z - z0) * _wave(k, direct)
-            u = u + (_kept(through, z + z0) * math.sqrt(length / mirrored)) * reflected * (
+            u = u + (_kept(through, z - mirror) * math.sqrt(length / mirrored)) * reflected * (
                 _wave(k, image)
             )
             return u / math.sqrt(first)
@@ -385,7 +409,9 @@ def _march_from(
         # The layer leaves exp(-2 strength thickness / (3 slope)) at most of a wave that
         # goes up through it at that slope and comes back down from the top of the grid.
         floor = max(h for x, h in tops if x <= first + _SAME_M)
-        layer = _layer(f, c, first, floor, (whole, below), left_out)
+        # Only the ground's reflection can be left out, not a roof's.
+        off = "roof" if under > 0.0 else "ground"
+        layer = _layer(f, c, first, floor, (whole, below), left_out and under == 0.0, off)
         through = 2.0 * parabolic.LAYER_STRENGTH * layer / 3.0 * first
         start = (first, field)
     else:
@@ -425,6 +451,7 @@ def _march_from(
             height=float(z0),
             tops=tops,
             first=first,
+            under=under,
             ground=ground,
             through=through,
         )
@@ -439,11 +466,14 @@ def _wave(k: np.ndarray, distance: np.ndarray) -> np.ndarray:
     return scale[:, None] * hankel1(0, k[:, None] * np.atleast_1d(distance)[None, :])
 
 
-def _layer(f, c: float, first: float, floor: float, strings, left_out: bool = False) -> float:
+def _layer(
+    f, c: float, first: float, floor: float, strings, left_out: bool = False, off: str = "ground"
+) -> float:
     """The thickness (m) of the absorbing layer for a march that begins ``first`` m
     from its end, above the top ``floor`` m up there: what leaves ``STEEP_LEFT`` at
-    most of the waves from the end and from its image in the ground to the heights of
-    the start that their ``strings`` need. Those are the heights from the top there,
+    most of the waves from the end and from its image (in the ground, or in the roof
+    under it: ``off``, which the error names) to the heights of the start that their
+    ``strings`` need. Those are the heights from the top there,
     whose edge the end lights, up to the upper end of each string's first Fresnel zone
     on the start (:func:`_zone`), and the start round them as far as
     ``FRESNEL_RADII`` radii of the zone of a string straight across (sqrt(wavelength
@@ -466,8 +496,9 @@ def _layer(f, c: float, first: float, floor: float, strings, left_out: bool = Fa
             wanted.append((slope + around) * by_slope)
         elif not (of_image and left_out):
             raise OutOfReach(
-                f"an end {first:.3g} m before its first obstacle, with the start that its "
-                f"{'reflection off the ground' if of_image else 'way on'} needs up to "
+                f"an end {first:.3g} m before its first "
+                f"{'top' if off == 'roof' else 'obstacle'}, with the start that its "
+                f"{f'reflection off the {off}' if of_image else 'way on'} needs up to "
                 f"{math.degrees(math.atan(slope)):.1f} degrees steep: the march at "
                 f"{float(np.min(f)):.0f} Hz and above would need "
                 f"{(slope + around) * by_slope / usual:.3g} times its usual absorbing "
@@ -553,20 +584,30 @@ def _kept(through: float, rise):
         return np.minimum(1.0, STEEP_LEFT * np.exp(through / np.abs(rise)))
 
 
-def _first(f, impedance, reach: float, row) -> float | None:
-    """Where a march begins from its end's own field: its first obstacle (m along it),
-    with one ground from the end up to it; None where nothing stands on the way, the
-    end stands over or against the first obstacle, or the ground changes before it."""
-    on_the_way = [near for near, far, _ in row if far > _SAME_M and near < reach - _SAME_M]
-    if not on_the_way or min(on_the_way) <= _SAME_M:
-        return None
-    first = min(on_the_way)
-    under = _impedances(impedance, 0.0, len(f))
+def _first(f, impedance, reach: float, row) -> tuple[float | None, float]:
+    """Where a march begins from its end's own field (m along it), and what the end
+    stands over up to there (m up). Over the ground (0): at its first obstacle, with
+    one ground from the end up to it. Over a roof (the roof's height): at the first
+    top past the end, a barrier on the roof or the roof's far side. None where nothing
+    stands on the way, the ground changes before the first obstacle, or the roof goes
+    on to the other end with no barrier on it between the two."""
+    on_the_way = [o for o in row if o[1] > _SAME_M and o[0] < reach - _SAME_M]
+    over = [o for o in on_the_way if o[0] <= _SAME_M and o[1] > o[0]]
+    if over:
+        _, far, under = over[0]
+        # The barriers on the roof, what stands against its far side, and that side.
+        ahead = [far, *(near for near, _, _ in on_the_way)]
+        ahead = [x for x in ahead if _SAME_M < x < reach - _SAME_M]
+        return (min(ahead) if ahead else None), under
+    if not on_the_way:
+        return None, 0.0
+    first = min(near for near, _, _ in on_the_way)
+    below = _impedances(impedance, 0.0, len(f))
     count = max(1, math.ceil(first / GROUND_STEP_M))
     for i in range(1, count):
-        if not np.array_equal(_impedances(impedance, first * i / count, len(f)), under):
-            return None
-    return first
+        if not np.array_equal(_impedances(impedance, first * i / count, len(f)), below):
+            return None, 0.0
+    return first, 0.0
 
 
 def _impedances(impedance, at: float, count: int) -> np.ndarray:
@@ -592,24 +633,27 @@ def _reflection(ground: np.ndarray, k: np.ndarray, cosine, distance) -> np.ndarr
 def _lit(way: _Way, k: np.ndarray, edge: tuple) -> list[tuple]:
     """How a march's end lights an ``edge`` (what, m along the march, top): the waves
     that reach it, each as (the two-dimensional field (F,), the length of its path
-    (m), the direction (along the march, up) from the edge to where it comes from).
-    The first obstacle of a march that begins there is lit by the end and by its image
-    in the ground, as much of each as the march takes (:func:`_kept`); any other edge
-    by the marched field, along the string from the end."""
+    (m), the direction (along the march, up) from the edge to where it comes from,
+    and whether it comes straight from the end or from its image, not from the
+    march). The first top of a march that begins there is lit by the end and by its
+    image in what the end stands over (the ground, or a roof), each its own wave and
+    as much of each as the march takes (:func:`_kept`); any other edge by the marched
+    field, along the string from the end."""
     _, x, h = edge
     if way.first is not None and abs(x - way.first) <= _SAME_M:
         out: list[tuple] = []
-        for z0 in (way.height, -way.height):
+        for image, z0 in enumerate((way.height, 2.0 * way.under - way.height)):
             a = math.hypot(x, h - z0)
             u = float(_kept(way.through, h - z0)) * np.exp(1j * k * a) / math.sqrt(a)
-            if z0 < 0.0 or (z0 == 0.0 and out):
+            if image:
                 u = u * _reflection(way.ground, k, (h - z0) / a, a)[:, 0]
-            out.append((u, a, (-x, z0 - h)))
+            out.append((u, a, (-x, z0 - h), True))
         return out
     path = string([(0.0, way.height), *(t for t in way.tops if t[0] < x - _SAME_M), (x, h)])
     cosine = 1.0 if way.first is not None else _cosine(path)
     before = path[-2]
-    return [(way.lit[edge] * math.sqrt(x / cosine), _length(path), (before[0] - x, before[1] - h))]
+    lit = way.lit[edge] * math.sqrt(x / cosine)
+    return [(lit, _length(path), (before[0] - x, before[1] - h), False)]
 
 
 def string(points) -> list[tuple[float, float]]:
@@ -739,23 +783,36 @@ def _screen(k: np.ndarray, kl: np.ndarray, to_source, to_listener) -> np.ndarray
     )
 
 
-def _corner(k: np.ndarray, kl: np.ndarray, outside, along: float) -> np.ndarray:
+def _corner(k: np.ndarray, kl: np.ndarray, outside, along: float, inside=None) -> np.ndarray:
     """(F,) what a roof's rigid corner sheds beyond the screen the march takes its wall
-    for, between a wave along the roof and the direction ``outside`` (along the way,
-    up) from the corner to where the sound comes from (the near corner: ``along`` 1,
-    the roof goes on along the way) or goes to (the far corner: ``along`` -1): the two
-    terms of the incident wave of the wedge open over three right angles, which along a
-    rigid face are half its field, less what the march's screen sheds, cos(bend / 2)
-    of those of the half-plane that hangs down from the corner."""
+    for, between a wave on the roof's side and the direction ``outside`` (along the
+    way, up) from the corner to where the sound comes from (the near corner: ``along``
+    1, the roof goes on along the way) or goes to (the far corner: ``along`` -1). The
+    wave on the roof's side runs along the roof, where the march brings it or takes
+    it on (``inside`` None): the two terms of the incident wave of the wedge open over
+    three right angles, which along a rigid face are half its field. Or it is the own
+    wave of an end over the roof or of the end's image in the roof, from the corner in
+    the direction ``inside`` (below the roof's plane: the image): the wedge's two
+    terms of that wave, those of the incident wave for the end and those of the
+    reflection off the roof for its image. Less what the march's screen sheds of the
+    wave: cos(bend / 2) of the two terms of the incident wave of the half-plane that
+    hangs down from the corner."""
     # Round the corner from the roof, through the air.
     phi = math.atan2(outside[1], along * outside[0]) % (2.0 * math.pi)
+    # The wave on the roof's side, above the roof (its image in the roof: below).
+    raised = 0.0 if inside is None else math.atan2(inside[1], along * inside[0])
+    between = phi - raised
+    wedge = wedge_terms(_CORNER, np.asarray(abs(raised)), np.asarray(phi), kl)
+    own = wedge[..., 0] + wedge[..., 1] if raised >= 0.0 else wedge[..., 2] + wedge[..., 3]
+    # The half-plane's terms of the incident wave are of the angle between the two.
     down = 1.5 * math.pi  # the wall, round the corner from the roof
-    wedge = wedge_terms(_CORNER, np.asarray(0.0), np.asarray(phi), kl)
-    plane = wedge_terms(_PLANE, np.asarray(down), np.asarray(max(down - phi, 0.0)), kl)
-    # The sound turns by phi less a straight angle.
-    shed = math.cos(0.5 * (phi - math.pi))
+    low = max(down - between, 0.0)
+    high = down if low > 0.0 else between
+    plane = wedge_terms(_PLANE, np.asarray(high), np.asarray(low), kl)
+    # The sound turns by that angle less a straight one.
+    shed = math.cos(0.5 * (between - math.pi))
     return np.conj(
-        wedge_prefactor(_CORNER, k, _ACROSS) * (wedge[..., 0] + wedge[..., 1])
+        wedge_prefactor(_CORNER, k, _ACROSS) * own
         - shed * wedge_prefactor(_PLANE, k, _ACROSS) * (plane[..., 0] + plane[..., 1])
     )
 

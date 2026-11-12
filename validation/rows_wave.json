@@ -628,5 +628,269 @@
 -20.73,
 -19.185,
 -23.709
+],
+"roof to 10 under the source | free | S +0.01 | L -1.99 | S at +9.51": [
+0.246,
+-0.558,
+-1.576,
+-2.826
+],
+"roof to 10 under the source | free | S +1.51 | L -1.99 | S at +9.51": [
+0.161,
+-0.279,
+-0.289,
+0.092
+],
+"roof to 10 under the source | free | S +0.01 | L -1.99 | S at +7.01": [
+-1.772,
+-3.027,
+-4.61,
+-6.579
+],
+"roof to 10 under the source | free | S +1.51 | L -1.99 | S at +7.01": [
+-1.241,
+-2.035,
+-2.648,
+-2.904
+],
+"roof to 10 under the source | free | S +0.01 | L +1.01 | S at +9.51": [
+1.814,
+1.772,
+1.904,
+2.272
+],
+"roof to 10 under the source | free | S +1.51 | L +1.01 | S at +9.51": [
+-0.247,
+-0.877,
+0.395,
+-0.085
+],
+"roof to 10 under the source | free | S +0.01 | L +1.01 | S at +7.01": [
+1.967,
+2.345,
+3.018,
+4.049
+],
+"roof to 10 under the source | free | S +1.51 | L +1.01 | S at +7.01": [
+1.225,
+0.64,
+-0.946,
+0.034
+],
+"roof to 10 under the source, parapet 0.1 m on its edge | free | S +0.01 | L -1.99 | S at +9.51": [
+0.116,
+-0.635,
+-1.491,
+-2.827
+],
+"roof to 10 under the source, parapet 0.1 m on its edge | free | S +1.51 | L -1.99 | S at +9.51": [
+0.01,
+-0.619,
+-0.384,
+0.489
+],
+"roof to 10 under the source, parapet 0.1 m on its edge | free | S +0.01 | L -1.99 | S at +7.01": [
+-1.77,
+-2.933,
+-4.269,
+-6.023
+],
+"roof to 10 under the source, parapet 0.1 m on its edge | free | S +1.51 | L -1.99 | S at +7.01": [
+-1.285,
+-2.116,
+-2.952,
+-4.367
+],
+"roof to 10 under the source, parapet 0.1 m on its edge | free | S +0.01 | L +1.01 | S at +9.51": [
+1.718,
+1.661,
+1.704,
+1.428
+],
+"roof to 10 under the source, parapet 0.1 m on its edge | free | S +1.51 | L +1.01 | S at +9.51": [
+-0.353,
+-0.851,
+0.409,
+-0.136
+],
+"roof to 10 under the source, parapet 0.1 m on its edge | free | S +0.01 | L +1.01 | S at +7.01": [
+1.927,
+2.276,
+2.839,
+3.38
+],
+"roof to 10 under the source, parapet 0.1 m on its edge | free | S +1.51 | L +1.01 | S at +7.01": [
+1.155,
+0.421,
+-1.417,
+0.824
+],
+"roof to 10 under the source, parapet 0.3 m on its edge | free | S +0.01 | L -1.99 | S at +9.51": [
+-0.248,
+-0.946,
+-2.971,
+-6.455
+],
+"roof to 10 under the source, parapet 0.3 m on its edge | free | S +1.51 | L -1.99 | S at +9.51": [
+-0.509,
+-1.653,
+0.304,
+0.456
+],
+"roof to 10 under the source, parapet 0.3 m on its edge | free | S +0.01 | L -1.99 | S at +7.01": [
+-1.723,
+-2.72,
+-4.814,
+-8.028
+],
+"roof to 10 under the source, parapet 0.3 m on its edge | free | S +1.51 | L -1.99 | S at +7.01": [
+-1.418,
+-2.648,
+-5.859,
+-8.663
+],
+"roof to 10 under the source, parapet 0.3 m on its edge | free | S +0.01 | L +1.01 | S at +9.51": [
+1.477,
+1.307,
+-0.148,
+-2.579
+],
+"roof to 10 under the source, parapet 0.3 m on its edge | free | S +1.51 | L +1.01 | S at +9.51": [
+-0.738,
+-0.616,
+0.358,
+0.071
+],
+"roof to 10 under the source, parapet 0.3 m on its edge | free | S +0.01 | L +1.01 | S at +7.01": [
+1.833,
+1.98,
+1.428,
+1.17
+],
+"roof to 10 under the source, parapet 0.3 m on its edge | free | S +1.51 | L +1.01 | S at +7.01": [
+0.904,
+-0.61,
+-2.242,
+1.943
+],
+"roof to 10 under the source, parapet 1.1 m on its edge | free | S +0.01 | L -1.99 | S at +9.51": [
+-3.134,
+-6.722,
+-9.195,
+-12.371
+],
+"roof to 10 under the source, parapet 1.1 m on its edge | free | S +1.51 | L -1.99 | S at +9.51": [
+-4.282,
+-2.473,
+-3.375,
+-3.612
+],
+"roof to 10 under the source, parapet 1.1 m on its edge | free | S +0.01 | L -1.99 | S at +7.01": [
+-2.907,
+-6.308,
+-8.658,
+-11.661
+],
+"roof to 10 under the source, parapet 1.1 m on its edge | free | S +1.51 | L -1.99 | S at +7.01": [
+-4.087,
+-11.405,
+-9.476,
+-11.791
+],
+"roof to 10 under the source, parapet 1.1 m on its edge | free | S +0.01 | L +1.01 | S at +9.51": [
+-0.947,
+-4.2,
+-6.419,
+-9.408
+],
+"roof to 10 under the source, parapet 1.1 m on its edge | free | S +1.51 | L +1.01 | S at +9.51": [
+-3.409,
+-0.655,
+-0.844,
+0.046
+],
+"roof to 10 under the source, parapet 1.1 m on its edge | free | S +0.01 | L +1.01 | S at +7.01": [
+0.169,
+-2.206,
+-3.642,
+-5.764
+],
+"roof to 10 under the source, parapet 1.1 m on its edge | free | S +1.51 | L +1.01 | S at +7.01": [
+-2.201,
+-7.576,
+-2.58,
+-3.179
+],
+"roof under both ends, screen 0.1 m high at 10 | free | S +0.01 | L +1.51 | S at +9.51": [
+6.044,
+6.159,
+6.436,
+5.842
+],
+"roof under both ends, screen 0.1 m high at 10 | free | S +1.51 | L +1.51 | S at +9.51": [
+4.416,
+0.965,
+-1.964,
+2.997
+],
+"roof under both ends, screen 0.1 m high at 10 | free | S +0.01 | L +1.51 | S at +7.01": [
+6.043,
+6.097,
+6.097,
+4.87
+],
+"roof under both ends, screen 0.1 m high at 10 | free | S +1.51 | L +1.51 | S at +7.01": [
+5.224,
+3.576,
+-4.114,
+3.95
+],
+"roof under both ends, screen 0.3 m high at 10 | free | S +0.01 | L +1.51 | S at +9.51": [
+6.233,
+6.744,
+4.506,
+-2.3
+],
+"roof under both ends, screen 0.3 m high at 10 | free | S +1.51 | L +1.51 | S at +9.51": [
+4.276,
+0.414,
+-2.122,
+3.179
+],
+"roof under both ends, screen 0.3 m high at 10 | free | S +0.01 | L +1.51 | S at +7.01": [
+6.223,
+6.338,
+3.727,
+0.557
+],
+"roof under both ends, screen 0.3 m high at 10 | free | S +1.51 | L +1.51 | S at +7.01": [
+5.261,
+2.948,
+-4.184,
+2.658
+],
+"roof under both ends, screen 1.1 m high at 10 | free | S +0.01 | L +1.51 | S at +9.51": [
+4.522,
+-2.07,
+-10.401,
+-5.629
+],
+"roof under both ends, screen 1.1 m high at 10 | free | S +1.51 | L +1.51 | S at +9.51": [
+1.24,
+-1.121,
+-1.75,
+1.985
+],
+"roof under both ends, screen 1.1 m high at 10 | free | S +0.01 | L +1.51 | S at +7.01": [
+5.04,
+-1.064,
+-6.434,
+-2.152
+],
+"roof under both ends, screen 1.1 m high at 10 | free | S +1.51 | L +1.51 | S at +7.01": [
+2.524,
+-8.725,
+-3.028,
+-0.833
 ]
 }
