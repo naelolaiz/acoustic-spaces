@@ -746,25 +746,6 @@ def _open_sides(
     return reached | ~at_layer
 
 
-def _in_sight(bvh, listeners: np.ndarray, probes: np.ndarray) -> np.ndarray:
-    """(len(probes),) whether no face of ``bvh`` lies between each of ``probes`` (the
-    :func:`_probe_points` of each of ``listeners`` in turn) and its listener. A point
-    across a thin surface (a screen, a balcony's front) can have air of its own, and a
-    difference across the surface is no gradient of the listener's air."""
-    origins = np.repeat(listeners, len(probes) // len(listeners), axis=0)
-    offsets = probes - origins
-    distances = np.linalg.norm(offsets, axis=1)
-    seen = np.ones(len(probes), dtype=bool)
-    away = distances > 0.0  # all but the listeners' own points
-    seen[away] = ~bvh.occluded(
-        np.ascontiguousarray(origins[away]),
-        np.ascontiguousarray(offsets[away] / distances[away, None]),
-        np.ascontiguousarray(distances[away]),
-        np.full(int(away.sum()), -1, np.int64),
-    )
-    return seen
-
-
 def _first_order(
     probes: np.ndarray,
     found: Sequence[bool],
@@ -1040,6 +1021,7 @@ def wave_responses(
                 size,
                 speeds,
                 *flow,
+                _PROBES,
             )
         except ValueError as error:
             if "the wind round the model's solids" not in str(error):
@@ -1099,21 +1081,33 @@ def wave_responses(
     drive = np.zeros(steps, np.float32)
     drive[lead - delay : lead - delay + len(signal)] = signal[: steps - lead + delay]
     # Before any step: a listener outside the source's air, or a source closed in. A
-    # point round a listener counts only where the listener sees it.
-    found = np.array([solver.probe_found(p) for p in range(len(probes))])
-    found &= _in_sight(bvh, listeners, probes)
+    # point round a listener counts only where the listener sees it, from the side of a
+    # surface each is read on: a point across a thin surface (a screen, a balcony's front)
+    # can have air of its own, and a difference across the surface is no gradient of the
+    # listener's air.
+    found = np.array(
+        [solver.probe_found(p) and solver.probe_in_sight(p) for p in range(len(probes))]
+    )
     found = _off_the_source(found, probes, np.asarray(source, dtype=float), h, solver.stencil)
     found = found.tolist()
     missing = [listener for i, listener in enumerate(names) if not found[_PROBES * i]]
     if missing:
+        # A source on a surface sends sound into the space on one side of it, which the
+        # listeners it reaches choose where they can (see the solver's place_on_face).
+        note = (
+            " (the source lies on a surface of the model and sends sound into the space on"
+            " one side of it only: a listener in the space on its other side is not reached)"
+            if solver.source_on_face
+            else ""
+        )
         air, volume = solver.air_cells * h**3, model.room.volume_m3
         if volume and air < 0.1 * volume:
             who = f"source {label!r}" if label else "the source"
             raise ValueError(
                 f"{who} is closed in: the wave grid has {air:.2g} m³ of air round it, "
-                f"in a room of {volume:.3g} m³"
+                f"in a room of {volume:.3g} m³{note}"
             )
-        raise ValueError(f"listener {missing[0]!r} is not in the air of the wave grid")
+        raise ValueError(f"listener {missing[0]!r} is not in the air of the wave grid{note}")
     name = f"{centres[0]} Hz" if bands == 1 else f"{centres[0]}-{centres[bands - 1]} Hz"
     # The GPU steps still air only: moving air stays on the CPU.
     gpu_wanted = use_gpu(device, steps)

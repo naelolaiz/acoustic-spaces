@@ -100,6 +100,12 @@ public:
     // Unit normal of a face, following the right-hand rule on its vertex order.
     const Vec3 &normal(std::size_t face) const { return tri_[place_[face]].normal; }
 
+    // How far p lies from a face's plane, along its normal.
+    double offset(std::size_t face, const Vec3 &p) const {
+        const Triangle &t = tri_[place_[face]];
+        return dot(t.normal, p - t.v0);
+    }
+
     // The corners of a face, in its vertex order.
     std::array<Vec3, 3> corners(std::size_t face) const {
         const Triangle &t = tri_[place_[face]];
@@ -148,6 +154,170 @@ public:
             return true;
         }, limit);
         return any;
+    }
+
+    // Calls visit(face, t) for every face hit with t in (min_distance(), t_max), in no
+    // particular order.
+    template <typename Visit>
+    void each_hit(const Vec3 &origin, const Vec3 &dir, double t_max, Visit visit) const {
+        double limit = t_max;
+        traverse(
+            origin, dir, -1,
+            [&](std::size_t face, double t) {
+                visit(face, t);
+                return false;
+            },
+            limit);
+    }
+
+    // t of the ray's hit on a face, by the arithmetic of intersect and each_hit (which keep
+    // it when it lies in (min_distance(), t_max)); negative for a miss.
+    double hit(std::size_t face, const Vec3 &origin, const Vec3 &dir) const {
+        return hit_triangle(tri_[place_[face]], origin, dir);
+    }
+
+    // Calls visit(face, offset) for every face whose plane passes within `tolerance` of
+    // p (`offset` from it, along the normal) and that lies in a leaf of the tree whose box,
+    // grown by `tolerance`, holds p, in no particular order: every face within `tolerance`
+    // of p, and some further off.
+    template <typename Visit>
+    void each_face_near(const Vec3 &p, double tolerance, Visit visit) const {
+        std::array<std::uint32_t, kMaxDepth + 4> stack{};
+        std::size_t top = 0;
+        std::uint32_t current = 0;
+        for (;;) {
+            const Node &node = nodes_[current];
+            const Box &box = node.box;
+            bool inside = true;
+            for (int a = 0; a < 3; ++a) {
+                inside = inside && p[a] >= box.lo[a] - tolerance && p[a] <= box.hi[a] + tolerance;
+            }
+            if (inside && node.count > 0) {
+                for (std::uint32_t i = node.first; i < node.first + node.count; ++i) {
+                    const Triangle &tri = tri_[i];
+                    const double offset = dot(tri.normal, p - tri.v0);
+                    if (std::abs(offset) <= tolerance) {
+                        visit(static_cast<std::size_t>(order_[i]), offset);
+                    }
+                }
+            } else if (inside) {
+                if (top == stack.size()) {
+                    throw std::runtime_error("Bvh: traversal stack overflow");
+                }
+                stack[top++] = node.first + 1;
+                current = node.first;
+                continue;
+            }
+            if (top == 0) return;
+            current = stack[--top];
+        }
+    }
+
+    // Of p, a point of a face's plane: its barycentric coordinates, each 0 on one edge (at:
+    // edge 0 runs from the face's first corner to its third, edge 1 from the first to the
+    // second, edge 2 from the second to the third, see corners), their gradients along the
+    // plane (gradient), whose lengths are the inverse of the triangle's heights (steep,
+    // found only where it may matter), and whether p lies on each edge (on): within
+    // `edge_tie` (a distance along the plane) of the edge's line, and within kEdge
+    // (barycentric) of the edge, inside or outside it; a caller may decide `on` otherwise
+    // (see WaveSolver::edges). `area` false for a face of no area, the rest then unset.
+    struct EdgeCoordinates {
+        bool area = false;
+        double at[3] = {};
+        Vec3 gradient[3];
+        bool on[3] = {false, false, false};
+        double steep(int e) const { return norm(gradient[e]); }
+        // How far p lies from edge e's line, along the plane.
+        double distance(int e) const { return std::abs(at[e]) / steep(e); }
+        // Whether p lies within kEdge (barycentric) of edge e, inside or outside it: where
+        // a ray's hit counts as on the face (see hit_triangle).
+        bool near(int e) const { return std::abs(at[e]) <= kEdge; }
+        // Whether p lies past edge e, outside the face, and not on it.
+        bool out(int e) const { return at[e] < 0.0 && !on[e]; }
+    };
+
+    EdgeCoordinates edges(std::size_t face, const Vec3 &p, double edge_tie) const {
+        EdgeCoordinates c = edge_coordinates(tri_[place_[face]], p);
+        for (int e = 0; e < 3 && c.area; ++e) {
+            c.on[e] = c.at[e] <= kEdge && std::abs(c.at[e]) <= edge_tie * c.steep(e);
+        }
+        return c;
+    }
+
+    // The two ends of edge e of a face (see EdgeCoordinates).
+    std::array<Vec3, 2> edge_ends(std::size_t face, int e) const {
+        const std::array<Vec3, 3> v = corners(face);
+        return e == 0
+                   ? std::array<Vec3, 2>{v[0], v[2]}
+                   : (e == 1 ? std::array<Vec3, 2>{v[0], v[1]} : std::array<Vec3, 2>{v[1], v[2]});
+    }
+
+    // Whether the foot of p on a face's plane lies in the face or on one of its edges: past
+    // none of them (see EdgeCoordinates).
+    static bool holds_foot(const EdgeCoordinates &c) {
+        return c.area && !c.out(0) && !c.out(1) && !c.out(2);
+    }
+
+    // The same, with `on` within `edge_tie` of each edge's line (see edges).
+    bool holds_foot(std::size_t face, const Vec3 &p, double edge_tie) const {
+        return holds_foot(edges(face, p, edge_tie));
+    }
+
+    // Whether a face holds the point p + e_0 d[0] + e_1 d[1] + ... of its plane, for
+    // infinitesimal e_0 >> e_1 >> ... > 0 (p's foot, with its coordinates c, the d's along
+    // the plane): where the foot lies on an edge (see EdgeCoordinates), the first d that
+    // leaves the edge's line says whether the point goes into the face or out of it; along
+    // all of them the point stays on the edge, and is held. A foot inside the face and on
+    // none of its edges is held; one outside it and on none of its edges is not (the face
+    // is not widened here as a ray's hit widens it).
+    // A d whose part across an edge is within 1e-9 of the sizes of its products (rounding)
+    // is taken as along that edge; so is one whose part across an edge one of `variants`
+    // sets of the d's (count each, one after another, from slightly other inputs) turns
+    // round, or makes as large.
+    static bool holds_towards(const EdgeCoordinates &c, const Vec3 *d, std::size_t count,
+                              const Vec3 *variants = nullptr, std::size_t many = 0) {
+        if (!holds_foot(c)) return false;
+        for (int e = 0; e < 3; ++e) {
+            if (!c.on[e]) continue;
+            for (std::size_t i = 0; i < count; ++i) {
+                const double length = norm(d[i]);
+                if (!(length > 0.0)) continue;
+                const Vec3 &grad = c.gradient[e];
+                const double g = dot(grad, d[i]);
+                // Rounding: 1e-9 of the sum of the products' sizes (of the parts of d across
+                // the edge, not of all of d: a step can be large along the edge).
+                double spread = 1e-9 * (std::abs(grad.x * d[i].x) + std::abs(grad.y * d[i].y) +
+                                        std::abs(grad.z * d[i].z));
+                for (std::size_t v = 0; v < many; ++v) {
+                    spread =
+                        std::max(spread, std::abs(dot(c.gradient[e], variants[v * count + i]) - g));
+                }
+                if (std::abs(g) <= spread) continue;  // along the edge
+                if (g < 0.0) return false;
+                break;
+            }
+        }
+        return true;
+    }
+
+    // Whether p lies on one of the face's edges (see EdgeCoordinates).
+    static bool near_edge(const EdgeCoordinates &c) {
+        return c.area && (c.on[0] || c.on[1] || c.on[2]);
+    }
+
+    // Whether holds_towards holds p whatever the d's: its foot inside the face and on none
+    // of its edges.
+    static bool holds_inside(const EdgeCoordinates &c) { return holds_foot(c) && !near_edge(c); }
+
+    // The edges of a face that p, a point of its plane, lies on (see EdgeCoordinates): for
+    // each, the unit vector along the plane from the edge away from the face, in out; how
+    // many.
+    static std::size_t edges_out(const EdgeCoordinates &c, Vec3 *out) {
+        std::size_t count = 0;
+        for (int e = 0; e < 3 && c.area; ++e) {
+            if (c.on[e]) out[count++] = -c.gradient[e] / c.steep(e);
+        }
+        return count;
     }
 
     // The tree as flat arrays, for tracing elsewhere (on a GPU), through
@@ -356,6 +526,26 @@ private:
         const double v = dot(dir, q) * inv_det;
         if (v < -kEdge || u + v > 1.0 + kEdge) return -1.0;
         return dot(tri.e2, q) * inv_det;
+    }
+
+    // Of p, a point of a triangle's plane: its coordinates (see EdgeCoordinates), `on` unset.
+    static EdgeCoordinates edge_coordinates(const Triangle &tri, const Vec3 &p) {
+        EdgeCoordinates c;
+        const Vec3 h = cross(tri.normal, tri.e2);
+        const double det = dot(tri.e1, h);
+        if (std::abs(det) < 1e-300) return c;
+        const double inv_det = 1.0 / det;
+        const Vec3 gu = h * inv_det, gv = cross(tri.e1, tri.normal) * inv_det;
+        const Vec3 s = p - tri.v0;
+        const double u = dot(s, gu), v = dot(s, gv);
+        c.area = true;
+        c.at[0] = u;
+        c.at[1] = v;
+        c.at[2] = 1.0 - u - v;
+        c.gradient[0] = gu;
+        c.gradient[1] = gv;
+        c.gradient[2] = -(gu + gv);
+        return c;
     }
 
     // Calls visit(face, t) for faces hit with t in (t_min, limit); visit returns true to

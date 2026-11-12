@@ -706,6 +706,10 @@ Known issues found by the review of 25 October 2026 (see
 - [ ] Type checks passing in the modules that did not when they began (listed in
   `pyproject.toml`), a few at a time.
 - [ ] Collada polygons with their holes.
+- [x] The wave solver's walls through planes of its cell centres, and sources and
+  listeners on surfaces.
+- [ ] The wave solver's surfaces a hair off its cell centres (see Validation, Known
+  issues).
 - [ ] Vector-based scattering with a lobe centred on the specular direction, so the late
   part carries the specular share of the orders after the first as the exact paths do,
   checked against the BRAS rooms' decay.

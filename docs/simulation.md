@@ -586,6 +586,18 @@ simulation:
   source and the listeners, on each side the model leaves open, by 15 % of the farthest
   a listener lies from the source along that side (none under an outdoor ground, and
   none on a side that the model's own surfaces close round them).
+- A surface that passes through a plane of the grid's cell centres, or within 1e-10
+  cells of one, acts on every link between cells and every line of sight as if it lay
+  an infinitesimal step further along -x (else -y, else -z): a wall there stays a wall
+  on either stencil. A source or a listener exactly on a surface, an edge or a corner is
+  read a hair off it, on the side that step gives; where the source's air on that side
+  reaches no listener, or a listener's side has no air, on a side that does (a source on
+  a pillar's face, a listener in a room's corner); on an edge or in a corner, into the
+  middle of the air round it, and on a screen's free rim or corner, straight out past
+  it. The points round a listener its gradient is read at move with it. A source whose
+  only listeners lie on the plane of a surface through it, reached from both sides, is
+  refused. Surfaces about 1e-10 cells off the centres can still be placed wrong, from a
+  few links to a closed object read as air: see [Known issues](validation.md#known-issues).
 - Outdoors in wind and temperature (an [atmosphere](outdoor.md#wind-and-temperature)
   in which sound bends), the speed of sound changes from cell to cell: the still air's
   at the cell's height, plus the wind's component along the horizontal from the source.
