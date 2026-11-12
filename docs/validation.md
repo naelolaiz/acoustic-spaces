@@ -3703,7 +3703,8 @@ listener, from both ends, with a barrier or a wall as a screen that lets nothing
 through below its top and a roof as a rigid floor, and adds for each rigid edge what
 the uniform theory of diffraction gives it beyond such a screen, lit by the marched
 field at the edge. Each march begins at its first obstacle, from the field that its end
-and the end's image in the ground have there, and its field becomes a point source's
+and the end's image in the ground have there (for an end over a roof: at the first top
+past it, with the end's image in the roof), and its field becomes a point source's
 by the length of the path pulled taut over the tops, so that the way from the street
 up to a roof may be steep. **Simulations do not use it yet**: the check is of the
 solver by itself.
@@ -3713,7 +3714,7 @@ in time in two dimensions (cells of 2 cm, rigid obstacles as whole cells, matche
 layers on every side, 0.5 s), turned into a point source's field by the integral over
 the wavenumber along the edges. With one rigid screen it is within 0.14 dB of the exact
 solution, the direct sound and the Biot-Tolstoy-Medwin integral over the edge, which
-the script checks on every run. Its levels for the 105 cases are stored beside the
+the script checks on every run. Its levels for the 149 cases are stored beside the
 script (`rows_wave.json`); `--references` computes them again, 3 to 6 minutes for a
 listener's place on one core.
 
@@ -3731,7 +3732,12 @@ which a scene adds in pressure, less the wave calculation's (dB), by the angle t
 bends by at the row's first or last edge. The simulation's columns are the early stage
 of the same scenes as it is today, either way round, with every sequence of reflections
 tested (`method: image_sources`); `first_order` has no path over two edges and so no
-sound where neither end sees over the row:
+sound where neither end sees over the row. In the last five lines the source stands
+over a roof instead, 0.5 or 3 m before x = 10 m, a centimetre or 1.5 m above it: the
+roof ends there, with no parapet or one 0.1, 0.3 or 1.1 m high on its edge, and the
+listener stands 5 m past the edge, 2 m below the roof or 1 m above it; or the roof
+goes on under the listener, who is 1.5 m above it, with a screen of those heights at
+x = 10 m:
 
 | rows | cases | march alone | with the edges' terms | simulation, `second_order` | simulation, `first_order` |
 |---|---|---|---|---|---|
@@ -3743,6 +3749,11 @@ sound where neither end sees over the row:
 | three screens on a ground, up to 6° | 4 | -3.53 to -1.10 | -1.26 to +0.07 | -11.27 to +2.21 | -3.35 to +5.66 |
 | three screens on a ground, 24° | 2 | -6.19 to -2.90 | -2.55 to -0.30 | -1.97 to +4.59 | +3.53 to +6.51, or no sound |
 | three screens on a ground, 42° | 3 | -9.20 to -4.06 | -3.42 to -0.09 | -2.65 to +4.57 | +2.01 to +7.61, or no sound |
+| a roof under the source, to its edge | 8 | -2.16 to +0.81 | -0.18 to +0.05 | -0.10 to +0.23 | -0.10 to +0.23 |
+| the same, a parapet 1.1 m high on the edge | 8 | -9.90 to +0.33 | -0.82 to +0.48 | -1.10 to +1.13 | -1.12 to +1.17 |
+| the same, the parapet 0.1 or 0.3 m high | 16 | -5.75 to +1.02 | -1.13 to +1.13 | -1.06 to +1.95 | -0.98 to +1.56 |
+| a screen 1.1 m high on a roof under both ends | 4 | -8.75 to +0.88 | -1.65 to +0.83 | -3.43 to +2.68 | -3.43 to +2.68 |
+| the same, the screen 0.1 or 0.3 m high | 8 | -4.85 to +0.93 | -3.01 to +2.35 | -2.91 to +1.38 | -2.91 to +1.38 |
 
 The march alone is low: a screen that reflects nothing lets through less than a rigid
 edge. With the edges' terms the solver is within 0.38 dB of the wave calculation near
@@ -3755,7 +3766,14 @@ screen on a rigid ground. Where the sound bends widely at the row's ends: within
 (22°); on the ground within 0.74 dB up from a source 4.5 m below the first top (13
 to 24°); and down to a listener at street level right behind the row (42°) within
 0.15 dB behind one roof, 0.47 dB behind one screen, 0.71 dB behind two roofs and
-1.24 dB behind a roof with a screen 1 m past it.
+1.24 dB behind a roof with a screen 1 m past it. With the source over a roof the
+solver is within 0.18 dB up to the roof's edge, where the march alone is up to
+2.16 dB low; with a parapet 1.1 m high on the edge within 0.82 dB (in the 63 Hz
+band, where the parapet is a fifth of a wavelength high; 0.48 dB in the others), and
+with one 0.1 or 0.3 m high within 1.13 dB. A screen on a roof that goes on under the
+listener is further off, by up to 1.65 dB at 1.1 m and 3.01 dB at 0.1 and 0.3 m, as
+are the simulation's paths over its top: see the barriers lower than a wavelength
+below.
 
 One rigid screen has an exact solution, the direct sound and the Biot-Tolstoy-Medwin
 integral over the edge, which holds the solver closer to a wall than the wave
@@ -3771,7 +3789,8 @@ above it), the march alone is 3 to 11 dB low.
 
 On a rigid ground the same integral gives the four paths over the top, from the
 source and its image in the ground to the listener and its image (not the sound that
-goes from the top down the screen to the ground and back). A screen 3 to 20 m high,
+goes from the top down the screen to the ground and back, which a screen lower than a
+wavelength needs: see below). A screen 3 to 20 m high,
 with the source 0.5 to 30 m before it and the listener 0.5 to 40 m past it, each 0.5
 to 4 m above the ground, is within 0.31 dB of them in the 563 places of the two that
 the solver takes; in the tests' seven places on a rigid ground the march alone is
@@ -3781,12 +3800,21 @@ high: deep in the shadow of a high wall the level depends on the height of that 
 (behind a wall 20 m high, with both ends 5 m from its foot, 46 dB below the free
 field, by up to 4.6 dB on the usual grid and 0.72 dB on one four times as high).
 
-A roof's corner has an exact solution too, with the reflection off the roof: a
-source on a roof or up to 2 m above it, 1 to 10 m before the roof's far corner, and
-a listener up to 6 m below the roof past it are within 0.07 dB of it, from either
-end, in the bands in which that corner is a wavelength or more from the source; and
-a barrier 1 to 3 m high on a roof that both ends stand over, 10 m or more from them,
-within 0.20 dB of the four paths over a screen on a rigid ground.
+A roof's corner has an exact solution too, with the reflection off the roof. Over a
+grid of 591 places (the source on the roof or up to 3 m above it, 5 cm to 10 m
+before the roof's far corner; the listener 0.5 to 40 m past the corner, from 8 m
+below the roof to 2 m above it), the solver is within 0.30 dB of it in the 63 Hz
+band, 0.25 dB in the 125 Hz band, 0.35 dB in the 250 Hz band and 0.53 dB in the
+500 Hz band, wherever it takes the two (494 to 538 of the places, by the band); in
+the tests' thirteen places the march alone is between 5.8 dB below it and 0.7 dB
+above. With a barrier 0.5 to 2 m high on a roof that both ends stand over, the
+source 5 cm to 10 m before the barrier and up to 3 m above the roof, the listener
+0.5 to 15 m past it and up to 4 m above the roof, the solver is within 0.46 dB of
+the four paths over a screen on a rigid ground in the 63 Hz band and 0.39 dB in the
+others, in the 456 to 513 of 630 places it takes; in the tests' six places 20 cm
+to 1 m before the barrier the march alone is up to 9.2 dB low. Those four paths are
+the solver's own model of a barrier on a rigid surface: how far they are from the
+field where the barrier is lower than a wavelength is below.
 
 What it does not hold:
 
@@ -3809,37 +3837,39 @@ What it does not hold:
   Fresnel zone of the way on, and the solver refuses (`OutOfReach`) an end for which
   that needs more than eight times the march's usual absorbing layer: an end level
   with its first top and closer to it than 3.7 cm (63 Hz band) to 3.9 cm (500 Hz
-  band); one whose way to its first top, or whose image's in the ground, rises too
-  steeply, in the 500 Hz band beyond 88.2° from an end a metre before a wall and
-  87.4° from one 10 cm before it, in the 250 Hz band beyond 89.1° and 88.7°, in the
-  125 Hz band 89.6° and 89.4°, in the 63 Hz band 89.8° and 89.7°; and one close
-  before an obstacle and high above its top (10 cm before it: more than 2.6 m above
-  in the 500 Hz band, 5.2 m in the 250 Hz band, 10.5 m in the 125 Hz band). On a rigid
-  ground, an end half a metre from the foot of a wall is refused in the 500 Hz band
-  where the wall is 15 m high or more (12 m high: taken), and in the 250 Hz band too
-  where it is 60 m high; 2 m from the foot of a wall 60 m high it is taken in every
-  band. Ends closer to each other over the tops than half a wavelength of the
-  band's lowest frequency (3.6 m in the 63 Hz band, 0.46 m in the 500 Hz band) are
-  refused too: the march's field becomes a point source's by the length of the
-  path, which holds from there on (a tenth of a wavelength apart the level would be
-  up to 0.5 dB off). The solver refuses, with a `ValueError`, an end below the top
-  of a building it stands in or of a wall or a barrier it stands against.
-- **An end on a roof, a ground that changes before the first obstacle, and nothing
-  between the ends.** That end's march begins at the end itself, with the parabolic
-  equation's own starting field, which is the end's within some 35° of the
-  horizontal and from about a wavelength on. Beyond that the end is refused
-  (`OutOfReach`): where its way on, or its image's in the ground or the roof, is
-  steeper than 35°, and where its first top, or the other end with no top between
-  them, is closer than a wavelength of the band's lowest frequency (7.3 m in the
-  63 Hz band, 0.9 m in the 500 Hz band); a source on a roof close to a parapet or to
-  a higher wall is. Within those limits the solver is within 0.49 dB of the paths
-  over a barrier on a roof and over a screen behind a change of the ground (at 35°
-  a wavelength away; 0.25 dB up to 20°), 0.05 dB of the exact solution for a roof's
-  far corner and 0.31 dB of the direct sound and the reflection with nothing between
-  the ends. Without the limits such a march is 1.0 dB low at 50° and 5 dB at 75°
-  behind one screen, and up to 1.0 dB low a quarter of a wavelength before a barrier
-  on a roof. A strip of another ground narrower than 25 cm before the first obstacle
-  can go unseen.
+  band); one whose way to its first top, or whose image's in the ground or in the
+  roof under it, rises too steeply, in the 500 Hz band beyond 88.2° from an end a
+  metre before a wall and 87.4° from one 10 cm before it, in the 250 Hz band beyond
+  89.1° and 88.7°, in the 125 Hz band 89.6° and 89.4°, in the 63 Hz band 89.8° and
+  89.7°; and one close before an obstacle and high above its top (10 cm before it:
+  more than 2.6 m above in the 500 Hz band, 5.2 m in the 250 Hz band, 10.5 m in the
+  125 Hz band). On a rigid ground, an end half a metre from the foot of a wall is
+  refused in the 500 Hz band where the wall is 15 m high or more (12 m high: taken),
+  and in the 250 Hz band too where it is 60 m high; 2 m from the foot of a wall 60 m
+  high it is taken in every band. A source a metre above a roof is refused 10 cm
+  before a barrier 3 m high on the roof in the 500 Hz band (30 cm before it: taken)
+  and 5 cm before it in every band. Ends closer to each other over the tops than half
+  a wavelength of the band's lowest frequency (3.6 m in the 63 Hz band, 0.46 m in the
+  500 Hz band) are refused too: the march's field becomes a point source's by the
+  length of the path, which holds from there on (a tenth of a wavelength apart the
+  level would be up to 0.5 dB off). The solver refuses, with a `ValueError`, an end
+  below the top of a building it stands in or of a wall or a barrier it stands
+  against.
+- **A ground that changes before the first obstacle, a roof under both ends with
+  nothing on it between them, and nothing between the ends.** That end's march
+  begins at the end itself, with the parabolic equation's own starting field, which
+  is the end's within some 35° of the horizontal and from about a wavelength on.
+  Beyond that the end is refused (`OutOfReach`): where its way on, or its image's in
+  the ground or the roof, is steeper than 35°, and where its first top, or the other
+  end with no top between them, is closer than a wavelength of the band's lowest
+  frequency (7.3 m in the 63 Hz band, 0.9 m in the 500 Hz band). Within those limits
+  the solver is within 0.49 dB of the paths over a screen behind a change of the
+  ground (at 35° a wavelength away; 0.25 dB up to 20°) and 0.31 dB of the direct
+  sound and the reflection with nothing between the ends (0.35 dB over a roof under
+  both). Without the limits such a march is 1.0 dB low at 50° and 5 dB at 75° behind
+  one screen, and up to 1.0 dB low a quarter of a wavelength before a barrier on a
+  rigid ground. A strip of another ground narrower than 25 cm before the first
+  obstacle can go unseen.
 - **An end within decimetres of a top.** Just past a top the field changes over less
   than a cell of the march's grid of heights, so the march that arrives at an end
   runs on cells of half the end's distance from the nearest top at most (down to an
@@ -3858,18 +3888,43 @@ What it does not hold:
   two corners shed as a roof's, however narrow the roof: a wall given as a building
   a millimetre thick comes out between 0.41 dB below and 0.09 dB above the same wall
   as a barrier (below it, by 0.14 to 0.41 dB, in five of six places in its shadow).
-- **Low screens and steps.** With a screen 5 cm high on grass the level is up to
-  0.50 dB from the open ground's with the edges' terms, which take a screen for a
-  half-plane (a source on the grass; 0.45 dB with it 1.5 m up), and 0.23 dB without
-  them. Over a step of 1 m between two roofs the 63 Hz band is 0.38 dB low (over a
-  step of 0.2 m within 0.02 dB there, and up to 0.22 dB low in the 250 Hz band); the
-  cause is not traced.
+- **Barriers lower than a wavelength on a rigid roof or ground.** The edges' terms
+  take a barrier for a half-plane, lit by the end and by its image in the surface it
+  stands on. The sound that goes on between its top and that surface is not in them,
+  nor in the four paths of the edge integral, which the solver stays within 0.20 dB
+  of here. Against the wave calculation, with a barrier 0.1, 0.3, 0.5 or 1.1 m high
+  on a roof under both ends (the source 0.5 to 8 m before it, a centimetre, 0.5 and
+  1.5 m above the roof, twelve places; the listener 5 m past it and 1.5 m up): where
+  the barrier is 0.7 wavelengths of the band's centre high or more the solver is
+  within 0.39 dB, from a quarter to half a wavelength within 1.15 dB, and below a
+  quarter of a wavelength up to 3.01 dB off. A barrier 10 cm high changes the wave
+  calculation's level by less than 0.5 dB up to the 250 Hz band; with the source half
+  a metre before it the solver is 2.35 dB too high in the 63 Hz band and 3.01 dB too
+  low in the 125 Hz band, with the source 8 m before it up to 1.04 dB off, and the
+  march alone is between 2.65 dB below the wave calculation and 1.32 dB above. A
+  barrier 1.1 m high comes out 1.22 to 1.72 dB low in the 63 Hz band. A parapet of
+  those heights on the edge of the roof under the source, from the same places, with
+  the listener 5 m past the edge, 3 m below the roof or 1 m above it, is closer:
+  within 0.73 dB where the parapet is a quarter of a wavelength high or more and 1.28
+  dB below that (0.15 dB with no parapet). Lower still, a parapet a centimetre high
+  on the edge, 8 m from the source, leaves the level up to 0.66 dB above the exact
+  corner's (63 Hz band), and a barrier a millimetre high on a roof under both ends,
+  half a metre past the source, 2.15 dB above the level without it (63 Hz band; 1.44
+  dB below it in the 500 Hz band). With a screen 5 cm high on grass the level is up
+  to 0.50 dB from the open ground's with the edges' terms (a source on the grass;
+  0.45 dB with it 1.5 m up), and 0.23 dB without them.
+- **Steps.** Over a step of 1 m between two roofs the 63 Hz band is 0.38 dB low
+  (over a step of 0.2 m within 0.02 dB there, and up to 0.22 dB low in the 250 Hz
+  band); the cause is not traced. A roof that rises by a centimetre where the roof
+  under the source ends comes out 0.27 dB above the flat roof in the 63 Hz band
+  with the source 8 m before the step and 0.38 dB with it 3 m before.
 - Edges that end beside the way, absorbing roofs and walls, and the bands above
   500 Hz are not in the check.
 
-`tests/test_rows.py` holds, on every change: twenty-three of the cases against their
+`tests/test_rows.py` holds, on every change: thirty-one of the cases against their
 stored wave levels, the thirteen in free space also at least twice as far from them
-without the edges' terms; one rigid screen in free space and on a rigid ground
+without the edges' terms, and two more, with a barrier 10 cm high on a roof, by how
+far off they are; one rigid screen in free space and on a rigid ground
 against the exact solutions as above, with ends far below its top, close beside it
 and within centimetres of it, and within 0.2 dB for a source and a listener up to
 3 m above its top and 2 m below; the higher grid behind a high wall and the finer
@@ -3879,9 +3934,12 @@ third and a quarter of the free field without a reflection at their tops, within
 2 %; a march from a point source's exact field against that field further on, and
 the direct sound and the reflection off the ground each by its own distance; the
 same sound with the source and the listener swapped, over a ground that changes
-along the way and close under walls too; an end on a roof, a barrier on a roof and
-a roof's edge behind an end against the exact solutions as above; the errors for
-what the solver refuses, and marches from an end at the limits of what it takes; and
+along the way and close under walls too; an end over a roof before the roof's
+corner, down to 10 cm from it, and before a barrier on the roof, down to 20 cm, a
+barrier on a roof far from both ends and a roof's edge behind an end, against the
+exact solutions as above; what a corner sheds of the wave of an end over its roof
+and of that end's image against closed forms; the errors for what the solver
+refuses, and marches from an end at the limits of what it takes; and
 a level that changes by less than 0.05 dB a centimetre as a barrier's top passes the
 plane of the roof before it.
 
