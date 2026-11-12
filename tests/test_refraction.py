@@ -1590,6 +1590,79 @@ def test_a_listener_in_wind_reads_the_same_whoever_else_stands_in_its_direction(
         np.testing.assert_allclose(levels[1][x], levels[0][x], rtol=0.0, atol=1e-9)
 
 
+@pytest.mark.parametrize(
+    ("side", "option", "far", "threads"),
+    [
+        (1.0, "narrow_angle", 250.0, 1),
+        (-1.0, "narrow_angle", 250.0, 1),
+        (1.0, "narrow_angle", 250.0, 2),
+        (1.0, "wide_angle", 150.0, 1),
+    ],
+)
+def test_a_listener_in_wind_reads_the_same_alone_as_with_others_farther_and_higher(
+    side, option, far, threads
+) -> None:
+    """A listener 60 m downwind (upwind, in the shadow) of a source over a lawn gets the
+    same early energy in every band alone as with three more in its direction: one 20 m
+    away and, with own absorbing layers that start higher than its own, one 100 m away
+    8 m up and one 150 or 250 m away. Its run's layer starts where the grid of heights
+    that its own layer needs holds it, whoever shares the run; on two threads and with
+    the wide-angle equation everywhere too. With the layer above the highest of a run's
+    listeners, the three moved its bands by up to 0.0007 dB downwind and 0.0013 dB
+    upwind (0.00002 dB with the wide-angle equation)."""
+    me = (side * 60.0, 0.0, 1.5)
+    others = ((side * 20.0, 0.0, 1.5), (side * 100.0, 0.0, 8.0), (side * far, 0.0, 1.5))
+    early = []
+    for listeners in ((me,), (me, *others)):
+        data = field({"preset": "windy", "wind": {"direction_deg": 0.0}}, listeners).to_data()
+        data["geometry"]["ground"]["extent"] = [[-300.0, -20.0], [300.0, 20.0]]
+        data["simulation"]["early"]["parabolic_equation"] = option
+        result = simulate(Room.from_scene(Scene.model_validate(data)), threads=threads)
+        early.append(result["s", "l0"].early.energy.sum(axis=0))
+    np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
+
+
+#: ``windy`` from 50 m out along the x axis, still air before it.
+WINDY_FROM_50_M = {
+    "preset": "neutral",
+    "zones": [
+        {
+            "polygon": [[50.0, -20.0], [300.0, -20.0], [300.0, 20.0], [50.0, 20.0]],
+            "preset": "windy",
+            "wind": {"direction_deg": 0.0},
+        }
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ("atmosphere", "others"),
+    [
+        (
+            {"preset": "windy", "wind": {"direction_deg": 0.0}},
+            ((100.0, 0.0, 10.0), (100.0, 0.0, 18.0)),
+        ),
+        (WINDY_FROM_50_M, ((30.0, 0.0, 1.5), (250.0, 0.0, 1.5))),
+    ],
+)
+def test_a_listener_in_wind_reads_the_same_under_others_and_in_a_weather_zone(
+    atmosphere, others
+) -> None:
+    """A listener 100 m downwind gets the same early energy in every band alone as with
+    two more above it, 10 and 18 m up at its range, whose runs need other grids of
+    heights; and in a weather zone that starts 50 m from the source, as with one before
+    the zone and one 250 m away. With one layer above the highest of a run's listeners
+    the others moved its bands by up to 0.0005 and 0.0003 dB."""
+    me = (100.0, 0.0, 1.5)
+    early = []
+    for listeners in ((me,), (me, *others)):
+        data = field(atmosphere, listeners).to_data()
+        data["geometry"]["ground"]["extent"] = [[-50.0, -20.0], [300.0, 20.0]]
+        result = simulate(Room.from_scene(Scene.model_validate(data)), threads=1)
+        early.append(result["s", "l0"].early.energy.sum(axis=0))
+    np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
+
+
 def test_steep_and_flat_listeners_in_wind_keep_their_early_bands_among_others() -> None:
     """From a source 10 m up, a listener 25 m downwind, which the wide-angle equation
     gives, and one 60 m away, which the narrow-angle march gives, get the same early
@@ -1617,11 +1690,12 @@ def test_steep_and_flat_listeners_in_wind_keep_their_early_bands_among_others() 
 def test_a_steep_listener_in_still_air_keeps_its_bands_with_a_far_listener(monkeypatch) -> None:
     """Under air that is still up to 110 m and warmer above, a listener 30 m from a source
     10 m up, which the reflection off the ground reaches 21 degrees up, takes the
-    wide-angle equation in every run, alone and with a listener 800 m away, whose run's
-    absorbing layer starts 120 m up, in the air that bends sound, where its own starts
-    30 m up; and its third octaves move by less than 0.001 dB (0.00003 measured). Left to
-    what the march finds on its grid, its 500 Hz octave took the narrow-angle equation
-    alone and the wide-angle one with the far listener, and moved by 0.06 dB."""
+    wide-angle equation in every run, alone and with a listener 800 m away, under an
+    absorbing layer that starts 32 m up in both (the step of the wide-angle runs' ladder
+    above its own 30 m; the far listener's own starts 120 m up, in the air that bends
+    sound), and its third octaves are the same. Left to what the march finds on its grid,
+    its 500 Hz octave took the narrow-angle equation alone and the wide-angle one with
+    the far listener, and moved by 0.06 dB."""
     from acoustic_spaces.engine import parabolic, wide_angle
 
     atmosphere = {"table": [[0.0, 20.0, 0.0], [110.0, 20.0, 0.0], [200.0, 30.0, 0.0]]}
@@ -1652,8 +1726,8 @@ def test_a_steep_listener_in_still_air_keeps_its_bands_with_a_far_listener(monke
         assert mine and all(run["wide"] for run in mine)
         tops.append({run["top"] for run in mine})
         early.append(result["s", "l0"].early.energy.sum(axis=0))
-    assert tops == [{30.0}, {120.0}]
-    np.testing.assert_allclose(10 * np.log10(early[1] / early[0]), 0.0, rtol=0.0, atol=1e-3)
+    assert tops == [{32.0}, {32.0}]
+    np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
 
 
 def test_sources_share_the_air_s_profiles_and_keep_no_plan_once_finished(monkeypatch) -> None:
@@ -2126,10 +2200,13 @@ def test_the_open_ground_s_frequencies_choose_how_1_and_2_khz_are_found() -> Non
 
 #: ``windy`` upwind of a source 2 m up over a lawn that scatters 0.1
 #: (:func:`scattering_lawn`), listeners 1.5 m up 10, 20 and 70 m away, the shadow
-#: starting 31.4 m away: the level re free field (dB) at 1 and 2 kHz as release 4.2.1
-#: gave it (measured on the code before the parabolic equation took those bands over):
-#: from the rays short of half the way to the shadow, from the equation beyond.
-RAYS_WINDY_UPWIND = [[0.2317, 0.5340], [1.9875, 1.0129], [-9.7644, -11.8441]]
+#: starting 31.4 m away: the level re free field (dB) at 1 and 2 kHz, from the rays
+#: short of half the way to the shadow, from the equation beyond. Release 4.2.1 (the
+#: code before the parabolic equation took those bands over) gave the first listener's
+#: to these digits, and 1.9875 and 1.0129 dB 20 m away and -9.7644 and -11.8441 dB 70 m
+#: away; so does the equation, within 0.0006 dB, under an absorbing layer from 22 m up,
+#: where these listeners' own starts, not from where their grids of heights hold it.
+RAYS_WINDY_UPWIND = [[0.2317, 0.5340], [1.9769, 0.9981], [-9.7634, -11.8437]]
 
 
 def test_the_open_ground_s_rays_give_way_to_the_equation_near_a_shadow() -> None:
