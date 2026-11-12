@@ -48,9 +48,11 @@ wavenumber along them: a way that crosses the row at a slant, seen from above. T
 of the sets :data:`SLANTED` are stored at the slants :data:`SLANTS` too and listed after
 the others (:func:`at_a_slant`): the module's level with each edge at its slant, held in
 every band in which the solver takes the row to the limit across the row, or to that of
-:data:`SLANT_LIMITS` for the bands it names; the bands in which the solver does not take
-the row ("out"), of which there may be as many as :data:`SLANT_TAKEN` leaves; and the
-module's level with the row as the vertical section along the way shows it, not turned.
+:data:`SLANT_LIMITS` for the bands it names; the bands that the solver takes across the
+row and moved to the slant, where its marches in the vertical plane along the way do not
+take the row (an x under "moved"); a band in which it does not take the row either way
+("out"), which fails; and the module's level with the row as the vertical section along
+the way shows it, not turned.
 
 The reference tests itself: with one rigid screen it must be within
 :data:`REFERENCE_LIMIT_DB` of the exact solution, the direct sound plus the
@@ -137,7 +139,7 @@ BENDS = (6.0, 25.0, 45.0)
 #: also gives the sound between ends that are offset along them: a way that crosses
 #: the row at a slant. The cases of the sets :data:`SLANTED` are taken at these angles
 #: (degrees) between the way and the edges' normal too, seen from above.
-SLANTS = (30.0, 60.0)
+SLANTS = (30.0, 60.0, 75.0)
 SLANTED = (
     "rows",
     "down",
@@ -147,23 +149,39 @@ SLANTED = (
     "roof_low_screen",
 )
 #: What the module must keep to at a slant, where it takes the row: the limits across
-#: the row (:data:`LIMITS`), but in these bands, (group, bend up to, slant, band): over
-#: rows in free space at 60 degrees, with a bend of up to 6 degrees the 63 Hz band
-#: (0.63 dB at most) and with a bend of up to 25 degrees the 500 Hz band (0.22 dB);
-#: over screens on a ground between ends about level with their tops at 30 degrees the
-#: 63 Hz band (1.40 dB).
+#: the row (:data:`LIMITS`), but in these bands, (group, bend up to, slant, band), each
+#: a little above what the module is from the wave calculation there (the comment, dB).
+#: Between rigid screens on a rigid ground, where it is up to 3.42 dB low across the
+#: row, it is up to 3.21 dB low at 30 degrees, 5.78 dB at 60 and 8.18 dB at 75, and in
+#: other bands higher than across the row (up to 2.39 dB above the wave calculation at
+#: 75 degrees).
 SLANT_LIMITS = {
-    ("free space", 6.0, 60.0, 0): 0.7,
-    ("free space", 25.0, 60.0, 3): 0.25,
-    ("screens on a ground", 6.0, 30.0, 0): 1.5,
-}
-#: The band levels that the solver takes at a slant, at least: (group, slant) -> how
-#: many of its cases'; every one in a group that is not named.
-SLANT_TAKEN = {
-    ("on a ground", 30.0): 7,
-    ("screens on a ground", 30.0): 8,
-    ("on a ground", 60.0): 0,
-    ("screens on a ground", 60.0): 0,
+    ("free space", 6.0, 60.0, 0): 0.7,  # 0.63
+    ("free space", 25.0, 60.0, 3): 0.25,  # 0.22
+    ("free space", 6.0, 75.0, 0): 0.6,  # 0.52
+    ("free space", 6.0, 75.0, 1): 0.75,  # 0.66
+    ("free space", 25.0, 75.0, 0): 0.45,  # 0.37
+    ("over a roof", 90.0, 75.0, 0): 0.35,  # 0.32
+    ("over a roof", 90.0, 75.0, 1): 0.25,  # 0.21
+    ("on a ground", 25.0, 60.0, 2): 1.4,  # 1.26
+    ("on a ground", 6.0, 75.0, 2): 1.3,  # 1.16
+    ("screens on a ground", 6.0, 30.0, 0): 1.5,  # 1.40
+    ("screens on a ground", 6.0, 30.0, 1): 1.6,  # 1.44
+    ("screens on a ground", 6.0, 30.0, 3): 1.4,  # 1.32
+    ("screens on a ground", 6.0, 60.0, 0): 3.0,  # 2.85
+    ("screens on a ground", 6.0, 60.0, 1): 2.2,  # 1.95
+    ("screens on a ground", 6.0, 60.0, 2): 2.5,  # 2.29
+    ("screens on a ground", 25.0, 60.0, 0): 2.8,  # 2.60
+    ("screens on a ground", 25.0, 60.0, 2): 6.0,  # 5.78
+    ("screens on a ground", 45.0, 60.0, 2): 3.9,  # 3.74
+    ("screens on a ground", 6.0, 75.0, 0): 8.4,  # 8.18
+    ("screens on a ground", 6.0, 75.0, 1): 2.8,  # 2.64
+    ("screens on a ground", 6.0, 75.0, 2): 1.9,  # 1.74
+    ("screens on a ground", 6.0, 75.0, 3): 1.5,  # 1.39
+    ("screens on a ground", 25.0, 75.0, 0): 5.6,  # 5.40
+    ("screens on a ground", 25.0, 75.0, 2): 2.8,  # 2.69
+    ("screens on a ground", 25.0, 75.0, 3): 3.9,  # 3.73
+    ("screens on a ground", 45.0, 75.0, 2): 8.0,  # 7.84
 }
 #: A screen on a roof under the source is low up to this height (m) above the roof.
 LOW_M = 0.5
@@ -566,15 +584,16 @@ def references(sets) -> None:
 
 
 def march(
-    case: dict, slant: float = 0.0, turned: bool = True
+    case: dict, slant: float = 0.0, turned: bool = True, how: str | None = None
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(4,) the band levels (dB re free field) of the march alone and of the module's
     sound for ``case``, and the bands in which the solver does not take the row. At a
     ``slant`` (degrees) the ends are offset along the edges so that the way between
     them crosses the row that far from across it: the row is given as that way meets
     it, every distance along it over the slant's cosine, with each obstacle turned by
-    the slant, or, without ``turned``, as if it stood across the way. A band in which
-    the solver does not take the turned row
+    the slant, or, without ``turned``, as if it stood across the way; ``how`` is the
+    solver's ``at_a_slant`` (its own choice of method by default). A band in which the
+    solver does not take the turned row
     (:class:`~acoustic_spaces.engine.rows.OutOfReach`) is not a number in both levels."""
     (xs, zs), (xl, zl) = case["source"], case["listener"]
     stretch = 1.0 / math.cos(math.radians(slant))
@@ -586,8 +605,9 @@ def march(
         # Lifted, the ground's reflection is too steep for the march, and is left out.
         steep = "leave out" if lift else "raise"
         ends = (zs + lift, (xl - xs) * stretch, zl + lift)
+        more = {"steep_reflections": steep, "slants": slants, "at_a_slant": how}
         try:
-            row = rows.over_row(f, C, None, *ends, standing, steep_reflections=steep, slants=slants)
+            row = rows.over_row(f, C, None, *ends, standing, **more)
         except rows.OutOfReach:
             if slants is None:
                 raise
@@ -699,11 +719,9 @@ def at_a_slant(stored: dict, only: str | None = None) -> tuple[list[dict], bool]
     each of :data:`SLANTS`: listed and summed up as the cases across the row are, with
     the module's level where the row is given as the way meets it but not turned (as
     if it stood across the way). A band in which the solver does not take the turned
-    row is listed as "out" and counted. Returns the cases and whether any is over its
-    limit (:func:`_slant_limits`), has a level that is not a number in a band that the
-    solver takes, or has no reference, or a group has fewer band levels taken than
-    :data:`SLANT_TAKEN` gives (a group that it names is not counted with ``only``, when
-    not all of its cases run; any other group takes every band)."""
+    row is listed as "out". Returns the cases and whether any is over its limit
+    (:func:`_slant_limits`), has a level that is not a number in a band that the solver
+    takes, has a band that the solver does not take, or has no reference."""
     results, failed = [], False
     worst: dict[tuple, list] = {}
     for slant in SLANTS:
@@ -719,6 +737,9 @@ def at_a_slant(stored: dict, only: str | None = None) -> tuple[list[dict], bool]
                 continue
             wave = np.array(stored[_key(case, slant)])
             alone, with_edges, refused = march(case, slant)
+            # The bands that the marches in the vertical section along the way do not
+            # take, and the solver takes across the row and moved.
+            moved = march(case, slant, how="section")[2] & ~refused
             _, unturned, _ = march(case, slant, turned=False)
             angle, name = bend(case), group(case)
             limits = _slant_limits(name, angle, slant)
@@ -731,6 +752,7 @@ def at_a_slant(stored: dict, only: str | None = None) -> tuple[list[dict], bool]
                 "march_db": _listed(alone - wave),
                 "module_db": _listed(with_edges - wave),
                 "refused": refused.tolist(),
+                "moved": moved.tolist(),
                 "unturned_db": (unturned - wave).tolist(),
                 "limit_db": None if limits is None else limits.tolist(),
             }
@@ -740,8 +762,13 @@ def at_a_slant(stored: dict, only: str | None = None) -> tuple[list[dict], bool]
             line += (
                 f" {angle:4.1f} deg, slant {slant:g}  wave {_row(wave)}  march {_row(alone - wave)}"
             )
-            line += f"  module {_row(with_edges - wave)}  not turned {_row(unturned - wave)}"
+            line += f"  module {_row(with_edges - wave)}"
+            line += f"  moved {''.join('x' if m else '.' for m in moved)}"
+            line += f"  not turned {_row(unturned - wave)}"
             off = np.abs(with_edges - wave)[~refused]
+            if refused.any():
+                failed = True
+                line += "  OUT OF REACH"
             if not np.all(np.isfinite(off)):
                 failed = True
                 line += "  NOT A NUMBER"
@@ -752,17 +779,15 @@ def at_a_slant(stored: dict, only: str | None = None) -> tuple[list[dict], bool]
             results.append(entry)
             print(line, flush=True)
     print()
-    counts: dict[tuple, list] = {}
     for (slant, name, to), entries in sorted(worst.items()):
         module = np.array([e["module_db"] for e in entries], dtype=float)
         unturned = np.array([e["unturned_db"] for e in entries])
         taken = ~np.array([e["refused"] for e in entries])
-        count = counts.setdefault((slant, name), [0, 0])
-        count[0] += int(taken.sum())
-        count[1] += taken.size
+        moved = int(np.sum([e["moved"] for e in entries]))
         angles = f"up to {to:g}" if math.isfinite(to) else f"more than {BENDS[-1]:g}"
         line = f"slant {slant:g} degrees: {name}, bend {angles} degrees: {len(entries)} cases,"
         line += f" {int(taken.sum())} of {module.size} band levels taken"
+        line += f" ({moved} across the row and moved)" if moved else ""
         if taken.any():
             line += f", module {module[taken].min():+.2f} to {module[taken].max():+.2f} dB"
             line += f" (not turned {unturned[taken].min():+.2f} to {unturned[taken].max():+.2f} dB)"
@@ -770,14 +795,6 @@ def at_a_slant(stored: dict, only: str | None = None) -> tuple[list[dict], bool]
             line += f"; out of reach, not turned {unturned[~taken].min():+.2f} to"
             line += f" {unturned[~taken].max():+.2f} dB"
         print(line)
-    for (slant, name), (taken, of) in sorted(counts.items()):
-        least = SLANT_TAKEN.get((name, slant), of)
-        if taken < least and (only is None or (name, slant) not in SLANT_TAKEN):
-            failed = True
-            print(
-                f"slant {slant:g} degrees: {name}: {taken} of {of} band levels taken,"
-                f" FEWER THAN THE {least} that the solver takes"
-            )
     return results, failed
 
 
@@ -868,8 +885,8 @@ def main() -> None:
         args.json.write_text(json.dumps(whole, indent=1) + "\n")
     if failed:
         raise SystemExit(
-            "a case is over its limit or has no reference, a level is not a number, or the"
-            " solver takes fewer bands at a slant"
+            "a case is over its limit or has no reference, a level is not a number, or a"
+            " band at a slant is out of reach"
         )
 
 
