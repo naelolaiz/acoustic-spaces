@@ -42,9 +42,19 @@ to in each group, up to a bend of 45 degrees (the steepest of the cases is 42), 
 a source over a roof at any bend (up to 66 degrees, from a source on the roof half a
 metre before a parapet 1.1 m high).
 
+The scenes are the same all along the edges, so the same run also gives the sound
+between ends that are y apart along the edges, with cos(ky y) in the sum over the
+wavenumber along them: a way that crosses the row at a slant, seen from above. The cases
+of the sets :data:`SLANTED` are stored at the slants :data:`SLANTS` too and listed after
+the others (:func:`at_a_slant`): the module's level with each edge at its slant, held in
+every band in which the solver takes the row to the limit across the row, or to that of
+:data:`SLANT_LIMITS` for the bands it names; the bands in which the solver does not take
+the row ("out"), of which there may be as many as :data:`SLANT_TAKEN` leaves; and the
+module's level with the row as the vertical section along the way shows it, not turned.
+
 The reference tests itself: with one rigid screen it must be within
 :data:`REFERENCE_LIMIT_DB` of the exact solution, the direct sound plus the
-Biot-Tolstoy-Medwin integral over the edge.
+Biot-Tolstoy-Medwin integral over the edge, across the screen and at each slant.
 """
 
 from __future__ import annotations
@@ -63,6 +73,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from edge_diffraction import (  # noqa: E402
     EXTENT,
+    HALF_LENGTH,
     C,
     Edge,
     K,
@@ -122,6 +133,37 @@ LIMITS = {
 }
 #: The groups' bends (degrees, up to).
 BENDS = (6.0, 25.0, 45.0)
+#: The scenes are the same all along the edges, so one run of the wave calculation
+#: also gives the sound between ends that are offset along them: a way that crosses
+#: the row at a slant. The cases of the sets :data:`SLANTED` are taken at these angles
+#: (degrees) between the way and the edges' normal too, seen from above.
+SLANTS = (30.0, 60.0)
+SLANTED = (
+    "rows",
+    "down",
+    "ground_two_roofs",
+    "ground_three_screens",
+    "roof_edge",
+    "roof_low_screen",
+)
+#: What the module must keep to at a slant, where it takes the row: the limits across
+#: the row (:data:`LIMITS`), but in these bands, (group, bend up to, slant, band): over
+#: rows in free space at 60 degrees the 63 Hz band (0.63 dB at most) and, with a bend
+#: of up to 25 degrees, the 500 Hz band (0.22 dB); over screens on a ground between
+#: ends about level with their tops at 30 degrees the 63 Hz band (1.40 dB).
+SLANT_LIMITS = {
+    ("free space", 6.0, 60.0, 0): 0.7,
+    ("free space", 25.0, 60.0, 3): 0.25,
+    ("screens on a ground", 6.0, 30.0, 0): 1.5,
+}
+#: The band levels that the solver takes at a slant, at least: (group, slant) -> how
+#: many of its cases'; every one in a group that is not named.
+SLANT_TAKEN = {
+    ("on a ground", 30.0): 7,
+    ("screens on a ground", 30.0): 8,
+    ("on a ground", 60.0): 0,
+    ("screens on a ground", 60.0): 0,
+}
 #: A screen on a roof under the source is low up to this height (m) above the roof.
 LOW_M = 0.5
 
@@ -271,12 +313,14 @@ def cases(sets=None) -> list[dict]:
     return out
 
 
-def _key(case: dict) -> str:
-    """The name a case's levels are stored by."""
+def _key(case: dict, slant: float = 0.0) -> str:
+    """The name a case's levels are stored by; at a ``slant`` (degrees), with it."""
     where = "ground" if case["ground"] else "free"
     key = f"{case['name']} | {where} | S {case['source'][1]:+.2f} | L {case['listener'][1]:+.2f}"
     if case["source"][0] != X_SOURCE:
         key += f" | S at {case['source'][0]:+.2f}"
+    if slant:
+        key += f" | slant {slant:g}"
     return key
 
 
@@ -445,28 +489,33 @@ def _spectra(trace, dt: float, kappa, gamma, taper: float = 0.15):
     return real, np.exp(-C * np.outer(gamma, t)) @ x
 
 
-def point_source(trace, free, distance: float, dt: float, k=WAVENUMBERS) -> np.ndarray:
+def point_source(trace, free, distance: float, dt: float, k=WAVENUMBERS, along=0.0) -> np.ndarray:
     """The pressure of a point source at the wavenumbers ``k`` (free field exp(ikr) / r)
     from the two-dimensional ``trace`` among the obstacles and ``free`` without them,
-    ``distance`` m from the source."""
+    ``distance`` m from the source in the plane across the edges and ``along`` m from
+    it along them: the sum over the wavenumber ky along the edges takes cos(ky along).
+    With several ``along``, one row for each."""
     from scipy.special import hankel1, k0
 
+    offsets = np.atleast_1d(np.asarray(along, dtype=float))
     trace, free, step = trace[3::4], free[3::4], 4.0 * dt
     theta, w_theta = np.polynomial.legendre.leggauss(6000)
     theta, w_theta = 0.25 * np.pi * (theta + 1.0), 0.25 * np.pi * w_theta
     g, w_g = np.polynomial.legendre.leggauss(400)
     gamma, w_g = 6.0 / distance * (g + 1.0), 6.0 / distance * w_g
-    out = np.empty(len(k), dtype=complex)
+    out = np.empty((len(offsets), len(k)), dtype=complex)
     for index, wavenumber in enumerate(k):
         kappa = wavenumber * np.sin(theta)
         real, decaying = _spectra(trace, step, kappa, gamma)
         real_free, decaying_free = _spectra(free, step, kappa, gamma)
         g2 = real / real_free * (0.25j * hankel1(0, kappa * distance))
         g2_decaying = decaying / decaying_free * (k0(gamma * distance) / (2.0 * np.pi))
-        g3 = np.sum(w_theta * g2 * kappa)
-        g3 += np.sum(w_g * g2_decaying * gamma / np.sqrt(wavenumber**2 + gamma**2))
-        out[index] = 4.0 * g3
-    return out
+        ky, ky_decaying = wavenumber * np.cos(theta), np.sqrt(wavenumber**2 + gamma**2)
+        for row, offset in enumerate(offsets):
+            g3 = np.sum(w_theta * g2 * kappa * np.cos(ky * offset))
+            g3 += np.sum(w_g * g2_decaying * gamma / ky_decaying * np.cos(ky_decaying * offset))
+            out[row, index] = 4.0 * g3
+    return out if np.ndim(along) else out[0]
 
 
 def band_levels(pressure: np.ndarray, distance: float) -> np.ndarray:
@@ -495,11 +544,17 @@ def references(sets) -> None:
             if (zl, tuple(sources)) not in free:
                 free[(zl, tuple(sources))] = fdtd([], listener, places, **frame)[0]
             without = free[(zl, tuple(sources))]
+            slants = (0.0, *SLANTS) if key in SLANTED else (0.0,)
             for i, place in enumerate(heard):
                 distance = math.hypot(at[0] - place[0], at[1] - place[1])
-                p = point_source(traces[:, i], without[:, i], distance, dt)
+                # Ends offset along the edges: the way between them crosses the row at
+                # a slant, as seen from above.
+                offsets = [abs(at[0] - place[0]) * math.tan(math.radians(v)) for v in slants]
+                found = point_source(traces[:, i], without[:, i], distance, dt, along=offsets)
                 case = {"name": name, "ground": ground, "source": list(place), "listener": list(at)}
-                stored[_key(case)] = [round(float(v), 3) for v in band_levels(p, distance)]
+                for slant, offset, p in zip(slants, offsets, found, strict=True):
+                    levels = band_levels(p, math.hypot(distance, offset))
+                    stored[_key(case, slant)] = [round(float(v), 3) for v in levels]
             print(
                 f"{key}: {name}, listener {zl:+.2f} m ({time.time() - started:.0f} s)", flush=True
             )
@@ -509,21 +564,45 @@ def references(sets) -> None:
 # -- the comparison ----------------------------------------------------------------------
 
 
-def march(case: dict) -> tuple[np.ndarray, np.ndarray]:
+def march(
+    case: dict, slant: float = 0.0, turned: bool = True
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(4,) the band levels (dB re free field) of the march alone and of the module's
-    sound for ``case``."""
+    sound for ``case``, and the bands in which the solver does not take the row. At a
+    ``slant`` (degrees) the ends are offset along the edges so that the way between
+    them crosses the row that far from across it: the row is given as that way meets
+    it, every distance along it over the slant's cosine, with each obstacle turned by
+    the slant, or, without ``turned``, as if it stood across the way. A band in which
+    the solver does not take the turned row
+    (:class:`~acoustic_spaces.engine.rows.OutOfReach`) is not a number in both levels."""
     (xs, zs), (xl, zl) = case["source"], case["listener"]
-    found = []
+    stretch = 1.0 / math.cos(math.radians(slant))
+    alone, whole, refused = [], [], []
     for f in FREQUENCIES:
         lift = 0.0 if case["ground"] else LIFT_M * FREQUENCIES[-1].min() / f.min()
-        standing = obstacles_of(case, lift)
+        standing = [(a * stretch, b * stretch, top) for a, b, top in obstacles_of(case, lift)]
+        slants = [math.radians(slant)] * len(standing) if slant and turned else None
         # Lifted, the ground's reflection is too steep for the march, and is left out.
         steep = "leave out" if lift else "raise"
-        ends = (zs + lift, xl - xs, zl + lift)
-        found.append(rows.over_row(f, C, None, *ends, standing, steep_reflections=steep))
-    distance = math.hypot(xl - xs, zl - zs)
-    alone = band_levels(np.concatenate([row.marched for row in found]), distance)
-    return alone, band_levels(np.concatenate([row.pressure for row in found]), distance)
+        ends = (zs + lift, (xl - xs) * stretch, zl + lift)
+        try:
+            row = rows.over_row(f, C, None, *ends, standing, steep_reflections=steep, slants=slants)
+        except rows.OutOfReach:
+            if slants is None:
+                raise
+            alone.append(np.full(len(f), np.nan + 0j))
+            whole.append(np.full(len(f), np.nan + 0j))
+            refused.append(True)
+            continue
+        alone.append(row.marched)
+        whole.append(row.pressure)
+        refused.append(False)
+    distance = math.hypot((xl - xs) * stretch, zl - zs)
+    return (
+        band_levels(np.concatenate(alone), distance),
+        band_levels(np.concatenate(whole), distance),
+        np.array(refused),
+    )
 
 
 def simulated(case: dict, folder: Path) -> dict[str, list]:
@@ -559,21 +638,28 @@ def simulated(case: dict, folder: Path) -> dict[str, list]:
 
 
 def reference_check(stored: dict) -> list[dict]:
-    """The wave calculation for one screen in free space against the exact solution."""
+    """The wave calculation for one screen in free space against the exact solution,
+    across the screen and at the slants of :data:`SLANTS`."""
     edge = Edge([0, 0, 0], [0, 1, 0], [0, 0, -1], [1, 0, 0], 2.0)
     out = []
     for case in cases(["down"]):
-        if case["name"] != "one screen at 10" or _key(case) not in stored:
+        if case["name"] != "one screen at 10":
             continue
         x = 0.5 * (case["row"][0][0] + case["row"][0][1])
-        a = np.array([case["source"][0] - x, 0.0, case["source"][1]])
-        b = np.array([case["listener"][0] - x, 0.0, case["listener"][1]])
-        distance = float(np.linalg.norm(b - a))
-        exact = btm_first(edge, a, b, WAVENUMBERS)
-        if a[2] + (b[2] - a[2]) * -a[0] / (b[0] - a[0]) > 0.0:  # in sight over the top
-            exact = exact + np.exp(-1j * WAVENUMBERS * distance) / distance
-        off = np.array(stored[_key(case)]) - band_levels(exact, distance)
-        out.append({"source": case["source"], "listener": case["listener"], "off_db": off.tolist()})
+        for slant in (0.0, *SLANTS):
+            if _key(case, slant) not in stored:
+                continue
+            offset = (case["listener"][0] - case["source"][0]) * math.tan(math.radians(slant))
+            a = np.array([case["source"][0] - x, 0.0, case["source"][1]])
+            b = np.array([case["listener"][0] - x, offset, case["listener"][1]])
+            distance = float(np.linalg.norm(b - a))
+            # Of the edge, three times the ends' offset along it either way at least.
+            exact = btm_first(edge, a, b, WAVENUMBERS, half_length=max(HALF_LENGTH, 3.0 * offset))
+            if a[2] + (b[2] - a[2]) * -a[0] / (b[0] - a[0]) > 0.0:  # in sight over the top
+                exact = exact + np.exp(-1j * WAVENUMBERS * distance) / distance
+            off = np.array(stored[_key(case, slant)]) - band_levels(exact, distance)
+            entry = {"source": case["source"], "listener": case["listener"], "slant_deg": slant}
+            out.append({**entry, "off_db": off.tolist()})
     return out
 
 
@@ -585,7 +671,112 @@ def _bends(name: str, angle: float) -> float:
 
 
 def _row(values) -> str:
-    return " ".join(f"{v:+6.2f}" for v in values)
+    return " ".join(f"{v:+6.2f}" if math.isfinite(v) else "   out" for v in values)
+
+
+def _listed(values) -> list:
+    """``values`` as a list, with None for what is not a number."""
+    return [float(v) if math.isfinite(v) else None for v in values]
+
+
+def _slant_limits(name: str, angle: float, slant: float) -> np.ndarray | None:
+    """(4,) what the module must keep to in each band (dB) for a case of the group
+    ``name`` with a bend of ``angle`` degrees at a ``slant`` (degrees): the limit across
+    the row, or that of :data:`SLANT_LIMITS` for a band it names. None for a group and
+    bend without a limit."""
+    to = next((to for (g, to) in LIMITS if g == name and angle <= to), None)
+    if to is None:
+        return None
+    across = LIMITS[(name, to)]
+    return np.array(
+        [SLANT_LIMITS.get((name, to, slant, band), across) for band in range(len(FREQUENCIES))]
+    )
+
+
+def at_a_slant(stored: dict, only: str | None = None) -> tuple[list[dict], bool]:
+    """The cases of the sets :data:`SLANTED` with the ends offset along the edges, at
+    each of :data:`SLANTS`: listed and summed up as the cases across the row are, with
+    the module's level where the row is given as the way meets it but not turned (as
+    if it stood across the way). A band in which the solver does not take the turned
+    row is listed as "out" and counted. Returns the cases and whether any is over its
+    limit (:func:`_slant_limits`), has a level that is not a number in a band that the
+    solver takes, or has no reference, or a group has fewer band levels taken than
+    :data:`SLANT_TAKEN` gives (with every case run: not with ``only``)."""
+    results, failed = [], False
+    worst: dict[tuple, list] = {}
+    for slant in SLANTS:
+        print()
+        for case in cases(SLANTED):
+            if only and only not in case["name"]:
+                continue
+            if _key(case, slant) not in stored:
+                print(
+                    f"no reference for {case['name']} at a slant (run --references {case['set']})"
+                )
+                failed = True
+                continue
+            wave = np.array(stored[_key(case, slant)])
+            alone, with_edges, refused = march(case, slant)
+            _, unturned, _ = march(case, slant, turned=False)
+            angle, name = bend(case), group(case)
+            limits = _slant_limits(name, angle, slant)
+            entry = {
+                **case,
+                "slant_deg": slant,
+                "group": name,
+                "bend_deg": angle,
+                "wave_db": wave.tolist(),
+                "march_db": _listed(alone - wave),
+                "module_db": _listed(with_edges - wave),
+                "refused": refused.tolist(),
+                "unturned_db": (unturned - wave).tolist(),
+                "limit_db": None if limits is None else limits.tolist(),
+            }
+            line = (
+                f"{case['name'][:44]:44s} S {case['source'][1]:5.2f} L {case['listener'][1]:5.2f}"
+            )
+            line += (
+                f" {angle:4.1f} deg, slant {slant:g}  wave {_row(wave)}  march {_row(alone - wave)}"
+            )
+            line += f"  module {_row(with_edges - wave)}  not turned {_row(unturned - wave)}"
+            off = np.abs(with_edges - wave)[~refused]
+            if not np.all(np.isfinite(off)):
+                failed = True
+                line += "  NOT A NUMBER"
+            elif limits is not None and np.any(off > limits[~refused]):
+                failed = True
+                line += "  OVER THE LIMIT"
+            worst.setdefault((slant, name, _bends(name, angle)), []).append(entry)
+            results.append(entry)
+            print(line, flush=True)
+    print()
+    counts: dict[tuple, list] = {}
+    for (slant, name, to), entries in sorted(worst.items()):
+        module = np.array([e["module_db"] for e in entries], dtype=float)
+        unturned = np.array([e["unturned_db"] for e in entries])
+        taken = ~np.array([e["refused"] for e in entries])
+        count = counts.setdefault((slant, name), [0, 0])
+        count[0] += int(taken.sum())
+        count[1] += taken.size
+        angles = f"up to {to:g}" if math.isfinite(to) else f"more than {BENDS[-1]:g}"
+        line = f"slant {slant:g} degrees: {name}, bend {angles} degrees: {len(entries)} cases,"
+        line += f" {int(taken.sum())} of {module.size} band levels taken"
+        if taken.any():
+            line += f", module {module[taken].min():+.2f} to {module[taken].max():+.2f} dB"
+            line += f" (not turned {unturned[taken].min():+.2f} to {unturned[taken].max():+.2f} dB)"
+        if not taken.all():
+            line += f"; out of reach, not turned {unturned[~taken].min():+.2f} to"
+            line += f" {unturned[~taken].max():+.2f} dB"
+        print(line)
+    for (slant, name), (taken, of) in sorted(counts.items()):
+        least = SLANT_TAKEN.get((name, slant), of)
+        if taken < least and (only is None or (name, slant) not in SLANT_TAKEN):
+            failed = True
+            print(
+                f"slant {slant:g} degrees: {name}: {taken} of {of} band levels taken,"
+                f" FEWER THAN THE {least} that the solver takes"
+            )
+    return results, failed
 
 
 def main() -> None:
@@ -604,7 +795,10 @@ def main() -> None:
     for check in checks:
         ok = max(abs(v) for v in check["off_db"]) <= REFERENCE_LIMIT_DB
         failed |= not ok
-        print(f"wave calculation, one screen, less the exact solution: {_row(check['off_db'])} dB")
+        at = f" at a slant of {check['slant_deg']:g} degrees" if check["slant_deg"] else ""
+        print(
+            f"wave calculation, one screen{at}, less the exact solution: {_row(check['off_db'])} dB"
+        )
     results = []
     worst: dict[tuple, list] = {}
     folder = Path(tempfile.mkdtemp())
@@ -616,7 +810,7 @@ def main() -> None:
             failed = True
             continue
         wave = np.array(stored[_key(case)])
-        alone, with_edges = march(case)
+        alone, with_edges, _ = march(case)
         angle = bend(case)
         limit = next((v for (g, to), v in LIMITS.items() if g == group(case) and angle <= to), None)
         entry = {
@@ -661,10 +855,16 @@ def main() -> None:
                 if not np.isfinite(both).all():
                     line += " or no sound"
         print(line)
+    slanted, over = at_a_slant(stored, args.case)
+    failed |= over
     if args.json:
-        args.json.write_text(json.dumps({"reference": checks, "cases": results}, indent=1) + "\n")
+        whole = {"reference": checks, "cases": results, "slanted": slanted}
+        args.json.write_text(json.dumps(whole, indent=1) + "\n")
     if failed:
-        raise SystemExit("a case is over its limit")
+        raise SystemExit(
+            "a case is over its limit or has no reference, a level is not a number, or the"
+            " solver takes fewer bands at a slant"
+        )
 
 
 if __name__ == "__main__":
