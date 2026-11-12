@@ -597,7 +597,7 @@ def test_the_sum_for_offset_ends_takes_more_nodes_at_a_steep_slant() -> None:
         span = 0.5 * math.pi - beta
         fastest = np.max(np.cos(beta + 0.5 * span * (1.0 + np.cos(t))) * 0.5 * span * np.sin(t))
         turns = wavenumber * (longest - reach) * float(fastest)
-        assert abs(on_the_axis - strip.REAL_POINTS - math.ceil(turns)) <= 1
+        assert on_the_axis == strip.REAL_POINTS + math.ceil(turns)
         real = kappa[strip.RAY_NODES : strip.RAY_NODES + on_the_axis]
         assert np.all(real.imag == 0.0) and np.all(np.diff(real.real) < 0.0)
         assert np.max(np.abs(np.diff((longest - reach) * real.real))) < math.pi
@@ -614,7 +614,7 @@ def test_the_points_on_the_real_axis_hold_the_sum_behind_a_barrier_of_many_wavel
     the one before, and the points on the real axis have to hold them. At k H = 31 and
     60 degrees, 6 and 10 m from a barrier 1 m high: with ``CROSSINGS`` of them the
     sound shed is within 2e-7 of that with twice as many and three times
-    ``REAL_POINTS`` (7e-8), where two crossings leave it 1.3e-2 off."""
+    ``REAL_POINTS`` (7e-8), where two crossings leave it 1.32e-2 off."""
     k, ends, slant = np.array([31.0]), ((6.0, 0.5), (10.0, 1.5)), math.radians(60.0)
     found = strip.beyond_screen(k, 1.0, *ends, slant=slant)
     monkeypatch.setattr(strip, "CROSSINGS", 2 * strip.CROSSINGS)
@@ -695,8 +695,9 @@ def test_a_slant_that_tends_to_none_gives_the_sound_across_the_barrier() -> None
     """As the slant tends to 0 the sum for offset ends tends to the one across the
     barrier (the real axis's part to nothing, the two lines to the ray and its
     mirror), by the slant's square: to 2e-12 at a millionth of a radian. The slant's
-    sign does not count, nor which end is the source. Beyond ``SLANT_MOST_DEG`` the
-    sum is not measured, and refused."""
+    sign does not count, nor which end is the source. A slant so small that the ends
+    are no distance apart along the barrier gives the sound across it. Beyond
+    ``SLANT_MOST_DEG`` the sum is not measured, and refused, above ``MOST_KH`` too."""
     k = np.array([0.8, 4.6])
     ends = (2.0, 0.5), (3.5, 1.5)
     head_on = strip.beyond_screen(k, 1.0, *ends)
@@ -711,6 +712,37 @@ def test_a_slant_that_tends_to_none_gives_the_sound_across_the_barrier() -> None
     for beyond in (most + 0.01, -most - 0.01, 0.5 * math.pi, math.inf, math.nan):
         with pytest.raises(ValueError, match="a slant of 75 degrees at most"):
             strip.beyond_screen(k, 1.0, *ends, slant=beyond)
+    above = np.array([1.25 * strip.MOST_KH])
+    assert strip.beyond_screen(above, 1.0, *ends, slant=most) is None
+    with pytest.raises(ValueError, match="a slant of 75 degrees at most"):
+        strip.beyond_screen(above, 1.0, *ends, slant=most + 0.01)
+    # Half a metre between the ends times the sine of the least number is nothing.
+    close = (0.2, 0.5), (0.3, 1.5)
+    np.testing.assert_array_equal(
+        strip.beyond_screen(k, 1.0, *close, slant=5e-324), strip.beyond_screen(k, 1.0, *close)
+    )
+
+
+def test_from_where_the_strip_s_equation_is_solved_at_each_slant(monkeypatch) -> None:
+    """With both ends halfway up a barrier and as far from it as each other along the
+    way, the equation is solved at k H = ``MOST_KH`` from 0.14 of the barrier's height
+    from it across it, 0.16 at 15 degrees, 0.20 at 30, 0.27 at 45, 0.41 at 60 and 0.83 at
+    75, and at k H = 0.15 from 0.35 at 60 degrees and 0.69 at 75: there, and not a
+    hundredth of the height closer. Whether it is solved is decided before it is: the
+    solution is left out here."""
+    monkeypatch.setattr(strip, "_rigid", lambda kappa, *rest: np.zeros(len(kappa), dtype=complex))
+    height = 3.0
+
+    def solved(kh: float, degrees: float, hundredths: int) -> bool:
+        off = 0.01 * hundredths
+        ends = (off * height, 0.5 * height), (off * height, 0.5 * height)
+        k = np.array([kh / height])
+        return strip.beyond_screen(k, height, *ends, slant=math.radians(degrees)) is not None
+
+    highest = zip((0.0, 15.0, 30.0, 45.0, 60.0, 75.0), (14, 16, 20, 27, 41, 83), strict=True)
+    for kh, slants in ((strip.MOST_KH, highest), (0.15, ((60.0, 35), (75.0, 69)))):
+        for slant, first in slants:
+            assert solved(kh, slant, first) and not solved(kh, slant, first - 1), (kh, slant)
 
 
 def test_where_the_strip_s_equation_is_not_solved_at_a_slant() -> None:
@@ -718,7 +750,8 @@ def test_where_the_strip_s_equation_is_not_solved_at_a_slant() -> None:
     further out, so the density's terms run out earlier: with both ends halfway up a
     barrier and 0.4 of its height from it along the way, the equation is solved up to
     60 degrees and not at 75; with 0.2 of the height, up to 30 degrees; with 0.8, at
-    75 as well. ``MOST_KH`` is the same at any slant."""
+    75 as well (k H = 0.15; at a higher k H the terms run out further off). ``MOST_KH``
+    is the same at any slant."""
     low = np.array([0.05])
     for off, solved in ((0.2, (True, True, False, False)), (0.4, (True, True, True, False))):
         ends = (off * 3.0, 1.5), (off * 3.0, 1.5)

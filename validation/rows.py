@@ -148,9 +148,10 @@ SLANTED = (
 )
 #: What the module must keep to at a slant, where it takes the row: the limits across
 #: the row (:data:`LIMITS`), but in these bands, (group, bend up to, slant, band): over
-#: rows in free space at 60 degrees the 63 Hz band (0.63 dB at most) and, with a bend
-#: of up to 25 degrees, the 500 Hz band (0.22 dB); over screens on a ground between
-#: ends about level with their tops at 30 degrees the 63 Hz band (1.40 dB).
+#: rows in free space at 60 degrees, with a bend of up to 6 degrees the 63 Hz band
+#: (0.63 dB at most) and with a bend of up to 25 degrees the 500 Hz band (0.22 dB);
+#: over screens on a ground between ends about level with their tops at 30 degrees the
+#: 63 Hz band (1.40 dB).
 SLANT_LIMITS = {
     ("free space", 6.0, 60.0, 0): 0.7,
     ("free space", 25.0, 60.0, 3): 0.25,
@@ -701,7 +702,8 @@ def at_a_slant(stored: dict, only: str | None = None) -> tuple[list[dict], bool]
     row is listed as "out" and counted. Returns the cases and whether any is over its
     limit (:func:`_slant_limits`), has a level that is not a number in a band that the
     solver takes, or has no reference, or a group has fewer band levels taken than
-    :data:`SLANT_TAKEN` gives (with every case run: not with ``only``)."""
+    :data:`SLANT_TAKEN` gives (a group that it names is not counted with ``only``, when
+    not all of its cases run; any other group takes every band)."""
     results, failed = [], False
     worst: dict[tuple, list] = {}
     for slant in SLANTS:
@@ -793,7 +795,7 @@ def main() -> None:
     failed = False
     checks = reference_check(stored)
     for check in checks:
-        ok = max(abs(v) for v in check["off_db"]) <= REFERENCE_LIMIT_DB
+        ok = all(abs(v) <= REFERENCE_LIMIT_DB for v in check["off_db"])
         failed |= not ok
         at = f" at a slant of {check['slant_deg']:g} degrees" if check["slant_deg"] else ""
         print(
@@ -834,7 +836,11 @@ def main() -> None:
                 line += f"  {mode} {' / '.join(_row(way) for way in ways)}"
         bucket = (group(case), _bends(group(case), angle))
         worst.setdefault(bucket, []).append(entry)
-        if limit is not None and np.max(np.abs(with_edges - wave)) > limit:
+        off = np.abs(with_edges - wave)
+        if not np.all(np.isfinite(off)):
+            failed = True
+            line += "  NOT A NUMBER"
+        elif limit is not None and np.max(off) > limit:
             failed = True
             line += "  OVER THE LIMIT"
         results.append(entry)

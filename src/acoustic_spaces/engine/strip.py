@@ -62,8 +62,8 @@ which the strip's equation is solved all the way (:func:`_offset`). That is the 
 part; the screen's is the marches', which run in the vertical plane along the way over a
 screen across it, and is summed on the ray as before. Against the reference's sum over
 the real wavenumbers for ends apart along the barrier (validation/barrier_strip.py;
-eight places, 44.5 to 500 Hz) the rigid strip's shed sound is within 1.5e-5 of itself at
-15 degrees from across the barrier, 4.3e-6 at 45, 7.6e-6 at 60 and 3.0e-5 at 75, with
+eight places, 44.5 to 500 Hz) the rigid strip's shed sound is within 1.4e-5 of itself at
+15 degrees from across the barrier, 4.2e-6 at 45, 7.6e-6 at 60 and 3.0e-5 at 75, with
 113 to 179 wavenumbers up to 45 degrees, 147 to 261 at 60 and 242 to 411 at 75, where
 the ray has 48.
 """
@@ -112,18 +112,18 @@ RAY_NODES = 48
 PANEL_NODES = 12
 PANEL_TURN = 4.0
 #: The sum for ends offset along the barrier (:func:`_offset`). The line on which it
-#: leaves the real axis goes down at ``TILT`` of the angle between the straight way
-#: and the barrier (45 degrees at most), with ``RAY_NODES`` nodes times the cotangent
-#: of twice the line's angle where that is more than 1 (along it the summed function's
-#: phase turns that many times as often). On the real axis the strip's part is taken
-#: at ``REAL_POINTS`` Chebyshev points and one more for each radian that the phase of
-#: its longest wave that counts turns, where it turns fastest, over a radian of the
-#: points' angle: the wave that crosses the strip ``CROSSINGS`` times from one of its
-#: edges, the barrier's top and the top's image, to the other (with 6 crossings the
-#: sound shed is within 2e-7 of that with 16 at k H = 8 to 31 and slants of 15 to 75
-#: degrees, with 4 up to 2.6e-5 off and with 2 up to 1.4e-2). Between the points it
-#: is summed with a rule of that many nodes, ``SUM_NODES`` and one more for each
-#: radian of the phase of the straight way's wave.
+#: leaves the real axis goes down at ``TILT`` of the angle between the straight way and
+#: the barrier (45 degrees at most), with ``RAY_NODES`` nodes times the cotangent of
+#: twice the line's angle where that is more than 1 (along it the summed function's
+#: phase turns that many times as often). On the real axis the strip's part is taken at
+#: ``REAL_POINTS`` Chebyshev points and one more for each radian that the phase of its
+#: longest wave that counts turns, where it turns fastest, over a radian of the points'
+#: angle: the wave that crosses the strip ``CROSSINGS`` times from one of its edges, the
+#: barrier's top and the top's image, to the other (with 6 crossings the sound shed is
+#: within 2e-7 of that with 16 and four times the points at k H = 8 to 31 and slants of
+#: 15 to 75 degrees, with 4 up to 2.6e-5 off and with 2 up to 1.4e-2). Between the
+#: points it is summed with a rule of that many nodes, ``SUM_NODES`` and one more for
+#: each radian of the phase of the straight way's wave.
 TILT = 0.5
 REAL_POINTS = 16
 CROSSINGS = 6
@@ -162,8 +162,9 @@ def beyond_screen(k, height: float, source, listener, slant: float = 0.0) -> np.
     terms, and None comes with the ends further from the barrier than the rule above
     gives for a way across it: with both ends halfway up the barrier and as far from it
     as each other along the way, the equation is solved from 0.14 of its height across
-    the barrier, 0.16 at 15 degrees, 0.20 at 30, 0.26 at 45, 0.40 at 60 and 0.80 at 75
-    (k H up to 24)."""
+    the barrier, 0.16 at 15 degrees, 0.20 at 30, 0.27 at 45, 0.41 at 60 and 0.83 at 75
+    at k H = ``MOST_KH``, and from closer at a lower k H (0.35 and 0.69 at 60 and 75
+    degrees at k H = 0.15)."""
     k = np.atleast_1d(np.asarray(k, dtype=float))
     height = float(height)
     (ds, zs), (dl, zl) = source, listener
@@ -173,6 +174,9 @@ def beyond_screen(k, height: float, source, listener, slant: float = 0.0) -> np.
         raise ValueError(f"a slant of {SLANT_MOST_DEG:.0f} degrees at most")
     if float(np.max(k)) * height > MOST_KH:
         return None
+    if (ds + dl) * abs(math.sin(slant)) == 0.0:
+        # Ends that are no distance apart along the barrier: the way across it.
+        slant = 0.0
     # The density is solved for the end farther from the barrier, whose field on it is
     # the smoother one, and summed against the nearer one's: the sound is the same with
     # the two swapped.

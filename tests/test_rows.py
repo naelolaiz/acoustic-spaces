@@ -2391,9 +2391,10 @@ def test_a_low_barrier_at_a_slant_gives_the_same_sound_with_the_ends_swapped() -
 
 
 def test_a_barrier_turned_beyond_the_strip_s_slant_keeps_the_edges_terms(monkeypatch) -> None:
-    """The strip's sum is measured up to its own slant (``strip.SLANT_MOST_DEG``): a
-    barrier turned further keeps the edges' terms, as where the strip's equation is
-    not solved."""
+    """The strip's sum is measured up to its own slant (``strip.SLANT_MOST_DEG``, as
+    shipped the row's own ``SLANT_MOST_DEG``, beyond which the row is out of reach).
+    With the strip's set below the row's, a barrier turned between the two keeps the
+    edges' terms, as where the strip's equation is not solved."""
     ends = (F[0], C, None, 1.5, 25.0, 1.5, [(10.0, 10.0, 2.0)])
     turn = [math.radians(60.0)]
     as_a_strip = rows.over_row(*ends, slants=turn)
@@ -2406,8 +2407,9 @@ def test_a_barrier_turned_beyond_the_strip_s_slant_keeps_the_edges_terms(monkeyp
 
 
 def test_what_the_slants_have_to_be(monkeypatch) -> None:
-    """One slant for each obstacle, a number or, for a roof, one for each of its two
-    sides; its sign does not count, and the obstacles may be given once (an iterator).
+    """One slant for each obstacle, a real number (not a string of digits, a truth
+    value or a complex number) or, for a roof, one for each of its two sides; its sign
+    does not count, and the obstacles may be given once (an iterator).
     An edge turned more than ``SLANT_MOST_DEG`` from across the way, or more than
     ``SLANT_ROW_MOST_DEG`` where a march lights it, is out of reach before either march
     runs, but not one that sheds no sound: what stands before the source or past the
@@ -2420,12 +2422,21 @@ def test_what_the_slants_have_to_be(monkeypatch) -> None:
     for wrong in (math.nan, (0.1, 0.2, 0.3), (0.1, math.inf), [[0.1, 0.2]], None):
         with pytest.raises(ValueError, match="an angle in radians, or one for each"):
             rows.over_row(*ends, row, slants=[0.1, wrong])
+    for wrong in ("0.3", b"0.3", 0.3 + 0j, True, {0.3}, (0.1, "0.2"), [0.1, [0.2]]):
+        with pytest.raises(ValueError, match="an angle in radians, or one for each"):
+            rows.over_row(*ends, row, slants=[0.1, wrong])
+    # Whole numbers and numpy's are numbers.
+    whole = rows.over_row(*ends, row, slants=[0, np.float32(0.0)])
+    assert np.array_equal(whole.pressure, rows.over_row(*ends, row).pressure)
     with pytest.raises(ValueError, match="an angle in radians") as raised:
         rows.over_row(*ends, row, slants=[0.1, math.nan])
     assert not isinstance(raised.value, rows.OutOfReach)
     # A barrier has one top: a slant for each side must be the same one.
     with pytest.raises(ValueError, match="a barrier has one top, and one slant"):
         rows.over_row(*ends, row, slants=[(0.2, 0.7), 0.1])
+    # An obstacle given back to front is that, with a slant for each side too.
+    with pytest.raises(ValueError, match="far side lies before its near side"):
+        rows.over_row(*ends, [(12.0, 8.0, 2.0)], slants=[(0.3, 0.6)])
     one = rows.over_row(*ends, row, slants=[0.4, (0.2, 0.9)])
     other = rows.over_row(*ends, row, slants=[(-0.4, 0.4), (-0.2, 0.9)])
     assert np.array_equal(one.pressure, other.pressure)
@@ -2512,7 +2523,7 @@ def test_each_edge_takes_the_slant_of_its_obstacle_s_side() -> None:
 #: field, ``validation/rows.py``), how far the row's level may be from it (dB) and how
 #: far below it the level is at least in some band with the row not turned.
 WAVE_AT_A_SLANT = [
-    # Not turned the row is 0.15 dB low at the most here, and turned within 0.12 dB.
+    # Not turned the row is 0.15 dB low at the most here, and turned within 0.13 dB.
     (TWO_ROOFS, 0.01, -0.49, 30.0, [-7.424, -8.112, -8.911, -9.959], 0.13, 0.14),
     (TWO_ROOFS, 0.01, -0.49, 60.0, [-6.798, -7.435, -8.313, -9.101], 0.2, 0.7),
     (THREE_SCREENS, 0.01, -0.49, 30.0, [-10.474, -11.562, -12.307, -13.686], 0.25, 0.3),

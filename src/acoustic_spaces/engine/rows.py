@@ -54,7 +54,7 @@ frequencies). Not where the ends are so close to each other across a high barrie
 or both so close to it, that the strip's density would take more than
 ``strip.TERMS_MOST`` terms (for a way across the barrier: closer to each other than
 about a quarter of its height, both within about a twentieth of it from the barrier, or
-between the two; at a slant further off, up to 0.8 of its height from it at 75 degrees):
+between the two; at a slant further off, up to 0.83 of its height from it at 75 degrees):
 the half-plane's terms stand there at every frequency, up to 0.27 dB from the strip's
 in an octave band's level across the barrier (docs/validation.md, "Rows of roofs and
 barriers against a wave calculation").
@@ -383,7 +383,7 @@ def over_row(
     ``slants`` are the angles (radians) by which the obstacles are turned from across
     the way, seen from above: one for each of ``obstacles``, a number for both its
     sides or, for a roof, a pair (near side, far side); None where all cross it at
-    right angles.
+    right angles. A slant's sign does not count.
     ``near``, ``far`` and the ends' heights are along the way as before, in the
     vertical plane through the two ends, which is the march's; each edge's terms are
     those of an edge at its slant (:func:`_slanted`). An edge turned more than
@@ -392,8 +392,8 @@ def over_row(
     both light themselves; and after the marches, a row whose sound would depend on
     which way's phase the terms of its slanted edges are given, the sound's own or the
     marches' (``SLANT_APART_MOST``, :func:`_on_one_way`). A slant that is not a number,
-    a count of slants that is not the obstacles', or a barrier with a slant for each
-    side that are not the same raises a ValueError."""
+    a count of slants that is not the obstacles', or a barrier with slants of different
+    sizes for its two sides raises a ValueError."""
     if steep_reflections not in ("raise", "leave out"):
         raise ValueError('steep_reflections is "raise" or "leave out"')
     obstacles = list(obstacles)
@@ -462,7 +462,9 @@ def over_row(
             # An end on the plane may be given a rounding below it (:func:`_stands_free`).
             ends = (x, max(zs - plane, 0.0)), (reach - x, max(zr - plane, 0.0))
             whole = None
-            # The strip's sum is measured up to its own slant; the edges' terms stand beyond.
+            # The strip's sum is measured up to its own slant (``strip.SLANT_MOST_DEG``).
+            # Were that less than ``SLANT_MOST_DEG``, beyond which no edge comes this far,
+            # the edges' terms would stand between the two.
             if np.any(low) and slant <= math.radians(strip.SLANT_MOST_DEG):
                 whole = strip.beyond_screen(k[low], h - plane, *ends, slant=slant)
             if whole is not None:
@@ -990,8 +992,9 @@ def _slants(obstacles, slants) -> list[tuple[float, float, float, float, float]]
     """The ``obstacles`` (a list) with their ``slants`` as (near, far, top, the near
     side's angle from across the way, the far side's), the angles as their sizes
     (radians); none where ``slants`` is None. A ValueError where the slants are not one
-    for each obstacle, each a number or a pair of numbers, and for a barrier, which has
-    one top, with two slants that differ."""
+    for each obstacle, each a real number or a pair of them (not a string, a truth
+    value or a complex number), and for a barrier, which has one top, with two slants
+    of different sizes."""
     if slants is None:
         return []
     try:
@@ -1002,11 +1005,18 @@ def _slants(obstacles, slants) -> list[tuple[float, float, float, float, float]]
         raise ValueError("one slant for each obstacle (a number, or one for each of its sides)")
     out = []
     for (near, far, h), slant in zip(obstacles, slants, strict=True):
-        sides = np.abs(np.asarray(slant, dtype=float))
-        if sides.shape not in ((), (2,)) or not np.all(np.isfinite(sides)):
+        try:
+            given = np.asarray(slant)
+        except (TypeError, ValueError):
+            given = np.asarray(None)
+        # Whole or real numbers alone: numpy would read a string of digits as one.
+        if given.dtype.kind not in "iuf" or given.shape not in ((), (2,)):
+            raise ValueError("a slant is an angle in radians, or one for each of the two sides")
+        sides = np.abs(given.astype(float))
+        if not np.all(np.isfinite(sides)):
             raise ValueError("a slant is an angle in radians, or one for each of the two sides")
         near_side, far_side = (float(side) for side in np.broadcast_to(sides, (2,)))
-        if far - near <= _SAME_M and near_side != far_side:
+        if abs(far - near) <= _SAME_M and near_side != far_side:
             raise ValueError("a barrier has one top, and one slant")
         out.append((float(near), float(far), float(h), near_side, far_side))
     return out

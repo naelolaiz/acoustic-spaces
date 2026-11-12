@@ -3936,7 +3936,7 @@ rigid ground, with ends from half a metre below the tops to half a metre above t
 roofs 0.53 to 0.85 dB above the wave calculation (across the row 0.17 to 0.64 dB above),
 over three screens 1.17 to 3.15 dB below (across the row 0.91 to 3.42 dB below). Without
 the refusal the level over the two roofs would be within 0.86 dB at 30° in the 63 to 250
-Hz bands and 1.35 dB in the 500 Hz band, and at 60° up to 6.4 dB above the wave
+Hz bands and 1.36 dB in the 500 Hz band, and at 60° up to 6.4 dB above the wave
 calculation from a source level with the roofs to a listener at street level; over the
 three screens up to 5.7 dB below at 60°.
 
@@ -3955,11 +3955,12 @@ What it does not hold:
   are each taken as if the row's other edges were turned as it is, which gives the same
   sound from either end but is not measured against a reference. A barrier's strip at a
   slant takes more terms where the ends are close to it: with both ends halfway up the
-  barrier and 0.4 of its height from it along the way it is solved up to 60° and not at
-  75°, and the edges' terms stand in its place. The strip's sum for ends apart along the
-  barrier takes 1.7 to 4.9 times as long as across it up to 45°, 2.5 to 9.9 times at 60°
-  and 5 to 37 times at 75° (eight places, 63 to 500 Hz), the most with the ends 4 and 6
-  m from a barrier 3 m high: 1.8 to 5.4 s a frequency at 75°.
+  barrier it is solved from 0.14 of its height from it across it, from 0.41 along the
+  way at 60° and from 0.83 at 75°, and closer the edges' terms stand in its place. The
+  strip's sum for ends apart along the barrier takes 1.7 to 4.9 times as long as across
+  it up to 45°, 2.5 to 9.9 times at 60° and 5 to 37 times at 75° (eight places, 63 to
+  500 Hz), the most with the ends 4 and 6 m from a barrier 3 m high: 1.8 to 5.4 s a
+  frequency at 75°.
 - **What stands behind an end.** It does nothing: a wall behind a source reflects
   nothing, and a roof under an end goes on behind it without end. Against the exact
   solution for the corner, with a source on a roof and a listener 1.5 m above it 20 m
