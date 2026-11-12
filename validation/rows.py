@@ -9,7 +9,10 @@ The scenes are the same along the edges: thin rigid screens and rigid blocks wit
 tops (roofs) across the way between x = 0 and x = 10, in free space or on a rigid
 ground 6 m below the tops, the source 10 m before x = 0 and the listener 5 m past
 x = 10, a centimetre to 2 m above the tops' plane or below it, or 1.5 m above the
-ground. :data:`SETS` lists them.
+ground. In the last sets the source stands over a roof, 0.5 or 3 m before x = 10: a
+roof that ends there, alone or with a parapet 0.1, 0.3 or 1.1 m high on its edge, and
+a roof that goes on under the listener with a screen of those heights on it.
+:data:`SETS` lists them.
 
 The reference is a wave calculation in two dimensions, turned into a point source's.
 The field of a point source at y = 0 is a sum over the wavenumber along the edges of
@@ -35,7 +38,9 @@ scene with ``second_order`` and ``first_order`` diffraction, each way round; the
 simulation does not take the module's sound yet. The cases go by the angle the sound
 bends by at the row's ends, up from the source to the first top or down from the last
 one to the listener (:func:`bend`), and :data:`LIMITS` holds what the module must keep
-to in each group, up to a bend of 45 degrees (the steepest of the cases is 42).
+to in each group, up to a bend of 45 degrees (the steepest of the cases is 42), and for
+a source over a roof at any bend (up to 66 degrees, from a source on the roof half a
+metre before a parapet 1.1 m high).
 
 The reference tests itself: with one rigid screen it must be within
 :data:`REFERENCE_LIMIT_DB` of the exact solution, the direct sound plus the
@@ -91,7 +96,11 @@ REFERENCE_LIMIT_DB = 0.15
 #: group: whether the row stands on a ground, and the bend at its ends (degrees, up
 #: to). On a ground the rows of screens alone are apart: there the module is lowest
 #: (between rigid screens on a rigid ground sound goes to and fro, and a march one way
-#: has none coming back; no run here shows that this is the cause).
+#: has none coming back; no run here shows that this is the cause). With the source
+#: over a roof the groups go by what stands on the roof, at any bend: nothing up to the
+#: roof's edge, a parapet on that edge, or a screen on a roof that goes on under the
+#: listener, each lower than :data:`LOW_M` or not (the edges' terms take a screen for a
+#: half-plane, and have no sound that goes on between its top and the roof).
 LIMITS = {
     ("free space", 6.0): 0.4,
     ("free space", 25.0): 0.2,
@@ -101,9 +110,16 @@ LIMITS = {
     ("screens on a ground", 6.0): 1.3,
     ("screens on a ground", 25.0): 2.6,
     ("screens on a ground", 45.0): 3.5,
+    ("over a roof", 90.0): 0.2,
+    ("parapet on a roof's edge", 90.0): 0.9,
+    ("low parapet on a roof's edge", 90.0): 1.2,
+    ("screen on a roof", 90.0): 1.7,
+    ("low screen on a roof", 90.0): 3.1,
 }
 #: The groups' bends (degrees, up to).
 BENDS = (6.0, 25.0, 45.0)
+#: A screen on a roof under the source is low up to this height (m) above the roof.
+LOW_M = 0.5
 
 
 # -- the cases -------------------------------------------------------------------------
@@ -131,13 +147,41 @@ def _on_ground(name: str, row: list) -> list:
     return [(name, row, zl, sources) for zl in (GROUND_M + 0.01, GROUND_M - 0.49, 1.51)]
 
 
+def _over_a_roof(parapet: float) -> list:
+    """A roof under the source up to the cell that begins at x = 10, its last (it goes
+    on behind the source without end), with a parapet ``parapet`` m high on that cell,
+    or none (0): for listeners 2 m below the roof's plane and 1 m above it, each with
+    the sources of :data:`_NEAR`."""
+    if parapet:
+        name = f"roof to 10 under the source, parapet {parapet:g} m on its edge"
+        row = [(-_BEHIND_M, 10.0, 0.0), _screen(10.0, parapet)]
+    else:
+        name = "roof to 10 under the source"
+        row = [(-_BEHIND_M, 10.0 + GRID_M, 0.0)]
+    return [(name, row, zl, _NEAR) for zl in (-1.99, 1.01)]
+
+
+def _low_screen(height: float) -> tuple:
+    """A screen ``height`` m high at x = 10 on a roof under both ends, the listener
+    1.5 m above the roof, with the sources of :data:`_NEAR`."""
+    name = f"roof under both ends, screen {height:g} m high at 10"
+    return (name, [(-_BEHIND_M, 2.0 * _BEHIND_M, 0.0), _screen(10.0, height)], 1.51, _NEAR)
+
+
+#: How far (m) behind the source a roof under it begins: past the wave calculation's
+#: frame, where it has no end.
+_BEHIND_M = 30.0
+#: Sources 0.5 and 3 m before the middle of the cell that begins at x = 10 (a screen's,
+#: or the roof's last), a centimetre and 1.5 m above the roof: (x, z).
+_NEAR = [(10.0 + 0.5 * GRID_M - before, z) for before in (0.5, 3.0) for z in (0.01, 1.51)]
 _ROOF_SCREEN = [(0.0, 9.0, 0.0), _screen(10.0)]
 _TWO_ROOFS = [(0.0, 4.0, 0.0), (6.0, 10.0, 0.0)]
 _THREE_SCREENS = [_screen(0.0), _screen(5.0), _screen(10.0)]
 _THREE_ROOFS = [(0.0, 2.0, 0.0), (4.0, 6.0, 0.0), (8.0, 10.0, 0.0)]
 #: By set: (name, the row as (from x, to x, top z), the listener's height, the sources'
-#: heights), heights from the tops' plane, or from the ground in the sets on one. One
-#: run of the wave calculation serves a listener and its sources.
+#: heights or, for sources that do not stand at :data:`X_SOURCE`, their (x, z)), heights
+#: from the tops' plane, or from the ground in the sets on one. One run of the wave
+#: calculation serves a listener and its sources.
 SETS: dict[str, list] = {
     "tops": [
         (
@@ -185,6 +229,10 @@ SETS: dict[str, list] = {
     "ground_roof_screen": _on_ground("roof 0..9, screen at 10", _ROOF_SCREEN),
     "ground_two_roofs": _on_ground("two roofs 0..4 and 6..10", _TWO_ROOFS),
     "ground_three_screens": _on_ground("three screens at 0, 5, 10", _THREE_SCREENS),
+    "roof_edge": _over_a_roof(0.0),
+    "roof_parapet_low": _over_a_roof(0.1) + _over_a_roof(0.3),
+    "roof_parapet": _over_a_roof(1.1),
+    "roof_low_screen": [_low_screen(0.1), _low_screen(0.3), _low_screen(1.1)],
 }
 
 
@@ -193,19 +241,26 @@ def _cell(height: float) -> float:
     return (math.floor(height / GRID_M) + 0.5) * GRID_M
 
 
+def _place(source) -> tuple[float, float]:
+    """Where a set's source stands (its cell's centre): a height at :data:`X_SOURCE`,
+    or (x, z)."""
+    x, z = source if isinstance(source, tuple) else (X_SOURCE, source)
+    return (x, _cell(z))
+
+
 def cases(sets=None) -> list[dict]:
     """The cases of ``sets`` (all by default), one for each source of each listener."""
     out = []
     for key in SETS if sets is None else sets:
         for name, row, zl, sources in SETS[key]:
-            for zs in sources:
+            for source in sources:
                 out.append(
                     {
                         "set": key,
                         "name": name,
                         "ground": key.startswith("ground"),
                         "row": [list(obstacle) for obstacle in row],
-                        "source": [X_SOURCE, _cell(zs)],
+                        "source": list(_place(source)),
                         "listener": [X_LISTENER, _cell(zl)],
                     }
                 )
@@ -215,35 +270,58 @@ def cases(sets=None) -> list[dict]:
 def _key(case: dict) -> str:
     """The name a case's levels are stored by."""
     where = "ground" if case["ground"] else "free"
-    return f"{case['name']} | {where} | S {case['source'][1]:+.2f} | L {case['listener'][1]:+.2f}"
+    key = f"{case['name']} | {where} | S {case['source'][1]:+.2f} | L {case['listener'][1]:+.2f}"
+    if case["source"][0] != X_SOURCE:
+        key += f" | S at {case['source'][0]:+.2f}"
+    return key
 
 
 def obstacles_of(case: dict, lift: float = 0.0) -> list[tuple[float, float, float]]:
     """The case's row as the march takes it: (near, far, top) from the source along the
     way and above the ground, a screen (one cell thick in the wave calculation) at its
-    cell's middle."""
+    cell's middle, and a roof that ends where a screen's cell begins up to there (the
+    screen stands on its edge)."""
+    middles = {a: 0.5 * (a + b) for a, b, _ in case["row"] if _thin(a, b)}
     out = []
     for a, b, top in case["row"]:
-        if b - a <= GRID_M + 1e-9:
+        if _thin(a, b):
             a = b = 0.5 * (a + b)
+        b = middles.get(b, b)
         out.append((a - case["source"][0], b - case["source"][0], top + lift))
     return out
 
 
+def _thin(a: float, b: float) -> bool:
+    """Whether what stands from ``a`` to ``b`` is a screen, one cell thick."""
+    return b - a <= GRID_M + 1e-9
+
+
 def bend(case: dict) -> float:
     """The angle (degrees) the sound bends by at the row's ends: up from the source to
-    the first top or down from the last top to the listener, the larger; 0 where both
-    look over them."""
-    first, last = case["row"][0], case["row"][-1]
-    up = math.atan2(first[2] - case["source"][1], first[0] - case["source"][0])
+    the first top past it (none where it stands over a roof with nothing else on its
+    way) or down from the last top to the listener, the larger; 0 where both look over
+    them."""
+    (xs, zs), last = case["source"], case["row"][-1]
+    ahead = [(a, top) for a, _, top in case["row"] if a > xs]
+    up = math.atan2(ahead[0][1] - zs, ahead[0][0] - xs) if ahead else 0.0
     down = math.atan2(last[2] - case["listener"][1], case["listener"][0] - last[1])
     return math.degrees(max(up, down, 0.0))
 
 
 def group(case: dict) -> str:
+    under = [(b, top) for a, b, top in case["row"] if a < case["source"][0] < b]
+    if under:
+        # The source stands over a roof: alone, with a parapet on the roof's edge, or
+        # with a screen on a roof that goes on under the listener.
+        end, roof = under[0]
+        screens = [(a, top - roof) for a, b, top in case["row"] if _thin(a, b)]
+        if not screens:
+            return "over a roof"
+        kind = "parapet on a roof's edge" if screens[0][0] == end else "screen on a roof"
+        return f"low {kind}" if screens[0][1] < LOW_M else kind
     if not case["ground"]:
         return "free space"
-    thin = all(b - a <= GRID_M + 1e-9 for a, b, _ in case["row"])
+    thin = all(_thin(a, b) for a, b, _ in case["row"])
     return "screens on a ground" if thin and len(case["row"]) > 1 else "on a ground"
 
 
@@ -407,7 +485,7 @@ def references(sets) -> None:
             started = time.time()
             solids = floor + [(a, b, -math.inf, top) for a, b, top in row]
             listener = (X_LISTENER, _cell(zl))
-            places = [(X_SOURCE, _cell(zs)) for zs in sources]
+            places = [_place(source) for source in sources]
             # By reciprocity one run from the listener's place serves its sources.
             traces, dt, at, heard = fdtd(solids, listener, places, **frame)
             if (zl, tuple(sources)) not in free:
@@ -495,6 +573,13 @@ def reference_check(stored: dict) -> list[dict]:
     return out
 
 
+def _bends(name: str, angle: float) -> float:
+    """The bend (degrees, up to) that the summary lists a case of the group ``name``
+    under: that of the group's own limit, or of :data:`BENDS`; infinite beyond them."""
+    own = sorted(to for (g, to) in LIMITS if g == name)
+    return next((to for to in (*own, *BENDS) if angle <= to), math.inf)
+
+
 def _row(values) -> str:
     return " ".join(f"{v:+6.2f}" for v in values)
 
@@ -549,7 +634,7 @@ def main() -> None:
             }
             for mode, ways in entry["simulated_db"].items():
                 line += f"  {mode} {' / '.join(_row(way) for way in ways)}"
-        bucket = (group(case), next((to for to in BENDS if angle <= to), math.inf))
+        bucket = (group(case), _bends(group(case), angle))
         worst.setdefault(bucket, []).append(entry)
         if limit is not None and np.max(np.abs(with_edges - wave)) > limit:
             failed = True

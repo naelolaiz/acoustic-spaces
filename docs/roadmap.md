@@ -153,14 +153,16 @@ Edge diffraction:
   three screens); an end almost straight under a top, within some 4 cm of its
   first obstacle, or close before it and high above its top, and ends within half a
   wavelength of each other (refused); an end in the shadow within decimetres of a
-  top (up to 0.5 dB low); an end on a roof, behind a change of the ground or with
-  nothing between it and the other end, with a way on or a reflection off the roof
-  or the ground steeper than 35° or closer than a wavelength to its first top
-  (refused: a source on a roof near a parapet; the march is to begin at the first
-  top there too); a roof's edge or a wall close behind an end; low screens and
-  steps; a wall given as a thin building (up to 0.4 dB low); the tops' place in the
-  march's cells (up to 0.2 dB); edges that end beside the way, absorbing roofs and
-  walls, the bands above 500 Hz, and wind.
+  top (up to 0.5 dB low); an end behind a change of the ground, on a roof that
+  reaches the other end with nothing on it between them, or with nothing between it
+  and the other end, with a way on or a reflection off the ground or the roof
+  steeper than 35°, or closer than a wavelength to its first top or to the other
+  end (refused); a roof's edge or a wall close behind an end; barriers lower than
+  a wavelength on a rigid roof or ground, which lack the sound that goes on between
+  their top and that surface (up to 3 dB off below a quarter of a wavelength, 1.3 dB
+  for a parapet on a roof's edge), and steps; a wall given as a thin building (up to
+  0.4 dB low); the tops' place in the march's cells (up to 0.2 dB); edges that end
+  beside the way, absorbing roofs and walls, the bands above 500 Hz, and wind.
 - [ ] Paths over edges tested from the edge itself, not from a millionth of the
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9
@@ -410,6 +412,11 @@ Outdoor acoustics, in steps:
   gradients, as over the open ground: the paths off façades and barriers are eigenrays
   in every band, with the rays' ground effect up to 2 kHz and their steps at caustics
   (see [Known issues](validation.md#known-issues)).
+- [ ] An absorbing layer for the parabolic equation's runs that a run's other listeners
+  do not move: the listeners and map points that share a run share its layer, which begins
+  as high and is as thick as any of them needs, and the narrow-angle equation's level
+  changes with it, by up to 0.07 dB per third octave out of the shadow and 0.76 dB 72 dB
+  below free field in the checks (see [Known issues](validation.md#known-issues)).
 - [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
   the shadow): out of the shadow the equation's field goes through it, but the rays'
@@ -515,7 +522,8 @@ Movement:
   **Render movement…** heard binaurally and with Doppler, and units for every number in
   the panel and in Run demo, with the pass's length, speed and duration.
 - [x] Faster walks outdoors: the places of a walking source share the parabolic
-  equation's runs, each listener getting what a run of its own place would give it.
+  equation's runs, each listener getting what a run of its own place would give it but
+  for the run's absorbing layer (see [Known issues](validation.md#known-issues)).
 - [x] The sound a source sends each way, along a walk with Doppler: each early path
   carries what is sent the way it leaves the source (`acoustic_spaces.emission`).
 - [x] A helicopter's rotors: their tones from the blades' steady loads, checked against
@@ -726,6 +734,10 @@ Known issues found by the review of 25 October 2026 (see
 - [ ] Type checks passing in the modules that did not when they began (listed in
   `pyproject.toml`), a few at a time.
 - [ ] Collada polygons with their holes.
+- [x] The wave solver's walls through planes of its cell centres, and sources and
+  listeners on surfaces.
+- [ ] The wave solver's surfaces a hair off its cell centres (see Validation, Known
+  issues).
 - [ ] Vector-based scattering with a lobe centred on the specular direction, so the late
   part carries the specular share of the orders after the first as the exact paths do,
   checked against the BRAS rooms' decay.

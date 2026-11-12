@@ -598,10 +598,17 @@ def test_a_steep_way_at_an_end_gets_a_higher_grid(monkeypatch) -> None:
     rows.over_row(low, C, None, 1.5, 400.0, 1.5, [(2.0, 2.0, 6.0)])
     thick = 8.0 * (air + parabolic.layer_thickness(low, C)) - (0.15 * 400.0 - 1.5)
     assert given == pytest.approx([thick, thick])
-    # A march that begins at its end, over a roof, gets it as the one from the wall.
+
+    # A march that begins at its end (the ground changes before the wall, 3 m high and
+    # 10 m on) gets it as the one from the wall, whose way up is 72 degrees steep.
+    def changes(r):
+        return None if r < 5.0 else np.full(len(f), 1e9 + 0j)
+
+    row = [(10.0, 10.0, 3.0)]
+    assert rows._first(f, changes, 11.0, row) == (None, 0.0)
     given.clear()
-    over([(-30.0, 0.0, 0.0)], (-10.0, 1.0), (3.0, -8.0), bands=[f])
-    assert given[0] == pytest.approx(8.0 * (21.0 + 8.0 + usual) - (21.0 + 8.0))
+    rows.over_row(f, C, changes, 1.0, 11.0, 0.0, row)
+    assert given[0] == pytest.approx(8.0 * (23.0 + usual) - 23.0)
     assert given[1] > 8.0 * usual
 
 
@@ -910,6 +917,60 @@ def test_between_rigid_screens_on_a_rigid_ground_the_row_is_low() -> None:
     assert np.all(off < -0.3) and np.all(off > -1.2) and off.min() < -0.9
 
 
+def _parapet(height: float) -> list:
+    """A roof that goes on behind the source without end, with a parapet ``height`` m
+    high on its edge at x = 10.01 (the middle of the wave calculation's cell)."""
+    return [(-30.0, 10.01, 0.0), (10.01, 10.01, height)]
+
+
+#: A source (x, z) over a roof that goes on behind it without end, up to the roof's
+#: edge or with a parapet on that edge, and the listener's height at x = 15.01: the wave
+#: calculation's level (dB re free field), how far the row's may be from it (dB) and
+#: how far the march alone is from it at least (none where it is the closer). A parapet
+#: lower than a wavelength is further off than the roof's edge alone: the edges' terms
+#: take it for a half-plane, and have no sound that goes on between its top and the
+#: roof.
+ROOF_TO_ITS_EDGE = [(-30.0, 10.02, 0.0)]
+OVER_A_ROOF = [
+    (ROOF_TO_ITS_EDGE, (9.51, 0.01), -1.99, [0.25, -0.56, -1.58, -2.83], 0.15, 1.5),
+    (ROOF_TO_ITS_EDGE, (9.51, 1.51), -1.99, [0.16, -0.28, -0.29, 0.09], 0.25, 0.7),
+    (ROOF_TO_ITS_EDGE, (7.01, 0.01), 1.01, [1.97, 2.35, 3.02, 4.05], 0.1, 0.3),
+    (_parapet(1.1), (9.51, 0.01), -1.99, [-3.13, -6.72, -9.20, -12.37], 0.9, 8.0),
+    (_parapet(1.1), (7.01, 1.51), 1.01, [-2.20, -7.58, -2.58, -3.18], 0.6, 2.0),
+    (_parapet(0.3), (9.51, 0.01), -1.99, [-0.25, -0.95, -2.97, -6.46], 0.7, 4.5),
+    (_parapet(0.3), (9.51, 1.51), 1.01, [-0.74, -0.62, 0.36, 0.07], 1.2, None),
+    (_parapet(0.1), (9.51, 0.01), 1.01, [1.72, 1.66, 1.70, 1.43], 1.2, 1.5),
+]
+
+
+@pytest.mark.parametrize("row, source, zr, wave, within, alone_off", OVER_A_ROOF)
+def test_a_source_over_a_roof_against_a_wave_calculation(
+    row, source, zr, wave, within, alone_off
+) -> None:
+    listener = (15.01, zr)
+    found = over(row, source, listener)
+    np.testing.assert_allclose(levels(found, source, listener), wave, atol=within)
+    if alone_off is not None:
+        alone = levels(found, source, listener, "marched")
+        assert np.max(np.abs(alone - wave)) > alone_off
+
+
+def test_a_barrier_far_lower_than_a_wavelength_on_a_rigid_roof_is_off() -> None:
+    """A barrier 10 cm high on a roof under both ends, half a metre past the source:
+    the row's level is 2.3 dB above the wave calculation's in the 63 Hz band from a
+    source on the roof, and 3.0 dB below it in the 125 Hz band from one 1.5 m up,
+    where the march alone is within 0.4 dB. The edges' terms take the barrier for a
+    half-plane, and have no sound that goes on between its top and the roof."""
+    row = [(-30.0, 60.0, 0.0), (10.01, 10.01, 0.1)]
+    listener = (15.01, 1.51)
+    low, high = (9.51, 0.01), (9.51, 1.51)
+    off = levels(over(row, low, listener), low, listener) - np.array([6.04, 6.16, 6.44, 5.84])
+    assert 2.1 < off[0] < 2.6 and 1.0 < off[1] < 1.5
+    found, wave = over(row, high, listener), np.array([4.42, 0.96, -1.96, 3.00])
+    assert -3.3 < (levels(found, high, listener) - wave)[1] < -2.7
+    assert np.max(np.abs(levels(found, high, listener, "marched") - wave)) < 0.45
+
+
 # -- what the row keeps ----------------------------------------------------------------
 
 
@@ -1097,7 +1158,7 @@ def test_a_source_lying_on_grass_lights_the_first_edge_with_its_image_s_reflecti
         way = rows._march_from(
             f, C, reach, top, parabolic.STEPS_PER_WAVELENGTH, lambda r, z=ground: z, 0.0, zr, row
         )()
-        (own, a, _), (image, also, _) = rows._lit(way, k, ("screen", 20.0, 0.05))
+        (own, a, _, _), (image, also, _, _) = rows._lit(way, k, ("screen", 20.0, 0.05))
         assert a == also == math.hypot(20.0, 0.05)
         at_top = np.conj(spherical_reflection(np.conj(1.0 / ground), 0.05 / a, k, a))
         np.testing.assert_allclose(image / own, at_top, rtol=1e-12)
@@ -1122,13 +1183,36 @@ def test_where_the_ground_changes_before_the_first_obstacle_the_march_begins_at_
         )
         apart = abs(level(changing.pressure, reach) - level(same.pressure, reach))
         assert 1e-4 < apart < 0.06
-        assert rows._first(f, lambda r, z=one: z, reach, row) == 20.0
-        assert rows._first(f, lambda r, a=one, b=other: a if r < 10.0 else b, reach, row) is None
-    # Nor can it begin at an obstacle the end stands over or against, or without one.
-    assert rows._first(F[0], None, reach, [(0.0, 8.0, 0.5), (30.0, 38.0, 5.0)]) is None
-    assert rows._first(F[0], None, reach, [(-5.0, 8.0, 0.5)]) is None
-    assert rows._first(F[0], None, reach, []) is None
-    assert rows._first(F[0], None, reach, [(70.0, 70.0, 3.0)]) is None
+        assert rows._first(f, lambda r, z=one: z, reach, row) == (20.0, 0.0)
+        changes = rows._first(f, lambda r, a=one, b=other: a if r < 10.0 else b, reach, row)
+        assert changes == (None, 0.0)
+    # Nor can it begin at an obstacle without one on the way.
+    assert rows._first(F[0], None, reach, []) == (None, 0.0)
+    assert rows._first(F[0], None, reach, [(70.0, 70.0, 3.0)]) == (None, 0.0)
+
+
+def test_over_a_roof_a_march_begins_at_the_first_top_past_its_end() -> None:
+    """An end over a roof has its own field, with its image's in the roof, up to the
+    first top past it: a barrier on the roof, what stands against the roof's far side,
+    or that side. Where the roof goes on to the other end with no barrier between
+    them, the march begins at the end."""
+    reach = 60.0
+    assert rows._first(F[0], None, reach, [(0.0, 8.0, 0.5), (30.0, 38.0, 5.0)]) == (8.0, 0.5)
+    assert rows._first(F[0], None, reach, [(-5.0, 8.0, 0.5)]) == (8.0, 0.5)
+    assert rows._first(F[0], None, reach, [(-5.0, 8.0, 0.5), (3.0, 3.0, 1.5)]) == (3.0, 0.5)
+    assert rows._first(F[0], None, reach, [(-5.0, 8.0, 0.5), (8.0, 8.0, 1.5)]) == (8.0, 0.5)
+    assert rows._first(F[0], None, reach, [(-5.0, 8.0, 0.5), (8.0, 20.0, 4.0)]) == (8.0, 0.5)
+    assert rows._first(F[0], None, reach, [(-5.0, 8.0, 0.5), (9.0, 9.0, 4.0)]) == (8.0, 0.5)
+    assert rows._first(F[0], None, reach, [(-5.0, 80.0, 0.5)]) == (None, 0.5)
+    assert rows._first(F[0], None, reach, [(-5.0, 60.0, 0.5)]) == (None, 0.5)
+    assert rows._first(F[0], None, reach, [(-5.0, 80.0, 0.5), (59.0, 59.0, 1.0)]) == (59.0, 0.5)
+    assert rows._first(F[0], None, reach, [(-5.0, 80.0, 0.5), (61.0, 61.0, 1.0)]) == (None, 0.5)
+    # The ground under the building does not count, whatever it is.
+    grass = np.conj(surface_impedance(F[0], 200.0))
+    assert rows._first(F[0], lambda r: grass if r < 4.0 else None, reach, [(-5.0, 8.0, 0.5)]) == (
+        8.0,
+        0.5,
+    )
 
 
 @pytest.mark.parametrize(
@@ -1151,7 +1235,7 @@ def test_a_march_from_its_end_takes_ways_within_35_degrees_of_the_horizontal(
     exact = over_one_screen(source, listener)
     from_the_screen = levels(over([(0.0, 0.0, 0.0)], source, listener), source, listener)
     np.testing.assert_allclose(from_the_screen, exact, atol=0.1)
-    monkeypatch.setattr(rows, "_first", lambda *given: None)
+    monkeypatch.setattr(rows, "_first", lambda *given: (None, 0.0))
     steep = f"way on {angle:.1f}" if angle > rows.FROM_END_DEG else "reflection off the ground 89.9"
     with pytest.raises(rows.OutOfReach, match=f"{steep} degrees steep.*takes 35"):
         over([(0.0, 0.0, 0.0)], source, listener)
@@ -1161,48 +1245,16 @@ def test_a_march_from_its_end_takes_ways_within_35_degrees_of_the_horizontal(
 
 
 def test_a_march_from_its_end_keeps_to_what_its_starting_field_holds() -> None:
-    """An end over a roof, or with the ground changing before its first obstacle, or
-    with nothing on its way, is marched from the end itself with the parabolic
-    equation's starting field. That holds within 35 degrees of the horizontal and
-    from a wavelength on: a first top, or the other end with no top before it, closer
-    than a wavelength of the band's lowest frequency, and a way on from the end or
-    from its image in the roof or the ground steeper than 35 degrees, are out of
-    reach, whatever is asked about steep reflections. Within those the levels here
-    are within 0.45 dB of the edge integrals over the paths, and with nothing between
-    the ends within 0.3 dB of the direct sound and the reflection."""
-
-    def on_a_roof(before: float, zs: float, top: float, band: int) -> float:
-        # Both ends over a roof 2 m up, a barrier with its top at ``top`` on it.
-        reach, row = before + 15.0, [(-20.0, before + 35.0, 2.0), (before, before, top)]
-        found = rows.over_row(F[band], C, None, zs, reach, 3.0, row)
-        paths = over_one_screen((-before, zs - 2.0), (15.0, 1.0), heights_from=top - 2.0)
-        return level(found.pressure, math.hypot(reach, zs - 3.0)) - paths[band]
-
-    # 1 m above the roof, the barrier 3 m above it.
-    for before, steep in ((0.01, 89.7), (0.3, 81.5), (1.0, 63.4)):
-        refused = f"an end over a roof.*way on {steep} degrees steep.*takes 35"
-        with pytest.raises(rows.OutOfReach, match=refused):
-            on_a_roof(before, 3.0, 5.0, 3)
-    with pytest.raises(rows.OutOfReach, match="over a roof.*off the roof 38.7 degrees steep"):
-        on_a_roof(5.0, 3.0, 5.0, 3)
-    assert abs(on_a_roof(6.0, 3.0, 5.0, 3)) < 0.25
-    with pytest.raises(rows.OutOfReach, match="6 m before its first top.*47 Hz.*closer than 7.25"):
-        on_a_roof(6.0, 3.0, 5.0, 0)
-    assert abs(on_a_roof(8.0, 3.0, 5.0, 0)) < 0.4
-    # On the roof, half a metre before a barrier 10 cm high: closer than a wavelength.
-    with pytest.raises(rows.OutOfReach, match="0.5 m before its first top.*closer than 0.914"):
-        on_a_roof(0.5, 2.0, 2.1, 3)
-    assert abs(on_a_roof(1.0, 2.0, 2.1, 3)) < 0.3
-    # It is the first top that counts, with another one far enough behind it too.
-    two = [(-20.0, 35.5, 2.0), (0.5, 0.5, 2.1), (10.5, 10.5, 2.01)]
-    with pytest.raises(rows.OutOfReach, match="0.5 m before its first top.*closer than 0.914"):
-        rows.over_row(F[3], C, None, 2.0, 15.5, 3.0, two)
-    # The way on is the string's: over the roof's far corner 10 m on up to a top behind it.
-    with pytest.raises(rows.OutOfReach, match="way on 56.3 degrees steep"):
-        rows.over_row(F[3], C, None, 2.0, 40.0, 2.0, [(-5.0, 10.0, 2.0), (12.0, 12.0, 20.0)])
-    # The image in a roof is there whatever is asked about the ground's reflection.
-    with pytest.raises(rows.OutOfReach, match="reflection off the roof 38.7 degrees steep"):
-        over([(-40.0, 40.0, 0.0), (0.0, 0.0, 3.0)], (-5.0, 1.0), (15.0, 1.0))
+    """An end with the ground changing before its first obstacle, or with nothing on
+    its way (on the ground, or on a roof that goes on to the other end), is marched
+    from the end itself with the parabolic equation's starting field. That holds
+    within 35 degrees of the horizontal and from a wavelength on: a first top, or the
+    other end with no top before it, closer than a wavelength of the band's lowest
+    frequency, and a way on from the end or from its image in the ground or the roof
+    steeper than 35 degrees, are out of reach, whatever is asked about steep
+    reflections. Within those the levels here are within 0.45 dB of the edge
+    integrals over the paths, and with nothing between the ends within 0.3 dB of the
+    direct sound and the reflection."""
 
     def ground_changing(before: float, band: int, changing: bool = True) -> float:
         # A screen 8 m high on a rigid ground, which near it is rigid by an impedance.
@@ -1224,6 +1276,16 @@ def test_a_march_from_its_end_keeps_to_what_its_starting_field_holds() -> None:
     for band in range(4):
         assert abs(ground_changing(15.0, band)) < 0.45
 
+    # A first top closer than a wavelength, with another one far enough behind it too.
+    def changes(r):
+        return None if r < 0.25 else np.full(8, 1e9 + 0j)
+
+    refused = "ground changing.*0.5 m before its first top.*closer than 0.914"
+    with pytest.raises(rows.OutOfReach, match=refused):
+        rows.over_row(F[3], C, changes, 0.0, 15.5, 1.0, [(0.5, 0.5, 0.1), (10.5, 10.5, 0.2)])
+    with pytest.raises(rows.OutOfReach, match="6 m before its first top.*47 Hz.*closer than 7.25"):
+        rows.over_row(F[0], C, changes, 0.0, 21.0, 1.0, [(6.0, 6.0, 0.5)])
+
     # Nothing between the ends: the direct sound and the reflection off a rigid ground.
     def open_ground(zr: float, band: int) -> float:
         k = 2.0 * math.pi * F[band] / C
@@ -1241,6 +1303,8 @@ def test_a_march_from_its_end_keeps_to_what_its_starting_field_holds() -> None:
     one_roof = [(-20.0, 40.0, 2.0)]
     with pytest.raises(rows.OutOfReach, match="over a roof.*0.5 m before the other end.*0.914"):
         rows.over_row(F[3], C, None, 2.0, 0.5, 2.0, one_roof)
+    with pytest.raises(rows.OutOfReach, match="over a roof.*off the roof 45.0 degrees steep"):
+        rows.over_row(F[3], C, None, 7.0, 10.0, 7.0, one_roof)
     for band in (0, 3):  # from a wavelength on, on the ground and on a roof
         reach = 1.02 * C / F[band].min()
         k = 2.0 * math.pi * F[band] / C
@@ -1317,36 +1381,39 @@ def over_a_corner(source, listener, roof: float = -1.0) -> np.ndarray:
 
 
 @pytest.mark.parametrize(
-    "source, listener, reached",
+    "source, listener, within",
     [
-        ((-8.0, 1.0), (15.0, -2.0), 0),
-        ((-5.0, 0.3), (15.0, -3.0), 1),
-        ((-10.0, 2.0), (10.0, 0.5), 0),
-        ((-8.0, 0.0), (12.0, -1.0), 0),
-        ((-3.0, 1.5), (15.0, -6.0), 2),
-        ((-1.0, 0.5), (15.0, -2.0), 3),
+        ((-8.0, 1.0), (15.0, -2.0), 0.05),
+        ((-5.0, 0.3), (15.0, -3.0), 0.05),
+        ((-10.0, 2.0), (10.0, 0.5), 0.05),
+        ((-8.0, 0.0), (12.0, -1.0), 0.05),
+        ((-3.0, 1.5), (15.0, -6.0), 0.1),
+        ((-1.0, 0.5), (15.0, -2.0), 0.05),
+        ((-0.5, 1.0), (15.0, -2.0), 0.1),
+        ((-0.3, 0.0), (15.0, -2.0), 0.1),
+        ((-0.2, 0.5), (10.0, -1.0), 0.1),
+        ((-1.0, 0.0), (2.0, -8.0), 0.1),
+        ((-0.1, 0.0), (15.0, 0.5), 0.1),
+        ((-1.0, 2.0), (5.0, -3.0), 0.2),
+        ((-2.0, 3.0), (10.0, -8.0), 0.2),
     ],
 )
-def test_an_end_on_a_roof_against_the_exact_edge_integral(source, listener, reached) -> None:
-    """A source on a rigid roof or up to 2 m above it, 1 to 10 m before the roof's far
-    corner, and a listener past the corner, up to 6 m below the roof: within 0.1 dB
-    of the exact solution for the corner, from either end, in every band in which the
-    corner is a wavelength or more from the end over the roof (from the band
-    ``reached`` on; in the lower ones that end is out of reach), where the march alone
-    is up to 0.6 dB low. The march from the end over the roof begins at that end, with
-    its image in the roof."""
-    exact = over_a_corner(source, listener)[reached:]
+def test_an_end_over_a_roof_against_the_exact_edge_integral(source, listener, within) -> None:
+    """A source on a rigid roof or up to 3 m above it, 10 cm to 10 m before the roof's
+    far corner, and a listener past the corner, up to 8 m below the roof or half a
+    metre above it: within 0.05 dB of the exact solution for the corner in five
+    places, 0.1 dB in six and 0.2 dB in the two with the source 2 or 3 m up and the
+    way down past the corner steeper than 30 degrees, from either end and in every
+    band, where the march alone is 0.25 dB or more off. The march from the end over
+    the roof begins at the corner, from that end's field and its image's in the
+    roof."""
+    exact = over_a_corner(source, listener)
     swapped = (-listener[0], listener[1]), (-source[0], source[1])
-    for band in range(reached):
-        for roof, ends in (((-30.0, 0.0, 0.0), (source, listener)), ((0.0, 30.0, 0.0), swapped)):
-            with pytest.raises(rows.OutOfReach, match="before its first top.*none closer than"):
-                over([roof], *ends, bands=F[band : band + 1])
-    found = over([(-30.0, 0.0, 0.0)], source, listener, bands=F[reached:])
-    np.testing.assert_allclose(levels(found, source, listener), exact, atol=0.1)
-    if reached == 0:
-        assert np.min(levels(found, source, listener, "marched") - exact) < -0.25
-    found = over([(0.0, 30.0, 0.0)], *swapped, bands=F[reached:])
-    np.testing.assert_allclose(levels(found, *swapped), exact, atol=0.1)
+    found = over([(-30.0, 0.0, 0.0)], source, listener)
+    np.testing.assert_allclose(levels(found, source, listener), exact, atol=within)
+    assert np.max(np.abs(levels(found, source, listener, "marched") - exact)) > 0.25
+    found = over([(0.0, 30.0, 0.0)], *swapped)
+    np.testing.assert_allclose(levels(found, *swapped), exact, atol=within)
 
 
 @pytest.mark.parametrize(
@@ -1362,15 +1429,75 @@ def test_a_barrier_on_a_roof_under_both_ends_against_the_edge_integrals_of_its_p
     top, source, listener
 ) -> None:
     """A barrier 1 to 3 m high on a rigid roof that both ends stand over, 0.2 to 3 m
-    above it: within 0.25 dB of the four paths over the top of a rigid screen on a
-    rigid ground, the roof (the exact edge integral from the source and its image in
-    the roof to the listener and its image, without the sound that goes from the top
-    down the screen to the roof and back), where the march alone is up to 2.3 dB
-    low."""
+    above it and 10 m or more from the barrier: within 0.05 dB of the four paths
+    over the top of a rigid screen on a rigid ground, the roof (the exact edge
+    integral from the source and its image in the roof to the listener and its
+    image, without the sound that goes from the top down the screen to the roof and
+    back), where the march alone is up to 2.3 dB low."""
     paths = over_one_screen(source, listener, heights_from=top)
     found = over([(-40.0, 40.0, 0.0), (0.0, 0.0, top)], source, listener)
-    np.testing.assert_allclose(levels(found, source, listener), paths, atol=0.25)
+    np.testing.assert_allclose(levels(found, source, listener), paths, atol=0.05)
     assert np.min(levels(found, source, listener, "marched") - paths) < -1.0
+
+
+@pytest.mark.parametrize(
+    "top, source, listener, within",
+    [
+        (1.0, (-0.5, 0.5), (15.0, 1.5), 0.3),
+        (1.0, (-0.3, 0.0), (15.0, 0.5), 0.3),
+        (1.0, (-0.2, 0.9), (20.0, 2.0), 0.4),
+        (3.0, (-0.3, 1.0), (15.0, 1.0), 0.2),
+        (1.2, (-1.0, 1.5), (10.0, 1.5), 0.15),
+        (0.5, (-0.5, 1.5), (15.0, 0.0), 0.15),
+    ],
+)
+def test_an_end_over_a_roof_close_before_a_barrier_on_it(top, source, listener, within) -> None:
+    """A source on a rigid roof or up to 1.5 m above it, 20 cm to 1 m before a barrier
+    0.5 to 3 m high on the roof, and a listener over the roof past it: within 0.4 dB
+    of the four paths over the top of a rigid screen on a rigid ground, from either
+    end. The march from the source begins at the barrier, from the source's field and
+    its image's in the roof."""
+    paths = over_one_screen(source, listener, heights_from=top)
+    row = [(-40.0, 40.0, 0.0), (0.0, 0.0, top)]
+    found = over(row, source, listener)
+    np.testing.assert_allclose(levels(found, source, listener), paths, atol=within)
+    swapped = (-listener[0], listener[1]), (-source[0], source[1])
+    np.testing.assert_allclose(levels(over(row, *swapped), *swapped), paths, atol=within)
+
+
+def test_an_end_over_a_roof_too_close_to_its_first_top_is_out_of_reach() -> None:
+    """Both ends over a roof 2 m up, the source a metre above it, a barrier 3 m high
+    on the roof: 30 cm before the barrier the level is within 0.15 dB of the four
+    paths over it in every band, 10 cm before it in the three lower bands. In the
+    500 Hz band the start there needs the source's image in the roof up to 88.7
+    degrees steep, and the source is out of reach; 5 cm before the barrier in every
+    band, and so asked to leave steep reflections out: that is for the ground's, and
+    a roof's is the source's own."""
+
+    def on_a_roof(before: float, band: int, steep: str = "raise") -> float:
+        reach, row = before + 15.0, [(-20.0, before + 35.0, 2.0), (before, before, 5.0)]
+        found = rows.over_row(F[band], C, None, 3.0, reach, 3.0, row, steep_reflections=steep)
+        paths = over_one_screen((-before, 1.0), (15.0, 1.0), heights_from=3.0)
+        return level(found.pressure, reach) - paths[band]
+
+    for band in range(4):
+        assert abs(on_a_roof(0.3, band)) < 0.15
+    for band in range(3):
+        assert abs(on_a_roof(0.1, band)) < 0.15
+    refused = "0.1 m before its first top.*reflection off the roof needs up to 88.7 degrees"
+    with pytest.raises(rows.OutOfReach, match=refused):
+        on_a_roof(0.1, 3)
+    for steep in ("raise", "leave out"):
+        for band in range(4):
+            with pytest.raises(rows.OutOfReach, match="0.05 m before its first top.* takes 8"):
+                on_a_roof(0.05, band, steep)
+    with pytest.raises(rows.OutOfReach, match="reflection off the roof needs up to 89.6 degrees"):
+        on_a_roof(0.05, 0, "leave out")
+    # Over the ground, the reflection that is too steep is left out where that is asked.
+    ground = (F[0], C, None, 1.0, 15.05, 1.0, [(0.05, 0.05, 3.0)])
+    with pytest.raises(rows.OutOfReach, match="reflection off the ground needs up to 89.6"):
+        rows.over_row(*ground)
+    rows.over_row(*ground, steep_reflections="leave out")
 
 
 def test_a_roof_s_edge_behind_an_end_does_nothing() -> None:
@@ -1551,6 +1678,137 @@ def test_what_the_edges_shed_round_a_right_angle() -> None:
     corner = abs(wedge - math.cos(0.125 * math.pi) * plane) * unit
     np.testing.assert_allclose(np.abs(rows._corner(k, far, (-1.0, -1.0), 1.0)), corner, rtol=1e-6)
     np.testing.assert_allclose(np.abs(rows._corner(k, far, (1.0, -1.0), -1.0)), corner, rtol=1e-6)
+
+
+def test_what_a_roof_s_corner_sheds_of_the_own_wave_of_an_end_over_the_roof() -> None:
+    """Far from the corner in wavelengths, the wave of a source 30 degrees above a roof
+    on its way to the roof's far corner, which goes down from it at 45 degrees (round
+    the corner from the roof: the source at pi / 6, the listener at 5 pi / 4): the
+    right-angled wedge's two terms of the incident wave, less cos(7.5 degrees) of the
+    half-plane's, for a wave that turns by 15 degrees. And the wave of the source's
+    image in the roof, 30 degrees below it: the wedge's two terms of the reflection
+    off the roof, less cos(37.5 degrees) of the half-plane's, for one that turns by
+    75. The near corner sheds the same seen from the other end, and a wave along the
+    roof is what the march brings there."""
+    k = 2.0 * math.pi * F[3] / C
+    far = k * 1e9
+    unit = 1.0 / np.sqrt(2.0 * math.pi * k)
+
+    def cot(x: float) -> float:
+        return 1.0 / math.tan(x)
+
+    def shed(between: float) -> float:
+        wedge = (cot((math.pi + between) / 3.0) + cot((math.pi - between) / 3.0)) / 3.0
+        plane = (cot((math.pi + between) / 4.0) + cot((math.pi - between) / 4.0)) / 4.0
+        return abs(wedge - math.cos(0.5 * (between - math.pi)) * plane)
+
+    up, down = (math.cos(math.pi / 6.0), 0.5), (math.cos(math.pi / 6.0), -0.5)
+    own, image = shed(1.25 * math.pi - math.pi / 6.0), shed(1.25 * math.pi + math.pi / 6.0)
+    assert image > 2.0 * own
+    for along, outside in ((-1.0, (1.0, -1.0)), (1.0, (-1.0, -1.0))):
+        for inside, expected in ((up, own), (down, image)):
+            inside = (along * inside[0], inside[1])
+            got = rows._corner(k, far, outside, along, inside)
+            np.testing.assert_allclose(np.abs(got), expected * unit, rtol=1e-6)
+        level_with_it = rows._corner(k, k * 3.0, outside, along, (along, 0.0))
+        assert np.array_equal(level_with_it, rows._corner(k, k * 3.0, outside, along))
+    # Steeply down past the corner, the image's wave turns by more than the wall's
+    # three right angles are from the roof: 60 degrees below the roof, and on at 255.
+    steep = (math.cos(math.radians(255.0)), math.sin(math.radians(255.0)))
+    below = (math.cos(math.radians(60.0)), -math.sin(math.radians(60.0)))
+    got = rows._corner(k, far, (-steep[0], steep[1]), -1.0, (-below[0], below[1]))
+    np.testing.assert_allclose(np.abs(got), shed(math.radians(315.0)) * unit, rtol=1e-6)
+
+
+def test_an_end_over_a_roof_lights_its_first_top_with_its_image_in_the_roof(monkeypatch) -> None:
+    """A source half a metre above a roof 2 m up, 4 m before a barrier 1 m high on the
+    roof: the march from the source begins at the barrier, from the source's field
+    and its image's in the roof, which is rigid whatever the ground is; and the
+    barrier's top is lit by the two apart, each from its own direction. Level with
+    the roof, the source and its image are one."""
+    f = F[3]
+    k = 2.0 * math.pi * f / C
+    grass = np.conj(surface_impedance(f, 200.0))
+    row, reach, zr = [(-5.0, 30.0, 2.0), (4.0, 4.0, 3.0), (10.0, 10.0, 2.5)], 20.0, 2.5
+    top = rows.layer_top(2.5, zr, reach, row)
+    march, given = parabolic.march, []
+
+    def spy(*args, **more):
+        given.append(more["start"])
+        return march(*args, **more)
+
+    monkeypatch.setattr(parabolic, "march", spy)
+    ready = (f, C, reach, top, parabolic.STEPS_PER_WAVELENGTH, lambda r: grass)
+    way = rows._march_from(*ready, 2.5, zr, row)()
+    assert (way.first, way.under) == (4.0, 2.0) and np.all(np.isinf(way.ground))
+    (own, a, to_own, apart), (image, b, to_image, also) = rows._lit(way, k, ("screen", 4.0, 3.0))
+    assert apart and also
+    assert (a, to_own) == (math.hypot(4.0, 0.5), (-4.0, -0.5))
+    assert (b, to_image) == (math.hypot(4.0, 1.5), (-4.0, -1.5))
+    np.testing.assert_allclose(own, np.exp(1j * k * a) / math.sqrt(a))
+    np.testing.assert_allclose(image, np.exp(1j * k * b) / math.sqrt(b))
+    # The start: the two waves on the heights of the barrier's plane.
+    at, field = given[0]
+    assert at == 4.0
+    z = np.array([3.0, 3.5, 5.0])
+    longer = math.sqrt(
+        (math.hypot(4.0, 0.5) + math.hypot(16.0, 0.5))
+        / (math.hypot(4.0, 1.5) + math.hypot(16.0, 0.5))
+    )
+    both = rows._wave(k, np.hypot(4.0, z - 2.5)) + longer * rows._wave(k, np.hypot(4.0, z - 1.5))
+    np.testing.assert_allclose(field(z), both / 2.0, rtol=1e-12)
+    on_it = rows._march_from(*ready, 2.0, zr, row)()
+    np.testing.assert_allclose(given[1][1](z), 2.0 * rows._wave(k, np.hypot(4.0, z - 2.0)) / 2.0)
+    (own, a, to_own, _), (image, b, to_image, _) = rows._lit(on_it, k, ("screen", 4.0, 3.0))
+    assert (a, to_own) == (b, to_image) and np.array_equal(own, image)
+    # Any other edge is lit by the marched field.
+    assert [wave[3] for wave in rows._lit(way, k, ("screen", 10.0, 2.5))] == [False]
+
+
+def test_a_roof_s_corner_is_told_the_own_waves_of_an_end_over_the_roof(monkeypatch) -> None:
+    """A roof's corner is told where the wave on the roof's side comes from for the
+    own wave of an end over that roof and for the wave of the end's image in it, and
+    for no other: a wave that the march brings along the roof has no such direction,
+    nor has the wave of an end before a building, which meets the corner from outside."""
+    f = F[3]
+    told = []
+    real = rows._corner
+
+    def spy(k, kl, outside, along, inside=None):
+        told.append((outside, along, inside))
+        return real(k, kl, outside, along, inside)
+
+    monkeypatch.setattr(rows, "_corner", spy)
+    # A source 1 m above a roof 2 m up, 2 m before its far corner; a listener 6 m past
+    # the corner, 1 m above the ground. Each of the source's two waves, with each of the
+    # listener's (its own, and its image's in the ground).
+    rows.over_row(f, C, None, 3.0, 8.0, 1.0, [(-5.0, 2.0, 2.0)])
+    down, further_down = (6.0, -1.0), (6.0, -3.0)
+    assert told == [
+        (down, -1.0, (-2.0, 1.0)),
+        (further_down, -1.0, (-2.0, 1.0)),
+        (down, -1.0, (-2.0, -1.0)),
+        (further_down, -1.0, (-2.0, -1.0)),
+    ]
+    # The two swapped: the roof's near corner, from the listener over the roof.
+    del told[:]
+    rows.over_row(f, C, None, 1.0, 8.0, 3.0, [(6.0, 13.0, 2.0)])
+    down, further_down = (-6.0, -1.0), (-6.0, -3.0)
+    assert told == [
+        (down, 1.0, (2.0, 1.0)),
+        (down, 1.0, (2.0, -1.0)),
+        (further_down, 1.0, (2.0, 1.0)),
+        (further_down, 1.0, (2.0, -1.0)),
+    ]
+    # A building between two ends on the ground: each corner from outside, twice.
+    del told[:]
+    rows.over_row(f, C, None, 1.0, 20.0, 1.0, [(6.0, 13.0, 2.0)])
+    assert [(along, inside) for _, along, inside in told] == [(1.0, None)] * 2 + [(-1.0, None)] * 2
+    # A barrier on the roof between the source and the far corner: the march brings
+    # the corner its wave along the string from the barrier's top.
+    del told[:]
+    rows.over_row(f, C, None, 3.0, 11.0, 1.0, [(-5.0, 5.0, 2.0), (2.0, 2.0, 3.5)])
+    assert [(along, inside) for _, along, inside in told] == [(-1.0, None)] * 2
 
 
 def test_the_edges_take_the_distance_parameter_of_a_point_source(monkeypatch) -> None:

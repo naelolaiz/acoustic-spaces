@@ -16,10 +16,11 @@ fixes to sound over two edges along an absorbing face or in sight over both, lev
 several tops, just above a roof and a barrier level with it, beside a thin screen's
 bends and corners, behind a barrier's foot, in line with a barrier's end or a wall,
 across a barrier end's shadow boundary in wind, from and to roofs in wind, with eddies
-at each frequency, to the late rays in wind and through plants, curved rays near a
-profile's nodes, the wave solver round open models, between its cells, at a response's
-end and round a closed building in wind, and its moving air flowing round solids, Doc
-29's maximum levels and tables, Doppler walks and the spread itself.
+at each frequency, for listeners in one direction in wind, to the late rays in wind and
+through plants, curved rays near a profile's nodes, the wave solver round open models,
+between its cells, at walls through its cell centres, at a response's end and round a
+closed building in wind, and its moving air flowing round solids, Doc 29's maximum
+levels and tables, Doppler walks and the spread itself.
 
 Results change from 4.2.1: outdoors in wind or a temperature gradient at 1 and 2 kHz
 over the open ground, now from the parabolic equation (that change alone moves the
@@ -44,32 +45,35 @@ and 18.8 dB 120 m downwind gone), through the parabolic equation's crossovers (a
 dip at a join between its bands, 2.0 and 5.3 dB off the fast field program in the 1995
 benchmark's case 2, within 0.19 and 0.45 dB now; C50 and C80 below 1 kHz with it), with
 eddies (`windy`'s 250 Hz to 2 kHz bands by up to 0.59 dB with the `strong` ones), from
-or to a building's roof in wind (up to 1.95 dB off a full-wave solution before); in wind
-or a temperature gradient over a ground that scatters little, where the late rays
-counted the curved ground paths again (still air and the shipped examples do not
-change); where a curved path turns just past a profile's node (the shipped examples'
-listeners by 0.02 dB at most); behind plants, with vector scattering (`tree_belt`'s
-A-weighted levels by 0.03 dB at most); where the size that sets scattering runs through
-an opening (`apartment`'s bed by 0.04 dB(A)); the wave solver's low bands round an open
-model, on a larger grid, and its 125 Hz band at a source or listener between its cells
-(up to 0.53 dB), the last 50 ms of its bands (up to 7.5 dB off, 15.7 dB in third
-octaves, in a room of 2 % absorption), and a closed building round a shut-in source in
-wind, now in still air (a 6 m hut's bands up to 1.7 dB off in a 15 m/s wind); Doc 29's
-L_Amax ahead of and behind a segment (up to 1.0 dB on Volume 3's departures; the airport
-example does not change); a walk with Doppler passing close to a listener (a ripple of
-up to 0.73 dB gone), through a directional microphone (up to 0.25 dB) or in binaural (up
-to 3.1 dB at 1 kHz); and the spread: its combined standard uncertainty and its mean,
-within the draws' noise, every response after the first in a run of several, materials
-that absorb everything in some band, grounds with an impedance, and draws of much more
-absorption than was traced; and a calibrated material given in third octaves where one
-of them reaches 1. An outdoor ground with an `impedance` and no `scattering` now
-scatters nothing (it took 0.1: the early level over grass moves by up to 0.5 dB at 500
-Hz, ground dips in still air deepen, flat open ground alone has no late part;
-`scattering: 0.1` gives the earlier results), and the wave solver's moving air flows
-round solids and passes between weather zones gradually (results near buildings and
-across zones change), and every result in moving air changes a little at the absorbing
-layer's border (the validation's levels by up to 0.012 dB). Scene files of 4.2.1 load
-unchanged.
+or to a building's roof in wind (up to 1.95 dB off a full-wave solution before); with
+other listeners in a listener's direction in wind (0.12 dB at 63 Hz behind one 10 m
+nearer, 0.65 dB among 201 listeners 10 cm apart); where the ground reflection reaches a
+listener more than 15 degrees up, now always from the wide-angle equation (up to 0.11 dB
+per octave band, 0.28 dB per third octave, in a one-off check); in wind or a temperature
+gradient over a ground that scatters little, where the late rays counted the curved
+ground paths again (still air and the shipped examples do not change); where a curved
+path turns just past a profile's node (the shipped examples' listeners by 0.02 dB at
+most); behind plants, with vector scattering (`tree_belt`'s A-weighted levels by 0.03 dB
+at most); where the size that sets scattering runs through an opening (`apartment`'s bed
+by 0.04 dB(A)); the wave solver's low bands round an open model, on a larger grid, and
+its 125 Hz band at a source or listener between its cells (up to 0.53 dB), the last 50
+ms of its bands (up to 7.5 dB off, 15.7 dB in third octaves, in a room of 2 %
+absorption), and a closed building round a shut-in source in wind, now in still air (a 6
+m hut's bands up to 1.7 dB off in a 15 m/s wind); Doc 29's L_Amax ahead of and behind a
+segment (up to 1.0 dB on Volume 3's departures; the airport example does not change); a
+walk with Doppler passing close to a listener (a ripple of up to 0.73 dB gone), through
+a directional microphone (up to 0.25 dB) or in binaural (up to 3.1 dB at 1 kHz); and the
+spread: its combined standard uncertainty and its mean, within the draws' noise, every
+response after the first in a run of several, materials that absorb everything in some
+band, grounds with an impedance, and draws of much more absorption than was traced; and
+a calibrated material given in third octaves where one of them reaches 1. An outdoor
+ground with an `impedance` and no `scattering` now scatters nothing (it took 0.1: the
+early level over grass moves by up to 0.5 dB at 500 Hz, ground dips in still air deepen,
+flat open ground alone has no late part; `scattering: 0.1` gives the earlier results),
+and the wave solver's moving air flows round solids and passes between weather zones
+gradually (results near buildings and across zones change), and every result in moving
+air changes a little at the absorbing layer's border (the validation's levels by up to
+0.012 dB). Scene files of 4.2.1 load unchanged.
 
 **Error estimates**
 
@@ -198,8 +202,9 @@ unchanged.
   row, with the terms of its rigid edges), within 0.38 dB of a wave calculation near
   grazing incidence in free space and 0.65 dB there over roofs on a rigid ground,
   0.74 dB up from a source at street level and 1.24 dB down to a listener there;
-  between rigid screens on a rigid ground up to 3.4 dB low, and with an error for the
-  ends it cannot hold, such as a source on a roof close to a parapet
+  between rigid screens on a rigid ground up to 3.4 dB low, a barrier lower than a
+  quarter of a wavelength on a rigid roof up to 3 dB off, and with an error for the
+  ends it cannot hold, such as one almost straight under the top of a wall
   (`validation/rows.py`). Simulations do not use it yet.
 - Fixed (results change): sound over two edges along a face that absorbs
   (`second_order`, over a roof or a thick wall) was nearly cancelled in the bands that
@@ -222,8 +227,8 @@ unchanged.
   [Outdoor scenes](docs/outdoor.md)).
 - Added: `simulation.early.open_ground_frequencies` (**Frequencies over open ground** in
   the editor) picks how those 1 and 2 kHz bands are found: 24 frequencies an octave (the
-  default, up to 0.75 dB off the program), 8 (4.0 dB, 2 to 3 times faster on one core)
-  or the rays short of half the way to the shadow, as 4.2.1 did in octave bands (8.5 dB,
+  default, up to 0.75 dB off the program), 8 (4.1 dB, 2 to 3 times faster on one core)
+  or the rays short of half the way to the shadow, as 4.2.1 did in octave bands (8.4 dB,
   2.3 to 30 times faster); in the shadow 4 and 8 kHz, which deepen from those bands,
   move with them (by up to 0.33 dB within 60 dB of free field). `helicopter_flyover`,
   whose sound comes down steeply, sets the rays, there within 0.11 dB of the default.
@@ -289,6 +294,22 @@ unchanged.
   listeners and coverage map points with such paths, what the band filters read up to
   500 Hz moves with them: the strength by up to 0.05 dB, and C50 and C80 by up to 11
   and 13 dB where they are 65 to 90 dB.
+- Fixed: in wind or a temperature gradient a listener's or map point's bands up to
+  2 kHz depended on the others in its direction, whose ranges broke up the steps of the
+  parabolic equation's march: by 0.12 dB at 63 Hz behind one listener 10 m nearer and
+  0.65 dB among 201 listeners 10 cm apart (a source 7 m and listeners 1.5 m up over a
+  ground of 200 kPa s/m², 40 to 60 m downwind in `windy`). Each is now reached by a last
+  step of its own off the march; the others still set the run's absorbing layer, how high
+  it begins and how thick it is (0.02 dB or less per octave band out of the shadow in
+  the checks, see [Known issues](docs/validation.md#known-issues)). A line of listeners
+  about a metre apart or closer takes about 1.5 to 1.8 times as long, listeners far
+  apart as long as before.
+- Fixed (results change): a listener that the reflection off the ground reaches more
+  than 15 degrees up takes the wide-angle parabolic equation wherever the parabolic
+  equation runs, as behind barriers; it went by whether the air bent sound on its run's
+  grid, which changes with the band and with the run's other listeners. In still air
+  before a weather zone, 8 m from a source 2 m up, the early sound's octave bands move
+  by up to 0.11 dB and its third octaves by up to 0.28 dB (a one-off check).
 - Fixed: a leg along the ground, a rounding error above it, had no refraction shadow.
 - Fixed: a curved path that turns in the air just past a node of the sampled profile
   near the source's or the listener's height took that profile's slope there, up to 15
@@ -340,6 +361,14 @@ unchanged.
   source's level from eight cells on in closed rooms, where the source's signal also
   undoes the 19-point grid's own gain on a point source (0.06 and 0.35 dB in the two
   bands), which that loss had hidden.
+- Fixed: the wave solver missed a wall through a plane of its cell centres or just past
+  one, so that sound went through it, a closed room could be read as open and the
+  19-point run could grow without bound; a source or a listener exactly on a surface is
+  now read a hair off it. Results change only where a surface comes within about 1e-9 of
+  the model's size of a cell centre, the source or a listener, or a link or line of sight
+  meets a surface within 1e-10 cells of the line of one of its edges; surfaces about
+  1e-10 cells off the centres can still be placed wrong, up to a closed object read as
+  air ([Known issues](docs/validation.md#known-issues)).
 - Fixed (results change): with `simulation.wave.wind: moving`, the wind blew through
   the model's solids, which made the sound in a nearly closed space such as a room
   with an opening grow without bound; it now flows round them as an ideal fluid's, so
