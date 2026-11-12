@@ -7,7 +7,7 @@ loudspeaker formats.
 
 ![The church example in 3D: the stone nave with its early reflection paths from the altar to the front of the nave, coloured by order up to the third](docs/images/church_paths.png)
 
-**Status: 4.2** (see the [roadmap](docs/roadmap.md) and the
+**Status: 4.3** (see the [roadmap](docs/roadmap.md) and the
 [known issues](docs/validation.md#known-issues)).
 
 ## What it does
@@ -21,8 +21,9 @@ loudspeaker formats.
   edge diffraction, added in pressure at low frequencies, a stochastic late tail and,
   for the lowest bands, a wave solver, both on the CPU or a GPU; ISO 3382-1 parameters
   with their standard errors, the STI and echo criteria for every source and listener,
-  and the parameters' uncertainty from the materials' absorption and the rays by Monte
-  Carlo (GUM Supplement 1): [simulation](docs/simulation.md),
+  and, by Monte Carlo (GUM Supplement 1), the parameters' uncertainty from the
+  materials' absorption and the rays, and that of the levels and speech results, with
+  one-sided bounds: [simulation](docs/simulation.md),
   [materials' uncertainty](docs/scenes.md#materials).
 - **Outdoors**: the ground and its impedance, terrain, buildings from a map, barriers
   and trees, wind, temperature and turbulence, behind barriers and buildings too; road
@@ -31,7 +32,7 @@ loudspeaker formats.
   vibration by the US FTA's manual and sound through a closed window by EN ISO 12354-3:
   [outdoor scenes](docs/outdoor.md).
 - **Coverage maps** of the parameters and of the speech transmission index over the
-  audience: [coverage maps](docs/coverage-maps.md).
+  audience, with the uncertainty of their values: [coverage maps](docs/coverage-maps.md).
 - **Listening**: impulse responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker
   formats, or through a listener's microphone (first-order patterns, XY, Blumlein and MS
   pairs), as WAV files; dry recordings run through them offline or in real time on the

@@ -340,7 +340,7 @@ stands on the ground, or on a face across the edge, goes on as its image there. 
 corner of a thin screen,
 square or not, and beside the bend of a screen's top, the level is within 0.2 dB of the
 exact solution and steps as it does, where it stepped by up to 2.8 dB past a square
-corner, 3.0 dB past one of 45° and 16 dB beside a bend (see the
+corner, 3.0 dB past one of 45° and 16.6 dB beside a bend (see the
 [validation report](validation.md#edge-diffraction-against-the-exact-solution)). The
 edges of solid wedges still stop at their ends: near a block's corners, where three
 meet, the level steps by up to 2.4 dB at 63 Hz and is up to 2.3 dB from the exact
