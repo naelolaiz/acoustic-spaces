@@ -2757,8 +2757,8 @@ def test_open_ground_frequencies_choice(window) -> None:
     assert combo.currentData() == 24
     assert [combo.itemText(k) for k in range(combo.count())] == [
         "24, off by up to 0.75 dB at 1 and 2 kHz",
-        "8, off by up to 4 dB at 1 and 2 kHz",
-        "rays, off by up to 8.5 dB at 1 and 2 kHz",
+        "8, off by up to 4.1 dB at 1 and 2 kHz",
+        "rays, off by up to 8.4 dB at 1 and 2 kHz",
     ]
     tip = combo.toolTip()
     assert "Fewer take less time" in tip and "Outdoor scenes" in tip
