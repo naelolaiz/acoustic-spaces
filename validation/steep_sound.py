@@ -11,7 +11,9 @@ equation's level, and the flatter ones the narrow-angle one's. Each case is a sc
 listeners at one height along the wind or against it, ``POINTS`` of them from
 ``refracted.WAVE_MIN_RANGE`` times the heights added (``NEAREST_M`` at least), where the
 parabolic equation takes over from the rays, to ``FARTHEST_M``, and two more ``BESIDE``
-of the range either side of the one the reflection reaches at 15 degrees. The engine's
+of the range either side of the one the reflection reaches at 15 degrees (the line),
+and for the table by angle one more where the reflection comes in at each of
+``ANGLES_DEG``, between the line's ends. The engine's
 level is that of its early paths
 (:func:`~acoustic_spaces.engine.coherent.total_energy`) re free field, the 1 and 2 kHz
 bands left to the rays short of the shadow, which changes nothing in the bands compared.
@@ -23,18 +25,22 @@ engine's equation takes in the band
 third octave), so that the two differ by the equation alone. Points deeper than
 ``FLOOR_DB`` below free field in the program are not compared.
 
-Each case runs as the engine has it (``engine``), and with the narrow-angle equation at
+Each case runs as the engine has it (``engine``), with the narrow-angle equation at
 every point (``parabolic.STEEP_DEG`` set to 90 degrees) at its range step, half and a
-quarter of it (``narrow``, ``half``, ``quarter``). The first set (``FIRST``) is the
+quarter of it (``narrow``, ``half``, ``quarter``), and with the wide-angle equation at
+every point (``parabolic.STEEP_DEG`` set to 0; ``wide``). The first set (``FIRST``) is the
 ``windy`` preset down- and upwind over grass; the further set (``FURTHER``) other
 weathers, a hard ground and other heights, in the bands of ``FURTHER_OCTAVES`` and
 ``FURTHER_THIRDS``.
 
-The tables: |level - program| (dB, mean and largest) at the flatter points with the
-narrow-angle equation and at the steep ones with each; the same at the flatter points
-from ``NEAR_DEG`` to 15 degrees up; and the jump at 15 degrees, the engine's level less
-the program's just steeper less the same just flatter, with the five largest and each
-side's own distance from the program there. ``--only steps`` runs the range step's own
+The tables, of the line's points: |level - program| (dB, mean and largest) at the
+flatter points with the narrow-angle equation and at the steep ones with each; the same
+at the flatter points from ``NEAR_DEG`` to 15 degrees up; and the jump at 15 degrees,
+the engine's level less the program's just steeper less the same just flatter, with the
+five largest and each side's own distance from the program there. The table by angle,
+of every point: |level - program| with the narrow-angle equation and with the
+wide-angle one where the reflection off the ground comes in within each range of angles
+(``ANGLE_BOUNDS_DEG``). ``--only steps`` runs the range step's own
 check instead: one listener (:data:`STEPS_CASE`), the 63 Hz band at the narrow-angle
 equation's step, at one wavelength and at a 32nd of the step.
 """
@@ -43,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import itertools
 import json
 import math
 import sys
@@ -74,6 +81,11 @@ BESIDE = 0.01
 FLOOR_DB = -15.0
 #: The flatter points this steep or steeper (degrees) are also reported apart.
 NEAR_DEG = 10.0
+#: For the table by angle: a listener more where the reflection off the ground comes in
+#: at each of these angles (degrees), if that is between the line's ends, and the
+#: bounds (degrees) of the table's ranges of angle.
+ANGLES_DEG = (5.5, 6.5, 7.5, 8.25, 9.0, 11.0, 12.0, 13.0, 14.0)
+ANGLE_BOUNDS_DEG = (5.0, 7.0, 10.0, 15.0)
 #: The grounds: flow resistivity (kPa s/m², Delany and Bazley).
 GROUNDS = {"grass": 200.0, "hard": 2000.0}
 GROUND_C = 20.0
@@ -111,8 +123,9 @@ FURTHER = {
 }
 CASES = {**FIRST, **FURTHER}
 #: The engine's runs of a case: the narrow-angle equation's range step as a share of
-#: its own, or None for the engine as it is (the wide-angle equation at steep points).
-RUNS = {"engine": None, "narrow": 1.0, "half": 0.5, "quarter": 0.25}
+#: its own, None for the engine as it is (the wide-angle equation at steep points), or
+#: "wide" for the wide-angle equation at every point.
+RUNS = {"engine": None, "narrow": 1.0, "half": 0.5, "quarter": 0.25, "wide": "wide"}
 #: The range step's own check: a case's weather, ground and heights, the listener's
 #: range (m), the band, and the steps (wavelengths at the highest of the band's
 #: frequencies: 86 Hz in the 63 Hz band).
@@ -129,13 +142,22 @@ def steep_from(zs: float, zr: float) -> float:
     return (zs + zr) / math.tan(math.radians(STEEP_DEG))
 
 
-def points_of(name: str) -> np.ndarray:
-    """(n,) the ranges (m) of a case's listeners, increasing."""
+def line_of(name: str) -> np.ndarray:
+    """(n,) the ranges (m) of a case's line of listeners, increasing."""
     _weather, _ground, zs, zr = CASES[name]
     nearest = max(NEAREST_M, 1.001 * refracted.WAVE_MIN_RANGE * (zs + zr))
     line = np.geomspace(nearest, FARTHEST_M, POINTS)
     edge = steep_from(zs, zr)
     return np.sort(np.concatenate([line, [edge * (1.0 - BESIDE), edge * (1.0 + BESIDE)]]))
+
+
+def points_of(name: str) -> np.ndarray:
+    """(n,) the ranges (m) of a case's listeners, increasing: its line's and those at
+    ``ANGLES_DEG`` between the line's ends."""
+    _weather, _ground, zs, zr = CASES[name]
+    line = line_of(name)
+    more = [(zs + zr) / math.tan(math.radians(angle)) for angle in ANGLES_DEG]
+    return np.sort(np.concatenate([line, [x for x in more if line[0] <= x <= line[-1]]]))
 
 
 def atmosphere_of(weather: str) -> dict:
@@ -262,15 +284,17 @@ def scene_of(name: str, resolution: str) -> Scene:
 
 
 @contextlib.contextmanager
-def narrow_angle(step: float | None, wavelengths: float | None = None):
+def narrow_angle(step: float | str | None, wavelengths: float | None = None):
     """The narrow-angle equation at every point, its range step ``step`` times its own
-    (or ``wavelengths`` of the highest frequency, with no least step); None: the engine
-    as it is."""
+    (or ``wavelengths`` of the highest frequency, with no least step); "wide": the
+    wide-angle equation at every point; None: the engine as it is."""
     kept = parabolic.STEEP_DEG, parabolic.RANGE_STEP_WAVELENGTHS, parabolic.RANGE_STEP_MIN_M
     try:
-        if step is not None or wavelengths is not None:
+        if step == "wide":
+            parabolic.STEEP_DEG = 0.0
+        elif step is not None or wavelengths is not None:
             parabolic.STEEP_DEG = 90.0
-        if step is not None:
+        if isinstance(step, float):
             parabolic.RANGE_STEP_WAVELENGTHS = kept[1] * step
             parabolic.RANGE_STEP_MIN_M = kept[2] * step
         if wavelengths is not None:
@@ -294,10 +318,15 @@ def levels(scene: Scene, bands: dict[int, int]) -> dict[int, list[float]]:
 
 
 def run_case(name: str) -> dict:
-    """A case's ranges, the program's levels and the engine's with each run."""
+    """A case's ranges, which of them are its line's, the program's levels and the
+    engine's with each run."""
     _weather, _ground, zs, zr = CASES[name]
     r = points_of(name)
-    row: dict = {"ranges": r.tolist(), "steep_from": steep_from(zs, zr)}
+    row: dict = {
+        "ranges": r.tolist(),
+        "line": np.isin(r, line_of(name)).tolist(),
+        "steep_from": steep_from(zs, zr),
+    }
     for resolution in ("octave", "third_octave"):
         bands = bands_of(name, resolution)
         if not bands:
@@ -310,10 +339,11 @@ def run_case(name: str) -> dict:
     return row
 
 
-def gather(out: dict, names, resolution: str, bands=None):
-    """Every compared point of ``names`` in ``resolution``: the case, the band, the
-    range, the angle (degrees) the reflection comes in at, the program's level and
-    each run's level less it."""
+def gather(out: dict, names, resolution: str, bands=None, every: bool = False):
+    """Every compared point of ``names`` in ``resolution`` on the cases' lines (with
+    ``every`` the points by angle too): the case, the band, the range, the angle
+    (degrees) the reflection comes in at, the program's level and each run's level
+    less it."""
     rows = []
     for name in names:
         if name not in out or resolution not in out[name]:
@@ -322,11 +352,12 @@ def gather(out: dict, names, resolution: str, bands=None):
         part = out[name][resolution]
         r = np.array(out[name]["ranges"])
         angle = np.degrees(np.arctan2(zs + zr, r))
+        taken = np.ones(len(r), dtype=bool) if every else np.array(out[name]["line"])
         for centre in part["program"]:
             if bands is not None and int(centre) not in bands:
                 continue
             ffp = np.array(part["program"][centre])
-            for k in np.flatnonzero(ffp >= FLOOR_DB):
+            for k in np.flatnonzero((ffp >= FLOOR_DB) & taken):
                 miss = {run: part[run][centre][k] - ffp[k] for run in RUNS}
                 rows.append((name, int(centre), float(r[k]), float(angle[k]), float(ffp[k]), miss))
     return rows
@@ -339,8 +370,8 @@ def stat(values) -> str:
 
 def jumps(out: dict, names, resolution: str, bands=None) -> list:
     """The jump at 15 degrees in each case and band: (engine - program) just steeper
-    less the same just flatter, where both are compared; with the case, the band and
-    each side's own miss."""
+    less the same just flatter (the line's two points ``BESIDE`` of it), where both are
+    compared; with the case, the band and each side's own miss."""
     rows = []
     for name in names:
         if name not in out or resolution not in out[name]:
@@ -420,6 +451,29 @@ def report(out: dict) -> dict:
             f" up to {max(abs(row[4]) for row in top):.2f} dB off"
         )
 
+    def angle_lines(title, names, resolution, bands=None):
+        rows = gather(out, names, resolution, bands, every=True)
+        if not rows:
+            return
+        entry = {}
+        print(
+            f"\n{title}, by the angle of the reflection off the ground: |level - program|"
+            " in dB, mean (largest) [points]"
+        )
+        bounds = (0.0, *ANGLE_BOUNDS_DEG, 90.0)
+        for low, high in itertools.pairwise(bounds):
+            inside = [row for row in rows if low < row[3] <= high]
+            key = f"over {low:g} degrees" if high == 90.0 else f"{low:g} to {high:g} degrees"
+            entry[key] = {
+                "narrow-angle": stat(row[5]["narrow"] for row in inside),
+                "wide-angle": stat(row[5]["wide"] for row in inside),
+            }
+            print(
+                f"  {key:20s} narrow-angle {entry[key]['narrow-angle']:22s}"
+                f" wide-angle {entry[key]['wide-angle']}"
+            )
+        table[f"{title}, by angle"] = entry
+
     first = [name for name in FIRST if name in out]
     further = [name for name in FURTHER if name in out]
     lines("first set, octaves 63 to 500 Hz", first, "octave")
@@ -432,6 +486,14 @@ def report(out: dict) -> dict:
     lines("further set, third octaves 80 to 160 Hz", further, "third_octave")
     jump_lines("both sets, octaves", first + further, "octave")
     jump_lines("both sets, third octaves", first + further, "third_octave")
+    angle_lines("first set, octaves 63 to 500 Hz", first, "octave")
+    angle_lines(
+        f"first set, third octaves 50 to 250 Hz, sources {THIRDS_FROM_M:g} m up and higher",
+        first,
+        "third_octave",
+    )
+    angle_lines("further set, octaves 63 and 125 Hz", further, "octave")
+    angle_lines("further set, third octaves 80 to 160 Hz", further, "third_octave")
     return table
 
 
