@@ -210,6 +210,22 @@
   reflection, as in the early part. An open face 1 m over a floor had taken 6.3 dB from
   the floor's scattered sound at 125 Hz; in `apartment` the bed's level drops by
   0.04 dB(A).
+- Fixed: in wind or a temperature gradient a listener's or map point's bands up to
+  2 kHz depended on the others in its direction, whose ranges broke up the steps of the
+  parabolic equation's march: by 0.12 dB at 63 Hz behind one listener 10 m nearer and
+  0.65 dB among 201 listeners 10 cm apart (a source 7 m and listeners 1.5 m up over a
+  ground of 200 kPa s/m², 40 to 60 m downwind in `windy`). Each is now reached by a last
+  step of its own off the march; the others still set the run's absorbing layer, how high
+  it begins and how thick it is (0.02 dB or less per octave band out of the shadow in
+  the checks, see [Known issues](docs/validation.md#known-issues)). A line of listeners
+  about a metre apart or closer takes about 1.5 to 1.8 times as long, listeners far
+  apart as long as before.
+- Fixed (results change): a listener that the reflection off the ground reaches more
+  than 15 degrees up takes the wide-angle parabolic equation wherever the parabolic
+  equation runs, as behind barriers; it went by whether the air bent sound on its run's
+  grid, which changes with the band and with the run's other listeners. In still air
+  before a weather zone, 8 m from a source 2 m up, the early sound's octave bands move
+  by up to 0.11 dB and its third octaves by up to 0.28 dB (a one-off check).
 - Fixed: in wind, a listener or map point exactly in line with the source and a
   barrier's end takes the weather's effect on the paths round the end, whichever way
   the line rounds; it read up to 9.3 dB low downwind from 63 to 500 Hz and up to
@@ -352,8 +368,8 @@
   [Outdoor scenes](docs/outdoor.md)).
 - Added: `simulation.early.open_ground_frequencies` (**Frequencies over open ground** in
   the editor) picks how those 1 and 2 kHz bands are found: 24 frequencies an octave (the
-  default, up to 0.75 dB off the program), 8 (4.0 dB, 2 to 3 times faster on one core)
-  or the rays short of half the way to the shadow, as 4.2.1 did in octave bands (8.5 dB,
+  default, up to 0.75 dB off the program), 8 (4.1 dB, 2 to 3 times faster on one core)
+  or the rays short of half the way to the shadow, as 4.2.1 did in octave bands (8.4 dB,
   2.3 to 30 times faster); in the shadow 4 and 8 kHz, which deepen from those bands,
   move with them (by up to 0.33 dB within 60 dB of free field). `helicopter_flyover`,
   whose sound comes down steeply, sets the rays, there within 0.11 dB of the default.
