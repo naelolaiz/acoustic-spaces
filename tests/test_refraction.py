@@ -1574,8 +1574,7 @@ def test_a_listener_in_wind_reads_the_same_whoever_else_stands_in_its_direction(
     """Downwind of a source over a lawn, each of three listeners gets the same bands with
     eighteen more between them, a metre apart, as without them: each is reached by a last
     step of its own, off the parabolic equation's march, whose steps the others' ranges
-    would break up (that moved the level 50 m away by 0.10 dB at 250 Hz). The farthest
-    listener is the same in both runs, and so is the absorbing layer."""
+    would break up (that moved the level 50 m away by 0.10 dB at 250 Hz)."""
     atmosphere = {"preset": "windy", "wind": {"direction_deg": 0.0}}
     few = (40.0, 50.0, 60.0)
     dense = tuple(float(x) for x in range(40, 61))
@@ -1596,7 +1595,7 @@ def test_a_listener_in_wind_reads_the_same_whoever_else_stands_in_its_direction(
         (1.0, "narrow_angle", 250.0, 1),
         (-1.0, "narrow_angle", 250.0, 1),
         (1.0, "narrow_angle", 250.0, 2),
-        (1.0, "wide_angle", 150.0, 1),
+        (1.0, "wide_angle", 150.0, 2),
     ],
 )
 def test_a_listener_in_wind_reads_the_same_alone_as_with_others_farther_and_higher(
@@ -1619,6 +1618,27 @@ def test_a_listener_in_wind_reads_the_same_alone_as_with_others_farther_and_high
         data["simulation"]["early"]["parabolic_equation"] = option
         result = simulate(Room.from_scene(Scene.model_validate(data)), threads=threads)
         early.append(result["s", "l0"].early.energy.sum(axis=0))
+    np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
+
+
+@pytest.mark.parametrize("share", [True, False])
+def test_a_listener_in_wind_reads_the_same_alone_as_with_others_from_two_sources(share) -> None:
+    """From each of two sources at one height, 30 m apart on a line with it, a listener
+    downwind gets the same early energy in every band alone as with two more beyond it,
+    one of them 8 m up: whether the sources share the parabolic equation's runs (the
+    places of a walk) or each takes its own. With one layer above the highest of a
+    run's listeners the two moved its bands by up to 0.0007 dB."""
+    me = (60.0, 0.0, 1.5)
+    others = ((100.0, 0.0, 8.0), (250.0, 0.0, 1.5))
+    places = {"s0": 0.0, "s1": -30.0}
+    early = []
+    for listeners in ((me,), (me, *others)):
+        data = field({"preset": "windy", "wind": {"direction_deg": 0.0}}, listeners).to_data()
+        data["geometry"]["ground"]["extent"] = [[-300.0, -20.0], [300.0, 20.0]]
+        data["sources"] = [{"name": name, "position": [x, 0.0, 2.0]} for name, x in places.items()]
+        room = Room.from_scene(Scene.model_validate(data))
+        result = simulate(room, threads=1, share_waves=list(places) if share else None)
+        early.append([result[name, "l0"].early.energy.sum(axis=0) for name in places])
     np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
 
 
@@ -1668,8 +1688,7 @@ def test_steep_and_flat_listeners_in_wind_keep_their_early_bands_among_others() 
     gives, and one 60 m away, which the narrow-angle march gives, get the same early
     energy in every third octave with six more listeners before and between them as
     without them (their ranges broke up the march's steps: by 0.21 dB at 63 Hz 60 m
-    away). The farthest listener is the same in both runs, and so is the absorbing
-    layer."""
+    away)."""
     atmosphere = {"preset": "windy", "wind": {"direction_deg": 0.0}}
     few = (25.0, 60.0)
     many = (15.0, 20.0, 24.9, 25.0, 25.1, 35.0, 59.9, 60.0)

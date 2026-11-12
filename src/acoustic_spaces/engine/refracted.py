@@ -115,10 +115,11 @@ WAVE_MAX_BAND_HZ = 2000
 #: field over a rigid ground): nearer, it comes in too steeply for it, and the
 #: atmosphere has had little room to bend it.
 WAVE_MIN_RANGE = 1.5
-#: The parabolic equation's absorbing layer starts this many times higher than the
-#: source, the listener and the rays between them, at least ``WAVE_MIN_HEADROOM_M``
-#: above the source and the listener and at least ``WAVE_TOP_SLOPE`` times the range up
-#: (higher makes no difference: 0.1 dB at 800 m downwind, at 125 Hz, 5 m/s of wind).
+#: A listener's own absorbing layer of the parabolic equation starts this many times
+#: higher than the source, the listener and the rays between them, at least
+#: ``WAVE_MIN_HEADROOM_M`` above the source and the listener and at least
+#: ``WAVE_TOP_SLOPE`` times the range up; its run's layer starts at or above that, by
+#: the grid of heights its own start needs (:func:`solve`).
 WAVE_HEADROOM = 1.5
 WAVE_MIN_HEADROOM_M = 20.0
 WAVE_TOP_SLOPE = 0.15
@@ -252,7 +253,7 @@ class _Cut:
     weight: float
     range: float
     height: float
-    top: float  # the runs' absorbing layer
+    top: float  # where its own absorbing layer starts (:func:`solve`)
     bands: np.ndarray  # (bands,) bool: the bands they run in (all)
 
 
@@ -282,7 +283,7 @@ class _Way:
     weathers: tuple | None
     range: float  # the way's length seen from above
     height: float
-    top: float  # the runs' absorbing layer
+    top: float  # where its own absorbing layer starts (:func:`solve`)
     bands: np.ndarray  # (bands,) bool: those of the open ground's parabolic equation
     #: The eigenrays along the way in the weather (before the equation is put in) and
     #: the straight direct sound and ground reflection along it in still air.
@@ -2311,8 +2312,9 @@ class _Job:
     barrier: bool = False  # with the grid and samples of the runs behind barriers
     #: What the run has in common with those that differ from it in what stands on the
     #: way and in their listeners alone (the source's runs behind barriers in one band
-    #: and weather, under one absorbing layer), which share the march over the open
-    #: ground (:class:`~acoustic_spaces.engine.parabolic.Trunk`); None: none do.
+    #: and weather, on one grid of heights under one absorbing layer), which share the
+    #: march over the open ground (:class:`~acoustic_spaces.engine.parabolic.Trunk`);
+    #: None: none do.
     family: tuple | None = None
     #: Over the open ground: the run on past the band's own frequencies through its
     #: upper crossover, at their spacing, for the listeners and the ways round ends whose
@@ -2373,13 +2375,13 @@ def solve(plans: list[Planned]) -> list[dict]:
     listeners' runs take the frequencies below it and those in the shadow run apart.
 
     Behind barriers the runs in the weather share by the profile and what stands on the
-    way (the cut), those in still air by the cut alone, each by the grid as above; the open
-    ground's runs along the ways round ends, in the weather alone (the straight paths
-    are their reference in still air), likewise with no cut, and with weather zones
-    through the weathers along the way's legs (:meth:`Refraction._weathers_on`), with
-    their skirts as a listener's (one run above a band for every way of the profile
-    whose top band it is). Every listener of theirs is reached by a last step of its
-    own.
+    way (the cut), those in still air by the cut (and, where the ground has zones, by
+    the way's direction), each by the grid as above; the open ground's runs along the
+    ways round ends, in the weather alone (the straight paths are their reference in
+    still air), likewise with no cut, and with weather zones through the weathers along
+    the way's legs (:meth:`Refraction._weathers_on`), with their skirts as a listener's
+    (one run above a band for every way of the profile whose top band it is). Every
+    listener of theirs is reached by a last step of its own.
 
     The runs behind barriers in one band that differ in the cut and the listeners alone
     (in still air those of every direction on one grid; in the weather, where it has no
@@ -2519,7 +2521,8 @@ def solve(plans: list[Planned]) -> list[dict]:
             )
 
     # Behind barriers and along the ways round ends: the runs in the weather, and behind
-    # barriers in still air, shared by all with the same cut and absorbing layer.
+    # barriers in still air, shared by all with the same cut, each by the grid of heights
+    # its own absorbing layer needs (``layered``).
     calm: dict[tuple, list] = {}
     for (owner, barrier, key, ground, cut), members in behind.items():
         refraction = plans[members[0][0]].refraction
@@ -2719,9 +2722,14 @@ def solve(plans: list[Planned]) -> list[dict]:
 
 #: The absorbing layers of the wide-angle equation's runs start at 2^(k / LADDER_STEPS) m,
 #: the lowest of these steps at or above a listener's own start: its grid of heights is
-#: as high as the layer needs, so each start would be a run of its own, and a step
-#: takes at most 2^(1 / 8) of the heights its own start would (9 % more).
-LADDER_STEPS = 8
+#: as high as the layer needs, so each start would be a run of its own. With two steps
+#: a doubling a run's layer starts at most 41 % higher than a listener's own; finer
+#: steps part listeners at different heights into more runs, each from the source
+#: again, and coarser ones march higher grids. Scenes with one steep listener, with
+#: three and with twelve up a facade 30 m away took 1.3, 1.5 and 1.7 times the time
+#: they take with one layer above the highest listener; with one step a doubling 1.5,
+#: 1.9 and 2.0 times, with four 1.0, 2.3 and 1.6 and with eight 1.0, 2.1 and 2.9.
+LADDER_STEPS = 2
 
 
 def _ladder_step(top: float) -> int:

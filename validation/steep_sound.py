@@ -294,7 +294,7 @@ def narrow_angle(step: float | str | None, wavelengths: float | None = None):
             parabolic.STEEP_DEG = 0.0
         elif step is not None or wavelengths is not None:
             parabolic.STEEP_DEG = 90.0
-        if isinstance(step, float):
+        if step is not None and step != "wide":
             parabolic.RANGE_STEP_WAVELENGTHS = kept[1] * step
             parabolic.RANGE_STEP_MIN_M = kept[2] * step
         if wavelengths is not None:

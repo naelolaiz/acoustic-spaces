@@ -141,9 +141,7 @@ def march(
     ranges asked for break up each other's steps; ``independent`` takes each one's last
     step off to the side, so that each range gets what a march to it alone gives, whatever
     else is asked for (the engine's runs: :func:`acoustic_spaces.engine.refracted.solve`),
-    but for the wide-angle equation's height step where a building stands short of the
-    farthest point (:func:`acoustic_spaces.engine.wide_angle.march`) and, with
-    ``refracting`` None, for which equation the steep points take (below).
+    but, with ``refracting`` None, for which equation the steep points take (below).
 
     In wind or temperature gradients the points the reflection off the ground reaches
     more steeply than STEEP_DEG are given by the wide-angle equation

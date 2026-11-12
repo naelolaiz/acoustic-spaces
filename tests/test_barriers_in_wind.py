@@ -1172,20 +1172,53 @@ def test_no_step_where_the_direct_sound_rises_past_a_barrier_s_top_corner() -> N
     assert np.all(np.abs(np.diff(level, axis=0)) < 0.05)
 
 
-def test_a_listener_behind_a_barrier_in_wind_reads_the_same_alone_as_with_others() -> None:
+@pytest.mark.parametrize(
+    ("more", "threads"), [((), 1), (((40.0, 10.0, 1.5), (80.0, -20.0, 1.5)), 2)]
+)
+def test_a_listener_behind_a_barrier_in_wind_reads_the_same_alone_as_with_others(
+    more, threads
+) -> None:
     """Behind the barrier in wind a listener 40 m from the source gets the same early
     energy in every band alone as with two more behind it, 80 m away, one of them 10 m
     up: its runs over the barrier, in the wind and in still air, are on the grid of
     heights that its own absorbing layer needs, the layer where that grid holds it,
-    whoever shares them. With one layer above the highest of a run's listeners the two
-    moved its bands by up to 0.0013 dB."""
+    whoever shares them; and on two threads, with two more in other directions, whose
+    runs in still air take the field up to the barrier from one another. With one layer
+    above the highest of a run's listeners the others moved its bands by up to 0.0013
+    dB."""
     me = (40.0, 0.0, 1.5)
     early = []
-    for listeners in ((me,), (me, (80.0, 0.0, 1.5), (80.0, 0.0, 10.0))):
+    for listeners in ((me,), (me, (80.0, 0.0, 1.5), (80.0, 0.0, 10.0), *more)):
         room = Room.from_scene(
             scene(listeners=listeners, open_ground_frequencies=8, barrier_frequencies=8)
         )
-        early.append(simulate(room, threads=1)["s", "l0"].early.energy.sum(axis=0))
+        early.append(simulate(room, threads=threads)["s", "l0"].early.energy.sum(axis=0))
+    np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
+
+
+@pytest.mark.parametrize(("y", "threads"), [(-10.0, 2), (5.0, 1)])
+def test_a_listener_past_a_barrier_s_end_in_wind_reads_the_same_alone_as_with_others(
+    y, threads
+) -> None:
+    """60 m downwind, 10 m behind a barrier's end and 5 m into the lit side, where the
+    paths round the end take the parabolic equation's runs along their ways, a listener
+    gets the same early energy in every band alone as with two more twice as far in its
+    direction, one of them 10 m up; on two threads too. With one layer above the highest
+    of a run's listeners the two moved its bands by up to 0.0002 dB behind the barrier
+    and 0.0005 dB on the lit side."""
+    me = (60.0, y, 1.5)
+    early = []
+    for listeners in ((me,), (me, (120.0, 2.0 * y, 1.5), (120.0, 2.0 * y, 10.0))):
+        room = Room.from_scene(
+            scene(
+                listeners=listeners,
+                barriers=[END],
+                extent=((-60.0, -60.0), (150.0, 60.0)),
+                open_ground_frequencies=8,
+                barrier_frequencies=8,
+            )
+        )
+        early.append(simulate(room, threads=threads)["s", "l0"].early.energy.sum(axis=0))
     np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
 
 
