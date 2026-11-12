@@ -561,7 +561,8 @@ private:
             std::uint32_t node;
             double entry;
         };
-        std::array<Pending, kMaxDepth + 4> stack{};
+        // Not zeroed: only stack[0, top) is read, each written by a push in this call.
+        std::array<Pending, kMaxDepth + 4> stack;
         std::size_t top = 0;
         if (!(slab(nodes_[0].box, origin, inv, limit) >= 0.0)) return;
         std::uint32_t current = 0;

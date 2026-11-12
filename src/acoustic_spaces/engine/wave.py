@@ -69,14 +69,15 @@ octave bands replace the ray-traced ones.
   second order where it changes; over open, flat ground, where the given wind already
   crosses nothing, it is carried as given, by fourth-order central differences. Over
   open ground it takes four to five times as long as the effective speed of sound's
-  run; round solids its steps take about seven times as long, after the solve of the
+  run; round solids its steps take about eight times as long, after the solve of the
   wind (see ``validation/wave_wind.py``). It runs on the CPU (asked for the GPU, it
-  says so and stays there). The matched layer's air is still, and where the moving air
-  meets it sound can build up at winds beyond the weather's (see the notes of
-  ``fdtd.hpp``). So the run is watched all the same: once the source's pulse has
-  ended, the pressure squared over the grid's air, averaged over pieces of
-  ``WATCH_S``, may not rise to ``WATCH_RISE`` times its lowest so far (a
-  ``ValueError``).
+  says so and stays there). The matched layer's air is still: where the wind crosses
+  its border, each cell's own sound is carried out and silence in, which takes energy
+  and adds none, and a wave that leaves the moving air for the layer comes back by
+  about half the wind's Mach number (see the notes of ``fdtd.hpp``). The run is watched
+  all the same: once the source's pulse has ended, the pressure squared over the
+  grid's air, averaged over pieces of ``WATCH_S``, may not rise to ``WATCH_RISE`` times
+  its lowest so far (a ``ValueError``).
 - The grid is laid out on the CPU and stepped there, or with ``device`` on a GPU,
   through WebGPU (:mod:`acoustic_spaces.engine.gpu`); the two agree to rounding, in
   wind and temperature too (with the effective speed of sound).

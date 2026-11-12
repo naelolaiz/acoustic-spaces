@@ -439,6 +439,102 @@ def test_the_update_keeps_its_highest_modes_inside_the_stability_limit(stencil: 
     assert np.max(peak / kicks) < 1.1 * 256
 
 
+#: The directions of a cell's links, as fdtd.hpp's kSteps: the axial six, then the edges.
+_STEPS = (
+    (-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0), (0, 0, -1), (0, 0, 1),
+    (-1, -1, 0), (1, -1, 0), (-1, 1, 0), (1, 1, 0), (-1, 0, -1), (1, 0, -1),
+    (-1, 0, 1), (1, 0, 1), (0, -1, -1), (0, 1, -1), (0, -1, 1), (0, 1, 1),
+)  # fmt: skip
+
+
+def _stepped_from_the_layout(solver, signal: np.ndarray) -> np.ndarray:
+    """The probes' pressures of ``solver`` (a closed grid in still air at one speed of
+    sound) run from rest on ``signal``, stepped in float32 from its layout() with
+    WaveSolver::run's operations in its order: its pressures, each boundary cell's links
+    and branch states in turn, and the probes summed in float64."""
+    f32 = np.float32
+    lay = solver.layout()
+    assert len(lay["layer_cells"]) == 0 and lay["scaled"][0] == 0 and len(lay["flow_mask"]) == 0
+    nx, ny, nz = (int(v) for v in lay["shape"])
+    sy, sz = nx, nx * ny
+    wide = int(lay["stencil"][0]) == 19
+    axial, centre = f32(lay["weights"][0]), f32(lay["centre"][0])
+    diagonal = f32(lay["weights"][6]) if wide else f32(0.0)
+    offset = np.array([x + y * sy + z * sz for x, y, z in _STEPS])
+    i = np.flatnonzero(lay["types"] == 1)
+    special = lay["special"].astype(np.int64)
+    link_start, state_start = (lay[k].astype(np.int64) for k in ("link_start", "state_start"))
+    links, states = np.diff(link_start), np.diff(state_start)
+    branch = lay["state_branch"]
+    now, before = lay["branch_now"][branch], lay["branch_before"][branch]
+    gain, weight = lay["branch_gain"][branch], lay["state_weight"]
+    owner = np.repeat(np.arange(len(special)), states)
+    a, b = np.zeros(nx * ny * nz, f32), np.zeros(nx * ny * nz, f32)
+    wa, wb = np.zeros(len(branch), f32), np.zeros(len(branch), f32)
+    starts, cells = lay["probe_start"].astype(np.int64), lay["probe_cells"].astype(np.int64)
+    weights = lay["probe_weights"]
+    out = np.zeros((len(starts) - 1, len(signal)))
+    for step, s in enumerate(signal.astype(f32)):
+        for p in range(len(starts) - 1):
+            value = 0.0
+            for k in range(starts[p], starts[p + 1]):
+                value += float(weights[k]) * float(b[cells[k]])
+            out[p, step] = value
+        total = b[i - 1] + b[i + 1] + b[i - sy] + b[i + sy] + b[i - sz] + b[i + sz]
+        update = centre * b[i] + axial * total
+        if wide:
+            edges = b[i - 1 - sy] + b[i + 1 - sy] + b[i - 1 + sy] + b[i + 1 + sy]
+            edges = edges + b[i - 1 - sz] + b[i + 1 - sz] + b[i - 1 + sz] + b[i + 1 + sz]
+            edges = edges + b[i - sy - sz] + b[i + sy - sz] + b[i - sy + sz] + b[i + sy + sz]
+            update = update + diagonal * edges
+        a[i] = update - a[i]
+        linked = np.zeros(len(special), f32)
+        for r in range(int(links.max())):
+            has = np.flatnonzero(links > r)
+            at = link_start[has] + r
+            near = special[has] + offset[lay["link_direction"][at]]
+            linked[has] = linked[has] + lay["link_weight"][at] * b[near]
+        term = now * wb - before * wa
+        flow = np.zeros(len(special), f32)
+        for r in range(int(states.max(initial=0))):
+            has = np.flatnonzero(states > r)
+            at = state_start[has] + r
+            flow[has] = flow[has] + weight[at] * term[at]
+        previous = a[special]
+        following = lay["coef_a"] * b[special] + linked - lay["coef_b"] * previous - flow
+        following = (following + lay["source"] * s) * lay["coef_inv"]
+        a[special] = following
+        wa = wa + ((following - previous)[owner] * gain + term)
+        # NumPy keeps subnormal values, which the solver flushes to zero: none may occur.
+        for field in (a, wa):
+            assert not np.any((field != 0) & (np.abs(field) < np.finfo(f32).tiny))
+        a, b, wa, wb = b, a, wb, wa
+    return out
+
+
+@STENCILS
+def test_the_boundary_cells_and_their_branches_step_as_the_layout_says(stencil: int) -> None:
+    # A room with resonant walls (branch states on three faces), its run against the
+    # layout stepped in NumPy: the same to the bit.
+    cell = 0.1
+    rate = C / (_courant(stencil) * cell)
+    fit = fit_admittance([0.1, 0.3, 0.6], 8, rate)
+    solver, _ = _solver(
+        (1.2, 0.9, 0.7),
+        lambda mesh: [0.02] * len(mesh.faces),
+        [0.33, 0.41, 0.29],
+        [[0.9, 0.6, 0.5], [0.2, 0.3, 0.4]],
+        cell=cell,
+        branches=[(0, fit), (3, fit), (5, fit)],
+        stencil=stencil,
+    )
+    assert solver.branch_states > 0
+    signal = _drive(rate, cell, 400, stencil)
+    pressure = solver.run(signal)
+    assert np.abs(pressure).max() > 0.0
+    assert np.array_equal(pressure, _stepped_from_the_layout(solver, signal))
+
+
 @STENCILS
 @pytest.mark.parametrize("beta", [0.0, 0.1, 0.5, 1.0])
 def test_duct_end_reflects_as_its_admittance_says(beta: float, stencil: int) -> None:
@@ -2895,8 +2991,8 @@ def test_the_wind_round_the_solids_carries_as_the_given_wind_where_they_agree() 
     central differences. With one cell's wind a hundred-thousandth off, the solver makes
     the wind flow round (it changes along that cell's row), and it comes out the same
     wind to that part: the faces' carrying is then the same operator, and the runs agree
-    to single precision's rounding, before the first sound is back from the matched
-    layer's edge, where the two meet the layer's still air each in its own way."""
+    to single precision's rounding. So they do with the matched layer two cells from the
+    plate and sound back from its border, which the two ways close by the same rule."""
 
     def flow(nudge: float):
         def given(centres):
@@ -2914,6 +3010,69 @@ def test_the_wind_round_the_solids_carries_as_the_given_wind_where_they_agree() 
     assert solver.wind_fastest == pytest.approx(0.2, rel=2e-5)
     assert np.abs(as_given - still).max() > 0.5 * np.abs(still).max()  # the wind is heard
     assert np.abs(round_it - as_given).max() < 2e-6 * np.abs(as_given).max()
+    as_given, plain, _ = _plate(0.3, LAYER_CELLS, LAYER_CELLS, 0.08, flow=flow(0.0))
+    round_it, solver, _ = _plate(0.3, LAYER_CELLS, LAYER_CELLS, 0.08, flow=flow(1e-5))
+    assert not plain.wind_round and solver.wind_round
+    assert np.abs(round_it - as_given).max() < 2e-6 * np.abs(as_given).max()
+
+
+def test_moving_air_adds_no_sound_at_the_matched_layer_s_border() -> None:
+    """In the open the moving air meets the matched layer's still air, which is not
+    carried. Through the faces between them each cell's own value goes out and silence
+    comes in, which takes energy and adds none: in winds far beyond the weather's the
+    sound dies away. Carried with the layer's own values it grew at that border, within
+    these steps: under a wind at 45 degrees to the grid over the open plate (carried as
+    given) and under a wind along x past a block (the wind round it)."""
+    h = 0.5
+
+    def levels(flow, block: bool):
+        solver, rate, _, _ = _plate_solver(h, LAYER_CELLS, LAYER_CELLS, flow=flow, block=block)
+        solver.run(_drive(rate, h, 500))
+        first, later = solver.mean_square, []
+        for _ in range(7):
+            solver.run(np.zeros(500, np.float32))
+            later.append(solver.mean_square)
+        return solver, first, later
+
+    def slanted(centres):
+        return np.full(len(centres), 0.3), np.full(len(centres), 0.3)
+
+    def along(centres):
+        return np.full(len(centres), 0.3), np.zeros(len(centres))
+
+    solver, first, later = levels(slanted, False)
+    assert solver.flowing and not solver.wind_round
+    assert max(later[2:]) < 1e-6 * first
+    solver, first, later = levels(along, True)
+    assert solver.wind_round and 0.4 < solver.wind_fastest < 0.5
+    assert max(later[2:]) < 1e-6 * first
+
+
+def test_moving_air_s_border_sends_back_about_half_the_wind_s_mach_number() -> None:
+    """A wave that leaves the moving air for the matched layer's still air comes back by
+    about half the wind's Mach number (1.5 % at 10 m/s, 37 dB down). That is a limit of
+    the still layer, which this test records: with either rule at the border it is
+    about half the Mach number (for the layer in still air see
+    test_matched_layer_takes_in_the_sound_leaving_an_open_model). Against a grid 45
+    cells larger all round, from whose edge nothing comes back in time."""
+    h, seconds = 0.4, 0.07
+
+    def flow(centres):  # 10 m/s along x
+        return np.full(len(centres), 10.0 * COURANT / C), np.zeros(len(centres))
+
+    reference, _, rate = _plate(h, 45 + LAYER_CELLS, LAYER_CELLS, seconds, flow=flow)
+    pressure, solver, _ = _plate(h, LAYER_CELLS, LAYER_CELLS, seconds, flow=flow)
+    assert solver.flowing and solver.layer_cells > 0
+    n_fft = 1 << 12
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)
+    gain = np.clip((f - 25) / 10, 0, 1) * np.clip((150 - f) / 30, 0, 1)
+
+    def band(x):
+        return np.fft.irfft(np.fft.rfft(x, n_fft, axis=1) * gain, n_fft, axis=1)[:, : x.shape[1]]
+
+    miss = band(pressure) - band(reference)
+    back = 10 * np.log10(np.sum(miss**2, axis=1) / np.sum(band(reference) ** 2, axis=1))
+    assert np.all(back < -32) and np.all(back > -43)
 
 
 def test_the_wind_round_the_solids_is_the_same_on_any_number_of_threads() -> None:
