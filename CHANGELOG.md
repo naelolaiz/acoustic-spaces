@@ -7,8 +7,9 @@
   row, with the terms of its rigid edges), within 0.38 dB of a wave calculation near
   grazing incidence in free space and 0.65 dB there over roofs on a rigid ground,
   0.74 dB up from a source at street level and 1.24 dB down to a listener there;
-  between rigid screens on a rigid ground up to 3.4 dB low, and with an error for the
-  ends it cannot hold, such as a source on a roof close to a parapet
+  between rigid screens on a rigid ground up to 3.4 dB low, a barrier lower than a
+  quarter of a wavelength on a rigid roof up to 3 dB off, and with an error for the
+  ends it cannot hold, such as one almost straight under the top of a wall
   (`validation/rows.py`). Simulations do not use it yet.
 - Changed: an outdoor ground (a material with an `impedance`) scatters nothing unless
   its material gives a `scattering`, where it took 0.1 like any material: the early
