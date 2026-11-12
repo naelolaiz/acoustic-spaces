@@ -5871,6 +5871,31 @@ Results:
   a gable roof's slope in a one-off check), and by 0.01 dB in pressure. Over a top
   1 m wide absorbing 0.5, the level 0.3 m above its plane was 0.56 dB above the rigid
   top's at 4 kHz (a one-off check).
+- **Surfaces a hair off the wave solver's cell centres.** The wave solver takes a
+  surface within 1e-10 cells of a plane of its cell centres to lie on it (see
+  [Simulation](simulation.md#low-frequencies-the-wave-solver)). Close to that distance,
+  but not on it, cells and links can still be placed wrong (one-off checks on prisms, a
+  tetrahedron, a wedge, an octahedron, a box and a screen in a 4 m room, 0.1 m cells,
+  both stencils). A face 1e-10 cells off a plane of centres, to within the rounding of
+  its offsets (about 1e-14 cells in that room; the rounding grows in proportion to the
+  distance from the grid's origin), can put the cells of that plane under it on the
+  wrong side: with one slanted face of a tetrahedron so placed, the 174 centres of that
+  plane inside it were air, and listeners 1.3 and 3.4 cells from the face read 0.47 and
+  0.50 of the response off. Where every face of a closed object lies so, the object can
+  be read as air throughout (those runs checked, 4000 steps, stayed bounded). Where a
+  flat side made of two triangles ends on a plane of centres, a centre on the side's end
+  edge from 1e-10 to 1e-10 / (2 sin a) cells past that plane, a being the angle between
+  the side's diagonal and its edges that leave the plane (tan a is the side's width over
+  its length), can be held by one triangle and not by the other (seen on prisms along x
+  and along y, on none along z): for a long, narrow side about length / (2 width) x 1e-10
+  cells, 1.8e-9 cells for a side 1 cell wide and 36 long. A few boundary cells and links
+  then move, no air cell, and a listener beside it read up to 0.16 of the response off. Where a face at 45 degrees to the axes lies 7e-11
+  to 1e-10 cells off a plane of centres, a link that meets it across its diagonal is cut
+  (1 boundary cell, 2 to 6 links). A box 6e-11 to 3e-9 cells past planes halfway between
+  centres has 42 of its 46662 19-point links cut by its edges (0.026 of the response). A
+  screen whose plane and rims round to different sides of 1e-10 cells gives up to 0.11
+  of the response on the 19-point grid. Past 1.3 million cells from the grid's origin,
+  rounding moves some ties out of reach (16 of 32 tied links of one scene).
 
 Models:
 

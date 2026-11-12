@@ -963,7 +963,7 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
                       InArray source, Points probes, double edge_admittance, std::size_t layer,
                       double layer_damping, std::size_t threads, std::size_t stencil,
                       std::optional<Speeds> speed, std::optional<Speeds> flow_x,
-                      std::optional<Speeds> flow_y) {
+                      std::optional<Speeds> flow_y, std::size_t probes_per_listener) {
     if (face_material.shape(0) != bvh.face_count()) {
         throw std::invalid_argument("WaveSolver: one material per face");
     }
@@ -989,7 +989,7 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
                                   nz, s, probe_points, edge_admittance, layer, layer_damping,
                                   threads, stencil, speed ? speed->data() : nullptr,
                                   flow_x ? flow_x->data() : nullptr,
-                                  flow_y ? flow_y->data() : nullptr);
+                                  flow_y ? flow_y->data() : nullptr, probes_per_listener);
     }
 }
 
@@ -1135,14 +1135,15 @@ NB_MODULE(_native, m) {
              nb::arg("probes"), nb::arg("edge_admittance") = 1.0, nb::arg("layer") = 0,
              nb::arg("layer_damping") = 0.0, nb::arg("threads") = 0, nb::arg("stencil") = 7,
              nb::arg("speed").none() = nb::none(), nb::arg("flow_x").none() = nb::none(),
-             nb::arg("flow_y").none() = nb::none(),
+             nb::arg("flow_y").none() = nb::none(), nb::arg("probes_per_listener") = 1,
              "face_material: each face's material; beta: each material's constant admittance; "
              "branches (n, 3): m, r and q of each mass-resistance-stiffness branch, of "
              "branch_material; layer: cells of matched layer inside the grid's edge; "
              "stencil: 7 or 19 points; speed (nx ny nz,) float32, x fastest: each cell's "
              "speed of sound over the grid's, in (0, 1], or None for the same everywhere; "
              "flow_x, flow_y (nx ny nz,) float32: the air's velocity in cells per step, "
-             "each under half, or None for still air.")
+             "each under half, or None for still air; probes_per_listener: the probes come "
+             "in groups of this many, the first of each a listener's own point.")
         .def_prop_ro("air_cells", &as::WaveSolver::air_cells)
         .def_prop_ro("boundary_cells", &as::WaveSolver::boundary_cells)
         .def_prop_ro("branch_states", &as::WaveSolver::branch_states)
@@ -1174,6 +1175,13 @@ NB_MODULE(_native, m) {
         .def_prop_ro("stencil", &as::WaveSolver::stencil)
         .def_prop_ro("threads", &as::WaveSolver::threads)
         .def("probe_found", &as::WaveSolver::probe_found, nb::arg("probe"))
+        .def("probe_in_sight", &as::WaveSolver::probe_in_sight, nb::arg("probe"),
+             "Whether the probe's listener (the first probe of its group) sees it, each "
+             "point on a surface just off it where its reading takes it; a listener sees its "
+             "own point.")
+        .def_prop_ro("source_on_face", &as::WaveSolver::source_on_face,
+                     "Whether the source lies on a face of the model, and so sends sound into "
+                     "the space on one side of it only.")
         .def("run", &wave_run, nb::arg("signal"),
              "Advances one step per sample of signal (added at the source); returns the "
              "pressure at every probe before each step, probes x steps.")

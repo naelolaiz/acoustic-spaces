@@ -11,6 +11,14 @@
   quarter of a wavelength on a rigid roof up to 3 dB off, and with an error for the
   ends it cannot hold, such as one almost straight under the top of a wall
   (`validation/rows.py`). Simulations do not use it yet.
+- Fixed: the wave solver missed a wall through a plane of its cell centres or just past
+  one, so that sound went through it, a closed room could be read as open and the
+  19-point run could grow without bound; a source or a listener exactly on a surface is
+  now read a hair off it. Results change only where a surface comes within about 1e-9 of
+  the model's size of a cell centre, the source or a listener, or a link or line of sight
+  meets a surface within 1e-10 cells of the line of one of its edges; surfaces about
+  1e-10 cells off the centres can still be placed wrong, up to a closed object read as
+  air ([Known issues](docs/validation.md#known-issues)).
 - Changed: an outdoor ground (a material with an `impedance`) scatters nothing unless
   its material gives a `scattering`, where it took 0.1 like any material: the early
   level over grass is within 0.05 dB of the exact solution 20 and 100 m away (it was
