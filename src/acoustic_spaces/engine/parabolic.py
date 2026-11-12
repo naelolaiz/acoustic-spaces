@@ -59,17 +59,18 @@ STEPS_PER_WAVELENGTH = 10
 #: it shrinks: each step also adds an error at the ground that shrinks with the height
 #: step, not the range step, so on this grid shorter steps add up more of it. In the
 #: ``windy`` preset downwind over grass, from 1 m up to 1.5 m up 200 m away, the 63 Hz
-#: band is 0.21 dB under the fast field program (``validation/ffp.py``) at this step,
-#: 0.21 dB over it at a wavelength and 0.93 dB over it at a 32nd of this step.
+#: band is 0.26 dB under the fast field program at this step, 0.14 dB over it at a
+#: wavelength and 0.59 dB over it at a 32nd of this step
+#: (``validation/steep_sound.py --only steps``).
 RANGE_STEP_WAVELENGTHS = 5.0
 RANGE_STEP_MIN_M = 1.2
 #: In wind or temperature gradients the phase shift taken at each step strays for sound
 #: that comes in steeply, at any step. The points that the reflection off the ground
 #: reaches more steeply than STEEP_DEG (degrees from the horizontal) get the wide-angle
-#: equation's field (:mod:`~acoustic_spaces.engine.wide_angle`): in the ``windy`` preset
-#: their octave bands are within 0.05 dB of the fast field program, where this equation
-#: is up to 0.46 dB off (0.56 dB at the flatter points; docs/validation.md, "Steep
-#: sound").
+#: equation's field (:mod:`~acoustic_spaces.engine.wide_angle`): in 28 cases of wind and
+#: temperature gradients their octave bands up to 500 Hz are within 0.09 dB of the fast
+#: field program, where this equation is up to 0.96 dB off (1.10 dB at the flatter
+#: points; ``validation/steep_sound.py``, docs/validation.md, "Steep sound").
 STEEP_DEG = 15.0
 #: The pole of the ground's reflection factor is left to the field continued below the
 #: ground within this many sample spacings below the real axis (where that field stays
@@ -132,14 +133,20 @@ def march(
     shorter last step. Unless ``independent``, the march goes on from there, so that the
     ranges asked for break up each other's steps; ``independent`` takes each one's last
     step off to the side, so that each range gets what a march to it alone gives, whatever
-    else is asked for (the engine's runs: :func:`acoustic_spaces.engine.refracted.solve`).
+    else is asked for (the engine's runs: :func:`acoustic_spaces.engine.refracted.solve`),
+    but for the wide-angle equation's height step where a building stands short of the
+    farthest point (:func:`acoustic_spaces.engine.wide_angle.march`) and, with
+    ``refracting`` None, for which equation the steep points take (below).
 
     In wind or temperature gradients the points the reflection off the ground reaches
     more steeply than STEEP_DEG are given by the wide-angle equation
     (:func:`acoustic_spaces.engine.wide_angle.march`, on ``threads`` threads); the others
-    get what the march to all the points gives. ``refracting`` True or False says
-    whether the air bends sound, in place of finding it from ``speed`` and ``speed_at``:
-    two runs that differ in their weather alone then take the same equations.
+    get what the march to all the points gives. Whether the air bends sound is found
+    from ``speed`` and ``speed_at`` at the grid's heights out to the farthest point, so
+    it depends on ``top`` and on the points asked for together; ``refracting`` True or
+    False says it instead. The engine's runs say True: a steep point then takes the
+    wide-angle equation whatever else its run holds, in still air too, and two runs that
+    differ in their weather alone take the same equations.
 
     ``obstacles`` (near, far, top) (m) stand across the way, ``top`` m above the ground:
     a thin screen at ``near`` where ``far`` is ``near``, otherwise a building from

@@ -2308,8 +2308,6 @@ class _Job:
     members: list  # (plan, request, slot): slot None for the open ground's pressure
     top: float
     obstacles: tuple = ()
-    #: Whether the air bends sound (None: as the march finds).
-    refracting: bool | None = None
     barrier: bool = False  # with the grid and samples of the runs behind barriers
     #: What the run has in common with those that differ from it in what stands on the
     #: way and in their listeners alone (the source's runs behind barriers in one band
@@ -2359,9 +2357,10 @@ def solve(plans: list[Planned]) -> list[dict]:
     height over one ground, where the weather and the grounds have no zones (the places
     of a walk, say): there a run from one source holds for any other alike, the way along
     the ground being the same from each. A run marches out to the farthest of its
-    listeners under an absorbing layer above the highest of their ``top``; each listener
-    is reached by a last step of its own, off to the side of the march, so that it gets
-    what a march to it alone under that layer gives, whoever shares the run.
+    listeners under an absorbing layer above the highest of their ``top``, as thick as
+    the lowest of the run's frequencies needs; each listener is reached by a last step of
+    its own, off to the side of the march, so that it gets what a march to it alone on
+    that grid gives, whoever shares the run.
 
     Behind barriers the runs in the weather share by the profile and what stands on the
     way (the cut), those in still air by the cut and the absorbing layer alone; the open
@@ -2484,7 +2483,6 @@ def solve(plans: list[Planned]) -> list[dict]:
                 band,
                 top=top,
                 obstacles=cut,
-                refracting=True,
                 barrier=barrier,
                 family=(owner, barrier, key, top, band) if alike else None,
             )
@@ -2517,7 +2515,6 @@ def solve(plans: list[Planned]) -> list[dict]:
                         needing,
                         top,
                         obstacles=cut,
-                        refracting=True,
                         barrier=barrier,
                         family=(owner, barrier, "still", c0, top, band) if cut else None,
                     )
@@ -2555,13 +2552,15 @@ def solve(plans: list[Planned]) -> list[dict]:
 
         ranges = np.array([m.range for _, m, _ in job.members])
         heights = np.array([m.height for _, m, _ in job.members])
-        extra = {}
-        if job.obstacles or job.barrier or job.refracting is not None:
-            extra = {"obstacles": job.obstacles, "steps_per_wavelength": steps(job)}
-            if solver is parabolic:
-                extra["refracting"] = job.refracting
-                if trunk is not None:
-                    extra["trunk"] = trunk
+        extra = {"obstacles": job.obstacles, "steps_per_wavelength": steps(job)}
+        if solver is parabolic:
+            # A steep listener by the wide-angle equation whatever the air on its way:
+            # found on the run's grid, that would go by the band and by the run's other
+            # listeners, which set how far and how high the grid reaches; and two runs
+            # that differ in their weather alone take the same equations.
+            extra["refracting"] = True
+            if trunk is not None:
+                extra["trunk"] = trunk
         # The wide-angle equation's frequencies (the narrow-angle one's at steep points)
         # share the threads the runs leave.
         return solver.march(

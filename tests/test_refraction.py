@@ -1449,10 +1449,10 @@ def test_flat_sound_and_still_air_keep_the_narrow_angle_equation(monkeypatch) ->
     wind the steep points get what the wide-angle equation gives them on its own, and in
     still air, where a step is exact but at the ground, they keep the narrow-angle march,
     as they do through weather zones all of still air, but not one windy zone among them.
-    Shorter steps are no closer: from 1 m up to 1.5 m up 200 m away, downwind in the
+    Shorter steps do not converge: from 1 m up to 1.5 m up 200 m away, downwind in the
     ``windy`` preset over grass, the 63 Hz band is within 0.3 dB of the wide-angle
-    equation at the full step (0.21 dB under the fast field program), and more than 0.6 dB
-    over it at a 32nd of the step on the same heights (0.93 dB over the program)."""
+    equation at the full step (0.26 dB under the fast field program), and more than 0.6 dB
+    over it at a 32nd of the step on the same heights (0.59 dB over the program)."""
     from acoustic_spaces.engine import parabolic, wide_angle
     from acoustic_spaces.engine.diffraction import band_frequencies
 
@@ -1567,7 +1567,7 @@ def test_sources_alike_share_the_parabolic_equation_s_runs(monkeypatch) -> None:
     assert sum(shared.details[s.name]["early_s"] for s in sources) < seconds
     for key in separate.responses:
         a, b = (r[key].early.energy.sum(axis=0) for r in (separate, shared))
-        np.testing.assert_allclose(10 * np.log10(b / a), 0.0, atol=0.01)
+        np.testing.assert_allclose(10 * np.log10(b / a), 0.0, rtol=0.0, atol=1e-9)
 
 
 def test_a_listener_in_wind_reads_the_same_whoever_else_stands_in_its_direction() -> None:
@@ -1588,6 +1588,72 @@ def test_a_listener_in_wind_reads_the_same_whoever_else_stands_in_its_direction(
         )
     for x in few:
         np.testing.assert_allclose(levels[1][x], levels[0][x], rtol=0.0, atol=1e-9)
+
+
+def test_steep_and_flat_listeners_in_wind_keep_their_early_bands_among_others() -> None:
+    """From a source 10 m up, a listener 25 m downwind, which the wide-angle equation
+    gives, and one 60 m away, which the narrow-angle march gives, get the same early
+    energy in every third octave with six more listeners before and between them as
+    without them (their ranges broke up the march's steps: by 0.21 dB at 63 Hz 60 m
+    away). The farthest listener is the same in both runs, and so is the absorbing
+    layer."""
+    atmosphere = {"preset": "windy", "wind": {"direction_deg": 0.0}}
+    few = (25.0, 60.0)
+    many = (15.0, 20.0, 24.9, 25.0, 25.1, 35.0, 59.9, 60.0)
+    early = []
+    for ranges in (few, many):
+        data = field(atmosphere, [(x, 0.0, 1.5) for x in ranges], bands="third_octave").to_data()
+        data["sources"][0]["position"] = [0.0, 0.0, 10.0]
+        result = simulate(Room.from_scene(Scene.model_validate(data)), threads=1)
+        early.append(
+            {x: result["s", f"l{k}"].early.energy.sum(axis=0) for k, x in enumerate(ranges)}
+        )
+    for x in few:
+        np.testing.assert_allclose(
+            10 * np.log10(early[1][x] / early[0][x]), 0.0, rtol=0.0, atol=1e-9
+        )
+
+
+def test_a_steep_listener_in_still_air_keeps_its_bands_with_a_far_listener(monkeypatch) -> None:
+    """Under air that is still up to 110 m and warmer above, a listener 30 m from a source
+    10 m up, which the reflection off the ground reaches 21 degrees up, takes the
+    wide-angle equation in every run, alone and with a listener 800 m away, whose run's
+    absorbing layer starts 120 m up, in the air that bends sound, where its own starts
+    30 m up; and its third octaves move by less than 0.001 dB (0.00003 measured). Left to
+    what the march finds on its grid, its 500 Hz octave took the narrow-angle equation
+    alone and the wide-angle one with the far listener, and moved by 0.06 dB."""
+    from acoustic_spaces.engine import parabolic, wide_angle
+
+    atmosphere = {"table": [[0.0, 20.0, 0.0], [110.0, 20.0, 0.0], [200.0, 30.0, 0.0]]}
+    steep, far = (30.0, 0.0, 1.5), (800.0, 0.0, 1.5)
+    runs: list[dict] = []
+    march_, wide_ = parabolic.march, wide_angle.march
+
+    def counted(*args, **kwargs):
+        runs.append({"top": float(args[6]), "steep": steep[0] in args[4], "wide": False})
+        return march_(*args, **kwargs)
+
+    def wide(*args, **kwargs):
+        runs[-1]["wide"] = steep[0] in args[4]
+        return wide_(*args, **kwargs)
+
+    monkeypatch.setattr(parabolic, "march", counted)
+    monkeypatch.setattr(wide_angle, "march", wide)
+    early, tops = [], []
+    for listeners in ((steep,), (steep, far)):
+        data = field(atmosphere, listeners, bands="third_octave", ir_length_s=0.5).to_data()
+        data["geometry"]["ground"]["extent"] = [[-50.0, -60.0], [850.0, 60.0]]
+        data["sources"][0]["position"] = [0.0, 0.0, 10.0]
+        # The 1 and 2 kHz bands by the rays, which keeps the run to 800 m short.
+        data["simulation"]["early"]["open_ground_frequencies"] = "rays"
+        runs.clear()
+        result = simulate(Room.from_scene(Scene.model_validate(data)), threads=1)
+        mine = [run for run in runs if run["steep"]]
+        assert mine and all(run["wide"] for run in mine)
+        tops.append({run["top"] for run in mine})
+        early.append(result["s", "l0"].early.energy.sum(axis=0))
+    assert tops == [{30.0}, {120.0}]
+    np.testing.assert_allclose(10 * np.log10(early[1] / early[0]), 0.0, rtol=0.0, atol=1e-3)
 
 
 def test_sources_share_the_air_s_profiles_and_keep_no_plan_once_finished(monkeypatch) -> None:
@@ -2263,8 +2329,9 @@ def test_the_equation_s_bands_leave_the_ground_s_scattering_and_go_on_across_the
     over grass whose scattering coefficient is 0.1, and with 0.1 they go on across the
     rays' caustic between 119.8675 and 119.870 m and where a ray comes in between 162.25
     and 162.5 m as on either side: each step within a quarter more than the larger of its
-    neighbours' (at most 1.08 times measured: 0.0431 dB at 250 Hz at the ray event against
-    0.0400 dB beside it; at the caustic all steps within 0.0005 dB)."""
+    neighbours' (at most 1.00 times measured, at the caustic, whose steps are all within
+    0.0005 dB; at the ray event 0.94 times: 0.0344 dB at 250 Hz against 0.0365 dB beside
+    it)."""
     windy = {"preset": "windy", "wind": {"direction_deg": 0.0}}
     smooth = scattering_levels(0.0, 2.0, xs, windy)[:, :6]
     rough = scattering_levels(0.1, 2.0, xs, windy)[:, :6]
@@ -2277,7 +2344,7 @@ def test_the_equation_s_bands_go_on_at_the_upwind_shadow_s_start() -> None:
     """In 1 m/s of wind upwind, the source 10 m up over grass whose scattering
     coefficient is 0.1, the rays stop arriving between 181.794 and 181.795 m: every
     millimetre from 181.788 to 181.800 m the parabolic equation's bands (63 Hz to 2 kHz)
-    move by at most 0.002 dB (0.0016 measured, 250 Hz, the field's own slope), and are
+    move by at most 0.002 dB (0.0001 measured, 500 Hz, the field's own slope), and are
     those over grass that scatters nothing bit for bit."""
     xs = np.round(np.arange(181.788, 181.8005, 0.001), 4)
     upwind = {"wind": {"speed_m_s": 1.0, "direction_deg": 180.0}}
