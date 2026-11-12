@@ -151,9 +151,11 @@ def march(
     get what the march to all the points gives. Whether the air bends sound is found
     from ``speed`` and ``speed_at`` at the grid's heights out to the farthest point, so
     it depends on ``top`` and on the points asked for together; ``refracting`` True or
-    False says it instead. The engine's runs say True: a steep point then takes the
-    wide-angle equation whatever else its run holds, in still air too, and two runs that
-    differ in their weather alone take the same equations.
+    False says it instead. The runs of :func:`acoustic_spaces.engine.refracted.solve` say
+    True: a steep point then takes the wide-angle equation whatever else its run holds, in
+    still air too, and two runs that differ in their weather alone take the same
+    equations. The solver for rows (:mod:`acoustic_spaces.engine.rows`) says False, which
+    ``edges``, ``start`` and ``layer`` need (below).
 
     ``obstacles`` (near, far, top) (m) stand across the way, ``top`` m above the ground:
     a thin screen at ``near`` where ``far`` is ``near``, otherwise a building from
