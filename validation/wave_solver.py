@@ -410,6 +410,46 @@ def impedance_duct(stencil: int = 7) -> dict:
     }
 
 
+def plate_solver(h: float, pad: int, layer: int, damping: float = LAYER_DAMPING, flow=None):
+    """A wave solver (with its sample rate) round a rigid 8 x 6 m plate in the open, the
+    source 1.5 m above it and three listeners round it, on a grid of cells ``h``: 2 +
+    ``pad`` cells past the box that holds the plate and, with two cells to spare, the
+    source and the listeners, with ``layer`` cells of matched layer at its edge;
+    ``flow`` moves its air uniformly (cells per step along x and y)."""
+    vertices = np.array([[0, 0, 0], [8, 0, 0], [8, 6, 0], [0, 6, 0]], float)
+    bvh = _native.Bvh(vertices, np.array([[0, 1, 2], [0, 2, 3]], np.int64))
+    source = np.array([2.0, 2.0, 1.5])
+    listeners = np.array([[6.0, 4.0, 1.2], [4.0, 3.0, 3.0], [7.5, 1.0, 0.5]])
+    points = np.vstack([source, listeners])
+    low = np.minimum(vertices.min(0), points.min(0) - 2 * h)
+    high = np.maximum(vertices.max(0), points.max(0) + 2 * h)
+    origin = low - h * (2.0 + pad + np.array([0.0137, 0.0219, 0.0291]))
+    shape = np.ceil((high - origin) / h).astype(int) + 2 + pad
+    moving = {}
+    if flow is not None:
+        cells = int(np.prod(shape))
+        moving = {
+            "flow_x": np.full(cells, flow[0], np.float32),
+            "flow_y": np.full(cells, flow[1], np.float32),
+        }
+    solver = _native.WaveSolver(
+        bvh,
+        np.zeros(2, np.int64),
+        np.zeros(1),
+        np.zeros((0, 3)),
+        np.zeros(0, np.int64),
+        origin,
+        h,
+        *map(int, shape),
+        source,
+        listeners,
+        layer=layer,
+        layer_damping=damping,
+        **moving,
+    )
+    return solver, C / (COURANT * h)
+
+
 def open_boundary() -> list[dict]:
     """A rigid 8 x 6 m plate in the open, 25 to 250 Hz at three listeners round it: what
     differs from a grid 16 m larger all round (nothing comes back from its edge in the 90
@@ -418,34 +458,12 @@ def open_boundary() -> list[dict]:
     these cells per wavelength, the 8-cell layer returns sound only 15 to 30 dB below the
     sound there (a one-off check)."""
     h, seconds = 0.2, 0.09
-    vertices = np.array([[0, 0, 0], [8, 0, 0], [8, 6, 0], [0, 6, 0]], float)
-    bvh = _native.Bvh(vertices, np.array([[0, 1, 2], [0, 2, 3]], np.int64))
-    source = np.array([2.0, 2.0, 1.5])
-    listeners = np.array([[6.0, 4.0, 1.2], [4.0, 3.0, 3.0], [7.5, 1.0, 0.5]])
-    points = np.vstack([source, listeners])
-    low = np.minimum(vertices.min(0), points.min(0) - 2 * h)
-    high = np.maximum(vertices.max(0), points.max(0) + 2 * h)
-    rate = C / (COURANT * h)
 
     def run(pad: int, layer: int, damping: float = LAYER_DAMPING):
-        origin = low - h * (2.0 + pad + np.array([0.0137, 0.0219, 0.0291]))
-        shape = np.ceil((high - origin) / h).astype(int) + 2 + pad
-        solver = _native.WaveSolver(
-            bvh,
-            np.zeros(2, np.int64),
-            np.zeros(1),
-            np.zeros((0, 3)),
-            np.zeros(0, np.int64),
-            origin,
-            h,
-            *map(int, shape),
-            source,
-            listeners,
-            layer=layer,
-            layer_damping=damping,
-        )
+        solver, rate = plate_solver(h, pad, layer, damping)
         return _run(solver, rate, h, seconds)[0], solver
 
+    rate = C / (COURANT * h)
     n_fft = 1 << 13
     f = np.fft.rfftfreq(n_fft, 1.0 / rate)
     gain = np.clip((f - 25) / 10, 0, 1) * np.clip((250 - f) / 50, 0, 1)

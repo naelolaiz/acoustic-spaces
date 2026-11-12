@@ -9,16 +9,17 @@ adaptive procedure does, and a material's absorption uncertainty on its page in 
 editor; the sound over the open ground in wind at 1 and 2 kHz from the parabolic
 equation, with a setting for its cost, and its bands carried through the crossovers; the
 parabolic equation behind barriers in wind and the wide-angle one, the spread's draws,
-the fit of an admittance and the rendering of a run's files faster with the same
-results, and walks in far less memory; and fixes to sound over two edges along an
-absorbing face or in sight over both, level with several tops, just above a roof and a
-barrier level with it, beside a thin screen's bends and corners, behind a barrier's
-foot, in line with a barrier's end or a wall, across a barrier end's shadow boundary in
-wind, from and to roofs in wind, with eddies at each frequency, to the late rays in wind
-and through plants, curved rays near a profile's nodes, the wave solver round open
-models, between its cells, at a response's end and round a closed building in wind, and
-its moving air flowing round solids, Doc 29's maximum levels and tables, Doppler walks
-and the spread itself.
+the fit of an admittance and the rendering of a run's files, the ray tracer and the wave
+solver's walls faster with the same results, walks in far less memory, and a solver for
+sound close over a whole row of roofs and barriers (not used by simulations yet); and
+fixes to sound over two edges along an absorbing face or in sight over both, level with
+several tops, just above a roof and a barrier level with it, beside a thin screen's
+bends and corners, behind a barrier's foot, in line with a barrier's end or a wall,
+across a barrier end's shadow boundary in wind, from and to roofs in wind, with eddies
+at each frequency, to the late rays in wind and through plants, curved rays near a
+profile's nodes, the wave solver round open models, between its cells, at a response's
+end and round a closed building in wind, and its moving air flowing round solids, Doc
+29's maximum levels and tables, Doppler walks and the spread itself.
 
 Results change from 4.2.1: outdoors in wind or a temperature gradient at 1 and 2 kHz
 over the open ground, now from the parabolic equation (that change alone moves the
@@ -66,7 +67,9 @@ scatters nothing (it took 0.1: the early level over grass moves by up to 0.5 dB 
 Hz, ground dips in still air deepen, flat open ground alone has no late part;
 `scattering: 0.1` gives the earlier results), and the wave solver's moving air flows
 round solids and passes between weather zones gradually (results near buildings and
-across zones change). Scene files of 4.2.1 load unchanged.
+across zones change), and every result in moving air changes a little at the absorbing
+layer's border (the validation's levels by up to 0.012 dB). Scene files of 4.2.1 load
+unchanged.
 
 **Error estimates**
 
@@ -190,6 +193,14 @@ across zones change). Scene files of 4.2.1 load unchanged.
   such a face can move with every diffraction mode (by 0.2 dB at 63 Hz at one of eight
   positions in two cities with `first_order`), and a whole city simulates up to about
   15 % slower.
+- Added: a solver for sound that passes close over a whole row of roofs and barriers
+  in still air (`acoustic_spaces.engine.rows`: the parabolic equation marched over the
+  row, with the terms of its rigid edges), within 0.38 dB of a wave calculation near
+  grazing incidence in free space and 0.65 dB there over roofs on a rigid ground,
+  0.74 dB up from a source at street level and 1.24 dB down to a listener there;
+  between rigid screens on a rigid ground up to 3.4 dB low, and with an error for the
+  ends it cannot hold, such as a source on a roof close to a parapet
+  (`validation/rows.py`). Simulations do not use it yet.
 - Fixed (results change): sound over two edges along a face that absorbs
   (`second_order`, over a roof or a thick wall) was nearly cancelled in the bands that
   add in pressure, by the plane wave's R = -1 at grazing incidence; the path now takes
@@ -332,12 +343,21 @@ across zones change). Scene files of 4.2.1 load unchanged.
 - Fixed (results change): with `simulation.wave.wind: moving`, the wind blew through
   the model's solids, which made the sound in a nearly closed space such as a room
   with an opening grow without bound; it now flows round them as an ideal fluid's, so
-  results near buildings change (the validation's façade echo comes 0.42 ms sooner)
+  results near buildings change (the validation's façade echo comes 0.41 ms sooner)
   and runs there take longer. Where weather zones change the wind along its way, it
   now passes from one zone's wind to the next's gradually, no cell gaining or losing
-  air, which changes results there too; open, flat ground in one weather is as before,
-  to the bit. Each run in moving air is also watched and stops with an error should
-  its sound grow, and a wave solver's run that does not stay finite is refused.
+  air, which changes results there too. Each run in moving air is also watched and
+  stops with an error should its sound grow, and a wave solver's run that does not
+  stay finite is refused.
+- Fixed (results change): in the wave solver's moving air, sound could build up in fast
+  winds where the wind crosses the border of the grid's absorbing layer, whose air is
+  still (in the runs made, the slowest wind in which it did was 53 m/s, at 45 degrees
+  to the grid over open ground on a grid 4 m tall). Each cell's own sound now goes out
+  through that border and silence comes in, which adds no energy there, and every
+  result in moving air changes a little (the validation's levels by up to 0.012 dB,
+  its façade echo by 0.011 ms); as before, the border sends back about half the wind's
+  Mach number of the sound that leaves, 32 to 40 dB below it at 10 m/s (see
+  [Validation](docs/validation.md#moving-air-in-the-wave-solver)).
 - Fixed (results change): outdoors, the wave solver took the wind into a closed building
   round a shut-in source, whose air is still. In a 15 m/s wind a 6 m hut's band
   energies were up to 1.7 dB off the still air's with the effective speed of sound and
@@ -448,6 +468,13 @@ across zones change). Scene files of 4.2.1 load unchanged.
   them: the files of the `shoebox` example in third-octave bands take 3.6 s on four
   cores where they took 8.0 s, with the same results, and the run peaks at 1.1 GiB
   where it peaked at 0.5 GiB.
+- Changed: on the CPU, the ray tracer finds the nearest of a run's directions for an
+  arrival in a table instead of going through them all and no longer clears its work
+  arrays for every ray, and the wave solver works out each state's term of a wall's
+  branches once a step instead of twice: the late part of the `concert_hall` example
+  takes 9.8 s on four cores where it took 13.6 s (the `lecture_hall`'s 7.4 s where it
+  took 9.5 s), and the wave solver's run of the `room_modes` example up to the 500 Hz
+  band 5.5 s where it took 6.8 s, with the same results.
 
 **Validation and docs**
 
@@ -473,7 +500,7 @@ across zones change). Scene files of 4.2.1 load unchanged.
   reading beyond (Free field under [Validation](docs/validation.md#wave-based-solver)).
 - Docs: the cost of the wave solver's moving air is given as four to five times the
   effective speed of sound's over open ground and more round buildings
-  (`validation/wave_wind.py` measures 3.8 to 5.0 times, and 10.5 times round its
+  (`validation/wave_wind.py` measures 3.9 to 4.9 times, and 12 times round its
   façade's building), where the help, the editor's tip and the docs said three to four
   times.
 - New validation: `validation/wave_walls.py`, what the wave solver's walls on cell faces

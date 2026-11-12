@@ -135,13 +135,32 @@ Edge diffraction:
   a wall in line with both is too low (6.4 dB at 63 Hz half a metre above a 10 m
   roof), and behind the roof with the source above its plane up to 6 dB too high (see
   [Known issues](validation.md#known-issues)).
-- [ ] Paths over more than two edges: just over three barriers or three flat roofs in
-  a row, or a roof with a slot across it, the level is off by 1 to 5 dB, and over a
-  roof and a screen level with it 2 to 6 dB too low against a wave calculation, with
-  steps of 12 to 15 dB in all as the screen's top rises through the roof's plane;
-  behind three barriers with the source on the line of their tops there is next to no
-  sound, and behind two flat roofs of one height with the source up to 0.5 m above
-  their plane the level is 9 to 23 dB below that behind one roof as wide as both.
+- [ ] Rows of edges near grazing incidence in simulations: where sound passes close
+  over the barriers and buildings of a scene, the level from the solver for whole rows
+  (`engine.rows`, within 0.38 dB of a wave calculation near grazing incidence in free
+  space; see
+  [Validation](validation.md#rows-of-roofs-and-barriers-against-a-wave-calculation))
+  in place of the paths over one edge and two. Today, just over three barriers or
+  three flat roofs in a row, or a roof with a slot across it, the level is off by 1 to
+  5 dB, and over a roof and a screen level with it 2 to 6 dB too low against a wave
+  calculation, with steps of 12 to 15 dB in all as the screen's top rises through the
+  roof's plane; behind three barriers with the source on the line of their tops there
+  is next to no sound, and behind two flat roofs of one height with the source up to
+  0.5 m above their plane the level is 9 to 23 dB below that behind one roof as wide
+  as both.
+- [ ] The solver for whole rows where it does not hold yet: rigid screens on a rigid
+  ground (up to 1.3 dB low near grazing incidence, 3.4 dB at street level behind
+  three screens); an end almost straight under a top, within some 4 cm of its
+  first obstacle, or close before it and high above its top, and ends within half a
+  wavelength of each other (refused); an end in the shadow within decimetres of a
+  top (up to 0.5 dB low); an end on a roof, behind a change of the ground or with
+  nothing between it and the other end, with a way on or a reflection off the roof
+  or the ground steeper than 35° or closer than a wavelength to its first top
+  (refused: a source on a roof near a parapet; the march is to begin at the first
+  top there too); a roof's edge or a wall close behind an end; low screens and
+  steps; a wall given as a thin building (up to 0.4 dB low); the tops' place in the
+  march's cells (up to 0.2 dB); edges that end beside the way, absorbing roofs and
+  walls, the bands above 500 Hz, and wind.
 - [ ] Paths over edges tested from the edge itself, not from a millionth of the
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9
@@ -330,8 +349,9 @@ Outdoor acoustics, in steps:
   against ray theory and the parabolic equation in the `windy` preset
   (`validation/wave_wind.py`). Runs on the CPU; the wind's shear term on the air's
   motion stays out. Its wind flows round the model's solids as an ideal fluid's (no
-  wake, no eddies), checked against the exact flow past a sphere. Without it nothing
-  changes.
+  wake, no eddies), checked against the exact flow past a sphere. The air of the grid's
+  absorbing layer is still, and its border sends back about half the wind's Mach number
+  of the sound that leaves. Without it nothing changes.
 - [x] The wave solver's room for sound along its matched layer only on the sides that
   need it: a side the model's own surfaces close gets none, which saves a hall open at
   one end 1.8 to 2.0 times the cells (see Open models under
