@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from acoustic_spaces import native_available
+from acoustic_spaces.spatial.directions import fibonacci_sphere
 
 
 def test_native_module_imports() -> None:
@@ -473,3 +474,264 @@ def test_a_worker_that_fails_raises_instead_of_ending_the_process() -> None:
         with pytest.raises(RuntimeError, match="a worker failed"):
             _native._parallel_for_raises(1_000, threads, at)
     _native._parallel_for_raises(1_000, 4, 1_000)  # past the last item: none fails
+
+
+def _hard_arrivals(directions: np.ndarray, rng, random: int) -> np.ndarray:
+    """Arrivals that test the nearest direction's table: ``random`` random ones at
+    lengths from 1e-30 to 1e30, the cube map's cell edges (u or v a multiple of 1/4 on
+    each face), the cube's edges and corners, the directions themselves and their
+    opposites, the points halfway between two directions (ties) or three, and those
+    moved by a few units in the last place (near-ties), all at several lengths."""
+    arrivals = [rng.standard_normal((random, 3)) * 10.0 ** rng.uniform(-30, 30, (random, 1))]
+    grid = np.linspace(-1.0, 1.0, 9)
+    u, v = np.meshgrid(grid, rng.uniform(-1.0, 1.0, 40))
+    edges = np.meshgrid(grid, grid)
+    for a, b in ((u, v), (v, u), edges):
+        flat = np.column_stack([np.ones(a.size), a.reshape(-1), b.reshape(-1)])
+        for axis in range(3):
+            for sign in (1.0, -1.0):
+                arrivals.append(np.roll(flat * [sign, 1.0, 1.0], axis, axis=1))
+    corners = np.array(np.meshgrid([-1.0, 0.0, 1.0], [-1.0, 0.0, 1.0], [-1.0, 0.0, 1.0]))
+    arrivals.append(corners.reshape(3, -1).T)
+    arrivals += [directions, -directions]
+    # Pairs and triples of near directions (all pairs of a small set).
+    n = len(directions)
+    near = np.argsort(-(directions @ directions.T), axis=1)[:, 1:4] if n > 1 else np.zeros((1, 0))
+    for k in range(near.shape[1]):
+        arrivals.append(directions + directions[near[:, k]])
+    if near.shape[1] >= 2:
+        arrivals.append(directions + directions[near[:, 0]] + directions[near[:, 1]])
+    if n <= 64:
+        i, j = np.triu_indices(n, 1)
+        arrivals.append(directions[i] + directions[j])
+    hard = np.vstack(arrivals[1:])
+    moved = [hard * s for s in (1.0, 3.0, 1e-12, 1e12)]
+    for steps in (1, 2, 5):
+        moved.append(np.nextafter(hard, rng.choice([-np.inf, np.inf], hard.shape)))
+        moved.append(hard + 2.0**-52 * steps * rng.standard_normal(hard.shape) * np.abs(hard))
+    return np.ascontiguousarray(np.vstack([arrivals[0], *moved]))
+
+
+def _direction_sets(rng) -> dict:
+    ring = np.column_stack(
+        [np.cos(np.arange(12) * math.pi / 6), np.sin(np.arange(12) * math.pi / 6)]
+    )
+    axes = np.vstack([np.eye(3), -np.eye(3)])
+    cube = np.array([p for p in np.ndindex(3, 3, 3) if p != (1, 1, 1)], dtype=float) - 1.0
+    random = rng.standard_normal((64, 3))
+    return {
+        "fibonacci 64": fibonacci_sphere(64),
+        "random 64": random / np.linalg.norm(random, axis=1, keepdims=True),
+        "one": fibonacci_sphere(1),
+        "two": fibonacci_sphere(2),
+        "three": fibonacci_sphere(3),
+        "ring in xy": np.column_stack([ring, np.zeros(12)]),
+        "ring in yz": np.column_stack([np.zeros(12), ring]),
+        "axes": axes,
+        "cube's 26": cube / np.linalg.norm(cube, axis=1, keepdims=True),
+        "twice the same 32": np.vstack([fibonacci_sphere(32), fibonacci_sphere(32)]),
+        "64 the same": np.tile([[0.6, 0.0, 0.8]], (64, 1)),
+        "lengths 0.5 to 2": fibonacci_sphere(64) * rng.uniform(0.5, 2.0, (64, 1)),
+        "long": fibonacci_sphere(64) * 1e10,
+        "short": fibonacci_sphere(64) * 1e-10,
+        "3000": fibonacci_sphere(3000),
+    }
+
+
+def test_the_nearest_directions_table_finds_what_a_scan_of_all_does() -> None:
+    """The tracer's nearest direction to each arrival through its cube map (the first of
+    the strictly largest dot product) is the one a scan of all directions finds, for
+    every arrival tried: random, on the map's cell edges and the cube's edges and
+    corners, between directions (ties) and next to that (near-ties), at any length."""
+    from acoustic_spaces import _native
+
+    rng = np.random.default_rng(7)
+    checked = 0
+    for name, directions in _direction_sets(rng).items():
+        directions = np.ascontiguousarray(directions)
+        arrivals = _hard_arrivals(directions, rng, 2_000_000 if name == "fibonacci 64" else 100_000)
+        if len(directions) > 1000:
+            arrivals = arrivals[:: max(1, len(arrivals) // 200_000)]
+        looked, scanned, served, kept = _native._nearest_directions(arrivals, directions)
+        assert np.array_equal(looked, scanned), name
+        assert 1 <= kept <= 4
+        checked += len(arrivals)
+        # The table serves all of these finite arrivals within its lengths (2^-200 to
+        # 2^200), except where it is not made: for one or two directions and for 64 the
+        # same, whose lists would hold most of them.
+        within = np.all(np.isfinite(arrivals), axis=1) & (np.abs(arrivals).max(axis=1) >= 2.0**-200)
+        if name in ("one", "two", "64 the same"):
+            assert not served.any(), name
+        else:
+            assert np.array_equal(served == 1, within), name
+    assert checked > 4_000_000
+
+
+def _angles(p: np.ndarray, q: np.ndarray) -> np.ndarray:
+    """The angles between the rows of p and of q, by atan2 as the core's table takes them."""
+    return np.arctan2(np.linalg.norm(np.cross(p, q), axis=-1), np.sum(p * q, axis=-1))
+
+
+def _table_slack(directions: np.ndarray) -> tuple:
+    """Per cube map cell (6 x 8 x 8, numbered as the core's DirectionTable numbers them)
+    and per direction, how far its upper bound U = |d| cos(max(0, theta - rho')) lies above
+    the bar the table lists by, the largest lower bound L = |d| cos(min(pi, theta + rho'))
+    less 1e-9 N (rho' the cell's corner radius plus 1e-9, N the longest direction's
+    length); and each cell's centre (unit), rho' and largest L."""
+    side, cells = 0.25, np.arange(384)
+    face, u0, v0 = cells // 64, -1.0 + side * ((cells // 8) % 8), -1.0 + side * (cells % 8)
+
+    def on_face(u: np.ndarray, v: np.ndarray) -> np.ndarray:
+        s = np.where(face % 2 == 0, 1.0, -1.0)
+        out = np.column_stack([s, u, v])
+        out[face // 2 == 1] = out[face // 2 == 1][:, [1, 0, 2]]
+        out[face // 2 == 2] = out[face // 2 == 2][:, [1, 2, 0]]
+        return out
+
+    centre = on_face(u0 + 0.5 * side, v0 + 0.5 * side)
+    centre /= np.linalg.norm(centre, axis=1, keepdims=True)
+    rho = np.max(
+        [_angles(centre, on_face(u0 + du, v0 + dv)) for du in (0, side) for dv in (0, side)],
+        axis=0,
+    )
+    rho = rho + 1e-9
+    length = np.linalg.norm(directions, axis=1)
+    theta = _angles(centre[:, None, :], directions[None, :, :])
+    low = length * np.cos(np.minimum(math.pi, theta + rho[:, None]))
+    high = length * np.cos(np.maximum(0.0, theta - rho[:, None]))
+    best_low = low.max(axis=1)
+    slack = high - (best_low - 1e-9 * length.max())[:, None]
+    return slack, centre, rho, best_low
+
+
+def test_the_nearest_directions_table_lists_each_direction_its_margins_take() -> None:
+    """Each cell's list of the nearest directions' table holds every direction whose upper
+    bound is at least the cell's largest lower bound less 1e-9 N, with the cell's radius
+    taken 1e-9 rad wider (the rule its comment argues from), and no direction far below
+    that. A direction placed only 0.25e-9 N above that bar, at 1.2 rad past the widened
+    radius, must be listed: a table made without either margin, or with a cell radius
+    short by more than about 2e-9 rad, leaves it out."""
+    from acoustic_spaces import _native
+
+    rng = np.random.default_rng(11)
+    random = rng.standard_normal((64, 3))
+    for directions in (
+        fibonacci_sphere(64),
+        random / np.linalg.norm(random, axis=1, keepdims=True),
+        fibonacci_sphere(64) * rng.uniform(0.5, 2.0, (64, 1)),
+    ):
+        start, index = _native._nearest_directions_lists(np.ascontiguousarray(directions))
+        assert len(start) == 385
+        slack = _table_slack(directions)[0]
+        for cell in range(384):
+            listed = np.zeros(len(directions), dtype=bool)
+            listed[index[start[cell] : start[cell + 1]]] = True
+            assert np.all(listed[slack[cell] > 1e-12]), cell
+            assert np.all(slack[cell][listed] >= -1e-12), cell
+            assert np.all(np.diff(index[start[cell] : start[cell + 1]]) > 0), cell
+
+    directions = fibonacci_sphere(64)
+    _, centre, rho, best_low = _table_slack(directions)
+    turn = 1.2
+    for cell in range(0, 384, 7):
+        c = centre[cell]
+        across = np.cross(c, [0.0, 0.0, 1.0] if abs(c[2]) < 0.9 else [1.0, 0.0, 0.0])
+        across /= np.linalg.norm(across)
+        angle = rho[cell] + turn
+        # Its upper bound is its length times cos(turn); its length is N.
+        length = best_low[cell] / (math.cos(turn) + 0.75e-9)
+        placed = np.vstack([directions, length * (math.cos(angle) * c + math.sin(angle) * across)])
+        slack = _table_slack(placed)[0][cell]
+        assert 0.2e-9 * length < slack[64] < 0.3e-9 * length
+        start, index = _native._nearest_directions_lists(placed)
+        assert len(start) == 385
+        assert 64 in index[start[cell] : start[cell + 1]], cell
+
+
+def test_the_nearest_directions_table_falls_back_to_a_scan_of_all() -> None:
+    """Arrivals that are zero, NaN, infinite, too long or too short, and directions with
+    no table (NaN, infinite or zero ones, too many), take the scan of all directions."""
+    from acoustic_spaces import _native
+
+    directions = fibonacci_sphere(64)
+    with np.errstate(over="ignore", invalid="ignore"):
+        arrivals = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [-0.0, 0.0, -0.0],
+                [np.nan, 0.5, 0.2],
+                [0.5, np.nan, 0.2],
+                [0.1, 0.2, np.nan],
+                [np.inf, 0.0, 0.0],
+                [1.0, -np.inf, 0.0],
+                [np.inf, np.inf, -np.inf],
+                [1e300, 1e-300, 3e299],
+                [5e-324, 0.0, -5e-324],
+                [1e-70, -3e-70, 2e-70],
+            ]
+        )
+    looked, scanned, served, _ = _native._nearest_directions(arrivals, directions)
+    assert np.array_equal(looked, scanned)
+    assert not served.any()
+    rng = np.random.default_rng(3)
+    arrivals = rng.standard_normal((20_000, 3))
+    for change in (np.nan, np.inf, 0.0):
+        odd = directions.copy()
+        odd[17] = change
+        looked, scanned, served, _ = _native._nearest_directions(arrivals, odd)
+        assert np.array_equal(looked, scanned) and not served.any()
+    for many in (fibonacci_sphere(4096), fibonacci_sphere(4097)):
+        looked, scanned, served, _ = _native._nearest_directions(arrivals[:2_000], many)
+        assert np.array_equal(looked, scanned)
+        assert served.all() == (len(many) <= 4096)
+    with pytest.raises(ValueError, match="at least one direction"):
+        _native._nearest_directions(arrivals[:2], np.zeros((0, 3)))
+
+
+def test_the_nearest_directions_tables_are_shared_between_threads_and_bounded() -> None:
+    """Python threads that trace at once with directions of their own (the binding lets
+    go of the GIL) each find their own nearest directions, while the tables they share
+    are made, kept and dropped, four at most."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from acoustic_spaces import _native
+
+    rng = np.random.default_rng(5)
+    sets = [fibonacci_sphere(n) for n in (16, 32, 48, 64, 80, 96, 112, 128)]
+    arrivals = rng.standard_normal((20_000, 3))
+
+    def run(k: int) -> bool:
+        same = True
+        for turn in range(12):
+            directions = sets[(k + turn) % len(sets)]
+            looked, scanned, served, kept = _native._nearest_directions(arrivals, directions)
+            same &= bool(np.array_equal(looked, scanned) and served.all() and kept <= 4)
+        return same
+
+    with ThreadPoolExecutor(8) as pool:
+        assert all(pool.map(run, range(8)))
+
+
+def test_the_nearest_directions_table_leaves_the_tracer_s_results_as_a_scan_of_all() -> None:
+    """The tracer with 64 directions (through their table) sums each arrival where it does
+    with the same directions and a zero one after them, which no arrival is nearer to and
+    which leaves them without a table (a scan of all): every result the same."""
+    from acoustic_spaces import _native
+
+    directions = fibonacci_sphere(64)
+    args = _stochastic_args(3_000) | {
+        "absorption": np.full((12, 1), 0.1),
+        "max_time": 0.2,
+        "vector_scattering": True,
+        "specular_rain": True,
+        "diffuse_rain": False,
+        "face_group": np.arange(12, dtype=np.int64) // 4,
+        "groups": 3,
+    }
+    fast = _native.trace_stochastic(**args | {"directions": directions})
+    plain = _native.trace_stochastic(**args | {"directions": np.vstack([directions, np.zeros(3)])})
+    assert fast[1].shape[1] == 64 and plain[1].shape[1] == 65
+    assert fast[1].sum() > 0.0 and not plain[1][:, 64].any()
+    np.testing.assert_array_equal(fast[1], plain[1][:, :64])
+    for a, b in zip(fast[:1] + fast[2:], plain[:1] + plain[2:], strict=True):
+        np.testing.assert_array_equal(a, b)

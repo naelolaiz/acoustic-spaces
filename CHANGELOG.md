@@ -114,6 +114,13 @@
   is read instead of holding a copy for the whole run: a walk of 201 places through the
   `church` example peaks at 336 MiB where it took 1,685 MiB, with the same results, and
   the memory estimate counts what is kept.
+- Changed: on the CPU, the ray tracer finds the nearest of a run's directions for an
+  arrival in a table instead of going through them all and no longer clears its work
+  arrays for every ray, and the wave solver works out each state's term of a wall's
+  branches once a step instead of twice: the late part of the `concert_hall` example
+  takes 9.8 s on four cores where it took 13.6 s (the `lecture_hall`'s 7.4 s where it
+  took 9.5 s), and the wave solver's run of the `room_modes` example up to the 500 Hz
+  band 5.5 s where it took 6.8 s, with the same results.
 - Changed: the draws of the materials' spread share what does not depend on the draw
   (the paths' counts on each surface, the early paths' delay phases) and work out a
   draw's octave echogram once for the parameters and the levels: with the faster fit

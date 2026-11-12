@@ -633,6 +633,19 @@ public:
         StepBarrier barrier(t_count);
         float *u0 = u0_.data(), *u1 = u1_.data();
         float *w0 = w0_.data(), *w1 = w1_.data();
+        // Each branch state's coefficients (its branch's), and room for its term of the
+        // step, now * wb - before * wa: worked out in the sum of the flow and used again
+        // in the update of its velocity, wa not changing in between. Each thread writes
+        // the terms of its own cells' states only.
+        const std::size_t states = state_branch_.size();
+        std::vector<float> state_now(states), state_before(states), state_gain(states);
+        std::vector<float> state_term(states);
+        for (std::size_t j = 0; j < states; ++j) {
+            const auto br = static_cast<std::size_t>(state_branch_[j]);
+            state_now[j] = branch_now_[br];
+            state_before[j] = branch_before_[br];
+            state_gain[j] = branch_gain_[br];
+        }
         std::vector<double> squares(t_count, 0.0);  // each thread's sum, in moving air
         auto work = [&](std::size_t t) {
             FlushDenormals flush;
@@ -651,10 +664,10 @@ public:
             const float *link_weight = link_weight_.data();
             const float *src = source_.data();
             const std::size_t *start = state_start_.data();
-            const std::int32_t *branch = state_branch_.data();
             const float *state_weight = state_weight_.data();
-            const float *now = branch_now_.data(), *before = branch_before_.data();
-            const float *gain = branch_gain_.data();
+            const float *now = state_now.data(), *before = state_before.data();
+            const float *gain = state_gain.data();
+            float *term = state_term.data();
             const std::ptrdiff_t *offset = offset_.data();
             const std::size_t sy = sy_, sz = sz_;
             const bool wide = stencil_ == 19;
@@ -697,16 +710,16 @@ public:
                     }
                     float flow = 0.0f;
                     for (std::size_t j = start[k]; j < start[k + 1]; ++j) {
-                        const std::size_t br = static_cast<std::size_t>(branch[j]);
-                        flow += state_weight[j] * (now[br] * wb[j] - before[br] * wa[j]);
+                        const float own = now[j] * wb[j] - before[j] * wa[j];
+                        term[j] = own;
+                        flow += state_weight[j] * own;
                     }
                     const float previous = a[i];
                     const float next =
                         (ca[k] * b[i] + sum - cb[k] * previous - flow + src[k] * s) * ci[k];
                     a[i] = next;
                     for (std::size_t j = start[k]; j < start[k + 1]; ++j) {
-                        const std::size_t br = static_cast<std::size_t>(branch[j]);
-                        wa[j] += (next - previous) * gain[br] + (now[br] * wb[j] - before[br] * wa[j]);
+                        wa[j] += (next - previous) * gain[j] + term[j];
                     }
                 }
                 for (std::size_t c = lb; c < le; ++c) update_layer(c, a, b);
