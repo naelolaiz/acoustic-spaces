@@ -88,6 +88,9 @@ FADE_GROWTH = 10.0
 LAYER_WAVELENGTHS = 50.0
 LAYER_MIN_M = 20.0
 LAYER_STRENGTH = 1.0
+#: A march that begins from a given field (``start``) takes it up to the absorbing layer;
+#: it fades out over this share of the layer's thickness.
+START_FADE = 0.1
 #: A step takes the frequencies (the rows of the field) this many at a time, so that
 #: what it works on stays in the processor's cache from one pass to the next. Each row
 #: comes out with the bytes it has when all the rows are taken at once (numpy 1.24, 1.26,
@@ -115,6 +118,9 @@ def march(
     refracting: bool | None = None,
     steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
     trunk: Trunk | None = None,
+    edges: list | None = None,
+    start: tuple | None = None,
+    layer: float | None = None,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
@@ -159,9 +165,44 @@ def march(
     points alone, keeps the narrow-angle march over the open ground from one of them to
     the next; each gets what it gets without it. A run with a ``screen`` or with
     ``speed_at`` marches without it, and one with steep points clears it before the
-    wide-angle equation runs."""
+    wide-angle equation runs.
+
+    ``edges``, a list, takes what the march finds at each obstacle it meets beyond the
+    source on its way to the farthest point, in order: (range, what, top, pressure), the
+    pressure (F,) at the obstacle's top just before the obstacle changes the field,
+    ``what`` being "screen" (the field that reaches a thin screen's top), "roof" (at a
+    building's near corner: the field without the building) or "behind" (at its far
+    corner: the field on its roof; of a roof the source stands over, the far corner
+    alone). It needs ``refracting`` False, with which the narrow-angle march gives
+    every point.
+
+    ``start``, (range, field), begins the march ``range`` m from the source with the
+    pressure ``field(z)`` gives on the heights z (m) there, (F, len(z)), in place of the
+    starting field at the source, which holds for sound within some 35 degrees of the
+    horizontal: the field is taken up to the absorbing layer and fades out over the
+    layer's first ``START_FADE``. What stands before ``range`` does nothing; an obstacle
+    at it is met at once, and a building over it keeps its roof under the field. The
+    start lies beyond the source and no point before it (a ValueError otherwise). It
+    needs ``refracting`` False too.
+
+    ``layer`` (m) makes the absorbing layer thicker than its ``LAYER_WAVELENGTHS``
+    wavelengths. Of a wave that goes up through the layer at a slope s and comes back
+    down from the top of the grid, the layer leaves exp(-2 ``LAYER_STRENGTH`` thickness
+    / (3 s)) at most (less where the grid, a power of two of height steps, goes on
+    above the layer, at the layer's full strength): a start with waves that rise
+    steeply needs it thicker. With ``refracting`` False alone."""
+    if edges is not None and refracting is not False:
+        raise ValueError("the field at the obstacles' edges needs refracting=False")
+    if start is not None and refracting is not False:
+        raise ValueError("a march from a given field needs refracting=False")
+    if layer is not None and refracting is not False:
+        raise ValueError("a march with a thicker absorbing layer needs refracting=False")
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
+    if start is not None and not start[0] > 0.0:
+        raise ValueError("a march from a given field begins beyond the source")
+    if start is not None and np.any(ranges < start[0] - 1e-9):
+        raise ValueError("a march from a given field gives no point before its start")
     common = (frequencies, speed, impedance, zs)
     obstacles = _obstacles(obstacles)
     steep = zs + heights > math.tan(math.radians(STEEP_DEG)) * ranges
@@ -181,6 +222,9 @@ def march(
             obstacles,
             steps_per_wavelength,
             trunk,
+            edges,
+            start,
+            layer,
         )
     from acoustic_spaces.engine import wide_angle  # which imports this module
 
@@ -319,15 +363,19 @@ def _march(
     obstacles: tuple = (),
     steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
     trunk: Trunk | None = None,
+    edges: list | None = None,
+    start: tuple | None = None,
+    layer: float | None = None,
 ) -> np.ndarray:
     """:func:`march` by the narrow-angle equation alone, past ``obstacles`` (as
     :func:`_obstacles` gives them)."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
-    if trunk is None or screen is not None or speed_at is not None:
-        alone = _Steps(f, speed, impedance, zs, top, screen, speed_at, steps_per_wavelength)
-        return alone.run(ranges, heights, independent, obstacles, None)
+    apart = start is not None or layer is not None
+    if trunk is None or screen is not None or speed_at is not None or apart:
+        alone = _Steps(f, speed, impedance, zs, top, screen, speed_at, steps_per_wavelength, layer)
+        return alone.run(ranges, heights, independent, obstacles, None, edges, start)
     with trunk._lock:
         steps = trunk._steps
         if steps is None or not steps.fits(f, speed, zs, top, steps_per_wavelength):
@@ -335,7 +383,7 @@ def _march(
             trunk._steps = steps
             trunk._restart()
         steps.impedance = impedance
-        return steps.run(ranges, heights, independent, obstacles, trunk)
+        return steps.run(ranges, heights, independent, obstacles, trunk, edges)
 
 
 class _Steps:
@@ -343,7 +391,7 @@ class _Steps:
     a run (the other arguments as :func:`march`'s), and its steps."""
 
     def __init__(
-        self, f, speed, impedance, zs, top, screen, speed_at, steps_per_wavelength
+        self, f, speed, impedance, zs, top, screen, speed_at, steps_per_wavelength, layer=None
     ) -> None:
         self.f = f
         self.zs = zs
@@ -355,7 +403,7 @@ class _Steps:
         self.c0 = c0 = float(np.asarray(speed(np.array([0.0])))[0])
         self.ka = ka = 2.0 * math.pi * f / c0  # (F,)
         shortest = c0 / f.max()
-        n, dz, thickness = _grid(f, c0, top, steps_per_wavelength)
+        n, dz, thickness = _grid(f, c0, top, steps_per_wavelength, layer)
         self.n, self.dz = n, dz
         self.z = z = np.arange(n) * dz
         #: (n,) the speed of sound at the source, on the heights.
@@ -624,11 +672,21 @@ class _Steps:
         independent: bool,
         obstacles: tuple,
         trunk: Trunk | None,
+        edges: list | None = None,
+        start: tuple | None = None,
     ) -> np.ndarray:
         """(F, n) the pressure at the points ``ranges`` and ``heights`` past
         ``obstacles``, as :func:`_march` gives it; with ``trunk``, from where it has the
-        field over the open ground."""
-        f, n, dz, z, ka, step = self.f, self.n, self.dz, self.z, self.ka, self.step
+        field over the open ground. ``edges`` takes the field at the obstacles' tops,
+        and ``start`` is where the march begins and its field there (see
+        :func:`march`)."""
+        f, n, dz, z, step = self.f, self.n, self.dz, self.z, self.step
+        #: Where the march begins (m from the source), and where its obstacles do.
+        begin, first = 0.0, 1e-9
+        if start is not None:
+            begin = float(start[0])
+            first = begin - 1e-9
+            obstacles = tuple(o for o in obstacles if o[1] >= first)
         order = np.argsort(ranges, kind="stable")
         out = np.zeros((len(f), len(ranges)), dtype=complex)
 
@@ -658,7 +716,10 @@ class _Steps:
 
         psi = None
         r = 0.0
-        if trunk is not None and len(order):
+        if start is not None:
+            self.here = None
+            psi, r = self.given(start[1], begin), begin
+        elif trunk is not None and len(order):
             # The full steps the march begins with, before a shorter one to its nearest
             # obstacle or point: the trunk's, where it has not gone further, over the
             # grounds this run has there.
@@ -692,7 +753,11 @@ class _Steps:
             goal = ranges[index]
             while True:
                 if events and events[0][0] <= r + 1e-9:
-                    psi = self.meet(psi, events.pop(0), roofs_over)
+                    event = events.pop(0)
+                    if edges is not None and event[0] >= first:
+                        at_top = _at_height(self.pressure(psi, r), z, event[2])
+                        edges.append((*event, np.array(at_top)))
+                    psi = self.meet(psi, event, roofs_over)
                     last = None
                     continue
                 if goal - r <= 1e-9:
@@ -715,13 +780,29 @@ class _Steps:
                     if side is None:
                         side = np.empty_like(psi)
                     reached, at = self.advance(psi, r, goal - r, side), goal
-                p = reached * (np.exp(1j * ka * at) / math.sqrt(max(at, 1e-9)))[:, None]
+                p = self.pressure(reached, at)
                 last = goal
-            h = heights[index]
-            out[:, index] = [
-                np.interp(h, z, row.real) + 1j * np.interp(h, z, row.imag) for row in p
-            ]
+            out[:, index] = _at_height(p, z, heights[index])
         return out
+
+    def given(self, field, at: float) -> np.ndarray:
+        """(F, n) the field of a march that begins at range ``at`` with the pressure
+        ``field(z)`` gives on the heights there: up to the absorbing layer, and fading
+        out over its first ``START_FADE``."""
+        p = np.asarray(field(self.z), dtype=complex)
+        fade = np.sin(0.5 * np.pi * np.clip(1.0 - self.depth / START_FADE, 0.0, 1.0)) ** 2
+        return p * fade[None, :] * (math.sqrt(at) * np.exp(-1j * self.ka * at))[:, None]
+
+    def pressure(self, psi: np.ndarray, at: float) -> np.ndarray:
+        """(F, n) the pressure on the heights at range ``at``, of the field ``psi``
+        there."""
+        return psi * (np.exp(1j * self.ka * at) / math.sqrt(max(at, 1e-9)))[:, None]
+
+
+def _at_height(p: np.ndarray, z: np.ndarray, h: float) -> list:
+    """The pressure ``p`` (F, n) on the heights ``z``, at the height ``h``: a value for
+    each frequency."""
+    return [np.interp(h, z, row.real) + 1j * np.interp(h, z, row.imag) for row in p]
 
 
 def _exp_rows(a: np.ndarray) -> np.ndarray:
@@ -784,13 +865,26 @@ def _starter(x: np.ndarray) -> np.ndarray:
 
 
 def _grid(
-    f: np.ndarray, c0: float, top: float, steps_per_wavelength: float = STEPS_PER_WAVELENGTH
+    f: np.ndarray,
+    c0: float,
+    top: float,
+    steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
+    layer: float | None = None,
 ) -> tuple[int, float, float]:
-    """The heights' count and spacing, and the absorbing layer's thickness, for the
-    frequencies ``f`` under an absorbing layer from ``top``."""
+    """The heights' count and spacing, and the absorbing layer's thickness (``layer``,
+    where that is more than the usual), for the frequencies ``f`` under an absorbing
+    layer from ``top``."""
     dz = c0 / f.max() / steps_per_wavelength
-    thickness = max(LAYER_WAVELENGTHS * c0 / f.min(), LAYER_MIN_M)
+    thickness = layer_thickness(f, c0)
+    if layer is not None:
+        thickness = max(thickness, float(layer))
     return int(2 ** math.ceil(math.log2((top + thickness) / dz))), dz, thickness
+
+
+def layer_thickness(frequencies, c0: float) -> float:
+    """The absorbing layer's usual thickness (m) for ``frequencies`` in air of speed
+    ``c0``."""
+    return max(LAYER_WAVELENGTHS * c0 / np.min(frequencies), LAYER_MIN_M)
 
 
 def footprint(
@@ -871,4 +965,11 @@ class _Ground:
         self.fade_below = self.fade[self.image]
 
 
-__all__ = ["Trunk", "footprint", "march", "open_share", "roof_share"]
+__all__ = [
+    "Trunk",
+    "footprint",
+    "layer_thickness",
+    "march",
+    "open_share",
+    "roof_share",
+]

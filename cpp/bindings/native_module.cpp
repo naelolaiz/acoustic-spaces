@@ -137,6 +137,54 @@ void parallel_for_raises(std::size_t n, std::size_t threads, std::size_t at) {
     });
 }
 
+// For the tests: for each of `arrivals`, the index of the nearest of `directions` as the
+// tracer finds it (through the process's kept DirectionTable where that serves the
+// arrival) and as a scan of all of them finds it, and whether the table served it
+// (1, else 0); then how many tables are kept. There must be at least one direction.
+nb::tuple nearest_directions(Points arrivals, Points directions) {
+    if (directions.shape(0) == 0) {
+        throw std::invalid_argument("_nearest_directions: expected at least one direction");
+    }
+    const std::vector<as::Vec3> dirs = points(directions);
+    const std::vector<as::Vec3> from = points(arrivals);
+    const std::size_t n = from.size();
+    std::vector<std::int64_t> looked(n), scanned(n), served(n);
+    std::size_t kept = 0;
+    {
+        nb::gil_scoped_release release;
+        const auto table = as::detail::direction_tables().get(dirs);
+        for (std::size_t i = 0; i < n; ++i) {
+            const std::uint32_t *first = nullptr, *last = nullptr;
+            served[i] = table != nullptr && table->candidates(from[i], first, last) ? 1 : 0;
+            looked[i] = static_cast<std::int64_t>(
+                as::detail::nearest_direction(dirs, table.get(), from[i]));
+            scanned[i] = static_cast<std::int64_t>(as::detail::nearest_of_all(dirs, from[i]));
+        }
+        kept = as::detail::direction_tables().size();
+    }
+    return nb::make_tuple(to_numpy(std::move(looked), {n}), to_numpy(std::move(scanned), {n}),
+                          to_numpy(std::move(served), {n}), kept);
+}
+
+// For the tests: the lists of a DirectionTable made for `directions`, cell c's at
+// index[start[c], start[c + 1]); both empty if the table is not made.
+nb::tuple nearest_directions_lists(Points directions) {
+    const as::detail::DirectionTable table(points(directions));
+    std::vector<std::int64_t> start, index;
+    if (table.usable()) {
+        start.push_back(0);
+        for (std::size_t cell = 0; cell < as::detail::DirectionTable::kCells; ++cell) {
+            const std::uint32_t *first = nullptr, *last = nullptr;
+            table.list(cell, first, last);
+            index.insert(index.end(), first, last);
+            start.push_back(static_cast<std::int64_t>(index.size()));
+        }
+    }
+    const std::size_t cells = start.size(), listed = index.size();
+    return nb::make_tuple(to_numpy(std::move(start), {cells}),
+                          to_numpy(std::move(index), {listed}));
+}
+
 nb::ndarray<nb::numpy, double> scatter_kernels(std::size_t length, Indices positions,
                                                Indices index, InArray amplitudes,
                                                Kernels kernels) {
@@ -978,6 +1026,17 @@ NB_MODULE(_native, m) {
           nb::arg("at"),
           "For the tests: runs the worker pool over n items, and the worker that reaches "
           "item `at` throws, which must come back as an exception, not end the process.");
+
+    m.def("_nearest_directions", &nearest_directions, nb::arg("arrivals"),
+          nb::arg("directions"),
+          "For the tests: per arrival (n x 3), the index of the nearest direction (m x 3) as "
+          "the tracer finds it and as a scan of all finds it, and whether the kept table "
+          "served it; then how many tables are kept. Raises ValueError for no directions.");
+
+    m.def("_nearest_directions_lists", &nearest_directions_lists, nb::arg("directions"),
+          "For the tests: the cell lists (start, index) of the nearest directions' table "
+          "made for `directions` (m x 3), cell c's at index[start[c]:start[c + 1]]; both "
+          "empty if no table is made for them.");
 
     m.def("real_fft", &real_fft, nb::arg("x"),
           "FFT of a real signal of power-of-two length: n / 2 + 1 bins (as numpy.fft.rfft).");
