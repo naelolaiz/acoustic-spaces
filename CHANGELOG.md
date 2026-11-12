@@ -2,15 +2,16 @@
 
 ## Unreleased
 
-- Added: a solver for sound that passes close over a whole row of roofs and barriers
-  in still air (`acoustic_spaces.engine.rows`: the parabolic equation marched over the
-  row, with the terms of its rigid edges), within 0.38 dB of a wave calculation near
-  grazing incidence in free space and 0.65 dB there over roofs on a rigid ground,
-  0.74 dB up from a source at street level and 1.24 dB down to a listener there;
-  between rigid screens on a rigid ground up to 3.4 dB low, a barrier lower than a
-  quarter of a wavelength on a rigid roof up to 3 dB off, and with an error for the
-  ends it cannot hold, such as one almost straight under the top of a wall
-  (`validation/rows.py`). Simulations do not use it yet.
+- Added: a solver for sound that passes close over a whole row of roofs and barriers in
+  still air (`acoustic_spaces.engine.rows`: the parabolic equation marched over the row,
+  with the terms of its rigid edges and, for a barrier alone on a rigid ground or roof,
+  the field of the strip it makes with its image, `acoustic_spaces.engine.strip`),
+  within 0.38 dB of a wave calculation near grazing incidence in free space and 0.65 dB
+  there over roofs on a rigid ground, 0.74 dB up from a source at street level and 1.24
+  dB down to a listener there; between rigid screens on a rigid ground up to 3.4 dB low,
+  a parapet lower than a quarter of a wavelength on a roof's edge up to 1.3 dB off, and
+  with an error for the ends it cannot hold, such as one almost straight under the top
+  of a wall (`validation/rows.py`). Simulations do not use it yet.
 - Fixed: the wave solver missed a wall through a plane of its cell centres or just past
   one, so that sound went through it, a closed room could be read as open and the
   19-point run could grow without bound; a source or a listener exactly on a surface is

@@ -13,7 +13,10 @@ from acoustic_spaces.materials.ground import spherical_reflection, surface_imped
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "validation"))
 
+import barrier_strip  # noqa: E402
 import edge_diffraction  # noqa: E402
+
+from acoustic_spaces.engine import strip  # noqa: E402
 
 C = edge_diffraction.C
 #: (4, 8) the frequencies of the 63 to 500 Hz octave bands the validation's references
@@ -382,34 +385,271 @@ def test_one_rigid_screen_far_below_its_top_against_the_exact_edge_integral(
     assert np.all(levels(found, source, listener, "marched") < exact - 2.9)
 
 
+#: A thin rigid barrier on a rigid plane, by its height (m) and the source's and the
+#: listener's place (x, z) from its foot: the exact level (dB re free field) in each
+#: of the four bands that begins at k H = 32 or below, None in the others. From
+#: ``validation/barrier_strip.py``: the strip that the barrier makes with its image in
+#: the plane, solved at every one of a band's frequencies (tests/test_strip.py holds
+#: it to closed forms, and :func:`test_the_exact_levels_are_the_reference_s` to these
+#: numbers).
+EXACT = {
+    (6.0, (-10.0, 1.5), (15.0, 1.5)): [-8.082, -25.033, -12.759, None],
+    (6.0, (-2.0, 1.5), (3.0, 1.5)): [-26.039, -14.915, -21.021, None],
+    (6.0, (-1.0, 1.5), (15.0, 1.5)): [-15.261, -16.698, -14.956, None],
+    (6.0, (-0.5, 0.5), (0.5, 0.5)): [-26.372, -37.967, -33.526, None],
+    (20.0, (-30.0, 0.5), (1.0, 4.0)): [-14.835, None, None, None],
+    (3.0, (-5.0, 0.0), (20.0, 1.5)): [1.059, -2.437, -9.219, -11.565],
+    (10.0, (-20.0, 4.0), (40.0, 12.0)): [-8.385, -9.867, None, None],
+    (2.0, (-10.0, 1.5), (15.0, 1.5)): [1.823, -2.162, -13.139, -7.383],
+    (2.0, (-10.0, 0.5), (15.0, 3.0)): [1.526, -3.055, -5.251, -7.154],
+    (1.0, (-10.0, 2.0), (15.0, 0.2)): [5.770, 2.043, -1.175, 1.309],
+    (3.0, (-20.0, 1.0), (10.0, 1.0)): [1.233, -3.155, -13.525, -18.118],
+    (1.0, (-0.5, 0.5), (15.0, 1.5)): [5.376, -3.154, -5.097, -7.841],
+    (1.0, (-0.3, 0.0), (15.0, 0.5)): [6.608, 1.897, -0.171, -3.410],
+    (1.0, (-0.2, 0.9), (20.0, 2.0)): [3.035, 0.530, 0.477, -4.404],
+    (3.0, (-0.3, 1.0), (15.0, 1.0)): [-7.970, -6.968, -12.306, -18.588],
+    (3.0, (-0.1, 1.0), (15.0, 1.0)): [-8.145, -7.018, -12.461, -18.639],
+    (1.2, (-1.0, 1.5), (10.0, 1.5)): [0.805, 1.611, -2.786, -1.859],
+    (0.5, (-0.5, 1.5), (15.0, 0.0)): [5.568, 5.462, 6.632, 5.971],
+    (0.1, (-0.5, 0.01), (5.0, 1.51)): [6.043, 6.140, 6.403, 6.276],
+    (0.1, (-0.5, 1.51), (5.0, 1.51)): [4.418, 0.964, -1.946, 2.966],
+}
+
+
+def behind_a_barrier(top: float, source, listener) -> tuple[np.ndarray, np.ndarray]:
+    """(4,) the exact band levels behind a rigid barrier ``top`` m high on a rigid
+    plane (:data:`EXACT`), nan in the bands without one, and (4,) whether a band has
+    one."""
+    exact = np.array(EXACT[top, source, listener], dtype=float)
+    return exact, ~np.isnan(exact)
+
+
 @pytest.mark.parametrize(
-    "top, source, listener",
+    "top, source, listener, band",
     [
-        (6.0, (-10.0, 1.5), (15.0, 1.5)),
-        (6.0, (-2.0, 1.5), (3.0, 1.5)),
-        (6.0, (-1.0, 1.5), (15.0, 1.5)),
-        (6.0, (-0.5, 0.5), (0.5, 0.5)),
-        (20.0, (-30.0, 0.5), (1.0, 4.0)),
-        (3.0, (-5.0, 0.0), (20.0, 1.5)),
-        (10.0, (-20.0, 4.0), (40.0, 12.0)),
+        (1.0, (-10.0, 2.0), (15.0, 0.2), 0),
+        (0.1, (-0.5, 1.51), (5.0, 1.51), 1),
     ],
 )
-def test_one_rigid_screen_on_a_rigid_ground_against_the_exact_edge_integrals(
-    top, source, listener
+def test_the_exact_levels_are_the_reference_s(top, source, listener, band) -> None:
+    """The levels of :data:`EXACT` are what ``validation/barrier_strip.py`` computes."""
+    k = 2.0 * math.pi * F[band : band + 1] / C
+    found = barrier_strip.levels(top, source, listener, k)
+    np.testing.assert_allclose(found, EXACT[top, source, listener][band], atol=2e-3)
+
+
+def on_a_rigid_ground(top: float, source, listener) -> list[rows.Row]:
+    """The four bands' sound over one rigid screen ``top`` m high on a rigid ground."""
+    reach, row = listener[0] - source[0], [(-source[0], -source[0], top)]
+    return [rows.over_row(f, C, None, source[1], reach, listener[1], row) for f in F]
+
+
+@pytest.mark.parametrize(
+    "top, source, listener, within",
+    [
+        (6.0, (-10.0, 1.5), (15.0, 1.5), 0.15),
+        (6.0, (-2.0, 1.5), (3.0, 1.5), 0.18),
+        (6.0, (-1.0, 1.5), (15.0, 1.5), 0.12),
+        (6.0, (-0.5, 0.5), (0.5, 0.5), 0.25),
+        (20.0, (-30.0, 0.5), (1.0, 4.0), 0.08),
+        (3.0, (-5.0, 0.0), (20.0, 1.5), 0.1),
+        (10.0, (-20.0, 4.0), (40.0, 12.0), 0.04),
+    ],
+)
+def test_one_rigid_screen_on_a_rigid_ground_against_the_exact_levels(
+    top, source, listener, within
 ) -> None:
     """A rigid screen 3 to 20 m high on a rigid ground, the source and the listener
     from tens of metres off to half a metre from its foot (85 degrees below its top;
-    their images in the ground steeper still): within 0.25 dB in every band of the
-    four paths over its top, each by the exact edge integral (:func:`over_one_screen`),
-    where the march alone is 1.7 to 28 dB low."""
+    their images in the ground steeper still): within 0.04 to 0.18 dB of the exact
+    level in the bands that begin at k H = 32 or below (:data:`EXACT`), and within
+    0.25 dB of the four paths over its top in the others, each by the exact edge
+    integral (:func:`over_one_screen`), where the march alone is 1.7 to 28 dB low.
+    Up to k H = 32 the solver takes the strip that the screen makes with its image
+    in the ground; with the edges' terms in its place five of the places are beyond
+    their bound (up to 0.30 dB off). Not with both ends half a metre from a screen
+    6 m high, where the strip's density would take too many terms and the edges'
+    terms stand: 0.21 dB off."""
+    exact, known = behind_a_barrier(top, source, listener)
     paths = over_one_screen(source, listener, top)
-    reach = listener[0] - source[0]
-    found = [
-        rows.over_row(f, C, None, source[1], reach, listener[1], [(-source[0], -source[0], top)])
-        for f in F
-    ]
-    np.testing.assert_allclose(levels(found, source, listener), paths, atol=0.25)
+    found = on_a_rigid_ground(top, source, listener)
+    got = levels(found, source, listener)
+    np.testing.assert_allclose(got[known], exact[known], atol=within)
+    np.testing.assert_allclose(got[~known], paths[~known], atol=0.25)
     assert np.all(levels(found, source, listener, "marched") < paths - 1.5)
+
+
+@pytest.mark.parametrize(
+    "top, source, listener, within, edges_off",
+    [
+        (2.0, (-10.0, 1.5), (15.0, 1.5), 0.05, (0.4, 0.55)),
+        (1.0, (-10.0, 2.0), (15.0, 0.2), 0.05, (1.0, 1.3)),
+        (1.0, (-0.5, 0.5), (15.0, 1.5), 0.15, (2.0, 2.4)),
+        (0.1, (-0.5, 1.51), (5.0, 1.51), 0.25, (2.8, 3.2)),
+    ],
+)
+def test_a_barrier_lower_than_a_wavelength_on_a_rigid_ground(
+    top, source, listener, within, edges_off, monkeypatch
+) -> None:
+    """A rigid barrier 10 cm to 2 m high on a rigid ground, lower than a wavelength in
+    the lower bands: within 0.05 dB of the exact level in every band (:data:`EXACT`)
+    with the ends 10 and 15 m from it, 0.15 dB with the source half a metre before
+    one 1 m high, and 0.25 dB for one 10 cm high. With the edges' terms in the
+    strip's place, which take the barrier for a half-plane, the solver is 0.46 to
+    3.0 dB off."""
+    exact, known = behind_a_barrier(top, source, listener)
+    assert np.all(known)
+    got = levels(on_a_rigid_ground(top, source, listener), source, listener)
+    np.testing.assert_allclose(got, exact, atol=within)
+    monkeypatch.setattr(strip, "MOST_KH", 0.0)
+    half_plane = levels(on_a_rigid_ground(top, source, listener), source, listener)
+    assert edges_off[0] < np.max(np.abs(half_plane - exact)) < edges_off[1]
+
+
+def test_the_march_over_a_barrier_on_a_rigid_plane_is_kirchhoff_s_screen() -> None:
+    """What the solver adds for a barrier on a rigid plane, the rigid strip's sound less
+    that of Kirchhoff's screen, stands on this: the mean of the two marches is the
+    sound without the barrier (the direct sound and the plane's reflection) plus what
+    Kirchhoff's screen sheds (``strip._screen``, summed over the wavenumbers along the
+    barrier). For a barrier 2 m high, 10 m from the source and 15 m from the listener,
+    both 1.5 m up, at 50 to 400 Hz: to 0.01 of the free field, where the screen
+    changes the sound by more than that field."""
+    top, source, listener = 2.0, (-10.0, 1.5), (15.0, 1.5)
+    f = np.array([50.0, 90.0, 180.0, 400.0])
+    row = [(-40.0, 40.0, 0.0), (0.0, 0.0, top)]
+    marched = over(row, source, listener, bands=[f])[0].marched
+    direct, image = 25.0, math.hypot(25.0, 3.0)
+    for index, k in enumerate(2.0 * math.pi * f / C):
+        kappa, weights = strip._ray(float(k), direct)
+        screen = np.sum(weights * strip._screen(kappa, top, (15.0, 1.5), (10.0, 1.5)))
+        without = np.exp(1j * k * direct) / direct + np.exp(1j * k * image) / image
+        assert abs(marched[index] - without - screen) * direct < 0.01
+        assert abs(marched[index] - without) * direct > 1.0
+
+
+@pytest.mark.parametrize(
+    "top, source, listener, on_ground, far_below",
+    [
+        (6.0, (-2.0, 1.5), (3.0, 1.5), True, (0.25, 0.4)),
+        (10.0, (-20.0, 4.0), (40.0, 12.0), True, (0.07, 0.12)),
+        (3.0, (-0.3, 1.0), (15.0, 1.0), False, (0.8, 1.1)),
+    ],
+)
+def test_at_k_h_32_the_strip_hands_over_to_the_edges_terms(
+    top, source, listener, on_ground, far_below, monkeypatch
+) -> None:
+    """Up to k H = ``strip.MOST_KH`` the solver takes the strip that a barrier makes
+    with its image in the rigid plane it stands on, above it the edges' terms: just
+    below the handover the two are within 0.15 dB of each other (a screen 6 and 10 m
+    high on a rigid ground, and a barrier 3 m high on a roof 30 cm past the source),
+    whereas at 44.5 Hz, the 63 Hz band's lowest frequency, they are 0.32 and 0.09 dB
+    apart for the screens on the ground (k H = 4.9 and 8.2) and 0.92 dB for the
+    barrier on the roof (k H = 2.4)."""
+    f = np.array([44.5, 0.999 * strip.MOST_KH / top * C / (2.0 * math.pi)])
+
+    def pressure() -> np.ndarray:
+        if on_ground:
+            row = [(-source[0], -source[0], top)]
+            reach = listener[0] - source[0]
+            return rows.over_row(f, C, None, source[1], reach, listener[1], row).pressure
+        return over([(-40.0, 40.0, 0.0), (0.0, 0.0, top)], source, listener, bands=[f])[0].pressure
+
+    whole = pressure()
+    monkeypatch.setattr(strip, "MOST_KH", 0.0)
+    apart = 20.0 * np.log10(np.abs(whole) / np.abs(pressure()))
+    assert abs(apart[1]) < 0.15
+    assert far_below[0] < abs(apart[0]) < far_below[1]
+
+
+@pytest.mark.parametrize(
+    "row, zs, zr",
+    [
+        ([(-20.0, 5.0, 3.0), (5.0, 5.0, 4.0)], 4.5, 1.5),
+        ([(8.0, 8.0, 2.0), (14.0, 14.0, 1.0)], 1.5, 1.5),
+        ([(10.0, 10.2, 2.0)], 1.5, 1.5),
+    ],
+)
+def test_where_the_edges_terms_stand_for_a_barrier(row, zs, zr, monkeypatch) -> None:
+    """A parapet 1 m high on the edge of a roof, the source over the roof and the
+    listener past it over the ground; two barriers between the ends; a wall 20 cm
+    thick, given as a building: none is a barrier alone on one rigid plane under
+    both ends, and each keeps the edges' terms (the pressures are those with the
+    strip switched off)."""
+    f = np.array([50.0, 100.0])
+    whole = rows.over_row(f, C, None, zs, 20.0, zr, row).pressure
+    monkeypatch.setattr(strip, "MOST_KH", 0.0)
+    np.testing.assert_array_equal(whole, rows.over_row(f, C, None, zs, 20.0, zr, row).pressure)
+
+
+def test_the_strip_is_taken_at_the_frequencies_at_which_the_ground_is_rigid(monkeypatch) -> None:
+    """Over a ground whose impedance is infinite at 50 Hz and 12 + 12i at 100 Hz, a
+    barrier 1 m high adds what the strip sheds at 50 Hz (the pressure is that over a
+    rigid ground, 20 % from that with the edges' terms) and the edges' terms at
+    100 Hz (the pressure is that over a ground of that impedance at both). Over a
+    ground that is rigid on one side of the barrier only, the edges' terms stand
+    (the pressures are those with the strip switched off)."""
+    f = np.array([50.0, 100.0])
+    place = (1.5, 25.0, 1.5, [(10.0, 10.0, 1.0)])
+
+    def soft_from(r: float):
+        return None if r < 10.0 else 12.0 + 12.0j
+
+    def soft_up_to(r: float):
+        return None if r > 10.0 else 12.0 + 12.0j
+
+    mixed = rows.over_row(f, C, lambda r: np.array([np.inf, 12.0 + 12.0j]), *place).pressure
+    rigid = rows.over_row(f, C, None, *place).pressure
+    soft = rows.over_row(f, C, lambda r: np.full(2, 12.0 + 12.0j), *place).pressure
+    np.testing.assert_allclose(mixed, [rigid[0], soft[1]], rtol=1e-12)
+    one_side = [rows.over_row(f, C, ground, *place).pressure for ground in (soft_from, soft_up_to)]
+    monkeypatch.setattr(strip, "MOST_KH", 0.0)
+    half_plane = rows.over_row(f, C, None, *place).pressure
+    assert 0.19 < abs(rigid[0] / half_plane[0] - 1.0) < 0.21
+    for ground, whole in zip((soft_from, soft_up_to), one_side, strict=True):
+        np.testing.assert_array_equal(whole, rows.over_row(f, C, ground, *place).pressure)
+
+
+def test_with_the_ground_s_reflection_left_out_at_its_top_a_barrier_is_no_strip(
+    monkeypatch,
+) -> None:
+    """Asked to leave out a reflection off the ground that is too steep for the march,
+    the solver keeps 4 % of the wave that the image of a source 5 cm before a screen
+    10 m high, half a metre below its top, sends to that top: the screen does not
+    stand on a rigid plane then, and the edges' terms stand, with the image's wave
+    as the march has it (the pressures are those with the strip switched off). With
+    the source 10 cm before the screen and a metre below its top the march keeps all
+    of that wave, and the strip is taken (8.5 % from the edges' terms)."""
+    f = np.array([44.5, 60.0])
+
+    def pressure(zs: float, before: float) -> np.ndarray:
+        place = (zs, before + 15.0, 1.0, [(before, before, 10.0)])
+        return rows.over_row(f, C, None, *place, steep_reflections="leave out").pressure
+
+    left_out, kept = pressure(9.5, 0.05), pressure(9.0, 0.1)
+    monkeypatch.setattr(strip, "MOST_KH", 0.0)
+    np.testing.assert_array_equal(left_out, pressure(9.5, 0.05))
+    assert 0.07 < np.max(np.abs(kept / pressure(9.0, 0.1) - 1.0)) < 0.1
+
+
+def test_with_both_ends_close_to_a_high_barrier_the_edges_terms_stand(monkeypatch) -> None:
+    """Both ends half a metre up and 39 cm from a rigid screen 3 m high on a rigid
+    ground: the strip's density would take more than ``strip.TERMS_MOST`` terms, and
+    the edges' terms stand at every frequency (the pressures are those with the strip
+    switched off). With the strip solved all the same they are 0.83 dB above it at
+    44.5 Hz and 0.30 dB below it at 89 Hz. 42 cm from the screen the strip is taken."""
+    f = np.array([44.5, 89.0])
+
+    def pressure(off: float) -> np.ndarray:
+        return rows.over_row(f, C, None, 0.5, 2.0 * off, 0.5, [(off, off, 3.0)]).pressure
+
+    stands, taken = pressure(0.392), pressure(0.42)
+    monkeypatch.setattr(strip, "TERMS_MOST", 600)
+    apart = 20.0 * np.log10(np.abs(stands) / np.abs(pressure(0.392)))
+    assert 0.75 < apart[0] < 0.9 and -0.35 < apart[1] < -0.25
+    np.testing.assert_array_equal(taken, pressure(0.42))
+    monkeypatch.setattr(strip, "MOST_KH", 0.0)
+    np.testing.assert_array_equal(stands, pressure(0.392))
+    assert np.max(np.abs(taken / pressure(0.42) - 1.0)) > 0.01
 
 
 def test_the_absorbing_layer_grows_for_what_a_march_s_start_needs() -> None:
@@ -955,20 +1195,35 @@ def test_a_source_over_a_roof_against_a_wave_calculation(
         assert np.max(np.abs(alone - wave)) > alone_off
 
 
-def test_a_barrier_far_lower_than_a_wavelength_on_a_rigid_roof_is_off() -> None:
-    """A barrier 10 cm high on a roof under both ends, half a metre past the source:
-    the row's level is 2.3 dB above the wave calculation's in the 63 Hz band from a
-    source on the roof, and 3.0 dB below it in the 125 Hz band from one 1.5 m up,
-    where the march alone is within 0.4 dB. The edges' terms take the barrier for a
-    half-plane, and have no sound that goes on between its top and the roof."""
+def test_a_barrier_far_lower_than_a_wavelength_on_a_rigid_roof(monkeypatch) -> None:
+    """A barrier 10 cm high on a roof under both ends, half a metre past the source,
+    from a source on the roof and from one 1.5 m up: within 0.25 dB of the exact
+    level in every band, and of the wave calculation's but in the 500 Hz band from
+    the source on the roof, where the exact level of the thin barrier is 0.44 dB
+    above the wave calculation's (whose barrier is one cell, 2 cm, thick). With the
+    edges' terms alone, which take the barrier for a half-plane and have no sound
+    that goes on between its top and the roof, the level is 2.3 dB above the wave
+    calculation's in the 63 Hz band from the source on the roof, and 3.0 dB below it
+    in the 125 Hz band from the one 1.5 m up."""
     row = [(-30.0, 60.0, 0.0), (10.01, 10.01, 0.1)]
     listener = (15.01, 1.51)
     low, high = (9.51, 0.01), (9.51, 1.51)
-    off = levels(over(row, low, listener), low, listener) - np.array([6.04, 6.16, 6.44, 5.84])
+    on_roof, up = np.array([6.04, 6.16, 6.44, 5.84]), np.array([4.42, 0.96, -1.96, 3.00])
+    for source, wave in ((low, on_roof), (high, up)):
+        exact, known = behind_a_barrier(0.1, (round(source[0] - 10.01, 2), source[1]), (5.0, 1.51))
+        assert np.all(known)
+        got = levels(over(row, source, listener), source, listener)
+        np.testing.assert_allclose(got, exact, atol=0.25)
+        closest = slice(0, 3) if source is low else slice(0, 4)
+        np.testing.assert_allclose(got[closest], wave[closest], atol=0.25)
+    assert 0.4 < EXACT[0.1, (-0.5, 0.01), (5.0, 1.51)][3] - on_roof[3] < 0.48
+    # Without the strip's equation: the edges' terms alone.
+    monkeypatch.setattr(strip, "MOST_KH", 0.0)
+    off = levels(over(row, low, listener), low, listener) - on_roof
     assert 2.1 < off[0] < 2.6 and 1.0 < off[1] < 1.5
-    found, wave = over(row, high, listener), np.array([4.42, 0.96, -1.96, 3.00])
-    assert -3.3 < (levels(found, high, listener) - wave)[1] < -2.7
-    assert np.max(np.abs(levels(found, high, listener, "marched") - wave)) < 0.45
+    found = over(row, high, listener)
+    assert -3.3 < (levels(found, high, listener) - up)[1] < -2.7
+    assert np.max(np.abs(levels(found, high, listener, "marched") - up)) < 0.45
 
 
 # -- what the row keeps ----------------------------------------------------------------
@@ -1425,50 +1680,72 @@ def test_an_end_over_a_roof_against_the_exact_edge_integral(source, listener, wi
         (3.0, (-20.0, 1.0), (10.0, 1.0)),
     ],
 )
-def test_a_barrier_on_a_roof_under_both_ends_against_the_edge_integrals_of_its_paths(
+def test_a_barrier_on_a_roof_under_both_ends_against_the_exact_levels(
     top, source, listener
 ) -> None:
     """A barrier 1 to 3 m high on a rigid roof that both ends stand over, 0.2 to 3 m
-    above it and 10 m or more from the barrier: within 0.05 dB of the four paths
-    over the top of a rigid screen on a rigid ground, the roof (the exact edge
-    integral from the source and its image in the roof to the listener and its
+    above it and 10 m or more from the barrier: within 0.05 dB of the exact level in
+    every band (:data:`EXACT`), where the march alone is up to 2.4 dB low, and the
+    four paths over the top of a rigid screen on a rigid ground, the roof (the exact
+    edge integral from the source and its image in the roof to the listener and its
     image, without the sound that goes from the top down the screen to the roof and
-    back), where the march alone is up to 2.3 dB low."""
-    paths = over_one_screen(source, listener, heights_from=top)
+    back), are 0.14 to 1.15 dB off."""
+    exact, known = behind_a_barrier(top, source, listener)
+    assert np.all(known)
     found = over([(-40.0, 40.0, 0.0), (0.0, 0.0, top)], source, listener)
-    np.testing.assert_allclose(levels(found, source, listener), paths, atol=0.05)
-    assert np.min(levels(found, source, listener, "marched") - paths) < -1.0
+    np.testing.assert_allclose(levels(found, source, listener), exact, atol=0.05)
+    assert np.min(levels(found, source, listener, "marched") - exact) < -1.0
+    paths = over_one_screen(source, listener, heights_from=top)
+    assert 0.13 < np.max(np.abs(paths - exact)) < 1.2
 
 
 @pytest.mark.parametrize(
     "top, source, listener, within",
     [
-        (1.0, (-0.5, 0.5), (15.0, 1.5), 0.3),
-        (1.0, (-0.3, 0.0), (15.0, 0.5), 0.3),
-        (1.0, (-0.2, 0.9), (20.0, 2.0), 0.4),
+        (1.0, (-0.5, 0.5), (15.0, 1.5), 0.05),
+        (1.0, (-0.3, 0.0), (15.0, 0.5), 0.06),
+        (1.0, (-0.2, 0.9), (20.0, 2.0), 0.1),
         (3.0, (-0.3, 1.0), (15.0, 1.0), 0.2),
-        (1.2, (-1.0, 1.5), (10.0, 1.5), 0.15),
-        (0.5, (-0.5, 1.5), (15.0, 0.0), 0.15),
+        (1.2, (-1.0, 1.5), (10.0, 1.5), 0.08),
+        (0.5, (-0.5, 1.5), (15.0, 0.0), 0.08),
     ],
 )
 def test_an_end_over_a_roof_close_before_a_barrier_on_it(top, source, listener, within) -> None:
     """A source on a rigid roof or up to 1.5 m above it, 20 cm to 1 m before a barrier
-    0.5 to 3 m high on the roof, and a listener over the roof past it: within 0.4 dB
-    of the four paths over the top of a rigid screen on a rigid ground, from either
-    end. The march from the source begins at the barrier, from the source's field and
-    its image's in the roof."""
-    paths = over_one_screen(source, listener, heights_from=top)
+    0.5 to 3 m high on the roof, and a listener over the roof past it: within 0.1 dB
+    of the exact level in every band (:data:`EXACT`; 0.2 dB with the barrier 3 m
+    high, whose 500 Hz band goes on above k H = 32), from either end, where the four
+    paths over the top of a rigid screen on a rigid ground are 0.7 to 2.3 dB off.
+    The march from the source begins at the barrier, from the source's field and its
+    image's in the roof."""
+    exact, known = behind_a_barrier(top, source, listener)
+    assert np.all(known)
     row = [(-40.0, 40.0, 0.0), (0.0, 0.0, top)]
     found = over(row, source, listener)
-    np.testing.assert_allclose(levels(found, source, listener), paths, atol=within)
+    np.testing.assert_allclose(levels(found, source, listener), exact, atol=within)
     swapped = (-listener[0], listener[1]), (-source[0], source[1])
-    np.testing.assert_allclose(levels(over(row, *swapped), *swapped), paths, atol=within)
+    np.testing.assert_allclose(levels(over(row, *swapped), *swapped), exact, atol=within)
+    paths = over_one_screen(source, listener, heights_from=top)
+    assert 0.6 < np.max(np.abs(paths - exact)) < 2.4
+
+
+def test_an_end_a_rounding_below_the_roof_it_stands_on_is_on_the_roof() -> None:
+    """An end given half a nanometre below the roof it stands on, which is taken for
+    on it (a rounding), is on the roof for the strip too, which a barrier on the roof
+    makes with its image in it: the pressure behind a barrier 1 m high is that from
+    the roof itself, to a millionth, for the source and for the listener."""
+    f = np.array([50.0, 100.0])
+    row = [(-40.0, 40.0, 3.0), (8.0, 8.0, 4.0)]
+    on = rows.over_row(f, C, None, 3.0, 20.0, 3.0, row).pressure
+    for zs, zr in ((3.0 - 5e-10, 3.0), (3.0, 3.0 - 5e-10)):
+        below = rows.over_row(f, C, None, zs, 20.0, zr, row).pressure
+        np.testing.assert_allclose(below, on, rtol=1e-6)
 
 
 def test_an_end_over_a_roof_too_close_to_its_first_top_is_out_of_reach() -> None:
     """Both ends over a roof 2 m up, the source a metre above it, a barrier 3 m high
-    on the roof: 30 cm before the barrier the level is within 0.15 dB of the four
-    paths over it in every band, 10 cm before it in the three lower bands. In the
+    on the roof: 30 cm before the barrier the level is within 0.15 dB of the exact
+    one (:data:`EXACT`) in every band, 10 cm before it in the three lower bands. In the
     500 Hz band the start there needs the source's image in the roof up to 88.7
     degrees steep, and the source is out of reach; 5 cm before the barrier in every
     band, and so asked to leave steep reflections out: that is for the ground's, and
@@ -1477,8 +1754,7 @@ def test_an_end_over_a_roof_too_close_to_its_first_top_is_out_of_reach() -> None
     def on_a_roof(before: float, band: int, steep: str = "raise") -> float:
         reach, row = before + 15.0, [(-20.0, before + 35.0, 2.0), (before, before, 5.0)]
         found = rows.over_row(F[band], C, None, 3.0, reach, 3.0, row, steep_reflections=steep)
-        paths = over_one_screen((-before, 1.0), (15.0, 1.0), heights_from=3.0)
-        return level(found.pressure, reach) - paths[band]
+        return level(found.pressure, reach) - EXACT[3.0, (-before, 1.0), (15.0, 1.0)][band]
 
     for band in range(4):
         assert abs(on_a_roof(0.3, band)) < 0.15
