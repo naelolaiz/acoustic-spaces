@@ -149,20 +149,23 @@ Edge diffraction:
   0.5 m above their plane the level is 9 to 23 dB below that behind one roof as wide
   as both.
 - [ ] The solver for whole rows where it does not hold yet: rigid screens on a rigid
-  ground (up to 1.3 dB low near grazing incidence, 3.4 dB at street level behind
-  three screens); an end almost straight under a top, within some 4 cm of its
-  first obstacle, or close before it and high above its top, and ends within half a
-  wavelength of each other (refused); an end in the shadow within decimetres of a
-  top (up to 0.5 dB low); an end behind a change of the ground, on a roof that
-  reaches the other end with nothing on it between them, or with nothing between it
-  and the other end, with a way on or a reflection off the ground or the roof
-  steeper than 35°, or closer than a wavelength to its first top or to the other
-  end (refused); a roof's edge or a wall close behind an end; barriers lower than
-  a wavelength on a rigid roof or ground, which lack the sound that goes on between
-  their top and that surface (up to 3 dB off below a quarter of a wavelength, 1.3 dB
-  for a parapet on a roof's edge), and steps; a wall given as a thin building (up to
-  0.4 dB low); the tops' place in the march's cells (up to 0.2 dB); edges that end
-  beside the way, absorbing roofs and walls, the bands above 500 Hz, and wind.
+  ground (up to 1.3 dB low near grazing incidence, 3.4 dB at street level behind three
+  screens); an end almost straight under a top, within some 4 cm of its first obstacle,
+  or close before it and high above its top, and ends within half a wavelength of each
+  other (refused); an end in the shadow within decimetres of a top (up to 0.5 dB low);
+  an end behind a change of the ground, on a roof that reaches the other end with
+  nothing on it between them, or with nothing between it and the other end, with a way
+  on or a reflection off the ground or the roof steeper than 35°, or closer than a
+  wavelength to its first top or to the other end (refused); a roof's edge or a wall
+  close behind an end; barriers lower than a wavelength where the edges' terms stand,
+  which lack the sound that goes on between a barrier's top and the surface under it (a
+  parapet on a roof's edge up to 1.3 dB off; a barrier with anything else between the
+  ends, on a ground with an impedance, or with the ends closer to each other than about
+  a quarter of its height, both within about a twentieth of it from the barrier, or
+  between the two; only a barrier alone on a rigid ground or roof is taken as the strip
+  it makes with its image), and steps; a wall given as a thin building (up to 0.4 dB
+  low); the tops' place in the march's cells (up to 0.2 dB); edges that end beside the
+  way, absorbing roofs and walls, the bands above 500 Hz, and wind.
 - [ ] Paths over edges tested from the edge itself, not from a millionth of the
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9
