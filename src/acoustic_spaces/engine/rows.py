@@ -52,11 +52,88 @@ terms, at the frequencies up to k H = ``strip.MOST_KH`` for its height H at whic
 that surface is rigid (:func:`_plane_under` finds the surface, :func:`_rigid` the
 frequencies). Not where the ends are so close to each other across a high barrier,
 or both so close to it, that the strip's density would take more than
-``strip.TERMS_MOST`` terms (closer to each other than about a quarter of its height,
-both within about a twentieth of it from the barrier, or between the two): the
-half-plane's terms stand there at every frequency, up to 0.27 dB from the strip's in
-an octave band's level (docs/validation.md, "Rows of roofs and barriers against a
-wave calculation").
+``strip.TERMS_MOST`` terms (for a way across the barrier: closer to each other than
+about a quarter of its height, both within about a twentieth of it from the barrier, or
+between the two; at a slant further off, up to 0.83 of its height from it at 75 degrees):
+the half-plane's terms stand there at every frequency, up to 0.27 dB from the strip's
+in an octave band's level across the barrier (docs/validation.md, "Rows of roofs and
+barriers against a wave calculation").
+
+A way that crosses the row at a slant, seen from above, meets the obstacles' edges
+turned from across it (``slants``). The row is then taken in one of two ways. In the
+first the marches still run in the vertical plane along the way, over the row as that
+plane cuts it: for a row that is the same all along its
+edges, the narrow-angle march along the way is the one across the edges at the
+wavenumber times the slant's cosine, which is the wavenumber across the edges of the
+sound that goes that way. What an edge adds is taken at its slant (:func:`_slanted`):
+the sound that bends at the edge leaves it on the cone of the angle at which it came, by
+the shortest way from end to end over the edge, and the uniform theory's terms are those
+of that angle, with that way's length for their phase; what the marches' screen sheds is
+taken off them as it is in the marches' plane. Each edge is taken as if the row's other
+edges were turned as it is: that is so for a row the same all along its edges, and not
+measured for edges at different slants. A barrier's strip is summed for ends apart along
+it (:func:`~acoustic_spaces.engine.strip.beyond_screen`).
+
+The one edge between the ends, which both light themselves, takes a slant of up to
+``SLANT_MOST_DEG`` degrees: what the march's screen sheds there is taken off as it was
+marched, whatever its phase. One rigid screen is within 0.10 dB of the exact solution at
+30, 60 and 75 degrees, where it is 0.09 to 5.33 dB low as an edge across the way; a
+roof's corner within 0.11, 0.36 and 0.61 dB, the most with an end a metre before the
+corner; a barrier on a rigid ground that is a strip within 0.08 dB of the strip's exact
+level at 30 to 75 degrees.
+
+In a row a march lights the edges, and the march's way over an edge, in the vertical
+plane along the way, is longer than the sound's own where an end's way to the row is
+steep: at a slant of 60 degrees over two roofs 10 m wide in all, from a source level
+with them and 10 m before them to a listener 4.5 m below them and 5 m past them (both
+across the edges), by 8 cm, and by 38 cm for the way to the listener's image in the
+ground. The edges' terms then have one phase and the marched field another, and no one
+phase of the terms holds for ways that differ by different lengths. Where the section's
+phase on the terms of the edges that a march lights would change the sound by more than
+``SLANT_APART_MOST`` of it, the row is out of reach (:func:`_on_one_way`), as is such an
+edge turned more than ``SLANT_ROW_MOST_DEG`` degrees. Against the wave calculation at 30
+and 60 degrees (``validation/rows.py``) this way takes these in every band: rows in free
+space that the sound just clears or bends down behind by 22 degrees, within 0.22 dB of
+it; a roof under the source up to its edge, within 0.19 dB; a screen on a roof under
+both ends, within 0.53 dB. But in the 63 Hz band at 60 degrees it is 0.54 dB low over
+three screens and 0.63 dB high over three roofs. (At that slant the row is, in
+wavelengths across its edges, what it is across the way an octave lower, and there the
+solver is 0.30 to 0.33 dB low over the three screens; over the roofs that is not
+measured.) Of two roofs and three screens on a rigid ground, between ends from half a
+metre below their tops to half a metre above them or 1.5 m above the ground, it takes
+the 63 Hz band alone at 30 degrees (at 15 of 18 places) and no band at 60, where the
+level from an end at roof level to one at street level would be up to 6.4 dB off.
+
+The second way holds for a rigid row that is the same all along its edges: it answers a
+point source's pulse, at ends y apart along the edges, as it does straight across them
+at the time sqrt(t^2 - y^2 / c^2). The sound at a frequency is then a sum of the row's
+sound ACROSS its edges over a lattice of wavenumbers (:func:`_kernel`), each way between
+the ends and their images on its own path. :func:`_moved` takes a row on a rigid ground
+whose edges all lie in one direction so, and :func:`over_row` uses it where the first
+way is out of reach, for edges turned up to ``SLANT_MOST_DEG`` degrees (it is not
+measured beyond): on the validation's 66 cases at 30 and 60 degrees the second takes 7.5
+times as long as the first (by set and slant 1.6 to 54 times), and where both take a
+band their levels are within 0.23 dB of each other (0.37 dB over three screens on a
+rigid ground). The second holds for what its kernel holds of the row's response, up to
+``ACROSS_PAST_M`` m past the longest way between the ends and their images, and as far
+as the solver does across the row at the lattice's wavenumbers, which it takes down to
+ends ``STRING_WAVELENGTHS`` wavelengths apart over the tops: where the sound's own
+wavenumber across the row is lower, or weights of more than ``ACROSS_BELOW_MOST`` of the
+first arrival's are (:func:`_folded`), the row is out of this way's reach too. One rigid
+screen is then within 0.15 dB of the exact solution at 2 to 75 degrees (the first way
+within 0.06 dB at those places); a barrier 0.1 to 8 m high on a rigid ground within 0.15
+dB of the strip's exact level, or of the four paths over its top, in eight of ten cases
+at 30 to 75 degrees, and 0.23 and 0.29 dB above it in the two others (the first way
+within 0.08 dB in all ten).
+
+With the two, the solver takes every band of the validation's 66 cases at 30, 60 and 75
+degrees. Against the wave calculation: two roofs on a rigid ground are within 0.85, 1.26
+and 1.21 dB of it at nine places; rows in free space are within 0.66 dB at 75 degrees, a
+roof under the source up to its edge within 0.32 dB and a screen on a roof under both
+ends within 0.31 dB. Three screens on a rigid ground are up to 3.21, 5.78 and 8.18 dB
+low (and up to 2.39 dB high at 75 degrees), where they are up to 3.42 dB low across the
+row: see below for what lacks between rigid screens. A row on a ground with an
+impedance, or with edges in different directions, has the first way alone.
 
 The march goes both ways, and the listener takes the mean of the two, so that the sound
 from A to B is that from B to A. Each begins at its first obstacle, from the field in
@@ -149,15 +226,21 @@ the level is 3.5 dB too high, with the edge 5 cm behind the end up to 2.6 dB, wi
 it 20 cm to 1 m behind up to 1.2 dB too high or 0.9 dB too low, from 1.5 m on within
 0.35 dB).
 Between rigid screens on a rigid ground, where sound goes to and fro, the level comes
-out too low; that the sound coming back is what lacks there is likely, not shown (see
-docs/validation.md, "Rows of roofs and barriers against a wave calculation").
+out too low. Part of what lacks is that sound: across three screens between ends at
+street level, the wave calculation's response holds 22 to 29 % of its energy 9 to 60 m
+after the shortest way and the solver's 0.1 to 0.2 %, and without it the wave
+calculation's own levels are up to 1.74 dB lower across the row, 2.14 dB at a slant of
+30 degrees and 2.62 dB at 60 (not traced at 75). Not all: in the 63 Hz band across the
+row the solver is 3.4 dB low where the wave calculation's level does not fall without
+its late sound, and the cause of that is not traced (see docs/validation.md, "Rows of
+roofs and barriers against a wave calculation").
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy.special import hankel1
@@ -216,6 +299,44 @@ FINEST = 8.0
 #: 0.10 dB at most with a grid twice as high again).
 STEEP_END_DEG = 30.0
 GRID_TIMES = 8.0
+#: An edge that the way crosses is turned from across it by this at most (degrees). With
+#: the marches in the vertical plane along the way, the edges' terms at a slant are
+#: measured up to ``SLANT_MOST_DEG`` for an edge that both ends light themselves, and up
+#: to ``SLANT_ROW_MOST_DEG`` for one that a march lights; a row solved across its edges
+#: and moved to the slant (:func:`_moved`) is measured up to ``SLANT_MOST_DEG``
+#: (:class:`OutOfReach` beyond).
+SLANT_MOST_DEG = 75.0
+SLANT_ROW_MOST_DEG = 60.0
+#: At a slant the marches' way over an edge, in the vertical plane along the way, is
+#: longer than the sound's own, the shortest from end to end over the edge, where an
+#: end's way to the row is steep. The terms of an edge that a march lights have the
+#: own way's phase and the march the section's: where the section's phase on those
+#: terms would change the sound at the frequencies given by more than this share of it
+#: (root mean square), the row is out of reach (:class:`OutOfReach`).
+SLANT_APART_MOST = 0.1
+#: A way that crosses at a slant a row whose edges all lie in one direction, on a rigid
+#: ground, is taken across the row at other wavenumbers and moved in time
+#: (:func:`_moved`): a sum over a lattice of wavenumbers across the row, with a kernel
+#: that holds the row's response up to ``ACROSS_PAST_M`` m past the longest way over the
+#: tops between the ends and their images, and fades at both ends over
+#: ``ACROSS_FRESNEL`` Fresnel lengths of the way at the slant (``ACROSS_TAPER_MOST``
+#: times the shortest way across at most); the kernel takes ``ACROSS_FILL`` of the
+#: lattice's period, and the lattice goes through the lowest wavenumber at which the row
+#: is solved (``STRING_WAVELENGTHS``). The wavenumbers at the two ends of a frequency's
+#: range that hold ``ACROSS_DROPPED`` of its weights' sizes between them are not solved
+#: (their weights go to the nearest that is), and the row is solved for
+#: ``ACROSS_TOGETHER`` wavenumbers at a time. Where the sizes of a frequency's weights
+#: below that wavenumber add up to more than ``ACROSS_BELOW_MOST`` of the first
+#: arrival's weight, the row is out of this method's reach.
+ACROSS_PAST_M = 8.0
+ACROSS_FRESNEL = 4.0
+ACROSS_TAPER_MOST = 4.0
+ACROSS_FILL = 0.9
+ACROSS_DROPPED = 1e-3
+ACROSS_TOGETHER = 8
+ACROSS_BELOW_MOST = 0.1
+#: Slants this close (radians) are one.
+_SAME_RAD = 1e-9
 #: Edges and tops this close (m) are at one place or one height.
 _SAME_M = 1e-9
 #: The open angles over pi of a half-plane and of a roof's corner, and the sine of the
@@ -232,7 +353,17 @@ class OutOfReach(ValueError):
     (or its image's) that is too steep. Where it begins at the end itself
     (:func:`_from_its_end`): a way on from the end, or from its image in the ground
     or the roof under it, steeper than ``FROM_END_DEG``, or a first top, or the other
-    end with no top before it, closer than ``FROM_END_WAVELENGTHS`` wavelengths."""
+    end with no top before it, closer than ``FROM_END_WAVELENGTHS`` wavelengths. And
+    for a way that crosses the row at a slant: an edge turned more than
+    ``SLANT_MOST_DEG`` degrees from across it; with the marches in the vertical plane
+    along the way, an edge that a march lights turned more than ``SLANT_ROW_MOST_DEG``
+    degrees, and a row between ends whose ways to it are so steep that its sound would
+    depend on the phase its edges' terms are given (``SLANT_APART_MOST``); and, for a
+    row that is taken across its edges and moved to the slant, where too much of what
+    moves it lies below the lowest wavenumber at which the row is solved
+    (``ACROSS_BELOW_MOST``), where the solver refuses the row across its edges, and
+    where across the edges an end is no distance from the other end or from a side of
+    an obstacle that is apart from it along the way."""
 
 
 @dataclass(frozen=True)
@@ -286,6 +417,8 @@ def over_row(
     top: float | None = None,
     steps_per_wavelength: float = parabolic.STEPS_PER_WAVELENGTH,
     steep_reflections: str = "raise",
+    slants=None,
+    at_a_slant: str | None = None,
 ) -> Row:
     """The sound at ``frequencies`` (F,, Hz, marched together: one band's) from a source
     ``zs`` m above the ground to a listener ``zr`` m above it, ``reach`` m away along
@@ -314,48 +447,149 @@ def over_row(
     much of it as the march's layer still takes (:func:`_kept`): a row high above a
     ground then stands in free space. That is for a march that begins at its first
     obstacle; one that begins at its end cannot leave its reflection out, and is
-    refused as before, as is an end over a roof for its reflection off the roof."""
+    refused as before, as is an end over a roof for its reflection off the roof.
+
+    ``slants`` are the angles (radians) by which the obstacles are turned from across
+    the way, seen from above: one for each of ``obstacles``, a number for both its sides
+    or, for a roof, a pair (near side, far side); None where all cross it at right
+    angles. ``near``, ``far`` and the ends' heights are along the way as before, in the
+    vertical plane through the two ends. A slant that is not a number, a count of slants
+    that is not the obstacles', or a barrier with slants of different sizes for its two
+    sides raises a ValueError.
+
+    A row at a slant is taken in one of two ways (``at_a_slant``). "section": the
+    marches run in the vertical plane along the way, and each edge's terms are those of
+    an edge at its slant (:func:`_slanted`), whatever its sign. An edge turned more than
+    ``SLANT_MOST_DEG`` degrees raises :class:`OutOfReach` before either march runs, as
+    does one turned more than ``SLANT_ROW_MOST_DEG`` degrees that the two ends do not
+    both light themselves; and after the marches, a row whose sound would depend on
+    which way's phase the terms of its slanted edges are given, the sound's own or the
+    marches' (``SLANT_APART_MOST``, :func:`_on_one_way`). "across": the row is solved
+    across its edges, at the wavenumbers of a lattice, and moved to the slant
+    (:func:`_moved`). That is for a row on a rigid ground (``impedance`` None) whose
+    edges all lie in one direction, every side between the ends of an obstacle above the
+    ground with the same slant, sign and all, which is not 0 (a ValueError for any other
+    row); it raises :class:`OutOfReach` for edges turned more than ``SLANT_MOST_DEG``
+    degrees, where the row is not solved at wavenumbers low enough for the slant
+    (``ACROSS_BELOW_MOST``), where the solver refuses the row across its edges, and
+    where across the edges an end is no distance from the other end or from a side of
+    an obstacle that is apart from it along the way (:func:`_moved`). None,
+    the default: the first where it takes the row, and the second where the first raises
+    :class:`OutOfReach` and the row is one for the second, with edges turned no more
+    than ``SLANT_MOST_DEG`` degrees; where both refuse it, the error gives both
+    reasons."""
     if steep_reflections not in ("raise", "leave out"):
         raise ValueError('steep_reflections is "raise" or "leave out"')
+    obstacles = list(obstacles)
+    turned = _slants(obstacles, slants)
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     reach = float(reach)
     row = skyline(obstacles)
     mirrored = [(reach - far, reach - near, h) for near, far, h in row]
     _stands_free(row, zs, "source")
     _stands_free(mirrored, zr, "listener")
+    back = None if impedance is None else (lambda r: impedance(reach - r))
+    if at_a_slant not in (None, "across", "section"):
+        raise ValueError('at_a_slant is None, "across" or "section"')
     between = [o for o in row if o[1] > _SAME_M and o[0] < reach - _SAME_M]
-    if top is None:
-        top = layer_top(zs, zr, reach, between)
-    elif top <= max([zs, zr] + [h for _, _, h in between]):
+    if top is not None and top <= max([zs, zr] + [h for _, _, h in between]):
         raise ValueError("the absorbing layer starts above both ends and every obstacle")
-    k = 2.0 * math.pi * f / float(speed_of_sound)
-    common = (f, float(speed_of_sound), reach, top, steps_per_wavelength)
+    # The edges' one direction, where they have one and the way crosses them at a slant.
+    one = _one_direction(turned, reach) or 0.0
+    movable = one > 0.0 and impedance is None
+    # Across the row and moved, the solver is measured up to the same slant.
+    too_far = one > math.radians(SLANT_MOST_DEG)
+    across = (zs, reach, zr, obstacles, top, steps_per_wavelength, steep_reflections, one)
+    if at_a_slant == "across":
+        if not movable:
+            raise ValueError(
+                "across the row and moved: for a way at a slant over edges that all lie in "
+                "one direction, on a rigid ground"
+            )
+        if too_far:
+            raise OutOfReach(
+                f"edges turned {math.degrees(one):.1f} degrees from across the way: across "
+                f"the row and moved, the solver takes {SLANT_MOST_DEG:g} degrees"
+            )
+        return _moved(f, float(speed_of_sound), *across)
+    section = (f, float(speed_of_sound), impedance, back, zs, reach, zr, row, mirrored, turned)
+    try:
+        return _in_section(*section, top, steps_per_wavelength, steep_reflections)
+    except OutOfReach as refused:
+        if at_a_slant == "section" or not movable or too_far:
+            raise
+        try:
+            return _moved(f, float(speed_of_sound), *across)
+        except OutOfReach as too:
+            raise OutOfReach(f"{refused}; across the row and moved to the slant: {too}") from None
+
+
+def _in_section(
+    f: np.ndarray,
+    c: float,
+    impedance,
+    back,
+    zs: float,
+    reach: float,
+    zr: float,
+    row: list,
+    mirrored: list,
+    turned: list,
+    top: float | None,
+    steps_per_wavelength: float,
+    steep_reflections: str,
+) -> Row:
+    """The sound over the ``row`` (a skyline; ``mirrored``, from the listener, with the
+    ground's impedance ``back`` from there) by the marches in the vertical section
+    along the way and the edges' terms, each edge at its slant (``turned``, as
+    :func:`_slants` gives them); the other arguments as :func:`over_row` takes them
+    (``top`` as it has checked it), and its errors."""
+    # Before either march runs too: an edge turned too far is out of reach.
+    slanting = {
+        edge: _slant_of(turned, *edge)
+        for edge in (edges_of(row) if turned else [])
+        if _SAME_M < edge[1] < reach - _SAME_M
+    }
+    if any(slant > math.radians(SLANT_ROW_MOST_DEG) for slant in slanting.values()):
+        _lit_by_both(
+            slanting,
+            _first(f, impedance, reach, row)[0],
+            _first(f, back, reach, mirrored)[0],
+            reach,
+        )
+    if top is None:
+        between = [o for o in row if o[1] > _SAME_M and o[0] < reach - _SAME_M]
+        top = layer_top(zs, zr, reach, between)
+    k = 2.0 * math.pi * f / c
+    common = (f, c, reach, top, steps_per_wavelength)
     left_out = steep_reflections == "leave out"
     # Both ends are checked before either march runs.
     from_source = _march_from(*common, impedance, zs, zr, row, left_out)
-    back = None if impedance is None else (lambda r: impedance(reach - r))
     from_listener = _march_from(*common, back, zr, zs, mirrored, left_out)
     forward, backward = from_source(), from_listener()
 
     added = np.zeros(len(f), dtype=complex)
+    # What the section's phase in place of the own way's would change (a slant).
+    apart = np.zeros(len(f), dtype=complex)
     # From the listener's end a near corner is a far one.
     seen_back = {"screen": "screen", "roof": "behind", "behind": "roof"}
     for what, x, h in edges_of(row):
         if not _SAME_M < x < reach - _SAME_M:
             continue
         mirrored_edge = (seen_back[what], reach - x, h)
+        slant = slanting.get((what, x, h), 0.0)
         sheds = np.zeros(len(f), dtype=complex)
-        for from_source, a, to_source, source_s in _lit(forward, k, (what, x, h)):
-            for from_listener, b, onwards, listener_s in _lit(backward, k, mirrored_edge):
+        for from_source, a, to_source, source_s, before in _lit(forward, k, (what, x, h)):
+            for from_listener, b, onwards, listener_s, after in _lit(backward, k, mirrored_edge):
                 to_listener = (-onwards[0], onwards[1])
                 kl = k * a * b / (a + b)
-                if what == "screen":
-                    shed = _screen(k, kl, to_source, to_listener)
-                elif what == "roof":
-                    shed = _corner(k, kl, to_source, 1.0, to_listener if listener_s else None)
-                else:
-                    shed = _corner(k, kl, to_listener, -1.0, to_source if source_s else None)
+                at = _slanted(k, a, b, before, after, slant, reach) if slant else None
+                ways = (to_source, to_listener, source_s, listener_s)
+                shed = _shed(what, k, kl, *ways, at)
                 sheds += from_source * from_listener * shed / math.sqrt(a + b)
+                if at is not None and not (source_s and listener_s):
+                    section = _shed(what, k, kl, *ways, replace(at, turn=np.abs(at.turn)))
+                    apart += from_source * from_listener * (shed - section) / math.sqrt(a + b)
         plane = _plane_under(forward, backward, x, h, reach) if what == "screen" else None
         if plane is not None:
             # The barrier and its image in the plane are a strip, whose field is known
@@ -364,11 +598,374 @@ def over_row(
             low = (k * (h - plane) <= strip.MOST_KH) & _rigid(forward) & _rigid(backward)
             # An end on the plane may be given a rounding below it (:func:`_stands_free`).
             ends = (x, max(zs - plane, 0.0)), (reach - x, max(zr - plane, 0.0))
-            whole = strip.beyond_screen(k[low], h - plane, *ends) if np.any(low) else None
+            whole = None
+            # The strip's sum is measured up to its own slant (``strip.SLANT_MOST_DEG``).
+            # Were that less than ``SLANT_MOST_DEG``, beyond which no edge comes this far,
+            # the edges' terms would stand between the two.
+            if np.any(low) and slant <= math.radians(strip.SLANT_MOST_DEG):
+                whole = strip.beyond_screen(k[low], h - plane, *ends, slant=slant)
             if whole is not None:
                 sheds[low] = whole
         added += sheds
-    return Row(marched=0.5 * (forward.pressure + backward.pressure), edges=added)
+    marched = 0.5 * (forward.pressure + backward.pressure)
+    _on_one_way(apart, marched + added)
+    return Row(marched=marched, edges=added)
+
+
+def _one_direction(turned, reach: float) -> float | None:
+    """The angle (radians, 0 or more) from across the way at which the edges between the
+    ends lie, where they all lie in one direction: the slant of every side between the
+    ends of an obstacle that stands above the ground (``turned`` as :func:`_slants`
+    gives them, the slants with their signs), 0 where no side does. None where the
+    slants differ, and where none were given."""
+    if not turned:
+        return None
+    angles = [
+        slant
+        for near, far, h, slant_near, slant_far in turned
+        for x, slant in ((near, slant_near), (far, slant_far))
+        if h > 0.0 and _SAME_M < x < reach - _SAME_M
+    ]
+    if not angles:
+        return 0.0
+    return abs(angles[0]) if max(angles) - min(angles) <= _SAME_RAD else None
+
+
+def _held(
+    f, c: float, reach: float, z0: float, z1: float, row, left_out: bool, along: float
+) -> list[float]:
+    """The heights (m) that an end's sound sets out from in the march from that end
+    (``z0`` m up, over the rigid ground or a roof, ``row`` from it as
+    :func:`_march_from` takes it), for ends ``along`` m apart along the edges: its own,
+    and that of its image in what it stands over. Not that of an image whose
+    reflection is left out as too steep (``left_out``): one of which the march does
+    not keep the whole up to the first top at the wavenumbers at which the way from
+    the image over the tops to the other end is taken, k times that way over its
+    length at the slant."""
+    between = [o for o in row if o[1] > _SAME_M and o[0] < reach - _SAME_M]
+    tops = sorted(
+        (x, h) for near, far, h in between for x in {near, far} if _SAME_M < x < reach - _SAME_M
+    )
+    first, under = _first(f, None, reach, between)
+    mirror = 2.0 * under - z0
+    if first is not None:
+        whole = string([(0.0, z0), *tops, (reach, z1)])
+        by_image = _length(string([(0.0, mirror), *tops, (reach, z1)]))
+        taken_at = f * by_image / math.hypot(by_image, along)
+        _, _, through = _start_layer(taken_at, c, reach, z1, tops, whole, first, under, left_out)
+        floor = max(h for x, h in tops if x <= first + _SAME_M)
+        if float(_kept(through, floor - mirror)) < 1.0:
+            return [z0]
+    return [z0, mirror]
+
+
+def _kernel(
+    k: float, step: float, offset: float, along: float, shortest: float, spread: float, taper: float
+) -> tuple[int, np.ndarray]:
+    """The weights that move a row's sound across it to ends ``along`` m apart along its
+    edges, at the wavenumber ``k``: with P(kappa) the pressure across the row at the
+    wavenumber kappa, on the lattice kappa_j = ``offset`` + j ``step``,
+
+        p = exp(i k own) sum over j of w_j P(kappa_j) exp(-i kappa_j l),
+
+    l the ``shortest`` way across (m) and own = sqrt(l^2 + along^2). Returns the lowest
+    j and the weights from it up.
+
+    A rigid row that is the same all along its edges answers a point source's pulse by
+    a pressure that depends on the time t and on the offset y along the edges through
+    t^2 - y^2 / c^2 alone: an arrival with the path s across the row has the path
+    sqrt(s^2 + y^2) to the offset, and s over that of its amplitude. In frequencies that
+    is a sum over the wavenumbers across the row, whose kernel is the Fourier
+    transform, at kappa - k sin(b) (tan(b) = l / along, the stationary wavenumber of
+    the first arrival), of
+
+        F(sigma) = A(sigma) exp(i psi(sigma)),  A = (l + sigma) / own(l + sigma),
+        psi = k (own(l + sigma) - own) - k sin(b) sigma,
+
+    over the paths l + sigma. That is taken as it is up to ``spread`` m past the
+    shortest way and fades out over ``taper`` m beyond (a squared cosine). Before the
+    shortest way nothing arrives, and F is free there: it goes on with A in a straight
+    line, down to zero where the line reaches it, l / cos(b)^2 before the shortest way,
+    and with no phase, and fades out over ``taper`` m too, which keeps the weights below
+    the stationary wavenumber small. The lattice's sum is that of the integral as long
+    as the kernel's length is less than the lattice's period 2 pi / ``step``, for a row
+    whose response has ended a period less ``taper`` m past the shortest way: what
+    arrives later comes into the sum as if a period earlier, its phase turned by 2 pi
+    ``offset`` / ``step``, and what arrives between the kernel's end and there is not
+    in it."""
+    own = math.hypot(shortest, along)
+    sine, turn = shortest / own, along / own
+    stationary = k * sine
+    width = math.sqrt(k / own) * turn
+    last = shortest + spread + taper
+    highest = k * (last / math.hypot(last, along) - sine)
+    low = stationary - 10.0 * width - 12.0 * math.pi / taper
+    high = stationary + highest + 12.0 * math.pi / taper
+    j_low, j_high = math.floor((low - offset) / step), math.ceil((high - offset) / step)
+    lattice = offset + step * np.arange(j_low, j_high + 1)
+    ds = 2.0 * math.pi / (16.0 * (high - low))
+    sigma = np.arange(-taper, spread + taper + ds, ds)
+    past = sigma >= 0.0
+    way = np.hypot(shortest + sigma, along)
+    amplitude = np.where(past, (shortest + sigma) / way, sine + turn**2 / own * sigma)
+    phase = np.where(past, k * (way - own) - stationary * sigma, 0.0)
+    fade = np.where(past, (sigma - spread) / taper, -sigma / taper)
+    kept = np.cos(0.5 * np.pi * np.clip(fade, 0.0, 1.0)) ** 2
+    density = kept * np.maximum(amplitude, 0.0) * np.exp(1j * phase)
+    weights = np.empty(len(lattice), dtype=complex)
+    for begin in range(0, len(lattice), 256):
+        some = lattice[begin : begin + 256] - stationary
+        weights[begin : begin + 256] = np.exp(-1j * np.outer(some, sigma)) @ density
+    return j_low, weights * (ds * step / (2.0 * math.pi))
+
+
+def _folded(j_low: int, weights: np.ndarray, least: int, hz: float) -> tuple[int, np.ndarray]:
+    """A frequency's weights (:func:`_kernel`: from the wavenumber ``j_low`` up) as they
+    are summed, from the lowest wavenumber that takes one: the weights below the
+    ``least`` wavenumber at which the row is solved go to that one, as if the row's
+    sound less its first arrival's phase were level below it, and those of the
+    wavenumbers at either end that hold ``ACROSS_DROPPED`` of the weights' sizes between
+    them to the nearest wavenumber kept. :class:`OutOfReach` where the sizes of the
+    weights below ``least`` add up to more than ``ACROSS_BELOW_MOST`` of the first
+    arrival's weight, which is the weights' sum (sin(b) of :func:`_kernel`), at ``hz``
+    Hz."""
+    sizes = np.abs(weights)
+    below = min(max(least - j_low, 0), len(weights))
+    share = float(np.sum(sizes[:below])) / abs(np.sum(weights))
+    if share > ACROSS_BELOW_MOST:
+        raise OutOfReach(
+            f"a way that crosses the row at a slant: at {hz:.0f} Hz the weights below the lowest "
+            f"wavenumber at which the row is solved are {share:.3g} of the first arrival's; "
+            f"across the row and moved, the solver takes {ACROSS_BELOW_MOST:g}"
+        )
+    dropped = 0.5 * ACROSS_DROPPED * float(np.sum(sizes))
+    start = int(np.searchsorted(np.cumsum(sizes), dropped, side="right"))
+    stop = len(sizes) - int(np.searchsorted(np.cumsum(sizes[::-1]), dropped, side="right"))
+    start = max(start, below)
+    kept = weights[start:stop].copy()
+    kept[0] += np.sum(weights[:start])
+    kept[-1] += np.sum(weights[stop:])
+    return j_low + start, kept
+
+
+def _moved(
+    f: np.ndarray,
+    c: float,
+    zs: float,
+    reach: float,
+    zr: float,
+    obstacles: list,
+    top: float | None,
+    steps_per_wavelength: float,
+    steep_reflections: str,
+    slant: float,
+) -> Row:
+    """The sound over a row on a rigid ground whose edges all lie ``slant`` radians from
+    across the way, more than 0 and less than a right angle (the other arguments as
+    :func:`over_row` takes them): the row's sound ACROSS its edges, between ends
+    ``reach`` cos(slant) m apart, at the wavenumbers of a lattice, moved to ends
+    ``reach`` sin(slant) m apart along the edges (:func:`_kernel`). For a rigid row that
+    is the same all along its edges that is exact for the part of the row's response
+    that the kernel holds, given the row's sound across it at those wavenumbers, for a
+    response that has ended a period of the lattice less the kernel's fade past the
+    shortest way (what arrives later comes into the sum out of place, see
+    :func:`_kernel`).
+
+    The kernel holds the row's response from the shortest way over the tops up to
+    ``ACROSS_PAST_M`` m past the longest of the ways between the ends and their images
+    that the marches hold (:func:`_held`), and its two ends fade over ``ACROSS_FRESNEL``
+    Fresnel lengths of the frequency (1 / sqrt(c), c the phase's rate k cos^2(b) / (2
+    own) of :func:`_kernel`), ``ACROSS_TAPER_MOST`` times the shortest way at most. The
+    lattice's step makes its period the kernel's greatest length over ``ACROSS_FILL``,
+    and the lattice goes through the lowest wavenumber at which the row is solved.
+    :class:`OutOfReach` where across the edges an end is no distance (``_SAME_M``) from
+    the other end, or from a side of an obstacle that is apart from it along the way,
+    between the ends or outside them (a way almost along the edges, or a side nanometres
+    from an end); where the first arrival's own wavenumber across the row, k times the
+    shortest way across over that way at the slant, is below the lowest at which the row
+    is solved, ``STRING_WAVELENGTHS`` wavelengths in the shortest way; where too much of
+    a frequency's weights lies below that one, or below a higher one where the solver
+    refuses the row at every wavenumber below it (:func:`_folded`); and where the solver
+    refuses the row at a wavenumber above one at which it takes it, or at all of them
+    (with the solver's reason). An image whose reflection is left out as too steep
+    (``steep_reflections``) is not held, and does not make the kernel longer: what the
+    marches still take of it (:func:`_kept`) is in the sum where it arrives within the
+    kernel."""
+    cosine = math.cos(slant)
+    across, along = reach * cosine, reach * math.sin(slant)
+    # A side that is apart from an end along the way is so across the edges too: the
+    # row across them stands to its ends as the row along the way does.
+    sides = [
+        x * cosine
+        for near, far, h in obstacles
+        for x in (near, far)
+        if h > 0.0 and abs(x) > _SAME_M and abs(x - reach) > _SAME_M
+    ]
+    if across <= 2.0 * _SAME_M or any(
+        abs(x) <= _SAME_M or abs(x - across) <= _SAME_M for x in sides
+    ):
+        raise OutOfReach(
+            "a way that crosses the row at a slant: across the row's edges an end is no "
+            "distance from the other end, or from a side of an obstacle that is apart from "
+            "it along the way"
+        )
+    standing = [(near * cosine, far * cosine, h) for near, far, h in obstacles]
+    row = skyline(standing)
+    mirrored = [(across - far, across - near, h) for near, far, h in row]
+    tops = sorted(
+        (x, h) for near, far, h in row for x in {near, far} if _SAME_M < x < across - _SAME_M
+    )
+    shortest = _length(string([(0.0, zs), *tops, (across, zr)]))
+    own = math.hypot(shortest, along)
+    turn = along / own
+    k = 2.0 * math.pi * f / c
+    # The first arrival crosses the row at k times its way across over its way at the slant.
+    first_at = float(np.min(f)) * shortest / own
+    if first_at * shortest < STRING_WAVELENGTHS * c:
+        raise OutOfReach(
+            f"a way that crosses the row at a slant: at {float(np.min(f)):.0f} Hz the sound "
+            f"crosses the row at the wavenumber of {first_at:.3g} Hz, at which ends "
+            f"{shortest:.3g} m apart across the row are closer than the "
+            f"{STRING_WAVELENGTHS:g} wavelengths that the solver takes"
+        )
+    left_out = steep_reflections == "leave out"
+    sources = _held(f, c, across, zs, zr, row, left_out, along)
+    listeners = _held(f, c, across, zr, zs, mirrored, left_out, along)
+    longest = max(
+        _length(string([(0.0, a), *tops, (across, b)])) for a in sources for b in listeners
+    )
+    spread = longest - shortest + ACROSS_PAST_M
+    fresnel = ACROSS_FRESNEL / (np.sqrt(k / (2.0 * own)) * turn)
+    tapers = np.minimum(fresnel, ACROSS_TAPER_MOST * shortest)
+    step = ACROSS_FILL * 2.0 * math.pi / (2.0 * float(np.max(tapers)) + spread)
+    # The lattice goes through the lowest wavenumber at which the solver takes the row: ends
+    # ``STRING_WAVELENGTHS`` wavelengths apart over the tops (and a rounding more).
+    lowest = 2.0 * math.pi * STRING_WAVELENGTHS / shortest * (1.0 + 1e-9)
+    least = int(lowest // step)
+    offset = lowest - least * step
+    kernels = [
+        _kernel(float(ki), step, offset, along, shortest, spread, float(t))
+        for ki, t in zip(k, tapers, strict=True)
+    ]
+    solved: dict[int, tuple[complex, complex]] = {}
+    # The solver's reason at each wavenumber at which it refuses the row.
+    why: dict[int, str] = {}
+
+    def solve(some: list[int]) -> bool:
+        wanted = (offset + np.array(some) * step) * c / (2.0 * math.pi)
+        try:
+            got = over_row(
+                wanted,
+                c,
+                None,
+                zs,
+                across,
+                zr,
+                standing,
+                top,
+                steps_per_wavelength,
+                steep_reflections,
+            )
+        except OutOfReach as refused:
+            if len(some) == 1:
+                why[some[0]] = str(refused)
+            return False
+        for j, marched, edges in zip(some, got.marched, got.edges, strict=True):
+            solved[j] = (complex(marched), complex(edges))
+        return True
+
+    while True:
+        try:
+            folded = [
+                _folded(*kernel, least, float(hz)) for kernel, hz in zip(kernels, f, strict=True)
+            ]
+        except OutOfReach as too_much:
+            if not why:
+                raise
+            raise OutOfReach(f"{too_much} (below it: {why[max(why)]})") from None
+        # Each wavenumber is asked for once: the loop ends.
+        needed = sorted(
+            {j for begin, w in folded for j in range(begin, begin + len(w))}
+            - set(solved)
+            - set(why)
+        )
+        if not needed:
+            break
+        for begin in range(0, len(needed), ACROSS_TOGETHER):
+            some = needed[begin : begin + ACROSS_TOGETHER]
+            if not solve(some) and len(some) > 1:
+                # One at a time: the solver may take the higher ones.
+                for j in some:
+                    solve([j])
+        if why:
+            highest = max(why)
+            if not solved or highest > min(solved):
+                # Not the lowest wavenumbers alone, which the weights' folding is for.
+                hz = (offset + highest * step) * c / (2.0 * math.pi)
+                raise OutOfReach(
+                    "a way that crosses the row at a slant: across the row, at the wavenumber "
+                    f"of {hz:.3g} Hz, {why[highest]}"
+                )
+            least = highest + 1
+    marched, added = np.empty(len(f), dtype=complex), np.empty(len(f), dtype=complex)
+    for i, (begin, weights) in enumerate(folded):
+        js = np.arange(begin, begin + len(weights))
+        turned = weights * np.exp(1j * (k[i] * own - (offset + js * step) * shortest))
+        marched[i] = np.sum(turned * np.array([solved[int(j)][0] for j in js]))
+        added[i] = np.sum(turned * np.array([solved[int(j)][1] for j in js]))
+    return Row(marched=marched, edges=added)
+
+
+def _shed(
+    what: str, k: np.ndarray, kl: np.ndarray, to_source, to_listener, source_s, listener_s, slant
+) -> np.ndarray:
+    """(F,) what an edge sheds beyond the march's screen (``what``: a barrier's top,
+    "screen", or a roof's near corner, "roof", or far one, "behind") for one wave from
+    each end, by the directions from the edge to where they come from and whether each
+    comes straight from its end or the end's image (:func:`_screen`, :func:`_corner`)."""
+    if what == "screen":
+        return _screen(k, kl, to_source, to_listener, slant)
+    if what == "roof":
+        return _corner(k, kl, to_source, 1.0, to_listener if listener_s else None, slant)
+    return _corner(k, kl, to_listener, -1.0, to_source if source_s else None, slant)
+
+
+def _lit_by_both(slanting: dict, first: float | None, last: float | None, reach: float) -> None:
+    """Raises :class:`OutOfReach` for an edge of ``slanting`` ((what, m along the way,
+    top) -> its slant, radians) turned more than ``SLANT_ROW_MOST_DEG`` degrees that the
+    two ends do not both light themselves: one at which not both marches begin
+    (``first`` m from the source, ``last`` m from the listener; None for a march that
+    begins at its end)."""
+    for (_, x, _), slant in slanting.items():
+        both = (
+            first is not None
+            and last is not None
+            and abs(x - first) <= _SAME_M
+            and abs(reach - x - last) <= _SAME_M
+        )
+        if slant > math.radians(SLANT_ROW_MOST_DEG) and not both:
+            raise OutOfReach(
+                f"an edge {x:.3g} m along the way that is turned {math.degrees(slant):.1f} "
+                f"degrees from across it and that a march lights: the terms of such an edge "
+                f"take {SLANT_ROW_MOST_DEG:.0f} degrees"
+            )
+
+
+def _on_one_way(apart: np.ndarray, pressure: np.ndarray) -> None:
+    """Raises :class:`OutOfReach` where the section's phase, in place of the own way's,
+    on the terms of the slanted edges that a march lights would change the sound by
+    ``apart`` (F,) and that is more than ``SLANT_APART_MOST`` of the ``pressure`` (F,),
+    as root mean squares over the frequencies: the marches have the section's phase,
+    and such a sound depends on which of the two those terms are given."""
+    if not np.any(apart):
+        return
+    share = math.sqrt(float(np.mean(np.abs(apart) ** 2) / np.mean(np.abs(pressure) ** 2)))
+    if share > SLANT_APART_MOST:
+        raise OutOfReach(
+            f"a way that crosses the row at a slant with an end's way to the row so steep "
+            f"that the edges' terms on the sound's own way and on the marches' differ by "
+            f"{share:.2f} of the sound: the solver takes {SLANT_APART_MOST:.2f}"
+        )
 
 
 def _plane_under(forward: _Way, backward: _Way, x: float, h: float, reach: float) -> float | None:
@@ -442,7 +1039,7 @@ def _march_from(
 
         # The end's image in what it stands over: the ground, or the roof under it.
         mirror = 2.0 * under - z0
-        below = string([(0.0, mirror), *tops, (reach, z1)])
+        below, layer, through = _start_layer(f, c, reach, z1, tops, whole, first, under, left_out)
         mirrored = _length(below)
 
         def field(z):
@@ -457,13 +1054,6 @@ def _march_from(
             )
             return u / math.sqrt(first)
 
-        # The layer leaves exp(-2 strength thickness / (3 slope)) at most of a wave that
-        # goes up through it at that slope and comes back down from the top of the grid.
-        floor = max(h for x, h in tops if x <= first + _SAME_M)
-        # Only the ground's reflection can be left out, not a roof's.
-        off = "roof" if under > 0.0 else "ground"
-        layer = _layer(f, c, first, floor, (whole, below), left_out and under == 0.0, off)
-        through = 2.0 * parabolic.LAYER_STRENGTH * layer / 3.0 * first
         start = (first, field)
     else:
         _from_its_end(f, c, z0, z1, reach, row, tops)
@@ -508,6 +1098,25 @@ def _march_from(
         )
 
     return run
+
+
+def _start_layer(
+    f, c: float, reach: float, z1: float, tops, whole, first: float, under: float, left_out: bool
+) -> tuple[list, float, float]:
+    """For a march that begins ``first`` m from its end, which stands over ``under``
+    (m up) with the string ``whole`` over the ``tops`` to the other end (``reach`` m on,
+    ``z1`` m up): the string from the end's image in that surface, the thickness (m) of
+    the absorbing layer that the start needs (:func:`_layer`; ``left_out`` as
+    :func:`_march_from` takes it), and what :func:`_kept` takes of the start's waves
+    with it."""
+    below = string([(0.0, 2.0 * under - whole[0][1]), *tops, (reach, z1)])
+    # The layer leaves exp(-2 strength thickness / (3 slope)) at most of a wave that
+    # goes up through it at that slope and comes back down from the top of the grid.
+    floor = max(h for x, h in tops if x <= first + _SAME_M)
+    # Only the ground's reflection can be left out, not a roof's.
+    off = "roof" if under > 0.0 else "ground"
+    layer = _layer(f, c, first, floor, (whole, below), left_out and under == 0.0, off)
+    return below, layer, 2.0 * parabolic.LAYER_STRENGTH * layer / 3.0 * first
 
 
 def _wave(k: np.ndarray, distance: np.ndarray) -> np.ndarray:
@@ -685,11 +1294,11 @@ def _lit(way: _Way, k: np.ndarray, edge: tuple) -> list[tuple]:
     """How a march's end lights an ``edge`` (what, m along the march, top): the waves
     that reach it, each as (the two-dimensional field (F,), the length of its path
     (m), the direction (along the march, up) from the edge to where it comes from,
-    and whether it comes straight from the end or from its image, not from the
-    march). The first top of a march that begins there is lit by the end and by its
-    image in what the end stands over (the ground, or a roof), each its own wave and
-    as much of each as the march takes (:func:`_kept`); any other edge by the marched
-    field, along the string from the end."""
+    whether it comes straight from the end or from its image, not from the march,
+    and the path's points). The first top of a march that begins there is lit by the
+    end and by its image in what the end stands over (the ground, or a roof), each its
+    own wave and as much of each as the march takes (:func:`_kept`); any other edge by
+    the marched field, along the string from the end."""
     _, x, h = edge
     if way.first is not None and abs(x - way.first) <= _SAME_M:
         out: list[tuple] = []
@@ -698,13 +1307,13 @@ def _lit(way: _Way, k: np.ndarray, edge: tuple) -> list[tuple]:
             u = float(_kept(way.through, h - z0)) * np.exp(1j * k * a) / math.sqrt(a)
             if image:
                 u = u * _reflection(way.ground, k, (h - z0) / a, a)[:, 0]
-            out.append((u, a, (-x, z0 - h), True))
+            out.append((u, a, (-x, z0 - h), True, [(0.0, z0), (x, h)]))
         return out
     path = string([(0.0, way.height), *(t for t in way.tops if t[0] < x - _SAME_M), (x, h)])
     cosine = 1.0 if way.first is not None else _cosine(path)
     before = path[-2]
     lit = way.lit[edge] * math.sqrt(x / cosine)
-    return [(lit, _length(path), (before[0] - x, before[1] - h), False)]
+    return [(lit, _length(path), (before[0] - x, before[1] - h), False, path)]
 
 
 def string(points) -> list[tuple[float, float]]:
@@ -815,26 +1424,161 @@ def _bend(to_source, to_listener) -> float:
     )
 
 
-def _screen(k: np.ndarray, kl: np.ndarray, to_source, to_listener) -> np.ndarray:
+@dataclass(frozen=True)
+class _Slanted:
+    """An edge that the way crosses at a slant, for one wave that reaches it and one
+    that goes on from it (:func:`_slanted`)."""
+
+    #: The cosine of the edge's angle from across the way, seen from above: what a step
+    #: along the way is across the edge.
+    cosine: float
+    #: The sine of the angle between the sound's way and the edge.
+    sine: float
+    #: (F,) the wavenumber times the distance parameter across the edge.
+    kl: np.ndarray
+    #: (F,) what makes a wave of the section along the way, exp(ik(a + b)) over the
+    #: root of a b (a + b), the wave of the edge at its slant.
+    turn: np.ndarray
+
+
+def _slants(obstacles, slants) -> list[tuple[float, float, float, float, float]]:
+    """The ``obstacles`` (a list) with their ``slants`` as (near, far, top, the near
+    side's angle from across the way, the far side's), the angles as given (radians,
+    with their signs); none where ``slants`` is None. A ValueError where the slants are not one
+    for each obstacle, each a real number or a pair of them (not a string, a truth
+    value or a complex number), and for a barrier, which has one top, with two slants
+    of different sizes."""
+    if slants is None:
+        return []
+    try:
+        slants = list(slants)
+    except TypeError:
+        slants = None
+    if slants is None or len(slants) != len(obstacles):
+        raise ValueError("one slant for each obstacle (a number, or one for each of its sides)")
+    out = []
+    for (near, far, h), slant in zip(obstacles, slants, strict=True):
+        try:
+            given = np.asarray(slant)
+        except (TypeError, ValueError):
+            given = np.asarray(None)
+        # Whole or real numbers alone: numpy would read a string of digits as one.
+        if given.dtype.kind not in "iuf" or given.shape not in ((), (2,)):
+            raise ValueError("a slant is an angle in radians, or one for each of the two sides")
+        sides = given.astype(float)
+        if not np.all(np.isfinite(sides)):
+            raise ValueError("a slant is an angle in radians, or one for each of the two sides")
+        near_side, far_side = (float(side) for side in np.broadcast_to(sides, (2,)))
+        if abs(far - near) <= _SAME_M and abs(near_side) != abs(far_side):
+            raise ValueError("a barrier has one top, and one slant")
+        out.append((float(near), float(far), float(h), near_side, far_side))
+    return out
+
+
+def _slant_of(turned, what: str, x: float, h: float) -> float:
+    """The angle (radians, 0 or more) by which the edge (what, m along the way, top) of
+    the row is turned from across the way: that of the side there of the obstacle with
+    its top at that height (``turned``, as :func:`_slants` gives them; of several, the
+    first given), the far side for a roof's far corner and the near side otherwise,
+    without its sign.
+    :class:`OutOfReach` beyond ``SLANT_MOST_DEG``."""
+    far_side = what == "behind"
+    for near, far, top, slant_near, slant_far in turned:
+        if (far - near > _SAME_M) != (what != "screen") or abs(top - h) > _SAME_M:
+            continue
+        if abs((far if far_side else near) - x) <= _SAME_M:
+            slant = abs(slant_far if far_side else slant_near)
+            if slant > math.radians(SLANT_MOST_DEG):
+                raise OutOfReach(
+                    f"an edge {x:.3g} m along the way that is turned "
+                    f"{math.degrees(slant):.1f} degrees from across it: the edges' terms "
+                    f"take {SLANT_MOST_DEG:.0f} degrees"
+                )
+            return slant
+    raise ValueError(f"no obstacle has a side {x:.6g} m along the way with its top {h:.6g} m up")
+
+
+def _across(path, cosine: float) -> float:
+    """The length (m) of a ``path`` in the vertical plane along the way ((m along it, m
+    up) points) as it is across an edge that is turned from across the way by the
+    angle with that ``cosine``."""
+    return sum(
+        math.hypot((b[0] - a[0]) * cosine, b[1] - a[1])
+        for a, b in zip(path[:-1], path[1:], strict=True)
+    )
+
+
+def _slanted(
+    k: np.ndarray, a: float, b: float, before, after, slant: float, reach: float
+) -> _Slanted:
+    """What the terms of an edge turned ``slant`` (radians) from across the way take in
+    place of the section's (:class:`_Slanted`), for the wave that reaches it over the
+    path ``before`` and goes on over the path ``after`` ((m along the way from their
+    own end, m up) points; ``a`` and ``b`` m long). The sound that bends at such an
+    edge does not stay in the vertical plane along the way: it meets the edge where it
+    leaves at the angle to the edge at which it came (Keller's cone), and its way is
+    the shortest from end to end over the edge. Across the edge the two paths are
+    ``rho_s`` and ``rho_l`` long, and along it the ends are ``reach`` times the
+    slant's sine apart, as if the row's other edges were turned as this one is (for a
+    row that is the same all along its edges that is the sound's own way; for edges
+    at different slants it is a choice). With beta the angle between that way and the
+    edge, the uniform theory's terms are those of the angles across the edge, at the
+    distance parameter rho_s rho_l sin(beta) / (rho_s + rho_l), over sin(beta)."""
+    cosine = math.cos(slant)
+    rho_s, rho_l = _across(before, cosine), _across(after, cosine)
+    across = rho_s + rho_l
+    whole = math.hypot(across, reach * math.sin(slant))
+    sine = across / whole
+    # exp(ik whole) over the root of s s' (s + s'), with s = rho / sin(beta) the legs.
+    spread = sine * math.sqrt(a * b * (a + b) / (rho_s * rho_l * whole))
+    return _Slanted(
+        cosine=cosine,
+        sine=sine,
+        kl=k * rho_s * rho_l * sine / across,
+        turn=np.exp(1j * k * (whole - a - b)) * spread,
+    )
+
+
+def _screen(
+    k: np.ndarray, kl: np.ndarray, to_source, to_listener, slant: _Slanted | None = None
+) -> np.ndarray:
     """(F,) what a rigid thin screen's top sheds beyond the march's screen, for the
     directions (along the way, up) from the top to where the sound comes from and to
     where it goes: the two terms of the reflections off the half-plane's faces, and
     the share of its two terms of the incident wave that the mean of the two marches
-    lacks, 1 - cos(bend / 2)."""
+    lacks, 1 - cos(bend / 2). With a ``slant`` the half-plane's four terms are those
+    of the edge at its slant (:func:`_slanted`), less what the marches' screen sheds
+    in the section along the way, cos(bend / 2) of the two terms of the incident wave
+    there."""
 
-    def angle(direction) -> np.ndarray:
+    def angle(direction, cosine: float = 1.0) -> np.ndarray:
         # Round the top from the screen itself, which hangs down from it.
-        return np.asarray(math.atan2(-direction[0], -direction[1]) % (2.0 * math.pi))
+        return np.asarray(math.atan2(-direction[0] * cosine, -direction[1]) % (2.0 * math.pi))
 
     terms = wedge_terms(_PLANE, angle(to_listener), angle(to_source), kl)
-    lacking = 1.0 - math.cos(0.5 * _bend(to_source, to_listener))
-    return np.conj(
-        wedge_prefactor(_PLANE, k, _ACROSS)
-        * (terms[..., 2] + terms[..., 3] + lacking * (terms[..., 0] + terms[..., 1]))
+    if slant is None:
+        lacking = 1.0 - math.cos(0.5 * _bend(to_source, to_listener))
+        return np.conj(
+            wedge_prefactor(_PLANE, k, _ACROSS)
+            * (terms[..., 2] + terms[..., 3] + lacking * (terms[..., 0] + terms[..., 1]))
+        )
+    turned = wedge_terms(
+        _PLANE, angle(to_listener, slant.cosine), angle(to_source, slant.cosine), slant.kl
     )
+    marched = math.cos(0.5 * _bend(to_source, to_listener))
+    return slant.turn * np.conj(
+        wedge_prefactor(_PLANE, k, np.asarray(slant.sine)) * turned.sum(axis=-1)
+    ) - marched * np.conj(wedge_prefactor(_PLANE, k, _ACROSS) * (terms[..., 0] + terms[..., 1]))
 
 
-def _corner(k: np.ndarray, kl: np.ndarray, outside, along: float, inside=None) -> np.ndarray:
+def _corner(
+    k: np.ndarray,
+    kl: np.ndarray,
+    outside,
+    along: float,
+    inside=None,
+    slant: _Slanted | None = None,
+) -> np.ndarray:
     """(F,) what a roof's rigid corner sheds beyond the screen the march takes its wall
     for, between a wave on the roof's side and the direction ``outside`` (along the
     way, up) from the corner to where the sound comes from (the near corner: ``along``
@@ -847,14 +1591,21 @@ def _corner(k: np.ndarray, kl: np.ndarray, outside, along: float, inside=None) -
     terms of that wave, those of the incident wave for the end and those of the
     reflection off the roof for its image. Less what the march's screen sheds of the
     wave: cos(bend / 2) of the two terms of the incident wave of the half-plane that
-    hangs down from the corner."""
-    # Round the corner from the roof, through the air.
-    phi = math.atan2(outside[1], along * outside[0]) % (2.0 * math.pi)
-    # The wave on the roof's side, above the roof (its image in the roof: below).
-    raised = 0.0 if inside is None else math.atan2(inside[1], along * inside[0])
+    hangs down from the corner. With a ``slant`` the wedge's terms are those of the
+    corner at its slant (:func:`_slanted`); what the march's screen sheds stays that
+    of the section along the way."""
+
+    def own(cosine: float, distance: np.ndarray) -> tuple[np.ndarray, float, float]:
+        # Round the corner from the roof, through the air.
+        phi = math.atan2(outside[1], along * outside[0] * cosine) % (2.0 * math.pi)
+        # The wave on the roof's side, above the roof (its image in the roof: below).
+        raised = 0.0 if inside is None else math.atan2(inside[1], along * inside[0] * cosine)
+        wedge = wedge_terms(_CORNER, np.asarray(abs(raised)), np.asarray(phi), distance)
+        pair = wedge[..., 0] + wedge[..., 1] if raised >= 0.0 else wedge[..., 2] + wedge[..., 3]
+        return pair, phi, raised
+
+    section, phi, raised = own(1.0, kl)
     between = phi - raised
-    wedge = wedge_terms(_CORNER, np.asarray(abs(raised)), np.asarray(phi), kl)
-    own = wedge[..., 0] + wedge[..., 1] if raised >= 0.0 else wedge[..., 2] + wedge[..., 3]
     # The half-plane's terms of the incident wave are of the angle between the two.
     down = 1.5 * math.pi  # the wall, round the corner from the roof
     low = max(down - between, 0.0)
@@ -862,10 +1613,13 @@ def _corner(k: np.ndarray, kl: np.ndarray, outside, along: float, inside=None) -
     plane = wedge_terms(_PLANE, np.asarray(high), np.asarray(low), kl)
     # The sound turns by that angle less a straight one.
     shed = math.cos(0.5 * (between - math.pi))
-    return np.conj(
-        wedge_prefactor(_CORNER, k, _ACROSS) * own
-        - shed * wedge_prefactor(_PLANE, k, _ACROSS) * (plane[..., 0] + plane[..., 1])
-    )
+    marched = shed * wedge_prefactor(_PLANE, k, _ACROSS) * (plane[..., 0] + plane[..., 1])
+    if slant is None:
+        return np.conj(wedge_prefactor(_CORNER, k, _ACROSS) * section - marched)
+    turned = own(slant.cosine, slant.kl)[0]
+    return slant.turn * np.conj(
+        wedge_prefactor(_CORNER, k, np.asarray(slant.sine)) * turned
+    ) - np.conj(marched)
 
 
 __all__ = ["OutOfReach", "Row", "edges_of", "layer_top", "over_row", "skyline", "string"]

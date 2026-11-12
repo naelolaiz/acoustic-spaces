@@ -11,7 +11,13 @@
   dB down to a listener there; between rigid screens on a rigid ground up to 3.4 dB low,
   a parapet lower than a quarter of a wavelength on a roof's edge up to 1.3 dB off, and
   with an error for the ends it cannot hold, such as one almost straight under the top
-  of a wall (`validation/rows.py`). Simulations do not use it yet.
+  of a wall (`validation/rows.py`). A way that crosses the row at a slant takes each
+  edge at its slant (`slants`, up to 75°; one screen within 0.10 dB of the exact
+  solution), and where an end's way to the row is steep or an edge in a row is turned
+  more than 60°, a row on a rigid ground whose edges all lie in one direction is solved
+  across them and moved to the slant: two roofs on a rigid ground within 1.3 dB of the
+  wave calculation at 30, 60 and 75°, three rigid screens there up to 8.2 dB low.
+  Simulations do not use it yet.
 - Fixed: the wave solver missed a wall through a plane of its cell centres or just past
   one, so that sound went through it, a closed room could be read as open and the
   19-point run could grow without bound; a source or a listener exactly on a surface is
