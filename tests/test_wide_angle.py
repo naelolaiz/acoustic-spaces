@@ -344,6 +344,46 @@ def test_independent_ranges_get_what_they_would_alone() -> None:
             assert np.array_equal(together[:, i], alone[:, 0])
 
 
+@pytest.mark.parametrize(
+    ("zs", "obstacles"),
+    [
+        (2.0, [(40.0, 60.0, 8.0)]),
+        (2.0, [(20.0, 20.0, 3.0), (40.0, 60.0, 8.0)]),
+        (2.0, [(40.0, 60.0, 8.0), (100.0, 120.0, 5.0)]),
+        (7.0, [(-5.0, 20.0, 6.0), (40.0, 60.0, 8.0)]),
+    ],
+)
+def test_independent_ranges_either_side_of_a_building_get_what_they_would_alone(
+    zs, obstacles
+) -> None:
+    """With ``independent`` the points short of the first building's front and those past
+    it get, to the bit, what a march to each alone gives, in either equation: the
+    wide-angle equation's height steps fit that building's roof only in a march that
+    goes past its front, so the points short of it (one of them at the front itself)
+    march apart. A screen before the building, a second building and a roof under the
+    source, which every march fits, change nothing in that. In one march with the
+    others the wide-angle equation's points short of the front moved by up to 0.011 dB
+    here."""
+    f = [63.0, 100.0]
+    grass = np.conj(surface_impedance(np.array(f), 200.0))
+
+    def windy(h):
+        return C + 0.05 * np.minimum(np.asarray(h, dtype=float), 100.0)
+
+    ranges = np.array([90.0, 12.0, 40.0, 50.0, 39.9, 61.0, 140.0])
+    heights = np.array([1.5, 2.0, 9.0, 9.5, 4.0, 3.0, 1.5])
+    for solver, more in ((wide_angle, {}), (parabolic, {"refracting": True})):
+        args = (f, windy, lambda r: grass, zs)
+        together = solver.march(
+            *args, ranges, heights, 60.0, independent=True, obstacles=obstacles, **more
+        )
+        for i in range(len(ranges)):
+            alone = solver.march(
+                *args, ranges[i : i + 1], heights[i : i + 1], 60.0, obstacles=obstacles, **more
+            )
+            assert np.array_equal(together[:, i], alone[:, 0])
+
+
 # -- in a scene ---------------------------------------------------------------------------
 
 

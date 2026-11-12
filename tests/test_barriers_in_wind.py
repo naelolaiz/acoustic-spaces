@@ -1172,6 +1172,56 @@ def test_no_step_where_the_direct_sound_rises_past_a_barrier_s_top_corner() -> N
     assert np.all(np.abs(np.diff(level, axis=0)) < 0.05)
 
 
+@pytest.mark.parametrize(
+    ("more", "threads"), [((), 1), (((40.0, 10.0, 1.5), (80.0, -20.0, 1.5)), 2)]
+)
+def test_a_listener_behind_a_barrier_in_wind_reads_the_same_alone_as_with_others(
+    more, threads
+) -> None:
+    """Behind the barrier in wind a listener 40 m from the source gets the same early
+    energy in every band alone as with two more behind it, 80 m away, one of them 10 m
+    up: its runs over the barrier, in the wind and in still air, are on the grid of
+    heights that its own absorbing layer needs, the layer where that grid holds it,
+    whoever shares them; and on two threads, with two more in other directions, whose
+    runs in still air take the field up to the barrier from one another. With one layer
+    above the highest of a run's listeners the others moved its bands by up to 0.0013
+    dB."""
+    me = (40.0, 0.0, 1.5)
+    early = []
+    for listeners in ((me,), (me, (80.0, 0.0, 1.5), (80.0, 0.0, 10.0), *more)):
+        room = Room.from_scene(
+            scene(listeners=listeners, open_ground_frequencies=8, barrier_frequencies=8)
+        )
+        early.append(simulate(room, threads=threads)["s", "l0"].early.energy.sum(axis=0))
+    np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
+
+
+@pytest.mark.parametrize(("y", "threads"), [(-10.0, 2), (5.0, 1)])
+def test_a_listener_past_a_barrier_s_end_in_wind_reads_the_same_alone_as_with_others(
+    y, threads
+) -> None:
+    """60 m downwind, 10 m behind a barrier's end and 5 m into the lit side, where the
+    paths round the end take the parabolic equation's runs along their ways, a listener
+    gets the same early energy in every band alone as with two more twice as far in its
+    direction, one of them 10 m up; on two threads too. With one layer above the highest
+    of a run's listeners the two moved its bands by up to 0.0002 dB behind the barrier
+    and 0.0005 dB on the lit side."""
+    me = (60.0, y, 1.5)
+    early = []
+    for listeners in ((me,), (me, (120.0, 2.0 * y, 1.5), (120.0, 2.0 * y, 10.0))):
+        room = Room.from_scene(
+            scene(
+                listeners=listeners,
+                barriers=[END],
+                extent=((-60.0, -60.0), (150.0, 60.0)),
+                open_ground_frequencies=8,
+                barrier_frequencies=8,
+            )
+        )
+        early.append(simulate(room, threads=threads)["s", "l0"].early.energy.sum(axis=0))
+    np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
+
+
 def test_the_paths_over_the_top_and_over_the_open_ground_stay_as_they_were() -> None:
     """60 m downwind the paths over the barrier's top 10 m behind its end and the open
     ground's paths 20 m into the lit side are as recorded for this scene (on Linux,
@@ -1197,22 +1247,22 @@ def test_the_paths_over_the_top_and_over_the_open_ground_stay_as_they_were() -> 
     ]
     ground = np.flatnonzero(lit.edge < 0)
     expected_top = [
-        5.298631481402662e-06,
-        4.2415031819623975e-06,
-        2.452351503009703e-06,
-        5.319490746351252e-06,
-        7.372428038473811e-07,
-        4.667647687070827e-07,
-        1.5041971014804868e-07,
-        1.30810958966448e-08,
+        5.298553749284605e-06,
+        4.241511621714229e-06,
+        2.452246701529454e-06,
+        5.318075668660478e-06,
+        7.36897879903873e-07,
+        4.666207148877158e-07,
+        1.5047143652078364e-07,
+        1.3085253877927274e-08,
     ]
     expected_ground = [
-        9.200513444254311e-05,
-        0.00010677352415635575,
-        0.00011699229865428902,
-        7.143885680548765e-05,
-        2.0410881905508263e-05,
-        6.926547047971363e-05,
+        9.200410206807897e-05,
+        0.0001067737110220973,
+        0.00011697147433859961,
+        7.143461213755506e-05,
+        2.0410108665021113e-05,
+        6.926517139835472e-05,
         2.6419545376058942e-05,
         8.918224948651596e-06,
     ]
