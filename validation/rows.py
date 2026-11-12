@@ -32,8 +32,8 @@ bands, at the engine's eight frequencies a band); ``--references`` computes them
 3 to 6 minutes a listener's place on one core.
 
 Each case is listed with the wave calculation's level and how far from it are the march
-alone (its screens and walls reflect nothing), the march with the edges' terms (what
-the module gives) and, with ``--engine``, the early stage of a simulation of the same
+alone (its screens and walls reflect nothing), the march with what the rigid edges add
+(what the module gives) and, with ``--engine``, the early stage of a simulation of the same
 scene with ``second_order`` and ``first_order`` diffraction, each way round; the
 simulation does not take the module's sound yet. The cases go by the angle the sound
 bends by at the row's ends, up from the source to the first top or down from the last
@@ -99,8 +99,12 @@ REFERENCE_LIMIT_DB = 0.15
 #: has none coming back; no run here shows that this is the cause). With the source
 #: over a roof the groups go by what stands on the roof, at any bend: nothing up to the
 #: roof's edge, a parapet on that edge, or a screen on a roof that goes on under the
-#: listener, each lower than :data:`LOW_M` or not (the edges' terms take a screen for a
-#: half-plane, and have no sound that goes on between its top and the roof).
+#: listener, each lower than :data:`LOW_M` or not. For a parapet the edges' terms take
+#: a half-plane, and have no sound that goes on between its top and the roof; for a
+#: screen on a roof under both ends the module takes the strip that the screen makes
+#: with its image in the roof (``engine/strip.py``), and the wave calculation's
+#: screen, one cell thick, is as far from the thin one's exact level as the module is
+#: from the wave calculation (``validation/barrier_strip.py``).
 LIMITS = {
     ("free space", 6.0): 0.4,
     ("free space", 25.0): 0.2,
@@ -113,8 +117,8 @@ LIMITS = {
     ("over a roof", 90.0): 0.2,
     ("parapet on a roof's edge", 90.0): 0.9,
     ("low parapet on a roof's edge", 90.0): 1.2,
-    ("screen on a roof", 90.0): 1.7,
-    ("low screen on a roof", 90.0): 3.1,
+    ("screen on a roof", 90.0): 0.5,
+    ("low screen on a roof", 90.0): 0.6,
 }
 #: The groups' bends (degrees, up to).
 BENDS = (6.0, 25.0, 45.0)

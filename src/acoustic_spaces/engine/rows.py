@@ -43,6 +43,21 @@ parameter a b / (a + b) and for the string's directions at the edge:
   cos(bend / 2) of the half-plane's two of the incident wave, for the angle between
   the wave's way to the corner and its way on.
 
+A barrier that stands alone between the ends on a rigid ground, or on a rigid roof
+under both, is not a half-plane: with its image in that surface it is a rigid strip in
+free space, and sound goes on between its top and the surface. There the barrier adds
+what that strip sheds beyond the marches' screen, from the strip's own equation
+(:func:`~acoustic_spaces.engine.strip.beyond_screen`), in place of the half-plane's
+terms, at the frequencies up to k H = ``strip.MOST_KH`` for its height H at which
+that surface is rigid (:func:`_plane_under` finds the surface, :func:`_rigid` the
+frequencies). Not where the ends are so close to each other across a high barrier,
+or both so close to it, that the strip's density would take more than
+``strip.TERMS_MOST`` terms (closer to each other than about a quarter of its height,
+both within about a twentieth of it from the barrier, or between the two): the
+half-plane's terms stand there at every frequency, up to 0.27 dB from the strip's in
+an octave band's level (docs/validation.md, "Rows of roofs and barriers against a
+wave calculation").
+
 The march goes both ways, and the listener takes the mean of the two, so that the sound
 from A to B is that from B to A. Each begins at its first obstacle, from the field in
 two dimensions that its end and the end's image in the ground have there (a Hankel
@@ -83,7 +98,8 @@ lower end as it does with the layer ``HEADROOM_M`` above everything (a layer tha
 starts higher, over a long way or as it is given, is made thicker by less). One
 rigid screen 3 to 20 m high on a rigid ground, the source 0.5 to 30 m before it and
 the listener 0.5 to 40 m past it, each 0.5 to 4 m up, is then within 0.31 dB of the
-four paths over its top in the 563 places the solver takes; at six places behind
+exact level where the strip is solved, and of the four paths over its top in the
+other bands of the 563 places the solver takes in every band; at six places behind
 walls 15 and 20 m high a grid twice as high again changes the levels by 0.10 dB at
 most.
 
@@ -115,15 +131,17 @@ highest roof; roofs level with each other that touch as one roof. A corner that
 something at least as high stands against (a lower roof against a wall) sheds nothing
 (:func:`edges_of`).
 
-The edges' terms take a barrier for a half-plane, lit by the end and by its image in
-the surface it stands on: the sound that goes on between its top and a rigid roof or
-ground under it is not in them. Against a wave calculation, a barrier on a rigid roof
-under both ends is within 0.4 dB where it is 0.7 wavelengths high or more, within
-1.2 dB from a quarter to half a wavelength, and up to 3 dB off below a quarter (one
-10 cm high, which changes next to nothing, 2.4 dB too high in the 63 Hz band with
-the source half a metre before it); a parapet on the edge of the roof under an end is
-within 0.8 dB from a quarter of a wavelength on and 1.3 dB below that
-(docs/validation.md, "Rows of roofs and barriers against a wave calculation").
+Where the edges' terms stand for a barrier (a parapet on the edge of a roof, a barrier
+with anything else between the ends or on a ground with an impedance, a wall given as
+a building, and a barrier alone on a rigid ground or roof where the strip is not
+solved), they take it for a half-plane, lit by the end and by its image in the surface
+it stands on: the sound that goes on between its top and a rigid roof or ground under
+it is not in them. With them a barrier 10 cm high alone on a rigid ground, half a
+metre past the source, would be 3.0 dB from the exact level, and one 1 m high 2.2 dB,
+where the strip is within 0.2 dB (tests/test_rows.py); against a wave calculation, a
+parapet on the edge of the roof under an end is within 0.8 dB from a quarter of a
+wavelength on and 1.3 dB below that (docs/validation.md, "Rows of roofs and barriers
+against a wave calculation").
 
 A march one way has no sound that comes back, and what stands behind an end does
 nothing: a roof under an end goes on behind it without end (at the roof's edge there
@@ -144,7 +162,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.special import hankel1
 
-from acoustic_spaces.engine import parabolic
+from acoustic_spaces.engine import parabolic, strip
 from acoustic_spaces.engine.diffraction import wedge_prefactor, wedge_terms
 from acoustic_spaces.materials.ground import spherical_reflection
 
@@ -326,6 +344,7 @@ def over_row(
         if not _SAME_M < x < reach - _SAME_M:
             continue
         mirrored_edge = (seen_back[what], reach - x, h)
+        sheds = np.zeros(len(f), dtype=complex)
         for from_source, a, to_source, source_s in _lit(forward, k, (what, x, h)):
             for from_listener, b, onwards, listener_s in _lit(backward, k, mirrored_edge):
                 to_listener = (-onwards[0], onwards[1])
@@ -336,8 +355,40 @@ def over_row(
                     shed = _corner(k, kl, to_source, 1.0, to_listener if listener_s else None)
                 else:
                     shed = _corner(k, kl, to_listener, -1.0, to_source if source_s else None)
-                added += from_source * from_listener * shed / math.sqrt(a + b)
+                sheds += from_source * from_listener * shed / math.sqrt(a + b)
+        plane = _plane_under(forward, backward, x, h, reach) if what == "screen" else None
+        if plane is not None:
+            # The barrier and its image in the plane are a strip, whose field is known
+            # beyond the first order of the waves between the top and the plane.
+            # At the frequencies at which the ground is rigid on both sides of it.
+            low = (k * (h - plane) <= strip.MOST_KH) & _rigid(forward) & _rigid(backward)
+            # An end on the plane may be given a rounding below it (:func:`_stands_free`).
+            ends = (x, max(zs - plane, 0.0)), (reach - x, max(zr - plane, 0.0))
+            whole = strip.beyond_screen(k[low], h - plane, *ends) if np.any(low) else None
+            if whole is not None:
+                sheds[low] = whole
+        added += sheds
     return Row(marched=0.5 * (forward.pressure + backward.pressure), edges=added)
+
+
+def _plane_under(forward: _Way, backward: _Way, x: float, h: float, reach: float) -> float | None:
+    """The height (m) of the plane on which the barrier with its top ``h`` m up, ``x``
+    m along the way, stands alone between the ends: the first top of both marches, on
+    what both ends stand over (the ground, or one roof), each march taking all of its
+    end's wave and of that of the end's image (:func:`_kept`). None otherwise. Whether
+    the plane is rigid is by the frequency (:func:`_rigid`)."""
+    for way, at in ((forward, x), (backward, reach - x)):
+        if way.first is None or abs(at - way.first) > _SAME_M:
+            return None
+        for z0 in (way.height, 2.0 * way.under - way.height):
+            if float(_kept(way.through, h - z0)) < 1.0:
+                return None
+    return forward.under if forward.under == backward.under else None
+
+
+def _rigid(way: _Way) -> np.ndarray:
+    """(F,) whether what a march's end stands over is rigid at each frequency."""
+    return np.isinf(way.ground)
 
 
 def _stands_free(row, height: float, end: str) -> None:
