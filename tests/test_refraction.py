@@ -2368,7 +2368,7 @@ def test_one_coherent_band_keeps_its_run_below_it() -> None:
     preset, the 63 Hz band is the only coherent one: it takes no skirt above, and its run
     goes on down to half its lower edge as with more bands (four frequencies, 25 to 42
     Hz), whose samples the carrier keeps. The band's run is the same as with 125, and so
-    is its level (+6.2726 dB re free field both, ``coh63.py``; 4e-8 dB apart, the 63 Hz
+    is its level (+6.2727 dB re free field both, ``coh63.py``; 5e-8 dB apart, the 63 Hz
     shape drawn with and without the 125 Hz band's samples beside it)."""
     from acoustic_spaces.engine.fine import fine_frequencies
 
@@ -2426,7 +2426,7 @@ def test_the_equation_s_bands_leave_the_ground_s_scattering_and_go_on_across_the
     rays' caustic between 119.8675 and 119.870 m and where a ray comes in between 162.25
     and 162.5 m as on either side: each step within a quarter more than the larger of its
     neighbours' (at most 1.00 times measured, at the caustic, whose steps are all within
-    0.0005 dB; at the ray event 0.94 times: 0.0344 dB at 250 Hz against 0.0365 dB beside
+    0.0005 dB; at the ray event 0.93 times: 0.0345 dB at 250 Hz against 0.0369 dB beside
     it)."""
     windy = {"preset": "windy", "wind": {"direction_deg": 0.0}}
     smooth = scattering_levels(0.0, 2.0, xs, windy)[:, :6]
