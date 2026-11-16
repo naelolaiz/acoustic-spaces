@@ -175,14 +175,17 @@ Edge diffraction:
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9
   to 15 dB above that further below.
-- [ ] Corners in their exact order: a reflection point within the search's tolerance
-  for planes (a ten-millionth of the model's largest extent) of the next plane, over
-  one of its faces, reflects off both there, whichever side the path's next leg lies
-  on: a source 0.5 mm over the ground and from the line where two walls meet at 170
-  degrees, in a model 10 km wide, has a third reflection that does not exist at 4 of
-  96 places 7 m away. And two different paths whose planes make one mirror (two equal
-  rooms either side of a partition, a source and a listener mirrored in it) count as
-  one.
+- [ ] Corners to the least distance of a ray: the search for early paths takes what lies
+  within its tolerance for planes (a ten-millionth of the model's largest extent, 1 mm
+  in a model 10 km wide) of the line where faces meet as on that line. A source or a
+  listener within that distance of the line where a wall ends on another that goes on (a
+  T) has reflections that do not exist, off both sides of the ending wall at one point,
+  at 7 to 17 % of the places 7 m away, and at up to 3 % at four times the distance; at a
+  plain bend one such reflection, off both walls at one point, stays at 2 of 96 places
+  (seen at bends of 65 and 66.5 degrees, half the tolerance from the line). And two
+  different paths with one image of the source that reflect off the same surfaces in
+  another order count as one: between two rooms as deep either side of a partition, one
+  of 155 paths up to the fourth order (0.1 dB in a band).
 - [ ] The same reflections whichever way round: the rays of the source and those of
   the listener can find different reflections between two faces, such as two screens
   or a roof's wall and a screen level with the roof (up to 0.7 dB apart, and 8 dB

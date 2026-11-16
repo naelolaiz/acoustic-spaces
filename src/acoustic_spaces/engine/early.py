@@ -676,11 +676,23 @@ def find_paths(
             # A reflection point on an edge already lies on the next plane's face too: the
             # path reflects off both at the same point (a corner), so there is nothing to
             # trace. One in that plane off its faces is no corner: the path goes on to it.
+            # Nor is one beside the plane (farther than the least distance at which a ray
+            # meets a face) from which the path does not go on to a face of it: on the
+            # side of the image it heads for, or meeting the plane past its faces.
             at = np.full(n, -1, dtype=np.int64)
             if j < k - 1:
                 near = np.flatnonzero(valid)
                 height = _height_near(model, current[near], plane[near], tolerance)
-                for i in near[np.abs(height) <= tolerance]:
+                there = _height_over_plane(model, chain[j + 1][near], plane[near])
+                beside = np.abs(height) > model.bvh.min_distance
+                held = (np.abs(height) <= tolerance) & (~beside | (height * there < 0.0))
+                for i, h, t, far in zip(
+                    near[held], height[held], there[held], beside[held], strict=True
+                ):
+                    if far:
+                        crossing = current[i] + h / (h - t) * (chain[j + 1][i] - current[i])
+                        if _face_at(model, plane[i], crossing, tolerance) < 0:
+                            continue
                     at[i] = _face_at(model, plane[i], current[i], tolerance)
             corner = at >= 0
             trace = valid & ~corner
@@ -743,10 +755,17 @@ def find_paths(
             continue
 
         idx = np.flatnonzero(valid)
-        # Plane sequences that commute (perpendicular planes) make the same mirror: one
-        # path. Other mirrors' images of a source near where their planes meet lie as
-        # near each other, and are paths of their own.
-        _, unique = np.unique(_mirrors(model, seqs[idx], tolerance), axis=0, return_index=True)
+        # Plane sequences that commute (perpendicular planes) make the same mirror off
+        # the same surfaces: one path. Other mirrors' images of a source near where their
+        # planes meet lie as near each other, and are paths of their own; so are paths
+        # off other surfaces that make the same mirror (in two rooms as deep either side
+        # of a partition: off the partition and one room's end wall, or the other's).
+        # Two paths with one mirror off the same surfaces in another order still count
+        # as one (from the fourth order on in such rooms).
+        key = np.hstack(
+            [_mirrors(model, seqs[idx], tolerance), _surfaces(model, seqs[idx], tolerance)]
+        )
+        _, unique = np.unique(key, axis=0, return_index=True)
         idx = idx[np.sort(unique)]
         parts.append(
             assemble_paths(
@@ -797,6 +816,17 @@ def _mirrors(model: TraceModel, seqs: np.ndarray, tolerance: float) -> np.ndarra
     for j in range(seqs.shape[1]):
         moved = model.mirror(moved, np.repeat(seqs[:, j], 4))
     return np.round(moved.reshape(len(seqs), 12) / tolerance)
+
+
+def _surfaces(model: TraceModel, seqs: np.ndarray, tolerance: float) -> np.ndarray:
+    """(n, k) the surfaces each sequence of ``seqs`` (n, k) reflects off, whatever their
+    order and however often: numbers of the planes' own mirrors (the two sides of a
+    partition are one surface), greatest first, -1 for no further one."""
+    planes = np.arange(model.plane_count)
+    _, surface = np.unique(_mirrors(model, planes[:, None], tolerance), axis=0, return_inverse=True)
+    met = np.sort(surface.reshape(-1)[seqs], axis=1)
+    met[:, 1:][met[:, 1:] == met[:, :-1]] = -1
+    return -np.sort(-met, axis=1)
 
 
 def _along_at_planes(
@@ -944,8 +974,10 @@ def _towards_plane(model, start, direction, length, ignore, plane, trace, tolera
     :func:`_turn` says): one within ``tolerance`` of the plane, in which the image the
     ray heads for is mirrored, not of the own plane of one of its faces (where they do
     not all lie in the plane, :attr:`TraceModel.plane_spread`), over a face of it
-    (:func:`_face_at`), on a ray whose two ends lie on either side of the plane: one
-    that does not cross the plane reflects nowhere off it."""
+    (:func:`_face_at`), on a ray whose two ends lie on either side of the plane (one
+    that does not cross the plane reflects nowhere off it) and that meets that face's
+    own plane on a face of the plane: a ray that met another face beside the line where
+    the two join meets it past the edge."""
     n = len(start)
     ends = start + direction * np.asarray(length, dtype=float)[:, None]
     across = _height_over_plane(model, start, plane) * _height_over_plane(model, ends, plane) < 0.0
@@ -968,9 +1000,18 @@ def _towards_plane(model, start, direction, length, ignore, plane, trace, tolera
         position[rows] += direction[rows] * t[:, None]
         remaining[rows] -= t
         on_plane = (model.face_plane[hit] == plane[rows]) & ~transparent[hit]
+        normal, offset = model.face_planes
         for i in np.flatnonzero(~on_plane & across[rows]):
-            other = _face_at(model, plane[rows[i]], position[rows[i]], tolerance, own=False)
-            if other >= 0:
+            row = rows[i]
+            other = _face_at(model, plane[row], position[row], tolerance, own=False)
+            if other < 0:
+                continue
+            height = float(np.einsum("k,k->", normal[other], position[row])) - offset[other]
+            slope = float(np.einsum("k,k->", normal[other], direction[row]))
+            if slope == 0.0:
+                continue
+            crossing = position[row] - (height / slope) * direction[row]
+            if _face_at(model, plane[row], crossing, tolerance) >= 0:
                 hit[i], on_plane[i] = other, True
         face[rows[on_plane]] = hit[on_plane]
         end[rows[on_plane]] = position[rows[on_plane]]

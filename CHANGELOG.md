@@ -4,12 +4,20 @@
 
 - Fixed: near the line where two walls meet in a very large model, a reflection off
   one wall went on past its edge over the other (by the search's tolerance for planes,
-  a ten-millionth of the model's largest extent, times a factor of the face's shape),
-  two reflections whose images fell in one step of that tolerance counted as one, and
-  a path ended at a point within it of a plane beside that plane's faces: 16 mm from a
-  170 degree bend in a model 10 km wide, the early level was off by up to 6.7 dB in a
-  band at 32 of 96 places 7 m away. A face now ends at its edges to within a billionth
-  of the model's diagonal.
+  a ten-millionth of the model's largest extent, times a factor of the face's shape,
+  or where its path met the other wall within that tolerance of the first), a
+  reflection point within the tolerance of another plane reflected off that one too
+  though the path did not go on to it, or ended the path beside its faces, and two
+  reflections whose images fell in one step of the tolerance counted as one: 16 mm
+  from a bend in a model 10 km wide, the early level was off by up to 6.7 dB in a band
+  at 32 of 96 places 7 m away for a bend of 170 degrees, and by up to 4.2 dB at 4 for
+  one of 91. A face now ends at its edges to within a billionth of the model's
+  diagonal.
+- Fixed: of two different early paths with one image of the source that reflect off
+  different surfaces, such as those between two rooms as deep either side of a
+  partition (off the partition and the source's room's end wall, or off the other
+  room's end wall and the partition), one was left out: there a listener had 63 of 70
+  paths up to the third order, and up to 2.2 dB less in a band.
 - Fixed: a path exactly through an outer edge (a roof's edge over an end wall, a
   building's upright corner, the edge where two barriers meet) stood as a reflection off
   both faces for a source and a listener the edge sees in the same direction across it,

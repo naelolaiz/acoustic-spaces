@@ -175,46 +175,80 @@ def _room(near, far, walls, near_is: str) -> Room:
     return Room.from_scene(Scene.model_validate(scene))
 
 
-@pytest.mark.parametrize("near_is", ["source", "listener"])
-@pytest.mark.parametrize("share", [0.2, 0.5])
-@pytest.mark.parametrize("distance", [0.5, 4.0, 16.0])
-@pytest.mark.parametrize("angle", [60.0, 90.0, 120.0, 170.0])
-def test_the_paths_of_a_point_near_a_bend_are_the_specular_ones(
-    angle: float, distance: float, share: float, near_is: str
-) -> None:
+def _not_specular(
+    angle: float, distance: float, share: float, near_is: str, up: float = 1.5, places: int = 16
+) -> list[tuple[int, str]]:
     """Two walls meet at ``angle`` degrees in a model 10 km wide. A source (or a
-    listener) stands 1.5 m up, ``distance`` times the search's tolerance for planes (1 mm
-    here) from the line where they meet, at ``share`` of the angle from the first wall;
-    16 listeners (sources) stand 7 m from that line across the angle. For each the
-    search finds the specular paths up to three reflections (:func:`_specular`): all
-    those that hold with 0.1 mm to spare at every edge, and none that does not hold with
-    0.1 mm given. A path is known by its number of reflections and its length, to 1 nm;
-    where it reflects is not compared (the search takes a reflection point within its
-    tolerance of the next plane, on a face of it, as that plane's too).
-
-    The search had other paths in more than half of these cases: a face reached past its
-    edge by the tolerance times its triangles' shape, so that the reflection off one
-    wall went on over the next; two paths whose images lay within the tolerance of each
-    other counted as one; a reflection point within the tolerance of the next plane,
-    off its faces, ended the path; and a ray that met one wall beside the other's plane
-    without crossing it reflected off both."""
+    listener, ``near_is``) stands ``up`` m over the ground, ``distance`` times the
+    search's tolerance for planes (1 mm here) from the line where they meet, at
+    ``share`` of the angle from the first wall; ``places`` listeners (sources) stand 7 m
+    from that line across the angle. Returned: the places where the search's paths up to
+    three reflections are not the specular ones (:func:`_specular`), each with what is
+    wrong: one that holds with 0.1 mm to spare at every edge is missing, or one found
+    does not hold with 0.1 mm given. A path is known by its number of reflections and
+    its length, to 1 nm; where it reflects is not compared (the search takes a
+    reflection point within its tolerance of the next plane, from which the path goes on
+    to a face of it, as that plane's too)."""
     apex, turn = (1.3, -2.1), 37.0
     walls = [_bend(angle, apex, turn)]
     way = math.radians(turn + share * angle)
     reach = distance * _TOLERANCE
-    near = [apex[0] + reach * math.cos(way), apex[1] + reach * math.sin(way), 1.5]
+    near = [apex[0] + reach * math.cos(way), apex[1] + reach * math.sin(way), up]
     far = []
-    for i in range(16):
-        way = math.radians(turn + angle * (i + 0.37) / 16)
+    for i in range(places):
+        way = math.radians(turn + angle * (i + 0.37) / places)
         far.append([apex[0] + 7.0 * math.cos(way), apex[1] + 7.0 * math.sin(way), 1.7])
     room = _room(near, far, walls, near_is)
     faces = _faces(walls, 4.0)
+    wrong = []
     for i, there in enumerate(far):
         source, listener = (near, there) if near_is == "source" else (there, near)
         paths = early_paths(room, **{"listener" if near_is == "source" else "source": f"p{i}"})
         found = list(zip(paths.distance_m.tolist(), paths.order.tolist(), strict=True))
-        assert not _without(_specular(source, listener, faces, -_ROOM), found), (i, "missing")
-        assert not _without(found, _specular(source, listener, faces, _ROOM)), (i, "extra")
+        if _without(_specular(source, listener, faces, -_ROOM), found):
+            wrong.append((i, "missing"))
+        if _without(found, _specular(source, listener, faces, _ROOM)):
+            wrong.append((i, "extra"))
+    return wrong
+
+
+@pytest.mark.parametrize("near_is", ["source", "listener"])
+@pytest.mark.parametrize("share", [0.2, 0.5])
+@pytest.mark.parametrize("distance", [0.5, 4.0, 16.0])
+@pytest.mark.parametrize("angle", [50.0, 60.0, 75.0, 90.0, 91.0, 120.0, 170.0])
+def test_the_paths_of_a_point_near_a_bend_are_the_specular_ones(
+    angle: float, distance: float, share: float, near_is: str
+) -> None:
+    """A source or a listener 1.5 m up, 0.5, 4 or 16 mm from the line where two walls
+    meet at ``angle`` degrees in a model 10 km wide, has the specular paths to 16 places
+    7 m away (:func:`_not_specular`).
+
+    The search had other paths in most of these cases: a face reached past its edge by
+    the tolerance times its triangles' shape, so that the reflection off one wall went
+    on over the next; two paths whose images lay within the tolerance of each other
+    counted as one; a reflection point within the tolerance of the next plane, off its
+    faces, ended the path; a ray that met one wall beside the other's plane without
+    crossing it reflected off both; and so did one that crossed that plane, but past
+    the other wall's end (seen at bends of 50 to 110 degrees other than 60 and 90)."""
+    assert not _not_specular(angle, distance, share, near_is)
+
+
+@pytest.mark.parametrize("near_is", ["source", "listener"])
+@pytest.mark.parametrize(
+    ("angle", "up"), [(75.0, 0.2), (91.0, 0.5), (120.0, 0.2), (170.0, 0.2), (170.0, 0.5)]
+)
+def test_the_paths_of_a_point_at_the_foot_of_a_bend_are_the_specular_ones(
+    angle: float, up: float, near_is: str
+) -> None:
+    """A source or a listener 0.5 mm from the line where two walls meet at ``angle``
+    degrees and ``up`` mm over the ground, in a model 10 km wide, has the specular paths
+    to 48 places 7 m away (:func:`_not_specular`). Besides the faults above, a
+    reflection point within the tolerance of the next plane, over one of its faces,
+    reflected off that plane there too wherever the path went on: with the image it
+    heads for on the point's own side of the plane, or meeting the plane past its
+    faces. That left reflections that do not exist at up to 44 of the 48 places."""
+    wrong = _not_specular(angle, 0.5, 0.2, near_is, up=up * _TOLERANCE, places=48)
+    assert not wrong
 
 
 def test_a_face_ends_at_its_corners_as_at_its_edges() -> None:
