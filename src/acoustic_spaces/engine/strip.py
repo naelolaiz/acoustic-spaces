@@ -283,7 +283,7 @@ def _offset(
     basis = ((-1.0) ** np.arange(count) * np.sin(at))[None, :] / np.where(on, 1.0, gap)
     basis = np.where(on.any(axis=1)[:, None], on.astype(float), basis)
     basis = basis / basis.sum(axis=1)[:, None]
-    weights_real = 2.0 * (carrier @ basis) * np.exp(-1j * kappa_real * reach)
+    weights_real = 2.0 * products.product(carrier, basis) * np.exp(-1j * kappa_real * reach)
     # Out into the fourth quadrant.
     phi = min(0.25 * math.pi, TILT * beta)
     width = math.sin(beta) * math.sqrt(wavenumber / (whole * math.sin(2.0 * phi)))

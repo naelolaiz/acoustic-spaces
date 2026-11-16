@@ -245,6 +245,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 from scipy.special import hankel1
 
+from acoustic_spaces import products
 from acoustic_spaces.engine import parabolic, strip
 from acoustic_spaces.engine.diffraction import wedge_prefactor, wedge_terms
 from acoustic_spaces.materials.ground import spherical_reflection
@@ -715,7 +716,8 @@ def _kernel(
     weights = np.empty(len(lattice), dtype=complex)
     for begin in range(0, len(lattice), 256):
         some = lattice[begin : begin + 256] - stationary
-        weights[begin : begin + 256] = np.exp(-1j * np.outer(some, sigma)) @ density
+        turned = np.exp(-1j * np.outer(some, sigma))
+        weights[begin : begin + 256] = products.product(turned, density)
     return j_low, weights * (ds * step / (2.0 * math.pi))
 
 
