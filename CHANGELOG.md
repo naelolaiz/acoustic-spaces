@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Changed: `simulate` and the editor work the draws of the materials' spread out in
+  worker processes, with the same results (on an Intel Mac the admittances' fits may
+  differ in their last digits, as they may there from one fit to the next): as many as
+  the run has threads (`--threads`, `simulation.performance.threads`) and cores, one for
+  each 100 draws of all the responses at most, and no more than half the computer's
+  memory holds. On four cores the 400 draws of the `concert_hall` example took 21 s
+  where they took 72 s, and those of the `street` example 163 s where they took 609 s.
+  In Python, `material_spread` and `with_spread` take `workers` (1 by default, 0 for
+  every core).
 - Fixed: a path exactly through an outer edge (a roof's edge over an end wall, a
   building's upright corner, the edge where two barriers meet) stood as a reflection off
   both faces for a source and a listener the edge sees in the same direction across it,

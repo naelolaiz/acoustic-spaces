@@ -702,8 +702,9 @@ simulation:
 ```
 
 - `threads`: the worker threads of the ray tracer (early candidates, the late part,
-  coverage maps, calibration), of the wave solver on the CPU, and of writing the
-  responses' files (`simulate --out`, the editor's Export). Fewer leave the
+  coverage maps, calibration), of the wave solver on the CPU, of writing the
+  responses' files (`simulate --out`, the editor's Export), and the worker processes
+  of the spread's draws (see [Materials](scenes.md#materials)). Fewer leave the
   computer free for other work while a long run goes on; more than the computer's
   cores run as its cores (see [Memory](#memory)). The responses' files are rendered
   side by side, and the threads the responses leave free render the channels of each
