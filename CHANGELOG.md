@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Changed: a run's results no longer depend on how many threads the linear-algebra
+  library behind numpy is given (as many as the computer has cores, unless
+  `OPENBLAS_NUM_THREADS` says otherwise): the package adds its long sums itself, each in
+  a fixed order (`acoustic_spaces.products`; what stays with the library is in
+  [Simulation](docs/simulation.md#performance)). Results move once in their last digits
+  (in the examples: parameters by at most 1e-9 of their value, sound files by 3e-10 of
+  the file's peak, one response's standard errors by up to 5e-5), and the examples'
+  runs take up to a quarter less time at 30 to 50 % of the CPU time; a rotor's `bpm`
+  broadband noise takes 23 % more.
 - Added: a solver for sound that passes close over a whole row of roofs and barriers in
   still air (`acoustic_spaces.engine.rows`: the parabolic equation marched over the row,
   with the terms of its rigid edges and, for a barrier alone on a rigid ground or roof,
