@@ -244,3 +244,174 @@ def test_the_examples_use_only_what_is_there(path: Path, tmp_path, monkeypatch) 
     monkeypatch.chdir(tmp_path)
     assert _what_code_uses_that_is_not_there(path) == []
     assert list(tmp_path.iterdir()) == []
+
+
+#: The products the package's sources leave to the linear-algebra library, per file:
+#: ``@``, and the calls of ``dot``, ``matmul``, ``tensordot``, ``inner``, ``vdot`` and
+#: ``multi_dot``, with the library calls whose sums also go to it and so depend on how
+#: many threads it has: ``np.linalg.norm`` without an axis, ``convolve`` and
+#: ``correlate`` of numpy and scipy, ``least_squares``, ``RBFInterpolator`` and
+#: ``einsum`` with ``optimize``. Each stays for the reason given: for most, on these
+#: operands the library uses one thread, or its result is not one the package keeps.
+LIBRARY_SUMS = {
+    # ratio @ self.mean: 16 groups at most times the moment slots (one thread up to
+    # 28,800 slots, 288 s of response); least_squares: a solver.
+    "calibration.py": 2,
+    # The demos' pictures and sounds: band weights, 2- and 3-vectors, a 2 ms smoothing.
+    "demos/audio.py": 2,
+    "demos/helicopter.py": 2,
+    "demos/indoors.py": 1,
+    "demos/passby.py": 3,
+    "demos/pipeline.py": 1,
+    # 3-vectors and 3 x 3 frames; the positions of one balloon's measurement points; the
+    # cosines between a balloon's grid and its measured directions, whose last digits
+    # choose among directions equally near (docs/validation.md, Known issues).
+    "directivity.py": 7,
+    # 2- and 3-vectors.
+    "doc29/noise.py": 1,
+    "doc29/path.py": 1,
+    "doc29/source.py": 1,
+    # A 3-vector times a 3 x 3 frame, one path at a time.
+    "doppler.py": 1,
+    # A 3 x 3 check; ways @ centre over at most 65,536 ways (one thread below 153,600);
+    # the 5-degree grid's 2664 directions times 3 x 3 axes.
+    "emission.py": 3,
+    # (paths, 3) @ axis: one thread below 153,600 paths (at most 5,262 seen).
+    "engine/coherent.py": 2,
+    # A 3-vector's norm.
+    "engine/coverage.py": 1,
+    # 2- and 3-vectors.
+    "engine/crests.py": 22,
+    # 3-vectors, and one plane's normal times a point.
+    "engine/diffraction.py": 4,
+    # 3-vectors, and the few planes or faces of one path or one plane.
+    "engine/early.py": 21,
+    "engine/edge_fade.py": 1,
+    # Integers: exact in any order.
+    "engine/gpu.py": 1,
+    # (paths, 3) @ normal: one thread below 153,600 paths.
+    "engine/grazing.py": 1,
+    # The fit's band weights and frequencies, and least_squares: a solver and its input.
+    "engine/impedance.py": 7,
+    # 3-vectors.
+    "engine/leaks.py": 2,
+    "engine/refracted.py": 23,
+    # (paths, 3) and (late directions, 3) @ axis: one thread below 153,600 rows;
+    # 3-vectors.
+    "engine/response.py": 4,
+    "engine/simulate.py": 2,
+    # A terrain profile's points times a 2-vector; 2- and 3-vectors.
+    "engine/terrain.py": 6,
+    # np.convolve of the high-pass filter (at most about 5,900 taps) and of 3 taps.
+    "engine/wave.py": 3,
+    # A weather profile's nodes times 3-vectors.
+    "engine/weather.py": 7,
+    # np.convolve of order + 1 terms.
+    "engine/wide_angle.py": 1,
+    # The shoelace sum of a builder's outline.
+    "geometry/builders.py": 2,
+    # 3-vectors and 4 x 4 transforms.
+    "geometry/cells.py": 2,
+    "geometry/io.py": 5,
+    "geometry/outdoor.py": 1,
+    "geometry/triangulate.py": 1,
+    # _TO_GLTF is a signed permutation: each element of a product is one exact term,
+    # the same in any order; norms of a quaternion and of a bounding box's diagonal.
+    "gltf.py": 8,
+    # The editor's views.
+    "gui/movement.py": 1,
+    "gui/plan_view.py": 11,
+    "gui/viewport.py": 10,
+    # Live head-tracked playback: single precision, in real time, not a result on file.
+    "headtracking.py": 4,
+    # A fit's band weights times its frequencies.
+    "materials/ground.py": 1,
+    # The STI's seven bands.
+    "parameters.py": 2,
+    # A 3-vector's norm; integers, exact in any order.
+    "room.py": 2,
+    # 3-vectors, a 3 x 3 frame, and the fixed 15-degree grid that counts the harmonics.
+    "rotorcraft.py": 7,
+    "scene/model.py": 1,
+    # The spherical head's grid (2048 directions) times an ear's axis.
+    "spatial/hrtf.py": 1,
+    # Loudspeaker layouts: tens of speakers.
+    "spatial/loudspeakers.py": 13,
+    # 3-vectors and a quaternion.
+    "spatial/microphone.py": 3,
+    "spatial/rotation.py": 1,
+    # Plots.
+    "viz.py": 9,
+}
+
+_PRODUCTS = {"dot", "matmul", "tensordot", "inner", "vdot", "multi_dot"}
+_SUMS = {"convolve", "correlate", "least_squares", "RBFInterpolator"}
+_LIBRARIES = {"np", "numpy", "scipy", "linalg", "signal", "optimize", "interpolate"}
+
+
+def _library_sums(source: str) -> list[int]:
+    """The lines of the products and sums ``source`` leaves to the library (see
+    :data:`LIBRARY_SUMS`), once for each."""
+    tree = ast.parse(source)
+    imported = {
+        alias.asname or alias.name: alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and not node.level
+        and (node.module or "").split(".")[0] in ("numpy", "scipy")
+        for alias in node.names
+    }
+    lines = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.BinOp, ast.AugAssign)) and isinstance(node.op, ast.MatMult):
+            lines.append(node.lineno)
+            continue
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in imported:
+            name = imported[func.id]
+        elif isinstance(func, ast.Attribute):
+            name, owner = func.attr, ast.unparse(func.value).split(".")
+            if owner == ["products"]:
+                continue
+            # Any x.dot(y), and the library's functions by its modules' names.
+            if name not in _PRODUCTS and not {owner[0], owner[-1]} & _LIBRARIES:
+                continue
+        else:
+            continue
+        keywords = {k.arg for k in node.keywords}
+        if (
+            name in _PRODUCTS
+            or name in _SUMS
+            or (name == "norm" and len(node.args) < 3 and "axis" not in keywords)
+            or (name == "einsum" and "optimize" in keywords)
+        ):
+            lines.append(node.lineno)
+    return sorted(lines)
+
+
+def test_the_package_adds_its_sums_in_a_fixed_order() -> None:
+    """Every product the package's sources leave to the linear-algebra library is one
+    that :data:`LIBRARY_SUMS` counts and says why: a new one would give results whose
+    last digits depend on how many threads the library has."""
+    package = SRC / "acoustic_spaces"
+    found = {}
+    for path in sorted(package.rglob("*.py")):
+        lines = _library_sums(path.read_text(encoding="utf-8"))
+        if lines:
+            found[path.relative_to(package).as_posix()] = lines
+    problems = [
+        f"{name}: {len(found.get(name, []))} products or sums left to the library "
+        f"(lines {', '.join(map(str, found.get(name, []))) or 'none'}), "
+        f"LIBRARY_SUMS has {LIBRARY_SUMS.get(name, 0)}"
+        for name in sorted(set(found) | set(LIBRARY_SUMS))
+        if len(found.get(name, [])) != LIBRARY_SUMS.get(name, 0)
+    ]
+    assert not problems, (
+        "\n".join(problems) + "\nSums are added in a fixed order with acoustic_spaces.products "
+        "(products.product, add_product, dot, dots), so that a result has the same bits on any "
+        "number of library threads: write a new product with it. For a product of small fixed "
+        "operands, raise this file's count in LIBRARY_SUMS (tests/test_code.py) and say there "
+        "why it stays; where a product moved to the module, lower it."
+    )

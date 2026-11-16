@@ -28,6 +28,7 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
+from acoustic_spaces import products
 from acoustic_spaces.engine.particles import _lambert
 from acoustic_spaces.room import Room, _label_text
 from acoustic_spaces.spatial.directions import fibonacci_sphere
@@ -383,16 +384,16 @@ def _through_flat_gaps(
         _, spread, axes = np.linalg.svd(points - centre, full_matrices=False)
         if len(spread) < 3 or spread[2] > FLAT * spread[0]:
             continue
-        across = directions @ axes[2]
+        across = products.product(directions, axes[2])
         with np.errstate(divide="ignore", invalid="ignore"):
-            t = (centre - starts) @ axes[2] / across
+            t = products.product(centre - starts, axes[2]) / across
         ahead = (np.abs(across) > 1e-9) & (t > 1e-9) & (t < first)
         t = np.where(ahead, t, 0.0)
         crossing = starts + t[:, None] * directions
         # In the plane's own coordinates: the crossing and the loops' edges.
-        q = (crossing - centre) @ axes[:2].T
-        a = (mesh.vertices[mine[:, 0]] - centre) @ axes[:2].T
-        b = (mesh.vertices[mine[:, 1]] - centre) @ axes[:2].T
+        q = products.product(crossing - centre, axes[:2].T)
+        a = products.product(mesh.vertices[mine[:, 0]] - centre, axes[:2].T)
+        b = products.product(mesh.vertices[mine[:, 1]] - centre, axes[:2].T)
         inside = _inside_loops(q, a, b) & ahead
         group[inside] = name
         where[inside] = crossing[inside]
@@ -420,7 +421,7 @@ def _spread(points: np.ndarray) -> tuple[float, float]:
     spread out most in."""
     centred = points - points.mean(axis=0)
     _, _, axes = np.linalg.svd(centred, full_matrices=False)
-    along = centred @ axes[:2].T
+    along = products.product(centred, axes[:2].T)
     reach = along.max(axis=0) - along.min(axis=0)
     return float(reach[0]), float(reach[1])
 
@@ -459,7 +460,7 @@ def _nearest_edges(
     for begin in range(0, len(origins), block):
         o, d = origins[begin : begin + block], directions[begin : begin + block]
         w = o[:, None, :] - a[None, :, :]  # (k, E, 3)
-        de = d @ e.T
+        de = products.product(d, e.T)
         dw = np.einsum("kj,kej->ke", d, w)
         ew = np.einsum("ej,kej->ke", e, w)
         # Closest points of the line along each ray and of each edge, then the ray's

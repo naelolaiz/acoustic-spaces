@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine import run_size, tuning
@@ -228,7 +229,7 @@ class _Edges:
             ]
         )
         planes = np.unique(planes)
-        distance = model.plane_normal[planes] @ source - model.plane_offset[planes]
+        distance = products.product(model.plane_normal[planes], source) - model.plane_offset[planes]
         planes = planes[np.abs(distance) > early_stage._ON_PLANE]
         return np.unique(np.concatenate([first[:, 0], planes]))[:, None]
 

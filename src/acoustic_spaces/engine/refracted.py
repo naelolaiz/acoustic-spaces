@@ -67,6 +67,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.engine import parabolic, run_size, wide_angle
 from acoustic_spaces.engine.coherent import (
     FILTERED_MAX_BAND_HZ,
@@ -2235,7 +2236,7 @@ class Refraction:
             weights = np.sqrt(np.outer(alone, alone))[off]
             if weights.sum() <= 0.0:
                 return None
-            return weights @ wander.coherence(f)[off] / weights.sum()
+            return products.product(weights, wander.coherence(f)[off]) / weights.sum()
 
         return blur
 
@@ -2659,7 +2660,7 @@ def solve(plans: list[Planned]) -> list[dict]:
                         (id(m), slot, "blur"), np.full((job.refraction.bands, 2), np.nan)
                     )
                     total = float(np.sum(power))
-                    effective = float(together @ power) / total if total > 0.0 else 0.0
+                    effective = products.dot(together, power) / total if total > 0.0 else 0.0
                     blur[job.band] = effective, float(np.mean(together))
             if slot is None:
                 out[p][id(m)][job.band] = np.conj(_early_of(value, shape[1]))
