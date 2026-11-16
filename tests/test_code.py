@@ -293,12 +293,17 @@ LIBRARY_SUMS = {
     "engine/grazing.py": 1,
     # The fit's band weights and frequencies, and least_squares: a solver and its input.
     "engine/impedance.py": 7,
-    # 3-vectors.
+    # 3-vectors; in refracted.py also the points on a row's upright edges times one (one
+    # thread below 153,600 edges).
     "engine/leaks.py": 2,
-    "engine/refracted.py": 23,
+    "engine/refracted.py": 22,
     # (paths, 3) and (late directions, 3) @ axis: one thread below 153,600 rows;
     # 3-vectors.
     "engine/response.py": 4,
+    # 2-vectors; the ends of a row's upright faces times a 2-vector, two terms each.
+    "engine/row_paths.py": 5,
+    # 3-vectors.
+    "engine/section.py": 1,
     "engine/simulate.py": 2,
     # A terrain profile's points times a 2-vector; 2- and 3-vectors.
     "engine/terrain.py": 6,
@@ -310,10 +315,10 @@ LIBRARY_SUMS = {
     "engine/wide_angle.py": 1,
     # The shoelace sum of a builder's outline.
     "geometry/builders.py": 2,
-    # 3-vectors and 4 x 4 transforms.
+    # 2- and 3-vectors and 4 x 4 transforms.
     "geometry/cells.py": 2,
     "geometry/io.py": 5,
-    "geometry/outdoor.py": 1,
+    "geometry/outdoor.py": 4,
     "geometry/triangulate.py": 1,
     # _TO_GLTF is a signed permutation: each element of a product is one exact term,
     # the same in any order; norms of a quaternion and of a bounding box's diagonal.
