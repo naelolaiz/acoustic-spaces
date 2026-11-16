@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fixed: a path exactly through an outer edge (a roof's edge over an end wall, a
+  building's upright corner, the edge where two barriers meet) stood as a reflection off
+  both faces for a source and a listener the edge sees in the same direction across it,
+  with `early.method: image_sources` and, where a ray meets other faces in the two
+  planes one after the other (a taller building's wall in the plane of the end wall),
+  with the default search: 1.5 m above the level of a rigid hall's roof, midway between
+  its end walls, the level was 5.3 dB higher at 63 Hz (`first_order`, image sources)
+  than 0.1 mm beside. The validation's long models had such paths off their far ends,
+  so a few of its numbers for image sources move (`docs/validation.md`).
 - Changed: a run's results no longer depend on how many threads the linear-algebra
   library behind numpy is given (as many as the computer has cores, unless
   `OPENBLAS_NUM_THREADS` says otherwise): the package adds its long sums itself, each in

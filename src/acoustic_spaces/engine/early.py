@@ -1124,6 +1124,137 @@ def _side_reflected(model, reflecting, plane, point, after, tolerance) -> int:
     )
 
 
+#: Room for rounding where an end of one arc is tested against another arc
+#: (:func:`_arcs_meet`).
+_ARC_ROUNDING = 1e-9
+
+
+def _arcs_meet(across: np.ndarray, least: np.ndarray, use: np.ndarray) -> np.ndarray:
+    """(p,) whether some unit vector d of a plane has ``across[p, k]`` . d >=
+    ``least[p, k]`` for every k that ``use`` (p, K) marks, where ``across`` (p, K, 2) are
+    unit vectors: each such bound leaves an arc of the unit circle (all of it up to -1,
+    none of it above 1), and the arcs of a row have a direction in common. Where they
+    have one and are not each the whole circle, what they have in common ends, going
+    round to the left, where one of the arcs does, so those ends are the directions
+    tried."""
+    least = np.where(use, least, -np.inf)
+    cut = (least > -1.0) & (least <= 1.0)
+    along = np.where(cut, least, 0.0)
+    aside = np.sqrt(1.0 - along**2)
+    ends = np.stack(
+        [
+            along * across[..., 0] - aside * across[..., 1],
+            along * across[..., 1] + aside * across[..., 0],
+        ],
+        axis=-1,
+    )
+    reach = (
+        ends[:, :, None, 0] * across[:, None, :, 0] + ends[:, :, None, 1] * across[:, None, :, 1]
+    )
+    held = np.all(reach >= least[:, None, :] - _ARC_ROUNDING, axis=2)
+    return ~np.any(least > 1.0, axis=1) & (np.any(cut & held, axis=1) | ~np.any(cut, axis=1))
+
+
+def _inner_corner(model, planes, fronts, point, tolerance) -> np.ndarray:
+    """(n,) whether the faces of ``planes`` (n, r; -1 for none; two or more a row, which
+    meet at ``point`` (n, 3)) make a corner there that a path reflects in, off all of
+    them at that one point, where ``fronts`` (n, r, 3) are the planes' normals towards
+    the side the path keeps to (zero for a plane the path runs in, which has no such
+    side). A path that reflects off a plane near the point does so on the path's side of
+    each of the other planes that have a side. A plane with no face there and one past
+    any of those others makes no such corner: at an outer edge, the plane of the wall
+    under a roof's edge has its faces below that edge and none over it, where sound from
+    above the roof would meet it, so that a path through the edge is no reflection off
+    the two. A plane with no face round the point leaves the corner one.
+
+    The faces are looked for on the circle of twice ``tolerance`` about the point in the
+    plane (the point itself may lie ``tolerance`` to either side of the other planes):
+    the directions from the point in which that circle lies on a triangle of the plane
+    (edges included to the intersection test's least distance), on the path's side of
+    every other plane by more than twice that distance, or past one of them by as much
+    (:func:`_arcs_meet`). Another plane counts where the circle reaches that far to
+    both sides of it: not one nearly parallel to the plane."""
+    least = model.bvh.min_distance
+    radius, clear = 2.0 * tolerance, 2.0 * least
+    valid = planes >= 0
+    safe = np.maximum(planes, 0)
+    normals = model.plane_normal[safe]
+    side = np.sign(np.einsum("nrk,nrk->nr", fronts, normals))
+    towards = normals * side[:, :, None]
+    # The point's own height over each plane, towards the path.
+    height = side * _height_over_plane(model, point[:, None], safe)
+    mesh = model.room.mesh
+    inner = np.ones(len(planes), dtype=bool)
+    for a in range(planes.shape[1]):
+        # Along plane a, each other plane's normal towards the path: across the line the
+        # two planes meet in.
+        normal = normals[:, a]
+        across = towards - np.einsum("nrk,nk->nr", towards, normal)[:, :, None] * normal[:, None]
+        size = np.linalg.norm(across, axis=2)
+        bounds = valid & (radius * size > clear + np.abs(height))
+        rows = np.flatnonzero(valid[:, a] & bounds.any(axis=1))
+        if len(rows) == 0:
+            continue
+        normal, size, bounds = normal[rows], np.where(bounds, size, 1.0)[rows], bounds[rows]
+        across = across[rows] / size[:, :, None]
+        # Two axes of plane a at the point, and in them the other planes' normals and how
+        # far along each a direction lies clear of that plane, before it and past it.
+        ahead = across[np.arange(len(rows)), np.argmax(bounds, axis=1)]
+        beside = _cross(normal, ahead)
+        lines = np.stack(
+            [np.einsum("mrk,mk->mr", across, ahead), np.einsum("mrk,mk->mr", across, beside)],
+            axis=-1,
+        )
+        before = (clear - height[rows]) / (radius * size)
+        past = (clear + height[rows]) / (radius * size)
+        # The faces of plane a near the point: their corners in those axes, their edges'
+        # normals into them, and how far along each a direction lies on the face.
+        own = planes[rows, a]
+        at, faces = [], []
+        for plane in np.unique(own):
+            held = np.flatnonzero(own == plane)
+            for part in np.array_split(held, -(-len(held) // _CHUNK)):
+                found, under = _faces_under(model, plane, point[rows[part]], tolerance)
+                solid = ~model.transparent[under]
+                at.append(part[found[solid]])
+                faces.append(under[solid])
+        at, faces = np.concatenate(at), np.concatenate(faces)
+        corners = mesh.vertices[mesh.faces[faces]] - point[rows[at]][:, None]
+        corners = np.stack(
+            [
+                np.einsum("pvk,pk->pv", corners, ahead[at]),
+                np.einsum("pvk,pk->pv", corners, beside[at]),
+            ],
+            axis=-1,
+        )
+        edge = np.roll(corners, -1, axis=1) - corners
+        third = np.roll(corners, -2, axis=1) - corners
+        inward = np.stack([-edge[..., 1], edge[..., 0]], axis=-1)
+        turn = np.sign(inward[..., 0] * third[..., 0] + inward[..., 1] * third[..., 1])
+        inward *= (turn / np.maximum(np.linalg.norm(edge, axis=2), 1e-300))[..., None]
+        on = (inward[..., 0] * corners[..., 0] + inward[..., 1] * corners[..., 1] - least) / radius
+        on[np.any(turn == 0.0, axis=1)] = 2.0  # a face without area: in no direction
+        every = np.ones((len(at), 3), dtype=bool)
+        front = _arcs_meet(
+            np.concatenate([inward, lines[at]], axis=1),
+            np.concatenate([on, before[at]], axis=1),
+            np.concatenate([every, bounds[at]], axis=1),
+        )
+        behind = np.zeros(len(at), dtype=bool)
+        for b in range(planes.shape[1]):
+            behind |= bounds[at, b] & _arcs_meet(
+                np.concatenate([inward, -lines[at, b : b + 1]], axis=1),
+                np.concatenate([on, past[at, b : b + 1]], axis=1),
+                np.ones((len(at), 4), dtype=bool),
+            )
+        faces_before = np.zeros(len(rows), dtype=bool)
+        faces_before[at[front]] = True
+        faces_past = np.zeros(len(rows), dtype=bool)
+        faces_past[at[behind]] = True
+        inner[rows[faces_past & ~faces_before]] = False
+    return inner
+
+
 def _turn(model, planes, faces, before, point, after, tolerance, counted):
     """Paths that reflect off ``planes`` (n, r; -1 for none; more than one in a corner),
     off their faces ``faces`` (n, r), at ``point`` (n, 3), coming from ``before`` (n, 3)
@@ -1137,7 +1268,9 @@ def _turn(model, planes, faces, before, point, after, tolerance, counted):
     leaves, or meets another face of that plane as one it passes through). Nor does a
     path turn off two coincident planes (within the model's plane tolerance; a wall
     drawn as one face for each room) at one point: it would go on through the wall
-    there, or come back as off one of them. Also the share of sound (n, bands) and the
+    there, or come back as off one of them. Nor does it turn off planes whose faces make
+    no corner on its side of them (see :func:`_inner_corner`), as at an outer edge of a
+    building. Also the share of sound (n, bands) and the
     crossings (n, m) of the faces each crosses right at the point (see
     :func:`_crossed_at`). The leg leaving the point meets no face nearer to it than the
     intersection test's least distance; the one arriving meets every face on its way
@@ -1167,6 +1300,12 @@ def _turn(model, planes, faces, before, point, after, tolerance, counted):
     coincident = np.abs(normals @ normals.transpose(0, 2, 1)) >= 1.0 - PLANE_TOLERANCE
     coincident &= valid[:, :, None] & valid[:, None, :] & (planes[:, :, None] != planes[:, None, :])
     turns = ~np.any(valid & across, axis=1) & ~np.any(coincident, axis=(1, 2))
+    rows = np.flatnonzero(corner & turns)
+    if len(rows):
+        farther = np.where(np.abs(below) >= np.abs(above), below, above)[rows]
+        sides = np.where(valid[rows] & (np.abs(farther) > tolerance), np.sign(farther), 0.0)
+        fronts = model.face_planes[0][own[rows]] * sides[:, :, None]
+        turns[rows] = _inner_corner(model, planes[rows], fronts, point[rows], tolerance)
     near = np.full((len(point), 2), least)
     share, crossed, _, _ = _crossed_at(
         model, planes, before, point, after, tolerance, counted, near

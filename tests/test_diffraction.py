@@ -1250,10 +1250,12 @@ def test_a_screens_top_a_micrometre_off_a_roofs_plane_does_not_reflect_off_the_r
             levels[z, way] = edge_diffraction.whole_early_stage(room)
     np.testing.assert_allclose(levels[top, 1][:4], levels[top, 0][:4], atol=0.05)
     if mode == "first_order" or top > 0.0:
-        # Below the plane the level with second_order is not that of a level top (a
-        # known issue of docs/validation.md).
+        # Within 0.04 dB of a level top's with first_order and 0.34 dB with second_order
+        # a micrometre above. Below the plane the level with second_order is not that
+        # of a level top (a known issue of docs/validation.md).
+        within = 0.1 if mode == "first_order" else 0.4
         for way in (0, 1):
-            np.testing.assert_allclose(levels[top, way][:4], levels[0.0, way][:4], atol=0.25)
+            np.testing.assert_allclose(levels[top, way][:4], levels[0.0, way][:4], atol=within)
 
 
 def test_a_path_over_a_screens_top_reflects_off_a_roof_its_own_line_meets(tmp_path: Path) -> None:
@@ -1323,7 +1325,7 @@ def test_past_the_end_of_a_screen_level_with_a_roof_with_every_reflection_tested
 ) -> None:
     # The same past a roof 5 m wide and then the screen, with every sequence of
     # reflections tested (method: image_sources): a millimetre above the plane the two
-    # ways round agree, and with the level a centimetre above within 0.62 dB (with the
+    # ways round agree, and with the level a centimetre above within 0.64 dB (with the
     # path that reflects off the roof's plane at the screen's top, 2.4 to 3.0 dB above
     # it).
     extent = edge_diffraction.EXTENT
@@ -1372,7 +1374,7 @@ def test_a_roof_and_then_a_screen_level_with_it_with_the_ends_swapped(
     np.testing.assert_allclose(levels[1], levels[0], atol=0.05)
     if mode == "first_order" and (height, gap) == (1e-2, 1.0):
         # A wave calculation in two dimensions turned into a point source's gives -6.3
-        # to -6.9 dB from 63 to 500 Hz there. first_order is 0.2 to 2.0 dB below it; with
+        # to -6.9 dB from 63 to 500 Hz there. first_order is 0.3 to 2.2 dB below it; with
         # both, and the source past the screen, it was 4.4 to 6.1 dB above.
         reference = [-6.26, -6.50, -6.74, -6.93]
         for level in levels:
@@ -1404,14 +1406,16 @@ def test_a_screen_level_with_a_roof_belongs_to_the_leg_it_stands_beside(
             room = edge_diffraction._room(tmp_path, "past", quads, a, b, simulation)
             levels[top, way] = edge_diffraction.whole_early_stage(room)
     np.testing.assert_allclose(levels[0.0, 1], levels[0.0, 0], atol=0.05)
-    if height == 1.0:
-        # Which leg: a top a tenth of a millimetre above the plane is on the leg it
-        # stands beside by its height, both ways round, and a level top is its limit:
-        # up to 500 Hz within 0.18 dB (on the other leg, 0.5 to 1.0 dB off up to
-        # 250 Hz). Lower down the level is not even with the top's height (a known
-        # issue).
+    # Which leg: a top a tenth of a millimetre above the plane is on the leg it stands
+    # beside by its height, both ways round, and a level top is its limit: up to 500 Hz
+    # within 0.001 dB with first_order and, a metre above the plane, within 0.08 dB with
+    # second_order (taken for the other leg, it had been 0.5 to 1.0 dB off up to
+    # 250 Hz). A tenth of a metre above the plane, second_order is 0.29 dB from it: the
+    # level is not even with the top's height there (a known issue).
+    if mode == "first_order" or height == 1.0:
+        within = 0.01 if mode == "first_order" else 0.15
         for way in (0, 1):
-            np.testing.assert_allclose(levels[0.0, way][:4], levels[1e-4, way][:4], atol=0.25)
+            np.testing.assert_allclose(levels[0.0, way][:4], levels[1e-4, way][:4], atol=within)
 
 
 @pytest.mark.parametrize("mode", ["second_order", "first_order"])
