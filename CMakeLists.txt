@@ -19,7 +19,9 @@ nanobind_add_module(_native NB_STATIC NOMINSIZE cpp/bindings/native_module.cpp)
 target_link_libraries(_native PRIVATE acoustic_spaces_core)
 
 if(MSVC)
-  target_compile_options(_native PRIVATE /W4)
+  # /fp:precise: no contraction of a product and a sum, no reassociation (fitted walls refuse
+  # to fit in any other build; cut_cells.hpp).
+  target_compile_options(_native PRIVATE /W4 /fp:precise)
 else()
   # No multiply-adds fused where the source has none (Apple's clang fuses them by default
   # on Apple silicon): every platform rounds alike, and the wave solver with a speed of

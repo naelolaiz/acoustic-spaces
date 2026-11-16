@@ -171,10 +171,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <thread>
 #include <type_traits>
 #include <utility>
+#include <unordered_map>
 #include <vector>
 
 #if defined(__SSE__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 1)
@@ -183,6 +185,7 @@
 #endif
 
 #include "acoustic_spaces/bvh.hpp"
+#include "acoustic_spaces/cut_cells.hpp"
 #include "acoustic_spaces/ray_tracer.hpp"
 #include "acoustic_spaces/vec3.hpp"
 
@@ -320,7 +323,8 @@ public:
                const std::vector<Vec3> &probes, double edge_admittance, std::size_t layer,
                double layer_damping, std::size_t threads, std::size_t stencil = 7,
                const float *speed = nullptr, const float *flow_x = nullptr,
-               const float *flow_y = nullptr, std::size_t probes_per_listener = 1)
+               const float *flow_y = nullptr, std::size_t probes_per_listener = 1,
+               bool fitted_walls = false, const CutCells::Mesh *fit_mesh = nullptr)
         : origin_(origin), cell_(cell), nx_(nx), ny_(ny), nz_(nz), sy_(nx), sz_(nx * ny),
           layer_(layer), stencil_(stencil) {
         if (stencil != 7 && stencil != 19) {
@@ -470,6 +474,10 @@ public:
                 layer_scale_.push_back(scale_[static_cast<std::size_t>(layer_cells_[c])]);
             }
         }
+        // With fitted_walls, the fit of the mesh as given (its
+        // cut cells and its own air), kept for cut_cells() and cut_air(); the update below
+        // does not use them. A refused input throws the fit's message.
+        if (fitted_walls) set_up_cut_cells(fit_mesh, face_material, materials, source);
 
         // Boundary cells: a link cut or at the grid's edge (mark 1), or a neighbour of
         // one whose folded links reach it (mark 2), whose weights averaging changes.
@@ -611,6 +619,9 @@ public:
             const std::size_t l = k - k % probes_per_listener;
             probe_in_sight_.push_back(k == l || crossing(bvh, probe_ends[l], probe_ends[k]) < 0);
         }
+        // With fitted_walls, the same points on the fit's flags (ruling T-1 of the design), for
+        // cut_points(); the update above does not use them.
+        if (fitted_walls) fitted_ = FittedStencil(*cut_, nx_, ny_, nz_, cell_).points(source, probes, probes_per_listener);
         // The runs of consecutive interior cells, which the update streams through.
         for (std::size_t i = 0; i < n;) {
             if (type_[i] != kInterior) {
@@ -662,6 +673,8 @@ public:
     bool source_on_face() const { return source_on_face_; }
     std::size_t stencil() const { return stencil_; }
     std::size_t threads() const { return threads_; }
+    // The cut cells (see cut_cells.hpp), or null without fitted walls.
+    const CutCells *cut_cells() const { return cut_.get(); }
 
     // Hands each array of the grid's layout to put(name, vector), for stepping the grid
     // elsewhere (on a GPU: engine/gpu.py); the grid's state is not among them.
@@ -868,6 +881,331 @@ private:
         {-1, 0, 1},  {1, 0, 1},  {0, -1, -1}, {0, 1, -1}, {0, -1, 1},  {0, 1, 1}};
 
     static int opposite(int k) { return k < 6 ? k ^ 1 : 6 + 4 * ((k - 6) / 4) + 3 - (k - 6) % 4; }
+
+    // The cut cells of the grid and the fit's own air (see cut_cells.hpp), on the
+    // grid's own doubles (cut_grid).
+    static constexpr bool same_steps() {
+        for (int k = 0; k < 18; ++k)
+            for (int a = 0; a < 3; ++a)
+                if (kSteps[k][a] != CutCells::kSteps[k][a]) return false;
+        return true;
+    }
+    void set_up_cut_cells(const CutCells::Mesh *mesh, const std::int64_t *face_material, std::size_t materials,
+                          const Vec3 &source) {
+        static_assert(same_steps(), "the cut cells' directions are the solver's");
+        if (mesh == nullptr) throw std::invalid_argument("fitted walls: the mesh's vertices and faces are needed");
+        cut_ = std::make_unique<CutCells>(*mesh, face_material, materials,
+                                          cut_grid(origin_, cell_, nx_, ny_, nz_, layer_), source, threads_);
+        cut_->check();
+    }
+
+public:
+    // The source's and probes' cells as the fitted path would take them (ruling T-1 and
+    // section 4.7.3 of the design), from the fit's flags and the exact way test: the solver's
+    // own stencil logic (reading_cells, seen_cells) in a second copy, its decisions on Q; kNear
+    // and kReach as the solver's. Used by the solver with fitted walls (cut_points) and by the fit alone.
+    struct FittedPoints {
+        std::vector<std::pair<std::size_t, double>> source;
+        std::vector<std::vector<std::pair<std::size_t, double>>> probes;
+        std::vector<std::uint8_t> in_sight;
+        bool source_on_face = false;
+        std::size_t without_cells = 0;  // probes with no cell
+    };
+    class FittedStencil {
+    public:
+        FittedStencil(const CutCells &cut, std::size_t nx, std::size_t ny, std::size_t nz, double cell)
+            : cut_(cut), nx_(nx), ny_(ny), nz_(nz), sy_(nx), sz_(nx * ny), cell_(cell) {}
+
+        // The source's cells (refused with the messages of DESIGN 5.5 where it has none), each
+        // probe's, and each probe's sight from its listener (the first of its group).
+        FittedPoints points(const Vec3 &source, const std::vector<Vec3> &probes, std::size_t per_listener) const {
+            FittedPoints fp;
+            const CutCells::Located S = cut_.locate(source);
+            fp.source_on_face = cut_.on_face(S.q);
+            const auto &air = cut_.air();
+            const auto not_solid = [&air](std::size_t i) { return air[i] != CutCells::kSolid; };
+            for (const auto &[i, w] : seen_cells_fitted(S, not_solid)) {
+                (void)w;
+                if (air[i] == CutCells::kLayer) {
+                    const Vec3 c = cut_.cell_centre(i);
+                    throw std::invalid_argument(
+                        "fitted walls: the source is in the matched layer: the cell centred at (" + std::to_string(c.x) +
+                        ", " + std::to_string(c.y) + ", " + std::to_string(c.z) + ") m that it would feed lies within the "
+                        "layer's " + std::to_string(cut_.layer()) + " cells inside the grid's edge. Move the source "
+                        "inward, or enlarge the margin round the model.");
+                }
+            }
+            fp.source = reading_cells_fitted(S, true);
+            if (fp.source.empty()) {
+                std::vector<std::int64_t> crossed;
+                bool edge = false;
+                seen_cells_fitted(S, not_solid, &edge, &crossed);
+                if (edge) {
+                    throw std::invalid_argument(
+                        "fitted walls: the source lies within " + std::to_string(kReach / 2) +
+                        " cells of the grid's edge, where the solver has no cells round it: move it inward or enlarge "
+                        "the grid.");
+                }
+                std::sort(crossed.begin(), crossed.end());
+                crossed.erase(std::unique(crossed.begin(), crossed.end()), crossed.end());
+                std::string faces;
+                for (std::size_t k = 0; k < crossed.size() && k < 8; ++k) faces += (k ? ", " : "") + std::to_string(crossed[k]);
+                throw std::invalid_argument(
+                    "fitted walls: no cell centre round the source can be reached from it without crossing the model: "
+                    "the ways to the eight cells round it cross faces " + (faces.empty() ? std::string("(none: they are not air)") : faces) +
+                    ". The source lies in a space narrower than a cell. Move it, or use a finer grid.");
+            }
+            std::vector<CutCells::Located> at;
+            for (std::size_t k = 0; k < probes.size(); ++k) {
+                const Vec3 &p = probes[k];
+                const bool close = norm(p - source) < (kNear - 1e-9) * cell_;
+                at.push_back(cut_.locate(p));
+                fp.probes.push_back(reading_cells_fitted(at.back(), !close));
+                if (fp.probes.back().empty()) ++fp.without_cells;
+            }
+            for (std::size_t k = 0; k < probes.size(); ++k) {
+                const std::size_t l = k - k % std::max<std::size_t>(1, per_listener);
+                if (k == l) {
+                    fp.in_sight.push_back(1);
+                    continue;
+                }
+                // A point outside the grid's box has no cell (it is not found) and may lie past
+                // the frame, where no way can be decided: not in sight.
+                if (!cut_.in_grid_box(at[l].q) || !cut_.in_grid_box(at[k].q)) {
+                    fp.in_sight.push_back(0);
+                    continue;
+                }
+                const CutCells::I128 pts[2][3] = {{at[l].q[0], at[l].q[1], at[l].q[2]}, {at[k].q[0], at[k].q[1], at[k].q[2]}};
+                fp.in_sight.push_back(cut_.way(at[l].q, at[k].q, cut_.faces_near(pts, 2)) < 0);
+            }
+            return fp;
+        }
+
+    private:
+        const CutCells &cut_;
+        std::size_t nx_, ny_, nz_, sy_, sz_;
+        double cell_;
+        mutable std::unordered_map<std::size_t, std::uint8_t> clear_;  // 3 i + axis: 1 clear, 2 crossed
+
+    std::vector<std::size_t> near_box(const CutCells::Located &L, const long long lo[3], const long long hi[3]) const {
+        CutCells::I128 pts[3][3];
+        const std::size_t size[3] = {nx_, ny_, nz_};
+        for (int a = 0; a < 3; ++a) {
+            const long long l = std::max(0LL, lo[a]), h = std::min(static_cast<long long>(size[a]) - 1, hi[a]);
+            std::size_t il[3] = {0, 0, 0}, ih[3] = {0, 0, 0};
+            il[a] = static_cast<std::size_t>(l);
+            ih[a] = static_cast<std::size_t>(h);
+            CutCells::I128 c0[3], c1[3];
+            cut_.centre_q(il[0] + il[1] * sy_ + il[2] * sz_, c0);
+            cut_.centre_q(ih[0] + ih[1] * sy_ + ih[2] * sz_, c1);
+            pts[0][a] = c0[a];
+            pts[1][a] = c1[a];
+            pts[2][a] = L.q[a];
+        }
+        return cut_.faces_near(pts, 3);
+    }
+    // used(p, i) of 4.7.2 without the type: the way from p to cell i's centre crosses no face.
+    std::int64_t way_to(const CutCells::Located &L, std::size_t i, const std::vector<std::size_t> &nearby_faces) const {
+        CutCells::I128 c[3];
+        cut_.centre_q(i, c);
+        return cut_.way(L.q, c, nearby_faces);
+    }
+    // clear(i, i + step along axis a), cached.
+    bool clear_step(std::size_t i, int a, const std::vector<std::size_t> &nearby_faces) const {
+        const std::size_t key = 3 * i + static_cast<std::size_t>(a);
+        const auto it = clear_.find(key);
+        if (it != clear_.end()) return it->second == 1;
+        const std::size_t j = i + (a == 0 ? 1 : (a == 1 ? sy_ : sz_));
+        CutCells::I128 ci[3], cj[3];
+        cut_.centre_q(i, ci);
+        cut_.centre_q(j, cj);
+        const bool c = cut_.way(ci, cj, nearby_faces) < 0;
+        clear_[key] = c ? 1 : 2;
+        return c;
+    }
+
+    // seen_cells on the fit (4.7.3): the eight round the point, those keep(i) holds for and
+    // reached without crossing a face; the side of a tie is + (the perturbation, step a + 1);
+    // in-grid tests on the exact bracket; no 1e-9 rule. `edge` is set when the point lies
+    // outside the grid's interior for the stencil, `crossed` gets the faces crossed.
+    template <typename Keep>
+    std::vector<std::pair<std::size_t, double>> seen_cells_fitted(const CutCells::Located &L, Keep keep,
+                                                                  bool *edge = nullptr,
+                                                                  std::vector<std::int64_t> *crossed = nullptr) const {
+        std::vector<std::pair<std::size_t, double>> out;
+        const long long size[3] = {static_cast<long long>(nx_), static_cast<long long>(ny_), static_cast<long long>(nz_)};
+        for (int a = 0; a < 3; ++a) {
+            const long long j = L.j[a];
+            if (!(j >= 1 && (j < size[a] - 3 || (j == size[a] - 3 && L.tied[a])))) {
+                if (edge != nullptr) *edge = true;
+                return out;
+            }
+        }
+        const long long lo[3] = {L.j[0], L.j[1], L.j[2]}, hi[3] = {L.j[0] + 1, L.j[1] + 1, L.j[2] + 1};
+        const std::vector<std::size_t> nearby_faces = near_box(L, lo, hi);
+        std::pair<std::size_t, double> seen[8];
+        int smallness[8], count = 0, least = 0;
+        for (int corner = 0; corner < 8; ++corner) {
+            double w = 1.0;
+            int small = 0;
+            std::size_t i = 0, stride = 1;
+            for (int a = 0; a < 3; ++a) {
+                const int up = (corner >> a) & 1;
+                if (!L.tied[a]) {
+                    w *= up ? L.lo[a] : L.hi[a];
+                } else if (up == 1) {  // past the plane, by the step of axis a (a + 1)
+                    small += 1 << (2 * (a + 1));
+                }
+                i += static_cast<std::size_t>(L.j[a] + up) * stride;
+                stride *= a == 0 ? nx_ : (a == 1 ? ny_ : 1);
+            }
+            if (w <= 0.0) continue;
+            if (!keep(i)) continue;
+            const std::int64_t f = way_to(L, i, nearby_faces);
+            if (f >= 0) {
+                if (crossed != nullptr) crossed->push_back(f);
+                continue;
+            }
+            if (count == 0 || small < least) least = small;
+            seen[count] = {i, w};
+            smallness[count++] = small;
+        }
+        double total = 0.0;
+        for (int k = 0; k < count; ++k) {
+            if (smallness[k] != least) continue;
+            out.push_back(seen[k]);
+            total += seen[k].second;
+        }
+        for (auto &cell_weight : out) cell_weight.second /= total;
+        return out;
+    }
+    std::vector<std::pair<std::size_t, double>> visible_cells_fitted(const CutCells::Located &L) const {
+        const auto &air = cut_.air();
+        return seen_cells_fitted(L, [&air](std::size_t i) { return air[i] != CutCells::kSolid; });
+    }
+
+    // reading_cells on the fit (4.7.3).
+    std::vector<std::pair<std::size_t, double>> reading_cells_fitted(const CutCells::Located &L, bool cubic) const {
+        if (!cubic) return visible_cells_fitted(L);
+        const auto &air = cut_.air();
+        const long long size[3] = {static_cast<long long>(nx_), static_cast<long long>(ny_), static_cast<long long>(nz_)};
+        long long start[3];
+        double weight[3][kReach];
+        for (int a = 0; a < 3; ++a) {
+            const long long j = L.j[a];
+            if (!(j >= 1 && j < size[a] - 3)) return visible_cells_fitted(L);
+            start[a] = j - (kReach / 2 - 1);
+            // x = lo + 1 in the stencil's frame; each factor x - m is formed as lo - (m - 1), so
+            // that x - 1 is lo itself and a weight is 0 exactly when the point is tied (lo + 1.0
+            // would round a lo under 1e-16 away)
+            for (int k = 0; k < kReach; ++k) {
+                double w = 1.0;
+                for (int m = 0; m < kReach; ++m) {
+                    if (m != k) w *= (L.lo[a] - static_cast<double>(m - 1)) / static_cast<double>(k - m);
+                }
+                weight[a][k] = w;
+            }
+        }
+        const long long hi[3] = {start[0] + 3, start[1] + 3, start[2] + 3};
+        const std::vector<std::size_t> nearby_faces = near_box(L, start, hi);
+        auto index = [&](int x, int y, int z) {
+            return static_cast<std::size_t>(start[0] + x) + static_cast<std::size_t>(start[1] + y) * sy_ +
+                   static_cast<std::size_t>(start[2] + z) * sz_;
+        };
+        bool own[kReach][kReach][kReach];
+        for (int z = 0; z < kReach; ++z)
+            for (int y = 0; y < kReach; ++y)
+                for (int x = 0; x < kReach; ++x) {
+                    const std::size_t i = index(x, y, z);
+                    own[z][y][x] = air[i] == CutCells::kAir && way_to(L, i, nearby_faces) < 0;
+                }
+        bool keep[3][kReach];
+        for (auto &axis : keep) std::fill(std::begin(axis), std::end(axis), true);
+        for (bool changed = true; changed;) {
+            changed = false;
+            for (int a = 0; a < 3; ++a) {
+                const int b = (a + 1) % 3, c = (a + 2) % 3;
+                for (int j = 0; j < kReach; ++j) {
+                    if (!keep[a][j]) continue;
+                    bool any = false;
+                    int at[3];
+                    at[a] = j;
+                    for (at[b] = 0; at[b] < kReach && !any; ++at[b])
+                        for (at[c] = 0; at[c] < kReach && !any; ++at[c])
+                            any = keep[b][at[b]] && keep[c][at[c]] && own[at[2]][at[1]][at[0]];
+                    if (!any) {
+                        keep[a][j] = false;
+                        changed = true;
+                    }
+                }
+            }
+        }
+        int from[3], count[3];
+        for (int a = 0; a < 3; ++a) {
+            const int inner = kReach / 2 - 1;
+            if (keep[a][0] && keep[a][1] && keep[a][2] && keep[a][3]) {
+                from[a] = 0;
+                count[a] = kReach;
+            } else if (keep[a][inner] && keep[a][inner + 1]) {
+                from[a] = inner;
+                count[a] = 2;
+                weight[a][inner] = L.hi[a];
+                weight[a][inner + 1] = L.lo[a];
+            } else if (keep[a][inner] || keep[a][inner + 1]) {
+                from[a] = keep[a][inner] ? inner : inner + 1;
+                count[a] = 1;
+                weight[a][from[a]] = 1.0;
+            } else {
+                return visible_cells_fitted(L);
+            }
+        }
+        std::vector<std::pair<std::size_t, double>> out;
+        for (int z = from[2]; z < from[2] + count[2]; ++z)
+            for (int y = from[1]; y < from[1] + count[1]; ++y)
+                for (int x = from[0]; x < from[0] + count[0]; ++x) {
+                    const std::size_t i = index(x, y, z);
+                    if (!own[z][y][x] || (x + 1 < from[0] + count[0] && !clear_step(i, 0, nearby_faces)) ||
+                        (y + 1 < from[1] + count[1] && !clear_step(i, 1, nearby_faces)) ||
+                        (z + 1 < from[2] + count[2] && !clear_step(i, 2, nearby_faces))) {
+                        return visible_cells_fitted(L);
+                    }
+                    const double w = weight[0][x] * weight[1][y] * weight[2][z];
+                    if (w != 0.0) out.emplace_back(i, w);
+                }
+        return out;
+    }
+
+    };
+
+    // The fitted path's points (empty without fitted walls).
+    const FittedPoints &fitted_points() const { return fitted_; }
+
+private:
+    FittedPoints fitted_;
+
+public:
+    // The grid as the fit takes it: the doubles of the cells' faces and centres per axis,
+    // each by the expression centre_at uses (origin + (i + 1/2) cell) and its face's
+    // (origin + i cell).
+    static CutCells::Grid cut_grid(const Vec3 &origin, double cell, std::size_t nx, std::size_t ny,
+                                   std::size_t nz, std::size_t layer) {
+        CutCells::Grid g;
+        g.origin = origin;
+        g.cell = cell;
+        g.n = {nx, ny, nz};
+        g.layer = layer;
+        for (int a = 0; a < 3; ++a) {
+            const double o = a == 0 ? origin.x : (a == 1 ? origin.y : origin.z);
+            for (std::size_t i = 0; i <= g.n[static_cast<std::size_t>(a)]; ++i)
+                g.face_at[static_cast<std::size_t>(a)].push_back(o + static_cast<double>(i) * cell);
+            for (std::size_t i = 0; i < g.n[static_cast<std::size_t>(a)]; ++i)
+                g.centre_at[static_cast<std::size_t>(a)].push_back(o + (static_cast<double>(i) + 0.5) * cell);
+        }
+        return g;
+    }
+
+private:
+    std::unique_ptr<CutCells> cut_;
 
     // The axial directions of edge direction k's two steps.
     static std::array<int, 2> steps_of(int k) {
