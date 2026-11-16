@@ -2561,6 +2561,14 @@ msgid "wide angle"
 msgstr "angolo ampio"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "solver for whole rows"
+msgstr "solutore per file intere"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "paths over the edges"
+msgstr "percorsi sopra gli spigoli"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "stochastic_ray_tracing"
 msgstr "tracciamento di raggi stocastico"
 
@@ -5314,6 +5322,24 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Outdoors, the sound over barriers and buildings in the vertical plane "
+"through a source and a listener, in the octave bands up to 500 Hz that add "
+"their paths in pressure: the solver for whole rows (one field over all of "
+"them, with the ground and the roofs in it, where their tops go on far enough "
+"to both sides of the way; seconds for each source and listener) or the paths "
+"over one edge or two alone. Maps and walks take the paths"
+msgstr ""
+"All'aperto, il suono sopra barriere ed edifici nel piano verticale che passa "
+"per una sorgente e un ricevitore, nelle bande d'ottava fino a 500 Hz che "
+"sommano i loro percorsi in pressione: il solutore per file intere (un solo "
+"campo sopra tutti, con il terreno e i tetti al suo interno, dove le loro "
+"sommità proseguono abbastanza lontano ai due lati della linea di vista; "
+"secondi per ogni sorgente e ricevitore) o i percorsi sopra uno spigolo o due "
+"soltanto. Le mappe e i percorsi di sorgenti e ricevitori in movimento "
+"prendono i percorsi sopra gli spigoli"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "Outdoors in wind or temperature gradients, the parabolic equation that gives "
 "the sound over the open ground in the low bands and in the shadows: narrow "
 "angle (for the gradients near the ground that the weather has) or wide angle "
@@ -5417,6 +5443,10 @@ msgstr "Diffrazione"
 #: acoustic_spaces/gui/inspector.py
 msgid "Reflections over an edge"
 msgstr "Riflessioni sopra uno spigolo"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Barriers and buildings"
+msgstr "Barriere ed edifici"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Parabolic equation"

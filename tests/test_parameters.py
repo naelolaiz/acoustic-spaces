@@ -1,4 +1,7 @@
 import math
+import os
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -477,3 +480,41 @@ def test_time_weighting_keeps_a_steady_level_and_checks_its_input() -> None:
         time_weighted(times, [60.0, 60.0])
     with pytest.raises(ValueError, match="must be positive"):
         time_weighted(times, [60.0] * 3, time_constant_s=0.0)
+
+
+_IACC_AND_FIT_DIGEST = """
+import hashlib
+import numpy as np
+from acoustic_spaces import parameters
+
+rng = np.random.default_rng(7)
+rate = 48_000
+t = np.arange(rate) / rate
+binaural = rng.normal(size=(rate, 2)) * np.exp(-6.0 * t)[:, None]
+binaural[:100] = 0.0
+iacc = parameters.interaural_cross_correlation(binaural, rate)
+level = -60.0 * np.arange(20_000) / 20_000 + rng.normal(scale=0.3, size=20_000)
+fit = parameters._fit(level, np.arange(20_000) * 1e-4, -1.0, -55.0)
+digest = hashlib.sha256()
+for x in (iacc["iacc_e"], iacc["iacc_l"], np.array(fit)):
+    digest.update(np.ascontiguousarray(x).tobytes())
+print(digest.hexdigest())
+"""
+
+
+def test_iacc_and_a_long_decay_fit_have_the_same_bits_on_any_number_of_library_threads() -> None:
+    """The IACC of a second of binaural noise (each band's parts over 10,000 samples) and
+    a decay line fitted through 20,000 points are bit for bit the same in fresh
+    processes on one and on four OpenBLAS threads."""
+    digests = set()
+    for threads in ("1", "4"):
+        env = dict(os.environ, OPENBLAS_NUM_THREADS=threads)
+        run = subprocess.run(
+            [sys.executable, "-c", _IACC_AND_FIT_DIGEST],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        digests.add(run.stdout)
+    assert len(digests) == 1

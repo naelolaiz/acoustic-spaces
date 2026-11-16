@@ -154,37 +154,64 @@ class Layout:
         crosses its path (near and far that distance, top the height (z) of its top
         there), a building over each stretch of the line inside its footprint (top its
         roof's height)."""
+        return [found[:3] for found in self.crossed_along(origin, direction, reach)]
+
+    def crossed_along(
+        self, origin: np.ndarray, direction: np.ndarray, reach: float
+    ) -> list[tuple[float, float, float, tuple[float, float]]]:
+        """(near, far, top, slants) for each barrier and building that the line from
+        ``origin`` along ``direction`` meets, as :meth:`obstacles_along` gives them, with
+        the angles (radians, between -pi / 2 and pi / 2) by which its near and its far
+        side are turned from across the line, seen from above: 0 for a side that the
+        line crosses at right angles, positive for one turned anticlockwise from there,
+        the same from either end of the line. A barrier's two are one angle, that of
+        the segment of its path the line crosses (through a corner of the path, of the
+        first of the two); a building's are those of the walls where the line enters
+        and leaves its footprint, nan for a side the line does not cross (the origin
+        inside the footprint, or ``reach`` inside it)."""
         origin = np.asarray(origin, dtype=float)[:2]
         direction = np.asarray(direction, dtype=float)[:2]
         tolerance = 1e-9 * max(reach, 1.0)
+        left = np.array([-direction[1], direction[0]])
+
+        def turned(a: np.ndarray, b: np.ndarray) -> float:
+            """The angle of the segment from ``a`` to ``b`` from across the line."""
+            along = b - a
+            if along @ left < 0.0:
+                along = -along
+            return math.atan2(0.0 - float(along @ direction), float(along @ left))
+
         out = []
         for _, line in self.barriers:
-            found = []
+            found: list = []
             crossed = line_crossings(origin, direction, reach, line[:, :2], closed=False)
             for t, segment, u in crossed:
                 # Through a corner of its path, once.
-                if not any(abs(t - near) <= tolerance for near, _, _ in found):
+                if not any(abs(t - near) <= tolerance for near, _, _, _ in found):
                     z = line[segment, 2] + u * (line[segment + 1, 2] - line[segment, 2])
-                    found.append((t, t, float(z)))
+                    slant = turned(line[segment, :2], line[segment + 1, :2])
+                    found.append((t, t, float(z), (slant, slant)))
             out += found
         for _, footprint, roof in self.buildings:
             # Through a corner, or touching one from outside, once.
-            found = []
-            for t in sorted(t for t, _, _ in line_crossings(origin, direction, reach, footprint)):
-                if not found or t - found[-1] > tolerance:
-                    found.append(t)
-            stops = [0.0, *found, float(reach)]
+            walls: list = []
+            crossed = line_crossings(origin, direction, reach, footprint)
+            for t, segment, _ in sorted(crossed):
+                if not walls or t - walls[-1][0] > tolerance:
+                    a, b = footprint[segment], footprint[(segment + 1) % len(footprint)]
+                    walls.append((t, turned(a, b)))
+            stops = [(0.0, math.nan), *walls, (float(reach), math.nan)]
             start = None
-            for a, b in zip(stops[:-1], stops[1:], strict=True):
+            for (a, slant), (b, _) in zip(stops[:-1], stops[1:], strict=True):
                 inside = bool(in_polygon((origin + 0.5 * (a + b) * direction)[None], footprint)[0])
                 if inside and start is None:
-                    start = a
+                    start = (a, slant)
                 elif not inside and start is not None:
-                    out.append((start, a, float(roof)))
+                    out.append((start[0], a, float(roof), (start[1], slant)))
                     start = None
             if start is not None:
-                out.append((start, float(reach), float(roof)))
-        return sorted(out)
+                out.append((start[0], float(reach), float(roof), (start[1], math.nan)))
+        return sorted(out, key=lambda found: found[:3])
 
     def building_at(self, points: np.ndarray) -> list[str | None]:
         """The building each point (n, 3) lies in, or None."""

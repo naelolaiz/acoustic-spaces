@@ -7,6 +7,7 @@ from functools import cached_property
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.directivity import PATTERNS, Directivity
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.materials.bands import Resolution, band_centres
@@ -48,7 +49,7 @@ def source_weights(
     directions = np.asarray(directions, dtype=float).reshape(-1, 3)
     if directivity is None:
         return np.ones((len(directions), bands))
-    local = directions if orientation is None else directions @ np.asarray(orientation)
+    local = directions if orientation is None else products.product(directions, orientation)
     if distances is not None and getattr(directivity, "near", None) is not None:
         return directivity.near_energy(local * np.asarray(distances, dtype=float).reshape(-1, 1))
     return directivity.energy(local)

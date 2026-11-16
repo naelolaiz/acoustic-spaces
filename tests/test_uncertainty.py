@@ -345,10 +345,10 @@ def test_the_spread_lists_the_errors_over_edges_it_does_not_count():
     assert spread["s", "a"].not_counted == {}
     assert spread["s", "a"].as_dict()["not_counted"] == {}
 
-    def response(edges, coherent):
+    def response(edges, coherent, energy=1.0):
         early = SimpleNamespace(
             edge=np.array(edges),
-            energy=np.zeros((len(edges), 8)),
+            energy=np.ones((len(edges), 8)) * np.asarray(energy, dtype=float),
             spectrum=None if coherent == 0 else np.zeros((len(edges), coherent, 8)),
         )
         return SimpleNamespace(early=early)
@@ -370,6 +370,24 @@ def test_the_spread_lists_the_errors_over_edges_it_does_not_count():
     found = edge_errors(response([7], 8), wide.simulation)
     assert list(found) == ["one edge", "two edges", "corners of edges"]
     np.testing.assert_array_equal(found["two edges"], EDGE_ERRORS_DB["two edges"]["pressure"])
+    # Where the solver for whole rows took a row's sound (edge -3), the paths over the
+    # row's edges have no energy left: the solver's own error is listed in those bands,
+    # the edges' in the others. Here the solver has the lowest three bands.
+    low = np.arange(8) < 3
+    rows = [[1.0] * 8, np.where(low, 0.0, 1.0), np.where(low, 1.0, 0.0)]
+    found = edge_errors(response([-1, 7, -3], 4, rows), wide.simulation)
+    assert list(found) == ["one edge", "two edges", "corners of edges", "whole rows"]
+    for name in ("one edge", "two edges", "corners of edges"):
+        table = EDGE_ERRORS_DB[name]
+        assert np.all(np.isnan(found[name][:3]))
+        np.testing.assert_array_equal(found[name][3], table["pressure"][3])
+        np.testing.assert_array_equal(found[name][4:], table["energy"][4:])
+    np.testing.assert_array_equal(
+        found["whole rows"][:3], EDGE_ERRORS_DB["whole rows"]["pressure"][:3]
+    )
+    assert np.all(np.isnan(found["whole rows"][3:]))
+    # Paths over edges without energy in any band are none.
+    assert edge_errors(response([-1, 7], 4, [[1.0] * 8, [0.0] * 8]), wide.simulation) == {}
 
 
 def test_the_errors_over_edges_are_those_of_the_run_s_settings():

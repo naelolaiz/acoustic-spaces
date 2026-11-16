@@ -32,6 +32,7 @@ from typing import NamedTuple
 import numpy as np
 
 from acoustic_spaces import parameters as iso3382
+from acoustic_spaces import products
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine import run_size
@@ -529,7 +530,7 @@ class _Air:
         self.bvh = _native.Bvh(mesh.vertices, mesh.faces)
         # The side of each face that a ray going down meets: the back where its normal
         # points down.
-        self.side = (mesh.face_normals() @ _DOWN > 0.0).astype(np.int64)
+        self.side = (products.product(mesh.face_normals(), _DOWN) > 0.0).astype(np.int64)
         self.face_room = room.face_room
 
     def rooms(self, points: np.ndarray) -> np.ndarray:

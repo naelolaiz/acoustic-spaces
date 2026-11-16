@@ -38,6 +38,7 @@ from pathlib import Path
 import numpy as np
 
 from acoustic_spaces import parameters as iso3382
+from acoustic_spaces import products
 from acoustic_spaces.compare import JND
 from acoustic_spaces.engine import reweight
 from acoustic_spaces.engine.coherent import EarlyPressure, filtered_bands, with_mean_phases
@@ -263,9 +264,9 @@ class _Band:
         out = self.late * np.exp(np.minimum(exponent, 50.0))[self.moment_slot]
         if self.pressure is not None:
             alike, pressure, slot, scale = self.pressure
-            p = np.exp(0.5 * (alike @ ratio)) @ pressure
+            p = products.product(np.exp(0.5 * products.product(alike, ratio)), pressure)
             return out + np.bincount(slot, weights=scale * p**2, minlength=self.slots)[: self.slots]
-        early = self.early_energy * np.exp(self.counts @ ratio)
+        early = self.early_energy * np.exp(products.product(self.counts, ratio))
         return out + np.bincount(self.early_slot, weights=early, minlength=self.slots)
 
     def parameters(self, ratio: np.ndarray) -> RoomParameters:
@@ -366,7 +367,7 @@ def _fit_band(
     # the others following, before the sum of the squared misses grows by one JND squared.
     data = jacobian_of(misses, solution.x, lowest, upper)
     try:
-        spread = np.sqrt(np.maximum(np.diag(np.linalg.inv(data.T @ data)), 0.0))
+        spread = np.sqrt(np.maximum(np.diag(np.linalg.inv(products.product(data.T, data))), 0.0))
     except np.linalg.LinAlgError:
         spread = np.full(len(start), math.inf)
     return solution.x, spread

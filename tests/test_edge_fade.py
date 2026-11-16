@@ -602,7 +602,10 @@ def test_a_path_over_an_edge_is_clear_past_the_ground(shape: str, mode: str) -> 
     1.72 m (under 0.15 dB from 63 to 500 Hz). Below, the paths of the missed reflection
     off the ground round the first barrier's end, on to the listener, and round the
     second's, back from the ground past the first's foot to the source, went through the
-    other barrier: the level stepped by up to 15.7 dB at 63 Hz."""
+    other barrier: the level stepped by up to 15.7 dB at 63 Hz. The paths over the edges
+    are looked at (``rows: edges``): the solver's field, which at 500 Hz has a share
+    here, rises with the height by itself (0.11 to 0.25 dB every 2 cm from 1.62 to
+    1.80 m, 0.18 dB over these 2 cm)."""
     levels = [
         10
         * np.log10(
@@ -613,6 +616,7 @@ def test_a_path_over_an_edge_is_clear_past_the_ground(shape: str, mode: str) -> 
                         source=(0.0, -8.0, 1.5),
                         max_order=2,
                         diffraction=mode,
+                        rows="edges",
                         **_BEHIND[shape],
                     )
                 )

@@ -84,6 +84,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.clusters import Clusters
 from acoustic_spaces.engine.coherent import ground_factors, ground_wave_factors, reflection_phases
@@ -716,8 +717,8 @@ def _closed_ends(model: TraceModel, points, outward, sides, tol) -> np.ndarray:
     normal, offset = model.plane_normal, model.plane_offset
     for begin in range(0, len(points), 512):
         rows = np.arange(begin, min(begin + 512, len(points)))
-        along = points[rows] @ normal.T - offset[None, :]
-        across = np.abs(into[rows] @ normal.T) >= closing
+        along = products.product(points[rows], normal.T) - offset[None, :]
+        across = np.abs(products.product(into[rows], normal.T)) >= closing
         hit_rows, hit_planes = np.nonzero(across & (np.abs(along) <= tol))
         for row, plane in zip(rows[hit_rows], hit_planes, strict=True):
             if closed[row]:
@@ -758,12 +759,22 @@ def _on_triangles(point: np.ndarray, triangles: np.ndarray, tol: float) -> bool:
     return bool(np.any(ok & (v >= -eps) & (w >= -eps) & (v + w <= 1.0 + eps)))
 
 
-def _fade_reach(r1, r2, sin_beta, k_min: float) -> np.ndarray:
+def _fade_reach(r1, r2, sin_beta, k_min: float | np.ndarray) -> np.ndarray:
     """How far (m) past a fading end of an edge a path touching its line at distances
     ``r1`` and ``r2`` from the source and listener sides, at ``sin_beta`` to it, is
     followed: FADE_REACH over the Fresnel integral's argument per metre at ``k_min``."""
     spread = np.sqrt(np.pi * r1 * r2 / ((r1 + r2) * k_min))
     return FADE_REACH * spread / np.maximum(sin_beta, _FADE_MIN_SINE)
+
+
+def fade_window(distance, reach) -> np.ndarray:
+    """How much of what an end of an edge does to a path counts where the path touches
+    the edge's line ``distance`` (m) from that end: all of it up to FADE_TAPER /
+    FADE_REACH of ``reach`` (m, :func:`_fade_reach`), then less, down to none at
+    ``reach`` (shaped like the two together)."""
+    start = FADE_TAPER / FADE_REACH * reach
+    x = np.clip((distance - start) / np.maximum(reach - start, 1e-300), 0.0, 1.0)
+    return 0.5 * (1.0 + np.cos(np.pi * x))
 
 
 def near_fading_end(fades, t_k, length, r1, r2, sin_beta, k_min: float):
@@ -805,7 +816,9 @@ def _weighted_tail(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     def owen(x, y):
         ratio = y / np.maximum(x, 1e-300)
         s2 = (ratio[:, None] * _LEGENDRE[0]) ** 2
-        return ratio * ((np.exp(-1j * (x**2)[:, None] * (1.0 + s2)) / (1.0 + s2)) @ _LEGENDRE[1])
+        return ratio * products.product(
+            np.exp(-1j * (x**2)[:, None] * (1.0 + s2)) / (1.0 + s2), _LEGENDRE[1]
+        )
 
     far = np.minimum(p, q) > _TAIL_SWITCH
     low = ~far & (q <= p)
@@ -818,7 +831,9 @@ def _weighted_tail(u: np.ndarray, v: np.ndarray) -> np.ndarray:
         out[high] = (owen(q[high], p[high]) / np.pi - rest) / (2.0 * whole)
     if far.any():
         square = (q[far] ** 2)[:, None] - 1j * _LAGUERRE[0]
-        along = (-0.5j / (np.sqrt(square) * (square + (p[far] ** 2)[:, None]))) @ _LAGUERRE[1]
+        along = products.product(
+            -0.5j / (np.sqrt(square) * (square + (p[far] ** 2)[:, None])), _LAGUERRE[1]
+        )
         phase = np.exp(-1j * (q[far] ** 2 + p[far] ** 2))
         out[far] = phase * p[far] * along / (2.0 * np.pi * _fresnel_tail_share(v[far]))
     return out
@@ -882,9 +897,7 @@ def along_edge(
     t_k, length = np.asarray(t_k, float), np.asarray(length, float)
 
     def window(distance):
-        start = FADE_TAPER / FADE_REACH * reach
-        x = np.clip((distance - start) / np.maximum(reach - start, 1e-300), 0.0, 1.0)
-        return (0.5 * (1.0 + np.cos(np.pi * x)))[:, None, None, None]
+        return fade_window(distance, reach)[:, None, None, None]
 
     before, after = t_k < 0.0, t_k > length
     squeeze = inside is None
@@ -1061,7 +1074,7 @@ class EdgeDiffraction:
 
     def _facing(self, point: np.ndarray) -> np.ndarray:
         """Planes that ``point`` lies in front of (on either side of two-sided ones)."""
-        distance = self.model.plane_normal @ point - self.model.plane_offset
+        distance = products.product(self.model.plane_normal, point) - self.model.plane_offset
         return np.flatnonzero(self.model.in_front(distance, _TOLERANCE * self.size))
 
     def _reaching(self, listener, planes, row_edge, t_s, rho_s, max_delay_s):

@@ -2575,6 +2575,14 @@ msgid "wide angle"
 msgstr "Weitwinkel"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "solver for whole rows"
+msgstr "Solver für ganze Reihen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "paths over the edges"
+msgstr "Pfade über die Kanten"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "stochastic_ray_tracing"
 msgstr "stochastische Strahlenverfolgung"
 
@@ -5329,6 +5337,23 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Outdoors, the sound over barriers and buildings in the vertical plane "
+"through a source and a listener, in the octave bands up to 500 Hz that add "
+"their paths in pressure: the solver for whole rows (one field over all of "
+"them, with the ground and the roofs in it, where their tops go on far enough "
+"to both sides of the way; seconds for each source and listener) or the paths "
+"over one edge or two alone. Maps and walks take the paths"
+msgstr ""
+"Im Freien der Schall über Schallschirme und Gebäude in der vertikalen Ebene "
+"durch eine Quelle und einen Empfänger, in den Oktavbändern bis 500 Hz, die "
+"ihre Pfade als Schalldrücke addieren: der Solver für ganze Reihen (ein Feld "
+"über alle hinweg, mit dem Boden und den Dächern darin, wo ihre Oberkanten zu "
+"beiden Seiten der Sichtlinie weit genug weiterlaufen; Sekunden je Quelle und "
+"Empfänger) oder allein die Pfade über eine oder zwei Kanten. Karten und Wege "
+"nehmen die Pfade"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "Outdoors in wind or temperature gradients, the parabolic equation that gives "
 "the sound over the open ground in the low bands and in the shadows: narrow "
 "angle (for the gradients near the ground that the weather has) or wide angle "
@@ -5434,6 +5459,10 @@ msgstr "Beugung"
 #: acoustic_spaces/gui/inspector.py
 msgid "Reflections over an edge"
 msgstr "Reflexionen über eine Kante"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Barriers and buildings"
+msgstr "Schallschirme und Gebäude"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Parabolic equation"

@@ -116,6 +116,7 @@ DIFFRACTION = [
 ]
 DIFFRACTION_REFLECTIONS = [("one_side", N_("one side")), ("both_sides", N_("both sides"))]
 PARABOLIC_EQUATIONS = [("narrow_angle", N_("narrow angle")), ("wide_angle", N_("wide angle"))]
+ROWS = [("solver", N_("solver for whole rows")), ("edges", N_("paths over the edges"))]
 #: simulation.early.barrier_frequencies' choices, with the largest error of the weather's
 #: effect behind barriers at 8 kHz that each gives against 64 frequencies an octave in
 #: validation/barrier_wind.py's convergence cases (dB; docs/outdoor.md has the table).
@@ -4035,6 +4036,19 @@ class SimulationPage(Page):
                 "barrier and again behind it: all four paths over a barrier on the ground)"
             )
         )
+        self.rows = QComboBox()
+        _fill(self.rows, ROWS)
+        self.rows.setToolTip(
+            _(
+                "Outdoors, the sound over barriers and buildings in the "
+                "vertical plane through a source and a listener, in the octave bands up to "
+                "500 Hz that add their paths in pressure: the solver for whole rows (one "
+                "field over all of them, with the ground and the roofs in it, where their "
+                "tops go on far enough to both sides of the way; seconds for each source "
+                "and listener) or the paths over one edge or two alone. Maps and walks take "
+                "the paths"
+            )
+        )
         self.parabolic_equation = QComboBox()
         _fill(self.parabolic_equation, PARABOLIC_EQUATIONS)
         self.parabolic_equation.setToolTip(
@@ -4100,6 +4114,7 @@ class SimulationPage(Page):
         early_form.addRow(_("Rays"), self.early_rays)
         early_form.addRow(_("Diffraction"), self.diffraction)
         early_form.addRow(_("Reflections over an edge"), self.diffraction_reflections)
+        early_form.addRow(_("Barriers and buildings"), self.rows)
         early_form.addRow(_("Parabolic equation"), self.parabolic_equation)
         early_form.addRow(_("Frequencies behind barriers"), self.barrier_frequencies)
         early_form.addRow(_("Frequencies over open ground"), self.open_ground_frequencies)
@@ -4414,6 +4429,7 @@ class SimulationPage(Page):
             (self.diffraction, "early.diffraction"),
             (self.diffraction_reflections, "early.diffraction_reflections"),
             (self.parabolic_equation, "early.parabolic_equation"),
+            (self.rows, "early.rows"),
             (self.late_method, "late.method"),
             (self.reception, "late.reception"),
             (self.scattering_method, "scattering.method"),
@@ -4495,6 +4511,9 @@ class SimulationPage(Page):
         # scene's own, a weather zone's or a long-term weather class's.
         weather = not self.document.scene.still
         self.parabolic_equation.setEnabled(weather)
+        _choose(self.rows, s.early.rows)
+        # The solver for whole rows stands for paths over edges outdoors.
+        self.rows.setEnabled(outdoor and s.early.diffraction != "none")
         _choose(self.barrier_frequencies, s.early.barrier_frequencies)
         self.barrier_frequencies.setEnabled(weather)
         _choose(self.open_ground_frequencies, s.early.open_ground_frequencies)

@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
-from acoustic_spaces import synthesis
+from acoustic_spaces import products, synthesis
 from acoustic_spaces.engine import coherent
 from acoustic_spaces.engine.run_size import each_on_threads, machine_memory, worker_threads
 from acoustic_spaces.spatial.directions import fibonacci_sphere, to_head
@@ -375,11 +375,12 @@ def _with_wave(
         low = np.zeros((n, fmt.channels))
         low[:, 0] = first[:, 0]
         if fmt.order >= 1:
-            velocity = first[:, 1:] @ response.orientation  # in head coordinates
-            low[:, 1:4] = velocity @ real_spherical_harmonics(1, np.eye(3))[:, 1:4]
+            velocity = products.product(first[:, 1:], response.orientation)  # in head coordinates
+            low[:, 1:4] = products.product(velocity, real_spherical_harmonics(1, np.eye(3))[:, 1:4])
         return out + low
     # Otherwise as plane waves from the vertices of an icosahedron (first order exact).
-    planes = (first[:, :1] + 3.0 * first[:, 1:] @ WAVE_DIRECTIONS.T) / len(WAVE_DIRECTIONS)
+    planes = first[:, :1] + products.product(3.0 * first[:, 1:], WAVE_DIRECTIONS.T)
+    planes /= len(WAVE_DIRECTIONS)
     head = to_head(WAVE_DIRECTIONS, response.orientation)
     if isinstance(fmt, Binaural):
         hrtf = fmt.at(sample_rate)
@@ -387,7 +388,7 @@ def _with_wave(
         ears = np.fft.rfft(hrtf.interpolate(head), size, axis=-1)  # (planes, 2, bins)
         spectrum = np.einsum("bk,keb->be", np.fft.rfft(planes, size, axis=0), ears)
         return out + np.fft.irfft(spectrum, size, axis=0)[:n]
-    return out + planes @ fmt.gains(head)
+    return out + products.product(planes, fmt.gains(head))
 
 
 def from_output(output) -> Format:
