@@ -1289,6 +1289,20 @@ NB_MODULE(_native, m) {
             nb::arg("layer") = 0, nb::arg("threads") = 0, nb::arg("raise_refusal") = true)
         .def("cut_cells", [](const as::CutCells &cut) { return cut_cells_dict(cut); })
         .def_prop_ro("cut_stats", [](const as::CutCells &cut) { return cut_stats_dict(cut); })
+        .def_prop_ro("open", &as::CutCells::open,
+                     "Whether any side of the grid is open (see open_sides).")
+        .def_prop_ro(
+            "open_sides",
+            [](const as::CutCells &cut) {
+                const std::array<bool, 6> &sides = cut.open_sides();
+                return nb::make_tuple(sides[0], sides[1], sides[2], sides[3], sides[4], sides[5]);
+            },
+            "Whether each side of the grid is open (-x, +x, -y, +y, -z, +z, as WaveSolver.open_sides "
+            "orders them). A side is open when an air cell lies next to an edge cell on that side, when "
+            "an open piece of a square in that side's edge plane joins a region of the source's air to "
+            "the edge cell, or when a cell of the matched layer lies within the layer's width of that "
+            "side; a wall in the edge plane (a closed piece) opens no side. Decided from the cells' kinds "
+            "and the pieces' exact open flags only; a refused fit has no open side.")
         .def("cut_air", [](const as::CutCells &cut) {
             std::vector<std::uint8_t> air = cut.air();
             const std::size_t n = air.size();

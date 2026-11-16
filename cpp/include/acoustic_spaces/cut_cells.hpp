@@ -70,6 +70,19 @@
 // cell); the cell's air volume, open areas (by face) and wall area are the sums of what it
 // owns. Counts of what is left out are in Stats.
 //
+// The grid's edge. Every air cell next to an edge cell (sharing a face with one) is a row; such
+// a row that owns nothing cut holds its own volume. A row's wall area towards the grid's edge
+// (its edge column) holds the open pieces in the edge plane between an edge cell and a region
+// the row owns, in the row's own cube or in a neighbour's cube whose centre is solid, and the
+// whole faces its cell shares with edge cells where no square was cut (w_b w_c each);
+// Stats::edge_area is their total.
+// open_sides() says which sides of the grid are open, decided from the cells' kinds and the
+// squares' exact open flags only. A side is open when an air cell lies next to an edge cell on
+// that side, when an open piece of a square in that side's edge plane joins a region of the
+// source's air to the edge cell, or when a cell of the matched layer lies within the layer's
+// width of that side. A closed piece (a wall in the edge plane) and air the source does not
+// reach (an edge pocket) open no side.
+//
 // Refusals (i) and (ii). (i): the mesh's mod-2 boundary, line by line, as odd intervals; each
 // interval's zone (the interval grown by kGap = 0.01 h in each coordinate, its facets exact
 // lattice planes) cuts the cubes it meets again (pass B); leaves inside zones are not nodes of
@@ -1180,9 +1193,11 @@ public:
             mark(2);
             air(source);
             sum_up();
+            sides();
         } catch (const Refusal &r) {
             stats_.refused = r.code;
             refusal_ = r.message;
+            open_sides_ = {};
             type_.assign(n_[0] * n_[1] * n_[2], kSolid);
             row_cell_.clear();
             air_volume_.clear();
@@ -1207,11 +1222,15 @@ public:
         regions_.shrink_to_fit();
     }
 
-    // One row per cell that owns cut air, ascending: the cell's index, its air volume
-    // (cells), open area per direction of kSteps (n x 18, cell faces), wall area per
-    // material and last to the grid's edge (n x (materials + 1), cell faces), a column of
-    // zeros kept for the binding (leak_area: no region of the air holds a solid centre), and
-    // the cut air's thickness per axial face (n x 6, cells).
+    // One row per air cell that owns cut air or lies next to an edge cell (shares a face with
+    // one), ascending: the cell's index, its air volume (cells; a row that owns nothing cut
+    // holds its own volume between its planes), open area per direction of kSteps (n x 18,
+    // cell faces), wall area per material and last to the grid's edge (n x (materials + 1),
+    // cell faces; the edge column holds the open pieces in the edge plane between an edge cell
+    // and a region the row owns, in its own cube or in a neighbour's, and the whole faces its
+    // cell shares with edge cells where no square was cut, each w_b w_c of its lattice widths),
+    // a column of zeros kept for the binding (leak_area: no region of the air holds a solid
+    // centre), and the cut air's thickness per axial face (n x 6, cells).
     const std::vector<std::int64_t> &cells() const { return row_cell_; }
     const std::vector<double> &air_volume() const { return air_volume_; }
     const std::vector<double> &open_area() const { return open_area_; }
@@ -1223,6 +1242,18 @@ public:
     const std::vector<double> &widths(int a) const { return width_[static_cast<std::size_t>(a)]; }
     // Each cell's kind in the fit (kSolid, kAir, kLayer), x fastest.
     const std::vector<std::uint8_t> &air() const { return type_; }
+    // Whether each side of the grid (-x, +x, -y, +y, -z, +z) is open, decided from the cells'
+    // kinds and exact open flags, never from an area: a side is open when an air cell lies next
+    // to an edge cell on that side, when an open piece of a square in that side's edge plane
+    // joins a region of the source's air to the edge cell, or when a cell of the matched layer
+    // lies within the layer's width of that side. A refused fit has no open side.
+    const std::array<bool, 6> &open_sides() const { return open_sides_; }
+    // Whether any side of the grid is open.
+    bool open() const {
+        for (const bool s : open_sides_)
+            if (s) return true;
+        return false;
+    }
     std::size_t materials() const { return materials_; }
     const Stats &stats() const { return stats_; }
     // A refused input: its code (Stats::refused, 0 when fitted) and its message; then the
@@ -4428,6 +4459,11 @@ private:
             if (type_[i] == kAir && depth(i) <= layer_) {
                 type_[i] = kLayer;
                 stats_.layer_cells += 1;
+                const auto p = at(i);
+                for (std::size_t a = 0; a < 3; ++a) {
+                    if (p[a] <= layer_) open_sides_[2 * a] = true;
+                    if (p[a] + 1 + layer_ >= n_[a]) open_sides_[2 * a + 1] = true;
+                }
             }
         }
         for (std::size_t k = 0; k < cubes_.size() && layer_ > 0; ++k) {
@@ -4619,9 +4655,33 @@ private:
     // The row of an owner cell (a cell of row_cell_), through row_index_.
     std::size_t row(std::int64_t cell) const { return static_cast<std::size_t>(row_index_[static_cast<std::size_t>(cell)]); }
 
+    // Calls f(i) for every cell i at depth 1 (a cell that shares a face with an edge cell), in
+    // ascending order of i.
+    template <typename F>
+    void for_depth_one(F f) const {
+        if (n_[0] < 3 || n_[1] < 3 || n_[2] < 3) return;
+        const std::size_t lx = n_[0] - 2, ly = n_[1] - 2, lz = n_[2] - 2;
+        for (std::size_t z = 1; z <= lz; ++z)
+            for (std::size_t y = 1; y <= ly; ++y) {
+                if (z == 1 || z == lz || y == 1 || y == ly) {
+                    for (std::size_t x = 1; x <= lx; ++x) f(index(x, y, z));
+                } else {
+                    f(index(1, y, z));
+                    if (lx > 1) f(index(lx, y, z));
+                }
+            }
+    }
+
+    // The rows: every air cell that owns a region, and every air cell next to an edge cell
+    // (which may own none: it then holds its own volume between its planes). Each row's air
+    // volume, walls, open areas and slivers are the sums of what it owns; every row's faces
+    // to edge cells and to cells without faces, where neither side is a cube, are added whole.
     void sum_up() {
         for (const Region &R : regions_)
             if (R.owner >= 0 && type_[static_cast<std::size_t>(R.owner)] == kAir) row_cell_.push_back(R.owner);
+        for_depth_one([&](std::size_t i) {
+            if (type_[i] == kAir) row_cell_.push_back(static_cast<std::int64_t>(i));
+        });
         std::sort(row_cell_.begin(), row_cell_.end());
         row_cell_.erase(std::unique(row_cell_.begin(), row_cell_.end()), row_cell_.end());
         row_index_.assign(type_.size(), -1);
@@ -4641,9 +4701,11 @@ private:
                 wall_area_[r * w + col] += a;
             }
         };
+        std::vector<char> owns(n, 0);
         for (const Region &R : regions_) {
             if (!is_row(R.owner)) continue;
             const std::size_t r = row(R.owner), o = static_cast<std::size_t>(R.owner);
+            owns[r] = 1;
             air_volume_[r] += R.volume;
             add_wall(R.owner, R.wall);
             const std::size_t distant = distance(o, R.cell);
@@ -4652,6 +4714,10 @@ private:
             const int k = direction(o, R.cell);
             if (k >= 0 && k < 6) sliver_[r * 6 + static_cast<std::size_t>(k)] += R.volume;
         }
+        // A row that owns no region (an air cell next to an edge cell, its cube and every
+        // neighbour's without faces) holds its own volume.
+        for (std::size_t r = 0; r < n; ++r)
+            if (!owns[r]) air_volume_[r] = cell_volume(static_cast<std::size_t>(row_cell_[r]));
         for (const Square &S : squares_) {
             for (const Piece &P : S.pieces) {
                 const std::int64_t oa = owner_of(P.low), ob = owner_of(P.high);
@@ -4692,8 +4758,8 @@ private:
                 if (is_row(ob)) open_area_[row(ob) * 18 + static_cast<std::size_t>(opposite(k))] += open;
             }
         }
-        // An owner's faces that no square was cut for (its cube and the one across both
-        // without faces): whole.
+        // A row's faces that no square was cut for (its cube and the one across both without
+        // faces): whole, to the edge column when the cell across is an edge cell.
         for (std::size_t r = 0; r < n; ++r) {
             const std::size_t o = static_cast<std::size_t>(row_cell_[r]);
             if (cube_at(o)) continue;
@@ -4736,6 +4802,33 @@ private:
         row_index_.shrink_to_fit();
     }
 
+    // Marks the open sides of the grid (open_sides_, -x, +x, -y, +y, -z, +z) from the cells'
+    // kinds and the pieces' exact open flags, never from an area. Side 2a (2a + 1) is open when
+    // an air cell lies next to the edge cell across its - (+) face along axis a, or when an open
+    // piece of a square in the grid's edge plane on that side joins a region of the source's air
+    // to the edge cell (the air of a cube next to the edge whose own centre is solid meets the
+    // edge there). The layer's cells mark their sides where they are found (a cell of the
+    // matched layer within the layer's width of a side). A closed piece (a wall in the edge
+    // plane) and a component of air the source does not reach (an edge pocket among them) mark
+    // no side.
+    void sides() {
+        for_depth_one([&](std::size_t i) {
+            if (type_[i] != kAir) return;
+            const auto p = at(i);
+            for (std::size_t a = 0; a < 3; ++a) {
+                if (p[a] == 1) open_sides_[2 * a] = true;
+                if (p[a] + 2 == n_[a]) open_sides_[2 * a + 1] = true;
+            }
+        });
+        for (const Square &S : squares_)
+            for (const Piece &P : S.pieces) {
+                if (!P.is_open) continue;
+                const std::size_t a = static_cast<std::size_t>(S.axis);
+                if (P.low == kEdge && P.high >= 0 && regions_[static_cast<std::size_t>(P.high)].in_air) open_sides_[2 * a] = true;
+                if (P.high == kEdge && P.low >= 0 && regions_[static_cast<std::size_t>(P.low)].in_air) open_sides_[2 * a + 1] = true;
+            }
+    }
+
     // ---- the self-checks of the owners and the rows ------------------------------------------
 
     // K8: every owned region of the air is the region holding its owner's centre, or its
@@ -4766,11 +4859,13 @@ private:
 
     // K4, K5 and K6: the rows as sum_up stores them, against a pass over the regions and the
     // squares' pieces written apart from it. K4: each row's air volume (the same terms in the
-    // same order: exact) and its wall area per column. K5: the open area between two rows,
-    // each seen from both. K6: every open piece falls in exactly one of the cases sum_up
-    // distinguishes, and what each case adds is found where it belongs: the open areas by
-    // row and direction, the open area of each row's slivers, and Stats' edge, dropped and
-    // diagonal areas.
+    // same order: exact; a row that owns no region, its cell's volume) and its wall area per
+    // column (the edge column holding the open pieces to edge cells of the regions it owns and
+    // its whole faces to edge cells), and that every air cell next to an edge cell is a row and
+    // every row owning no region is such a cell. K5: the open area between two rows, each seen
+    // from both. K6: every open piece falls in exactly one of the cases sum_up distinguishes,
+    // and what each case adds is found where it belongs: the open areas by row and direction,
+    // the open area of each row's slivers, and Stats' edge, dropped and diagonal areas.
     void check_rows(const std::vector<double> &sliver_area) {
         const std::size_t n = row_cell_.size(), w = materials_ + 1;
         // Each cell's row, read from row_cell_ here (not sum_up's index), or -1.
@@ -4789,11 +4884,43 @@ private:
                 wall_scale[q] += std::abs(a);
             }
         };
+        std::vector<char> owned(n, 0);
         for (const Region &R : regions_) {
             const std::int64_t r = row_of(R.owner);
             if (r < 0) continue;
+            owned[static_cast<std::size_t>(r)] = 1;
             vol[static_cast<std::size_t>(r)] += R.volume;
             add_walls(r, R.wall);
+        }
+        SelfCheck k4, k5, k6;
+        // The rows next to the grid's edge: every air cell across a face from an edge cell is a
+        // row (found from each edge cell's neighbour inwards), and a row that owns no region is
+        // such a cell, holding its own volume.
+        for (std::size_t a = 0; a < 3; ++a) {
+            const std::size_t b = (a + 1) % 3, c = (a + 2) % 3;
+            if (n_[a] < 3 || n_[b] < 3 || n_[c] < 3) break;
+            for (std::size_t v = 1; v + 1 < n_[c]; ++v)
+                for (std::size_t u = 1; u + 1 < n_[b]; ++u)
+                    for (const std::size_t t : {std::size_t{1}, n_[a] - 2}) {
+                        std::array<std::size_t, 3> p{};
+                        p[a] = t;
+                        p[b] = u;
+                        p[c] = v;
+                        const std::size_t i = index(p[0], p[1], p[2]);
+                        if (type_[i] == kAir)
+                            k4.compare(row_at[i] >= 0 ? 0.0 : 1.0, 0.0, -1.0,
+                                       [&]() { return cell_text(i) + ", an air cell next to the grid's edge, missing from the rows"; });
+                    }
+        }
+        for (std::size_t r = 0; r < n; ++r) {
+            if (owned[r]) continue;
+            const std::size_t o = static_cast<std::size_t>(row_cell_[r]);
+            const auto p = at(o);
+            bool next = false;
+            for (std::size_t a = 0; a < 3; ++a) next = next || p[a] == 1 || p[a] + 2 == n_[a];
+            k4.compare(next ? 0.0 : 1.0, 0.0, -1.0,
+                       [&]() { return "the row of " + cell_text(o) + ", which owns no region and does not lie next to the grid's edge"; });
+            vol[r] = cell_volume(o);
         }
         // The cases of an open piece of area a between regions owned by oa and ob, each piece in
         // exactly one: to the grid's edge, one or both owners missing, one owner, not adjacent,
@@ -4843,7 +4970,9 @@ private:
                 }
             }
         }
-        // The whole faces of a row whose cube and neighbour hold no faces.
+        // The whole faces of a row whose cube and neighbour hold no faces, the rows next to the
+        // edge included: to the edge column when the cell across is an edge cell, else to the
+        // open area when it is not solid.
         for (std::size_t r = 0; r < n; ++r) {
             const std::size_t o = static_cast<std::size_t>(row_cell_[r]);
             if (cube_at(o)) continue;
@@ -4861,7 +4990,6 @@ private:
                 }
             }
         }
-        SelfCheck k4, k5, k6;
         for (std::size_t r = 0; r < n; ++r) {
             const std::size_t o = static_cast<std::size_t>(row_cell_[r]);
             k4.compare(air_volume_[r], vol[r], -1.0, [&]() { return "the row of " + cell_text(o) + ", its air volume"; });
@@ -4937,6 +5065,7 @@ private:
     std::vector<std::uint8_t> type_;
     std::vector<std::int64_t> row_cell_;
     std::vector<double> air_volume_, open_area_, wall_area_, leak_area_row_, sliver_;
+    std::array<bool, 6> open_sides_{};  // the open sides of the grid (see open_sides())
     Stats stats_;
     // Counts that every table adds to when it ends (cubes, squares and location, all threads).
     mutable std::atomic<std::size_t> exact_e_{0}, exact_t_{0}, refined_{0};
