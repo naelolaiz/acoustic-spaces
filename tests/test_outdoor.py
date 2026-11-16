@@ -200,7 +200,7 @@ def test_a_barrier_diffracts_over_its_top_and_round_its_ends() -> None:
     # The top and the two ends; not its foot, nor the edges of the ground or the sky.
     assert len(edges) == 3
     paths = early_paths(room)
-    assert np.all(paths.edge >= 0)  # the screen hides the direct sound and the ground
+    assert paths.diffracted.all()  # the screen hides the direct sound and the ground
     over = math.dist([0, 0, 1], [5, 0, 3]) + math.dist([5, 0, 3], [15, 0, 1.5])
     assert paths.distance_m.min() == pytest.approx(over)
 

@@ -187,6 +187,66 @@ Sources and listeners must stand in the open air: above the ground, under the sk
 inside the extent and not inside one of the `buildings`; `validate` and the editor say
 which one is not.
 
+### Sound over rows of barriers and buildings
+
+Where sound passes close over several tops in a row (the roofs along a street, a barrier
+and the house behind it), the paths over one edge and two do not add up to the field,
+and a path over two edges reflects nowhere (see [Known
+issues](validation.md#known-issues)). With `simulation.early.diffraction`
+on and reflections of the first order or higher, the early stage takes the sound in the
+vertical plane through a source and a listener from the solver for whole rows instead,
+in the octave bands up to 500 Hz that add their paths in pressure:
+`simulation.early.rows: solver`, the default (`--rows` for one run of `simulate`,
+**Barriers and buildings** under **Early reflections** in the editor). `rows: edges`
+leaves the paths over the edges alone. The solver marches a parabolic equation over the
+row, with the ground and the roofs in it, and adds what the row's rigid edges shed;
+against a wave calculation, two flat roofs on a rigid ground are within 0.74 dB in a
+simulation that takes it, where the paths over the edges are up to 10.7 dB off (see
+[Validation](validation.md#rows-of-roofs-and-barriers-against-a-wave-calculation)).
+
+- **What gives way.** The row's own paths: the direct sound, its reflections off the
+  ground, the roofs and the walls that the way crosses between the two, and the paths
+  over tops that cross the way between them. One path carries the solver's sound in
+  their place, along the string pulled taut over the tops, and counts among the
+  diffracted paths. The other paths stay: round the ends of barriers and the corners of
+  buildings, off walls behind the source, past the listener or beside the way, over a
+  model file's objects, and through a barrier or a wall that lets sound through. The
+  solver marches one way, so sound that goes to and fro between the row's walls is not
+  in its field.
+- **Near the ends of a top.** The solver's row is the same all along its edges. Where
+  the way crosses a top, or its line past its end, closer to an end than the edges' own
+  terms follow that end, the solver's sound and the row's paths are added in pressure,
+  each with its share, and closer than two thirds of that distance the paths stand
+  alone: for a top across the way, 10 m from the source and 20 m from the listener, that
+  is within 9.8 m of an end in the 63 Hz band and 3.5 m in the 500 Hz band, and the
+  solver's sound is whole from 14.8 and 5.2 m on. There a barrier or a building less
+  than 19.6 m long keeps its paths alone in the 63 Hz band, and one 30 m long has the
+  solver's sound whole in every band near its middle only. In the `street` example,
+  whose noise barrier is 30 m long, no band's level changes by more than 0.01 dB with
+  it.
+- **Materials.** The solver's barriers and roofs are rigid, whatever their materials
+  absorb or let through, and its ground has each zone's impedance. A roof on the way whose material has
+  an `impedance` leaves the row to the paths. A ground given by its absorption alone has
+  the admittance that gives that absorption, as in the weather's runs, where the paths
+  reflect off it with one magnitude at every angle: 2 to 90 m behind a long barrier 3 m
+  high, 10 m from a source 1 m up, the solver's level is within 0.28 dB of the paths'
+  over a rigid ground, 0.35 dB with an absorption of 0.02 and 1.8 dB with 0.1 (give an
+  outdoor ground an impedance, see [Ground impedance](#ground-impedance)).
+- **In wind and temperature gradients** the solver's sound is that in still air, and the
+  weather's effect behind the barriers and buildings scales it as it scales the paths in
+  the plane (see [How the simulation bends sound](#how-the-simulation-bends-sound)).
+- **Where the paths stand as they are.** Over a terrain; with an object of a model file
+  in the straight line between the two; in the bands above 500 Hz; in each octave band
+  in which the solver does not take the row (what it does not hold is listed under
+  [Validation](validation.md#rows-of-roofs-and-barriers-against-a-wave-calculation));
+  in coverage maps, with thousands of points; and along the walk of a source or a
+  listener, with a place every 0.25 m, where the level would step between a place that
+  the solver takes and the next that it does not.
+- **Time.** Behind one long barrier the solver takes 1.5 to 1.9 s for a source and a
+  listener 25 to 280 m apart (four octave bands, one core). The `railway` example,
+  whose listeners behind the barrier take the solver's sound for part of the line
+  source, takes about a sixth longer.
+
 ## Buildings from a map
 
 `geometry.buildings_file` adds the buildings of a GeoJSON file (`.geojson` or `.json`)
@@ -1188,7 +1248,10 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
   `first_order` bends over one edge at a time, which is enough for a barrier. With
   `diffraction_reflections: both_sides` a path reflects off the ground both before and
   after the edge, the fourth of the four paths over a barrier on the ground (see
-  [Edge diffraction](simulation.md#edge-diffraction)).
+  [Edge diffraction](simulation.md#edge-diffraction)). The sound over
+  long barriers and rows of buildings comes from a solver for the whole row in the
+  bands up to 500 Hz (see
+  [Sound over rows of barriers and buildings](#sound-over-rows-of-barriers-and-buildings)).
 - **The late part** comes from the stochastic ray tracer: rays reflect off the ground
   and the buildings, and scatter off those that scatter, until they leave through the
   sky. Between tall buildings (a street canyon, a courtyard) that is a tail of its own;

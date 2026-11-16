@@ -33,7 +33,9 @@ to the rays short of half the way to the shadow's start (:data:`LIT_WAVE_MAX_BAN
 
 Where the listener's way, seen from above, crosses a barrier or a building
 (:meth:`Refraction._barrier`), the paths in the vertical plane through the source and
-the listener keep their levels in still air, and in every band the weather changes them
+the listener (the path of the solver for whole rows among them,
+:mod:`~acoustic_spaces.engine.row_paths`) keep their levels in still air, and in every
+band the weather changes them
 by the ratio of the parabolic equation's sound marched through it to that marched
 through still air, both with the barriers and buildings on the way inside (the
 ``obstacles`` of :func:`~acoustic_spaces.engine.parabolic.march`), along the whole
@@ -59,7 +61,6 @@ from __future__ import annotations
 import dataclasses
 import functools
 import math
-import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -74,7 +75,7 @@ from acoustic_spaces.engine.coherent import (
     ground_factors,
     reflection_phases,
 )
-from acoustic_spaces.engine.early import _EDGE_TOLERANCE, EarlyReflections, _face_at
+from acoustic_spaces.engine.early import EarlyReflections, _face_at
 from acoustic_spaces.engine.fine import (
     OPEN_DENSE,
     OPEN_DENSE_FROM_HZ,
@@ -92,10 +93,18 @@ from acoustic_spaces.engine.refraction import (
     node_heights,
     table_heights,
 )
+from acoustic_spaces.engine.section import (
+    GROUND_STEP_M,
+    ROW,
+    Section,
+    _at,
+    _edge_distance,
+    _on_edges,
+)
 from acoustic_spaces.engine.shadow import equivalent_radius, shadow_start
 from acoustic_spaces.engine.turbulence import Eddies
 from acoustic_spaces.engine.weather import Weather
-from acoustic_spaces.geometry.outdoor import GROUND, SKY, in_polygon, line_crossings
+from acoustic_spaces.geometry.outdoor import in_polygon
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, band_limits, octave_of
 
 #: The bands within the octave bands up to this one (centre, Hz) take the sound over the
@@ -131,8 +140,6 @@ WAVE_MEMORY_BYTES = 1 << 30
 #: ways alike share their rays (a share of 0.005 of a 5 m/s wind is 0.025 m/s), and
 #: divided by their sum (:meth:`Refraction.profile`).
 MIX_STEP = 0.005
-#: The grounds along the parabolic equation's way are looked up this often (m).
-GROUND_STEP_M = 0.25
 #: The most times a curved path bounces off the ground.
 MAX_GROUND_BOUNCES = 10
 #: Behind barriers and buildings the parabolic equation runs in every band with them
@@ -185,10 +192,6 @@ def barrier_samples(at_8k: int = 32) -> tuple[tuple[int, int], ...]:
 #: Their absorbing layer starts at least this many times higher than the highest top
 #: on the way.
 BARRIER_HEADROOM = 1.5
-#: A listener this close (m) to a barrier's line or a building's wall, seen from above,
-#: stands on it: the parabolic equation takes it past it, where nothing below its top
-#: gets through, so the paths over it keep straight legs there.
-ON_OBSTACLE_M = 1e-6
 #: A run along a whole degree counts fully for a listener behind barriers while the last
 #: of them along it stands at least this share as far before the listener as along its
 #: own way, and less as it comes nearer (:meth:`Refraction._cuts_for`).
@@ -309,7 +312,7 @@ class _Ends:
     roofs: list[tuple[np.ndarray, _Barrier]] = dataclasses.field(default_factory=list)
 
 
-class Refraction:
+class Refraction(Section):
     """Bends the early paths of the source at ``source`` in an outdoor scene's
     atmosphere (not still), running the parabolic equation on ``threads`` threads (0:
     every core): the wide-angle one (:mod:`~acoustic_spaces.engine.wide_angle`) with
@@ -345,8 +348,6 @@ class Refraction:
         profiles: dict | None = None,
         rendered: bool = True,
     ) -> None:
-        from acoustic_spaces.engine.diffraction import band_frequencies
-
         self.barrier_samples = barrier_samples(barrier_frequencies)
         #: The open ground's runs from ``OPEN_DENSE_FROM_HZ`` up take this many times the
         #: early paths' frequencies (``simulation.early.open_ground_frequencies``: 24 an
@@ -355,23 +356,16 @@ class Refraction:
         self.open_dense = OPEN_DENSE if open_ground_frequencies == 24 else 1
         self.open_rays = open_ground_frequencies == "rays"
         self.rendered = bool(rendered)
+        super().__init__(model, source, edges)
         room = model.room
-        self.model = model
         self.atmosphere = room.scene.atmosphere
         self.ground_c = float(room.scene.air.temperature_c)
-        self.source = np.asarray(source, dtype=float)
-        self.ground = float(model.ground)
-        self.zs = max(float(self.source[2]) - self.ground, 0.0)
         self.c = float(speed_of_sound)
         self.air = np.asarray(air, dtype=float)
         self.directivity = directivity
         self.orientation = orientation
         self.coherent = int(coherent)
         self.max_order = int(max_order)
-        self.bands = model.absorption.shape[1]
-        self.flat = _ground_faces(room)
-        self.tolerance = _EDGE_TOLERANCE * float(np.ptp(room.mesh.vertices, axis=0).max())
-        self.frequencies = band_frequencies(bands=model.bands)[0]  # (bands, M)
         self.centres = np.asarray(model.band_hz, dtype=float)
         z = node_heights(self.atmosphere)
         self._nodes = z
@@ -380,7 +374,6 @@ class Refraction:
         self._wind_speed = np.asarray(self.atmosphere.wind_speed(z), dtype=float)
         self.windy = bool(np.any(self._wind_speed != 0.0))
         self.wind = self.atmosphere.to_wind()
-        self.zones = room.outdoor is not None and bool(room.outdoor.zones)
         # The weather where it changes from place to place; None where it is one.
         self.weather = Weather.of(model) if self.atmosphere.zones else None
         self.zoned = self.weather is not None
@@ -390,21 +383,11 @@ class Refraction:
             self.windy = self.windy or bool(np.any(self.weather.wind != 0.0))
         self._weather = (self.atmosphere.model_dump_json(), self.ground_c)
         self._profiles: dict[float, Profile] = {} if profiles is None else profiles
-        #: The frequencies of each band at so many an octave (:meth:`_samples`).
-        self._dense: dict[int, list] = {}
-        self._admittances: dict[int, np.ndarray] = {}
-        self._lock = threading.Lock()
         self.threads = run_size.worker_threads(int(threads))
         self.wide_angle = bool(wide_angle)
         self._starts: dict[tuple, tuple] = {}
         self.eddies = Eddies.of(model, self.c)
-        self.layout = room.outdoor
         self._cuts: dict[tuple, tuple] = {}
-        self._dense: dict[tuple, np.ndarray] = {}
-        self._objects: np.ndarray | None = None
-        self._edges = edges
-        self._laid: np.ndarray | None = None
-        self._roofs: np.ndarray | None = None
 
     # -- profiles ----------------------------------------------------------------------
 
@@ -521,9 +504,14 @@ class Refraction:
         ratio = _ratios(straight, paths)
         groups: dict[tuple, list[int]] = {}
         bent: list[int] = []
+        # The path of the solver for whole rows, which is in the plane.
+        whole: list[int] = []
         for i in range(len(paths)):
             if paths.edge[i] >= 0:
                 bent.append(i)
+                continue
+            if paths.edge[i] == ROW:
+                whole.append(i)
                 continue
             faces = paths.faces[i] if paths.faces else np.zeros(0, dtype=np.int64)
             walls = faces[~self.flat[faces]] if len(faces) else faces
@@ -544,7 +532,7 @@ class Refraction:
             for i in rows
         ]
         barrier = self._barrier(
-            k, listener, way, reach, zr, paths, groups[()], bent, cutoff, roof_rows
+            k, listener, way, reach, zr, paths, groups[()] + whole, bent, cutoff, roof_rows
         )
         request = None
         for planes, rows in groups.items():
@@ -590,6 +578,10 @@ class Refraction:
             chosen, low, request_ends = ends
             taken = set(chosen)
             bent = [i for i in bent if i not in taken]
+        if barrier is None:
+            # Where no runs hold the row (a listener nearer than the equation goes), the
+            # solver's path keeps its legs as the paths over the edges do.
+            bent += whole
         if bent:
             out.append(self._legs(paths[np.array(sorted(bent))]))
         if ends is not None:
@@ -788,15 +780,6 @@ class Refraction:
         if not rows:
             return EarlyReflections.empty(self.bands), visible, highest
         return self._describe(rays, found, rows, directions, r0, r1), visible, highest
-
-    def _ground_face(self, points: np.ndarray) -> np.ndarray:
-        """(n,) the face of the ground under each of ``points`` (n, 3), or -1."""
-        start = np.asarray(points, dtype=float) + np.array([0.0, 0.0, 0.01])
-        down = np.broadcast_to(np.array([0.0, 0.0, -1.0]), start.shape)
-        _, face = self.model.intersect(
-            start, down, np.full(len(start), 0.02), np.full(len(start), -1)
-        )
-        return np.where((face >= 0) & self.flat[np.maximum(face, 0)], face, -1)
 
     def _passes(self, points: np.ndarray, face: np.ndarray):
         """(bands,) the share of sound that gets along the chords between ``points``,
@@ -1016,7 +999,8 @@ class Refraction:
         under=None,
     ):
         """Behind barriers and buildings in the weather: the paths in the vertical plane
-        through the source and the listener (``open_rows``, those off the ground alone,
+        through the source and the listener (``open_rows``, those off the ground alone
+        and the path of the solver for whole rows,
         and those of ``edge_rows`` over edges across the plane, see :meth:`_in_plane`)
         keep their level in still air, which the weather changes by the ratio of the
         parabolic equation's sound in it to that in still air, both with the barriers
@@ -1204,17 +1188,6 @@ class Refraction:
         ``AZIMUTH_STEP_DEG``."""
         angle = math.degrees(math.atan2(towards[1], towards[0]))
         return round(angle / AZIMUTH_STEP_DEG) * AZIMUTH_STEP_DEG % 360.0
-
-    def _above(self, found) -> tuple:
-        """The obstacles ``found`` ((near, far, top), as
-        :meth:`~acoustic_spaces.geometry.outdoor.Layout.obstacles_along` gives them) with
-        their tops above the ground, as :func:`~acoustic_spaces.engine.parabolic.march`
-        takes them, to the nanometre (so that mirrored ways share their runs)."""
-        return tuple(
-            (round(near, 9), round(far, 9), round(top - self.ground, 9))
-            for near, far, top in found
-            if top > self.ground
-        )
 
     def _past_ends(self, k, listener, zr, paths, rows, cutoff, reach):
         """Of the paths ``rows`` of ``paths``, those over a barrier's or a building's
@@ -1413,17 +1386,6 @@ class Refraction:
         faces = paths.faces[i] if paths.faces else np.zeros(0, dtype=np.int64)
         return bool(len(faces) and np.any(self.flat[faces]))
 
-    def _laid_edges(self) -> np.ndarray:
-        """(edges,) bool: whether each of the model's edges is a barrier's or a
-        building's."""
-        if self._laid is None:
-            mesh = self.model.room.mesh
-            laid = np.array([_kind(label) in _LAID for label in mesh.labels] or [False])
-            faces = laid[mesh.face_labels]
-            edge = self._edge_set().face
-            self._laid = faces[edge[:, 0]] & faces[edge[:, 1]]
-        return self._laid
-
     def _cut(self, azimuth: float, under: tuple | None = None) -> tuple:
         """What stands on the way from the source towards ``azimuth`` (degrees from the
         x axis), out to the ground's edge, for the parabolic equation: (near, far, top),
@@ -1457,103 +1419,6 @@ class Refraction:
             for i, (_, footprint, roof) in enumerate(self.layout.buildings)
             if np.any(in_polygon(ends[:, :2], footprint) & (ends[:, 2] > roof + 1e-9))
         )
-
-    def _in_plane(self, paths: EarlyReflections, i: int, towards, reach: float) -> bool:
-        """Whether the path ``i`` of ``paths`` goes over edges that all cross the vertical
-        plane through the source and the listener between them, none vertical, and
-        reflects off nothing but the ground and the buildings' roofs."""
-        if paths.edge[i] < 0:
-            return False
-        faces = paths.faces[i] if paths.faces else np.zeros(0, dtype=np.int64)
-        if len(faces) and not np.all((self.flat | self._roof_faces())[faces]):
-            return False
-        edges = self._edge_set()
-        # Only the barriers' and buildings' edges: the parabolic equation's runs leave the
-        # model file's objects out.
-        laid = self._laid_edges()
-        if not laid[paths.edge[i]]:
-            return False
-        if not self._across(edges, np.array([paths.edge[i]]), towards, reach)[0]:
-            return False
-        # Any other corner on an edge (the second of two) lies on one across the plane.
-        tolerance = self.tolerance
-        for corner in paths.points[i][1:-1]:
-            on = _on_edges(edges, corner, tolerance)
-            if (
-                len(on)
-                and paths.edge[i] not in on
-                and not (self._across(edges, on, towards, reach) & laid[on]).any()
-            ):
-                return False
-        return True
-
-    def _roof_faces(self) -> np.ndarray:
-        """(faces,) bool: the buildings' roofs, their faces facing straight up, which the
-        parabolic equation's runs hold as rigid floors."""
-        if self._roofs is None:
-            mesh = self.model.room.mesh
-            kinds = np.array([_kind(label) == "buildings" for label in mesh.labels] or [False])
-            normal = self.model.plane_normal[self.model.face_plane]
-            self._roofs = kinds[mesh.face_labels] & (normal[:, 2] >= 1.0 - 1e-9)
-        return self._roofs
-
-    def _roof_plane(self, plane: int) -> bool:
-        """Whether the plane ``plane`` holds a building's roof."""
-        faces = self.model.face_plane == plane
-        return bool(np.any(self._roof_faces() & faces))
-
-    def _across(self, edges, index: np.ndarray, towards, reach: float) -> np.ndarray:
-        """Whether each of the edges ``index`` is not vertical and crosses the way from
-        the source along ``towards`` (seen from above) short of ``reach``."""
-        out = np.zeros(len(index), dtype=bool)
-        for n, e in enumerate(index):
-            if abs(float(edges.direction[e][2])) >= 1.0 - 1e-9:
-                continue
-            ends = np.array([edges.start[e][:2], edges.end[e][:2]])
-            out[n] = bool(line_crossings(self.source[:2], towards, reach, ends, closed=False))
-        return out
-
-    def _edge_set(self):
-        """The model's diffracting edges, as the paths over them number them."""
-        if self._edges is None:
-            from acoustic_spaces.engine.diffraction import find_edges
-
-            self._edges = find_edges(self.model)
-        return self._edges
-
-    def _blocked(self, listener: np.ndarray) -> bool:
-        """Whether a face of the model file's objects stands in the straight line from
-        the source to ``listener``."""
-        if self._objects is None:
-            mesh = self.model.room.mesh
-            laid = np.array(
-                [_kind(label) in _LAID or tuple(label) in _OPEN for label in mesh.labels] or [True]
-            )
-            self._objects = ~laid[mesh.face_labels]
-        return self._meets(listener, self._objects)
-
-    def _meets(self, listener: np.ndarray, faces: np.ndarray) -> bool:
-        """Whether the straight line from the source to ``listener`` meets one of the
-        ``faces`` ((F,) bool), by the model's intersection test."""
-        if not faces.any():
-            return False
-        start = self.source.copy()
-        delta = np.asarray(listener, dtype=float) - start
-        left = float(np.linalg.norm(delta))
-        direction = delta / max(left, 1e-300)
-        skip = -1
-        for _ in range(64):
-            t, face = self.model.intersect(
-                start[None], direction[None], np.array([left]), np.array([skip])
-            )
-            if face[0] < 0:
-                return False
-            if faces[face[0]]:
-                return True
-            start = start + direction * float(t[0])
-            left -= float(t[0])
-            skip = int(face[0])
-        return False
 
     def _place_barrier(self, request: _Barrier, pressures: dict, parts: list) -> None:
         """The paths in the plane of ``request`` scaled by the weather's effect behind the
@@ -1934,70 +1799,6 @@ class Refraction:
         if per_band not in self._dense:
             self._dense[per_band] = band_frequencies(per_band, self.model.bands)[0]
         return self._dense[per_band][band]
-
-    def _admittance_at(self, face: int, band: int, frequencies: np.ndarray) -> np.ndarray:
-        """(M,) the admittance of ``face`` as :meth:`_admittance` gives it, at other
-        ``frequencies`` (Hz) of ``band`` than the early paths'."""
-        index = (face, band, len(frequencies), float(frequencies[0]))
-        with self._lock:
-            if index not in self._dense:
-                model = self.model
-                if model.impedance_faces(np.array([face]))[0]:
-                    row = int(model.face_impedance[face])
-                    grazing = (
-                        model.impedance_extended is not None and model.impedance_extended.any()
-                    )
-                    value = model.impedances[row].admittance(
-                        frequencies, model.room.speed_of_sound(), cosine=0.0 if grazing else None
-                    )
-                else:
-                    from acoustic_spaces.engine.impedance import fit_admittance
-
-                    value = fit_admittance(model.absorption[face], self.bands, None)(frequencies)
-                self._dense[index] = np.asarray(value, dtype=complex)
-            return self._dense[index]
-
-    def _admittance(self, face: int) -> np.ndarray:
-        """(bands, M) the normalised admittance (time as exp(j omega t)) of ``face``: an
-        impedance's at grazing incidence (which differs with the extended reaction)."""
-        with self._lock:
-            if face not in self._admittances:
-                model = self.model
-                if model.impedance_faces(np.array([face]))[0]:
-                    value = model.grazing_admittance[model.face_impedance[face]]
-                else:
-                    from acoustic_spaces.engine.impedance import fit_admittance
-
-                    value = fit_admittance(model.absorption[face], self.bands, None)(
-                        self.frequencies
-                    )
-                self._admittances[face] = np.asarray(value, dtype=complex)
-            return self._admittances[face]
-
-    def _here(self) -> int:
-        """The face of the ground under the source (the first flat one off the ground)."""
-        here = self._ground_face(np.array([[*self.source[:2], self.ground]]))[0]
-        return int(here) if here >= 0 else int(np.flatnonzero(self.flat)[0])
-
-    def _zone_faces(self, points: np.ndarray) -> np.ndarray:
-        """The faces of the ground's zones at the horizontal ``points`` (n, 2), held to
-        the layout's extent; the source's own (:meth:`_here`) outside every zone."""
-        layout = self.model.room.outdoor
-        x0, y0, x1, y1 = layout.extent
-        found = self.model.part_face[layout.zone_at(np.clip(points, [x0, y0], [x1, y1])) + 1]
-        return np.where(found < 0, self._here(), found)
-
-    def _grounds_along(self, direction: np.ndarray, reach: float):
-        """A function giving the face of the ground (its material) at a distance along
-        ``direction`` from the source, up to ``reach``."""
-        here = self._here()
-        if not self.zones or self.model.ground_part is None:
-            return lambda r: here
-        # The grounds every GROUND_STEP_M along the way, looked up once.
-        along = np.arange(0.0, reach + 2.0 * GROUND_STEP_M, GROUND_STEP_M)
-        faces = self._zone_faces(self.source[:2] + along[:, None] * direction)
-        last = len(faces) - 1
-        return lambda r: int(faces[min(int(round(r / GROUND_STEP_M)), last)])
 
     def _grounds_round(self, corners: np.ndarray) -> tuple | None:
         """With ground zones, the grounds along the horizontal polyline ``corners``
@@ -2706,41 +2507,6 @@ def _unfolded(points: np.ndarray, corners: np.ndarray) -> tuple[np.ndarray, np.n
     return path, heights
 
 
-#: The kinds of the faces the parabolic equation's runs hold: barriers and buildings.
-_LAID = frozenset({"barriers", "buildings"})
-#: The labels of the ground and the sky.
-_OPEN = frozenset({(GROUND,), (SKY,)})
-
-
-def _kind(label) -> str | None:
-    """The kind of the faces of ``label``, its last part, as the outdoor geometry writes
-    it (a building's or a barrier's own name, or a model file's, may be anything)."""
-    return label[-1] if len(label) else None
-
-
-def _on_edges(edges, point: np.ndarray, tolerance: float) -> np.ndarray:
-    """The indices of the ``edges`` that ``point`` (3,) lies on, within ``tolerance``."""
-    index = np.arange(len(edges.length))
-    points = np.broadcast_to(point, (len(index), 3))
-    return np.flatnonzero(_edge_distance(edges, index, points) <= tolerance)
-
-
-def _edge_distance(edges, index: np.ndarray, points: np.ndarray) -> np.ndarray:
-    """(n,) the distance (m) from each of ``points`` (n, 3) to the ``edges`` ``index``
-    (n,), between their ends."""
-    start = edges.start[index]
-    direction = edges.direction[index]
-    along = np.clip(np.einsum("ij,ij->i", points - start, direction), 0.0, edges.length[index])
-    return np.linalg.norm(points - start - direction * along[:, None], axis=1)
-
-
-def _at(cut: tuple, reach: float) -> bool:
-    """Whether a barrier or a building's wall of ``cut`` ((near, far, top)) stands within
-    ``ON_OBSTACLE_M`` of ``reach`` m along the way: the march there gives a listener the
-    field past it, none below its top."""
-    return any(min(abs(near - reach), abs(far - reach)) <= ON_OBSTACLE_M for near, far, _ in cut)
-
-
 def _departure(points: np.ndarray) -> np.ndarray:
     """The unit vector a path along ``points`` leaves its first point in."""
     delta = points[1] - points[0]
@@ -2749,14 +2515,15 @@ def _departure(points: np.ndarray) -> np.ndarray:
 
 def _ratios(straight: EarlyReflections, paths: EarlyReflections) -> dict[tuple, np.ndarray]:
     """What the edges' diffraction did to each specular path's energy (bands,), by its
-    faces."""
+    faces. The path of the solver for whole rows, which has no faces, is not the direct
+    sound's."""
     before = {}
     for i in range(len(straight)):
         if straight.edge[i] < 0:
             before[tuple(int(f) for f in straight.faces[i])] = straight.energy[i]
     out = {}
     for i in range(len(paths)):
-        if paths.edge[i] >= 0:
+        if paths.edge[i] >= 0 or paths.edge[i] == ROW:
             continue
         key = tuple(int(f) for f in paths.faces[i])
         old = before.get(key)

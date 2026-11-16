@@ -400,8 +400,11 @@ def simulate_walk(
     The late part is traced every ``late_step_m`` (see the module's description), or at
     every place with ``late_step_m=None`` or the statistical late method. ``settings``
     (default: the scene's) and ``threads`` (default: their ``performance.threads``) go
-    to :func:`~acoustic_spaces.engine.simulate`.
+    to :func:`~acoustic_spaces.engine.simulate`, with the paths over the edges of
+    barriers and buildings in place of the solver for whole rows
+    (:func:`_over_the_edges`).
     """
+    settings = _over_the_edges(settings, room.scene)
     kind, item = _walker(room, name)
     points = walk_points(item, step_m)
     doppler = item.walk.doppler
@@ -483,6 +486,18 @@ def _check_speed(room: Room, item, speed: float) -> None:
             f"{item.name!r} walks at {speed:g} m/s, as fast as sound or faster "
             f"({c:.0f} m/s): walks must go slower, as shock waves are not simulated"
         )
+
+
+def _over_the_edges(settings: SimulationSettings | None, scene) -> SimulationSettings:
+    """The settings a walk's places are simulated with: ``settings`` (the scene's when
+    None) with the paths over the edges of barriers and buildings (``early.rows:
+    edges``). The solver for whole rows would run for every place apart, and where it
+    takes one place and not the next the level would step between them."""
+    settings = settings or scene.simulation
+    if settings.early.rows == "edges":
+        return settings
+    early = settings.early.model_copy(update={"rows": "edges"})
+    return settings.model_copy(update={"early": early})
 
 
 def _check_doppler(room: Room, settings: SimulationSettings | None) -> None:
@@ -625,7 +640,8 @@ def simulate_movement(
     mover stands as a copy where its walk has it then, a copy serving every moment it
     stands still at (once its walk is over, say). Every listener in use hears every
     source in use, still or moving. The late part is traced every ``late_step_m`` along
-    each mover's walk, as in :func:`simulate_walk`.
+    each mover's walk, and barriers and buildings have the paths over their edges, as in
+    :func:`simulate_walk`.
 
     Every mover goes slower than sound. A walk with Doppler moves alone: with another
     mover it is refused. It goes without the wave solver, as in :func:`simulate_walk`.
@@ -635,6 +651,7 @@ def simulate_movement(
     if step_deg <= 0:
         raise ValueError("step_deg must be positive")
     scene = room.scene
+    settings = _over_the_edges(settings, scene)
     moving = movers(scene)
     if not moving:
         raise ValueError("nothing moves: give a listener or a source a walk that is enabled")

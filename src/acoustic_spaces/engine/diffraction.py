@@ -758,12 +758,22 @@ def _on_triangles(point: np.ndarray, triangles: np.ndarray, tol: float) -> bool:
     return bool(np.any(ok & (v >= -eps) & (w >= -eps) & (v + w <= 1.0 + eps)))
 
 
-def _fade_reach(r1, r2, sin_beta, k_min: float) -> np.ndarray:
+def _fade_reach(r1, r2, sin_beta, k_min: float | np.ndarray) -> np.ndarray:
     """How far (m) past a fading end of an edge a path touching its line at distances
     ``r1`` and ``r2`` from the source and listener sides, at ``sin_beta`` to it, is
     followed: FADE_REACH over the Fresnel integral's argument per metre at ``k_min``."""
     spread = np.sqrt(np.pi * r1 * r2 / ((r1 + r2) * k_min))
     return FADE_REACH * spread / np.maximum(sin_beta, _FADE_MIN_SINE)
+
+
+def fade_window(distance, reach) -> np.ndarray:
+    """How much of what an end of an edge does to a path counts where the path touches
+    the edge's line ``distance`` (m) from that end: all of it up to FADE_TAPER /
+    FADE_REACH of ``reach`` (m, :func:`_fade_reach`), then less, down to none at
+    ``reach`` (shaped like the two together)."""
+    start = FADE_TAPER / FADE_REACH * reach
+    x = np.clip((distance - start) / np.maximum(reach - start, 1e-300), 0.0, 1.0)
+    return 0.5 * (1.0 + np.cos(np.pi * x))
 
 
 def near_fading_end(fades, t_k, length, r1, r2, sin_beta, k_min: float):
@@ -882,9 +892,7 @@ def along_edge(
     t_k, length = np.asarray(t_k, float), np.asarray(length, float)
 
     def window(distance):
-        start = FADE_TAPER / FADE_REACH * reach
-        x = np.clip((distance - start) / np.maximum(reach - start, 1e-300), 0.0, 1.0)
-        return (0.5 * (1.0 + np.cos(np.pi * x)))[:, None, None, None]
+        return fade_window(distance, reach)[:, None, None, None]
 
     before, after = t_k < 0.0, t_k > length
     squeeze = inside is None

@@ -135,19 +135,14 @@ Edge diffraction:
   a wall in line with both is too low (6.4 dB at 63 Hz half a metre above a 10 m
   roof), and behind the roof with the source above its plane up to 6 dB too high (see
   [Known issues](validation.md#known-issues)).
-- [ ] Rows of edges near grazing incidence in simulations: where sound passes close
-  over the barriers and buildings of a scene, the level from the solver for whole rows
-  (`engine.rows`, within 0.38 dB of a wave calculation near grazing incidence in free
-  space; see
-  [Validation](validation.md#rows-of-roofs-and-barriers-against-a-wave-calculation))
-  in place of the paths over one edge and two. Today, just over three barriers or
-  three flat roofs in a row, or a roof with a slot across it, the level is off by 1 to
-  5 dB, and over a roof and a screen level with it 2 to 6 dB too low against a wave
-  calculation, with steps of 12 to 15 dB in all as the screen's top rises through the
-  roof's plane; behind three barriers with the source on the line of their tops there
-  is next to no sound, and behind two flat roofs of one height with the source up to
-  0.5 m above their plane the level is 9 to 23 dB below that behind one roof as wide
-  as both.
+- [x] Rows of edges in simulations: outdoors, where sound passes over the barriers and
+  buildings of a scene, the level in the bands up to 500 Hz from the solver for whole
+  rows in place of the paths over one edge and two, in still air and in wind
+  (`simulation.early.rows`, see [Sound over rows of barriers and
+  buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)).
+- [ ] The solver for whole rows in coverage maps and along walks, which take the paths
+  over the edges: a run for every point takes seconds, and along a walk the level would
+  step where the solver takes one place and not the next.
 - [ ] The solver for whole rows where it does not hold yet: rigid screens on a rigid
   ground (up to 1.3 dB low near grazing incidence, 3.4 dB at street level behind three
   screens, and up to 8.2 dB where the way crosses them at a slant of 75°; part of what
@@ -173,8 +168,9 @@ Edge diffraction:
   row), edges turned more than 75° (refused: not measured beyond), a row that the sound
   crosses at wavenumbers below the solver's lowest (refused), and edges at different
   slants (not measured); a wall given as a thin building (up to 0.4 dB low); the tops'
-  place in the march's cells (up to 0.2 dB); edges that end beside the way, absorbing
-  roofs and walls, the bands above 500 Hz, and wind.
+  place in the march's cells (up to 0.2 dB); roofs and walls that absorb (rigid in
+  it; a roof with an impedance leaves the row to the paths over the edges), the sound
+  that goes to and fro between a row's walls, and the bands above 500 Hz.
 - [ ] Paths over edges tested from the edge itself, not from a millionth of the
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9
