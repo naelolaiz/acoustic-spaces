@@ -6187,21 +6187,6 @@ Results:
   screen whose plane and rims round to different sides of 1e-10 cells gives up to 0.11
   of the response on the 19-point grid. Past 1.3 million cells from the grid's origin,
   rounding moves some ties out of reach (16 of 32 tied links of one scene).
-- **Measured directions equally near a point of a directivity table.** A table read
-  from measured directions (a CSV or SOFA file) takes each point of its 5 degree grid
-  from the 4 nearest directions. Where more than 4 are equally near, as halfway between
-  the directions of a file measured every 10 degrees, the last digits of the cosines
-  between the point and the directions decide which are taken: a product of the
-  linear-algebra library, left to it so that the choice stays what it is. One-off
-  checks with those sums added in another order: the tables of the examples' monitor
-  wedge and loudspeaker box (`wedge.csv`, `box.csv`, measured every 10 degrees of
-  azimuth and 2.5 of elevation) took other directions at 243 of their 2,664 points and
-  moved there by up to 1.3 and 0.9 dB; the concert stage's G then moved by up to
-  0.09 dB, and in the stadium concert one side fill's level at one seat by 2.0 dB at
-  2 kHz (0.3 dB in its A-weighted level). The tables were the same with 1, 2, 3 and 4
-  threads of the library on the computer of these checks. A file on the table's own
-  grid, as `write_directivity_csv` writes it, is not affected: each point has a
-  measured direction of its own.
 
 Models:
 

@@ -745,9 +745,8 @@ same results, bit for bit, with one, two and four of those threads (all were run
 `bim_office`). What it leaves to the library are the solvers (the eigenvalues behind turbulence's delays, a binaural
 decoder's pseudo-inverse, the fits of calibration and of a ground's impedance), whose
 results can round with the number of threads where their matrices are large (the
-eigenvalues of a 200 by 200 matrix did; nothing in the examples does), live
-head-tracked playback, and the cosines that choose a measured directivity table's
-nearest directions ([Known issues](validation.md#known-issues)).
+eigenvalues of a 200 by 200 matrix did; nothing in the examples does), and live
+head-tracked playback.
 
 ### Memory
 

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fixed: a measured directivity (a CSV or SOFA file) whose directions lie equally near a
+  point of the 5 degree grid it is interpolated on, as halfway between the directions of
+  a table given every 10 degrees, took four of them by the last digits of a sum, and a
+  direction given more than once (-180 and 180 degrees of azimuth, the rows at a pole)
+  counted once for each row: a table that is the same left and right gave a pattern
+  whose sides were up to 1.1 dB apart. Directions equally near a point are now taken
+  alike and a direction given more than once counts once
+  ([Scenes](docs/scenes.md#sources-and-directivity)), and directions that are not finite
+  or are (0, 0, 0) are refused. The examples' `wedge.csv` and `box.csv` move by up to
+  1.1 and 1.4 dB at single directions (the box's 8 kHz band is about 0.3 dB down in
+  most directions), and with them the levels of `concert_stage` by up to 0.5 dB at 8 kHz
+  and 0.2 dB(A), those of `stadium_concert` by up to 0.8 dB at 8 kHz and 0.2 dB(A), and
+  the lakeside system's 8 kHz band at the audience by 0.1 dB; a table given on the grid
+  itself moves in its last digits only.
 - Fixed: a path exactly through an outer edge (a roof's edge over an end wall, a
   building's upright corner, the edge where two barriers meet) stood as a reflection off
   both faces for a source and a listener the edge sees in the same direction across it,

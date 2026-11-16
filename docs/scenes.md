@@ -582,11 +582,17 @@ sources:
 - A **CSV** table has the header `azimuth, elevation` followed by frequencies in Hz,
   then one row per direction with levels in dB (any reference; only differences
   matter). Azimuth turns from the front towards the source's left and elevation is
-  positive upwards, in degrees. Any set of directions works: they are interpolated
-  onto a 5 degree grid. Bands are averaged into octaves, and octaves with no data copy
-  the nearest one; in third-octave runs each octave's pattern holds for its thirds.
+  positive upwards, in degrees. Any set of directions works. Bands are averaged into
+  octaves, and octaves with no data copy the nearest one; in third-octave runs each
+  octave's pattern holds for its thirds.
   From Python, `acoustic_spaces.directivity.write_directivity_csv(path, balloon)` writes
   a directivity (a `Balloon`) as such a table, its octave bands on its grid.
+- The directions of a SOFA or CSV file are interpolated onto a 5 degree grid, each of
+  its points from the four directions nearest to it, or from all of them where the
+  file has fewer. Where several are equally near and not all of them are among the
+  four, the point takes the nearer ones alone, or all of them if none is nearer. A
+  direction given more than once (a table's -180 and 180 degrees of azimuth, its rows
+  straight up and down) counts once, with the mean of its energies.
 - CLF (Common Loudspeaker Format) files are not read: their specification is not
   public. Convert them to SOFA or CSV.
 
