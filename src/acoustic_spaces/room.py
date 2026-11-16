@@ -15,6 +15,7 @@ from typing import Literal
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.air import (
     STATED_F_OVER_P,
     energy_attenuation_per_m,
@@ -771,7 +772,7 @@ class Room:
         ``bands="third_octave"`` (m2): the sum of S * alpha over the sides of the faces
         that face a room. With partitions or openings between rooms, it is that of all
         the rooms as one: what passes from one room to another is not lost."""
-        return self.mesh.face_areas() @ self._sides(bands)[1]
+        return products.product(self.mesh.face_areas(), self._sides(bands)[1])
 
     def air_attenuation(self, bands: Resolution = "octave") -> np.ndarray:
         """Energy attenuation of the scene's air per octave band, or per third-octave
@@ -815,7 +816,7 @@ class Room:
             with np.errstate(divide="ignore"):
                 return constant / (-surface * np.log1p(-mean_alpha) + air)
 
-        absorption = self.mesh.face_areas() @ taken
+        absorption = products.product(self.mesh.face_areas(), taken)
         if formula == "sabine":
             with np.errstate(divide="ignore"):
                 return constant / (absorption + air)
@@ -828,7 +829,7 @@ class Room:
             total = float((share * sides[:, None]).sum())
             log_time = np.zeros(taken.shape[1])
             for area, axis_absorption in zip(
-                (share * sides[:, None]).sum(axis=0), share.T @ taken, strict=True
+                (share * sides[:, None]).sum(axis=0), products.product(share.T, taken), strict=True
             ):
                 if area > 0:
                     log_time += area / total * np.log(eyring(axis_absorption, area))

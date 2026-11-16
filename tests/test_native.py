@@ -1,3 +1,4 @@
+import itertools
 import math
 
 import numpy as np
@@ -735,3 +736,356 @@ def test_the_nearest_directions_table_leaves_the_tracer_s_results_as_a_scan_of_a
     np.testing.assert_array_equal(fast[1], plain[1][:, :64])
     for a, b in zip(fast[:1] + fast[2:], plain[:1] + plain[2:], strict=True):
         np.testing.assert_array_equal(a, b)
+
+
+# The fixed-order products (fixed_sums.hpp): kinds of operands as (a, b, conj_b).
+_KINDS = [
+    ("real", "real", False),
+    ("real", "complex", False),
+    ("complex", "real", False),
+    ("complex", "complex", False),
+    ("complex", "complex", True),
+]
+
+
+def _parts(value) -> tuple[float, float]:
+    return float(np.real(value)), float(np.imag(value))
+
+
+def _ordered_product(a, b, out=None, rows=None, conj_b=False) -> np.ndarray:
+    """a @ b by the definition in fixed_sums.hpp, in Python floats (no fused operations):
+    each element's terms one by one in ascending k (or the order of ``rows``), from the
+    first term, or from ``out`` if given; real and imaginary parts written out."""
+    m, k = a.shape
+    n = b.shape[1]
+    complex_a, complex_b = a.dtype.kind == "c", b.dtype.kind == "c"
+    width = 2 if complex_a or complex_b else 1
+    result = np.zeros((m, n, width))
+    for i in range(m):
+        for j in range(n):
+            sums = None if out is None else list(_parts(out[i, j])[:width])
+            for kk in range(k) if rows is None else rows:
+                ar, ai = _parts(a[i, kk])
+                br, bi = _parts(b[kk, j])
+                if not complex_a and not complex_b:
+                    terms = [ar * br]
+                elif not complex_a:
+                    terms = [ar * br, ar * bi]
+                elif not complex_b:
+                    terms = [ar * br, ai * br]
+                elif conj_b:
+                    terms = [ar * br + ai * bi, ai * br - ar * bi]
+                else:
+                    terms = [ar * br - ai * bi, ar * bi + ai * br]
+                sums = terms if sums is None else [s + t for s, t in zip(sums, terms, strict=True)]
+            result[i, j] = 0.0 if sums is None else sums
+    return result[..., 0] if width == 1 else result.view(complex)[..., 0]
+
+
+def _same_bits(x, y) -> bool:
+    """Whether two float64 or complex128 arrays hold the same bits, any NaN counting as
+    any other (which of two NaNs a vector instruction passes on is the compiler's)."""
+    x, y = np.asarray(x), np.asarray(y)
+    if x.dtype != y.dtype or x.shape != y.shape:
+        return False
+    xf, yf = x.reshape(-1).view(np.float64), y.reshape(-1).view(np.float64)
+    nan = np.isnan(xf)
+    return bool(
+        np.array_equal(nan, np.isnan(yf))
+        and np.array_equal(xf[~nan].view(np.uint64), yf[~nan].view(np.uint64))
+    )
+
+
+def _hard_operand(rng, shape, kind) -> np.ndarray:
+    """Values that test the order and the IEEE operations: zeros of both signs, numbers
+    that cancel, subnormals, products that overflow or underflow, infinities and NaN,
+    among plain random ones."""
+    pool = np.array(
+        [0.0, -0.0, 1.0, -1.0, 1.0 + 2.0**-52, -(1.0 + 2.0**-52), 3.0, 1.0 / 3.0, 2.0**60]
+        + [-(2.0**60), 5e-324, -1e-310, 2.2e-308, 1e-200, 1e300, -1e300, np.inf, -np.inf]
+        + [np.nan]
+    )
+
+    def draw():
+        values = rng.standard_normal(shape) * 10.0 ** rng.integers(-3, 4, shape)
+        special = rng.random(shape) < 0.3
+        values[special] = rng.choice(pool, int(special.sum()))
+        return values
+
+    if kind == "real":
+        return draw()
+    out = np.empty(shape, dtype=complex)  # not draw() + 1j * draw(): 1j * inf has a NaN
+    out.real, out.imag = draw(), draw()
+    return out
+
+
+def _random_operand(rng, shape, kind) -> np.ndarray:
+    values = rng.standard_normal(shape)
+    return values if kind == "real" else values + 1j * rng.standard_normal(shape)
+
+
+def _fixed(a, b, out=None, rows=None, conj_b=False, threads=1) -> np.ndarray:
+    """_native.fixed_product into a copy of out (added to it), or into a new array."""
+    from acoustic_spaces import _native
+
+    dtype = complex if "c" in (a.dtype.kind, b.dtype.kind) else float
+    result = np.empty((a.shape[0], b.shape[1]), dtype) if out is None else out.copy()
+    _native.fixed_product(a, b, result, rows, conj_b, out is not None, threads)
+    return result
+
+
+@pytest.mark.parametrize("kind_a, kind_b, conj_b", _KINDS)
+def test_fixed_product_adds_each_sum_in_the_defined_order(kind_a, kind_b, conj_b) -> None:
+    """Bit for bit the sum of the definition, with and without out and rows, for no terms,
+    no rows or columns, one, one column (matrix times vector), values that cancel,
+    overflow, underflow or are not finite, and plain random ones."""
+    rng = np.random.default_rng(11)
+    shapes = [
+        (0, 3, 4),
+        (3, 0, 4),
+        (3, 4, 0),
+        (1, 1, 1),
+        (1, 6, 1),
+        (4, 0, 1),
+        (2, 7, 3),
+        (7, 6, 1),
+        (4, 9, 6),
+    ]
+    for m, k, n in shapes:
+        for draw in (_hard_operand, _hard_operand, _hard_operand, _random_operand):
+            a = draw(rng, (m, k), kind_a)
+            b = draw(rng, (k, n), kind_b)
+            out = draw(rng, (m, n), "complex" if "complex" in (kind_a, kind_b) else "real")
+            rows = np.flatnonzero(rng.random(k) < 0.6)
+            for given, start in ((None, None), (rows, None), (None, out), (rows, out)):
+                got = _fixed(a, b, start, given, conj_b)
+                assert _same_bits(got, _ordered_product(a, b, start, given, conj_b)), (m, k, n)
+    # One term of zeros of every sign: the signs of the definition's operations.
+    for signs in itertools.product((0.0, -0.0), repeat=4):
+        a = np.array([[complex(*signs[:2]) if kind_a == "complex" else signs[0]]])
+        b = np.array([[complex(*signs[2:]) if kind_b == "complex" else signs[2]]])
+        assert _same_bits(_fixed(a, b, conj_b=conj_b), _ordered_product(a, b, conj_b=conj_b))
+    # Without out, a sum starts from its first term: -0.0 stays -0.0; no term gives +0.0.
+    a, b = np.array([[-0.0]]), np.array([[1.0]])
+    assert math.copysign(1.0, _fixed(a, b)[0, 0]) == -1.0
+    assert math.copysign(1.0, _fixed(np.zeros((1, 0)), np.zeros((0, 1)))[0, 0]) == 1.0
+
+
+@pytest.mark.parametrize("kind_a, kind_b, conj_b", _KINDS)
+def test_fixed_product_gives_the_same_bits_on_any_threads_and_blocks(kind_a, kind_b, conj_b):
+    """The definition's bits on 1 to 8 threads, at sizes that cross each block of the
+    loops: 8 rows, 2048 doubles of a row's columns over the rows of a block, 32 columns
+    to a thread, four terms at a time after the first, four rows at a time of one
+    column; threads split rows when there are few columns. a of hard values and of
+    plain random ones (whose sums any other order would round differently)."""
+    rng = np.random.default_rng(12)
+    shapes = [(1, 9, 2049), (1, 5, 1025), (9, 8, 257), (17, 2, 129), (40, 6, 3), (3, 1, 65)]
+    for m, k, n in [*shapes, (11, 9, 1)]:
+        for draw in (_hard_operand, _random_operand):
+            a = draw(rng, (m, k), kind_a)
+            b = _random_operand(rng, (k, n), kind_b)
+            kind = "complex" if "complex" in (kind_a, kind_b) else "real"
+            out = _random_operand(rng, (m, n), kind)
+            rows = np.flatnonzero(rng.random(k) < 0.7)
+            for given, start in ((None, None), (rows, out)):
+                want = _ordered_product(a, b, start, given, conj_b)
+                for threads in (1, 2, 3, 5, 8):
+                    got = _fixed(a, b, start, given, conj_b, threads)
+                    assert _same_bits(got, want), (m, k, n, threads)
+
+
+@pytest.mark.parametrize("kind_a, kind_b, conj_b", _KINDS)
+def test_fixed_product_is_numpy_s_product_within_rounding(kind_a, kind_b, conj_b) -> None:
+    """Within what rounding allows of numpy's @ in any order of its own: each of k terms
+    (complex ones of two products and a sum) and k additions round by at most a unit u
+    each, so each result is within gamma = (k + 2) u / (1 - (k + 2) u) of the exact sum,
+    relative to the sum of the terms' magnitudes (Higham, Accuracy and Stability of
+    Numerical Algorithms, 3.1 and 3.6), and the two results within twice that."""
+    rng = np.random.default_rng(13)
+    for m, k, n in [(5, 300, 70), (4, 256, 33), (1, 1000, 9), (60, 3, 1)]:
+        a = _random_operand(rng, (m, k), kind_a)
+        b = _random_operand(rng, (k, n), kind_b)
+        got = _fixed(a, b, conj_b=conj_b)
+        want = a @ (b.conj() if conj_b else b)
+        u = 2.0**-53
+        bound = 2.0 * (k + 2) * u / (1.0 - (k + 2) * u) * (np.abs(a) @ np.abs(b))
+        assert np.all(np.abs(got.real - want.real) <= bound)
+        assert np.all(np.abs(np.imag(got) - np.imag(want)) <= bound)
+
+
+def _exact_values(count: int, seed: int, scales: int = 41) -> np.ndarray:
+    """Values from a 64-bit linear congruential generator, its integers scaled by powers
+    of two (math.ldexp, exact) from 2**-72 to 2**(scales - 73): the same on every
+    platform, as no library function that rounds makes them."""
+    state, out = seed, []
+    for _ in range(count):
+        state = (state * 6364136223846793005 + 1442695040888963407) % 2**64
+        out.append(math.ldexp((state >> 11) - 2**52, state % scales - 72))
+    return np.array(out)
+
+
+def _exact_operand(shape, kind, seed, scales: int = 41) -> np.ndarray:
+    if kind == "real":
+        return _exact_values(math.prod(shape), seed, scales).reshape(shape)
+    values = _exact_values(2 * math.prod(shape), seed, scales)
+    return (values[::2] + 1j * values[1::2]).reshape(shape)
+
+
+# The doubles (re, im of each element) of a (2, 11) @ b (11, 3) for each kind of
+# _KINDS, of _exact_operand(seeds 3i + 1, 3i + 2), the second and fifth added to out
+# (seed 3i + 3), the third and fifth over rows 0, 1, 3, 4, 5, 8, 10.
+_STORED_PRODUCTS = [
+    (
+        "-0x1.760665b0658fbp+26 0x1.2e87d59345f91p+12 -0x1.f743c39c07d39p+22 "
+        "-0x1.187041e52db18p+24 0x1.ab355a80c37b6p+18 -0x1.161d449524ba6p+34"
+    ),
+    (
+        "0x1.4c9e7a19b2194p+35 0x1.5cc4d3d5292edp+24 0x1.e5e9cdc23a1e8p+32 "
+        "-0x1.1b5ff0b029597p+23 -0x1.9a963d045e3d5p+18 0x1.b3771790f04afp+28 "
+        "-0x1.2b38d48295470p+28 -0x1.1f36c0be5cbc0p+23 0x1.4fbf11207c34cp+18 "
+        "0x1.a37e336b0d6fap+24 0x1.813198e685413p+25 0x1.be8b831c09ffdp+22"
+    ),
+    (
+        "-0x1.048e28d463c3bp+29 0x1.63022b628485fp+14 0x1.a4ed6cf5d1b0fp+17 "
+        "-0x1.4bc02329f80b1p+31 -0x1.6e1faee041678p+11 0x1.89777b1579431p+21 "
+        "0x1.606ea02139caap+15 -0x1.07cec9795fb65p+32 -0x1.0ae0afc43eb49p+30 "
+        "0x1.bdc11a5dd5dcbp+28 -0x1.bec6048a414b6p+28 0x1.5d55b040d2b44p+22"
+    ),
+    (
+        "-0x1.8ab4b53a53fb4p+21 0x1.0cfbde76e0d04p+16 0x1.02b65831ed576p+23 "
+        "0x1.1525caf36afa6p+24 0x1.bf93e40e79140p+27 -0x1.99c111afec145p+24 "
+        "0x1.b771224b00760p+26 -0x1.310dbd05c52eep+27 -0x1.1d9ad0db0a50ep+32 "
+        "-0x1.4bf755de7a983p+25 0x1.3587c143bc576p+32 0x1.229ccdd818f83p+36"
+    ),
+    (
+        "0x1.8e39cbae5562cp+24 -0x1.dc6bd0db7bfbcp+26 -0x1.1345b1e93e6d9p+29 "
+        "0x1.66dab7894b270p+25 0x1.07b3eda759549p+26 0x1.729590b2c6e85p+24 "
+        "-0x1.0f67cdc675a54p+15 -0x1.5705cc5186600p+28 0x1.1652a15ee77a8p+26 "
+        "-0x1.e423ccf098ad0p+23 -0x1.73006e998d7b1p+24 -0x1.6c9bd21889ff9p+19"
+    ),
+]
+# Real a (2, 11) @ b (11, 3) of _exact_operand(seeds 16, 17) of one scale: terms of
+# about one size and either sign, whose sums round differently if any two of their
+# terms but the first two change places.
+_STORED_CANCELLING = (
+    "0x1.711708b894595p-42 0x1.fc492442399ecp-41 0x1.642338b91959dp-41 "
+    "-0x1.64882a93a6e1bp-40 0x1.3c28e81e20888p-40 0x1.9939cc165df8ep-40"
+)
+# fixed_dot and fixed_dots of _exact_values(37, 100) and (37, 101).
+_STORED_DOTS = (
+    "-0x1.02ff19b9126ffp+25 0x1.dc983048c58fbp+39 0x1.0e33fe0f73130p+37 -0x1.02ff19b9126ffp+25"
+)
+
+
+def test_fixed_products_give_the_stored_bits() -> None:
+    """The same bits on every platform CI runs (Linux, Windows, macOS on Intel and Apple
+    silicon) for inputs made without library functions: compilers that fused a multiply
+    and an add, reordered a sum or changed a vector's lanes would change them."""
+    from acoustic_spaces import _native
+
+    rows = np.array([0, 1, 3, 4, 5, 8, 10])
+    for i, ((kind_a, kind_b, conj_b), stored) in enumerate(
+        zip(_KINDS, _STORED_PRODUCTS, strict=True)
+    ):
+        a = _exact_operand((2, 11), kind_a, 3 * i + 1)
+        b = _exact_operand((11, 3), kind_b, 3 * i + 2)
+        kind = "complex" if "complex" in (kind_a, kind_b) else "real"
+        out = _exact_operand((2, 3), kind, 3 * i + 3) if i in (1, 4) else None
+        given = rows if i in (2, 4) else None
+        got = _fixed(a, b, out, given, conj_b)
+        want = np.array([float.fromhex(h) for h in stored.split()])
+        assert _same_bits(got.reshape(-1).view(np.float64), want), i
+        assert _same_bits(got, _ordered_product(a, b, out, given, conj_b))
+    a, b = _exact_operand((2, 11), "real", 16, 1), _exact_operand((11, 3), "real", 17, 1)
+    want = np.array([float.fromhex(h) for h in _STORED_CANCELLING.split()])
+    assert _same_bits(_fixed(a, b).reshape(-1), want)
+    x, y = _exact_values(37, 100), _exact_values(37, 101)
+    got = [_native.fixed_dot(x, y), *_native.fixed_dots(x, y)]
+    assert [v.hex() for v in got] == _STORED_DOTS.split()
+
+
+def _ordered_dot(x, y) -> float:
+    """x . y by the definition in fixed_sums.hpp, in Python floats."""
+    sums = [0.0] * 8
+    for i, (u, v) in enumerate(zip(x.tolist(), y.tolist(), strict=True)):
+        sums[i % 8] = sums[i % 8] + u * v
+    s = sums
+    return ((s[0] + s[1]) + (s[2] + s[3])) + ((s[4] + s[5]) + (s[6] + s[7]))
+
+
+def test_fixed_dot_adds_eight_sums_in_the_defined_order() -> None:
+    """fixed_dot is the definition's sum bit for bit, for every length up to two rounds
+    of eight and longer ones, with values that cancel, overflow or are not finite;
+    fixed_dots is (x . x, y . y, x . y) of it; both within rounding of numpy's."""
+    from acoustic_spaces import _native
+
+    rng = np.random.default_rng(14)
+    for n in [*range(18), 100, 1001]:
+        for x, y in (
+            (_hard_operand(rng, (n,), "real"), _hard_operand(rng, (n,), "real")),
+            (rng.standard_normal(n), rng.standard_normal(n)),
+        ):
+            assert _same_bits(_native.fixed_dot(x, y), _ordered_dot(x, y)), n
+            want = [_ordered_dot(x, x), _ordered_dot(y, y), _ordered_dot(x, y)]
+            assert _same_bits(np.array(_native.fixed_dots(x, y)), np.array(want)), n
+    assert math.copysign(1.0, _native.fixed_dot(np.array([-0.0]), np.array([1.0]))) == 1.0
+    x, y = rng.standard_normal(331_051), rng.standard_normal(331_051)
+    bound = 2.0 * len(x) * 2.0**-53 / (1.0 - len(x) * 2.0**-53) * float(np.abs(x) @ np.abs(y))
+    assert abs(_native.fixed_dot(x, y) - float(x @ y)) <= bound
+
+
+@pytest.mark.parametrize(
+    "a, b, out, rows, message",
+    [
+        (np.ones((2, 3)), np.ones((4, 5)), np.ones((2, 5)), None, "the same k"),
+        (np.ones((2, 3)), np.ones((3, 5)), np.ones((2, 4)), None, "out must be"),
+        (np.ones((2, 3)), np.ones((3, 5)), np.ones((2, 5), complex), None, "out must be"),
+        (np.ones((2, 3)), np.ones((3, 5), complex), np.ones((2, 5)), None, "out must be"),
+        (np.ones((2, 3)), np.ones((3, 10))[:, ::2], np.ones((2, 5)), None, "adjacent"),
+        (np.ones((2, 3)), np.ones((3, 5)), np.ones((2, 10))[:, ::2], None, "adjacent"),
+        (np.ones((2, 3), np.float32), np.ones((3, 5)), np.ones((2, 5)), None, "float64"),
+        (np.ones((2, 3)), np.ones((3, 5)), np.ones((2, 5)), np.array([0, 3]), "ascending"),
+        (np.ones((2, 3)), np.ones((3, 5)), np.ones((2, 5)), np.array([1, 1]), "ascending"),
+        (np.ones((2, 3)), np.ones((3, 5)), np.ones((2, 5)), np.array([-1, 0]), "ascending"),
+    ],
+)
+def test_fixed_product_rejects_bad_operands(a, b, out, rows, message) -> None:
+    from acoustic_spaces import _native
+
+    with pytest.raises(ValueError, match=message):
+        _native.fixed_product(a, b, out, rows)
+
+
+def _unaligned(x) -> np.ndarray:
+    """A copy of x whose data starts one byte past an aligned address."""
+    x = np.asarray(x)
+    out = np.zeros(x.nbytes + 1, np.uint8)[1:].view(x.dtype).reshape(x.shape)
+    out[...] = x
+    return out
+
+
+def test_fixed_product_refuses_operands_it_cannot_read_as_defined() -> None:
+    """A real a with a conjugated complex b (not defined), an out that shares memory with
+    a or b (which the loops would read after writing), and unaligned operands."""
+    from acoustic_spaces import _native
+
+    a, b = np.ones((3, 3)), np.ones((3, 3))
+    cases = [
+        ((a, np.ones((3, 3), complex), np.ones((3, 3), complex), None, True), "conj_b"),
+        ((a, b, a, None, False), "share memory"),
+        ((a, b, b, None, False), "share memory"),
+        ((a, b[:, :2], b[:, 1:], None, False), "share memory"),
+        ((_unaligned(a), b, np.ones((3, 3)), None, False), "aligned"),
+        ((a, _unaligned(b), np.ones((3, 3)), None, False), "aligned"),
+        ((a, b, _unaligned(np.ones((3, 3))), None, False), "aligned"),
+        ((a, b, np.ones((3, 3)), _unaligned(np.array([0, 2])), False), "aligned"),
+    ]
+    for (x, y, out, rows, conj_b), message in cases:
+        with pytest.raises(ValueError, match=message):
+            _native.fixed_product(x, y, out, rows, conj_b)
+    for call in (_native.fixed_dot, _native.fixed_dots):
+        with pytest.raises(ValueError, match="aligned"):
+            call(_unaligned(np.ones(9)), np.ones(9))
+    out = np.ones((3, 3), complex)  # conj_b of a real b is b
+    _native.fixed_product(np.ones((3, 3), complex), b, out, None, True)
+    assert _same_bits(out, _ordered_product(np.ones((3, 3), complex), b))

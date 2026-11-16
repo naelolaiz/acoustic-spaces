@@ -2572,6 +2572,14 @@ msgid "wide angle"
 msgstr "ángulo amplio"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "solver for whole rows"
+msgstr "método para hileras enteras"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "paths over the edges"
+msgstr "trayectorias sobre las aristas"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "stochastic_ray_tracing"
 msgstr "trazado de rayos estocástico"
 
@@ -5343,6 +5351,23 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Outdoors, the sound over barriers and buildings in the vertical plane "
+"through a source and a listener, in the octave bands up to 500 Hz that add "
+"their paths in pressure: the solver for whole rows (one field over all of "
+"them, with the ground and the roofs in it, where their tops go on far enough "
+"to both sides of the way; seconds for each source and listener) or the paths "
+"over one edge or two alone. Maps and walks take the paths"
+msgstr ""
+"Al aire libre, el sonido sobre pantallas y edificios en el plano vertical "
+"que pasa por una fuente y un receptor, en las bandas de octava hasta 500 Hz "
+"que suman sus trayectorias en presión: el método para hileras enteras (un "
+"solo campo sobre todos ellos, con el terreno y las cubiertas dentro, donde "
+"sus partes superiores continúan lo bastante lejos a ambos lados del camino; "
+"segundos por cada fuente y receptor) o las trayectorias sobre una arista o "
+"dos solas. Los mapas y los recorridos toman las trayectorias"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "Outdoors in wind or temperature gradients, the parabolic equation that gives "
 "the sound over the open ground in the low bands and in the shadows: narrow "
 "angle (for the gradients near the ground that the weather has) or wide angle "
@@ -5446,6 +5471,10 @@ msgstr "Difracción"
 #: acoustic_spaces/gui/inspector.py
 msgid "Reflections over an edge"
 msgstr "Reflexiones sobre una arista"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Barriers and buildings"
+msgstr "Pantallas y edificios"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Parabolic equation"

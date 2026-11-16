@@ -33,6 +33,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.directivity import (
     GRID_STEP_DEG,
     Balloon,
@@ -131,7 +132,7 @@ def _band_powers(spectra: np.ndarray, gains: np.ndarray, n: int) -> np.ndarray:
     power = np.abs(spectra) ** 2 / float(n) ** 2
     # Each bin but the first (and the last, for an even n) stands for two frequencies.
     power[..., 1 : (n + 1) // 2] *= 2.0
-    return power @ gains
+    return products.product(power, gains)
 
 
 @dataclass(frozen=True)
@@ -184,7 +185,7 @@ class Mixture(Emission):
 
     def averaged(self) -> np.ndarray:
         # Signals that do not correlate add their powers: each at its mean power.
-        return np.sqrt(sphere_mean(self.weights**2)) @ self.signals
+        return products.product(np.sqrt(sphere_mean(self.weights**2)), self.signals)
 
     def scaled(self, gain: float) -> Mixture:
         return dataclasses.replace(self, weights=self.weights * float(gain))
@@ -197,7 +198,7 @@ class Mixture(Emission):
             _band_powers(np.fft.rfft(self.signals[:, s : s + size], axis=1), gains, size)
             for s in starts
         ) / len(starts)
-        return on_grid(self.weights**2 @ powers, directions)
+        return on_grid(products.product(self.weights**2, powers), directions)
 
 
 @dataclass(frozen=True)
@@ -286,7 +287,7 @@ class Periodic(Emission):
     def _read(self, times: np.ndarray, ways: np.ndarray) -> np.ndarray:
         """The sound sent at ``times`` (n,) the ways ``ways`` (n, 3), unit vectors in
         the source's frame."""
-        own = ways @ self.axes.T
+        own = products.product(ways, self.axes.T)
         if self.turn_s:
             times = times - np.arctan2(own[:, 1], own[:, 0]) / (2 * np.pi) * self.turn_s
         if np.any(self.centre):

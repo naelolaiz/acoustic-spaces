@@ -2,6 +2,9 @@
 
 import dataclasses
 import math
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -683,3 +686,149 @@ def test_the_equation_s_samples_go_with_their_path() -> None:
     np.testing.assert_array_equal(turned.spectrum, carrier.spectrum)
     np.testing.assert_array_equal(turned.fine, carrier.fine)
     assert paths(1, None).fine is None
+
+
+_PRESSURE_DIGEST = """
+import hashlib
+import numpy as np
+from acoustic_spaces.engine import coherent
+from acoustic_spaces.engine.early import EarlyReflections
+
+rng = np.random.default_rng(5)
+n = 203
+delay = np.sort(rng.uniform(0.005, 0.3, n))
+energy = rng.uniform(0.1, 1.0, (n, 8)) * 1e-3
+energy[:2, 1] = 0.0
+paths = EarlyReflections(
+    order=np.ones(n, dtype=np.int64),
+    delay_s=delay,
+    distance_m=delay * 343.0,
+    direction=rng.normal(size=(n, 3)),
+    energy=energy,
+    edge=None,
+    spectrum=np.exp(1j * rng.uniform(-3.0, 3.0, (n, 2, 8))),
+)
+pressure = coherent.EarlyPressure(paths)
+digest = hashlib.sha256()
+for x in (pressure.spectra, *pressure._spectra_of.values(), coherent.signal(paths, 4096, 16000.0)):
+    digest.update(np.ascontiguousarray(x).tobytes())
+print(digest.hexdigest())
+"""
+
+
+def test_the_early_pressure_has_the_same_bits_on_any_number_of_library_threads() -> None:
+    """203 paths, two of them silent in the second band: the early part's spectra, those
+    of the 201 paths heard in that band, and the coherent signal are bit for bit the same
+    in fresh processes on one and on four OpenBLAS threads."""
+    digests = set()
+    for threads in ("1", "4"):
+        env = dict(os.environ, OPENBLAS_NUM_THREADS=threads)
+        run = subprocess.run(
+            [sys.executable, "-c", _PRESSURE_DIGEST],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        digests.add(run.stdout)
+    assert len(digests) == 1
+
+
+def _scattered(n: int, seed: int, wander: bool = False) -> early_stage.EarlyReflections:
+    """``n`` paths from all directions, with random delays, energies and phases, every
+    seventh silent in the second band; with ``wander``, apart by random delay variances."""
+    from acoustic_spaces.engine.turbulence import Wander
+
+    rng = np.random.default_rng(seed)
+    delay = np.sort(rng.uniform(0.005, 0.3, n))
+    energy = rng.uniform(0.1, 1.0, (n, 8)) * 1e-3
+    energy[::7, 1] = 0.0
+    variance = rng.uniform(0.0, 1e-7, (n, n))
+    variance = variance + variance.T
+    np.fill_diagonal(variance, 0.0)
+    return early_stage.EarlyReflections(
+        order=np.ones(n, dtype=np.int64),
+        delay_s=delay,
+        distance_m=delay * 343.0,
+        direction=rng.normal(size=(n, 3)),
+        energy=energy,
+        edge=None,
+        spectrum=np.exp(1j * rng.uniform(-3.0, 3.0, (n, 2, 8))),
+        wander=Wander(variance, np.zeros((n, n)), 343.0) if wander else None,
+    )
+
+
+def test_the_early_pressure_and_the_signal_add_every_path_of_every_chunk() -> None:
+    """600 paths, three chunks of the loop: the early pressure's spectra, those of the
+    paths heard in the second band, and the coherent signal of three weightings are the
+    weighted sums over all the paths' delayed spectra at once, to rounding."""
+    from acoustic_spaces import synthesis
+    from acoustic_spaces.engine import coherent
+
+    paths = _scattered(600, 5)
+    pressure = coherent.EarlyPressure(paths)
+    f = np.fft.rfftfreq(pressure.n_fft, 1.0 / pressure.rate)
+    gains = synthesis.band_gains(pressure.n_fft, pressure.rate, 8)
+    shift = paths.delay_s + pressure.lead - 0.5 / pressure.rate
+    spectra = coherent.amplitude_spectra(paths, f, gains) * np.exp(-2j * np.pi * np.outer(shift, f))
+    weights = np.column_stack([np.ones(len(paths)), paths.direction])
+    np.testing.assert_allclose(pressure.spectra, weights.T @ spectra, rtol=0, atol=1e-12)
+    heard = paths.energy[:, 1] > 0.0
+    assert list(pressure._spectra_of) == [1]
+    np.testing.assert_allclose(
+        pressure._spectra_of[1], weights[heard].T @ spectra[heard], rtol=0, atol=1e-12
+    )
+
+    n, rate = 4096, 16000.0
+    weights = np.random.default_rng(1).normal(size=(len(paths), 3))
+    n_fft = synthesis.fft_size(n, rate)
+    gains = synthesis.band_gains(n_fft, rate, 8)
+    top = int(np.flatnonzero(gains[:2].sum(axis=0) > 0.0).max()) + 1
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)[:top]
+    spectra = coherent.amplitude_spectra(paths, f, gains[:, :top], only_coherent=True)
+    spectra *= np.exp(-2j * np.pi * np.outer(paths.delay_s, f))
+    expected = np.zeros((n_fft // 2 + 1, 3), dtype=complex)
+    expected[:top] = spectra.T @ weights
+    expected = np.fft.irfft(expected, n_fft, axis=0)[:n]
+    np.testing.assert_allclose(
+        coherent.signal(paths, n, rate, weights),
+        expected,
+        rtol=0,
+        atol=1e-13 * np.abs(expected).max(),
+    )
+
+
+def test_the_early_figure_of_eight_is_the_pressure_weighted_by_its_cosines() -> None:
+    """Facing an axis of unequal components, the early pressure's figure of eight is the
+    energy of the paths each weighted by the cosine of its direction to the axis."""
+    from acoustic_spaces.engine import coherent
+
+    paths = _scattered(300, 2)
+    axis = np.array([0.6, 0.0, 0.8])
+    facing = coherent.EarlyPressure(paths).energy(0.001, 300, axis=axis)
+    weighted = coherent.EarlyPressure(paths, weights=(paths.direction @ axis)[:, None])
+    expected = weighted.energy(0.001, 300)
+    np.testing.assert_allclose(facing, expected, rtol=0, atol=1e-12 * expected.max())
+
+
+def test_the_turbulent_figure_of_eight_takes_each_two_paths_coherence() -> None:
+    """In turbulence, a figure of eight facing an axis with exponent 1 adds, for each two
+    paths, the first's cosine times its band signal, their coherence factor, and the
+    second's pressure: the einsum of these, through the band filters, to rounding."""
+    from acoustic_spaces.engine import coherent
+    from acoustic_spaces.materials.bands import resolution_of
+
+    paths = _scattered(150, 3, wander=True)
+    pressure = coherent.EarlyPressure(paths)
+    axis = np.array([0.6, 0.0, 0.8])
+    facing = pressure.energy(0.001, 300, axis=axis, exponent=1)
+    side = paths.direction @ axis
+    for b in range(pressure.count):
+        gain, keep, slot, scale = pressure._filter(b, 0.001, 300, 0.0, None)
+        signals = np.fft.irfft(gain * pressure._each, pressure.n_fft, axis=1)[:, keep]
+        signals[paths.energy[:, b] <= 0.0] = 0.0
+        f = band_frequencies(bands=resolution_of(8))[0][b]
+        together = paths.wander.coherence(f).mean(axis=2)
+        power = np.abs(np.einsum("it,ij,jt->t", side[:, None] * signals, together, signals))
+        expected = np.bincount(slot, power * scale, minlength=300)[:300]
+        np.testing.assert_allclose(facing[b], expected, rtol=0, atol=1e-12 * expected.max())

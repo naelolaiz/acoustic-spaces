@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
 from acoustic_spaces.engine import run_size, tuning
@@ -25,6 +26,7 @@ from acoustic_spaces.engine.grazing import apply_grazing
 from acoustic_spaces.engine.model import TraceModel, free_field_energy
 from acoustic_spaces.engine.refracted import direct_times, refraction_for, solve
 from acoustic_spaces.engine.response import Deferred, Response
+from acoustic_spaces.engine.row_paths import RowPaths
 from acoustic_spaces.engine.turbulence import Eddies
 from acoustic_spaces.geometry import distance_to_surface
 from acoustic_spaces.parameters import RoomParameters
@@ -228,7 +230,7 @@ class _Edges:
             ]
         )
         planes = np.unique(planes)
-        distance = model.plane_normal[planes] @ source - model.plane_offset[planes]
+        distance = products.product(model.plane_normal[planes], source) - model.plane_offset[planes]
         planes = planes[np.abs(distance) > early_stage._ON_PLANE]
         return np.unique(np.concatenate([first[:, 0], planes]))[:, None]
 
@@ -243,6 +245,8 @@ class _Edges:
         both_sides: bool = False,
         threads: int = 0,
         candidates: list[np.ndarray] | None = None,
+        rows: str = "edges",
+        max_order: int = 1,
     ) -> _Diffraction | None:
         """Diffraction of the sound of source ``name`` at ``source``, coherent in the
         lowest ``coherent`` bands, with paths that reflect on both sides of an edge when
@@ -250,8 +254,10 @@ class _Edges:
         threads (0: every core); with the plane sequences the early stage tests
         (``candidates``), also the terms at the edges of every specular path, found or
         just missed, that make it fade in and out there
-        (:mod:`~acoustic_spaces.engine.edge_fade`). None when off or when there is
-        nothing to bend over."""
+        (:mod:`~acoustic_spaces.engine.edge_fade`); with ``rows`` "solver" and early
+        paths up to ``max_order``, the solver for whole rows where it stands for the
+        paths over barriers and buildings (:mod:`~acoustic_spaces.engine.row_paths`).
+        None when off or when there is nothing to bend over."""
         if mode == "none":
             return None
         if self._edges is None:
@@ -280,7 +286,10 @@ class _Edges:
         fade = None
         if at_edges is not None and candidates is not None:
             fade = EdgeFade(at_edges, candidates)
-        return _Diffraction(self._edges, at_edges, crests, fade)
+        whole = None
+        if at_edges is not None:
+            whole = RowPaths.of(self.model, source, rows, max_order, edges=self._edges, **settings)
+        return _Diffraction(self._edges, at_edges, crests, fade, whole)
 
 
 @dataclass
@@ -291,6 +300,9 @@ class _Diffraction:
     at_edges: EdgeDiffraction | None
     crests: CrestDiffraction | None
     fade: EdgeFade | None = None
+    #: The solver for whole rows, where it stands for the paths over barriers and
+    #: buildings in the vertical plane through the source and a listener.
+    rows: RowPaths | None = None
 
     def apply(
         self, listener: np.ndarray, paths: early_stage.EarlyReflections, max_delay_s: float
@@ -305,6 +317,8 @@ class _Diffraction:
         )
         if terms is not None:
             paths = self.fade.join(paths, terms)
+        if self.rows is not None:
+            paths = self.rows.apply(listener, paths)
         if self.crests is not None:
             paths = self.crests.apply(listener, paths, max_delay_s)
         return paths
@@ -391,6 +405,8 @@ def early_paths(
             both_sides=cfg.diffraction_reflections == "both_sides",
             threads=threads,
             candidates=candidates,
+            rows=cfg.rows,
+            max_order=order,
         )
         if found is not None:
             paths = found.apply(target, paths, cutoff)
@@ -697,15 +713,23 @@ def simulate(
             both_sides=early_cfg.diffraction_reflections == "both_sides",
             threads=threads,
             candidates=candidates,
+            rows=early_cfg.rows,
+            max_order=early_cfg.max_order,
         )
         if diffraction is not None:
-            say(f"{label}: edge diffraction ({early_cfg.diffraction})")
+            whole = "" if diffraction.rows is None else ", whole rows by the solver"
+            say(f"{label}: edge diffraction ({early_cfg.diffraction}{whole})")
             paths = [
                 diffraction.apply(listener_pos[k], paths[k], float(cutoff[k]))
                 for k in range(len(chosen_listeners))
             ]
             info["edges"] = float(len(diffraction.edges))
             add(info, "diffracted_paths", float(sum(int(p.diffracted.sum()) for p in paths)))
+            if diffraction.rows is not None:
+                # A listener's octave bands that the solver for whole rows took, and
+                # those it left to the paths over the edges.
+                add(info, "rows_solved", float(diffraction.rows.taken))
+                add(info, "rows_left_to_edges", float(diffraction.rows.refused))
         refraction = refraction_for(
             model,
             position,

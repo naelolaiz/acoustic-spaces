@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.spatial.ambisonics import MAX_ORDER, Ambisonics, real_spherical_harmonics
 from acoustic_spaces.spatial.hrtf import HRTF
 from acoustic_spaces.spatial.loudspeakers import Loudspeakers
@@ -46,7 +47,7 @@ def binaural_decoder(order: int, hrtf: HRTF, method: str = "magls") -> np.ndarra
     fine = _power_of_two(max(8 * hrtf.taps, 2048))
     taps = _power_of_two(max(2 * hrtf.taps, 64))
     spectra = np.fft.rfft(hrtf.hrir, fine, axis=-1).transpose(2, 0, 1)  # (bins, dirs, 2)
-    filters = inverse @ spectra  # (bins, channels, 2)
+    filters = products.product(inverse, spectra)  # (bins, channels, 2)
     if method == "magls":
         frequencies = np.fft.rfftfreq(fine, 1.0 / hrtf.sample_rate)
         start = int(np.searchsorted(frequencies, MAGLS_HZ_PER_ORDER * max(order, 1)))
@@ -56,8 +57,8 @@ def binaural_decoder(order: int, hrtf: HRTF, method: str = "magls") -> np.ndarra
         advance = np.exp(-2j * math.pi * delay / fine)
         magnitudes = np.abs(spectra)
         for k in range(max(start, 1), len(frequencies)):
-            phase = np.exp(1j * np.angle(harmonics @ filters[k - 1])) * advance
-            filters[k] = inverse @ (magnitudes[k] * phase)
+            phase = np.exp(1j * np.angle(products.product(harmonics, filters[k - 1]))) * advance
+            filters[k] = products.product(inverse, magnitudes[k] * phase)
     out = np.fft.irfft(filters, fine, axis=0)[:taps]  # (taps, channels, 2)
     fade = taps // 8
     out[taps - fade :] *= (0.5 + 0.5 * np.cos(np.linspace(0.0, math.pi, fade)))[:, None, None]

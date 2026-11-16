@@ -165,9 +165,9 @@ def march(
 
     ``trunk``, a :class:`Trunk` given to the runs that differ in their obstacles and
     points alone, keeps the narrow-angle march over the open ground from one of them to
-    the next; each gets what it gets without it. A run with a ``screen`` or with
-    ``speed_at`` marches without it, and one with steep points clears it before the
-    wide-angle equation runs.
+    the next; each gets what it gets without it. A run with a ``screen``, with
+    ``speed_at``, or with a ``start`` or a ``layer`` of its own marches without it, and
+    one with steep points clears it before the wide-angle equation runs.
 
     ``edges``, a list, takes what the march finds at each obstacle it meets beyond the
     source on its way to the farthest point, in order: (range, what, top, pressure), the

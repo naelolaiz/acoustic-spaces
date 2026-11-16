@@ -325,8 +325,14 @@ solution that [Validation](validation.md#edge-diffraction-against-the-exact-solu
 finds in each band, as the band adds its paths in pressure or in energy: over one edge,
 over two (`second_order`), a path reflected on both sides of an edge left out
 (`one_side`), and where a path reaches an edge's end (a solid block's corners; a thin
-screen's edges fade out past their ends). They are not drawn, as they are
-measured for whole levels in a few geometries, not for each path.
+screen's edges fade out past their ends). Where the [solver for whole
+rows](outdoor.md#sound-over-rows-of-barriers-and-buildings) carries a row's sound, its
+own largest difference from the [wave
+calculation](validation.md#rows-of-roofs-and-barriers-against-a-wave-calculation) is
+listed in those bands (`whole rows`) and the edges' in the others. That sound stays as
+it was traced in every draw, though it depends on the absorption of a ground without an
+impedance. The method's errors are not drawn, as they are measured for whole levels in a
+few geometries, not for each path.
 In the lowest bands, where the early paths add in pressure, a reflection's phase
 follows its face's admittance, which is fitted to the absorption; the draws take it
 between fits at nine absorptions of each material over their range rather than a fit

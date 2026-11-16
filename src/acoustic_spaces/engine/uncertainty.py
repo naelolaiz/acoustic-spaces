@@ -76,7 +76,12 @@ whatever the rest of the surface does.
 Of the method's errors, those of the paths over edges are listed where a response has
 such paths (:data:`EDGE_ERRORS_DB`), each with the largest difference of the early level
 from the exact solution that the validation finds in each band, but not drawn: they are
-measured for whole levels in a few geometries, not for each path.
+measured for whole levels in a few geometries, not for each path. Where the solver for
+whole rows carries a row's sound (:mod:`~acoustic_spaces.engine.row_paths`), its own
+largest difference from the wave calculation is listed in the bands its path has energy
+in, and the edges' in the bands where a path over an edge has. That path stays as it was
+traced in every draw: it reflects off no face, though its sound depends on the
+absorption of a ground without an impedance.
 A draw of the absorption below 0 is taken as 0 and one above ``MAX_ABSORPTION`` as that,
 so near those ends the spread is a little less than the uncertainty gives. The
 re-weighting is exact for the early paths; the late part's follows Eyring's decay with
@@ -100,6 +105,7 @@ from acoustic_spaces.engine.reweight import (
     log_ratio,
     reweighted_materials,
 )
+from acoustic_spaces.engine.section import ROW
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, Resolution
 from acoustic_spaces.parameters import LIMITS, Levels, RoomParameters
 from acoustic_spaces.scene.model import ONE_SIDED, SPREAD_DRAWS, AbsorptionUncertainty
@@ -236,6 +242,16 @@ EDGE_ERRORS_DB = {
         "pressure": (2.29, 1.50, 1.62, 1.89, 1.44, 0.89, 0.58, 0.50),
         "energy": (_NOT,) * 8,
     },
+    # The solver for whole rows, where a response has its path: against a wave
+    # calculation, rows of roofs and screens in free space and on a rigid ground, across
+    # the way and at slants of 30, 60 and 75 degrees ("Rows of roofs and barriers against
+    # a wave calculation"); the largest are those of three rigid screens on a rigid
+    # ground at a slant. It takes the bands up to 500 Hz that add their paths in
+    # pressure.
+    "whole rows": {
+        "pressure": (8.18, 3.36, 7.84, 3.73, _NOT, _NOT, _NOT, _NOT),
+        "energy": (_NOT,) * 8,
+    },
 }
 
 
@@ -273,7 +289,8 @@ class Spread:
     not counted; from ``batches`` batches, 0 for none). NaN where a parameter is
     undefined in some draw. ``not_counted``: the method's errors over edges that the
     response has (:data:`EDGE_ERRORS_DB`), each the largest difference of the level
-    from the exact solution in each band (dB; NaN where not measured). ``assumed``: the
+    from the exact solution in each band (dB; NaN where not measured, or where the
+    response has no such path's sound). ``assumed``: the
     built-in materials of unknown source that took ``simulation.uncertainty.presets``,
     with that choice (:func:`assumed`). ``held``: the bands (Hz) in which a material
     with an uncertainty absorbs everything and is not drawn (:func:`held`). ``stable``:
@@ -950,27 +967,37 @@ def edge_errors(response, settings) -> dict[str, np.ndarray]:
     ``response`` has, simulated with ``settings`` (the run's, not the scene's where they
     differ), in each band as the band adds its early paths: none without paths over an
     edge; over two edges with ``second_order``, and with a path reflected on both sides
-    of an edge left out with ``one_side``."""
+    of an edge left out with ``one_side``. Each in the bands where a path over an edge
+    has energy (NaN in the others), and ``whole rows``, the error of the solver for
+    whole rows, in the bands where its path has: where that solver took a row's sound
+    whole, the paths over the row's edges have none."""
     early = response.early
-    if early.edge is None or not np.any(early.edge >= 0):
+    if early.edge is None:
         return {}
     bands = early.energy.shape[1]
     if bands != len(EDGE_ERRORS_DB["one edge"]["pressure"]):
         return {}  # measured in octave bands only
+    over = np.any(early.energy[early.edge >= 0] > 0.0, axis=0)
+    whole = np.any(early.energy[early.edge == ROW] > 0.0, axis=0)
     coherent = 0 if early.spectrum is None else early.spectrum.shape[1]
     settings = settings.early
-    names = ["one edge"]
-    if settings.diffraction != "direct" and settings.diffraction_reflections == "one_side":
-        names.append("one side")
-    if settings.diffraction == "second_order":
-        names.append("two edges")
-    names.append("corners of edges")
+    names: dict[str, np.ndarray] = {}
+    if over.any():
+        names["one edge"] = over
+        if settings.diffraction != "direct" and settings.diffraction_reflections == "one_side":
+            names["one side"] = over
+        if settings.diffraction == "second_order":
+            names["two edges"] = over
+        names["corners of edges"] = over
+    if whole.any():
+        names["whole rows"] = whole
     out = {}
-    for name in names:
+    for name, there in names.items():
         bound = EDGE_ERRORS_DB[name]
-        out[name] = np.array(
-            [bound["pressure"][b] if b < coherent else bound["energy"][b] for b in range(bands)]
-        )
+        listed = [
+            bound["pressure"][b] if b < coherent else bound["energy"][b] for b in range(bands)
+        ]
+        out[name] = np.where(there, listed, math.nan)
     return out
 
 

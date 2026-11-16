@@ -70,6 +70,7 @@ from typing import Any
 import numpy as np
 from scipy.special import jv
 
+from acoustic_spaces import products
 from acoustic_spaces.air import density, speed_of_sound
 from acoustic_spaces.directivity import _from_angles, _grid
 from acoustic_spaces.emission import Mixture, Periodic, Sum
@@ -496,9 +497,9 @@ def _harmonics(
             j = rows[q]
             phase = np.exp(1j * np.outer(angles, n * spin))
             chord = (
-                areas @ phase * values[j]
-                + (areas * outward) @ phase * slopes[j]
-                + (areas * outward**2 / 2.0) @ phase * curves[j]
+                products.product(areas, phase) * values[j]
+                + products.product(areas * outward, phase) * slopes[j]
+                + products.product(areas * outward**2 / 2.0, phase) * curves[j]
             )
             if q == 0:
                 mode = -lift * cos_t[:, None] / c * values[j] + rho * omega * r * chord
@@ -537,7 +538,7 @@ def tones(
     axes = _basis(load.axis)
     elevation, azimuth = _grid(grid_deg)
     own = _from_angles(azimuth[None, :], elevation[:, None]).reshape(-1, 3)
-    ways = own @ axes
+    ways = products.product(own, axes)
     flight = axes @ np.array([1.0, 0.0, 0.0])
     rotor_args: dict[str, Any] = dict(
         blades=rotor.blades,
@@ -650,7 +651,7 @@ def pegg_broadband(
         if which not in rotors:
             continue
         signals.append(noise)
-        pattern = np.sqrt((ways @ load.axis) ** 2 + 0.1)
+        pattern = np.sqrt(products.product(ways, load.axis) ** 2 + 0.1)
         level_db = pegg_level_db(
             rotor.tip_speed, trim.sound_speed, rotor.blade_area_m2, trim.lift_coefficient(which)
         )
@@ -784,13 +785,17 @@ def bpm_bands(
         cos_t, sin_t = np.cos(theta), np.sin(theta)
         chord = -cos_t[:, None] * ahead - sin_t[:, None] * load.axis
         normal = -sin_t[:, None] * ahead + cos_t[:, None] * load.axis
-        dx, dz = flat @ chord.T, flat @ normal.T
-        dy = (flat @ out)[:, None]
+        dx, dz = products.product(flat, chord.T), products.product(flat, normal.T)
+        dy = products.product(flat, out)[:, None]
         # As the report's figure B3 has them: theta from the chord to the way, phi from
         # the span to the way's projection across the chord.
         theta_e = np.degrees(np.arctan2(np.hypot(dy, dz), dx))
         phi_e = np.degrees(np.arctan2(np.abs(dz), dy))
-        moving = 1.0 - (v * flat[:, :1] + rotor.omega * r[None, :] * (flat @ ahead)[:, None]) / c
+        moving = (
+            1.0
+            - (v * flat[:, :1] + rotor.omega * r[None, :] * products.product(flat, ahead)[:, None])
+            / c
+        )
         a, u = np.abs(alpha[kept]), speed[kept]
         m = u / c
         common: dict[str, Any] = {"trip": trip, "viscosity": nu, "sound_speed": c}
@@ -837,8 +842,9 @@ def bpm_bands(
             share += np.where(whole == shift - 1, part, 0.0)
             source = np.arange(out_lo, out_hi + 1) - shift - lo
             inside = (source >= 0) & (source <= hi - lo)
-            total[:, inside] += (share * d_high) @ high[:, source[inside]]
-            total[:, inside] += (share * d_low) @ low[:, source[inside]]
+            # Added to the bands inside through the mask.
+            total[:, inside] += products.product(share * d_high, high[:, source[inside]])
+            total[:, inside] += products.product(share * d_low, low[:, source[inside]])
     centres = _third_octaves(out_lo, out_hi)
     total *= rotor.blades / azimuths * REFERENCE_PA**2
     return centres, total.reshape(ways.shape[:-1] + (len(centres),))
