@@ -38,6 +38,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.directivity import PATTERNS, FirstOrder
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ
 from acoustic_spaces.materials.bands import resolution_of
@@ -99,7 +100,7 @@ class Microphone:
                 "render it through its parts()"
             )
         v = np.atleast_2d(np.asarray(directions, dtype=float))
-        return np.asarray(self.weights) + v @ np.asarray(self.axes).T
+        return np.asarray(self.weights) + products.product(v, np.asarray(self.axes).T)
 
     def parts(self) -> tuple[Microphone, Microphone]:
         """A microphone whose pattern changes with frequency as two that do not: what
@@ -141,7 +142,7 @@ class Microphone:
         sum to one: each band's gain across its share of the frequencies."""
         if self.a is None:
             return self.gains(directions)[:, :, None]
-        return self.band_gains(directions, len(shapes)) @ np.asarray(shapes)
+        return products.product(self.band_gains(directions, len(shapes)), np.asarray(shapes))
 
     def capsules(self) -> list[tuple[FirstOrder, np.ndarray]]:
         """Each channel as a first-order pattern and the rotation that aims it: columns

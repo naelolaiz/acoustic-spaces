@@ -69,6 +69,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.engine.coherent import SameDelays, absorption_phases, sample_frequencies
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.late import MAX_GROUPS, MOMENT_STEP
@@ -327,7 +328,7 @@ def reweighted_paths(paths: EarlyReflections, counts: np.ndarray, ratio: np.ndar
     :func:`path_counts`, ``ratio`` from :func:`log_ratio`)."""
     if len(paths) == 0:
         return paths
-    return dataclasses.replace(paths, energy=paths.energy * np.exp(counts @ ratio))
+    return dataclasses.replace(paths, energy=paths.energy * np.exp(products.product(counts, ratio)))
 
 
 def turned_paths(

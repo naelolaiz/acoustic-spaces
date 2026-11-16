@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.coherent import (
     ground_factors,
@@ -381,7 +382,8 @@ def exhaustive_candidates(
         chunk = max(1, 4_000_000 // max(1, model.plane_count))
         for start in range(0, len(seqs), chunk):
             s, img = seqs[start : start + chunk], images[start : start + chunk]
-            ok = model.in_front(img @ normals.T - offsets, _ON_PLANE)  # (n, planes)
+            distance = products.product(img, normals.T) - offsets  # (n, planes)
+            ok = model.in_front(distance, _ON_PLANE)
             if s.shape[1]:
                 ok[np.arange(len(s)), s[:, -1]] = False
             if sky is not None:

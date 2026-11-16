@@ -27,6 +27,7 @@ from pathlib import Path
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces._extras import install_hint
 from acoustic_spaces.geometry.mesh import RoomMesh
 from acoustic_spaces.geometry.triangulate import triangulate_polygon
@@ -574,7 +575,7 @@ def _ifc_surface(surface) -> tuple[np.ndarray, np.ndarray] | None:
         triangles = _triangulate_rings(rings)
         flat = np.concatenate(rings)
         plane = ifcopenshell.util.placement.get_axis2placement(surface.BasisSurface.Position)
-        corners = flat @ plane[:3, :2].T + plane[:3, 3]
+        corners = products.product(flat, plane[:3, :2].T) + plane[:3, 3]
         return corners, triangles
     if surface.is_a("IfcFaceBasedSurfaceModel") or surface.is_a("IfcFaceSurface"):
         faces = (
@@ -595,7 +596,9 @@ def _ifc_surface(surface) -> tuple[np.ndarray, np.ndarray] | None:
                 continue
             basis = _plane_basis(normal)
             start = sum(len(c) for c in corners)
-            triangles.append(_triangulate_rings([r @ basis.T for r in rings]) + start)
+            triangles.append(
+                _triangulate_rings([products.product(r, basis.T) for r in rings]) + start
+            )
             corners += rings
         return (np.concatenate(corners), np.concatenate(triangles)) if triangles else None
     return None
@@ -617,7 +620,7 @@ def _ifc_boundaries(model, space, scale: float) -> _MeshBuilder:
         if found is None:
             continue
         corners, triangles = found
-        world = corners @ placement[:3, :3].T + placement[:3, 3]
+        world = products.product(corners, placement[:3, :3].T) + placement[:3, 3]
         element = boundary.RelatedBuildingElement
         if element is None or element.is_a("IfcVirtualElement"):
             label = _label("virtual boundary", getattr(element, "Name", None))
@@ -773,7 +776,7 @@ def _collada_geometry(builder: _MeshBuilder, geometry, matrix, materials, ids, p
     points = _numbers(source.find("float_array")).reshape(-1, stride)[:, :3]
     if not (np.isfinite(points).all() and np.isfinite(matrix).all()):
         raise ValueError(f"{path}: vertex coordinates must be finite")
-    points = points @ matrix[:3, :3].T + matrix[:3, 3]
+    points = products.product(points, matrix[:3, :3].T) + matrix[:3, 3]
     mirrored = np.linalg.det(matrix[:3, :3]) < 0  # a mirrored copy turns its faces over
     for primitive in mesh:
         if primitive.tag not in ("triangles", "polylist", "polygons"):

@@ -76,6 +76,8 @@ import math
 import numpy as np
 from scipy.special import hankel1, jv
 
+from acoustic_spaces import products
+
 #: The strip's equation is solved where k H is this at most: its cost goes with the
 #: square of k H. Above it the uniform theory's terms stand (:func:`beyond_screen`
 #: returns None).
@@ -425,7 +427,7 @@ def _frame(count: int):
         above = np.cos((degree + 2) * angle_t) / (degree + 2)  # (p, j), T_{p+2}(t) / (p + 2)
         taken = 0.5 * math.pi * (above - np.cos(degree * angle_t) / degree)
     taken[0] = math.pi * (0.5 * t**2 - 0.25 - 0.5 * math.log(2.0))
-    log_rule = 2.0 / math.pi * (taken.T @ all_at_s) * w[None, :]  # (j, m)
+    log_rule = 2.0 / math.pi * products.product(taken.T, all_at_s) * w[None, :]  # (j, m)
     apart = np.abs(t[:, None] - s[None, :])
     return t, s, w, _even(count, t), _even(count, s), apart, log_rule
 
@@ -468,7 +470,7 @@ def _rigid(kappa: np.ndarray, height: float, far, near, terms: int) -> np.ndarra
     foot = np.arccos(complex(above, distance) / height)
     turns = 2 * count + 1 + float(np.max(np.abs(kappa))) * height
     angle, w = _graded(0.0, math.pi, foot.real, abs(foot.imag), 2.0 * PANEL_TURN / turns)
-    jump = coefficients @ _even_at(count, angle)  # (Q, m), without the root
+    jump = products.product(coefficients, _even_at(count, angle))  # (Q, m), without the root
     out_ward = _slope(kappa, np.hypot(distance, above - height * np.cos(angle)), distance)
     return height * np.sum(jump * out_ward * (w * np.sin(angle) ** 2)[None, :], axis=1)
 
