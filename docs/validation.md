@@ -1305,7 +1305,7 @@ as the rays can find the reflection between the top's wall and the screen one wa
 round only (see [Known issues](#known-issues)). With the screen 0.1 m past the top
 and its top a micrometre above the top's plane or below it, the level a centimetre
 above is that of a level top within 0.04 dB with `first_order` and, a micrometre
-above, within 0.13 dB up to 500 Hz with `second_order` (below the plane and above
+above, within 0.34 dB up to 500 Hz with `second_order` (below the plane and above
 500 Hz it is not: see [Known issues](#known-issues)). Where such a screen ends 1 cm to
 0.5 m beside the way, the level 1 or 2 mm above the plane is, with `second_order`,
 that a centimetre above: between two tops within 0.23 dB (0.39 dB with the way
@@ -1736,7 +1736,7 @@ theory gives +6.0 dB on both sides.
   the screen 0.5 to 2 m past the top and a tenth of a metre above it with the screen
   0.1 m or less past it, and by up to 0.7 dB a metre above it. With
   `method: image_sources`, which tests every sequence of reflections, the two ways
-  round agree within 0.05 dB there (0.23 dB a tenth of a metre above with the screen
+  round agree within 0.05 dB there (0.25 dB a tenth of a metre above with the screen
   1 cm past the top). They do not past the end of a screen 5 m before a top 5 m wide
   and level with it, a centimetre above their plane and 1 or 10 cm inside the screen's
   end: one way round the fade follows the reflections off the top's wall with their
@@ -3796,9 +3796,9 @@ x = 10 m:
 
 | rows | cases | march alone | the solver | simulation, `second_order` | simulation, `first_order` |
 |---|---|---|---|---|---|
-| free space, up to 6° | 52 | -1.96 to -0.03 | -0.38 to +0.18 | -20.60 to +6.64 | -21.07 to +14.16, or no sound |
+| free space, up to 6° | 52 | -1.96 to -0.03 | -0.38 to +0.18 | -20.60 to +6.64 | -21.72 to +14.16, or no sound |
 | free space, 22° down to the listener | 8 | -2.26 to -0.88 | -0.16 to +0.14 | -20.57 to +1.09 | -1.22 to +8.42 |
-| roofs and one screen on a ground, up to 6° | 16 | -1.66 to -0.28 | -0.50 to +0.65 | -10.63 to +1.74 | -10.90 to +7.99 |
+| roofs and one screen on a ground, up to 6° | 16 | -1.66 to -0.28 | -0.50 to +0.65 | -10.63 to +1.74 | -11.79 to +7.99 |
 | the same, 13 to 24° up from the source | 8 | -2.70 to -1.43 | -0.74 to +0.41 | -6.22 to +7.86 | -0.93 to +9.05, or no sound |
 | the same, 42° down to the listener | 12 | -5.29 to -2.19 | -0.71 to +1.24 | -4.69 to +7.35 | -1.94 to +8.21, or no sound |
 | three screens on a ground, up to 6° | 4 | -3.53 to -1.10 | -1.26 to +0.07 | -11.27 to +2.21 | -3.35 to +5.66 |
@@ -5577,15 +5577,15 @@ Results:
   2.5 dB below it); with the top 5 m wide and the screen 5 m past it, -7.6 to -8.4 dB,
   `second_order` 2.3 to 3.4 dB below (`first_order` within 1.3 dB), either way round
   with the rays' own search for reflections. The level also steps with the height of
-  the screen's top at that plane, by 12 to 15 dB over 4 mm: past the 9 m top with
+  the screen's top at that plane, by 13 to 16 dB over 4 mm: past the 9 m top with
   `second_order` and every sequence of reflections tested (`method: image_sources`),
-  it is -13.1 to -16.6 dB with the screen's top from 2 mm to a micrometre below the
-  plane, -9.4 to -12.0 dB with it level or up to 0.5 mm above, and -0.4 to -1.8 dB
+  it is -13.7 to -19.0 dB with the screen's top from 2 mm to a micrometre below the
+  plane, -9.6 to -12.6 dB with it level or up to 0.5 mm above, and -0.3 to -1.9 dB
   from 0.55 mm above, from where the path over the screen's top reflects off the top
   (0.53 mm above, it does so at the top's far edge). Above 500 Hz, where the bands add
-  in energy, the level is -10.1 dB with the screen's top level and -5.6 dB with it a
-  micrometre above. With it 10 µm to 0.5 mm above the plane, the two ways round are
-  also up to 1.0 dB apart (0.4 dB with the rays' own search). A solver for whole rows
+  in energy, the level is -10.0 to -10.2 dB with the screen's top level and -5.6 dB
+  with it a micrometre above. With it 10 µm to 0.5 mm above the plane and the rays' own
+  search, the two ways round are also up to 0.4 dB apart. A solver for whole rows
   is in the package, within 0.38 dB of wave calculations near grazing incidence in
   free space (see
   [Rows of roofs and barriers against a wave calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation));
