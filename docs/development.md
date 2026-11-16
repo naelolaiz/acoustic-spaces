@@ -69,9 +69,9 @@ definition fixes:
 ```python
 from acoustic_spaces import products
 
-spectra = products.product(weights.T, phased)      # weights.T @ phased
-products.add_product(total, weights.T, phased)     # total += weights.T @ phased
-norm = math.sqrt(products.dot(left, left))         # left @ left
+spectra = products.product(weights.T, phased)  # weights.T @ phased
+products.add_product(total, weights.T, phased)  # total += weights.T @ phased
+norm = math.sqrt(products.dot(left, left))  # left @ left
 ```
 
 A product of a few fixed values (3-vectors, 3 x 3 frames, a handful of bands) stays an
