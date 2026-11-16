@@ -1569,7 +1569,7 @@ def _ground_barrier(
     path=((10, -190), (10, 190)),
 ) -> Room:
     """A thin barrier 3 m high along ``path``, 10 m from a source 1 m over a ground of
-    this absorption."""
+    this absorption, with the paths over its edges (``rows: edges``)."""
     return Room.from_scene(
         Scene.model_validate(
             {
@@ -1596,6 +1596,7 @@ def _ground_barrier(
                         "max_order": 2,
                         "diffraction": "first_order",
                         "diffraction_reflections": "both_sides" if both_sides else "one_side",
+                        "rows": "edges",
                     },
                 },
             }

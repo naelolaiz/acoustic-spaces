@@ -17,7 +17,15 @@
   more than 60°, a row on a rigid ground whose edges all lie in one direction is solved
   across them and moved to the slant: two roofs on a rigid ground within 1.3 dB of the
   wave calculation at 30, 60 and 75°, three rigid screens there up to 8.2 dB low.
-  Simulations do not use it yet.
+- Changed: outdoors, the sound over long barriers and rows of buildings in the vertical
+  plane through a source and a listener comes from the solver for whole rows in the
+  octave bands up to 500 Hz that add their paths in pressure (`simulation.early.rows:
+  solver`, the default; `--rows`, **Barriers and buildings** in the editor), in still
+  air and, scaled by the weather's effect, in wind and temperature gradients: against a
+  wave calculation two flat roofs on a rigid ground are within 0.74 dB, where the paths
+  over the edges are up to 10.7 dB off. `rows: edges` gives the levels as before;
+  coverage maps and walks keep the paths over the edges ([Outdoor
+  scenes](docs/outdoor.md#sound-over-rows-of-barriers-and-buildings)).
 - Fixed: the wave solver missed a wall through a plane of its cell centres or just past
   one, so that sound went through it, a closed room could be read as open and the
   19-point run could grow without bound; a source or a listener exactly on a surface is

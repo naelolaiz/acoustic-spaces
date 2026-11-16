@@ -306,6 +306,14 @@ diffracted paths and a few tens of milliseconds per listener);
 `--diffraction-reflections` sets it for one run of `simulate` or `map`, and the editor
 has it as **Reflections over an edge** under **Early reflections**.
 
+Outdoors, where sound passes over barriers and buildings on its way to a
+listener, paths over one edge and two do not add up to the field. There
+`simulation.early.rows: solver` (the default) takes the sound in the vertical plane
+through the source and the listener from a solver for the whole row, in the octave bands
+up to 500 Hz that add their paths in pressure; `rows: edges` leaves the paths over the
+edges alone (see [Sound over rows of barriers and
+buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)).
+
 The edges are found in the model: corners where two faces meet with more than 195° of
 open air round them (the inside corner of an L-shaped room, the front of a stage or a
 balcony) and the free edges of thin screens. Each source and listener get the shortest

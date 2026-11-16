@@ -34,8 +34,13 @@ bands, at the engine's eight frequencies a band); ``--references`` computes them
 Each case is listed with the wave calculation's level and how far from it are the march
 alone (its screens and walls reflect nothing), the march with what the rigid edges add
 (what the module gives) and, with ``--engine``, the early stage of a simulation of the same
-scene with ``second_order`` and ``first_order`` diffraction, each way round; the
-simulation does not take the module's sound yet. The cases go by the angle the sound
+scene with ``second_order`` and ``first_order`` diffraction, each way round, from a
+model file's faces, which leaves the paths over the edges alone. A case on a ground is
+then simulated as an outdoor scene too (:func:`outdoors`: its roofs as buildings and its
+screens as barriers, :data:`OUTDOORS_HALF_M` to either side of the way), where the early
+stage takes the module's sound (``simulation.early.rows: solver``), and with ``rows:
+edges``: with the solver the simulation's level must be within
+:data:`OUTDOORS_LIMIT_DB` of the module's. The cases go by the angle the sound
 bends by at the row's ends, up from the source to the first top or down from the last
 one to the listener (:func:`bend`), and :data:`LIMITS` holds what the module must keep
 to in each group, up to a bend of 45 degrees (the steepest of the cases is 42), and for
@@ -185,6 +190,19 @@ SLANT_LIMITS = {
 }
 #: A screen on a roof under the source is low up to this height (m) above the roof.
 LOW_M = 0.5
+#: As outdoor scenes the cases on a ground have their buildings and barriers this far
+#: (m) to either side of the way: past the reach of the ends' taper in every band (about
+#: 16 m in the 63 Hz band here), so the early stage takes the solver's sound whole.
+OUTDOORS_HALF_M = 200.0
+#: The outdoor scenes' responses are this long (s): shorter than the way to the far ends
+#: of their buildings and barriers and back (over a second), whose sound is no part of
+#: the cases. With both ends a centimetre above a roof the early stage has paths from
+#: there that add 0.2 to 0.3 dB to a band.
+OUTDOORS_RESPONSE_S = 0.5
+#: The most (dB) a simulation's level with the solver may be from the module's in a band:
+#: the air takes its energy along the string over the tops there, and along the straight
+#: line here.
+OUTDOORS_LIMIT_DB = 0.02
 
 
 # -- the cases -------------------------------------------------------------------------
@@ -658,6 +676,56 @@ def simulated(case: dict, folder: Path) -> dict[str, list]:
     return out
 
 
+def outdoors(case: dict) -> dict[str, list]:
+    """The early stage's band levels (dB re free field) for ``case``, one on a ground, as
+    an outdoor scene: its roofs as buildings and its screens as barriers,
+    :data:`OUTDOORS_HALF_M` to either side of the way, on a rigid ground, with
+    ``second_order`` diffraction and reflections on both sides of an edge, in a response
+    :data:`OUTDOORS_RESPONSE_S` long; by ``simulation.early.rows``."""
+    from acoustic_spaces import Room, Scene
+    from acoustic_spaces.engine.coherent import total_energy
+    from acoustic_spaces.engine.simulate import early_paths
+
+    half, x0 = OUTDOORS_HALF_M, case["source"][0]
+    barriers, buildings = [], []
+    for near, far, top in obstacles_of(case):
+        a, b = near + x0, far + x0
+        if far == near:
+            barriers.append({"path": [[a, -half], [a, half]], "height": top})
+        else:
+            footprint = [[a, -half], [b, -half], [b, half], [a, half]]
+            buildings.append({"footprint": footprint, "height": top})
+    source = [case["source"][0], 0.0, case["source"][1]]
+    listener = [case["listener"][0], 0.0, case["listener"][1]]
+    distance = math.dist(source, listener)
+    out = {}
+    for mode in ("solver", "edges"):
+        early = {
+            "method": "image_sources",
+            "diffraction": "second_order",
+            "diffraction_reflections": "both_sides",
+            "coherent_max_band_hz": 500,
+            "rows": mode,
+        }
+        scene = {
+            "geometry": {
+                "ground": {"extent": [[-half - 50, -half - 50], [half + 50, half + 50]]},
+                "barriers": barriers,
+                "buildings": buildings,
+            },
+            "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
+            "default_material": "hard",
+            "sources": [{"name": "s", "position": source}],
+            "listeners": [{"name": "l", "position": listener}],
+            "simulation": {"early": early, "ir_length_s": OUTDOORS_RESPONSE_S},
+        }
+        room = Room.from_scene(Scene.model_validate(scene))
+        energy = total_energy(early_paths(room)) * np.exp(room.air_attenuation() * distance)
+        with np.errstate(divide="ignore"):
+            out[mode] = (10.0 * np.log10(energy * 4.0 * np.pi * distance**2))[:4].tolist()
+    return out
+
+
 def reference_check(stored: dict) -> list[dict]:
     """The wave calculation for one screen in free space against the exact solution,
     across the screen and at the slants of :data:`SLANTS`."""
@@ -851,6 +919,14 @@ def main() -> None:
             }
             for mode, ways in entry["simulated_db"].items():
                 line += f"  {mode} {' / '.join(_row(way) for way in ways)}"
+            if case["ground"]:
+                scene = {mode: np.array(level) for mode, level in outdoors(case).items()}
+                entry["outdoors_db"] = {m: (v - wave).tolist() for m, v in scene.items()}
+                line += f"  outdoors: solver {_row(scene['solver'] - wave)}"
+                line += f"  edges {_row(scene['edges'] - wave)}"
+                if not np.all(np.abs(scene["solver"] - with_edges) <= OUTDOORS_LIMIT_DB):
+                    failed = True
+                    line += "  NOT THE MODULE'S"
         bucket = (group(case), _bends(group(case), angle))
         worst.setdefault(bucket, []).append(entry)
         off = np.abs(with_edges - wave)
@@ -878,6 +954,17 @@ def main() -> None:
                 if not np.isfinite(both).all():
                     line += " or no sound"
         print(line)
+    if args.engine:
+        by_row: dict[str, list] = {}
+        for entry in results:
+            if "outdoors_db" in entry:
+                by_row.setdefault(entry["name"], []).append(entry["outdoors_db"])
+        for name, found in by_row.items():
+            line = f"outdoors, {name}: {len(found)} cases"
+            for mode in ("solver", "edges"):
+                off = np.array([entry[mode] for entry in found])
+                line += f", rows: {mode} {off.min():+.2f} to {off.max():+.2f} dB"
+            print(line)
     slanted, over = at_a_slant(stored, args.case)
     failed |= over
     if args.json:
@@ -885,8 +972,8 @@ def main() -> None:
         args.json.write_text(json.dumps(whole, indent=1) + "\n")
     if failed:
         raise SystemExit(
-            "a case is over its limit or has no reference, a level is not a number, or a"
-            " band at a slant is out of reach"
+            "a case is over its limit or has no reference, a level is not a number, a band"
+            " at a slant is out of reach, or an outdoor scene's level is not the module's"
         )
 
 

@@ -2499,6 +2499,9 @@ made for moving air, which the solver does not have (see
 `validation/insertion_loss.py` runs whole outdoor scenes through the results an outdoor
 run reports, the level relative to free field and the insertion loss (see
 [Outdoor scenes](outdoor.md#results-outdoors)), and compares them with exact solutions.
+The barrier's scenes take the paths over its edge (`simulation.early.rows: edges`),
+which those solutions are of; the solver for whole rows has its own check
+([Rows of roofs and barriers against a wave calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation)).
 
 A thin barrier 3 m high, 10 m from a source 1 m up, with listeners 1.5 m up, 2 to 90 m
 behind it, over a ground that absorbs everything: its insertion loss, from the two
@@ -3761,8 +3764,10 @@ top and the surface too. Each march begins at its first obstacle, from the field
 its end and the end's image in the ground have there (for an end over a roof: at the
 first top past it, with the end's image in the roof), and its field becomes a point
 source's by the length of the path pulled taut over the tops, so that the way from the
-street up to a roof may be steep. **Simulations do not use it yet**: the check is of the
-solver by itself.
+street up to a roof may be steep. Outdoor simulations take a row's sound from it (see
+[Sound over rows of barriers and
+buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)): the check is of the
+solver by itself and, for the cases on a ground, of whole simulations (further down).
 
 The reference is a wave calculation written apart from the engine: finite differences in
 time in two dimensions (cells of 2 cm, rigid obstacles as whole cells, matched layers on
@@ -3786,8 +3791,9 @@ tops and the listener a centimetre above them or half a metre below, or either s
 1.5 m above the ground. The table gives the level in the octave bands from 63 to 500 Hz,
 which a scene adds in pressure, less the wave calculation's (dB), by the angle the sound
 bends by at the row's first or last edge. The simulation's columns are the early stage
-of the same scenes as it is today, either way round, with every sequence of reflections
-tested (`method: image_sources`); `first_order` has no path over two edges and so no
+of the same scenes with the paths over the edges alone (the roofs and screens given as
+a model file's faces), either way round, with every sequence of reflections tested
+(`method: image_sources`); `first_order` has no path over two edges and so no
 sound where neither end sees over the row. In the last five lines the source stands
 over a roof instead, 0.5 or 3 m before x = 10 m, a centimetre or 1.5 m above it: the
 roof ends there, with no parapet or one 0.1, 0.3 or 1.1 m high on its edge, and the
@@ -3830,6 +3836,37 @@ with one 0.1 or 0.3 m high within 1.13 dB. A screen on a roof that goes on under
 listener, which the solver takes as a strip, is within 0.42 dB at 1.1 m and 0.50 dB
 at 0.1 and 0.3 m, where the simulation's paths over its top are up to 3.43 dB off:
 see the barriers lower than a wavelength below.
+
+In an outdoor scene the early stage takes the solver's sound for the row, in still air
+and in wind (`simulation.early.rows: solver`, the default). With `--engine` the 45 cases
+on a ground are simulated as outdoor scenes too, their roofs as buildings and their
+screens as barriers 400 m long (`second_order`, reflections on both sides of an edge,
+every sequence of reflections tested, a response of 0.5 s, which ends before what comes
+back from the far ends of those buildings and barriers): with the solver the
+simulation's level is the solver's own within 0.02 dB in every band (the air takes its
+energy along the path pulled taut over the tops in the one and along the straight line
+in the other). Against the wave calculation (dB), and with `rows: edges`, the paths over
+the edges alone:
+
+| row | cases | `rows: solver` | `rows: edges` |
+|---|---|---|---|
+| one screen | 9 | -0.15 to +0.47 | -0.87 to +0.54 |
+| one roof 10 m wide | 9 | -0.16 to +0.14 | -3.81 to +3.37 |
+| a roof 9 m wide and a screen 1 m past it | 9 | -0.60 to +1.23 | -6.22 to +5.41 |
+| two roofs 4 m wide, 2 m apart | 9 | -0.74 to +0.64 | -10.63 to +7.85 |
+| three screens | 9 | -3.42 to +0.07 | -11.30 to +4.52 |
+
+The simulation gives the solver the early paths' eight frequencies in each octave band,
+as the solver's own check does. Against 72 in a band, at nine places behind one screen 3
+or 4 m high the band levels with eight are within 0.10 dB at seven, and 0.24 and 0.38 dB
+off in the 500 Hz band at the other two (10 m behind the screen 4 m high).
+Near the end of a top the solver's sound gives way to the paths over the edges (see the
+link above): with a listener 10 m behind a barrier 30 m long, 10 m from the source,
+moved along it and past its end in steps of 2 m, the level stays within 0.26 dB of the
+paths' in every band, and is the paths' own from where the way crosses the barrier 5 m
+before its end. In wind behind a barrier 300 m long the weather changes the level by as
+much with the solver as with the paths over the edges (within 0.001 dB, 25 and 85 m
+behind it).
 
 One rigid screen has an exact solution, the direct sound and the Biot-Tolstoy-Medwin
 integral over the edge, which holds the solver closer to a wall than the wave
@@ -4118,7 +4155,7 @@ What it does not hold:
   band); the cause is not traced. A roof that rises by a centimetre where the roof
   under the source ends comes out 0.27 dB above the flat roof in the 63 Hz band
   with the source 8 m before the step and 0.38 dB with it 3 m before.
-- Edges that end beside the way, absorbing roofs and walls, and the bands above
+- Absorbing roofs and walls, which the solver takes as rigid, and the bands above
   500 Hz are not in the check.
 
 `tests/test_rows.py` holds, on every change: thirty-one of the cases against their
@@ -5726,8 +5763,11 @@ Results:
   also up to 1.0 dB apart (0.4 dB with the rays' own search). A solver for whole rows
   is in the package, within 0.38 dB of wave calculations near grazing incidence in
   free space (see
-  [Rows of roofs and barriers against a wave calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation));
-  simulations do not use it yet.
+  [Rows of roofs and barriers against a wave calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation)).
+  An outdoor scene takes the sound over the tops of its barriers and buildings from
+  it in the bands up to 500 Hz; the levels here are those of the paths over the edges,
+  which stand with `simulation.early.rows: edges`, in coverage maps and walks, near
+  the ends of a top and over a model file's objects.
 - **Exactly in the plane of several tops in a row.** With the source and the listener
   both exactly in the plane of two flat roofs of one height, or of a roof and a
   barrier's top, the paths over one edge and over two do not add up as they do just

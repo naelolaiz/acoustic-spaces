@@ -2551,6 +2551,14 @@ msgid "wide angle"
 msgstr "brede hoek"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "solver for whole rows"
+msgstr "solver voor hele rijen"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "paths over the edges"
+msgstr "paden over de randen"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "stochastic_ray_tracing"
 msgstr "stochastische straaltracering"
 
@@ -5301,6 +5309,22 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Outdoors, the sound over barriers and buildings in the vertical plane "
+"through a source and a listener, in the octave bands up to 500 Hz that add "
+"their paths in pressure: the solver for whole rows (one field over all of "
+"them, with the ground and the roofs in it, where their tops go on far enough "
+"to both sides of the way; seconds for each source and listener) or the paths "
+"over one edge or two alone. Maps and walks take the paths"
+msgstr ""
+"Buiten het geluid over schermen en gebouwen in het verticale vlak door een "
+"bron en een ontvanger, in de octaafbanden tot 500 Hz die hun paden in "
+"geluidsdruk optellen: de solver voor hele rijen (één veld over allemaal, met "
+"de grond en de daken erin, waar hun bovenkanten aan beide zijden van de "
+"zichtlijn ver genoeg doorlopen; seconden per bron en ontvanger) of alleen de "
+"paden over één of twee randen. Kaarten en routes nemen de paden"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "Outdoors in wind or temperature gradients, the parabolic equation that gives "
 "the sound over the open ground in the low bands and in the shadows: narrow "
 "angle (for the gradients near the ground that the weather has) or wide angle "
@@ -5404,6 +5428,10 @@ msgstr "Diffractie"
 #: acoustic_spaces/gui/inspector.py
 msgid "Reflections over an edge"
 msgstr "Reflecties over een rand"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Barriers and buildings"
+msgstr "Schermen en gebouwen"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Parabolic equation"

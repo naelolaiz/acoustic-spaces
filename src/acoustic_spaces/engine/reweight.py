@@ -15,9 +15,14 @@ re-weighted as off the ground it meets alone. With source and listener 0.5 and 1
 high and 30 m apart, and a zone without an impedance taken from an absorption of 0.1 to
 0.2, a reflection half a metre inside the zone's edge falls by 0.5 dB re-weighted and
 by 0.13 to 0.20 dB traced again; half a metre outside it, by none and by 0.11 to
-0.16 dB.
+0.16 dB. Nor is the path of the solver for whole rows
+(:mod:`~acoustic_spaces.engine.row_paths`): it reflects off no face, and its sound
+depends on the absorption of a ground without an impedance through the admittance fitted
+to it. A result with such a path is not re-weighted for another absorption of such a
+ground (:func:`reweighted_result`); a spread's draws and a calibration's fits, which
+re-weight response by response, leave that path as it was traced.
 
-Early paths carry the faces they reflect off, so their energies re-weight exactly. Where
+The other early paths carry the faces they reflect off, so their energies re-weight exactly. Where
 they add in pressure (:mod:`~acoustic_spaces.engine.coherent`), a reflection also
 shifts the phase, by that of its reflection factor, which comes from the admittance
 fitted to its face's absorption and the angle it meets the face at; the paths keep
@@ -187,7 +192,9 @@ def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequenc
     """``result``, simulated from the scene ``traced`` with ``face_group`` for
     ``materials`` (:func:`groups_of`), for the absorption of ``scene``: re-weighted,
     without tracing again. None when ``scene`` differs from ``traced`` in more than the
-    absorption of its materials, or a material re-weighting covers changed."""
+    absorption of its materials, a material changed that re-weighting does not cover,
+    or one did that the solver for whole rows took for a response
+    (:func:`solver_grounds`)."""
     if scene is traced:
         return result
     if _without_absorption(scene) != _without_absorption(traced):
@@ -195,6 +202,8 @@ def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequenc
     old = {n: m.coefficients("octave")[0] for n, m in traced.materials.items()}
     new = {n: m.coefficients("octave")[0] for n, m in scene.materials.items()}
     if any(old[n] != new[n] for n in old if n not in materials):
+        return None
+    if any(old[n] != new[n] for n in solver_grounds(result)):
         return None
     fresh = np.array([new[n] for n in materials])
     traced_absorption = np.array([old[n] for n in materials])
@@ -212,6 +221,25 @@ def reweighted_result(result, traced, face_group: np.ndarray, materials: Sequenc
     return dataclasses.replace(
         result, responses=responses, removed=(), insertion_loss={}, long_term=None, spreads={}
     )
+
+
+def solver_grounds(result) -> list[str]:
+    """The materials without an impedance on the ground of ``result``'s scene, where
+    some response of it has the path of the solver for whole rows
+    (:mod:`~acoustic_spaces.engine.row_paths`) among its early paths; none otherwise.
+    That path's sound depends on those grounds' absorption, through the admittance
+    fitted to it, and reflects off no face that a re-weighting counts."""
+    from acoustic_spaces.engine.model import _ground_faces
+    from acoustic_spaces.engine.section import ROW
+
+    room = result.room
+    if room.outdoor is None or not any(
+        r.early.edge is not None and np.any(r.early.edge == ROW) for r in result.responses.values()
+    ):
+        return []
+    used = np.unique(np.asarray(room.face_materials)[_ground_faces(room)])
+    names = [room.material_names[k] for k in used if k >= 0]
+    return [n for n in names if room.scene.materials[n].impedance is None]
 
 
 def log_ratio(old: np.ndarray, new: np.ndarray) -> np.ndarray:
@@ -444,6 +472,7 @@ __all__ = [
     "reweighted_paths",
     "reweighted_materials",
     "reweighted_result",
+    "solver_grounds",
     "slot_factor",
     "turned_paths",
 ]

@@ -129,8 +129,11 @@ The editor works on the same scene files as the command line.
   in pressure (up to 125 Hz indoors by default, every band outdoors), their phases turn
   with the absorption too, as a new run has them; only the faces of an edge that sound
   bends round keep what they did to it as traced. The panel says so; **Run** traces
-  afresh. Other changes, and runs with the statistical method, third-octave
-  bands or the wave solver, leave the results marked out of date until the next run.
+  afresh. Other changes, and runs with the statistical method, third-octave bands or the
+  wave solver, leave the results marked out of date until the next run. So does another
+  absorption of an outdoor ground without an impedance where the [solver for whole
+  rows](outdoor.md#sound-over-rows-of-barriers-and-buildings) carries a row's sound,
+  which depends on it.
 - A source's form sets its **Shape** (a point, a line or a surface, with its length,
   height and spacing), its directivity (a pattern, a SOFA or CSV file of measured data,
   or an array file, whose elements **Add up the array's elements one by one** sums near
@@ -262,13 +265,16 @@ a **Ground impedance** group, to make the material a ground: ticking it keeps th
 material's scattering unless that is 0.1 in every band, as a new material's is, since a
 ground scatters nothing unless its material says so, and unticking it gives a ground
 that scatters nothing 0.1 in every band (see
-[Ground impedance](outdoor.md#ground-impedance)). The **Simulation** entry
-adds the **Parabolic equation** (narrow-angle or wide-angle), **Frequencies behind
-barriers** (each choice with its largest error at 8 kHz), **Frequencies over open
-ground** (each choice with its largest error at 1 and 2 kHz) and, with buildings,
-barriers or vegetation, an **Insertion loss** list: ticking one runs the scene again
-without it (see [Results outdoors](outdoor.md#results-outdoors)). **Draw room**
-replaces an outdoor scene with a floor plan, after asking.
+[Ground impedance](outdoor.md#ground-impedance)). The **Simulation** entry adds
+**Barriers and buildings** (the solver for whole rows or the paths over
+the edges, see [Sound over rows of barriers and
+buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)), the **Parabolic
+equation** (narrow-angle or wide-angle), **Frequencies behind barriers** (each choice
+with its largest error at 8 kHz), **Frequencies over open ground** (each choice with its
+largest error at 1 and 2 kHz) and, with buildings, barriers or vegetation, an
+**Insertion loss** list: ticking one runs the scene again without it (see [Results
+outdoors](outdoor.md#results-outdoors)). **Draw room** replaces an outdoor scene with a
+floor plan, after asking.
 
 ## Exporting to Blender
 
