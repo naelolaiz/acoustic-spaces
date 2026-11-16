@@ -396,6 +396,8 @@ def test_the_package_adds_its_sums_in_a_fixed_order() -> None:
     that :data:`LIBRARY_SUMS` counts and says why: a new one would give results whose
     last digits depend on how many threads the library has."""
     package = SRC / "acoustic_spaces"
+    if not package.is_dir():
+        pytest.skip("the package's sources are in the source checkout only")
     found = {}
     for path in sorted(package.rglob("*.py")):
         lines = _library_sums(path.read_text(encoding="utf-8"))
