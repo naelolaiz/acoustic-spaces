@@ -50,8 +50,11 @@ import functools
 import math
 import sys
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
+
+from acoustic_spaces import products
 
 #: Images closer than this, relative to the model's size, are the same.
 _STEP = 1e-5
@@ -416,16 +419,17 @@ def _slice_shares(pressure, relative, cluster, width, panels, points) -> np.ndar
         for low in range(0, panels, step):
             ends = np.arange(low, min(low + step, panels)) / panels - 0.5
             within = nodes / panels
-            total = 0.0  # (q, M): the wave at each point
+            total: Any = 0.0  # (q, M): the wave at each point
             for a in chunks:
                 phase = _phases(turn * r[a : a + rows], ends, within)
-                total = total + phase.T @ p[a : a + rows]
+                total = total + products.product(phase.T, p[a : a + rows])
             weight = np.tile(weights / panels, phase.shape[1] // points)
             for a in chunks:
                 if len(chunks) > 1:
                     phase = _phases(turn * r[a : a + rows], ends, within)
-                mine = np.real(phase * (p[a : a + rows] @ np.conj(total).T)) / per_band
-                out[first + a : first + a + len(phase)] += mine @ weight
+                cross = products.product(p[a : a + rows], total.T, conj_b=True)  # p @ conj(total).T
+                mine = np.real(phase * cross) / per_band
+                products.add_product(out[first + a : first + a + len(phase)], mine, weight)
     return out
 
 

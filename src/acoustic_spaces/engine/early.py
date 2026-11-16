@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.coherent import (
     ground_factors,
@@ -68,8 +69,9 @@ class EarlyReflections:
     faces: list[np.ndarray] = field(default_factory=list)  # faces hit, source side first
     #: (n,) the edge a path bends over (an index of the model's diffracting edges, see
     #: :func:`~acoustic_spaces.engine.diffraction.find_edges`), -1 for specular paths,
-    #: or -2 for a path over the crests of the terrain
-    #: (:mod:`~acoustic_spaces.engine.crests`).
+    #: -2 for a path over the crests of the terrain
+    #: (:mod:`~acoustic_spaces.engine.crests`), or -3 for the path that carries the
+    #: sound of the solver for whole rows (:mod:`~acoustic_spaces.engine.row_paths`).
     edge: np.ndarray | None = None
     #: (n,) how many surfaces that let sound through a path passes, openings aside.
     crossings: np.ndarray | None = None
@@ -196,7 +198,8 @@ class EarlyReflections:
 
     @property
     def diffracted(self) -> np.ndarray:
-        """(n,) True for paths that bend over an edge or the terrain's crests."""
+        """(n,) True for paths that bend over an edge or the terrain's crests, and for
+        the one that carries the sound of the solver for whole rows."""
         return self.edge != -1
 
     @classmethod
@@ -379,7 +382,8 @@ def exhaustive_candidates(
         chunk = max(1, 4_000_000 // max(1, model.plane_count))
         for start in range(0, len(seqs), chunk):
             s, img = seqs[start : start + chunk], images[start : start + chunk]
-            ok = model.in_front(img @ normals.T - offsets, _ON_PLANE)  # (n, planes)
+            distance = products.product(img, normals.T) - offsets  # (n, planes)
+            ok = model.in_front(distance, _ON_PLANE)
             if s.shape[1]:
                 ok[np.arange(len(s)), s[:, -1]] = False
             if sky is not None:

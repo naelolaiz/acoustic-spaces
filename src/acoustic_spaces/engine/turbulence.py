@@ -74,6 +74,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from acoustic_spaces import products
+
 if TYPE_CHECKING:
     from acoustic_spaces.engine.early import EarlyReflections
     from acoustic_spaces.engine.refraction import Profile
@@ -231,10 +233,10 @@ class Wander:
             if m > 1:
                 block = variance[np.ix_(rows, rows)].transpose(2, 0, 1)  # (B, m, m)
                 centring = np.eye(m) - 1.0 / m
-                gram = -0.5 * centring @ block @ centring
+                gram = products.product(products.product(-0.5 * centring, block), centring)
                 values, vectors = np.linalg.eigh(0.5 * (gram + gram.transpose(0, 2, 1)))
                 values = np.sqrt(np.maximum(values, 0.0))
-                square = (vectors * values[:, None, :]) @ vectors.transpose(0, 2, 1)
+                square = products.product(vectors * values[:, None, :], vectors.transpose(0, 2, 1))
             out.append((rows, square))
         return out
 
@@ -245,7 +247,7 @@ class Wander:
         bands = roots[0][1].shape[0] if roots else 0
         out = np.zeros((n, bands))
         for (rows, square), xi in zip(roots, draws, strict=True):
-            out[rows] = (square @ xi).T
+            out[rows] = products.product(square, xi).T
         return out
 
 
@@ -394,7 +396,7 @@ class Eddies:
                 # The eddies between the two points: Cn² at their mean height (no nearer
                 # the ground than the outer scale, see strength()).
                 growth = growth * self.strength(0.5 * (heights[rows, None] + heights[None]))
-            variance[rows] = mean * (growth @ weights)
+            variance[rows] = mean * products.product(growth, weights)
             largest[rows] = apart.max(axis=2)
         return variance / self.speed_of_sound**2, largest
 

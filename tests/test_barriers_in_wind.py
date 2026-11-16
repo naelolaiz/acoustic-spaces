@@ -31,7 +31,9 @@ def scene(
 ) -> Scene:
     """A source 1 m up over hard ground (grass on the polygon ``lawn``; the material
     ``ground`` everywhere if given), a barrier 15 m away across the x axis, and
-    listeners; or ``sources`` (named s, or s0, s1 ...)."""
+    listeners; or ``sources`` (named s, or s0, s1 ...). It has the paths over the edges
+    (``rows: edges``), which these tests look at: the solver for whole rows in wind has
+    its own (``tests/test_row_paths.py``)."""
     geometry = {
         "ground": {"extent": [list(corner) for corner in extent], "sky": 20.0},
         "barriers": list(barriers),
@@ -61,6 +63,7 @@ def scene(
                 "max_order": 1,
                 "diffraction": "first_order",
                 "diffraction_reflections": "both_sides",
+                "rows": "edges",
                 **early,
             },
             "late": {"rays": 200},

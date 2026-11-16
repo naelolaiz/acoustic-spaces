@@ -2620,6 +2620,18 @@ class EarlyStage(_Model):
             "them (docs/outdoor.md gives the error and the run time of each)"
         ),
     )
+    rows: Literal["solver", "edges"] = Field(
+        default="solver",
+        description=(
+            "outdoors with edge diffraction on, the sound over barriers and "
+            "buildings in the vertical plane through a source and a listener, in the "
+            "octave bands up to 500 Hz that add their paths in pressure: solver (one "
+            "field over the whole row of them, with the ground and the roofs in it, "
+            "where their tops go on far enough to both sides of the way; seconds for "
+            "each source and listener) or edges (the paths over one edge or two alone). "
+            "Maps and walks take the paths over the edges (docs/outdoor.md)"
+        ),
+    )
     coherent_max_band_hz: Literal[63, 125, 250, 500, 1000, 2000, 4000, 8000] | None = Field(
         default=125,
         description=(

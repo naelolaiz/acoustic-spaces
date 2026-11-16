@@ -379,6 +379,11 @@ def test_simulate_checks_the_options_that_override_the_scene(
     capsys.readouterr()
     report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
     assert report["settings"]["early"]["parabolic_equation"] == "wide_angle"
+    assert report["settings"]["early"]["rows"] == "solver"
+    assert main([*args, "--rays", "500", "--max-order", "1", "--rows", "edges"]) == 0
+    capsys.readouterr()
+    report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
+    assert report["settings"]["early"]["rows"] == "edges"
 
     performance = ["--threads", "1", "--ray-tree", "median"]
     assert main([*args, "--rays", "500", "--max-order", "1", *performance]) == 0

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .. import products
 from .path import Segment, power_between
 from .tables import FOOT_M, KNOT_M_S, Aircraft, NpdCurves, installation_of
 
@@ -182,7 +183,7 @@ def segment_levels(
     horizontal = float(np.hypot(u[0], u[1]))
     climb = math.degrees(math.atan2(u[2], horizontal))
     rel = o - s1
-    q = rel @ u
+    q = products.product(rel, u)
     foot = s1 + np.outer(q, u)
     slant = np.linalg.norm(o - foot, axis=1)
     d1 = np.linalg.norm(o - s1, axis=1)

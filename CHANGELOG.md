@@ -11,6 +11,15 @@
   its end walls, the level was 5.3 dB higher at 63 Hz (`first_order`, image sources)
   than 0.1 mm beside. The validation's long models had such paths off their far ends,
   so a few of its numbers for image sources move (`docs/validation.md`).
+- Changed: a run's results no longer depend on how many threads the linear-algebra
+  library behind numpy is given (as many as the computer has cores, unless
+  `OPENBLAS_NUM_THREADS` says otherwise): the package adds its long sums itself, each in
+  a fixed order (`acoustic_spaces.products`; what stays with the library is in
+  [Simulation](docs/simulation.md#performance)). Results move once in their last digits
+  (in the examples: parameters by at most 1e-9 of their value, sound files by 3e-10 of
+  the file's peak, one response's standard errors by up to 5e-5), and the examples'
+  runs take up to a quarter less time at 30 to 50 % of the CPU time; a rotor's `bpm`
+  broadband noise takes 23 % more.
 - Added: a solver for sound that passes close over a whole row of roofs and barriers in
   still air (`acoustic_spaces.engine.rows`: the parabolic equation marched over the row,
   with the terms of its rigid edges and, for a barrier alone on a rigid ground or roof,
@@ -20,7 +29,21 @@
   dB down to a listener there; between rigid screens on a rigid ground up to 3.4 dB low,
   a parapet lower than a quarter of a wavelength on a roof's edge up to 1.3 dB off, and
   with an error for the ends it cannot hold, such as one almost straight under the top
-  of a wall (`validation/rows.py`). Simulations do not use it yet.
+  of a wall (`validation/rows.py`). A way that crosses the row at a slant takes each
+  edge at its slant (`slants`, up to 75°; one screen within 0.10 dB of the exact
+  solution), and where an end's way to the row is steep or an edge in a row is turned
+  more than 60°, a row on a rigid ground whose edges all lie in one direction is solved
+  across them and moved to the slant: two roofs on a rigid ground within 1.3 dB of the
+  wave calculation at 30, 60 and 75°, three rigid screens there up to 8.2 dB low.
+- Changed: outdoors, the sound over long barriers and rows of buildings in the vertical
+  plane through a source and a listener comes from the solver for whole rows in the
+  octave bands up to 500 Hz that add their paths in pressure (`simulation.early.rows:
+  solver`, the default; `--rows`, **Barriers and buildings** in the editor), in still
+  air and, scaled by the weather's effect, in wind and temperature gradients: against a
+  wave calculation two flat roofs on a rigid ground are within 0.74 dB, where the paths
+  over the edges are up to 10.7 dB off. `rows: edges` gives the levels as before;
+  coverage maps and walks keep the paths over the edges ([Outdoor
+  scenes](docs/outdoor.md#sound-over-rows-of-barriers-and-buildings)).
 - Fixed: the wave solver missed a wall through a plane of its cell centres or just past
   one, so that sound went through it, a closed room could be read as open and the
   19-point run could grow without bound; a source or a listener exactly on a surface is
