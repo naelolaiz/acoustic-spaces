@@ -355,7 +355,9 @@ inline std::vector<std::pair<std::string, std::uint64_t>> run(std::size_t cases,
         for (std::size_t i = 0; i < words.size(); ++i) {
             std::int64_t d = static_cast<std::int64_t>(words[i] >> 1);
             if (d == 0) d = 1 + static_cast<std::int64_t>(i);
-            const std::int64_t x = static_cast<std::int64_t>(rnd.next() >> 1) % (d + 1 > 0 ? d + 1 : d);
+            // x is one of 0 to d. The modulus d + 1 is formed without a sign, because d reaches 2^63 - 1.
+            const std::uint64_t modulus = static_cast<std::uint64_t>(d) + 1;
+            const std::int64_t x = static_cast<std::int64_t>((rnd.next() >> 1) % modulus);
             for (const std::int64_t num : {x, d - x, x / 2, d / 3, d}) {
                 if (num < 0 || num > d) continue;
                 ++n;
