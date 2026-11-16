@@ -60,11 +60,13 @@ past. A stitch whose own corner lies on its edge (within 10 µm) is dropped ther
 split closes the gap. A model with no faces left is refused, as is one with coordinates
 that are not finite numbers or a face that names a vertex the file does not have.
 `validate` then reports surfaces without a material, sources or listeners outside the
-room or on a surface (within 1 µm of it; an opening, with air on both sides, does not
-count) and listeners within 1 cm of a source; it warns about models that are not closed
-(rays would escape), listeners so close to a surface or an opening that the late part
-comes out noisy, and assignments that match nothing. Errors exit
-with status 1, and with `--strict` warnings too. Normals may point either way:
+room or on a surface (within 1 µm of it, or within 2e-9 of the model's diagonal where
+that is more, twice the least distance at which a ray traced on the CPU meets a face; an
+opening, with air on both sides, does not count) and listeners within 1 cm of a source;
+it warns about models that are not closed (rays would escape), listeners so close to a
+surface or an opening that the late part comes out noisy, and assignments that match
+nothing. Errors exit with status 1, and with `--strict` warnings too. Normals may point
+either way:
 the room is the space the faces close off, found from the faces themselves (see
 [Walls, doors and openings](#walls-doors-and-openings)), and a panel standing in the
 room, with air on both sides, reflects and absorbs on both.

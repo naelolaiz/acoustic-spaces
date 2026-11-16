@@ -177,7 +177,9 @@ def test_points_on_or_next_to_a_surface(tmp_path: Path) -> None:
     room = Room.from_yaml(path)
     problems = room.problems()
     assert len(problems) == 2
-    assert problems[0].startswith("source 'floor' at [2.0, 3.0, 0.0] is on a surface")
+    assert problems[0].startswith(
+        "source 'floor' at [2.0, 3.0, 0.0] is on a surface (within 1 µm of it), neither"
+    )
     assert problems[1].startswith("listener 'on' at [8.0, 3.0, 1.2] is on a surface")
     (near,) = [w for w in room.warnings() if "from a surface" in w]
     assert near.startswith("listener 'next to' is 1 cm from a surface")
@@ -203,6 +205,157 @@ def test_a_point_on_an_opening_is_in_the_air() -> None:
     (near,) = [w for w in room.warnings() if "detector sphere" in w]
     assert near.startswith("listener 'edge' is on an opening")
     assert "a radius of 0.1 cm" in near
+
+
+def _outdoors(width: float, source, listener, line_m: float | None = None) -> Room:
+    """A hard ground ``width`` m wide under an open sky, with a wall 4 m high along
+    x = -3 from y = -20 to 20; the source a line ``line_m`` long along y, if given."""
+    half = width / 2.0
+    source = {"name": "s", "position": [float(x) for x in source]}
+    if line_m is not None:
+        source |= {"line_m": line_m}
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {
+                    "ground": {"extent": [[-half, -half], [half, half]], "sky": 30.0},
+                    "barriers": [
+                        {"name": "wall", "path": [[-3.0, -20.0], [-3.0, 20.0]], "height": 4.0}
+                    ],
+                },
+                "materials": {"hard": {"absorption": [0.02] * 8, "scattering": 0.0}},
+                "default_material": "hard",
+                "sources": [source],
+                "listeners": [{"name": "l", "position": [float(x) for x in listener]}],
+            }
+        )
+    )
+
+
+def _early_level(room: Room) -> tuple[int, np.ndarray]:
+    """How many early paths ``room``'s source has to its listener, and their level per
+    band (dB)."""
+    from acoustic_spaces.engine import early_paths
+    from acoustic_spaces.engine.coherent import total_energy
+
+    paths = early_paths(room)
+    return len(paths), 10.0 * np.log10(total_energy(paths))
+
+
+def test_the_distance_of_a_point_on_a_surface_grows_with_the_model() -> None:
+    """A point is on a surface within a micrometre of it, or within twice the least
+    length of a ray traced on the CPU where that is more."""
+    from acoustic_spaces.engine.early import ray_start
+    from acoustic_spaces.engine.model import TraceModel
+
+    assert Room.from_yaml(SHOEBOX).on_surface_m() == 1e-6  # 8 by 6 by 3 m
+    for width in (60.0, 2000.0, 10000.0):
+        room = _outdoors(width, [5.0, 0.0, 1.5], [20.0, 0.0, 1.5])
+        least = float(TraceModel.from_room(room).bvh.min_distance)
+        assert ray_start(room.mesh) == pytest.approx(least, rel=1e-12)
+        assert room.on_surface_m() == pytest.approx(max(1e-6, 2.0 * least), rel=1e-12)
+    # 2 km wide, 2.8 km from corner to corner: 5.7 µm.
+    room = _outdoors(2000.0, [5.0, 0.0, 1.5], [20.0, 0.0, 1.5])
+    assert room.on_surface_m() == pytest.approx(5.657e-6, rel=1e-3)
+
+
+@pytest.mark.parametrize("width", [2000.0, 10000.0])
+@pytest.mark.parametrize(
+    ("place", "other"),
+    [
+        (lambda e: [0.5, 0.0, e], [0.0, 0.0, 3.0]),  # over the ground, the source above
+        (lambda e: [-3.0 + e, 0.5, 3.0], [1.0, 0.0, 3.5]),  # at the wall's face
+    ],
+    ids=["ground", "wall"],
+)
+def test_a_listener_nearer_a_surface_than_a_ray_can_meet_it_is_on_it(width, place, other) -> None:
+    """A ray traced on the CPU meets no face nearer its start than 1e-9 of the model's
+    diagonal, so the path traced back from a listener misses a reflection whose last leg
+    is shorter, as that of a source almost over the listener is: 6 dB of the level over
+    a hard ground alone. Where that is more than the micrometre of a small model, the
+    room takes the listener as on the surface within twice that distance; from there on
+    the paths and their level are those of the same place in a model 60 m wide, where a
+    ray meets a face from 0.09 µm."""
+    from acoustic_spaces.engine import simulate
+
+    within = _outdoors(width, other, other).on_surface_m()
+    assert within > 5e-6
+    on = _outdoors(width, other, place(0.4 * within))
+    (problem,) = on.problems()
+    assert problem.startswith("listener 'l' at ")
+    assert f"is on a surface (within {within * 1e6:.3g} µm of it, twice the least" in problem
+    with pytest.raises(ValueError, match="is on a surface"):
+        simulate(on)
+    # Being a problem, it is not also warned of as near a surface, as it is from there on.
+    assert not [w for w in on.warnings() if "detector sphere" in w]
+    for share in (1.05, 3.0):
+        off = _outdoors(width, other, place(share * within))
+        assert off.problems() == []
+        (near,) = [w for w in off.warnings() if "detector sphere" in w]
+        assert near.startswith("listener 'l' is ") and "from a surface" in near
+        count, level = _early_level(off)
+        same, expected = _early_level(_outdoors(60.0, other, place(share * within)))
+        assert count == same
+        assert level == pytest.approx(expected, abs=1e-9)
+
+
+@pytest.mark.parametrize("width", [2000.0, 10000.0])
+@pytest.mark.parametrize(
+    "place",
+    [
+        lambda e: [5.0, 0.0, e],  # over the ground
+        lambda e: [-3.0 + e, 0.5, 3.0],  # at the wall's face
+    ],
+    ids=["ground", "wall"],
+)
+def test_a_source_nearer_a_surface_than_a_ray_can_meet_it_is_on_it(width, place) -> None:
+    """The rays of a source nearer a surface than a ray can meet it go through the
+    surface. The room takes the source as on the surface within twice that distance, as
+    it does a listener; from there on the paths and their level are those of the same
+    place in a model 60 m wide."""
+    from acoustic_spaces.engine import simulate
+
+    listener = [20.0, 0.0, 1.5]
+    within = _outdoors(width, listener, listener).on_surface_m()
+    on = _outdoors(width, place(0.4 * within), listener)
+    (problem,) = on.problems()
+    assert problem.startswith("source 's' at ")
+    assert f"is on a surface (within {within * 1e6:.3g} µm of it, twice the least" in problem
+    with pytest.raises(ValueError, match="is on a surface"):
+        simulate(on)
+    for share in (1.05, 3.0):
+        off = _outdoors(width, place(share * within), listener)
+        assert off.problems() == []
+        count, level = _early_level(off)
+        same, expected = _early_level(_outdoors(60.0, place(share * within), listener))
+        assert count == same
+        assert level == pytest.approx(expected, abs=1e-9)
+
+
+def test_a_line_source_reaches_a_surface_by_the_distance_of_the_model() -> None:
+    """Each of the points a line source is made of counts: a line beside the wall and
+    past its end, in a model 2 km wide, reaches the surface with one of them 2 µm from
+    the wall's face, its middle half a metre past the wall's end; 6 µm from the face it
+    does not."""
+    listener = [20.0, 0.0, 1.5]
+    on = _outdoors(2000.0, [-3.0 + 2e-6, 20.5, 2.0], listener, line_m=2.0)
+    points = on.scene.sources[0].elements()
+    assert points[:, 0] == pytest.approx(-3.0 + 2e-6, abs=1e-9)
+    assert sorted(points[:, 1]) == pytest.approx([19.75, 20.25, 20.75, 21.25])
+    (problem,) = on.problems()
+    assert problem.startswith("source 's' at ")
+    assert " reaches on a surface (within 5.66 µm of it, twice the least" in problem
+    assert _outdoors(2000.0, [-3.0 + 6e-6, 20.5, 2.0], listener, line_m=2.0).problems() == []
+
+
+def test_a_listener_on_an_opening_by_the_distance_of_the_model() -> None:
+    """The sky lets all sound through: a listener 3 µm from its side in a model 2 km
+    wide, nearer than the 5.7 µm there, is in the air, and is warned of as on an
+    opening."""
+    room = _outdoors(2000.0, [990.0, 0.0, 2.0], [1000.0 - 3e-6, 0.0, 1.5])
+    assert room.problems() == []
+    (near,) = [w for w in room.warnings() if "detector sphere" in w]
+    assert near.startswith("listener 'l' is on an opening")
 
 
 def test_flipped_faces_do_not_put_points_outside(tmp_path: Path) -> None:

@@ -12,6 +12,11 @@
   a parapet lower than a quarter of a wavelength on a roof's edge up to 1.3 dB off, and
   with an error for the ends it cannot hold, such as one almost straight under the top
   of a wall (`validation/rows.py`). Simulations do not use it yet.
+- Fixed: a source or a listener counted as on a surface only within 1 µm of it whatever
+  the model's size, though a ray traced on the CPU meets no face nearer its start than
+  1e-9 of the model's diagonal: twice that distance now counts where it is more, in a
+  model more than 500 m from corner to corner. A listener 6 µm over the hard ground of a
+  model 10 km wide, almost under its source, was 6 dB low without a message.
 - Fixed: the wave solver missed a wall through a plane of its cell centres or just past
   one, so that sound went through it, a closed room could be read as open and the
   19-point run could grow without bound; a source or a listener exactly on a surface is

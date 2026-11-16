@@ -327,7 +327,10 @@ def early_paths(
 
     Names default to the first source and listener; ``max_order``, ``method`` and
     ``diffraction`` default to ``scene.simulation.early``, ``threads`` to
-    ``scene.simulation.performance.threads``. Useful for drawing paths.
+    ``scene.simulation.performance.threads``. Useful for drawing paths. The room's
+    checks, with which a simulation refuses to run, are not made
+    (:meth:`~acoustic_spaces.room.Room.problems`): a listener nearer a surface than a
+    ray can meet it, say, may lack the reflection off it here.
     """
     room = _as_room(room)
     scene = room.scene
