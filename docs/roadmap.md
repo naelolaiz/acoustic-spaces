@@ -175,6 +175,14 @@ Edge diffraction:
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9
   to 15 dB above that further below.
+- [ ] Corners in their exact order: a reflection point within the search's tolerance
+  for planes (a ten-millionth of the model's largest extent) of the next plane, over
+  one of its faces, reflects off both there, whichever side the path's next leg lies
+  on: a source 0.5 mm over the ground and from the line where two walls meet at 170
+  degrees, in a model 10 km wide, has a third reflection that does not exist at 4 of
+  96 places 7 m away. And two different paths whose planes make one mirror (two equal
+  rooms either side of a partition, a source and a listener mirrored in it) count as
+  one.
 - [ ] The same reflections whichever way round: the rays of the source and those of
   the listener can find different reflections between two faces, such as two screens
   or a roof's wall and a screen level with the roof (up to 0.7 dB apart, and 8 dB

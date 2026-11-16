@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed: near the line where two walls meet in a very large model, a reflection off
+  one wall went on past its edge over the other (by the search's tolerance for planes,
+  a ten-millionth of the model's largest extent, times a factor of the face's shape),
+  two reflections whose images fell in one step of that tolerance counted as one, and
+  a path ended at a point within it of a plane beside that plane's faces: 16 mm from a
+  170 degree bend in a model 10 km wide, the early level was off by up to 6.7 dB in a
+  band at 32 of 96 places 7 m away. A face now ends at its edges to within a billionth
+  of the model's diagonal.
 - Fixed: a path exactly through an outer edge (a roof's edge over an end wall, a
   building's upright corner, the edge where two barriers meet) stood as a reflection off
   both faces for a source and a listener the edge sees in the same direction across it,
