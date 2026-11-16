@@ -211,16 +211,23 @@
   reflection, as in the early part. An open face 1 m over a floor had taken 6.3 dB from
   the floor's scattered sound at 125 Hz; in `apartment` the bed's level drops by
   0.04 dB(A).
-- Fixed: in wind or a temperature gradient a listener's or map point's bands up to
-  2 kHz depended on the others in its direction, whose ranges broke up the steps of the
-  parabolic equation's march: by 0.12 dB at 63 Hz behind one listener 10 m nearer and
-  0.65 dB among 201 listeners 10 cm apart (a source 7 m and listeners 1.5 m up over a
-  ground of 200 kPa s/m², 40 to 60 m downwind in `windy`). Each is now reached by a last
-  step of its own off the march; the others still set the run's absorbing layer, how high
-  it begins and how thick it is (0.02 dB or less per octave band out of the shadow in
-  the checks, see [Known issues](docs/validation.md#known-issues)). A line of listeners
-  about a metre apart or closer takes about 1.5 to 1.8 times as long, listeners far
-  apart as long as before.
+- Fixed (results change): in wind or a temperature gradient a listener's or map
+  point's bands up to 2 kHz depended on the others in its direction, whose ranges broke
+  up the steps of the parabolic equation's march and set its absorbing layer: by 0.12 dB
+  at 63 Hz behind one listener 10 m nearer and 0.65 dB among 201 listeners 10 cm apart
+  (a source 7 m and listeners 1.5 m up over a ground of 200 kPa s/m², 40 to 60 m
+  downwind in `windy`). Over the open ground each is now reached by a last step of its
+  own off the march, under the absorbing layer of a run for it alone, and reads the same
+  alone as among others. With that every level from the equation there moves once: by
+  0.07 dB or less down to 45 dB below free field in the checks, by up to 0.3 dB down to
+  60 dB below it and by more deeper in a shadow. Behind barriers and buildings the
+  others still set the layer (see
+  [Known issues](docs/validation.md#known-issues)). A line of listeners about a metre
+  apart or closer takes about 1.5 to 1.8 times as long as before the fix and a coverage
+  map as long; listeners whose layers need different grids of heights no longer share a
+  run (`validation/long_term.py`, five 50 to 800 m away, takes 1.3 times as long, three
+  10 to 20 m up 30 to 60 m from the source 1.5 times), and a listener alone that takes
+  the wide-angle equation up to 1.3 times.
 - Fixed (results change): a listener that the reflection off the ground reaches more
   than 15 degrees up takes the wide-angle parabolic equation wherever the parabolic
   equation runs, as behind barriers; it went by whether the air bent sound on its run's
