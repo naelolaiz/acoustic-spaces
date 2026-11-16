@@ -766,6 +766,50 @@ def find_paths(
     return found
 
 
+def _along_at_planes(
+    source: np.ndarray, points: list[np.ndarray], normals: np.ndarray, tolerance: float
+) -> np.ndarray:
+    """(k, n, 3) for each of the k reflections of n paths a vector along the path where
+    it meets that reflection's plane, for the angle between the two (``points``: the
+    reflection points, k + 1 arrays of (n, 3) with the listener last; ``normals``
+    (n, k, 3) of the planes): the leg to the reflection from the source or from the
+    reflection before.
+
+    Where that leg is no longer than ``tolerance``, the path reflects where it reflected
+    last, in a corner, and meets the plane at the angle it leaves it: the leg after it.
+    A plane between others of a corner has no leg of any length on either side. The
+    path leaves it as it leaves the plane after it, turned back by that plane; where no
+    leg follows at all (the listener is at the corner), it meets it as it came to the
+    corner, turned by each plane it has reflected off since. (Zero where the path has
+    no leg longer than the tolerance on either side of the corner.)"""
+    k, n = len(points) - 1, len(points[0])
+
+    def turned(way: np.ndarray, j: int) -> np.ndarray:
+        normal = normals[:, j]
+        return way - 2.0 * np.einsum("ij,ij->i", normal, way)[:, None] * normal
+
+    leaving = np.zeros((k, n, 3))
+    for j in range(k - 1, -1, -1):
+        after = points[j + 1] - points[j]
+        follows = np.linalg.norm(after, axis=1) > tolerance
+        back = turned(leaving[j + 1], j + 1) if j + 1 < k else leaving[j]
+        leaving[j] = np.where(follows[:, None], after, back)
+    along = np.zeros((k, n, 3))
+    heading = np.zeros((n, 3))
+    before = np.broadcast_to(source, (n, 3))
+    for j in range(k):
+        incoming = points[j] - before
+        corner = np.linalg.norm(incoming, axis=1) <= tolerance
+        heading = np.where(corner[:, None], heading, incoming)
+        leaves = np.any(leaving[j] != 0.0, axis=1)
+        along[j] = np.where(
+            corner[:, None], np.where(leaves[:, None], leaving[j], heading), incoming
+        )
+        heading = turned(heading, j)
+        before = points[j]
+    return along
+
+
 def assemble_paths(
     model: TraceModel,
     source: np.ndarray,
@@ -804,18 +848,15 @@ def assemble_paths(
     grounds = bool(k) and model.factor_faces(faces).any()
     factor = None
     before = np.broadcast_to(source, (n, 3))
+    if coherent or grounds:
+        normals = model.plane_normal[model.face_plane[faces]]
+        along = _along_at_planes(source, points, normals, tolerance)
     for j in range(k):
         incoming = points[j] - before
         energy *= model.reflection(faces[:, j], incoming, j + 1, impedance=True)
         if coherent or grounds:
-            # At a corner the path reflects where it reflected last: it meets the
-            # second plane at the angle it leaves it.
-            after = points[j + 1] - points[j]
-            corner = np.linalg.norm(incoming, axis=1) <= tolerance
-            incoming = np.where(corner[:, None], after, incoming)
-            normal = model.plane_normal[model.face_plane[faces[:, j]]]
-            cosine = np.abs(np.einsum("ij,ij->i", normal, incoming)) / np.maximum(
-                np.linalg.norm(incoming, axis=1), 1e-300
+            cosine = np.abs(np.einsum("ij,ij->i", normals[:, j], along[j])) / np.maximum(
+                np.linalg.norm(along[j], axis=1), 1e-300
             )
             if coherent:
                 spectrum *= reflection_phases(model, faces[:, j], cosine, coherent)

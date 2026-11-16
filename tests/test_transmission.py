@@ -773,7 +773,11 @@ def test_a_reflection_in_a_leaning_corner_at_a_partition_s_foot_passes_through_i
     at 1 kHz. In rooms whose side walls lean at 60 degrees, paths that reflect off a
     wall, the floor or the ceiling and the wall again in their 60 degree corner, and in
     the upright rooms one off the ceiling and a wall, had passed it there and 1 to 3 um
-    aside: 17 to 28 dB more at 1 kHz."""
+    aside: 17 to 28 dB more at 1 kHz. With the bands that add in pressure, the level in
+    line is that 1 mm to one side or the other within 0.02 dB: a path that reflects
+    three times in the corner meets the middle surface at the angle it has there (taken
+    to graze it, it had left the level 0.46 to 1.3 dB from the nearer side's in the four
+    rooms with such a path)."""
     image = np.array(source, dtype=float)
     for side in sides:
         (y0, z0), (y1, z1) = section[side], section[(side + 1) % len(section)]
@@ -785,16 +789,20 @@ def test_a_reflection_in_a_leaning_corner_at_a_partition_s_foot_passes_through_i
     aside = np.cross(way, [1.0, 0.3, 0.25])
     aside /= np.linalg.norm(aside)
     obj = _along_x(tmp_path / "rooms.obj", section, partition)
-    levels = []
+    levels, in_pressure = [], {}
     for offset in (-1e-3, -3e-6, -2e-6, -1.5e-6, -1e-6, 0.0, 1e-6, 1.5e-6, 2e-6, 3e-6, 1e-3):
         listener = corner + distance * way + offset * aside
         room = _partitioned(
             obj, list(source), listener, max_order=3, method="image_sources", diffraction="none"
         )
-        levels.append(10 * np.log10(early_paths(room).energy.sum(axis=0)))
+        paths = early_paths(room)
+        levels.append(10 * np.log10(paths.energy.sum(axis=0)))
+        in_pressure[offset] = 10 * np.log10(total_energy(paths))
     low, high = np.minimum(levels[0], levels[-1]), np.maximum(levels[0], levels[-1])
     assert np.all(np.array(levels[1:-1]) > low - 0.01)
     assert np.all(np.array(levels[1:-1]) < high + 0.01)
+    assert paths.coherent_bands == 2
+    assert min(np.abs(in_pressure[0.0] - in_pressure[side]).max() for side in (-1e-3, 1e-3)) < 0.02
 
 
 def _across_x(x: float, y0: float, y1: float) -> tuple:
