@@ -11,6 +11,11 @@
   each of its bogies). Each path now goes on as the one whose delay carries on from its
   own; in that train's walks to the example's four listeners, 89 of the 502 paths
   followed jumped so, and none does now.
+- Fixed: with edge diffraction, whether the end of an edge stands on a plane (a
+  barrier's end on the ground) is read from the plane's faces at the end, no longer a
+  ten-thousandth of the model's size past it (1 m in a model 10 km long). With the
+  ground ending 0.5 m past a barrier's end in such a model, a listener round the end had
+  10 early paths in place of 8 and up to 5.0 dB less (at 125 Hz, with `first_order`).
 - Fixed: a free-standing panel or a partition between two rooms in line with a wall
   shared the wall's plane in the model or had one of its own by the way the wall faces,
   so with edge diffraction a room and its mirror image gave different early levels (up
