@@ -161,6 +161,44 @@
 // carrying and the still air's, keep no energy of their own where the wind changes or
 // ends at the matched layer. So a run in moving air is still to be watched
 // (mean_square()).
+//
+// Fitted walls (fitted_walls; the 7-point stencil, in still air, with one speed of sound
+// for the whole grid; refused otherwise). The model's faces are fitted to the grid exactly
+// (cut_cells.hpp), and the fit alone lays the grid out: which cells are air or in the
+// matched layer, which sides are open, and the source's and probes' cells (FittedStencil);
+// the casts, the flood and the boundary loop above do not run. Each row of the fit (an air
+// cell owning cut air, or next to a cut cube or to the grid's edge) has its air volume V,
+// its open area A_k towards each of its 18 neighbours and its wall area W_m per material
+// and towards the grid's edge, all measured on the fit's lattice. Its update is the
+// finite-volume form of the one above,
+//
+//   V (p+ - 2 p + p-) = sum_k g A_k (p_k - p) - (L/2) sum_m W_m (beta_m (p+ - p-) + sum_j (w_j+ - w_j-))
+//                       - (L/2) W_edge edge_admittance (p+ - p-),
+//
+// so each link weighs g A_k / V (g = 1/3; the edge-diagonal ones too, which the fit gives
+// only between two rows), the centre 2 less the links as stored, the wall term's g is (L/2)
+// sum_m W_m (beta_m + sum_j 1 / (2 a_j)) + (L/2) W_edge edge_admittance taken times 1 / V,
+// each branch state weighs (L/2) W_m / V, and the source feeds a cell w / V of its weight
+// w. A whole cell face gives the boundary weight of the cell-face walls, so walls on cell
+// faces give their layout. Two rules come first. The sliver rule: a row that owns a sliver
+// of thickness f (cells) beyond one of its faces has the link through its opposite face
+// scaled by 3 lambda / ((lambda + 1/2)(lambda + 1)), lambda = 1 + f, on both of its cells
+// (by the product of the factors where both cells' rules touch it, so that no order
+// enters), which puts the wall where the model has it at normal incidence; not when the far
+// cell is in the matched layer, whose update reads its neighbours whole. The clamp: V is at
+// least half the cell's link weights summed, g/2 times its areas after the sliver rule.
+// Every link then stands for the same area from both of its cells, so the update is similar
+// to a symmetric one with each cell's links summing to at most 2 V, and its largest
+// eigenvalue stays within 4 (Gershgorin): the time step is the stencil's. The centre's
+// coefficient is rounded down, so that it and the links sum to at most 2 and no eigenvalue
+// falls below 0, where a uniform pressure would grow. A plain cell whose link the sliver
+// rule scales becomes special with its volume and faces from its lattice widths; a row
+// whose coefficients are a plain cell's to the bit stays plain. Cells next to the matched
+// layer must own their whole cube and face towards it, and every cell's lattice width must
+// lie within 2^-24 of a whole cell (refused otherwise). A speed of sound per cell is
+// refused: with one, an interior cell's centre and links weigh 2 - total s and s axial
+// (update_interior), each rounded to a float, so that together they may exceed 2 and a
+// uniform pressure may grow.
 
 #pragma once
 
@@ -315,7 +353,9 @@ public:
     // `probes_per_listener`, the first of each a listener's own point and the others
     // round it: a source on a face lies on a side of it chosen by the listeners its air
     // reaches (see place_on_face), and each probe is in sight of its group's listener
-    // or not (see probe_in_sight).
+    // or not (see probe_in_sight). With `fitted_walls`, `fit_mesh` (the vertices and faces
+    // the BVH was built from) is fitted to the grid and lays it out instead (see the notes
+    // above).
     WaveSolver(const Bvh &bvh, const std::int64_t *face_material, const double *beta,
                std::size_t materials, const double *branches, const std::int64_t *branch_material,
                std::size_t branch_count, const Vec3 &origin, double cell, std::size_t nx,
@@ -381,6 +421,31 @@ public:
                 }
                 scale_[i] = static_cast<float>(r * r);
             }
+        }
+        // Fitted walls (see the notes above): the fit alone lays out the grid, and none of
+        // what follows (the casts, the flood, the boundary loop, the source's and probes'
+        // cells) runs.
+        if (fitted_walls) {
+            if (stencil != 7) {
+                throw std::invalid_argument(
+                    "fitted walls: they need the 7-point stencil, and the 19-point one was asked for: "
+                    "set the stencil to 7, or take walls on cell faces");
+            }
+            if (flow_x != nullptr || flow_y != nullptr) {
+                throw std::invalid_argument(
+                    "fitted walls: they are not available in moving air: leave the air's motion out, or "
+                    "take walls on cell faces");
+            }
+            if (speed != nullptr) {
+                throw std::invalid_argument(
+                    "fitted walls: they take one speed of sound for the whole grid, and a speed per cell was "
+                    "given: leave the speed of each cell out, or take walls on cell faces");
+            }
+            set_up_fitted(fit_mesh, face_material, beta, materials, material_branches,
+                          edge_admittance, layer_damping, source, probes, probes_per_listener);
+            set_up_runs();
+            threads_ = std::max<std::size_t>(1, std::min(threads_, air_ / 20000 + 1));
+            return;
         }
 
         // Links crossing a face, each pair of neighbours once: bit b of cut[i] is set
@@ -474,10 +539,6 @@ public:
                 layer_scale_.push_back(scale_[static_cast<std::size_t>(layer_cells_[c])]);
             }
         }
-        // With fitted_walls, the fit of the mesh as given (its
-        // cut cells and its own air), kept for cut_cells() and cut_air(); the update below
-        // does not use them. A refused input throws the fit's message.
-        if (fitted_walls) set_up_cut_cells(fit_mesh, face_material, materials, source);
 
         // Boundary cells: a link cut or at the grid's edge (mark 1), or a neighbour of
         // one whose folded links reach it (mark 2), whose weights averaging changes.
@@ -619,23 +680,7 @@ public:
             const std::size_t l = k - k % probes_per_listener;
             probe_in_sight_.push_back(k == l || crossing(bvh, probe_ends[l], probe_ends[k]) < 0);
         }
-        // With fitted_walls, the same points on the fit's flags (ruling T-1 of the design), for
-        // cut_points(); the update above does not use them.
-        if (fitted_walls) fitted_ = FittedStencil(*cut_, nx_, ny_, nz_, cell_).points(source, probes, probes_per_listener);
-        // The runs of consecutive interior cells, which the update streams through.
-        for (std::size_t i = 0; i < n;) {
-            if (type_[i] != kInterior) {
-                ++i;
-                continue;
-            }
-            run_begin_.push_back(i);
-            while (i < n && type_[i] == kInterior) ++i;
-            run_end_.push_back(i);
-        }
-        u0_.assign(n, 0.0f);
-        u1_.assign(n, 0.0f);
-        w0_.assign(state_branch_.size(), 0.0f);
-        w1_.assign(state_branch_.size(), 0.0f);
+        set_up_runs();
         if ((flow_x == nullptr) != (flow_y == nullptr)) {
             throw std::invalid_argument("the air's motion needs both of its components");
         }
@@ -896,7 +941,378 @@ private:
         if (mesh == nullptr) throw std::invalid_argument("fitted walls: the mesh's vertices and faces are needed");
         cut_ = std::make_unique<CutCells>(*mesh, face_material, materials,
                                           cut_grid(origin_, cell_, nx_, ny_, nz_, layer_), source, threads_);
+        cut_->require_whole_widths();
         cut_->check();
+    }
+
+    // The sliver rule's factor for a sliver of thickness f cells: w(lambda) = 3 lambda /
+    // ((lambda + 1/2)(lambda + 1)), lambda = 1 + f; at most 1.
+    static double sliver_factor(double f) {
+        const double lambda = 1.0 + f;
+        return 3.0 * lambda / ((lambda + 0.5) * (lambda + 1.0));
+    }
+
+    // A special cell of the fitted path before it is stored: its volume, its links (direction
+    // and the area each stands for, after the sliver rule) and its wall term.
+    struct FittedCell {
+        double volume = 1.0, air_volume = 1.0;
+        std::array<double, 18> area{};
+        double wall = 0.0;  // g of the wall term: sum over materials of (L/2) W (beta + branch gains), and the edge's
+        std::vector<std::pair<std::int32_t, double>> states;  // (branch, (L/2) W of its material)
+    };
+
+    // Fitted walls: the grid's layout from the fit (see the notes above). Cell kinds from the
+    // fit's air; every row and every plain cell whose link the sliver rule changes a special
+    // cell with its own coefficients (but a row whose coefficients are a plain cell's to the
+    // bit, which stays plain); the source's and probes' cells from the fitted stencil.
+    void set_up_fitted(const CutCells::Mesh *mesh, const std::int64_t *face_material, const double *beta,
+                       std::size_t materials, const std::vector<std::vector<std::int32_t>> &material_branches,
+                       double edge_admittance, double layer_damping, const Vec3 &source,
+                       const std::vector<Vec3> &probes, std::size_t probes_per_listener) {
+        set_up_cut_cells(mesh, face_material, materials, source);
+        const CutCells &cut = *cut_;
+        const std::size_t n = nx_ * ny_ * nz_;
+        const auto &air = cut.air();
+        type_.assign(n, kSolid);
+        for (std::size_t i = 0; i < n; ++i) {
+            if (air[i] == CutCells::kAir) {
+                type_[i] = kInterior;
+                ++air_;
+            } else if (air[i] == CutCells::kLayer) {
+                // (The fit's depth and the solver's are one formula on the cells' indices.)
+                if (depth(i) > layer_) {
+                    throw std::logic_error("fitted walls: self-check layer_depth failed at the cell centred at " +
+                                           place(i) + ": the fit puts it in the matched layer");
+                }
+                type_[i] = kLayer;
+                layer_cells_.push_back(static_cast<std::int64_t>(i));
+                ++air_;
+            }
+        }
+        open_sides_ = cut.open_sides();
+        open_ = cut.open();
+        if (!layer_cells_.empty()) {
+            layer_damping_ = layer_damping;
+            for (int a = 0; a < 3; ++a) layer_coefficients(a);
+            layer_state_.assign(9 * layer_cells_.size(), 0.0f);
+            for (std::size_t c = 0; c < layer_cells_.size() && !scale_.empty(); ++c) {
+                layer_scale_.push_back(scale_[static_cast<std::size_t>(layer_cells_[c])]);
+            }
+        }
+
+        const std::vector<std::int64_t> &rows = cut.cells();
+        const std::size_t columns = cut.materials() + 1;
+        const auto row_of = [&rows](std::size_t i) -> std::size_t {
+            const auto it = std::lower_bound(rows.begin(), rows.end(), static_cast<std::int64_t>(i));
+            return it != rows.end() && *it == static_cast<std::int64_t>(i) ? static_cast<std::size_t>(it - rows.begin())
+                                                                            : npos;
+        };
+        const auto width = [&cut, this](std::size_t i, int a) {
+            const std::size_t at[3] = {i % nx_, (i / nx_) % ny_, i / sz_};
+            return cut.widths(a)[at[a]];
+        };
+        // An uncut cell's volume and the area of its face across axis a, from its widths on the
+        // fit's lattice (CutCells::cell_volume and face_area_of).
+        const auto cell_volume = [&width](std::size_t i) { return width(i, 0) * width(i, 1) * width(i, 2); };
+        const auto face_area = [&width](std::size_t i, int a) { return width(i, (a + 1) % 3) * width(i, (a + 2) % 3); };
+
+        // The sliver rule: for every row o and axial face k through which o owns a sliver of
+        // thickness f > 0, the link between o and its neighbour across the opposite face is
+        // scaled by w(1 + f) on both sides; where both of its cells' rules touch a link it
+        // takes the product of their factors, so no order enters. Not where that neighbour is
+        // in the matched layer, which reads the link whole, or holds no air.
+        struct Touch {
+            std::size_t key;  // 3 (the link's lower cell) + its axis
+            double factor;
+            bool thick;       // f > 1
+        };
+        std::vector<Touch> touches;
+        const std::vector<double> &sliver = cut.sliver();
+        for (std::size_t r = 0; r < rows.size(); ++r) {
+            const auto o = static_cast<std::size_t>(rows[r]);
+            for (int k = 0; k < 6; ++k) {
+                const double f = sliver[6 * r + static_cast<std::size_t>(k)];
+                if (!(f > 0.0)) continue;
+                const std::size_t m = neighbour(o, opposite(k));
+                if (edge(m) || type_[m] == kSolid) continue;
+                const double w = sliver_factor(f);
+                if (type_[m] == kLayer) {
+                    fitted_counts_.layer_whole_links += 1;
+                    fitted_counts_.layer_whole_least = std::min(fitted_counts_.layer_whole_least, w);
+                    continue;
+                }
+                touches.push_back({3 * std::min(o, m) + static_cast<std::size_t>(k / 2), w, f > 1.0});
+            }
+        }
+        std::sort(touches.begin(), touches.end(), [](const Touch &x, const Touch &y) {
+            return x.key != y.key ? x.key < y.key : x.factor < y.factor;
+        });
+        std::vector<std::pair<std::size_t, double>> factors;  // (key, product), by key
+        std::vector<std::size_t> far_cells;                   // plain cells a factor reaches
+        for (std::size_t t = 0; t < touches.size();) {
+            const std::size_t key = touches[t].key;
+            double product = 1.0;
+            bool thick = false;
+            std::size_t count = 0;
+            for (; t < touches.size() && touches[t].key == key; ++t, ++count) {
+                product *= touches[t].factor;
+                thick = thick || touches[t].thick;
+            }
+            factors.emplace_back(key, product);
+            fitted_counts_.sliver_links += 1;
+            if (count > 1) fitted_counts_.sliver_both += 1;
+            if (thick) fitted_counts_.sliver_thick += 1;
+            const std::size_t lower = key / 3, upper = lower + (key % 3 == 0 ? 1 : (key % 3 == 1 ? sy_ : sz_));
+            for (const std::size_t c : {lower, upper})
+                if (row_of(c) == npos) far_cells.push_back(c);
+        }
+        std::sort(far_cells.begin(), far_cells.end());
+        far_cells.erase(std::unique(far_cells.begin(), far_cells.end()), far_cells.end());
+        const auto factor_of = [&factors](std::size_t i, std::size_t j, int axis) {
+            const std::size_t key = 3 * std::min(i, j) + static_cast<std::size_t>(axis);
+            const auto it = std::lower_bound(factors.begin(), factors.end(), std::make_pair(key, -1.0));
+            return it != factors.end() && it->first == key ? it->second : 1.0;
+        };
+
+        // A cell's open area towards direction k after the sliver rule, as the cell's own row
+        // has it (or, for a cell that is not a row, its whole face towards an air cell).
+        const std::vector<double> &open_area = cut.open_area();
+        const auto room = [this](std::size_t i) { return type_[i] == kInterior || type_[i] == kSpecial; };
+        const auto area_towards = [&](std::size_t i, int k) {
+            const std::size_t r = row_of(i);
+            const std::size_t j = neighbour(i, k);
+            double a = 0.0;
+            if (r != npos) {
+                a = open_area[18 * r + static_cast<std::size_t>(k)];
+            } else if (k < 6 && type_[i] != kSolid && !edge(j) && type_[j] != kSolid) {
+                a = face_area(i, k / 2);
+            }
+            if (k < 6 && a > 0.0 && room(i) && room(j)) a *= factor_of(i, j, k / 2);
+            return a;
+        };
+
+        // The wall term of a row: per material m, (L/2) W_m (beta_m + the sum of 1 / (2 a_j)
+        // over m's branches j), one branch state per branch weighing (L/2) W_m; the grid's
+        // edge, (L/2) W_edge times its admittance.
+        const double plane = boundary_[0];  // L/2: a whole cell face's boundary weight
+        const std::vector<double> &wall_area = cut.wall_area();
+        const double half_g = exact_[0] / 2.0;
+        const auto make = [&](std::size_t i) {
+            FittedCell c;
+            const std::size_t r = row_of(i);
+            c.air_volume = r != npos ? cut.air_volume()[r] : cell_volume(i);
+            for (int k = 0; k < 18; ++k) c.area[static_cast<std::size_t>(k)] = area_towards(i, k);
+            if (r != npos) {
+                for (std::size_t m = 0; m + 1 < columns; ++m) {
+                    const double W = wall_area[columns * r + m];
+                    if (!(W > 0.0)) continue;
+                    const double weight = plane * W;
+                    c.wall += weight * beta[m];
+                    for (const std::int32_t j : material_branches[m]) {
+                        c.wall += weight * (0.5 / branch_a_[static_cast<std::size_t>(j)]);
+                        c.states.emplace_back(j, weight);
+                    }
+                }
+                const double edge_wall = wall_area[columns * r + columns - 1];
+                if (edge_wall > 0.0) c.wall += plane * edge_wall * edge_admittance;
+            }
+            // The clamp: the volume at least half the cell's link weights summed (the areas
+            // summed in the order of the directions, then weighed once), so that its links
+            // sum to at most 2 V and the bound on the time step holds.
+            double total = 0.0;
+            for (const double a : c.area) total += a;
+            c.volume = std::max(c.air_volume, half_g * total);
+            return c;
+        };
+        // The special cells, in ascending order: the rows and the plain cells the sliver rule
+        // reaches.
+        std::vector<std::size_t> candidates(far_cells);
+        for (const std::int64_t i : rows) candidates.push_back(static_cast<std::size_t>(i));
+        std::sort(candidates.begin(), candidates.end());
+        for (const std::size_t i : candidates) {
+            const FittedCell c = make(i);
+            if (c.volume > c.air_volume * (1.0 + 1e-12)) {
+                fitted_counts_.raised += 1;
+                fitted_counts_.most_raised = std::max(fitted_counts_.most_raised, c.volume / c.air_volume);
+            }
+            if (!add_special_fitted(i, c, true)) fitted_counts_.plain_rows += 1;
+        }
+        sorted_specials_ = special_.size();
+        boundary_cells_ = special_.size();
+
+        // The source's and the probes' cells, from the fit alone: the source feeds
+        // each of its cells w / V, V the cell's volume, so that the sound it puts in is its own.
+        // A source cell not yet special keeps its update: a row that stayed plain takes its own
+        // coefficients (a plain cell's), any other cell the interior's weights, as the default
+        // path's source cells do, with its volume from its widths on the fit's lattice.
+        fitted_ = FittedStencil(cut, nx_, ny_, nz_, cell_).points(source, probes, probes_per_listener);
+        for (const auto &[i, w] : fitted_.source) {
+            std::size_t k = fitted_special(i);
+            if (k == npos) {
+                if (row_of(i) != npos) {
+                    add_special_fitted(i, make(i), false);
+                } else {
+                    add_special(i, exact_.data(), 0.0);
+                    special_volume_.push_back(cell_volume(i));
+                }
+                k = special_.size() - 1;
+            }
+            source_[k] += static_cast<float>(cell_scale(i) * w / special_volume_[k]);
+        }
+        source_on_face_ = fitted_.source_on_face;
+        for (std::size_t p = 0; p < fitted_.probes.size(); ++p) {
+            probe_cells_.push_back({});
+            probe_weights_.push_back({});
+            for (const auto &[i, w] : fitted_.probes[p]) {
+                probe_cells_.back().push_back(i);
+                probe_weights_.back().push_back(w);
+            }
+            probe_in_sight_.push_back(fitted_.in_sight[p]);
+        }
+
+        // Self-check of the links (every build): each special cell's link stands for the same
+        // area on both of its sides, a link reaches only air, a row's link to a cell of the
+        // matched layer is its whole face, and the links weigh at most 2 s together.
+        for (std::size_t k = 0; k < special_.size(); ++k) {
+            const auto i = static_cast<std::size_t>(special_[k]);
+            double sum = 0.0;
+            for (std::size_t l = link_start_[k]; l < link_start_[k + 1]; ++l) {
+                const int d = link_direction_[l];
+                const std::size_t j = neighbour(i, d);
+                sum += static_cast<double>(link_weight_[l]);
+                const double here = area_towards(i, d), there = area_towards(j, opposite(d));
+                std::string fault;
+                if (edge(j) || type_[j] == kSolid) {
+                    fault = "a link reaches a cell without air";
+                } else if (std::abs(here - there) > 1e-12 * std::max(here, there)) {
+                    fault = "its link along direction " + std::to_string(d) + " stands for " + exact_text(here) +
+                            " cell faces, and " + exact_text(there) + " from the other side";
+                } else if (type_[j] == kLayer && (d >= 6 || std::abs(here - face_area(i, d / 2)) > 1e-12)) {
+                    fault = "its link to the matched layer along direction " + std::to_string(d) + " is not its whole face";
+                }
+                if (!fault.empty()) {
+                    throw std::logic_error("fitted walls: self-check check_links failed at the cell centred at " +
+                                           place(i) + ": " + fault);
+                }
+            }
+            if (sum > 2.0 * cell_scale(i)) {
+                throw std::logic_error("fitted walls: self-check check_links failed at the cell centred at " + place(i) +
+                                       ": its links weigh " + exact_text(sum) + " together, more than 2");
+            }
+        }
+    }
+
+    // Makes cell i special with the coefficients of c (see set_up_fitted), unless `spare` and they
+    // equal a plain cell's to the bit, when it stays plain; returns whether it was made special.
+    bool add_special_fitted(std::size_t i, const FittedCell &c, bool spare) {
+        const double s = cell_scale(i), r = std::sqrt(s) / c.volume;
+        std::array<float, 18> weight{};
+        double total = 0.0;
+        for (int k = 0; k < 18; ++k) {
+            const double a = c.area[static_cast<std::size_t>(k)];
+            if (!(a > 0.0)) continue;
+            weight[static_cast<std::size_t>(k)] = lowered(s * (exact_[0] * a / c.volume));
+            total += static_cast<double>(weight[static_cast<std::size_t>(k)]);
+        }
+        // coef_a: 2 less the stored weights, rounded down to a float, so that coef_a and the links
+        // sum to at most 2 and a uniform pressure never grows (rounded to the nearest float, the
+        // cells' excesses can sum to a negative eigenvalue of the update, about -1e-10).
+        const double centre = 2.0 - total;
+        auto coef_a = static_cast<float>(centre);
+        if (static_cast<double>(coef_a) > centre) coef_a = std::nextafter(coef_a, -std::numeric_limits<float>::infinity());
+        const auto coef_b = static_cast<float>(1.0 - r * c.wall);
+        const auto coef_inv = static_cast<float>(1.0 / (1.0 + r * c.wall));
+        if (spare && scale_.empty() && c.states.empty() && coef_a == centre_ && coef_b == 1.0f && coef_inv == 1.0f) {
+            bool plain = true;
+            for (int k = 0; k < 18 && plain; ++k)
+                plain = weight[static_cast<std::size_t>(k)] == (k < 6 ? weight_[static_cast<std::size_t>(k)] : 0.0f);
+            if (plain) return false;
+        }
+        type_[i] = kSpecial;
+        special_.push_back(static_cast<std::int64_t>(i));
+        special_volume_.push_back(c.volume);
+        for (int k = 0; k < 18; ++k) {
+            if (!(c.area[static_cast<std::size_t>(k)] > 0.0)) continue;
+            link_direction_.push_back(static_cast<std::uint8_t>(k));
+            link_weight_.push_back(weight[static_cast<std::size_t>(k)]);
+        }
+        link_start_.push_back(link_direction_.size());
+        coef_a_.push_back(coef_a);
+        coef_b_.push_back(coef_b);
+        coef_inv_.push_back(coef_inv);
+        source_.push_back(0.0f);
+        for (const auto &[j, w] : c.states) {
+            state_branch_.push_back(j);
+            state_weight_.push_back(static_cast<float>(r * w));
+        }
+        state_start_.push_back(state_branch_.size());
+        return true;
+    }
+
+    // The fitted path's special index of cell i, or npos: the cells set up in ascending order,
+    // then those the source added.
+    std::size_t fitted_special(std::size_t i) const {
+        const auto end = special_.begin() + static_cast<std::ptrdiff_t>(sorted_specials_);
+        const auto it = std::lower_bound(special_.begin(), end, static_cast<std::int64_t>(i));
+        if (it != end && *it == static_cast<std::int64_t>(i)) return static_cast<std::size_t>(it - special_.begin());
+        for (std::size_t k = sorted_specials_; k < special_.size(); ++k)
+            if (special_[k] == static_cast<std::int64_t>(i)) return k;
+        return npos;
+    }
+
+    // Cell i's centre, for a message: "(x, y, z) m".
+    std::string place(std::size_t i) const {
+        const Vec3 c = centre(i);
+        return "(" + std::to_string(c.x) + ", " + std::to_string(c.y) + ", " + std::to_string(c.z) + ") m";
+    }
+    static std::string exact_text(double x) {
+        char t[40];
+        std::snprintf(t, sizeof t, "%.17g", x);
+        return t;
+    }
+
+public:
+    // Fitted walls: what the update's rules did (see set_up_fitted). Rows whose volume the
+    // clamp raised (by more than 1e-12 of it) and the largest V / V_air; links the sliver rule
+    // scaled, of them those both cells' rules touch and those with a sliver thicker than a
+    // cell; links to the matched layer the rule leaves whole and the least factor it left
+    // out; rows whose coefficients are a plain cell's, which stay plain.
+    struct FittedCounts {
+        std::size_t raised = 0;
+        double most_raised = 1.0;
+        std::size_t sliver_links = 0, sliver_both = 0, sliver_thick = 0;
+        std::size_t layer_whole_links = 0;
+        double layer_whole_least = 1.0;
+        std::size_t plain_rows = 0;
+    };
+    const FittedCounts &fitted_counts() const { return fitted_counts_; }
+    // The special cells and, with fitted walls, the volume each is stepped with (cells^3; empty
+    // without fitted walls).
+    const std::vector<std::int64_t> &special_cells() const { return special_; }
+    const std::vector<double> &special_volume() const { return special_volume_; }
+
+private:
+    FittedCounts fitted_counts_;
+    std::vector<double> special_volume_;
+    std::size_t sorted_specials_ = 0;
+
+    // The runs of consecutive interior cells, which the update streams through, and the
+    // grid's state.
+    void set_up_runs() {
+        const std::size_t n = nx_ * ny_ * nz_;
+        for (std::size_t i = 0; i < n;) {
+            if (type_[i] != kInterior) {
+                ++i;
+                continue;
+            }
+            run_begin_.push_back(i);
+            while (i < n && type_[i] == kInterior) ++i;
+            run_end_.push_back(i);
+        }
+        u0_.assign(n, 0.0f);
+        u1_.assign(n, 0.0f);
+        w0_.assign(state_branch_.size(), 0.0f);
+        w1_.assign(state_branch_.size(), 0.0f);
     }
 
 public:

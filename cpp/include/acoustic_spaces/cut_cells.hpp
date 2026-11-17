@@ -64,7 +64,9 @@
 // open pieces of squares. The air is the component that holds the source; a cell is air when
 // the region holding its centre is in it (a point exactly on a plane is taken on its + side).
 // Refused, with a message: the source in a cell on the grid's edge; the source in a closed
-// space that holds no cell centre; the model reaching into the matched layer; a part of the
+// space that holds no cell centre; the model reaching into the matched layer; faces in a cube
+// next to a cell of the layer that holds air (code kRefusedNextToLayer: the layer reads its
+// neighbours whole, so each of them owns its whole cube and face towards it); a part of the
 // air open only to the layer (T-4). Each region of the air is owned by one air cell, the
 // nearest by the exact open flag of the squares between them (1e-12 band, ties to the lowest
 // cell); the cell's air volume, open areas (by face) and wall area are the sums of what it
@@ -93,6 +95,8 @@
 // air on the side towards the other, are refused (kRefusedThinLayer). A refusal does not
 // throw from the constructor: refused() and refusal() give it, check() throws
 // std::invalid_argument with the message; every cell is then kSolid and the rows are empty.
+// The wave solver adds one condition of its own, require_whole_widths() (code kRefusedWidths):
+// every cell's width on the lattice within 2^-24 of a whole cell.
 //
 // Points (T-1). locate() takes a point onto Q with its centre bracket and exact ties;
 // way() decides whether the segment between two lattice points, both moved by
@@ -1041,6 +1045,9 @@ public:
         kRefusedPocket = 7,         // the source's component holds no centre
         kRefusedLayer = 8,          // a face in a cube of the matched layer with air in it
         kRefusedLayerReach = 9,     // T-4
+        // (10 and 11 are not used.)
+        kRefusedNextToLayer = 12,   // a cube next to a matched-layer cell holds faces and air
+        kRefusedWidths = 13,        // a cell's lattice width off 1 by more than 2^-24 (set by the solver)
         // The source refusals of DESIGN 5.5 (no cell of its stencil; the stencil past the
         // grid's interior; the source in the matched layer) are made by the solver's fitted
         // stencil (fdtd.hpp, FittedStencil::points) and thrown as std::invalid_argument with
@@ -1197,14 +1204,7 @@ public:
         } catch (const Refusal &r) {
             stats_.refused = r.code;
             refusal_ = r.message;
-            open_sides_ = {};
-            type_.assign(n_[0] * n_[1] * n_[2], kSolid);
-            row_cell_.clear();
-            air_volume_.clear();
-            open_area_.clear();
-            wall_area_.clear();
-            leak_area_row_.clear();
-            sliver_.clear();
+            clear_rows();
         }
 #ifdef ACOUSTIC_SPACES_CUT_CHECK
         stats_.underflow_raised = underflow_ || std::fetestexcept(FE_UNDERFLOW) ? 1 : 0;
@@ -1263,6 +1263,47 @@ public:
     // Throws std::invalid_argument with the message when the input was refused.
     void check() const {
         if (refused()) throw std::invalid_argument(refusal_);
+    }
+    // The wave solver's condition on the grid (refusal 13): every cell's width on the lattice
+    // lies within 2^-24 of a whole cell, decided exactly on the integers of the grid's planes,
+    // |G_i+1 - G_i - S| 2^24 <= S with S = cell 2^s the cell in quanta. The solver steps a plain
+    // cell with the stencil's own weight and a row with its lattice widths, so a link between
+    // the two differs on its sides by at most 2^-24 of its weight, 2^6 below the update's margin
+    // of 2^-18. A fit already refused keeps its refusal. CutFit, which only measures, does not
+    // apply it.
+    void require_whole_widths() {
+        if (refused()) return;
+        int e = 0;
+        const double m = std::frexp(S_, &e);
+        const I128 M = static_cast<I128>(static_cast<std::int64_t>(std::ldexp(m, 53)));
+        const int k = e - 53;           // S = M 2^k exactly
+        const int up = k < 0 ? -k : 0;  // both sides times 2^up, so that both are integers
+        const I128 S = k >= 0 ? M << k : M;
+        const I128 limit = S >> 24;     // |d - S| 2^24 > S exactly when |d - S| > floor(S / 2^24)
+        const I128 huge = static_cast<I128>(1) << 100;
+        for (std::size_t a = 0; a < 3; ++a)
+            for (std::size_t i = 0; i < n_[a]; ++i) {
+                I128 d = G_[a][i + 1] - G_[a][i];
+                bool off = d.negative() || (up > 0 && d >= (huge >> up));
+                if (!off) {
+                    d = d << up;
+                    I128 diff = d - S;
+                    if (diff.negative()) diff = -diff;
+                    off = diff > limit;
+                }
+                if (!off) continue;
+                static const char *const axis[3] = {"x", "y", "z"};
+                const double at = origin_[static_cast<int>(a)] + static_cast<double>(i) * cell_;
+                stats_.refused = kRefusedWidths;
+                refusal_ = std::string("fitted walls: the grid lies too far from the origin of its coordinates for "
+                                       "its cells to keep their width: the cell from ") +
+                           axis[a] + " = " + std::to_string(at) + " m is " + exact_text(width_[a][i]) +
+                           " cells wide on the fit's lattice, more than 2^-24 off a whole cell, where the solver's "
+                           "plain cells take a whole one. Move the model and the grid nearer the origin of the "
+                           "coordinates, or use a larger cell.";
+                clear_rows();
+                return;
+            }
     }
 
     // ---- the points (T-1, DESIGN 4.7.2 and 4.7.3) ------------------------------------------
@@ -4472,11 +4513,31 @@ private:
                 if (regions_[static_cast<std::size_t>(cube_first_[k]) + r].in_air) {
                     const Vec3 c = centre_of(cubes_[k].cell);
                     refuse(kRefusedLayer,
-                           "fitted walls: the model reaches into the matched layer: faces of it cut the room's air in "
-                           "the cell centred at (" + std::to_string(c.x) + ", " + std::to_string(c.y) + ", " +
+                           "fitted walls: the model reaches into the matched layer: faces of it cut the air the source "
+                           "reaches in the cell centred at (" + std::to_string(c.x) + ", " + std::to_string(c.y) + ", " +
                                std::to_string(c.z) + ") m, which lies within the layer's " + std::to_string(layer_) +
                                " cells inside the grid's edge, where the layer takes the air as open space. Move the "
                                "model away from the grid's edge, or enlarge the margin round it.");
+                }
+        }
+        // A cube next to a cell of the matched layer that holds faces (a face crossing it, or lying in
+        // one of its own faces, which makes it a cube of the fit) and air is refused: the layer's update
+        // reads its six neighbours' pressures whole, so each cell next to it must own its whole cube and
+        // the whole face towards it.
+        for (std::size_t k = 0; k < cubes_.size() && layer_ > 0; ++k) {
+            const std::size_t cell = cubes_[k].cell;
+            if (depth(cell) != layer_ + 1) continue;
+            bool next_to_layer = false;
+            for (int d = 0; d < 6; ++d) next_to_layer = next_to_layer || type_[neighbour(cell, d)] == kLayer;
+            if (!next_to_layer) continue;
+            for (std::size_t r = 0; r < cubes_[k].volume.size(); ++r)
+                if (regions_[static_cast<std::size_t>(cube_first_[k]) + r].in_air) {
+                    const Vec3 c = centre_of(cell);
+                    refuse(kRefusedNextToLayer,
+                           "fitted walls: faces of the model lie in the cell next to the matched layer centred at (" +
+                               std::to_string(c.x) + ", " + std::to_string(c.y) + ", " + std::to_string(c.z) +
+                               ") m, which holds air the source reaches: the layer needs whole faces towards the air. "
+                               "Move the model away from the grid's edge, or enlarge the margin round it.");
                 }
         }
         stats_.air_cells = air;
@@ -4564,7 +4625,7 @@ private:
             const Vec3 c = centre_of(unowned->cell);
             refuse(kRefusedLayerReach,
                 "fitted walls: the model reaches within a cell of the matched layer near (" + std::to_string(c.x) + ", " +
-                std::to_string(c.y) + ", " + std::to_string(c.z) + ") m: a part of the room's air there (" +
+                std::to_string(c.y) + ", " + std::to_string(c.z) + ") m: a part of the air the source reaches there (" +
                 std::to_string(stats_.unowned_volume * cell_ * cell_ * cell_) +
                 " m^3) is open only to the layer, and no cell of the grid can hold it. Move the model away from the "
                 "grid's edge, or enlarge the margin round it.");
@@ -4634,6 +4695,18 @@ private:
                        "triangulations of one wall, or a corner sharper than 7.2 degrees); fitted walls would count both as "
                        "wall. Make them one face, weld them, or keep them at least kGap apart.");
         }
+    }
+
+    // A refused fit: no open side, every cell kSolid, no row.
+    void clear_rows() {
+        open_sides_ = {};
+        type_.assign(n_[0] * n_[1] * n_[2], kSolid);
+        row_cell_.clear();
+        air_volume_.clear();
+        open_area_.clear();
+        wall_area_.clear();
+        leak_area_row_.clear();
+        sliver_.clear();
     }
 
     // x with three significant digits, for a message (std::to_string prints a small area as 0.000000).

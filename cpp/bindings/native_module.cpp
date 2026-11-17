@@ -1092,10 +1092,10 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
     as::CutCells::Mesh mesh;
     if (fitted_walls) {
         if (!vertices || !faces)
-            throw std::invalid_argument("WaveSolver: fitted_walls needs the vertices and faces the BVH was built from");
+            throw std::invalid_argument("fitted walls: the solver needs the vertices and faces the BVH was built from");
         mesh = fit_mesh(*vertices, *faces);
         if (mesh.face_count != bvh.face_count())
-            throw std::invalid_argument("WaveSolver: the faces given are not the BVH's (their counts differ)");
+            throw std::invalid_argument("fitted walls: the faces given are not the BVH's (their counts differ)");
     }
     {
         nb::gil_scoped_release release;
@@ -1404,17 +1404,27 @@ NB_MODULE(_native, m) {
                      "of the last run, on average; 0 in still air.")
         .def_prop_ro("stencil", &as::WaveSolver::stencil)
         .def_prop_ro("threads", &as::WaveSolver::threads)
+        .def_prop_ro(
+            "fitted_walls",
+            [](const as::WaveSolver &solver) { return solver.cut_cells() != nullptr; },
+            "Whether the model's faces were fitted to the grid (fitted_walls=True).")
         .def(
             "cut_cells",
             [](const as::WaveSolver &solver) {
                 const as::CutCells *cut = solver.cut_cells();
-                return cut == nullptr ? nb::dict() : cut_cells_dict(*cut);
+                if (cut == nullptr) return nb::dict();
+                nb::dict d = cut_cells_dict(*cut);
+                const std::size_t k = solver.special_cells().size();
+                d["special"] = to_numpy(std::vector<std::int64_t>(solver.special_cells()), {k});
+                d["volume"] = to_numpy(std::vector<double>(solver.special_volume()), {k});
+                return d;
             },
-            "With fitted_walls=True: per cell owning cut air, ascending by index: cell, "
-            "air_volume (cells), open_area (n, 18; cell faces, the solver's directions), "
-            "wall_area (n, materials + 1; the last column the grid's edge), leak_area (n; "
-            "rigid wall where a solid cell's region meets the cell's air), sliver (n, 6; "
-            "the cut air's thickness taken through each axial face, cells).")
+            "With fitted_walls=True: the fit's rows, ascending by index: cell, air_volume "
+            "(cells^3), open_area (n, 18; cell faces, the solver's directions), wall_area (n, "
+            "materials + 1; the last column the grid's edge), leak_area (n; zeros), sliver (n, "
+            "6; the cut air's thickness taken through each axial face, cells); and the "
+            "solver's special cells, special (in the layout's order) and the volume each is "
+            "stepped with, volume (cells^3, after the clamp).")
         .def_prop_ro(
             "cut_stats",
             [](const as::WaveSolver &solver) {
@@ -1424,9 +1434,21 @@ NB_MODULE(_native, m) {
                 const auto &fp = solver.fitted_points();
                 d["points_without_cells"] = fp.without_cells;
                 d["source_on_face"] = fp.source_on_face;
+                const as::WaveSolver::FittedCounts &c = solver.fitted_counts();
+                d["raised"] = c.raised;
+                d["most_raised"] = c.most_raised;
+                d["sliver_links"] = c.sliver_links;
+                d["sliver_both"] = c.sliver_both;
+                d["sliver_thick"] = c.sliver_thick;
+                d["layer_whole_links"] = c.layer_whole_links;
+                d["layer_whole_least"] = c.layer_whole_least;
+                d["plain_rows"] = c.plain_rows;
                 return d;
             },
-            "Fitted walls: the cut cells' counts (see CutCells::Stats in cut_cells.hpp).")
+            "Fitted walls: the cut cells' counts (see CutCells::Stats in cut_cells.hpp), and "
+            "the update's (see WaveSolver::FittedCounts in fdtd.hpp): raised, most_raised, "
+            "sliver_links, sliver_both, sliver_thick, layer_whole_links, layer_whole_least, "
+            "plain_rows.")
         .def(
             "cut_air",
             [](const as::WaveSolver &solver) {

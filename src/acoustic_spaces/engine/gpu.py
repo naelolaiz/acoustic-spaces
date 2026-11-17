@@ -439,6 +439,13 @@ class GpuWaveSolver:
     solver's ``run`` does, from the GPU's own state."""
 
     def __init__(self, solver) -> None:
+        # A fitted layout links cells along the edge-diagonal directions on the 7-point grid,
+        # which the offset table built from the stencil's own directions does not hold.
+        if solver.fitted_walls:
+            raise ValueError(
+                "fitted walls: the GPU does not step them yet: run the wave solver on the CPU "
+                "(simulation.wave.device: cpu)"
+            )
         wgpu = _wgpu()
         self._device = device = _device()
         layout = solver.layout()
