@@ -158,6 +158,23 @@ def test_wave_responses_with_fitted_walls_on_the_gpu_match_the_cpu() -> None:
 
 
 @needs_gpu
+def test_the_wave_timing_script_runs_with_fitted_walls(monkeypatch, capsys) -> None:
+    script = Path(__file__).resolve().parent.parent / "validation" / "wave_gpu.py"
+    argv = ["wave_gpu.py", "--rooms", "shoebox", "--band", "63", "--length", "0.2"]
+    monkeypatch.setattr("sys.argv", [*argv, "--walls", "fitted"])
+    runpy.run_path(str(script), run_name="__main__")
+    out = capsys.readouterr().out
+    walls = next(line for line in out.splitlines() if line.startswith("Walls:"))
+    assert walls.split()[1] == "fitted:"
+    row = next(line for line in out.splitlines() if line.startswith("| shoebox"))
+    cells = [cell.strip() for cell in row.strip("|").split("|")]
+    # Fitted walls take the 7-point stencil, where the shoebox's walls on cell faces take
+    # the 19-point one; the GPU steps them as the CPU does.
+    assert len(cells) == 10 and cells[3] == "7-point" and cells[8].endswith("x")
+    assert float(cells[9]) < _tolerance(1e-5, 1e-4)
+
+
+@needs_gpu
 @STENCILS
 def test_gpu_steps_a_speed_of_sound_per_cell_as_the_cpu_does(stencil: int) -> None:
     """A room whose speed of sound falls from the grid's at the ceiling to 0.6 of it at

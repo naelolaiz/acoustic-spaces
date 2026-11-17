@@ -2455,3 +2455,224 @@ def test_wave_responses_give_the_fit_the_faces_of_the_bvh(tmp_path, monkeypatch)
     assert info["wave_open"] == 1.0 and info["wave_fitted_walls"] == 1.0
     assert info["wave_cells"] == reference["wave_cells"]
     assert np.array_equal(opened[0].signals, left_out[0].signals)
+
+
+# ---- The checks of validation/wave_walls.py ----------------------------------------------------
+
+
+def _wave_walls_script():
+    """validation/wave_walls.py, imported by its path."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent.parent / "validation" / "wave_walls.py"
+    spec = importlib.util.spec_from_file_location("wave_walls_checked", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_fitted_walls_validation_s_checks_fail_past_the_stated_figures() -> None:
+    """Each check of validation/wave_walls.py passes a figure just inside its limit and
+    fails one just outside: the limits are the figures stated for fitted walls to the
+    precision they are stated in (0.05 % along the grid, 0.38 % up to 14 degrees, 4.3 %
+    beyond, 0.04 dB along the grid and 0.18 dB slanted), the dispersion's 1e-5, the 7-point
+    relation's 1e-9 from its closed form, and the controls on cell faces (at least 1 % and
+    1 dB); the box's levels within 1.82 dB; the L-shaped room's reference, and fitted walls
+    no further off than cell faces; the duct's 0.012, 0.1, 0.02 and 0.0278; the decay's
+    4 %; the branch weights' 1e-6; and the long runs' criteria, so that no check can pass
+    whatever it is given."""
+    script = _wave_walls_script()
+
+    def outcome(checks: list[dict]) -> list[bool]:
+        return [c["passed"] for c in checks]
+
+    def faces(off: float) -> dict:
+        return {
+            "kind": "faces",
+            "off_relation": 100 * off,
+            "walls": "fitted",
+            "stencil": 7,
+            "grid_band_hz": 125,
+        }
+
+    assert outcome(script.dispersion_checks([faces(0.9e-5), faces(1.1e-5)])) == [True, False]
+    # On the 7-point stencil the relation is also checked against its closed form.
+    written = [{**faces(0.0), "relation_off_closed_form": off} for off in (0.9e-9, 1.1e-9)]
+    assert outcome(script.dispersion_checks(written)) == [True, True, True, False]
+
+    def turned(walls: str, yaw: float, pitch: float, worst: float) -> dict:
+        return {
+            "walls": walls,
+            "grid_band_hz": 125,
+            "yaw_deg": yaw,
+            "pitch_deg": pitch,
+            "min_percent": -0.001,
+            "max_percent": worst,
+        }
+
+    limits = [((0.0, 0.0), 0.055), ((14.0, 0.0), 0.385), ((22.5, 11.0), 4.35), ((45.0, 0.0), 4.35)]
+    rows = [
+        turned("fitted", *turn, x) for turn, limit in limits for x in (0.99 * limit, 1.01 * limit)
+    ]
+    assert outcome(script.turned_checks(rows)) == [True, False] * len(limits)
+    for worst, passed in ((1.01, True), (0.99, False)):
+        control = [turned("cell_faces", 45.0, 0.0, worst), turned("cell_faces", 0.0, 0.0, 0.5)]
+        assert outcome(script.turned_checks(control)) == [passed]
+
+    converged = [{"stencil": 7, "grid_band_hz": 125, "moves_db": x} for x in (0.0099, 0.0101)]
+    assert outcome(script.levels_checks(converged)) == [True, False]
+
+    def wall(walls: str, angle: float, share: float, error: float, stencil: int = 7) -> dict:
+        return {
+            "walls": walls,
+            "stencil": stencil,
+            "angle_deg": angle,
+            "share": share,
+            "rms_db": [error, 0.0, 0.0],
+        }
+
+    walls = [
+        wall("fitted", 0.0, -0.48, 0.0449),
+        wall("fitted", 0.0, 0.25, 0.0451),
+        wall("fitted", 14.0, 0.0, 0.1849),
+        wall("fitted", 8.0, 0.0, 0.1851),
+        wall("fitted", 25.0, 0.0, 9.0),  # stated nothing: no check
+        wall("cell_faces", 0.0, -0.48, 1.01),
+        wall("cell_faces", 0.0, -0.48, 0.99),
+        wall("cell_faces", 0.0, -0.48, 0.5, stencil=19),  # the 7-point stencil's alone
+    ]
+    assert outcome(script.wall_checks(walls)) == [True, False, True, False, True, False]
+
+    def cost(walls: str, scheme: str, step_ms: float, fit_s) -> dict:
+        return {
+            "model": "box",
+            "walls": walls,
+            "scheme": scheme,
+            "step_ms": step_ms,
+            "fit_s": fit_s,
+        }
+
+    plain = cost("cell_faces", "standard", 1.0, None)
+    within, over = cost("fitted", "auto", 2.39, 2.89), cost("fitted", "auto", 2.41, 2.91)
+    assert outcome(script.cost_checks([plain, within])) == [True, True]
+    assert outcome(script.cost_checks([plain, over])) == [False, False]
+
+    # The turned box's worst over the scanned placements, and the box moved along the grid.
+    scans = [
+        {
+            "grid_band_hz": 125,
+            "yaw_deg": 14.0,
+            "pitch_deg": 0.0,
+            "placements": [0] * 3,
+            "worst_percent": x,
+        }
+        for x in (0.384, 0.386)
+    ]
+    assert outcome(script.scan_checks(scans)) == [True, False]
+    moved = [
+        {
+            "walls": walls,
+            "kind": "shift",
+            "case": "moved",
+            "grid_band_hz": 125,
+            "lowest": {"min_percent": -0.001, "max_percent": x},
+        }
+        for walls, x in (("fitted", 0.054), ("fitted", 0.056), ("cell_faces", 9.0))
+    ]
+    assert outcome(script.moved_checks(moved)) == [True, False]
+
+    def levels(walls: str, worst: float, band: int = 63) -> dict:
+        db = {b: [0.0, worst] for b in (63, 125, 250)[: (63, 125, 250).index(band) + 1]}
+        return {
+            "walls": walls,
+            "stencil": 7,
+            "grid_band_hz": band,
+            "100_ms": db,
+            "300_ms": {b: [0.0] for b in db},
+        }
+
+    assert outcome(script.box_levels_checks([levels("fitted", 1.82)])) == [True, True]
+    assert outcome(script.box_levels_checks([levels("fitted", -1.83)])) == [False, True]
+    assert outcome(script.box_levels_checks([levels("cell_faces", 1.83)])) == [True]
+    assert outcome(script.box_levels_checks([levels("cell_faces", 1.82)])) == [False]
+
+    def l_room(walls: str, f: float, shift=(0.3, 0.2, 0.4)) -> dict:
+        return {
+            "walls": walls,
+            "grid_band_hz": 125,
+            "shift_cells": list(shift),
+            "lowest_hz": f,
+            "plan_on_cell_hz": 62.0,
+            "continuum_hz": 63.0,
+        }
+
+    faces = [l_room("cell_faces", 62.0 * (1 + 0.9e-5)), l_room("cell_faces", 62.0 * (1 + 1.1e-5))]
+    assert outcome(script.lroom_checks(faces)) == [True, False]
+    # Fitted walls no further from the continuum (63 Hz) than cell faces (1.586 % below),
+    # on either side of it.
+    for f, held in ((63.99, True), (64.01, False), (62.01, True), (61.99, False)):
+        assert outcome(script.lroom_checks([faces[0], l_room("fitted", f)])) == [True, held]
+
+    def duct(beta: float, end: float, off: float) -> dict:
+        return {"walls": "fitted", "beta": beta, "end_cells": end, "off": off}
+
+    def branch(end: float, off: float, written: float = 0.0) -> dict:
+        return {
+            "walls": "fitted",
+            "end_cells": end,
+            "off_grid_theory": off,
+            "admittance_off_written": written,
+        }
+
+    def decay(ratio: float) -> dict:
+        return {"walls": "fitted", "grid_band_hz": 125, "modes": [{"ratio": 1.0}, {"ratio": ratio}]}
+
+    def weights(off: float, walls: str = "fitted") -> dict:
+        return {"walls": walls, "grid_band_hz": 125, "off": off}
+
+    found = {
+        "duct": [duct(0.5, 0.25, 0.0119), duct(0.5, 0.48, -0.0121), duct(1.0, 0.0, 0.099)]
+        + [duct(1.0, 0.48, 0.101)],
+        "duct_branch": [branch(0.0, 0.0199, 0.9e-12), branch(0.25, 0.0201)]
+        + [branch(-0.48, 0.0277), branch(-0.48, 0.0279)],
+        "decay": [decay(0.961), decay(1.041)],
+        "branch_weights": [weights(0.9e-6), weights(-1.1e-6), weights(0.5, "cell_faces")],
+    }
+    duct_ends = [True, False, True, False]
+    branch_ends = [True, True, False, True, False]
+    expected = [*duct_ends, *branch_ends, True, False, True, False]
+    assert outcome(script.absorbing_checks(found)) == expected
+    assert outcome(script.absorbing_checks({**found, "duct": []})[:2]) == [True, True]
+    written = {"duct": [], "duct_branch": [branch(0.0, 0.0, 1.1e-12)], "decay": []}
+    assert outcome(script.absorbing_checks(written)) == [False, True]
+
+    def long_run(case: str, oscillating, full=None, **more) -> dict:
+        full = oscillating if full is None else full
+        return {
+            "model": "room",
+            "case": case,
+            "finite": True,
+            "oscillating": list(oscillating),
+            "full": list(full),
+            **more,
+        }
+
+    steady = [1.0] + [0.5] * 19
+    bounded = {"least_coefficient": 0.0, "row_sum": 2.0, "largest_mu": 3.99}
+    rigid = long_run("rigid", steady, **bounded)
+    assert outcome(script.long_checks([rigid])) == [True] * 7
+    over = {"least_coefficient": -1e-12, "row_sum": 2.0 + 1e-12, "largest_mu": 4.01}
+    grown = long_run("rigid", [*steady[:-1], 0.5 * 1.051], **over)
+    assert outcome(script.long_checks([grown])) == [True, True, False, True, False, False, False]
+    swollen = long_run("rigid", [1.0, 0.5, *[0.5] * 9, 0.56, *[0.5] * 8])
+    assert outcome(script.long_checks([swollen])) == [True, True, True, False]
+    decaying = [1.0, 1e-3, 1e-4, 1e-5, 1e-6, *[1e-7] * 5, *[1.09e-7] * 10]
+    assert outcome(script.long_checks([long_run("strong", decaying)])) == [True, True, True]
+    level = [1.0, 1e-3, 1e-4, 1e-5, 1e-6, *[1e-6] * 5, *[1.05e-6] * 10]
+    assert outcome(script.long_checks([long_run("strong", level)])) == [True, False, True]
+    regrowing = [*decaying[:10], *[1.2e-7] * 10]
+    assert outcome(script.long_checks([long_run("open", regrowing)])) == [True, True, False]
+    floor = [*decaying[:10], *[1.1e-6] * 10]
+    assert outcome(script.long_checks([long_run("absorbing", floor)])) == [True, False, False]
