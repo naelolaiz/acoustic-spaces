@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fixed: with Doppler, paths off the same surfaces over the same edge were paired from
+  place to place in the order of their delays, so where one more came among them (as
+  round a barrier's end with edge diffraction) a path could go on as another whose
+  delay was tens of milliseconds shorter, and its sound was heard going back in time
+  for a moment: a click 40 dB above the sound around it, with a slow thump either side,
+  0.76 s into the walk of the `railway` example's train heard at `tsi_7m5` (once for
+  each of its bogies). Each path now goes on as the one whose delay carries on from its
+  own; in that train's walks to the example's four listeners, 89 of the 502 paths
+  followed jumped so, and none does now.
 - Fixed: with edge diffraction, whether the end of an edge stands on a plane (a
   barrier's end on the ground) is read from the plane's faces at the end, no longer a
   ten-thousandth of the model's size past it (1 m in a model 10 km long). With the
