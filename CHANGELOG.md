@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: with `late.device` set to `gpu`, `both` or `auto`, the late part came out low
+  where the source or a listener lay right by a surface. In the cases measured: up to
+  3.2 dB for a source within a millionth of the model's size of one, 6 to 7.5 dB for a
+  source two millionths from both sides of an inner edge of 30 degrees (0.4 to 0.5 dB in
+  a right-angled corner), and 2 to 6 dB for a listener 3 to 12 millionths over a floor
+  that scatters. The CPU now traces such a run and the run says so
+  ([which runs](docs/simulation.md#tuning-the-devices-for-a-computer)).
 - Fixed: a path exactly through an outer edge (a roof's edge over an end wall, a
   building's upright corner, the edge where two barriers meet) stood as a reflection off
   both faces for a source and a listener the edge sees in the same direction across it,
