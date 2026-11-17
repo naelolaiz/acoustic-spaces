@@ -163,7 +163,11 @@ validation's levels by up to 0.012 dB). Scene files of 4.2.1 load unchanged.
 - Upgrading: `engine.uncertainty.edge_errors` takes the run's simulation settings (a
   result's `settings`, or a scene's `simulation`) in place of the scene, and
   `engine.uncertainty.Spread` has the fields `at_least`, `at_most` and `one_sided`,
-  which a `Spread` built by hand must give.
+  which a `Spread` built by hand must give. `engine.refracted.WAVE_MAX_BAND_HZ` is 2000
+  Hz, the top band of the parabolic equation in and out of the shadow (500 Hz before),
+  and `SHADOW_WAVE_MAX_BAND_HZ` is gone; `engine.wave.source_signal` gives the 19-point
+  grid's signal with its correction for the grid's own gain (`level=False` gives the
+  plain one).
 
 **Edges and barriers**
 
@@ -724,6 +728,8 @@ validation's levels by up to 0.012 dB). Scene files of 4.2.1 load unchanged.
   because GitHub lost their runner or a step that fetches system packages failed
   (`.github/workflows/rerun.yml`, `tools/ci_rerun.py`). A pull request runs one job on
   the Intel Mac, the tests with Python 3.10; main and tags run all four.
+- Changed: CI gives the tests 120 minutes and the tests under the sanitizers 150 (75 each
+  in 4.2.1): in mid-November the Windows jobs took 64 to 73 minutes in all.
 
 ## 4.2.1
 
