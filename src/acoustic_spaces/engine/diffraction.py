@@ -84,6 +84,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.clusters import Clusters
 from acoustic_spaces.engine.coherent import ground_factors, ground_wave_factors, reflection_phases
@@ -479,7 +480,7 @@ def _wedges(
     if model.oriented:
         # Face n lies behind face 0: the solid is inside the angle. Between faces with a
         # room on both sides (a bent panel), the side that opens wider diffracts.
-        keep &= (side < 0.0) | model.plane_two_sided[model.face_plane[owner[h0]]]
+        keep &= (side < 0.0) | model.face_two_sided[owner[h0]]
     return geometry, owner, h0, h1, single, theta, side, keep
 
 
@@ -716,8 +717,8 @@ def _closed_ends(model: TraceModel, points, outward, sides, tol) -> np.ndarray:
     normal, offset = model.plane_normal, model.plane_offset
     for begin in range(0, len(points), 512):
         rows = np.arange(begin, min(begin + 512, len(points)))
-        along = points[rows] @ normal.T - offset[None, :]
-        across = np.abs(into[rows] @ normal.T) >= closing
+        along = products.product(points[rows], normal.T) - offset[None, :]
+        across = np.abs(products.product(into[rows], normal.T)) >= closing
         hit_rows, hit_planes = np.nonzero(across & (np.abs(along) <= tol))
         for row, plane in zip(rows[hit_rows], hit_planes, strict=True):
             if closed[row]:
@@ -758,12 +759,22 @@ def _on_triangles(point: np.ndarray, triangles: np.ndarray, tol: float) -> bool:
     return bool(np.any(ok & (v >= -eps) & (w >= -eps) & (v + w <= 1.0 + eps)))
 
 
-def _fade_reach(r1, r2, sin_beta, k_min: float) -> np.ndarray:
+def _fade_reach(r1, r2, sin_beta, k_min: float | np.ndarray) -> np.ndarray:
     """How far (m) past a fading end of an edge a path touching its line at distances
     ``r1`` and ``r2`` from the source and listener sides, at ``sin_beta`` to it, is
     followed: FADE_REACH over the Fresnel integral's argument per metre at ``k_min``."""
     spread = np.sqrt(np.pi * r1 * r2 / ((r1 + r2) * k_min))
     return FADE_REACH * spread / np.maximum(sin_beta, _FADE_MIN_SINE)
+
+
+def fade_window(distance, reach) -> np.ndarray:
+    """How much of what an end of an edge does to a path counts where the path touches
+    the edge's line ``distance`` (m) from that end: all of it up to FADE_TAPER /
+    FADE_REACH of ``reach`` (m, :func:`_fade_reach`), then less, down to none at
+    ``reach`` (shaped like the two together)."""
+    start = FADE_TAPER / FADE_REACH * reach
+    x = np.clip((distance - start) / np.maximum(reach - start, 1e-300), 0.0, 1.0)
+    return 0.5 * (1.0 + np.cos(np.pi * x))
 
 
 def near_fading_end(fades, t_k, length, r1, r2, sin_beta, k_min: float):
@@ -805,7 +816,9 @@ def _weighted_tail(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     def owen(x, y):
         ratio = y / np.maximum(x, 1e-300)
         s2 = (ratio[:, None] * _LEGENDRE[0]) ** 2
-        return ratio * ((np.exp(-1j * (x**2)[:, None] * (1.0 + s2)) / (1.0 + s2)) @ _LEGENDRE[1])
+        return ratio * products.product(
+            np.exp(-1j * (x**2)[:, None] * (1.0 + s2)) / (1.0 + s2), _LEGENDRE[1]
+        )
 
     far = np.minimum(p, q) > _TAIL_SWITCH
     low = ~far & (q <= p)
@@ -818,7 +831,9 @@ def _weighted_tail(u: np.ndarray, v: np.ndarray) -> np.ndarray:
         out[high] = (owen(q[high], p[high]) / np.pi - rest) / (2.0 * whole)
     if far.any():
         square = (q[far] ** 2)[:, None] - 1j * _LAGUERRE[0]
-        along = (-0.5j / (np.sqrt(square) * (square + (p[far] ** 2)[:, None]))) @ _LAGUERRE[1]
+        along = products.product(
+            -0.5j / (np.sqrt(square) * (square + (p[far] ** 2)[:, None])), _LAGUERRE[1]
+        )
         phase = np.exp(-1j * (q[far] ** 2 + p[far] ** 2))
         out[far] = phase * p[far] * along / (2.0 * np.pi * _fresnel_tail_share(v[far]))
     return out
@@ -882,9 +897,7 @@ def along_edge(
     t_k, length = np.asarray(t_k, float), np.asarray(length, float)
 
     def window(distance):
-        start = FADE_TAPER / FADE_REACH * reach
-        x = np.clip((distance - start) / np.maximum(reach - start, 1e-300), 0.0, 1.0)
-        return (0.5 * (1.0 + np.cos(np.pi * x)))[:, None, None, None]
+        return fade_window(distance, reach)[:, None, None, None]
 
     before, after = t_k < 0.0, t_k > length
     squeeze = inside is None
@@ -1061,7 +1074,7 @@ class EdgeDiffraction:
 
     def _facing(self, point: np.ndarray) -> np.ndarray:
         """Planes that ``point`` lies in front of (on either side of two-sided ones)."""
-        distance = self.model.plane_normal @ point - self.model.plane_offset
+        distance = products.product(self.model.plane_normal, point) - self.model.plane_offset
         return np.flatnonzero(self.model.in_front(distance, _TOLERANCE * self.size))
 
     def _reaching(self, listener, planes, row_edge, t_s, rho_s, max_delay_s):
@@ -1251,7 +1264,9 @@ class EdgeDiffraction:
         boundary, the one row of each such way that carries the wave itself, all the
         rows on those ways, and (C,) whether a row's incident wave is one of those
         waves. ``angle`` (C,) is the listener side's from the boundary, ``image``
-        (C, 3) and ``order`` (C,) the wave's image of the source and its order.
+        (C, 3) and ``order`` (C,) the wave's image of the source and its order; two rows
+        have one wave where those and the planes it reflects off (:func:`_wave_planes`)
+        are the same.
 
         The rays that look for a path over an edge start just off the edge, and pass
         what the straight way between the source and the listener sides does not: two
@@ -1283,7 +1298,8 @@ class EdgeDiffraction:
         of_way = np.zeros(len(t_k), dtype=bool)
         if len(rows) < 2:
             return rows[:0], rows[:0], rows[:0], of_way
-        wave = np.column_stack([np.round(image / (1e-6 * self.size)), order])
+        planes = _wave_planes(self.model, c)
+        wave = np.column_stack([np.round(image / (1e-6 * self.size)), order, planes])
         groups = np.unique(wave, axis=0, return_inverse=True)[1].ravel()
         group = groups[rows]
         past = (t_k[rows] < 0.0) | (t_k[rows] > length[rows])
@@ -2283,7 +2299,8 @@ class EdgeDiffraction:
         incident wave and the reflections off face 0 and face n), or -1; (C, 3, 3) the
         image of the source each wave comes from and (C, 3) its order; and (C, 3)
         whether the wave comes from in front of its face (always for the incident
-        wave)."""
+        wave). A wave's path is the one with its image that reflects off its planes, or
+        one with its image that does not carry its faces (:func:`_match`)."""
         model, edges = self.model, self.edges
         count = len(c["edge"])
         out = np.full((count, 3), -1, dtype=np.int64)
@@ -2293,6 +2310,7 @@ class EdgeDiffraction:
         specular = np.flatnonzero((paths.edge < 0) & (paths.crossings == 0))
         images = _image_sources(listener, paths)[specular]
         orders = paths.order[specular]
+        hit, known = _planes_hit(model, paths, specular, 3)
         kind, plane, plane2 = c["kind"], c["plane"], c["plane2"]
         base = np.broadcast_to(self.source, (count, 3)).copy()
         has_plane = kind > 0
@@ -2302,8 +2320,10 @@ class EdgeDiffraction:
         for column, wedge_face in ((0, None), (1, 0), (2, 1)):
             if wedge_face is None:
                 image, order = base.copy(), has_plane.astype(np.int64)
+                off = _wave_planes(model, c)
             else:
                 face_plane = edges.plane[c["edge"], wedge_face]
+                off = _wave_planes(model, c, face_plane)
                 image = base.copy()
                 # Reflection off the wedge face after the plane (source side image),
                 # or before it (listener side image).
@@ -2321,7 +2341,9 @@ class EdgeDiffraction:
                 order = order + both.astype(np.int64)
             points[:, column], reflections[:, column] = image, order
             if len(specular):
-                out[:, column] = _match(image, order, images, orders, specular, tolerance)
+                out[:, column] = _match(
+                    image, order, images, orders, specular, tolerance, (off, hit, known)
+                )
         # A reflection off a face needs the wave to come from in front of it: on a free
         # edge both faces' images are the same point, and only one side is in front.
         n = edges.wedge[c["edge"]]
@@ -2600,14 +2622,60 @@ def _shortest(a, d1, b, d2, source, listener, iterations: int = 50):
     return t1, t2, np.maximum(np.abs(g1), np.abs(g2)) < 1e-8
 
 
-def _match(queries, query_order, images, orders, index, tolerance, chunk: int = 4096):
+def _wave_planes(model: TraceModel, c: dict, face_plane: np.ndarray | None = None) -> np.ndarray:
+    """(C, 3) the planes the wave of each of the terms ``c`` (:meth:`EdgeDiffraction._combos`)
+    reflects off, as ``model``'s :attr:`~acoustic_spaces.engine.model.TraceModel.geometric_plane`
+    has them (one for the planes that lie in one place, whichever way they face), in
+    rising order after -1 where they are fewer than three: the term's own (one before or
+    after its edge, or one before and one after) and, with ``face_plane`` (C,), that
+    plane of its wedge's face too."""
+    kind = c["kind"]
+    out = np.full((len(kind), 3), -1, dtype=np.int64)
+    out[kind > 0, 0] = model.geometric_plane[c["plane"][kind > 0]]
+    out[kind == 3, 1] = model.geometric_plane[c["plane2"][kind == 3]]
+    if face_plane is not None:
+        out[:, 2] = model.geometric_plane[face_plane]
+    return np.sort(out, axis=1)
+
+
+def _planes_hit(
+    model: TraceModel, paths: EarlyReflections, rows: np.ndarray, width: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """(len(rows), width) the planes each of the specular paths ``rows`` of ``paths``
+    reflects off, as ``model``'s
+    :attr:`~acoustic_spaces.engine.model.TraceModel.geometric_plane` has them, in rising
+    order after -1 where they are fewer than ``width``, and (len(rows),) whether the
+    path carries them: a face for each of its reflections, ``width`` at most."""
+    out = np.full((len(rows), width), -1, dtype=np.int64)
+    known = np.zeros(len(rows), dtype=bool)
+    for at, row in enumerate(rows):
+        if row >= len(paths.faces):
+            continue
+        faces = np.asarray(paths.faces[row], dtype=np.int64)
+        if len(faces) == paths.order[row] <= width:
+            planes = model.geometric_plane[model.face_plane[faces]]
+            out[at, width - len(faces) :] = np.sort(planes)
+            known[at] = True
+    return out, known
+
+
+def _match(queries, query_order, images, orders, index, tolerance, planes=None, chunk: int = 4096):
     """For each query point, the index of the image of the same order within
-    ``tolerance`` of it, or -1."""
+    ``tolerance`` of it, or -1. With ``planes`` (the planes that the queries' waves
+    reflect off, as :func:`_wave_planes` gives them, then those of the images' paths
+    and whether each carries them, as :func:`_planes_hit` does), the image is one of a
+    path off the query's planes, in whatever order, or of a path that does not carry
+    its planes: the images of a source right by two surfaces in the one and in the
+    other lie within the tolerance of each other."""
     out = np.full(len(queries), -1, dtype=np.int64)
     for begin in range(0, len(queries), chunk):
         q = queries[begin : begin + chunk]
         d = np.linalg.norm(q[:, None, :] - images[None, :, :], axis=2)
         d = np.where(query_order[begin : begin + chunk, None] == orders[None, :], d, np.inf)
+        if planes is not None:
+            asked, off, known = planes
+            same = (asked[begin : begin + chunk, None, :] == off[None, :, :]).all(axis=2)
+            d = np.where(same | ~known[None, :], d, np.inf)
         best = np.argmin(d, axis=1)
         hit = d[np.arange(len(q)), best] <= tolerance
         out[begin : begin + chunk] = np.where(hit, index[best], -1)

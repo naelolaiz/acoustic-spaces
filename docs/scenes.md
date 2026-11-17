@@ -60,11 +60,13 @@ past. A stitch whose own corner lies on its edge (within 10 µm) is dropped ther
 split closes the gap. A model with no faces left is refused, as is one with coordinates
 that are not finite numbers or a face that names a vertex the file does not have.
 `validate` then reports surfaces without a material, sources or listeners outside the
-room or on a surface (within 1 µm of it; an opening, with air on both sides, does not
-count) and listeners within 1 cm of a source; it warns about models that are not closed
-(rays would escape), listeners so close to a surface or an opening that the late part
-comes out noisy, and assignments that match nothing. Errors exit
-with status 1, and with `--strict` warnings too. Normals may point either way:
+room or on a surface (within 1 µm of it, or within 2e-9 of the model's diagonal where
+that is more, twice the least distance at which a ray traced on the CPU meets a face; an
+opening, with air on both sides, does not count) and listeners within 1 cm of a source;
+it warns about models that are not closed (rays would escape), listeners so close to a
+surface or an opening that the late part comes out noisy, and assignments that match
+nothing. Errors exit with status 1, and with `--strict` warnings too. Normals may point
+either way:
 the room is the space the faces close off, found from the faces themselves (see
 [Walls, doors and openings](#walls-doors-and-openings)), and a panel standing in the
 room, with air on both sides, reflects and absorbs on both.
@@ -323,8 +325,14 @@ solution that [Validation](validation.md#edge-diffraction-against-the-exact-solu
 finds in each band, as the band adds its paths in pressure or in energy: over one edge,
 over two (`second_order`), a path reflected on both sides of an edge left out
 (`one_side`), and where a path reaches an edge's end (a solid block's corners; a thin
-screen's edges fade out past their ends). They are not drawn, as they are
-measured for whole levels in a few geometries, not for each path.
+screen's edges fade out past their ends). Where the [solver for whole
+rows](outdoor.md#sound-over-rows-of-barriers-and-buildings) carries a row's sound, its
+own largest difference from the [wave
+calculation](validation.md#rows-of-roofs-and-barriers-against-a-wave-calculation) is
+listed in those bands (`whole rows`) and the edges' in the others. That sound stays as
+it was traced in every draw, though it depends on the absorption of a ground without an
+impedance. The method's errors are not drawn, as they are measured for whole levels in a
+few geometries, not for each path.
 In the lowest bands, where the early paths add in pressure, a reflection's phase
 follows its face's admittance, which is fitted to the absorption; the draws take it
 between fits at nine absorptions of each material over their range rather than a fit
@@ -339,9 +347,33 @@ bounds and the errors over edges, and `parameters.json` holds them all (`uncerta
 warning when a material gives an uncertainty of its own; so does the editor, in its
 messages. The editor shows each run's results at once, draws the spread
 after them and gives it in the results table's tips. The draws add to a run: in the
-concert hall example (five built-in materials, six responses) 400 draws take 70 to 75 s
-after an 11 s run on four cores, about half of it the lowest bands' paths added in
-pressure for each draw; `presets: none` leaves the built-in materials out.
+concert hall example (five built-in materials, six responses) 400 draws take 21 s in
+four worker processes (below; 72 s in the run's own process) after a 12 s run on four
+cores, about half of their work the lowest bands' paths added in pressure for each draw;
+`presets: none` leaves the built-in materials out.
+
+`acoustic-spaces simulate` and the editor work the draws out in worker processes, as
+many as the run has threads (`simulation.performance.threads`, `--threads`) and the
+cores it may use, with the same results as in the run's own process and the same
+messages. Each process takes a run of one response's draws at a time and holds that
+response, as traced and as a draw re-weights it, what the run's draws share (up to 128
+MiB of the coherent bands' delay phases and band grids) and its own interpreter, some 80
+MiB; the processes take at most half of the computer's memory (or of its container's
+limit) together, so fewer of them for large responses. There is one process for each
+100 draws of all the responses together at most, so a spread of fewer than 200 draws in
+all stays in the run's own process, as does every spread with `--threads 1`. The
+admittances the draws take in the lowest bands are fitted before the draws, each once.
+The processes inherit the run's environment and the cores it may use and set nothing of
+the linear algebra's threads: a draw's products are added in a fixed order, and the
+library's solvers (the admittances' fits) run in them as in the run's own process. The
+results come out the same to the last bit, except on an Intel Mac, where Apple's
+Accelerate rounds a sum by where its numbers lie in memory and the admittances' fits may
+differ in their last digits as they may from one fit to the next in one process. In
+Python, `material_spread` and `with_spread` take `workers` (1, the default, for none; 0
+for every core). The draws stay in the calling process in a daemonic process (a
+`multiprocessing.Pool`'s). The processes are started by spawning, which imports the main
+module again in each, so a script that gives `workers` must do so under
+`if __name__ == "__main__":`, or the call ends with an error.
 
 `simulation.uncertainty.draws` is the number of draws: 400 unless the scene says
 otherwise, 0 for no spread (`--spread-draws` on the command line, **Draws** in the
@@ -576,11 +608,17 @@ sources:
 - A **CSV** table has the header `azimuth, elevation` followed by frequencies in Hz,
   then one row per direction with levels in dB (any reference; only differences
   matter). Azimuth turns from the front towards the source's left and elevation is
-  positive upwards, in degrees. Any set of directions works: they are interpolated
-  onto a 5 degree grid. Bands are averaged into octaves, and octaves with no data copy
-  the nearest one; in third-octave runs each octave's pattern holds for its thirds.
+  positive upwards, in degrees. Any set of directions works. Bands are averaged into
+  octaves, and octaves with no data copy the nearest one; in third-octave runs each
+  octave's pattern holds for its thirds.
   From Python, `acoustic_spaces.directivity.write_directivity_csv(path, balloon)` writes
   a directivity (a `Balloon`) as such a table, its octave bands on its grid.
+- The directions of a SOFA or CSV file are interpolated onto a 5 degree grid, each of
+  its points from the four directions nearest to it, or from all of them where the
+  file has fewer. Where several are equally near and not all of them are among the
+  four, the point takes the nearer ones alone, or all of them if none is nearer. A
+  direction given more than once (a table's -180 and 180 degrees of azimuth, its rows
+  straight up and down) counts once, with the mean of its energies.
 - CLF (Common Loudspeaker Format) files are not read: their specification is not
   public. Convert them to SOFA or CSV.
 

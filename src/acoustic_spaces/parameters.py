@@ -48,6 +48,7 @@ from typing import Literal, NamedTuple
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 
 #: Fit ranges in dB for EDT, T20 and T30.
@@ -285,11 +286,8 @@ def _fit(level: np.ndarray, t: np.ndarray, top: float, bottom: float):
     x, y = t[start : stop + 1], level[start : stop + 1]
     n = len(x)
     sx, sy = float(x.sum()), float(y.sum())
-    sxx, syy, sxy = (
-        n * float(x @ x) - sx * sx,
-        n * float(y @ y) - sy * sy,
-        n * float(x @ y) - sx * sy,
-    )
+    xx, yy, xy = products.dots(x, y)
+    sxx, syy, sxy = n * xx - sx * sx, n * yy - sy * sy, n * xy - sx * sy
     slope = sxy / sxx
     if slope >= 0:
         return None
@@ -732,7 +730,7 @@ def modulation_transfer(
     )
     kernel = kernel[:slots]
     total = energy.sum(axis=1, keepdims=True)
-    return np.abs(energy @ kernel) / np.where(total > 0, total, np.inf)
+    return np.abs(products.product(energy, kernel)) / np.where(total > 0, total, np.inf)
 
 
 @functools.lru_cache(maxsize=8)
@@ -1402,7 +1400,7 @@ def interaural_cross_correlation(
 
 def _iacc(left: np.ndarray, right: np.ndarray, lag: int) -> float:
     """Largest |cross-correlation| of two signals within ``lag`` samples, normalised."""
-    norm = math.sqrt(float(left @ left) * float(right @ right))
+    norm = math.sqrt(products.dot(left, left) * products.dot(right, right))
     if norm <= 0:
         return math.nan
     n_fft = 1 << (len(left) + lag).bit_length()

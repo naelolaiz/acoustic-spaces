@@ -548,6 +548,29 @@ def test_cancel_stops_the_spread_while_it_is_drawn(qapp) -> None:
     assert not any("draw 51 of" in message for message in heard)
 
 
+def test_the_spread_s_draws_take_the_run_s_threads(qapp, monkeypatch) -> None:
+    """The spread's draws take as many worker processes as the run has threads: the
+    job's, else those of the settings."""
+    from acoustic_spaces.engine import reweight, uncertainty
+    from acoustic_spaces.engine.run_size import worker_threads
+
+    asked = []
+
+    def with_spread(result, *args, workers=1, **options):
+        asked.append(workers)
+        return result
+
+    monkeypatch.setattr(uncertainty, "with_spread", with_spread)
+    document = Document(box_scene())
+    _quick(document)
+    document.edit("default", lambda d: d["simulation"].pop("uncertainty"))
+    groups, materials = reweight.groups_of(document.room)
+    for threads in (None, 1, 3):
+        SimulationJob(document.room, threads=threads, groups=groups, materials=materials).run()
+    threads = document.room.scene.simulation.performance.threads
+    assert asked == [worker_threads(threads), 1, worker_threads(3)]
+
+
 # -- the window -------------------------------------------------------------------------
 
 
@@ -2776,6 +2799,31 @@ def test_parabolic_equation_choice(window) -> None:
     window.select("simulation")
     assert not page.parabolic_equation.isEnabled()
     assert page.parabolic_equation.currentData() == "narrow_angle"
+
+
+def test_rows_choice(window) -> None:
+    """Outdoors with edge diffraction on, the simulation page picks the solver for
+    whole rows or the paths over the edges, in wind too; without edge diffraction and
+    in a room there is none to pick."""
+    window.open_example(example_path("street"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    assert page.rows.isEnabled()
+    assert page.rows.currentText() == "solver for whole rows"
+    assert "Maps and walks take the paths" in page.rows.toolTip()
+    page.rows.setCurrentIndex(page.rows.findData("edges"))
+    assert window.document.scene.simulation.early.rows == "edges"
+    page.diffraction.setCurrentIndex(page.diffraction.findData("none"))
+    assert not page.rows.isEnabled()
+    window.open_example(example_path("open_air_stage"))  # in wind, without diffraction
+    window.select("simulation")
+    assert not page.rows.isEnabled()
+    page.diffraction.setCurrentIndex(page.diffraction.findData("first_order"))
+    assert page.rows.isEnabled()
+    window.open_example(example_path("shoebox"))
+    window.select("simulation")
+    assert not page.rows.isEnabled()
+    assert page.rows.currentData() == "solver"
 
 
 def test_barrier_frequencies_choice(window) -> None:

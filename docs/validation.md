@@ -46,6 +46,12 @@ request and checks:
   1.6 band by band and 0.8 to 1.25 on average (over 60 seeds, the root mean square of
   the standard errors came within 0.90 to 1.17 of the spread); and they follow a
   source's feed and new absorption (re-weighted) along with the rest;
+- the sums the package adds in a fixed order (`acoustic_spaces.products`): every kind
+  of product against the same sum added term by term in Python, bit for bit, on one
+  and on several of its own threads, and against bit patterns stored with the tests,
+  the same on every platform; the early pressure's spectra and its coherent signal,
+  the IACC and a decay line through 20,000 points bit for bit the same on one and on
+  four threads of the linear-algebra library;
 - a response's decay times and ratios read the same however loud it is (20 gains, to
   1e-9): the decay curve starts at 0 dB exactly, so EDT's fit always starts at the
   onset;
@@ -1305,7 +1311,7 @@ as the rays can find the reflection between the top's wall and the screen one wa
 round only (see [Known issues](#known-issues)). With the screen 0.1 m past the top
 and its top a micrometre above the top's plane or below it, the level a centimetre
 above is that of a level top within 0.04 dB with `first_order` and, a micrometre
-above, within 0.13 dB up to 500 Hz with `second_order` (below the plane and above
+above, within 0.34 dB up to 500 Hz with `second_order` (below the plane and above
 500 Hz it is not: see [Known issues](#known-issues)). Where such a screen ends 1 cm to
 0.5 m beside the way, the level 1 or 2 mm above the plane is, with `second_order`,
 that a centimetre above: between two tops within 0.23 dB (0.39 dB with the way
@@ -1736,7 +1742,7 @@ theory gives +6.0 dB on both sides.
   the screen 0.5 to 2 m past the top and a tenth of a metre above it with the screen
   0.1 m or less past it, and by up to 0.7 dB a metre above it. With
   `method: image_sources`, which tests every sequence of reflections, the two ways
-  round agree within 0.05 dB there (0.23 dB a tenth of a metre above with the screen
+  round agree within 0.05 dB there (0.25 dB a tenth of a metre above with the screen
   1 cm past the top). They do not past the end of a screen 5 m before a top 5 m wide
   and level with it, a centimetre above their plane and 1 or 10 cm inside the screen's
   end: one way round the fade follows the reflections off the top's wall with their
@@ -2499,6 +2505,9 @@ made for moving air, which the solver does not have (see
 `validation/insertion_loss.py` runs whole outdoor scenes through the results an outdoor
 run reports, the level relative to free field and the insertion loss (see
 [Outdoor scenes](outdoor.md#results-outdoors)), and compares them with exact solutions.
+The barrier's scenes take the paths over its edge (`simulation.early.rows: edges`),
+which those solutions are of; the solver for whole rows has its own check
+([Rows of roofs and barriers against a wave calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation)).
 
 A thin barrier 3 m high, 10 m from a source 1 m up, with listeners 1.5 m up, 2 to 90 m
 behind it, over a ground that absorbs everything: its insertion loss, from the two
@@ -2799,34 +2808,34 @@ program runs without it, a difference of the path lengths only, under 0.01 dB he
 | | -0.22 | -0.15 | +0.12 | -0.19 | -0.05 | through the filters |
 | 2 km | 5.93 | 5.97 | -0.51 | 4.14 | 4.18 | ffp, dB |
 | | -0.02 | +0.07 | -0.53 | -0.75 | -0.90 | engine - ffp |
-| | -0.33 | +0.35 | -1.32 | -0.45 | -0.90 | through the filters |
+| | -0.33 | +0.34 | -1.32 | -0.45 | -0.90 | through the filters |
 
 **case 3, upward refraction 0.1/s**
 
 | distance | 63 | 125 | 250 | 500 | 1k | |
 |---|---|---|---|---|---|---|
 | 100 m | 4.78 | 2.82 | -2.44 | -7.68 | -0.30 | ffp, dB |
-| | -0.02 | -0.02 | -0.09 | -0.06 | -0.04 | engine - ffp |
-| | +0.03 | +0.08 | -0.04 | -0.60 | -0.04 | through the filters |
+| | -0.02 | -0.01 | -0.03 | -0.07 | -0.04 | engine - ffp |
+| | +0.03 | +0.10 | +0.01 | -0.60 | -0.04 | through the filters |
 | 200 m | 3.72 | 0.85 | -7.14 | -16.62 | -11.46 | ffp, dB |
-| | -0.02 | -0.02 | -0.02 | -0.07 | -0.05 | engine - ffp |
-| | +0.05 | +0.11 | -0.11 | -0.53 | -0.05 | through the filters |
+| | -0.02 | -0.02 | -0.03 | -0.08 | -0.05 | engine - ffp |
+| | +0.05 | +0.11 | -0.12 | -0.53 | -0.05 | through the filters |
 | 500 m | -0.84 | -6.20 | -20.67 | -44.90 | -52.70 | ffp, dB |
 | | -0.02 | -0.00 | -0.02 | -0.10 | -0.07 | engine - ffp |
 | | +0.07 | +0.08 | -0.88 | -2.33 | -0.07 | through the filters |
 | 1 km | -10.83 | -19.87 | -43.44 | -90.90 | -100.23 | ffp, dB |
 | | -0.01 | +0.01 | +0.02 | - | - | engine - ffp |
-| | +0.06 | -0.12 | -3.40 | - | - | through the filters |
+| | +0.06 | -0.13 | -3.40 | - | - | through the filters |
 | 2 km | -33.35 | -48.82 | -78.33 | -88.90 | -94.67 | ffp, dB |
-| | -0.01 | +0.02 | - | - | - | engine - ffp |
-| | -0.12 | -0.91 | - | - | - | through the filters |
+| | -0.01 | +0.01 | - | - | - | engine - ffp |
+| | -0.13 | -0.93 | - | - | - | through the filters |
 
 **0.1/s up to 100 m**
 
 | distance | 63 | 125 | 250 | 500 | 1k | |
 |---|---|---|---|---|---|---|
 | 100 m | 5.55 | 3.42 | -2.27 | -5.22 | 2.55 | ffp, dB |
-| | -0.05 | -0.05 | -0.04 | -0.06 | -0.04 | engine - ffp |
+| | -0.05 | -0.05 | -0.04 | -0.07 | -0.04 | engine - ffp |
 | | +0.00 | +0.06 | -0.04 | -0.68 | -0.04 | through the filters |
 | 200 m | 6.21 | 2.97 | -5.67 | -6.00 | 2.28 | ffp, dB |
 | | -0.04 | -0.04 | -0.05 | -0.07 | -0.05 | engine - ffp |
@@ -2850,16 +2859,16 @@ program runs without it, a difference of the path lengths only, under 0.01 dB he
 | | +0.03 | +0.08 | +0.01 | -0.60 | -0.04 | through the filters |
 | 200 m | 3.72 | 0.85 | -7.14 | -16.62 | -11.46 | ffp, dB |
 | | -0.02 | -0.02 | -0.03 | -0.08 | -0.05 | engine - ffp |
-| | +0.05 | +0.11 | -0.12 | -0.53 | -0.05 | through the filters |
+| | +0.04 | +0.11 | -0.12 | -0.53 | -0.05 | through the filters |
 | 500 m | -0.84 | -6.20 | -20.66 | -44.81 | -52.68 | ffp, dB |
 | | -0.01 | -0.00 | -0.04 | -0.20 | -0.08 | engine - ffp |
 | | +0.08 | +0.08 | -0.89 | -2.39 | -0.08 | through the filters |
 | 1 km | -10.87 | -19.88 | -43.62 | -66.43 | -66.91 | ffp, dB |
 | | -0.03 | -0.09 | +1.48 | - | - | engine - ffp |
-| | +0.01 | -0.23 | -1.94 | - | - | through the filters |
+| | +0.01 | -0.23 | -1.95 | - | - | through the filters |
 | 2 km | -31.61 | -43.55 | -69.69 | -91.23 | -98.25 | ffp, dB |
-| | +0.04 | +0.11 | - | - | - | engine - ffp |
-| | +0.17 | +0.23 | - | - | - | through the filters |
+| | +0.06 | +0.06 | - | - | - | engine - ffp |
+| | +0.19 | +0.18 | - | - | - | through the filters |
 
 In still air the early paths are image sources read through the band filters, and the
 row *through the filters* is the one to compare: the engine is within 0.04 dB of the program up
@@ -2880,7 +2889,7 @@ free field (0.20 dB with the gradient stopping at 100 m, at 500 Hz), and within 
 at 1 km with the gradient stopping at 100 m (250 Hz,
 44 dB down, where the pure tones above show the parabolic equation straying deep in
 the shadow); the comparison stops 60 dB down. The 1 kHz band comes from the parabolic
-equation too: within 0.08 dB to 1 km, downwind and upwind, and at 2 km downwind 0.9 dB
+equation too: within 0.09 dB to 1 km, downwind and upwind, and at 2 km downwind 0.9 dB
 low with the gradient going on to 1000 m, as the bands below it there, and 0.38 dB high
 with it stopping at 100 m.
 
@@ -2901,14 +2910,14 @@ the shadow the bands keep their own samples (see [Known issues](#known-issues)).
 Up to 500 Hz the echogram reads the bands through band filters from that field, the
 63 Hz band's run going on down to an octave below it, where its filter still reads it.
 100 m downwind in case 2 and 200 m downwind in `windy`, C50 and C80 at 63 Hz are within
-0.01 and 0.08 dB and within 0.05 and 0.10 dB of a run of the equation 27 times as dense
+0.01 and 0.09 dB and within 0.06 and 0.07 dB of a run of the equation 27 times as dense
 going on down to 11 Hz, read through the same filters (27 and 81 times, to 11 or
 5.5 Hz, agree within 0.06 dB), where the band's own samples were 0.30 and 0.29 dB and
 0.91 and 0.19 dB off, and EDT within a step of the echogram (1 ms), where `windy`'s was
 1.8 ms off (`tests/test_ffp.py`); a coverage map's point keeps the same samples in these
 bands as a listener there (`tests/test_refraction.py`). That run's lowest frequency, 25 Hz,
 thickens its absorbing layer, which moves the 63 Hz band's level by 0.002 and 0.003 dB,
-to within 0.0001 dB of a thicker one still. Above 63 Hz, where C50 and C80 are 47 to
+to within 0.0002 dB of a thicker one still. Above 63 Hz, where C50 and C80 are 50 to
 88 dB, see [Known issues](#known-issues).
 
 ## The wide-angle parabolic equation
@@ -3054,17 +3063,17 @@ of the two.
 | | +0.00 | +0.00 | -0.00 | -0.00 | -0.00 | engine - ffp |
 | | +0.05 | +0.11 | +0.00 | -0.61 | -0.00 | through the filters |
 | 200 m | 6.21 | 2.97 | -5.67 | -6.00 | 2.28 | ffp, dB |
-| | +0.00 | +0.00 | -0.00 | -0.00 | -0.00 | engine - ffp |
+| | +0.00 | +0.00 | -0.00 | +0.00 | -0.00 | engine - ffp |
 | | +0.07 | +0.13 | -0.22 | -0.62 | -0.00 | through the filters |
 | 500 m | 9.03 | 1.29 | -2.98 | -2.74 | 5.07 | ffp, dB |
-| | +0.00 | -0.00 | -0.00 | -0.00 | -0.00 | engine - ffp |
+| | +0.00 | -0.00 | -0.00 | +0.00 | -0.00 | engine - ffp |
 | | +0.15 | -0.15 | -0.06 | -0.76 | -0.00 | through the filters |
 | 1 km | 6.79 | 1.37 | 1.43 | 1.55 | 6.63 | ffp, dB |
 | | -0.00 | +0.00 | -0.00 | -0.00 | -0.00 | engine - ffp |
 | | -0.25 | -0.10 | +0.16 | -0.08 | -0.00 | through the filters |
 | 2 km | 5.93 | 5.97 | -0.51 | 4.14 | 4.18 | ffp, dB |
 | | -0.00 | -0.00 | -0.00 | -0.00 | -0.00 | engine - ffp |
-| | -0.31 | +0.27 | -0.79 | +0.29 | -0.00 | through the filters |
+| | -0.30 | +0.27 | -0.79 | +0.29 | -0.00 | through the filters |
 
 **case 3, upward refraction 0.1/s**
 
@@ -3077,24 +3086,24 @@ of the two.
 | | -0.00 | -0.00 | +0.00 | +0.00 | -0.00 | engine - ffp |
 | | +0.06 | +0.12 | -0.08 | -0.45 | -0.00 | through the filters |
 | 500 m | -0.84 | -6.20 | -20.67 | -44.90 | -52.70 | ffp, dB |
-| | -0.01 | -0.01 | -0.00 | +0.01 | +0.01 | engine - ffp |
-| | +0.08 | +0.08 | -0.86 | -2.22 | +0.01 | through the filters |
+| | -0.01 | -0.00 | +0.00 | +0.00 | +0.01 | engine - ffp |
+| | +0.08 | +0.08 | -0.86 | -2.23 | +0.01 | through the filters |
 | 1 km | -10.83 | -19.87 | -43.44 | -90.90 | -100.23 | ffp, dB |
 | | -0.01 | -0.01 | +0.01 | - | - | engine - ffp |
 | | +0.06 | -0.14 | -3.41 | - | - | through the filters |
 | 2 km | -33.35 | -48.82 | -78.33 | -88.90 | -94.67 | ffp, dB |
-| | -0.03 | -0.03 | - | - | - | engine - ffp |
+| | -0.04 | -0.03 | - | - | - | engine - ffp |
 | | -0.15 | -0.96 | - | - | - | through the filters |
 
-From 63 Hz to 1 kHz the engine's levels are within 0.03 dB of the program's band
+From 63 Hz to 1 kHz the engine's levels are within 0.04 dB of the program's band
 averages to 2 km, downwind and upwind (at 1 kHz upwind to 500 m, 53 dB down), where
 with the narrow-angle equation they are 0.5 to 0.9 dB off at 2 km downwind.
 
 Each band of the wide-angle equation marches a grid of twenty points per wavelength of
 its highest frequency in steps of three wavelengths, ten tridiagonal solves a step,
 where the narrow-angle one takes a pair of Fourier transforms a step on a grid half as
-fine, in steps of five wavelengths: three to seven times the time (3.6 to 4.4 on one
-core for a listener 100 m out, 5.5 to 6.6 at 500 m and 3.3 to 3.7 at 2 km, over grass
+fine, in steps of five wavelengths: five to eight times the time (5.4 to 5.7 on one
+core for a listener 100 m out, 7.6 at 500 m and 6.3 to 6.5 at 2 km, over grass
 in the `windy` preset and over asphalt in `clear_night`), all of it in the bands the parabolic equation gives. Neither equation is checked against measurements
 in strong refraction, and neither is combined with a terrain yet (see
 [Outdoor scenes](outdoor.md#what-is-not-modelled-yet)).
@@ -3130,64 +3139,88 @@ difference in dB:
 | bands | 15° or flatter, narrow-angle | steeper, narrow-angle | steeper, narrow-angle, half its step | steeper, wide-angle |
 |---|---|---|---|---|
 | octaves, 63 to 500 Hz | 0.10 (0.48) | 0.10 (0.41) | 0.09 (0.37) | 0.01 (0.05) |
-| third octaves, 50 to 250 Hz, sources 10 to 120 m up | 0.17 (0.87) | 0.23 (1.65) | 0.16 (0.72) | 0.03 (0.09) |
+| third octaves, 50 to 250 Hz, sources 10 to 120 m up | 0.17 (0.87) | 0.24 (1.61) | 0.17 (0.73) | 0.03 (0.09) |
 
-A quarter of the narrow-angle step leaves the steep points 0.10 (0.42) and 0.19 (0.69)
+A quarter of the narrow-angle step leaves the steep points 0.10 (0.42) and 0.20 (0.69)
 dB off. In 18 further cases (the `windy` preset and 10 m/s of wind down- and upwind,
 `clear_night`, and `sunny_day` with 3 m/s of wind downwind; from 20 m up to 1.5 m up and
 from 40 m up to 4 m up over grass, and from 60 m up to 4 m up over a ground of 2000 kPa
 s/m²; the 63 and 125 Hz octaves and the third octaves from 80 to 160 Hz) the steep
 points' octave bands are 0.16 (0.96) dB off with the narrow-angle equation, 0.14 (0.93)
 dB at half its step and 0.02 (0.09) dB with the wide-angle one, their third octaves 0.35
-(2.21), 0.31 (1.96) and 0.04 (0.29) dB. In those cases the narrow-angle equation is about
+(2.20), 0.31 (1.96) and 0.04 (0.29) dB. In those cases the narrow-angle equation is about
 as far off just under 15 degrees: from 10 to 15 degrees up it is 0.14 (1.05) dB off per
 octave band and 0.38 (5.74) dB per third octave, the largest where the level is 14 dB
 below free field (80 Hz, 287 m from the source 60 m up, downwind in 10 m/s of wind over
 the hard ground; the wide-angle equation is 0.28 dB off there in a one-off check). So
 the level jumps at 15 degrees by the narrow-angle equation's error there: in the 28
 cases of both sets, in the bands compared in each, per octave band by 0.12 dB on average
-and up to 0.73 dB (125 Hz, from 60 m up to 4 m up, upwind in 10 m/s of wind over the
+and up to 0.72 dB (125 Hz, from 60 m up to 4 m up, upwind in 10 m/s of wind over the
 hard ground), per third octave by 0.27 dB and up to 2.3 dB (125 Hz in the same case),
 where the level is above -15 dB re free field; at the five largest jumps in each kind of
 band the wide-angle side is within 0.29 dB of the program and the narrow-angle side up
-to 2.4 dB off. Other listeners in the same direction change a level only through what
-the run's grid shares, each listener being reached by a last step of its own off the
-march. That is the absorbing layer: it begins as high as the listener that needs it
-highest, and is as thick as the lowest frequency of the run needs (in the lowest band's
-run those down to an octave below the band, which a listener out of the shadow adds). In
-one-off checks, each listener alone against the same one among the others, a march to it
-alone under the shared run's layer gave the shared run's pressures to the bit; the steep
-listeners' levels moved by less than 0.0001 dB (100 m from a source 30 m up downwind in
-the `windy` preset with five more out to 1 km; 8 m from a source 2 m up in still air
-with another 250 m away in a weather zone of the `windy` preset that begins 100 m away;
-and 30 m from a source 10 m up under air that is still up to 110 m and warmer above with
-another 800 m away), and the flatter ones' by up to 0.006 dB per third octave and 0.001
-dB per octave band (the five 1.5 m up, 150 m to 1 km from that source 30 m up over
-grass), by 0.006 dB at 63 Hz for a listener 400 m upwind, deep in the shadow, with
-another 10 m upwind (a source and that listener 0.5 m over snow in 10 m/s of wind), and
-by 0.007 dB at 125 Hz for a listener 50 m downwind of a source 2 m up in the `windy`
-preset with another 3 km away (the layer then begins 450 m up, alone 22 m up). It is
-more where the narrow-angle equation is near its limit or the level is low. A listener
-45 m from a source 10 m up, which the reflection reaches 14 degrees up, moved by 0.07 dB
-in its 200 Hz third octave, 8.8 dB below free field in its dip over the ground, in still
-air with another listener 1.5 km away in a weather zone of the `windy` preset, and by
-0.03 dB at 80 Hz downwind in that preset with another 1 km away; under seven layers that
-begin 30 to 450 m up the narrow-angle equation is 0.05 to 0.14 dB under the program in
-that 200 Hz third octave, the wide-angle one 0.001 dB over it under each. A listener
-200 m upwind of a source 2 m up in the `windy` preset, with another 1.5 km upwind, moved
-by 0.03 dB in its 1 kHz octave band, 63 dB below free field (0.04 dB with
-`open_ground_frequencies` 8 or `rays`), by 0.08 dB at 8 kHz, and by 0.76 dB in its 1 kHz
-third octave, 72 dB below free field. Where the
+to 2.4 dB off.
+
+By the angle at which the reflection off the ground reaches the listener, with each
+equation run at every point of each case's line and at up to nine more between its ends,
+where the reflection comes in at 5.5 to 14 degrees, the mean (largest) difference in dB
+of the narrow-angle equation and, after it, of the wide-angle one:
+
+| reflection's angle | first set, octaves | first set, third octaves | further set, octaves | further set, third octaves |
+|---|---|---|---|---|
+| 0 to 5° | 0.13 (0.48), 0.03 (0.14) | 0.22 (0.87), 0.07 (0.32) | 0.20 (1.10), 0.05 (0.20) | 0.24 (1.68), 0.07 (0.32) |
+| 5 to 7° | 0.08 (0.42), 0.02 (0.06) | 0.13 (0.48), 0.03 (0.09) | 0.18 (1.21), 0.04 (0.14) | 0.32 (4.55), 0.07 (0.41) |
+| 7 to 10° | 0.06 (0.25), 0.02 (0.05) | 0.12 (0.44), 0.03 (0.08) | 0.11 (0.63), 0.03 (0.13) | 0.25 (3.03), 0.07 (0.43) |
+| 10 to 15° | 0.07 (0.23), 0.02 (0.04) | 0.15 (0.64), 0.03 (0.09) | 0.14 (1.21), 0.03 (0.14) | 0.35 (5.74), 0.07 (0.36) |
+| over 15° | 0.10 (0.41), 0.01 (0.05) | 0.24 (1.61), 0.03 (0.09) | 0.16 (0.96), 0.02 (0.09) | 0.35 (2.20), 0.04 (0.29) |
+
+At every angle the narrow-angle equation is 0.06 to 0.35 dB off on average and the
+wide-angle one 0.01 to 0.07 dB: its error does not begin at 15 degrees. A scene that
+needs the wide-angle equation's level at the flatter listeners too sets
+`parabolic_equation: wide_angle`, at the run time given above.
+
+Over the open ground other listeners in the same direction do not change a level.
+Each listener is reached by a last step of its own off the march, and a run's absorbing
+layer starts where the layer of a run for each of its listeners alone would. A
+listener's own layer starts 1.5 times as high as the highest of the source, the listener
+and the bent paths between them, at least 20 m above the two and 0.15 times the range
+up; listeners share a run where those starts need the same grid of heights, a power of
+two of them, and the layer starts as high as that grid holds it, for one listener as for
+all. The listeners that take the wide-angle equation's level, whose grid is as high as
+its layer needs, share a run where their starts round up to the same of the heights
+2^(k/2) m, where the layer then starts. In the lowest band a listener out of the shadow,
+whose run goes on down to an octave below the band and has a thicker layer for it, runs
+apart from those in the shadow. So a listener alone and the same one among others have
+the same early energy in every band, within 10⁻¹² of it (`tests/test_refraction.py`:
+with others farther away and higher up, downwind and upwind, on two threads, with the
+wide-angle equation for all, under others in a weather zone, and from two sources whose
+runs are shared). The level does go by where the listener's own layer starts, more where
+the narrow-angle equation is near its limit or the level is low. For a listener 45 m
+from a source 10 m up over grass, which the reflection reaches 14 degrees up, 8.8 dB
+below free field in its dip over the ground in the 200 Hz third octave, in still air
+with a weather zone of the `windy` preset beginning 100 m away, the narrow-angle equation
+is 0.05 to 0.14 dB under the program under seven layers that begin 30 to 450 m up, and
+the wide-angle one 0.001 dB over it under each (a one-off check). So the level steps
+where a listener's own start needs the next grid of heights: in a one-off check of 37
+such places 150 to 900 m from a source 2 m up, with listeners 1.5 m up half a percent
+of the range either side, over grass in the `windy` preset, by 0.001 dB or less per
+octave band and 0.011 dB or less per third octave where the level was less than 35 dB
+below free field (23 places, down- and upwind), and by up to 0.57 dB per octave band and
+3.2 dB per third octave upwind where it was more than 60 dB below it (14 places). Behind
+barriers and buildings the others still change a level (see
+[Known issues](#known-issues)). Where the
 wide-angle equation runs behind a barrier its height step is shared too: it fits the
 roof of a building further along the way once one of its points lies beyond the
 building's front (in a one-off check of the march, from a source 2 m up over a ground of
 200 kPa s/m², a barrier 3 m high 15 m away and a building 60 to 75 m away with its roof
 4 m up, down- and upwind in 5 m/s of wind, a point 90 m away moved the 63 Hz band 20 m
 away by 0.018 dB, and the bands to 500 Hz 20 to 59 m away by 0.002 dB or less
-otherwise). At 1 and 2 kHz, in a one-off check, the steep points' level is within 0.03
-dB of the program at 32 points: from sources 5, 10 and 30 m up to a listener 1.5 m up
-and from 1.5 m up to 30 m up, down- and upwind in the `windy` preset over grass. The
-steep listeners' bands take the wide-angle equation's time: about 4 times the
+otherwise). At 1 and 2 kHz, in a one-off check at the steep points of the first set's
+cases from sources 5, 10 and 30 m up to a listener 1.5 m up and from 1.5 m up to 30 m
+up (42 points), the level is within 0.07 dB of the program at 1 kHz; at 2 kHz it is 0.11
+to 0.49 dB off at each case's nearest point, where the sound comes in at 34 degrees, and
+within 0.27 dB at the others. The
+steep listeners' bands take the wide-angle equation's time: about 6 times the
 narrow-angle one's on one core for three listeners 10 to 20 m up, 30 to 60 m from a
 source 1 m up over a lawn in the `windy` preset.
 
@@ -3761,15 +3794,18 @@ top and the surface too. Each march begins at its first obstacle, from the field
 its end and the end's image in the ground have there (for an end over a roof: at the
 first top past it, with the end's image in the roof), and its field becomes a point
 source's by the length of the path pulled taut over the tops, so that the way from the
-street up to a roof may be steep. **Simulations do not use it yet**: the check is of the
-solver by itself.
+street up to a roof may be steep. Outdoor simulations take a row's sound from it (see
+[Sound over rows of barriers and
+buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)): the check is of the
+solver by itself and, for the cases on a ground, of whole simulations (further down).
 
-The reference is a wave calculation written apart from the engine: finite differences
-in time in two dimensions (cells of 2 cm, rigid obstacles as whole cells, matched
-layers on every side, 0.5 s), turned into a point source's field by the integral over
-the wavenumber along the edges. With one rigid screen it is within 0.14 dB of the exact
-solution, the direct sound and the Biot-Tolstoy-Medwin integral over the edge, which
-the script checks on every run. Its levels for the 149 cases are stored beside the
+The reference is a wave calculation written apart from the engine: finite differences in
+time in two dimensions (cells of 2 cm, rigid obstacles as whole cells, matched layers on
+every side, 0.5 s), turned into a point source's field by the integral over the
+wavenumber along the edges. With one rigid screen it is within 0.14 dB of the exact
+solution, the direct sound and the Biot-Tolstoy-Medwin integral over the edge, which the
+script checks on every run. Its levels for the 149 cases, and for 66 of them with the
+ends offset along the edges (see the ways at a slant below), are stored beside the
 script (`rows_wave.json`); `--references` computes them again, 3 to 6 minutes for a
 listener's place on one core.
 
@@ -3785,8 +3821,9 @@ tops and the listener a centimetre above them or half a metre below, or either s
 1.5 m above the ground. The table gives the level in the octave bands from 63 to 500 Hz,
 which a scene adds in pressure, less the wave calculation's (dB), by the angle the sound
 bends by at the row's first or last edge. The simulation's columns are the early stage
-of the same scenes as it is today, either way round, with every sequence of reflections
-tested (`method: image_sources`); `first_order` has no path over two edges and so no
+of the same scenes with the paths over the edges alone (the roofs and screens given as
+a model file's faces), either way round, with every sequence of reflections tested
+(`method: image_sources`); `first_order` has no path over two edges and so no
 sound where neither end sees over the row. In the last five lines the source stands
 over a roof instead, 0.5 or 3 m before x = 10 m, a centimetre or 1.5 m above it: the
 roof ends there, with no parapet or one 0.1, 0.3 or 1.1 m high on its edge, and the
@@ -3796,9 +3833,9 @@ x = 10 m:
 
 | rows | cases | march alone | the solver | simulation, `second_order` | simulation, `first_order` |
 |---|---|---|---|---|---|
-| free space, up to 6° | 52 | -1.96 to -0.03 | -0.38 to +0.18 | -20.60 to +6.64 | -21.07 to +14.16, or no sound |
+| free space, up to 6° | 52 | -1.96 to -0.03 | -0.38 to +0.18 | -20.60 to +6.64 | -21.72 to +14.16, or no sound |
 | free space, 22° down to the listener | 8 | -2.26 to -0.88 | -0.16 to +0.14 | -20.57 to +1.09 | -1.22 to +8.42 |
-| roofs and one screen on a ground, up to 6° | 16 | -1.66 to -0.28 | -0.50 to +0.65 | -10.63 to +1.74 | -10.90 to +7.99 |
+| roofs and one screen on a ground, up to 6° | 16 | -1.66 to -0.28 | -0.50 to +0.65 | -10.63 to +1.74 | -11.79 to +7.99 |
 | the same, 13 to 24° up from the source | 8 | -2.70 to -1.43 | -0.74 to +0.41 | -6.22 to +7.86 | -0.93 to +9.05, or no sound |
 | the same, 42° down to the listener | 12 | -5.29 to -2.19 | -0.71 to +1.24 | -4.69 to +7.35 | -1.94 to +8.21, or no sound |
 | three screens on a ground, up to 6° | 4 | -3.53 to -1.10 | -1.26 to +0.07 | -11.27 to +2.21 | -3.35 to +5.66 |
@@ -3829,6 +3866,37 @@ with one 0.1 or 0.3 m high within 1.13 dB. A screen on a roof that goes on under
 listener, which the solver takes as a strip, is within 0.42 dB at 1.1 m and 0.50 dB
 at 0.1 and 0.3 m, where the simulation's paths over its top are up to 3.43 dB off:
 see the barriers lower than a wavelength below.
+
+In an outdoor scene the early stage takes the solver's sound for the row, in still air
+and in wind (`simulation.early.rows: solver`, the default). With `--engine` the 45 cases
+on a ground are simulated as outdoor scenes too, their roofs as buildings and their
+screens as barriers 400 m long (`second_order`, reflections on both sides of an edge,
+every sequence of reflections tested, a response of 0.5 s, which ends before what comes
+back from the far ends of those buildings and barriers): with the solver the
+simulation's level is the solver's own within 0.02 dB in every band (the air takes its
+energy along the path pulled taut over the tops in the one and along the straight line
+in the other). Against the wave calculation (dB), and with `rows: edges`, the paths over
+the edges alone:
+
+| row | cases | `rows: solver` | `rows: edges` |
+|---|---|---|---|
+| one screen | 9 | -0.15 to +0.47 | -0.87 to +0.54 |
+| one roof 10 m wide | 9 | -0.16 to +0.14 | -3.81 to +3.37 |
+| a roof 9 m wide and a screen 1 m past it | 9 | -0.60 to +1.23 | -6.22 to +5.41 |
+| two roofs 4 m wide, 2 m apart | 9 | -0.74 to +0.64 | -10.63 to +7.85 |
+| three screens | 9 | -3.42 to +0.07 | -11.30 to +4.52 |
+
+The simulation gives the solver the early paths' eight frequencies in each octave band,
+as the solver's own check does. Against 72 in a band, at nine places behind one screen 3
+or 4 m high the band levels with eight are within 0.10 dB at seven, and 0.24 and 0.38 dB
+off in the 500 Hz band at the other two (10 m behind the screen 4 m high).
+Near the end of a top the solver's sound gives way to the paths over the edges (see the
+link above): with a listener 10 m behind a barrier 30 m long, 10 m from the source,
+moved along it and past its end in steps of 2 m, the level stays within 0.26 dB of the
+paths' in every band, and is the paths' own from where the way crosses the barrier 5 m
+before its end. In wind behind a barrier 300 m long the weather changes the level by as
+much with the solver as with the paths over the edges (within 0.001 dB, 25 and 85 m
+behind it).
 
 One rigid screen has an exact solution, the direct sound and the Biot-Tolstoy-Medwin
 integral over the edge, which holds the solver closer to a wall than the wave
@@ -3881,15 +3949,133 @@ half a metre past it and 1.5 m up, the sound comes down to the top at 32° and g
 up at 39°, and the march is 0.50 dB below the open field with Kirchhoff's screen, for
 which the strip's part takes it.
 
+**Ways that cross the row at a slant.** Seen from above, a way seldom crosses a row's
+edges at right angles. The solver takes the angle by which each obstacle is turned from
+across the way (`slants`), and takes the row in one of two ways. In the first the
+marches run in the vertical plane along the way as before, and each edge's terms are
+those of the edge at its slant, on the shortest way from end to end over it. One edge
+between the ends has its exact solutions at a slant too. One rigid screen is within 0.10
+dB of the direct sound and the edge integral at 30, 60 and 75°, at four places of the
+source and the listener; taken as an edge across the way, as the vertical section along
+the way shows it, the solver is 0.09 to 0.62, 0.54 to 2.84 and 1.48 to 5.33 dB low
+there. A roof's corner is within 0.11, 0.36 and 0.61 dB at those slants, the most with
+an end a metre before the corner (within 0.29 dB otherwise). A barrier 0.1 to 3 m high
+on a rigid ground, which the solver takes as the strip summed for ends apart along it,
+is within 0.08 dB of the strip's exact level at 30 to 75° in eight places, where it is
+0.21 to 7.61 dB off when not turned.
+
+In a row a march lights the edges, and the march's way over an edge, in the vertical
+plane along the way, is longer than the sound's own where an end's way to the row is
+steep: at 60°, from a source level with two roofs and 10 m before them to a listener 4.5
+m below them and 5 m past them (both across the edges), by 8 cm, and by 38 cm for the
+way to the listener's image in the ground. The edges' terms have the phase of the
+sound's own way and the marched field that of the section, and the two do not add up:
+given that row all the same, the first way would be up to 6.4 dB above the wave
+calculation. It does not take a row where the section's phase on those terms would
+change a band's sound by more than a tenth of it, nor an edge in a row that is turned
+more than 60° (one edge that both ends light themselves: 75°).
+
+Such a row is taken the second way where it stands on a rigid ground with all its edges
+in one direction, turned up to 75°: solved across its edges and moved to the slant. A
+rigid row that is the same all along its edges answers a point source's pulse, between
+ends y apart along the edges, as it does straight across them at the time sqrt(t² -
+y²/c²), so that every way between the ends and their images has its own path at the
+slant. At a frequency that is a sum of the row's sound across its edges over a lattice
+of wavenumbers, whose weights hold the row's response up to 8 m past the longest of
+those ways. The sum moves a free field and its reflection off the ground to slants of 3
+to 80° within 0.002 of the direct sound. For a row it is as good as the solver is across
+the row at the lattice's wavenumbers, for the part of the row's response that the
+weights hold, as long as the response has ended a period of the lattice less the
+weights' fade past the shortest way (what arrived later would come into the sum out of
+place); the solver takes a row down to ends half a wavelength apart over the tops. Where
+the sound crosses the row at a lower wavenumber, or weights of more than a tenth of the
+first arrival's lie below it, the row is out of reach this way too (`OutOfReach`): one
+screen with the ends 6.8 m apart across it in the 63 and 125 Hz bands at 75°. One rigid
+screen moved so is within 0.15 dB of the exact solution at 2 to 75° (the first way
+within 0.06 dB at those places), and a barrier 0.1 to 8 m high on a rigid ground within
+0.15 dB of the strip's exact level, or of the four paths over its top, in eight of ten
+cases at 30 to 75°, and 0.23 and 0.29 dB above it in the two others (the first way
+within 0.08 dB in all ten). The solver takes the first way where it can: on the 66 cases
+below at 30 and 60° the second takes 7.5 times as long (by set and slant 1.6 to 54
+times), and where both take a band their levels are within 0.23 dB of each other (0.37
+dB over three screens on a rigid ground).
+
+The wave calculation's scenes are the same all along their edges, so each run also gives
+the sound between ends offset along them; with one screen that is within 0.14 dB of the
+exact solution at 30, 60 and 75° as well. Its levels for 66 of the cases are stored at
+those three slants, and the solver takes every band of every one. The table gives its
+level less the wave calculation's (dB), and its level with the row as the vertical
+section shows it, not turned:
+
+| rows | band levels | 30°: the solver | not turned | 60°: the solver | not turned | 75°: the solver | not turned |
+|---|---|---|---|---|---|---|---|
+| free space, up to 6° | 80 | -0.19 to +0.17 | -0.35 to +0.07 | -0.54 to +0.63 | -1.81 to -0.12 | -0.41 to +0.66 | -2.60 to -0.50 |
+| free space, 22° down to the listener | 32 | -0.18 to +0.15 | -0.30 to -0.06 | -0.22 to +0.17 | -1.37 to -0.52 | -0.19 to +0.37 | -2.50 to -0.80 |
+| a roof under the source, to its edge | 32 | -0.15 to +0.03 | -0.26 to +0.13 | -0.08 to +0.19 | -0.82 to +0.85 | -0.14 to +0.32 | -1.38 to +0.88 |
+| a screen 1.1 m high on a roof under both ends | 16 | -0.02 to +0.31 | -0.63 to +0.41 | -0.02 to +0.30 | -3.41 to +0.89 | -0.02 to +0.30 | -5.73 to +1.33 |
+| the same, the screen 0.1 or 0.3 m high | 32 | -0.11 to +0.53 | -0.29 to +0.91 | -0.15 to +0.53 | -2.53 to +2.16 | -0.19 to +0.21 | -4.14 to +3.39 |
+| two roofs on a ground | 36 | -0.75 to +0.85 | -1.46 to +0.36 | -1.26 to +0.59 | -4.79 to +1.90 | -1.16 to +1.21 | -5.90 to +1.32 |
+| three screens on a ground | 36 | -3.21 to +0.65 | -4.15 to +0.07 | -5.78 to +0.49 | -8.76 to +0.06 | -8.18 to +2.39 | -9.73 to -1.87 |
+
+The first way takes the rows in free space at 30 and 60°, and the roof under the source
+and the screens on a roof at every slant. The second takes the rows on a ground but for
+the 63 Hz band at 30° at 15 of 18 places (57 of 72 band levels at 30°, all at 60 and
+75°), and at 75° the rows in free space (104 of 112 band levels).
+
+In free space and over a roof the solver is as close at 30 and 60° as across the row,
+but in the 63 Hz band at 60°: over three screens it is 0.44 to 0.54 dB low there and
+over three roofs 0.60 to 0.63 dB high, and within 0.22 dB in every other case and band.
+At that slant the row is, in wavelengths across its edges, what it is across the way an
+octave lower, and across the way in the 31.5 Hz band the solver is 0.30 to 0.33 dB below
+a wave calculation of the three screens (5 m apart, a third to two thirds of a
+wavelength there) at the two places where it is 0.44 and 0.47 dB low at the slant. That
+calculation is not made for the three roofs. At 75°, nearly two octaves lower across the
+edges, the solver is 0.37 to 0.52 dB high over the three roofs in the 63 Hz band and
+0.61 to 0.66 dB high in the 125 Hz band, and within 0.41 dB in every other case and band
+in free space; with a roof under the source within 0.32 dB, and with a screen on a roof
+within 0.31 dB.
+
+On the rigid ground, with ends from half a metre below the tops to half a metre above
+them or 1.5 m above the ground, the two roofs are within 0.85 dB of the wave calculation
+at 30°, 1.26 dB at 60° and 1.21 dB at 75° (across the row: 0.74 dB). The three screens
+are up to 3.21 dB low at 30°, 5.78 dB at 60° and 8.18 dB at 75°, and up to 0.65, 0.49
+and 2.39 dB high (across the row up to 3.42 dB low); what lacks between rigid screens is
+described below.
+
 What it does not hold:
 
 - **Rigid screens on a rigid ground.** Over three screens 6 m high and 5 m apart the
   solver is up to 1.26 dB low near grazing incidence, 2.55 dB with the source 4.5 m
-  below their tops and 3.42 dB with the listener at street level (two roofs with a
-  gap 2 m wide between them near grazing incidence: within 0.50 dB; one screen, one
-  roof and a roof with a screen 1 m past it: within 0.65 dB). Between rigid screens
-  on a rigid ground sound goes to and fro, and a march one way has none coming back;
-  no run here shows that this is what lacks.
+  below their tops and 3.42 dB with the listener at street level (two roofs with a gap 2
+  m wide between them near grazing incidence: within 0.50 dB; one screen, one roof and a
+  roof with a screen 1 m past it: within 0.65 dB), and at a slant up to 3.21 dB low at
+  30°, 5.78 dB at 60° and 8.18 dB at 75°. Between rigid screens on a rigid ground sound
+  goes to and fro, and a march one way has none coming back. That is part of what lacks:
+  with both ends at street level the wave calculation's response across the row holds 22
+  to 29 % of its energy 9 to 60 m after the shortest way and the solver's 0.1 to 0.2 %,
+  and without that late sound the wave calculation's own levels are up to 1.74 dB lower
+  across the row, 2.14 dB at 30° and 2.62 dB at 60° (at 75° that is not traced). It is
+  not all: in the 63 Hz band across the row the solver is 3.4 dB low there, where the
+  wave calculation's level does not fall without its late sound, and the cause of that
+  is not traced.
+- **A row at a slant that neither way takes.** The second way is for a rigid ground and
+  edges in one direction. On a ground with an impedance, or with edges at different
+  slants, a row has the first way alone and is refused where an end's way to it, or its
+  image's in the ground, is steep, or an edge in it that a march lights is turned more
+  than 60° (one that both ends light themselves: 75°). Edges turned more than 75° are
+  refused either way: neither is measured beyond. Edges at different slants are each
+  taken as if the row's other edges were turned as it is, which gives the same sound
+  from either end but is not measured against a reference. The second way does not reach
+  a row that the sound crosses at wavenumbers below the solver's lowest, where the ends
+  are few wavelengths apart across the edges: with a way of 25 m at 75°, 6.8 m across
+  the edges, the 63 and 125 Hz bands. And it takes time: 7.5 times as long as the first
+  way over the 66 cases at 30 and 60°. A barrier's strip at a slant takes more terms
+  where the ends are close to it: with both ends halfway up the barrier it is solved
+  from 0.14 of its height from it across it, from 0.41 along the way at 60° and from
+  0.83 at 75°, and closer the edges' terms stand in its place. The strip's sum for ends
+  apart along the barrier takes 1.7 to 4.9 times as long as across it up to 45°, 2.5 to
+  9.9 times at 60° and 5 to 37 times at 75° (eight places, 63 to 500 Hz), the most with
+  the ends 4 and 6 m from a barrier 3 m high: 1.8 to 5.4 s a frequency at 75°.
 - **What stands behind an end.** It does nothing: a wall behind a source reflects
   nothing, and a roof under an end goes on behind it without end. Against the exact
   solution for the corner, with a source on a roof and a listener 1.5 m above it 20 m
@@ -3999,7 +4185,7 @@ What it does not hold:
   band); the cause is not traced. A roof that rises by a centimetre where the roof
   under the source ends comes out 0.27 dB above the flat roof in the 63 Hz band
   with the source 8 m before the step and 0.38 dB with it 3 m before.
-- Edges that end beside the way, absorbing roofs and walls, and the bands above
+- Absorbing roofs and walls, which the solver takes as rigid, and the bands above
   500 Hz are not in the check.
 
 `tests/test_rows.py` holds, on every change: thirty-one of the cases against their
@@ -4026,19 +4212,38 @@ building, a ground that is rigid at some frequencies only, the ends close to eac
 beside a high screen); what a corner sheds of the wave of an end over its roof and of
 that end's image against closed forms; the errors for what the solver refuses, and
 marches from an end at the limits of what it takes; and a level that changes by less
-than 0.05 dB a centimetre as a barrier's top passes the plane of the roof before it.
-`tests/test_strip.py` holds the strip's solution by itself: a barrier far lower than a
-wavelength against the plate across a uniform flow that it is, the kernel's parts
-against each other and their limits, the rule for the logarithm against closed forms,
-the equation at the far end of the sum over the wavenumbers, where a factor of its
-kernel would grow beyond the digits of a number and is faded, how far the density's
-number of terms holds what the barrier adds (to 6e-5 of it, 4e-5 dB, at a height of 31
-over the wavenumber with one end at the barrier's foot and the other far off, the least
-of the places tried), the sums against the field of an end millimetres from the barrier,
-the sum over the wavenumbers along the barrier against a point source's field, the same
-sound with the ends swapped, and the sound shed against a reference written apart
-(`validation/barrier_strip.py`: every term of the density, the kernel as it stands, the
-sum over the real wavenumbers).
+than 0.05 dB a centimetre as a barrier's top passes the plane of the roof before it. At
+a slant: one screen, a roof's corner, a high screen and seven barriers on a rigid ground
+against the exact solutions as above, each further off when not turned; four rows in
+free space against their stored wave levels at 60°, two of them at 30° too, each further
+from them when not turned; the same sound with the ends swapped, with edges at different
+slants too; the row from roof level to street level at 60° refused by the first way, 6.4
+dB off without that refusal, and taken by the second; what the slants have to be; and
+the geometry of an edge at a slant against the shortest way over it, found by a search.
+Across the row and moved: the weights against an arrival's place and size at the slant,
+before the shortest way and past the kernel's end; the weights below the lowest
+wavenumber solved, and the refusal; a free field and its reflection moved to slants of 3
+to 80° with a solver that gives exact arrivals; the wavenumbers and the row that the
+solver is asked for, and those it refuses; which way the solver takes, and both
+refusals; one screen and a screen and a barrier on a rigid ground against the exact
+solutions; rows on a ground against their stored wave levels at 30 and 60°, three
+screens among them; and the same sound with the ends swapped. `tests/test_strip.py`
+holds the strip's solution by itself: a barrier far lower than a wavelength against the
+plate across a uniform flow that it is, the kernel's parts against each other and their
+limits, the rule for the logarithm against closed forms, the equation at the far end of
+the sum over the wavenumbers, where a factor of its kernel would grow beyond the digits
+of a number and is faded, how far the density's number of terms holds what the barrier
+adds (to 6e-5 of it, 4e-5 dB, at a height of 31 over the wavenumber with one end at the
+barrier's foot and the other far off, the least of the places tried), the sums against
+the field of an end millimetres from the barrier, the sum over the wavenumbers along the
+barrier against a point source's field, the same sound with the ends swapped, the sound
+shed against a reference written apart (`validation/barrier_strip.py`: every term of the
+density, the kernel as it stands, the sum over the real wavenumbers), and, for ends
+apart along the barrier, the sum against a point source's field, the sound shed against
+that reference at slants of 15 to 75°, the sum's points behind a barrier 31 over the
+wavenumber high against three times as many for waves that cross the strip twice as
+often, a slant that tends to none against the sound across the barrier, and where the
+strip's equation is not solved at a slant.
 
 ## Levels over a long term
 
@@ -5760,19 +5965,22 @@ Results:
   2.5 dB below it); with the top 5 m wide and the screen 5 m past it, -7.6 to -8.4 dB,
   `second_order` 2.3 to 3.4 dB below (`first_order` within 1.3 dB), either way round
   with the rays' own search for reflections. The level also steps with the height of
-  the screen's top at that plane, by 12 to 15 dB over 4 mm: past the 9 m top with
+  the screen's top at that plane, by 13 to 16 dB over 4 mm: past the 9 m top with
   `second_order` and every sequence of reflections tested (`method: image_sources`),
-  it is -13.1 to -16.6 dB with the screen's top from 2 mm to a micrometre below the
-  plane, -9.4 to -12.0 dB with it level or up to 0.5 mm above, and -0.4 to -1.8 dB
+  it is -13.7 to -19.0 dB with the screen's top from 2 mm to a micrometre below the
+  plane, -9.6 to -12.6 dB with it level or up to 0.5 mm above, and -0.3 to -1.9 dB
   from 0.55 mm above, from where the path over the screen's top reflects off the top
   (0.53 mm above, it does so at the top's far edge). Above 500 Hz, where the bands add
-  in energy, the level is -10.1 dB with the screen's top level and -5.6 dB with it a
-  micrometre above. With it 10 µm to 0.5 mm above the plane, the two ways round are
-  also up to 1.0 dB apart (0.4 dB with the rays' own search). A solver for whole rows
+  in energy, the level is -10.0 to -10.2 dB with the screen's top level and -5.6 dB
+  with it a micrometre above. With it 10 µm to 0.5 mm above the plane and the rays' own
+  search, the two ways round are also up to 0.4 dB apart. A solver for whole rows
   is in the package, within 0.38 dB of wave calculations near grazing incidence in
   free space (see
-  [Rows of roofs and barriers against a wave calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation));
-  simulations do not use it yet.
+  [Rows of roofs and barriers against a wave calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation)).
+  An outdoor scene takes the sound over the tops of its barriers and buildings from
+  it in the bands up to 500 Hz; the levels here are those of the paths over the edges,
+  which stand with `simulation.early.rows: edges`, in coverage maps and walks, near
+  the ends of a top and over a model file's objects.
 - **Exactly in the plane of several tops in a row.** With the source and the listener
   both exactly in the plane of two flat roofs of one height, or of a roof and a
   barrier's top, the paths over one edge and over two do not add up as they do just
@@ -5869,7 +6077,7 @@ Results:
   boundary is the open ground's less 6.12 to 5.83 dB from 250 Hz to 8 kHz (half the
   field, 6.02 dB, for a half-plane; 6.48 to 5.74 dB in still air) and 1 m into the lit
   side within 0.32 dB of the half-plane's Fresnel factor from 1 to 8 kHz. 60 m upwind
-  at 4 and 8 kHz it is the open ground's less 1.77 dB and plus 4.30 dB with the
+  at 4 and 8 kHz it is the open ground's less 1.78 dB and plus 4.30 dB with the
   default frequencies, but less 1.56 and 4.13 dB with 8 an octave in the runs: it
   depends on the frequencies they take. Where the
   end stands below the line of sight (a barrier 1 m high 30 m from the source), a
@@ -5895,7 +6103,7 @@ Results:
   and 4.3 dB are left at 1 and 2 kHz. In a breath of wind (0.05 m/s) the paths round
   the end share the open ground's own departure from still air, its equation's ground
   fitted from the absorption near grazing against the image sources' reflection: 60 m
-  downwind on the boundary by -0.07 to -0.85 dB from 63 Hz to 2 kHz and +0.62 dB at
+  downwind on the boundary by -0.07 to -0.86 dB from 63 Hz to 2 kHz and +0.62 dB at
   4 kHz (10 m into the lit side as much, 10 m behind up to 0.27 dB), over grass, whose
   impedance both share, by at most 0.21 dB.
 - **A model file's object in wind.** The parabolic equation's runs behind barriers and
@@ -5906,14 +6114,14 @@ Results:
   steps across the shadow boundaries of a wall 4 m high 15 m from a source 8 m up in
   the `windy` preset, down- and upwind, the weather's effect steps across the direct
   sound's boundary by at most 0.13 dB in octave bands and 0.2 dB in third octaves, and
-  across the ground reflection's by up to 0.57 dB at 250 Hz upwind and 0.8 dB at 2 kHz
+  across the ground reflection's by up to 0.59 dB at 250 Hz upwind and 0.8 dB at 2 kHz
   downwind in octave bands and 2.5 dB at 250 Hz in third octaves (a one-off check;
   `tests/test_barriers_in_wind.py` bounds octave bands from 63 to 500 Hz). A source or
   a listener on a building's roof takes the equation with the building inside, as
   behind barriers and buildings, where those steps are gone (see
   [Continuity](#barriers-and-buildings-in-wind-against-a-full-wave-solution)); there
   the narrow-angle march from the roof and the one to it differ by up to 0.22 dB at
-  8 kHz 42.5 m away (0.6 dB in third octaves), the wide-angle one by 0.03 dB.
+  8 kHz 42.5 m away (0.7 dB in third octaves), the wide-angle one by 0.03 dB.
 - **Where the runs from a roof take over.** Nearer than 1.5 times the source's and the
   listener's heights above the ground added, the paths over a roof's edge keep their
   straight legs, which leave out the weather's effect close behind it: 12.75 m from a
@@ -6001,16 +6209,21 @@ Results:
   300 m the 500 Hz band is 12.5 dB above the program on average. Without the wall the
   same listeners, 50 to 300 m away, are within rms 0.11 dB of the program's direct
   sound in every band up to 2 kHz.
-- **Other listeners in a listener's direction, in wind and temperature gradients.** The
-  listeners and map points that a source's sound goes the same way to share a run of the
-  parabolic equation, whose absorbing layer begins as high and is as thick as any of
-  them needs, and the narrow-angle equation's level changes a little with the layer. In
-  one-off checks a listener alone and the same one with another far behind it or high
-  above it differ by 0.02 dB or less per octave band and by up to 0.07 dB per third
-  octave out of the shadow, and 200 m upwind, 63 to 72 dB below free field, by up to
-  0.08 dB per octave band and 0.76 dB in one third octave; the listeners that take the
-  wide-angle equation's level differ by less than 0.0001 dB (see [The wide-angle
-  parabolic equation](#the-wide-angle-parabolic-equation)).
+- **Other listeners in a listener's direction behind barriers, in wind and temperature
+  gradients.** Behind a barrier or a building the listeners and map points that a
+  source's sound goes the same way to share a run of the parabolic equation under one
+  absorbing layer, which begins above the highest of them, and part of the sound that
+  the obstacle's top sends steeply up comes back down, by where the layer begins. In
+  one-off checks a listener 40 m from a source 1 m up, behind a barrier 4 m high 15 m
+  from the source in the `windy` preset, moved by 0.0013 dB with two more 80 m away, one
+  of them 10 m up. One 15 m from a source 0.5 m up, behind a barrier 7.43 m high 4 m
+  from the source over a rigid ground, downwind in a wind of 10 m/s at 10 m, moved by
+  2.0 dB at 2 kHz with another 290 m away, and by 2.1 and 2.4 dB at 2 and 4 kHz with
+  another 60 m away, 23 m up; alone, its 2 kHz band stayed within 0.25 dB under ten of
+  twelve layers set to begin 21 to 240 m up and was 0.4 and 2.0 dB under their mean
+  under those beginning 36 and 43 m up, and 0.02 dB under it under a layer twice as
+  thick beginning 43 m up. Over the open ground a listener reads the same alone as among others (see
+  [The wide-angle parabolic equation](#the-wide-angle-parabolic-equation)).
 - **What the equation's field through the crossovers does not mend.** Between its
   samples (59 Hz apart in the 2 kHz band) the field is drawn linearly in the complex
   pressure, within h^2 / 8 times the sum of |a_i| (2 pi dtau_i)^2 for arrivals a_i
@@ -6120,20 +6333,20 @@ Results:
   equation's samples h apart (11, 22 and 44 Hz in the 125, 250 and 500 Hz octave
   bands) a band's spectrum is drawn linearly, which weighs the response about the
   field's delay by sinc^2(t h) and repeats it faintly every 1/h: what comes 1/(2h)
-  later is 7.8 dB down, later still more, and images come in. Where C50 and C80 are 47
-  to 88 dB, the late part that far below the early sound, they so read up to 8.2 dB off
+  later is 7.8 dB down, later still more, and images come in. Where C50 and C80 are 50
+  to 88 dB, the late part that far below the early sound, they so read up to 8.1 dB off
   runs of the equation 27 and 81 times as dense, read the same way, 100 m downwind in
-  case 2 and 200 m downwind in `windy` (the bands' own samples up to 13.7 dB off);
-  closer than those in every case but C80 at 500 Hz, 6.5 to 7.4 and 2.3 to 4.8 dB off
-  against 4.6 to 5.6 and 0.4 to 2.2 dB, where the two dense runs differ by 0.9 and
+  case 2 and 200 m downwind in `windy` (the bands' own samples up to 13.6 dB off);
+  closer than those in every case but C80 at 500 Hz, 6.5 to 7.5 and 2.3 to 4.8 dB off
+  against 4.6 to 5.5 and 0.3 to 2.2 dB, where the two dense runs differ by 0.9 and
   2.6 dB. The dense run's own field, drawn on a 0.12 Hz grid and read through the same
   octave filters outside the response's synthesis, gives its C50 and C80 at 250 and
-  500 Hz within 0.1 dB. What cuts the late part differs by the case: in case 2 mostly
+  500 Hz within 0.1 dB in case 2 and 0.3 dB in `windy`. What cuts the late part differs by the case: in case 2 mostly
   the 500 Hz band's own samples (those alone at their own spacing move its C80 from
-  82.1 to 91.3 dB, the bands from 1 to 3.4 kHz alone to 83.9 dB), in `windy` the bands
+  82.0 to 91.3 dB, the bands from 1 to 3.4 kHz alone to 83.8 dB), in `windy` the bands
   from 1 to 3.4 kHz, which the 500 Hz filter reads through its skirts (alone they move
   it from 73.1 to 84.6 dB). Denser samples close it only slowly: C80 at 500 Hz in
-  case 2 reads 88.4, 94.9, 87.0, 82.0 and 81.1 dB with 1, 3, 9, 27 and 81 times as
+  case 2 reads 88.5, 95.2, 87.3, 81.9 and 81.0 dB with 1, 3, 9, 27 and 81 times as
   many from 63 Hz to 3.4 kHz (a one-off check).
 - **Coverage maps behind barriers** read the high bands higher than a listener at the
   same point: 130 m behind two barriers over grass by 0.6, 1.3, 3.8 and 13.5 dB at 1,
@@ -6361,7 +6574,7 @@ python validation/ffp.py --json ffp.json
 python validation/curved_rays.py --json curved_rays.json   # about 30 min
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
 python validation/open_ground_frequencies.py --json open_ground.json   # --cache DIR --part K/N to share it
-python validation/steep_sound.py --json steep_sound.json   # about an hour; --only steps: the range step's check
+python validation/steep_sound.py --json steep_sound.json   # about 2.3 h; --only steps: the range step's check
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
 python validation/barrier_wind.py --json barrier_wind.json   # about 4 h; --quick: fewer bands
 python validation/rows.py --engine --json rows.json   # --references: the wave calculation again
@@ -6408,12 +6621,12 @@ third-octave bands) and of the hall about 1.5 hours (5.2 calibrated, 3.4 in thir
 bands), the binaural comparison 10 minutes in the seminar room, 6 in the auditorium and
 an hour in the hall, a loudspeaker of the hall in parts about 10 minutes, the coupled
 rooms against theory under a second, and the rooms' own decay 5.8 minutes. Since then
-the open ground's parabolic equation in wind runs up to 2 kHz, which on one core makes
-the outdoor measurements take about 15 times as long (case 1), the long term about 5.4
-times and the benchmark about 1.6 times (measured before its bands carried its field
-through the crossovers, which takes the equation 11 to 79 % longer for a listener, so
-these runs now take longer still); the others listed here do not reach that part
-of the engine. Since 11 November the ray tracer and the wave solver do less work on the
+the open ground's parabolic equation in wind runs up to 2 kHz, its bands carry its field
+through the crossovers and over the open ground each listener's run marches under the
+absorbing layer of a run for it alone: on 16 November, on another machine of the kind, the outdoor
+measurements took 28 minutes (the cases already downloaded, without the plots), the
+long term 1.6 and the benchmark 93 (the sum of its parts, each timed alone); the others
+listed here do not reach that part of the engine. Since 11 November the ray tracer and the wave solver do less work on the
 CPU for the same results: the seminar room's BRAS run takes 10 to 12 % less, and of the
 others only the wave solver's checks were timed again.
 The cross-check's numbers come from 4.0.1 with seed 1;

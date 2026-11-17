@@ -3,6 +3,7 @@ fades in and out at them, as exact solutions do."""
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import numpy as np
@@ -435,13 +436,15 @@ def _outdoors(
     source=(0.0, 0.0, 1.0),
     path=((10, -30), (10, 30)),
     behind=None,
+    half_m: float = 100.0,
     **early,
 ) -> Room:
-    """A ``source`` (by default 1 m over a ground), a barrier ``barrier_m`` high along
-    ``path`` (by default 10 m away, along y), with ``behind`` another as high along that
-    path, and, with ``shed``, a shed as high as the barrier out of the way."""
+    """A ``source`` (by default 1 m over a ground that reaches ``half_m`` each way), a
+    barrier ``barrier_m`` high along ``path`` (by default 10 m away, along y), with
+    ``behind`` another as high along that path, and, with ``shed``, a shed as high as the
+    barrier out of the way."""
     geometry = {
-        "ground": {"extent": [[-100, -100], [100, 100]], "sky": 40},
+        "ground": {"extent": [[-half_m, -half_m], [half_m, half_m]], "sky": 40},
         "barriers": [
             {"name": name, "path": [list(p) for p in line], "height": barrier_m}
             for name, line in (("wall", path), ("wall_2", behind))
@@ -602,7 +605,10 @@ def test_a_path_over_an_edge_is_clear_past_the_ground(shape: str, mode: str) -> 
     1.72 m (under 0.15 dB from 63 to 500 Hz). Below, the paths of the missed reflection
     off the ground round the first barrier's end, on to the listener, and round the
     second's, back from the ground past the first's foot to the source, went through the
-    other barrier: the level stepped by up to 15.7 dB at 63 Hz."""
+    other barrier: the level stepped by up to 15.7 dB at 63 Hz. The paths over the edges
+    are looked at (``rows: edges``): the solver's field, which at 500 Hz has a share
+    here, rises with the height by itself (0.11 to 0.25 dB every 2 cm from 1.62 to
+    1.80 m, 0.18 dB over these 2 cm)."""
     levels = [
         10
         * np.log10(
@@ -613,6 +619,7 @@ def test_a_path_over_an_edge_is_clear_past_the_ground(shape: str, mode: str) -> 
                         source=(0.0, -8.0, 1.5),
                         max_order=2,
                         diffraction=mode,
+                        rows="edges",
                         **_BEHIND[shape],
                     )
                 )
@@ -621,6 +628,30 @@ def test_a_path_over_an_edge_is_clear_past_the_ground(shape: str, mode: str) -> 
         for z in (1.70, 1.72)
     ]
     assert np.abs(levels[1] - levels[0])[:4].max() < 0.15
+
+
+def test_a_leg_shorter_than_the_rays_offset_is_clear() -> None:
+    """A source 2 mm from both arms of a barrier bent by 30 degrees, inside the bend,
+    and a listener behind an arm: the reflections between the arms next to the source
+    have legs a few millimetres long. The rays that tell whether a path over an edge is
+    clear leg after leg start a millionth of the model's size along the leg, 1 cm in a
+    model 10 km wide: no further than the leg's middle, so that the paths and the level
+    are those of the same scene in a model 200 m wide."""
+    bend = np.radians(30.0)
+    reach = 0.002 / np.sin(0.5 * bend)
+    scene = {
+        "source": (reach * np.cos(0.5 * bend), reach * np.sin(0.5 * bend), 1.5),
+        "path": ((12.0, 0.0), (0.0, 0.0), (12.0 * np.cos(bend), 12.0 * np.sin(bend))),
+        "barrier_m": 4.0,
+        "max_order": 2,
+        "diffraction": "first_order",
+    }
+    wide, narrow = (
+        early_paths(_outdoors((6.0, -3.0, 2.0), half_m=half_m, **scene))
+        for half_m in (5000.0, 100.0)
+    )
+    assert len(wide.order) == len(narrow.order) > 1
+    assert np.abs(10 * np.log10(total_energy(wide) / total_energy(narrow))).max() < 0.01
 
 
 # The level (dB re the direct sound in free field) behind that barrier, from the source
@@ -700,6 +731,33 @@ def test_a_wall_as_high_as_a_roof_does_not_stand_on_its_plane() -> None:
     assert not any(np.isin(faces, roof).any() for faces in paths.faces)
 
 
+@pytest.mark.parametrize("gap", [0.5, 0.0002])
+def test_a_barrier_s_end_stands_on_ground_that_ends_just_past_it(gap: float) -> None:
+    """Round the end of a barrier, with the ground ending ``gap`` (m) past it, in a model
+    10 km long and in one 200 m long: the number of paths and the early level are those
+    with the ground going on 90 m past the end, to 0.01 dB (no path has a point past the
+    end). Whether the ground goes on round the barrier's end was looked up a
+    ten-thousandth of the model's size past it, 1 m in the long model and 2 cm in the
+    short one: where that was off the ground the end did not stand on it, and the
+    listener had 10 paths for 8 and a level 3.0 dB lower at 63 Hz and 5.0 dB lower at
+    125 Hz."""
+    room = _outdoors(
+        (9.0, 4.0, 1.5),
+        source=(6.0, -2.0, 1.5),
+        path=((-10, 0), (10, 0)),
+        max_order=2,
+        diffraction="first_order",
+    )
+    on = early_paths(room)
+    assert len(on.order) > 1 and max(points[:, 0].max() for points in on.points) < 10.0 + 1e-9
+    for low in (-9990.0, -190.0):
+        scene = room.scene.model_dump()
+        scene["geometry"]["ground"]["extent"] = [[low, -100.0], [10.0 + gap, 100.0]]
+        paths = early_paths(Room.from_scene(Scene.model_validate(scene)))
+        assert len(paths.order) == len(on.order)
+        assert np.abs(10 * np.log10(total_energy(paths) / total_energy(on))).max() < 0.01
+
+
 @pytest.mark.parametrize("x", [-95.333, -78.0])
 def test_no_path_reflects_off_a_roof_s_plane_from_below(x: float) -> None:
     """The train horn in the railway example, heard 25 m behind the barrier, where its
@@ -723,3 +781,43 @@ def test_no_path_reflects_off_a_roof_s_plane_from_below(x: float) -> None:
         assert all(-66.0 - 1e-6 <= p[0] <= -54.0 + 1e-6 and p[1] >= 20.0 - 1e-6 for p in roof)
     # But 8 kHz, where 2 cm is half a wavelength.
     assert np.abs(levels[1] - levels[0])[:-1].max() < 0.1
+
+
+def test_a_sequence_is_found_by_a_path_with_its_image_off_its_planes(tmp_path: Path) -> None:
+    """A source by a screen's end over the ground: its reflection off the screen and then
+    the ground reaches a listener beside the screen; for one past the screen's end the
+    sequence is a miss that one event stops, its reflection off the screen's plane past
+    the screen. A path there with the sequence's image that reflects off its planes, in
+    whatever order they are numbered, is that sequence found, and no miss; a path with
+    its image off other planes is not."""
+    engine = _Engine(tmp_path, "screen end", (-1.0, 2.0, 3.0))
+    model = engine.model
+
+    def found(listener) -> early_stage.EarlyReflections:
+        return early_stage.find_paths(
+            model,
+            engine.source,
+            listener,
+            engine.candidates,
+            speed_of_sound=engine.c,
+            air=engine.air,
+            max_delay_s=0.5,
+            coherent=BANDS,
+        )
+
+    beside, past = np.array([-6.0, 3.0, 0.5]), np.array([-6.0, -14.0, 0.5])
+    paths = found(beside)
+    (twice,) = np.flatnonzero(paths.order == 2)
+    sequence = model.face_plane[paths.faces[twice]][None, :]
+    assert sequence[0, 0] > sequence[0, 1]  # the screen's plane, then the ground's
+    missed = engine.fade._missed(sequence, past, found(past), 0.5)
+    assert missed["planes"].tolist() == sequence.tolist() and missed["fail"].tolist() == [1]
+    image = model.mirror(model.mirror(engine.source[None, :], sequence[:, 0]), sequence[:, 1])
+    distance = np.linalg.norm(image - past, axis=1)
+    there = dataclasses.replace(
+        paths[np.array([twice])], direction=(image - past) / distance, distance_m=distance
+    )
+    assert engine.fade._missed(sequence, past, there, 0.5) is None
+    ground = dataclasses.replace(there, faces=[np.repeat(there.faces[0][1:], 2)])
+    missed = engine.fade._missed(sequence, past, ground, 0.5)
+    assert missed["planes"].tolist() == sequence.tolist()

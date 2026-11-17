@@ -135,41 +135,58 @@ Edge diffraction:
   a wall in line with both is too low (6.4 dB at 63 Hz half a metre above a 10 m
   roof), and behind the roof with the source above its plane up to 6 dB too high (see
   [Known issues](validation.md#known-issues)).
-- [ ] Rows of edges near grazing incidence in simulations: where sound passes close
-  over the barriers and buildings of a scene, the level from the solver for whole rows
-  (`engine.rows`, within 0.38 dB of a wave calculation near grazing incidence in free
-  space; see
-  [Validation](validation.md#rows-of-roofs-and-barriers-against-a-wave-calculation))
-  in place of the paths over one edge and two. Today, just over three barriers or
-  three flat roofs in a row, or a roof with a slot across it, the level is off by 1 to
-  5 dB, and over a roof and a screen level with it 2 to 6 dB too low against a wave
-  calculation, with steps of 12 to 15 dB in all as the screen's top rises through the
-  roof's plane; behind three barriers with the source on the line of their tops there
-  is next to no sound, and behind two flat roofs of one height with the source up to
-  0.5 m above their plane the level is 9 to 23 dB below that behind one roof as wide
-  as both.
+- [x] Rows of edges in simulations: outdoors, where sound passes over the barriers and
+  buildings of a scene, the level in the bands up to 500 Hz from the solver for whole
+  rows in place of the paths over one edge and two, in still air and in wind
+  (`simulation.early.rows`, see [Sound over rows of barriers and
+  buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)).
+- [ ] The solver for whole rows in coverage maps and along walks, which take the paths
+  over the edges: a run for every point takes seconds, and along a walk the level would
+  step where the solver takes one place and not the next.
 - [ ] The solver for whole rows where it does not hold yet: rigid screens on a rigid
   ground (up to 1.3 dB low near grazing incidence, 3.4 dB at street level behind three
-  screens); an end almost straight under a top, within some 4 cm of its first obstacle,
-  or close before it and high above its top, and ends within half a wavelength of each
-  other (refused); an end in the shadow within decimetres of a top (up to 0.5 dB low);
-  an end behind a change of the ground, on a roof that reaches the other end with
-  nothing on it between them, or with nothing between it and the other end, with a way
-  on or a reflection off the ground or the roof steeper than 35°, or closer than a
-  wavelength to its first top or to the other end (refused); a roof's edge or a wall
-  close behind an end; barriers lower than a wavelength where the edges' terms stand,
-  which lack the sound that goes on between a barrier's top and the surface under it (a
-  parapet on a roof's edge up to 1.3 dB off; a barrier with anything else between the
-  ends, on a ground with an impedance, or with the ends closer to each other than about
-  a quarter of its height, both within about a twentieth of it from the barrier, or
-  between the two; only a barrier alone on a rigid ground or roof is taken as the strip
-  it makes with its image), and steps; a wall given as a thin building (up to 0.4 dB
-  low); the tops' place in the march's cells (up to 0.2 dB); edges that end beside the
-  way, absorbing roofs and walls, the bands above 500 Hz, and wind.
+  screens, and up to 8.2 dB where the way crosses them at a slant of 75°; part of what
+  lacks is the sound that goes to and fro between them); an end almost straight under a
+  top, within some 4 cm of its first obstacle, or close before it and high above its
+  top, and ends within half a wavelength of each other (refused); an end in the shadow
+  within decimetres of a top (up to 0.5 dB low); an end behind a change of the ground,
+  on a roof that reaches the other end with nothing on it between them, or with nothing
+  between it and the other end, with a way on or a reflection off the ground or the roof
+  steeper than 35°, or closer than a wavelength to its first top or to the other end
+  (refused); a roof's edge or a wall close behind an end; barriers lower than a
+  wavelength where the edges' terms stand, which lack the sound that goes on between a
+  barrier's top and the surface under it (a parapet on a roof's edge up to 1.3 dB off; a
+  barrier with anything else between the ends, on a ground with an impedance, or with
+  the ends closer to each other than about a quarter of its height, both within about a
+  twentieth of it from the barrier, or between the two; only a barrier alone on a rigid
+  ground or roof is taken as the strip it makes with its image), and steps; a row that
+  the way crosses at a slant on a ground with an impedance, or with edges in different
+  directions, where an end's way to it, or its image's in the ground, is steep or an
+  edge in it that a march lights is turned more than 60° (refused: the row solved across
+  its edges and moved to the slant is for a rigid ground and edges in one direction; not
+  tried yet: a ground with an impedance by its impedance at each wavenumber across the
+  row), edges turned more than 75° (refused: not measured beyond), a row that the sound
+  crosses at wavenumbers below the solver's lowest (refused), and edges at different
+  slants (not measured); a wall given as a thin building (up to 0.4 dB low); the tops'
+  place in the march's cells (up to 0.2 dB); roofs and walls that absorb (rigid in
+  it; a roof with an impedance leaves the row to the paths over the edges), the sound
+  that goes to and fro between a row's walls, and the bands above 500 Hz.
 - [ ] Paths over edges tested from the edge itself, not from a millionth of the
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9
   to 15 dB above that further below.
+- [ ] Corners to the least distance of a ray: the search for early paths takes what lies
+  within its tolerance for planes (a ten-millionth of the model's largest extent, 1 mm
+  in a model 10 km wide) of the line where faces meet as on that line. A source or a
+  listener within that distance of the line where a wall ends on another that goes on (a
+  T) has reflections that do not exist, off both walls at one point or off both sides of
+  the ending wall there, at up to 8 % of the places 7 m away (none at a right angle) and
+  at up to 3 % at four times the distance; at a plain bend one such reflection, off both
+  walls at one point, stays at 2 of 96 places (seen at bends of 65 and 66.5 degrees,
+  half the tolerance from the line). And two different paths with one image of the
+  source that reflect off the same surfaces in another order count as one: between two
+  rooms as deep either side of a partition, one of 155 paths up to the fourth order
+  (0.1 dB in a band).
 - [ ] The same reflections whichever way round: the rays of the source and those of
   the listener can find different reflections between two faces, such as two screens
   or a roof's wall and a screen level with the roof (up to 0.7 dB apart, and 8 dB
@@ -430,11 +447,12 @@ Outdoor acoustics, in steps:
   gradients, as over the open ground: the paths off façades and barriers are eigenrays
   in every band, with the rays' ground effect up to 2 kHz and their steps at caustics
   (see [Known issues](validation.md#known-issues)).
-- [ ] An absorbing layer for the parabolic equation's runs that a run's other listeners
-  do not move: the listeners and map points that share a run share its layer, which begins
-  as high and is as thick as any of them needs, and the narrow-angle equation's level
-  changes with it, by up to 0.07 dB per third octave out of the shadow and 0.76 dB 72 dB
-  below free field in the checks (see [Known issues](validation.md#known-issues)).
+- [ ] An absorbing layer for the parabolic equation's runs behind barriers and
+  buildings that takes up the sound an obstacle's top sends steeply up, and that a run's
+  other listeners do not move: there the listeners and map points that share a run share
+  its layer, and the level changes with where it begins, by up to 2.4 dB behind a tall
+  barrier close to the source in the checks (see
+  [Known issues](validation.md#known-issues)).
 - [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
   the shadow): out of the shadow the equation's field goes through it, but the rays'
@@ -474,6 +492,8 @@ Sources:
 - [x] Sources and listeners in groups, and left out of a run without being removed
   (`group`, `enabled: false`); in the editor a tick and an eye per source, listener
   and group.
+- [x] A measured directivity table takes the directions equally near a point of its
+  grid alike, and a direction given more than once as one.
 
 Examples:
 
@@ -540,8 +560,8 @@ Movement:
   **Render movement…** heard binaurally and with Doppler, and units for every number in
   the panel and in Run demo, with the pass's length, speed and duration.
 - [x] Faster walks outdoors: the places of a walking source share the parabolic
-  equation's runs, each listener getting what a run of its own place would give it but
-  for the run's absorbing layer (see [Known issues](validation.md#known-issues)).
+  equation's runs, each listener over the open ground getting what a run of its own
+  place would give it.
 - [x] The sound a source sends each way, along a walk with Doppler: each early path
   carries what is sent the way it leaves the source (`acoustic_spaces.emission`).
 - [x] A helicopter's rotors: their tones from the blades' steady loads, checked against
@@ -827,3 +847,17 @@ Next:
   normal speech spectrum and the background noise: the spatial decay rate D2,S and
   Lp,A,S,4m fitted to the speech level against distance, and the distraction, privacy
   and comfort distances from the STI and the level along the line.
+- [ ] The package's sums in a fixed order ([Simulation](simulation.md#performance)) as
+  fast as the linear-algebra library's, with the same bits: wider vector instructions
+  chosen when it runs, and less to do for a small product. A rotor's `bpm` broadband
+  noise takes 23 % longer than it did with the library's sums.
+- [ ] A walk's places rendered on the run's threads, as a run's files are: they are
+  rendered one after the other.
+- [ ] A response's echogram worked out once for all that read it: a run works it out
+  for the parameters, for the speech results, for the standard errors and, outdoors,
+  for the level against the free field. And the early paths' signals on the run's
+  threads.
+- [ ] The command line starting without the engine's imports, for the commands that do
+  not need them.
+- [ ] Less memory while a response is rendered: its early paths placed a part at a
+  time, and its bands combined in place.

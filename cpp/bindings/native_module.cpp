@@ -10,6 +10,7 @@
 #include <nanobind/stl/vector.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <optional>
@@ -29,6 +30,7 @@
 #include "acoustic_spaces/edge_cull.hpp"
 #include "acoustic_spaces/fdtd.hpp"
 #include "acoustic_spaces/fft.hpp"
+#include "acoustic_spaces/fixed_sums.hpp"
 #include "acoustic_spaces/rational_steps.hpp"
 #include "acoustic_spaces/ray_tracer.hpp"
 
@@ -98,6 +100,133 @@ nb::ndarray<nb::numpy, double> inverse_real_fft(Spectrum bins, std::size_t n) {
     std::vector<double> out(n);
     fft.inverse(bins.data(), out.data());
     return to_numpy(std::move(out), {n});
+}
+
+// Operands of fixed_product: float64 or complex128 matrices of any strides.
+using Operand = nb::ndarray<nb::ro, nb::ndim<2>, nb::device::cpu>;
+using Product = nb::ndarray<nb::ndim<2>, nb::device::cpu>;
+
+// Whether `array` is complex128 (true) or float64 (false); anything else is refused.
+template <typename Array>
+bool complex_of(const Array &array, const char *what) {
+    if (array.dtype() == nb::dtype<double>()) return false;
+    if (array.dtype() == nb::dtype<std::complex<double>>()) return true;
+    throw std::invalid_argument(std::string("fixed_product: ") + what +
+                                " must be float64 or complex128");
+}
+
+// Whether the data of `array` starts at a multiple of `alignment` bytes (an empty
+// array's always does).
+template <typename Array>
+bool aligned(const Array &array, std::size_t alignment) {
+    return array.size() == 0 || reinterpret_cast<std::uintptr_t>(array.data()) % alignment == 0;
+}
+
+// The bytes [first, last) that the elements of `array` span; first == last if none.
+template <typename Array>
+std::pair<std::uintptr_t, std::uintptr_t> extent(const Array &array) {
+    const auto start = reinterpret_cast<std::uintptr_t>(array.data());
+    if (array.size() == 0) return {start, start};
+    const auto item = static_cast<std::int64_t>(array.itemsize());
+    std::int64_t low = 0, high = item;
+    for (std::size_t d = 0; d < array.ndim(); ++d) {
+        const std::int64_t span = array.stride(d) * (static_cast<std::int64_t>(array.shape(d)) - 1);
+        (span < 0 ? low : high) += span * item;
+    }
+    return {start + static_cast<std::uintptr_t>(low), start + static_cast<std::uintptr_t>(high)};
+}
+
+template <typename First, typename Second>
+bool overlap(const First &first, const Second &second) {
+    const auto [a0, a1] = extent(first);
+    const auto [b0, b1] = extent(second);
+    return a0 < b1 && b0 < a1;
+}
+
+// out = a @ b, or out += a @ b with add, in the order of as::fixed_product (see
+// fixed_sums.hpp), over all of a's columns or those of `rows`.
+void fixed_product(Operand a, Operand b, Product out, std::optional<Indices> rows, bool conj_b,
+                   bool add, std::size_t threads) {
+    as::ProductOperands p;
+    p.m = a.shape(0);
+    p.k = a.shape(1);
+    p.n = b.shape(1);
+    if (b.shape(0) != p.k) {
+        throw std::invalid_argument("fixed_product: a is (m, k) and b (k, n), with the same k");
+    }
+    if (out.shape(0) != p.m || out.shape(1) != p.n) {
+        throw std::invalid_argument("fixed_product: out must be (m, n), a's rows by b's columns");
+    }
+    p.a_complex = complex_of(a, "a");
+    p.b_complex = complex_of(b, "b");
+    if (complex_of(out, "out") != (p.a_complex || p.b_complex)) {
+        throw std::invalid_argument(
+            "fixed_product: out must be complex128 if a or b is, float64 otherwise");
+    }
+    if (p.n > 1 && ((p.k > 0 && b.stride(1) != 1) || (p.m > 0 && out.stride(1) != 1))) {
+        throw std::invalid_argument(
+            "fixed_product: b's and out's columns must be adjacent (column stride 1)");
+    }
+    if (conj_b && p.b_complex && !p.a_complex) {
+        throw std::invalid_argument(
+            "fixed_product: conj_b needs a complex a (for a real a, pass b's conjugate)");
+    }
+    if (!aligned(a, alignof(double)) || !aligned(b, alignof(double)) ||
+        !aligned(out, alignof(double)) || (rows && !aligned(*rows, alignof(std::int64_t)))) {
+        throw std::invalid_argument("fixed_product: a, b, out and rows must be aligned");
+    }
+    if (overlap(out, a) || overlap(out, b)) {
+        throw std::invalid_argument("fixed_product: out must not share memory with a or b");
+    }
+    p.a = static_cast<const double *>(a.data());
+    p.a_row = static_cast<std::ptrdiff_t>(a.stride(0));
+    p.a_col = static_cast<std::ptrdiff_t>(a.stride(1));
+    p.b = static_cast<const double *>(b.data());
+    p.b_row = static_cast<std::ptrdiff_t>(b.stride(0));
+    p.out = static_cast<double *>(out.data());
+    p.out_row = static_cast<std::ptrdiff_t>(out.stride(0));
+    p.conj_b = conj_b && p.b_complex;
+    p.add = add;
+    if (rows) {
+        p.rows = rows->data();
+        p.terms = rows->shape(0);
+        for (std::size_t r = 0; r < p.terms; ++r) {
+            if (p.rows[r] < 0 || static_cast<std::size_t>(p.rows[r]) >= p.k ||
+                (r > 0 && p.rows[r] <= p.rows[r - 1])) {
+                throw std::invalid_argument(
+                    "fixed_product: rows must be ascending indices into a's columns, each "
+                    "once");
+            }
+        }
+    }
+    nb::gil_scoped_release release;
+    as::fixed_product(p, threads);
+}
+
+double fixed_dot(InArray x, InArray y) {
+    if (x.shape(0) != y.shape(0)) {
+        throw std::invalid_argument("fixed_dot: x and y must have the same length");
+    }
+    if (!aligned(x, alignof(double)) || !aligned(y, alignof(double))) {
+        throw std::invalid_argument("fixed_dot: x and y must be aligned");
+    }
+    nb::gil_scoped_release release;
+    return as::fixed_dot(x.data(), y.data(), x.shape(0));
+}
+
+std::tuple<double, double, double> fixed_dots(InArray x, InArray y) {
+    if (x.shape(0) != y.shape(0)) {
+        throw std::invalid_argument("fixed_dots: x and y must have the same length");
+    }
+    if (!aligned(x, alignof(double)) || !aligned(y, alignof(double))) {
+        throw std::invalid_argument("fixed_dots: x and y must be aligned");
+    }
+    std::array<double, 3> s;
+    {
+        nb::gil_scoped_release release;
+        s = as::fixed_dots(x.data(), y.data(), x.shape(0));
+    }
+    return {s[0], s[1], s[2]};
 }
 
 using FloatOut = nb::ndarray<float, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
@@ -1185,6 +1314,22 @@ NB_MODULE(_native, m) {
           "FFT of a real signal of power-of-two length: n / 2 + 1 bins (as numpy.fft.rfft).");
     m.def("inverse_real_fft", &inverse_real_fft, nb::arg("bins"), nb::arg("n"),
           "Inverse of real_fft (as numpy.fft.irfft).");
+
+    m.def("fixed_product", &fixed_product, nb::arg("a"), nb::arg("b"), nb::arg("out").noconvert(),
+          nb::arg("rows").noconvert().none() = nb::none(), nb::arg("conj_b") = false,
+          nb::arg("add") = false, nb::arg("threads") = 1,
+          "out (m, n) = a (m, k) @ b (k, n), or out += a @ b with add, each element's terms "
+          "added in ascending k from the first term (or from out), over the k of rows "
+          "(int64, ascending) if given; conj_b uses b's conjugate (a complex if b is). "
+          "float64 or complex128 operands of any strides, aligned, but b's and out's "
+          "columns adjacent; out complex128 if a or b is, and sharing no memory with a "
+          "or b. The same bits for any number of threads (0: all cores), but for the "
+          "sign and payload of a NaN.");
+    m.def("fixed_dot", &fixed_dot, nb::arg("x"), nb::arg("y"),
+          "x . y of two aligned float64 vectors in eight partial sums (i mod 8), added in "
+          "a fixed order.");
+    m.def("fixed_dots", &fixed_dots, nb::arg("x"), nb::arg("y"),
+          "(x . x, y . y, x . y), each as fixed_dot, in one call.");
 
     nb::class_<Convolver>(m, "Convolver",
                           "Non-uniformly partitioned real-time convolution (float32).")

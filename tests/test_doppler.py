@@ -229,6 +229,50 @@ def test_paths_are_followed_from_place_to_place(short) -> None:
     assert np.allclose(direct.received, walk.points.times + direct.delays)
 
 
+def test_a_path_that_comes_among_others_off_the_same_planes_leaves_them_as_they_were(
+    short,
+) -> None:
+    """Halfway along the walk a second path off the ground comes, 10 ms ahead of the
+    ground's reflection (as a barrier's end brings in a path round it off its face
+    ahead of one already heard). The ground's reflection goes on as it was, its delay
+    never jumping, and the new path is heard as it would be alone. Paired in the order
+    of their delays, the ground's reflection went on as the new path: its delay jumped
+    10 ms back between two places, and the sound there was off by 5 dB more than the
+    new path's own level."""
+    room = Room.from_scene(short.scene("source", 30.0, "hard"))
+    walk = simulate_walk(room, step_m=1.0, late_step_m=None)
+    responses = walk.result.responses
+    first = {name: responses[name, "l"] for name in walk.names}
+    came = len(walk.names) // 2
+
+    def heard(direct_and_ground: bool, ahead: bool) -> np.ndarray:
+        for k, name in enumerate(walk.names):
+            early = first[name].early
+            ground = early[early.order == 1]
+            parts = [early] if direct_and_ground else []
+            if ahead and k >= came:
+                parts.append(dataclasses.replace(ground, delay_s=ground.delay_s - 0.01))
+            responses[name, "l"] = dataclasses.replace(
+                first[name], early=EarlyReflections.concatenate(parts, early.energy.shape[1])
+            )
+        return render_walk(walk, {"s": dry}, Mono())[:, 0]
+
+    dry = _noise(1.0)
+    step_s = 1.5 / 343.0 + 1e-4
+    both = heard(True, True)
+    places = [responses[name, "l"].early for name in walk.names]
+    found = dp.tracks(
+        places, walk.points.times, source_walks=True, planes=dp.plane_ids(room.mesh), step_s=step_s
+    )
+    last = len(places) - 1
+    assert sorted(track.span for track in found) == [(0, last), (0, last), (came, last)]
+    for track in found:
+        assert np.all(np.abs(np.diff(track.delays)) < step_s)
+    assert np.allclose(
+        both - heard(True, False), heard(False, True) - heard(False, False), atol=1e-12
+    )
+
+
 # -- the sound -----------------------------------------------------------------------
 
 

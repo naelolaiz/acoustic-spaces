@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 
 from acoustic_spaces import parameters as iso3382
-from acoustic_spaces import synthesis
+from acoustic_spaces import products, synthesis
 from acoustic_spaces.engine import coherent
 from acoustic_spaces.engine.early import EarlyReflections
 from acoustic_spaces.engine.wave import WaveResponse
@@ -240,7 +240,9 @@ class Response:
         gain = np.abs(self.late_directions @ axis) ** exponent
         total = energy.sum(axis=0)
         mean = np.full(total.shape, even)
-        np.divide(np.tensordot(gain, energy, axes=1), total, out=mean, where=total > 0)
+        # tensordot(gain, energy, axes=1): the directions' energies weighted by their gains
+        weighted = products.product(gain, energy.reshape(len(gain), -1)).reshape(energy.shape[1:])
+        np.divide(weighted, total, out=mean, where=total > 0)
         coarse = (np.arange(shape[1]) * self.time_step / self.direction_step + 1e-9).astype(int)
         inside = coarse < mean.shape[1]
         return np.where(inside, mean[:, np.minimum(coarse, mean.shape[1] - 1)], even)

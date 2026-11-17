@@ -28,10 +28,12 @@ openings): its energy is then multiplied by their transmission, band by band.
 from __future__ import annotations
 
 import dataclasses
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.coherent import (
     ground_factors,
@@ -48,10 +50,23 @@ from acoustic_spaces.engine.turbulence import Wander
 
 #: Distance (metres) below which a point counts as lying on a plane.
 _ON_PLANE = 1e-9
-#: Tolerance, relative to the model size, for a path reflecting exactly on an edge.
+#: Tolerance, relative to the model size, within which a point lies in a plane (a mesh's
+#: faces need not lie in theirs to rounding): for a path reflecting where planes meet.
 _EDGE_TOLERANCE = 1e-7
+#: A ray traced on the CPU meets no face nearer its start than this share of the diagonal
+#: of the model's box (``Bvh::min_distance``).
+_RAY_START = 1e-9
 #: Upper bound on candidates for the exhaustive search.
 MAX_CANDIDATES = 2_000_000
+
+
+def ray_start(mesh) -> float:
+    """Distance (metres) from its start within which a ray traced on the CPU meets no
+    face of ``mesh`` (:data:`_RAY_START` of the diagonal of its box,
+    ``TraceModel.bvh.min_distance``): the path traced back from a listener misses a
+    reflection whose last leg is shorter, and the rays of a source nearer a surface go
+    through it."""
+    return _RAY_START * math.hypot(*np.ptp(mesh.vertices, axis=0).tolist())
 
 
 @dataclass
@@ -68,8 +83,9 @@ class EarlyReflections:
     faces: list[np.ndarray] = field(default_factory=list)  # faces hit, source side first
     #: (n,) the edge a path bends over (an index of the model's diffracting edges, see
     #: :func:`~acoustic_spaces.engine.diffraction.find_edges`), -1 for specular paths,
-    #: or -2 for a path over the crests of the terrain
-    #: (:mod:`~acoustic_spaces.engine.crests`).
+    #: -2 for a path over the crests of the terrain
+    #: (:mod:`~acoustic_spaces.engine.crests`), or -3 for the path that carries the
+    #: sound of the solver for whole rows (:mod:`~acoustic_spaces.engine.row_paths`).
     edge: np.ndarray | None = None
     #: (n,) how many surfaces that let sound through a path passes, openings aside.
     crossings: np.ndarray | None = None
@@ -196,7 +212,8 @@ class EarlyReflections:
 
     @property
     def diffracted(self) -> np.ndarray:
-        """(n,) True for paths that bend over an edge or the terrain's crests."""
+        """(n,) True for paths that bend over an edge or the terrain's crests, and for
+        the one that carries the sound of the solver for whole rows."""
         return self.edge != -1
 
     @classmethod
@@ -379,7 +396,8 @@ def exhaustive_candidates(
         chunk = max(1, 4_000_000 // max(1, model.plane_count))
         for start in range(0, len(seqs), chunk):
             s, img = seqs[start : start + chunk], images[start : start + chunk]
-            ok = model.in_front(img @ normals.T - offsets, _ON_PLANE)  # (n, planes)
+            distance = products.product(img, normals.T) - offsets  # (n, planes)
+            ok = model.in_front(distance, _ON_PLANE)
             if s.shape[1]:
                 ok[np.arange(len(s)), s[:, -1]] = False
             if sky is not None:
@@ -421,9 +439,13 @@ def _cross(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     return np.stack([u1 * v2 - u2 * v1, u2 * v0 - u0 * v2, u0 * v1 - u1 * v0], axis=-1)
 
 
-def _over(model: TraceModel, faces: np.ndarray, points: np.ndarray, tolerance: float):
+def _over(model: TraceModel, faces: np.ndarray, points: np.ndarray) -> np.ndarray:
     """Whether each of ``points`` (p, 3) projected onto the face of ``faces`` (p,) beside
-    it lies on it, edges included to ``tolerance`` (p,)."""
+    it lies on it (p,), its edges included: on the triangle, or no farther from it than
+    the least distance at which a ray meets a face (``model.bvh.min_distance``, a
+    billionth of the model's diagonal). The model's tolerance for planes is no room past
+    an edge: a face a path meets where it ends is another one's, however near its
+    plane."""
     mesh = model.room.mesh
     tri = mesh.vertices[mesh.faces[faces]]
     a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
@@ -433,32 +455,70 @@ def _over(model: TraceModel, faces: np.ndarray, points: np.ndarray, tolerance: f
     w_a = np.einsum("ij,ij->i", _cross(c - b, points - b), n) / area2
     w_b = np.einsum("ij,ij->i", _cross(a - c, points - c), n) / area2
     w_c = 1.0 - w_a - w_b
-    edge = np.sqrt(area2) / np.maximum(
-        np.linalg.norm(np.stack([b - a, c - b, a - c]), axis=2).max(axis=0), 1e-300
-    )  # twice the area over the longest edge: a height of the triangle
-    slack = tolerance / np.maximum(edge, 1e-300)
-    return np.minimum(np.minimum(w_a, w_b), w_c) >= -slack
+    # Beside the triangle: how far the projected point lies from the nearest side.
+    at = w_a[:, None] * a + w_b[:, None] * b + w_c[:, None] * c
+    beside = np.full(len(at), np.inf)
+    for p, q in ((a, b), (b, c), (c, a)):
+        side = q - p
+        along = np.einsum("ij,ij->i", at - p, side) / np.maximum(
+            np.einsum("ij,ij->i", side, side), 1e-300
+        )
+        gap = at - p - np.clip(along, 0.0, 1.0)[:, None] * side
+        beside = np.minimum(beside, np.linalg.norm(gap, axis=1))
+    return ((w_a >= 0.0) & (w_b >= 0.0) & (w_c >= 0.0)) | (beside <= model.bvh.min_distance)
 
 
-def _face_at(
+def _faces_at(
     model: TraceModel, plane: int, point: np.ndarray, tolerance: float, own: bool = True
-) -> int:
-    """A face of ``plane`` that ``point`` lies on (edges included), or -1: it lies within
-    ``tolerance`` of the plane or, with ``own``, of the face's own plane (see
-    :attr:`TraceModel.face_planes`). Openings are holes: no point lies on one."""
+) -> np.ndarray:
+    """The faces of ``plane`` that ``point`` lies on (edges included, :func:`_over`), in
+    ascending order: it lies within ``tolerance`` of the plane or, with ``own``, of the
+    face's own plane (see :attr:`TraceModel.face_planes`). Openings are holes: no point
+    lies on one."""
     height = abs(model.plane_normal[plane] @ point - model.plane_offset[plane])
     if height > tolerance + (2.0 * model.plane_spread[plane] if own else 0.0):
-        return -1
+        return np.empty(0, dtype=np.int64)
     candidates = np.flatnonzero((model.face_plane == plane) & ~model.transparent)
     if height > tolerance:  # off the plane, but maybe on a face that is not in it
         normal, offset = model.face_planes
         near = np.abs(normal[candidates] @ point - offset[candidates]) <= tolerance
         candidates = candidates[near]
     if len(candidates) == 0:
-        return -1
+        return candidates
     at = np.broadcast_to(point, (len(candidates), 3))
-    inside = np.flatnonzero(_over(model, candidates, at, tolerance))
-    return int(candidates[inside[0]]) if len(inside) else -1
+    return candidates[_over(model, candidates, at)]
+
+
+def _face_at(
+    model: TraceModel, plane: int, point: np.ndarray, tolerance: float, own: bool = True
+) -> int:
+    """The first of the faces of ``plane`` that ``point`` lies on (:func:`_faces_at`),
+    or -1."""
+    faces = _faces_at(model, plane, point, tolerance, own)
+    return int(faces[0]) if len(faces) else -1
+
+
+def _goes_on(
+    model: TraceModel, plane: int, point: np.ndarray, way: np.ndarray, tolerance: float
+) -> bool:
+    """Whether a face of ``plane`` that ``point`` lies on (:func:`_faces_at`) goes on
+    from it along ``way`` (in the plane, of any length): ``way`` leaves the face across
+    none of its edges that the point lies within ``tolerance`` of, or beyond (a way
+    along an edge, to the plane tolerance, stays on the face). With no way (zero) a
+    face the point lies on is enough."""
+    faces = _faces_at(model, plane, point, tolerance)
+    if len(faces) == 0:
+        return False
+    mesh = model.room.mesh
+    corner = mesh.vertices[mesh.faces[faces]]  # (f, 3, 3)
+    side = np.roll(corner, -1, axis=1) - corner  # each edge, from its first corner
+    side /= np.maximum(np.linalg.norm(side, axis=2, keepdims=True), 1e-300)
+    inward = np.roll(corner, -2, axis=1) - corner  # to the corner across the edge
+    inward -= np.einsum("fej,fej->fe", inward, side)[..., None] * side
+    inward /= np.maximum(np.linalg.norm(inward, axis=2, keepdims=True), 1e-300)
+    depth = np.einsum("fej,fej->fe", point - corner, inward)
+    out = np.einsum("fej,j->fe", inward, way) < -PLANE_TOLERANCE * np.linalg.norm(way, axis=0)
+    return bool(np.any(~np.any((depth <= tolerance) & out, axis=1)))
 
 
 #: Points looked up at once in a plane's grid of faces (:func:`_faces_under`).
@@ -471,10 +531,11 @@ _GRID_CELLS = 64
 def _face_grid(model: TraceModel, plane: int, tolerance: float):
     """The faces of ``plane`` binned for :func:`_faces_under` (worked out once for each
     plane and ``tolerance``, in :attr:`TraceModel.face_grids`): each face's box, grown by
-    the room :func:`_over` leaves round its edges (it takes the triangle scaled about its
-    centroid by 1 + 3 ``tolerance`` / its least height, which moves no corner farther
-    along an axis than that 3 ``tolerance`` / least height times the box's largest side)
-    and by ``tolerance`` and twice the plane's spread, then doubled and added the model's
+    more than the room :func:`_over` leaves round its edges (the intersection test's
+    least distance, no more than ``tolerance``: the triangle scaled about its centroid by
+    1 + 3 ``tolerance`` / its least height holds it, and that moves no corner farther
+    along an axis than 3 ``tolerance`` / least height times the box's largest side) and
+    by ``tolerance`` and twice the plane's spread, then doubled and added the model's
     rounding (:attr:`TraceModel.height_error`); and a grid of square cells across the two
     axes the plane faces least, listing the faces whose boxes overlap each (those that
     overlap more than :data:`_GRID_CELLS` of them, or with no finite box, listed apart,
@@ -536,9 +597,10 @@ def _face_grid(model: TraceModel, plane: int, tolerance: float):
 def _faces_under(model: TraceModel, plane: int, points: np.ndarray, tolerance: float):
     """Pairs of the ``points`` (m, 3) and faces of ``plane``, as (p,) rows of ``points``
     and (p,) faces, among which are all those where a point projected onto the face lies
-    on it, edges included to ``tolerance``, within ``tolerance`` and twice the plane's
+    on it (edges included, :func:`_over`), within ``tolerance`` and twice the plane's
     spread of the face's own plane: those whose grown boxes hold the point (see
-    :func:`_face_grid`)."""
+    :func:`_face_grid`; ``tolerance`` is no less than the intersection test's least
+    distance)."""
     faces, low, high, axes, start, cell, shape, first, listed, apart = _face_grid(
         model, plane, tolerance
     )
@@ -563,7 +625,7 @@ def _height_near(model: TraceModel, points, planes, tolerance: float) -> np.ndar
     do not all lie in it (:attr:`TraceModel.plane_spread`) and the point lies within
     ``tolerance`` and twice that spread of it, the one of least size of that and the
     point's distances from the own planes (:attr:`TraceModel.face_planes`) of the plane's
-    faces it lies over (edges included to ``tolerance``; of equal ones the first face's):
+    faces it lies over (edges included, :func:`_over`; of equal ones the first face's):
     a point on any face of the plane lies on it, and its side is taken from the faces
     there."""
     height = _height_over_plane(model, points, planes)
@@ -581,7 +643,7 @@ def _height_near(model: TraceModel, points, planes, tolerance: float) -> np.ndar
             rows, faces = _faces_under(model, plane, points[part], tolerance)
             at = points[part][rows]
             own = np.einsum("ij,ij->i", at, normal[faces]) - offset[faces]
-            over = _over(model, faces, at, tolerance)
+            over = _over(model, faces, at)
             rows, faces, own = rows[over], faces[over], own[over]
             order = np.lexsort((faces, np.abs(own), rows))
             rows, own = rows[order], own[order]
@@ -656,14 +718,28 @@ def find_paths(
         first = np.full(n, k - 1, dtype=np.int64)
         for j in range(k - 1, -1, -1):
             plane = seqs[:, j]
-            # A reflection point on an edge already lies on the next plane too: the path
-            # reflects off both at the same point (a corner), so there is nothing to trace.
-            corner = np.zeros(n, dtype=bool)
+            # A reflection point on an edge already lies on the next plane's face too: the
+            # path reflects off both at the same point (a corner), so there is nothing to
+            # trace. One in that plane off its faces is no corner: the path goes on to it.
+            # Nor is one beside the plane (farther than the least distance at which a ray
+            # meets a face) from which the path does not go on to a face of it: on the
+            # side of the image it heads for, or meeting the plane past its faces.
+            at = np.full(n, -1, dtype=np.int64)
             if j < k - 1:
-                corner[valid] = (
-                    np.abs(_height_near(model, current[valid], plane[valid], tolerance))
-                    <= tolerance
-                )
+                near = np.flatnonzero(valid)
+                height = _height_near(model, current[near], plane[near], tolerance)
+                there = _height_over_plane(model, chain[j + 1][near], plane[near])
+                beside = np.abs(height) > model.bvh.min_distance
+                held = (np.abs(height) <= tolerance) & (~beside | (height * there < 0.0))
+                for i, h, t, far in zip(
+                    near[held], height[held], there[held], beside[held], strict=True
+                ):
+                    if far:
+                        crossing = current[i] + h / (h - t) * (chain[j + 1][i] - current[i])
+                        if _face_at(model, plane[i], crossing, tolerance) < 0:
+                            continue
+                    at[i] = _face_at(model, plane[i], current[i], tolerance)
+            corner = at >= 0
             trace = valid & ~corner
             start = current
             delta = chain[j + 1] - current
@@ -694,9 +770,7 @@ def find_paths(
                 crossings[rows] += crossed
             before[trace], first[trace] = start[trace], j
             valid &= hit | corner
-            for i in np.flatnonzero(corner):
-                face[i] = _face_at(model, plane[i], current[i], tolerance)
-            valid &= face >= 0
+            face[corner] = at[corner]
             faces[:, j] = face
             points[j] = current.copy()
             ignore = face
@@ -726,8 +800,17 @@ def find_paths(
             continue
 
         idx = np.flatnonzero(valid)
-        # Plane sequences that commute (perpendicular planes) give the same image.
-        _, unique = np.unique(np.round(chain[-1][idx] / tolerance), axis=0, return_index=True)
+        # Plane sequences that commute (perpendicular planes) make the same mirror off
+        # the same surfaces: one path. Other mirrors' images of a source near where their
+        # planes meet lie as near each other, and are paths of their own; so are paths
+        # off other surfaces that make the same mirror (in two rooms as deep either side
+        # of a partition: off the partition and one room's end wall, or the other's).
+        # Two paths with one mirror off the same surfaces in another order still count
+        # as one (from the fourth order on in such rooms).
+        key = np.hstack(
+            [_mirrors(model, seqs[idx], tolerance), _surfaces(model, seqs[idx], tolerance)]
+        )
+        _, unique = np.unique(key, axis=0, return_index=True)
         idx = idx[np.sort(unique)]
         parts.append(
             assemble_paths(
@@ -764,6 +847,75 @@ def find_paths(
             coherent=coherent,
         )
     return found
+
+
+def _mirrors(model: TraceModel, seqs: np.ndarray, tolerance: float) -> np.ndarray:
+    """(n, 12) where the planes of each sequence of ``seqs`` (n, k), mirroring in turn,
+    take four points (a corner of the model's box and the three its largest extent from
+    it along the axes), in steps of ``tolerance``: the same for the sequences that make
+    one mirror, wherever a source lies."""
+    vertices = model.room.mesh.vertices
+    size = float(np.ptp(vertices, axis=0).max())
+    marks = vertices.min(axis=0) + size * np.vstack([np.zeros(3), np.eye(3)])
+    moved = np.tile(marks, (len(seqs), 1))
+    for j in range(seqs.shape[1]):
+        moved = model.mirror(moved, np.repeat(seqs[:, j], 4))
+    return np.round(moved.reshape(len(seqs), 12) / tolerance)
+
+
+def _surfaces(model: TraceModel, seqs: np.ndarray, tolerance: float) -> np.ndarray:
+    """(n, k) the surfaces each sequence of ``seqs`` (n, k) reflects off, whatever their
+    order and however often: numbers of the planes' own mirrors (the two sides of a
+    partition are one surface), greatest first, -1 for no further one."""
+    planes = np.arange(model.plane_count)
+    _, surface = np.unique(_mirrors(model, planes[:, None], tolerance), axis=0, return_inverse=True)
+    met = np.sort(surface.reshape(-1)[seqs], axis=1)
+    met[:, 1:][met[:, 1:] == met[:, :-1]] = -1
+    return -np.sort(-met, axis=1)
+
+
+def _along_at_planes(
+    source: np.ndarray, points: list[np.ndarray], normals: np.ndarray, tolerance: float
+) -> np.ndarray:
+    """(k, n, 3) for each of the k reflections of n paths a vector along the path where
+    it meets that reflection's plane, for the angle between the two (``points``: the
+    reflection points, k + 1 arrays of (n, 3) with the listener last; ``normals``
+    (n, k, 3) of the planes): the leg to the reflection from the source or from the
+    reflection before.
+
+    Where that leg is no longer than ``tolerance``, the path reflects where it reflected
+    last, in a corner, and meets the plane at the angle it leaves it: the leg after it.
+    A plane between others of a corner has no leg of any length on either side. The
+    path leaves it as it leaves the plane after it, turned back by that plane; where no
+    leg follows at all (the listener is at the corner), it meets it as it came to the
+    corner, turned by each plane it has reflected off since. (Zero where the path has
+    no leg longer than the tolerance on either side of the corner.)"""
+    k, n = len(points) - 1, len(points[0])
+
+    def turned(way: np.ndarray, j: int) -> np.ndarray:
+        normal = normals[:, j]
+        return way - 2.0 * np.einsum("ij,ij->i", normal, way)[:, None] * normal
+
+    leaving = np.zeros((k, n, 3))
+    for j in range(k - 1, -1, -1):
+        after = points[j + 1] - points[j]
+        follows = np.linalg.norm(after, axis=1) > tolerance
+        back = turned(leaving[j + 1], j + 1) if j + 1 < k else leaving[j]
+        leaving[j] = np.where(follows[:, None], after, back)
+    along = np.zeros((k, n, 3))
+    heading = np.zeros((n, 3))
+    before = np.broadcast_to(source, (n, 3))
+    for j in range(k):
+        incoming = points[j] - before
+        corner = np.linalg.norm(incoming, axis=1) <= tolerance
+        heading = np.where(corner[:, None], heading, incoming)
+        leaves = np.any(leaving[j] != 0.0, axis=1)
+        along[j] = np.where(
+            corner[:, None], np.where(leaves[:, None], leaving[j], heading), incoming
+        )
+        heading = turned(heading, j)
+        before = points[j]
+    return along
 
 
 def assemble_paths(
@@ -804,18 +956,15 @@ def assemble_paths(
     grounds = bool(k) and model.factor_faces(faces).any()
     factor = None
     before = np.broadcast_to(source, (n, 3))
+    if coherent or grounds:
+        normals = model.plane_normal[model.face_plane[faces]]
+        along = _along_at_planes(source, points, normals, tolerance)
     for j in range(k):
         incoming = points[j] - before
         energy *= model.reflection(faces[:, j], incoming, j + 1, impedance=True)
         if coherent or grounds:
-            # At a corner the path reflects where it reflected last: it meets the
-            # second plane at the angle it leaves it.
-            after = points[j + 1] - points[j]
-            corner = np.linalg.norm(incoming, axis=1) <= tolerance
-            incoming = np.where(corner[:, None], after, incoming)
-            normal = model.plane_normal[model.face_plane[faces[:, j]]]
-            cosine = np.abs(np.einsum("ij,ij->i", normal, incoming)) / np.maximum(
-                np.linalg.norm(incoming, axis=1), 1e-300
+            cosine = np.abs(np.einsum("ij,ij->i", normals[:, j], along[j])) / np.maximum(
+                np.linalg.norm(along[j], axis=1), 1e-300
             )
             if coherent:
                 spectrum *= reflection_phases(model, faces[:, j], cosine, coherent)
@@ -869,8 +1018,14 @@ def _towards_plane(model, start, direction, length, ignore, plane, trace, tolera
     counts as on the plane (whether the path goes on across that face there,
     :func:`_turn` says): one within ``tolerance`` of the plane, in which the image the
     ray heads for is mirrored, not of the own plane of one of its faces (where they do
-    not all lie in the plane, :attr:`TraceModel.plane_spread`)."""
+    not all lie in the plane, :attr:`TraceModel.plane_spread`), over a face of it
+    (:func:`_face_at`), on a ray whose two ends lie on either side of the plane (one
+    that does not cross the plane reflects nowhere off it) and that meets that face's
+    own plane on a face of the plane: a ray that met another face beside the line where
+    the two join meets it past the edge."""
     n = len(start)
+    ends = start + direction * np.asarray(length, dtype=float)[:, None]
+    across = _height_over_plane(model, start, plane) * _height_over_plane(model, ends, plane) < 0.0
     bands = model.absorption.shape[1]
     transparent = model.transparent
     face = np.full(n, -1, dtype=np.int64)
@@ -890,9 +1045,18 @@ def _towards_plane(model, start, direction, length, ignore, plane, trace, tolera
         position[rows] += direction[rows] * t[:, None]
         remaining[rows] -= t
         on_plane = (model.face_plane[hit] == plane[rows]) & ~transparent[hit]
-        for i in np.flatnonzero(~on_plane):
-            other = _face_at(model, plane[rows[i]], position[rows[i]], tolerance, own=False)
-            if other >= 0:
+        normal, offset = model.face_planes
+        for i in np.flatnonzero(~on_plane & across[rows]):
+            row = rows[i]
+            other = _face_at(model, plane[row], position[row], tolerance, own=False)
+            if other < 0:
+                continue
+            height = float(np.einsum("k,k->", normal[other], position[row])) - offset[other]
+            slope = float(np.einsum("k,k->", normal[other], direction[row]))
+            if slope == 0.0:
+                continue
+            crossing = position[row] - (height / slope) * direction[row]
+            if _face_at(model, plane[row], crossing, tolerance) >= 0:
                 hit[i], on_plane[i] = other, True
         face[rows[on_plane]] = hit[on_plane]
         end[rows[on_plane]] = position[rows[on_plane]]
@@ -1120,25 +1284,160 @@ def _side_reflected(model, reflecting, plane, point, after, tolerance) -> int:
     )
 
 
+#: Room for rounding where an end of one arc is tested against another arc
+#: (:func:`_arcs_meet`).
+_ARC_ROUNDING = 1e-9
+
+
+def _arcs_meet(across: np.ndarray, least: np.ndarray, use: np.ndarray) -> np.ndarray:
+    """(p,) whether some unit vector d of a plane has ``across[p, k]`` . d >=
+    ``least[p, k]`` for every k that ``use`` (p, K) marks, where ``across`` (p, K, 2) are
+    unit vectors: each such bound leaves an arc of the unit circle (all of it up to -1,
+    none of it above 1), and the arcs of a row have a direction in common. Where they
+    have one and are not each the whole circle, what they have in common ends, going
+    round to the left, where one of the arcs does, so those ends are the directions
+    tried."""
+    least = np.where(use, least, -np.inf)
+    cut = (least > -1.0) & (least <= 1.0)
+    along = np.where(cut, least, 0.0)
+    aside = np.sqrt(1.0 - along**2)
+    ends = np.stack(
+        [
+            along * across[..., 0] - aside * across[..., 1],
+            along * across[..., 1] + aside * across[..., 0],
+        ],
+        axis=-1,
+    )
+    reach = (
+        ends[:, :, None, 0] * across[:, None, :, 0] + ends[:, :, None, 1] * across[:, None, :, 1]
+    )
+    held = np.all(reach >= least[:, None, :] - _ARC_ROUNDING, axis=2)
+    return ~np.any(least > 1.0, axis=1) & (np.any(cut & held, axis=1) | ~np.any(cut, axis=1))
+
+
+def _inner_corner(model, planes, fronts, point, tolerance) -> np.ndarray:
+    """(n,) whether the faces of ``planes`` (n, r; -1 for none; two or more a row, which
+    meet at ``point`` (n, 3)) make a corner there that a path reflects in, off all of
+    them at that one point, where ``fronts`` (n, r, 3) are the planes' normals towards
+    the side the path keeps to (zero for a plane the path runs in, which has no such
+    side). A path that reflects off a plane near the point does so on the path's side of
+    each of the other planes that have a side. A plane with no face there and one past
+    any of those others makes no such corner: at an outer edge, the plane of the wall
+    under a roof's edge has its faces below that edge and none over it, where sound from
+    above the roof would meet it, so that a path through the edge is no reflection off
+    the two. A plane with no face round the point leaves the corner one.
+
+    The faces are looked for on the circle of twice ``tolerance`` about the point in the
+    plane (the point itself may lie ``tolerance`` to either side of the other planes):
+    the directions from the point in which that circle lies on a triangle of the plane
+    (edges included to the intersection test's least distance), on the path's side of
+    every other plane by more than twice that distance, or past one of them by as much
+    (:func:`_arcs_meet`). Another plane counts where the circle reaches that far to
+    both sides of it: not one nearly parallel to the plane."""
+    least = model.bvh.min_distance
+    radius, clear = 2.0 * tolerance, 2.0 * least
+    valid = planes >= 0
+    safe = np.maximum(planes, 0)
+    normals = model.plane_normal[safe]
+    side = np.sign(np.einsum("nrk,nrk->nr", fronts, normals))
+    towards = normals * side[:, :, None]
+    # The point's own height over each plane, towards the path.
+    height = side * _height_over_plane(model, point[:, None], safe)
+    mesh = model.room.mesh
+    inner = np.ones(len(planes), dtype=bool)
+    for a in range(planes.shape[1]):
+        # Along plane a, each other plane's normal towards the path: across the line the
+        # two planes meet in.
+        normal = normals[:, a]
+        across = towards - np.einsum("nrk,nk->nr", towards, normal)[:, :, None] * normal[:, None]
+        size = np.linalg.norm(across, axis=2)
+        bounds = valid & (radius * size > clear + np.abs(height))
+        rows = np.flatnonzero(valid[:, a] & bounds.any(axis=1))
+        if len(rows) == 0:
+            continue
+        normal, size, bounds = normal[rows], np.where(bounds, size, 1.0)[rows], bounds[rows]
+        across = across[rows] / size[:, :, None]
+        # Two axes of plane a at the point, and in them the other planes' normals and how
+        # far along each a direction lies clear of that plane, before it and past it.
+        ahead = across[np.arange(len(rows)), np.argmax(bounds, axis=1)]
+        beside = _cross(normal, ahead)
+        lines = np.stack(
+            [np.einsum("mrk,mk->mr", across, ahead), np.einsum("mrk,mk->mr", across, beside)],
+            axis=-1,
+        )
+        before = (clear - height[rows]) / (radius * size)
+        past = (clear + height[rows]) / (radius * size)
+        # The faces of plane a near the point: their corners in those axes, their edges'
+        # normals into them, and how far along each a direction lies on the face.
+        own = planes[rows, a]
+        at, faces = [], []
+        for plane in np.unique(own):
+            held = np.flatnonzero(own == plane)
+            for part in np.array_split(held, -(-len(held) // _CHUNK)):
+                found, under = _faces_under(model, plane, point[rows[part]], tolerance)
+                solid = ~model.transparent[under]
+                at.append(part[found[solid]])
+                faces.append(under[solid])
+        at, faces = np.concatenate(at), np.concatenate(faces)
+        corners = mesh.vertices[mesh.faces[faces]] - point[rows[at]][:, None]
+        corners = np.stack(
+            [
+                np.einsum("pvk,pk->pv", corners, ahead[at]),
+                np.einsum("pvk,pk->pv", corners, beside[at]),
+            ],
+            axis=-1,
+        )
+        edge = np.roll(corners, -1, axis=1) - corners
+        third = np.roll(corners, -2, axis=1) - corners
+        inward = np.stack([-edge[..., 1], edge[..., 0]], axis=-1)
+        turn = np.sign(inward[..., 0] * third[..., 0] + inward[..., 1] * third[..., 1])
+        inward *= (turn / np.maximum(np.linalg.norm(edge, axis=2), 1e-300))[..., None]
+        on = (inward[..., 0] * corners[..., 0] + inward[..., 1] * corners[..., 1] - least) / radius
+        on[np.any(turn == 0.0, axis=1)] = 2.0  # a face without area: in no direction
+        every = np.ones((len(at), 3), dtype=bool)
+        front = _arcs_meet(
+            np.concatenate([inward, lines[at]], axis=1),
+            np.concatenate([on, before[at]], axis=1),
+            np.concatenate([every, bounds[at]], axis=1),
+        )
+        behind = np.zeros(len(at), dtype=bool)
+        for b in range(planes.shape[1]):
+            behind |= bounds[at, b] & _arcs_meet(
+                np.concatenate([inward, -lines[at, b : b + 1]], axis=1),
+                np.concatenate([on, past[at, b : b + 1]], axis=1),
+                np.ones((len(at), 4), dtype=bool),
+            )
+        faces_before = np.zeros(len(rows), dtype=bool)
+        faces_before[at[front]] = True
+        faces_past = np.zeros(len(rows), dtype=bool)
+        faces_past[at[behind]] = True
+        inner[rows[faces_past & ~faces_before]] = False
+    return inner
+
+
 def _turn(model, planes, faces, before, point, after, tolerance, counted):
     """Paths that reflect off ``planes`` (n, r; -1 for none; more than one in a corner),
     off their faces ``faces`` (n, r), at ``point`` (n, 3), coming from ``before`` (n, 3)
     and going on to ``after`` (n, 3):
     (n,) whether each turns back off every one of those planes, as a reflection does,
     rather than going on across one: in a corner, ``before`` and ``after`` on either
-    side of it, both farther than ``tolerance``; anywhere, the leg from the point to
-    ``before`` or to ``after`` crossing it farther from both of its ends than the
-    intersection test's least distance (in a corner the point may lie past a plane the
-    path reflects off just before, and the leg's own test does not meet the face it
-    leaves, or meets another face of that plane as one it passes through). Nor does a
-    path turn off two coincident planes (within the model's plane tolerance; a wall
-    drawn as one face for each room) at one point: it would go on through the wall
-    there, or come back as off one of them. Also the share of sound (n, bands) and the
-    crossings (n, m) of the faces each crosses right at the point (see
-    :func:`_crossed_at`). The leg leaving the point meets no face nearer to it than the
-    intersection test's least distance; the one arriving meets every face on its way
-    but one right where it meets the plane (:func:`_towards_plane`), and the point then
-    lies in that face's plane.
+    side of it, both farther from it than the intersection test's least distance (not
+    ``tolerance``, within which the corner's point may lie off it); anywhere, the leg
+    from the point to ``before`` or to ``after`` crossing it farther from both of its
+    ends than the intersection test's least distance (in a corner the point may lie past
+    a plane the path reflects off just before, and the leg's own test does not meet the
+    face it leaves, or meets another face of that plane as one it passes through). Nor
+    does a path turn off two coincident planes (within the model's plane tolerance; a
+    wall drawn as one face for each room) at one point: it would go on through the wall
+    there, or come back as off one of them. Nor does it turn off planes whose faces make
+    no corner on its side of them (see :func:`_inner_corner`), as at an outer edge of a
+    building: its side of each plane is that of the farther of ``before`` and ``after``,
+    where that lies farther from the plane than the least distance, and none otherwise.
+    Also the share of sound (n, bands) and the crossings (n, m) of the faces each
+    crosses right at the point (see :func:`_crossed_at`). The leg leaving the point
+    meets no face nearer to it than the intersection test's least distance; the one
+    arriving meets every face on its way but one right where it meets the plane
+    (:func:`_towards_plane`), and the point then lies in that face's plane.
 
     Sides and distances are those of the plane that each of ``faces`` itself lies in
     (:attr:`TraceModel.face_planes`; its plane where the face lies in it): the face the
@@ -1154,7 +1453,8 @@ def _turn(model, planes, faces, before, point, after, tolerance, counted):
     own = np.where(valid, faces, 0)
     here, below, above = _height_over_face(model, np.stack([point, before, after])[:, :, None], own)
     corner = np.count_nonzero(valid, axis=1) > 1
-    across = corner[:, None] & _on_either_side(below, above, tolerance)
+    off = max(least, model.height_error)
+    across = corner[:, None] & _on_either_side(below, above, off)
     for end, there in ((before, below), (after, above)):
         way = end - point
         way /= np.maximum(np.linalg.norm(way, axis=1), 1e-300)[:, None]
@@ -1163,6 +1463,12 @@ def _turn(model, planes, faces, before, point, after, tolerance, counted):
     coincident = np.abs(normals @ normals.transpose(0, 2, 1)) >= 1.0 - PLANE_TOLERANCE
     coincident &= valid[:, :, None] & valid[:, None, :] & (planes[:, :, None] != planes[:, None, :])
     turns = ~np.any(valid & across, axis=1) & ~np.any(coincident, axis=(1, 2))
+    rows = np.flatnonzero(corner & turns)
+    if len(rows):
+        farther = np.where(np.abs(below) >= np.abs(above), below, above)[rows]
+        sides = np.where(valid[rows] & (np.abs(farther) > off), np.sign(farther), 0.0)
+        fronts = model.face_planes[0][own[rows]] * sides[:, :, None]
+        turns[rows] = _inner_corner(model, planes[rows], fronts, point[rows], tolerance)
     near = np.full((len(point), 2), least)
     share, crossed, _, _ = _crossed_at(
         model, planes, before, point, after, tolerance, counted, near

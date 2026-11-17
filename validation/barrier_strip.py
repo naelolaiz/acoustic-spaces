@@ -116,7 +116,14 @@ def free(kappa: np.ndarray, source, listener) -> np.ndarray:
 
 
 def point(
-    height: float, k, source, listener, terms: int | None = None, angles=None, decays=80
+    height: float,
+    k,
+    source,
+    listener,
+    terms: int | None = None,
+    angles=None,
+    decays=80,
+    along: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """(K,) a point source's pressure at the wavenumbers ``k`` (free field
     exp(ikr) / r) without the barrier (the direct sound and the plane's reflection),
@@ -127,7 +134,9 @@ def point(
     against the other end's field 40 H over that end's distance from the barrier
     where that is more; a ValueError beyond ``FINEST_RULE`` nodes); ``angles`` of the
     real wavenumbers, by default 240, and 0.6 k times the ends' distance where that
-    is more (the field turns by k times that distance over them)."""
+    is more (the field turns by k times that distance over them). With ``along`` the
+    listener is that far (m) from the source along the barrier too, which the sum
+    over the wavenumber q along it takes as cos(q along)."""
     k = np.atleast_1d(np.asarray(k, dtype=float))
     if abs(listener[0]) > abs(source[0]):
         # The sound is the same with the ends swapped: the equation is solved for the
@@ -140,6 +149,7 @@ def point(
     g, w_g = np.polynomial.legendre.leggauss(decays)
     reach = math.hypot(listener[0] - source[0], listener[1] - source[1])
     gamma, w_g = 6.0 / reach * (g + 1.0), 6.0 / reach * w_g
+    whole = math.hypot(reach, along)
     open_field = np.empty(len(k), dtype=complex)
     shed = np.empty(len(k), dtype=complex)
     for index, wavenumber in enumerate(k):
@@ -147,12 +157,15 @@ def point(
         if count is None:
             count = int(1.3 * wavenumber * height + 24 + 5.0 * height / abs(source[0]))
         strip = Strip(height, count, 12 * count)
-        turns = angles if angles is not None else max(240, math.ceil(0.6 * wavenumber * reach))
+        turns = angles if angles is not None else max(240, math.ceil(0.6 * wavenumber * whole))
         theta, w_theta = np.polynomial.legendre.leggauss(turns)
         theta, w_theta = 0.25 * np.pi * (theta + 1.0), 0.25 * np.pi * w_theta
         kappa = wavenumber * np.sin(theta)
         weights = np.concatenate([w_theta * kappa, w_g * gamma / np.sqrt(wavenumber**2 + gamma**2)])
         both = np.concatenate([kappa.astype(complex), 1j * gamma])
+        if along:
+            q = np.concatenate([wavenumber * np.cos(theta), np.sqrt(wavenumber**2 + gamma**2)])
+            weights = weights * np.cos(q * along)
         scattered = np.empty(len(both), dtype=complex)
         closer = fine if fine > strip.m else None
         for a in range(0, len(both), 32):
@@ -164,11 +177,12 @@ def point(
     return open_field, shed
 
 
-def levels(height: float, source, listener, wavenumbers) -> np.ndarray:
+def levels(height: float, source, listener, wavenumbers, along: float = 0.0) -> np.ndarray:
     """(B,) the band levels (dB re the free field at the listener's distance from the
-    source) behind the barrier, ``wavenumbers`` (B, n) those of each band."""
+    source) behind the barrier, ``wavenumbers`` (B, n) those of each band; the
+    listener ``along`` m from the source along the barrier."""
     wavenumbers = np.asarray(wavenumbers, dtype=float)
-    open_field, shed = point(height, wavenumbers.ravel(), source, listener)
+    open_field, shed = point(height, wavenumbers.ravel(), source, listener, along=along)
     energy = (np.abs(open_field + shed) ** 2).reshape(wavenumbers.shape).mean(axis=1)
-    distance = math.hypot(listener[0] - source[0], listener[1] - source[1])
+    distance = math.hypot(listener[0] - source[0], listener[1] - source[1], along)
     return 10.0 * np.log10(energy * distance**2)

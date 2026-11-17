@@ -101,7 +101,7 @@ from typing import Literal
 
 import numpy as np
 
-from acoustic_spaces import synthesis
+from acoustic_spaces import products, synthesis
 from acoustic_spaces.engine.gpu import Device, GpuWaveSolver, gpu_name, use_gpu
 from acoustic_spaces.engine.impedance import (
     MAX_ABSORPTION,
@@ -441,7 +441,7 @@ class WaveResponse:
         keep = slot < slots
         padded = np.concatenate([np.zeros(pad), self.signals[:, 0]])
         if axis is not None:
-            figure8 = np.concatenate([np.zeros(pad), self.signals[:, 1:] @ axis])
+            figure8 = np.concatenate([np.zeros(pad), products.product(self.signals[:, 1:], axis)])
         for b, gain in enumerate(gains):
             pressure = _filter(padded, gain, n_fft)
             share = float((gain**2 * weights).sum() / n_fft)

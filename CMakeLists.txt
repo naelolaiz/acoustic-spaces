@@ -19,8 +19,9 @@ nanobind_add_module(_native NB_STATIC NOMINSIZE cpp/bindings/native_module.cpp)
 target_link_libraries(_native PRIVATE acoustic_spaces_core)
 
 if(MSVC)
-  # /fp:precise: no contraction of a product and a sum, no reassociation (fitted walls refuse
-  # to fit in any other build; cut_cells.hpp).
+  # /fp:precise: no reordered sums and no contracted multiply-adds (fixed_sums.hpp needs
+  # both, and fitted walls refuse to fit in any other build, cut_cells.hpp; it is the
+  # default, said here so that no other default can take its place).
   target_compile_options(_native PRIVATE /W4 /fp:precise)
 else()
   # No multiply-adds fused where the source has none (Apple's clang fuses them by default

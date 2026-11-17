@@ -1,7 +1,11 @@
 """Early paths that add in pressure in the lowest bands (engine.coherent)."""
 
 import dataclasses
+import itertools
 import math
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -683,3 +687,412 @@ def test_the_equation_s_samples_go_with_their_path() -> None:
     np.testing.assert_array_equal(turned.spectrum, carrier.spectrum)
     np.testing.assert_array_equal(turned.fine, carrier.fine)
     assert paths(1, None).fine is None
+
+
+_PRESSURE_DIGEST = """
+import hashlib
+import numpy as np
+from acoustic_spaces.engine import coherent
+from acoustic_spaces.engine.early import EarlyReflections
+
+rng = np.random.default_rng(5)
+n = 203
+delay = np.sort(rng.uniform(0.005, 0.3, n))
+energy = rng.uniform(0.1, 1.0, (n, 8)) * 1e-3
+energy[:2, 1] = 0.0
+paths = EarlyReflections(
+    order=np.ones(n, dtype=np.int64),
+    delay_s=delay,
+    distance_m=delay * 343.0,
+    direction=rng.normal(size=(n, 3)),
+    energy=energy,
+    edge=None,
+    spectrum=np.exp(1j * rng.uniform(-3.0, 3.0, (n, 2, 8))),
+)
+pressure = coherent.EarlyPressure(paths)
+digest = hashlib.sha256()
+for x in (pressure.spectra, *pressure._spectra_of.values(), coherent.signal(paths, 4096, 16000.0)):
+    digest.update(np.ascontiguousarray(x).tobytes())
+print(digest.hexdigest())
+"""
+
+
+def test_the_early_pressure_has_the_same_bits_on_any_number_of_library_threads() -> None:
+    """203 paths, two of them silent in the second band: the early part's spectra, those
+    of the 201 paths heard in that band, and the coherent signal are bit for bit the same
+    in fresh processes on one and on four OpenBLAS threads."""
+    digests = set()
+    for threads in ("1", "4"):
+        env = dict(os.environ, OPENBLAS_NUM_THREADS=threads)
+        run = subprocess.run(
+            [sys.executable, "-c", _PRESSURE_DIGEST],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        digests.add(run.stdout)
+    assert len(digests) == 1
+
+
+def _scattered(n: int, seed: int, wander: bool = False) -> early_stage.EarlyReflections:
+    """``n`` paths from all directions, with random delays, energies and phases, every
+    seventh silent in the second band; with ``wander``, apart by random delay variances."""
+    from acoustic_spaces.engine.turbulence import Wander
+
+    rng = np.random.default_rng(seed)
+    delay = np.sort(rng.uniform(0.005, 0.3, n))
+    energy = rng.uniform(0.1, 1.0, (n, 8)) * 1e-3
+    energy[::7, 1] = 0.0
+    variance = rng.uniform(0.0, 1e-7, (n, n))
+    variance = variance + variance.T
+    np.fill_diagonal(variance, 0.0)
+    return early_stage.EarlyReflections(
+        order=np.ones(n, dtype=np.int64),
+        delay_s=delay,
+        distance_m=delay * 343.0,
+        direction=rng.normal(size=(n, 3)),
+        energy=energy,
+        edge=None,
+        spectrum=np.exp(1j * rng.uniform(-3.0, 3.0, (n, 2, 8))),
+        wander=Wander(variance, np.zeros((n, n)), 343.0) if wander else None,
+    )
+
+
+def test_the_early_pressure_and_the_signal_add_every_path_of_every_chunk() -> None:
+    """600 paths, three chunks of the loop: the early pressure's spectra, those of the
+    paths heard in the second band, and the coherent signal of three weightings are the
+    weighted sums over all the paths' delayed spectra at once, to rounding."""
+    from acoustic_spaces import synthesis
+    from acoustic_spaces.engine import coherent
+
+    paths = _scattered(600, 5)
+    pressure = coherent.EarlyPressure(paths)
+    f = np.fft.rfftfreq(pressure.n_fft, 1.0 / pressure.rate)
+    gains = synthesis.band_gains(pressure.n_fft, pressure.rate, 8)
+    shift = paths.delay_s + pressure.lead - 0.5 / pressure.rate
+    spectra = coherent.amplitude_spectra(paths, f, gains) * np.exp(-2j * np.pi * np.outer(shift, f))
+    weights = np.column_stack([np.ones(len(paths)), paths.direction])
+    np.testing.assert_allclose(pressure.spectra, weights.T @ spectra, rtol=0, atol=1e-12)
+    heard = paths.energy[:, 1] > 0.0
+    assert list(pressure._spectra_of) == [1]
+    np.testing.assert_allclose(
+        pressure._spectra_of[1], weights[heard].T @ spectra[heard], rtol=0, atol=1e-12
+    )
+
+    n, rate = 4096, 16000.0
+    weights = np.random.default_rng(1).normal(size=(len(paths), 3))
+    n_fft = synthesis.fft_size(n, rate)
+    gains = synthesis.band_gains(n_fft, rate, 8)
+    top = int(np.flatnonzero(gains[:2].sum(axis=0) > 0.0).max()) + 1
+    f = np.fft.rfftfreq(n_fft, 1.0 / rate)[:top]
+    spectra = coherent.amplitude_spectra(paths, f, gains[:, :top], only_coherent=True)
+    spectra *= np.exp(-2j * np.pi * np.outer(paths.delay_s, f))
+    expected = np.zeros((n_fft // 2 + 1, 3), dtype=complex)
+    expected[:top] = spectra.T @ weights
+    expected = np.fft.irfft(expected, n_fft, axis=0)[:n]
+    np.testing.assert_allclose(
+        coherent.signal(paths, n, rate, weights),
+        expected,
+        rtol=0,
+        atol=1e-13 * np.abs(expected).max(),
+    )
+
+
+def test_the_early_figure_of_eight_is_the_pressure_weighted_by_its_cosines() -> None:
+    """Facing an axis of unequal components, the early pressure's figure of eight is the
+    energy of the paths each weighted by the cosine of its direction to the axis."""
+    from acoustic_spaces.engine import coherent
+
+    paths = _scattered(300, 2)
+    axis = np.array([0.6, 0.0, 0.8])
+    facing = coherent.EarlyPressure(paths).energy(0.001, 300, axis=axis)
+    weighted = coherent.EarlyPressure(paths, weights=(paths.direction @ axis)[:, None])
+    expected = weighted.energy(0.001, 300)
+    np.testing.assert_allclose(facing, expected, rtol=0, atol=1e-12 * expected.max())
+
+
+def test_the_turbulent_figure_of_eight_takes_each_two_paths_coherence() -> None:
+    """In turbulence, a figure of eight facing an axis with exponent 1 adds, for each two
+    paths, the first's cosine times its band signal, their coherence factor, and the
+    second's pressure: the einsum of these, through the band filters, to rounding."""
+    from acoustic_spaces.engine import coherent
+    from acoustic_spaces.materials.bands import resolution_of
+
+    paths = _scattered(150, 3, wander=True)
+    pressure = coherent.EarlyPressure(paths)
+    axis = np.array([0.6, 0.0, 0.8])
+    facing = pressure.energy(0.001, 300, axis=axis, exponent=1)
+    side = paths.direction @ axis
+    for b in range(pressure.count):
+        gain, keep, slot, scale = pressure._filter(b, 0.001, 300, 0.0, None)
+        signals = np.fft.irfft(gain * pressure._each, pressure.n_fft, axis=1)[:, keep]
+        signals[paths.energy[:, b] <= 0.0] = 0.0
+        f = band_frequencies(bands=resolution_of(8))[0][b]
+        together = paths.wander.coherence(f).mean(axis=2)
+        power = np.abs(np.einsum("it,ij,jt->t", side[:, None] * signals, together, signals))
+        expected = np.bincount(slot, power * scale, minlength=300)[:300]
+        np.testing.assert_allclose(facing[b], expected, rtol=0, atol=1e-12 * expected.max())
+
+
+def _through_a_corner(paths, corner, within: float) -> list[int]:
+    """The paths that reflect three times within ``within`` of ``corner``."""
+    return [
+        i
+        for i in range(len(paths))
+        if paths.edge[i] < 0
+        and paths.order[i] == 3
+        and all(math.dist(point, corner) <= within for point in paths.points[i][1:4])
+    ]
+
+
+def _beside(scene: dict, shift):
+    """The early paths of the scene's listener moved by ``shift``."""
+    moved = (np.asarray(scene["listeners"][0]["position"]) + shift).tolist()
+    listeners = [{"name": "l", "position": moved}]
+    return early_paths(Room.from_scene(Scene.model_validate({**scene, "listeners": listeners})))
+
+
+#: A room with a source 1.9 m from a corner and a listener on the line from that corner
+#: through the source, twice as far: the corner's three walls send sound back along
+#: the line it came on, so that the path between the two that reflects off all three
+#: does so at the corner point itself.
+ROOM_CORNER = {
+    "geometry": {"box": [7.3, 5.1, 3.0]},
+    "materials": {"m": {"absorption": [0.15] * 8, "scattering": 0.0}},
+    "default_material": "m",
+    "sources": [{"name": "s", "position": [1.0, 1.4, 0.8]}],
+    "listeners": [{"name": "l", "position": [2.0, 2.8, 1.6]}],
+}
+#: Two barriers that meet at a right angle, on a ground, with a source and a listener on
+#: one line from the foot of their corner (see :data:`ROOM_CORNER`).
+BARRIERS_CORNER = {
+    "geometry": {
+        "ground": {"extent": [[-30, -30], [30, 30]], "sky": 30},
+        "barriers": [{"name": "b", "path": [[0, 12], [0, 0], [12, 0]], "height": 5}],
+    },
+    "materials": {
+        "hard": {"absorption": [0.2] * 8, "scattering": 0.0},
+        "grass": {"impedance": "grass"},
+    },
+    "default_material": "hard",
+    "sources": [{"name": "s", "position": [1.5, 2.0, 1.2]}],
+    "listeners": [{"name": "l", "position": [3.0, 4.0, 2.4]}],
+}
+
+
+@pytest.mark.parametrize(
+    ("scene", "early"),
+    [
+        (ROOM_CORNER, {}),
+        (ROOM_CORNER, {"method": "image_sources", "coherent_max_band_hz": 500}),
+        (BARRIERS_CORNER, {}),
+        (BARRIERS_CORNER, {"method": "image_sources", "diffraction": "none"}),
+        ({**BARRIERS_CORNER, "assignments": {"ground": "grass"}}, {}),
+    ],
+    ids=["a room", "a room, image sources", "barriers", "barriers, no edges", "on grass"],
+)
+def test_a_path_that_reflects_three_times_at_one_point_meets_each_wall_at_its_angle(
+    scene: dict, early: dict
+) -> None:
+    # The path that reflects off three walls right in their corner meets each of them at
+    # the angle of the line it comes and leaves on: also the middle one of the three,
+    # which it reaches and leaves by no leg of any length. Its pressure is then that of
+    # the path that reflects off the three one after the other, as it does for a
+    # listener 0.1 mm beside that line, and the two listeners' early levels agree.
+    # (Taken to graze the middle wall, the path had its pressure turned over where the
+    # bands add in pressure: the level in line was 0.7 dB off at 63 Hz in the room, 1.6
+    # dB between the barriers on the hard ground and 2.3 dB on grass, with the default
+    # settings.)
+    scene = {**scene, "simulation": {"early": early}}
+    exact = _beside(scene, np.zeros(3))
+    (corner,) = _through_a_corner(exact, np.zeros(3), 1e-9)
+    towards = -np.asarray(scene["sources"][0]["position"])
+    towards /= math.sqrt(float(towards @ towards))
+    if "assignments" not in scene:  # (a ground with an impedance keeps no cosine)
+        np.testing.assert_allclose(
+            np.sort(exact.cosines[corner]), np.sort(np.abs(towards)), atol=1e-9
+        )
+    level = 10 * np.log10(total_energy(exact))
+    for shift in ((0, 0, 1e-4), (1e-4, 0, 0), (0, -1e-4, 0)):
+        beside = _beside(scene, shift)
+        assert len(beside) == len(exact)
+        (other,) = _through_a_corner(beside, np.zeros(3), 1e-3)
+        assert not _through_a_corner(beside, np.zeros(3), 1e-9)
+        np.testing.assert_allclose(exact.spectrum[corner], beside.spectrum[other], atol=1e-4)
+        np.testing.assert_allclose(level, 10 * np.log10(total_energy(beside)), atol=0.01)
+
+    # The three surfaces are at right angles, so every order of them gives this path: its
+    # pressure and its energy are the same whichever it is put together in, without the
+    # scattering of a surface's size, which only the surface met first takes. (With a
+    # ground that has an impedance in the middle, the angle of 0 had also given the path
+    # another energy: 1.3 dB more at 63 Hz and 6.1 dB more at 250 Hz on the grass.)
+    scene["simulation"]["scattering"] = {"from_size": False}
+    room = Room.from_scene(Scene.model_validate(scene))
+    model = TraceModel.from_room(room)
+    source, listener = (
+        np.asarray(scene[end][0]["position"], dtype=float) for end in ("sources", "listeners")
+    )
+    bands = exact.energy.shape[1]
+    # (With no band that adds in pressure, a ground's factor still takes its angle.)
+    for coherent in (exact.coherent_bands, 0):
+        orders = [
+            early_stage.assemble_paths(
+                model,
+                source,
+                listener,
+                [np.zeros((1, 3))] * 3 + [listener[None]],
+                np.array([faces]),
+                exact.distance_m[[corner]],
+                np.ones((1, bands)),
+                np.zeros(1, dtype=np.int64),
+                speed_of_sound=room.speed_of_sound(),
+                air=np.zeros(bands),
+                coherent=coherent,
+            )
+            for faces in itertools.permutations(exact.faces[corner])
+        ]
+        assert len(orders) == 6
+        for order in orders:
+            np.testing.assert_allclose(order.energy[0], orders[0].energy[0], rtol=1e-9)
+            if coherent:
+                np.testing.assert_allclose(order.spectrum[0], exact.spectrum[corner], atol=1e-6)
+
+
+def test_planes_at_one_point_turn_a_path_from_one_to_the_next() -> None:
+    # A roof, the wall of a taller building along its edge and a barrier that stands on
+    # the roof at 80 degrees to that wall: three planes at one point that are not all at
+    # right angles, so that the angle a path meets the wall at there depends on how the
+    # barrier turned it. For a listener in line with that point and the image of the
+    # source in the three, the path that reflects off all three there meets each at the
+    # angle the path 0.1 mm beside does (0.37, 0.60 and 0.80 as cosines), and the early
+    # levels agree (the level in line had been 1.1 dB off at 63 Hz).
+    corner = np.array([10.0, 5.0, 6.0])
+    along = np.radians(170.0)
+    end = [10 + 8 * math.cos(along), 5 + 8 * math.sin(along)]
+    normals = np.array([[-math.sin(along), math.cos(along), 0.0], [1.0, 0, 0], [0, 0, 1.0]])
+    source = corner + (2.5 * math.cos(np.radians(130.0)), 2.5 * math.sin(np.radians(130.0)), 1)
+    image = source
+    for normal in normals:
+        image = image - 2.0 * ((image - corner) @ normal) * normal
+    scene = {
+        "geometry": {
+            "ground": {"margin": 60},
+            "buildings": [
+                {"name": "low", "footprint": [[0, 0], [10, 0], [10, 20], [0, 20]], "height": 6},
+                {"name": "tall", "footprint": [[10, 0], [14, 0], [14, 20], [10, 20]], "height": 12},
+            ],
+            "barriers": [{"name": "b", "path": [[10, 5], end], "height": 9}],
+        },
+        "materials": {"hard": {"absorption": [0.2] * 8, "scattering": 0.0}},
+        "default_material": "hard",
+        "sources": [{"name": "s", "position": source.tolist()}],
+        "listeners": [{"name": "l", "position": (corner + 1.5 * (corner - image)).tolist()}],
+        "simulation": {"early": {"method": "image_sources", "max_order": 3, "diffraction": "none"}},
+    }
+    exact, beside = _beside(scene, np.zeros(3)), _beside(scene, (0, 0, 1e-4))
+    (at,) = _through_a_corner(exact, corner, 1e-9)
+    (near,) = _through_a_corner(beside, corner, 1e-3)
+    assert len(exact) == len(beside) and not _through_a_corner(beside, corner, 1e-9)
+    np.testing.assert_allclose(exact.cosines[at], beside.cosines[near], atol=1e-4)
+    np.testing.assert_allclose(exact.cosines[at], [0.3714, 0.5968, 0.8041], atol=1e-4)
+    np.testing.assert_allclose(
+        10 * np.log10(total_energy(exact)), 10 * np.log10(total_energy(beside)), atol=0.01
+    )
+
+    # The roof is at right angles to the other two, so the three orders that have the
+    # barrier before the wall give the same image: whichever of them the path is put
+    # together in, it meets the planes at those three angles, also where the wall is the
+    # middle one, met as the barrier turned the path.
+    model = TraceModel.from_room(Room.from_scene(Scene.model_validate(scene)))
+    own = model.plane_normal[model.face_plane[exact.faces[at]]]
+    faces = [
+        int(exact.faces[at][np.flatnonzero(np.abs(own @ normal) > 1.0 - 1e-9)[0]])
+        for normal in normals
+    ]
+    assert len(set(faces)) == 3
+    bands = model.absorption.shape[1]
+
+    def cosines(planes, source, listener, points=None, tolerance=0.0) -> np.ndarray:
+        """The cosines of a path off ``planes`` (the barrier 0, the wall 1, the roof 2),
+        all at the corner or at ``points``."""
+        points = [corner] * len(planes) if points is None else points
+        found = early_stage.assemble_paths(
+            model,
+            source,
+            listener,
+            [point[None] for point in (*points, listener)],
+            np.array([[faces[plane] for plane in planes]]),
+            np.array([math.dist(source, corner) + math.dist(corner, listener)]),
+            np.ones((1, bands)),
+            np.zeros(1, dtype=np.int64),
+            speed_of_sound=343.0,
+            air=np.zeros(bands),
+            coherent=2,
+            tolerance=tolerance,
+        )
+        return found.cosines[0]
+
+    def mirrored(start, planes) -> list[float]:
+        """The cosines at which a path from ``start`` meets ``planes`` at the corner, one
+        after the other, each turning it for the next."""
+        heading = (corner - start) / math.dist(corner, start)
+        out = []
+        for normal in normals[list(planes)]:
+            out.append(abs(float(normal @ heading)))
+            heading = heading - 2.0 * (normal @ heading) * normal
+        return out
+
+    in_line = corner + 1.5 * (corner - image)
+    for planes in ((2, 0, 1), (0, 2, 1), (0, 1, 2)):
+        np.testing.assert_allclose(
+            np.sort(cosines(planes, source, in_line)), [0.3714, 0.5968, 0.8041], atol=1e-4
+        )
+    np.testing.assert_allclose(cosines((0, 1, 2), source, in_line)[1], 0.8041, atol=1e-4)
+
+    # Four reflections at the point, off the barrier, the wall, the barrier and the
+    # roof, to a listener in line with the source's image in the four: the angles are
+    # those the source's leg gives, turned from plane to plane. The path is given them
+    # from the leg that leaves the corner, turned back; from the leg into it where none
+    # leaves (a listener at the corner); and from the leg that leaves alone for a source
+    # at the corner. Legs within the tolerance count as none.
+    planes = (0, 1, 0, 2)
+    image = source
+    for normal in normals[list(planes)]:
+        image = image - 2.0 * ((image - corner) @ normal) * normal
+    in_line = corner + 1.5 * (corner - image)
+    expected = mirrored(source, planes)
+    assert abs(expected[2] - expected[0]) > 0.1 and abs(expected[1] - 0.8041) < 1e-4
+    np.testing.assert_allclose(cosines(planes, source, in_line), expected, atol=1e-9)
+    np.testing.assert_allclose(cosines(planes, source, corner), expected, atol=1e-9)
+    np.testing.assert_allclose(
+        cosines(planes, corner, in_line), mirrored(in_line, planes[::-1])[::-1], atol=1e-9
+    )
+    hair = [corner, corner + (1e-12, 0, 2e-12), corner + (0, -1e-9, 1e-9), corner]
+    np.testing.assert_allclose(
+        cosines(planes, source, in_line, hair, tolerance=1e-6), expected, atol=1e-6
+    )
+    assert np.abs(cosines(planes, source, in_line, hair) - expected).max() > 0.1
+
+
+def test_a_source_in_the_edge_of_a_room_meets_both_walls_at_their_angles() -> None:
+    # A source 10 nm from the floor and from a wall, in their edge for the search: the
+    # path that reflects off the two right there has no leg before either reflection,
+    # and takes the angles of the leg that leaves the edge for the listener (its
+    # pressure had been turned over by an angle of 0 at the first).
+    scene = {
+        **ROOM_CORNER,
+        "sources": [{"name": "s", "position": [4.0, 1e-8, 1e-8]}],
+        "listeners": [{"name": "l", "position": [4.1, 2.2, 1.3]}],
+        "simulation": {"early": {"method": "image_sources", "diffraction": "none"}},
+    }
+    paths = _beside(scene, np.zeros(3))
+    (both,) = [
+        i
+        for i in range(len(paths))
+        if paths.order[i] == 2
+        and all(math.dist(point, (4.0, 0.0, 0.0)) < 1e-6 for point in paths.points[i][1:3])
+    ]
+    leaves = np.array([0.1, 2.2, 1.3]) / math.sqrt(0.1**2 + 2.2**2 + 1.3**2)
+    np.testing.assert_allclose(np.sort(paths.cosines[both]), np.sort(leaves[1:]), atol=1e-6)
+    np.testing.assert_allclose(paths.spectrum[both], 1.0, atol=1e-9)

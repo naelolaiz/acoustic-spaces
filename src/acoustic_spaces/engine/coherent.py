@@ -57,7 +57,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from acoustic_spaces import synthesis
+from acoustic_spaces import products, synthesis
 from acoustic_spaces.engine.fine import fine_rows, fine_shape
 from acoustic_spaces.materials.bands import (
     BANDS_PER_OCTAVE,
@@ -625,7 +625,9 @@ def amplitude_spectra(
     else:
         low = np.zeros((len(paths), len(f)), dtype=complex)
     if not only_coherent:
-        low = low + (amplitude[:, count:] @ gains[count:]) * held_phase(paths)[:, None]
+        low = (
+            low + products.product(amplitude[:, count:], gains[count:]) * held_phase(paths)[:, None]
+        )
     lagged = lag_phase(paths, f)
     return low if lagged is None else low * lagged
 
@@ -700,7 +702,7 @@ def signal(
         spectra = amplitude_spectra(paths[part], f, gains[:, :top], only_coherent=True)
         spectra *= np.exp(-2j * np.pi * np.outer(paths.delay_s[part], f))
         for column in range(k):  # one at a time: a mono response and W add alike
-            out[:top, column] += spectra.T @ weights[part, column]
+            products.add_product(out[:top, column], spectra.T, weights[part, column])
     return np.fft.irfft(out, n_fft, axis=0)[:n]
 
 
@@ -793,7 +795,8 @@ def _pair_terms(paths, b, f, width) -> tuple[np.ndarray, np.ndarray, np.ndarray]
     if lagged is not None:
         pressure = pressure * lagged
     if paths.wander is None:
-        cross = np.real(pressure @ pressure.conj().T) / f.shape[1]
+        # pressure @ pressure.conj().T
+        cross = np.real(products.product(pressure, pressure.T, conj_b=True)) / f.shape[1]
     else:
         together = paths.wander.coherence(f[b])
         cross = np.einsum("im,jm,ijm->ij", pressure, pressure.conj(), together).real
@@ -1011,11 +1014,14 @@ class EarlyPressure:
                 spectra *= np.exp(-2j * np.pi * np.outer(shift, f))
             else:
                 spectra *= kept.delay_phases(shift, self.n_fft, self.rate)
-            self.spectra += weights[part].T @ spectra
+            products.add_product(self.spectra, weights[part].T, spectra)
             for b in partly:
                 heard = ~self._silent[part, b]
                 self._alone_of[b] += np.sum(squared[heard], axis=0)
-                self._spectra_of[b] += np.asarray(weights[part])[heard].T @ spectra[heard]
+                # the sums over the paths heard in band b
+                products.add_product(
+                    self._spectra_of[b], np.asarray(weights[part]).T, spectra, rows=heard
+                )
             if self._wander is not None:
                 self._each[part] = spectra
 
@@ -1077,7 +1083,9 @@ class EarlyPressure:
         else:
             side = self._weights[:, 1:] @ np.asarray(axis, dtype=float)
             first, second = side, (side if exponent == 2 else plain)
-        power = np.sum((first[:, None] * signals) * (together @ (second[:, None] * signals)), 0)
+        power = np.sum(
+            (first[:, None] * signals) * products.product(together, second[:, None] * signals), 0
+        )
         if axis is not None and exponent != 2:
             power = np.abs(power)
         return np.bincount(slot, power * scale, minlength=slots)[:slots]
@@ -1105,7 +1113,7 @@ class EarlyPressure:
             if axis is None:
                 power = pressure[0] ** 2
             else:
-                side = np.asarray(axis) @ pressure[1:]
+                side = products.product(axis, pressure[1:])
                 power = side**2 if exponent == 2 else np.abs(side * pressure[0])
             out[b] = np.bincount(slot, power * scale, minlength=slots)[:slots]
         return out

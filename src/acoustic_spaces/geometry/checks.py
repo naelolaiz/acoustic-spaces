@@ -407,6 +407,132 @@ def distance_to_surface(mesh: RoomMesh, points: np.ndarray) -> np.ndarray:
     return out
 
 
+def triangle_gaps(one: np.ndarray, other: np.ndarray) -> np.ndarray:
+    """The least distance (metres) between each of the triangles ``one`` (n, 3, 3: the
+    three corners of each) and the one of ``other`` at its place: nothing where the two
+    touch or cross."""
+    one = np.asarray(one, dtype=np.float64).reshape(-1, 3, 3)
+    other = np.asarray(other, dtype=np.float64).reshape(-1, 3, 3)
+    best = np.full(len(one), np.inf)
+    for these, those in ((one, other), (other, one)):
+        a = those[:, 0]
+        ab, ac = those[:, 1] - a, those[:, 2] - a
+        for k in range(3):
+            # A corner to the face; and nothing where the edge from it goes through the face.
+            best = np.minimum(best, _squared_distance_to_triangles(these[:, k], a, ab, ac))
+            edge = these[:, (k + 1) % 3] - these[:, k]
+            best = np.where(_crosses(these[:, k], edge, a, ab, ac), 0.0, best)
+    for j in range(3):
+        for k in range(3):
+            best = np.minimum(
+                best,
+                _squared_segment_gaps(
+                    one[:, j],
+                    one[:, (j + 1) % 3] - one[:, j],
+                    other[:, k],
+                    other[:, (k + 1) % 3] - other[:, k],
+                ),
+            )
+    return np.sqrt(best)
+
+
+def _crosses(
+    start: np.ndarray, line: np.ndarray, a: np.ndarray, ab: np.ndarray, ac: np.ndarray
+) -> np.ndarray:
+    """Whether each segment from ``start`` along ``line`` goes through its triangle
+    (a, a + ab, a + ac): its ends lie on the two sides of the triangle's plane, or one
+    of them in it, and the point of the segment in the plane lies in the triangle. A
+    segment in the plane goes through nothing; where rounding leaves its ends just off
+    the plane, on its two sides, the point looked for is still one of the segment, so
+    that a segment outside the triangle does not go through it."""
+    normal = np.cross(ab, ac)
+    before = ((start - a) * normal).sum(axis=1)
+    after = before + (line * normal).sum(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        point = start - a + line * (before / (before - after))[:, None]
+        area = (normal * normal).sum(axis=1)
+        u = (np.cross(point, ac) * normal).sum(axis=1) / area
+        v = (np.cross(ab, point) * normal).sum(axis=1) / area
+        return (before * after <= 0) & (u >= 0) & (v >= 0) & (u + v <= 1)
+
+
+def _squared_segment_gaps(p: np.ndarray, d: np.ndarray, q: np.ndarray, e: np.ndarray) -> np.ndarray:
+    """Squared least distance between each segment from ``p`` along ``d`` and its
+    segment from ``q`` along ``e`` (the nearest points of the two, each kept on its
+    segment)."""
+    r = p - q
+    dd, ee, de = (d * d).sum(axis=1), (e * e).sum(axis=1), (d * e).sum(axis=1)
+    dr, er = (d * r).sum(axis=1), (e * r).sum(axis=1)
+    across = dd * ee - de * de
+    with np.errstate(divide="ignore", invalid="ignore"):
+        s = np.where(across > 0, np.clip((de * er - dr * ee) / across, 0.0, 1.0), 0.0)
+        t = (de * s + er) / ee
+        s = np.where(
+            t < 0,
+            np.clip(-dr / dd, 0.0, 1.0),
+            np.where(t > 1, np.clip((de - dr) / dd, 0.0, 1.0), s),
+        )
+    # A segment of no length is its start.
+    s, t = np.nan_to_num(s), np.clip(np.nan_to_num(t), 0.0, 1.0)
+    apart = r + d * s[:, None] - e * t[:, None]
+    return (apart * apart).sum(axis=1)
+
+
+#: Most pairs of a point and a triangle that :func:`triangles_near` measures at once.
+_PAIRS = 1_000_000
+
+
+def triangles_near(
+    triangles: np.ndarray, points: np.ndarray, reach: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The pairs of one of ``points`` and one of ``triangles`` (n, 3, 3: the three
+    corners of each) no farther apart than ``reach`` metres: the points' indices, the
+    triangles' and the distances (metres), in no order.
+
+    Only the points in a triangle's box, grown by the reach, are measured against it:
+    along the axis that leaves the fewest, each box takes the run of the sorted points
+    that its span holds."""
+    points = np.atleast_2d(np.asarray(points, dtype=np.float64))
+    tri = np.asarray(triangles, dtype=np.float64).reshape(-1, 3, 3)
+    found: tuple[list, list, list] = ([], [], [])
+    if len(points) and len(tri):
+        low, high = tri.min(axis=1) - reach, tri.max(axis=1) + reach
+        runs = []
+        for axis in range(3):
+            order = np.argsort(points[:, axis], kind="stable")
+            along = points[order, axis]
+            first = np.searchsorted(along, low[:, axis], side="left")
+            count = np.searchsorted(along, high[:, axis], side="right") - first
+            runs.append((int(count.sum()), order, first, count))
+        _, order, first, count = min(runs, key=lambda run: run[0])
+        ends = np.cumsum(count)
+        start = 0
+        while start < len(tri):
+            done = int(ends[start - 1]) if start else 0
+            stop = max(start + 1, int(np.searchsorted(ends, done + _PAIRS, side="right")))
+            held = count[start:stop]
+            triangle = np.repeat(np.arange(start, stop), held)
+            place = np.arange(len(triangle)) - np.repeat(np.cumsum(held) - held, held)
+            point = order[np.repeat(first[start:stop], held) + place]
+            inside = ((points[point] >= low[triangle]) & (points[point] <= high[triangle])).all(
+                axis=1
+            )
+            triangle, point = triangle[inside], point[inside]
+            a = tri[triangle, 0]
+            distance = np.sqrt(
+                _squared_distance_to_triangles(
+                    points[point], a, tri[triangle, 1] - a, tri[triangle, 2] - a
+                )
+            )
+            near = distance <= reach
+            for kept, values in zip(found, (point, triangle, distance), strict=True):
+                kept.append(values[near])
+            start = stop
+    if not found[0]:
+        return np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int64), np.zeros(0)
+    return tuple(np.concatenate(values) for values in found)
+
+
 def _squared_distance_to_triangles(
     p: np.ndarray, a: np.ndarray, ab: np.ndarray, ac: np.ndarray
 ) -> np.ndarray:

@@ -76,7 +76,12 @@ whatever the rest of the surface does.
 Of the method's errors, those of the paths over edges are listed where a response has
 such paths (:data:`EDGE_ERRORS_DB`), each with the largest difference of the early level
 from the exact solution that the validation finds in each band, but not drawn: they are
-measured for whole levels in a few geometries, not for each path.
+measured for whole levels in a few geometries, not for each path. Where the solver for
+whole rows carries a row's sound (:mod:`~acoustic_spaces.engine.row_paths`), its own
+largest difference from the wave calculation is listed in the bands its path has energy
+in, and the edges' in the bands where a path over an edge has. That path stays as it was
+traced in every draw: it reflects off no face, though its sound depends on the
+absorption of a ground without an impedance.
 A draw of the absorption below 0 is taken as 0 and one above ``MAX_ABSORPTION`` as that,
 so near those ends the spread is a little less than the uncertainty gives. The
 re-weighting is exact for the early paths; the late part's follows Eyring's decay with
@@ -88,6 +93,9 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import numbers
+import os
+import sys
 from collections.abc import Sequence
 from typing import Any
 
@@ -100,6 +108,7 @@ from acoustic_spaces.engine.reweight import (
     log_ratio,
     reweighted_materials,
 )
+from acoustic_spaces.engine.section import ROW
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ, Resolution
 from acoustic_spaces.parameters import LIMITS, Levels, RoomParameters
 from acoustic_spaces.scene.model import ONE_SIDED, SPREAD_DRAWS, AbsorptionUncertainty
@@ -138,6 +147,30 @@ ADMITTANCE_NODES = 9
 MIN_BATCHES = 4
 #: How many draws :func:`material_spread` takes between two calls of its ``progress``.
 PROGRESS_DRAWS = 25
+#: The fewest draws, of all the responses together, for each worker process of
+#: :func:`material_spread`: starting a process and importing the package takes as long
+#: as some tens of a small room's draws.
+WORKER_DRAWS = 100
+#: The share of the computer's memory the worker processes of :func:`material_spread`
+#: take at most together.
+WORKERS_MEMORY_SHARE = 0.5
+#: Bytes a worker process of :func:`material_spread` holds besides what its draws share
+#: and the copies of its response: the interpreter with the package imported (some 80
+#: MiB) and a draw's own.
+WORKER_PROCESS_BYTES = 1 << 28
+#: How many times its response as sent (pickled, :class:`_Sent`) a worker process of
+#: :func:`material_spread` holds at most besides: the response as traced, as a draw
+#: re-weights it and what a draw makes of its paths. The peaks measured: 130 MiB for the
+#: concert hall example (2.4 MiB a response), 350 MiB for the street (1.8 MiB) and 560
+#: MiB for the street in wind and turbulence (13.5 MiB), under the 420, 410 and 600 MiB
+#: these give.
+WORKER_RESPONSE_COPIES = 16
+#: The most worker processes :func:`material_spread` starts on Windows, where
+#: :class:`concurrent.futures.ProcessPoolExecutor` takes no more (it waits on the
+#: processes' handles together, at most 63 of them with two of its own).
+WINDOWS_MAX_WORKERS = 61
+#: Seconds between two looks at the worker processes' draws.
+_POLL_S = 0.05
 #: The parts of a :class:`Spread`.
 PARTS = ("mean", "standard", "low", "high", "at_least", "at_most", "absorption", "rays")
 #: The results that take another's deviates of the rays' error, so that their intervals
@@ -236,6 +269,16 @@ EDGE_ERRORS_DB = {
         "pressure": (2.29, 1.50, 1.62, 1.89, 1.44, 0.89, 0.58, 0.50),
         "energy": (_NOT,) * 8,
     },
+    # The solver for whole rows, where a response has its path: against a wave
+    # calculation, rows of roofs and screens in free space and on a rigid ground, across
+    # the way and at slants of 30, 60 and 75 degrees ("Rows of roofs and barriers against
+    # a wave calculation"); the largest are those of three rigid screens on a rigid
+    # ground at a slant. It takes the bands up to 500 Hz that add their paths in
+    # pressure.
+    "whole rows": {
+        "pressure": (8.18, 3.36, 7.84, 3.73, _NOT, _NOT, _NOT, _NOT),
+        "energy": (_NOT,) * 8,
+    },
 }
 
 
@@ -273,7 +316,8 @@ class Spread:
     not counted; from ``batches`` batches, 0 for none). NaN where a parameter is
     undefined in some draw. ``not_counted``: the method's errors over edges that the
     response has (:data:`EDGE_ERRORS_DB`), each the largest difference of the level
-    from the exact solution in each band (dB; NaN where not measured). ``assumed``: the
+    from the exact solution in each band (dB; NaN where not measured, or where the
+    response has no such path's sound). ``assumed``: the
     built-in materials of unknown source that took ``simulation.uncertainty.presets``,
     with that choice (:func:`assumed`). ``held``: the bands (Hz) in which a material
     with an uncertainty absorbs everything and is not drawn (:func:`held`). ``stable``:
@@ -529,6 +573,8 @@ class _Admittances:
         self._traced, self._widths, self._limits = traced, widths, limits
         self._fits: dict[tuple[int, float], object] = {}
         self._found: dict[bytes, tuple[int, float, float, float]] = {}
+        # The fits of other rows made ahead of the draws (:meth:`fit`), by their bytes.
+        self._rows: dict[bytes, object] = {}
 
     def over(self, taken, deviates) -> None:
         """Take the draws ``taken`` (draws, materials, bands) of ``deviates`` (draws,
@@ -563,23 +609,100 @@ class _Admittances:
                     t,
                 )
 
+    def _row(self, k: int, node: float):
+        """Material k's absorption at ``node``."""
+        return np.clip(self._traced[k] + node * self._widths[k], *self._limits[k])
+
     def _fit(self, k: int, node: float):
         from acoustic_spaces.engine.impedance import fit_admittance
 
         if (k, node) not in self._fits:
-            row = np.clip(self._traced[k] + node * self._widths[k], *self._limits[k])
-            self._fits[k, node] = fit_admittance(row, self._traced.shape[1])
+            self._fits[k, node] = fit_admittance(self._row(k, node), self._traced.shape[1])
         return self._fits[k, node]
 
     def __call__(self, row: np.ndarray):
         from acoustic_spaces.engine.impedance import fit_admittance
 
-        found = self._found.get(np.ascontiguousarray(row, dtype=float).tobytes())
+        key = np.ascontiguousarray(row, dtype=float).tobytes()
+        found = self._found.get(key)
         if found is None:
+            if key in self._rows:
+                return self._rows[key]
             return fit_admittance(row.tolist(), self._traced.shape[1])
         k, below, above, t = found
         low, high = self._fit(k, below), self._fit(k, above)
         return lambda f: (1.0 - t) * low(f) + t * high(f)
+
+    def asked(
+        self, taken: np.ndarray, reflected: np.ndarray
+    ) -> tuple[list[tuple[int, float]], dict[bytes, np.ndarray]]:
+        """(nodes, rows) what the draws ``taken`` (draws, materials, bands) ask for when
+        the coherent bands' reflections off the materials ``reflected`` (materials,) turn
+        (:func:`~acoustic_spaces.engine.reweight.turned_paths`): in each draw, those of
+        the materials it moves, as drawn and as traced. The nodes are those of the rows
+        taken between two nodes, the rows ({bytes: row}) the others, fitted as the trace
+        fits them."""
+        nodes: set[tuple[int, float]] = set()
+        rows: dict[bytes, np.ndarray] = {}
+
+        def ask(row: np.ndarray) -> None:
+            row = np.ascontiguousarray(row, dtype=float)
+            found = self._found.get(row.tobytes())
+            if found is None:
+                rows[row.tobytes()] = row
+            else:
+                nodes.update(((found[0], found[1]), (found[0], found[2])))
+
+        moved = np.any(taken != self._traced, axis=2) & reflected
+        for draw, k in zip(*np.nonzero(moved), strict=True):
+            ask(taken[draw, k])
+        for k in np.flatnonzero(moved.any(axis=0)):
+            ask(self._traced[k])
+        return sorted(nodes), rows
+
+    def fit(self, nodes, rows: dict[bytes, np.ndarray], each) -> None:
+        """Fit ``nodes`` and ``rows`` (:meth:`asked`) ahead of the draws: the rows here,
+        each as the trace fits it (from its fits where it has the row's); a node whose
+        absorption is one of those rows takes its fit, the others not fitted yet are
+        fitted by ``each(absorptions)``, the fits of a list of absorption rows in their
+        order, each distinct row once."""
+        from acoustic_spaces.engine.impedance import fit_admittance
+
+        total = self._traced.shape[1]
+        for key, row in rows.items():
+            if key not in self._rows:
+                self._rows[key] = fit_admittance(row.tolist(), total)
+        todo: dict[bytes, list[tuple[int, float]]] = {}
+        absorptions: dict[bytes, np.ndarray] = {}
+        for node in nodes:
+            if node in self._fits:
+                continue
+            row = self._row(*node)
+            key = row.tobytes()
+            if key in self._rows:
+                self._fits[node] = self._rows[key]
+                continue
+            todo.setdefault(key, []).append(node)
+            absorptions[key] = row
+        for key, fitted in zip(todo, each(list(absorptions.values())), strict=True):
+            for node in todo[key]:
+                self._fits[node] = fitted
+
+    def part(self, taken: np.ndarray) -> _Admittances:
+        """These admittances for the draws ``taken`` alone: what they look up of the
+        draws' rows, the nodes those take that are fitted, and the other rows' fits."""
+        out = _Admittances(self._traced, self._widths, self._limits)
+        for row in (*taken.reshape(-1, taken.shape[-1]), *self._traced):
+            key = np.ascontiguousarray(row, dtype=float).tobytes()
+            found = self._found.get(key)
+            if found is None:
+                continue
+            out._found[key] = found
+            for node in ((found[0], found[1]), (found[0], found[2])):
+                if node in self._fits:
+                    out._fits[node] = self._fits[node]
+        out._rows = dict(self._rows)
+        return out
 
 
 def numerical_tolerance(standard, digits: int = 1) -> np.ndarray:
@@ -810,15 +933,14 @@ def _redrawn(
     """The parameters, and the levels and speech results for ``inputs`` (the sound power,
     background noise and talker), of ``response`` re-weighted for each draw ``taken``
     (draws, groups, bands) of the absorption ``traced`` of its face groups, ``ratios``
-    their :func:`log_ratio`, with ``admittance_of``. ``told(k)`` comes before draw k,
-    every ``PROGRESS_DRAWS`` draws. Each draw is worked out alone; what they share
-    (:class:`~acoustic_spaces.engine.reweight.Redraws`) is made for them and goes
-    with them."""
+    their :func:`log_ratio`, with ``admittance_of``. ``told(k)`` comes before each
+    draw k. Each draw is worked out alone; what they share
+    (:class:`~acoustic_spaces.engine.reweight.Redraws`) is made for them and goes with
+    them."""
     redraws = Redraws(response.early, face_group, len(traced), traced, admittance_of)
     found, heard = [], []
     for k, (ratio, drawn) in enumerate(zip(ratios, taken, strict=True)):
-        if k % PROGRESS_DRAWS == 0:
-            told(k)
+        told(k)
         moved = response.reweighted(
             face_group,
             ratio,
@@ -834,6 +956,289 @@ def _redrawn(
     return found, heard
 
 
+def _reflected(responses, face_group, groups: int) -> np.ndarray:
+    """(groups,) whether a reflection off each group of faces turns a coherent band's
+    phase in some of ``responses`` (:func:`~acoustic_spaces.engine.reweight.turned_paths`:
+    a reflection at a known angle on an early path that adds in pressure)."""
+    from acoustic_spaces.engine.reweight import _turned_reflections
+
+    out = np.zeros(groups, dtype=bool)
+    every = np.ones(groups, dtype=bool)
+    for response in responses:
+        early = response.early
+        if early.spectrum is None or len(early) == 0 or not early.cosines:
+            continue
+        out[_turned_reflections(early, np.asarray(face_group), every)[1]] = True
+    return out
+
+
+class _Sent:
+    """A response as a worker process of :func:`material_spread` gets it (pickled):
+    without the fields the response makes for itself (``init=False``: what its
+    echograms keep for the next reading), which a draw's re-weighted response makes
+    anew (:meth:`~acoustic_spaces.engine.response.Response.reweighted`)."""
+
+    def __init__(self, response) -> None:
+        self.response = response
+
+    def __reduce__(self):
+        response = self.response
+        own = {f.name: f.default for f in dataclasses.fields(response) if not f.init}
+        return _unsent, (type(response),), {**response.__getstate__(), **own}
+
+
+def _unsent(kind):
+    """A new ``kind`` for pickle to give the state of a :class:`_Sent` response to, as
+    it gives one its own."""
+    return kind.__new__(kind)
+
+
+def _worker_bytes(response) -> float:
+    """Bytes a worker process of :func:`material_spread` holds for the draws of
+    ``response``: ``WORKER_PROCESS_BYTES``, what the draws share at most
+    (:class:`~acoustic_spaces.engine.coherent.SameDelays`) and ``WORKER_RESPONSE_COPIES``
+    times the response as it is sent to the process (:class:`_Sent`, pickled)."""
+    import pickle
+
+    from acoustic_spaces.engine.coherent import SameDelays
+
+    sent = len(pickle.dumps(_Sent(response), protocol=pickle.HIGHEST_PROTOCOL))
+    return WORKER_PROCESS_BYTES + SameDelays().limit + WORKER_RESPONSE_COPIES * sent
+
+
+def _usable_cores() -> int:
+    """The cores this process may run on: those of its CPU affinity where the system
+    tells them (``os.process_cpu_count``, ``os.sched_getaffinity``), else all the
+    computer's."""
+    usable = getattr(os, "process_cpu_count", None)
+    if usable is not None:
+        return usable() or 1
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0)) or 1
+    return os.cpu_count() or 1
+
+
+def _worker_count(workers: int, responses, draws: int) -> int:
+    """The worker processes :func:`material_spread` takes for ``draws`` draws of each of
+    ``responses`` on at most ``workers`` (0 for every core,
+    :func:`~acoustic_spaces.engine.run_size.worker_threads`): no more than the cores this
+    process may run on (:func:`_usable_cores`), one each ``WORKER_DRAWS`` of all the
+    draws at most, ``WINDOWS_MAX_WORKERS`` at most on Windows, and as many as hold the
+    largest response's draws (:func:`_worker_bytes`) in ``WORKERS_MEMORY_SHARE`` of the
+    computer's memory (:func:`~acoustic_spaces.engine.run_size.machine_memory`). 1 for
+    none, and in a daemonic process (a :class:`multiprocessing.pool.Pool`'s), which may
+    start none."""
+    if workers == 1:
+        return 1
+    from acoustic_spaces.engine.run_size import machine_memory, worker_threads
+
+    count = min(worker_threads(workers), _usable_cores(), draws * len(responses) // WORKER_DRAWS)
+    if sys.platform == "win32":
+        count = min(count, WINDOWS_MAX_WORKERS)
+    if count < 2:
+        return 1
+    import multiprocessing
+
+    if multiprocessing.current_process().daemon:
+        return 1
+    memory = machine_memory()
+    if memory is not None:
+        each = max(_worker_bytes(response) for response in responses)
+        count = min(count, int(WORKERS_MEMORY_SHARE * memory // each))
+    return max(1, count)
+
+
+#: A worker process's own: the flag that stops its draws and the count of the draws
+#: done, shared with the process that made it (:class:`_Workers`).
+_WORKER: dict[str, Any] = {}
+
+
+class _Stopped(Exception):
+    """Raised in a worker process at a draw once the draws are stopped."""
+
+
+def _worker_start(stop, done) -> None:
+    """Start a worker process: keep ``stop`` and ``done``, leave Ctrl-C to the process
+    that made it (which stops the draws by ``stop``), and end with that process."""
+    import multiprocessing
+    import signal
+    import threading
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    _WORKER.update(stop=stop, done=done)
+    parent = multiprocessing.parent_process()
+    if parent is not None:
+        threading.Thread(target=_end_with, args=(parent,), daemon=True).start()
+
+
+def _end_with(parent) -> None:
+    """End this process once the process ``parent`` has ended: a worker process whose
+    maker was ended from outside would else wait for its next draws for ever."""
+    parent.join()
+    os._exit(1)
+
+
+def _worker_draws(response, face_group, traced, taken, ratios, admittance_of, inputs):
+    """:func:`_redrawn` in a worker process: each draw counted in the shared count when
+    done, and none begun once the draws are stopped."""
+    stop, done = _WORKER["stop"], _WORKER["done"]
+
+    def told(k: int) -> None:
+        if stop.value:
+            raise _Stopped
+        if k:
+            with done.get_lock():
+                done.value += 1
+
+    out = _redrawn(response, face_group, traced, taken, ratios, admittance_of, inputs, told)
+    with done.get_lock():
+        done.value += 1
+    return out
+
+
+def _broken():
+    """The error a worker process of :func:`material_spread` that ended early gives."""
+    from concurrent.futures.process import BrokenProcessPool
+
+    return BrokenProcessPool(
+        "a worker process of the spread ended before its draws did (its own output, "
+        "above, says why): it was killed or ran out of memory, say, or could not import "
+        "the main module again, as spawning a process does: a script that gives workers "
+        'must call the spread under if __name__ == "__main__":'
+    )
+
+
+class _Workers:
+    """``count`` worker processes for the draws of :func:`material_spread`, started by
+    spawning (on every platform: a forked copy of a process with the tracer's and the
+    linear algebra's threads is not safe), each when a call finds no process idle. Each
+    inherits the environment and the CPU affinity of this process and sets nothing of
+    its linear algebra's threads, so that it runs the library's solvers (the
+    admittances' fits) as this process does. ``close`` ends them.
+
+    This process takes no lock that a worker process takes: it sets the flag that stops
+    the draws, which has none, and reads the count of the draws done without the lock
+    the processes add to it under. A process that ended while it held a lock (killed,
+    out of memory) would leave it taken for ever, and this one waiting for it."""
+
+    def __init__(self, count: int) -> None:
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+
+        context = multiprocessing.get_context("spawn")
+        self.count = count
+        self._stop = context.RawValue("b", 0)
+        self._done = context.Value("q", 0)
+        self._told: list[tuple[int, str]] = []
+        self._pool = ProcessPoolExecutor(
+            count,
+            mp_context=context,
+            initializer=_worker_start,
+            initargs=(self._stop, self._done),
+        )
+
+    def close(self) -> None:
+        """Stop the draws in progress at their next draw and end the processes."""
+        self._stop.value = 1
+        self._pool.shutdown(wait=True, cancel_futures=True)
+
+    def _say(self, say) -> None:
+        """``say`` the messages due: those of the draws done (``_told``, (draws, message)
+        in their order)."""
+        done = self._done.get_obj().value
+        while self._told and self._told[0][0] <= done:
+            say(self._told.pop(0)[1])
+
+    def _run(self, function, calls: list[tuple], say) -> list:
+        """``function`` of each of ``calls`` in the processes, at most one more in hand
+        than there are processes, the results in their order; the messages due said
+        meanwhile. What a call or ``say`` raises stops the others at their next draw,
+        and is raised here."""
+        from concurrent.futures import FIRST_COMPLETED, wait
+        from concurrent.futures.process import BrokenProcessPool
+
+        results: list = [None] * len(calls)
+        running: dict = {}
+        left = iter(enumerate(calls))
+        try:
+            while True:
+                while len(running) <= self.count and (call := next(left, None)) is not None:
+                    running[self._pool.submit(function, *call[1])] = call[0]
+                self._say(say)
+                if not running:
+                    return results
+                finished, _ = wait(running, timeout=_POLL_S, return_when=FIRST_COMPLETED)
+                for future in finished:
+                    results[running.pop(future)] = future.result()
+        except BrokenProcessPool as exc:
+            self._stop.value = 1
+            raise _broken() from exc
+        except BaseException:
+            self._stop.value = 1
+            for future in running:
+                future.cancel()
+            raise
+
+    def redrawn(
+        self,
+        responses: list,
+        face_group,
+        traced,
+        taken: np.ndarray,
+        ratios,
+        admittance_of: _Admittances,
+        inputs: list,
+        told: list[tuple[int, str]],
+        say,
+    ) -> list[tuple[list[RoomParameters], list[Levels]]]:
+        """:func:`_redrawn` of each of ``responses`` (with its ``inputs``) for the draws
+        ``taken``, as :func:`material_spread` takes them one after the other: each
+        response's draws in ``count`` runs (fewer for fewer draws), each with its own
+        :class:`~acoustic_spaces.engine.reweight.Redraws`, their results put back in
+        order. The admittances the draws ask for are fitted first
+        (:meth:`_Admittances.asked`), the nodes in the processes, so that none is fitted
+        twice, and go with them. ``told`` holds (draw, message): each message is said
+        once that many draws of all the responses, counted one after the other, are
+        done, in its order."""
+        from acoustic_spaces.engine.impedance import fit_admittance
+
+        self._done.get_obj().value = 0
+        self._told = list(told)
+        self._say(say)
+        total = traced.shape[1]
+        nodes, rows = admittance_of.asked(taken, _reflected(responses, face_group, len(traced)))
+        admittance_of.fit(
+            nodes,
+            rows,
+            lambda absorptions: self._run(
+                fit_admittance, [(row, total) for row in absorptions], say
+            ),
+        )
+        runs = [part for part in np.array_split(np.arange(len(taken)), self.count) if part.size]
+        calls = [
+            (
+                _Sent(response),
+                face_group,
+                traced,
+                taken[run[0] : run[-1] + 1],
+                ratios[run[0] : run[-1] + 1],
+                admittance_of.part(taken[run[0] : run[-1] + 1]),
+                inputs[n],
+            )
+            for n, response in enumerate(responses)
+            for run in runs
+        ]
+        each = self._run(_worker_draws, calls, say)
+        out = []
+        for n in range(len(responses)):
+            found, heard = [], []
+            for done, said in each[n * len(runs) : (n + 1) * len(runs)]:
+                found += done
+                heard += said
+            out.append((found, heard))
+        return out
+
+
 def material_spread(
     result,
     scene,
@@ -846,6 +1251,7 @@ def material_spread(
     progress=None,
     max_draws: int | None = None,
     one_sided: float = DEFAULT_ONE_SIDED,
+    workers: int = 1,
 ) -> dict:
     """{(source, listener): :class:`Spread`} the spread of ``result``'s parameters, and
     of its levels and speech results (:attr:`Spread.levels`), that
@@ -858,13 +1264,44 @@ def material_spread(
     ``max_draws`` at most (default ``ADAPTIVE_MAX_DRAWS``). ``one_sided`` is the
     probability of the one-sided bounds, between 0.5 and 1. ``progress(message)``,
     if given, is called before each response's draws and every ``PROGRESS_DRAWS`` draws;
-    an exception it raises (a cancel) stops the spread."""
+    an exception it raises (a cancel) stops the spread.
+
+    With ``workers`` other than 1 (0 for every core) the draws are worked out in up to
+    that many processes besides this one (:func:`_worker_count`): no more than the cores
+    this process may run on, one each ``WORKER_DRAWS`` of all the draws at most and as
+    many as ``WORKERS_MEMORY_SHARE`` of the computer's memory holds
+    (:func:`_worker_bytes`). For fewer than two, and in a daemonic process (a
+    :class:`multiprocessing.pool.Pool`'s), the draws are worked out here. The processes
+    inherit this process's environment and CPU affinity and set nothing of the linear
+    algebra's threads; a draw's products are added in a fixed order
+    (:mod:`acoustic_spaces.products`), and the library's solvers (the admittances' fits)
+    run there as here. The processes give the results worked out here, to the last bit
+    where the linear algebra rounds the same numbers alike wherever they lie in memory:
+    not Apple's Accelerate on an Intel Mac, where the admittances' fits may differ in
+    their last digits as even one process's repeated fits may there. Each process takes
+    a run of one response's draws at a time and holds that response, as traced and as a
+    draw re-weights it, with what the run's draws share (up to 128 MiB of the coherent
+    bands' delay phases and band grids) and a process's own, some 80 MiB. The
+    admittances the draws ask for are fitted first, each once
+    (:meth:`_Admittances.fit`): in the processes those of the nodes the draws take
+    theirs between, here the others, as a material's as traced. ``progress`` is called
+    here with the same messages in the same order, each once as many draws in all are
+    done as before it one after the other; an exception it raises stops the processes
+    within a draw, as does one raised in a process, which is raised here. A warning in a
+    process follows the interpreter's ``-W`` options and ``PYTHONWARNINGS``, which the
+    processes inherit, not filters set while this one runs. As with
+    :mod:`multiprocessing`'s spawn start method, a process started so imports the main
+    module again: a script that calls this with ``workers`` other than 1 must do so
+    under ``if __name__ == "__main__":``, or each process runs the script again and the
+    call ends with an error."""
     if not 0.0 < coverage < 1.0:
         raise ValueError("the coverage probability lies between 0 and 1")
     if not 0.5 < one_sided < 1.0:
         raise ValueError("the one-sided bounds' probability lies between 0.5 and 1")
     if not has_uncertainty(scene, materials):
         raise ValueError("no material on the surfaces has an absorption uncertainty")
+    if isinstance(workers, bool) or not isinstance(workers, numbers.Integral) or workers < 0:
+        raise ValueError("give the spread's worker processes as a whole number, 0 for every core")
     adaptive = draws == ADAPTIVE
     limit = ADAPTIVE_MAX_DRAWS if max_draws is None else max_draws
     first = ADAPTIVE_MIN_BATCHES * ADAPTIVE_BATCH
@@ -892,47 +1329,83 @@ def material_spread(
     limits = [_limits(scene.materials[n], own) for n, own in zip(materials, traced, strict=True)]
     stable: bool | None = None
     taken_so_far = 0
-    while True:
-        if adaptive:
-            batch = taken_so_far // ADAPTIVE_BATCH
-            # Each batch from streams of its own, so that the first ones are the same
-            # however many follow.
-            taken, deviates, widths = _draws(scene, materials, ADAPTIVE_BATCH, [seed, 2, batch])
-            stream = [seed, 3, batch]
-            if admittance_of is None:
+    count = _worker_count(
+        workers, list(result.responses.values()), first if adaptive else int(draws)
+    )
+    pool = None
+    try:
+        if count > 1:
+            pool = _Workers(count)
+        while True:
+            if adaptive:
+                batch = taken_so_far // ADAPTIVE_BATCH
+                # Each batch from streams of its own, so that the first ones are the same
+                # however many follow.
+                taken, deviates, widths = _draws(scene, materials, ADAPTIVE_BATCH, [seed, 2, batch])
+                stream = [seed, 3, batch]
+                if admittance_of is None:
+                    admittance_of = _Admittances(traced, widths, limits)
+                admittance_of.along(taken, deviates, steps)
+            else:
+                taken, deviates, widths = _draws(scene, materials, draws, seed)
+                # The rays' deviates from a stream of their own, so that the absorption's
+                # draws stay those of ``seed``.
+                stream = [seed, 1]
                 admittance_of = _Admittances(traced, widths, limits)
-            admittance_of.along(taken, deviates, steps)
-        else:
-            taken, deviates, widths = _draws(scene, materials, draws, seed)
-            # The rays' deviates from a stream of their own, so that the absorption's
-            # draws stay those of ``seed``.
-            stream = [seed, 1]
-            admittance_of = _Admittances(traced, widths, limits)
-            admittance_of.over(taken, deviates)
-        ratios = [log_ratio(traced, drawn) for drawn in taken]
-        of = "" if adaptive else f" of {draws}"
-        for n, (key, response) in enumerate(result.responses.items(), start=1):
-            told = f"the spread: {key[0]} -> {key[1]} ({n} of {len(result.responses)}), draw "
-            found, heard = _redrawn(
-                response,
-                face_group,
-                traced,
-                taken,
-                ratios,
-                admittance_of,
-                inputs[key],
-                lambda k, told=told, first=taken_so_far, of=of: say(f"{told}{first + k + 1}{of}"),
-            )
-            # Each response from the start of the stream: its spread is the same
-            # whichever other responses the run has.
-            tallies[key].add(found, np.random.default_rng(stream), heard)
-        taken_so_far += len(taken)
-        if not adaptive:
-            break
-        if taken_so_far >= first:
-            stable = all(tally.unstable() is None for tally in tallies.values())
-            if stable or taken_so_far + ADAPTIVE_BATCH > limit:
+                admittance_of.over(taken, deviates)
+            ratios = [log_ratio(traced, drawn) for drawn in taken]
+            of = "" if adaptive else f" of {draws}"
+            told = [
+                f"the spread: {key[0]} -> {key[1]} ({n} of {len(result.responses)}), draw "
+                for n, key in enumerate(result.responses, start=1)
+            ]
+            if pool is None:
+                each = []
+                for n, (key, response) in enumerate(result.responses.items()):
+                    each.append(
+                        _redrawn(
+                            response,
+                            face_group,
+                            traced,
+                            taken,
+                            ratios,
+                            admittance_of,
+                            inputs[key],
+                            lambda k, told=told[n], first=taken_so_far, of=of: (
+                                k % PROGRESS_DRAWS == 0 and say(f"{told}{first + k + 1}{of}")
+                            ),
+                        )
+                    )
+            else:
+                each = pool.redrawn(
+                    list(result.responses.values()),
+                    face_group,
+                    traced,
+                    taken,
+                    ratios,
+                    admittance_of,
+                    [inputs[key] for key in result.responses],
+                    [
+                        (n * len(taken) + k, f"{told[n]}{taken_so_far + k + 1}{of}")
+                        for n in range(len(told))
+                        for k in range(0, len(taken), PROGRESS_DRAWS)
+                    ],
+                    say,
+                )
+            for key, (found, heard) in zip(result.responses, each, strict=True):
+                # Each response from the start of the stream: its spread is the same
+                # whichever other responses the run has.
+                tallies[key].add(found, np.random.default_rng(stream), heard)
+            taken_so_far += len(taken)
+            if not adaptive:
                 break
+            if taken_so_far >= first:
+                stable = all(tally.unstable() is None for tally in tallies.values())
+                if stable or taken_so_far + ADAPTIVE_BATCH > limit:
+                    break
+    finally:
+        if pool is not None:
+            pool.close()
     defaults, full = assumed(scene, materials), held(scene, materials)
     return {
         key: dataclasses.replace(
@@ -950,27 +1423,37 @@ def edge_errors(response, settings) -> dict[str, np.ndarray]:
     ``response`` has, simulated with ``settings`` (the run's, not the scene's where they
     differ), in each band as the band adds its early paths: none without paths over an
     edge; over two edges with ``second_order``, and with a path reflected on both sides
-    of an edge left out with ``one_side``."""
+    of an edge left out with ``one_side``. Each in the bands where a path over an edge
+    has energy (NaN in the others), and ``whole rows``, the error of the solver for
+    whole rows, in the bands where its path has: where that solver took a row's sound
+    whole, the paths over the row's edges have none."""
     early = response.early
-    if early.edge is None or not np.any(early.edge >= 0):
+    if early.edge is None:
         return {}
     bands = early.energy.shape[1]
     if bands != len(EDGE_ERRORS_DB["one edge"]["pressure"]):
         return {}  # measured in octave bands only
+    over = np.any(early.energy[early.edge >= 0] > 0.0, axis=0)
+    whole = np.any(early.energy[early.edge == ROW] > 0.0, axis=0)
     coherent = 0 if early.spectrum is None else early.spectrum.shape[1]
     settings = settings.early
-    names = ["one edge"]
-    if settings.diffraction != "direct" and settings.diffraction_reflections == "one_side":
-        names.append("one side")
-    if settings.diffraction == "second_order":
-        names.append("two edges")
-    names.append("corners of edges")
+    names: dict[str, np.ndarray] = {}
+    if over.any():
+        names["one edge"] = over
+        if settings.diffraction != "direct" and settings.diffraction_reflections == "one_side":
+            names["one side"] = over
+        if settings.diffraction == "second_order":
+            names["two edges"] = over
+        names["corners of edges"] = over
+    if whole.any():
+        names["whole rows"] = whole
     out = {}
-    for name in names:
+    for name, there in names.items():
         bound = EDGE_ERRORS_DB[name]
-        out[name] = np.array(
-            [bound["pressure"][b] if b < coherent else bound["energy"][b] for b in range(bands)]
-        )
+        listed = [
+            bound["pressure"][b] if b < coherent else bound["energy"][b] for b in range(bands)
+        ]
+        out[name] = np.where(there, listed, math.nan)
     return out
 
 
@@ -983,10 +1466,11 @@ def with_spread(
     seed: int = 0,
     progress=None,
     one_sided: float = DEFAULT_ONE_SIDED,
+    workers: int = 1,
 ):
-    """``result`` with its ``spreads`` (:func:`material_spread`, which ``progress`` and
-    ``one_sided`` go to), or as it is when no material on the surfaces has an absorption uncertainty
-    (:func:`has_uncertainty`)."""
+    """``result`` with its ``spreads`` (:func:`material_spread`, which ``progress``,
+    ``one_sided`` and ``workers`` go to), or as it is when no material on the surfaces
+    has an absorption uncertainty (:func:`has_uncertainty`)."""
     if not has_uncertainty(scene, materials):
         return result
     spreads = material_spread(
@@ -998,6 +1482,7 @@ def with_spread(
         seed=seed,
         progress=progress,
         one_sided=one_sided,
+        workers=workers,
     )
     return dataclasses.replace(result, spreads=spreads)
 
@@ -1012,6 +1497,11 @@ __all__ = [
     "EDGE_ERRORS_DB",
     "MAX_ABSORPTION",
     "MIN_BATCHES",
+    "WINDOWS_MAX_WORKERS",
+    "WORKERS_MEMORY_SHARE",
+    "WORKER_DRAWS",
+    "WORKER_PROCESS_BYTES",
+    "WORKER_RESPONSE_COPIES",
     "LevelSpread",
     "Spread",
     "absorption_draws",

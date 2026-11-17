@@ -22,6 +22,7 @@ src/acoustic_spaces/   Python package
   spatial/             Ambisonics, VBAP loudspeaker layouts, HRTFs, spatial rendering,
                        sound field rotation, binaural decoding of Ambisonics
   parameters.py        ISO 3382-1 parameters, octave filters, noise floor detection
+  products.py          matrix and dot products whose sums are added in a fixed order
   render.py            convolution, resampling, auralisation, real-time playback
   headtracking.py      head-tracked binaural playback, OSC head trackers
   measurement.py       sine sweeps, playback and recording, deconvolution
@@ -43,7 +44,8 @@ src/acoustic_spaces/   Python package
                        it.po: Italian, de.po: German, nl.po: Dutch)
 cpp/include/           header-only C++ core: BVH, ray tracer (specular paths, stochastic
                        and map tracing), wave solver (FDTD), FFT, partitioned
-                       convolver (no Python, so a plugin or player can reuse it)
+                       convolver, sums in a fixed order (no Python, so a plugin or
+                       player can reuse it)
 cpp/bindings/          nanobind module exposing the core as acoustic_spaces._native
 tools/catalog.py       keeps the translation catalogs in step with the code (see Translating)
 tests/                 pytest suite, run on Linux, macOS and Windows in CI
@@ -52,3 +54,28 @@ validation/            the longer checks behind the validation report; bras/ has
                        measured rooms of the BRAS benchmark
 docs/                  the Sphinx documentation, the validation report and the pictures
 ```
+
+## Sums in a fixed order
+
+numpy's `@` hands a product's sums to the linear-algebra library, which splits a large
+one among its threads and adds the parts in an order that depends on how many it has
+(as many as the computer's cores, unless `OPENBLAS_NUM_THREADS` says otherwise). The
+last digits of such a sum can change with that number, and with them a run's results
+from one computer to the next. So a product whose operands can grow with the scene (its
+paths, frequencies, samples, receivers or faces) is written with
+`acoustic_spaces.products`, whose compiled loops add each sum in the order its
+definition fixes:
+
+```python
+from acoustic_spaces import products
+
+spectra = products.product(weights.T, phased)  # weights.T @ phased
+products.add_product(total, weights.T, phased)  # total += weights.T @ phased
+norm = math.sqrt(products.dot(left, left))  # left @ left
+```
+
+A product of a few fixed values (3-vectors, 3 x 3 frames, a handful of bands) stays an
+`@`: the library works it on one thread. The library's solvers (`eigh`, `pinv`, `svd`,
+`inv`, `least_squares`) stay too, and so does live head-tracked playback.
+`tests/test_code.py` counts the products each file leaves to the library and fails
+when one is added, with a message that says what to do.

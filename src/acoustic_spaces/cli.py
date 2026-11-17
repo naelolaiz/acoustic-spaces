@@ -60,6 +60,8 @@ DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
 DIFFRACTION_REFLECTIONS = ("one_side", "both_sides")
 #: The parabolic equations outdoors (scene.model.EarlyStage.parabolic_equation).
 PARABOLIC_EQUATIONS = ("narrow_angle", "wide_angle")
+#: The sound over rows of barriers and buildings (scene.model.EarlyStage.rows).
+ROWS = ("solver", "edges")
 #: Highest octave bands the wave solver can compute (engine.wave.WAVE_BANDS_HZ).
 WAVE_BANDS_HZ = (63, 125, 250, 500)
 #: Choices for the highest band the early paths add in pressure in
@@ -1133,6 +1135,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
                 args.diffraction_reflections,
             ),
             "--parabolic-equation": ("early.parabolic_equation", args.parabolic_equation),
+            "--rows": ("early.rows", args.rows),
             "--wave": ("wave.enabled", args.wave),
             "--wave-band": ("wave.max_band_hz", args.wave_band),
             "--wave-device": ("wave.device", args.wave_device),
@@ -1184,6 +1187,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         _remove_if_empty(made)
         return 1
     if groups is not None:
+        from acoustic_spaces.engine.run_size import worker_threads
         from acoustic_spaces.engine.uncertainty import ADAPTIVE, ADAPTIVE_MAX_DRAWS, with_spread
 
         many = f"{draws} draws"
@@ -1198,6 +1202,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
                 draws=draws,
                 seed=settings.seed or 0,
                 one_sided=settings.uncertainty.one_sided,
+                workers=worker_threads(settings.performance.threads),
             )
         except ValueError as exc:
             print(f"warning: no spread from the absorption uncertainty: {exc}", file=sys.stderr)
@@ -3054,6 +3059,13 @@ def build_parser() -> argparse.ArgumentParser:
         "gradients reaching hundreds of metres up over kilometres",
     )
     simulate.add_argument(
+        "--rows",
+        choices=ROWS,
+        help="override simulation.early.rows: outdoors, the sound over barriers and "
+        "buildings in the octave bands up to 500 Hz from the solver for whole rows, or "
+        "from the paths over their edges alone",
+    )
+    simulate.add_argument(
         "--coherent-band",
         choices=COHERENT_BANDS,
         metavar="HZ",
@@ -3614,6 +3626,12 @@ def _windows_escape_codes() -> bool:  # pragma: no cover - Windows consoles only
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if getattr(sys, "frozen", False):
+        # In a frozen build the spread's worker processes are this executable, started
+        # with the arguments of a spawned process, which this call runs and ends with.
+        import multiprocessing.spawn
+
+        multiprocessing.spawn.freeze_support()
     for stream in (sys.stdout, sys.stderr):
         # Material descriptions contain characters a Windows console code page may lack.
         if hasattr(stream, "reconfigure"):

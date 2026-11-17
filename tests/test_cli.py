@@ -379,6 +379,11 @@ def test_simulate_checks_the_options_that_override_the_scene(
     capsys.readouterr()
     report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
     assert report["settings"]["early"]["parabolic_equation"] == "wide_angle"
+    assert report["settings"]["early"]["rows"] == "solver"
+    assert main([*args, "--rays", "500", "--max-order", "1", "--rows", "edges"]) == 0
+    capsys.readouterr()
+    report = json.loads((out / "parameters.json").read_text(encoding="utf-8"))
+    assert report["settings"]["early"]["rows"] == "edges"
 
     performance = ["--threads", "1", "--ray-tree", "median"]
     assert main([*args, "--rays", "500", "--max-order", "1", *performance]) == 0
@@ -404,6 +409,60 @@ def test_simulate_checks_the_options_that_override_the_scene(
         with pytest.raises(SystemExit):
             main([*args, option, value])
         assert option in capsys.readouterr().err
+
+
+def test_simulate_draws_the_spread_on_the_run_s_threads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The spread's draws take as many worker processes as the run has threads, which
+    ``--threads 1`` keeps to one, the run's own."""
+    import os
+
+    from acoustic_spaces.engine import uncertainty
+
+    class Drawn(Exception):
+        pass
+
+    asked = []
+
+    def with_spread(*args, workers=1, **options):
+        asked.append(workers)
+        raise Drawn
+
+    monkeypatch.setattr(uncertainty, "with_spread", with_spread)
+    args = ["simulate", str(SHOEBOX), "--out", str(tmp_path / "out"), "--length", "0.3"]
+    args += ["--rays", "300", "--max-order", "1"]
+    for threads in ("1", "3", "0"):
+        with pytest.raises(Drawn):
+            main([*args, "--spread-draws", "4", "--threads", threads])
+    cores = os.cpu_count() or 1
+    assert asked == [1, min(3, cores), cores]
+
+
+def test_a_frozen_build_runs_a_spawned_process_s_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In a frozen build the command line and the editor first run a spawned worker
+    process's arguments, if they are those (the spread's processes are the executable
+    itself there); otherwise they do not look."""
+    import multiprocessing.spawn
+
+    import acoustic_spaces.gui
+    from acoustic_spaces import cli
+
+    class Spawned(Exception):
+        pass
+
+    def freeze_support() -> None:
+        raise Spawned
+
+    monkeypatch.setattr(multiprocessing.spawn, "freeze_support", freeze_support)
+    monkeypatch.setattr(cli, "_main", lambda argv: 0)
+    assert main([]) == 0
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    for entry in (main, acoustic_spaces.gui.main):
+        with pytest.raises(Spawned):
+            entry([])
 
 
 def test_edit_hands_the_device_trial_switch_to_the_editor(
