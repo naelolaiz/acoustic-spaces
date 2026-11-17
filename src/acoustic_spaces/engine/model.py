@@ -210,6 +210,22 @@ class TraceModel:
         normals = np.where((back | (both & flip[:, 0]))[:, None], -normals, normals)
         offsets = np.einsum("ij,ij->i", normals, mesh.triangles[:, 0])
         keys = np.round(np.column_stack([normals, offsets]) / PLANE_TOLERANCE).astype(np.int64)
+        if both.any() and not both.all():
+            # A face with a room on both sides in the geometric plane of walls with a room
+            # on one side, none of which faces the canonical way, faces theirs: a partition
+            # or a free-standing panel in line with a wall is in the wall's plane whichever
+            # way the wall faces.
+            walls = int((~both).sum())
+            rows = np.concatenate([keys[~both], keys[both], -keys[both]])
+            label = np.unique(rows, axis=0, return_inverse=True)[1].reshape(-1)
+            wall = np.zeros(int(label.max()) + 1, dtype=bool)
+            wall[label[:walls]] = True
+            same, opposite = wall[label[walls:]].reshape(2, -1)
+            turn = both.copy()
+            turn[both] = opposite & ~same
+            normals = np.where(turn[:, None], -normals, normals)
+            offsets = np.where(turn, -offsets, offsets)
+            keys = np.where(turn[:, None], -keys, keys)
         _, first, face_plane = np.unique(keys, axis=0, return_index=True, return_inverse=True)
         face_plane = face_plane.reshape(-1)
         two_sided = np.zeros(len(first), dtype=bool)
@@ -323,16 +339,27 @@ class TraceModel:
         return spread
 
     @cached_property
+    def face_two_sided(self) -> np.ndarray:
+        """(F,) the faces with a room on both sides: a partition between two rooms or a
+        free-standing panel; every face when the model is not ``oriented``. A wall with
+        a room on one side has one side, also where its plane holds such a face
+        (:attr:`plane_two_sided`)."""
+        air = self.face_room >= 0
+        return self.plane_two_sided[self.face_plane] & (air[:, 0] == air[:, 1])
+
+    @cached_property
     def geometric_plane(self) -> np.ndarray:
         """(P,) for each plane the first of the planes that lie where it does, whichever
-        way they face: a wall with a room on one side and a partition or a panel in line
-        with it, whose normal points the other way, are two planes in one geometric
-        plane, and a point has one image in both (worked out once). Two planes lie in
-        one place where their normals and offsets, in multiples of
-        :data:`PLANE_TOLERANCE` and with the signs of one plane's turned where it faces
-        the other way, round to numbers at most one apart: always where they differ by
-        less than that tolerance in each, on whichever side of a rounding step either
-        falls. So do two planes that each lie where a third does."""
+        way they face: two walls with a room on one side in line with each other that
+        face opposite ways (the wall between two rooms drawn once for each, the two
+        sides of a step in a room's plan) are two planes in one geometric plane, and a
+        point has one image in both (worked out once); a partition or a panel in line
+        with them lies in the plane of one of them. Two planes lie in one place where
+        their normals and offsets, in multiples of :data:`PLANE_TOLERANCE` and with the
+        signs of one plane's turned where it faces the other way, round to numbers at
+        most one apart: always where they differ by less than that tolerance in each, on
+        whichever side of a rounding step either falls. So do two planes that each lie
+        where a third does."""
         from scipy.sparse import coo_matrix
         from scipy.sparse.csgraph import connected_components
         from scipy.spatial import cKDTree

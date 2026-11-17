@@ -1,6 +1,7 @@
 import dataclasses
 import math
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -264,6 +265,210 @@ def test_pieces_of_one_edge_are_joined(tmp_path: Path) -> None:
     edges = find_edges(TraceModel.from_room(room))
     top = np.flatnonzero(np.isclose(edges.start[:, 2], 0) & np.isclose(edges.end[:, 2], 0))
     assert len(top) == 1 and edges.length[top[0]] == pytest.approx(4.0)
+
+
+# L-shaped rooms 3 m high with a free-standing panel 2 m high in the plane of a wall: the
+# plan, two rectangles that make up the floor, the panel's ends, and the axis across the
+# plane. "x": the plane x = 5 of the wall from y = 5 to 9, which faces -x. "y": the plane
+# y = 5 of the wall from x = 0 to 5, which faces +y. No plane lies halfway between two
+# planes parallel to it, where two sequences of reflections have one image.
+IN_LINE = {
+    "x": (
+        [(0, 0), (11, 0), (11, 5), (5, 5), (5, 9), (0, 9)],
+        [(0, 0, 11, 5), (0, 5, 5, 9)],
+        [(5, 1), (5, 4)],
+        0,
+    ),
+    "y": (
+        [(0, 5), (5, 5), (5, 0), (11, 0), (11, 9), (0, 9)],
+        [(0, 5, 5, 9), (5, 0, 11, 9)],
+        [(6, 5), (9, 5)],
+        1,
+    ),
+}
+
+
+def _in_line_with_a_wall(
+    folder: Path, sign: float, source, listener, room: str = "x", partition=None, **early
+) -> Room:
+    """The ``room`` of ``IN_LINE``; with ``sign`` -1 its mirror image across the plane of
+    the panel, where the wall in that plane faces the other way. With ``partition`` (a
+    loss in dB), room "x" with a partition that lets sound through from y = 0 to 5 in
+    place of the panel: two rooms."""
+    plan, floor, ends, axis = IN_LINE[room]
+    walls = [
+        [(*a, 0.0), (*b, 0.0), (*b, 3.0), (*a, 3.0)]
+        for a, b in zip(plan, plan[1:] + plan[:1], strict=True)
+    ]
+    for z in (0.0, 3.0):
+        walls += [[(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)] for x0, y0, x1, y1 in floor]
+    a, b, height = (*ends, 2.0) if partition is None else ((5, 0), (5, 5), 3.0)
+    # The panel first: its plane takes the first of its faces' normals.
+    groups = {"panels": [[(*a, 0.0), (*b, 0.0), (*b, height), (*a, height)]], "walls": walls}
+    mirror = np.ones(3)
+    mirror[axis] = sign
+    lines = []
+    for name, quads in groups.items():
+        lines.append(f"g {name}")
+        for quad in quads:
+            lines += ["v " + " ".join(f"{c:.15g}" for c in mirror * corner) for corner in quad]
+            lines.append("f -4 -3 -2 -1")
+    obj = folder / f"in_line_{room}{sign:+.0f}.obj"
+    obj.write_text("\n".join(lines) + "\n")
+    wall = {"absorption": [0.1] * 8, "scattering": 0.0}
+    panel = wall if partition is None else wall | {"transmission_loss": partition}
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": str(obj)},
+                "materials": {"wall": wall, "panel": panel},
+                "default_material": "wall",
+                "assignments": {"panels": "panel"},
+                "sources": [{"name": "s", "position": (mirror * source).tolist()}],
+                "listeners": [{"name": "l", "position": (mirror * listener).tolist()}],
+                "simulation": {
+                    "seed": 1,
+                    "ir_length_s": 0.3,
+                    "scattering": {"from_size": False},
+                    "early": {"method": "image_sources", "max_order": 2, **early},
+                },
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize("sign", [1.0, -1.0])
+@pytest.mark.parametrize("partition", [None, 20.0])
+def test_a_panel_in_line_with_a_wall_lies_in_the_wall_s_plane(
+    tmp_path: Path, sign: float, partition
+) -> None:
+    """A face with a room on both sides (a free-standing panel, a partition between two
+    rooms) in the geometric plane of a wall is in the wall's plane, which faces the
+    wall's room, whichever way that is; the plane has two sides for the panel's sake,
+    the wall one."""
+    room = _in_line_with_a_wall(
+        tmp_path, sign, [4.0, 2.5, 1.0], [2.0, 8.0, 2.0], partition=partition
+    )
+    model = TraceModel.from_room(room)
+    centre = room.mesh.triangles.mean(axis=1)
+    in_plane = np.all(np.isclose(room.mesh.triangles[:, :, 0], sign * 5.0), axis=1)
+    wall = np.flatnonzero(in_plane & (centre[:, 1] > 5.0))
+    panel = np.flatnonzero(in_plane & (centre[:, 1] < 5.0))
+    assert len(wall) == 2 and len(panel) == 2
+    plane = model.face_plane[wall[0]]
+    assert np.all(model.face_plane[np.concatenate([wall, panel])] == plane)
+    np.testing.assert_allclose(model.plane_normal[plane], [-sign, 0.0, 0.0], atol=1e-12)
+    assert model.plane_offset[plane] == pytest.approx(-5.0)
+    assert model.plane_two_sided[plane]
+    assert model.face_two_sided[panel].all() and not model.face_two_sided[wall].any()
+    # The other walls have one side, and so have their planes.
+    others = np.setdiff1d(np.arange(len(model.face_plane)), np.concatenate([wall, panel]))
+    assert not model.face_two_sided[others].any()
+    assert not model.plane_two_sided[model.face_plane[others]].any()
+    # No face has two sides where its plane is given one.
+    one_sided = replace(model, plane_two_sided=np.zeros(model.plane_count, dtype=bool))
+    assert not one_sided.face_two_sided.any()
+
+
+def test_a_panel_in_line_with_walls_that_face_both_ways_stays_with_one_of_them(
+    tmp_path: Path,
+) -> None:
+    """Two walls of a Z-shaped room lie in the plane x = 5 and face opposite ways, so they
+    are two planes of the model; a panel between them is in the one that faces +x, the
+    way a panel in a plane of its own (x = 8) faces."""
+    plan = [(0, 0), (5, 0), (5, 4), (11, 4), (11, 9), (5, 9), (5, 6), (0, 6)]
+    quads = [
+        [(*a, 0.0), (*b, 0.0), (*b, 3.0), (*a, 3.0)]
+        for a, b in zip(plan, plan[1:] + plan[:1], strict=True)
+    ]
+    for z in (0.0, 3.0):
+        quads.append([(0, 0, z), (5, 0, z), (5, 6, z), (0, 6, z)])
+        quads.append([(5, 4, z), (11, 4, z), (11, 9, z), (5, 9, z)])
+    quads.append([(5, 4.5, 0), (5, 5.5, 0), (5, 5.5, 2), (5, 4.5, 2)])
+    quads.append([(8, 7, 0), (8, 6, 0), (8, 6, 2), (8, 7, 2)])
+    lines = ["g walls"]
+    for quad in quads:
+        lines += [f"v {x:.15g} {y:.15g} {z:.15g}" for x, y, z in quad]
+        lines.append("f -4 -3 -2 -1")
+    obj = tmp_path / "z.obj"
+    obj.write_text("\n".join(lines) + "\n")
+    room = _screen(tmp_path, [2.0, 2.0, 1.5], [8.0, 7.0, 1.5], obj)
+    model = TraceModel.from_room(room)
+    centre = room.mesh.triangles.mean(axis=1)
+    in_plane = np.all(np.isclose(room.mesh.triangles[:, :, 0], 5.0), axis=1)
+    low = model.face_plane[in_plane & (centre[:, 1] < 4.0)]  # the room at x < 5
+    high = model.face_plane[in_plane & (centre[:, 1] > 6.0)]  # the room at x > 5
+    panel = model.face_plane[in_plane & (centre[:, 1] > 4.0) & (centre[:, 1] < 6.0)]
+    assert len(low) == 2 and len(high) == 2 and len(panel) == 2
+    assert len({*low}) == 1 and len({*high}) == 1 and low[0] != high[0]
+    np.testing.assert_allclose(model.plane_normal[low[0]], [-1.0, 0.0, 0.0], atol=1e-12)
+    np.testing.assert_allclose(model.plane_normal[high[0]], [1.0, 0.0, 0.0], atol=1e-12)
+    assert np.all(panel == high[0])
+    alone = np.unique(
+        model.face_plane[np.all(np.isclose(room.mesh.triangles[:, :, 0], 8.0), axis=1)]
+    )
+    assert len(alone) == 1 and model.plane_two_sided[alone[0]]
+    np.testing.assert_allclose(model.plane_normal[alone[0]], [1.0, 0.0, 0.0], atol=1e-12)
+    assert model.plane_offset[alone[0]] == pytest.approx(8.0)
+
+
+def test_faces_have_two_sides_as_their_planes_where_the_model_tells_no_rooms(
+    tmp_path: Path,
+) -> None:
+    # A screen on its own: no side of it is solid.
+    model = TraceModel.from_room(_screen(tmp_path, [-5, 0, -2], [5, 0, -2]))
+    assert not model.oriented and model.face_two_sided.all()
+
+
+@pytest.mark.parametrize("sign", [1.0, -1.0])
+@pytest.mark.parametrize("room", ["x", "y"])
+def test_the_inside_corner_of_a_wall_with_a_panel_in_line_is_no_edge(
+    tmp_path: Path, sign: float, room: str
+) -> None:
+    """The wall in whose plane the panel stands meets one wall in an inside corner of the
+    room and another in an outside one, at (5, 5). The panel makes the plane two-sided,
+    the wall not: only the outside corner diffracts, and the panel's four free edges."""
+    source, listener = ([4.0, 2.5, 1.0], [2.0, 8.0, 2.0]) if room == "x" else ([8, 2, 1], [3, 7, 2])
+    edges = find_edges(
+        TraceModel.from_room(_in_line_with_a_wall(tmp_path, sign, source, listener, room))
+    )
+    ends = [np.abs(end) for end in IN_LINE[room][2]]
+    upright = np.abs(edges.direction[:, 2]) > 0.5
+    at = sorted((round(abs(x)), round(abs(y))) for x, y in edges.start[upright, :2])
+    assert at == sorted([(5, 5), *(tuple(end) for end in ends)])
+    assert sorted(edges.wedge[upright]) == pytest.approx([1.5, 2.0, 2.0])
+    level = np.flatnonzero(~upright)  # the panel's top and its foot
+    assert sorted(edges.start[level, 2]) == pytest.approx([0.0, 2.0])
+    assert np.all(edges.wedge[level] == 2.0)
+    np.testing.assert_allclose(np.abs(edges.start[level, :2]), [ends[0]] * 2, atol=1e-9)
+
+
+@pytest.mark.parametrize(
+    ("room", "source", "listener", "early"),
+    [
+        ("x", [4.0, 2.5, 1.0], [2.0, 8.0, 2.0], {"diffraction": "first_order"}),
+        ("x", [3.637, 0.775, 1.076], [0.651, 3.924, 1.546], {"diffraction": "second_order"}),
+        (
+            "y",
+            [7.5, 6.0, 1.0],
+            [8.0, 2.0, 2.0],
+            {"diffraction": "first_order", "diffraction_reflections": "both_sides"},
+        ),
+    ],
+)
+def test_a_room_with_a_panel_in_line_with_a_wall_sounds_as_its_mirror_image(
+    tmp_path: Path, room: str, source, listener, early
+) -> None:
+    """The early level of a room of ``IN_LINE`` and of its mirror image, where the wall
+    in whose plane the panel stands faces the other way. With the panel in a plane of
+    its own there, the wall's reflection past the wall's end counted as found by the path
+    off the panel and lost its term at the wall's end: 1.9 dB at 63 Hz in the first
+    case."""
+    levels = []
+    for sign in (1.0, -1.0):
+        paths = early_paths(_in_line_with_a_wall(tmp_path, sign, source, listener, room, **early))
+        levels.append(10.0 * np.log10(total_energy(paths)))
+    np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
 
 
 # -- diffracted paths -----------------------------------------------------------------
@@ -2533,8 +2738,8 @@ def test_two_waves_with_one_image_off_two_planes_are_two_ways(tmp_path: Path) ->
     to one point of the grid, a millionth of the model's extent wide, that tells images
     apart) are two ways, each with its carrier, also where they differ in the second of
     their two planes alone; told by the image alone they were one way, and one of the
-    two waves was left out. Off a wall and off a panel in the wall's plane that faces
-    the other way, two of the model's planes in one place, it is one wave."""
+    two waves was left out. Off two walls in line with each other that face opposite
+    ways, two of the model's planes in one place, it is one wave."""
     room = _by_two_planes(60.0, "corner", 0.5)
     diffraction = EdgeDiffraction(
         TraceModel.from_room(room),
@@ -2569,12 +2774,12 @@ def test_two_waves_with_one_image_off_two_planes_are_two_ways(tmp_path: Path) ->
     rows["plane2"] = np.full(4, 5)
     in_line, carrier, _, _ = diffraction._in_line(rows, *twice)
     assert carrier.tolist() == [0] and in_line.tolist() == [1, 2, 3]
-    room = _l_room_with_panels(tmp_path, [4.0, 2.5, 1.0], [2.0, 8.0, 2.4])
+    room = _stepped_room_with_panels(tmp_path, [5.5, 4.0, 1.0], [2.5, 2.5, 1.0])
     model = TraceModel.from_room(room)
     panel = int(np.flatnonzero(model.geometric_plane != np.arange(model.plane_count))[0])
     wall = int(model.geometric_plane[panel])
     diffraction = EdgeDiffraction(
-        model, np.array([4.0, 2.5, 1.0]), speed_of_sound=room.speed_of_sound(), air=np.zeros(8)
+        model, np.array([5.5, 4.0, 1.0]), speed_of_sound=room.speed_of_sound(), air=np.zeros(8)
     )
     rows["t_k"] = 0.5 * diffraction.edges.length[edge]
     for kind, key, order in ((1, "plane", wave), (3, "plane2", twice)):
@@ -2620,28 +2825,44 @@ def test_the_wave_that_arrives_at_an_edge_has_the_path_off_its_plane() -> None:
     assert found[:, 0].tolist() == [reflected if p == ground else -1 for p in terms["plane"]]
 
 
-def _l_room_with_panels(folder: Path, source, listener, loss: float | None = None) -> Room:
-    """An L-shaped room 3 m high (11 x 5 m and, beside it, 5 x 4 m) with two panels 2 m
-    high standing free in it: one in the plane of each of its two inner walls, which
-    face the other way. With ``loss``, the panels let sound through with that
-    transmission loss (dB)."""
-    plan = [(0, 0), (11, 0), (11, 5), (5, 5), (5, 9), (0, 9)]
+def _stepped_room_with_panels(folder: Path, source, listener, loss: float | None = None) -> Room:
+    """A room 3 m high whose plan steps twice: 7 x 5 m, beside it 7 x 4.5 m 3 m further
+    along, and beside that 3.5 x 6.5 m 1 m further along. The plane of each step holds
+    two of its walls, which face opposite ways, and a panel 2 m high standing free in
+    the opening between them, which lies in the plane of the wall that faces the way
+    of the plane's canonical normal (+y, +x). No plane lies halfway between two
+    parallel others, where two sequences of reflections would have one image. With
+    ``loss``, the panels let sound through with that transmission loss (dB)."""
+    plan = [
+        (0, 0),
+        (7, 0),
+        (7, 5),
+        (10, 5),
+        (10, 6),
+        (13.5, 6),
+        (13.5, 12.5),
+        (10, 12.5),
+        (10, 9.5),
+        (3, 9.5),
+        (3, 5),
+        (0, 5),
+    ]
     quads = [
         ((x0, y0, 0), (x1, y1, 0), (x1, y1, 3), (x0, y0, 3))
         for (x0, y0), (x1, y1) in zip(plan, plan[1:] + plan[:1], strict=True)
     ]
     for z in (0, 3):
-        quads.append(((0, 0, z), (11, 0, z), (11, 5, z), (0, 5, z)))
-        quads.append(((0, 5, z), (5, 5, z), (5, 9, z), (0, 9, z)))
-    quads.append(((5, 1, 0), (5, 4, 0), (5, 4, 2), (5, 1, 2)))
-    quads.append(((1, 5, 0), (4, 5, 0), (4, 5, 2), (1, 5, 2)))
+        for x0, y0, x1, y1 in ((0, 0, 7, 5), (3, 5, 10, 9.5), (10, 6, 13.5, 12.5)):
+            quads.append(((x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)))
+    quads.append(((3.5, 5, 0), (6.5, 5, 0), (6.5, 5, 2), (3.5, 5, 2)))
+    quads.append(((10, 6.5, 0), (10, 8.5, 0), (10, 8.5, 2), (10, 6.5, 2)))
     lines = ["g walls"]
     for n, quad in enumerate(quads):
         if n == len(quads) - 2:
             lines.append("g panels")
         lines += [f"v {x} {y} {z}" for x, y, z in quad]
         lines.append("f " + " ".join(str(4 * n + i + 1) for i in range(4)))
-    obj = folder / "l.obj"
+    obj = folder / "steps.obj"
     obj.write_text("\n".join(lines) + "\n")
     wall = {"absorption": [0.1] * 8, "scattering": 0.0}
     return Room.from_scene(
@@ -2665,23 +2886,24 @@ def _l_room_with_panels(folder: Path, source, listener, loss: float | None = Non
 @pytest.mark.parametrize(
     ("source", "listener", "loss"),
     [
-        ([4.0, 2.5, 1.0], [2.0, 8.0, 2.4], None),
-        ([2.5, 4.0, 1.2], [8.0, 2.0, 1.2], None),
-        ([4.0, 2.5, 1.0], [2.0, 8.0, 2.4], 10.0),
+        ([5.5, 4.0, 1.0], [2.5, 2.5, 1.0], None),
+        ([8.0, 7.5, 1.2], [4.0, 6.0, 1.2], None),
+        ([4.0, 4.0, 1.0], [9.2, 7.5, 1.2], 10.0),
     ],
 )
 def test_planes_that_face_opposite_ways_in_one_place_are_one_for_a_wave_s_path(
     tmp_path: Path, monkeypatch, source, listener, loss
 ) -> None:
-    """A wall with a room on one side and a panel in line with it that faces the other
-    way are two of the model's planes in one geometric plane, where a point has one
+    """Two walls with a room on one side in line with each other that face opposite
+    ways are two of the model's planes in one geometric plane, where a point has one
     image: a wave off the one has the path off the other. In a room with two such
-    pairs and no source right by two planes, every wave has the path that it has by its
-    image alone, and the early level is the same to the last digit. With the planes
-    told by their numbers, waves off a panel's plane would lose the paths off its wall:
-    2.3 and 1.5 dB in the first two cases. In the third the panels let sound through,
-    and paths through a panel come before reflections in the list of the paths."""
-    room = _l_room_with_panels(tmp_path, source, listener, loss)
+    pairs, a panel in line with each pair, and no source right by two planes, every
+    wave has the path that it has by its image alone, and the early level is the same
+    to the last digit. With the planes told by their numbers, waves off the one plane
+    would lose the paths off the other: 2.2 and 1.6 dB in the first two cases, one
+    for each pair. In the third the panels let sound through, and paths through a
+    panel come before reflections in the list of the paths."""
+    room = _stepped_room_with_panels(tmp_path, source, listener, loss)
     model = TraceModel.from_room(room)
     label = model.geometric_plane
     assert model.plane_count - len(np.unique(label)) == 2

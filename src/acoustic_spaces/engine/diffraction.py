@@ -480,7 +480,7 @@ def _wedges(
     if model.oriented:
         # Face n lies behind face 0: the solid is inside the angle. Between faces with a
         # room on both sides (a bent panel), the side that opens wider diffracts.
-        keep &= (side < 0.0) | model.plane_two_sided[model.face_plane[owner[h0]]]
+        keep &= (side < 0.0) | model.face_two_sided[owner[h0]]
     return geometry, owner, h0, h1, single, theta, side, keep
 
 
