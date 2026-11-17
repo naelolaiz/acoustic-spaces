@@ -476,9 +476,8 @@ Sources:
 - [x] Sources and listeners in groups, and left out of a run without being removed
   (`group`, `enabled: false`); in the editor a tick and an eye per source, listener
   and group.
-- [ ] A rule for the measured directions equally near a point of a directivity table:
-  the last digits of a product choose among them, which can move the table there by up
-  to 1.3 dB (see [Known issues](validation.md#known-issues)).
+- [x] A measured directivity table takes the directions equally near a point of its
+  grid alike, and a direction given more than once as one.
 
 Examples:
 

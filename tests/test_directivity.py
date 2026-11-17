@@ -84,6 +84,157 @@ def test_a_balloon_fills_silent_bands_and_refuses_bad_data() -> None:
         Balloon.from_measurements(directions, energy[:, :4])
 
 
+def _lattice(azimuths, elevations) -> np.ndarray:
+    """Unit vectors (elevations, azimuths, 3) towards every pair of the angles (degrees)."""
+    az, el = np.meshgrid(np.radians(azimuths), np.radians(elevations))
+    return np.stack([np.cos(el) * np.cos(az), np.cos(el) * np.sin(az), np.sin(el)], axis=-1)
+
+
+def test_a_balloon_takes_the_directions_equally_near_a_point_alike() -> None:
+    """A table measured every 10 degrees of azimuth and 2.5 of elevation, from -180 to
+    180: on the equator, a grid point halfway between two meridians has two directions
+    equally near and four more equally near after them. It is the mean of the two; the
+    table of a pattern that is the same on the left and the right, above and below, is
+    so too, and the order of the rows changes nothing."""
+    azimuths, elevations = np.arange(-180.0, 181.0, 10.0), np.arange(-90.0, 90.1, 2.5)
+    measured = _lattice(azimuths, elevations)
+    off = np.arccos(np.clip(measured[..., 0], -1.0, 1.0))
+    tall = 1.0 + 3.0 * measured[..., 2] ** 2
+    energy = np.stack([np.exp(-(off**2) * (1.0 + band) / tall) + 0.01 for band in range(8)], -1)
+    balloon = Balloon.from_measurements(measured.reshape(-1, 3), energy.reshape(-1, 8))
+    table = balloon.table  # elevations -90 to 90, azimuths 0 to 355, every 5 degrees
+    np.testing.assert_allclose(table[:, 1:], table[:, :0:-1], rtol=1e-12)  # left and right
+    np.testing.assert_allclose(table, table[::-1], rtol=1e-12)  # above and below
+    # The equator's row 36 of the measured elevations, its azimuths 0 and 10 at 18 and 19;
+    # the grid's row 18, its azimuths 0, 5 and 10 at 0, 1 and 2.
+    mean = 0.5 * (energy[36, 18] + energy[36, 19])
+    np.testing.assert_allclose(table[18, 1] / table[18, 0], mean / energy[36, 18], rtol=1e-9)
+    np.testing.assert_allclose(table[18, 2] / table[18, 0], energy[36, 19] / energy[36, 18])
+    order = np.random.default_rng(1).permutation(measured.shape[0] * measured.shape[1])
+    shuffled = Balloon.from_measurements(
+        measured.reshape(-1, 3)[order], energy.reshape(-1, 8)[order]
+    )
+    np.testing.assert_allclose(shuffled.table, table, rtol=1e-12)
+
+
+def test_a_direction_measured_more_than_once_counts_once() -> None:
+    """The rows at -180 and 180 degrees of azimuth and those at a pole are one direction
+    each, with the mean of their energies; a ring of directions equally near a point,
+    with none nearer, is taken whole."""
+    azimuths, elevations = np.arange(-180.0, 181.0, 10.0), np.arange(-90.0, 91.0, 10.0)
+    measured = _lattice(azimuths, elevations)
+    energy = np.random.default_rng(2).uniform(0.2, 3.0, (*measured.shape[:2], 8))
+    table = Balloon.from_measurements(measured.reshape(-1, 3), energy.reshape(-1, 8)).table
+    # On the equator (row 9 of the measured, 18 of the grid) the direction behind is the
+    # mean of its two rows, and the pole above that of its 37.
+    behind = 0.5 * (energy[9, 0] + energy[9, -1])
+    np.testing.assert_allclose(table[18, 36] / table[18, 0], behind / energy[9, 18], rtol=1e-9)
+    above = energy[-1].mean(axis=0)
+    np.testing.assert_allclose(table[-1] / table[18, 0], above / energy[9, 18] * np.ones((72, 1)))
+    # Halfway between 170 degrees (35 of the measured, 34 of the grid) and behind, the
+    # direction behind counts as much as the one at 170 degrees, not twice.
+    beside = 0.5 * (energy[9, 35] + behind)
+    np.testing.assert_allclose(table[18, 35] / table[18, 0], beside / energy[9, 18], rtol=1e-9)
+    # Without the rows given twice, with the means in their place, it is the same table.
+    once, levels = measured[1:-1, 1:], energy[1:-1, 1:].copy()
+    levels[:, -1] = 0.5 * (energy[1:-1, 0] + energy[1:-1, -1])
+    poles = np.array([[0.0, 0.0, -1.0], [0.0, 0.0, 1.0]])
+    same = Balloon.from_measurements(
+        np.concatenate([once.reshape(-1, 3), poles]),
+        np.concatenate([levels.reshape(-1, 8), [energy[0].mean(axis=0), above]]),
+    )
+    np.testing.assert_allclose(same.table, table, rtol=1e-12)
+    # Two rings 10 degrees from the poles and nothing nearer: each pole is its ring's mean.
+    rings = _lattice(np.arange(0.0, 360.0, 10.0), [-80.0, 80.0])
+    levels = np.random.default_rng(4).uniform(0.2, 3.0, (2, 36, 8))
+    table = Balloon.from_measurements(rings.reshape(-1, 3), levels.reshape(-1, 8)).table
+    np.testing.assert_allclose(
+        table[-1, 0] / table[0, 0], levels[1].mean(axis=0) / levels[0].mean(axis=0)
+    )
+    for none in (np.nan, np.inf, 0.0):
+        with pytest.raises(ValueError, match="finite directions"):
+            Balloon.from_measurements([[none, 0.0, 0.0], [0.0, 1.0, 0.0]], np.ones((2, 8)))
+    # A direction is its vector's, whatever the vector's length.
+    long = measured.reshape(-1, 3) * np.random.default_rng(3).choice([1e-200, 0.3, 1e200], (703, 1))
+    scaled = Balloon.from_measurements(long, energy.reshape(-1, 8)).table
+    np.testing.assert_allclose(
+        scaled,
+        Balloon.from_measurements(measured.reshape(-1, 3), energy.reshape(-1, 8)).table,
+        rtol=1e-12,
+    )
+
+
+def test_directions_joined_by_others_are_one_in_any_order() -> None:
+    """Three directions in a row, each within a millionth of a radian of the next and
+    the ends further apart, are one direction, the mean of them, whichever comes first."""
+    measured = _lattice(np.arange(0.0, 360.0, 10.0), np.arange(-80.0, 81.0, 10.0)).reshape(-1, 3)
+    energy = np.random.default_rng(5).uniform(0.2, 3.0, (len(measured), 8))
+    # Beside the row at 10 degrees of azimuth and of elevation (9 * 36 + 1 of the measured).
+    more = _lattice(10.0 + np.degrees(0.9e-6) * np.arange(1.0, 3.0), [10.0]).reshape(-1, 3)
+    extra = np.random.default_rng(6).uniform(0.2, 3.0, (2, 8))
+    last = Balloon.from_measurements(
+        np.concatenate([measured, more]), np.concatenate([energy, extra])
+    ).table
+    first = Balloon.from_measurements(
+        np.concatenate([more[::-1], measured]), np.concatenate([extra[::-1], energy])
+    ).table
+    np.testing.assert_allclose(first, last, rtol=1e-9)
+    # The grid's point there (row 20, azimuth 2) against the one straight ahead (the
+    # measured row 8 * 36), both on a direction.
+    mean = (energy[325] + extra.sum(axis=0)) / 3.0
+    np.testing.assert_allclose(last[20, 2] / last[18, 0], mean / energy[288], rtol=1e-6)
+
+
+def test_a_balloon_weighs_by_the_inverse_squares_of_the_angles() -> None:
+    """Two directions 20 degrees apart: the grid's point 5 degrees from one and 15 from
+    the other takes them 9 to 1."""
+    rad = np.radians(20.0)
+    measured = [[1.0, 0.0, 0.0], [np.cos(rad), np.sin(rad), 0.0]]
+    energy = np.array([np.full(8, 1.0), np.full(8, 3.0)])
+    table = Balloon.from_measurements(measured, energy).table
+    np.testing.assert_allclose(table[18, 1] / table[18, 0], (9 * 1.0 + 3.0) / 10, rtol=1e-9)
+
+
+def test_a_balloon_takes_four_directions_and_groups_whole() -> None:
+    """Round the grid's point straight ahead, one direction 2 degrees away and others 6
+    degrees away. With three of those the four are taken; with four they do not all fit
+    among the four, and none of them is taken; and a direction a ten-thousandth of a
+    radian further than the three is not as near as they are."""
+
+    def around(degrees: float, turns: list[float]) -> np.ndarray:
+        """Unit vectors ``degrees`` from straight ahead, each a turn (degrees) round it."""
+        off, turn = np.radians(degrees), np.radians(turns)
+        ahead = np.full(turn.shape, np.cos(off))
+        return np.stack([ahead, np.sin(off) * np.cos(turn), np.sin(off) * np.sin(turn)], axis=-1)
+
+    def ahead(others: np.ndarray, levels: list[float]) -> float:
+        """The point straight ahead against the one behind, which is on a direction of
+        energy 1, as is the direction 2 degrees from straight ahead."""
+        measured = np.concatenate([[[-1.0, 0.0, 0.0]], around(2.0, [50.0]), others])
+        energy = np.outer([1.0, 1.0, *levels], np.ones(8))
+        table = Balloon.from_measurements(measured, energy).table
+        return float(table[18, 0, 0] / table[18, 36, 0])
+
+    three = around(6.0, [10.0, 130.0, 250.0])
+    four = (1.0 / 2**2 + (2.0 + 3.0 + 5.0) / 6**2) / (1.0 / 2**2 + 3.0 / 6**2)
+    assert ahead(three, [2.0, 3.0, 5.0]) == pytest.approx(four, rel=1e-9)
+    ring = around(6.0, [10.0, 100.0, 190.0, 280.0])
+    assert ahead(ring, [2.0, 3.0, 5.0, 7.0]) == pytest.approx(1.0, rel=1e-9)
+    further = around(6.0 + np.degrees(1e-4), [300.0])
+    assert ahead(np.concatenate([three, further]), [2.0, 3.0, 5.0, 7.0]) == pytest.approx(
+        four, rel=1e-9
+    )
+
+
+def test_a_balloon_of_fewer_directions_than_neighbours_once_merged() -> None:
+    """Four rows, two of them one direction: three directions, the merged one with the
+    mean of its two energies."""
+    measured = [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    energy = np.array([np.full(8, 1.0), np.full(8, 3.0), np.full(8, 1.0), np.full(8, 1.0)])
+    table = Balloon.from_measurements(measured, energy).table
+    np.testing.assert_allclose(table[18, 0] / table[-1, 0], 2.0)  # ahead against the pole
+
+
 # -- files ---------------------------------------------------------------------------
 
 

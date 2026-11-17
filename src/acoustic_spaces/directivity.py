@@ -68,8 +68,13 @@ GRID_STEP_DEG = 5.0
 SPEED_OF_SOUND = speed_of_sound(20.0)
 #: Directions times pairs of elements an array's pattern is worked out for at a time.
 _ARRAY_CHUNK = 1 << 18
-#: Measured directions each grid point is interpolated from.
+#: Measured directions a grid point is interpolated from, but where several are equally
+#: near it (``Balloon.from_measurements``).
 NEIGHBOURS = 4
+#: Measured directions whose unit vectors are no further apart than this are one
+#: direction, and those whose distances from a grid point differ by no more are equally
+#: near it (a millionth of a radian, 0.00006 degrees).
+SAME_DIRECTION = 1e-6
 
 _BANDS = len(OCTAVE_BANDS_HZ)
 _BAND_COUNTS = (len(OCTAVE_BANDS_HZ), len(THIRD_OCTAVE_BANDS_HZ))
@@ -80,6 +85,37 @@ _SPACES = re.compile(r"\s+")
 def _unit(directions) -> np.ndarray:
     v = np.asarray(directions, dtype=float).reshape(-1, 3)
     return v / np.maximum(np.linalg.norm(v, axis=1, keepdims=True), 1e-300)
+
+
+def _merged(directions: np.ndarray, energy: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Unit ``directions`` (n, 3) and their ``energy`` (n, bands) with the directions
+    that are one (within ``SAME_DIRECTION`` of another, or joined to it by others that
+    are) as one: the mean of them, of unit length, with the mean of their energies, in
+    the order of the first of each."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    from scipy.spatial import cKDTree
+
+    pairs = cKDTree(directions).query_pairs(SAME_DIRECTION, output_type="ndarray")
+    if not len(pairs):
+        return directions, energy
+    count = len(directions)
+    graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(count, count))
+    _, label = connected_components(graph, directed=False)
+    _, first, group = np.unique(label, return_index=True, return_inverse=True)
+    order = np.argsort(first)
+    rank = np.empty(len(order), dtype=np.int64)
+    rank[order] = np.arange(len(order))
+    group = rank[group.ravel()]
+    size = np.bincount(group)
+    summed = np.zeros((len(order), energy.shape[1]))
+    np.add.at(summed, group, energy)
+    middle = np.zeros((len(order), 3))
+    np.add.at(middle, group, directions)
+    middle = _unit(middle)
+    alone = size == 1
+    middle[alone] = directions[first[order][alone]]
+    return middle, summed / size[:, None]
 
 
 def _from_angles(azimuth_deg, elevation_deg) -> np.ndarray:
@@ -218,9 +254,9 @@ class Balloon(Directivity):
     """Measured energy at some directions, interpolated over the sphere.
 
     The measurements are first spread onto a regular grid of elevations and azimuths
-    (``GRID_STEP_DEG`` apart) by inverse-distance weighting of the ``NEIGHBOURS``
-    nearest measured directions, then read off it bilinearly, which the compiled tracer
-    does the same way. Each band is scaled to average 1 over the sphere.
+    (``GRID_STEP_DEG`` apart), each of its points from the measured directions nearest
+    to it (``from_measurements``), then read off it bilinearly, which the compiled
+    tracer does the same way. Each band is scaled to average 1 over the sphere.
     """
 
     #: Interpolation grid: energy weights (elevations, azimuths, bands).
@@ -240,25 +276,59 @@ class Balloon(Directivity):
         extrapolated: tuple[int, ...] = (),
         step: float = GRID_STEP_DEG,
     ) -> Balloon:
-        """Interpolate energies (n, bands) measured at unit vectors (n, 3)."""
-        measured = _unit(directions)
+        """Interpolate energies (n, bands) measured in the directions of vectors (n, 3).
+
+        Directions given more than once (a table's -180 and 180 degrees of azimuth,
+        its rows at a pole) are one direction, the mean of them, with the mean of
+        their energies. Each grid point takes the ``NEIGHBOURS`` directions nearest to
+        it, weighted by the inverse squares of their angles from it. Where several are
+        as near as the last of those (within ``SAME_DIRECTION``) and not all of them
+        are among the ``NEIGHBOURS``, none of them is taken, only the nearer ones; or
+        all of them, if none is nearer. So directions equally near a point are taken
+        alike, whatever their order in the data and the last digits of their
+        distances."""
+        measured = np.asarray(directions, dtype=float).reshape(-1, 3)
         energy = np.asarray(energy, dtype=float).reshape(len(measured), -1)
         if energy.shape[1] not in _BAND_COUNTS:
             raise ValueError(f"expected {_BANDS} bands, got {energy.shape[1]}")
         if len(measured) == 0 or not np.all(np.isfinite(energy)) or (energy < 0).any():
             raise ValueError("directivity data must be finite, non-negative energies")
+        # Each direction over its largest component first: its length is then between 1
+        # and the root of 3, whatever the size of the vector given.
+        largest = np.abs(measured).max(axis=1, keepdims=True)
+        if not (np.isfinite(largest) & (largest > 0.0)).all():
+            raise ValueError("directivity data must have finite directions other than (0, 0, 0)")
+        measured, energy = _merged(_unit(measured / largest), energy)
         elevation, azimuth = _grid(step)
         points = _from_angles(azimuth[None, :], elevation[:, None]).reshape(-1, 3)
+        # The distance between the unit vectors of each grid point and each measured
+        # direction, (grid, measured), from differences, squares and a root: directions
+        # equally near a point come out within some 1e-15 of one another, and one the
+        # point is on within that of 0, far inside SAME_DIRECTION.
+        chord = np.zeros((len(points), len(measured)))
+        apart = np.empty_like(chord)
+        for axis in range(3):
+            np.subtract.outer(points[:, axis], measured[:, axis], out=apart)
+            apart *= apart
+            chord += apart
+        np.sqrt(chord, out=chord)
         k = min(NEIGHBOURS, len(measured))
-        # The library's product: where several measured directions are equally near a
-        # grid point, the last digits of these cosines choose which are taken, and
-        # sums added in another order choose others (docs/validation.md, Known issues).
-        angle = np.arccos(np.clip(points @ measured.T, -1.0, 1.0))  # (grid, measured)
-        nearest = np.argsort(angle, axis=1)[:, :k]
-        near_angle = np.take_along_axis(angle, nearest, axis=1)
-        weight = 1.0 / np.maximum(near_angle, 1e-9) ** 2
-        weight /= weight.sum(axis=1, keepdims=True)
-        values = np.einsum("gk,gkb->gb", weight, energy[nearest])
+        apart[:] = chord
+        apart.partition(k - 1, axis=1)
+        last = apart[:, k - 1].copy()[:, None]
+        del apart
+        near = chord <= last + SAME_DIRECTION
+        nearer = chord < last - SAME_DIRECTION
+        cut = (near.sum(axis=1) > k) & nearer.any(axis=1)
+        near[cut] = nearer[cut]
+        del nearer
+        point, taken = np.nonzero(near)
+        del near
+        angle = 2.0 * np.arcsin(np.minimum(0.5 * chord[point, taken], 1.0))
+        weight = 1.0 / np.maximum(angle, 1e-9) ** 2
+        weight /= np.bincount(point, weights=weight, minlength=len(points))[point]
+        values = np.zeros((len(points), energy.shape[1]))
+        np.add.at(values, point, weight[:, None] * energy[taken])
         table = values.reshape(len(elevation), len(azimuth), energy.shape[1])
         return cls.from_table(table, name, extrapolated)
 
