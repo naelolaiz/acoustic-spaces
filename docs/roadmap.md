@@ -431,11 +431,12 @@ Outdoor acoustics, in steps:
   gradients, as over the open ground: the paths off façades and barriers are eigenrays
   in every band, with the rays' ground effect up to 2 kHz and their steps at caustics
   (see [Known issues](validation.md#known-issues)).
-- [ ] An absorbing layer for the parabolic equation's runs that a run's other listeners
-  do not move: the listeners and map points that share a run share its layer, which begins
-  as high and is as thick as any of them needs, and the narrow-angle equation's level
-  changes with it, by up to 0.07 dB per third octave out of the shadow and 0.76 dB 72 dB
-  below free field in the checks (see [Known issues](validation.md#known-issues)).
+- [ ] An absorbing layer for the parabolic equation's runs behind barriers and
+  buildings that takes up the sound an obstacle's top sends steeply up, and that a run's
+  other listeners do not move: there the listeners and map points that share a run share
+  its layer, and the level changes with where it begins, by up to 2.4 dB behind a tall
+  barrier close to the source in the checks (see
+  [Known issues](validation.md#known-issues)).
 - [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
   the shadow): out of the shadow the equation's field goes through it, but the rays'
@@ -544,8 +545,8 @@ Movement:
   **Render movement…** heard binaurally and with Doppler, and units for every number in
   the panel and in Run demo, with the pass's length, speed and duration.
 - [x] Faster walks outdoors: the places of a walking source share the parabolic
-  equation's runs, each listener getting what a run of its own place would give it but
-  for the run's absorbing layer (see [Known issues](validation.md#known-issues)).
+  equation's runs, each listener over the open ground getting what a run of its own
+  place would give it.
 - [x] The sound a source sends each way, along a walk with Doppler: each early path
   carries what is sent the way it leaves the source (`acoustic_spaces.emission`).
 - [x] A helicopter's rotors: their tones from the blades' steady loads, checked against
