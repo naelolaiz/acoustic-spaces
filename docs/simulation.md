@@ -13,7 +13,8 @@ faces of every diffracting edge that the source stands in front of, in its sight
 not: a ray misses a face the source sees nearly edge-on, and a reflection that an
 obstacle cuts off still fades at the obstacle's edges. Every candidate is then traced back from the listener, so the
 paths found are exact either way, including paths that reflect exactly on an edge
-or in a corner. Sound that bends round edges is added to them (see
+or in a corner: a face reflects as far as its edges, to within a billionth of the
+model's diagonal. Sound that bends round edges is added to them (see
 [Edge diffraction](#edge-diffraction)).
 
 **Late reverberation** (`simulation.late`) is either:
@@ -745,9 +746,8 @@ same results, bit for bit, with one, two and four of those threads (all were run
 `bim_office`). What it leaves to the library are the solvers (the eigenvalues behind turbulence's delays, a binaural
 decoder's pseudo-inverse, the fits of calibration and of a ground's impedance), whose
 results can round with the number of threads where their matrices are large (the
-eigenvalues of a 200 by 200 matrix did; nothing in the examples does), live
-head-tracked playback, and the cosines that choose a measured directivity table's
-nearest directions ([Known issues](validation.md#known-issues)).
+eigenvalues of a 200 by 200 matrix did; nothing in the examples does), and live
+head-tracked playback.
 
 ### Memory
 
@@ -832,7 +832,11 @@ simulation:
   [vegetation](outdoor.md#vegetation) and the open sky); the listeners' side of the
   first reflections' scattered sound is found on the CPU. Rays start where
   the CPU's do, then draw random numbers of their own, in single precision, so the two
-  agree statistically, not ray for ray. The tests trace main's stored runs on the GPU
+  agree statistically, not ray for ray. Its lengths are coarser than the CPU's: a
+  straight ray meets no face nearer its start than a millionth of the model's size (the
+  CPU's, a billionth), and a reflection starts a hundred-thousandth of it off its face,
+  so the CPU traces the runs with a source or a listener right by a surface (see
+  below). The tests trace main's stored runs on the GPU
   and check that they land within the spread of the CPU's own results over seeds. The
   shader is compiled once per session with only what the scene has of the outdoors
   (bent rays, vegetation), in seconds. On Direct3D 12 (Windows) its compiler (FXC)
@@ -870,7 +874,8 @@ acoustic-spaces tune --default cpu              # back to the CPU, without timin
 acoustic-spaces info                            # the default, and what auto takes now
 ```
 
-- The late stage traces the scene's first source to its listeners with the scene's
+- The late stage traces the scene's first source to its listeners (but those too near
+  a surface for the GPU, see below) with the scene's
   settings (or `--rays` per band) on `cpu`, `gpu` and `both`, for responses of 0.5, 1,
   2 and 4 s (`--lengths`), and keeps the fastest for each: the CPU unless another is at
   least 10 % faster. Each length stands for its range (up to 0.5, 1, 2, 4 s and so on).
@@ -905,7 +910,15 @@ Sound through partitions and openings (an outdoor scene's sky, which lets sound 
 into no room, is not one), coverage maps and vegetation of more than 16 media are traced
 on the CPU whatever the setting, and so are
 runs whose results the GPU's buffers cannot hold (many listeners and arrival directions
-over a long response). `simulate --late-device` overrides the setting; the editor's Simulation page
+over a long response), and runs with a source nearer a surface than 2 millionths of the
+model's size, a listener so near one that the start of the GPU's reflections would cost
+it more than 0.1 dB of the surface's scattered sound (with the late stage's own
+spheres: nearer than about 47 millionths of the model's size, or than 0.6 to 1.2 mm in a
+model of 2 to 25 m; in a model of more than 12 km it can be less than those 47
+millionths), or either nearer both sides of an inner edge than 50
+millionths where the two surfaces meet at a right angle (up to 550 at sharper angles,
+fewer at wider ones and none from about 96 degrees on). `simulate --late-device`
+overrides the setting; the editor's Simulation page
 has it as "Run on" under Late reverberation. When it is not `cpu`, the progress messages
 say where the rays went and why
 (`talker: late rays traced on the CPU (no hardware GPU)`).

@@ -263,10 +263,8 @@ LIBRARY_SUMS = {
     "demos/indoors.py": 1,
     "demos/passby.py": 3,
     "demos/pipeline.py": 1,
-    # 3-vectors and 3 x 3 frames; the positions of one balloon's measurement points; the
-    # cosines between a balloon's grid and its measured directions, whose last digits
-    # choose among directions equally near (docs/validation.md, Known issues).
-    "directivity.py": 7,
+    # 3-vectors and 3 x 3 frames; the positions of one balloon's measurement points.
+    "directivity.py": 6,
     # 2- and 3-vectors.
     "doc29/noise.py": 1,
     "doc29/path.py": 1,

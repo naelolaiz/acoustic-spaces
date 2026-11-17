@@ -1,6 +1,7 @@
 """Where the late stage traces its rays: the choice of device, ``auto``'s trial and the
 CPU and the GPU sharing the rays. None of these needs a GPU: test_gpu.py traces on one."""
 
+import itertools
 import math
 import os
 import time
@@ -9,10 +10,11 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from test_geometry import _to_triangle
 from test_tracer_reference import REFERENCE, late_results, reference_arguments
 
-from acoustic_spaces import Room, _native
-from acoustic_spaces.engine import gpu, gpu_tracer, ray_device, tuning
+from acoustic_spaces import Room, Scene, _native
+from acoustic_spaces.engine import gpu, gpu_rays, gpu_tracer, ray_device, tuning
 
 SHOEBOX = Path(__file__).resolve().parent.parent / "examples" / "shoebox" / "scene.yaml"
 
@@ -114,6 +116,406 @@ def test_the_open_sky_lets_sound_out_on_any_device() -> None:
     assert ray_device._unsupported(values) == ""
     values["face_room"] = np.array([[0, -1], [0, 1], [-1, 0]])
     assert "partitions" in ray_device._unsupported(values)
+
+
+#: Where a listener with a sphere of nine tenths of its distance from a face reads 0.1 dB
+#: low on the GPU, in distances at which the GPU starts its reflections off the face.
+_LOW = 4.6889
+
+
+def _near(who: str, what: str, millionths: float = 10) -> str:
+    """The reason the GPU gives for leaving a run to the CPU (``gpu_tracer.too_near``)."""
+    if (who, what) == ("listener", "surface"):
+        return (
+            "sound to a listener whose sphere reaches where the GPU's reflections start, "
+            f"{millionths:.3g} millionths of the model's size off a surface, is traced on the CPU"
+        )
+    who = {"source": "a source", "listener": "sound to a listener"}[who]
+    what = {"surface": "a surface", "edge": "two surfaces that meet"}[what]
+    return (
+        f"{who} nearer {what} than {millionths:.3g} millionths of the model's size is traced "
+        "on the CPU"
+    )
+
+
+def _too_near(bvh, source, listeners) -> str:
+    """``gpu_tracer.too_near`` with the spheres the late stage gives listeners between
+    its limits: nine tenths of each one's distance from the nearest face, worked out
+    here."""
+    layout = np.asarray(bvh.layout()["triangles"], dtype=float).reshape(-1, 3, 3)
+    faces = np.stack([layout[:, 0], layout[:, 0] + layout[:, 1], layout[:, 0] + layout[:, 2]], 1)
+    listeners = np.asarray(listeners, dtype=float).reshape(-1, 3)
+    spheres = [0.9 * min(_to_triangle(place, face) for face in faces) for place in listeners]
+    return gpu_tracer.too_near(bvh, source, listeners, np.array(spheres))
+
+
+@pytest.fixture(params=["at once", "a row at a time"])
+def tables(request, monkeypatch) -> None:
+    """The table of pairs of ``gpu_tracer._meeting``, filled at once and row by row."""
+    if request.param == "a row at a time":
+        monkeypatch.setattr(gpu_tracer, "_ROWS", 1)
+
+
+def test_the_gpu_leaves_a_source_or_a_listener_right_by_a_surface_to_the_cpu() -> None:
+    """The GPU's rays meet no face nearer their start than a millionth of the model's
+    size, so a source nearer a face than that sends rays through it (up to 3.2 dB of its
+    late part over a floor). And the reflections off a face start a hundred-thousandth
+    of the size off it: a listener with the late stage's sphere within 4.7 times that
+    reads low (2 to 6 dB from 12 down to 3 millionths over the floor of a room 20 m long
+    in a model of 20 km). The GPU declines a run with its source nearer a face than
+    twice the first distance, or such a listener: nearer the triangle itself, not its
+    plane or its box."""
+    at = np.array([1.0, 2.0, 3.0])  # no corner at the origin, where a corner and an edge are one
+    corners = at + np.array([[0.0, 0.0, 0.0], [6.0, 0.0, 0.0], [0.0, 8.0, 0.0]])
+    bvh = _native.Bvh(corners, np.array([[0, 1, 2]], dtype=np.int64))
+    assert bvh.scale == pytest.approx(10.0)
+    assert gpu_tracer.CLEAR * gpu_rays.T_MIN == pytest.approx(2e-6)
+    assert gpu_tracer._OFFSET == pytest.approx(1e-5)
+    far = at + np.array([[1.0, 1.0, 3.0], [4.0, 2.0, -1.0], [2.0, 5.0, 2.0]])
+    for who, room in (("source", 2e-5), ("listener", _LOW * 1e-4)):
+        for near, clear in [
+            ([2.0, 2.0, 0.9 * room], [2.0, 2.0, 1.1 * room]),  # over the face
+            ([2.0, 2.0, -0.9 * room], [2.0, 2.0, -1.1 * room]),  # under it
+            ([2.0, -0.9 * room, 0.0], [2.0, -1.1 * room, 0.0]),  # in its plane, past an edge
+            ([-0.6 * room, -0.6 * room, 0.4 * room], [-0.7 * room, -0.7 * room, 0.4 * room]),
+            ([3.0, 4.0, 0.9 * room], [3.0 + 0.8 * room, 4.0 + 0.6 * room, 0.5 * room]),
+        ]:
+            near, clear = at + near, at + clear
+            if who == "source":
+                assert _too_near(bvh, near, far) == _near("source", "surface", 2)
+                assert _too_near(bvh, clear, far) == ""
+                continue
+            # The near listener first, among the others and last.
+            for place in range(len(far) + 1):
+                listeners = np.insert(far, place, near, axis=0)
+                assert _too_near(bvh, far[0], listeners) == _near("listener", "surface")
+                assert _too_near(bvh, far[0], np.insert(far, place, clear, axis=0)) == ""
+    # In the triangle's box and right by its plane, but metres past its long edge.
+    assert _too_near(bvh, at + [5.0, 7.0, 1e-5], far) == ""
+    # A source that near a face is not a listener that near it.
+    assert _too_near(bvh, at + [2.0, 2.0, 1e-4], far) == ""
+    assert _too_near(bvh, far[0], np.empty((0, 3))) == ""
+
+
+def test_a_listener_is_the_gpus_while_the_start_of_its_reflections_costs_it_little() -> None:
+    """A face lit evenly sends a listener at the distance c, with a sphere of the radius
+    r, the share x (3 - x^2) / 2 of its scattered sound, x = c / r up to 1: the shader's
+    own sum (the cosine and the square of the distance, with the distance held to the
+    radius) over the plane. The GPU works it out from a hundred-thousandth of the
+    model's size nearer. It leaves the listeners that read more than 0.1 dB low for
+    that to the CPU, and those no farther from a face than that distance: against the
+    two shares worked out here, for spheres from a tenth of that distance to 3,000 times
+    it and listeners out to 1,600 times it."""
+    at = np.array([1.0, 2.0, 3.0])
+    corners = at + np.array([[0.0, 0.0, 0.0], [6.0, 0.0, 0.0], [0.0, 8.0, 0.0]])
+    bvh = _native.Bvh(corners, np.array([[0, 1, 2]], dtype=np.int64))
+    start = gpu_tracer._OFFSET * bvh.scale
+
+    def low(distance: float, radius: float) -> float:
+        """How low the GPU reads (dB): the share heard from ``start`` nearer over the
+        share heard."""
+
+        def share(x: float) -> float:
+            x = min(max(x, 0.0), 1.0)
+            return x * (3.0 - x * x) / 2.0
+
+        return 10.0 * math.log10(share((distance - start) / radius) / share(distance / radius))
+
+    assert gpu_tracer.LOSS == 0.1
+    assert low(0.999 * _LOW * start, 0.9 * 0.999 * _LOW * start) < -0.1
+    assert low(1.001 * _LOW * start, 0.9 * 1.001 * _LOW * start) > -0.1
+    rng = np.random.default_rng(3)
+    distance = start * 10.0 ** rng.uniform(0.01, 3.2, 400)
+    radius = start * 10.0 ** rng.uniform(-1.0, 3.5, 400)
+    lows = np.array([low(c, r) for c, r in zip(distance, radius, strict=True)])
+    decided = np.abs(lows + 0.1) > 1e-4  # not at the limit itself
+    places = at + [2.0, 2.0, 0.0] + distance[:, None] * [0.0, 0.0, 1.0]
+    found = gpu_tracer.listeners_too_near(bvh, places, radius)
+    assert 100 < (lows < -0.1).sum() < 300
+    np.testing.assert_array_equal(found[decided], (lows < -0.1)[decided])
+    # A sphere through the face reads lower still on the CPU: what counts is the GPU from it.
+    through = radius > distance
+    assert (found & through).sum() > 100 and (~found & through).sum() > 4
+    # No farther from the face than where the reflections start: however small the sphere.
+    by = at + np.array([[2.0, 2.0, 0.9 * start], [2.0, 2.0, -start], [2.0, 2.0, 1.1 * start]])
+    assert gpu_tracer.listeners_too_near(bvh, by, 0.01 * start).tolist() == [True, True, False]
+    # On the face itself, where neither share is any: with a sphere and without one.
+    on = at + np.array([[2.0, 2.0, 0.0]])
+    for sphere in (30.0 * start, 0.0):
+        assert gpu_tracer.listeners_too_near(bvh, on, sphere).tolist() == [True]
+    assert gpu_tracer.listeners_too_near(bvh, by[2:], 0.0).tolist() == [False]
+    # One radius for all, and each listener's own answer among the others.
+    mixed = gpu_tracer.listeners_too_near(bvh, places[:50], 30.0 * start)
+    assert mixed.tolist() == [low(c, 30.0 * start) < -0.1 for c in distance[:50]]
+    assert 5 < mixed.sum() < 45
+    assert gpu_tracer.listeners_too_near(bvh, np.empty((0, 3)), 0.5).tolist() == []
+
+
+def _wedge(angle_deg: float):
+    """Two faces that meet along the line x = z = 0 from y = 0 to 10 m at ``angle_deg``
+    degrees (a floor towards +x and a wall), their tree, and the place a distance from
+    both of them inside the angle (0) or outside both (1)."""
+    angle = math.radians(angle_deg)
+    lean = np.array([math.cos(angle), 0.0, math.sin(angle)])
+    ends = np.array([[0.0, 0.0, 0.0], [0.0, 10.0, 0.0]])
+    corners = np.vstack([ends, [[10.0, 5.0, 0.0]], 10.0 * lean + [0.0, 5.0, 0.0]])
+    bvh = _native.Bvh(corners, np.array([[0, 1, 2], [0, 3, 1]], dtype=np.int64))
+    middle = np.array([math.cos(angle / 2), 0.0, math.sin(angle / 2)]) / math.sin(angle / 2)
+
+    def place(distance: float, outside: bool = False) -> np.ndarray:
+        return (-distance if outside else distance) * middle + [0.0, 5.0, 0.0]
+
+    return bvh, place
+
+
+@pytest.mark.parametrize("angle", [30.0, 60.0, 90.0, 93.0])
+def test_the_gpu_leaves_a_point_by_an_inner_edge_to_the_cpu(angle: float, tables) -> None:
+    """Beside a second face that faces the one it left, the GPU loses a reflected ray: it
+    goes through that face within a millionth of the model's size of it, and where the
+    two meet at less than a right angle it starts behind it within the share of a
+    hundred-thousandth that points to it. A source 2.05 millionths from both sides of an
+    edge, traced on the GPU, is 6 to 7.5 dB low at 30 degrees and 0.15 dB at 90, and 0.4
+    to 0.5 dB low in a corner of three faces at right angles. The GPU declines a run with
+    its source or a listener nearer both faces than 50 times that reach."""
+    bvh, place = _wedge(angle)
+    size = float(bvh.scale)
+    millionths = 50 * (1 + 10 * math.cos(math.radians(angle)))
+    far = np.array([[4.0, 5.0, 1.0], [3.0, 2.0, 0.5]])
+    near, clear = place(0.95e-6 * millionths * size), place(1.05e-6 * millionths * size)
+    assert _too_near(bvh, near, far) == _near("source", "edge", millionths)
+    assert _too_near(bvh, clear, far) == ""
+    # Right by both faces, the source is told of the surface, not of the edge.
+    assert _too_near(bvh, place(1e-6 * size), far) == _near("source", "surface", 2)
+    # A listener is too near either face alone within 46.9 millionths of it.
+    reason = _near("listener", "edge", millionths)
+    if millionths < 10 * _LOW:
+        near, reason = place(0.95e-5 * _LOW * size), _near("listener", "surface")
+        clear = place(1.05e-5 * _LOW * size)
+    assert _too_near(bvh, far[0], np.vstack([far, near])) == reason
+    assert _too_near(bvh, far[0], np.vstack([clear, far])) == ""
+    # After a listener that the two faces are near and not too near.
+    assert _too_near(bvh, far[0], np.vstack([clear, near, far])) == reason
+    # Nearer one face than the other, the farther one counts: 3 millionths over the floor
+    # and past the reach from the wall, then within it.
+    turn = math.radians(angle)
+    for out, reason in ((1.05, ""), (0.95, _near("source", "edge", millionths))):
+        along = (out * 1e-6 * millionths + 3e-6 * math.cos(turn)) * size / math.sin(turn)
+        assert _too_near(bvh, [along, 5.0, 3e-6 * size], far) == reason
+
+
+def test_the_gpu_traces_a_point_by_an_edge_that_loses_no_ray(tables) -> None:
+    """Where two faces meet at more than about 96 degrees, a reflection off one starts
+    more than a millionth of the model's size from the other, and beside an outer edge
+    no ray goes from one face to the other: the GPU takes a source 2.1 millionths from
+    both. Nor do two faces in one plane make an edge."""
+    far = np.array([[4.0, 5.0, 1.0]])
+    for angle in (96.0, 120.0, 150.0, 179.0):
+        bvh, place = _wedge(angle)
+        assert _too_near(bvh, place(2.1e-6 * bvh.scale), far) == ""
+    for angle in (30.0, 90.0):
+        bvh, place = _wedge(angle)
+        size = float(bvh.scale)
+        assert _too_near(bvh, place(2.1e-6 * size), far) != ""
+        # Outside both faces; and by the edge behind the wall, over the floor's plane: the
+        # wall is ahead of the floor there, the floor is not ahead of the wall.
+        assert _too_near(bvh, place(2.1e-6 * size, outside=True), far) == ""
+        lean = np.array([math.cos(math.radians(angle)), 0.0, math.sin(math.radians(angle))])
+        behind = np.array([0.0, 5.0, 0.0]) + 3e-6 * size * (lean + np.cross(lean, [0, 1, 0]))
+        assert _too_near(bvh, behind, far) == ""
+    # Under the floor by its end, on the side of the wall's plane where the floor lies:
+    # the floor is ahead of the wall there, the wall is not ahead of the floor.
+    assert _too_near(bvh, [2.1e-6 * size, 5.0, -2.1e-6 * size], far) == ""
+    flat = np.array([[0.0, 0.0, 0.0], [8.0, 0.0, 0.0], [8.0, 6.0, 0.0], [0.0, 6.0, 0.0]])
+    bvh = _native.Bvh(flat, np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int64))
+    assert _too_near(bvh, [4.0, 3.0, 2.1e-6 * bvh.scale], far) == ""
+
+
+@pytest.mark.parametrize("floor", [[0, 1, 2], [0, 2, 1]], ids=["up", "down"])
+def test_a_point_in_the_plane_of_a_face_is_on_both_sides_of_it(floor: list[int], tables) -> None:
+    """A source in the plane of a floor, 28 millionths of the model's size past its
+    corner and 20 from the wall that the floor ends on, which goes on past the corner:
+    the floor has no side there, so the two make an edge for it whichever way the
+    floor's corners are listed, and as well half the least distance of a ray to either
+    side of the plane."""
+    corners = np.array(
+        [[0.0, 0.0, 0.0], [6.0, 0.0, 0.0], [0.0, 8.0, 0.0], [0.0, 12.0, 0.0], [0.0, 6.0, 5.0]]
+    )
+    bvh = _native.Bvh(corners, np.array([floor, [0, 3, 4]], dtype=np.int64))
+    by = 2e-5 * bvh.scale
+    far = np.array([[4.0, 5.0, 1.0]])
+    for off in (0.0, 0.5 * bvh.min_distance, -0.5 * bvh.min_distance):
+        assert _too_near(bvh, [by, 8.0 + by, off], far) == _near("source", "edge", 50)
+    assert _too_near(bvh, [3 * by, 8.0 + 3 * by, 0.0], far) == ""
+    # A wall that leans over the floor at 60 degrees: the angle between the two has no sign
+    # for a point in the floor's plane, and the edge holds it out to its 300 millionths.
+    corners[4] = [5.0 * math.cos(math.radians(60.0)), 6.0, 5.0 * math.sin(math.radians(60.0))]
+    bvh = _native.Bvh(corners, np.array([floor, [0, 3, 4]], dtype=np.int64))
+    by = 2e-5 * bvh.scale
+    assert _too_near(bvh, [by, 8.0 + by, 0.0], far) == _near("source", "edge", 300)
+
+
+def test_two_faces_that_face_each_other_make_an_edge_only_where_they_meet(tables) -> None:
+    """A floor and a ceiling face each other like the two sides of an edge of no angle,
+    but a reflection off one is lost beside the other only where the two come within 11
+    millionths of the model's size of each other (a millionth and a hundred-thousandth).
+    A source midway between two such faces 200 or 12 millionths apart is the GPU's; in a
+    slot 10 millionths wide it is the CPU's."""
+    far = np.array([[4.0, 5.0, 1.0]])
+
+    def slot(width: float):
+        low = np.array([[0.0, 0.0, 0.0], [6.0, 0.0, 0.0], [0.0, 8.0, 0.0]])
+        corners = np.vstack([low, low + [0.0, 0.0, width]])
+        return _native.Bvh(corners, np.array([[0, 1, 2], [3, 5, 4]], dtype=np.int64))
+
+    for millionths, reason in ((200.0, ""), (12.0, ""), (10.0, _near("source", "edge", 550))):
+        bvh = slot(millionths * 1e-5)
+        assert bvh.scale == pytest.approx(10.0)
+        midway = [2.0, 2.0, millionths * 1e-5 / 2]
+        assert _too_near(bvh, midway, far) == reason
+
+
+@pytest.mark.parametrize("order", list(itertools.permutations(range(3))))
+def test_two_faces_that_do_not_meet_take_nothing_from_an_edge_beside_them(order, tables) -> None:
+    """A source 30 millionths of the model's size from a floor, from a wall at a right
+    angle to it and from a ceiling 60 millionths over the floor. The floor and the
+    ceiling face each other and would hold it out to 550 millionths, but they do not
+    meet (they come no nearer each other than 60 millionths, not 11): the edges with the
+    wall hold it, at their 50 millionths, whichever order the faces come in."""
+    size = math.sqrt(6.0**2 + 8.0**2 + 1.0**2)
+    floor = np.array([[0.0, 0.0, 0.0], [6.0, 0.0, 0.0], [0.0, 8.0, 0.0]])
+    wall = np.array([[0.0, 0.0, 0.0], [0.0, 8.0, 0.0], [0.0, 4.0, 1.0]])
+    corners = np.vstack([floor, floor + [0.0, 0.0, 6e-5 * size], wall])
+    faces = np.arange(9, dtype=np.int64).reshape(3, 3)
+    bvh = _native.Bvh(corners, faces[list(order)])
+    assert bvh.scale == pytest.approx(size)
+    far = np.array([[4.0, 5.0, 1.0]])
+    assert _too_near(bvh, [3e-5 * size, 2.0, 3e-5 * size], far) == _near("source", "edge", 50)
+    # Out of the wall's reach, between the floor and the ceiling still: the GPU's.
+    assert _too_near(bvh, [6e-5 * size, 2.0, 3e-5 * size], far) == ""
+
+
+@pytest.mark.parametrize("order", [[0, 1, 2], [2, 0, 1], [1, 2, 0], [2, 1, 0]])
+def test_a_point_by_edges_of_two_angles_is_held_to_the_wider_reach(order, tables) -> None:
+    """A source 40 millionths of the model's size from a floor, from a wall at a right
+    angle to it and from one that leans over it at 30 degrees: nearer than the reach of
+    both edges with the floor (50 and 483 millionths). The reason names the wider one,
+    whichever order the faces come in."""
+    lean = [0.0, 10.0 * math.cos(math.radians(30.0)), 10.0 * math.sin(math.radians(30.0))]
+    corners = np.array(
+        [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 10.0], lean]
+    )
+    faces = np.array([[0, 1, 2], [0, 2, 3], [0, 1, 4]], dtype=np.int64)  # floor, upright, leaning
+    bvh = _native.Bvh(corners, faces[order])
+    by = 4e-5 * bvh.scale
+    place = [by, by / math.tan(math.radians(15.0)), by]
+    reach = 50 * (1 + 10 * math.cos(math.radians(30.0)))
+    assert _too_near(bvh, place, np.array([[4.0, 5.0, 1.0]])) == _near("source", "edge", reach)
+
+
+def test_a_run_right_by_a_surface_is_traced_on_the_cpu(reference, machine, monkeypatch) -> None:
+    values = _arguments(reference, "vector")
+    assert ray_device.choose("gpu", values) == ray_device.Plan("gpu")
+    bvh = values["bvh"]
+    layout = np.asarray(bvh.layout()["triangles"], dtype=float).reshape(-1, 3, 3)
+    # A face with no corner at the origin, where a corner and an edge are the same numbers.
+    corner, one, other = next(row for row in layout if np.abs(row[0]).min() > 0.5)
+    normal = np.cross(one, other) / np.linalg.norm(np.cross(one, other))
+    middle = corner + (one + other) / 3
+    by_source = middle + 1e-6 * bvh.scale * normal
+    listeners = np.array(values["receivers"], dtype=float).reshape(-1, 3)
+    assert len(listeners) > 1
+    listeners[0] = middle + 5e-5 * bvh.scale * normal
+    near_source, near_listener = _near("source", "surface", 2), _near("listener", "surface")
+    for setting in ("gpu", "both", "auto", ray_device.Plan("gpu"), ray_device.Plan("both", 1, 2)):
+        plan = ray_device.choose(setting, values | {"source": by_source})
+        assert plan == ray_device.Plan("cpu", reason=near_source)
+        plan = ray_device.choose(setting, values | {"receivers": listeners})
+        assert plan == ray_device.Plan("cpu", reason=near_listener)
+    # The GPU's tracer declines such a run itself, before it takes it.
+    with pytest.raises(gpu_tracer.Unsupported, match="a source nearer a surface"):
+        gpu_tracer.trace_stochastic(**values | {"source": by_source})
+    with pytest.raises(gpu_tracer.Unsupported, match="sound to a listener whose sphere"):
+        gpu_tracer.trace_stochastic(**values | {"receivers": listeners})
+    # The listeners' spheres count: twenty times the start of a face's reflections from it,
+    # a sphere through the face reads 0.2 dB low, and one that ends short of it nothing.
+    start = gpu_tracer._OFFSET * bvh.scale
+    listeners[0] = middle + 20.0 * start * normal
+    wide = values | {"receivers": listeners, "receiver_radius": 1000.0 * start}
+    small = wide | {"receiver_radius": 10.0 * start}
+    assert ray_device.choose("gpu", wide) == ray_device.Plan("cpu", reason=near_listener)
+    assert ray_device.choose("gpu", small) == ray_device.Plan("gpu")
+    with pytest.raises(gpu_tracer.Unsupported, match="sound to a listener whose sphere"):
+        gpu_tracer.trace_stochastic(**wide)
+    assert gpu_tracer.too_near(bvh, values["source"], listeners, 10.0 * start) == ""
+    # auto looks at the places only once it would take the GPU: no trial of such a run,
+    monkeypatch.setattr(ray_device, "trial", lambda values: pytest.fail("a trial"))
+    near = values | {"source": by_source}
+    assert ray_device.choose("auto", near) == ray_device.Plan("cpu", reason=near_source)
+    # with speeds from a run before, the CPU for this one only,
+    monkeypatch.setattr(ray_device, "_rates", {ray_device._key(values): (1.0, 100.0)})
+    assert ray_device.choose("auto", values).device == "gpu"
+    assert ray_device.choose("auto", near) == ray_device.Plan("cpu", reason=near_source)
+    # (and the trial's own reason where its speeds give the run to the CPU, without a look),
+    monkeypatch.setattr(ray_device, "_rates", {ray_device._key(values): (100.0, 1.0)})
+    with monkeypatch.context() as patch:
+        patch.setattr(gpu_tracer, "too_near", lambda *places: pytest.fail("looked"))
+        slow = ray_device.choose("auto", near)
+    assert slow == ray_device.Plan("cpu", 100.0, 1.0, "the trial")
+    # as with the GPU chosen by tune, or kept from a trial before with the trial off,
+    for origin in ("tune", "trial"):
+        ray_device.set_trial(origin == "tune")
+        choice = {"device": "gpu", "cpu_rate": 1.0, "gpu_rate": 9.0, "from": origin}
+        tuning.keep_late(values["max_time"], choice)
+        assert ray_device.choose("auto", values).device == "gpu"
+        assert ray_device.choose("auto", near) == ray_device.Plan("cpu", reason=near_source)
+    # and the reason it would have had anyway where it would not take the GPU.
+    monkeypatch.setattr(gpu_tracer, "too_near", lambda *places: pytest.fail("looked"))
+    ray_device.set_trial(False)
+    (machine / "devices.json").unlink()
+    plan = ray_device.choose("auto", near)
+    assert plan == ray_device.Plan("cpu", reason="no trial or tune on this computer yet")
+    monkeypatch.setattr(gpu, "hardware_gpu", lambda: False)
+    assert ray_device.choose("auto", near) == ray_device.Plan("cpu", reason="no hardware GPU")
+
+
+@pytest.mark.parametrize(
+    "source, listener, reason",
+    [
+        ([2.5, 2.0, 1e-5], [7.0, 4.5, 1.7], _near("source", "surface", 2)),
+        ([5e-4, 5e-4, 5e-4], [7.0, 4.5, 1.7], _near("source", "edge", 50)),
+        ([2.5, 2.0, 1.2], [7.0, 4.5, 5e-4], _near("listener", "surface")),
+    ],
+    ids=["source over the floor", "source in a corner", "listener over the floor"],
+)
+def test_simulate_traces_a_run_right_by_a_surface_on_the_cpu(
+    machine, source, listener, reason
+) -> None:
+    """In a room 10 m long with the late stage set to the GPU, a source 10 µm over the
+    floor, one half a millimetre from the three faces of a corner, and a listener half a
+    millimetre over the floor: the run says that the CPU traced it, and gives the CPU's
+    late part."""
+    from acoustic_spaces.engine.simulate import simulate
+
+    def room(device: str) -> Room:
+        scene = {
+            "geometry": {"box": [10.0, 7.0, 4.0]},
+            "materials": {"wall": {"absorption": [0.2] * 8, "scattering": 0.3}},
+            "default_material": "wall",
+            "sources": [{"name": "s", "position": source}],
+            "listeners": [{"name": "l", "position": listener}],
+            "simulation": {
+                "ir_length_s": 0.3,
+                "seed": 7,
+                "late": {"device": device, "rays": 300},
+            },
+        }
+        return Room.from_scene(Scene.model_validate(scene))
+
+    messages: list[str] = []
+    found = simulate(room("gpu"), progress=messages.append)
+    where = [m for m in messages if "late rays traced on" in m]
+    assert where == [f"s: late rays traced on the CPU ({reason})"]
+    np.testing.assert_array_equal(found["s", "l"].late, simulate(room("cpu"))["s", "l"].late)
 
 
 @pytest.mark.parametrize(

@@ -16,7 +16,8 @@
   (:func:`set_trial`, ``--no-device-trial``), ``auto`` takes the choice kept for the
   nearest length, or the CPU when there is none.
 
-What only the CPU traces (sound through partitions and openings, vegetation of more
+What only the CPU traces (sound through partitions and openings, a source or a listener
+too near a surface or the line where two meet for the GPU's rays, vegetation of more
 media than the GPU keeps) runs there, whatever the setting, and so does a run the GPU
 declines once it has it (one whose results its buffers cannot hold, or a ray through
 more volumes of vegetation at once than its tables hold): the plan :func:`trace` returns
@@ -93,7 +94,8 @@ class Plan:
 
 
 def _unsupported(values: dict) -> str:
-    """Why only the CPU can trace this run, or ''."""
+    """Why only the CPU can trace this run wherever its source and listeners are, or ''
+    (:func:`_clear` looks at where they are)."""
     from acoustic_spaces.engine.gpu_tracer import MAX_MEDIA, outdoors_declined, passes_sound
 
     upright = values.get("plant_upright")
@@ -108,6 +110,18 @@ def _unsupported(values: dict) -> str:
     if passes_sound(values["transmission"], rooms, source_room):
         return "sound through partitions and openings is traced on the CPU"
     return ""
+
+
+def _clear(plan: Plan, values: dict) -> Plan:
+    """``plan``, or the CPU with the reason where the plan names the GPU and the run's
+    source or one of its listeners lies too near a surface, or the line where two meet,
+    for the GPU's rays (``gpu_tracer.too_near``)."""
+    if plan.device == "cpu":
+        return plan
+    from acoustic_spaces.engine.gpu_tracer import too_near
+
+    near = too_near(values["bvh"], values["source"], values["receivers"], values["receiver_radius"])
+    return Plan("cpu", reason=near) if near else plan
 
 
 def _check_gpu(setting: str) -> None:
@@ -176,7 +190,7 @@ def choose(setting: str | Plan, values: dict) -> Plan:
         if setting.device != "cpu":
             _check_gpu(setting.device)
         reason = _unsupported(values)
-        return Plan("cpu", reason=reason) if reason else setting
+        return Plan("cpu", reason=reason) if reason else _clear(setting, values)
     if setting not in DEVICES:
         choices = ", ".join(DEVICES)
         raise ValueError(f"the late stage's device must be one of {choices}, not {setting!r}")
@@ -188,29 +202,32 @@ def choose(setting: str | Plan, values: dict) -> Plan:
     if reason:
         return Plan("cpu", reason=reason)
     if setting == "gpu":
-        return Plan("gpu")
+        return _clear(Plan("gpu"), values)
     length = float(values["max_time"])
     if setting == "both":
         # Shares by the speeds of a trial or of tune, if there was one; else even ones.
         kept = tuning.late_choice(length) or {"cpu_rate": 1.0, "gpu_rate": 1.0}
         rates = _rates.get(_key(values), (kept["cpu_rate"], kept["gpu_rate"]))
-        return Plan("both", *rates)
+        return _clear(Plan("both", *rates), values)
     # auto
     if not gpu.hardware_gpu():
         return Plan("cpu", reason="no hardware GPU")
     tuned = tuning.late_entry(length)
     if tuned is not None and tuned.get("from") == "tune":
-        return _kept(tuned)
+        return _clear(_kept(tuned), values)
     if not _trial:
         kept = tuning.late_choice(length)
         if kept is None:
             return Plan("cpu", reason="no trial or tune on this computer yet")
-        return _kept(kept)
+        return _clear(_kept(kept), values)
     from acoustic_spaces.engine import gpu_tracer
 
     key = _key(values)
     with _lock:
         if key not in _rates:
+            near = _clear(Plan("gpu"), values)
+            if near.device == "cpu":
+                return near  # no trial of a run the GPU would not trace
             try:
                 _rates[key] = trial(values)
             except gpu_tracer.Unsupported as declined:
@@ -221,7 +238,7 @@ def choose(setting: str | Plan, values: dict) -> Plan:
         length,
         {"device": device, "cpu_rate": cpu_rate, "gpu_rate": gpu_rate, "from": "trial"},
     )
-    return Plan(device, cpu_rate, gpu_rate, "the trial")
+    return _clear(Plan(device, cpu_rate, gpu_rate, "the trial"), values)
 
 
 def _kept(choice: dict) -> Plan:
