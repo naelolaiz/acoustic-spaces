@@ -50,7 +50,7 @@
 // side). Each facet between two leaves of a cube and each square, against its pieces' bare
 // area plus the walls given to each of its sides, is reported as Stats::partition, a second
 // measure (totals only, the worse side). Every build throws std::logic_error where either
-// passes 1e-9 relative, as it does where one of the self-checks K1 to K8 fails.
+// passes 1e-9 relative, as it does where one of the self-checks K1 to K9 fails.
 //
 // Candidates and measures on Q. Which cubes a face, a zone or a pair of
 // faces may meet, and which faces a way may cross, are read on the lattice: integer boxes
@@ -78,6 +78,12 @@
 // the row owns, in the row's own cube or in a neighbour's cube whose centre is solid, and the
 // whole faces its cell shares with edge cells where no square was cut (w_b w_c each);
 // Stats::edge_area is their total.
+// Conduits. A region of the air outside its owner's cube (a conduit: the thin L of air round a
+// solid's convex edge whose faces lie just inside the grid planes) has its edge-diagonal links
+// scaled by 2 V / (A_s A_p) where that is below 1 - 1e-12 (its volume, its open area to its
+// owner's cube and through the link) and a share of its walls moved to the diagonal neighbour,
+// so that the rows change continuously as the faces leave the planes (thin_conduits; K9 checks
+// it).
 // open_sides() says which sides of the grid are open, decided from the cells' kinds and the
 // squares' exact open flags only. A side is open when an air cell lies next to an edge cell on
 // that side, when an open piece of a square in that side's edge plane joins a region of the
@@ -133,6 +139,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <map>
 #include <unordered_map>
 #include <stdexcept>
 #include <string>
@@ -1115,13 +1122,14 @@ public:
         // max over the two sides of |partition_area - partition_side| / max(1, partition_area):
         // a measure, 0 up to rounding
         double partition = 0.0;
-        // The self-checks (K1 to K8): each one's largest residual relative to its threshold (a
+        // The self-checks (K1 to K9): each one's largest residual relative to its threshold (a
         // comparison fails above 1; an exact check's residual is 0 when it passes) and its count
         // of failed comparisons. A failed check throws std::logic_error, so a fit that is returned
         // has every count 0. K1 walls per region and material of each cube; K2 the volume of each
         // cube; K3 the copy of the cubes' regions; K4 the rows' volumes and walls; K5 the symmetry
         // of the open areas between rows; K6 the open area of the squares' pieces, by what sum_up
-        // makes of it; K7 the regions on the two sides of each square's piece; K8 the owners.
+        // makes of it; K7 the regions on the two sides of each square's piece; K8 the owners; K9
+        // the conduit rule (check_conduits, below).
         double check_wall = 0.0, check_volume = 0.0, check_copy = 0.0, check_rows = 0.0;
         double check_open_symmetry = 0.0, check_open = 0.0, check_piece_sides = 0.0, check_owners = 0.0;
         std::size_t check_wall_failed = 0, check_volume_failed = 0, check_copy_failed = 0, check_rows_failed = 0;
@@ -1131,6 +1139,18 @@ public:
         // owner rule's comparisons within 1e-13 of its band's edge (1e-12), and the open areas of
         // slivers within 1e-12 of the gate (1e-9 cell faces).
         std::size_t owner_near_band = 0, sliver_near_gate = 0;
+        // The conduit rule (thin_conduits): open pieces between edge-diagonal rows through a
+        // conduit (a region of the air outside its owner's cube), the conduits' links (a conduit
+        // and a direction from its owner), of them those left whole (the owner not a face
+        // neighbour of the conduit's cube, or no open area to its cube or through the link) and
+        // those scaled (a factor below 1), the least factor, and the wall area moved (cell faces);
+        // and the factors within 1e-13 of the rule's band (1e-12 below 1).
+        std::size_t conduit_pieces = 0, conduit_links = 0, conduit_whole = 0, conduit_scaled = 0;
+        std::size_t conduit_near_band = 0;
+        double conduit_least = 1.0, conduit_wall_moved = 0.0;
+        // K9, the conduit rule's check (see thin_conduits).
+        double check_conduits = 0.0;
+        std::size_t check_conduits_failed = 0;
         // In the checking build: whether a floating-point underflow was raised during the fit.
         int underflow_raised = 0;
         std::size_t exact_calls = 0;     // signs decided by the exact stage, in cubes and squares
@@ -4951,6 +4971,7 @@ private:
         row_index_.clear();
         row_index_.shrink_to_fit();
         check_rows(sliver_area);
+        thin_conduits();
     }
 
     // Marks the open sides of the grid (open_sides_, -x, +x, -y, +y, -z, +z) from the cells'
@@ -5165,6 +5186,180 @@ private:
         finish(k4, "check_rows", stats_.check_rows, stats_.check_rows_failed);
         finish(k5, "check_open_symmetry", stats_.check_open_symmetry, stats_.check_open_symmetry_failed);
         finish(k6, "check_open", stats_.check_open, stats_.check_open_failed);
+    }
+
+    // The conduit rule, on the rows K4 to K6 have checked. A conduit is a region of the air
+    // outside its owner's cube: round a solid's convex edge whose two faces lie just inside the
+    // grid planes, the cube whose centre is in the solid keeps a thin L of air, owned by a face
+    // neighbour o of that cube, and the L's open area to another neighbour n of the cube, an
+    // edge-diagonal neighbour of o, is a link between o and n; taken whole, that link would jump
+    // from nothing to a whole face as the faces leave the planes. With V_g the conduit's volume,
+    // A_s its open area to the regions of o's own cube and A_p its open area through the link
+    // (direction k from o), the link's pieces through the conduit are scaled by
+    // phi = 2 V_g / (A_s A_p): whole where the conduit holds at least the prism its two contacts
+    // span (a cube's edge cut off by a slanted wall: V_g = A_s A_p / 2, which the measures give
+    // to rounding, so that phi is 1 from 1 - 1e-12 up), less as it thins, nothing as it vanishes;
+    // a piece through two conduits takes both factors. A share
+    // (1 - phi) A_p / (A_s + the sum of its A_p) of the conduit's walls in its cube goes from
+    // o's row to n's, which holds them where the faces lie on the planes. A conduit whose owner
+    // is not a face neighbour of its cube, or that has no open area to its owner's cube or
+    // through the link, is left whole. Without a factor below 1 the rows stay as they are, to
+    // the bit. K9: each open area the rule changes, summed again without it, equals the stored
+    // one (the same terms in the same order: exact); after it, no such area is above that sum
+    // and each is the same from both of its rows (exact); each row a wall goes to is the
+    // conduit's diagonal neighbour; no wall area is below 0 (1e-9 of the area moved from it)
+    // and each wall column's total over the rows is kept (1e-9 relative).
+    void thin_conduits() {
+        const std::size_t n = row_cell_.size(), w = materials_ + 1;
+        auto is_row = [&](std::int64_t o) { return o >= 0 && type_[static_cast<std::size_t>(o)] == kAir; };
+        // The row of an owner cell, by its place in row_cell_ (sorted; sum_up's index is gone).
+        auto row_of = [&](std::int64_t o) {
+            return static_cast<std::size_t>(std::lower_bound(row_cell_.begin(), row_cell_.end(), o) - row_cell_.begin());
+        };
+        auto cell_of = [&](std::int64_t g) { return static_cast<std::int64_t>(regions_[static_cast<std::size_t>(g)].cell); };
+        // f(P, oa, ob, k, open) for each open piece between two rows that are edge-diagonal
+        // neighbours (k: the direction from oa's cell to ob's), in sum_up's order.
+        auto for_diagonal = [&](auto f) {
+            for (const Square &S : squares_)
+                for (const Piece &P : S.pieces) {
+                    if (!P.is_open) continue;
+                    const std::int64_t oa = owner_of(P.low), ob = owner_of(P.high);
+                    if (oa == ob || !is_row(oa) || !is_row(ob)) continue;
+                    const int k = direction(static_cast<std::size_t>(oa), static_cast<std::size_t>(ob));
+                    if (k >= 6) f(P, oa, ob, k, (std::max)(P.open, 0.0));
+                }
+        };
+        // Each conduit's links: (conduit, direction from its owner) -> A_p and phi.
+        struct Link {
+            double through = 0.0, phi = 1.0;
+        };
+        std::map<std::pair<std::int64_t, int>, Link> links;
+        for_diagonal([&](const Piece &P, std::int64_t oa, std::int64_t ob, int k, double open) {
+            const bool ca = cell_of(P.low) != oa, cb = cell_of(P.high) != ob;
+            if (ca) links[{P.low, k}].through += open;
+            if (cb) links[{P.high, opposite(k)}].through += open;
+            if (ca || cb) stats_.conduit_pieces += 1;
+        });
+        stats_.conduit_links = links.size();
+        if (links.empty()) return;
+        std::vector<std::int64_t> conduit;  // the conduits, ascending
+        for (const auto &entry : links)
+            if (conduit.empty() || conduit.back() != entry.first.first) conduit.push_back(entry.first.first);
+        auto conduit_at = [&](std::int64_t g) {
+            return static_cast<std::size_t>(std::lower_bound(conduit.begin(), conduit.end(), g) - conduit.begin());
+        };
+        // A_s: each conduit's open area to the regions of its owner's own cube.
+        std::vector<double> contact(conduit.size(), 0.0);
+        for (const Square &S : squares_)
+            for (const Piece &P : S.pieces) {
+                if (!P.is_open) continue;
+                const std::int64_t oa = owner_of(P.low), ob = owner_of(P.high);
+                if (oa < 0 || oa != ob) continue;
+                const bool ia = cell_of(P.low) == oa, ib = cell_of(P.high) == oa;
+                if (ia == ib) continue;
+                const std::int64_t g = ia ? P.high : P.low;
+                const std::size_t x = conduit_at(g);
+                if (x < conduit.size() && conduit[x] == g) contact[x] += (std::max)(P.open, 0.0);
+            }
+        bool any = false;
+        for (auto &[key, L] : links) {
+            const Region &R = regions_[static_cast<std::size_t>(key.first)];
+            const int kc = direction(static_cast<std::size_t>(R.owner), R.cell);
+            const double a_s = contact[conduit_at(key.first)];
+            if (kc < 0 || kc >= 6 || !(a_s > 0.0) || !(L.through > 0.0)) {
+                stats_.conduit_whole += 1;
+                continue;
+            }
+            const double ratio = 2.0 * R.volume / (a_s * L.through);
+            if (std::abs((1.0 - ratio) - 1e-12) <= 1e-13) stats_.conduit_near_band += 1;
+            L.phi = ratio >= 1.0 - 1e-12 ? 1.0 : ratio;
+            stats_.conduit_least = (std::min)(stats_.conduit_least, L.phi);
+            if (L.phi < 1.0) {
+                stats_.conduit_scaled += 1;
+                any = true;
+            }
+        }
+        if (!any) return;
+        auto factor_of = [&](const Piece &P, std::int64_t oa, std::int64_t ob, int k) {
+            double f = 1.0;
+            if (cell_of(P.low) != oa) f *= links.find({P.low, k})->second.phi;
+            if (cell_of(P.high) != ob) f *= links.find({P.high, opposite(k)})->second.phi;
+            return f;
+        };
+        // The open areas the rule changes (row * 18 + direction), summed again in sum_up's order
+        // without the rule and with it.
+        struct Sum {
+            double plain = 0.0, scaled = 0.0;
+        };
+        std::map<std::size_t, Sum> sums;
+        for_diagonal([&](const Piece &P, std::int64_t oa, std::int64_t ob, int k, double) {
+            if (!(factor_of(P, oa, ob, k) < 1.0)) return;
+            sums[row_of(oa) * 18 + static_cast<std::size_t>(k)];
+            sums[row_of(ob) * 18 + static_cast<std::size_t>(opposite(k))];
+        });
+        for_diagonal([&](const Piece &P, std::int64_t oa, std::int64_t ob, int k, double open) {
+            const double f = factor_of(P, oa, ob, k);
+            for (const std::size_t q : {row_of(oa) * 18 + static_cast<std::size_t>(k), row_of(ob) * 18 + static_cast<std::size_t>(opposite(k))}) {
+                const auto it = sums.find(q);
+                if (it == sums.end()) continue;
+                it->second.plain += open;
+                it->second.scaled += open * f;
+            }
+        });
+        SelfCheck k9;
+        auto row_text = [&](std::size_t r) { return "the row of " + cell_text(static_cast<std::size_t>(row_cell_[r])); };
+        for (const auto &[q, s] : sums) {
+            const std::size_t r = q / 18;
+            const int k = static_cast<int>(q % 18);
+            k9.compare(open_area_[q], s.plain, -1.0, [&]() { return row_text(r) + ", its open area in direction " + std::to_string(k) + " summed again"; });
+            k9.compare(s.scaled > s.plain ? 1.0 : 0.0, 0.0, -1.0, [&]() { return row_text(r) + ", its open area in direction " + std::to_string(k) + " raised"; });
+            open_area_[q] = s.scaled;
+        }
+        for (const auto &[q, s] : sums) {
+            const std::size_t r = q / 18;
+            const int k = static_cast<int>(q % 18);
+            const std::size_t b = row_of(static_cast<std::int64_t>(neighbour(static_cast<std::size_t>(row_cell_[r]), k)));
+            const double across = b < n ? open_area_[b * 18 + static_cast<std::size_t>(opposite(k))] : -1.0;
+            k9.compare(open_area_[q], across, -1.0, [&]() { return row_text(r) + ", its open area in direction " + std::to_string(k) + " against its neighbour's"; });
+        }
+        // The walls: each wall column's total over the rows before the rule, and the area moved
+        // from each row and column.
+        std::vector<double> total(w, 0.0), scale(w, 0.0);
+        for (std::size_t q = 0; q < n * w; ++q) {
+            total[q % w] += wall_area_[q];
+            scale[q % w] += std::abs(wall_area_[q]);
+        }
+        std::map<std::size_t, double> moved;
+        for (auto it = links.begin(); it != links.end();) {
+            const std::int64_t g = it->first.first;
+            auto end = it;
+            double spans = contact[conduit_at(g)];
+            for (; end != links.end() && end->first.first == g; ++end) spans += end->second.through;
+            const Region &R = regions_[static_cast<std::size_t>(g)];
+            const std::size_t o = static_cast<std::size_t>(R.owner), ro = row_of(R.owner);
+            for (; it != end; ++it) {
+                const double share = (1.0 - it->second.phi) * it->second.through / spans;
+                if (!(share > 0.0)) continue;
+                const std::size_t across = neighbour(o, it->first.second), rn = row_of(static_cast<std::int64_t>(across));
+                k9.compare(rn < n && static_cast<std::size_t>(row_cell_[rn]) == across ? 0.0 : 1.0, 0.0, -1.0,
+                           [&]() { return "region " + std::to_string(g) + ", a conduit of " + row_text(ro) + ", its diagonal neighbour " + cell_text(across) + " not a row"; });
+                if (!(rn < n)) continue;
+                for (const auto &[m, a] : R.wall) {
+                    const std::size_t col = m < 0 ? materials_ : static_cast<std::size_t>(m);
+                    wall_area_[ro * w + col] -= share * a;
+                    wall_area_[rn * w + col] += share * a;
+                    moved[ro * w + col] += share * a;
+                    stats_.conduit_wall_moved += share * a;
+                }
+            }
+        }
+        for (const auto &[q, a] : moved)
+            k9.compare((std::min)(wall_area_[q], 0.0), 0.0, a, [&]() { return row_text(q / w) + ", wall column " + std::to_string(q % w) + " below 0"; });
+        std::vector<double> after(w, 0.0);
+        for (std::size_t q = 0; q < n * w; ++q) after[q % w] += wall_area_[q];
+        for (std::size_t c = 0; c < w; ++c)
+            k9.compare(after[c], total[c], scale[c], [&]() { return "wall column " + std::to_string(c) + "'s total over the rows"; });
+        finish(k9, "check_conduits", stats_.check_conduits, stats_.check_conduits_failed);
     }
 
     // ---- state --------------------------------------------------------------------------------

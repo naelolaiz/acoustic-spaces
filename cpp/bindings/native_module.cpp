@@ -1043,6 +1043,15 @@ nb::dict cut_stats_dict(const Fit &cut) {
     out["check_owners_failed"] = s.check_owners_failed;
     out["owner_near_band"] = s.owner_near_band;
     out["sliver_near_gate"] = s.sliver_near_gate;
+    out["conduit_pieces"] = s.conduit_pieces;
+    out["conduit_links"] = s.conduit_links;
+    out["conduit_whole"] = s.conduit_whole;
+    out["conduit_scaled"] = s.conduit_scaled;
+    out["conduit_least"] = s.conduit_least;
+    out["conduit_wall_moved"] = s.conduit_wall_moved;
+    out["conduit_near_band"] = s.conduit_near_band;
+    out["check_conduits"] = s.check_conduits;
+    out["check_conduits_failed"] = s.check_conduits_failed;
 #ifdef ACOUSTIC_SPACES_CUT_CHECK
     out["underflow_raised"] = s.underflow_raised;
 #endif

@@ -169,7 +169,8 @@
 // the casts, the flood and the boundary loop above do not run. Each row of the fit (an air
 // cell owning cut air, or next to a cut cube or to the grid's edge) has its air volume V,
 // its open area A_k towards each of its 18 neighbours and its wall area W_m per material
-// and towards the grid's edge, all measured on the fit's lattice. Its update is the
+// and towards the grid's edge, all measured on the fit's lattice (with its conduit rule round
+// convex edges near the grid planes, cut_cells.hpp). Its update is the
 // finite-volume form of the one above,
 //
 //   V (p+ - 2 p + p-) = sum_k g A_k (p_k - p) - (L/2) sum_m W_m (beta_m (p+ - p-) + sum_j (w_j+ - w_j-))

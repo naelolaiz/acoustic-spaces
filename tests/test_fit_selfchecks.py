@@ -1,7 +1,7 @@
 """Fitted walls: the fit's self-checks, read from cut_stats.
 
 On each golden case (tests/reference/fit_golden.npz) and on the three cases of test_fit_cases.py,
-every self-check of the fit (K1 to K8, the wall balance and the partition) reports no failed
+every self-check of the fit (K1 to K9, the wall balance and the partition) reports no failed
 comparison, and its largest residual stays below one thousandth of its threshold: a check that
 throws in every build must leave legitimate fits that far from throwing.
 """
@@ -22,6 +22,7 @@ CHECKS = [
     "check_open",
     "check_piece_sides",
     "check_owners",
+    "check_conduits",
 ]
 
 
@@ -60,6 +61,7 @@ def assert_checks_pass(stats):
     assert stats["partition"] < 1e-12
     assert stats["owner_near_band"] == 0
     assert stats["sliver_near_gate"] == 0
+    assert stats["conduit_near_band"] == 0
 
 
 @pytest.mark.parametrize("name", NAMES)

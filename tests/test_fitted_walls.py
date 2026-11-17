@@ -1442,6 +1442,75 @@ def test_fitted_cells_take_their_volumes_and_links_from_the_fit_s_rows(model):
         assert stats["sliver_both"] == 12
 
 
+def edge_box(m):
+    """A rigid room from cell face 2 to cell face 12 of each axis on 10 cm cells from the origin
+    (14 cells), with a solid box from 5 + m to 9 + m cells inside it: the box's faces lie m cells
+    inside the grid planes. Mesh, cell, origin, shape, source and two listeners."""
+    h = 0.1
+    room = box(np.full(3, 2 * h), np.full(3, 12 * h))
+    solid = box(np.full(3, (5 + m) * h), np.full(3, (9 + m) * h))
+    v = np.vstack([room, solid])
+    f = np.vstack([BOX_FACES, BOX_FACES[:, ::-1] + 8])
+    probes = np.array([[10.4, 10.7, 10.2], [4.5, 7.5, 6.6]]) * h
+    return v, f, h, np.zeros(3), np.array([14, 14, 14]), np.array([3.3, 3.6, 3.2]) * h, probes
+
+
+@pytest.mark.parametrize("m", [0.0, 0.01, 0.1, 0.29, 0.4])
+def test_a_conduit_round_a_solid_s_edge_scales_its_diagonal_link_and_moves_its_walls(m):
+    # Round the box's edge along z at x = y = 5 + m cells, the cube (5, 5, 7), whose centre is in
+    # the box, keeps an L of air, V = 2 m - m^2 cells^3, open by a whole face (A_s) to the cube of
+    # the face neighbour that owns it and by a whole face (A_p) to the other's: a diagonal link
+    # between the two neighbours (5, 4, 7) and (4, 5, 7). The fit scales it by phi = min(1,
+    # 2 V / (A_s A_p)) = min(1, 4 m - 2 m^2) and moves (1 - phi) A_p / (A_s + A_p) of the L's
+    # walls (2 (1 - m) cell faces) from its owner's row to the other's. At m = 0 the faces lie on
+    # the planes: no link, and each neighbour holds a whole face of wall; as m grows from 0, both
+    # move from there continuously.
+    v, f, h, origin, shape, src, _ = edge_box(m)
+    cut = fit(v, f, src, h, origin, shape)
+    rows, stats = cut.cut_cells(), cut.cut_stats
+    cells = np.asarray(rows["cell"]).tolist()
+    a, b = (cells.index(cell_index(p, shape)) for p in ((5, 4, 7), (4, 5, 7)))
+    open_area, wall_area = np.asarray(rows["open_area"]), np.asarray(rows["wall_area"])
+    phi = min(1.0, 4 * m - 2 * m * m)
+    # The directions from (5, 4, 7) to (4, 5, 7) and back.
+    k, back = (STEPS.tolist().index(step) for step in ([-1, 1, 0], [1, -1, 0]))
+    assert np.flatnonzero(open_area[a, 6:]).tolist() == ([k - 6] if m else [])
+    assert np.flatnonzero(open_area[b, 6:]).tolist() == ([back - 6] if m else [])
+    assert open_area[a, k] == pytest.approx(phi, rel=1e-12)
+    assert open_area[b, back] == open_area[a, k]
+    want = [(1 - phi) * (1 - m), (1 + phi) * (1 - m)]
+    assert sorted([wall_area[a, 0], wall_area[b, 0]]) == pytest.approx(want, rel=1e-12, abs=1e-12)
+    assert stats["check_conduits_failed"] == 0 and stats["check_conduits"] < 1e-3
+    if m == 0.0:
+        assert stats["conduit_links"] == 0
+    elif phi < 1.0:
+        assert stats["conduit_least"] == pytest.approx(phi, rel=1e-12)
+        assert stats["conduit_scaled"] > 0
+    else:
+        assert stats["conduit_scaled"] == 0 and stats["conduit_wall_moved"] == 0.0
+
+
+@pytest.mark.parametrize("beta", [0.0, 0.2])
+def test_the_fitted_update_changes_continuously_as_faces_leave_the_grid_planes(beta):
+    # The room of edge_box, rigid or every wall of admittance 0.2, heard for 600 steps at m = 0
+    # (the box's faces on the grid planes) and with its faces m cells inside them. Round the box's
+    # convex edges each link and wall of the update changes continuously with m (the conduit
+    # rule): the response moves by less than the float update's own noise (1e-3 of its peak) at
+    # m = 1e-9 and 1e-6, and by at most 3 m at m = 1e-3 and 1e-2. A diagonal link taken whole
+    # would jump to a whole face at any m > 0: about 0.02 of the peak.
+    rate = C / (COURANT * 0.1)
+
+    def response(m):
+        v, f, h, origin, shape, src, probes = edge_box(m)
+        solver = wave(v, f, h, origin, shape, src, probes, beta=(beta,))
+        return solver.run(_drive(rate, h, 600)).astype(float)
+
+    still = response(0.0)
+    for m in (1e-9, 1e-6, 1e-3, 1e-2):
+        step = np.abs(response(m) - still).max() / np.abs(still).max()
+        assert step <= max(1e-3, 3 * m), m
+
+
 @pytest.mark.parametrize("shift", [(0.311, 0.173, 0.457), (-0.48, -0.48, -0.48)])
 def test_a_fitted_box_rings_at_its_exact_modes(shift):
     # A rigid box on 10 cm cells, its walls `shift` cells off the cell faces: the 10 lowest modes of
@@ -1775,8 +1844,12 @@ def test_fitted_walls_stay_stable_over_a_long_run(case):
     # 20,000 steps (3.4 s), the rms over 24 points spread through the room in tenths of the run: a
     # rigid closed room keeps its energy (the last tenth within 0.97 to 1.05 of the second, none
     # above 1.1 times it); with every wall of admittance 1, and open to a matched layer through its
-    # missing ceiling, the sound decays to single precision's rounding by the half (a millionth of
-    # the first tenth's rms) and does not grow again. In the rigid room each point's mean over each
+    # missing ceiling, from the half on each tenth is at most half the one before until it lies
+    # below single precision's rounding (a millionth of the first tenth's rms), the last tenth lies
+    # there, and none grows again. With every wall of admittance 1 the rms is down to that floor
+    # by the second tenth (a uniform pressure, which the walls' term leaves); the open room's tail
+    # decays by a factor of 5 to 13 per tenth as the grid is moved by parts of a cell (ten
+    # placements), about 7 here. In the rigid room each point's mean over each
     # tenth is taken out first: the update's lowest mode, the uniform pressure, rings at an
     # eigenvalue of about 3e-9 (coef_a rounded down to a float), a period of 110,000 steps, and
     # holds next to no energy (lambda u^2), but moves the mean by up to 0.6 in this small room,
@@ -1790,7 +1863,9 @@ def test_fitted_walls_stay_stable_over_a_long_run(case):
     if case == "rigid":
         assert 0.97 <= rms[-1] / rms[1] <= 1.05 and np.all(rms[1:] <= 1.1 * rms[1])
     else:
-        assert np.all(rms[5:] <= 1e-6 * rms[0]) and np.all(rms[5:] <= 1.01 * rms[5])
+        floor = 1e-6 * rms[0]
+        assert np.all(rms[5:] <= np.maximum(rms[4:-1] / 2, floor)) and rms[-1] <= floor
+        assert np.all(rms[5:] <= 1.01 * rms[5])
 
 
 def test_the_source_next_to_a_fitted_wall_puts_in_all_its_sound():
