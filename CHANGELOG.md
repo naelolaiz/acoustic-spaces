@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fixed: in a very large model, a corner of two reflections (points within the early
+  search's tolerance for planes of each other, a ten-millionth of the model's largest
+  extent, 1 mm in a model 10 km wide) was judged by that tolerance: a path into it went
+  on through one of its planes unless the points before and after it lay farther than
+  that from the plane, and it took a side of a plane only from such a point. A source
+  0.3 mm from both arms of a bent barrier in a model 10 km wide had a path through the
+  barrier, with the early level behind it up to 42 dB above that of the same scene in a
+  model 200 m wide, and one 0.3 mm from two walls of a building or from both barriers of
+  a T reflected off the roof from under the eave or off the T's stem from its bare side
+  (up to 4.3 dB in a band). Both now take the least distance at which a ray meets a
+  face.
 - Fixed: a free-standing panel or a partition between two rooms in line with a wall
   shared the wall's plane in the model or had one of its own by the way the wall faces,
   so with edge diffraction a room and its mirror image gave different early levels (up
