@@ -421,6 +421,101 @@ def test_a_way_through_an_inner_corner_reflects_there(
     assert np.abs(level - level_beside).max() < 0.005
 
 
+@pytest.mark.parametrize(
+    ("bend", "gap", "height", "order"), [(30.0, 2e-4, 1.5, 2), (60.0, 2e-3, 2e-3, 3)]
+)
+def test_no_way_through_a_barrier_from_a_source_in_its_bend(bend, gap, height, order) -> None:
+    """A source ``gap`` (m) from both arms of a barrier bent by ``bend`` degrees,
+    ``height`` over the ground, and a listener behind one arm, in a model 10 km wide and
+    in one 200 m wide. Without diffraction no path reaches the listener; with
+    ``first_order`` the two models have the same paths and early levels to 0.01 dB. The
+    paths' tolerance is 1 mm in the wide model, and the source (0.2 mm from both arms),
+    or the reflection off the ground behind an arm (1 mm), lay within it of an arm's
+    plane: a path that reflected off both arms in the bend and went on through one of
+    them counted as a reflection there, at the level of the direct sound."""
+    turn = math.radians(bend)
+    reach = gap / math.sin(turn / 2)
+    source = (math.cos(turn / 2) * reach, math.sin(turn / 2) * reach, height)
+    path = [[12.0, 0.0], [0.0, 0.0], [12.0 * math.cos(turn), 12.0 * math.sin(turn)]]
+    for diffraction in ("none", "first_order"):
+        found = []
+        for half in (5000.0, 100.0):
+            geometry = {
+                "ground": {"extent": [[-half, -half], [half, half]], "sky": 40},
+                "barriers": [{"name": "wall", "path": path, "height": 4.0}],
+            }
+            early_options = {"method": "image_sources", "max_order": order}
+            scene = outdoor(
+                geometry,
+                sources=[source],
+                listeners=[(6.0, -3.0, 2.0)],
+                early={**early_options, "diffraction": diffraction},
+            )
+            found.append(early_paths(Room.from_scene(scene)))
+        wide, narrow = found
+        if diffraction == "none":
+            assert len(wide.order) == len(narrow.order) == 0
+        else:
+            assert len(wide.order) == len(narrow.order) > 0
+            level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
+            assert np.abs(level).max() < 0.01
+
+
+@pytest.mark.parametrize(
+    ("solids", "source", "listener"),
+    [
+        (
+            {
+                "buildings": [
+                    {"name": "b", "footprint": [[0, 0], [10, 0], [10, 10], [0, 10]], "height": 6}
+                ]
+            },
+            (-3e-4, -3e-4, 3.0),
+            (12.0, -5e-4, 1.0),
+        ),
+        (
+            {
+                "barriers": [
+                    {"name": "w", "path": [[-10, 0], [10, 0]], "height": 3},
+                    {"name": "v", "path": [[0, 0], [0, 10]], "height": 3},
+                ]
+            },
+            (3e-4, -3e-4, 3e-4),
+            (5.0, -5.0, 1.5),
+        ),
+    ],
+)
+def test_no_reflection_at_an_outer_corner_from_points_by_its_planes(
+    solids, source, listener
+) -> None:
+    """A source 0.3 mm from the planes of two walls of a building and a listener 0.5 mm
+    from one of them past its end, or a source 0.3 mm from the planes of both barriers
+    of a T, on the side away from its stem, and 0.3 mm over the ground, in a model 10 km
+    wide and in one 200 m wide: the same paths, and early levels to 0.01 dB with
+    ``first_order`` and to 0.05 dB without diffraction (where a reflection off the wall
+    at grazing incidence and then off the ground, 37 to 58 dB under the direct sound,
+    which the wide model joins into one corner at the wall's foot, is 3 dB weaker). The
+    paths' tolerance is 1 mm in the wide model, and a corner's planes took a side only
+    from a point before or after it farther than that from them: a path reflected off
+    the roof from under the eave, or off the stem of the T at the junction from the side
+    where the stem has no faces."""
+    for diffraction, within in (("none", 0.05), ("first_order", 0.01)):
+        found = []
+        for half in (5000.0, 100.0):
+            geometry = {"ground": {"extent": [[-half, -half], [half, half]], "sky": 40}, **solids}
+            scene = outdoor(
+                geometry,
+                sources=[source],
+                listeners=[listener],
+                early={"method": "image_sources", "max_order": 3, "diffraction": diffraction},
+            )
+            found.append(early_paths(Room.from_scene(scene)))
+        wide, narrow = found
+        assert len(wide.order) == len(narrow.order)
+        level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
+        assert np.abs(level).max() < within
+
+
 def test_a_way_through_a_sharp_corner_of_three_planes_reflects_there() -> None:
     """A roof, the wall of a taller building along its edge and a barrier that stands on
     the roof at 80 degrees to that wall make a corner on the sound's side, though the
@@ -740,11 +835,12 @@ def test_arcs_meet_where_they_have_a_direction_in_common() -> None:
 
 def test_a_corners_side_is_the_farther_neighbours() -> None:
     """``early._turn`` takes the side of each of a corner's planes that a path keeps to
-    from the farther of the points before and after the corner, and none where both lie
-    within the paths' tolerance of the plane. A path in the ground's plane, which the
-    rounding puts a hair on either side of it before and after the foot of a wall,
-    turns there. One from a point in a roof's plane to the roof's edge over a wall and
-    on to a point above the roof does not: the wall has no face above the roof."""
+    from the farther of the points before and after the corner, and none where that lies
+    within the intersection test's least distance of the plane. A path in the ground's
+    plane, which the rounding puts a hair on either side of it before and after the foot
+    of a wall, turns there. One from a point in a roof's plane to the roof's edge over a
+    wall and on to a point above the roof does not: the wall has no face above the
+    roof."""
     model, wall, ground, roof, tolerance = _foot_of_a_wall()
     counted = np.column_stack([~model.transparent, model.partition])
 

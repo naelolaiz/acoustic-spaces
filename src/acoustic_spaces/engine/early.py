@@ -1421,21 +1421,23 @@ def _turn(model, planes, faces, before, point, after, tolerance, counted):
     and going on to ``after`` (n, 3):
     (n,) whether each turns back off every one of those planes, as a reflection does,
     rather than going on across one: in a corner, ``before`` and ``after`` on either
-    side of it, both farther than ``tolerance``; anywhere, the leg from the point to
-    ``before`` or to ``after`` crossing it farther from both of its ends than the
-    intersection test's least distance (in a corner the point may lie past a plane the
-    path reflects off just before, and the leg's own test does not meet the face it
-    leaves, or meets another face of that plane as one it passes through). Nor does a
-    path turn off two coincident planes (within the model's plane tolerance; a wall
-    drawn as one face for each room) at one point: it would go on through the wall
+    side of it, both farther from it than the intersection test's least distance (not
+    ``tolerance``, within which the corner's point may lie off it); anywhere, the leg
+    from the point to ``before`` or to ``after`` crossing it farther from both of its
+    ends than the intersection test's least distance (in a corner the point may lie past
+    a plane the path reflects off just before, and the leg's own test does not meet the
+    face it leaves, or meets another face of that plane as one it passes through). Nor
+    does a path turn off two coincident planes (within the model's plane tolerance; a
+    wall drawn as one face for each room) at one point: it would go on through the wall
     there, or come back as off one of them. Nor does it turn off planes whose faces make
     no corner on its side of them (see :func:`_inner_corner`), as at an outer edge of a
-    building. Also the share of sound (n, bands) and the
-    crossings (n, m) of the faces each crosses right at the point (see
-    :func:`_crossed_at`). The leg leaving the point meets no face nearer to it than the
-    intersection test's least distance; the one arriving meets every face on its way
-    but one right where it meets the plane (:func:`_towards_plane`), and the point then
-    lies in that face's plane.
+    building: its side of each plane is that of the farther of ``before`` and ``after``,
+    where that lies farther from the plane than the least distance, and none otherwise.
+    Also the share of sound (n, bands) and the crossings (n, m) of the faces each
+    crosses right at the point (see :func:`_crossed_at`). The leg leaving the point
+    meets no face nearer to it than the intersection test's least distance; the one
+    arriving meets every face on its way but one right where it meets the plane
+    (:func:`_towards_plane`), and the point then lies in that face's plane.
 
     Sides and distances are those of the plane that each of ``faces`` itself lies in
     (:attr:`TraceModel.face_planes`; its plane where the face lies in it): the face the
@@ -1451,7 +1453,8 @@ def _turn(model, planes, faces, before, point, after, tolerance, counted):
     own = np.where(valid, faces, 0)
     here, below, above = _height_over_face(model, np.stack([point, before, after])[:, :, None], own)
     corner = np.count_nonzero(valid, axis=1) > 1
-    across = corner[:, None] & _on_either_side(below, above, tolerance)
+    off = max(least, model.height_error)
+    across = corner[:, None] & _on_either_side(below, above, off)
     for end, there in ((before, below), (after, above)):
         way = end - point
         way /= np.maximum(np.linalg.norm(way, axis=1), 1e-300)[:, None]
@@ -1463,7 +1466,7 @@ def _turn(model, planes, faces, before, point, after, tolerance, counted):
     rows = np.flatnonzero(corner & turns)
     if len(rows):
         farther = np.where(np.abs(below) >= np.abs(above), below, above)[rows]
-        sides = np.where(valid[rows] & (np.abs(farther) > tolerance), np.sign(farther), 0.0)
+        sides = np.where(valid[rows] & (np.abs(farther) > off), np.sign(farther), 0.0)
         fronts = model.face_planes[0][own[rows]] * sides[:, :, None]
         turns[rows] = _inner_corner(model, planes[rows], fronts, point[rows], tolerance)
     near = np.full((len(point), 2), least)
