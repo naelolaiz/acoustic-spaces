@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed: with edge diffraction, whether the end of an edge stands on a plane (a
+  barrier's end on the ground) is read from the plane's faces at the end, no longer a
+  ten-thousandth of the model's size past it (1 m in a model 10 km long). With the
+  ground ending 0.5 m past a barrier's end in such a model, a listener round the end had
+  10 early paths in place of 8 and up to 5.0 dB less (at 125 Hz, with `first_order`).
 - Changed: `simulate` and the editor work the draws of the materials' spread out in
   worker processes, with the same results (on an Intel Mac the admittances' fits may
   differ in their last digits, as they may there from one fit to the next): as many as
