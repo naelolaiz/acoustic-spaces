@@ -103,20 +103,33 @@ says it compares with another run of the solver. Eight parts:
   (0.08 to 0.18 dB as stated); walls on cell faces 0.48 of a cell off at least 1 dB, as a
   wall half a cell off is;
 - ``lroom``: an L-shaped room, 2.4 x 2.0 x 1.5 m with a 1.0 x 0.9 m notch cut from one
-  corner of its plan, every length rounded to whole cells of the grid, on the 125 and 250 Hz
-  bands' 7-point grids, moved off the cell faces by (0.311, 0.173, 0.457), -0.48 and +0.48
-  cells along each axis: its lowest mode, the plan's (the height's lies higher), with each
-  kind of walls. The references are the plan's own problem written here (minus the Laplacian
-  on the L, no flow through its walls, on the 5-point stencil over squares): on squares of
-  the grid's cell, which walls on cell faces must give within 1e-5 (the room's walls lie on
-  cell faces, and its mode does not vary with height); and the continuum's, from squares of
-  2.5, 1.2 and 0.6 cm extrapolated to nothing (the error falls as a power of the square's
-  side found from the three, about 4/3 at the plan's concave corner), carried through the
-  grid's time step. Checked: at each placement, fitted walls' mode no further from the
-  continuum's than the cell-faces mode. Walls on cell faces lie below it (the concave edge
-  on whole cells); fitted walls lie above it or below it with where the concave edge falls
-  in its cell (their mode jumps by about 2 % as the edge crosses the planes of the cells'
-  centres), a stated limit of fitted walls;
+  corner of its plan, every length rounded to whole cells of the grid, on the 125 and 250
+  Hz bands' 7-point grids, moved off the cell faces by (0.311, 0.173, 0.457), 0.05, -0.48
+  and +0.48 cells along each axis, and with fitted walls also by k / 40 of a cell along
+  each axis (k = 0 to 39) and by 0.499 and 0.501, either side of the planes of the cells'
+  centres: its lowest mode, the plan's (the height's lies higher), with each kind of
+  walls. The references are the plan's own problem written here (minus the Laplacian on
+  the L, no flow through its walls, on the 5-point stencil over squares): on squares of
+  the grid's cell, which walls on cell faces must give within 1e-5 (the room's walls lie
+  on cell faces, and its mode does not vary with height); and the continuum's, from
+  squares of 2.5, 1.2 and 0.6 cm extrapolated to nothing (the error falls as a power of
+  the square's side found from the three, about 4/3 at the plan's concave corner), carried
+  through the grid's time step. Checked: at each of the four placements, fitted walls'
+  mode no further from the continuum's than the cell-faces mode; fitted walls on the cell
+  faces (moved by 0) giving the cell-faces mode within 1e-5 (their rows' coefficients are
+  rounded to single precision from the fit's volumes and areas, which there lie within
+  1e-14 of whole ones, so they can differ from the plain cells' by a unit in single
+  precision's last place); and over the scan, fitted walls' mode between 1.4 % below and
+  1.0 % above the continuum's on the 125 Hz band's grid and between 0.5 % below and 0.4 %
+  above on the 250 Hz band's (each to the precision it is stated in, so 1.4 % is under
+  1.45 %). Walls on cell faces lie below it (the concave edge on whole cells); fitted
+  walls lie above it or below it with where the concave edge falls in its cell, and their
+  mode jumps by 2.3 % on the 125 Hz band's grid and 0.9 % on the 250 Hz band's as the edge
+  crosses the planes of the cells' centres, a stated limit of fitted walls (just below
+  those planes, on the 250 Hz band's grid, they lie 0.01 % further below the continuum
+  than walls on cell faces). At 0.05 the cube round the concave edge keeps a thin L of air
+  whose link the fit scales to the L's volume (taken whole, it would put the mode 3.3 %
+  above the continuum on the 125 Hz grid);
 - ``absorbing``: fitted walls with admittances. A duct 0.3 m square on 10 cm cells, its far
   end 0, 0.25, -0.48 and 0.48 of a cell past a cell face: the reflection off an end of
   admittance 0.25, 0.5 and 1 (the incident and the reflected waves at 40-200 Hz, gated)
@@ -178,12 +191,12 @@ ratio to the plain run) are listed at the end. ``--parts`` chooses the parts
 (``modes`` runs ``dispersion``'s boxes too), ``--bands`` the grids of the first three (the
 single wall's is always the 250 Hz band's, and the L-shaped room's, the duct's and the long
 runs' are their own) and ``--walls`` the kinds of walls. With two threads on a shared
-four-core machine (others running, load 1.2 to 3.2) the whole script takes about 51 minutes.
-The parts: ``dispersion`` about 2 run alone (``modes`` runs its boxes too); ``modes`` about
-24, all but a few minutes of them on the 250 Hz band's grids, which ``--bands 63 125``
-leaves out; ``levels`` about 3; ``wall`` about 20; ``lroom`` under a quarter of a minute;
-``absorbing`` under a minute; ``long`` about 2, most of it the open room; ``cost`` under a
-minute.
+four-core machine the whole script took 41 and 51 minutes in two runs (others running,
+load 1.4 to 1.8 and 1.2 to 3.2). The parts, in minutes: ``dispersion`` about 2 run alone
+(``modes`` runs its boxes too); ``modes`` 20 to 24, all but a few of them on the 250 Hz
+band's grids, which ``--bands 63 125`` leaves out; ``levels`` 2 to 3; ``wall`` 15 to 20;
+``lroom`` about a quarter; ``absorbing`` under one; ``long`` about 2, most of it the open
+room; ``cost`` under one.
 """
 
 from __future__ import annotations
@@ -334,7 +347,17 @@ L_NOTCH = np.array([1.0, 0.9])
 L_BANDS = (125, 250)
 #: Where the L-shaped room lies on the grid: moved off the cell faces by these parts of
 #: a cell along x, y and z.
-L_PLACEMENTS = ((0.311, 0.173, 0.457), (-0.48, -0.48, -0.48), (0.48, 0.48, 0.48))
+L_PLACEMENTS = (
+    (0.311, 0.173, 0.457),
+    (0.05, 0.05, 0.05),
+    (-0.48, -0.48, -0.48),
+    (0.48, 0.48, 0.48),
+)
+#: With fitted walls the L-shaped room is also moved by k / L_SCAN_STEPS of a cell along
+#: each axis (k = 0 ... L_SCAN_STEPS - 1), and by 0.5 - L_SCAN_CROSS and 0.5 + L_SCAN_CROSS,
+#: on either side of the planes of the cells' centres, where its mode jumps.
+L_SCAN_STEPS = 40
+L_SCAN_CROSS = 1e-3
 #: The finest square the plan's continuum mode is computed on (m): it and twice and four
 #: times it, each a whole part of the grid's cell, extrapolated to nothing.
 L_FINEST_M = 0.0062
@@ -395,6 +418,10 @@ LEVELS_LIMIT_DB = 1.825
 #: The most the lowest mode of the L-shaped room with its walls on cell faces may be off
 #: the plan's own 5-point problem at the grid's cell (a fraction), as DISPERSION_LIMIT.
 L_FACES_LIMIT = 1e-5
+#: The range the fitted L-shaped room's lowest mode lies in over the scan, % off the
+#: continuum's (least, most) on each grid, as stated (1.4 % below to 1.0 % above, 0.5 %
+#: below to 0.4 % above), each to the precision it is stated in.
+L_SCAN_RANGE = {125: (-1.45, 1.05), 250: (-0.55, 0.45)}
 #: The most the duct's reflection may be off (1 - beta) / (1 + beta), wherever its end falls
 #: in a cell: an end of admittance up to 0.5, and one of admittance 1, which reflects nothing
 #: in the continuum, where the grid's own wall (walls on cell faces) gives back 0.044 of the
@@ -1226,9 +1253,18 @@ def _lowest_mode(solver) -> float:
     return float(np.sort(mu[mu > 1e-6])[0])
 
 
+def l_scan_placements() -> list[tuple[float, float, float]]:
+    """The placements of the fitted L-shaped room's scan: k / L_SCAN_STEPS cells along each
+    axis, and 0.5 -+ L_SCAN_CROSS."""
+    steps = [k / L_SCAN_STEPS for k in range(L_SCAN_STEPS)]
+    steps += [0.5 - L_SCAN_CROSS, 0.5 + L_SCAN_CROSS]
+    return [(s, s, s) for s in sorted(steps)]
+
+
 def l_room(band: int, walls: str) -> list[dict]:
     """The L-shaped room's lowest mode on the band's 7-point grid at each placement of
-    L_PLACEMENTS, against the plan's own at the grid's cell and the continuum's."""
+    L_PLACEMENTS (rows with ``scan`` False) and, with fitted walls, of the scan
+    (``scan`` True), against the plan's own at the grid's cell and the continuum's."""
     g = grid(band, 7)
     cell, rate = g.cell, g.rate
     reference = l_reference(cell)
@@ -1241,7 +1277,10 @@ def l_room(band: int, walls: str) -> list[dict]:
         return _hz(courant**2 * cell**2 * kappa, rate)
 
     rows = []
-    for shift in L_PLACEMENTS:
+    placements = [(shift, False) for shift in L_PLACEMENTS]
+    if walls == "fitted":
+        placements += [(shift, True) for shift in l_scan_placements()]
+    for shift, scan in placements:
         moved = vertices + np.array(shift) * cell
         origin = -2.0 * cell * np.ones(3)
         shape = np.ceil((moved.max(axis=0) - origin) / cell).astype(int) + 2
@@ -1256,6 +1295,7 @@ def l_room(band: int, walls: str) -> list[dict]:
                 "grid_band_hz": band,
                 "cell_m": cell,
                 "shift_cells": list(shift),
+                "scan": scan,
                 "size_m": reference["size_m"],
                 "lowest_hz": f,
                 "plan_on_cell_hz": hz(reference["on_cell"]),
@@ -2096,6 +2136,8 @@ def lroom_part(walls) -> list[dict]:
         for kind in walls:
             for row in l_room(band, kind):
                 rows.append(row)
+                if row["scan"]:
+                    continue
                 _say(
                     f"lroom, {_kind(row)}, {band} Hz grid, moved {row['shift_cells']}: "
                     f"{row['seconds']:.0f} s"
@@ -2227,7 +2269,8 @@ def box_levels_checks(rows: list[dict]) -> list[dict]:
 def lroom_checks(rows: list[dict]) -> list[dict]:
     """With walls on cell faces, the L-shaped room's lowest mode the plan's own at the
     grid's cell; at each placement, fitted walls' mode no further from the continuum's
-    than the cell-faces mode, on either side of it."""
+    than the cell-faces mode, on either side of it; over the scan, fitted walls on the cell
+    faces giving the cell faces' mode, and the least and the most within L_SCAN_RANGE."""
     checks = []
     for row in rows:
         if row["walls"] == "cell_faces":
@@ -2242,7 +2285,7 @@ def lroom_checks(rows: list[dict]) -> list[dict]:
                 )
             )
     for row in rows:
-        if row["walls"] != "fitted":
+        if row["walls"] != "fitted" or row["scan"]:
             continue
         faces = [
             r
@@ -2261,6 +2304,50 @@ def lroom_checks(rows: list[dict]) -> list[dict]:
                 "walls' lowest mode off the continuum's over the cell faces' (each as a size)",
                 abs(row["lowest_hz"] / continuum - 1) / abs(faces[0]["lowest_hz"] / continuum - 1),
                 1.0,
+            )
+        )
+    for band in L_BANDS:
+        scan = [
+            r for r in rows if r["walls"] == "fitted" and r["scan"] and r["grid_band_hz"] == band
+        ]
+        faces = [r for r in rows if r["walls"] == "cell_faces" and r["grid_band_hz"] == band]
+        if not scan or not faces:
+            continue
+        at_zero = [r for r in scan if r["shift_cells"] == [0.0, 0.0, 0.0]]
+        checks.append(
+            _check(
+                "lroom",
+                f"{band} Hz grid, fitted walls on the cell faces (moved 0 cells): the lowest mode "
+                "off the cell faces' (relative)",
+                abs(at_zero[0]["lowest_hz"] / faces[0]["lowest_hz"] - 1),
+                L_FACES_LIMIT,
+            )
+        )
+    for band in L_BANDS:
+        scan = [
+            r for r in rows if r["walls"] == "fitted" and r["scan"] and r["grid_band_hz"] == band
+        ]
+        if not scan:
+            continue
+        off = [100 * (r["lowest_hz"] / r["continuum_hz"] - 1) for r in scan]
+        low, high = L_SCAN_RANGE[band]
+        checks.append(
+            _check(
+                "lroom",
+                f"{band} Hz grid, fitted walls over the scan's {len(scan)} placements: the "
+                "lowest mode off the continuum's, the least (%)",
+                min(off),
+                low,
+                least=True,
+            )
+        )
+        checks.append(
+            _check(
+                "lroom",
+                f"{band} Hz grid, fitted walls over the scan's {len(scan)} placements: the "
+                "lowest mode off the continuum's, the most (%)",
+                max(off),
+                high,
             )
         )
     return checks
@@ -2506,6 +2593,38 @@ def print_lroom(rows: list[dict]) -> None:
                 + ", ".join(f"{x:.4f}" for x in levels["levels_hz"])
                 + f" at {', '.join(map(str, levels['parts']))} parts ({levels['power']:.2f}) |"
             )
+    scans = [r for r in rows if r["walls"] == "fitted" and r["scan"]]
+    if not scans:
+        return
+    print(
+        f"\nFitted walls, the room moved by s cells along each axis (s = k / {L_SCAN_STEPS}, and "
+        f"0.5 -+ {L_SCAN_CROSS:g}, either side of the planes of the cells' centres), % off the "
+        "continuum"
+    )
+    print(
+        "\n| grid (cell) | least (at s) | most (at s) | from s = "
+        f"{0.5 - L_SCAN_CROSS:g} to {0.5 + L_SCAN_CROSS:g} | walls on cell faces |"
+    )
+    print("|---|---:|---:|---:|---:|")
+    for band in L_BANDS:
+        mine = [r for r in scans if r["grid_band_hz"] == band]
+        if not mine:
+            continue
+        cont = mine[0]["continuum_hz"]
+
+        def off(r: dict, cont: float = cont) -> float:
+            return 100 * (r["lowest_hz"] / cont - 1)
+
+        least = min(mine, key=off)
+        most = max(mine, key=off)
+        side = {round(r["shift_cells"][0], 9): r for r in mine}
+        jump = off(side[round(0.5 + L_SCAN_CROSS, 9)]) - off(side[round(0.5 - L_SCAN_CROSS, 9)])
+        faces = [r for r in rows if r["walls"] == "cell_faces" and r["grid_band_hz"] == band]
+        print(
+            f"| {band} Hz ({100 * mine[0]['cell_m']:.2f} cm) | {off(least):+.3f} % "
+            f"({least['shift_cells'][0]:g}) | {off(most):+.3f} % ({most['shift_cells'][0]:g}) | "
+            f"{jump:+.3f} % | " + (f"{off(faces[0]):+.3f} %" if faces else "") + " |"
+        )
 
 
 def print_absorbing(found: dict) -> None:

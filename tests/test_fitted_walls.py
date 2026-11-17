@@ -2715,14 +2715,17 @@ def test_the_fitted_walls_validation_s_checks_fail_past_the_stated_figures() -> 
     assert outcome(script.box_levels_checks([levels("cell_faces", 1.83)])) == [True]
     assert outcome(script.box_levels_checks([levels("cell_faces", 1.82)])) == [False]
 
-    def l_room(walls: str, f: float, shift=(0.3, 0.2, 0.4)) -> dict:
+    def l_room(
+        walls: str, f: float, shift=(0.3, 0.2, 0.4), band=125, scan=False, continuum=63.0
+    ) -> dict:
         return {
             "walls": walls,
-            "grid_band_hz": 125,
+            "grid_band_hz": band,
             "shift_cells": list(shift),
+            "scan": scan,
             "lowest_hz": f,
             "plan_on_cell_hz": 62.0,
-            "continuum_hz": 63.0,
+            "continuum_hz": continuum,
         }
 
     faces = [l_room("cell_faces", 62.0 * (1 + 0.9e-5)), l_room("cell_faces", 62.0 * (1 + 1.1e-5))]
@@ -2731,6 +2734,25 @@ def test_the_fitted_walls_validation_s_checks_fail_past_the_stated_figures() -> 
     # on either side of it.
     for f, held in ((63.99, True), (64.01, False), (62.01, True), (61.99, False)):
         assert outcome(script.lroom_checks([faces[0], l_room("fitted", f)])) == [True, held]
+    # The scan: fitted walls moved by 0 give the cell faces' mode within 1e-5; over the scan
+    # the mode lies 1.45 % below to 1.05 % above the continuum on the 125 Hz band's grid
+    # and 0.55 % below to 0.45 % above on the 250 Hz band's (the continuum here 0.4 % above
+    # the cell faces' mode, inside both).
+    continuum = 62.0 * 1.004
+    for band, low, high in ((125, -1.45, 1.05), (250, -0.55, 0.45)):
+        on_faces = l_room("cell_faces", 62.0, band=band, continuum=continuum)
+
+        def scan(zero: float, least: float, most: float, band: int = band) -> list:
+            return [
+                l_room("fitted", zero, (0.0, 0.0, 0.0), band, True, continuum),
+                l_room("fitted", continuum * (1 + least / 100), (0.3,) * 3, band, True, continuum),
+                l_room("fitted", continuum * (1 + most / 100), (0.5,) * 3, band, True, continuum),
+            ]
+
+        inside = scan(62.0 * (1 + 0.9e-5), low + 0.001, high - 0.001)
+        assert outcome(script.lroom_checks([on_faces, *inside])) == [True, True, True, True]
+        outside = scan(62.0 * (1 + 1.1e-5), low - 0.001, high + 0.001)
+        assert outcome(script.lroom_checks([on_faces, *outside])) == [True, False, False, False]
 
     def duct(beta: float, end: float, off: float) -> dict:
         return {"walls": "fitted", "beta": beta, "end_cells": end, "off": off}
