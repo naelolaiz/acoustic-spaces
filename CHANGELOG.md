@@ -20,6 +20,13 @@
   the file's peak, one response's standard errors by up to 5e-5), and the examples'
   runs take up to a quarter less time at 30 to 50 % of the CPU time; a rotor's `bpm`
   broadband noise takes 23 % more.
+- Fixed: a path that reflects more than once at one point (a room's corner sends sound
+  back along the line it came on) took a surface with no leg before or after it at a
+  grazing angle: in the bands that add in pressure its pressure came out turned over
+  (with another factor and energy where that surface is a ground with an impedance).
+  For a source and a listener on one line from the corner the early level was 0.7 dB off
+  at 63 Hz in a room 7.3 by 5.1 by 3 m, and 1.6 dB (2.3 dB on grass) at the foot of two
+  barriers that meet at a right angle, with the default settings.
 - Added: a solver for sound that passes close over a whole row of roofs and barriers in
   still air (`acoustic_spaces.engine.rows`: the parabolic equation marched over the row,
   with the terms of its rigid edges and, for a barrier alone on a rigid ground or roof,
