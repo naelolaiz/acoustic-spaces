@@ -2723,6 +2723,31 @@ def test_parabolic_equation_choice(window) -> None:
     assert page.parabolic_equation.currentData() == "narrow_angle"
 
 
+def test_rows_choice(window) -> None:
+    """Outdoors with edge diffraction on, the simulation page picks the solver for
+    whole rows or the paths over the edges, in wind too; without edge diffraction and
+    in a room there is none to pick."""
+    window.open_example(example_path("street"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    assert page.rows.isEnabled()
+    assert page.rows.currentText() == "solver for whole rows"
+    assert "Maps and walks take the paths" in page.rows.toolTip()
+    page.rows.setCurrentIndex(page.rows.findData("edges"))
+    assert window.document.scene.simulation.early.rows == "edges"
+    page.diffraction.setCurrentIndex(page.diffraction.findData("none"))
+    assert not page.rows.isEnabled()
+    window.open_example(example_path("open_air_stage"))  # in wind, without diffraction
+    window.select("simulation")
+    assert not page.rows.isEnabled()
+    page.diffraction.setCurrentIndex(page.diffraction.findData("first_order"))
+    assert page.rows.isEnabled()
+    window.open_example(example_path("shoebox"))
+    window.select("simulation")
+    assert not page.rows.isEnabled()
+    assert page.rows.currentData() == "solver"
+
+
 def test_barrier_frequencies_choice(window) -> None:
     """Outdoors in wind the simulation page picks the frequencies an octave behind
     barriers, each with its largest error at 8 kHz; in still air there is none to pick."""

@@ -2551,6 +2551,14 @@ msgid "wide angle"
 msgstr "angle ampli"
 
 #: acoustic_spaces/gui/inspector.py
+msgid "solver for whole rows"
+msgstr "mètode per a fileres senceres"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "paths over the edges"
+msgstr "trajectòries sobre les arestes"
+
+#: acoustic_spaces/gui/inspector.py
 msgid "stochastic_ray_tracing"
 msgstr "traçat de raigs estocàstic"
 
@@ -5287,6 +5295,23 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
+"Outdoors, the sound over barriers and buildings in the vertical plane "
+"through a source and a listener, in the octave bands up to 500 Hz that add "
+"their paths in pressure: the solver for whole rows (one field over all of "
+"them, with the ground and the roofs in it, where their tops go on far enough "
+"to both sides of the way; seconds for each source and listener) or the paths "
+"over one edge or two alone. Maps and walks take the paths"
+msgstr ""
+"A l'aire lliure, el so sobre pantalles i edificis al pla vertical que passa "
+"per una font i un receptor, a les bandes d'octava fins a 500 Hz que sumen "
+"les seves trajectòries en pressió: el mètode per a fileres senceres (un sol "
+"camp sobre tots ells, amb el terreny i les cobertes dins, on les seves parts "
+"superiors continuen prou lluny a banda i banda del camí; segons per a cada "
+"font i receptor) o les trajectòries sobre una aresta o dues soles. Els mapes "
+"i els recorreguts prenen les trajectòries"
+
+#: acoustic_spaces/gui/inspector.py
+msgid ""
 "Outdoors in wind or temperature gradients, the parabolic equation that gives "
 "the sound over the open ground in the low bands and in the shadows: narrow "
 "angle (for the gradients near the ground that the weather has) or wide angle "
@@ -5390,6 +5415,10 @@ msgstr "Difracció"
 #: acoustic_spaces/gui/inspector.py
 msgid "Reflections over an edge"
 msgstr "Reflexions sobre una aresta"
+
+#: acoustic_spaces/gui/inspector.py
+msgid "Barriers and buildings"
+msgstr "Pantalles i edificis"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Parabolic equation"

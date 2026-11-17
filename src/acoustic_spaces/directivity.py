@@ -42,6 +42,7 @@ from pathlib import Path
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces._extras import install_hint
 from acoustic_spaces.air import speed_of_sound
 from acoustic_spaces.materials import OCTAVE_BANDS_HZ, THIRD_OCTAVE_BANDS_HZ
@@ -249,6 +250,9 @@ class Balloon(Directivity):
         elevation, azimuth = _grid(step)
         points = _from_angles(azimuth[None, :], elevation[:, None]).reshape(-1, 3)
         k = min(NEIGHBOURS, len(measured))
+        # The library's product: where several measured directions are equally near a
+        # grid point, the last digits of these cosines choose which are taken, and
+        # sums added in another order choose others (docs/validation.md, Known issues).
         angle = np.arccos(np.clip(points @ measured.T, -1.0, 1.0))  # (grid, measured)
         nearest = np.argsort(angle, axis=1)[:, :k]
         near_angle = np.take_along_axis(angle, nearest, axis=1)
@@ -672,7 +676,7 @@ def array_directivity(
             element, np.einsum("dk,nkj->ndj", chunk, turns[:1] if alike else turns)
         )
         # How much sooner one element of each pair is heard than the other (s).
-        lag = chunk @ offsets.T / c - shifts[None, :]  # (directions, pairs)
+        lag = products.product(chunk, offsets.T) / c - shifts[None, :]  # (directions, pairs)
         still = np.abs(lag) < 1e-15
         # The energy is the sum over pairs of w_i w_k cos(2 pi f lag); its mean over a
         # band, exactly: (sin(2 pi f2 lag) - sin(2 pi f1 lag)) / (2 pi (f2 - f1) lag).

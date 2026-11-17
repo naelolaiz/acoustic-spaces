@@ -23,6 +23,7 @@ import math
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces.materials import bands as _bands
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 
@@ -101,7 +102,7 @@ def equalized(signal: np.ndarray, sample_rate: float, gains) -> np.ndarray:
     n = len(signal)
     n_fft = fft_size(n, sample_rate)
     gains = np.asarray(gains, dtype=float)
-    curve = gains @ _band_gains(n_fft, float(sample_rate), len(gains))
+    curve = products.product(gains, _band_gains(n_fft, float(sample_rate), len(gains)))
     spectrum = np.fft.rfft(signal, n_fft, axis=0)
     curve = curve.reshape((-1,) + (1,) * (signal.ndim - 1))
     return np.fft.irfft(spectrum * curve, n_fft, axis=0)[:n]
@@ -121,7 +122,7 @@ def matched_gains(gains, sample_rate: float, rounds: int = 30) -> np.ndarray:
     wanted = gains**2 * weights.sum(axis=1)
     out = gains.copy()
     for _ in range(rounds):
-        got = weights @ (out @ shapes) ** 2
+        got = products.product(weights, products.product(out, shapes) ** 2)
         ratio = np.divide(wanted, got, out=np.ones_like(got), where=got > 0.0)
         out = out * np.sqrt(ratio)
         if np.all(np.abs(10.0 * np.log10(ratio[wanted > 0.0])) < 1e-3):

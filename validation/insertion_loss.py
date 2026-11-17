@@ -82,9 +82,11 @@ FILTER_N_FFT, FILTER_RATE, FILTER_MAX_HZ = 1 << 14, 48000.0, 4000.0
 
 
 def barrier_scene(ground: dict, listeners, both_sides: bool = False) -> Scene:
-    """A barrier across a ground of this material, long and wide enough for its ends
-    and the ground's edge to add nothing; with the paths reflected both before and after
-    the barrier when ``both_sides``."""
+    """A barrier across a ground of this material, with the paths over its edge
+    (``simulation.early.rows: edges``, which the exact solutions here are of; the solver
+    for whole rows has its own checks, ``validation/rows.py``), long and wide enough for
+    its ends and the ground's edge to add nothing; with the paths reflected both before
+    and after the barrier when ``both_sides``."""
     far = max(x for x, _, _ in listeners) + 100.0
     return Scene.model_validate(
         {
@@ -111,6 +113,7 @@ def barrier_scene(ground: dict, listeners, both_sides: bool = False) -> Scene:
                     "max_order": 2,
                     "diffraction": "first_order",
                     "diffraction_reflections": "both_sides" if both_sides else "one_side",
+                    "rows": "edges",
                 },
                 "late": {"rays": 2000},
             },

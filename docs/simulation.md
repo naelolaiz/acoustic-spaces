@@ -306,6 +306,14 @@ diffracted paths and a few tens of milliseconds per listener);
 `--diffraction-reflections` sets it for one run of `simulate` or `map`, and the editor
 has it as **Reflections over an edge** under **Early reflections**.
 
+Outdoors, where sound passes over barriers and buildings on its way to a
+listener, paths over one edge and two do not add up to the field. There
+`simulation.early.rows: solver` (the default) takes the sound in the vertical plane
+through the source and the listener from a solver for the whole row, in the octave bands
+up to 500 Hz that add their paths in pressure; `rows: edges` leaves the paths over the
+edges alone (see [Sound over rows of barriers and
+buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)).
+
 The edges are found in the model: corners where two faces meet with more than 195° of
 open air round them (the inside corner of an L-shaped room, the front of a stage or a
 balcony) and the free edges of thin screens. Each source and listener get the shortest
@@ -728,6 +736,19 @@ above.
 acoustic-spaces simulate validation/bras/CR3/scene.yaml --out cr3 --threads 3
 ```
 
+A run's results do not depend on how many threads the linear-algebra library behind
+numpy is given, which is as many as the computer has cores unless
+`OPENBLAS_NUM_THREADS` says otherwise: the package adds its long sums itself, each in
+a fixed order (the early paths' spectra and signals, the IACC's correlations, the
+decay fits and the like; `acoustic_spaces.products`), and the example scenes give the
+same results, bit for bit, with one, two and four of those threads (all were run but
+`bim_office`). What it leaves to the library are the solvers (the eigenvalues behind turbulence's delays, a binaural
+decoder's pseudo-inverse, the fits of calibration and of a ground's impedance), whose
+results can round with the number of threads where their matrices are large (the
+eigenvalues of a 200 by 200 matrix did; nothing in the examples does), live
+head-tracked playback, and the cosines that choose a measured directivity table's
+nearest directions ([Known issues](validation.md#known-issues)).
+
 ### Memory
 
 Before a simulation or a coverage map starts, the memory of its late part is estimated
@@ -873,11 +894,12 @@ acoustic-spaces info                            # the default, and what auto tak
 - In the editor, Simulation > Tune CPU and GPU… times the open scene, shows the table,
   and asks with a check box whether to make `auto` this computer's default (ticked).
   OK saves the timings and that choice; Cancel saves nothing, not even the timings.
-- A scene that names its devices keeps them; it gives the same result on every
-  computer, and with `cpu` the seed repeats a run exactly (`gpu` and `both` may vary a
-  little). Scenes saved by the editor before 3.1.0 name `cpu`: set **Run on** to
-  *default* (or leave the tune window's second check box ticked for the open scene) to
-  let them follow the default.
+- A scene that names its devices keeps them on every computer, and with `cpu` the
+  seed repeats a run exactly on a computer (`gpu` and `both` may vary a little);
+  between computers the last digits can differ (the linear-algebra library's solvers,
+  for one, differ from one processor to the next). Scenes saved by the editor before
+  3.1.0 name `cpu`: set **Run on** to *default* (or leave the tune window's second
+  check box ticked for the open scene) to let them follow the default.
 
 Sound through partitions and openings (an outdoor scene's sky, which lets sound out
 into no room, is not one), coverage maps and vegetation of more than 16 media are traced

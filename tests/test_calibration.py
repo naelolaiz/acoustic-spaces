@@ -405,3 +405,40 @@ def test_the_calibrate_command(tmp_path, capsys):
     assert main(["calibrate", str(scene)]) == 1
     assert "give --measured or --measured-json" in capsys.readouterr().err
     assert main(["calibrate", str(scene), "--measured", "s", "a", str(tmp_path / "x.wav")]) == 1
+
+
+def test_a_band_re_weights_each_set_of_paths_alike_by_its_reflections():
+    """A band's echogram for a change per reflection of each of the three groups: in a
+    band where the early paths add in pressure, that of the paths each weighted in
+    pressure by its own reflections (not by those of its set); above, that of the paths'
+    energies re-weighted one by one."""
+    from acoustic_spaces.calibration import _Band
+    from acoustic_spaces.engine.coherent import EarlyPressure, with_mean_phases
+    from acoustic_spaces.engine.reweight import path_counts, reweighted_paths
+
+    room = Room.from_scene(_box(TRUTH, rays=200))
+    group = face_groups(room, MATERIALS)
+    response = simulate(room, sources=["s"], groups=group)["s", "a"]
+    response = dataclasses.replace(response, late=np.zeros_like(response.late))
+    early = response.early
+    counts = path_counts(early, group, 3)
+    assert len(np.unique(counts, axis=0)) > 1
+    ratio = np.array([-0.4, 0.3, -0.2])
+    weights = np.exp(0.5 * (counts @ ratio))[:, None]
+    for b in range(early.coherent_bands):
+        band = _Band.of(response, b, 3, group)
+        assert band.pressure is not None
+        pressure, slot, scale = EarlyPressure(with_mean_phases(early), weights).band(
+            b, response.time_step, band.slots, start=response.direct_delay_s
+        )
+        expected = np.bincount(slot, weights=scale * pressure[0] ** 2, minlength=band.slots)
+        np.testing.assert_allclose(
+            band.energy(ratio), expected, rtol=0, atol=1e-12 * expected.max()
+        )
+    again = _early_only(
+        dataclasses.replace(response, early=reweighted_paths(early, counts, ratio[:, None]))
+    )
+    for b in (3, 6):
+        band = _Band.of(response, b, 3, group)
+        assert band.pressure is None
+        np.testing.assert_allclose(band.energy(ratio), again[b], rtol=1e-12)

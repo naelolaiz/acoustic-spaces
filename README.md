@@ -26,11 +26,11 @@ loudspeaker formats.
   one-sided bounds: [simulation](docs/simulation.md),
   [materials' uncertainty](docs/scenes.md#materials).
 - **Outdoors**: the ground and its impedance, terrain, buildings from a map, barriers
-  and trees, wind, temperature and turbulence, behind barriers and buildings too; road
-  vehicles by CNOSSOS-EU, trains and trams by Schall 03, construction plant from Defra's
-  database, helicopters from their rotors, aircraft by ECAC Doc 29, ground-borne
-  vibration by the US FTA's manual and sound through a closed window by EN ISO 12354-3:
-  [outdoor scenes](docs/outdoor.md).
+  and trees, wind, temperature and turbulence, behind barriers and buildings too, and
+  sound close over whole rows of them; road vehicles by CNOSSOS-EU, trains and trams by
+  Schall 03, construction plant from Defra's database, helicopters from their rotors,
+  aircraft by ECAC Doc 29, ground-borne vibration by the US FTA's manual and sound
+  through a closed window by EN ISO 12354-3: [outdoor scenes](docs/outdoor.md).
 - **Coverage maps** of the parameters and of the speech transmission index over the
   audience, with the uncertainty of their values: [coverage maps](docs/coverage-maps.md).
 - **Listening**: impulse responses in mono, binaural, Ambisonics (AmbiX) and loudspeaker

@@ -37,6 +37,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
+from acoustic_spaces import products
+
 if TYPE_CHECKING:
     from acoustic_spaces.engine.simulate import SimulationResult
     from acoustic_spaces.headtracking import HeadTrackedBinaural
@@ -145,7 +147,9 @@ def resample(signal: np.ndarray, rate_in: float, rate_out: float) -> np.ndarray:
                     continue
                 n = len(range(k0, count, phases))
                 first = (k0 * step - p) // phases + 1
-                out[k0::phases, c] = rows[first : first + (n - 1) * step + 1 : step] @ table[p]
+                out[k0::phases, c] = products.product(
+                    rows[first : first + (n - 1) * step + 1 : step], table[p]
+                )
             continue
         for start in range(0, count, _RESAMPLE_CHUNK):
             k = np.arange(start, min(start + _RESAMPLE_CHUNK, count))

@@ -19,7 +19,9 @@ nanobind_add_module(_native NB_STATIC NOMINSIZE cpp/bindings/native_module.cpp)
 target_link_libraries(_native PRIVATE acoustic_spaces_core)
 
 if(MSVC)
-  target_compile_options(_native PRIVATE /W4)
+  # /fp:precise: no reordered sums and no contracted multiply-adds (fixed_sums.hpp needs
+  # both; it is the default, said here so that no other default can take its place).
+  target_compile_options(_native PRIVATE /W4 /fp:precise)
 else()
   # No multiply-adds fused where the source has none (Apple's clang fuses them by default
   # on Apple silicon): every platform rounds alike, and the wave solver with a speed of

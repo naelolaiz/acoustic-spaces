@@ -135,34 +135,42 @@ Edge diffraction:
   a wall in line with both is too low (6.4 dB at 63 Hz half a metre above a 10 m
   roof), and behind the roof with the source above its plane up to 6 dB too high (see
   [Known issues](validation.md#known-issues)).
-- [ ] Rows of edges near grazing incidence in simulations: where sound passes close
-  over the barriers and buildings of a scene, the level from the solver for whole rows
-  (`engine.rows`, within 0.38 dB of a wave calculation near grazing incidence in free
-  space; see
-  [Validation](validation.md#rows-of-roofs-and-barriers-against-a-wave-calculation))
-  in place of the paths over one edge and two. Today, just over three barriers or
-  three flat roofs in a row, or a roof with a slot across it, the level is off by 1 to
-  5 dB, and over a roof and a screen level with it 2 to 6 dB too low against a wave
-  calculation, with steps of 12 to 15 dB in all as the screen's top rises through the
-  roof's plane; behind three barriers with the source on the line of their tops there
-  is next to no sound, and behind two flat roofs of one height with the source up to
-  0.5 m above their plane the level is 9 to 23 dB below that behind one roof as wide
-  as both.
+- [x] Rows of edges in simulations: outdoors, where sound passes over the barriers and
+  buildings of a scene, the level in the bands up to 500 Hz from the solver for whole
+  rows in place of the paths over one edge and two, in still air and in wind
+  (`simulation.early.rows`, see [Sound over rows of barriers and
+  buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)).
+- [ ] The solver for whole rows in coverage maps and along walks, which take the paths
+  over the edges: a run for every point takes seconds, and along a walk the level would
+  step where the solver takes one place and not the next.
 - [ ] The solver for whole rows where it does not hold yet: rigid screens on a rigid
-  ground (up to 1.3 dB low near grazing incidence, 3.4 dB at street level behind
-  three screens); an end almost straight under a top, within some 4 cm of its
-  first obstacle, or close before it and high above its top, and ends within half a
-  wavelength of each other (refused); an end in the shadow within decimetres of a
-  top (up to 0.5 dB low); an end behind a change of the ground, on a roof that
-  reaches the other end with nothing on it between them, or with nothing between it
-  and the other end, with a way on or a reflection off the ground or the roof
-  steeper than 35°, or closer than a wavelength to its first top or to the other
-  end (refused); a roof's edge or a wall close behind an end; barriers lower than
-  a wavelength on a rigid roof or ground, which lack the sound that goes on between
-  their top and that surface (up to 3 dB off below a quarter of a wavelength, 1.3 dB
-  for a parapet on a roof's edge), and steps; a wall given as a thin building (up to
-  0.4 dB low); the tops' place in the march's cells (up to 0.2 dB); edges that end
-  beside the way, absorbing roofs and walls, the bands above 500 Hz, and wind.
+  ground (up to 1.3 dB low near grazing incidence, 3.4 dB at street level behind three
+  screens, and up to 8.2 dB where the way crosses them at a slant of 75°; part of what
+  lacks is the sound that goes to and fro between them); an end almost straight under a
+  top, within some 4 cm of its first obstacle, or close before it and high above its
+  top, and ends within half a wavelength of each other (refused); an end in the shadow
+  within decimetres of a top (up to 0.5 dB low); an end behind a change of the ground,
+  on a roof that reaches the other end with nothing on it between them, or with nothing
+  between it and the other end, with a way on or a reflection off the ground or the roof
+  steeper than 35°, or closer than a wavelength to its first top or to the other end
+  (refused); a roof's edge or a wall close behind an end; barriers lower than a
+  wavelength where the edges' terms stand, which lack the sound that goes on between a
+  barrier's top and the surface under it (a parapet on a roof's edge up to 1.3 dB off; a
+  barrier with anything else between the ends, on a ground with an impedance, or with
+  the ends closer to each other than about a quarter of its height, both within about a
+  twentieth of it from the barrier, or between the two; only a barrier alone on a rigid
+  ground or roof is taken as the strip it makes with its image), and steps; a row that
+  the way crosses at a slant on a ground with an impedance, or with edges in different
+  directions, where an end's way to it, or its image's in the ground, is steep or an
+  edge in it that a march lights is turned more than 60° (refused: the row solved across
+  its edges and moved to the slant is for a rigid ground and edges in one direction; not
+  tried yet: a ground with an impedance by its impedance at each wavenumber across the
+  row), edges turned more than 75° (refused: not measured beyond), a row that the sound
+  crosses at wavenumbers below the solver's lowest (refused), and edges at different
+  slants (not measured); a wall given as a thin building (up to 0.4 dB low); the tops'
+  place in the march's cells (up to 0.2 dB); roofs and walls that absorb (rigid in
+  it; a roof with an impedance leaves the row to the paths over the edges), the sound
+  that goes to and fro between a row's walls, and the bands above 500 Hz.
 - [ ] Paths over edges tested from the edge itself, not from a millionth of the
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9
@@ -456,6 +464,9 @@ Sources:
 - [x] Sources and listeners in groups, and left out of a run without being removed
   (`group`, `enabled: false`); in the editor a tick and an eye per source, listener
   and group.
+- [ ] A rule for the measured directions equally near a point of a directivity table:
+  the last digits of a product choose among them, which can move the table there by up
+  to 1.3 dB (see [Known issues](validation.md#known-issues)).
 
 Examples:
 
@@ -804,7 +815,11 @@ Version 4.3.0 (in the sections above: under Parameters the error estimates' adap
 number of draws, one-sided bounds, the absorption uncertainty on the editor's material
 page, the spread of the listeners' levels and speech results and the uncertainty of a
 coverage map's values; under Edge diffraction the fade beside a bend of a thin screen's
-top and past its corners that are not right angles).
+top and past its corners that are not right angles, and the rows of edges in
+simulations; under Outdoor acoustics the wave solver's room along its matched layer only
+where it is needed and its source and listeners read between the cell centres to a
+higher order; under the known issues of the review of 25 October the wave solver's walls
+through planes of its cell centres).
 
 Next:
 

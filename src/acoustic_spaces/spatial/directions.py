@@ -11,6 +11,8 @@ import math
 
 import numpy as np
 
+from acoustic_spaces import products
+
 
 def fibonacci_sphere(n: int) -> np.ndarray:
     """``n`` near-uniform unit vectors (n, 3) on a Fibonacci lattice, each standing for
@@ -42,7 +44,7 @@ def to_angles(directions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def to_head(directions: np.ndarray, rotation: np.ndarray) -> np.ndarray:
     """Room directions (..., 3) in the head coordinates of a listener whose ``rotation``
     has the forward, left and up axes as columns (see ``Orientation.rotation``)."""
-    return np.asarray(directions, dtype=float) @ np.asarray(rotation, dtype=float)
+    return products.product(np.asarray(directions, dtype=float), np.asarray(rotation, dtype=float))
 
 
 __all__ = ["fibonacci_sphere", "from_angles", "to_angles", "to_head"]

@@ -22,6 +22,7 @@ from typing import Literal, overload
 
 import numpy as np
 
+from acoustic_spaces import products
 from acoustic_spaces._extras import install_hint
 from acoustic_spaces.spatial.directions import fibonacci_sphere, from_angles
 
@@ -61,7 +62,7 @@ class HRTF:
     def nearest(self, directions: np.ndarray) -> np.ndarray:
         """Index of the nearest measured direction for each of (dirs, 3)."""
         v = np.atleast_2d(np.asarray(directions, dtype=float))
-        return np.argmax(v @ self.directions.T, axis=1)
+        return np.argmax(products.product(v, self.directions.T), axis=1)
 
     def onsets(self) -> np.ndarray:
         """(m, 2) onset of each response (samples, fractions included): the lag at which
@@ -146,7 +147,7 @@ class HRTF:
         """The measured directions (k, 3) to mix for unit directions (k, 3), and their
         weights (k, 3)."""
         faces, inverse, around, real = self._triangulation()
-        nearest = np.argmax(v @ self.directions.T, axis=1)
+        nearest = np.argmax(products.product(v, self.directions.T), axis=1)
         # The triangles round the nearest direction first, then all of them.
         candidates = around[nearest]
         g = np.einsum("kc,ktcd->ktd", v, inverse[candidates])
