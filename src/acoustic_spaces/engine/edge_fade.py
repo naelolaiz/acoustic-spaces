@@ -128,6 +128,7 @@ from acoustic_spaces.engine.diffraction import (
     _image_sources,
     _match,
     _past_face,
+    _planes_hit,
     _reach,
     _subset,
     _waves,
@@ -265,7 +266,8 @@ class EdgeFade:
             chain.append(model.mirror(chain[-1], seqs[:, j]))
         distance = np.linalg.norm(chain[-1] - listener, axis=1)
         keep = distance / c <= max_delay_s
-        # A sequence found already is no miss.
+        # A sequence found already is no miss: a path with its image off its planes, or
+        # with its image alone where the path does not carry its faces (_match).
         found = np.flatnonzero((paths.edge < 0) & (paths.order == k))
         if len(found):
             images = listener + paths.direction[found] * paths.distance_m[found, None]
@@ -276,6 +278,10 @@ class EdgeFade:
                 paths.order[found],
                 found,
                 1e-6 * self.d.size,
+                (
+                    np.sort(model.geometric_plane[seqs], axis=1),
+                    *_planes_hit(model, paths, found, k),
+                ),
             )
             keep &= hit < 0
         idx = np.flatnonzero(keep)

@@ -1,3 +1,4 @@
+import dataclasses
 import math
 import sys
 from pathlib import Path
@@ -1759,8 +1760,6 @@ def _all_reaching(model, edges, bounds, end, planes, among, sides, *rest):
 
 
 def _same_paths(a, b) -> None:
-    import dataclasses
-
     for field in dataclasses.fields(a):
         x, y = getattr(a, field.name), getattr(b, field.name)
         if isinstance(x, np.ndarray) or isinstance(y, np.ndarray):
@@ -2396,3 +2395,350 @@ def test_the_way_along_a_thick_barrier_s_top(tmp_path: Path, swap: bool) -> None
         level = _over_barrier(room, "second_order")
     assert np.abs(level[2] - level[0]).max() < 0.1
     np.testing.assert_allclose(level[1], level[0], atol=0.01)
+
+
+def _by_two_planes(width: float, case: str, near: float) -> Room:
+    """A hard ground ``width`` m wide with a wall 4 m high along x = -3 m from y = -20
+    to 20 m, or with a building 10 m square and 6 m high beside the origin, and a source
+    ``near`` m from two planes at once: the building's wall and roof at its eave, two of
+    its walls at an upright corner, or the ground and the wall's plane 3 cm or 30 cm
+    past the wall's end."""
+    half = width / 2.0
+    geometry = {"ground": {"extent": [[-half, -half], [half, half]], "sky": 30.0}}
+    if case in ("eave", "corner"):
+        plan = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]
+        geometry["buildings"] = [{"name": "house", "footprint": plan, "height": 6.0}]
+        if case == "eave":
+            source, listener = [10.0 + near, 5.0, 6.0 + near], [5.0, 30.0, 8.0]
+        else:
+            source, listener = [10.0 + near, 10.0 + near, 1.5], [14.0, 5.0, 12.0]
+    else:
+        geometry["barriers"] = [
+            {"name": "wall", "path": [[-3.0, -20.0], [-3.0, 20.0]], "height": 4.0}
+        ]
+        source, listener = [-3.0 + near, 20.0 + float(case), near], [20.0, 0.0, 1.5]
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": geometry,
+                "materials": {"hard": {"absorption": [0.02] * 8, "scattering": 0.0}},
+                "default_material": "hard",
+                "sources": [{"name": "s", "position": source}],
+                "listeners": [{"name": "l", "position": listener}],
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize("width", [10000.0, 2000.0])
+@pytest.mark.parametrize("case", ["eave", "corner", "0.03", "0.3"])
+def test_a_source_right_by_two_planes_has_each_wave_s_own_path(width: float, case: str) -> None:
+    """The images of a source 0.3 millionths of the model's largest extent from two
+    planes at a right angle, in the one and in the other, lie 0.85 millionths apart:
+    within the millionth that an edge's wave is from its specular path's image at most.
+    The path of a wave is the one off its planes all the same, and the early level with
+    the scene's edge diffraction is that of the same places in a model 60 m wide (within
+    0.01 dB), where the two images are far apart. With the nearest image of the wave's
+    order for its path, the reflection off one plane stood for the reflection off the
+    other where only one of the two reaches the listener: 0.9 to 2.6 dB in these eight
+    cases."""
+    level = [
+        10.0 * np.log10(total_energy(early_paths(_by_two_planes(size, case, 3e-7 * width))))
+        for size in (width, 60.0)
+    ]
+    np.testing.assert_allclose(level[0], level[1], atol=0.01)
+
+
+def test_a_wave_s_path_reflects_off_its_planes() -> None:
+    """``_match`` takes the nearest image of the query's order within the tolerance; with
+    the planes, the nearest of a path off the query's planes, or of a path that
+    does not carry its planes, each query with its own planes however many queries it
+    takes at once. ``_planes_hit`` gives the planes of a search's paths in rising order,
+    and none for paths without a face for each reflection; ``_wave_planes`` those of the
+    terms' waves: the plane before or after the edge, or both, and the wedge's face."""
+    images = np.array([[0.0, 0.0, 0.0], [1e-3, 0.0, 0.0], [5e-4, 0.0, 0.0]])
+    orders, index = np.array([1, 1, 2]), np.array([7, 9, 4])
+    hit = np.array([[-1, -1, 3], [-1, -1, 5], [-1, 3, 5]])
+    known = np.ones(3, dtype=bool)
+    query, order = np.array([[2e-4, 0.0, 0.0]]), np.array([1])
+
+    def match(planes, carried=known, tolerance=1e-2):
+        asked = np.array([planes])
+        return int(
+            diffraction_module._match(
+                query, order, images, orders, index, tolerance, (asked, hit, carried)
+            )[0]
+        )
+
+    assert (
+        int(diffraction_module._match(query, order, images, orders, index, 1e-2)[0]) == 7
+    )  # the nearest
+    assert match([-1, -1, 3]) == 7
+    assert match([-1, -1, 5]) == 9  # not the nearest: the one off the wave's plane
+    assert match([-1, -1, 5], tolerance=5e-4) == -1  # and within the tolerance
+    assert match([-1, -1, 4]) == -1  # no path off the wave's plane
+    assert match([-1, 3, 5]) == -1  # the path off both planes is of another order
+    assert match([-1, -1, 4], carried=np.array([True, False, True])) == 9  # planes unknown
+    two = np.array([[-1, -1, 5], [-1, -1, 3]])
+    for chunk in (1, 2):
+        found = diffraction_module._match(
+            np.repeat(query, 2, axis=0),
+            np.repeat(order, 2),
+            images,
+            orders,
+            index,
+            1e-2,
+            (two, hit, known),
+            chunk=chunk,
+        )
+        assert found.tolist() == [9, 7]
+
+    room = _by_two_planes(60.0, "0.3", 0.5)
+    paths = early_paths(room, diffraction="none")
+    model = TraceModel.from_room(room)
+    rows = np.flatnonzero(paths.order > 0)
+    off = [model.face_plane[paths.faces[row]].tolist() for row in rows]
+    assert any(len(own) == 2 and own[0] > own[1] for own in off)  # not in rising order
+    planes, carried = diffraction_module._planes_hit(model, paths, rows, 3)
+    assert carried.all()
+    for row, own, hit in zip(rows, planes, off, strict=True):
+        assert own[own >= 0].tolist() == sorted(hit)
+        assert (own[: 3 - paths.order[row]] == -1).all()
+    short = dataclasses.replace(paths, faces=[faces[:-1] for faces in paths.faces])
+    assert not diffraction_module._planes_hit(model, short, rows, 3)[1].any()
+    assert not diffraction_module._planes_hit(model, paths, rows, 0)[
+        1
+    ].any()  # more reflections than the width
+    bare = early_stage.EarlyReflections(
+        paths.order, paths.delay_s, paths.distance_m, paths.direction, paths.energy
+    )
+    assert not diffraction_module._planes_hit(model, bare, rows, 3)[1].any()
+
+    assert model.geometric_plane.tolist() == list(range(model.plane_count))
+    terms = {
+        "kind": np.array([0, 1, 2, 3]),
+        "plane": np.array([-1, 6, 2, 5]),
+        "plane2": np.array([-1, -1, -1, 4]),
+    }
+    own = diffraction_module._wave_planes(model, terms)
+    assert own.tolist() == [[-1, -1, -1], [-1, -1, 6], [-1, -1, 2], [-1, 4, 5]]
+    with_face = diffraction_module._wave_planes(model, terms, np.full(4, 3))
+    assert with_face.tolist() == [[-1, -1, 3], [-1, 3, 6], [-1, 2, 3], [3, 4, 5]]
+
+
+def test_two_waves_with_one_image_off_two_planes_are_two_ways(tmp_path: Path) -> None:
+    """Edges in a row on one straight way share its wave: one carries it, the others
+    count on the lit side of its boundary. Two waves of one order off different planes
+    with one image of the source (a source right by both planes: the two images round
+    to one point of the grid, a millionth of the model's extent wide, that tells images
+    apart) are two ways, each with its carrier, also where they differ in the second of
+    their two planes alone; told by the image alone they were one way, and one of the
+    two waves was left out. Off a wall and off a panel in the wall's plane that faces
+    the other way, two of the model's planes in one place, it is one wave."""
+    room = _by_two_planes(60.0, "corner", 0.5)
+    diffraction = EdgeDiffraction(
+        TraceModel.from_room(room),
+        np.array([12.0, 12.0, 1.5]),
+        speed_of_sound=room.speed_of_sound(),
+        air=np.zeros(8),
+    )
+    edge = np.array([0, 1, 0, 1])
+    rows = {
+        "edge": edge,
+        "t_k": 0.5 * diffraction.edges.length[edge],
+        "rho_s": np.ones(4),
+        "r1": np.ones(4),
+        "r2": np.ones(4),
+        "point": np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]] * 2),
+        "kind": np.ones(4, dtype=np.int64),
+        "plane": np.array([3, 3, 5, 5]),
+        "plane2": np.full(4, -1),
+    }
+    wave = np.ones(4, dtype=bool), np.zeros(4), np.zeros((4, 3)), np.ones(4, dtype=np.int64)
+    in_line, carrier, on_ways, of_way = diffraction._in_line(rows, *wave)
+    assert carrier.tolist() == [0, 2] and in_line.tolist() == [1, 3]
+    assert on_ways.tolist() == [0, 1, 2, 3] and of_way.all()
+    rows["plane"] = np.full(4, 3)  # one wave over the two edges, told twice: one carrier
+    in_line, carrier, _, _ = diffraction._in_line(rows, *wave)
+    assert carrier.tolist() == [0] and in_line.tolist() == [1, 2, 3]
+    # A plane before the edge and one after it: the second tells the waves apart too.
+    rows["kind"], rows["plane2"] = np.full(4, 3), np.array([5, 5, 7, 7])
+    twice = wave[0], wave[1], wave[2], np.full(4, 2)
+    in_line, carrier, _, _ = diffraction._in_line(rows, *twice)
+    assert carrier.tolist() == [0, 2] and in_line.tolist() == [1, 3]
+    rows["plane2"] = np.full(4, 5)
+    in_line, carrier, _, _ = diffraction._in_line(rows, *twice)
+    assert carrier.tolist() == [0] and in_line.tolist() == [1, 2, 3]
+    room = _l_room_with_panels(tmp_path, [4.0, 2.5, 1.0], [2.0, 8.0, 2.4])
+    model = TraceModel.from_room(room)
+    panel = int(np.flatnonzero(model.geometric_plane != np.arange(model.plane_count))[0])
+    wall = int(model.geometric_plane[panel])
+    diffraction = EdgeDiffraction(
+        model, np.array([4.0, 2.5, 1.0]), speed_of_sound=room.speed_of_sound(), air=np.zeros(8)
+    )
+    rows["t_k"] = 0.5 * diffraction.edges.length[edge]
+    for kind, key, order in ((1, "plane", wave), (3, "plane2", twice)):
+        rows["kind"], rows["plane"], rows["plane2"] = (
+            np.full(4, kind),
+            np.full(4, 5),
+            np.full(4, -1),
+        )
+        rows[key] = np.array([wall, wall, panel, panel])
+        in_line, carrier, _, _ = diffraction._in_line(rows, *order)
+        assert carrier.tolist() == [0] and in_line.tolist() == [1, 2, 3]
+
+
+def test_the_wave_that_arrives_at_an_edge_has_the_path_off_its_plane() -> None:
+    """A source 0.3 millionths of the model's extent from the ground and from the plane
+    of a wall, 30 cm past the wall's end: only its reflection off the ground reaches the
+    listener. A term whose wave reflects off the ground before or after its edge has
+    that path for the wave that arrives at the edge; one whose wave reflects off the
+    wall's plane has none, though the two images lie within the millionth of each
+    other."""
+    width = 10000.0
+    room = _by_two_planes(width, "0.3", 3e-7 * width)
+    model = TraceModel.from_room(room)
+    source = np.array(room.scene.sources[0].position)
+    listener = np.array(room.scene.listeners[0].position)
+    paths = early_paths(room, diffraction="none")
+    (reflected,) = np.flatnonzero(paths.order == 1)
+    ground = int(model.face_plane[paths.faces[reflected][0]])
+    by = np.flatnonzero(np.abs(model.plane_normal @ source - model.plane_offset) < 1e-6 * width)
+    assert len(by) == 2 and ground in by
+    diffraction = EdgeDiffraction(
+        model, source, speed_of_sound=room.speed_of_sound(), air=np.zeros(8)
+    )
+    terms = {
+        "kind": np.array([1, 2, 1, 2]),
+        "plane": np.repeat(by, 2),
+        "plane2": np.full(4, -1),
+        "edge": np.zeros(4, dtype=np.int64),
+        "phi_s": np.ones(4),
+    }
+    found, images, _, _ = diffraction._specular(listener, paths, terms)
+    assert np.linalg.norm(images[0, 0] - images[2, 0]) < 1e-6 * width
+    assert found[:, 0].tolist() == [reflected if p == ground else -1 for p in terms["plane"]]
+
+
+def _l_room_with_panels(folder: Path, source, listener, loss: float | None = None) -> Room:
+    """An L-shaped room 3 m high (11 x 5 m and, beside it, 5 x 4 m) with two panels 2 m
+    high standing free in it: one in the plane of each of its two inner walls, which
+    face the other way. With ``loss``, the panels let sound through with that
+    transmission loss (dB)."""
+    plan = [(0, 0), (11, 0), (11, 5), (5, 5), (5, 9), (0, 9)]
+    quads = [
+        ((x0, y0, 0), (x1, y1, 0), (x1, y1, 3), (x0, y0, 3))
+        for (x0, y0), (x1, y1) in zip(plan, plan[1:] + plan[:1], strict=True)
+    ]
+    for z in (0, 3):
+        quads.append(((0, 0, z), (11, 0, z), (11, 5, z), (0, 5, z)))
+        quads.append(((0, 5, z), (5, 5, z), (5, 9, z), (0, 9, z)))
+    quads.append(((5, 1, 0), (5, 4, 0), (5, 4, 2), (5, 1, 2)))
+    quads.append(((1, 5, 0), (4, 5, 0), (4, 5, 2), (1, 5, 2)))
+    lines = ["g walls"]
+    for n, quad in enumerate(quads):
+        if n == len(quads) - 2:
+            lines.append("g panels")
+        lines += [f"v {x} {y} {z}" for x, y, z in quad]
+        lines.append("f " + " ".join(str(4 * n + i + 1) for i in range(4)))
+    obj = folder / "l.obj"
+    obj.write_text("\n".join(lines) + "\n")
+    wall = {"absorption": [0.1] * 8, "scattering": 0.0}
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": str(obj)},
+                "materials": {"wall": wall, "panel": wall | {"transmission_loss": loss}},
+                "default_material": "wall",
+                "assignments": {"panels": "panel"},
+                "sources": [{"name": "s", "position": source}],
+                "listeners": [{"name": "l", "position": listener}],
+                "simulation": {
+                    "scattering": {"from_size": False},
+                    "early": {"method": "image_sources", "max_order": 2},
+                },
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "listener", "loss"),
+    [
+        ([4.0, 2.5, 1.0], [2.0, 8.0, 2.4], None),
+        ([2.5, 4.0, 1.2], [8.0, 2.0, 1.2], None),
+        ([4.0, 2.5, 1.0], [2.0, 8.0, 2.4], 10.0),
+    ],
+)
+def test_planes_that_face_opposite_ways_in_one_place_are_one_for_a_wave_s_path(
+    tmp_path: Path, monkeypatch, source, listener, loss
+) -> None:
+    """A wall with a room on one side and a panel in line with it that faces the other
+    way are two of the model's planes in one geometric plane, where a point has one
+    image: a wave off the one has the path off the other. In a room with two such
+    pairs and no source right by two planes, every wave has the path that it has by its
+    image alone, and the early level is the same to the last digit. With the planes
+    told by their numbers, waves off a panel's plane would lose the paths off its wall:
+    2.3 and 1.5 dB in the first two cases. In the third the panels let sound through,
+    and paths through a panel come before reflections in the list of the paths."""
+    room = _l_room_with_panels(tmp_path, source, listener, loss)
+    model = TraceModel.from_room(room)
+    label = model.geometric_plane
+    assert model.plane_count - len(np.unique(label)) == 2
+    for a in range(model.plane_count):
+        for b in range(model.plane_count):
+            along = float(model.plane_normal[a] @ model.plane_normal[b])
+            one = (
+                abs(abs(along) - 1.0) < 1e-9
+                and abs(model.plane_offset[a] - along * model.plane_offset[b]) < 1e-9
+            )
+            assert (label[a] == label[b]) == one
+    assert (label <= np.arange(model.plane_count)).all() and (label[label] == label).all()
+    panels = np.flatnonzero(label != np.arange(model.plane_count))
+    # A plane 0.02 mm from another, or turned from it by 0.02 mrad, is no part of it.
+    # One 0.008 mm from it, turned by 0.008 mrad or both is, though its offset and its
+    # normal round to other multiples of the planes' tolerance.
+    count = np.arange(model.plane_count)
+    for step, one in ((2e-5, False), (8e-6, True)):
+        moved = model.plane_offset + step * (count == panels[0])
+        there = dataclasses.replace(model, plane_offset=moved).geometric_plane[panels]
+        assert there.tolist() == [label[panels[0]] if one else panels[0], label[panels[1]]]
+        turned = model.plane_normal.copy()
+        turned[panels[1], 2] = step
+        turned[panels[1]] /= np.linalg.norm(turned[panels[1]])
+        there = dataclasses.replace(model, plane_normal=turned).geometric_plane[panels]
+        assert there.tolist() == [label[panels[0]], label[panels[1]] if one else panels[1]]
+    moved = model.plane_offset + 8e-6 * (count == panels[1])
+    there = dataclasses.replace(model, plane_normal=turned, plane_offset=moved).geometric_plane
+    assert there[panels].tolist() == label[panels].tolist()
+    # Three planes each 0.01 mm from the next are one: the one between joins the others.
+    between = model.plane_normal.copy()
+    between[panels[1]] = model.plane_normal[panels[0]]
+    moved = model.plane_offset + 2e-5 * (count == panels[0])
+    moved[panels[1]] = model.plane_offset[panels[0]] + 1e-5
+    there = dataclasses.replace(model, plane_normal=between, plane_offset=moved).geometric_plane
+    assert there[panels].tolist() == [label[panels[0]]] * 2
+    terms = {"kind": np.array([1, 3]), "plane": panels, "plane2": panels[::-1]}
+    own = diffraction_module._wave_planes(model, terms, panels[::-1])
+    walls = sorted(label[panels].tolist())
+    assert own.tolist() == [[-1, *walls], sorted([*walls, int(label[panels[0]])])]
+    specular = early_paths(room, diffraction="none")
+    rows = np.flatnonzero(specular.order > 0)
+    hit, carried = diffraction_module._planes_hit(model, specular, rows, 2)
+    off = [model.face_plane[specular.faces[row]] for row in rows]
+    assert carried.all() and np.isin(np.concatenate(off), panels).any()
+    for own, planes in zip(hit, off, strict=True):
+        assert own[own >= 0].tolist() == sorted(label[planes].tolist())
+    level = 10.0 * np.log10(total_energy(early_paths(room)))
+
+    def unknown(model, paths, rows, width):
+        return np.full((len(rows), width), -1), np.zeros(len(rows), dtype=bool)
+
+    def none(model, c, face_plane=None):
+        return np.full((len(c["kind"]), 3), -1)
+
+    monkeypatch.setattr(diffraction_module, "_planes_hit", unknown)
+    monkeypatch.setattr(edge_fade_module, "_planes_hit", unknown)
+    monkeypatch.setattr(diffraction_module, "_wave_planes", none)
+    by_image = 10.0 * np.log10(total_energy(early_paths(room)))
+    np.testing.assert_allclose(level, by_image, rtol=0, atol=1e-9)

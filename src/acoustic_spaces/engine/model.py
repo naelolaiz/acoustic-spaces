@@ -320,6 +320,33 @@ class TraceModel:
         return spread
 
     @cached_property
+    def geometric_plane(self) -> np.ndarray:
+        """(P,) for each plane the first of the planes that lie where it does, whichever
+        way they face: a wall with a room on one side and a partition or a panel in line
+        with it, whose normal points the other way, are two planes in one geometric
+        plane, and a point has one image in both (worked out once). Two planes lie in
+        one place where their normals and offsets, in multiples of
+        :data:`PLANE_TOLERANCE` and with the signs of one plane's turned where it faces
+        the other way, round to numbers at most one apart: always where they differ by
+        less than that tolerance in each, on whichever side of a rounding step either
+        falls. So do two planes that each lie where a third does."""
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
+        from scipy.spatial import cKDTree
+
+        count = self.plane_count
+        keys = np.round(np.column_stack([self.plane_normal, self.plane_offset]) / PLANE_TOLERANCE)
+        # Each plane as it faces and as it faces the other way: the pairs at most one
+        # apart in every number (whole numbers, so nearer than 1.5).
+        either = np.concatenate([keys, -keys])
+        pairs = cKDTree(either).query_pairs(1.5, p=np.inf, output_type="ndarray") % count
+        graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(count, count))
+        label = connected_components(graph, directed=False)[1]
+        first = np.full(count, count, dtype=np.int64)
+        np.minimum.at(first, label, np.arange(count))
+        return first[label]
+
+    @cached_property
     def face_planes(self) -> tuple[np.ndarray, np.ndarray]:
         """(F, 3) unit normals and (F,) offsets of the plane each face itself lies in, the
         normal facing the way of its plane's; its plane's own where its

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fixed: with edge diffraction, a source so near two planes at once that its images in
+  the two lie within a millionth of the model's largest extent of each other (nearer
+  both than 0.35 millionths where they meet at a right angle, 3.5 mm in a model 10 km
+  wide: by a building's eave or upright corner, or by the ground and the plane of a wall
+  past the wall's end) had the reflection off one plane taken for the reflection off the
+  other where only one of the two reaches the listener: the early level was 0.9 to 2.6
+  dB off in the cases measured. Levels also move, by up to 0.44 dB in the cases
+  measured, where two sequences of reflections off parallel planes have one image (off a
+  wall and then a screen exactly halfway to the opposite wall, and off the screen and
+  then that wall): the reflection off one sequence's planes is no longer taken for the
+  other's.
 - Fixed: with `late.device` set to `gpu`, `both` or `auto`, the late part came out low
   where the source or a listener lay right by a surface. In the cases measured: up to
   3.2 dB for a source within a millionth of the model's size of one, 6 to 7.5 dB for a
