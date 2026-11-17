@@ -27,8 +27,8 @@
 # Its microphone is an ideal supercardioid and the reverberation's phases are random,
 # so take the frequencies as an example of where such a stage rings.
 # near_field.py prints how far each array's far-field pattern would be off at each
-# listener: within 3 dB up to 2 kHz, but up to 8 dB at 4 and 8 kHz, the side fill's at
-# the guitarist.
+# listener: within 3 dB up to 2 kHz, but up to 8.5 dB at 4 and 8 kHz, the side fill's
+# at the guitarist.
 # make_model.py writes the model and the arrays; their boxes are a generic box made up
 # for this example, not any product's data.
 name: Concert stage with monitors
