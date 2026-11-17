@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: with edge diffraction, where a path reflects off two surfaces next to the line
+  they meet at, the leg between them can be shorter than a millionth of the model's
+  size, and the terms that make reflections fade at edges then lost their paths over
+  edges (the ray that looks whether such a leg is clear started past its end). With a
+  source 2 mm from both arms of a barrier bent by 30 degrees in a model 10 km wide, a
+  listener behind an arm had 1 of its 6 paths and up to 7.1 dB less (at 125 Hz, with
+  `first_order`).
 - Fixed: with edge diffraction, a source so near two planes at once that its images in
   the two lie within a millionth of the model's largest extent of each other (nearer
   both than 0.35 millionths where they meet at a right angle, 3.5 mm in a model 10 km

@@ -436,13 +436,15 @@ def _outdoors(
     source=(0.0, 0.0, 1.0),
     path=((10, -30), (10, 30)),
     behind=None,
+    half_m: float = 100.0,
     **early,
 ) -> Room:
-    """A ``source`` (by default 1 m over a ground), a barrier ``barrier_m`` high along
-    ``path`` (by default 10 m away, along y), with ``behind`` another as high along that
-    path, and, with ``shed``, a shed as high as the barrier out of the way."""
+    """A ``source`` (by default 1 m over a ground that reaches ``half_m`` each way), a
+    barrier ``barrier_m`` high along ``path`` (by default 10 m away, along y), with
+    ``behind`` another as high along that path, and, with ``shed``, a shed as high as the
+    barrier out of the way."""
     geometry = {
-        "ground": {"extent": [[-100, -100], [100, 100]], "sky": 40},
+        "ground": {"extent": [[-half_m, -half_m], [half_m, half_m]], "sky": 40},
         "barriers": [
             {"name": name, "path": [list(p) for p in line], "height": barrier_m}
             for name, line in (("wall", path), ("wall_2", behind))
@@ -626,6 +628,30 @@ def test_a_path_over_an_edge_is_clear_past_the_ground(shape: str, mode: str) -> 
         for z in (1.70, 1.72)
     ]
     assert np.abs(levels[1] - levels[0])[:4].max() < 0.15
+
+
+def test_a_leg_shorter_than_the_rays_offset_is_clear() -> None:
+    """A source 2 mm from both arms of a barrier bent by 30 degrees, inside the bend,
+    and a listener behind an arm: the reflections between the arms next to the source
+    have legs a few millimetres long. The rays that tell whether a path over an edge is
+    clear leg after leg start a millionth of the model's size along the leg, 1 cm in a
+    model 10 km wide: no further than the leg's middle, so that the paths and the level
+    are those of the same scene in a model 200 m wide."""
+    bend = np.radians(30.0)
+    reach = 0.002 / np.sin(0.5 * bend)
+    scene = {
+        "source": (reach * np.cos(0.5 * bend), reach * np.sin(0.5 * bend), 1.5),
+        "path": ((12.0, 0.0), (0.0, 0.0), (12.0 * np.cos(bend), 12.0 * np.sin(bend))),
+        "barrier_m": 4.0,
+        "max_order": 2,
+        "diffraction": "first_order",
+    }
+    wide, narrow = (
+        early_paths(_outdoors((6.0, -3.0, 2.0), half_m=half_m, **scene))
+        for half_m in (5000.0, 100.0)
+    )
+    assert len(wide.order) == len(narrow.order) > 1
+    assert np.abs(10 * np.log10(total_energy(wide) / total_energy(narrow))).max() < 0.01
 
 
 # The level (dB re the direct sound in free field) behind that barrier, from the source

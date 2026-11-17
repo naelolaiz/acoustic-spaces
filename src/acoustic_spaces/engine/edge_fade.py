@@ -1618,7 +1618,11 @@ class EdgeFade:
             alive[np.flatnonzero(alive)[~go]] = False
             toward = nxt - point[rows]
             length = np.linalg.norm(toward, axis=1)
-            start = point[rows] + step * toward / np.maximum(length, 1e-300)[:, None]
+            # The ray starts just off the plane the leg leaves: no further along the leg
+            # than its middle, where the leg is shorter than twice that (between two
+            # planes next to where they meet).
+            off = np.minimum(step, 0.5 * length)[:, None]
+            start = point[rows] + off * toward / np.maximum(length, 1e-300)[:, None]
             ok[rows] &= _clear(model, start, nxt)
             point[rows], plane[rows] = nxt, nxt_plane
             alive[rows] &= ok[rows] & (nxt_plane >= 0)
