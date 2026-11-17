@@ -207,6 +207,22 @@ class TraceModel:
         normals = np.where((back | (both & flip[:, 0]))[:, None], -normals, normals)
         offsets = np.einsum("ij,ij->i", normals, mesh.triangles[:, 0])
         keys = np.round(np.column_stack([normals, offsets]) / PLANE_TOLERANCE).astype(np.int64)
+        if both.any() and not both.all():
+            # A face with a room on both sides in the geometric plane of walls with a room
+            # on one side, none of which faces the canonical way, faces theirs: a partition
+            # or a free-standing panel in line with a wall is in the wall's plane whichever
+            # way the wall faces.
+            walls = int((~both).sum())
+            rows = np.concatenate([keys[~both], keys[both], -keys[both]])
+            label = np.unique(rows, axis=0, return_inverse=True)[1].reshape(-1)
+            wall = np.zeros(int(label.max()) + 1, dtype=bool)
+            wall[label[:walls]] = True
+            same, opposite = wall[label[walls:]].reshape(2, -1)
+            turn = both.copy()
+            turn[both] = opposite & ~same
+            normals = np.where(turn[:, None], -normals, normals)
+            offsets = np.where(turn, -offsets, offsets)
+            keys = np.where(turn[:, None], -keys, keys)
         _, first, face_plane = np.unique(keys, axis=0, return_index=True, return_inverse=True)
         face_plane = face_plane.reshape(-1)
         two_sided = np.zeros(len(first), dtype=bool)
@@ -318,6 +334,15 @@ class TraceModel:
         spread = np.zeros(self.plane_count)
         np.maximum.at(spread, self.face_plane, self.face_spread)
         return spread
+
+    @cached_property
+    def face_two_sided(self) -> np.ndarray:
+        """(F,) the faces with a room on both sides: a partition between two rooms or a
+        free-standing panel; every face when the model is not ``oriented``. A wall with
+        a room on one side has one side, also where its plane holds such a face
+        (:attr:`plane_two_sided`)."""
+        air = self.face_room >= 0
+        return self.plane_two_sided[self.face_plane] & (air[:, 0] == air[:, 1])
 
     @cached_property
     def face_planes(self) -> tuple[np.ndarray, np.ndarray]:

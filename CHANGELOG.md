@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: a free-standing panel or a partition between two rooms in line with a wall
+  shared the wall's plane in the model or had one of its own by the way the wall faces,
+  so with edge diffraction a room and its mirror image gave different early levels (up
+  to 1.9 dB at 63 Hz in the cases measured), and an inside corner of such a wall could
+  count as a diffracting edge. The panel now lies in the wall's plane whichever way the
+  wall faces (with walls that face both ways in that plane, in the plane of one of them,
+  as before), and such a corner is no edge.
 - Fixed: a path exactly through an outer edge (a roof's edge over an end wall, a
   building's upright corner, the edge where two barriers meet) stood as a reflection off
   both faces for a source and a listener the edge sees in the same direction across it,
