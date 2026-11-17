@@ -60,11 +60,13 @@ past. A stitch whose own corner lies on its edge (within 10 µm) is dropped ther
 split closes the gap. A model with no faces left is refused, as is one with coordinates
 that are not finite numbers or a face that names a vertex the file does not have.
 `validate` then reports surfaces without a material, sources or listeners outside the
-room or on a surface (within 1 µm of it; an opening, with air on both sides, does not
-count) and listeners within 1 cm of a source; it warns about models that are not closed
-(rays would escape), listeners so close to a surface or an opening that the late part
-comes out noisy, and assignments that match nothing. Errors exit
-with status 1, and with `--strict` warnings too. Normals may point either way:
+room or on a surface (within 1 µm of it, or within 2e-9 of the model's diagonal where
+that is more, twice the least distance at which a ray traced on the CPU meets a face; an
+opening, with air on both sides, does not count) and listeners within 1 cm of a source;
+it warns about models that are not closed (rays would escape), listeners so close to a
+surface or an opening that the late part comes out noisy, and assignments that match
+nothing. Errors exit with status 1, and with `--strict` warnings too. Normals may point
+either way:
 the room is the space the faces close off, found from the faces themselves (see
 [Walls, doors and openings](#walls-doors-and-openings)), and a panel standing in the
 room, with air on both sides, reflects and absorbs on both.
@@ -606,11 +608,17 @@ sources:
 - A **CSV** table has the header `azimuth, elevation` followed by frequencies in Hz,
   then one row per direction with levels in dB (any reference; only differences
   matter). Azimuth turns from the front towards the source's left and elevation is
-  positive upwards, in degrees. Any set of directions works: they are interpolated
-  onto a 5 degree grid. Bands are averaged into octaves, and octaves with no data copy
-  the nearest one; in third-octave runs each octave's pattern holds for its thirds.
+  positive upwards, in degrees. Any set of directions works. Bands are averaged into
+  octaves, and octaves with no data copy the nearest one; in third-octave runs each
+  octave's pattern holds for its thirds.
   From Python, `acoustic_spaces.directivity.write_directivity_csv(path, balloon)` writes
   a directivity (a `Balloon`) as such a table, its octave bands on its grid.
+- The directions of a SOFA or CSV file are interpolated onto a 5 degree grid, each of
+  its points from the four directions nearest to it, or from all of them where the
+  file has fewer. Where several are equally near and not all of them are among the
+  four, the point takes the nearer ones alone, or all of them if none is nearer. A
+  direction given more than once (a table's -180 and 180 degrees of azimuth, its rows
+  straight up and down) counts once, with the mean of its energies.
 - CLF (Common Loudspeaker Format) files are not read: their specification is not
   public. Convert them to SOFA or CSV.
 

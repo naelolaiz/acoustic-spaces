@@ -80,10 +80,10 @@ jobs:
         # A hung GPU test would otherwise hold the runner for 6 hours. Windows and the
         # Intel Mac need the most; on Windows, its software GPU (WARP) runs the shaders
         # that Direct3D 12's compiler builds without its optimizer (see
-        # gpu._primary_backends) slowly. In November 2026 their jobs took 31 to 43
-        # minutes on main, and two Intel Mac Python 3.10 jobs ran out of 45 minutes, at
-        # 81 and 96 % of the tests.
-        timeout-minutes: 75
+        # gpu._primary_backends) slowly. In mid-November 2026 the Windows jobs took 64
+        # to 73 minutes in all where they passed, and two ran out of this step's 75
+        # minutes with no test failed (3,095 had passed in one).
+        timeout-minutes: 120
         run: >-
           python -m pytest -q -W error
           ${{ matrix.os == 'ubuntu-24.04' && matrix.python == '3.14'

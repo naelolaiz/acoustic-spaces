@@ -53,6 +53,9 @@ MIN_SOURCE_DISTANCE_M = 0.01
 #: A source or listener closer than this (metres) to a surface is on it: neither in the
 #: room nor out of it (the distance at which two corners count as one).
 ON_SURFACE_M = MERGE_TOLERANCE_M
+#: In a large model the distance is this many times the least length of a ray traced on
+#: the CPU, where that is more (:meth:`Room.on_surface_m`).
+ON_SURFACE_MARGIN = 2.0
 #: The late part's detector sphere, kept clear of the surfaces, smaller than this share
 #: of the smallest one sized for the room (``late.RADIUS_RANGE``) catches a hundredth of
 #: the rays or fewer: a listener that close to a surface gets a noisy late part.
@@ -397,13 +400,20 @@ class Room:
             # On a surface the inside checks can say either; that is the problem. An
             # opening (the sky, say) has air on both sides.
             points = [item.elements() if kind == "source" else item.position for item in items]
-            on = [bool((self._clearance(p, solid=True) < ON_SURFACE_M).any()) for p in points]
+            within = self.on_surface_m()
+            # The reason goes with a distance that the model's size has made longer.
+            why = (
+                ", twice the least distance at which a ray meets a face in a model of this size"
+                if within > ON_SURFACE_M
+                else ""
+            )
+            on = [bool((self._clearance(p, solid=True) < within).any()) for p in points]
             for item, on_surface in zip(items, on, strict=True):
                 if on_surface:
                     reaches = "reaches" if getattr(item, "extended", False) else "is"
                     out.append(
                         f"{kind} {item.name!r} at {list(item.position)} {reaches} on a "
-                        f"surface (within {ON_SURFACE_M * 1e6:g} µm of it), neither in the "
+                        f"surface (within {within * 1e6:.3g} µm of it{why}), neither in the "
                         "air nor out of it: move it off the surface"
                     )
             if inside is None:
@@ -441,6 +451,16 @@ class Room:
                         "them apart"
                     )
         return out
+
+    def on_surface_m(self) -> float:
+        """The distance (m) under which a source or a listener is on a surface:
+        :data:`ON_SURFACE_M`, or :data:`ON_SURFACE_MARGIN` times the least length of a ray
+        traced on the CPU in the model
+        (:func:`~acoustic_spaces.engine.early.ray_start`) where that is more, which it is
+        in a model more than 500 m from corner to corner."""
+        from acoustic_spaces.engine.early import ray_start
+
+        return max(ON_SURFACE_M, ON_SURFACE_MARGIN * ray_start(self.mesh))
 
     def _clearance(self, points, solid: bool = False) -> np.ndarray:
         """Distance (m) from each point to the nearest surface, or with ``solid`` to the
@@ -588,7 +608,8 @@ class Room:
         positions = [lis.position for lis in listeners]
         # Kept clear of every face, openings too, as the run keeps it.
         clearance = self._clearance(positions)
-        on_solid = self._clearance(positions, solid=True) < ON_SURFACE_M  # a problem
+        within = self.on_surface_m()
+        on_solid = self._clearance(positions, solid=True) < within  # a problem
         smallest = RADIUS_RANGE[0]
         out = []
         for listener, gap, on in zip(listeners, clearance.tolist(), on_solid, strict=True):
@@ -597,7 +618,7 @@ class Room:
                 continue
             where = (
                 "on an opening (a surface that lets all sound through)"
-                if gap < ON_SURFACE_M
+                if gap < within
                 else f"{100 * gap:.2g} cm from a surface"
             )
             out.append(

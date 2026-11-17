@@ -42,7 +42,8 @@
 #   python make_model.py
 #
 # On the pitch from the mix position back, nine points of the map in ten get the same
-# level within 2.6 dB (all bands together). The map takes under five minutes on 4 cores.
+# level within 2.3 to 2.5 dB (all bands together; it differs from run to run, as the
+# scene sets no seed). The map takes under five minutes on 4 cores.
 # align.py prints when and how loud each loudspeaker arrives at each listener, and which
 # would be heard as an echo: none, and each player hears their own monitor loudest.
 # near_field.py prints how far each array's far-field pattern would be off at each
