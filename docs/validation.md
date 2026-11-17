@@ -6181,7 +6181,7 @@ python validation/ffp.py --json ffp.json
 python validation/curved_rays.py --json curved_rays.json   # about 30 min
 python validation/benchmark_1995.py --json benchmark.json   # --far: whole scenes to 10 km
 python validation/open_ground_frequencies.py --json open_ground.json   # --cache DIR --part K/N to share it
-python validation/steep_sound.py --json steep_sound.json   # about an hour; --only steps: the range step's check
+python validation/steep_sound.py --json steep_sound.json   # about 2.3 h; --only steps: the range step's check
 python validation/weather_zones.py --json weather_zones.json   # --only pe or mean
 python validation/barrier_wind.py --json barrier_wind.json   # about 4 h; --quick: fewer bands
 python validation/rows.py --engine --json rows.json   # --references: the wave calculation again
@@ -6228,12 +6228,12 @@ third-octave bands) and of the hall about 1.5 hours (5.2 calibrated, 3.4 in thir
 bands), the binaural comparison 10 minutes in the seminar room, 6 in the auditorium and
 an hour in the hall, a loudspeaker of the hall in parts about 10 minutes, the coupled
 rooms against theory under a second, and the rooms' own decay 5.8 minutes. Since then
-the open ground's parabolic equation in wind runs up to 2 kHz, which on one core makes
-the outdoor measurements take about 15 times as long (case 1), the long term about 5.4
-times and the benchmark about 1.6 times (measured before its bands carried its field
-through the crossovers, which takes the equation 11 to 79 % longer for a listener, so
-these runs now take longer still); the others listed here do not reach that part
-of the engine. Since 11 November the ray tracer and the wave solver do less work on the
+the open ground's parabolic equation in wind runs up to 2 kHz, its bands carry its field
+through the crossovers and over the open ground each listener's run marches under the
+absorbing layer of a run for it alone: on 16 November, on another machine of the kind, the outdoor
+measurements took 28 minutes (the cases already downloaded, without the plots), the
+long term 1.6 and the benchmark 93 (the sum of its parts, each timed alone); the others
+listed here do not reach that part of the engine. Since 11 November the ray tracer and the wave solver do less work on the
 CPU for the same results: the seminar room's BRAS run takes 10 to 12 % less, and of the
 others only the wave solver's checks were timed again.
 The cross-check's numbers come from 4.0.1 with seed 1;
