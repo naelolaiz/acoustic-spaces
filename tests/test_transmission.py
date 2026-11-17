@@ -593,6 +593,45 @@ def test_a_partition_drawn_as_one_face_for_each_room_is_one_partition(tmp_path: 
         np.testing.assert_allclose(energy_two, energy, rtol=1e-9)
 
 
+@pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
+def test_paths_with_one_image_off_other_surfaces_are_paths_of_their_own(
+    tmp_path: Path, method: str
+) -> None:
+    """Two rooms as deep (5 m) either side of a 30 dB partition, drawn as one face or as
+    two, the source in one room and listeners in the other. Off the partition and the
+    end wall of the source's room and then through the partition, or through it and off
+    the other room's end wall and the partition: two paths as long, with one image of
+    the source. Each listener has both, as with its room 1 mm deeper or shallower: the
+    same orders and crossings, and the early level within 0.01 dB of the mean of theirs
+    in every band. Of the paths with one image one had been kept, whatever they
+    reflected off: 63 paths of 70, and 0.8 to 2.2 dB less in a band."""
+    quad = ((5, 0, 0), (5, 4, 0), (5, 4, 3), (5, 0, 3))
+    for faces in (1, 2):
+        for listener in ((7.9, 2.6, 1.5), (6.1, 0.9, 1.1), (8.8, 3.3, 1.7)):
+            found = []
+            for deeper in (-1e-3, 0.0, 1e-3):
+                groups = {
+                    "room1": _box(0, 5, 4, 3, skip=("x1",)),
+                    "room2": _box(5, 10 + deeper, 4, 3, skip=("x0",)),
+                    "partition": [quad, quad[::-1]][:faces],
+                }
+                room = _partitioned(
+                    _write(tmp_path / "rooms.obj", groups),
+                    [1.7, 1.3, 1.2],
+                    listener,
+                    max_order=3,
+                    method=method,
+                    diffraction="none",
+                )
+                paths = early_paths(room)
+                kinds = sorted(zip(paths.order.tolist(), paths.crossings.tolist(), strict=True))
+                found.append((kinds, 10 * np.log10(total_energy(paths))))
+            (kinds_less, level_less), (kinds, level), (kinds_more, level_more) = found
+            assert kinds == kinds_less == kinds_more
+            assert len(kinds) == 70
+            np.testing.assert_allclose(level, (level_less + level_more) / 2, rtol=0, atol=0.01)
+
+
 def test_a_reflection_at_the_foot_of_a_doorway_s_side_passes_the_doorway(
     tmp_path: Path,
 ) -> None:

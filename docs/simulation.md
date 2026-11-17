@@ -13,7 +13,8 @@ faces of every diffracting edge that the source stands in front of, in its sight
 not: a ray misses a face the source sees nearly edge-on, and a reflection that an
 obstacle cuts off still fades at the obstacle's edges. Every candidate is then traced back from the listener, so the
 paths found are exact either way, including paths that reflect exactly on an edge
-or in a corner. Sound that bends round edges is added to them (see
+or in a corner: a face reflects as far as its edges, to within a billionth of the
+model's diagonal. Sound that bends round edges is added to them (see
 [Edge diffraction](#edge-diffraction)).
 
 **Late reverberation** (`simulation.late`) is either:
