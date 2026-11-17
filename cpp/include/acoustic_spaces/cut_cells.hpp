@@ -67,10 +67,10 @@
 // space that holds no cell centre; the model reaching into the matched layer; faces in a cube
 // next to a cell of the layer that holds air (code kRefusedNextToLayer: the layer reads its
 // neighbours whole, so each of them owns its whole cube and face towards it); a part of the
-// air open only to the layer (T-4). Each region of the air is owned by one air cell, the
-// nearest by the exact open flag of the squares between them (1e-12 band, ties to the lowest
-// cell); the cell's air volume, open areas (by face) and wall area are the sums of what it
-// owns. Counts of what is left out are in Stats.
+// air open only to the layer (code kRefusedLayerReach). Each region of the air is owned by one
+// air cell, the nearest by the exact open flag of the squares between them (1e-12 band, ties to
+// the lowest cell); the cell's air volume, open areas (by face) and wall area are the sums of
+// what it owns. Counts of what is left out are in Stats.
 //
 // The grid's edge. Every air cell next to an edge cell (sharing a face with one) is a row; such
 // a row that owns nothing cut holds its own volume. A row's wall area towards the grid's edge
@@ -98,7 +98,7 @@
 // The wave solver adds one condition of its own, require_whole_widths() (code kRefusedWidths):
 // every cell's width on the lattice within 2^-24 of a whole cell.
 //
-// Points (T-1). locate() takes a point onto Q with its centre bracket and exact ties;
+// Points. locate() takes a point onto Q with its centre bracket and exact ties;
 // way() decides whether the segment between two lattice points, both moved by
 // (eps, eps^2, eps^3), crosses a face (box filter, then the plane and edge signs in 256 bits,
 // none zero after the perturbation); on_face() is the exact on-face flag. The solver's
@@ -1033,7 +1033,7 @@ public:
     // What a cell of the grid is in the fit: solid, air of the source's component, or air in
     // the matched layer.
     static constexpr std::uint8_t kSolid = 0, kAir = 1, kLayer = 2;
-    // Why an input was refused (Stats::refused), in the order the tests run (DESIGN 5).
+    // Why an input was refused (Stats::refused), in the order the tests run.
     enum : int {
         kRefusedNot = 0,
         kRefusedFrame = 1,          // R0: a face's vertex 2^24 cells or more from the frame's middle
@@ -1044,11 +1044,11 @@ public:
         kRefusedSlit = 6,           // (i)
         kRefusedPocket = 7,         // the source's component holds no centre
         kRefusedLayer = 8,          // a face in a cube of the matched layer with air in it
-        kRefusedLayerReach = 9,     // T-4
+        kRefusedLayerReach = 9,     // a region of the air open only to the matched layer
         // (10 and 11 are not used.)
         kRefusedNextToLayer = 12,   // a cube next to a matched-layer cell holds faces and air
         kRefusedWidths = 13,        // a cell's lattice width off 1 by more than 2^-24 (set by the solver)
-        // The source refusals of DESIGN 5.5 (no cell of its stencil; the stencil past the
+        // The source's refusals (no cell of its stencil; the stencil past the
         // grid's interior; the source in the matched layer) are made by the solver's fitted
         // stencil (fdtd.hpp, FittedStencil::points) and thrown as std::invalid_argument with
         // their messages; they carry no code here.
@@ -1306,7 +1306,7 @@ public:
             }
     }
 
-    // ---- the points (T-1, DESIGN 4.7.2 and 4.7.3) ------------------------------------------
+    // ---- the points ------------------------------------------------------------------------
 
     // A point on Q: its lattice coordinates, its centre bracket per axis (j: the largest with
     // C_j <= Q, -1 below the first centre), whether it is tied (Q = C_j: the point lies on that
@@ -1997,7 +1997,7 @@ private:
                     hi[a] = std::max(hi[a], p[static_cast<std::size_t>(k)][a]);
                 }
         }
-        // The grid's own box too: every point of a stencil (T-1) lies in it, so
+        // The grid's own box too: every point of a stencil lies in it, so
         // on Q under 2^61 however far the grid reaches past the faces.
         for (int a = 0; a < 3; ++a) {
             lo[a] = std::min(lo[a], grid.face_at[static_cast<std::size_t>(a)].front());
@@ -2723,7 +2723,7 @@ private:
         stats_.layer_candidates = layer_pairs_.size();
     }
 
-    // The exact tests of a pair (DESIGN 5.3): the angle (n1.n2)^2 > 63/64 |n1|^2 |n2|^2; the
+    // The exact tests of a pair: the angle (n1.n2)^2 > 63/64 |n1|^2 |n2|^2; the
     // projections along f1's dominant axis a (lattice points, 2D orientations in 128 bits)
     // overlap in positive area (no edge line separates them); the overlap O is f1's triangle
     // clipped by f2's edge lines, its vertices held as meets of two edge lines; and the sign
@@ -2874,7 +2874,7 @@ private:
         return true;
     }
 
-    // The odd intervals named, each as what it is (DESIGN 5.2, T-5): free edges (a part on
+    // The odd intervals named, each as what it is: free edges (a part on
     // no other face) and contact edges (lying wholly on other faces, or shared by an odd
     // number of faces), with the faces (their indices in the model) and the ends (m).
     std::string describe_intervals(const std::vector<int> &which) const {
@@ -4613,7 +4613,7 @@ private:
                                        "an owner that had none (" + std::to_string(given.size()) + " offers taken)");
         }
         check_owners();
-        // T-4: a region of the air left without an owner (open only to the matched layer).
+        // A region of the air left without an owner (open only to the matched layer).
         const Region *unowned = nullptr;
         for (const Region &G : regions_) {
             if (!G.in_air || G.owner >= 0) continue;
@@ -4664,7 +4664,7 @@ private:
     }
 
     // Refusal (ii): a candidate pair whose faces each have a part of positive area facing
-    // the source's air on its side towards the other (DESIGN 5.3; read on the whole face, a
+    // the source's air on its side towards the other (read on the whole face, a
     // superset of the part over O': it refuses more, never less).
     void thin_layers(UF &uf, std::size_t omega) {
         std::vector<char> plus(faces_.size(), 0), minus(faces_.size(), 0);

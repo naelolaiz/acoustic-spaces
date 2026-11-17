@@ -1316,10 +1316,10 @@ private:
     }
 
 public:
-    // The source's and probes' cells as the fitted path would take them (ruling T-1 and
-    // section 4.7.3 of the design), from the fit's flags and the exact way test: the solver's
-    // own stencil logic (reading_cells, seen_cells) in a second copy, its decisions on Q; kNear
-    // and kReach as the solver's. Used by the solver with fitted walls (cut_points) and by the fit alone.
+    // The source's and probes' cells as the fitted path would take them, from the fit's flags
+    // and the exact way test: the solver's own stencil logic (reading_cells, seen_cells) in a
+    // second copy, its decisions on Q; kNear and kReach as the solver's. Used by the solver with
+    // fitted walls (cut_points) and by the fit alone.
     struct FittedPoints {
         std::vector<std::pair<std::size_t, double>> source;
         std::vector<std::vector<std::pair<std::size_t, double>>> probes;
@@ -1332,7 +1332,7 @@ public:
         FittedStencil(const CutCells &cut, std::size_t nx, std::size_t ny, std::size_t nz, double cell)
             : cut_(cut), nx_(nx), ny_(ny), nz_(nz), sy_(nx), sz_(nx * ny), cell_(cell) {}
 
-        // The source's cells (refused with the messages of DESIGN 5.5 where it has none), each
+        // The source's cells (refused with a message where it has none), each
         // probe's, and each probe's sight from its listener (the first of its group).
         FittedPoints points(const Vec3 &source, const std::vector<Vec3> &probes, std::size_t per_listener) const {
             FittedPoints fp;

@@ -1351,8 +1351,8 @@ NB_MODULE(_native, m) {
                 return out;
             },
             nb::arg("source"), nb::arg("probes"), nb::arg("probes_per_listener") = 1,
-            "Fitted walls (T-1): the fitted path's cells for a source (1 x 3) and probes (n x 3) on this fit, as "
-            "WaveSolver.cut_points() gives them; a source refusal (DESIGN 5.5) raises ValueError.");
+            "Fitted walls: the fitted path's cells for a source (1 x 3) and probes (n x 3) on this fit, as "
+            "WaveSolver.cut_points() gives them; a source the fit refuses raises ValueError.");
 
     nb::class_<as::WaveSolver>(
         m, "WaveSolver",
@@ -1483,7 +1483,7 @@ NB_MODULE(_native, m) {
                 out["source_on_face"] = fp.source_on_face;
                 return out;
             },
-            "With fitted_walls=True (T-1): the source's and each probe's cells and weights "
+            "With fitted_walls=True: the source's and each probe's cells and weights "
             "as the fitted path would take them ((cell, weight) lists), probe_found, "
             "probe_in_sight and source_on_face (exact).")
         .def("probe_found", &as::WaveSolver::probe_found, nb::arg("probe"))
