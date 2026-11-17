@@ -595,10 +595,9 @@ is an arc of a circle, so its travel time and its length are exact.
   `simulation.early.open_ground_frequencies`, see below), within 0.1 dB of the program
   in those cases; in third octaves it gives the three of each of those octave bands, to
   2.5 kHz. A source's listeners and map points that the sound goes the same way to
-  share a march, each reached by a last step of its own off it, so that the others'
-  ranges do not break up its steps; the others still set the run's absorbing layer (how
-  high it begins and how thick it is), which changes what it reads by 0.02 dB or less
-  per octave band out of the shadow in the cases checked (see
+  share a march, each reached by a last step of its own off it and under the absorbing
+  layer of a run for it alone, so that over the open ground it reads the same alone as
+  among others (behind barriers and buildings the others still set the layer, see
   [Known issues](validation.md#known-issues)).
   In the shadow, above those
   bands, the shadow deepens with frequency as it does over the octave below. At 4 and
@@ -629,8 +628,8 @@ is an arc of a circle, so its travel time and its length are exact.
   get the wide-angle one's level: in 28 cases of wind and temperature gradients, in the
   octave bands compared (63 to 500 Hz in ten of them, 63 and 125 Hz in the others),
   within 0.09 dB of a fast field program (0.29 dB per third octave, compared in 24 of
-  them), where the narrow-angle one is up to 0.96 dB off (2.2 dB), and within 0.03 dB at
-  1 and 2 kHz (a one-off check in the `windy` preset); flatter, the narrow-angle one is
+  them), where the narrow-angle one is up to 0.96 dB off (2.2 dB), and at 1 and 2 kHz
+  within 0.07 and 0.49 dB (a one-off check in the `windy` preset); flatter, the narrow-angle one is
   up to 1.10 dB off per octave band in those bands, and 5.7 dB in a third octave 14 dB
   below free field, these two in 10 m/s of wind over a hard ground (see
   [Validation](validation.md#the-wide-angle-parabolic-equation)). The wide-angle one (split-step Padé, as in Collins' RAM) marches the field
@@ -643,7 +642,7 @@ is an arc of a circle, so its travel time and its length are exact.
   dB, and in the weather presets within 0.02 dB per band on average where the
   narrow-angle one is within 0.07 dB (see
   [Validation](validation.md#the-wide-angle-parabolic-equation)). Over open ground it
-  takes three to seven times as long, all of it in the bands the parabolic
+  takes five to eight times as long, all of it in the bands the parabolic
   equation gives, and behind barriers and buildings, where it runs in every band, about
   ten times.
 - **Off façades and barriers** the paths bend the same way, in the vertical plane the
@@ -706,10 +705,11 @@ is an arc of a circle, so its travel time and its length are exact.
   and beside a building they take the open ground's effect with the direct sound
   (within 0.45 dB from 63 to 500 Hz 3 m beside a wall 60 m away in the `windy` preset,
   down- and upwind). Behind a building, where nothing else takes a run, this costs a
-  run of the open ground's equation a way, shared by the ways whose profiles agree: 85 m
+  run of the open ground's equation a way, shared by the ways whose profiles agree and
+  whose absorbing layers need the same grid of heights: 85 m
   from a source 1 m up, behind a building 10 m deep and 20 m wide 20 m from it, a
   listener took 1.1 s of CPU instead of 0.16 s in the `windy` preset, and a coverage map
-  round it on a 10 m grid 33.7 s instead of 25.6 s (300 runs in its bands instead of
+  round it on a 10 m grid 33.7 s instead of 25.6 s (306 runs in its bands instead of
   240); at that listener the wind's effect comes within 0.33 dB of the open ground's
   along the way round the corner from 63 Hz to 2 kHz and 1.04 dB at 4 kHz. Where the
   source or the listener stands on a building's roof, the paths round an end take
@@ -894,8 +894,8 @@ the source 10 m up), at 290 points within 60 dB of free field in 18 cases
 
 | `open_ground_frequencies` | 1 and 2 kHz | the stage | its map | the helicopter | a class |
 |---|---|---|---|---|---|
-| 24 (the default) | 0.07, 0.14, 0.75 | 2.0 times | 3.3 times | 24 times | 9.4 times |
-| 8 | 0.17, 0.35, 4.1 | 1.2 times | 1.4 times | 8.9 times | 3.4 times |
+| 24 (the default) | 0.07, 0.14, 0.75 | 2.0 times | 3.4 times | 26 times | 9.4 times |
+| 8 | 0.17, 0.35, 4.1 | 1.2 times | 1.4 times | 9.4 times | 3.4 times |
 | `rays` | 0.67, 1.7, 8.4 | 1 | 1 | 1 | 1 |
 
 With 24 the largest error is the parabolic equation's own, 43 dB deep in the shadow
@@ -903,8 +903,8 @@ With 24 the largest error is the parabolic equation's own, 43 dB deep in the sha
 night's inversion, and they step at a caustic by up to 14 dB a centimetre at 1 kHz
 ([Known issues](validation.md#known-issues)). The other bands change only in the
 shadow, where 4 and 8 kHz deepen from the 1 and 2 kHz levels: 8 and `rays` move them
-there by up to 0.33 dB within 60 dB of free field in these cases, and by up to 5.1 dB
-deeper (88 dB below it, 8 kHz upwind). Nothing changes in still air.
+there by up to 0.33 dB within 60 dB of free field in these cases, and by up to 4.9 dB
+deeper (89 dB below it, 8 kHz upwind). Nothing changes in still air.
 
 Through the crossovers between the bands the equation's bands carry its field at every
 frequency the runs took, and one more run takes the top band on through the crossover
@@ -922,7 +922,7 @@ benchmark's case 2, from 4.9 to 6.0 s 300 m away, and in `windy` from 2.0 to 2.9
 0.87 to 0.97, 4.0 to 4.6 and 1.6 to 1.9 s in the first three; with 8 an octave from
 0.29 to 0.52 s 100 m away in case 2 and from 12 to 21 s 1 km downwind). A coverage map, which
 reads the bands above 500 Hz from their energies, takes the run above the top band only
-with `rays`, where its 500 Hz band filter reads that crossover (8 of the 76 runs of the
+with `rays`, where its 500 Hz band filter reads that crossover (8 of the 77 runs of the
 stage's map on a 40 m grid, 0.2 of its 8.6 s).
 
 Behind barriers and buildings the runs take 32 frequencies an octave at 8 kHz and 16
@@ -954,16 +954,14 @@ of the first in its 8 kHz run; a map of 22 points round the building takes 159 s
 (4.6 s), 105 s with `barrier_frequencies: 16` and 54 s with 8. The places of a walking source share the parabolic
 equation's runs where they stand at one height over one ground and neither the weather
 nor the ground has zones: a run from one place serves the listeners of every other that
-the sound goes the same way to, each reached by a last step of its own, so that it gets
-what a run of its own place would give it but for the run's grid: its absorbing layer
-can lie higher or be thicker where another of the run's listeners needs it, and behind a
-building the wide-angle equation's height step can be another (see
+the sound goes the same way to, each reached by a last step of its own under the
+absorbing layer of a run for it alone, so that over the open ground it gets what a run
+of its own place would give it (see
 [Validation](validation.md#the-wide-angle-parabolic-equation)). Each place keeps its bent paths
 while it waits for the shared runs, so the memory a walk takes grows with the places
 that share them. An aircraft's 26 places 64 m apart, 100 m up over 1.6 km of a meadow
-in the `windy` preset, heard 30 m off the middle of its track, take about three quarters
-of the time on one core that a run for each place takes, with the same early levels to
-10⁻⁷ dB. An atmosphere in which sound goes straight (`neutral`, no wind and no
+in the `windy` preset, heard 30 m off the middle of its track, take about four fifths
+of the time on one core that a run for each place takes, with the same early levels. An atmosphere in which sound goes straight (`neutral`, no wind and no
 temperature gradient) changes nothing: the results are those of still air, bit
 for bit.
 

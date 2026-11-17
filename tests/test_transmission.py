@@ -593,6 +593,45 @@ def test_a_partition_drawn_as_one_face_for_each_room_is_one_partition(tmp_path: 
         np.testing.assert_allclose(energy_two, energy, rtol=1e-9)
 
 
+@pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
+def test_paths_with_one_image_off_other_surfaces_are_paths_of_their_own(
+    tmp_path: Path, method: str
+) -> None:
+    """Two rooms as deep (5 m) either side of a 30 dB partition, drawn as one face or as
+    two, the source in one room and listeners in the other. Off the partition and the
+    end wall of the source's room and then through the partition, or through it and off
+    the other room's end wall and the partition: two paths as long, with one image of
+    the source. Each listener has both, as with its room 1 mm deeper or shallower: the
+    same orders and crossings, and the early level within 0.01 dB of the mean of theirs
+    in every band. Of the paths with one image one had been kept, whatever they
+    reflected off: 63 paths of 70, and 0.8 to 2.2 dB less in a band."""
+    quad = ((5, 0, 0), (5, 4, 0), (5, 4, 3), (5, 0, 3))
+    for faces in (1, 2):
+        for listener in ((7.9, 2.6, 1.5), (6.1, 0.9, 1.1), (8.8, 3.3, 1.7)):
+            found = []
+            for deeper in (-1e-3, 0.0, 1e-3):
+                groups = {
+                    "room1": _box(0, 5, 4, 3, skip=("x1",)),
+                    "room2": _box(5, 10 + deeper, 4, 3, skip=("x0",)),
+                    "partition": [quad, quad[::-1]][:faces],
+                }
+                room = _partitioned(
+                    _write(tmp_path / "rooms.obj", groups),
+                    [1.7, 1.3, 1.2],
+                    listener,
+                    max_order=3,
+                    method=method,
+                    diffraction="none",
+                )
+                paths = early_paths(room)
+                kinds = sorted(zip(paths.order.tolist(), paths.crossings.tolist(), strict=True))
+                found.append((kinds, 10 * np.log10(total_energy(paths))))
+            (kinds_less, level_less), (kinds, level), (kinds_more, level_more) = found
+            assert kinds == kinds_less == kinds_more
+            assert len(kinds) == 70
+            np.testing.assert_allclose(level, (level_less + level_more) / 2, rtol=0, atol=0.01)
+
+
 def test_a_reflection_at_the_foot_of_a_doorway_s_side_passes_the_doorway(
     tmp_path: Path,
 ) -> None:
@@ -773,7 +812,11 @@ def test_a_reflection_in_a_leaning_corner_at_a_partition_s_foot_passes_through_i
     at 1 kHz. In rooms whose side walls lean at 60 degrees, paths that reflect off a
     wall, the floor or the ceiling and the wall again in their 60 degree corner, and in
     the upright rooms one off the ceiling and a wall, had passed it there and 1 to 3 um
-    aside: 17 to 28 dB more at 1 kHz."""
+    aside: 17 to 28 dB more at 1 kHz. With the bands that add in pressure, the level in
+    line is that 1 mm to one side or the other within 0.02 dB: a path that reflects
+    three times in the corner meets the middle surface at the angle it has there (taken
+    to graze it, it had left the level 0.46 to 1.3 dB from the nearer side's in the four
+    rooms with such a path)."""
     image = np.array(source, dtype=float)
     for side in sides:
         (y0, z0), (y1, z1) = section[side], section[(side + 1) % len(section)]
@@ -785,16 +828,20 @@ def test_a_reflection_in_a_leaning_corner_at_a_partition_s_foot_passes_through_i
     aside = np.cross(way, [1.0, 0.3, 0.25])
     aside /= np.linalg.norm(aside)
     obj = _along_x(tmp_path / "rooms.obj", section, partition)
-    levels = []
+    levels, in_pressure = [], {}
     for offset in (-1e-3, -3e-6, -2e-6, -1.5e-6, -1e-6, 0.0, 1e-6, 1.5e-6, 2e-6, 3e-6, 1e-3):
         listener = corner + distance * way + offset * aside
         room = _partitioned(
             obj, list(source), listener, max_order=3, method="image_sources", diffraction="none"
         )
-        levels.append(10 * np.log10(early_paths(room).energy.sum(axis=0)))
+        paths = early_paths(room)
+        levels.append(10 * np.log10(paths.energy.sum(axis=0)))
+        in_pressure[offset] = 10 * np.log10(total_energy(paths))
     low, high = np.minimum(levels[0], levels[-1]), np.maximum(levels[0], levels[-1])
     assert np.all(np.array(levels[1:-1]) > low - 0.01)
     assert np.all(np.array(levels[1:-1]) < high + 0.01)
+    assert paths.coherent_bands == 2
+    assert min(np.abs(in_pressure[0.0] - in_pressure[side]).max() for side in (-1e-3, 1e-3)) < 0.02
 
 
 def _across_x(x: float, y0: float, y1: float) -> tuple:
