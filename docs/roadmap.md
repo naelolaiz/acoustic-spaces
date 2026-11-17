@@ -820,3 +820,17 @@ Next:
   normal speech spectrum and the background noise: the spatial decay rate D2,S and
   Lp,A,S,4m fitted to the speech level against distance, and the distraction, privacy
   and comfort distances from the STI and the level along the line.
+- [ ] The package's sums in a fixed order ([Simulation](simulation.md#performance)) as
+  fast as the linear-algebra library's, with the same bits: wider vector instructions
+  chosen when it runs, and less to do for a small product. A rotor's `bpm` broadband
+  noise takes 23 % longer than it did with the library's sums.
+- [ ] A walk's places rendered on the run's threads, as a run's files are: they are
+  rendered one after the other.
+- [ ] A response's echogram worked out once for all that read it: a run works it out
+  for the parameters, for the speech results, for the standard errors and, outdoors,
+  for the level against the free field. And the early paths' signals on the run's
+  threads.
+- [ ] The command line starting without the engine's imports, for the commands that do
+  not need them.
+- [ ] Less memory while a response is rendered: its early paths placed a part at a
+  time, and its bands combined in place.
