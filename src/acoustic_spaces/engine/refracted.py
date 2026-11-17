@@ -125,10 +125,11 @@ WAVE_MAX_BAND_HZ = 2000
 #: field over a rigid ground): nearer, it comes in too steeply for it, and the
 #: atmosphere has had little room to bend it.
 WAVE_MIN_RANGE = 1.5
-#: The parabolic equation's absorbing layer starts this many times higher than the
-#: source, the listener and the rays between them, at least ``WAVE_MIN_HEADROOM_M``
-#: above the source and the listener and at least ``WAVE_TOP_SLOPE`` times the range up
-#: (higher makes no difference: 0.1 dB at 800 m downwind, at 125 Hz, 5 m/s of wind).
+#: A listener's own absorbing layer of the parabolic equation starts this many times
+#: higher than the source, the listener and the rays between them, at least
+#: ``WAVE_MIN_HEADROOM_M`` above the source and the listener and at least
+#: ``WAVE_TOP_SLOPE`` times the range up; its run's layer starts at or above that
+#: (:func:`solve`).
 WAVE_HEADROOM = 1.5
 WAVE_MIN_HEADROOM_M = 20.0
 WAVE_TOP_SLOPE = 0.15
@@ -256,7 +257,7 @@ class _Cut:
     weight: float
     range: float
     height: float
-    top: float  # the runs' absorbing layer
+    top: float  # where its own absorbing layer starts (:func:`solve`)
     bands: np.ndarray  # (bands,) bool: the bands they run in (all)
 
 
@@ -286,7 +287,7 @@ class _Way:
     weathers: tuple | None
     range: float  # the way's length seen from above
     height: float
-    top: float  # the runs' absorbing layer
+    top: float  # where its own absorbing layer starts (:func:`solve`)
     bands: np.ndarray  # (bands,) bool: those of the open ground's parabolic equation
     #: The eigenrays along the way in the weather (before the equation is put in) and
     #: the straight direct sound and ground reflection along it in still air.
@@ -2113,8 +2114,9 @@ class _Job:
     barrier: bool = False  # with the grid and samples of the runs behind barriers
     #: What the run has in common with those that differ from it in what stands on the
     #: way and in their listeners alone (the source's runs behind barriers in one band
-    #: and weather, under one absorbing layer), which share the march over the open
-    #: ground (:class:`~acoustic_spaces.engine.parabolic.Trunk`); None: none do.
+    #: and weather, on one grid of heights under one absorbing layer), which share the
+    #: march over the open ground (:class:`~acoustic_spaces.engine.parabolic.Trunk`);
+    #: None: none do.
     family: tuple | None = None
     #: Over the open ground: the run on past the band's own frequencies through its
     #: upper crossover, at their spacing, for the listeners and the ways round ends whose
@@ -2159,19 +2161,32 @@ def solve(plans: list[Planned]) -> list[dict]:
     height over one ground, where the weather and the grounds have no zones (the places
     of a walk, say): there a run from one source holds for any other alike, the way along
     the ground being the same from each. A run marches out to the farthest of its
-    listeners under an absorbing layer above the highest of their ``top``, as thick as
-    the lowest of the run's frequencies needs; each listener is reached by a last step of
-    its own, off to the side of the march, so that it gets what a march to it alone on
-    that grid gives, whoever shares the run.
+    listeners; each is reached by a last step of its own, off to the side of the march.
+
+    Over the open ground what a listener gets is what a run for it alone gives, whoever
+    shares its run. The absorbing layer of a run, as thick as the lowest of its
+    frequencies needs, starts where each of its listeners' own would: listeners share a
+    run where their own layer starts (``top``) need the same grid of heights, a power of
+    two of them, at the run's frequencies and height step, and the layer starts as high
+    as that grid holds it (:func:`_layer_top`), for one of them as for all. Those that
+    the wide-angle equation gives (where the reflection off the ground comes in more
+    steeply than :data:`~acoustic_spaces.engine.parabolic.STEEP_DEG`, and all of them
+    with ``parabolic_equation: wide_angle``), whose grid is as high as its layer needs,
+    share a run where their layer starts round up to the same step of a ladder
+    (:data:`LADDER_STEPS`), where the run's layer starts. Under the lowest band the lit
+    listeners' runs take the frequencies below it and those in the shadow run apart.
 
     Behind barriers the runs in the weather share by the profile and what stands on the
-    way (the cut), those in still air by the cut and the absorbing layer alone; the open
+    way (the cut), those in still air by the cut and the absorbing layer alone, under one
+    absorbing layer above the highest of their listeners' ``top``: there a listener's
+    level still goes by the others of its run, since the sound that an obstacle's top
+    sends steeply up comes back down in part, by where the layer starts. The open
     ground's runs along the ways round ends, in the weather alone (the straight paths
-    are their reference in still air), likewise with no cut, and with weather zones
-    through the weathers along the way's legs (:meth:`Refraction._weathers_on`), with
-    their skirts as a listener's (one run above a band for every way of the profile
-    whose top band it is). Every listener of theirs is reached by a last step of its
-    own.
+    are their reference in still air), share by the profile with no cut, each by the
+    grid as above, and with weather zones through the weathers along the way's legs
+    (:meth:`Refraction._weathers_on`), with their skirts as a listener's (one run above
+    a band for every way of the profile whose top band it is). Every listener of theirs
+    is reached by a last step of its own.
 
     The runs behind barriers in one band that differ in the cut and the listeners alone
     (in still air those of every direction under one absorbing layer; in the weather,
@@ -2223,8 +2238,52 @@ def solve(plans: list[Planned]) -> list[dict]:
         return direction, refraction._grounds_along(direction, reach)
 
     jobs: list[_Job] = []
+    solver = wide_angle if plans[0].refraction.wide_angle else parabolic
 
-    def open_ground(refraction, band, needing, job):
+    def steps_in(refraction: Refraction, band: int, barrier: bool) -> float:
+        coarse = barrier and refraction.centres[band] >= BARRIER_COARSE_FROM_HZ * 0.999
+        return solver.STEPS_PER_WAVELENGTH * (BARRIER_COARSE if coarse else 1.0)
+
+    def taken(refraction: Refraction, band: int, barrier: bool, skirt: bool, below: bool):
+        if skirt:
+            return _skirt(refraction, band)
+        found = refraction._samples(band, barrier)
+        own = refraction.frequencies[band] if found is None else found
+        return np.concatenate([_skirt(refraction, band, True), own]) if below else own
+
+    def layered(
+        make,
+        refraction,
+        band,
+        speed,
+        needing,
+        *,
+        skirt=False,
+        below=False,
+    ):
+        # The runs for ``needing`` made by ``make``: one for each grid their own layers
+        # (``top``) need at the frequencies and height step the run takes, its layer
+        # starting as high as that grid holds it (:func:`_layer_top`), so that what a
+        # member gets does not depend on who shares its run.
+        f = taken(refraction, band, False, skirt, below)
+        per = steps_in(refraction, band, False)
+        c0 = float(np.asarray(speed(np.array([0.0])))[0])
+        classes: dict[tuple, list] = {}
+        slope = math.tan(math.radians(parabolic.STEEP_DEG))
+        for item in needing:
+            m = item[1]
+            if solver is wide_angle or refraction.zs + m.height > slope * m.range:
+                # By the wide-angle equation: on a ladder of layer starts of its own.
+                key = ("steep", _ladder_step(m.top))
+            else:
+                key = ("flat", parabolic._grid(f, c0, m.top, per)[0])
+            classes.setdefault(key, []).append(item)
+        for key, items in sorted(classes.items()):
+            kind, value = key
+            top = _layer_top(f, c0, value, per) if kind == "flat" else 2.0 ** (value / LADDER_STEPS)
+            jobs.append(make(items, top=top, skirt=skirt, below=below))
+
+    def open_ground(refraction, band, speed, needing, job):
         # The open ground's runs in ``band`` for ``needing`` (a listener's requests or
         # the ways round ends), made by ``job``, and their skirts, none in the shadow,
         # where the carrier keeps no fine samples (:meth:`Refraction._place`): under the
@@ -2233,14 +2292,19 @@ def solve(plans: list[Planned]) -> list[dict]:
         # coherent band lies above, in a run of its own, where a response is rendered
         # from the spectra and, for a map, where the band filters read that crossover (a
         # top band up to FILTERED_MAX_BAND_HZ).
+        # Under the lowest band the lit ones' runs alone take the frequencies below it:
+        # those in the shadow run apart, as they would alone.
         lit = [n for n in needing if not _open_wave(n[1]).shadow]
-        if needing:
-            below = band == 0 and bool(lit) and refraction.coherent > 0
-            jobs.append(job(needing, below=below))
+        dark = [n for n in needing if _open_wave(n[1]).shadow]
+        if band == 0 and refraction.coherent > 0:
+            layered(job, refraction, band, speed, lit, below=True)
+            layered(job, refraction, band, speed, dark)
+        else:
+            layered(job, refraction, band, speed, needing)
         topmost = [n for n in lit if not n[1].bands[band + 1 :].any()]
         read = refraction.rendered or band < band_count(FILTERED_MAX_BAND_HZ, refraction.bands)
         if topmost and read and band + 1 < refraction.coherent:
-            jobs.append(job(topmost, skirt=True))
+            layered(job, refraction, band, speed, topmost, skirt=True)
 
     for (_, (key, azimuth)), members in groups.items():
         refraction = plans[members[0][0]].refraction
@@ -2248,18 +2312,20 @@ def solve(plans: list[Planned]) -> list[dict]:
         reach = max(m.range for _, m in members)
         face_at = refraction._grounds_along(direction, reach)
         speed, speed_at = weather(refraction, key, direction, reach)
-        top = max(m.top for _, m in members)
         for band in range(refraction.bands):
             needing = [(p, m, None) for p, m in members if m.bands[band]]
             open_ground(
                 refraction,
                 band,
+                speed,
                 needing,
-                functools.partial(_Job, refraction, speed, speed_at, face_at, band, top=top),
+                functools.partial(_Job, refraction, speed, speed_at, face_at, band),
             )
 
     # Behind barriers and along the ways round ends: the runs in the weather, and behind
-    # barriers in still air, shared by all with the same cut and absorbing layer.
+    # barriers in still air, shared by all with the same cut; behind barriers under one
+    # absorbing layer above the highest of them, along the ways round ends each by the
+    # grid of heights its own layer needs (``layered``).
     calm: dict[tuple, list] = {}
     for (owner, barrier, key, ground, cut), members in behind.items():
         refraction = plans[members[0][0]].refraction
@@ -2283,16 +2349,15 @@ def solve(plans: list[Planned]) -> list[dict]:
                 speed_at,
                 face_at,
                 band,
-                top=top,
                 obstacles=cut,
                 barrier=barrier,
-                family=(owner, barrier, key, top, band) if alike else None,
             )
             if not barrier:
                 # Along the ways round ends as for a listener: the skirts too.
-                open_ground(refraction, band, needing, job)
+                open_ground(refraction, band, speed, needing, job)
             elif needing:
-                jobs.append(job(needing))
+                family = (owner, barrier, key, top, band) if alike else None
+                jobs.append(job(needing, top=top, family=family))
         if not barrier:
             # Round ends the weather's runs alone: the straight paths are the reference
             # in still air (Refraction._turned).
@@ -2304,40 +2369,26 @@ def solve(plans: list[Planned]) -> list[dict]:
         refraction = plans[members[0][0]].refraction
         reach = max(m.range for _, m in members)
         _, face_at = grounds(refraction, members, reach)
+        still = Profile.uniform(c0).speed
         for band in range(refraction.bands):
             needing = [(p, m, "still") for p, m in members if m.bands[band]]
             if needing:
-                jobs.append(
-                    _Job(
-                        refraction,
-                        Profile.uniform(c0).speed,
-                        None,
-                        face_at,
-                        band,
-                        needing,
-                        top,
-                        obstacles=cut,
-                        barrier=barrier,
-                        family=(owner, barrier, "still", c0, top, band) if cut else None,
-                    )
+                job = functools.partial(
+                    _Job, refraction, still, None, face_at, band, obstacles=cut, barrier=barrier
                 )
+                family = (owner, barrier, "still", c0, top, band) if cut else None
+                jobs.append(job(needing, top=top, family=family))
     if not jobs:
         return [{} for _ in plans]
 
     first = plans[0].refraction
-    solver = wide_angle if first.wide_angle else parabolic
     share = 1
 
     def steps(job: _Job) -> float:
-        coarse = job.barrier and job.refraction.centres[job.band] >= BARRIER_COARSE_FROM_HZ * 0.999
-        return solver.STEPS_PER_WAVELENGTH * (BARRIER_COARSE if coarse else 1.0)
+        return steps_in(job.refraction, job.band, job.barrier)
 
     def frequencies_of(job: _Job) -> np.ndarray:
-        if job.skirt:
-            return _skirt(job.refraction, job.band)
-        found = job.refraction._samples(job.band, job.barrier)
-        own = job.refraction.frequencies[job.band] if found is None else found
-        return np.concatenate([_skirt(job.refraction, job.band, True), own]) if job.below else own
+        return taken(job.refraction, job.band, job.barrier, job.skirt, job.below)
 
     def run(job: _Job, trunk: parabolic.Trunk | None = None) -> np.ndarray:
         refraction, band = job.refraction, job.band
@@ -2471,6 +2522,43 @@ def solve(plans: list[Planned]) -> list[dict]:
                 )
                 pressure[job.band] = np.conj(_early_of(value, shape[1]))
     return out
+
+
+#: The absorbing layers of the wide-angle equation's runs start at 2^(k / LADDER_STEPS) m,
+#: the lowest of these steps at or above a listener's own start: its grid of heights is
+#: as high as the layer needs, so each start would be a run of its own. With two steps
+#: a doubling a run's layer starts at most 41 % higher than a listener's own; finer
+#: steps part listeners at different heights into more runs, each from the source
+#: again, and coarser ones march higher grids. Scenes with one steep listener, with
+#: three and with twelve up a facade 30 m away took 1.3, 1.5 and 1.7 times the time
+#: they take with one layer above the highest listener; with one step a doubling 1.5,
+#: 1.9 and 2.0 times, with four 1.0, 2.3 and 1.6 and with eight 1.0, 2.1 and 2.9.
+LADDER_STEPS = 2
+
+
+def _ladder_step(top: float) -> int:
+    """The step k of the ladder of layer starts 2^(k / LADDER_STEPS) m: the lowest at or
+    above ``top``."""
+    k = math.ceil(LADDER_STEPS * math.log2(top))
+    while 2.0 ** (k / LADDER_STEPS) < top:
+        k += 1
+    while 2.0 ** ((k - 1) / LADDER_STEPS) >= top:
+        k -= 1
+    return k
+
+
+def _layer_top(f: np.ndarray, c0: float, n: int, steps_per_wavelength: float) -> float:
+    """The highest absorbing layer start (m) whose grid for the frequencies ``f`` in air
+    of speed ``c0`` at the ground, at that height step, is ``n`` heights
+    (:func:`~acoustic_spaces.engine.parabolic._grid`): the layer reaching the grid's
+    top, a few units in the last place lower where rounding would double the grid."""
+    _, dz, thickness = parabolic._grid(f, c0, 0.0, steps_per_wavelength)
+    top = n * dz - thickness
+    for _ in range(64):
+        if parabolic._grid(f, c0, top, steps_per_wavelength)[0] <= n:
+            return top
+        top = math.nextafter(top, -math.inf)
+    raise AssertionError("no layer start holds the grid")
 
 
 def _kept(index: tuple, make) -> Rays:

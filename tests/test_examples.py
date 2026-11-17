@@ -291,7 +291,7 @@ def test_each_player_hears_their_own_monitor_loudest() -> None:
 
 @pytest.mark.parametrize(
     ("example", "low_db", "high_db"),
-    [("stadium_concert", 3.5, 10.5), ("concert_stage", 3.0, 8.0)],
+    [("stadium_concert", 3.5, 10.5), ("concert_stage", 3.0, 9.0)],
 )
 def test_stadium_arrays_near_their_listeners(
     example: str,

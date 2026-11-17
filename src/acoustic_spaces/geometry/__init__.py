@@ -15,6 +15,8 @@ from acoustic_spaces.geometry.checks import (
     distance_to_surface,
     points_inside,
     room_of,
+    triangle_gaps,
+    triangles_near,
 )
 from acoustic_spaces.geometry.io import (
     SUPPORTED_SUFFIXES,
@@ -43,4 +45,6 @@ __all__ = [
     "plan_problem",
     "points_inside",
     "room_of",
+    "triangle_gaps",
+    "triangles_near",
 ]
