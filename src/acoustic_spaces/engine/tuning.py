@@ -318,17 +318,20 @@ def tune(
 
     The late stage traces the scene's first source to its listeners with the scene's
     settings, ``rays`` per band (default: the scene's), once for each response length
-    of ``lengths`` (s) on each device. The wave solver runs the scene's wave settings
-    (enabled or not) for the two ``wave_lengths``; None leaves it out. ``threads``
-    defaults to the scene's. ``keep=False`` returns the timings without saving them;
-    :meth:`Tuning.keep` saves them later (the editor does that on OK).
+    of ``lengths`` (s) on each device; the listeners too near a surface for the GPU
+    (``gpu_tracer.listeners_too_near``) are left out. The wave solver runs the scene's
+    wave settings (enabled or not) for the two ``wave_lengths``; None leaves it out.
+    ``threads`` defaults to the scene's. ``keep=False`` returns the timings without
+    saving them; :meth:`Tuning.keep` saves them later (the editor does that on OK).
     """
     import numpy as np
 
     from acoustic_spaces.engine import late as late_stage
     from acoustic_spaces.engine import ray_device
+    from acoustic_spaces.engine.gpu_tracer import listeners_too_near, too_near
     from acoustic_spaces.engine.model import TraceModel
     from acoustic_spaces.engine.simulate import TIME_STEP
+    from acoustic_spaces.geometry import distance_to_surface
     from acoustic_spaces.spatial.directions import fibonacci_sphere
 
     say = say or (lambda _: None)
@@ -353,15 +356,33 @@ def tune(
     directions = fibonacci_sphere(late_cfg.directions)
     result = Tuning(scene.name, machine(), rays, software=not gpu.hardware_gpu())
 
+    clearance = distance_to_surface(room.mesh, listeners)
+    told = False
+
     def late_run(plan: ray_device.Plan, length: float, count: int = rays):
+        nonlocal told
         radius = late_cfg.receiver_radius
-        if radius is None:
-            radius = late_stage.receiver_radius(room.volume_m3, count, length, c)
+        if radius is None:  # the spheres a run gives the listeners
+            radius = late_stage.receiver_radius(
+                room.volume_m3, count, length, c, clearance=clearance
+            )
+        radius = np.broadcast_to(np.asarray(radius, dtype=float), (len(listeners),))
+        # Every device is timed on the listeners that the GPU traces.
+        heard = ~listeners_too_near(model.bvh, listeners, radius)
+        if not heard.any():
+            reason = too_near(model.bvh, position, listeners, radius)
+            raise ValueError(f"tune needs a scene the GPU can trace: {reason}")
+        if not heard.all() and not told:
+            told = True
+            say(
+                f"late stage: {int((~heard).sum())} of {len(listeners)} listeners are too near "
+                "a surface for the GPU and left out of the timing"
+            )
         started = time.perf_counter()
         late = late_stage.stochastic_energy(
             model,
             position,
-            listeners,
+            listeners[heard],
             rays=count,
             max_time=length,
             time_step=TIME_STEP,
@@ -369,7 +390,7 @@ def tune(
             air=air,
             reception=late_cfg.reception,
             covered_order=early_cfg.max_order,
-            radius=radius,
+            radius=radius[heard],
             directions=directions,
             splitting=late_cfg.splitting,
             threads=threads,

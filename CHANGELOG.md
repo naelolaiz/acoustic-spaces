@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: with `late.device` set to `gpu`, `both` or `auto`, the late part came out low
+  where the source or a listener lay right by a surface. In the cases measured: up to
+  3.2 dB for a source within a millionth of the model's size of one, 6 to 7.5 dB for a
+  source two millionths from both sides of an inner edge of 30 degrees (0.4 to 0.5 dB in
+  a right-angled corner), and 2 to 6 dB for a listener 3 to 12 millionths over a floor
+  that scatters. The CPU now traces such a run and the run says so
+  ([which runs](docs/simulation.md#tuning-the-devices-for-a-computer)).
 - Fixed: a measured directivity (a CSV or SOFA file) whose directions lie equally near a
   point of the 5 degree grid it is interpolated on, as halfway between the directions of
   a table given every 10 degrees, took four of them by the last digits of a sum, and a

@@ -12,9 +12,10 @@ counts); outdoors, the rays bent by the atmosphere, followed in chords as the CP
 follows them (``cpp/include/acoustic_spaces/atmosphere.hpp``), and the plants that
 absorb and scatter them (``vegetation.hpp``), with the stems' and the foliage's rain. It
 leaves to the CPU (raising :class:`Unsupported`) sound through surfaces into other
-rooms, runs whose results its buffers cannot hold, and vegetation of more than
-:data:`MAX_MEDIA` media or so many volumes along one ray that its fixed tables run out
-of room.
+rooms, a source or a listener nearer a surface, or the line where two meet, than its
+rays tell apart (:func:`too_near`), runs whose results its buffers cannot hold, and
+vegetation of more than :data:`MAX_MEDIA` media or so many volumes along one ray that
+its fixed tables run out of room.
 
 Rays start where the CPU's do (``_native.ray_starts``: the same directions and energies
 for the same seed), then go their own way: the GPU draws its random numbers from
@@ -96,6 +97,21 @@ MAX_MEDIA = 16
 MAX_SPANS = 32
 #: Most face groups whose reflections a ray counts (as the CPU's kMaxGroups).
 MAX_GROUPS = 16
+#: The GPU traces a source at least this many times ``T_MIN`` of the model's size (the
+#: least distance at which its rays meet a face) from every face,
+CLEAR = 2.0
+#: a listener that the start of a face's reflections, ``_OFFSET`` off the face, costs
+#: less than this many decibels of the scattered sound the face sends it
+#: (:func:`listeners_too_near`; a sphere far through a face loses the share that
+#: ``_OFFSET`` is of the listener's distance, however far the face is, so a limit of a
+#: hundredth of a decibel would take listeners hundreds of times ``_OFFSET`` from a face),
+LOSS = 0.1
+#: and both at least this many times what a reflection loses beside a second face from
+#: two faces that face each other: a source that far from both sides of an edge loses
+#: about a hundredth of a decibel.
+MEET = 50.0
+#: Rows of the table of pairs that :func:`_meeting` fills at once.
+_ROWS = 256
 
 #: The run's settings, one 32-bit word each, in the order of ``Run`` in the shader.
 _FIELDS = (
@@ -3052,6 +3068,210 @@ def passes_sound(transmission, face_room, source_room) -> bool:
     return bool(((rooms >= 0).sum(axis=1) > 1)[through.any(axis=1)].any())
 
 
+def too_near(bvh, source, receivers, radius) -> str:
+    """Why the GPU leaves a run with its source at ``source`` and its listeners at
+    ``receivers``, with spheres of ``radius`` (m, one for all or one each), to the CPU,
+    or ''.
+
+    The GPU's straight rays meet no face nearer their start than
+    :data:`~acoustic_spaces.engine.gpu_rays.T_MIN` of the model's size (a millionth; the
+    CPU's, a billionth), and a reflected ray, like the sound that a reflection sends the
+    listeners, starts ``_OFFSET`` of it (a hundred-thousandth) off the face it left. So:
+
+    - A source nearer a face than the first distance sends rays through it. (Rays that
+      the atmosphere bends meet a face at any distance on their first leg; such a run is
+      held to the same distance.)
+    - The sound that a reflection sends a listener is worked out from the second
+      distance off the face, as nearer the listener than it is, and held to the
+      listener's radius at least: a listener whose sphere reaches where it starts reads
+      low (:func:`listeners_too_near`).
+    - A reflection beside a second face that faces the first is lost: within the first
+      distance of it the ray goes through it, and where the two meet at less than a
+      right angle the ray starts behind it within the share of the second distance that
+      points to it. A source by the line where two such faces meet loses a share of its
+      rays that falls as one over its distance from them.
+
+    The CPU traces a run with its source nearer a face than :data:`CLEAR` times
+    ``T_MIN`` of the model's size, with a listener that reads the scattered sound of a
+    face more than :data:`LOSS` decibels low, or with either nearer both of two faces
+    that meet facing each other than :data:`MEET` times what a reflection loses beside
+    the second: ``T_MIN`` plus ``_OFFSET`` times the cosine of the angle at which they
+    meet, where that is more than nothing (up to about 96 degrees)."""
+    size = float(bvh.scale)
+    by_source, reach = _near(bvh, _bytes(source), _bytes(CLEAR * T_MIN * size))
+    if (by_source == 1).any():
+        return (
+            f"a source nearer a surface than {CLEAR * T_MIN * 1e6:.3g} millionths of the "
+            "model's size is traced on the CPU"
+        )
+    who = "a source"
+    if not by_source.any():
+        who = "sound to a listener"
+        by_listener, reach = _by_listeners(bvh, receivers, radius)
+        if (by_listener == 1).any():
+            return (
+                "sound to a listener whose sphere reaches where the GPU's reflections start, "
+                f"{_OFFSET * 1e6:.3g} millionths of the model's size off a surface, is traced "
+                "on the CPU"
+            )
+        if not by_listener.any():
+            return ""
+    return (
+        f"{who} nearer two surfaces that meet than {reach[reach > 0][0] * 1e6:.3g} millionths "
+        "of the model's size is traced on the CPU"
+    )
+
+
+def listeners_too_near(bvh, receivers, radius) -> np.ndarray:
+    """Which of the listeners at ``receivers``, with spheres of ``radius`` (m, one for
+    all or one each), the GPU leaves to the CPU (see :func:`too_near`).
+
+    A face lit evenly sends a listener at the distance c from it, with a sphere of the
+    radius r, the share x (3 - x^2) / 2 of its scattered sound, x = c / r, and all of it
+    from x = 1 on: the distance to each reflection counts as the radius at least. The
+    GPU works that out from ``_OFFSET`` of the model's size off the face, as for a
+    listener nearer by that much. It leaves a listener that reads the face's scattered
+    sound more than :data:`LOSS` decibels low for it (its whole late part less: the other
+    faces' sound is as it was), or lies no farther from a face than that distance, to
+    the CPU: with a sphere of nine tenths of its distance from the nearest face (what
+    the late stage gives a listener by one,
+    :func:`~acoustic_spaces.engine.late.receiver_radius`), a listener nearer the face
+    than 4.7 times ``_OFFSET`` of the model's size."""
+    return _by_listeners(bvh, receivers, radius)[0] > 0
+
+
+def _by_listeners(bvh, receivers, radius) -> tuple[np.ndarray, np.ndarray]:
+    """:func:`_near` of the listeners at ``receivers`` with spheres of ``radius``: each
+    is looked at out to where its sphere ends over the start of the reflections, and no
+    farther than a listener of any sphere reads :data:`LOSS` decibels low (the share
+    heard, over its distance in radii, falls with the distance: no sphere reads lower
+    than by the start over the listener's distance)."""
+    places = np.ascontiguousarray(receivers, dtype=np.float64).reshape(-1, 3)
+    spheres = np.broadcast_to(np.asarray(radius, dtype=np.float64), (len(places),))
+    start = _OFFSET * float(bvh.scale)
+    most = start / (1.0 - 10.0 ** (-LOSS / 10.0))
+    look = np.minimum(spheres + start, most)
+    return _near(bvh, places.tobytes(), _bytes(look), _bytes(spheres))
+
+
+def _bytes(values) -> bytes:
+    """The bytes of ``values`` as 64-bit floats."""
+    return np.ascontiguousarray(values, dtype=np.float64).tobytes()
+
+
+def _heard(share: np.ndarray) -> np.ndarray:
+    """The share of an evenly lit face's scattered sound that a listener hears whose
+    distance from where it starts is ``share`` of its sphere's radius."""
+    x = np.clip(share, 0.0, 1.0)
+    return x * (3.0 - x * x) / 2.0
+
+
+@functools.lru_cache(maxsize=4)
+def _near(bvh, points: bytes, clear: bytes, spheres: bytes = b"") -> tuple[np.ndarray, np.ndarray]:
+    """For each of ``points`` (the bytes of 64-bit floats, three for each point), whether
+    it lies too near the triangles of ``bvh`` for the GPU (see :func:`too_near`), and how
+    near two that meet it may not be.
+
+    The first is 1 for a point nearer a triangle than ``clear`` (the bytes of one
+    distance in metres, or of one for each point); with ``spheres`` (the bytes of a
+    radius in metres for each point), only for a listener of that radius that reads too
+    low at its distance (:func:`listeners_too_near`). It is 2 for another point nearer
+    two triangles that meet facing each other than their reach, which is the second, as
+    a share of the model's size; 0 and 0.0 for the rest. Kept for a run's calls, which
+    ask for the same listeners with every source and for the same source with every
+    batch of rays."""
+    from acoustic_spaces.geometry import triangles_near
+
+    size = float(bvh.scale)
+    layout = np.asarray(bvh.layout()["triangles"], dtype=np.float64).reshape(-1, 3, 3)
+    corners = np.stack([layout[:, 0], layout[:, 0] + layout[:, 1], layout[:, 0] + layout[:, 2]], 1)
+    places = np.frombuffer(points, dtype=np.float64).reshape(-1, 3)
+    room = np.broadcast_to(np.frombuffer(clear, dtype=np.float64), (len(places),))
+    kind, reach = np.zeros(len(places), dtype=np.int64), np.zeros(len(places))
+    widest = MEET * (T_MIN + _OFFSET) * size
+    point, face, distance = triangles_near(corners, places, max(widest, room.max(initial=0.0)))
+    close = distance < room[point]
+    if spheres:
+        # A listener reads lowest for its nearest triangle: any that takes too much counts.
+        radius = np.frombuffer(spheres, dtype=np.float64)[point]
+        start = _OFFSET * size
+        with np.errstate(divide="ignore", invalid="ignore"):
+            low = _heard((distance - start) / radius) < 10.0 ** (-LOSS / 10.0) * _heard(
+                distance / radius
+            )
+        close &= low | (distance <= start)
+    kind[point[close]] = 1
+    order = np.argsort(point, kind="stable")
+    order = order[(distance[order] < widest) & (kind[point[order]] == 0)]
+    point, face, distance = point[order], face[order], distance[order]
+    triangles = corners[face]
+    first = triangles[:, 0]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        normal = np.cross(triangles[:, 1] - first, triangles[:, 2] - first)
+        normal /= np.sqrt((normal * normal).sum(axis=1))[:, None]
+    side = ((places[point] - first) * normal).sum(axis=1)
+    # Each normal towards its point; a point in a triangle's plane has both sides.
+    level = float(bvh.min_distance)
+    within = np.abs(side) <= level
+    normal = np.where(side[:, None] < 0.0, -normal, normal)
+    starts = np.flatnonzero(np.r_[True, point[1:] != point[:-1]])
+    for start, stop in zip(starts, np.r_[starts[1:], len(point)], strict=True):
+        if stop - start > 1:
+            pairs = slice(start, stop)
+            found = _meeting(
+                triangles[pairs], normal[pairs], within[pairs], distance[pairs], size, level
+            )
+            if found:
+                kind[point[start]], reach[point[start]] = 2, found
+    kind.flags.writeable = reach.flags.writeable = False
+    return kind, reach
+
+
+def _meeting(
+    triangles: np.ndarray,
+    normal: np.ndarray,
+    within: np.ndarray,
+    distance: np.ndarray,
+    size: float,
+    level: float,
+) -> float:
+    """The widest reach (a share of the model's size ``size``, see :func:`too_near`) of
+    two of ``triangles`` (n, 3, 3) that meet facing each other and both lie nearer a
+    point than it; 0.0 where no two do. ``normal`` (n, 3) is each triangle's towards the
+    point, ``within`` (n,) whether the point lies in its plane (it has both sides
+    then), ``distance`` (n,) its distance from the point in metres.
+
+    Two triangles face each other where each has a corner more than ``level`` metres
+    off the other's plane on the point's side: the two sides of an inner edge, not
+    those of an outer one, nor two faces in one plane. They meet where they come as
+    near each other as what a reflection loses beside the second (a floor and the
+    ceiling over it do not)."""
+    from acoustic_spaces.geometry import triangle_gaps
+
+    first = triangles[:, 0]
+    count = len(triangles)
+    found = 0.0  # what a reflection loses beside the second of the widest pair so far, m
+    for start in range(0, count, _ROWS):
+        rows = np.arange(start, min(start + _ROWS, count))
+        cosine = -(normal[rows, None] * normal[None]).sum(axis=2)
+        cosine = np.where(within[rows, None] | within[None], np.abs(cosine), cosine)
+        lost = (T_MIN + _OFFSET * cosine) * size
+        farther = np.maximum(distance[rows, None], distance[None])
+        # Each pair once, and only those wider than the widest so far.
+        later = np.arange(count)[None] > rows[:, None]
+        one, other = np.nonzero(later & (farther < MEET * lost) & (lost > found))
+        lost, one = lost[one, other], rows[one]
+        for _ in range(2):  # each has a corner over the other's plane, on the point's side
+            height = ((triangles[other] - first[one, None]) * normal[one, None]).sum(axis=2)
+            over = np.where(within[one], np.abs(height).max(axis=1), height.max(axis=1))
+            ahead = over > level
+            one, other, lost = other[ahead], one[ahead], lost[ahead]
+        if len(one):
+            meet = triangle_gaps(triangles[one], triangles[other]) <= lost
+            found = max(found, float(lost[meet].max(initial=0.0)))
+    return MEET * found / size
+
+
 @functools.lru_cache(maxsize=2)
 def tracer(bvh) -> GpuTracer:
     """The GPU tracer of ``bvh``, made once per model."""
@@ -3143,12 +3363,16 @@ def trace_stochastic(
     buffer of rays in flight for the next call, until :func:`release`, as a run's late
     part does; without, the call makes and lets go of its own. Raises
     :class:`Unsupported` for what only the CPU traces: transmission into a room (see
-    :func:`passes_sound`) and vegetation of more media than :data:`MAX_MEDIA`."""
+    :func:`passes_sound`), a source or a listener too near a surface (:func:`too_near`)
+    and vegetation of more media than :data:`MAX_MEDIA`."""
     from acoustic_spaces import _native
 
     del threads, room_level
     if passes_sound(transmission, face_room, source_room):
         raise Unsupported("the GPU tracer does not let sound through surfaces")
+    near = too_near(bvh, source, receivers, receiver_radius)
+    if near:
+        raise Unsupported(near)
     if int(groups) > MAX_GROUPS:
         raise ValueError(f"at most {MAX_GROUPS} groups of faces, not {int(groups)}")
     if face_kind is not None:  # as the CPU's trace_stochastic takes them
