@@ -1187,6 +1187,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
         _remove_if_empty(made)
         return 1
     if groups is not None:
+        from acoustic_spaces.engine.run_size import worker_threads
         from acoustic_spaces.engine.uncertainty import ADAPTIVE, ADAPTIVE_MAX_DRAWS, with_spread
 
         many = f"{draws} draws"
@@ -1201,6 +1202,7 @@ def _cmd_simulate(args: argparse.Namespace) -> int:
                 draws=draws,
                 seed=settings.seed or 0,
                 one_sided=settings.uncertainty.one_sided,
+                workers=worker_threads(settings.performance.threads),
             )
         except ValueError as exc:
             print(f"warning: no spread from the absorption uncertainty: {exc}", file=sys.stderr)
@@ -3624,6 +3626,12 @@ def _windows_escape_codes() -> bool:  # pragma: no cover - Windows consoles only
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    if getattr(sys, "frozen", False):
+        # In a frozen build the spread's worker processes are this executable, started
+        # with the arguments of a spawned process, which this call runs and ends with.
+        import multiprocessing.spawn
+
+        multiprocessing.spawn.freeze_support()
     for stream in (sys.stdout, sys.stderr):
         # Material descriptions contain characters a Windows console code page may lack.
         if hasattr(stream, "reconfigure"):

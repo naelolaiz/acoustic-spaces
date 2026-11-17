@@ -347,9 +347,33 @@ bounds and the errors over edges, and `parameters.json` holds them all (`uncerta
 warning when a material gives an uncertainty of its own; so does the editor, in its
 messages. The editor shows each run's results at once, draws the spread
 after them and gives it in the results table's tips. The draws add to a run: in the
-concert hall example (five built-in materials, six responses) 400 draws take 70 to 75 s
-after an 11 s run on four cores, about half of it the lowest bands' paths added in
-pressure for each draw; `presets: none` leaves the built-in materials out.
+concert hall example (five built-in materials, six responses) 400 draws take 21 s in
+four worker processes (below; 72 s in the run's own process) after a 12 s run on four
+cores, about half of their work the lowest bands' paths added in pressure for each draw;
+`presets: none` leaves the built-in materials out.
+
+`acoustic-spaces simulate` and the editor work the draws out in worker processes, as
+many as the run has threads (`simulation.performance.threads`, `--threads`) and the
+cores it may use, with the same results as in the run's own process and the same
+messages. Each process takes a run of one response's draws at a time and holds that
+response, as traced and as a draw re-weights it, what the run's draws share (up to 128
+MiB of the coherent bands' delay phases and band grids) and its own interpreter, some 80
+MiB; the processes take at most half of the computer's memory (or of its container's
+limit) together, so fewer of them for large responses. There is one process for each
+100 draws of all the responses together at most, so a spread of fewer than 200 draws in
+all stays in the run's own process, as does every spread with `--threads 1`. The
+admittances the draws take in the lowest bands are fitted before the draws, each once.
+The processes inherit the run's environment and the cores it may use and set nothing of
+the linear algebra's threads: a draw's products are added in a fixed order, and the
+library's solvers (the admittances' fits) run in them as in the run's own process. The
+results come out the same to the last bit, except on an Intel Mac, where Apple's
+Accelerate rounds a sum by where its numbers lie in memory and the admittances' fits may
+differ in their last digits as they may from one fit to the next in one process. In
+Python, `material_spread` and `with_spread` take `workers` (1, the default, for none; 0
+for every core). The draws stay in the calling process in a daemonic process (a
+`multiprocessing.Pool`'s). The processes are started by spawning, which imports the main
+module again in each, so a script that gives `workers` must do so under
+`if __name__ == "__main__":`, or the call ends with an error.
 
 `simulation.uncertainty.draws` is the number of draws: 400 unless the scene says
 otherwise, 0 for no spread (`--spread-draws` on the command line, **Draws** in the

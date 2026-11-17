@@ -77,6 +77,7 @@ class SimulationJob(QThread):
             progress=self._say,
             groups=self.groups,
         )
+        from acoustic_spaces.engine.run_size import worker_threads
         from acoustic_spaces.engine.uncertainty import has_uncertainty, with_spread
 
         settings = self.settings or self.room.scene.simulation
@@ -94,6 +95,9 @@ class SimulationJob(QThread):
             seed=settings.seed or 0,
             progress=self._say,
             one_sided=settings.uncertainty.one_sided,
+            workers=worker_threads(
+                settings.performance.threads if self.threads is None else self.threads
+            ),
         )
 
     def run(self) -> None:

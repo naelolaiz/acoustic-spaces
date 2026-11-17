@@ -1,5 +1,4 @@
 import dataclasses
-import functools
 import itertools
 import math
 import types
@@ -7,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import rounded_by_place
 
 from acoustic_spaces import Room, Scene, _native, simulate, synthesis
 from acoustic_spaces.engine import wave as wave_stage
@@ -1902,59 +1902,6 @@ def test_the_fits_differences_are_those_least_squares_takes_itself(
             )
 
 
-def _placed(values: np.ndarray, offset: int) -> np.ndarray:
-    """A copy of ``values`` (float64) whose data begin ``offset`` bytes past a multiple
-    of 64."""
-    values = np.asarray(values, dtype=float)
-    raw = np.empty(values.size + 16)
-    first = ((-raw.ctypes.data) % 64 + offset) // 8
-    out = raw[first : first + values.size].reshape(values.shape)
-    out[...] = values
-    assert out.ctypes.data % 64 == offset
-    return out
-
-
-def _products(jac: np.ndarray, f: np.ndarray, step: np.ndarray, at: int) -> dict:
-    """Products ``least_squares`` takes at every step, of the differences (laid as the
-    fit lays them, ``jac.T``), the misses ``f`` and a ``step``, each with one array
-    ``at`` bytes past a multiple of 64."""
-    rows, unknowns = jac.T.shape
-    misses = _placed(f, at)
-    return {
-        f"f.dot(f) of {rows} misses": np.dot(misses, misses),
-        f"J.T.dot(f) of {rows} misses and {unknowns} unknowns": _placed(jac, at).dot(f),
-        f"J.dot(step) of {rows} misses and {unknowns} unknowns": _placed(jac, at).T.dot(step),
-        f"J.dot(step), the step of {unknowns} unknowns": jac.T.dot(_placed(step, at)),
-    }
-
-
-@functools.cache
-def _rounded_by_place() -> str | None:
-    """A product ``least_squares`` takes at every step that this computer's linear
-    algebra rounds by where its numbers lie in memory, among the places a new array
-    gets (every 16 bytes), at the sizes of the fits of ``_FITS``; None where it rounds
-    none so. Where it does, a fit by ``least_squares`` depends on what was made in
-    memory before it, with the fit's differences or with its own: on an Intel Mac,
-    Apple's Accelerate adds the products of a vector with itself in another order
-    where the vector begins 16 bytes past a multiple of 32, and three of the five fits
-    of ``_FITS`` by ``least_squares``' own differences changed with a few small arrays
-    kept in memory beside them."""
-    rng = np.random.default_rng(3)
-    for unknowns, rows in ((11, 8), (21, 18), (27, 24), (53, 50), (7, 4), (13, 10), (12, 9)):
-        for _ in range(16):
-            jac = rng.normal(size=(unknowns, rows))
-            f, step = rng.normal(size=rows), rng.normal(size=unknowns)
-            found: dict[str, dict[bytes, list[int]]] = {}
-            for at in (0, 16, 32, 48):
-                for name, product in _products(jac, f, step, at).items():
-                    groups = found.setdefault(name, {})
-                    groups.setdefault(np.asarray(product).tobytes(), []).append(at)
-            for name, groups in found.items():
-                if len(groups) > 1:
-                    return f"{name}, by the bytes past a multiple of 64: {sorted(groups.values())}"
-    return None
-
-
 def _both_fits(monkeypatch, absorption, total: int, rate):
     """The fit of ``absorption`` with the forward differences it takes itself, and with
     those ``least_squares`` takes for ``jac="2-point"``."""
@@ -1986,9 +1933,9 @@ def test_the_fit_is_the_one_least_squares_own_differences_give(
     """The fit takes the forward differences of its misses itself, a branch at a time.
     They are the ones scipy's ``least_squares`` takes with ``jac="2-point"``, and the fit
     is the same down to the last bit. Not compared where the computer's linear algebra
-    rounds by where an array lies in memory (:func:`_rounded_by_place`): there
-    ``least_squares`` gives no one fit to compare with."""
-    if (rounded := _rounded_by_place()) is not None:
+    rounds by where an array lies in memory (conftest's :func:`rounded_by_place`):
+    there ``least_squares`` gives no one fit to compare with."""
+    if (rounded := rounded_by_place()) is not None:
         pytest.skip(
             "a fit by least_squares changes with what else is in memory on this computer, "
             f"whose linear algebra rounds {rounded}"
