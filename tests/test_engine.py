@@ -10,6 +10,8 @@ from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine import TraceModel, early_paths
 from acoustic_spaces.engine import early as early_stage
 from acoustic_spaces.engine import late as late_stage
+from acoustic_spaces.engine.coherent import total_energy
+from acoustic_spaces.engine.model import PLANE_TOLERANCE
 from acoustic_spaces.parameters import from_impulse_response
 from acoustic_spaces.scene.model import Scattering
 from acoustic_spaces.synthesis import REFERENCE_ENERGY_10M
@@ -188,6 +190,101 @@ def test_faces_merged_into_one_plane_reflect_as_an_exact_box(
             * ((1 - alpha) * (1 - scattering)) ** paths.order[:, None]
         )
         np.testing.assert_allclose(paths.energy, expected, rtol=1e-5)
+
+
+def _box_with_a_diagonal_panel(path: Path, degrees: float, tilt: float) -> Room:
+    """The box of ``_box_of_triangles`` with two pieces of a free-standing panel in its
+    plane x - y = 1, each two triangles, the second wound the other way round, and a
+    source and a listener either side of the panel; all of it turned ``degrees`` about
+    the z axis. One piece is turned ``tilt`` rad about the upright line of the plane
+    nearest the z axis, which leaves the plane as far from the origin as it was, and the
+    other as much the other way."""
+    _box_of_triangles(path, degrees=degrees)
+    lines, n = [path.read_text().rstrip("\n")], 24
+    pivot = np.array([0.5, -0.5])
+    for name, start, angle in (("panel_a", 2.0, tilt), ("panel_b", 3.5, -tilt)):
+        c, s = math.cos(angle), math.sin(angle)
+        ends = np.array([[start + 1.0, start], [start + 1.9, start + 0.9]]) - pivot
+        a, b = ends @ np.array([[c, s], [-s, c]]) + pivot
+        corners = [(*a, 0.2), (*b, 0.2), (*b, 2.2), (*a, 2.2)]
+        if angle < 0.0:
+            corners.reverse()
+        lines.append(f"g {name}")
+        lines += ["v " + " ".join(repr(float(v)) for v in p) for p in _turned(corners, degrees)]
+        lines += [f"f {n + 1} {n + 2} {n + 3}", f"f {n + 1} {n + 3} {n + 4}"]
+        n += 4
+    path.write_text("\n".join(lines) + "\n")
+    scene = Scene.model_validate(
+        {
+            "geometry": {"file": str(path)},
+            "materials": {"m": {"absorption": [0.1] * 8, "scattering": 0.0}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": _turned((6.5, 2.0, 1.2), degrees).tolist()}],
+            "listeners": [{"name": "l", "position": _turned((3.0, 5.5, 1.3), degrees).tolist()}],
+            "simulation": {
+                "ir_length_s": 0.3,
+                "scattering": {"from_size": False},
+                "early": {"method": "image_sources", "max_order": 2, "diffraction": "first_order"},
+            },
+        }
+    )
+    return Room.from_scene(scene)
+
+
+@pytest.mark.parametrize("degrees", [0.0, 180.0])
+def test_pieces_of_a_panel_at_45_degrees_share_a_plane(tmp_path, degrees) -> None:
+    """Two pieces of a free-standing panel in a plane at 45 degrees to the x and y axes,
+    wound opposite ways, their planes a millionth of a radian either side of it (as a
+    file with six decimals leaves them, a tenth of what the planes' keys tell apart):
+    the normal's two largest components are equal as the keys round them, and the pieces
+    are one plane of the model, with the paths and the early level of the room turned 90
+    degrees further, where those components have one sign. With the direction of a
+    two-sided plane by the larger component as each face has it, the pieces faced
+    opposite ways, each in a plane of its own."""
+    room = _box_with_a_diagonal_panel(tmp_path / "here.obj", degrees, 1e-6)
+    model = TraceModel.from_room(room)
+    names = [str(label) for label in room.mesh.labels]
+    panel = np.array(["panel" in names[label] for label in room.mesh.face_labels])
+    assert panel.sum() == 4 and len(np.unique(model.face_plane[panel])) == 1
+    paths = early_paths(room)
+    turned = early_paths(_box_with_a_diagonal_panel(tmp_path / "turned.obj", degrees + 90.0, 1e-6))
+    assert len(paths) == len(turned)
+    assert np.abs(10 * np.log10(total_energy(paths) / total_energy(turned))).max() < 0.001
+
+
+@pytest.mark.parametrize("larger", [0.7, 0.70001, 0.70005, 0.7005])
+def test_faces_with_one_normal_as_the_keys_round_it_share_a_plane(tmp_path, larger) -> None:
+    """Two triangles through the origin, of a model that is not closed, wound opposite
+    ways: the normal of one has the components 0.7 and ``larger`` less a ten-millionth,
+    that of the other 0.7 and ``larger`` plus as much. As the planes' keys round them the
+    two normals are opposite, and the triangles are one plane of the model. The values of
+    ``larger`` are those where the larger of the two components is another one for the
+    two triangles when it is not taken as the keys round them: with the components as
+    they are (0.7), with components within a step of the keys taken for equal (a step
+    more), and with steps ten and a hundred times the keys' (half such a step more)."""
+    lines = []
+    for size, second, order in ((1.0, larger - 1e-7, 1), (2.0, larger + 1e-7, -1)):
+        normal = np.array([0.7, -second, math.sqrt(0.51 - second * second)])
+        u = np.cross(normal, (0.0, 0.0, 1.0))
+        u *= size / np.linalg.norm(u)
+        corners = (u, np.cross(normal, u), -u - np.cross(normal, u))[::order]
+        lines += ["v " + " ".join(repr(float(v)) for v in p) for p in corners]
+    path = tmp_path / "pair.obj"
+    path.write_text("\n".join([*lines, "f 1 2 3", "f 4 5 6"]) + "\n")
+    scene = Scene.model_validate(
+        {
+            "geometry": {"file": str(path)},
+            "materials": {"m": {"absorption": [0.1] * 8, "scattering": 0.0}},
+            "default_material": "m",
+            "sources": [{"name": "s", "position": [3.0, 0.0, 1.0]}],
+            "listeners": [{"name": "l", "position": [0.0, 3.0, 1.0]}],
+        }
+    )
+    room = Room.from_scene(scene)
+    rounded = np.round(room.mesh.face_normals() / PLANE_TOLERANCE)
+    assert np.array_equal(rounded[0], -rounded[1])
+    model = TraceModel.from_room(room)
+    assert model.face_plane[0] == model.face_plane[1]
 
 
 def _hall_of_triangles(path: Path, size, turn) -> Path:
