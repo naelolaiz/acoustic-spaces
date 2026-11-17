@@ -312,7 +312,7 @@ def test_the_paths_round_an_end_take_the_open_ground_s_field_in_line_with_it(run
 
 def test_a_breath_of_wind_behind_a_barrier_is_still_air() -> None:
     """In a wind of 0.01 m/s at 10 m the levels behind the barrier, in the middle and
-    near its end, are within 0.02 dB of those in still air at 4 and 8 kHz (0.008 dB)
+    near its end, are within 0.02 dB of those in still air at 4 and 8 kHz (0.009 dB)
     and within 0.2 dB from 63 Hz to 2 kHz: there the paths round the ends take the open
     ground's equation along their way, whose limit in no wind departs from the image
     sources' by up to 0.15 dB here (250 Hz), over a ground given by its absorption
@@ -1020,7 +1020,7 @@ def test_no_step_across_the_shadow_boundary_of_a_barrier_s_end_in_weather_zones(
     of the end's shadow boundary is within 0.1 dB of still air's (0.04 dB at most; the
     way's run in the mean of the weathers stepped by 1.70 dB at 1 kHz, the equation's
     ratio by 0.85). At 4 and 8 kHz, where the eigenrays take the mean profile of the
-    weathers along their way, it is below 1 dB (0.20 and 0.76 dB): the weathers' shares
+    weathers along their way, it is below 1 dB (0.20 and 0.77 dB): the weathers' shares
     along a way, sampled every metre of each leg, differ by 0.005 between the way round
     the end and the listener's straight line (0 dB with them sampled every millimetre;
     main 8.25 and 9.45 dB)."""
@@ -1210,12 +1210,12 @@ def test_the_paths_over_the_top_and_over_the_open_ground_stay_as_they_were() -> 
         1.30810958966448e-08,
     ]
     expected_ground = [
-        9.200513444254311e-05,
-        0.00010677352415635575,
-        0.00011699229865428902,
-        7.143885680548765e-05,
-        2.0410881905508263e-05,
-        6.926547047971363e-05,
+        9.200410206807897e-05,
+        0.0001067737110220973,
+        0.00011697147433859961,
+        7.143461213755506e-05,
+        2.0410108665021113e-05,
+        6.926517139835472e-05,
         2.6419545376058942e-05,
         8.918224948651596e-06,
     ]
@@ -1409,7 +1409,7 @@ def _beside_end(atmosphere, listeners):
 def test_no_step_across_an_end_s_shadow_boundary_through_the_crossovers() -> None:
     """60 m downwind in the windy preset, 1 mm either side of the end's shadow boundary,
     the rendered early response steps in the third octaves from 1.25 to 3.15 kHz by no
-    more than 0.1 dB over still air's step there (at most 0.011 dB over it measured;
+    more than 0.1 dB over still air's step there (at most 0.006 dB over it measured;
     still air's 0.011 dB at most): the paths round the end carry the weather's field at
     every frequency the way's runs took, as the lit side's own does. Holding the
     weather's change at the early paths' frequencies they stepped by 0.50, 0.17, 0.11,
@@ -1525,7 +1525,7 @@ def test_below_the_line_of_sight_the_paths_round_an_end_keep_their_level_in_the_
 def test_a_map_matches_listeners_beside_a_barrier_s_end_in_wind() -> None:
     """A coverage map's points 40 and 60 m away on the shadow boundary of a barrier's
     end, downwind in the windy preset, read C50 and C80 from 63 to 500 Hz as listeners
-    at those points do, within 0.5 dB (0.12 and 0.03 dB measured, where they are 36 to
+    at those points do, within 0.5 dB (0.12 and 0.03 dB measured, where they are 35 to
     88 dB), and the strength within 0.002 dB: the paths round the end carry their way's
     field through a map's band filters as through a listener's. With a map's paths held
     at the early paths' frequencies they would be up to 10.5 dB and 0.014 dB apart."""

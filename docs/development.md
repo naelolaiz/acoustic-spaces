@@ -76,8 +76,6 @@ norm = math.sqrt(products.dot(left, left))  # left @ left
 
 A product of a few fixed values (3-vectors, 3 x 3 frames, a handful of bands) stays an
 `@`: the library works it on one thread. The library's solvers (`eigh`, `pinv`, `svd`,
-`inv`, `least_squares`) stay too, and so do live head-tracked playback and the cosines
-that choose a measured directivity table's nearest directions
-([Known issues](validation.md#known-issues)). `tests/test_code.py` counts the products
-each file leaves to the library and fails when one is added, with a message that says
-what to do.
+`inv`, `least_squares`) stay too, and so does live head-tracked playback.
+`tests/test_code.py` counts the products each file leaves to the library and fails
+when one is added, with a message that says what to do.
