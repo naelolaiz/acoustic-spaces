@@ -31,9 +31,10 @@ from test_wave import (
     _stepped_from_the_layout,
 )
 
-from acoustic_spaces import _native
+from acoustic_spaces import Room, Scene, _native
 from acoustic_spaces.engine.impedance import Admittance
-from acoustic_spaces.engine.wave import COURANT, source_signal
+from acoustic_spaces.engine.model import TraceModel
+from acoustic_spaces.engine.wave import COURANT, source_signal, wave_responses
 
 # The grid's origin is moved off the model's round numbers by these fractions of a cell.
 OFFSET = np.array([0.0137, 0.0219, 0.0291])
@@ -2336,3 +2337,121 @@ def test_a_speck_nearly_closes_its_owner_s_opposite_link():
     assert len(touched[(m, o)]) == 2 and min(touched[(m, o)]) < 1.0 < max(touched[(m, o)])
     thick = sum(max(x) > 1.0 for x in touched.values())
     assert wave(v, f, h, origin, shape, src).cut_stats["sliver_thick"] == thick
+
+
+# ---- Group D: fitted walls through wave_responses (walls="fitted") ------------------------------
+#
+# References: the fit's refusal words; the mesh's faces less its openings', selected here from the
+# model; and the run on the model with its openings' faces taken out of its file.
+
+
+def obj_room(path, v, groups, source, listener, materials, assignments):
+    """A room from an OBJ file written at `path`: the vertices v (written as the doubles they are)
+    and `groups`, (name, faces) in order; one source and one listener."""
+    lines = [f"v {float(x)!r} {float(y)!r} {float(z)!r}" for x, y, z in np.asarray(v, float)]
+    for name, faces in groups:
+        lines.append(f"g {name}")
+        lines += [f"f {a + 1} {b + 1} {c + 1}" for a, b, c in faces]
+    path.write_text("\n".join(lines) + "\n")
+    data = {
+        "geometry": {"file": str(path)},
+        "materials": materials,
+        "default_material": "m",
+        "assignments": assignments,
+        "sources": [{"name": "s", "position": list(source)}],
+        "listeners": [{"name": "l", "position": list(listener)}],
+    }
+    return Room.from_scene(Scene.model_validate(data))
+
+
+def fitted_responses(room, said=None):
+    """wave_responses of the room from its source to its listener, 63 Hz band, 0.1 s, with
+    fitted walls; and the progress lines, in `said` when given."""
+    said = [] if said is None else said
+    responses, info = wave_responses(
+        TraceModel.from_room(room),
+        np.array(room.scene.sources[0].position),
+        [room.scene.listeners[0].position],
+        ["l"],
+        max_band_hz=63,
+        length_s=0.1,
+        sample_rate=48_000,
+        speed_of_sound=C,
+        walls="fitted",
+        say=said.append,
+    )
+    return responses, info, said
+
+
+HARD = {"m": {"absorption": [0.1] * 8, "scattering": 0.0}}
+
+
+def test_wave_responses_raise_the_fit_s_refusals(tmp_path):
+    # The T-junction room of A7, 8 times as large, its T vertex 1.6 mm off the diagonal: on the
+    # 63 Hz band's 7-point grid (cells of 0.40 m) the slit it opens is narrower than a hundredth of
+    # a cell, and the fit refuses it, before any step. Welded, the room runs.
+    source, listener = np.array([0.47, 0.39, 0.42]) * 8, np.array([0.7, 0.5, 0.3]) * 8
+    for offset in (0.0, 2e-4):
+        v, f = t_room(offset, 0)
+        room = obj_room(tmp_path / "t.obj", v * 8, [("walls", f)], source, listener, HARD, {})
+        if offset == 0.0:
+            _, info, _ = fitted_responses(room)
+            assert info["wave_fitted_walls"] == 1.0 and "wave_open" not in info
+            continue
+        said = []
+        with pytest.raises(ValueError, match=r"^fitted walls: the air in the cell centred at") as e:
+            fitted_responses(room, said)
+        assert "Weld the faces along it" in str(e.value)
+        assert said == []
+
+
+def test_wave_responses_give_the_fit_the_faces_of_the_bvh(tmp_path, monkeypatch):
+    # A box whose +x wall has a 1 m square opening (transmission 1), its two faces written between
+    # the other walls' and the +x wall's, three materials; its corners lie off the origin, at
+    # coordinates single precision does not hold, so vertices rounded on the way to the fit are
+    # seen. Every solver made (the closed grid tried
+    # first, then the one with the layer) is given the mesh's vertices and its faces less the
+    # opening's, in the mesh's order, the order the wave grid's walls are found in; and the fitted
+    # run is, to the bit, the run on the box with the opening's faces left out of the file. The
+    # opening is open: the run has the matched layer, and its wave_fit_s is the two fits' seconds.
+    given, seconds = [], []
+
+    class Kept(_native.WaveSolver):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            given.append(kwargs)
+            seconds.append(self.cut_stats["seconds"])
+
+    monkeypatch.setattr(_native, "WaveSolver", Kept)
+    lo, hi = np.array([0.1, 0.1, 0.1]), np.array([4.1, 3.1, 2.6])
+    v, f = holed_box(lo, hi, 1.0)
+    assert not np.array_equal(v.astype(np.float32), v)
+    walls, ring = f[:10], f[10:]
+    opening = np.array([[12, 13, 14], [12, 14, 15]])  # the hole's corners, vertices 12 to 15
+    materials = {
+        **HARD,
+        "panel": {"absorption": [0.4] * 8, "scattering": 0.0},
+        "gap": {"absorption": [1.0] * 8, "scattering": 0.0, "transmission": [1.0] * 8},
+    }
+    source, listener = (1.13, 1.37, 1.21), (3.02, 2.11, 1.43)
+    runs = []
+    for with_opening in (True, False):
+        groups = [("walls", walls[:5]), ("hole", opening), ("walls", walls[5:]), ("front", ring)]
+        if not with_opening:
+            del groups[1]
+        assignments = {"hole": "gap", "front": "panel"}
+        room = obj_room(tmp_path / "box.obj", v, groups, source, listener, materials, assignments)
+        model = TraceModel.from_room(room)
+        assert model.transparent.sum() == (2 if with_opening else 0)
+        given.clear()
+        seconds.clear()
+        runs.append(fitted_responses(room)[:2])
+        assert len(given) == 2 and runs[-1][1]["wave_fit_s"] == seconds[0] + seconds[1]
+        for kwargs in given:
+            assert kwargs["fitted_walls"] is True
+            assert np.array_equal(kwargs["vertices"], room.mesh.vertices)
+            assert np.array_equal(kwargs["faces"], room.mesh.faces[~model.transparent])
+    (opened, info), (left_out, reference) = runs
+    assert info["wave_open"] == 1.0 and info["wave_fitted_walls"] == 1.0
+    assert info["wave_cells"] == reference["wave_cells"]
+    assert np.array_equal(opened[0].signals, left_out[0].signals)

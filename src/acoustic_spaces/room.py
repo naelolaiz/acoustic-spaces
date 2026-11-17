@@ -531,10 +531,14 @@ class Room:
         default = WaveStage().points_per_wavelength
         if not wave.enabled or wave.points_per_wavelength >= default:
             return []
-        # The stencil the run takes: auto's is the isotropic one but round an open model.
+        # The stencil the run takes: auto's is the isotropic one but round an open model or
+        # with fitted walls, which take the standard one only.
         closed = self.report.closed and self.outdoor is None
-        if wave.scheme == "isotropic" or (wave.scheme == "auto" and closed):
+        fitted = wave.walls == "fitted"
+        if wave.scheme == "isotropic" or (wave.scheme == "auto" and closed and not fitted):
             stencil, name = 19, "the isotropic (19-point) stencil"
+        elif fitted:
+            stencil, name = 7, "the standard (7-point) stencil that fitted walls take"
         else:
             which = "the" if wave.scheme == "standard" else "an open model's"
             stencil, name = 7, f"{which} standard (7-point) stencil"

@@ -138,6 +138,26 @@ def test_wave_responses_on_the_gpu_match_the_cpu() -> None:
 
 
 @needs_gpu
+def test_wave_responses_with_fitted_walls_on_the_gpu_match_the_cpu() -> None:
+    room = Room.from_yaml(SHOEBOX)
+    model = TraceModel.from_room(room)
+    source = np.array(room.scene.sources[0].position)
+    listener = np.array(room.scene.listeners[0].position)
+    common = {"max_band_hz": 63, "length_s": 0.3, "sample_rate": 48_000, "speed_of_sound": C}
+    common["walls"] = "fitted"
+    said: list[str] = []
+    cpu, cpu_info = wave_responses(model, source, [listener], ["l"], **common)
+    on_gpu, info = wave_responses(
+        model, source, [listener], ["l"], device="gpu", say=said.append, **common
+    )
+    assert info["wave_gpu"] == 1.0 and info["wave_fitted_walls"] == 1.0
+    assert cpu_info["wave_fitted_walls"] == 1.0 and "wave_gpu" not in cpu_info
+    assert "fitted walls, " in said[0] and gpu.gpu_name() in said[0]
+    a, b = cpu[0].signals, on_gpu[0].signals
+    assert np.abs(a - b).max() < _tolerance(1e-5, 1e-4) * np.abs(a).max()
+
+
+@needs_gpu
 @STENCILS
 def test_gpu_steps_a_speed_of_sound_per_cell_as_the_cpu_does(stencil: int) -> None:
     """A room whose speed of sound falls from the grid's at the ceiling to 0.6 of it at

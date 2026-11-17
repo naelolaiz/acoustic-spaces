@@ -3221,6 +3221,11 @@ def _windy_ground(wind: float, model: str, temperature=None) -> Room:
     """Rigid ground, the source 1.5 m up and listeners 6 m downwind and upwind of it, in
     a uniform wind ``wind`` (m/s) along +x taken as ``model``; ``temperature``, a table
     of heights and °C, for still air warming with height."""
+    return Room.from_scene(Scene.model_validate(_windy_ground_data(wind, model, temperature)))
+
+
+def _windy_ground_data(wind: float, model: str, temperature=None) -> dict:
+    """The scene data of :func:`_windy_ground`."""
     data = {
         "geometry": {"ground": {"extent": [[-10, -6], [10, 6]], "sky": 5}},
         "materials": {"hard": {"absorption": [0.0] * 8, "scattering": 0.0}},
@@ -3238,7 +3243,7 @@ def _windy_ground(wind: float, model: str, temperature=None) -> Room:
         }
     if temperature is not None:
         data["atmosphere"] = {"table": [[z, t, 0.0] for z, t in temperature]}
-    return Room.from_scene(Scene.model_validate(data))
+    return data
 
 
 def _windy_hut(wind: float) -> Room:
@@ -3606,6 +3611,226 @@ def test_the_wave_stage_takes_its_wind_model() -> None:
     assert _windy_ground(15.0, "moving").scene.simulation.wave.wind == "moving"
     with pytest.raises(ValueError, match="wind"):
         WaveStage.model_validate({"wind": "sideways"})
+
+
+# Fitted walls as a scene setting (simulation.wave.walls). The messages are the words the
+# scene's checks and wave_responses give.
+_FITTED_ISOTROPIC = (
+    "simulation.wave.walls: fitted works on the standard (7-point) stencil only: set "
+    "simulation.wave.scheme to standard or auto, or simulation.wave.walls to cell_faces"
+)
+_FITTED_OUTDOORS = (
+    "simulation.wave.walls: fitted is not available outdoors: set simulation.wave.walls to "
+    "cell_faces"
+)
+
+
+def test_the_wave_stage_takes_its_walls() -> None:
+    assert WaveStage().walls == "cell_faces"
+    assert WaveStage(walls="fitted").walls == "fitted"
+    assert WaveStage(walls="fitted", scheme="standard").scheme == "standard"
+    with pytest.raises(ValueError, match="walls"):
+        WaveStage.model_validate({"walls": "voxel"})
+    with pytest.raises(ValueError) as error:
+        WaveStage(walls="fitted", scheme="isotropic")
+    assert _FITTED_ISOTROPIC in str(error.value)
+    # Outdoors they are refused when the scene is read, whether the wave solver is on or
+    # not; walls on cell faces read as before.
+    data = _windy_ground_data(15.0, "effective")
+    assert Scene.model_validate(data).simulation.wave.walls == "cell_faces"
+    for enabled in (True, False):
+        data["simulation"]["wave"].update(walls="fitted", enabled=enabled)
+        with pytest.raises(ValueError) as error:
+            Scene.model_validate(data)
+        assert _FITTED_OUTDOORS in str(error.value)
+
+
+def test_the_walls_match_the_schema() -> None:
+    from typing import get_args
+
+    walls = get_args(WaveStage.model_fields["walls"].annotation)
+    assert walls == get_args(wave_stage.Walls) == ("cell_faces", "fitted")
+    assert "Walls" in wave_stage.__all__
+
+
+def _fitted_run(
+    room: Room, model: TraceModel | None = None, **more
+) -> tuple[list[WaveResponse], dict[str, float], list[str]]:
+    """wave_responses in the room's ``model`` (by default its own) from the scene's first
+    source to its listeners, 63 Hz band, 0.1 s, with ``more`` (walls="fitted" unless it
+    says otherwise); and the progress lines."""
+    said: list[str] = []
+    responses, info = wave_responses(
+        TraceModel.from_room(room) if model is None else model,
+        np.array(room.scene.sources[0].position),
+        np.array([listener.position for listener in room.scene.listeners], dtype=float),
+        [listener.name for listener in room.scene.listeners],
+        **{
+            "max_band_hz": 63,
+            "length_s": 0.1,
+            "sample_rate": FS,
+            "speed_of_sound": C,
+            "walls": "fitted",
+            "say": said.append,
+            **more,
+        },
+    )
+    return responses, info, said
+
+
+def test_fitted_walls_take_the_7_point_stencil_in_a_closed_room() -> None:
+    # In a closed room auto takes the isotropic stencil, but with fitted walls the standard
+    # one: the grid, steps and cells of the standard stencil with walls on cell faces. The
+    # box's walls lie off the cell faces (the grid's origin is shifted off the model's
+    # planes), so the fitted ones lie elsewhere, and the responses differ.
+    room = _free_room([1.0])
+    fitted, info, said = _fitted_run(room)
+    plain, plain_info, _ = _fitted_run(room, walls="cell_faces", scheme="standard")
+    assert info["wave_stencil"] == 7 and info["wave_fitted_walls"] == 1.0
+    assert info["wave_fit_s"] > 0.0 and "wave_open" not in info
+    for key in ("wave_cell_m", "wave_steps", "wave_cells", "wave_stencil", "wave_slow_percent"):
+        assert info[key] == plain_info[key], key
+    assert "wave_fitted_walls" not in plain_info and "wave_fit_s" not in plain_info
+    assert "cells of 40 cm, fitted walls, " in said[0]
+    a, b = fitted[0].signals, plain[0].signals
+    assert a.shape == b.shape and np.abs(a - b).max() > 1e-3 * np.abs(b).max()
+
+
+def test_wave_responses_refuse_fitted_walls_they_cannot_take(monkeypatch) -> None:
+    # Called directly, wave_responses refuses before any solver is made what fitted walls
+    # do not take: the isotropic stencil, an outdoor model (in moving air too, which only an
+    # outdoor scene has) and an unknown walls. In a room, whose air does not move, wind
+    # "moving" runs them.
+    room = _free_room([1.0])
+    _, info, _ = _fitted_run(room, wind="moving", length_s=0.02)
+    assert info["wave_fitted_walls"] == 1.0 and "wave_moving_air" not in info
+
+    def made(*args, **kwargs):
+        raise AssertionError("a wave solver was made")
+
+    monkeypatch.setattr(_native, "WaveSolver", made)
+    for refused, more, message in (
+        (room, {"scheme": "isotropic"}, _FITTED_ISOTROPIC),
+        (room, {"walls": "voxel"}, "unknown walls 'voxel'; use cell_faces or fitted"),
+        (_windy_ground(15.0, "effective"), {}, _FITTED_OUTDOORS),
+        (_windy_ground(15.0, "moving"), {"wind": "moving"}, _FITTED_OUTDOORS),
+        (_windy_ground(0.0, "effective"), {}, _FITTED_OUTDOORS),
+    ):
+        with pytest.raises(ValueError) as error:
+            _fitted_run(refused, **more)
+        assert str(error.value) == message
+    # A weather reaches wave_responses only from an outdoor scene. Given one all the same
+    # (an outdoor scene's, its room taken for a room indoors), fitted walls refuse its
+    # moving air and its speed of sound per cell.
+    windy = _windy_ground(15.0, "moving")
+    model = TraceModel.from_room(windy)
+    weather = wave_stage._Weather.of(model, np.array([0.0, 0.0, 1.5]))
+    assert weather is not None
+    monkeypatch.setattr(wave_stage._Weather, "of", lambda model, source: weather)
+    monkeypatch.setattr(windy, "outdoor", None)
+    for wind, message in (
+        (
+            "moving",
+            "fitted walls are not available in moving air: set simulation.wave.walls to "
+            "cell_faces, or simulation.wave.wind to effective",
+        ),
+        (
+            "effective",
+            "fitted walls take one speed of sound over the grid, and the weather gives each "
+            "cell its own: set simulation.wave.walls to cell_faces",
+        ),
+    ):
+        with pytest.raises(ValueError) as error:
+            _fitted_run(windy, model, wind=wind)
+        assert str(error.value) == message
+
+
+def test_simulate_refuses_fitted_walls_outdoors_or_isotropic_before_tracing(monkeypatch) -> None:
+    # Settings given to simulate are not checked against the scene, which refuses fitted
+    # walls outdoors, nor checked again once changed: simulate refuses fitted walls outdoors,
+    # and with the isotropic stencil set after the settings were made, before any ray is traced.
+    import importlib
+
+    simulating = importlib.import_module("acoustic_spaces.engine.simulate")
+
+    def traced(*args, **kwargs):
+        raise AssertionError("rays were traced")
+
+    monkeypatch.setattr(simulating, "_candidates", traced)
+    room = _windy_ground(0.0, "effective")
+    settings = room.scene.simulation.model_copy(deep=True)
+    settings.wave.walls = "fitted"
+    with pytest.raises(ValueError) as error:
+        simulate(room, settings=settings)
+    assert str(error.value) == _FITTED_OUTDOORS
+    room = Room.from_yaml(SHOEBOX)
+    settings = room.scene.simulation.model_copy(deep=True)
+    settings.wave.enabled = True
+    settings.wave.walls = "fitted"
+    settings.wave.scheme = "isotropic"
+    with pytest.raises(ValueError) as error:
+        simulate(room, settings=settings)
+    assert str(error.value) == _FITTED_ISOTROPIC
+
+
+def test_a_coarse_grid_warning_names_the_stencil_fitted_walls_take() -> None:
+    # With fitted walls a closed room's grid takes the standard stencil, scheme auto or
+    # standard, and the warning says how slow the top band's waves travel on it.
+    closed = _free_room([1.0])
+    for scheme in ("auto", "standard"):
+        closed.scene.simulation.wave = WaveStage(
+            enabled=True, points_per_wavelength=6, scheme=scheme, walls="fitted"
+        )
+        (note,) = [w for w in closed.warnings() if "points_per_wavelength" in w]
+        assert "is 6 (default 8): with the standard (7-point) stencil that fitted walls" in note
+        assert "up to 3.13 % slow in still air (1.74 % at 8)" in note
+
+
+def test_simulate_with_fitted_walls() -> None:
+    room = Room.from_yaml(SHOEBOX)
+    settings = room.scene.simulation.model_copy(deep=True)
+    settings.ir_length_s = 0.3
+    settings.late.rays = 200
+    settings.seed = 1
+    settings.wave.enabled = True
+    settings.wave.max_band_hz = 63
+    settings.wave.walls = "fitted"
+    said: list[str] = []
+    result = simulate(room, settings=settings, progress=said.append)
+    info = next(iter(result.details.values()))
+    assert info["wave_fitted_walls"] == 1.0 and info["wave_stencil"] == 7
+    assert info["wave_fit_s"] > 0.0 and "wave_open" not in info
+    assert any("wave solver, 63 Hz" in line and "fitted walls, " in line for line in said)
+    # The waves at the top of the 63 Hz band as slow along the axes as the 7-point stencil
+    # makes them.
+    per_wavelength = room.speed_of_sound() / (band_top(0) * info["wave_cell_m"])
+    assert 8.0 <= per_wavelength < 8.5
+    assert info["wave_slow_percent"] == pytest.approx(100 * slow_by(7, per_wavelength))
+    response = next(iter(result.responses.values()))
+    assert response.wave.bands == 1
+    ir = response.impulse_response(FS, seed=1)
+    assert ir.shape == (int(math.ceil(settings.ir_length_s * FS)),) and np.all(np.isfinite(ir))
+
+
+def test_tune_times_the_wave_solver_with_the_scene_s_walls(monkeypatch) -> None:
+    # acoustic-spaces tune times the run the scene asks for: its walls too.
+    from acoustic_spaces.engine import tuning
+
+    asked: list[str] = []
+
+    def timed(*args, walls, say, **more):
+        asked.append(walls)
+        say("wave solver, 10 steps")
+        return [], {"wave_steps": 10.0, "wave_cells": 100.0}
+
+    monkeypatch.setattr(wave_stage, "wave_responses", timed)
+    room = _free_room([1.0])
+    for walls in ("fitted", "cell_faces"):
+        room.scene.simulation.wave.walls = walls
+        asked.clear()
+        position, listeners = room.scene.sources[0].position, [[9.0, 6.0, 6.0]]
+        tuning._time_wave(room, None, position, listeners, 1, [0.1, 0.2], lambda _: None)
+        assert asked and set(asked) == {walls}
 
 
 # Points and cell centres on faces (ties). A point within 1e-10 cells of a face's plane,

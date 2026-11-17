@@ -497,6 +497,7 @@ def test_simulate_with_the_wave_solver(tmp_path: Path, capsys: pytest.CaptureFix
         "max_band_hz": 125,
         "points_per_wavelength": 8.0,
         "scheme": "auto",
+        "walls": "cell_faces",
         "wind": "moving",
         "device": "auto",
     }
