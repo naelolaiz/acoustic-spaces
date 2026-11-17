@@ -2336,19 +2336,3 @@ def test_a_speck_nearly_closes_its_owner_s_opposite_link():
     assert len(touched[(m, o)]) == 2 and min(touched[(m, o)]) < 1.0 < max(touched[(m, o)])
     thick = sum(max(x) > 1.0 for x in touched.values())
     assert wave(v, f, h, origin, shape, src).cut_stats["sliver_thick"] == thick
-
-
-def test_the_gpu_does_not_take_a_fitted_solver_yet():
-    # The GPU's offset table holds the stencil's own directions only, six on the 7-point grid, and a
-    # fitted layout links cells along the edge-diagonal ones too: a fitted solver is sent to the
-    # CPU.
-    from acoustic_spaces.engine import gpu
-
-    v, f, mat, h, origin, shape, src = l_room()
-    solver = wave(v, f, h, origin, shape, src, mat=mat, beta=(0.0, 0.0, 0.0))
-    assert (np.asarray(solver.layout()["link_direction"]) >= 6).any()
-    with pytest.raises(
-        ValueError,
-        match="^fitted walls: the GPU does not step them yet: run the wave solver on the CPU",
-    ):
-        gpu.GpuWaveSolver(solver)

@@ -401,7 +401,16 @@ def _tables(layout: dict[str, np.ndarray]) -> tuple[np.ndarray, dict[str, int]]:
         if len(layout[f"keep_{axis}"])
     ]
     nx, ny, _ = (int(v) for v in layout["shape"])
-    steps = np.array(_STEPS[: len(layout["weights"])], np.int64)
+    # The offset table: for each direction of _STEPS from the first on, the step from a cell's
+    # index to its neighbour's, as a 32-bit word that wraps round below zero; a special cell's
+    # link finds its neighbour through the entry of its direction. It holds the stencil's own
+    # directions (6 on the 7-point grid, 18 on the 19-point one) and runs on to the largest
+    # direction a link takes: with fitted walls the special cells of the 7-point grid link
+    # along the edge diagonals (directions 6 to 17) too.
+    directions = len(layout["weights"])
+    if len(layout["link_direction"]):
+        directions = max(directions, int(layout["link_direction"].max()) + 1)
+    steps = np.array(_STEPS[:directions], np.int64)
     offsets = (steps @ np.array([1, nx, nx * ny])).astype(np.int32).view(np.uint32)
     link_table = np.column_stack(
         [layout["link_direction"].astype(np.uint32), _words(layout["link_weight"])]
@@ -439,13 +448,6 @@ class GpuWaveSolver:
     solver's ``run`` does, from the GPU's own state."""
 
     def __init__(self, solver) -> None:
-        # A fitted layout links cells along the edge-diagonal directions on the 7-point grid,
-        # which the offset table built from the stencil's own directions does not hold.
-        if solver.fitted_walls:
-            raise ValueError(
-                "fitted walls: the GPU does not step them yet: run the wave solver on the CPU "
-                "(simulation.wave.device: cpu)"
-            )
         wgpu = _wgpu()
         self._device = device = _device()
         layout = solver.layout()
