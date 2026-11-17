@@ -28,6 +28,7 @@ openings): its energy is then multiplied by their transmission, band by band.
 from __future__ import annotations
 
 import dataclasses
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -52,8 +53,20 @@ _ON_PLANE = 1e-9
 #: Tolerance, relative to the model size, within which a point lies in a plane (a mesh's
 #: faces need not lie in theirs to rounding): for a path reflecting where planes meet.
 _EDGE_TOLERANCE = 1e-7
+#: A ray traced on the CPU meets no face nearer its start than this share of the diagonal
+#: of the model's box (``Bvh::min_distance``).
+_RAY_START = 1e-9
 #: Upper bound on candidates for the exhaustive search.
 MAX_CANDIDATES = 2_000_000
+
+
+def ray_start(mesh) -> float:
+    """Distance (metres) from its start within which a ray traced on the CPU meets no
+    face of ``mesh`` (:data:`_RAY_START` of the diagonal of its box,
+    ``TraceModel.bvh.min_distance``): the path traced back from a listener misses a
+    reflection whose last leg is shorter, and the rays of a source nearer a surface go
+    through it."""
+    return _RAY_START * math.hypot(*np.ptp(mesh.vertices, axis=0).tolist())
 
 
 @dataclass

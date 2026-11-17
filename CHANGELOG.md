@@ -67,6 +67,11 @@
   over the edges are up to 10.7 dB off. `rows: edges` gives the levels as before;
   coverage maps and walks keep the paths over the edges ([Outdoor
   scenes](docs/outdoor.md#sound-over-rows-of-barriers-and-buildings)).
+- Fixed: a source or a listener counted as on a surface only within 1 µm of it whatever
+  the model's size, though a ray traced on the CPU meets no face nearer its start than
+  1e-9 of the model's diagonal: twice that distance now counts where it is more, in a
+  model more than 500 m from corner to corner. A listener 6 µm over the hard ground of a
+  model 10 km wide, almost under its source, was 6 dB low without a message.
 - Fixed: the wave solver missed a wall through a plane of its cell centres or just past
   one, so that sound went through it, a closed room could be read as open and the
   19-point run could grow without bound; a source or a listener exactly on a surface is
