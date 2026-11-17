@@ -44,6 +44,8 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr std::size_t kMaxBands = 32;
 // Most groups of faces whose reflections the tracer counts (StochasticScene::face_group).
 constexpr std::size_t kMaxGroups = 16;
+// StochasticScene::mirror_plane: at most this many mirror planes.
+constexpr std::size_t kMaxMirrors = 4;
 
 // xoshiro256** seeded through splitmix64: one independent stream per ray, so results
 // do not depend on how rays are split between threads.
@@ -471,6 +473,20 @@ struct StochasticScene {
     // Optional, outdoors: plants (prepared, with these bands) that absorb along the rays
     // and scatter them. The rain on the way to a receiver loses what the plants take.
     const Vegetation *vegetation = nullptr;
+    // Optional, with diffuse rain alone in straight air: mirror planes, at most
+    // kMaxMirrors (mirrors x 4: a unit normal toward the side the sound is on and the
+    // offset, n . x = offset), and the mirror plane of each face (faces, -1 for none).
+    // The scattered share of each reflection rains also on each receiver's image in each
+    // mirror plane but the reflecting face's own: along the line to the image, reflected
+    // where it meets the plane when a face of that plane is there and both legs are
+    // clear, by that face's specular share. A ray that reflects off a mirror plane's face
+    // from its front then leaves to the rain the share of its energy scattered at the
+    // reflection before (RayState::fresh): the detector spheres no longer count it on the
+    // next leg, whose few hits each bring a burst where the rain brings the same energy
+    // in its steady sum.
+    const double *mirror_plane = nullptr;
+    std::size_t mirrors = 0;
+    const std::int64_t *face_mirror = nullptr;
 };
 
 // StochasticScene::face_kind: the ground, a vertical wall, any other face.
@@ -544,6 +560,9 @@ struct RayState {
     // With StochasticScene::deciding, per band: the energy the ray would carry with that
     // absorption over the energy it carries.
     std::array<double, kMaxBands> ratio = ones();
+    // With StochasticScene::mirror_plane, per band: the share of the energy scattered at
+    // the last reflection, whose rain went on to the receivers' mirror images.
+    std::array<double, kMaxBands> fresh{};
 };
 
 // Whether the specular-only path a ray in `state` has followed is one the early stage
@@ -1263,6 +1282,14 @@ inline void check_stochastic(const StochasticScene &scene, const StochasticSetti
         throw std::invalid_argument(name +
                                     ": gather_ratio needs diffuse rain alone, in still air");
     }
+    if (scene.mirrors > 0 &&
+        (scene.mirrors > kMaxMirrors || scene.mirror_plane == nullptr ||
+         scene.face_mirror == nullptr || !settings.diffuse_rain || settings.specular_rain ||
+         scene.atmosphere != nullptr)) {
+        throw std::invalid_argument(name + ": mirror planes need diffuse rain alone, in "
+                                           "still air, and at most " +
+                                    std::to_string(kMaxMirrors) + " of them");
+    }
     if (scene.groups > kMaxGroups || (scene.groups > 0 && scene.face_group == nullptr)) {
         throw std::invalid_argument(name + ": bad face groups");
     }
@@ -1546,6 +1573,94 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
             }
         };
 
+        // The rain `scattered` (per band) of a reflection off `face` at `origin` (n its
+        // normal, toward the side the ray came from), sent on to each receiver by each
+        // mirror plane but the face's own (StochasticScene::mirror_plane): along the line
+        // to the receiver's image, as Lambert has it, where that line meets the plane at a
+        // face of the plane with both legs clear, times that face's specular share there.
+        std::array<double, kMaxBands> second{}, mirror_scatter{};
+        const auto mirror_rain = [&](const Vec3 &origin, const Vec3 &n, std::size_t face,
+                                     const detail::RayState &state, const double *scattered) {
+            const std::int64_t own = scene.face_mirror[face];
+            for (std::size_t m = 0; m < scene.mirrors; ++m) {
+                if (static_cast<std::int64_t>(m) == own) continue;
+                const double *plane = scene.mirror_plane + 4 * m;
+                const Vec3 up{plane[0], plane[1], plane[2]};
+                const double above = dot(up, origin) - plane[3];
+                if (!(above > 0.0)) continue;
+                for (std::size_t k = 0; k < n_rec; ++k) {
+                    const Vec3 &receiver = scene.receivers[k];
+                    const double height = dot(up, receiver) - plane[3];
+                    if (!(height > 0.0)) continue;
+                    const Vec3 v = receiver - up * (2.0 * height) - origin;
+                    const double length = norm(v);
+                    const double dist = std::max(length, settings.receiver_radius[k]);
+                    const double cos_theta = dot(n, v) / dist;
+                    if (cos_theta <= 0.0) continue;
+                    const Vec3 toward = v / length;
+                    // The plane is `down` metres along the line; the face there is the
+                    // first it meets past those that let sound through.
+                    const double down = length * above / (above + height);
+                    const double gap = offset + 1e-9 * down;
+                    if (!detail::passing_share(scene, origin, toward, down - gap,
+                                               static_cast<std::int64_t>(face), share.data())) {
+                        continue;
+                    }
+                    const Hit at = bvh.intersect(origin + toward * (down - gap), toward,
+                                                 2.0 * gap, static_cast<std::int64_t>(face));
+                    if (!at.found() || scene.face_mirror[at.face] != static_cast<std::int64_t>(m)) {
+                        continue;
+                    }
+                    const auto there = static_cast<std::size_t>(at.face);
+                    const Vec3 q = origin + toward * down;
+                    const Vec3 rise = toward - up * (2.0 * dot(toward, up));  // reflected
+                    const double rest = length - down;
+                    if (!detail::passing_share(scene, q + up * offset, rise, rest, at.face,
+                                               second.data())) {
+                        continue;
+                    }
+                    for (std::size_t b = 0; b < bands; ++b) share[b] *= second[b];
+                    if (plants != nullptr) {
+                        plants->depth(origin, toward, down, depth.data(), line_spans, line_cuts);
+                        for (std::size_t b = 0; b < bands; ++b) share[b] *= std::exp(-depth[b]);
+                        plants->depth(q, rise, rest, depth.data(), line_spans, line_cuts);
+                        for (std::size_t b = 0; b < bands; ++b) share[b] *= std::exp(-depth[b]);
+                    }
+                    // Its specular share as a ray's there (one reflection after this one).
+                    const double *surface = scene.scattering + there * bands;
+                    if (scene.surface_size != nullptr && state.order + 1 >= settings.size_from_order) {
+                        size_scattering(scene.surface_size[2 * there],
+                                        scene.surface_size[2 * there + 1], down,
+                                        -dot(up, toward), c, bands, scene.band_hz, surface,
+                                        mirror_scatter.data());
+                    } else {
+                        std::copy(surface, surface + bands, mirror_scatter.begin());
+                    }
+                    const double *absorbed = scene.absorption + there * bands;
+                    for (std::size_t b = 0; b < bands; ++b) {
+                        counted[b] = scattered[b] * (1.0 - absorbed[b]) *
+                                     (1.0 - mirror_scatter[b]) * share[b];
+                    }
+                    std::array<std::uint32_t, kMaxGroups> bounced = state.hits;
+                    if (scene.groups > 0 && scene.face_group[there] >= 0) {
+                        ++bounced[static_cast<std::size_t>(scene.face_group[there])];
+                    }
+                    acc.add(k, counted.data(), cos_theta / (kPi * dist * dist),
+                            state.travelled + length, -rise, bounced.data());
+                }
+            }
+        };
+        // Whether a ray reflecting off `face` (n its normal, toward the side the ray came
+        // from) reflects off the front of a mirror plane, whose rain covered on the next
+        // leg the share of the ray scattered at the reflection before.
+        const auto off_mirror = [&](std::size_t face, const Vec3 &n) {
+            if (scene.mirrors == 0) return false;
+            const std::int64_t m = scene.face_mirror[face];
+            if (m < 0) return false;
+            const double *plane = scene.mirror_plane + 4 * static_cast<std::size_t>(m);
+            return dot(n, Vec3{plane[0], plane[1], plane[2]}) > 0.0;
+        };
+
         std::vector<detail::RayState> stack;
 
         for (std::size_t ray = begin; ray < end; ++ray) {
@@ -1607,7 +1722,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                 if (!ray_state.detect_only) ++out.traced_rays;
                 auto &[pos, dir, energy, seen, alone, travelled, order, last, rng, room, hits,
                        path, away, leaving, partitions, detect_only, ground, other, since,
-                       ratio] = ray_state;
+                       ratio, fresh] = ray_state;
 
                 while (travelled < max_length) {
                     Hit hit;
@@ -1765,6 +1880,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             kept += scattered;
                             mean_g += scattered * g[b];
                             alone[b] = 0.0;
+                            fresh[b] = 0.0;  // scattered here, not off the last face
                         }
                         const std::size_t window =
                             std::min(out.windows - 1,
@@ -1993,6 +2109,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             acc.add(k, counted.data(), factor, travelled + reach, -toward,
                                     hits.data(), atmosphere == nullptr ? -1.0 : path + norm(v));
                         }
+                        if (scene.mirrors > 0 && std::any_of(rain.begin(), rain.begin() + bands,
+                                                             [](double e) { return e > 0.0; })) {
+                            mirror_rain(origin, n, face, ray_state, rain.data());
+                        }
                     }
                     if (passed > 0.0) {
                         if (!settings.split_target.empty() && level(beyond) > 0.0 &&
@@ -2007,6 +2127,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             stack.back().other = other_before;
                             stack.back().since = leg;
                             stack.back().ratio = ratio;
+                            stack.back().fresh = fresh;
                             detail::pass_partition(stack.back());
                             ++family;
                         } else {
@@ -2051,6 +2172,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         // or there are maps), and on this one its scattered share unless the
                         // rain covers that.
                         const Vec3 specular = reflect(dir, n);
+                        const bool mirrored = off_mirror(face, n);
                         if (!settings.specular_rain &&
                             (atmosphere != nullptr || reaches(pos, specular, travelled) ||
                              (has_map && acc.crosses_map(pos, specular, max_length - travelled)))) {
@@ -2060,7 +2182,10 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             share_leg.detect_only = true;
                             for (std::size_t b = 0; b < bands; ++b) {
                                 share_leg.energy[b] = reflected[b];
-                                share_leg.seen[b] = 1.0 - scatter[b];
+                                // Less what the last reflection scattered, which the
+                                // mirror rain covered.
+                                share_leg.seen[b] =
+                                    (1.0 - scatter[b]) * (mirrored ? 1.0 - fresh[b] : 1.0);
                             }
                         }
                         const Vec3 mixed = specular * (1.0 - p) + cosine_hemisphere(n, rng) * p;
@@ -2068,6 +2193,7 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                         for (std::size_t b = 0; b < bands; ++b) {
                             energy[b] = reflected[b];
                             seen[b] = settings.diffuse_rain ? 0.0 : scatter[b];
+                            fresh[b] = scene.mirrors > 0 ? scatter[b] : 0.0;
                         }
                     } else if (rng.uniform() < p) {
                         // Diffuse, re-weighted per band so each band's expected energy
@@ -2076,14 +2202,18 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                             energy[b] = rain[b] / p;
                             seen[b] = settings.diffuse_rain ? 0.0 : 1.0;  // the rain covered it
                             alone[b] = 0.0;
+                            fresh[b] = scene.mirrors > 0 ? 1.0 : 0.0;
                         }
                         dir = cosine_hemisphere(n, rng);
                     } else {
-                        // Specular: the whole ray is still specular-only if it was before.
+                        // Specular: the whole ray is still specular-only if it was before;
+                        // the share the last reflection scattered, the mirror rain covered.
+                        const bool mirrored = off_mirror(face, n);
                         for (std::size_t b = 0; b < bands; ++b) {
                             energy[b] = (reflected[b] - rain[b]) / (1.0 - p);
-                            seen[b] = 1.0;
+                            seen[b] = mirrored ? 1.0 - fresh[b] : 1.0;
                             alone[b] = alone[b] > 0.0 ? 1.0 : 0.0;
+                            fresh[b] = 0.0;
                         }
                         dir = reflect(dir, n);
                     }

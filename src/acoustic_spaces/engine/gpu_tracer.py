@@ -55,6 +55,9 @@ import numpy as np
 from acoustic_spaces.engine import gpu
 from acoustic_spaces.engine.gpu_rays import BVH_WGSL, T_MIN, pack_tree
 
+#: Why the rain on the listeners' images in the ground goes to the CPU.
+MIRRORS_ON_CPU = "the rain on the listeners' images in the ground is traced on the CPU"
+
 
 class Unsupported(ValueError):
     """The GPU tracer does not do what a run asks for; the CPU's does."""
@@ -3353,6 +3356,8 @@ def trace_stochastic(
     gather_ratio=0.0,
     face_kind=None,
     covered_ground=0,
+    mirror_plane=None,
+    face_mirror=None,
     *,
     total: int | None = None,
     keep: bool = False,
@@ -3368,6 +3373,8 @@ def trace_stochastic(
     from acoustic_spaces import _native
 
     del threads, room_level
+    if mirror_plane is not None or face_mirror is not None:
+        raise Unsupported(MIRRORS_ON_CPU)
     if passes_sound(transmission, face_room, source_room):
         raise Unsupported("the GPU tracer does not let sound through surfaces")
     near = too_near(bvh, source, receivers, receiver_radius)

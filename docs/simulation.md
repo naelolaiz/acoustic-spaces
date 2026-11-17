@@ -40,6 +40,14 @@ model's diagonal. Sound that bends round edges is added to them (see
     rays near the source, the listener's directions near the listener. The expected
     energy is the same, but a ray that lands next to a listener (above a ground that
     scatters, an aircraft overhead) brings it no burst of scattered sound.
+    Outdoors with rays that go straight, the scattered part also radiates to each
+    listener's image in the ground (in the plane of the ground; on a terrain, in its
+    four largest planes), reflected where the line to the image meets the ground by
+    its specular share there, and a ray that reflects off the ground leaves what it
+    carries of its last reflection's scattered sound to that rain. What the ground
+    reflects of a wall's or a barrier's scattered sound then reaches the listener with
+    the same expected energy, steadily, where through the detector sphere a few rays
+    brought it, each in one time slot.
   - `secondary_sources`: all reflected energy radiates that way, as in ODEON's late
     method. Much smoother tails, but it treats specular energy as diffuse: in the
     example box (smooth walls, absorbing ceiling) EDT comes out about 20 % shorter.
@@ -831,7 +839,9 @@ simulation:
   stage's paths left out, arrival directions, the weight window, and outdoors the rays
   bent by [wind and temperature](outdoor.md#wind-and-temperature), those through
   [vegetation](outdoor.md#vegetation) and the open sky); the listeners' side of the
-  first reflections' scattered sound is found on the CPU. Rays start where
+  first reflections' scattered sound is found on the CPU, and outdoors in still air the
+  CPU traces the whole run, with the rain on the listeners' images in the ground.
+  Rays start where
   the CPU's do, then draw random numbers of their own, in single precision, so the two
   agree statistically, not ray for ray. Its lengths are coarser than the CPU's: a
   straight ray meets no face nearer its start than a millionth of the model's size (the

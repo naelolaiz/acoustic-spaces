@@ -1252,7 +1252,9 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
   [Sound over rows of barriers and buildings](#sound-over-rows-of-barriers-and-buildings)).
 - **The late part** comes from the stochastic ray tracer: rays reflect off the ground
   and the buildings, and scatter off those that scatter, until they leave through the
-  sky. Between tall buildings (a street canyon, a courtyard) that is a tail of its own;
+  sky. In still air what they scatter also rains on each listener's image in the
+  ground (see [Simulation](simulation.md)). Between tall buildings (a street canyon, a
+  courtyard) that is a tail of its own;
   in the open, almost nothing: over flat ground that scatters nothing, nothing at all,
   and over a terrain that scatters nothing, the sound its slopes reflect more often than
   the image sources' order (twice or more, off the hollow at the foot of the `hillside`

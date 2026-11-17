@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed: outdoors, what a wall or a barrier scatters and the ground then reflects
+  reached a listener only through rays that crossed its detector sphere, each one a
+  burst in one millisecond of the tail (blips in the `railway` example's tour at
+  `meadow_25m`); in still air the rain now also falls on each listener's image in the
+  ground, with the same expected energy and without those bursts.
 - Fixed: in a very large model, a corner of two reflections (points within the early
   search's tolerance for planes of each other, a ten-millionth of the model's largest
   extent, 1 mm in a model 10 km wide) was judged by that tolerance: a path into it went
