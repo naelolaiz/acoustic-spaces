@@ -201,9 +201,12 @@ class TraceModel:
         air = face_room >= 0
         back = air[:, 1] & ~air[:, 0]
         # A room on both sides, or the inside unknown: one canonical normal direction for
-        # the face's geometric plane.
+        # the face's geometric plane, that of the largest component of its normal as the
+        # planes' keys round it (the first of equal ones: a plane at 45 degrees to two
+        # axes has one direction whichever way its faces' normals are rounded).
         both = air[:, 0] == air[:, 1]
-        flip = np.take_along_axis(normals, np.abs(normals).argmax(axis=1)[:, None], 1) < 0
+        rounded = np.round(normals / PLANE_TOLERANCE)
+        flip = np.take_along_axis(rounded, np.abs(rounded).argmax(axis=1)[:, None], 1) < 0
         normals = np.where((back | (both & flip[:, 0]))[:, None], -normals, normals)
         offsets = np.einsum("ij,ij->i", normals, mesh.triangles[:, 0])
         keys = np.round(np.column_stack([normals, offsets]) / PLANE_TOLERANCE).astype(np.int64)

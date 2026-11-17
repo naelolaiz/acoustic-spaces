@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed: the faces of a plane at 45 degrees to two axes with air on both sides (a
+  free-standing panel, a partition, any surface of a model that is not closed) could
+  face opposite ways, by the rounding of their corners, and be two planes of the model.
+  With `first_order`, a room with three pieces of such a panel had 1,097 early paths in
+  place of 1,205 when it was turned by 180 degrees, and its early level changed by up to
+  1.1 dB (at 63 Hz).
 - Fixed: a path exactly through an outer edge (a roof's edge over an end wall, a
   building's upright corner, the edge where two barriers meet) stood as a reflection off
   both faces for a source and a listener the edge sees in the same direction across it,
