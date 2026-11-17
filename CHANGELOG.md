@@ -13,6 +13,20 @@
   a T reflected off the roof from under the eave or off the T's stem from its bare side
   (up to 4.3 dB in a band). Both now take the least distance at which a ray meets a
   face.
+- Fixed: with Doppler, paths off the same surfaces over the same edge were paired from
+  place to place in the order of their delays, so where one more came among them (as
+  round a barrier's end with edge diffraction) a path could go on as another whose
+  delay was tens of milliseconds shorter, and its sound was heard going back in time
+  for a moment: a click 40 dB above the sound around it, with a slow thump either side,
+  0.76 s into the walk of the `railway` example's train heard at `tsi_7m5` (once for
+  each of its bogies). Each path now goes on as the one whose delay carries on from its
+  own; in that train's walks to the example's four listeners, 89 of the 502 paths
+  followed jumped so, and none does now.
+- Fixed: with edge diffraction, whether the end of an edge stands on a plane (a
+  barrier's end on the ground) is read from the plane's faces at the end, no longer a
+  ten-thousandth of the model's size past it (1 m in a model 10 km long). With the
+  ground ending 0.5 m past a barrier's end in such a model, a listener round the end had
+  10 early paths in place of 8 and up to 5.0 dB less (at 125 Hz, with `first_order`).
 - Fixed: a free-standing panel or a partition between two rooms in line with a wall
   shared the wall's plane in the model or had one of its own by the way the wall faces,
   so with edge diffraction a room and its mirror image gave different early levels (up

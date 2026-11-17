@@ -731,6 +731,33 @@ def test_a_wall_as_high_as_a_roof_does_not_stand_on_its_plane() -> None:
     assert not any(np.isin(faces, roof).any() for faces in paths.faces)
 
 
+@pytest.mark.parametrize("gap", [0.5, 0.0002])
+def test_a_barrier_s_end_stands_on_ground_that_ends_just_past_it(gap: float) -> None:
+    """Round the end of a barrier, with the ground ending ``gap`` (m) past it, in a model
+    10 km long and in one 200 m long: the number of paths and the early level are those
+    with the ground going on 90 m past the end, to 0.01 dB (no path has a point past the
+    end). Whether the ground goes on round the barrier's end was looked up a
+    ten-thousandth of the model's size past it, 1 m in the long model and 2 cm in the
+    short one: where that was off the ground the end did not stand on it, and the
+    listener had 10 paths for 8 and a level 3.0 dB lower at 63 Hz and 5.0 dB lower at
+    125 Hz."""
+    room = _outdoors(
+        (9.0, 4.0, 1.5),
+        source=(6.0, -2.0, 1.5),
+        path=((-10, 0), (10, 0)),
+        max_order=2,
+        diffraction="first_order",
+    )
+    on = early_paths(room)
+    assert len(on.order) > 1 and max(points[:, 0].max() for points in on.points) < 10.0 + 1e-9
+    for low in (-9990.0, -190.0):
+        scene = room.scene.model_dump()
+        scene["geometry"]["ground"]["extent"] = [[low, -100.0], [10.0 + gap, 100.0]]
+        paths = early_paths(Room.from_scene(Scene.model_validate(scene)))
+        assert len(paths.order) == len(on.order)
+        assert np.abs(10 * np.log10(total_energy(paths) / total_energy(on))).max() < 0.01
+
+
 @pytest.mark.parametrize("x", [-95.333, -78.0])
 def test_no_path_reflects_off_a_roof_s_plane_from_below(x: float) -> None:
     """The train horn in the railway example, heard 25 m behind the barrier, where its

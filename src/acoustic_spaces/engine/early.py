@@ -468,25 +468,57 @@ def _over(model: TraceModel, faces: np.ndarray, points: np.ndarray) -> np.ndarra
     return ((w_a >= 0.0) & (w_b >= 0.0) & (w_c >= 0.0)) | (beside <= model.bvh.min_distance)
 
 
-def _face_at(
+def _faces_at(
     model: TraceModel, plane: int, point: np.ndarray, tolerance: float, own: bool = True
-) -> int:
-    """A face of ``plane`` that ``point`` lies on (edges included, :func:`_over`), or -1:
-    it lies within ``tolerance`` of the plane or, with ``own``, of the face's own plane
-    (see :attr:`TraceModel.face_planes`). Openings are holes: no point lies on one."""
+) -> np.ndarray:
+    """The faces of ``plane`` that ``point`` lies on (edges included, :func:`_over`), in
+    ascending order: it lies within ``tolerance`` of the plane or, with ``own``, of the
+    face's own plane (see :attr:`TraceModel.face_planes`). Openings are holes: no point
+    lies on one."""
     height = abs(model.plane_normal[plane] @ point - model.plane_offset[plane])
     if height > tolerance + (2.0 * model.plane_spread[plane] if own else 0.0):
-        return -1
+        return np.empty(0, dtype=np.int64)
     candidates = np.flatnonzero((model.face_plane == plane) & ~model.transparent)
     if height > tolerance:  # off the plane, but maybe on a face that is not in it
         normal, offset = model.face_planes
         near = np.abs(normal[candidates] @ point - offset[candidates]) <= tolerance
         candidates = candidates[near]
     if len(candidates) == 0:
-        return -1
+        return candidates
     at = np.broadcast_to(point, (len(candidates), 3))
-    inside = np.flatnonzero(_over(model, candidates, at))
-    return int(candidates[inside[0]]) if len(inside) else -1
+    return candidates[_over(model, candidates, at)]
+
+
+def _face_at(
+    model: TraceModel, plane: int, point: np.ndarray, tolerance: float, own: bool = True
+) -> int:
+    """The first of the faces of ``plane`` that ``point`` lies on (:func:`_faces_at`),
+    or -1."""
+    faces = _faces_at(model, plane, point, tolerance, own)
+    return int(faces[0]) if len(faces) else -1
+
+
+def _goes_on(
+    model: TraceModel, plane: int, point: np.ndarray, way: np.ndarray, tolerance: float
+) -> bool:
+    """Whether a face of ``plane`` that ``point`` lies on (:func:`_faces_at`) goes on
+    from it along ``way`` (in the plane, of any length): ``way`` leaves the face across
+    none of its edges that the point lies within ``tolerance`` of, or beyond (a way
+    along an edge, to the plane tolerance, stays on the face). With no way (zero) a
+    face the point lies on is enough."""
+    faces = _faces_at(model, plane, point, tolerance)
+    if len(faces) == 0:
+        return False
+    mesh = model.room.mesh
+    corner = mesh.vertices[mesh.faces[faces]]  # (f, 3, 3)
+    side = np.roll(corner, -1, axis=1) - corner  # each edge, from its first corner
+    side /= np.maximum(np.linalg.norm(side, axis=2, keepdims=True), 1e-300)
+    inward = np.roll(corner, -2, axis=1) - corner  # to the corner across the edge
+    inward -= np.einsum("fej,fej->fe", inward, side)[..., None] * side
+    inward /= np.maximum(np.linalg.norm(inward, axis=2, keepdims=True), 1e-300)
+    depth = np.einsum("fej,fej->fe", point - corner, inward)
+    out = np.einsum("fej,j->fe", inward, way) < -PLANE_TOLERANCE * np.linalg.norm(way, axis=0)
+    return bool(np.any(~np.any((depth <= tolerance) & out, axis=1)))
 
 
 #: Points looked up at once in a plane's grid of faces (:func:`_faces_under`).

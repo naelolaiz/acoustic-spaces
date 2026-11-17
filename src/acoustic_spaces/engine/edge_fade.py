@@ -142,6 +142,7 @@ from acoustic_spaces.engine.early import (
     EarlyReflections,
     _crossed_at,
     _face_at,
+    _goes_on,
     assemble_paths,
 )
 from acoustic_spaces.engine.model import size_scattering
@@ -703,12 +704,9 @@ class EdgeFade:
             if key not in self._standing:
                 end = edges.start[edge[i]] if ends[0][i] else edges.end[edge[i]]
                 # The plane goes on round the end on the edge's open side.
-                probe = end + 1e-4 * self.d.size * self._bisector[edge[i]]
-                probe -= (normal[i] @ probe - offset[i]) * normal[i]
-                self._standing[key] = (
-                    _face_at(model, key[1], end, self.tolerance) >= 0
-                    and _face_at(model, key[1], probe, self.tolerance) >= 0
-                )
+                way = self._bisector[edge[i]]
+                way = way - (normal[i] @ way) * normal[i]
+                self._standing[key] = _goes_on(model, key[1], end, way, self.tolerance)
             out[i] = self._standing[key]
         return out
 
