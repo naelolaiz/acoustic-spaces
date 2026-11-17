@@ -959,7 +959,8 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
 using Speeds = nb::ndarray<const float, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
 
 // Fitted walls: the cut cells' rows and counts as dicts.
-nb::dict cut_cells_dict(const as::CutCells &cut) {
+template <typename Fit>
+nb::dict cut_cells_dict(const Fit &cut) {
     nb::dict out;
     const std::size_t n = cut.cells().size(), w = cut.materials() + 1;
     out["cell"] = to_numpy(std::vector<std::int64_t>(cut.cells()), {n});
@@ -970,7 +971,8 @@ nb::dict cut_cells_dict(const as::CutCells &cut) {
     out["sliver"] = to_numpy(std::vector<double>(cut.sliver()), {n, 6});
     return out;
 }
-nb::dict cut_stats_dict(const as::CutCells &cut) {
+template <typename Fit>
+nb::dict cut_stats_dict(const Fit &cut) {
     nb::dict out;
     const as::CutCells::Stats &s = cut.stats();
     out["faces"] = s.faces;
@@ -1411,7 +1413,7 @@ NB_MODULE(_native, m) {
         .def(
             "cut_cells",
             [](const as::WaveSolver &solver) {
-                const as::CutCells *cut = solver.cut_cells();
+                const auto *cut = solver.cut_cells();
                 if (cut == nullptr) return nb::dict();
                 nb::dict d = cut_cells_dict(*cut);
                 const std::size_t k = solver.special_cells().size();
@@ -1428,7 +1430,7 @@ NB_MODULE(_native, m) {
         .def_prop_ro(
             "cut_stats",
             [](const as::WaveSolver &solver) {
-                const as::CutCells *cut = solver.cut_cells();
+                const auto *cut = solver.cut_cells();
                 if (cut == nullptr) return nb::dict();
                 nb::dict d = cut_stats_dict(*cut);
                 const auto &fp = solver.fitted_points();
@@ -1452,7 +1454,7 @@ NB_MODULE(_native, m) {
         .def(
             "cut_air",
             [](const as::WaveSolver &solver) {
-                const as::CutCells *cut = solver.cut_cells();
+                const auto *cut = solver.cut_cells();
                 std::vector<std::uint8_t> air = cut ? cut->air() : std::vector<std::uint8_t>{};
                 const std::size_t n = air.size();
                 return to_numpy(std::move(air), {n});

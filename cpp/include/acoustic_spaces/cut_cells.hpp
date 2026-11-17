@@ -1199,6 +1199,9 @@ public:
             cut_squares(threads);
             mark(2);
             air(source);
+            // The rows and the sides read the regions, the squares and the cubes' cells, not the cubes.
+            cubes_.clear();
+            cubes_.shrink_to_fit();
             sum_up();
             sides();
         } catch (const Refusal &r) {
@@ -1260,6 +1263,58 @@ public:
     // rows are empty and every cell is kSolid.
     bool refused() const { return stats_.refused != kRefusedNot; }
     const std::string &refusal() const { return refusal_; }
+
+    // What a fit's user reads once the fit's work is done: the rows, each cell's kind, the open
+    // sides, the counts and the refusal, under the accessors of the same names. take_results
+    // moves them out of the fit, which then holds no rows and no cell kinds; the arrays of the
+    // fit's work (the planes, the faces, the cubes' indices) go when the fit is destroyed.
+    class Results {
+    public:
+        const std::vector<std::int64_t> &cells() const { return cells_; }
+        const std::vector<double> &air_volume() const { return air_volume_; }
+        const std::vector<double> &open_area() const { return open_area_; }
+        const std::vector<double> &wall_area() const { return wall_area_; }
+        const std::vector<double> &leak_area() const { return leak_area_; }
+        const std::vector<double> &sliver() const { return sliver_; }
+        const std::vector<std::uint8_t> &air() const { return air_; }
+        const std::array<bool, 6> &open_sides() const { return open_sides_; }
+        std::size_t materials() const { return materials_; }
+        const Stats &stats() const { return stats_; }
+        const std::string &refusal() const { return refusal_; }
+        std::size_t ways() const { return ways_; }
+        std::size_t ways_exact() const { return ways_exact_; }
+
+    private:
+        friend class CutCells;
+        std::vector<std::int64_t> cells_;
+        std::vector<double> air_volume_, open_area_, wall_area_, leak_area_, sliver_;
+        std::vector<std::uint8_t> air_;
+        std::array<bool, 6> open_sides_{};
+        std::size_t materials_ = 0, ways_ = 0, ways_exact_ = 0;
+        Stats stats_;
+        std::string refusal_;
+    };
+    Results take_results() {
+        Results r;
+        r.cells_ = std::move(row_cell_);
+        r.air_volume_ = std::move(air_volume_);
+        r.open_area_ = std::move(open_area_);
+        r.wall_area_ = std::move(wall_area_);
+        r.leak_area_ = std::move(leak_area_row_);
+        r.sliver_ = std::move(sliver_);
+        r.air_ = std::move(type_);
+        r.open_sides_ = open_sides_;
+        r.materials_ = materials_;
+        r.ways_ = ways_;
+        r.ways_exact_ = ways_exact_;
+        r.stats_ = stats_;
+        r.refusal_ = refusal_;
+        row_cell_.clear();
+        for (auto *v : {&air_volume_, &open_area_, &wall_area_, &leak_area_row_, &sliver_}) v->clear();
+        type_.clear();
+        open_sides_ = {};
+        return r;
+    }
     // Throws std::invalid_argument with the message when the input was refused.
     void check() const {
         if (refused()) throw std::invalid_argument(refusal_);
@@ -3985,6 +4040,17 @@ private:
         }
         finish(k_wall, "check_wall", stats_.check_wall, stats_.check_wall_failed);
         finish(k_volume, "check_volume", stats_.check_volume, stats_.check_volume_failed);
+        {
+            // cubes_ holds every cube with a tree and every cell next to a membrane (bare or not).
+            std::size_t count = 0, m = 0;
+            for (const Cube &C : cubes) {
+                for (; m < mem_cells.size() && mem_cells[m] < C.cell; ++m) ++count;
+                const bool next_to_membrane = m < mem_cells.size() && mem_cells[m] == C.cell;
+                if (next_to_membrane) ++m;
+                if (next_to_membrane || C.tree) ++count;
+            }
+            cubes_.reserve(count + (mem_cells.size() - m));
+        }
         for (Cube &C : cubes) {
             while (k < mem_cells.size() && mem_cells[k] < C.cell) push_bare(mem_cells[k++]);
             if (k < mem_cells.size() && mem_cells[k] == C.cell) ++k;
@@ -4072,7 +4138,13 @@ private:
     static int regions_z_of(const Cube &C) {
         return C.leaf_region_z.empty() ? static_cast<int>(C.volume.size()) : C.regions_z;
     }
+    bool has_cube(std::size_t cell) const {
+        return std::binary_search(cube_cells_.begin(), cube_cells_.end(), cell);
+    }
     const Cube *cube_at(std::size_t cell) const {
+        // The cubes go once the air is found (see the constructor); what runs after reads has_cube.
+        if (cubes_.empty() && !cube_cells_.empty())
+            throw std::logic_error("cut cells: a cube was read after the cubes were freed");
         const auto it = std::lower_bound(cube_cells_.begin(), cube_cells_.end(), cell);
         if (it == cube_cells_.end() || *it != cell) return nullptr;
         return &cubes_[static_cast<std::size_t>(it - cube_cells_.begin())];
@@ -4105,6 +4177,11 @@ private:
         keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
         std::sort(whole_.begin(), whole_.end());
         whole_.erase(std::unique(whole_.begin(), whole_.end()), whole_.end());
+        {
+            std::size_t count = whole_.size();
+            for (const Cube &C : cubes_) count += C.volume.size();
+            regions_.reserve(count);
+        }
         for (const Cube &C : cubes_) {
             for (std::size_t r = 0; r < C.volume.size(); ++r) {
                 Region R;
@@ -4835,10 +4912,10 @@ private:
         // faces): whole, to the edge column when the cell across is an edge cell.
         for (std::size_t r = 0; r < n; ++r) {
             const std::size_t o = static_cast<std::size_t>(row_cell_[r]);
-            if (cube_at(o)) continue;
+            if (has_cube(o)) continue;
             for (int k = 0; k < 6; ++k) {
                 const std::size_t j = neighbour(o, k);
-                if (cube_at(j)) continue;
+                if (has_cube(j)) continue;
                 const double whole = face_area_of(o, k / 2);
                 if (edge(j)) {
                     wall_area_[r * w + materials_] += whole;
@@ -4856,7 +4933,6 @@ private:
             if (std::abs(sliver_area[q] - 1e-9) <= 1e-12) stats_.sliver_near_gate += 1;
             sliver_[q] = sliver_area[q] > 1e-9 ? sliver_[q] / sliver_area[q] : 0.0;
         }
-        check_rows(sliver_area);
         // The air's total (cells^3, a measure on Q): the rows, and each air cell that owns
         // nothing cut, at its own volume between its planes.
         // (Neumaier's compensated sum, in cell order: a measure.)
@@ -4871,8 +4947,10 @@ private:
             if (type_[i] == kAir && row_index_[i] < 0)
                 add(cell_volume(i));
         stats_.air_volume = total + lost;
+        // The index goes before the self-check, which builds its own.
         row_index_.clear();
         row_index_.shrink_to_fit();
+        check_rows(sliver_area);
     }
 
     // Marks the open sides of the grid (open_sides_, -x, +x, -y, +y, -z, +z) from the cells'
@@ -5048,10 +5126,10 @@ private:
         // open area when it is not solid.
         for (std::size_t r = 0; r < n; ++r) {
             const std::size_t o = static_cast<std::size_t>(row_cell_[r]);
-            if (cube_at(o)) continue;
+            if (has_cube(o)) continue;
             for (int k = 0; k < 6; ++k) {
                 const std::size_t j = neighbour(o, k);
-                if (cube_at(j)) continue;
+                if (has_cube(j)) continue;
                 const double face = face_area_of(o, k / 2);
                 if (edge(j)) {
                     wall[r * w + materials_] += face;

@@ -719,7 +719,7 @@ public:
     std::size_t stencil() const { return stencil_; }
     std::size_t threads() const { return threads_; }
     // The cut cells (see cut_cells.hpp), or null without fitted walls.
-    const CutCells *cut_cells() const { return cut_.get(); }
+    const CutCells::Results *cut_cells() const { return cut_.get(); }
 
     // Hands each array of the grid's layout to put(name, vector), for stepping the grid
     // elsewhere (on a GPU: engine/gpu.py); the grid's state is not among them.
@@ -935,14 +935,15 @@ private:
                 if (kSteps[k][a] != CutCells::kSteps[k][a]) return false;
         return true;
     }
-    void set_up_cut_cells(const CutCells::Mesh *mesh, const std::int64_t *face_material, std::size_t materials,
-                          const Vec3 &source) {
+    std::unique_ptr<CutCells> set_up_cut_cells(const CutCells::Mesh *mesh, const std::int64_t *face_material,
+                                               std::size_t materials, const Vec3 &source) {
         static_assert(same_steps(), "the cut cells' directions are the solver's");
         if (mesh == nullptr) throw std::invalid_argument("fitted walls: the mesh's vertices and faces are needed");
-        cut_ = std::make_unique<CutCells>(*mesh, face_material, materials,
-                                          cut_grid(origin_, cell_, nx_, ny_, nz_, layer_), source, threads_);
-        cut_->require_whole_widths();
-        cut_->check();
+        auto fit = std::make_unique<CutCells>(*mesh, face_material, materials,
+                                              cut_grid(origin_, cell_, nx_, ny_, nz_, layer_), source, threads_);
+        fit->require_whole_widths();
+        fit->check();
+        return fit;
     }
 
     // The sliver rule's factor for a sliver of thickness f cells: w(lambda) = 3 lambda /
@@ -969,8 +970,8 @@ private:
                        std::size_t materials, const std::vector<std::vector<std::int32_t>> &material_branches,
                        double edge_admittance, double layer_damping, const Vec3 &source,
                        const std::vector<Vec3> &probes, std::size_t probes_per_listener) {
-        set_up_cut_cells(mesh, face_material, materials, source);
-        const CutCells &cut = *cut_;
+        const std::unique_ptr<CutCells> fit = set_up_cut_cells(mesh, face_material, materials, source);
+        const CutCells &cut = *fit;
         const std::size_t n = nx_ * ny_ * nz_;
         const auto &air = cut.air();
         type_.assign(n, kSolid);
@@ -1200,6 +1201,18 @@ private:
                                        ": its links weigh " + exact_text(sum) + " together, more than 2");
             }
         }
+        // The layout's arrays, grown cell by cell, keep only their contents.
+        special_.shrink_to_fit();
+        special_volume_.shrink_to_fit();
+        link_start_.shrink_to_fit();
+        state_start_.shrink_to_fit();
+        link_direction_.shrink_to_fit();
+        for (auto *v : {&link_weight_, &coef_a_, &coef_b_, &coef_inv_, &source_, &state_weight_, &layer_scale_})
+            v->shrink_to_fit();
+        state_branch_.shrink_to_fit();
+        layer_cells_.shrink_to_fit();
+        // The fit's results stay for cut_cells(); the arrays of its work go with it here.
+        cut_ = std::make_unique<const CutCells::Results>(fit->take_results());
     }
 
     // Makes cell i special with the coefficients of c (see set_up_fitted), unless `spare` and they
@@ -1621,7 +1634,7 @@ public:
     }
 
 private:
-    std::unique_ptr<CutCells> cut_;
+    std::unique_ptr<const CutCells::Results> cut_;
 
     // The axial directions of edge direction k's two steps.
     static std::array<int, 2> steps_of(int k) {
