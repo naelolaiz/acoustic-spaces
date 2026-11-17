@@ -6,6 +6,7 @@ import dataclasses
 
 import numpy as np
 import pytest
+from conftest import rounded_by_place
 
 from acoustic_spaces import Room, Scene, simulate
 from acoustic_spaces.engine.reweight import (
@@ -40,6 +41,7 @@ from acoustic_spaces.engine.uncertainty import (
     spread_groups,
     uncertainty_of,
 )
+from acoustic_spaces.engine.uncertainty import _worker_draws as _draws_in_a_worker
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
 
 WALLS = [0.04, 0.04, 0.05, 0.06, 0.07, 0.08, 0.1, 0.12]
@@ -63,6 +65,23 @@ def _box(uncertainty: dict | None) -> Scene:
             "simulation": {"seed": 2, "ir_length_s": 1.6, "late": {"rays": 500}},
         }
     )
+
+
+def _corner(absorption: float, *listeners: tuple[str, list[float]]) -> Scene:
+    """The box's materials in an L-shaped room, the source in one leg and listener a
+    round the corner in the other (paths over an edge), with ``listeners`` besides; the
+    walls' absorption with an uncertainty of ``absorption``."""
+    data = _box({"absorption": absorption}).to_data()
+    data["geometry"] = {
+        "floor_plan": [[0, 0], [8, 0], [8, 4], [4, 4], [4, 8], [0, 8]],
+        "height": 3,
+    }
+    data["assignments"] = {"floor": "floor", "ceiling": "ceiling", "default": "walls"}
+    data["sources"] = [{"name": "s", "position": [7.0, 2.0, 1.5]}]
+    data["listeners"] = [{"name": "a", "position": [2.0, 7.0, 1.2]}] + [
+        {"name": name, "position": position} for name, position in listeners
+    ]
+    return Scene.model_validate(data)
 
 
 def test_an_uncertainty_is_given_per_band_or_once_and_a_tolerance_counts_a_third():
@@ -393,16 +412,8 @@ def test_the_spread_lists_the_errors_over_edges_it_does_not_count():
 def test_the_errors_over_edges_are_those_of_the_run_s_settings():
     """A run made with other settings than the scene's (``simulate --diffraction``)
     lists the errors over edges of the settings it was made with."""
-    data = _box({"absorption": 0.02}).to_data()
     # An L-shaped room, the listener round its corner from the source.
-    data["geometry"] = {
-        "floor_plan": [[0, 0], [8, 0], [8, 4], [4, 4], [4, 8], [0, 8]],
-        "height": 3,
-    }
-    data["assignments"] = {"floor": "floor", "ceiling": "ceiling", "default": "walls"}
-    data["sources"] = [{"name": "s", "position": [7.0, 2.0, 1.5]}]
-    data["listeners"] = [{"name": "a", "position": [2.0, 7.0, 1.2]}]
-    scene = Scene.model_validate(data)
+    scene = _corner(0.02)
     assert scene.simulation.early.diffraction == "first_order"
     room = Room.from_scene(scene)
     face_group, materials = groups_of(room)
@@ -430,15 +441,7 @@ def test_the_draws_come_out_the_same_with_what_they_share_as_each_alone():
     from acoustic_spaces.engine.uncertainty import _redrawn
     from acoustic_spaces.parameters import Levels, RoomParameters
 
-    data = _box({"absorption": 0.03}).to_data()
-    data["geometry"] = {
-        "floor_plan": [[0, 0], [8, 0], [8, 4], [4, 4], [4, 8], [0, 8]],
-        "height": 3,
-    }
-    data["assignments"] = {"floor": "floor", "ceiling": "ceiling", "default": "walls"}
-    data["sources"] = [{"name": "s", "position": [7.0, 2.0, 1.5]}]
-    data["listeners"] = [{"name": "a", "position": [2.0, 7.0, 1.2]}]
-    scene = Scene.model_validate(data)
+    scene = _corner(0.03)
     room = Room.from_scene(scene)
     face_group, materials = groups_of(room)
     response = simulate(room, groups=face_group)["s", "a"]
@@ -455,7 +458,7 @@ def test_the_draws_come_out_the_same_with_what_they_share_as_each_alone():
     found, heard = _redrawn(
         response, face_group, traced, taken, ratios, admittance_of, inputs, told.append
     )
-    assert told == [0]
+    assert told == list(range(6))
     for k, (ratio, drawn) in enumerate(zip(ratios, taken, strict=True)):
         alone = response.reweighted(
             face_group, ratio, absorption=(traced, drawn), admittance_of=admittance_of
@@ -1429,3 +1432,590 @@ def test_simulate_draws_adaptively_and_warns_at_the_limit(
     assert ", 40 draws (adaptive, not stable): at most" in captured.out
     spread = json.loads((out / "parameters.json").read_text())["responses"][0]["uncertainty"]
     assert spread["draws"] == 40 and spread["stable"] is False
+
+
+def _every_value(spreads: dict) -> dict:
+    """{name: value} every field of every :class:`Spread` of ``spreads``, of the
+    dataclasses and dictionaries in them too."""
+    out = {}
+
+    def walk(value, name: str) -> None:
+        if dataclasses.is_dataclass(value) and not isinstance(value, type):
+            for f in dataclasses.fields(value):
+                walk(getattr(value, f.name), f"{name}.{f.name}")
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                walk(item, f"{name}[{key}]")
+        else:
+            out[name] = value
+
+    for key, spread in spreads.items():
+        walk(spread, str(key))
+    return out
+
+
+def _assert_same_bits(ours: dict, theirs: dict) -> None:
+    """Every value of :func:`_every_value` ``theirs`` is that of ``ours``, bit for bit."""
+    assert list(theirs) == list(ours)
+    for name, value in ours.items():
+        other = theirs[name]
+        if isinstance(value, np.ndarray):
+            assert other.dtype == value.dtype and other.shape == value.shape, name
+            assert np.array_equal(other, value, equal_nan=True), name
+        else:
+            assert type(other) is type(value) and (other == value or value != value), name
+
+
+def _two_sources() -> Scene:
+    """The L-shaped room (:func:`_corner`) with a second source, t, of another power, in
+    sight of listener a: responses of other paths and other levels' inputs."""
+    data = _corner(0.03).to_data()
+    data["sources"].append({"name": "t", "position": [1.5, 5.0, 1.5], "level_db": 90.0})
+    return Scene.model_validate(data)
+
+
+def _no_fit_in_draws(*args):
+    """The worker processes' draws (``uncertainty._worker_draws``, which this stands for
+    in a test), with a fit of an admittance an error: they take those fitted ahead."""
+    from acoustic_spaces.engine import impedance
+
+    def fit_admittance(*_args, **_options):
+        raise AssertionError("a worker process fitted an admittance in its draws")
+
+    real = impedance.fit_admittance
+    impedance.fit_admittance = fit_admittance
+    try:
+        return _draws_in_a_worker(*args)
+    finally:
+        impedance.fit_admittance = real
+
+
+def _for_workers(patch: pytest.MonkeyPatch) -> None:
+    """What the tests of worker processes set with ``patch``: processes for a few draws,
+    two whatever the cores (one core of a computer runs them both), and a warning in a
+    process an error, as pytest's -W error makes one here."""
+    import os
+
+    from acoustic_spaces.engine import uncertainty
+
+    patch.setattr(uncertainty, "WORKER_DRAWS", 1)
+    patch.setattr(os, "cpu_count", lambda: 2)
+    patch.setattr(uncertainty, "_usable_cores", lambda: 2)
+    patch.setenv("PYTHONWARNINGS", "error")
+
+
+@pytest.fixture(scope="module")
+def spreads_by_workers():
+    """{(draws, workers): (spreads, messages)} the spread of an L-shaped room's two
+    responses (source s round the corner from listener a, over an edge; source t, of
+    another power, in sight of it), from 7 draws and adaptively (two batches of 5),
+    here and in two worker processes (each response's draws in runs of 4 and 3, or 3
+    and 2), with what ``progress`` heard; the draws of each time the processes worked
+    them out, and how many draws the processes counted done then. A fit of an
+    admittance in the processes' draws is an error (:func:`_no_fit_in_draws`)."""
+    from acoustic_spaces.engine import uncertainty
+
+    scene = _two_sources()
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    result = simulate(room, groups=face_group)
+    a, t = result["s", "a"].early, result["t", "a"].early
+    assert np.any(a.edge >= 0) and a.spectrum is not None and len(a) != len(t)
+    assert scene.level_inputs("s")[0][0] != scene.level_inputs("t")[0][0]
+    out = {}
+    sent, counted, kinds = [], [], set()
+    redrawn, run = uncertainty._Workers.redrawn, uncertainty._Workers._run
+
+    def worked(self, responses, face_group, traced, taken, *args):
+        found = redrawn(self, responses, face_group, traced, taken, *args)
+        sent.append(len(taken))
+        counted.append(self._done.value)
+        return found
+
+    def ran(self, function, calls, say):
+        if function is _no_fit_in_draws:
+            kinds.update(type(call[0]) for call in calls)
+        return run(self, function, calls, say)
+
+    with pytest.MonkeyPatch.context() as patch:
+        _for_workers(patch)
+        # For the test's speed: batches of 5.
+        patch.setattr(uncertainty, "ADAPTIVE_BATCH", 5)
+        patch.setattr(uncertainty, "ADAPTIVE_MIN_BATCHES", 2)
+        patch.setattr(uncertainty._Workers, "redrawn", worked)
+        patch.setattr(uncertainty._Workers, "_run", ran)
+        patch.setattr(uncertainty, "_worker_draws", _no_fit_in_draws)
+        for draws in (7, ADAPTIVE):
+            for workers in (1, 2):
+                heard: list[str] = []
+                spreads = material_spread(
+                    result,
+                    scene,
+                    face_group,
+                    materials,
+                    draws=draws,
+                    seed=4,
+                    max_draws=10,
+                    progress=heard.append,
+                    workers=workers,
+                )
+                out[draws, workers] = (spreads, heard)
+    # The responses go to the processes without what their echograms kept.
+    assert kinds == {uncertainty._Sent}
+    return out, sent, counted
+
+
+def test_a_worker_process_gets_a_response_without_what_its_echograms_kept():
+    """A response goes to a worker process with its fields, without those it makes for
+    itself (what its echograms keep for the next reading), and gives the same results
+    there: so a draw's, whose re-weighted response makes them anew."""
+    import pickle
+
+    from acoustic_spaces.engine.uncertainty import _Sent
+
+    result, *_ = _box_spread()
+    response = result["s", "a"]
+    found = response.parameters()
+    assert response._pressure is not None
+    sent = pickle.loads(pickle.dumps(_Sent(response)))
+    assert type(sent) is type(response) and sent._pressure is None
+    assert len(pickle.dumps(_Sent(response))) < len(pickle.dumps(response))
+    _assert_same_bits(_every_value({"traced": found}), _every_value({"traced": sent.parameters()}))
+
+
+def test_worker_processes_give_the_draws_of_one_process_to_the_last_bit(spreads_by_workers):
+    """The draws worked out in worker processes, each response's in runs of draws, give
+    every part of every response's spread bit for bit as one process does, with the
+    same messages: from a number of draws and adaptively, in a room with paths over an
+    edge whose coherent bands' phases take the admittances fitted at the draws' nodes
+    (in the processes, none in their draws), for two sources. Each draw is counted
+    once, when done. Not compared where the computer's linear algebra rounds a product
+    an admittance's fit takes by where its numbers lie in memory (conftest's
+    :func:`rounded_by_place`): there the fits differ with what else is in memory."""
+    if (rounded := rounded_by_place()) is not None:
+        pytest.skip(
+            "an admittance's fit changes with what else is in memory on this computer, "
+            f"whose linear algebra rounds {rounded}"
+        )
+    out, sent, counted = spreads_by_workers
+    assert sent == [7, 5, 5] and counted == [2 * 7, 2 * 5, 2 * 5]
+    for draws in (7, ADAPTIVE):
+        (here, said), (there, heard) = out[draws, 1], out[draws, 2]
+        assert heard == said
+        ours, theirs = _every_value(here), _every_value(there)
+        assert len(ours) > 400
+        _assert_same_bits(ours, theirs)
+
+
+def test_worker_processes_give_the_spread_of_one_process(spreads_by_workers):
+    """On any computer, also one where the test above has no one result to compare
+    with: the worker processes work the draws out and give each part of each response's
+    spread within 0.01 of what one process gives, in the part's own unit, with the same
+    messages. Admittances fitted to absorptions up to 16 units in their last place
+    apart, as such a computer may fit them, moved the parts here by 0.0009 at most (a
+    U50 bound, in dB)."""
+    out, sent, _ = spreads_by_workers
+    assert sent == [7, 5, 5]
+    for draws in (7, ADAPTIVE):
+        (here, said), (there, heard) = out[draws, 1], out[draws, 2]
+        assert heard == said
+        ours, theirs = _every_value(here), _every_value(there)
+        assert list(theirs) == list(ours)
+        for name, value in ours.items():
+            if isinstance(value, np.ndarray):
+                np.testing.assert_allclose(theirs[name], value, rtol=0, atol=0.01, err_msg=name)
+            else:
+                assert theirs[name] == value or value != value, name
+
+
+def _box_spread():
+    """(result, scene, face groups, materials) of the box's one response, for the draws
+    of a spread."""
+    scene = _box({"absorption": 0.02})
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    return simulate(room, sources=["s"], groups=face_group), scene, face_group, materials
+
+
+def _watched(patch: pytest.MonkeyPatch) -> tuple[list, list]:
+    """([pool], [draws done after close]) each :class:`_Workers` made while ``patch``
+    holds, and the draws its processes counted done once it was closed."""
+    from acoustic_spaces.engine import uncertainty
+
+    pools, closed = [], []
+    start, close = uncertainty._Workers.__init__, uncertainty._Workers.close
+
+    def made(self, count: int) -> None:
+        start(self, count)
+        pools.append(self)
+
+    def ended(self) -> None:
+        close(self)
+        closed.append(self._done.value)
+
+    patch.setattr(uncertainty._Workers, "__init__", made)
+    patch.setattr(uncertainty._Workers, "close", ended)
+    return pools, closed
+
+
+def test_worker_processes_stop_within_a_draw_at_a_cancel_and_at_an_error_and_end(monkeypatch):
+    """What ``progress`` raises (the editor's Cancel) stops the worker processes' draws,
+    each within a draw, and is raised; a message is said once as many draws in all are
+    done as come before it, while the others go on. An error in a process's draws is
+    raised as itself. No process is left either way."""
+    import multiprocessing
+
+    _for_workers(monkeypatch)
+    result, scene, face_group, materials = _box_spread()
+    pools, closed = _watched(monkeypatch)
+
+    class Stop(Exception):
+        pass
+
+    heard: list[str] = []
+    done: list[int] = []
+
+    def stop(message: str) -> None:
+        heard.append(message)
+        done.append(pools[0]._done.value)
+        if "draw 26" in message:
+            raise Stop
+
+    with pytest.raises(Stop):
+        material_spread(result, scene, face_group, materials, draws=200, progress=stop, workers=2)
+    assert heard == [f"the spread: s -> a (1 of 1), draw {k} of 200" for k in (1, 26)]
+    # The first message comes before any draw is done, the next once 25 are. The two
+    # processes, each at a draw when stopped, finish it and begin no other.
+    assert done[0] == 0
+    assert 25 <= done[1] < 200 and closed[0] <= done[1] + 2 * 2
+    assert multiprocessing.active_children() == []
+    # Moments of fewer groups than the draws re-weight: the draw raises.
+    response = result["s", "a"]
+    fewer = dataclasses.replace(response, late_moments=response.late_moments[:1])
+    broken = dataclasses.replace(result, responses={("s", "a"): fewer})
+    with pytest.raises(ValueError, match="the response has no late moments of 3 groups"):
+        material_spread(broken, scene, face_group, materials, draws=4, workers=2)
+    assert multiprocessing.active_children() == []
+
+
+def test_a_worker_process_killed_ends_the_spread_with_an_error_and_no_process_left(
+    monkeypatch,
+):
+    """A worker process that ends before its draws do (killed, out of memory) ends the
+    spread with an error that says what may have ended it, and the other process ends."""
+    import multiprocessing
+    from concurrent.futures.process import BrokenProcessPool
+
+    _for_workers(monkeypatch)
+    result, scene, face_group, materials = _box_spread()
+    pools, _ = _watched(monkeypatch)
+
+    def kill(message: str) -> None:
+        if "draw 26" in message:
+            next(iter(pools[0]._pool._processes.values())).kill()
+
+    with pytest.raises(BrokenProcessPool, match="ended before its draws did .* killed"):
+        material_spread(result, scene, face_group, materials, draws=200, progress=kill, workers=2)
+    assert multiprocessing.active_children() == []
+
+
+def _end_with_the_locks_taken() -> None:
+    """In a worker process: take whatever locks the count of the draws done and the flag
+    that stops the draws have, hold them until the process that started this one has
+    looked at the draws again, and end without giving them back."""
+    import os
+    import time
+
+    from acoustic_spaces.engine.uncertainty import _POLL_S, _WORKER
+
+    for shared in (_WORKER["done"], _WORKER["stop"]):
+        if hasattr(shared, "get_lock"):
+            shared.get_lock().acquire()
+        if hasattr(shared, "_cond"):  # a multiprocessing Event's
+            shared._cond.acquire()
+    time.sleep(4 * _POLL_S)
+    os._exit(1)
+
+
+def test_a_worker_process_that_ends_with_a_lock_taken_ends_the_spread_with_an_error():
+    """A worker process that ends while it holds a lock (killed as it counts a draw)
+    leaves the lock taken for ever. The process that started it takes none of the
+    processes' locks, neither to read the count nor to stop the draws: it gets the
+    error and ends the other process, where it would else wait for ever."""
+    import multiprocessing
+    import threading
+    from concurrent.futures.process import BrokenProcessPool
+
+    from acoustic_spaces.engine.uncertainty import _Workers
+
+    pool = _Workers(2)
+    pool._run(abs, [(1,), (2,)], lambda _: None)
+    raised: list[BaseException | None] = []
+
+    def run() -> None:
+        try:
+            pool._run(_end_with_the_locks_taken, [()], lambda _: None)
+        except BaseException as exc:
+            raised.append(exc)
+        pool.close()
+        raised.append(None)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(120)
+    if thread.is_alive():
+        for process in list((pool._pool._processes or {}).values()):
+            process.kill()
+        pytest.fail("the process that started the workers waits for a lock a dead one holds")
+    assert isinstance(raised[0], BrokenProcessPool), raised
+    assert "ended before its draws did" in str(raised[0])
+    assert multiprocessing.active_children() == []
+
+
+def test_worker_processes_end_with_the_process_that_started_them():
+    """A worker process ends once the process that started it has ended, killed say,
+    rather than wait for draws for ever: the output the processes share then ends.
+    Not on Windows, where a spawned process does not hold its parent's output."""
+    import subprocess
+    import sys
+
+    if sys.platform == "win32":
+        pytest.skip("a spawned process on Windows does not hold its parent's output")
+    code = """
+import sys
+from acoustic_spaces.engine.uncertainty import _Workers
+
+pool = _Workers(2)
+pool._run(abs, [(1,), (2,)], lambda _: None)
+print(*pool._pool._processes, flush=True)
+sys.stdin.read()
+"""
+    with subprocess.Popen(
+        [sys.executable, "-c", code], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
+    ) as run:
+        assert run.stdout is not None
+        workers = [int(pid) for pid in run.stdout.readline().split()]
+        assert len(workers) == 2
+        run.kill()
+        try:
+            run.communicate(timeout=120)
+        except subprocess.TimeoutExpired:
+            import os
+            import signal
+
+            for pid in workers:
+                os.kill(pid, signal.SIGKILL)
+            pytest.fail("the worker processes went on after the process that started them")
+
+
+def test_worker_processes_start_with_this_process_s_environment_and_cores(monkeypatch):
+    """The worker processes inherit this process's environment, with the variables that
+    set the threads of the linear algebra, and its CPU affinity, and change neither;
+    this process's environment is left as it was. They ignore Ctrl-C, which is this
+    process's to act on."""
+    import os
+    import signal
+
+    from acoustic_spaces.engine.uncertainty import _Workers
+
+    names = ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "SPREAD_TEST")
+    monkeypatch.setenv("SPREAD_TEST", "7")
+    before = dict(os.environ)
+    pool = _Workers(2)
+    try:
+        seen = pool._run(os.getenv, [(name,) for name in names] * 2, lambda _: None)
+        if hasattr(os, "sched_getaffinity"):
+            cores = pool._run(os.sched_getaffinity, [(0,)] * 2, lambda _: None)
+            assert cores == [os.sched_getaffinity(0)] * 2
+        interrupts = pool._run(signal.getsignal, [(signal.SIGINT,)] * 2, lambda _: None)
+    finally:
+        pool.close()
+    assert dict(os.environ) == before
+    assert seen == [os.environ.get(name) for name in names] * 2
+    assert interrupts == [signal.SIG_IGN] * 2
+
+
+def test_one_worker_or_few_draws_start_no_process():
+    """With one worker, or too few draws for more, the draws are worked out in the
+    calling process, which imports nothing to start others."""
+    import json
+    import subprocess
+    import sys
+
+    data = json.dumps(json.dumps(_box({"absorption": 0.02}).to_data()))
+    code = f"""
+import json, sys
+from acoustic_spaces import Room, Scene, simulate
+from acoustic_spaces.engine.reweight import groups_of
+from acoustic_spaces.engine.uncertainty import material_spread
+
+scene = Scene.model_validate(json.loads({data}))
+room = Room.from_scene(scene)
+face_group, materials = groups_of(room)
+result = simulate(room, groups=face_group)
+for workers, draws in ((1, 4), (4, 3)):
+    material_spread(result, scene, face_group, materials, draws=draws, workers=workers)
+print(sorted(m for m in sys.modules if m.startswith(("multiprocessing", "concurrent.futures.p"))))
+"""
+    run = subprocess.run(
+        [sys.executable, "-W", "error", "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.strip() == "[]"
+
+
+def test_the_admittances_fitted_ahead_are_those_the_draws_ask_for():
+    """The admittances fitted before the draws go to worker processes are those the
+    draws ask for when worked out one after the other, the nodes and the rows as traced
+    alike, each once, and none of a material whose reflections turn no coherent band's
+    phase (here the side wall's, its paths given no angle); with them, the draws fit
+    none."""
+    from acoustic_spaces.engine import impedance
+    from acoustic_spaces.engine.uncertainty import _redrawn, _reflected
+
+    data = _two_sources().to_data()
+    data["materials"]["side"] = {"absorption": [0.2] * 8, "uncertainty": {"absorption": 0.03}}
+    data["assignments"]["wall_1"] = "side"
+    scene = Scene.model_validate(data)
+    room = Room.from_scene(scene)
+    face_group, materials = groups_of(room)
+    side = materials.index("side")
+    result = simulate(room, groups=face_group)
+
+    def unseen(response):
+        early = response.early
+        cosines = [
+            np.where(face_group[np.asarray(faces, dtype=np.int64)] == side, np.nan, angles)
+            for faces, angles in zip(early.faces, early.cosines, strict=True)
+        ]
+        return dataclasses.replace(response, early=dataclasses.replace(early, cosines=cosines))
+
+    result = dataclasses.replace(
+        result, responses={key: unseen(response) for key, response in result.responses.items()}
+    )
+    traced = np.array([scene.materials[n].coefficients("octave")[0] for n in materials])
+    taken, deviates, widths = _draws(scene, materials, 6, 5)
+    limits = [_limits(scene.materials[n], own) for n, own in zip(materials, traced, strict=True)]
+    ratios = [log_ratio(traced, drawn) for drawn in taken]
+    responses = list(result.responses.values())
+    reflected = _reflected(responses, face_group, len(materials))
+    assert not reflected[side] and reflected.sum() == len(materials) - 1
+
+    def draws(admittance_of, fitted):
+        real = impedance.fit_admittance
+
+        def fit_admittance(absorption, total, rate=None):
+            fitted.append(np.asarray(absorption, dtype=float).tobytes())
+            return real(absorption, total, rate)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(impedance, "fit_admittance", fit_admittance)
+            for (source, _), response in result.responses.items():
+                inputs = scene.level_inputs(source)
+                _redrawn(response, face_group, traced, taken, ratios, admittance_of, inputs, abs)
+
+    steps = [
+        ADMITTANCE_STEPS[getattr(uncertainty_of(scene, n), "distribution", "normal")]
+        for n in materials
+    ]
+    # The nodes over the draws' range, and every step from 0, whose node 0 is a row as
+    # traced.
+    for take in (
+        lambda admittances: admittances.over(taken, deviates),
+        lambda admittances: admittances.along(taken, deviates, steps),
+    ):
+        asked: list[bytes] = []
+        alone = _Admittances(traced, widths, limits)
+        take(alone)
+        draws(alone, asked)
+        ahead = _Admittances(traced, widths, limits)
+        take(ahead)
+        nodes, rows = ahead.asked(taken, reflected)
+        assert nodes and rows
+        assert {ahead._row(*node).tobytes() for node in nodes} | set(rows) == set(asked)
+        fitted: list[bytes] = []
+        ahead.fit(
+            nodes,
+            rows,
+            lambda absorptions, fitted=fitted: (
+                fitted.extend(row.tobytes() for row in absorptions)
+                or [impedance.fit_admittance(row, len(OCTAVE_BANDS_HZ)) for row in absorptions]
+            ),
+        )
+        # Each absorption once: the rows here, the others' nodes in the processes.
+        assert len(set(fitted)) == len(fitted) and set(fitted).isdisjoint(rows)
+        assert len(fitted) + len(rows) == len(set(asked))
+        again: list[bytes] = []
+        draws(ahead.part(taken), again)
+        assert again == []
+
+
+def test_the_worker_processes_are_as_many_as_the_cores_the_draws_and_the_memory_hold(
+    monkeypatch,
+):
+    """One worker process each ``WORKER_DRAWS`` draws of all the responses at most, no
+    more than the cores this process may run on (all of them for 0), at most
+    ``WINDOWS_MAX_WORKERS`` on Windows, and as many as hold a response's draws each in
+    ``WORKERS_MEMORY_SHARE`` of the computer's memory; for one or none, the draws stay
+    in the calling process. Fewer than none, or a part of one, is an error."""
+    import os
+    import sys
+
+    from acoustic_spaces.engine import run_size, uncertainty
+    from acoustic_spaces.engine.coherent import SameDelays
+    from acoustic_spaces.engine.uncertainty import WORKER_DRAWS, _worker_bytes, _worker_count
+
+    result, scene, face_group, materials = _box_spread()
+    response = result["s", "a"]
+    each = _worker_bytes(response)
+    assert each > uncertainty.WORKER_PROCESS_BYTES + SameDelays().limit
+    monkeypatch.setattr(run_size, "machine_memory", lambda: None)
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(uncertainty, "_usable_cores", lambda: 8)
+    assert _worker_count(4, [response], 4 * WORKER_DRAWS) == 4
+    assert _worker_count(4, [response, response], 2 * WORKER_DRAWS) == 4
+    assert _worker_count(4, [response], 3 * WORKER_DRAWS - 1) == 2
+    assert _worker_count(4, [response], 2 * WORKER_DRAWS - 1) == 1
+    assert _worker_count(1, [response], 10 * WORKER_DRAWS) == 1
+    assert _worker_count(0, [response], 10 * WORKER_DRAWS) == 8
+    assert _worker_count(16, [response], 20 * WORKER_DRAWS) == 8
+    monkeypatch.setattr(uncertainty, "_usable_cores", lambda: 3)
+    assert _worker_count(0, [response], 10 * WORKER_DRAWS) == 3
+    monkeypatch.setattr(os, "cpu_count", lambda: 64)
+    monkeypatch.setattr(uncertainty, "_usable_cores", lambda: 64)
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert _worker_count(0, [response], 64 * WORKER_DRAWS) == 64
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert _worker_count(0, [response], 64 * WORKER_DRAWS) == uncertainty.WINDOWS_MAX_WORKERS
+    monkeypatch.undo()
+    monkeypatch.setattr(uncertainty, "_usable_cores", lambda: 8)
+    monkeypatch.setattr(os, "cpu_count", lambda: 8)
+    share = uncertainty.WORKERS_MEMORY_SHARE
+    monkeypatch.setattr(run_size, "machine_memory", lambda: int(3.5 * each / share))
+    assert _worker_count(8, [response], 8 * WORKER_DRAWS) == 3
+    monkeypatch.setattr(run_size, "machine_memory", lambda: int(1.5 * each / share))
+    assert _worker_count(8, [response], 8 * WORKER_DRAWS) == 1
+    for workers in (-1, 2.5, True):
+        with pytest.raises(ValueError, match="worker processes as a whole number"):
+            material_spread(result, scene, face_group, materials, draws=4, workers=workers)
+
+
+def test_a_daemonic_process_works_the_draws_out_itself(monkeypatch):
+    """A daemonic process (a :class:`multiprocessing.pool.Pool`'s), which may start no
+    process, takes no worker processes for the draws, where another would."""
+    import multiprocessing
+
+    from acoustic_spaces.engine import run_size, uncertainty
+    from acoustic_spaces.engine.uncertainty import WORKER_DRAWS, _worker_count
+
+    result, *_ = _box_spread()
+    response = result["s", "a"]
+    with multiprocessing.get_context("spawn").Pool(1) as pool:
+        assert pool.apply(_worker_count, (2, [response], 2 * WORKER_DRAWS)) == 1
+    monkeypatch.setattr(run_size, "machine_memory", lambda: None)
+    monkeypatch.setattr(uncertainty, "_usable_cores", lambda: 2)
+    assert _worker_count(2, [response], 2 * WORKER_DRAWS) == 2

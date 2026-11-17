@@ -548,6 +548,29 @@ def test_cancel_stops_the_spread_while_it_is_drawn(qapp) -> None:
     assert not any("draw 51 of" in message for message in heard)
 
 
+def test_the_spread_s_draws_take_the_run_s_threads(qapp, monkeypatch) -> None:
+    """The spread's draws take as many worker processes as the run has threads: the
+    job's, else those of the settings."""
+    from acoustic_spaces.engine import reweight, uncertainty
+    from acoustic_spaces.engine.run_size import worker_threads
+
+    asked = []
+
+    def with_spread(result, *args, workers=1, **options):
+        asked.append(workers)
+        return result
+
+    monkeypatch.setattr(uncertainty, "with_spread", with_spread)
+    document = Document(box_scene())
+    _quick(document)
+    document.edit("default", lambda d: d["simulation"].pop("uncertainty"))
+    groups, materials = reweight.groups_of(document.room)
+    for threads in (None, 1, 3):
+        SimulationJob(document.room, threads=threads, groups=groups, materials=materials).run()
+    threads = document.room.scene.simulation.performance.threads
+    assert asked == [worker_threads(threads), 1, worker_threads(3)]
+
+
 # -- the window -------------------------------------------------------------------------
 
 

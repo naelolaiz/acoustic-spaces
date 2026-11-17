@@ -128,6 +128,7 @@ from acoustic_spaces.engine.diffraction import (
     _image_sources,
     _match,
     _past_face,
+    _planes_hit,
     _reach,
     _subset,
     _waves,
@@ -141,6 +142,7 @@ from acoustic_spaces.engine.early import (
     EarlyReflections,
     _crossed_at,
     _face_at,
+    _goes_on,
     assemble_paths,
 )
 from acoustic_spaces.engine.model import size_scattering
@@ -265,7 +267,8 @@ class EdgeFade:
             chain.append(model.mirror(chain[-1], seqs[:, j]))
         distance = np.linalg.norm(chain[-1] - listener, axis=1)
         keep = distance / c <= max_delay_s
-        # A sequence found already is no miss.
+        # A sequence found already is no miss: a path with its image off its planes, or
+        # with its image alone where the path does not carry its faces (_match).
         found = np.flatnonzero((paths.edge < 0) & (paths.order == k))
         if len(found):
             images = listener + paths.direction[found] * paths.distance_m[found, None]
@@ -276,6 +279,10 @@ class EdgeFade:
                 paths.order[found],
                 found,
                 1e-6 * self.d.size,
+                (
+                    np.sort(model.geometric_plane[seqs], axis=1),
+                    *_planes_hit(model, paths, found, k),
+                ),
             )
             keep &= hit < 0
         idx = np.flatnonzero(keep)
@@ -697,12 +704,9 @@ class EdgeFade:
             if key not in self._standing:
                 end = edges.start[edge[i]] if ends[0][i] else edges.end[edge[i]]
                 # The plane goes on round the end on the edge's open side.
-                probe = end + 1e-4 * self.d.size * self._bisector[edge[i]]
-                probe -= (normal[i] @ probe - offset[i]) * normal[i]
-                self._standing[key] = (
-                    _face_at(model, key[1], end, self.tolerance) >= 0
-                    and _face_at(model, key[1], probe, self.tolerance) >= 0
-                )
+                way = self._bisector[edge[i]]
+                way = way - (normal[i] @ way) * normal[i]
+                self._standing[key] = _goes_on(model, key[1], end, way, self.tolerance)
             out[i] = self._standing[key]
         return out
 
@@ -1612,7 +1616,11 @@ class EdgeFade:
             alive[np.flatnonzero(alive)[~go]] = False
             toward = nxt - point[rows]
             length = np.linalg.norm(toward, axis=1)
-            start = point[rows] + step * toward / np.maximum(length, 1e-300)[:, None]
+            # The ray starts just off the plane the leg leaves: no further along the leg
+            # than its middle, where the leg is shorter than twice that (between two
+            # planes next to where they meet).
+            off = np.minimum(step, 0.5 * length)[:, None]
+            start = point[rows] + off * toward / np.maximum(length, 1e-300)[:, None]
             ok[rows] &= _clear(model, start, nxt)
             point[rows], plane[rows] = nxt, nxt_plane
             alive[rows] &= ok[rows] & (nxt_plane >= 0)

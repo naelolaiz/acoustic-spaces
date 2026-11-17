@@ -747,6 +747,143 @@ def test_the_late_stage_traces_where_its_device_says() -> None:
         assert found.energy.sum() == pytest.approx(on_cpu.energy.sum(), rel=0.15)
 
 
+#: In place of the shader's two lengths (``T_MIN``, ``_OFFSET``): a hundredth of each.
+_SHORT = (1e-8, 1e-7)
+
+
+def _late_on_the_gpu(
+    monkeypatch,
+    geometry: dict,
+    source,
+    listeners,
+    lengths=None,
+    anyway: bool = False,
+    rays: int = 3000,
+    sphere: float | None = None,
+) -> np.ndarray:
+    """The late part of each listener by band (dB) of one source in a room of
+    ``geometry``, traced on the GPU with ``rays`` rays (the listeners' spheres of the
+    radius ``sphere``, m, or the late stage's own): with ``lengths``, with these in
+    place of the shader's ``T_MIN`` and ``_OFFSET`` (the rays are the same); with
+    ``anyway``, however near a surface the source and the listeners are."""
+    from acoustic_spaces import Scene
+    from acoustic_spaces.engine.simulate import simulate
+
+    names = [f"l{k}" for k in range(len(listeners))]
+    scene = {
+        "geometry": geometry,
+        "materials": {"wall": {"absorption": [0.2] * 8, "scattering": 0.3}},
+        "default_material": "wall",
+        "sources": [{"name": "s", "position": [float(v) for v in source]}],
+        "listeners": [
+            {"name": name, "position": [float(v) for v in place]}
+            for name, place in zip(names, listeners, strict=True)
+        ],
+        "simulation": {
+            "ir_length_s": 0.4,
+            "seed": 7,
+            "late": {"device": "gpu", "rays": rays, "receiver_radius": sphere},
+        },
+    }
+    messages: list[str] = []
+    with monkeypatch.context() as patch:
+        if lengths is not None:
+            patch.setattr(gpu_tracer, "T_MIN", lengths[0])
+            patch.setattr(gpu_tracer, "_OFFSET", lengths[1])
+        if anyway:
+            patch.setattr(gpu_tracer, "too_near", lambda *places: "")
+        found = simulate(Room.from_scene(Scene.model_validate(scene)), progress=messages.append)
+    assert [m for m in messages if "late rays traced on" in m] == ["s: late rays traced on the GPU"]
+    return np.array([10 * np.log10(np.asarray(found["s", n].late).sum(axis=1)) for n in names])
+
+
+def _both_ways(monkeypatch, geometry: dict, source, listeners, lengths, anyway: bool, **run):
+    """How far the GPU's late part of each listener (dB by band) lies from that of the
+    same rays traced with ``lengths`` in place of the shader's two (``run``: as
+    :func:`_late_on_the_gpu`)."""
+    shipped = _late_on_the_gpu(monkeypatch, geometry, source, listeners, anyway=anyway, **run)
+    return shipped - _late_on_the_gpu(
+        monkeypatch, geometry, source, listeners, lengths, anyway, **run
+    )
+
+
+@needs_gpu
+def test_the_gpu_loses_no_ray_of_a_source_as_near_a_floor_as_it_takes(monkeypatch) -> None:
+    """A source as near a floor as the GPU takes (a tenth more than twice the least
+    distance at which its rays meet a face; nearer, the CPU traces the run) sends no ray
+    through the floor: a listener's late part is that of the same rays traced with a
+    hundredth of that least distance. A source half that least distance from the floor,
+    traced on the GPU all the same, is about 1 dB low (0.9 to 1.1 dB over four seeds)."""
+    size = np.array([10.0, 7.0, 4.0])
+    room_m = gpu_tracer.CLEAR * gpu_rays.T_MIN * float(np.linalg.norm(size))
+    box, listener = {"box": size.tolist()}, [[7.0, 4.5, 1.7]]
+    less = (gpu_rays.T_MIN / 100, gpu_tracer._OFFSET)
+    kept = _both_ways(monkeypatch, box, [2.5, 2.0, 1.1 * room_m], listener, less, False, rays=2000)
+    np.testing.assert_allclose(kept, 0.0, atol=0.02)
+    lost = _both_ways(monkeypatch, box, [2.5, 2.0, 0.25 * room_m], listener, less, True, rays=2000)
+    assert -1.8 < lost.mean() < -0.5
+
+
+@needs_gpu
+@pytest.mark.parametrize("angle, low", [(90.0, -0.25), (60.0, -2.5)])
+def test_the_gpu_keeps_the_rays_of_a_source_as_near_a_corner_as_it_takes(
+    monkeypatch, angle: float, low: float
+) -> None:
+    """In the corner of a floor and two walls that meet at ``angle`` degrees, a source as
+    near the three as the GPU takes (a tenth more than fifty times what a reflection
+    loses beside the second face of an edge: a millionth of the model's size, and five
+    more where the walls meet at 60 degrees) gives a listener the late part of the same
+    rays traced with the shader's two lengths a hundredth as long, within 0.15 dB on
+    average over the bands (0.05 dB over four seeds). A source 2.05 millionths from the
+    three, traced on the GPU all the same, is ``low`` dB from it or lower on that average
+    (0.39 to 0.45 dB at 90 degrees over four seeds, 3.5 to 3.7 dB at 60 over five): its
+    reflections go through the next wall, or start behind it."""
+    turn = np.radians(angle)
+    along, across = np.array([10.0, 0.0]), 7.0 * np.array([np.cos(turn), np.sin(turn)])
+    plan = np.array([[0.0, 0.0], along, along + across, across])
+    room = {"floor_plan": plan.tolist(), "height": 4.0}
+    size = float(np.linalg.norm([*np.ptp(plan, axis=0), 4.0]))
+    listener = [[*(0.6 * along + 0.55 * across), 1.7]]
+    reach = gpu_tracer.MEET * (gpu_rays.T_MIN + gpu_tracer._OFFSET * np.cos(turn))
+    assert reach * 1e6 == pytest.approx({90.0: 50.0, 60.0: 300.0}[angle])
+
+    def source(distance: float) -> list[float]:
+        """The place ``distance`` (a share of the model's size) from the three faces."""
+        out = distance * size / np.sin(turn / 2)
+        return [out * np.cos(turn / 2), out * np.sin(turn / 2), distance * size]
+
+    kept = _both_ways(monkeypatch, room, source(1.1 * reach), listener, _SHORT, False)
+    assert abs(kept.mean()) < 0.15
+    assert _both_ways(monkeypatch, room, source(2.05e-6), listener, _SHORT, True).mean() < low
+
+
+@needs_gpu
+def test_the_gpu_hears_a_listener_as_low_over_a_floor_as_it_takes(monkeypatch, tmp_path) -> None:
+    """In a model 20 km in size (a room 20 m long and a small box far from it) the shader
+    starts the reflections 20 cm off their faces. Eight listeners with spheres of 0.5 m,
+    as low over the floor as the GPU takes them (70 cm: a tenth more than that offset
+    and 0.874 of the sphere), have the late part of the same rays traced with a hundredth
+    of the offset, within 0.5 dB on average (0.01 to 0.17 dB low over four seeds).
+    Listeners 12 cm over the floor, under where its reflections start, traced on the GPU
+    all the same, are more than 0.5 dB low on average (1.0 to 1.4 dB over four seeds)."""
+    from test_geometry import _box_obj
+
+    rooms = _box_obj([0, 0, 0], [20, 14, 8], 1, "room") + _box_obj(
+        [20000, 0, 0], [20001, 1, 1], 9, "box"
+    )
+    (tmp_path / "rooms.obj").write_text(rooms)
+    model = {"file": str(tmp_path / "rooms.obj")}
+    offset = gpu_tracer._OFFSET * float(np.linalg.norm([20001.0, 14.0, 8.0]))
+    assert offset == pytest.approx(0.2, rel=1e-3)
+    source, less = [5.0, 4.0, 1.5], (gpu_rays.T_MIN, gpu_tracer._OFFSET / 100)
+    spots = [[x, y] for x in np.linspace(3.0, 17.0, 4) for y in (4.0, 10.0)]
+    run = {"rays": 2500, "sphere": 0.5}
+    heard = [[*spot, 1.1 * (offset + 0.8742 * 0.5)] for spot in spots]
+    assert abs(_both_ways(monkeypatch, model, source, heard, less, False, **run).mean()) < 0.5
+    under = [[*spot, 0.6 * offset] for spot in spots]
+    assert _both_ways(monkeypatch, model, source, under, less, True, **run).mean() < -0.5
+
+
 @needs_gpu
 def test_the_late_stage_s_last_slots_on_a_gpu_take_the_whole_chords() -> None:
     # As on the CPU (test_engine): the same rays traced for 0.2 s and for 0.25 s give the
@@ -1104,6 +1241,57 @@ def test_the_outdoor_timing_script_runs(monkeypatch, capsys) -> None:
     # much further.
     level = [float(row[7]) for row in cells[1:]]
     assert level[1] < max(3 * level[0], 1.0)
+
+
+@needs_gpu
+def test_tune_leaves_out_the_listeners_too_near_a_surface_for_the_gpu(monkeypatch) -> None:
+    from acoustic_spaces import Scene
+    from acoustic_spaces.engine import tuning
+
+    def room(*heights: float) -> Room:
+        scene = {
+            "geometry": {"box": [10.0, 7.0, 4.0]},
+            "materials": {"wall": {"absorption": [0.2] * 8, "scattering": 0.3}},
+            "default_material": "wall",
+            "sources": [{"name": "s", "position": [2.5, 2.0, 1.5]}],
+            "listeners": [
+                {"name": f"l{k}", "position": [7.0, 4.5 - 0.5 * k, height]}
+                for k, height in enumerate(heights)
+            ],
+        }
+        return Room.from_scene(Scene.model_validate(scene))
+
+    traced: list[int] = []
+    trace = late.stochastic_energy
+
+    def counted(model, source, listeners, **run):
+        traced.append(len(listeners))
+        assert len(run["radius"]) == len(listeners)
+        return trace(model, source, listeners, **run)
+
+    monkeypatch.setattr(late, "stochastic_energy", counted)
+    told: list[str] = []
+    # A listener half a millimetre over the floor is the CPU's: each device is timed on
+    # the three others, for both lengths, and tune says so once. One of them is 3 mm over
+    # the floor: the GPU's with the sphere a run gives it (nine tenths of that), not with
+    # one that goes through the floor.
+    result = tuning.tune(
+        room(1.7, 0.0005, 1.2, 0.003),
+        rays=100,
+        lengths=[0.1, 0.2],
+        wave_lengths=None,
+        keep=False,
+        say=told.append,
+    )
+    assert [set(timing.seconds) for timing in result.late] == [{"cpu", "gpu", "both"}] * 2
+    assert traced == [3] * 7
+    assert [message for message in told if "too near" in message] == [
+        "late stage: 1 of 4 listeners are too near a surface for the GPU and left out of the timing"
+    ]
+    reason = "tune needs a scene the GPU can trace: sound to a listener whose sphere reaches"
+    with pytest.raises(ValueError, match=reason):
+        tuning.tune(room(0.0005, 0.0004), rays=100, lengths=[0.1], wave_lengths=None, keep=False)
+    assert traced == [3] * 7
 
 
 @needs_gpu

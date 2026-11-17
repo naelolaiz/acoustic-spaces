@@ -1,4 +1,5 @@
 import dataclasses
+import functools
 import sys
 import types
 
@@ -139,3 +140,55 @@ def silenced(response, bands: list[int]):
     return dataclasses.replace(
         response, early=early, late=late, late_batches=batches, late_directional=directional
     )
+
+
+def placed(values: np.ndarray, offset: int) -> np.ndarray:
+    """A copy of ``values`` whose data begin ``offset`` bytes past a multiple of 64."""
+    values = np.asarray(values)
+    raw = np.empty(values.nbytes + 128, dtype=np.uint8)
+    first = (-raw.ctypes.data) % 64 + offset
+    out = raw[first : first + values.nbytes].view(values.dtype).reshape(values.shape)
+    out[...] = values
+    assert out.ctypes.data % 64 == offset
+    return out
+
+
+def _fit_products(jac: np.ndarray, f: np.ndarray, step: np.ndarray, at: int) -> dict:
+    """Products ``least_squares`` takes at every step of an admittance's fit, of the
+    differences (laid as the fit lays them, ``jac.T``), the misses ``f`` and a ``step``,
+    each with one array ``at`` bytes past a multiple of 64."""
+    rows, unknowns = jac.T.shape
+    misses = placed(f, at)
+    return {
+        f"f.dot(f) of {rows} misses": np.dot(misses, misses),
+        f"J.T.dot(f) of {rows} misses and {unknowns} unknowns": placed(jac, at).dot(f),
+        f"J.dot(step) of {rows} misses and {unknowns} unknowns": placed(jac, at).T.dot(step),
+        f"J.dot(step), the step of {unknowns} unknowns": jac.T.dot(placed(step, at)),
+    }
+
+
+@functools.cache
+def rounded_by_place() -> str | None:
+    """A product ``least_squares`` takes at every step of an admittance's fit (at the
+    sizes of the fits of test_wave's ``_FITS``) that this computer's linear algebra
+    rounds by where its numbers lie in memory, among the places a new array gets (every
+    16 bytes); None where it rounds none so. Where it does, a fit by ``least_squares``
+    depends on what was made in memory before it, with the fit's differences or with
+    its own: on an Intel Mac, Apple's Accelerate adds the products of a vector with
+    itself in another order where the vector begins 16 bytes past a multiple of 32, and
+    three of the five fits of ``_FITS`` by ``least_squares``' own differences changed
+    with a few small arrays kept in memory beside them."""
+    rng = np.random.default_rng(3)
+    for unknowns, rows in ((11, 8), (21, 18), (27, 24), (53, 50), (7, 4), (13, 10), (12, 9)):
+        for _ in range(16):
+            jac = rng.normal(size=(unknowns, rows))
+            f, step = rng.normal(size=rows), rng.normal(size=unknowns)
+            found: dict[str, dict[bytes, list[int]]] = {}
+            for at in (0, 16, 32, 48):
+                for name, product in _fit_products(jac, f, step, at).items():
+                    groups = found.setdefault(name, {})
+                    groups.setdefault(np.asarray(product).tobytes(), []).append(at)
+            for name, groups in found.items():
+                if len(groups) > 1:
+                    return f"{name}, by the bytes past a multiple of 64: {sorted(groups.values())}"
+    return None

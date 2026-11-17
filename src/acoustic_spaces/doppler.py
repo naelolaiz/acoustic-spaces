@@ -10,9 +10,13 @@ pitch while the direct sound still rises), so :func:`render` follows every path 
 place to place along the walk:
 
 - **The paths.** A path at one place is the same path at the next when it meets the
-  same planes (the ground, a facade) in the same order over the same edge; failing
-  that, the path of the same kind whose delay carries on from it. Where a path appears
-  or goes, it fades in or out between two places.
+  same planes (the ground, a facade) in the same order over the same edge, failing
+  that when it is of the same kind, and its delay carries on from it: it changes by no
+  more than one and a half times the walker's longest step over the speed of sound,
+  and is nearest where the path's last two places lead. Paths that meet the same planes over
+  the same edge are paired so that the most go on, and of those pairings the one with
+  the delays nearest where they lead. Where a path appears or goes, it fades in or out
+  between two places.
 - **The delay.** Each path's delay is known at every place: for a walking source, the
   time its sound takes from there, heard that much later (the retarded time); for a
   walking listener, at the moment it is there. Between the places a cubic through
@@ -103,6 +107,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
+from scipy.optimize import linear_sum_assignment
 from scipy.special import i0
 
 from acoustic_spaces import synthesis
@@ -186,33 +191,33 @@ def tracks(
     open_tracks: dict[tuple, list[int]] = {}  # key -> tracks heard at the previous place
     previous: dict[int, int] = {}  # track -> its row at the previous place
     for k, paths in enumerate(places):
+        delays = np.asarray(paths.delay_s, dtype=float)
         keys = [_key(paths, i, planes) for i in range(len(paths))]
-        order = np.argsort(paths.delay_s, kind="stable")
+        order = np.argsort(delays, kind="stable")
+        last = {t: float(places[k - 1].delay_s[row]) for t, row in previous.items()}
+        ahead = {t: _ahead(found[t], places, times, k) for t in previous}
+        of_key: dict[tuple, list[int]] = {}
+        for i in order:
+            of_key.setdefault(keys[i], []).append(int(i))
         taken: set[int] = set()
         now: dict[int, int] = {}
         reopened: dict[tuple, list[int]] = {}
-        loose = []
-        for i in order:
-            candidates = [t for t in open_tracks.get(keys[i], []) if t not in taken]
-            if candidates:
-                t = candidates[0]
-            else:
-                loose.append(int(i))
-                continue
-            taken.add(t)
-            found[t][k] = int(i)
-            now[t] = int(i)
-            reopened.setdefault(keys[i], []).append(t)
+        for key, alike in of_key.items():
+            for t, i in _paired(open_tracks.get(key, []), alike, delays, last, ahead, step_s):
+                taken.add(t)
+                found[t][k] = i
+                now[t] = i
+                reopened.setdefault(key, []).append(t)
         # Failing the same planes, a path of the same kind whose delay carries on.
-        for i in loose:
+        paired = set(now.values())
+        for i in (int(i) for i in order if int(i) not in paired):
             kind = keys[i][:3]
-            best, gap = None, step_s
-            for t, row in previous.items():
+            best, miss = None, math.inf
+            for t in previous:
                 if t in taken or _kind(found[t], places, k) != kind:
                     continue
-                jump = abs(float(paths.delay_s[i]) - float(places[k - 1].delay_s[row]))
-                if jump <= gap:
-                    best, gap = t, jump
+                if abs(delays[i] - last[t]) <= step_s and abs(delays[i] - ahead[t]) < miss:
+                    best, miss = t, abs(delays[i] - ahead[t])
             if best is None:
                 best = len(found)
                 found.append({})
@@ -233,6 +238,38 @@ def tracks(
         received = times + filled if source_walks else times.astype(float)
         out.append(Track(present, rows, received, filled))
     return out
+
+
+def _ahead(rows_of: dict, places: list, times: np.ndarray, k: int) -> float:
+    """Where the delay of a track heard at place ``k - 1`` leads at place ``k``: on
+    along its slope from the place before, where it was heard there too."""
+    last = float(places[k - 1].delay_s[rows_of[k - 1]])
+    if k - 2 not in rows_of or times[k - 1] <= times[k - 2]:
+        return last
+    before = float(places[k - 2].delay_s[rows_of[k - 2]])
+    return last + (last - before) * (times[k] - times[k - 1]) / (times[k - 1] - times[k - 2])
+
+
+def _paired(
+    before: list[int], rows: list[int], delays: np.ndarray, last: dict, ahead: dict, step_s: float
+) -> list[tuple[int, int]]:
+    """The tracks ``before`` (heard at the place before) that the paths ``rows`` (of the
+    same key, at this place) go on, as pairs (track, row): each delay no more than
+    ``step_s`` from its track's last one, the most such pairs, and of those the pairing
+    with the least sum of the squares of each delay's distance from where its track
+    leads (``ahead``)."""
+    if not before or not rows:
+        return []
+    now = delays[rows]
+    jumps = np.abs(now[None, :] - np.array([last[t] for t in before])[:, None])
+    misses = ((now[None, :] - np.array([ahead[t] for t in before])[:, None]) / step_s) ** 2
+    allowed = jumps <= step_s
+    if not allowed.any():
+        return []
+    # A pair whose delay jumps further costs more than all the others together.
+    cost = np.where(allowed, misses, 1.0 + misses[allowed].sum())
+    tracks_at, rows_at = linear_sum_assignment(cost)
+    return [(before[a], rows[b]) for a, b in zip(tracks_at, rows_at, strict=True) if allowed[a, b]]
 
 
 def _kind(rows_of: dict, places: list, k: int) -> tuple:

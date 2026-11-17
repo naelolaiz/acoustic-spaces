@@ -9,6 +9,8 @@ in a source checkout.
 
 from __future__ import annotations
 
+import sys
+
 from acoustic_spaces._extras import install_hint
 
 INSTALL_HINT = f"the editor needs the gui extra: {install_hint('gui')}"
@@ -16,6 +18,12 @@ INSTALL_HINT = f"the editor needs the gui extra: {install_hint('gui')}"
 
 def main(argv: list[str] | None = None) -> int:
     """Run the editor, opening the scene file in ``argv`` if one is given."""
+    if getattr(sys, "frozen", False):
+        # In a frozen build the spread's worker processes are this executable, started
+        # with the arguments of a spawned process, which this call runs and ends with.
+        import multiprocessing.spawn
+
+        multiprocessing.spawn.freeze_support()
     try:
         import PySide6  # noqa: F401
         import pyvistaqt  # noqa: F401

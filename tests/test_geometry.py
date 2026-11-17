@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 import numpy as np
@@ -672,3 +673,150 @@ def test_plan_problems() -> None:
     assert "walls 1 and 3" in plan_problem(np.array([[0, 0], [4, 0], [4, 4], [2, 0], [0, 4]]))
     spike = np.array([[0, 0], [4, 0], [4, 4], [2, 4], [2, 2], [2, 4], [0, 4]])
     assert "back at corner 5" in plan_problem(spike)
+
+
+def test_the_least_distance_between_two_triangles() -> None:
+    """``triangle_gaps`` on pairs whose distance is known by hand, either way round, and
+    on random pairs against the least distance that a minimiser finds between a point of
+    one and a point of the other."""
+    from scipy.optimize import minimize
+
+    from acoustic_spaces.geometry import triangle_gaps
+
+    floor = [[0, 0, 0], [4, 0, 0], [0, 4, 0]]
+    cases = [
+        (floor, [[0, 0, 0], [4, 0, 0], [0, 0, 3]], 0.0),  # a shared side
+        (floor, [[0, 0, 0], [-1, -1, 2], [-2, 0, 2]], 0.0),  # a shared corner
+        (floor, [[0, 0, 2.5], [4, 0, 2.5], [0, 4, 2.5]], 2.5),  # one over the other
+        (floor, [[1, 1, 0.7], [1, 1, 3], [2, 1, 3]], 0.7),  # a corner over the face
+        (floor, [[1, 1, -1], [1, 1, 2], [1.5, 1.2, 2]], 0.0),  # a side through the face
+        (floor, [[1, 1, 0], [2, 1, 0], [1.5, 1, 3]], 0.0),  # a side on the face
+        (floor, [[6, 0, 0], [9, 0, 0], [6, 3, 0]], 2.0),  # apart in one plane
+        (floor, [[1, 1, 0], [9, 1, 0], [1, 9, 0]], 0.0),  # one over the other in one plane
+        (floor, [[1, 1, 0.3], [1, 1, 0.3], [1, 1, 0.3]], 0.3),  # a triangle of no size
+        # Two sides that pass each other, neither end the nearest.
+        ([[0, 0, 0], [2, 0, 0], [1, -3, 0]], [[1, -1, 1.5], [1, 1, 1.5], [1, 0, 5]], 1.5),
+        # A side through the middle of a large face, no corner of either within metres.
+        ([[-5, -5, 0], [5, -5, 0], [0, 5, 0]], [[0, -1, -4], [0, -1, 4], [0, 2, 4]], 0.0),
+    ]
+    one = np.array([case[0] for case in cases], dtype=float)
+    other = np.array([case[1] for case in cases], dtype=float)
+    expected = [case[2] for case in cases]
+    np.testing.assert_allclose(triangle_gaps(one, other), expected, atol=1e-12)
+    np.testing.assert_allclose(triangle_gaps(other, one), expected, atol=1e-12)
+    assert triangle_gaps(one[2], other[2]) == pytest.approx([2.5])  # one pair, as it comes
+
+    rng = np.random.default_rng(5)
+    one = rng.normal(size=(40, 3, 3))
+    other = rng.normal(size=(40, 3, 3)) + 1.5 * rng.normal(size=(40, 1, 3))
+    gaps = triangle_gaps(one, other)
+    within = [
+        {"type": "ineq", "fun": lambda x: 1 - x[0] - x[1]},
+        {"type": "ineq", "fun": lambda x: 1 - x[2] - x[3]},
+    ]
+    for a, b, gap in zip(one, other, gaps, strict=True):
+
+        def squared(x, a=a, b=b) -> float:
+            p = a[0] + x[0] * (a[1] - a[0]) + x[1] * (a[2] - a[0])
+            q = b[0] + x[2] * (b[1] - b[0]) + x[3] * (b[2] - b[0])
+            return float(((p - q) ** 2).sum())
+
+        least = min(
+            minimize(
+                squared,
+                start,
+                bounds=[(0, 1)] * 4,
+                constraints=within,
+                method="SLSQP",
+                options={"ftol": 1e-15, "maxiter": 500},
+            ).fun
+            for start in ([0.3] * 4, [0.9, 0.05, 0.05, 0.9], [0.05, 0.9, 0.9, 0.05])
+        )
+        assert gap == pytest.approx(math.sqrt(max(least, 0.0)), abs=1e-6)
+    assert 0 < (gaps == 0).sum() < len(gaps)  # some cross, most do not
+
+
+def test_triangles_apart_do_not_touch_where_an_edge_lies_in_the_others_plane() -> None:
+    """A ceiling whose edge lies in the plane of a wall that ends 1 mm or 1 cm short of
+    it, and two triangles 1 mm apart, one over the other: turned and moved 2,000 ways
+    at random, the two are always that far apart. (A crossing looked for by the triple
+    product of the edge and the triangle, which rounding leaves near nothing for an edge
+    in the plane, makes them touch in one placement of twenty.) A wall that goes through
+    the ceiling touches it in every placement."""
+    from acoustic_spaces.geometry import triangle_gaps
+
+    rng = np.random.default_rng(4)
+    turns, _ = np.linalg.qr(rng.normal(size=(2000, 3, 3)))
+    moves = 10.0 * rng.normal(size=(2000, 1, 3))
+
+    def gaps(one: list, other: list) -> np.ndarray:
+        placed = [
+            np.einsum("nij,kj->nki", turns, np.array(triangle, float)) + moves
+            for triangle in (one, other)
+        ]
+        return triangle_gaps(*placed)
+
+    ceiling = [[0, 0, 3], [3, 0, 3], [0, 3, 3]]
+    for short in (1e-3, 1e-2):
+        wall = [[0, 0, 0], [0, 3, 0], [0, 0, 3 - short]]
+        np.testing.assert_allclose(gaps(ceiling, wall), short, rtol=0, atol=1e-9)
+        np.testing.assert_allclose(gaps(wall, ceiling), short, rtol=0, atol=1e-9)
+    over = [[0.5, 0.5, 1e-3], [2, 0.5, 1e-3], [0.5, 2, 1e-3]]
+    np.testing.assert_allclose(gaps([[0, 0, 0], [3, 0, 0], [0, 3, 0]], over), 1e-3, atol=1e-9)
+    through = [[1, 1, 0], [1, 2, 0], [1, 1, 4]]
+    assert not gaps(ceiling, through).any() and not gaps(through, ceiling).any()
+
+
+def _to_triangle(point: np.ndarray, corners: np.ndarray) -> float:
+    """A point's distance to a triangle: to its foot in the plane where that lies on the
+    triangle, else to the nearest of the three sides."""
+    normal = np.cross(corners[1] - corners[0], corners[2] - corners[0])
+    normal /= np.linalg.norm(normal)
+    height = float(np.dot(point - corners[0], normal))
+    foot = point - height * normal
+    sides = [(corners[k], corners[(k + 1) % 3]) for k in range(3)]
+    if all(np.dot(np.cross(end - start, foot - start), normal) >= 0 for start, end in sides):
+        return abs(height)
+    least = math.inf
+    for start, end in sides:
+        along = np.clip(np.dot(point - start, end - start) / np.dot(end - start, end - start), 0, 1)
+        least = min(least, float(np.linalg.norm(point - start - along * (end - start))))
+    return least
+
+
+def test_the_points_near_triangles(monkeypatch) -> None:
+    """``triangles_near`` gives each pair of a point and a triangle within the reach, with
+    its distance: against every point's distance to every triangle worked out one by one,
+    in one helping and in many."""
+    from acoustic_spaces.geometry import triangles_near
+
+    rng = np.random.default_rng(11)
+    triangles = rng.uniform(0, 10, size=(40, 1, 3)) + rng.normal(scale=0.8, size=(40, 3, 3))
+    points = rng.uniform(-1, 11, size=(250, 3)) * [1.0, 1.0, 0.2]  # most candidates along z
+    triangles[:, :, 2] *= 0.2
+    reach = 0.5
+    every = np.array([[_to_triangle(point, corners) for corners in triangles] for point in points])
+    expected = {(p, t): every[p, t] for p, t in zip(*np.nonzero(every <= reach), strict=True)}
+    assert 50 < len(expected) < every.size / 10
+
+    def found() -> dict:
+        point, triangle, distance = triangles_near(triangles, points, reach)
+        pairs = list(zip(point.tolist(), triangle.tolist(), strict=True))
+        assert len(distance) == len(pairs) == len(set(pairs))
+        return dict(zip(pairs, distance.tolist(), strict=True))
+
+    for helping in (checks._PAIRS, 300, 1):
+        monkeypatch.setattr(checks, "_PAIRS", helping)
+        pairs = found()
+        assert pairs.keys() == expected.keys()
+        for pair, distance in pairs.items():
+            assert distance == pytest.approx(expected[pair], abs=1e-12)
+
+    # A triangle's first corner is within no reach at all of it; one point as it comes.
+    point, triangle, distance = triangles_near(triangles[7:9], triangles[8, 0], 0.0)
+    assert (point.tolist(), triangle.tolist(), distance.tolist()) == ([0], [1], [0.0])
+    for no_triangles, no_points in ((triangles[:0], points), (triangles, points[:0])):
+        point, triangle, distance = triangles_near(no_triangles, no_points, reach)
+        assert len(point) == len(triangle) == len(distance) == 0
+    far = triangles_near(triangles, points + 100.0, reach)
+    assert [len(values) for values in far] == [0, 0, 0]

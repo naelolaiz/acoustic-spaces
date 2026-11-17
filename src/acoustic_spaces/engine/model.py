@@ -201,12 +201,31 @@ class TraceModel:
         air = face_room >= 0
         back = air[:, 1] & ~air[:, 0]
         # A room on both sides, or the inside unknown: one canonical normal direction for
-        # the face's geometric plane.
+        # the face's geometric plane, that of the largest component of its normal as the
+        # planes' keys round it (the first of equal ones: a plane at 45 degrees to two
+        # axes has one direction whichever way its faces' normals are rounded).
         both = air[:, 0] == air[:, 1]
-        flip = np.take_along_axis(normals, np.abs(normals).argmax(axis=1)[:, None], 1) < 0
+        rounded = np.round(normals / PLANE_TOLERANCE)
+        flip = np.take_along_axis(rounded, np.abs(rounded).argmax(axis=1)[:, None], 1) < 0
         normals = np.where((back | (both & flip[:, 0]))[:, None], -normals, normals)
         offsets = np.einsum("ij,ij->i", normals, mesh.triangles[:, 0])
         keys = np.round(np.column_stack([normals, offsets]) / PLANE_TOLERANCE).astype(np.int64)
+        if both.any() and not both.all():
+            # A face with a room on both sides in the geometric plane of walls with a room
+            # on one side, none of which faces the canonical way, faces theirs: a partition
+            # or a free-standing panel in line with a wall is in the wall's plane whichever
+            # way the wall faces.
+            walls = int((~both).sum())
+            rows = np.concatenate([keys[~both], keys[both], -keys[both]])
+            label = np.unique(rows, axis=0, return_inverse=True)[1].reshape(-1)
+            wall = np.zeros(int(label.max()) + 1, dtype=bool)
+            wall[label[:walls]] = True
+            same, opposite = wall[label[walls:]].reshape(2, -1)
+            turn = both.copy()
+            turn[both] = opposite & ~same
+            normals = np.where(turn[:, None], -normals, normals)
+            offsets = np.where(turn, -offsets, offsets)
+            keys = np.where(turn[:, None], -keys, keys)
         _, first, face_plane = np.unique(keys, axis=0, return_index=True, return_inverse=True)
         face_plane = face_plane.reshape(-1)
         two_sided = np.zeros(len(first), dtype=bool)
@@ -318,6 +337,44 @@ class TraceModel:
         spread = np.zeros(self.plane_count)
         np.maximum.at(spread, self.face_plane, self.face_spread)
         return spread
+
+    @cached_property
+    def face_two_sided(self) -> np.ndarray:
+        """(F,) the faces with a room on both sides: a partition between two rooms or a
+        free-standing panel; every face when the model is not ``oriented``. A wall with
+        a room on one side has one side, also where its plane holds such a face
+        (:attr:`plane_two_sided`)."""
+        air = self.face_room >= 0
+        return self.plane_two_sided[self.face_plane] & (air[:, 0] == air[:, 1])
+
+    @cached_property
+    def geometric_plane(self) -> np.ndarray:
+        """(P,) for each plane the first of the planes that lie where it does, whichever
+        way they face: two walls with a room on one side in line with each other that
+        face opposite ways (the wall between two rooms drawn once for each, the two
+        sides of a step in a room's plan) are two planes in one geometric plane, and a
+        point has one image in both (worked out once); a partition or a panel in line
+        with them lies in the plane of one of them. Two planes lie in one place where
+        their normals and offsets, in multiples of :data:`PLANE_TOLERANCE` and with the
+        signs of one plane's turned where it faces the other way, round to numbers at
+        most one apart: always where they differ by less than that tolerance in each, on
+        whichever side of a rounding step either falls. So do two planes that each lie
+        where a third does."""
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
+        from scipy.spatial import cKDTree
+
+        count = self.plane_count
+        keys = np.round(np.column_stack([self.plane_normal, self.plane_offset]) / PLANE_TOLERANCE)
+        # Each plane as it faces and as it faces the other way: the pairs at most one
+        # apart in every number (whole numbers, so nearer than 1.5).
+        either = np.concatenate([keys, -keys])
+        pairs = cKDTree(either).query_pairs(1.5, p=np.inf, output_type="ndarray") % count
+        graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(count, count))
+        label = connected_components(graph, directed=False)[1]
+        first = np.full(count, count, dtype=np.int64)
+        np.minimum.at(first, label, np.arange(count))
+        return first[label]
 
     @cached_property
     def face_planes(self) -> tuple[np.ndarray, np.ndarray]:
