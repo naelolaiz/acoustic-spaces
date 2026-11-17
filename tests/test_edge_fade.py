@@ -3,6 +3,7 @@ fades in and out at them, as exact solutions do."""
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import numpy as np
@@ -753,3 +754,43 @@ def test_no_path_reflects_off_a_roof_s_plane_from_below(x: float) -> None:
         assert all(-66.0 - 1e-6 <= p[0] <= -54.0 + 1e-6 and p[1] >= 20.0 - 1e-6 for p in roof)
     # But 8 kHz, where 2 cm is half a wavelength.
     assert np.abs(levels[1] - levels[0])[:-1].max() < 0.1
+
+
+def test_a_sequence_is_found_by_a_path_with_its_image_off_its_planes(tmp_path: Path) -> None:
+    """A source by a screen's end over the ground: its reflection off the screen and then
+    the ground reaches a listener beside the screen; for one past the screen's end the
+    sequence is a miss that one event stops, its reflection off the screen's plane past
+    the screen. A path there with the sequence's image that reflects off its planes, in
+    whatever order they are numbered, is that sequence found, and no miss; a path with
+    its image off other planes is not."""
+    engine = _Engine(tmp_path, "screen end", (-1.0, 2.0, 3.0))
+    model = engine.model
+
+    def found(listener) -> early_stage.EarlyReflections:
+        return early_stage.find_paths(
+            model,
+            engine.source,
+            listener,
+            engine.candidates,
+            speed_of_sound=engine.c,
+            air=engine.air,
+            max_delay_s=0.5,
+            coherent=BANDS,
+        )
+
+    beside, past = np.array([-6.0, 3.0, 0.5]), np.array([-6.0, -14.0, 0.5])
+    paths = found(beside)
+    (twice,) = np.flatnonzero(paths.order == 2)
+    sequence = model.face_plane[paths.faces[twice]][None, :]
+    assert sequence[0, 0] > sequence[0, 1]  # the screen's plane, then the ground's
+    missed = engine.fade._missed(sequence, past, found(past), 0.5)
+    assert missed["planes"].tolist() == sequence.tolist() and missed["fail"].tolist() == [1]
+    image = model.mirror(model.mirror(engine.source[None, :], sequence[:, 0]), sequence[:, 1])
+    distance = np.linalg.norm(image - past, axis=1)
+    there = dataclasses.replace(
+        paths[np.array([twice])], direction=(image - past) / distance, distance_m=distance
+    )
+    assert engine.fade._missed(sequence, past, there, 0.5) is None
+    ground = dataclasses.replace(there, faces=[np.repeat(there.faces[0][1:], 2)])
+    missed = engine.fade._missed(sequence, past, ground, 0.5)
+    assert missed["planes"].tolist() == sequence.tolist()

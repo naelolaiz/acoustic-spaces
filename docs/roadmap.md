@@ -175,6 +175,17 @@ Edge diffraction:
   model's size off it: exactly in the plane of several roofs in a row the level is up
   to 9 dB below that just above it, and within twice that distance below the plane 9
   to 15 dB above that further below.
+- [ ] Corners to the least distance of a ray: the search for early paths takes what lies
+  within its tolerance for planes (a ten-millionth of the model's largest extent, 1 mm
+  in a model 10 km wide) of the line where faces meet as on that line. A source or a
+  listener within that distance of the line where a wall ends on another that goes on (a
+  T) has reflections that do not exist, off both sides of the ending wall at one point,
+  at 7 to 17 % of the places 7 m away, and at up to 3 % at four times the distance; at a
+  plain bend one such reflection, off both walls at one point, stays at 2 of 96 places
+  (seen at bends of 65 and 66.5 degrees, half the tolerance from the line). And two
+  different paths with one image of the source that reflect off the same surfaces in
+  another order count as one: between two rooms as deep either side of a partition, one
+  of 155 paths up to the fourth order (0.1 dB in a band).
 - [ ] The same reflections whichever way round: the rays of the source and those of
   the listener can find different reflections between two faces, such as two screens
   or a roof's wall and a screen level with the roof (up to 0.7 dB apart, and 8 dB
@@ -420,11 +431,12 @@ Outdoor acoustics, in steps:
   gradients, as over the open ground: the paths off façades and barriers are eigenrays
   in every band, with the rays' ground effect up to 2 kHz and their steps at caustics
   (see [Known issues](validation.md#known-issues)).
-- [ ] An absorbing layer for the parabolic equation's runs that a run's other listeners
-  do not move: the listeners and map points that share a run share its layer, which begins
-  as high and is as thick as any of them needs, and the narrow-angle equation's level
-  changes with it, by up to 0.07 dB per third octave out of the shadow and 0.76 dB 72 dB
-  below free field in the checks (see [Known issues](validation.md#known-issues)).
+- [ ] An absorbing layer for the parabolic equation's runs behind barriers and
+  buildings that takes up the sound an obstacle's top sends steeply up, and that a run's
+  other listeners do not move: there the listeners and map points that share a run share
+  its layer, and the level changes with where it begins, by up to 2.4 dB behind a tall
+  barrier close to the source in the checks (see
+  [Known issues](validation.md#known-issues)).
 - [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
   the shadow): out of the shadow the equation's field goes through it, but the rays'
@@ -464,9 +476,8 @@ Sources:
 - [x] Sources and listeners in groups, and left out of a run without being removed
   (`group`, `enabled: false`); in the editor a tick and an eye per source, listener
   and group.
-- [ ] A rule for the measured directions equally near a point of a directivity table:
-  the last digits of a product choose among them, which can move the table there by up
-  to 1.3 dB (see [Known issues](validation.md#known-issues)).
+- [x] A measured directivity table takes the directions equally near a point of its
+  grid alike, and a direction given more than once as one.
 
 Examples:
 
@@ -533,8 +544,8 @@ Movement:
   **Render movement…** heard binaurally and with Doppler, and units for every number in
   the panel and in Run demo, with the pass's length, speed and duration.
 - [x] Faster walks outdoors: the places of a walking source share the parabolic
-  equation's runs, each listener getting what a run of its own place would give it but
-  for the run's absorbing layer (see [Known issues](validation.md#known-issues)).
+  equation's runs, each listener over the open ground getting what a run of its own
+  place would give it.
 - [x] The sound a source sends each way, along a walk with Doppler: each early path
   carries what is sent the way it leaves the source (`acoustic_spaces.emission`).
 - [x] A helicopter's rotors: their tones from the blades' steady loads, checked against
