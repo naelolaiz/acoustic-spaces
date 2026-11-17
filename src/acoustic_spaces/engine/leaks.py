@@ -29,6 +29,7 @@ from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
 from acoustic_spaces.engine.particles import _lambert
+from acoustic_spaces.geometry.checks import open_edges_of
 from acoustic_spaces.room import Room, _label_text
 from acoustic_spaces.spatial.directions import fibonacci_sphere
 
@@ -243,12 +244,7 @@ def open_edges(room: Room) -> tuple[np.ndarray, np.ndarray]:
     """The edges of the room's mesh that only one face has: (E, 2) their corners (indices
     into the mesh's vertices, in the order the face runs along them) and (E,) that
     face."""
-    faces = room.mesh.faces
-    directed = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
-    key = directed.min(axis=1) * (int(faces.max(initial=0)) + 1) + directed.max(axis=1)
-    _, edge, counts = np.unique(key, return_inverse=True, return_counts=True)
-    rows = np.flatnonzero(counts[edge.reshape(-1)] == 1)
-    return directed[rows], rows % len(faces)
+    return open_edges_of(room.mesh.faces)
 
 
 def _gaps(

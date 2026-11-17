@@ -35,6 +35,7 @@ from acoustic_spaces import Room, Scene, _native
 from acoustic_spaces.engine.impedance import Admittance
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.wave import COURANT, source_signal, wave_responses
+from acoustic_spaces.scene.model import WaveStage
 
 # The grid's origin is moved off the model's round numbers by these fractions of a cell.
 OFFSET = np.array([0.0137, 0.0219, 0.0291])
@@ -2455,6 +2456,47 @@ def test_wave_responses_give_the_fit_the_faces_of_the_bvh(tmp_path, monkeypatch)
     assert info["wave_open"] == 1.0 and info["wave_fitted_walls"] == 1.0
     assert info["wave_cells"] == reference["wave_cells"]
     assert np.array_equal(opened[0].signals, left_out[0].signals)
+
+
+def test_a_warning_names_the_open_edges_fitted_walls_leave_out(tmp_path):
+    # The holed box of the test above. The wave solver takes the opening's faces out, so the
+    # hole's rim is four open edges, 4 m (the square's four sides, summed here), as with the
+    # opening left out of the file; closed by an opaque material, the box has none. A
+    # free-standing panel 1 x 0.5 m in the box adds its four edges, 3 m (its diagonal has both
+    # its faces). The warning comes with fitted walls only, and only with the wave solver on.
+    lo, hi = np.array([0.1, 0.1, 0.1]), np.array([4.1, 3.1, 2.6])
+    v, f = holed_box(lo, hi, 1.0)
+    walls, ring = f[:10], f[10:]
+    opening = np.array([[12, 13, 14], [12, 14, 15]])
+    panel = np.array([[2.0, 1.0, 0.5], [2.0, 2.0, 0.5], [2.0, 2.0, 1.0], [2.0, 1.0, 1.0]])
+    v_panel = np.vstack([v, panel])
+    panel_faces = np.array([[0, 1, 2], [0, 2, 3]]) + len(v)
+    materials = {
+        **HARD,
+        "gap": {"absorption": [1.0] * 8, "scattering": 0.0, "transmission": [1.0] * 8},
+    }
+    source, listener = (1.13, 1.37, 1.21), (3.02, 2.11, 1.43)
+    cases = [
+        ("gap", v, [("hole", opening)], "have 4 open edges (4.00 m)"),
+        ("gap", v, [], "have 4 open edges (4.00 m)"),
+        ("m", v, [("hole", opening)], None),
+        ("gap", v_panel, [("hole", opening), ("panel", panel_faces)], "have 8 open edges (7.00 m)"),
+        ("m", v_panel, [("hole", opening), ("panel", panel_faces)], "have 4 open edges (3.00 m)"),
+    ]
+    for hole, vertices, more, said in cases:
+        groups = [("walls", walls), *more, ("walls", ring)]
+        room = obj_room(
+            tmp_path / "box.obj", vertices, groups, source, listener, materials, {"hole": hole}
+        )
+        for enabled, walls_kind in ((True, "fitted"), (True, "cell_faces"), (False, "fitted")):
+            room.scene.simulation.wave = WaveStage(enabled=enabled, walls=walls_kind)
+            notes = [w for w in room.warnings() if "walls is fitted, and the surfaces" in w]
+            if said is None or not enabled or walls_kind != "fitted":
+                assert notes == []
+                continue
+            (note,) = notes
+            assert said in note
+            assert "a panel comes out up to a cell shorter" in note
 
 
 # ---- The checks of validation/wave_walls.py ----------------------------------------------------

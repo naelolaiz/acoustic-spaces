@@ -151,6 +151,14 @@ def _edge_counts(faces: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]
     return directed, edge.reshape(-1), counts
 
 
+def open_edges_of(faces: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The edges that only one of the faces has: (E, 2) their corners (vertex indices, in
+    the order the face runs along them) and (E,) that face."""
+    directed, edge, counts = _edge_counts(faces)
+    rows = np.flatnonzero(counts[edge] == 1)
+    return directed[rows], rows % len(faces)
+
+
 def _split_t_junctions(
     vertices: np.ndarray, faces: np.ndarray, labels: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
