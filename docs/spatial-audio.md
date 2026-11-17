@@ -416,8 +416,10 @@ acoustic-spaces walkthrough scene.yaml car=engine.wav --listener kerb --out pass
 ```
 
 - Each early path (the direct sound, each reflection, the sound bent round each edge)
-  is followed from place to place and played through a delay that changes smoothly as
-  the walker goes: a cubic curve through the path's delay at each place, read through a
+  is followed from place to place (at the next place it is the path off the same
+  surfaces over the same edge whose delay carries on from its own, changed by no more
+  than the time sound takes over the walker's step, with a margin) and played through a
+  delay that changes smoothly as the walker goes: a cubic curve through the path's delay at each place, read through a
   windowed sinc that cuts off below the Nyquist frequency as the pitch rises, so that
   nothing aliases. A walking source is heard at the retarded time, when the sound it
   sent from each place arrives; a walking listener hears what reaches it at each place.
