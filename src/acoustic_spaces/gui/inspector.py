@@ -4224,6 +4224,24 @@ class SimulationPage(Page):
         self.wave_band.setToolTip(
             _("The highest band it computes; each costs about 16 times the one below")
         )
+        self.wave_walls = QCheckBox(_("Fitted walls"))
+        self.wave_walls.setToolTip(
+            _(
+                "Put the walls where the model has them, cutting through the grid's cells, "
+                "instead of on the cell faces nearest them: room modes, and levels next to "
+                "rigid walls, come out closer to the exact ones, most of all with walls along "
+                "the grid. Walls at steep angles and absorbing walls are less exact, and in the "
+                "cell a free edge ends in, a free-standing panel comes out up to a cell shorter "
+                "and an opening up to a cell wider on each side (see the documentation). Takes "
+                "the standard (7-point) stencil, indoors only. At 125 Hz the wave solver took "
+                "1.1 to 1.4 times as long as with walls on cell faces and the default stencil "
+                "in seven of the examples, and up to 2.6 times in a small room holding a "
+                "sphere of 5120 faces, where fitting the model to the grid took most of the "
+                "extra time; its set-up took 2.7 to 4.1 times as much memory at its peak. A "
+                "model with cracks or with surfaces laid on one another is refused, with the "
+                "faces named"
+            )
+        )
         self.wave_device = QComboBox()
         _fill(self.wave_device, WAVE_DEVICES)
         self.wave_device.setToolTip(
@@ -4247,6 +4265,7 @@ class SimulationPage(Page):
         )
         wave_form.addRow(self.wave)
         wave_form.addRow(_("Up to band (Hz)"), self.wave_band)
+        wave_form.addRow(self.wave_walls)
         wave_form.addRow(_("Wind"), self.wave_wind)
         wave_form.addRow(_("Run on"), self.wave_device)
         layout.addWidget(wave)
@@ -4465,6 +4484,9 @@ class SimulationPage(Page):
             (self.wave, "wave.enabled"),
         ):
             check.toggled.connect(lambda on, key=key: self._set(key, on))
+        self.wave_walls.toggled.connect(
+            lambda on: self._set("wave.walls", "fitted" if on else "cell_faces")
+        )
         self.auto_transition.toggled.connect(
             lambda on: self._set("transition_ms", None if on else self.transition.value())
         )
@@ -4519,6 +4541,9 @@ class SimulationPage(Page):
         self.wave_band.setEnabled(s.wave.enabled)
         _set_device(self.wave_device, s.wave.device)
         self.wave_device.setEnabled(s.wave.enabled)
+        self.wave_walls.setChecked(s.wave.walls == "fitted")
+        # Fitted walls take the standard stencil, indoors only.
+        self.wave_walls.setEnabled(s.wave.enabled and not outdoor and s.wave.scheme != "isotropic")
         _choose(self.wave_wind, s.wave.wind)
         self.wave_wind.setEnabled(s.wave.enabled and outdoor)  # wind blows outdoors only
         self.threads.setValue(s.performance.threads)

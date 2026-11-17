@@ -2704,6 +2704,61 @@ def test_ground_impedance_and_zones(window) -> None:
     assert simulation.coherent.model().item(simulation.coherent.findData(500)).isEnabled()
 
 
+def test_the_fitted_walls_box_sets_the_wave_walls(window) -> None:
+    """The Fitted walls box writes simulation.wave.walls and shows the scene's value. It
+    can be changed only with the wave solver on, indoors and with a stencil other than the
+    isotropic one."""
+
+    def wave(**fields) -> None:
+        window.document.edit("wave", lambda data: data["simulation"]["wave"].update(fields))
+
+    window.open_example(example_path("shoebox"))
+    window.select("simulation")
+    page = window.inspector.pages["simulation"]
+    box = page.wave_walls
+    assert box.text() == "Fitted walls" and "7-point" in box.toolTip()
+    # It is on the page, in the row under "Up to band (Hz)".
+    form = page.wave_band.parentWidget().layout()
+    assert box.isVisibleTo(page)
+    assert form.getWidgetPosition(box)[0] == form.getWidgetPosition(page.wave_band)[0] + 1
+    # Indoors with the auto stencil, the wave solver off: the box shows the scene's walls,
+    # on cell faces, and cannot change them.
+    settings = window.document.scene.simulation.wave
+    assert not settings.enabled and settings.scheme == "auto" and settings.walls == "cell_faces"
+    assert not box.isChecked() and not box.isEnabled()
+    page.wave.setChecked(True)
+    assert box.isEnabled() and not box.isChecked()
+    # Ticked, it writes fitted walls and nothing else; unticked, walls on cell faces.
+    before = window.document.scene.to_data()
+    box.setChecked(True)
+    after = window.document.scene.to_data()
+    assert after["simulation"]["wave"]["walls"] == "fitted"
+    after["simulation"]["wave"]["walls"] = "cell_faces"
+    assert after == before
+    box.setChecked(False)
+    assert window.document.scene.to_data() == before
+    # It shows the scene's value, with the wave solver off or on.
+    wave(enabled=False, walls="fitted")
+    assert box.isChecked() and not box.isEnabled()
+    wave(enabled=True)
+    assert box.isChecked() and box.isEnabled()
+    wave(scheme="standard")
+    assert box.isChecked() and box.isEnabled()
+    # The isotropic stencil, indoors with the wave solver on: walls on cell faces only.
+    wave(walls="cell_faces", scheme="isotropic")
+    settings = window.document.scene.simulation.wave
+    assert settings.enabled and settings.scheme == "isotropic"
+    assert not box.isChecked() and not box.isEnabled()
+    # Outdoors, with the wave solver on and the auto stencil: walls on cell faces only.
+    window.open_example(example_path("open_air_stage"))
+    window.select("simulation")
+    page.wave.setChecked(True)
+    settings = window.document.scene.simulation.wave
+    assert settings.enabled and settings.scheme == "auto" and settings.walls == "cell_faces"
+    assert page.wave_wind.isEnabled()
+    assert not box.isChecked() and not box.isEnabled()
+
+
 def test_parabolic_equation_choice(window) -> None:
     """Outdoors in wind the simulation page picks the narrow-angle or the wide-angle
     parabolic equation; in still air and in a room there is none to pick."""
