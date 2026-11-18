@@ -9,6 +9,10 @@
   panel in the opening between two such walls, a room and its mirror image were up to
   1.1 dB apart, and in a room with two such planes up to 1.8 dB. It now takes them by
   where they lie and the way each face faces.
+- Fixed: faces that face one way with planes less than 0.01 mm apart are one plane on
+  either side of a step of the planes' rounding: a panel 0.01 mm off a wall's plane was
+  a plane of its own, up to 0.40 dB from the level in line at 125 Hz with edge
+  diffraction, and now has that level.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

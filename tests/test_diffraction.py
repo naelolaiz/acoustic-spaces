@@ -297,13 +297,24 @@ IN_LINE = {
 
 
 def _in_line_with_a_wall(
-    folder: Path, sign: float, source, listener, room: str = "x", partition=None, **early
+    folder: Path,
+    sign: float,
+    source,
+    listener,
+    room: str = "x",
+    partition=None,
+    shift: float = 0.0,
+    panel_last: bool = False,
+    **early,
 ) -> Room:
     """The ``room`` of ``IN_LINE``; with ``sign`` -1 its mirror image across the plane of
     the panel, where the walls in that plane face the other way. With ``partition`` (a
     loss in dB), room "x" with a partition that lets sound through from y = 0 to 5 in
-    place of the panel: two rooms."""
+    place of the panel: two rooms. With ``shift``, the panel that far off the plane (m,
+    along the axis across it); with ``panel_last``, the panel after the walls in the
+    model, where the plane takes the wall's normal."""
     plan, floor, ends, axis = IN_LINE[room]
+    ends = [tuple(c + (shift if i == axis else 0.0) for i, c in enumerate(end)) for end in ends]
     walls = [
         [(*a, 0.0), (*b, 0.0), (*b, 3.0), (*a, 3.0)]
         for a, b in zip(plan, plan[1:] + plan[:1], strict=True)
@@ -313,6 +324,8 @@ def _in_line_with_a_wall(
     a, b, height = (*ends, 2.0) if partition is None else ((5, 0), (5, 5), 3.0)
     # The panel first: its plane takes the first of its faces' normals.
     groups = {"panels": [[(*a, 0.0), (*b, 0.0), (*b, height), (*a, height)]], "walls": walls}
+    if panel_last:
+        groups = {"walls": walls, "panels": groups["panels"]}
     mirror = np.ones(3)
     mirror[axis] = sign
     lines = []
@@ -321,7 +334,7 @@ def _in_line_with_a_wall(
         for quad in quads:
             lines += ["v " + " ".join(f"{c:.15g}" for c in mirror * corner) for corner in quad]
             lines.append("f -4 -3 -2 -1")
-    obj = folder / f"in_line_{room}{sign:+.0f}.obj"
+    obj = folder / f"in_line_{room}{sign:+.0f}{shift:+.0e}{'p' if panel_last else ''}.obj"
     obj.write_text("\n".join(lines) + "\n")
     wall = {"absorption": [0.1] * 8, "scattering": 0.0}
     panel = wall if partition is None else wall | {"transmission_loss": partition}
@@ -504,6 +517,45 @@ def test_walls_facing_both_ways_in_the_plane_of_a_panel_sound_as_their_mirror_im
         )
         levels.append(10.0 * np.log10(total_energy(early_paths(room))))
     np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("source", "listener", "shift", "panel_last"),
+    [
+        ([3.637, 0.775, 1.076], [0.651, 3.924, 1.546], 1e-5, False),
+        ([3.637, 0.775, 1.076], [0.651, 3.924, 1.546], -1e-5, False),
+        ([3.637, 0.775, 1.076], [0.651, 3.924, 1.546], 1e-5, True),
+        ([5.69, 1.949, 0.957], [10.094, 2.916, 1.058], -1e-5, False),
+    ],
+)
+def test_a_panel_a_hundredth_of_a_millimetre_off_a_wall_s_plane_is_in_it(
+    tmp_path: Path, source, listener, shift: float, panel_last: bool
+) -> None:
+    """The panel of room "x" 0.01 mm behind the wall's plane or in front of it lies in
+    that plane, and the early level is that of the panel in line, also with the plane
+    taking the wall's normal (the panel after the walls in the model, its faces then
+    0.01 mm off the plane): faces make one plane where TraceModel.geometric_plane has
+    one place, on either side of a step of the planes' rounding, and the edge fade finds
+    a reflection on such a face. As a plane of its own the panel took the terms of a
+    panel off the wall's plane, up to 0.40 dB from the level in line at 125 Hz, and
+    0.76 dB with the edge fade taking edges and faces by their place; as one plane with
+    its faces behind it, the ray that looks for the face a reflection lies on passed
+    short of them: 0.48 dB."""
+    levels, planes = [], []
+    for d in (0.0, shift):
+        room = _in_line_with_a_wall(
+            tmp_path,
+            1.0,
+            source,
+            listener,
+            shift=d,
+            panel_last=panel_last,
+            diffraction="first_order",
+        )
+        planes.append(TraceModel.from_room(room).plane_count)
+        levels.append(10.0 * np.log10(total_energy(early_paths(room))))
+    assert planes[1] == planes[0]
+    np.testing.assert_allclose(levels[1], levels[0], atol=0.005)
 
 
 # -- diffracted paths -----------------------------------------------------------------

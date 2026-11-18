@@ -190,6 +190,10 @@ class EdgeFade:
         # line with them in the plane of one of them), as a scene and its mirror image
         # have them alike.
         self._edge_plane = self.model.geometric_plane[self.edges.plane]
+        # The largest TraceModel.plane_spread of the planes in each plane's place.
+        spread = np.zeros(self.model.plane_count)
+        np.maximum.at(spread, self.model.geometric_plane, self.model.plane_spread)
+        self._place_spread = spread[self.model.geometric_plane]
         # The edges of each geometric plane (of either face), by plane.
         pairs = np.unique(
             np.concatenate(
@@ -336,7 +340,10 @@ class EdgeFade:
             side = chain[j - 1][rows]
             on = (hit >= 0) & ~model.transparent[safe] & _facing(model, safe, side)
             on &= model.geometric_plane[model.face_plane[safe]] == model.geometric_plane[plane]
-            for i in np.flatnonzero((hit >= 0) & ~on):  # another face right there
+            # Another face right there, or one in a place whose faces do not all lie in
+            # its planes, which the ray may pass short of.
+            again = ~on & ((hit >= 0) | (self._place_spread[plane] > 0.0))
+            for i in np.flatnonzero(again):
                 hit[i] = self._reflecting_face(plane[i], points[rows[i], j], side[i])
                 on[i] = hit[i] >= 0
             faces[rows, j - 1] = np.where(on, hit, -1)
