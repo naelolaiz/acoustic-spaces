@@ -168,6 +168,12 @@ def mesh_cells(vertices: np.ndarray, faces: np.ndarray, solids: bool = False) ->
     side_a = 2 * owner[a] + np.where(ahead[a], 0, 1)
     side_b = 2 * owner[b] + np.where(ahead[b], 1, 0)
     label = _components(2 * n, side_a, side_b)
+    # The sides that face a wedge of no angle (between coincident faces) at some edge,
+    # not the one from the last face round to the first; a cell whose sides all do is a
+    # sliver.
+    thin = np.zeros(2 * n, dtype=bool)
+    shut = (level[a] == level[b]) & (np.arange(len(order)) != last)
+    thin[side_a[shut]] = thin[side_b[shut]] = True
 
     # Volume of each cell: its sides with the normal pointing out of it.
     cone = np.einsum("ij,ij->i", tri[:, 0], np.cross(tri[:, 1], tri[:, 2])) / 6.0
@@ -176,7 +182,9 @@ def mesh_cells(vertices: np.ndarray, faces: np.ndarray, solids: bool = False) ->
     volume = np.bincount(side[:, 0], weights=-cone, minlength=count) + np.bincount(
         side[:, 1], weights=cone, minlength=count
     )
-    side, volume = _nest(tri, normal, side, volume)
+    sliver = np.ones(count, dtype=bool)
+    np.logical_and.at(sliver, label, thin)
+    side, volume = _nest(tri, normal, side, volume, sliver)
     tolerance = float(np.abs(volume).max(initial=0.0)) * EMPTY_SHARE
     outside = volume < -tolerance
     enclosed = volume > tolerance
@@ -256,27 +264,31 @@ def _components(nodes: int, a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return rank[inverse.reshape(-1)].astype(np.int64)
 
 
-def _nest(tri, normal, side, volume):
+def _nest(tri, normal, side, volume, sliver):
     """Joins the outer sides of shells, and panels, that lie inside a cell to that cell.
 
     A shell joined to the rest at no edge is a cell of negative volume by itself; a
     free-standing panel that touches nothing, a cell of no volume with both sides of its
-    faces. A point just off a face, on the cell's side, tells which enclosed cell it lies
-    in (the smallest that holds it), if any. A face may lie on another surface, as a
-    platform's underside on the floor, and its point then on that surface's far side:
-    points off the largest faces of up to ``_NEST_PLANES`` planes vote by those faces'
-    area, until the rest could no longer change the outcome.
+    faces, or, drawn as two faces back to back, with the sides they turn away from each
+    other (not the sliver between them: ``sliver`` (C,) marks the cells all of whose
+    sides face such a gap). A point just off a face, on the cell's side, tells which
+    enclosed cell it lies in (the smallest that holds it), if any. A face may lie on
+    another surface, as a platform's underside on the floor, and its point then on that
+    surface's far side: points off the largest faces of up to ``_NEST_PLANES`` planes
+    vote by those faces' area, until the rest could no longer change the outcome.
     """
     tolerance = float(np.abs(volume).max(initial=0.0)) * EMPTY_SHARE
-    both = side[side[:, 0] == side[:, 1], 0]
-    loose = np.zeros(len(volume), dtype=bool)
-    loose[both] = np.abs(volume[both]) <= tolerance
+    enclosed = volume > tolerance
+    across = np.zeros(len(volume), dtype=bool)
+    np.logical_or.at(across, side[:, 0], enclosed[side[:, 1]])
+    np.logical_or.at(across, side[:, 1], enclosed[side[:, 0]])
+    loose = (np.abs(volume) <= tolerance) & ~across & ~sliver
     shells = np.flatnonzero((volume < -tolerance) | loose)
     if len(shells) < 2 and not loose.any():
         return side, volume
     size = float(np.ptp(tri.reshape(-1, 3), axis=0).max()) or 1.0  # the faces' extent
     area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
-    enclosed = np.flatnonzero(volume > tolerance)
+    enclosed = np.flatnonzero(enclosed)
     parent = np.arange(len(volume))
     # The sides of each cell, in the order of their faces.
     order = np.argsort(side.reshape(-1), kind="stable")

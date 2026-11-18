@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed: a panel standing free in a room, drawn as two faces back to back, made the
+  model read as not closed: the faces' outer sides and the gap between them were spaces
+  of no volume of their own, which no room held, so the model had no volume and the
+  statistical late method refused it; with a material of its own on each side, the
+  panel's late part was 2.4 to 3.6 dB off its mirror image. It now sounds as the panel
+  drawn once, with its edges' diffraction too.
 - Fixed: where two rooms modelled as closed models touch, each with a wall of its own
   where they meet, each face of that wall now reflects and absorbs in its own room, on
   the CPU and the GPU. In two 5 x 4 x 3 m rooms whose faces there absorb 0.9 and 0.1,

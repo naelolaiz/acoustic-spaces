@@ -479,8 +479,10 @@ def _wedges(
     keep = theta <= np.pi - math.radians(min_bend_deg)
     if model.oriented:
         # Face n lies behind face 0: the solid is inside the angle. Between faces with a
-        # room on both sides (a bent panel), the side that opens wider diffracts.
-        keep &= (side < 0.0) | model.face_two_sided[owner[h0]]
+        # room on both sides (a bent panel), the side that opens wider diffracts, and
+        # between two faces back to back (a panel drawn as two), the edge is a free one.
+        folded = np.einsum("ij,ij->i", a0, a1) >= 1.0 - 1e-12
+        keep &= (side < 0.0) | model.face_two_sided[owner[h0]] | folded
     return geometry, owner, h0, h1, single, theta, side, keep
 
 
