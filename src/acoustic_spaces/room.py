@@ -41,7 +41,7 @@ from acoustic_spaces.geometry import (
     load_mesh,
 )
 from acoustic_spaces.geometry.cells import MeshCells, cell_of
-from acoustic_spaces.geometry.checks import MERGE_TOLERANCE_M
+from acoustic_spaces.geometry.checks import MERGE_TOLERANCE_M, open_edges_of
 from acoustic_spaces.geometry.outdoor import SKY, Layout, outdoor_mesh
 from acoustic_spaces.materials.bands import Resolution, band_centres
 from acoustic_spaces.scene import Scene
@@ -510,6 +510,7 @@ class Room:
             out.extend(self.scene.geometry.footprint_notes())
         out.extend(self._run_size())
         out.extend(self._wave_grid())
+        out.extend(self._fitted_open_edges())
         return out
 
     def _air_pressure(self) -> list[str]:
@@ -552,10 +553,14 @@ class Room:
         default = WaveStage().points_per_wavelength
         if not wave.enabled or wave.points_per_wavelength >= default:
             return []
-        # The stencil the run takes: auto's is the isotropic one but round an open model.
+        # The stencil the run takes: auto's is the isotropic one but round an open model or
+        # with fitted walls, which take the standard one only.
         closed = self.report.closed and self.outdoor is None
-        if wave.scheme == "isotropic" or (wave.scheme == "auto" and closed):
+        fitted = wave.walls == "fitted"
+        if wave.scheme == "isotropic" or (wave.scheme == "auto" and closed and not fitted):
             stencil, name = 19, "the isotropic (19-point) stencil"
+        elif fitted:
+            stencil, name = 7, "the standard (7-point) stencil that fitted walls take"
         else:
             which = "the" if wave.scheme == "standard" else "an open model's"
             stencil, name = 7, f"{which} standard (7-point) stencil"
@@ -566,6 +571,32 @@ class Room:
             f"travel up to {100 * slow_by(stencil, per_wavelength):.2f} % slow in still "
             f"air ({100 * slow_by(stencil, default):.2f} % at {default:g}), and the modes "
             "there come out that much low"
+        ]
+
+    def _fitted_open_edges(self) -> list[str]:
+        """With fitted walls, the open edges of the surfaces the wave solver takes (every
+        face but the openings): a free-standing panel's, or a single-surface wall's round
+        an opening. In the grid cell such an edge ends in, the fit leaves the surface out."""
+        wave = self.scene.simulation.wave
+        if not wave.enabled or wave.walls != "fitted" or self.outdoor is not None:
+            return []
+        mesh = self.mesh
+        faces = mesh.faces
+        through = self.face_transmission(self.scene.simulation.bands)
+        if through is not None:
+            faces = faces[~np.all(through >= 1.0, axis=1)]
+        corners, _ = open_edges_of(faces)
+        if not len(corners):
+            return []
+        ends = mesh.vertices[corners]
+        length = float(np.linalg.norm(ends[:, 1] - ends[:, 0], axis=1).sum())
+        return [
+            f"simulation.wave.walls is fitted, and the surfaces the wave solver takes have "
+            f"{len(corners)} open edges ({length:.2f} m), such as a free-standing panel's or "
+            "a single-surface wall's round an opening: in the grid cell such an edge ends in, "
+            "fitted walls leave the surface out, so a panel comes out up to a cell shorter "
+            "(the level behind it about 1 dB off) and an opening up to a cell wider on each "
+            "side; a finer grid (more points_per_wavelength) narrows this"
         ]
 
     def _run_size(self) -> list[str]:

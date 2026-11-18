@@ -32,6 +32,11 @@ octave bands replace the ray-traced ones.
   the model lies between that sound and the layer (:func:`_open_sides`). Openings are not
   surfaces here: the air flows through them. Surfaces that let only part of the sound
   through are not modelled, so a model with any stops the wave solver with an error.
+- ``walls`` says where the grid's walls lie: ``"cell_faces"``, each surface on the cell
+  faces nearest it, or ``"fitted"``, where the model has it, cut exactly through the
+  cells. Fitted walls take the standard stencil (``auto`` takes it for them) and still
+  air with one speed of sound: they are refused with the isotropic stencil, outdoors and
+  in moving air.
 - At these frequencies the source radiates the same way in all directions. The
   listener records the pressure and, from its gradient, the direction the sound comes
   from (first-order Ambisonics), so spatial outputs keep the low end's direction.
@@ -116,6 +121,8 @@ ISOTROPIC_COURANT = math.sqrt(0.75)
 Scheme = Literal["auto", "standard", "isotropic"]
 #: How the wave solver takes the wind (see :func:`wave_responses`).
 WindModel = Literal["effective", "moving"]
+#: Where the grid's walls lie (see :func:`wave_responses`).
+Walls = Literal["cell_faces", "fitted"]
 #: The stencils' points, and their Courant numbers, by scheme.
 STENCILS = {"standard": (7, COURANT), "isotropic": (19, ISOTROPIC_COURANT)}
 #: Each stencil's link weights, by its points: of an axial link and of an edge link (the
@@ -812,6 +819,7 @@ def wave_responses(
     say: Callable[[str], None] | None = None,
     label: str = "",
     wind: WindModel = "effective",
+    walls: Walls = "cell_faces",
 ) -> tuple[list[WaveResponse], dict[str, float]]:
     """The wave bands of the responses from ``source`` to each of ``listeners`` in the
     room of ``model`` (a :class:`~acoustic_spaces.engine.model.TraceModel`), and run
@@ -820,8 +828,15 @@ def wave_responses(
     ``"auto"``, the isotropic one but round an open model, where only the standard one
     has the matched layer. ``wind`` says how it takes the wind outdoors: ``"effective"``,
     as a speed of sound changed by the wind's component along the horizontal from the
-    source, or ``"moving"``, as air that moves (see the module's notes)."""
+    source, or ``"moving"``, as air that moves (see the module's notes). ``walls`` says
+    where the grid's walls lie: ``"cell_faces"``, on the cell faces nearest the surfaces,
+    or ``"fitted"``, where the model has them, cut through the cells; fitted walls take
+    the standard stencil whatever the ``scheme`` but ``"isotropic"``, which they refuse,
+    as they refuse an outdoor model and moving air. The fit's own refusals of a model (a
+    crack, faces laid on one another, a model reaching into the matched layer) are
+    ``ValueError`` starting "fitted walls:", raised before any step."""
     from acoustic_spaces import _native
+    from acoustic_spaces.scene.model import FITTED_WALLS_OUTDOORS, FITTED_WALLS_STENCIL
 
     say = say or (lambda _: None)
     use_gpu(device)  # an unknown device, or the GPU missing, before any work
@@ -832,6 +847,11 @@ def wave_responses(
         raise ValueError(f"unknown scheme {scheme!r}; use auto, standard or isotropic")
     if wind not in ("effective", "moving"):
         raise ValueError(f"unknown wind {wind!r}; use effective or moving")
+    if walls not in ("cell_faces", "fitted"):
+        raise ValueError(f"unknown walls {walls!r}; use cell_faces or fitted")
+    fitted = walls == "fitted"
+    if fitted and scheme == "isotropic":
+        raise ValueError(FITTED_WALLS_STENCIL)
     for what, value in (
         ("points_per_wavelength", points_per_wavelength),
         ("length_s", length_s),
@@ -859,11 +879,11 @@ def wave_responses(
                 "some through (openings, with transmission 1, are fine): set "
                 "simulation.wave.enabled to false or give them no transmission"
             )
-    bvh = model.bvh
+    # The faces of the grid's walls, and their tree; fitted walls are cut from these.
+    bvh, faces = model.bvh, mesh.faces
     if not solid.all():  # openings: holes in the grid's walls
-        bvh = _native.Bvh(
-            mesh.vertices, np.ascontiguousarray(mesh.faces[solid]), split=model.ray_tree
-        )
+        faces = np.ascontiguousarray(mesh.faces[solid])
+        bvh = _native.Bvh(mesh.vertices, faces, split=model.ray_tree)
     points = np.vstack([np.asarray(source, dtype=float).reshape(1, 3), listeners])
     centres = band_centres(model.bands)
     bands = (OCTAVE_BANDS_HZ.index(max_band_hz) + 1) * BANDS_PER_OCTAVE[model.bands]
@@ -880,6 +900,8 @@ def wave_responses(
         rows, face_material = np.unique(coefficients, axis=0, return_inverse=True)
 
     outdoor = model.room.outdoor is not None
+    if fitted and outdoor:
+        raise ValueError(FITTED_WALLS_OUTDOORS)
     weather = _Weather.of(model, source)
     windy = False  # the wind blows somewhere over the scene
     if weather is not None:
@@ -889,8 +911,22 @@ def wave_responses(
         weathers = weather.weathers if weather.zones is not None else [weather.atmosphere]
         windy = any(np.any(np.asarray(w.wind_speed(z - model.ground)) != 0.0) for w in weathers)
     moving = windy and wind == "moving"  # (temperature alone needs no moving air)
+    if fitted and weather is not None:
+        # Only an outdoor scene has a weather, and outdoors is refused above; the fitted
+        # solver takes still air with one speed of sound over the grid, so a weather that
+        # reaches here all the same is refused, its moving air or its speed per cell.
+        if moving:
+            raise ValueError(
+                "fitted walls are not available in moving air: set simulation.wave.walls "
+                "to cell_faces, or simulation.wave.wind to effective"
+            )
+        raise ValueError(
+            "fitted walls take one speed of sound over the grid, and the weather gives each "
+            "cell its own: set simulation.wave.walls to cell_faces"
+        )
 
     open_sides: list[np.ndarray] = []  # the sides whose layer needs room, once found
+    fit_seconds: list[float] = []  # with fitted walls, the fit's on each grid made
 
     def layout(courant: float, layer: int, speed: float, per_wavelength: float):
         """The grid for the stencil's ``courant``, with ``layer`` cells of matched
@@ -1001,6 +1037,10 @@ def wave_responses(
             [np.full(len(b), m, dtype=np.int64) for m, b in enumerate(branches)]
         )
         probes = np.vstack([_probe_points(p, h) for p in listeners])
+        # Fitted walls: the arrays the walls' tree is built from, the faces in its order.
+        fitting = (
+            {"fitted_walls": True, "vertices": mesh.vertices, "faces": faces} if fitted else {}
+        )
         try:
             solver = _native.WaveSolver(
                 bvh,
@@ -1023,6 +1063,7 @@ def wave_responses(
                 speeds,
                 *flow,
                 _PROBES,
+                **fitting,
             )
         except ValueError as error:
             if "the wind round the model's solids" not in str(error):
@@ -1033,6 +1074,8 @@ def wave_responses(
                 "simulation.wave.wind to effective, or lower max_band_hz or "
                 "points_per_wavelength"
             ) from error
+        if fitted:
+            fit_seconds.append(float(solver.cut_stats["seconds"]))
         return solver, grid, fits, probes, courant, extremes, still
 
     def kept(stencil: str, layer: int, still_air: bool = False):
@@ -1042,9 +1085,11 @@ def wave_responses(
         return built if built[0].open == bool(layer) else None
 
     # The isotropic stencil, but round an open model the standard one with its matched
-    # layer, which the isotropic one has none of. An outdoor model's sky is an opening,
-    # so its grid is open unless the source is shut in: the one with the layer first,
-    # and the isotropic stencil refused before any grid is made.
+    # layer, which the isotropic one has none of, and with fitted walls the standard one
+    # (they take no other). An outdoor model's sky is an opening, so its grid is open
+    # unless the source is shut in: the one with the layer first, and the isotropic
+    # stencil refused before any grid is made. With fitted walls the model is fitted on
+    # each grid made: an open model's twice, its closed grid's fit thrown away.
     if scheme == "isotropic" and outdoor:
         raise ValueError(
             "outdoors the isotropic stencil is not available (it has no matched layer for "
@@ -1054,7 +1099,7 @@ def wave_responses(
     if built is None:
         # A closed model's air is still, whichever way the wind is taken: no wind blows
         # through its walls (outdoors, a source shut in a closed building).
-        built = kept("standard" if scheme == "standard" else "isotropic", 0, windy)
+        built = kept("standard" if scheme == "standard" or fitted else "isotropic", 0, windy)
     if built is None:
         if scheme == "isotropic":
             raise ValueError(
@@ -1128,7 +1173,7 @@ def wave_responses(
         where += f", round the model's solids at up to {fastest:.0f} m/s"
     say(
         f"{label}: wave solver, {name} ({solver.air_cells:,} cells of {100 * h:.0f} cm, "
-        f"{steps:,} steps{where})"
+        f"{'fitted walls, ' if fitted else ''}{steps:,} steps{where})"
     )
     stepper = GpuWaveSolver(solver) if on_gpu else solver
     who = f"source {label!r}" if label else "the source"
@@ -1195,6 +1240,9 @@ def wave_responses(
         info["wave_wind_fastest_m_s"] = fastest
     if still_inside:
         info["wave_still_inside"] = 1.0
+    if fitted:
+        info["wave_fitted_walls"] = 1.0
+        info["wave_fit_s"] = sum(fit_seconds)  # on every grid made
     # How much slower than it should sound travels at the top of the highest band along
     # the grid's axes: the slowest sound's cells per wavelength there, stepped as the
     # slowest air is (in moving air, the still air's step in the air's own frame;
@@ -1246,6 +1294,7 @@ __all__ = [
     "STENCILS",
     "WAVE_BANDS_HZ",
     "Scheme",
+    "Walls",
     "WindModel",
     "Admittance",
     "BandGrid",

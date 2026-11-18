@@ -83,6 +83,23 @@ def test_round_trip_keeps_a_null_that_is_not_the_default(tmp_path: Path) -> None
     assert Scene.model_validate(scene.to_data()).simulation.early.coherent_max_band_hz is None
 
 
+def test_a_saved_scene_keeps_the_wave_solver_s_walls(tmp_path: Path) -> None:
+    # A scene file written before the setting has no walls: it reads as cell_faces. Every
+    # file written carries the setting, cell_faces unless set, as it carries the scheme.
+    path = EXAMPLES / "shoebox" / "scene.yaml"
+    assert "walls" not in load_yaml(path.read_text(encoding="utf-8")).get("simulation", {})
+    scene = Scene.from_yaml(path)
+    assert scene.simulation.wave.walls == "cell_faces"
+    wave = scene.to_data()["simulation"]["wave"]
+    assert wave["walls"] == "cell_faces" and wave["scheme"] == "auto"
+    scene.simulation.wave.walls = "fitted"
+    scene.to_yaml(tmp_path / "copy.yaml")
+    assert "    walls: fitted\n" in (tmp_path / "copy.yaml").read_text(encoding="utf-8")
+    assert Scene.from_yaml(tmp_path / "copy.yaml").simulation.wave.walls == "fitted"
+    walls = Scene.model_json_schema()["$defs"]["WaveStage"]["properties"]["walls"]
+    assert walls["enum"] == ["cell_faces", "fitted"] and walls["default"] == "cell_faces"
+
+
 def test_every_example_reads_back_as_it_was() -> None:
     """Written and read again, every example scene is the same scene, with exactly the
     same coefficients: what the file leaves out of a material, its preset, file, entry,
