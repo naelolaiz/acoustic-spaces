@@ -1801,6 +1801,47 @@ theory gives +6.0 dB on both sides.
   product is a wave bent twice by one edge, which the exact solution does not have. It
   is not checked on its own; behind the corner of the tests' L-shaped room such
   products come 23 dB below the paths over the corner.
+- **A third edge across a path over an edge.** Where an obstacle's edge cuts the way of
+  a path over another edge, or of a reflection next to it, the fade's terms and the
+  edge diffraction's paths do not hand the sound over to each other: the level steps
+  where that edge crosses the way, and between such boundaries it can be several dB
+  off. Over a roof 9 m wide and a screen 1 m past it, the source 10 m before the roof
+  and the listener 5 m past the screen, both 1 m above the roof's plane, with the
+  screen's top from 0.04 to 0.9 m above that plane, against the wave calculation of
+  [Rows of roofs and barriers against a wave
+  calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation) (a one-off
+  check, with both ends at 1.01 m, its cells' centres; the engine's paths over the
+  edges alone, either way round, `method: image_sources`), in the bands up to 500 Hz:
+  - With `first_order` (the default) the level is within 0.9 dB for tops 0.2 to 0.6 m
+    and 0.7 to 0.9 m above the plane. Between the way of the roof's reflection to the
+    listener (0.61 m) and the line from the roof's near edge to the listener (0.67 m)
+    it is 4.4 to 4.6 dB low at 63 Hz and 3.1 to 3.3 dB at 125 Hz. There the screen
+    stops the reflection, and the term of the roof's far edge for it comes in with
+    the screen's term (where the reflection is stopped, the term is not tested past
+    the screen), which the reflection did not have while it was found (from that edge
+    the way to the listener passes under the screen's top); and the screen's term in
+    that product is the reflection's, for the image of the source in the roof, not
+    one from that edge, from which the listener lies deep in the screen's shadow. At
+    the line from the near edge, the path over that edge is cut off with nothing to go
+    on round the screen. With the ends at 1 m and the screen a face, the level at
+    63 Hz steps by -3.7 dB where the screen's top passes 0.6 m (by -2.2 dB at 125 Hz)
+    and by +5.3 dB at two thirds of a metre (+3.6 dB). Below the line from the roof's
+    far edge to the listener (tops up to 0.16 m, the line passing 0.17 m above the
+    plane there) the level is 6.6 to 7.1 dB low at 63 Hz and 2.1 to 2.2 dB at 125 Hz,
+    the path over both of the roof's edges in a row being missing (see
+    [Known issues](#known-issues)); where the screen cuts off the path over the far
+    edge, the level at 63 Hz steps up to 0.2 dB of the wave calculation's.
+  - With `second_order` the level is 4.9 to 5.2 dB low at 63 Hz and 3.2 to 3.3 dB at
+    125 Hz for tops 0.7 to 0.9 m, where both the fade's products for the stopped
+    reflection and the paths over a roof's edge and then the screen's top count the
+    sound that goes on round the screen; 1.8 to 2.3 dB high up to 250 Hz for tops 0.5
+    to 0.6 m; and 2.9 to 3.0 dB high at 63 Hz for tops 0.1 to 0.16 m. At 63 Hz it
+    steps by -2.3 dB at 0.6 m and by -5.5 dB at two thirds of a metre.
+
+  The steps of [More than two edges in a row near grazing incidence](#known-issues), a
+  centimetre above the roof's plane, have the same cause. Outdoors the early stage
+  takes such rows from the solver for whole rows in the bands up to 500 Hz
+  (`simulation.early.rows: solver`, the default).
 - **Order of reflections.** Where the edge diffraction does not bend it, a path of the
   highest order the early stage follows takes no terms for the reflections off the
   edge's faces, behind their planes or in front, as the early stage follows no path

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Docs: where a third edge cuts a path over an edge, the level steps and can be several
+  dB off; the known issues of the edge fade give the measured levels over a roof and a
+  screen against the wave calculation, and the roadmap the fix.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

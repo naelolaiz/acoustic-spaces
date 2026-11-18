@@ -135,6 +135,14 @@ Edge diffraction:
   a wall in line with both is too low (6.4 dB at 63 Hz half a metre above a 10 m
   roof), and behind the roof with the source above its plane up to 6 dB too high (see
   [Known issues](validation.md#known-issues)).
+- [ ] The sound handed over where a third edge cuts a path over an edge: the edge
+  diffraction's own paths over an edge going on round an edge near their way as the
+  fade's terms do for the specular paths, the fade's products of two edges' terms taken
+  as paths over both, and with `second_order` giving way to the paths over two edges.
+  Over a roof and a screen 1 m past it, both ends 1 m above the roof, the level steps by
+  up to 5.3 dB at 63 Hz where the screen's top passes a way, and is 4.4 to 4.6 dB low
+  with `first_order` and 4.9 to 5.2 dB low with `second_order` between such places (see
+  [Known issues of the edge fade](validation.md#known-issues-of-the-edge-fade)).
 - [x] Rows of edges in simulations: outdoors, where sound passes over the barriers and
   buildings of a scene, the level in the bands up to 500 Hz from the solver for whole
   rows in place of the paths over one edge and two, in still air and in wind
