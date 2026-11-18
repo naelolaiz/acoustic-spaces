@@ -405,9 +405,11 @@ face, and stands on a plane only where the plane goes on round its end on its op
 side, so no path reflects off a roof's plane from below beside the building. Reflections off perpendicular planes, such as the
 floor and a wall, give the same image in either order, and the path over an edge may
 take another order than the path itself: each path takes the terms of every such
-order, and each order is tried where the early stage found only one. Each term is a
-path over its edge, and each product of terms is a path of its own, which arrives
-later by the detours of all its terms; the terms the edge diffraction adds already are
+order, and each order is tried where the early stage found only one. Other sequences
+of reflections with one image, off parallel planes (a panel and the walls either side
+of it, and the same the other way round), are other paths, which take their own terms.
+Each term is a path over its edge, and each product of terms is a path of its own,
+which arrives later by the detours of all its terms; the terms the edge diffraction adds already are
 left out (`engine.edge_fade` in the
 [API reference](api.md#edge-diffraction)). Against the exact solution, past the end of
 a screen, the corner of a building, a strip 2 m wide and a gap 4 m wide on a hard

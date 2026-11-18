@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed: of the paths that share an image off parallel planes (off a panel and the walls
+  either side of it, and off the same the other way round), the edge fade took the terms
+  of the first by the planes' numbers only, so a room and its mirror image differed
+  (0.018 dB at 125 Hz); each now takes its own.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane
