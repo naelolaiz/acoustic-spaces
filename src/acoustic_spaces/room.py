@@ -376,6 +376,19 @@ class Room:
                 f"surfaces without a material: {listed}; "
                 "add them to assignments or set default_material"
             )
+        # Whether none of those in use stands in a room the faces close off, as where the
+        # faces are those of solids with the air between them.
+        placed = [
+            bool(ok)
+            for every, inside in (
+                (self.scene.sources, self.sources_inside),
+                (self.scene.listeners, self.listeners_inside),
+            )
+            if inside is not None
+            for item, ok in zip(every, inside, strict=True)
+            if item.in_use
+        ]
+        nowhere = self.outdoor is None and bool(placed) and not any(placed)
         for kind, every, every_inside, every_solid in (
             ("source", self.scene.sources, self.sources_inside, self.sources_in_solid),
             ("listener", self.scene.listeners, self.listeners_inside, self.listeners_in_solid),
@@ -437,8 +450,16 @@ class Room:
                         "a room"
                     )
                 elif not ok:
+                    hint = (
+                        "; no source or listener stands in any room the faces close off "
+                        "(the faces of solids, such as walls drawn with their thickness, "
+                        "close off no room round the air between them)"
+                        if nowhere
+                        else ""
+                    )
                     out.append(
-                        f"{kind} {item.name!r} at {list(item.position)} {where} outside the room"
+                        f"{kind} {item.name!r} at {list(item.position)} {where} outside the "
+                        f"room{hint}"
                     )
         for listener in self._used("listeners", named):
             for source in self._used("sources", named):
@@ -485,11 +506,16 @@ class Room:
         r = self.report
         out = []
         if not r.closed:
+            why = (
+                "its faces are those of solids, building elements, which close off no room"
+                if r.solids
+                else f"{r.open_faces} faces have no room on either side; "
+                f"{r.boundary_edges} boundary edges"
+            )
             out.append(
-                f"the model is not closed ({r.open_faces} faces have no room on either "
-                f"side; {r.boundary_edges} boundary edges): rays can escape (the leak "
-                "finder shows where: validate --leaks, or Show leaks in the editor's View "
-                "menu), and the volume and inside checks are skipped"
+                f"the model is not closed ({why}): rays can escape (the leak finder shows "
+                "where: validate --leaks, or Show leaks in the editor's View menu), and the "
+                "volume and inside checks are skipped"
             )
         out.extend(self._unreachable())
         if r.inconsistent_edges:

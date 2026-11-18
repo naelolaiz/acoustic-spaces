@@ -593,6 +593,80 @@ def test_a_partition_drawn_as_one_face_for_each_room_is_one_partition(tmp_path: 
         np.testing.assert_allclose(energy_two, energy, rtol=1e-9)
 
 
+def _touching(path: Path, gap: float, inward: bool) -> Path:
+    """Two 5 x 4 x 3 m rooms along x, each modelled closed with a wall of its own at
+    x = 5, room 1's in group "dry" and room 2's in "live": touching (``gap`` 0, a wall
+    drawn once for each room) or ``gap`` apart, their normals pointing out of the rooms
+    (as closed solids have them) or, ``inward``, into them."""
+    x = 5 + gap
+    groups = {
+        "room1": _box(0, 5, 4, 3, skip=("x1",)),
+        "room2": _box(x, x + 5, 4, 3, skip=("x0",)),
+        "dry": [((5, 0, 0), (5, 4, 0), (5, 4, 3), (5, 0, 3))],
+        "live": [((x, 0, 3), (x, 4, 3), (x, 4, 0), (x, 0, 0))],
+    }
+    if inward:
+        groups = {name: [quad[::-1] for quad in quads] for name, quads in groups.items()}
+    return _write(path, groups)
+
+
+@pytest.mark.parametrize("inward", [False, True], ids=["out", "in"])
+def test_each_face_of_a_wall_drawn_once_for_each_room_is_its_own_room_s(
+    tmp_path: Path, inward: bool
+) -> None:
+    """Two rooms modelled as closed models that touch, the wall where they meet absorbing
+    0.9 in the first room and 0.1 in the second: in the first room they sound as with the
+    rooms 1 mm apart, early (image sources and ray tracing) and late (the statistical
+    method and the stochastic tracer), whichever way the normals point. On main, with the
+    normals pointing out of the rooms, each face went with the other room; either way, a
+    ray met the same one of the two faces from both sides: the stochastic tracer gave 3 dB
+    more G and twice the T30 in the first room."""
+    materials = {
+        "wall": _flat(0.1, scattering=0.3),
+        "dry": _flat(0.9, scattering=0.3),
+        "live": _flat(0.1, scattering=0.3),
+    }
+    assignments = {"room1": "wall", "room2": "wall", "dry": "dry", "live": "live"}
+    found = {}
+    for gap in (0.0, 1e-3):
+        obj = _touching(tmp_path / f"rooms_{gap}.obj", gap, inward)
+        for early, late in (
+            ("image_sources", "statistical"),
+            ("image_sources", "stochastic_ray_tracing"),
+            ("ray_tracing", "stochastic_ray_tracing"),
+        ):
+            scene = _scene(
+                obj,
+                materials,
+                assignments,
+                {"one": [3.0, 2.2, 1.4]},
+                source=[1.5, 1.9, 1.5],
+                ir_length_s=1.0,
+                late={"rays": 3000, "method": late},
+                early={"max_order": 2, "method": early, "diffraction": "none"},
+            )
+            room = Room.from_scene(scene)
+            names = np.array([room.mesh.labels[k][0] for k in room.mesh.face_labels])
+            # Each face has its own room on one side; on the other, between them, none.
+            for name, point in (("dry", [3.0, 2.2, 1.4]), ("live", [7.5, 2.2, 1.4])):
+                own = int(room.room_of([point])[0])
+                assert own >= 0
+                assert np.unique(room.face_room[names == name]).tolist() == [-1, own]
+            if late == "stochastic_ray_tracing":
+                # The early part before the stochastic tracer's, long enough to hold the
+                # reflection off that wall (before the statistical method's, it is not).
+                found[gap, early] = np.sort(early_paths(room).energy, axis=0)
+            if early == "image_sources":
+                p = simulate(room)["s", "one"].parameters()
+                found[gap, late] = (p.g, p.t30)
+    for early in ("image_sources", "ray_tracing"):
+        np.testing.assert_allclose(found[0.0, early], found[1e-3, early], rtol=1e-9)
+    for late in ("statistical", "stochastic_ray_tracing"):
+        (g, t30), (g_apart, t30_apart) = found[0.0, late], found[1e-3, late]
+        np.testing.assert_allclose(g, g_apart, atol=1e-6)
+        np.testing.assert_allclose(t30, t30_apart, rtol=1e-6)
+
+
 @pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
 def test_paths_with_one_image_off_other_surfaces_are_paths_of_their_own(
     tmp_path: Path, method: str

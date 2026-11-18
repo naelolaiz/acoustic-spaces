@@ -78,6 +78,28 @@ class MeshCells:
         return self.volume[self.rooms]
 
     @property
+    def slivers(self) -> np.ndarray:
+        """(C,) True for the slivers: cells of no volume between faces in one place (a
+        wall drawn once for each room), which no face has on both sides as faces have
+        the inside of an open model."""
+        same = self.side[:, 0] == self.side[:, 1]
+        sliver = ~self.enclosed & ~self.outside
+        sliver[self.side[same, 0]] = False
+        return sliver
+
+    @property
+    def facing(self) -> np.ndarray:
+        """(F,) int8: the own side of each face with a sliver on its other side, 1 its
+        front and -1 its back; 0 for a face with a sliver on neither side or on both.
+        Of the faces in one place, a ray meets the one whose own side faces it first
+        (:meth:`acoustic_spaces._native.Bvh.set_facing`)."""
+        on = self.slivers[self.side]
+        out = np.zeros(len(self.side), dtype=np.int8)
+        out[on[:, 1] & ~on[:, 0]] = 1
+        out[on[:, 0] & ~on[:, 1]] = -1
+        return out
+
+    @property
     def open_faces(self) -> np.ndarray:
         """(F,) True for faces with neither side in an enclosed cell: a hole joins the
         room behind them to the outside, or they stand outside the model."""
@@ -89,8 +111,10 @@ class MeshCells:
         return len(self.rooms) > 0 and not self.open_faces.any()
 
 
-def mesh_cells(vertices: np.ndarray, faces: np.ndarray) -> MeshCells:
-    """The cells of the mesh with ``vertices`` (V, 3) and ``faces`` (F, 3)."""
+def mesh_cells(vertices: np.ndarray, faces: np.ndarray, solids: bool = False) -> MeshCells:
+    """The cells of the mesh with ``vertices`` (V, 3) and ``faces`` (F, 3); with
+    ``solids``, the faces of solids (see :class:`~acoustic_spaces.geometry.mesh.RoomMesh`),
+    whose enclosed cells are no rooms."""
     vertices = np.asarray(vertices, dtype=float)
     faces = np.asarray(faces, dtype=np.int64).reshape(-1, 3)
     n = len(faces)
@@ -128,9 +152,13 @@ def mesh_cells(vertices: np.ndarray, faces: np.ndarray) -> MeshCells:
     # Whether the front of each face looks towards growing angles.
     ahead = np.einsum("ij,ij->i", normal[owner], np.cross(along, into)) > 0.0
     # Coincident faces: the ones whose front looks back first, so that the sliver between
-    # two faces that look away from each other has both their backs.
+    # two faces that look away from each other has both their backs; or, where the faces
+    # round them say so, the other way round (see ``_facing_out``).
     level = np.round(angle / _SAME_ANGLE).astype(np.int64)
     order = np.lexsort((owner, ahead, level, edge))
+    turned = _facing_out(order, edge, level, ahead, owner, n)
+    if turned.any():
+        order = np.lexsort((owner, ahead != turned, level, edge))
     group = edge[order]
     first = np.searchsorted(group, group, side="left")
     last = np.searchsorted(group, group, side="right") - 1
@@ -157,12 +185,65 @@ def mesh_cells(vertices: np.ndarray, faces: np.ndarray) -> MeshCells:
     bordering = np.concatenate([front[outside[back]], back[outside[front]]])
     is_room = np.zeros(len(volume), dtype=bool)
     is_room[bordering] = True
-    is_room &= enclosed
+    is_room &= enclosed & (not solids)
     first_face = np.full(len(volume), 2 * n, dtype=np.int64)
     np.minimum.at(first_face, side.reshape(-1), np.arange(2 * n))
     rooms = np.flatnonzero(is_room)
     rooms = rooms[np.argsort(first_face[rooms], kind="stable")]
     return MeshCells(side=side, volume=volume, rooms=rooms)
+
+
+def _facing_out(order, edge, level, ahead, owner, n: int) -> np.ndarray:
+    """True for the rows (corner pairs of faces) of the faces of a wall drawn once for
+    each room, at the edges where both its faces meet, where their fronts face the
+    sliver between them: the rooms' normals point out of them.
+
+    Two faces in one place along an edge (the same angle round it, looking opposite
+    ways), with a face of their own at the angles before and after them, are a wall
+    drawn once for each room where two closed models touch. Each of the two belongs
+    with the face next to it: two faces of one closed model run along their common edge
+    in opposite directions, which is to say that the front of one looks towards growing
+    angles round it and the other's does not (``ahead``). Whether the two faces' backs
+    or fronts face the sliver between them is the same for every edge of theirs, and
+    for every face joined to them along an edge that two faces share or as the other
+    face of such a pair: each such set of faces takes what most of its pairs' neighbours
+    say, and the backs where they say nothing or are split evenly. ``order`` sorts the
+    rows (the faces' corner pairs) by edge, angle round it and ``ahead``."""
+    e, at = edge[order], level[order]
+    rows = len(order)
+    new = np.ones(rows, dtype=bool)
+    new[1:] = (e[1:] != e[:-1]) | (at[1:] != at[:-1])
+    group = np.cumsum(new) - 1
+    size = np.bincount(group)
+    head = np.flatnonzero(new)
+    # Pairs of faces in one place, the one whose front looks back first (as sorted).
+    pair = head[(size == 2) & (ahead[order[head]] != ahead[order[np.minimum(head + 1, rows - 1)]])]
+    if not len(pair):
+        return np.zeros(rows, dtype=bool)
+    first = np.searchsorted(e, e[pair], side="left")
+    last = np.searchsorted(e, e[pair], side="right") - 1
+    before = np.where(pair == first, last, pair - 1)
+    after = np.where(pair + 1 == last, first, pair + 2)
+    # The faces before and after the pair, where they stand alone at their angle: each
+    # says whether the pair's fronts face the sliver.
+    votes = np.zeros(n)
+    alone = size[group[before]] == 1
+    np.add.at(votes, owner[order[pair[alone]]], np.where(ahead[order[before[alone]]], -1.0, 1.0))
+    alone = size[group[after]] == 1
+    np.add.at(votes, owner[order[pair[alone]]], np.where(ahead[order[after[alone]]], 1.0, -1.0))
+    # The sets of faces that face the sliver alike: the pairs, and faces sharing an edge
+    # that only the two of them have.
+    _, counts = np.unique(edge, return_counts=True)
+    two = np.flatnonzero(counts[edge] == 2)
+    two = two[np.argsort(edge[two], kind="stable")].reshape(-1, 2)
+    a = np.concatenate([owner[order[pair]], owner[two[:, 0]]])
+    b = np.concatenate([owner[order[pair + 1]], owner[two[:, 1]]])
+    label = _components(n, a, b)
+    total = np.bincount(label, weights=votes, minlength=n)
+    out = np.zeros(rows, dtype=bool)
+    for k in (pair, pair + 1):
+        out[order[k]] = total[label[owner[order[k]]]] > 0.0
+    return out
 
 
 def _components(nodes: int, a: np.ndarray, b: np.ndarray) -> np.ndarray:

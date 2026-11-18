@@ -579,6 +579,39 @@ def test_gpu_ray_search_finds_what_the_cpu_does() -> None:
 
 
 @needs_gpu
+def test_gpu_ray_search_meets_the_face_whose_own_side_a_ray_comes_from() -> None:
+    # A wall 20 m square drawn twice in one place, once facing each way, off the origin:
+    # from either side the GPU meets the face the CPU does, the one whose own side (the
+    # front, or the back) the ray comes from.
+    square = np.array([[0.0, 0, 0], [0, 1, 0], [0, 1, 1], [0, 0, 1]]) * 20.0 + [100, -40, 3]
+    up = np.array([[0, 1, 2], [0, 2, 3]])
+    faces = np.vstack([up, up[:, ::-1]])
+    rng = np.random.default_rng(8)
+    n = 2000
+    yz = square[0, 1:] + rng.uniform(0.5, 19.5, (n, 2))
+    none = np.full(n, -1)
+    for own in (1, -1):
+        bvh = _native.Bvh(square, faces)
+        bvh.set_facing(np.full(4, own, dtype=np.int8))
+        on_gpu = gpu_rays.GpuBvh(bvh)
+        for x, step in ((-7.0, 1.0), (13.0, -1.0)):
+            origins = np.column_stack([np.full(n, square[0, 0] + x), yz])
+            directions = np.tile([step, 0.0, 0.0], (n, 1)) + rng.normal(0, 0.1, (n, 3))
+            directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+            t, face = bvh.intersect(origins, directions, np.full(n, np.inf), none)
+            t_gpu, face_gpu = on_gpu.intersect(origins, directions, np.inf, none)
+            hit = face >= 0
+            assert hit.mean() > 0.9
+            assert set(face[hit] // 2) == {0 if (x > 0) == (own > 0) else 1}
+            # The same drawing of the wall for every ray both meet it; the same triangle
+            # but for rays along an edge (single precision widens the triangles).
+            both = hit & (face_gpu >= 0)
+            assert np.mean(face_gpu == face) > 0.995
+            np.testing.assert_array_equal(face_gpu[both] // 2, face[both] // 2)
+            np.testing.assert_allclose(t_gpu[both], t[both], rtol=1e-4, atol=1e-5 * on_gpu.scale)
+
+
+@needs_gpu
 def test_gpu_ray_search_meets_the_faces_main_found() -> None:
     with np.load(REFERENCE) as stored:
         data = dict(stored)
