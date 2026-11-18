@@ -1302,7 +1302,7 @@ same with the source and the listener swapped, within 0.15 dB. Closer to the top
 to the plane two things count. A path over the screen's top reflects off the top's
 plane where its own line meets that plane: with the two level, at the screen's top
 itself, where the top is not, so that it is no path, whatever the ray that looks for
-it meets from its start a millionth of the model's size off the edge; and the
+it meets from its start just off the edge; and the
 screen's top lies beside the reflection off the top, before the point of reflection
 one way round and after it the other, and takes its term on that leg. In six cases from a millimetre to a metre above the plane, the screen 0.1 to 5 m
 past the top, the two ways round agree within 0.05 dB (`tests/test_diffraction.py`),
@@ -1314,9 +1314,11 @@ above is that of a level top within 0.04 dB with `first_order` and, a micrometre
 above, within 0.34 dB up to 500 Hz with `second_order` (below the plane and above
 500 Hz it is not: see [Known issues](#known-issues)). Where such a screen ends 1 cm to
 0.5 m beside the way, the level 1 or 2 mm above the plane is, with `second_order`,
-that a centimetre above: between two tops within 0.23 dB (0.39 dB with the way
-through the screen's end), and 5 m before a top or 5 m past it within 0.64 dB, both
-ways round. A centimetre above, with the screen first and the way a centimetre inside
+that a centimetre above: between two tops within 0.14 dB (0.30 dB with the screen's
+top a millionth of a micrometre above the plane, where a millimetre above it the ray
+that tests the path round the screen's upright end off the first top's wall meets
+that wall's top edge), and 5 m before a top or 5 m past it within 0.14 dB, both ways
+round. A centimetre above, with the screen first and the way a centimetre inside
 its end, it is up to 500 Hz 0.5 to 1.2 dB above half the sum of the fields without
 the screen and with an endless one (Kirchhoff's approximation for the way through the
 screen's end, -6.2 to -6.8 dB), each from the two-dimensional wave calculation of the
@@ -1325,9 +1327,9 @@ the plane of several flat tops the
 level is off by more: 3.9 to 9.2 dB below that a centimetre above the plane of two
 tops, 2.5 to 6.9 dB below it over three and 2.8 to 5.3 dB below it over a screen and
 then a top, where a top and then a screen is within 1.7 dB of it. It is off within
-two millionths of the model's size below the plane too (1.2 mm here), where the rays
-that look for paths over edges, which start a millionth of the model's size off the
-edges, find paths that are not there: 0.01 mm below the plane of two tops the level
+twice the rays' distance from the edges below the plane too (0.2 mm here), where the
+rays that look for paths over edges, which start a tenth of a millimetre off the edges
+here (a millionth of the model's size, but no farther), find paths that are not there: 0.01 mm below the plane of two tops the level
 is at +3.3 to +4.1 dB, and below that of three at +9.1 to +10.0 dB. In the bands that
 add in energy the levels up to 500 Hz are those of the table within 1.7 dB, but at
 63 Hz for three screens above their tops and level with them (2.5 and 2.6 dB higher),
@@ -5988,17 +5990,22 @@ Results:
   tops 5 m apart, 2.5 to 6.9 dB below it over three tops, 1.4 to 5.4 dB below it with
   a 2 cm slot across a 10 m top and 2.8 to 5.3 dB below it over a screen and then a
   top; over a top and then a screen it is within 1.7 dB of it (in pressure up to
-  500 Hz and in the bands that add in energy). Within two millionths of the model's
-  size below that plane, the rays that look for paths over edges, which start a
-  millionth of it off the edges, find paths that the tops hide: the level is then 9.4
+  500 Hz and in the bands that add in energy). Within twice their distance from the
+  edges below that plane, the rays that look for paths over edges, which start a
+  millionth of the model's size off the edges but no farther than a tenth of a
+  millimetre, find paths that the tops hide: the level is then 9.4
   to 9.7 dB above that a centimetre below the plane of two tops, 15 dB above it for
-  three tops, and 8.9 to 9.9 dB behind a top and a screen in either order. Within that
-  distance above the plane they miss paths that are there: a millimetre above the tops
-  of three screens 5 m apart, the last of which ends a centimetre beside the way, the
-  path round that end is not found and the level at 63 Hz is 1.5 dB below that 3 mm
-  above them. Likewise above a roof 5 m wide and a screen level with it, 5 m before
-  the roof or past it, that ends 1 cm to 0.1 m beside the way: the term of the
-  screen's upright end for the direct sound is missing up to 1.2 or 1.8 mm above the
+  three tops, and 8.9 to 9.9 dB behind a top and a screen in either order. Within a
+  few times that distance above the plane they miss paths that are there: up to 0.3 mm
+  above the tops of three screens 5 m apart, the last of which ends a centimetre
+  beside the way, the path round that end is not found and the level at 63 Hz is
+  1.5 dB below that 3 mm above them. Exactly level with the tops, with the middle
+  screen ending there, the path round its end is not found either, as its ray starts
+  just inside the end, below the plane: the level is 1.0 to 1.3 dB below that a
+  millimetre above at 63 Hz and 0.6 to 0.8 dB at 125 Hz, where with that path it is
+  within 0.3 dB of it. Likewise above a roof 5 m wide and a screen level with it, 5 m
+  before the roof or past it, that ends 1 cm to 0.1 m beside the way: the term of the
+  screen's upright end for the direct sound is missing up to 0.2 or 0.3 mm above the
   plane, where the level up to 500 Hz is 0.2 to 0.6 dB below that a centimetre above
   (0.5 to 1.1 dB with the way 1 cm outside the end).
 - **Reflections level with several tops.** With the source and the listener exactly

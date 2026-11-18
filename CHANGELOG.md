@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: the rays that test a path over an edge started a millionth of the model's
+  size off it, 1 cm in a model 10 km wide, where they missed paths or found ones that
+  are not there: a source 1 cm from both arms of a barrier bent by 120 degrees gave
+  1.92 dB more at 63 Hz than in a model 200 m wide. They now start a tenth of a
+  millimetre off at most (models up to 100 m wide are as before), and a millimetre above
+  a roof and a screen level with it the level is that a centimetre above within 0.14 dB
+  (it was up to 0.64 dB below).
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

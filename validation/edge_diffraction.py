@@ -754,8 +754,9 @@ def in_a_row(folder: Path, heights=(1e-2, 0.0, -1e-5, -1e-2), names=None) -> lis
     tops: the whole early stage's level with paths over two edges and without, with
     the paths in pressure to 500 Hz and in energy in every band. No reference: the
     levels show where the positions agree and where they do not. The rays that look for
-    the paths start 1e-6 of the model's size off the edges (0.6 mm here), so a height of
-    -1e-5 m is within their reach below the plane."""
+    the paths start a tenth of a millimetre off the edges here
+    (:func:`~acoustic_spaces.engine.diffraction.ray_offset`), so a height of -1e-5 m is
+    within their reach below the plane."""
     rows = []
     for name in names or IN_A_ROW:
         quads, past = IN_A_ROW[name]
