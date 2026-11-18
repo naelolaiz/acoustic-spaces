@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed: with edge diffraction, the edge fade takes a model turned to any angle and
+  written with six decimals as it takes it exact: planes at right angles to the model's
+  tolerance for planes commute, a term's path reaches a face of the plane it reflects
+  off that lies just in front of that plane, and each event of a path's orders of
+  reflections counts once by its planes, not by its rounded images. An open box turned
+  17 to 50 degrees had been up to 0.43 dB off at 63 Hz.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

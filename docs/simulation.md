@@ -405,7 +405,9 @@ face, and stands on a plane only where the plane goes on round its end on its op
 side, so no path reflects off a roof's plane from below beside the building. Reflections off perpendicular planes, such as the
 floor and a wall, give the same image in either order, and the path over an edge may
 take another order than the path itself: each path takes the terms of every such
-order, and each order is tried where the early stage found only one. Each term is a
+order, and each order is tried where the early stage found only one. Planes are
+perpendicular to within the model's tolerance for planes, as the walls of a model turned
+to any angle and written with six decimals are. Each term is a
 path over its edge, and each product of terms is a path of its own, which arrives
 later by the detours of all its terms; the terms the edge diffraction adds already are
 left out (`engine.edge_fade` in the

@@ -1410,8 +1410,11 @@ class EdgeFade:
                 _towards(model, point[sel], images[side][slot[sel]], planes[:, side], own)
                 for side, own in enumerate((start[sel], end[sel]))
             ]
-            clear = _clear(
-                model, np.vstack([off_edge, off_edge]), np.vstack([r[0] for r in reflect])
+            clear = _clear_to(
+                model,
+                np.vstack([off_edge, off_edge]),
+                np.vstack([r[0] for r in reflect]),
+                np.concatenate([r[1] for r in reflect]),
             )
             clear = [clear[: len(sel)], clear[len(sel) :]]
             # Where they stand in for a missed path, on from there too (see _beyond).
@@ -1623,11 +1626,12 @@ class EdgeFade:
         j = table["at"][slot] // 2
         plane = model.face_plane[face]
         sides = table["sides"][slot]  # (n, 2, K)
-        normal = model.plane_normal[plane]
         upright = []
         for s in (0, 1):
-            dot = np.einsum("nkj,nj->nk", model.plane_normal[np.maximum(sides[:, s], 0)], normal)
-            upright.append(np.all((sides[:, s] < 0) | (np.abs(dot) < 1e-9), axis=1))
+            across = _perpendicular(
+                model, np.maximum(sides[:, s], 0).reshape(-1), np.repeat(plane, sides.shape[2])
+            ).reshape(n, -1)
+            upright.append(np.all((sides[:, s] < 0) | across, axis=1))
         out = np.ones((n, len(model.band_hz)))
         last = listener_side & upright[1]
         rows = np.flatnonzero(last & (k + 1 >= first))
@@ -2193,8 +2197,8 @@ def _once(events: list[dict], tolerance: float) -> list[dict]:
                     e["row"],
                     e["kind"],
                     e["plane"],
-                    np.round(e["source"] / tolerance),
-                    np.round(e["listener"] / tolerance),
+                    np.sort(e["sides"][:, 0], axis=1),
+                    np.sort(e["sides"][:, 1], axis=1),
                 ]
             )
             for e in events
@@ -2265,6 +2269,20 @@ def _across_face(start, end, edges, edge, bisector) -> np.ndarray:
     usable = np.abs(across) > 1e-12 * np.linalg.norm(line, axis=1)
     t = np.einsum("ij,ij->i", normal, edges.start[edge] - start) / np.where(usable, across, 1.0)
     return start + np.where(usable, t, 0.0)[:, None] * line
+
+
+def _clear_to(model, start, end, plane) -> np.ndarray:
+    """Whether nothing but openings lies between each start and end point, the end in
+    ``plane`` (-1 for none): a face of that plane met first lies there, off the plane
+    by no more than its faces stray from it (TraceModel.plane_spread), as the line
+    crosses the plane only at the end."""
+    delta = end - start
+    length = np.linalg.norm(delta, axis=1)
+    direction = delta / np.maximum(length, 1e-300)[:, None]
+    _, face = _first_solid(model, start, direction, length * (1.0 - 1e-9), -1)
+    geometric = model.geometric_plane
+    met = geometric[model.face_plane[np.maximum(face, 0)]] == geometric[np.maximum(plane, 0)]
+    return (face < 0) | ((plane >= 0) & met)
 
 
 def _towards(model, point, image, planes, fallback) -> tuple[np.ndarray, np.ndarray]:

@@ -858,3 +858,64 @@ def test_a_corner_the_search_joins_takes_its_terms(bend: float, gap: float, heig
     assert len(wide.order) == len(narrow.order)
     level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
     assert np.abs(level).max() < 0.01
+
+
+def _open_box(folder: Path, degrees: float, decimals: int | None) -> Room:
+    """The box of test_engine's ``_box_of_triangles`` without its ceiling, its sides in
+    quarters, turned ``degrees`` about the z axis and written with ``decimals`` (all
+    digits for None), with a source and a listener in it, first-order diffraction and
+    reflections up to the third order."""
+    from test_engine import _box_of_triangles, _turned
+
+    obj = _box_of_triangles(
+        folder / f"open_{degrees:g}_{decimals}.obj",
+        degrees=degrees,
+        decimals=decimals,
+        quarters=True,
+        ceiling=False,
+    )
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": str(obj)},
+                "materials": {"m": {"absorption": [0.1] * BANDS, "scattering": 0.0}},
+                "default_material": "m",
+                "sources": [{"name": "s", "position": _turned((2.0, 2.5, 1.5), degrees).tolist()}],
+                "listeners": [
+                    {"name": "l", "position": _turned((6.4096, 2.462, 1.486), degrees).tolist()}
+                ],
+                "simulation": {
+                    "ir_length_s": 0.3,
+                    "scattering": {"from_size": False},
+                    "early": {
+                        "method": "image_sources",
+                        "max_order": 3,
+                        "diffraction": "first_order",
+                    },
+                },
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize("degrees", [17.0, 45.0, 50.0])
+def test_a_model_turned_with_its_corners_rounded_takes_the_terms_it_takes_exact(
+    tmp_path: Path, degrees: float
+) -> None:
+    """The open box (with no inside known, every face reflects on both sides; its walls'
+    tops are free edges) turned ``degrees`` and written with six decimals, as most files
+    carry a model: the paths and the early level of the box exact and unturned. The
+    rounding leaves its walls at right angles to within 4e-7 (the cosine between their
+    normals) and its faces up to 1.4 um off their planes.
+    The edge fade took reflections off perpendicular planes for commuting only to 1e-9
+    (turned 17 degrees, the box then had 411 paths for 437, 0.21 dB less at 63 Hz), its
+    terms' rays stopped at a face of the plane they reflect off just in front of that
+    plane (394, 0.58 dB more), and it took the terms of an event of another order of
+    the reflections once by its images rounded to a billionth of the model's size (592,
+    0.96 dB more at 125 Hz); with all three, 309 to 411 paths at these angles and up to
+    0.43 dB off at 63 Hz."""
+    exact = early_paths(_open_box(tmp_path, 0.0, None))
+    rounded = early_paths(_open_box(tmp_path, degrees, 6))
+    assert len(rounded) == len(exact)
+    level = 10 * np.log10(total_energy(rounded) / total_energy(exact))
+    assert np.abs(level).max() < 0.001

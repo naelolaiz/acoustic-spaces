@@ -419,9 +419,12 @@ def exhaustive_candidates(
 
 
 def _perpendicular(model, a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Whether the planes ``a`` and ``b`` are perpendicular: reflections off them commute."""
+    """Whether the planes ``a`` and ``b`` are perpendicular: reflections off them commute.
+    Their normals are known to :data:`PLANE_TOLERANCE` (faces join a plane within it),
+    and so is the right angle between them: the walls of a room turned to any angle,
+    with its corners written to six decimals, stand at right angles."""
     dot = np.einsum("ij,ij->i", model.plane_normal[a], model.plane_normal[b])
-    return np.abs(dot) < 1e-9
+    return np.abs(dot) < PLANE_TOLERANCE
 
 
 def _image_points(
