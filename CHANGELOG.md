@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed: a wall between two rooms drawn once for each room (two faces in one place, as
+  where two rooms modelled as closed models touch) let no sound through in the late part,
+  which took the space between the two faces for no room: behind a 30 dB partition so
+  drawn G came out 11 to 20 dB too low, behind an opening 5 to 14 dB, `validate` warned
+  that no surface joined the rooms, and the statistical reverberation times counted what
+  passes as lost. Such a wall now gives what it gives drawn once.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

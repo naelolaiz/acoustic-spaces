@@ -435,10 +435,12 @@ struct StochasticScene {
     const double *surface_size = nullptr;
     const double *band_hz = nullptr;
     // Optional: the share of sound each face lets through (faces x bands), and the room
-    // on the front (the side its normal points to) and on the back of each face (faces
-    // x 2, -1 for none). A ray passes into the room on the far side; with no room
-    // there (the outside), what passes counts as absorbed. Without face_room, every
-    // face lets its share through. source_room is the room the source is in.
+    // that sound passing each face reaches on its front (the side its normal points to)
+    // and on its back (faces x 2, -1 for none): the room on that side, or, behind a wall
+    // drawn once for each room, the room behind the other face, which lies at the same
+    // point and so nearer than any hit. A ray passes into the room on the far side; with
+    // no room there (the outside), what passes counts as absorbed. Without face_room,
+    // every face lets its share through. source_room is the room the source is in.
     const double *transmission = nullptr;
     const std::int64_t *face_room = nullptr;
     std::int64_t source_room = -1;
