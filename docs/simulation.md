@@ -376,6 +376,12 @@ is then within 0.06 dB of the exact solution, where `first_order` is 6.4 dB low 
 the level over barriers 0.3 to 3 m thick is within 0.3 dB from 500 Hz up, and over two
 screens in a row within 0.45 dB; at 63 and 125 Hz, in pressure, within 0.6 dB over
 the barriers and 0.13 dB over the screens (1.7 and 1.9 dB with the waves in energy).
+Along the plane of a screen or a panel, from one of its edges to another in that plane,
+the path runs along each of its faces, two ways with half the coefficient at grazing
+incidence each, as in the exact solution, and the faces do not stop it: behind a thin
+strip 2 m wide the level is within 0.11 dB of BTM at 63 and 125 Hz, where without such
+paths it is up to 1.39 dB low. One in that plane on past the screen's far end, where
+the waves along its two faces cancel, is left out.
 
 ```sh
 acoustic-spaces simulate examples/gallery/scene.yaml --out gallery
