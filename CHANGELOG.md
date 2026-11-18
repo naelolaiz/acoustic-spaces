@@ -6,7 +6,8 @@ Error estimates for more results: the uncertainty of a coverage map's values (it
 insertion loss and long-term levels too), the spread of each listener's levels and
 speech results, one-sided bounds, the number of draws chosen as GUM Supplement 1's
 adaptive procedure does, and a material's absorption uncertainty on its page in the
-editor; the sound over the open ground in wind at 1 and 2 kHz from the parabolic
+editor; fitted walls for the wave solver, its faces cut exactly through the grid's
+cells; the sound over the open ground in wind at 1 and 2 kHz from the parabolic
 equation, with a setting for its cost, and its bands carried through the crossovers; the
 parabolic equation behind barriers in wind and the wide-angle one, the spread's draws
 (now in worker processes), the fit of an admittance and the rendering of a run's files,
@@ -73,26 +74,28 @@ building round a shut-in source in wind, now in still air (a 6 m hut's bands up 
 dB off in a 15 m/s wind); Doc 29's L_Amax ahead of and behind a segment (up to 1.0 dB on
 Volume 3's departures; the airport example does not change); early paths at corners and
 near edges and surfaces: two paths with one image of the source off different surfaces
-(one was left out: up to 2.2 dB in a band), a path back off a room's corner, a panel or
-partition in line with a wall (a room and its mirror image up to 1.9 dB apart at 63 Hz),
-a plane at 45 degrees to two axes, a source right by two planes or a short leg between
-two reflections with edge diffraction, an edge's end on a plane, and points right by a
-surface or a corner in very large models; the late part on the GPU right by a surface
-(up to 3.2 to 7.5 dB low); a measured directivity table at directions equally near a
-grid point; a walk with Doppler past a barrier's end (a click 40 dB above the sound
-around it gone); a walk with Doppler passing close to a listener (a ripple of up to 0.73
-dB gone), through a directional microphone (up to 0.25 dB) or in binaural (up to 3.1 dB
-at 1 kHz); and the spread: its combined standard uncertainty and its mean, within the
-draws' noise, every response after the first in a run of several, materials that absorb
-everything in some band, grounds with an impedance, and draws of much more absorption
-than was traced; and a calibrated material given in third octaves where one of them
-reaches 1. An outdoor ground with an `impedance` and no `scattering` now scatters
-nothing (it took 0.1: the early level over grass moves by up to 0.5 dB at 500 Hz, ground
-dips in still air deepen, flat open ground alone has no late part; `scattering: 0.1`
-gives the earlier results), and the wave solver's moving air flows round solids and
-passes between weather zones gradually (results near buildings and across zones change),
-and every result in moving air changes a little at the absorbing layer's border (the
-validation's levels by up to 0.012 dB). Scene files of 4.2.1 load unchanged.
+(one was left out: up to 2.2 dB in a band), a path joined at a corner of two reflections
+(up to 20.7 dB too low 0.1 mm before a wall in a model 200 m wide), a path back off a
+room's corner, a panel or partition in line with a wall (a room and its mirror image up
+to 1.9 dB apart at 63 Hz), a plane at 45 degrees to two axes, a source right by two
+planes or a short leg between two reflections with edge diffraction, an edge's end on a
+plane, and points right by a surface or a corner in very large models; the late part on
+the GPU right by a surface (up to 3.2 to 7.5 dB low); a measured directivity table at
+directions equally near a grid point; a walk with Doppler past a barrier's end (a click
+40 dB above the sound around it gone); a walk with Doppler passing close to a listener
+(a ripple of up to 0.73 dB gone), through a directional microphone (up to 0.25 dB) or in
+binaural (up to 3.1 dB at 1 kHz); and the spread: its combined standard uncertainty and
+its mean, within the draws' noise, every response after the first in a run of several,
+materials that absorb everything in some band, grounds with an impedance, and draws of
+much more absorption than was traced; and a calibrated material given in third octaves
+where one of them reaches 1. An outdoor ground with an `impedance` and no `scattering`
+now scatters nothing (it took 0.1: the early level over grass moves by up to 0.5 dB at
+500 Hz, ground dips in still air deepen, flat open ground alone has no late part;
+`scattering: 0.1` gives the earlier results), and the wave solver's moving air flows
+round solids and passes between weather zones gradually (results near buildings and
+across zones change), and every result in moving air changes a little at the absorbing
+layer's border (the validation's levels by up to 0.012 dB). Scene files of 4.2.1 load
+unchanged.
 
 **Error estimates**
 
@@ -427,6 +430,16 @@ validation's levels by up to 0.012 dB). Scene files of 4.2.1 load unchanged.
 
 **The wave solver**
 
+- Added: `simulation.wave.walls: fitted` (**Fitted walls** in the editor) puts the wave
+  solver's walls where the model has them, its faces cut exactly through the grid's
+  cells, instead of on the nearest cell faces: in a box along the grid the modes come
+  within 0.05 % of the exact ones where walls on cell faces are up to 5.2 % off, and the
+  level in front of a rigid wall within 0.04 dB where they are up to 1.8 dB off. It takes
+  the standard stencil, indoors and in still air, refuses models with cracks or faces
+  laid on one another (naming the faces), and has measured limits at steep walls,
+  concave edges, free edges and absorbing walls
+  ([Low frequencies](docs/simulation.md#low-frequencies-the-wave-solver)); saved scenes
+  now carry `walls`.
 - Fixed (results change): round an open model the wave solver's matched layer lay a few
   cells past the model, the source and the listeners and sent back much of the sound
   that ran along it: over a rigid plate, with 40 cm cells, the 63 Hz band read 3.1 and
@@ -508,6 +521,18 @@ validation's levels by up to 0.012 dB). Scene files of 4.2.1 load unchanged.
   a T reflected off the roof from under the eave or off the T's stem from its bare side
   (up to 4.3 dB in a band). Both now take the least distance at which a ray meets a
   face.
+- Fixed: the search for early paths takes a reflection point within its tolerance for
+  planes of the next reflection's plane (a ten-millionth of the model's largest extent,
+  1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane
+  at the angle of its legs to that corner, which can lie as far from where the path
+  meets it; a reflection with both legs shorter than the tolerance met its plane at
+  grazing incidence, and with edge diffraction the edge fade dropped a joined path with
+  all its terms. A joined path now takes the points the image method places, where that
+  path can be, and every reflection meets its plane at the angle the source's image
+  gives. Against the same scenes in a model 200 m wide, a source and a listener 0.1 mm
+  before a wall and 0.5 mm apart had been 20.7 dB too low, a source 0.3 mm from both
+  arms of a bent barrier and the ground up to 2.6 dB, and with edge diffraction one 0.1
+  mm from both arms 1.2 dB at 63 Hz.
 - Fixed: a free-standing panel or a partition between two rooms in line with a wall
   shared the wall's plane in the model or had one of its own by the way the wall faces,
   so with edge diffraction a room and its mirror image gave different early levels (up

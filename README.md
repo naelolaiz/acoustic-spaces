@@ -19,12 +19,12 @@ loudspeaker formats.
   is open: [scene files](docs/scenes.md).
 - **Simulation**, in octave or third-octave bands: ray-traced early reflections with
   edge diffraction, added in pressure at low frequencies, a stochastic late tail and,
-  for the lowest bands, a wave solver, both on the CPU or a GPU; ISO 3382-1 parameters
-  with their standard errors, the STI and echo criteria for every source and listener,
-  and, by Monte Carlo (GUM Supplement 1), the parameters' uncertainty from the
-  materials' absorption and the rays, and that of the levels and speech results, with
-  one-sided bounds: [simulation](docs/simulation.md),
-  [materials' uncertainty](docs/scenes.md#materials).
+  for the lowest bands, a wave solver (with walls on its cell faces, or fitted where the
+  model has them), both on the CPU or a GPU; ISO 3382-1 parameters with their standard
+  errors, the STI and echo criteria for every source and listener, and, by Monte Carlo
+  (GUM Supplement 1), the parameters' uncertainty from the materials' absorption and the
+  rays, and that of the levels and speech results, with one-sided bounds:
+  [simulation](docs/simulation.md), [materials' uncertainty](docs/scenes.md#materials).
 - **Outdoors**: the ground and its impedance, terrain, buildings from a map, barriers
   and trees, wind, temperature and turbulence, behind barriers and buildings too, and
   sound close over whole rows of them; road vehicles by CNOSSOS-EU, trains and trams by

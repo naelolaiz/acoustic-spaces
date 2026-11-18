@@ -32,6 +32,7 @@ from acoustic_spaces.geometry import distance_to_surface
 from acoustic_spaces.parameters import RoomParameters
 from acoustic_spaces.room import Room, every_left_out
 from acoustic_spaces.scene import Scene
+from acoustic_spaces.scene.model import FITTED_WALLS_OUTDOORS, FITTED_WALLS_STENCIL
 from acoustic_spaces.scene.model import Simulation as SimulationSettings
 from acoustic_spaces.spatial.directions import fibonacci_sphere
 
@@ -644,6 +645,13 @@ def simulate(
     eddies = Eddies.of(model, c)
     responses: dict[tuple[str, str], Response] = {}
     details: dict[str, dict[str, float]] = {}
+    # Refused before any ray is traced: settings given here are not checked against the
+    # scene, which refuses fitted walls outdoors, nor checked again once changed.
+    if settings.wave.enabled and settings.wave.walls == "fitted":
+        if settings.wave.scheme == "isotropic":
+            raise ValueError(FITTED_WALLS_STENCIL)
+        if room.outdoor is not None:
+            raise ValueError(FITTED_WALLS_OUTDOORS)
     for source in chosen_sources:
         if settings.wave.enabled and source.extended:
             raise ValueError(
@@ -913,6 +921,7 @@ def simulate(
                 say=say,
                 label=source.name,
                 wind=settings.wave.wind,
+                walls=settings.wave.walls,
             )
             info.update(wave_info)
             info["wave_s"] = time.perf_counter() - started

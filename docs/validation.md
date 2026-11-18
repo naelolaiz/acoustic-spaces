@@ -5629,6 +5629,186 @@ the grid puts the wall on, what is left is below 0.001 dB, as it is with the mod
 on a cell face. At an angle, the wall's place that fits the error best lies within 0.08
 cells of the model's wall with either stencil, and the error is in the steps.
 
+**Fitted walls.** The same script runs its parts with fitted walls
+(`simulation.wave.walls: fitted`) on the 7-point stencil, the only one they take, beside
+walls on cell faces, and four parts of their own; each figure the
+[simulation page](simulation.md#low-frequencies-the-wave-solver) states for them is one
+of its checks, to the precision it is stated in (`--walls` picks the kinds of walls).
+In the boxes with every side a whole number of cells the grid's modes follow the
+stencil's relation within 2e-6, as with walls on cell faces (the update, D⁻¹K with K
+symmetric and D the cells' volumes, is symmetric within 3e-8). In each grid's own band,
+at every placement moved or turned, fitted walls' modes are off by the stencil's
+dispersion alone, as with every side in whole cells: −1.1, −1.0 and −1.0 % at most on
+the 63, 125 and 250 Hz bands' grids; 2 of the 195 modes of the 250 Hz band mix at most,
+none on the other grids. The box's 16 lowest modes against the exact ones with the
+dispersion taken out (least ... most, %; on the 125 Hz band's grid also the worst over
+24 more placements, the grid's origin drawn within a cell):
+
+| grid | turned (degrees) | walls on cell faces | fitted walls | fitted, 24 more placements |
+|---|---|---:|---:|---:|
+| 125 Hz band's (19.8 cm) | 0 / 0 | −2.31 ... +0.04 | −0.03 ... −0.00 | 0.05 |
+| | 3 / 0 | −2.54 ... +0.08 | −0.03 ... +0.01 | 0.05 |
+| | 8 / 0 | −4.19 ... −0.95 | −0.03 ... +0.10 | 0.12 |
+| | 14 / 0 | −2.92 ... −0.62 | −0.03 ... +0.37 | 0.37 |
+| | 22.5 / 11 | −5.72 ... −1.19 | +0.12 ... +0.95 | 1.00 |
+| | 30 / 20 | −6.03 ... −1.59 | +0.43 ... +1.77 | 1.83 |
+| | 45 / 0 | −7.12 ... −0.61 | −0.03 ... +3.48 | 4.30 |
+| | 40 / 35 | −6.19 ... −2.17 | +1.12 ... +3.26 | 3.56 |
+| 250 Hz band's (9.9 cm) | 0 / 0 | −0.75 ... +1.30 | −0.00 ... −0.00 | |
+| | 3 / 0 | −0.91 ... +1.30 | −0.00 ... +0.01 | |
+| | 8 / 0 | −0.95 ... +1.30 | −0.00 ... +0.05 | |
+| | 14 / 0 | −1.42 ... +1.30 | −0.00 ... +0.18 | |
+| | 22.5 / 11 | −2.03 ... −0.52 | +0.06 ... +0.49 | |
+| | 30 / 20 | −2.61 ... −0.81 | +0.20 ... +0.92 | |
+| | 45 / 0 | −3.46 ... +1.30 | −0.00 ... +1.26 | |
+| | 40 / 35 | −3.36 ... −1.26 | +0.58 ... +1.77 | |
+
+Moved along the grid (the three placements above), fitted walls' 16 lowest modes are
+within 0.03 % on the 125 Hz band's grid and 0.004 % on the 250 Hz band's, walls on cell
+faces up to 5.2 % and 2.3 % off. Every mode keeps its shape with fitted walls
+(correlation 0.987 or more; on cell faces down to 0.71). Turned further than 14
+degrees the modes come out high, more the steeper. At 45 degrees the worst over the
+placements falls in two groups, 3.2 and 4.3 %, by where the two walls lie against the
+grid's diagonal planes through the cells' centres; on the 250 Hz band's grid eight
+more placements gave 1.9 % there (one-off checks).
+
+The box's band levels (the same listeners, windows and placements) are off by up to
+0.3 / 0.5 dB in the 63 Hz band on its grid, 0.2 / 0.4 dB in the 125 Hz band and 1.1 /
+1.2 dB in the 250 Hz band on theirs (first 100 / 300 ms), where walls on cell faces are
+3.3 / 2.9, 2.4 / 4.6 and 4.0 / 3.7 dB off on the same stencil and the box with every side
+in whole cells, which is another box, 0.30 / 0.29, 0.10 / 0.26 and 1.02 / 0.49 dB.
+
+The single wall, as above, on the 7-point stencil (dB rms in front of it, by cells per
+wavelength):
+
+| wall | on cell faces: 8–16 | 16–32 | 32–64 | fitted: 8–16 | 16–32 | 32–64 | fitted, place fitted (cells) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| along the grid, 0.1 cell off a cell face | 0.34 | 0.21 | 0.10 | 0.02 | 0.00 | 0.00 | +0.00 |
+| along the grid, 0.25 cell off | 0.89 | 0.53 | 0.24 | 0.03 | 0.00 | 0.00 | −0.01 |
+| along the grid, 0.4 cell off | 1.47 | 0.85 | 0.38 | 0.01 | 0.00 | 0.00 | +0.00 |
+| along the grid, 0.48 cell behind one | 1.81 | 1.01 | 0.44 | 0.04 | 0.00 | 0.00 | +0.01 |
+| at 3 degrees to the grid | 1.17 | 0.41 | 0.23 | 0.04 | 0.01 | 0.00 | +0.00 |
+| at 8 degrees | 1.01 | 0.09 | 0.04 | 0.12 | 0.02 | 0.00 | +0.01 |
+| at 14 degrees | 0.69 | 0.20 | 0.06 | 0.18 | 0.03 | 0.01 | +0.01 |
+| at 25 degrees | 0.55 | 0.18 | 0.09 | 0.25 | 0.04 | 0.02 | +0.02 |
+| at 45 degrees | 0.32 | 0.12 | 0.09 | 0.26 | 0.11 | 0.08 | +0.05 |
+| at 45 degrees, 0.2 cell behind a cell face | 0.59 | 0.43 | 0.27 | 0.40 | 0.16 | 0.12 | +0.08 |
+
+Along the grid fitted walls lie where the model has them, and against the source's
+image in the cell face nearest the wall they are about as far off as walls on cell faces
+are against the model's wall; at an angle the error grows with it.
+
+**Fitted walls: an L-shaped room.** Its plan 2.4 x 2.0 m with a 1.0 x 0.9 m notch cut
+from a corner, 1.5 m high, every length rounded to whole cells, on the 125 and 250 Hz
+bands' 7-point grids: its lowest mode (the plan's) against the plan's own problem written
+in the script (no flow through its walls, on squares), on squares of the grid's cell
+(which walls on cell faces give within 2e-6) and in the continuum (from squares of 2.5,
+1.2 and 0.6 cm extrapolated, carried through the grid's time step: 63.35 and 64.41 Hz on
+the two grids' rooms), % off the continuum's, the room moved off the cell faces by parts
+of a cell along each axis:
+
+| grid | moved (cells) | fitted walls | walls on cell faces |
+|---|---|---:|---:|
+| 125 Hz band's (19.8 cm) | 0.311, 0.173, 0.457 | +0.83 | −1.42 |
+| | 0.05 along each axis | −0.22 | −1.42 |
+| | −0.48 along each axis | +0.83 | −1.42 |
+| | 0.48 along each axis | −1.20 | −1.42 |
+| | 0 to 0.975 in steps of 0.025, and 0.499 and 0.501 | −1.42 (at 0) ... +1.01 (at 0.5) | −1.42 |
+| 250 Hz band's (9.9 cm) | 0.311, 0.173, 0.457 | +0.33 | −0.50 |
+| | 0.05 along each axis | −0.06 | −0.50 |
+| | −0.48 along each axis | +0.35 | −0.50 |
+| | 0.48 along each axis | −0.44 | −0.50 |
+| | 0 to 0.975 in steps of 0.025, and 0.499 and 0.501 | −0.51 (at 0.499) ... +0.41 (at 0.5) | −0.50 |
+
+Walls on cell faces put the room's concave edge on whole cells, and lie below the
+continuum wherever the room lies. Fitted walls lie above or below it by where the edge
+falls within its cell, and jump by 2.31 % on the 125 Hz band's grid and 0.89 % on the
+250 Hz band's as the edge crosses the planes of the cells' centres (from 0.499 to 0.501
+of a cell); just below those planes on the 250 Hz band's grid they lie 0.01 % further
+below than walls on cell faces. At 0.05 the cube round the concave edge keeps a thin L
+of air, whose link the fit scales to the L's volume; taken whole, it put the mode 3.3 %
+above the continuum on the 125 Hz band's grid (a one-off check).
+
+**Fitted walls that absorb.** A duct 0.3 m square on 10 cm cells, its far end 0, 0.25,
+−0.48 and 0.48 of a cell past a cell face, reflects off an end of admittance 0.25 and
+0.5 within 0.010 of (1 − β)/(1 + β) with fitted walls (0.003 on cell faces); off an end
+of admittance 1, which reflects nothing in the continuum, 0.044 on a cell face and 0.061,
+0.002 and 0.077 at the others (0.044 at every place on cell faces; the grid's own
+reflection off a wall half a cell past the last cell centre is 0.02 to 0.09 at these
+frequencies, 40 to 200 Hz). An end of a material with a branch resonant at 100 Hz
+reflects within 0.003 of the grid's theory for its admittance on a cell face, and 0.012
+and 0.025 off it 0.25 and 0.48 of a cell from one (0.003 on cell faces), as the fitted
+update's own analysis in one dimension gives (a one-off check). In the box turned by 8
+degrees, its floor and ceiling of admittance 0.05 and its walls 0.02, the nine lowest
+modes decay at 0.992 to 0.999 of modal theory's rate (from the update's own terms, to
+first order), where walls on cell faces give 1.002 to 1.100; and with walls of the
+branch's material the branch states weigh what the walls' area says within 6e-9 (on cell
+faces, whose walls are the staircase's squares, 11 to 16 % more).
+
+**Fitted walls over long runs.** 200,000 steps of the L-shaped room on 10 cm cells with
+four plates in it (one turned 31 and 57 degrees, one level, two upright with a 3 cm slit
+between them), all turned 22.5 and 11 degrees, and of the box turned 22.5 degrees on the
+19.8 cm grid: rigid, each keeps its oscillating part within 0.999 to 1.001 of the second
+block of 10,000 steps, its update's coefficients are not below 0 and each cell's sum to
+at most 2, and its largest eigenvalue is 3.95 and 3.96, under 4; the uniform pressure's
+Rayleigh quotient is 2.3e-9 and 1.0e-9, so that it rings once in about 130,000 and
+200,000 steps.
+With walls of admittance 1, or of 0.05 with a branch resonant at 60 Hz, the room falls
+below 4e-11 of its first block by the half and stays there. Open (its ceiling left out,
+in a grid with the matched layer), it falls to 9e-10 by the eighth block and then rises
+by about 1e-10 a block, to 2.1e-9 at the end: single precision's rounding round the
+matched layer, which walls on cell faces show too (a one-off check).
+
+**Fitted walls: cost.** Through the solver with two threads, the least of three runs
+(the script's own machine, 4 cores shared):
+
+| model | grid (cell) | cells of air | the fit (s) | per step over the 7-point stencil on cell faces | the 19-point stencil's |
+|---|---|---:|---:|---:|---:|
+| the box, 5 s of sound | 250 Hz band's (9.9 cm) | 38,556 | 0.07 | 1.57 | 1.90 |
+| the church, closed, 0.25 s | 125 Hz band's (19.8 cm) | 1,228,682 | 0.92 | 1.35 | 1.89 |
+| the leaky classroom, open, 0.25 s | 125 Hz band's (19.8 cm) | 117,504 | 0.16 | 1.03 | |
+
+An open model is fitted twice: on the closed grid the solver tries first and on the grid
+with the matched layer. In one-off checks at 125 Hz with the examples' own lengths, a run
+took 1.1 to 1.4 times as long as with walls on cell faces and the default stencil in
+seven examples, and 2.4 to 2.6 times in a small room holding a sphere of 5,120 faces,
+where the fit took most of the extra time (0.03 to 1.1 s on the examples, 13 to 18 s on
+a grid of 37 million cells). The set-up's memory peaks while the model is fitted, at 2.7
+(the church) to 4.1 times (a box of 37 million cells) that with walls on cell faces.
+
+**Fitted walls: one-off checks.** Beyond the script:
+
+- Turned rooms with absorbing materials, 63 and 125 Hz bands, against the same room on
+  cells half as large: the lecture hall turned 17 degrees within 0.43 dB (G) and 2.4 %
+  (T20) with fitted walls; the studio turned 17 degrees within 0.40 dB, its 125 Hz T20
+  6.0 % and 4.7 % above at its two sources, 3 % unturned (the default grid, 8 points per
+  wavelength at the band's top, is coarse for its T20; finer grids approach the half-cell
+  result smoothly). Walls on cell faces on the default grid were 0.05 to 1.75 dB (G) and
+  4.8 to 22.6 % (T20, always shorter) off the same reference.
+- A thin rigid screen behind which the level is read against the exact diffraction
+  (Biot-Tolstoy-Medwin), 8 to 16 cells per wavelength: with its edge on a cell face,
+  fitted walls are 0.15 dB rms off (walls on cell faces 0.73); with the edge inside a
+  cell, 0.11 to 1.2 dB, more the higher the edge lies in its cell (on cell faces 0.26 to
+  0.70 dB): in the cell the edge ends in the fit leaves the screen out, so it acts as if
+  it ended up to a cell lower and lets too much sound past.
+- A listener 0.2 to 1.5 cells from a rigid wall, against the exact field: along the grid
+  and at 8 degrees fitted walls give the level within 0.40 dB and its gradient along the
+  wall within 0.89 dB (walls on cell faces up to 2.29 and 7.96 dB); the gradient's
+  component normal to the wall, nearly 0 there, is up to 11.4 dB off with fitted walls
+  and 13.8 dB on cell faces. Fitted walls' errors hardly depend on where the wall lies
+  in its cell, and walls on cell faces can be closer where their errors cancel: by up to
+  0.35 dB with the wall a quarter of a cell off a cell face, and by up to 2.8 dB in the
+  normal component at 8 degrees.
+- Every indoor example checked (17 at 63, 125 and 250 Hz, every source; not the BIM
+  office, which needs the `ifc` extra) fits without a refusal; where its mesh is closed,
+  its air volume is the mesh's within 3e-16. Outdoor scenes are refused by design.
+- Next to the matched layer a cell keeps its link to the layer whole where a grid
+  without the layer would scale it: one more cell between the model and the layer
+  changed the open classroom's responses by up to 7e-4 of their peak (rms), at most 1.9
+  times as much as with walls on cell faces.
+- The fit gives the same arrays to the bit on every platform CI tests (Linux, Windows,
+  macOS on Intel and on Apple silicon): a test compares their hashes.
+
 **On a GPU.** `validation/wave_gpu.py` computes the wave bands (up to 125 Hz, 0.5 s) of
 the first source of three example rooms to every listener on the CPU and on the GPU,
 and compares the two. The tests do the same with resonant walls and with the matched
@@ -5650,7 +5830,10 @@ earlier version of the script and include the grid's set-up on the CPU (the same
 both) and, in the first room, the GPU's start-up; the script now prints the set-up on
 its own, the CPU's and the GPU's time steps without it, and the speed-up of the steps.
 A software driver is no faster than the CPU solver; the script is there to time a
-hardware GPU.
+hardware GPU. With fitted walls (`--walls fitted`, the 7-point stencil, 1,516 steps) on
+SwiftShader, another Vulkan driver that runs on the CPU, the three rooms differ by
+7.4e-7, 8.4e-7 and 5.9e-7, and the tests' closed and open rooms by 2.4e-7 and 1.5e-7
+after 400 steps (one-off checks; the tests' bar on a software driver is 1e-5).
 
 ## Real-time convolver
 
@@ -6240,7 +6423,33 @@ Results:
   centres has 42 of its 46662 19-point links cut by its edges (0.026 of the response). A
   screen whose plane and rims round to different sides of 1e-10 cells gives up to 0.11
   of the response on the 19-point grid. Past 1.3 million cells from the grid's origin,
-  rounding moves some ties out of reach (16 of 32 tied links of one scene).
+  rounding moves some ties out of reach (16 of 32 tied links of one scene). With
+  fitted walls (`simulation.wave.walls: fitted`) none of these arise: the fit decides
+  every side exactly. Its own sudden changes are the next item.
+- **Sudden changes with fitted walls.** With `simulation.wave.walls: fitted`, a cell is
+  stepped where its centre lies in air, and a piece of air that holds no cell centre is
+  stepped with the neighbouring cell it shares the most open area with. A face that
+  crosses a plane of the cells' centres takes centres from air to solid or back, and the
+  response changes suddenly there: the L-shaped room's lowest mode by 2.3 % on the
+  125 Hz band's grid and 0.9 % on the 250 Hz band's (`validation/wave_walls.py`), and
+  the response of solids whose faces pass through cell centres, moved by 1e-7 of a
+  cell, by up to 0.34 of its peak (one-off checks, the solver's own pulse, which
+  reaches the top of the grid's band). Where two cells share a centreless piece alike
+  to within 1e-12 of a cell face, the one with the lower index takes it, and a model
+  moved through that choice changes the response suddenly too: by up to 0.25 of its
+  peak in a one-off check, a solid with faces at 45 degrees moved by less than 1e-12 of
+  a cell from where they lie alike against the grid. Any rule that gives each piece of
+  air to one cell changes suddenly where its choice changes; sharing such pieces among
+  their neighbours would remove it. Where a solid's convex edge whose faces lie a hair
+  inside the grid's planes meets a face off them (a corner of a box), the response
+  changes by up to 0.05 of its peak (0.07 dB in a band) as those faces leave the
+  planes, where along the rest of the edge it changes continuously (a one-off check): a
+  rule for the depth of air behind each such link would remove it. A closed chamber
+  thinner than a cell, joined to a cell through a hole much smaller than a cell face,
+  nearly closes that cell's link on the other side, as if the chamber were a sliver of
+  the cell's own; and the rule that scales that link starts where a sliver's face is
+  larger than 1e-9 of a cell face, with a step there (8e-7 of the link's weight in a
+  test's room).
 
 Models:
 
@@ -6370,7 +6579,7 @@ python -m pip install pyroomacoustics matplotlib
 python validation/pyroomacoustics_crosscheck.py --json results.json --plots docs/validation
 python validation/convolver_benchmark.py
 python validation/wave_solver.py --plot docs/images/wave.png
-python validation/wave_walls.py --json wave_walls.json   # 18 to 25 min; --bands 63 125: 10 less
+python validation/wave_walls.py --json wave_walls.json   # 41 to 51 min; --walls picks the kinds
 python validation/edge_diffraction.py --json diffraction.json
 python validation/edge_fade.py --json edge_fade.json
 python validation/walks.py --json walks.json   # --walks gallery archway street
