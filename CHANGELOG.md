@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed: the pieces of an edge along one line are one edge also where rounding leaves
+  their directions up to about a millionth apart (a model written with six decimals) or
+  at 45 degrees to two axes: a screen's top drawn in four pieces was up to four edges,
+  which moved the level in an open box turned 45 degrees by 0.03 dB at 63 Hz with
+  `second_order` diffraction.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

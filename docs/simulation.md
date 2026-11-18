@@ -317,7 +317,8 @@ buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)).
 
 The edges are found in the model: corners where two faces meet with more than 195° of
 open air round them (the inside corner of an L-shaped room, the front of a stage or a
-balcony) and the free edges of thin screens. Each source and listener get the shortest
+balcony) and the free edges of thin screens; an edge drawn in pieces along one line is one
+edge, also where the model's coordinates are rounded. Each source and listener get the shortest
 path over each edge they can both see. In the shadow of the edge that path carries the
 diffracted sound; on the lit side, near the boundary, it changes the energy of the
 specular path it borders. Across a boundary the level is continuous: the tests cross one

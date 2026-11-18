@@ -560,6 +560,8 @@ def _join(model, p0, p1, e, along, normal, wedge, face0, face1) -> Edges:
             plane=np.zeros((0, 2), dtype=np.int64),
             reflection=np.zeros((0, 2, bands)),
         )
+    from scipy.spatial import cKDTree
+
     size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
     tol = 1e-6 * size
     # One direction per line: its largest component positive.
@@ -580,7 +582,30 @@ def _join(model, p0, p1, e, along, normal, wedge, face0, face1) -> Edges:
             np.round(foot / tol),
         ]
     ).astype(np.int64)
-    group = np.unique(key, axis=0, return_inverse=True)[1].reshape(-1)
+    unique, inverse = np.unique(key, axis=0, return_inverse=True)
+    inverse = inverse.reshape(-1)
+    # One line for the pieces whose keys are at most one apart in every number, on
+    # either side of a rounding step, with their directions either way: which component
+    # of a line at 45 degrees to two axes is the largest depends on how its ends were
+    # rounded. Their planes and materials are the same (whole numbers, made three apart
+    # where they differ).
+    count = len(unique)
+    either = np.concatenate([unique, unique]).astype(float)
+    either[:, :4] *= 3.0
+    either[count:, 4:7] *= -1.0
+    pairs = cKDTree(either).query_pairs(1.5, p=np.inf, output_type="ndarray") % count
+    line = _components(count, pairs[:, 0], pairs[:, 1])
+    group = line[inverse]
+    # Each piece in the direction of its line's first key.
+    first = np.full(count, count, dtype=np.int64)
+    np.minimum.at(first, line, np.arange(count))
+    turn = np.einsum("ij,ij->i", unique[inverse, 4:7], unique[first[group], 4:7]) < 0
+    if turn.any():
+        e = np.where(turn[:, None], -e, e)
+        p0, p1 = np.where(turn[:, None], p1, p0), np.where(turn[:, None], p0, p1)
+        t0 = np.einsum("ij,ij->i", p0, e)
+        t1 = np.einsum("ij,ij->i", p1, e)
+        foot = p0 - t0[:, None] * e
     chosen, begin, finish = [], [], []
     for i in np.lexsort((t0, group)):
         if chosen and group[chosen[-1]] == group[i] and t0[i] <= finish[-1] + tol:
