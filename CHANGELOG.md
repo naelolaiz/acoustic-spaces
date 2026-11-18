@@ -9,6 +9,12 @@
   millimetre off at most (models up to 100 m wide are as before), and a millimetre above
   a roof and a screen level with it the level is that a centimetre above within 0.14 dB
   (it was up to 0.64 dB below).
+- Fixed: a path over an edge that reflects off a plane next to it counted wherever the
+  ray from just off the edge met a face of that plane; near grazing incidence that ray
+  meets the plane far from the path's own line. It now counts only where that line meets
+  a face: with `second_order` the level a metre above a roof and a screen 1 m past it
+  stepped by 3.1 dB at 63 Hz with the screen's top 0.6 mm lower than where the path over
+  it begins to reflect off the roof.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

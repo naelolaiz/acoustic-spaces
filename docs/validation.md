@@ -1300,9 +1300,12 @@ the level is 3.4 to 5.0 dB above that over one. Over a top 5 m wide and then a
 screen level with it, 5 m past it, the level a centimetre above their plane is the
 same with the source and the listener swapped, within 0.15 dB. Closer to the top or
 to the plane two things count. A path over the screen's top reflects off the top's
-plane where its own line meets that plane: with the two level, at the screen's top
-itself, where the top is not, so that it is no path, whatever the ray that looks for
-it meets from its start just off the edge; and the
+plane where its own line meets that plane, and counts only if the top is there,
+whatever the ray that looks for it meets from its start just off the edge: with the
+two level, the line meets the plane at the screen's top itself, where the top is not;
+near grazing incidence the ray meets the plane far from the line (with the source a
+centimetre above the plane, 6.6 mm inside the top's far edge where the line passes
+17.5 cm past it). And the
 screen's top lies beside the reflection off the top, before the point of reflection
 one way round and after it the other, and takes its term on that leg. In six cases from a millimetre to a metre above the plane, the screen 0.1 to 5 m
 past the top, the two ways round agree within 0.05 dB (`tests/test_diffraction.py`),
@@ -5967,12 +5970,15 @@ Results:
   2.5 dB below it); with the top 5 m wide and the screen 5 m past it, -7.6 to -8.4 dB,
   `second_order` 2.3 to 3.4 dB below (`first_order` within 1.3 dB), either way round
   with the rays' own search for reflections. The level also steps with the height of
-  the screen's top at that plane, by 13 to 16 dB over 4 mm: past the 9 m top with
-  `second_order` and every sequence of reflections tested (`method: image_sources`),
-  it is -13.7 to -19.0 dB with the screen's top from 2 mm to a micrometre below the
-  plane, -9.6 to -12.6 dB with it level or up to 0.5 mm above, and -0.3 to -1.9 dB
-  from 0.55 mm above, from where the path over the screen's top reflects off the top
-  (0.53 mm above, it does so at the top's far edge). Above 500 Hz, where the bands add
+  the screen's top at that plane: past the 9 m top with `second_order` and every
+  sequence of reflections tested (`method: image_sources`), it is -13.7 to -19.7 dB
+  with the screen's top from 2 mm to a micrometre below the plane, -9.6 to -12.6 dB
+  with it level or up to 0.52 mm above, +0.5 to -1.8 dB from 0.53 to 1.7 mm above,
+  from where the path over the screen's top reflects off the top (0.53 mm above, it
+  does so at the top's far edge), and -7.9 to -11.7 dB from 1.8 mm to 5 cm above,
+  where the screen hides the top's far edge from the listener (from 1.67 mm above; the
+  ray that tests that path starts a tenth of a millimetre off the edge and passes the
+  screen's top 0.06 mm higher). Above 500 Hz, where the bands add
   in energy, the level is -10.0 to -10.2 dB with the screen's top level and -5.6 dB
   with it a micrometre above. With it 10 µm to 0.5 mm above the plane and the rays' own
   search, the two ways round are also up to 0.4 dB apart. A solver for whole rows

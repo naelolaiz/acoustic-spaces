@@ -88,7 +88,7 @@ from acoustic_spaces import products
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.clusters import Clusters
 from acoustic_spaces.engine.coherent import ground_factors, ground_wave_factors, reflection_phases
-from acoustic_spaces.engine.early import EarlyReflections, _face_at
+from acoustic_spaces.engine.early import EarlyReflections, _face_at, _over
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 from acoustic_spaces.geometry.cells import _components
 from acoustic_spaces.geometry.outdoor import ON_GROUND_M, on_ground
@@ -1487,7 +1487,18 @@ class EdgeDiffraction:
                 across = (height * beyond < 0.0) & (np.abs(height) > tolerance)
                 share = np.where(across, height / np.where(across, height - beyond, 1.0), 0.0)
                 crossing = at_edge + share[:, None] * (target - at_edge)
-                for i in np.flatnonzero(hit & (np.abs(height) <= offset)):
+                recheck = hit & (np.abs(height) <= offset)
+                # Farther off, a ray that starts beside the point stands for it unless the
+                # line from its start meets the plane off the face that the line from the
+                # point crosses it on: near grazing incidence the two cross the plane far
+                # apart (6.6 mm inside a roof's end and 17.5 cm past it, from a screen's top
+                # 0.43 mm above the roof's plane with the source 1 cm above it and the ray
+                # 0.1 mm above the top). A ray from inside an end of the edge, for a point
+                # near or past that end, still decides.
+                far = np.flatnonzero(hit & across & ~recheck & (along[via] == 0.0))
+                if len(far):
+                    recheck[far[~_over(self.model, face[far], crossing[far])]] = True
+                for i in np.flatnonzero(recheck):
                     hit[i] = _face_at(self.model, int(through[i]), crossing[i], tolerance) >= 0
                 ok[via] &= hit
                 rows = np.flatnonzero(via)
