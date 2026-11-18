@@ -726,7 +726,10 @@ def find_paths(
     bands = model.absorption.shape[1]
 
     tolerance = _EDGE_TOLERANCE * float(np.ptp(model.room.mesh.vertices, axis=0).max())
-    counted = np.column_stack([~model.transparent, model.partition])
+    # The faces crossed: those that are not openings, the partitions, and those with a
+    # room on one side only (model.face_leaves).
+    counted = np.column_stack([~model.transparent, model.partition, model.face_leaves])
+    allowed = None  # how many of the source and the listener lie in no room, once needed
     parts = []
     direct = np.zeros((1, 0), dtype=np.int64)
     for seqs in [direct, *candidates]:
@@ -752,8 +755,8 @@ def find_paths(
         points[k] = current.copy()
         ignore = np.full(n, -1, dtype=np.int64)
         through = np.ones((n, bands))
-        # Per path: the faces crossed that are not openings, and the partitions.
-        crossings = np.zeros((n, 2), dtype=np.int64)
+        # Per path: how many faces it crosses of each column of ``counted``.
+        crossings = np.zeros((n, counted.shape[1]), dtype=np.int64)
         # The reflections at the current point (from reflection ``first`` on, more than
         # one in a corner) and the point the path came to them from.
         before = current.copy()
@@ -836,6 +839,16 @@ def find_paths(
             through[rows] *= share
             crossings[rows] += crossed
         valid &= np.any(through > 0.0, axis=1)
+        # What a face lets out of the rooms goes into none and does not come back in
+        # through another, as the late part's rays stop there: a path that crosses a face
+        # with a room on one side only is none, but for one crossing for each of the
+        # source and the listener that lies in no room (which validate reports), as its
+        # sound comes in or goes out through one.
+        leaving = np.flatnonzero(valid & (crossings[:, 2] > 0))
+        if len(leaving):
+            if allowed is None:
+                allowed = _outside(model, source, listener)
+            valid[leaving] = crossings[leaving, 2] <= allowed
         if max_partitions is not None and k > 0:
             valid &= crossings[:, 1] <= max_partitions
         if not valid.any():
@@ -902,6 +915,11 @@ def find_paths(
     return found
 
 
+def _outside(model: TraceModel, *points: np.ndarray) -> int:
+    """How many of ``points`` lie in no room of ``model``."""
+    return int(np.sum(model.room.room_of(np.vstack(points)) < 0))
+
+
 def _apart(
     model: TraceModel, seqs, points: list, faces, crossings, source, listener, tolerance, counted
 ) -> None:
@@ -914,7 +932,7 @@ def _apart(
     larger): in place, those points, in the order of the planes or in another that gives
     the same image (one that swaps only perpendicular planes), and the faces they lie on,
     where that path can be, each point lies on a face of its plane and its legs cross the
-    faces the path's ``crossings`` (n, 2) count (of ``counted``, as :func:`find_paths`
+    faces the path's ``crossings`` (n, m) count (of ``counted``, as :func:`find_paths`
     counts them), nothing solid. The corner lies up to the tolerance from where the path
     meets each plane; the share of sound the path lets through stays the corner's."""
     n, k = faces.shape

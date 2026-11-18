@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed: the early part followed sound out of the rooms through a surface that lets it
+  out and back in through another, which the late part's rays do not: in a room in the
+  shape of a U whose notch's walls let sound through, the image sources found the direct
+  sound and 10 reflections across the notch, the ray search 4 more, and with edge
+  diffraction the level came out 1.0 dB higher at 63 Hz. Early paths, over edges too,
+  now cross such a surface only from a source or to a listener outside the rooms.
 - Fixed: a wall between two rooms drawn once for each room (two faces in one place, as
   where two rooms modelled as closed models touch) let no sound through in the late part,
   which took the space between the two faces for no room: behind a 30 dB partition so

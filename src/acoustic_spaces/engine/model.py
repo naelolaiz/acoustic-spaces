@@ -356,6 +356,37 @@ class TraceModel:
         return self.plane_two_sided[self.face_plane] & (air[:, 0] == air[:, 1])
 
     @cached_property
+    def face_leaves(self) -> np.ndarray:
+        """(F,) the faces that sound passing them leaves the rooms through, where the rooms
+        are known: a room on one side only (:attr:`face_beyond`, so that a wall drawn once
+        for each room is not one). What passes through one goes into no room and does not
+        come back in through another, as the late part's rays stop there (an opening to the
+        outside, a wall that lets sound out). None of them when the rooms are not known."""
+        air = self.face_beyond >= 0
+        return air[:, 0] != air[:, 1]
+
+    @cached_property
+    def face_normal(self) -> np.ndarray:
+        """(F, 3) the unit normal of each face of the mesh, which points to its front
+        (the side ``face_room`` gives first)."""
+        return self.room.mesh.face_normals()
+
+    @cached_property
+    def face_out(self) -> np.ndarray:
+        """(F, 3) for each of the faces sound leaves the rooms through
+        (:attr:`face_leaves`) the unit normal that points out of the rooms; zeros for the
+        others."""
+        normals = self.face_normal
+        out = np.where((self.face_beyond[:, 0] >= 0)[:, None], -normals, normals)
+        return np.where(self.face_leaves[:, None], out, 0.0)
+
+    @cached_property
+    def face_out_offset(self) -> np.ndarray:
+        """(F,) where the plane of each face lies along :attr:`face_out`: a point ``p``
+        lies out of the rooms' side of it where ``face_out @ p`` exceeds this."""
+        return np.einsum("ij,ij->i", self.face_out, self.room.mesh.triangles[:, 0])
+
+    @cached_property
     def geometric_plane(self) -> np.ndarray:
         """(P,) for each plane the first of the planes that lie where it does, whichever
         way they face: two walls with a room on one side in line with each other that

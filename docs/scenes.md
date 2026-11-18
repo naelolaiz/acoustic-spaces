@@ -482,7 +482,9 @@ assignments:
   must be at least the transmission in every band. A material without absorption
   values, preset or file absorbs what it lets through: an opening absorbs 1. What a
   surface lets out of the rooms goes into no room and does not come back in through
-  another: the late part's rays and the rain of their reflections stop there.
+  another: the late part's rays and the rain of their reflections stop there, and the
+  early part's paths, over edges too, cross such a surface only to come from a source
+  or go to a listener outside the rooms (which `validate` reports).
 - The rooms are found from the faces: every space the faces close off on all sides is
   one, whichever way the normals point. The space inside a thick wall or a column, with
   rooms all round it, is solid, as is the inside of a closed shell standing on the floor

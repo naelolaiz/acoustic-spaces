@@ -343,6 +343,120 @@ def test_sound_let_out_of_the_rooms_does_not_come_back_in(tmp_path: Path) -> Non
     assert shared[:5].sum(axis=1).min() > 0.0
 
 
+def _u_room(path: Path) -> Path:
+    """A room 13 m by 9 m and 3 m high in the shape of a U, round a notch 3 m wide and
+    4 m deep between its arms, outside the room; the notch's walls at y = 5 and x = 8
+    are the group ``notch``."""
+    plan = [(0, 0), (13, 0), (13, 9), (8, 9), (8, 5), (5, 5), (5, 9), (0, 9)]
+    walls = [
+        ((a[0], a[1], 0), (b[0], b[1], 0), (b[0], b[1], 3), (a[0], a[1], 3))
+        for a, b in zip(plan, plan[1:] + plan[:1], strict=True)
+    ]
+    floors = [
+        ((x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z))
+        for x0, y0, x1, y1 in ((0, 0, 13, 5), (0, 5, 5, 9), (8, 5, 13, 9))
+        for z in (0, 3)
+    ]
+    return _write(path, {"walls": walls[:3] + walls[5:] + floors, "notch": walls[3:5]})
+
+
+def _across_the_notch(points: np.ndarray) -> bool:
+    """Whether a path through ``points`` passes through the U room's notch."""
+    t = np.linspace(0.0, 1.0, 101)[:, None]
+    legs = zip(points[:-1], points[1:], strict=True)
+    along = np.concatenate([a + t * (b - a) for a, b in legs])
+    inside = (along[:, 0] > 5.0 + 1e-6) & (along[:, 0] < 8.0 - 1e-6)
+    return bool(np.any(inside & (along[:, 1] > 5.0 + 1e-6)))
+
+
+@pytest.mark.parametrize("diffraction", ["none", "first_order"])
+def test_early_paths_do_not_go_out_of_the_rooms_and_back_in(
+    tmp_path: Path, diffraction: str
+) -> None:
+    """In a room in the shape of a U, from a source by the notch between its arms to a
+    listener in an arm behind it, the notch's walls letting sound through: what one lets
+    out into the notch, in no room, does not come back in through the other, as in the
+    late part (:func:`test_sound_let_out_of_the_rooms_does_not_come_back_in`). The image
+    sources and the ray search find the same paths and the same levels, none of them
+    across the notch. The image sources had found 11 paths across it (the direct sound
+    through both walls among them) and the ray search 15, and with the paths over the
+    edges the level was 1.0 dB higher at 63 Hz."""
+    obj = _u_room(tmp_path / "u.obj")
+    found = []
+    for method in ("image_sources", "ray_tracing"):
+        room = Room.from_scene(
+            _scene(
+                obj,
+                {
+                    "wall": _flat(0.1, scattering=0.0),
+                    "thin": _flat(0.1, scattering=0.0, transmission_loss=10),
+                },
+                {"walls": "wall", "notch": "thin"},
+                {"l": [10.0, 8.5, 1.5]},
+                source=[6.5, 4.5, 1.5],
+                ir_length_s=0.3,
+                early={"method": method, "max_order": 2, "diffraction": diffraction},
+            )
+        )
+        assert len(TraceModel.from_room(room).room_volumes) == 1
+        paths = early_paths(room)
+        assert len(paths) > 1
+        assert not any(_across_the_notch(np.asarray(points)) for points in paths.points)
+        found.append(paths)
+    image, rays = found
+    assert len(image) == len(rays)
+    np.testing.assert_allclose(total_energy(rays), total_energy(image), rtol=1e-9)
+
+
+@pytest.mark.parametrize("diffraction", ["none", "direct", "first_order", "second_order"])
+def test_no_early_sound_goes_out_of_a_window_and_in_through_another(
+    tmp_path: Path, diffraction: str
+) -> None:
+    """Two houses across a lane 1 m wide, an open window in each of the walls that face
+    each other: what goes out of one window goes into no room and does not come in
+    through the other, nor round its edges, in the early part as in the late. From a
+    source in one house the other got the direct sound through both windows and the
+    sound over their edges. From a source in the lane, in no room (which validate
+    reports), the sound comes in through a window as before, and from the first house it
+    goes out through one to a listener there."""
+    window = [((x, 1.5, 1.0), (x, 2.5, 1.0), (x, 2.5, 2.0), (x, 1.5, 2.0)) for x in (4, 5)]
+    walls = [
+        ((4, 0, 0), (4, 1.5, 0), (4, 1.5, 3), (4, 0, 3)),
+        ((4, 2.5, 0), (4, 4, 0), (4, 4, 3), (4, 2.5, 3)),
+        ((4, 1.5, 0), (4, 2.5, 0), (4, 2.5, 1), (4, 1.5, 1)),
+        ((4, 1.5, 2), (4, 2.5, 2), (4, 2.5, 3), (4, 1.5, 3)),
+    ]
+    walls += [tuple((5, y, z) for _, y, z in quad) for quad in walls]
+    obj = _write(
+        tmp_path / "houses.obj",
+        {
+            "house1": _box(0, 4, 4, 3, skip=("x1",)),
+            "house2": _box(5, 9, 4, 3, skip=("x0",)),
+            "lane": walls,
+            "window": window,
+        },
+    )
+
+    def heard(source, listener=(7.0, 2.1, 1.4)) -> float:
+        room = Room.from_scene(
+            _scene(
+                obj,
+                {"wall": _flat(0.2), "open": {"transmission": 1}},
+                {"house1": "wall", "house2": "wall", "lane": "wall", "window": "open"},
+                {"other": list(listener)},
+                source=source,
+                ir_length_s=0.3,
+                early={"max_order": 2, "diffraction": diffraction},
+            )
+        )
+        assert len(TraceModel.from_room(room).room_volumes) == 2
+        return float(total_energy(early_paths(room)).sum())
+
+    assert heard([2.1, 1.9, 1.6]) == 0.0
+    assert heard([4.5, 2.0, 1.5]) > 0.0
+    assert heard([2.1, 1.9, 1.6], (4.5, 2.0, 1.5)) > 0.0
+
+
 def test_coupled_rooms_decay_in_two_slopes(tmp_path: Path) -> None:
     # The dry room's decay falls fast, then follows the live room's, as the two-room
     # diffuse-field model has it.
@@ -1329,6 +1443,36 @@ def test_no_step_where_a_reflection_crosses_a_doorway_s_side(tmp_path: Path) -> 
         )
         levels.append(10 * np.log10(total_energy(early_paths(Room.from_scene(scene)))))
     assert np.abs(levels[1] - levels[0]).max() < 0.1
+
+
+def test_paths_over_the_edges_at_a_doorway_out_are_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The room above, its doorway leading out of the rooms, the source and the listener
+    inside: the paths over edges are those found without the rule that stops them going
+    out through the doorway, as none of their ways goes out. The terms of the edge fade
+    over the ceiling's edge at the doorway's top (and the floor's at its foot) stand in
+    for a reflection off the wall missed in the doorway; that edge lies in the wall's
+    plane, so the line from it to the listener's image meets the floor in the wall's
+    mirror image, outside, where the way itself reflects off the floor in the room. The
+    rule had taken that point for one outside the rooms and left those terms out: 32
+    paths, 0.5 dB at 63 Hz."""
+    scene = _scene(
+        _doorway(tmp_path / "doorway.obj"),
+        {"hard": _flat(0.05, scattering=0.05), "open": {"transmission": 1}},
+        {"walls": "hard", "floor": "hard", "ceiling": "hard", "door": "open"},
+        {"l": [7.999, 2.0, 1.5]},
+        source=[3.0, 3.0, 1.5],
+        early={"max_order": 3, "diffraction": "first_order"},
+    )
+    found = []
+    for rule in (True, False):
+        if not rule:
+            monkeypatch.setattr("acoustic_spaces.engine.diffraction._outward", lambda model: None)
+        paths = early_paths(Room.from_scene(scene))
+        found.append((len(paths), total_energy(paths)))
+    assert found[0][0] == found[1][0]
+    np.testing.assert_array_equal(found[0][1], found[1][1])
 
 
 def test_the_face_nearest_to_a_point_in_a_doorway_is_the_wall_beside_it(

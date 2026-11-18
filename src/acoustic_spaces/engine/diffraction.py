@@ -997,6 +997,13 @@ class EdgeDiffraction:
         #: (:meth:`_in_line`) that carry too little to be among them, or None.
         self.unheard: tuple[EarlyReflections, EarlyReflections] | None = None
         self.size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
+        #: The openings that stop the paths over edges (_outward), or None.
+        self.outward = _outward(model)
+        #: Whether the ways between two points on faces are tested to lie in the rooms
+        #: (_in_rooms), for the listener of the paths over edges being found: where some
+        #: faces let sound out of the rooms, and the source and the listener lie in them.
+        self.midway = False
+        self._source_in = None
         frequencies, self.slice_hz = band_frequencies(bands=model.bands)
         self.wavenumber = 2.0 * np.pi * frequencies / self.speed_of_sound  # (B, M)
         self.k_min = float(self.wavenumber.min())
@@ -1134,6 +1141,11 @@ class EdgeDiffraction:
         self.ledger = self.unheard = None
         if len(self.edges) == 0:
             return paths
+        self.midway = False
+        if self.outward is not None:
+            if self._source_in is None:
+                self._source_in = bool(self.model.room.room_of(self.source[None])[0] >= 0)
+            self.midway = self._source_in and bool(self.model.room.room_of(listener[None])[0] >= 0)
         combos = self._combos(listener, max_delay_s)
         if combos is not None:
             combos = self._in_front(listener, paths, combos)
@@ -1455,13 +1467,21 @@ class EdgeDiffraction:
             via = (kind == image_kind) | (kind == 3)
             plain = ~via
             if plain.any():
-                ok[plain] &= _clear(self.model, start[plain], ends[plain])
+                ok[plain] &= _clear(
+                    self.model,
+                    start[plain],
+                    ends[plain],
+                    closed=self.outward,
+                    ends=(point[plain], True),
+                )
             if via.any():
                 target = src[via] if image_kind == 1 else rcv[via]
                 through = plane[via]
                 if image_kind == 2:
                     through = np.where(kind[via] == 3, plane2[via], through)
-                hit, where, face = _reflect(self.model, start[via], target, through, ends[via])
+                hit, where, face = _reflect(
+                    self.model, start[via], target, through, ends[via], self.outward, point[via]
+                )
                 # Where the edge's point lies no farther from the plane the path is to
                 # reflect off than the ray starts from the point, the ray's start does not
                 # stand for the point: the ray can meet a face of that plane (a roof level
@@ -1479,6 +1499,9 @@ class EdgeDiffraction:
                 crossing = at_edge + share[:, None] * (target - at_edge)
                 for i in np.flatnonzero(hit & (np.abs(height) <= offset)):
                     hit[i] = _face_at(self.model, int(through[i]), crossing[i], tolerance) >= 0
+                if self.midway and hit.any():
+                    mid = 0.5 * (at_edge[hit] + where[hit])
+                    hit[hit] = _in_rooms(self.model, mid, np.broadcast_to(self.source, mid.shape))
                 ok[via] &= hit
                 rows = np.flatnonzero(via)
                 second = (kind[via] == 3) & (image_kind == 2)
@@ -1816,11 +1839,23 @@ class EdgeDiffraction:
             for p, t, e in ((p1, t1, e1), (p2, t2, e2))
         ]
         ends = np.broadcast_to(self.source, p1.shape), np.broadcast_to(listener, p2.shape)
-        for a, b in ((starts[0], ends[0]), (starts[0], starts[1]), (starts[1], ends[1])):
+        legs = (
+            (starts[0], ends[0], p1, True),
+            (starts[0], starts[1], p1, p2),
+            (starts[1], ends[1], p2, True),
+        )
+        for a, b, from_a, to_b in legs:
             rows = np.flatnonzero(ok)
             if len(rows) == 0:
                 return None
-            ok[rows] = _clear(model, a[rows], b[rows])
+            to_b = to_b if to_b is True else to_b[rows]
+            ok[rows] = _clear(
+                model, a[rows], b[rows], closed=self.outward, ends=(from_a[rows], to_b)
+            )
+        rows = np.flatnonzero(ok)
+        if self.midway and len(rows):
+            mid = 0.5 * (p1[rows] + p2[rows])
+            ok[rows] = _in_rooms(model, mid, np.broadcast_to(self.source, mid.shape))
         sel = np.flatnonzero(ok)
         if len(sel) == 0:
             return None
@@ -2823,16 +2858,44 @@ def _reach(kind, length, t_s, rho_s, t_r, rho_r, speed_of_sound, max_delay_s, pa
     return ok, t_k, r1, r2
 
 
-def _first_solid(model: TraceModel, start, direction, length, ignore, through=None):
+def _first_solid(
+    model: TraceModel,
+    start,
+    direction,
+    length,
+    ignore,
+    through=None,
+    closed=None,
+    ends=(True, True),
+):
     """How far along each ray from ``start`` the first face within ``length`` that is not
     an opening (nor one of ``through``, a mask over the faces) lies, and that face, or
-    -1."""
+    -1. The openings of ``closed`` (a mask over the faces with a room on one side only,
+    :func:`_outward`) let a ray out of the rooms only on to its end, and in only from its
+    start: what goes out through one goes into no room and does not come back in. A ray
+    that has gone out and then meets a face stops at the opening it went out through.
+    ``ends`` says, for the ray's start and for its end (the point at ``length`` along
+    it), how it may come in or go out there: True for a source or a listener, which may
+    lie outside the rooms (validate reports it), its sound coming in or going out
+    through one; False for a point that may not (a point a path reflects at, or an image
+    the ray aims at); or (n, 3) the points on edges that the rays' starts or ends stand
+    for, just off them: a ray from just off an edge on an opening, or nearer to one than
+    that (the end of a barrier on ground that ends just past it), can start outside the
+    rooms, and it comes in (or at its end goes out) through an opening whose rooms' side
+    that point lies on, which the way from the point itself does not cross."""
     n = len(start)
     face = np.full(n, -1, dtype=np.int64)
     at = np.zeros(n)
     travelled = np.zeros(n)
     skip = np.broadcast_to(np.asarray(ignore, dtype=np.int64), (n,)).copy()
-    transparent = model.transparent if through is None else model.transparent | through
+    transparent = model.transparent if closed is None else model.transparent & ~closed
+    if through is not None:
+        transparent = transparent | through
+    if closed is not None:
+        size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
+        first, last = (_may_cross(model, end, n, 1e-9 * size) for end in ends)
+        gone = np.full(n, -1, dtype=np.int64)  # the opening each ray went out through
+        gone_at = np.zeros(n)
     alive = np.arange(n)
     for _ in range(MAX_CROSSINGS + 1):
         if len(alive) == 0:
@@ -2846,39 +2909,114 @@ def _first_solid(model: TraceModel, start, direction, length, ignore, through=No
         found = hit >= 0
         rows, hit = alive[found], hit[found]
         travelled[rows] += t[found]
-        solid = ~transparent[hit]
-        face[rows[solid]] = hit[solid]
-        at[rows[solid]] = travelled[rows[solid]]
-        alive = rows[~solid]
-        skip[alive] = hit[~solid]
+        stop = ~transparent[hit]
+        plain = stop
+        if closed is not None:
+            shut = closed[hit]
+            leaving = np.einsum("ij,ij->i", direction[rows], model.face_out[hit]) >= 0.0
+            out = gone[rows] >= 0
+            # Out of the rooms to its end, or in from its start while it has not gone out.
+            leave = ~out & shut & leaving & last(rows, hit)
+            stop &= ~(leave | (~out & shut & ~leaving & first(rows, hit)))
+            gone[rows[leave]], gone_at[rows[leave]] = hit[leave], travelled[rows[leave]]
+            # Gone out, it stops where it went out at whatever face it then meets.
+            back = out & stop
+            face[rows[back]], at[rows[back]] = gone[rows[back]], gone_at[rows[back]]
+            plain = stop & ~back
+        face[rows[plain]] = hit[plain]
+        at[rows[plain]] = travelled[rows[plain]]
+        alive = rows[~stop]
+        skip[alive] = hit[~stop]
     return at, face
 
 
-def _clear(model: TraceModel, start: np.ndarray, end: np.ndarray, through=None) -> np.ndarray:
+def _may_cross(model: TraceModel, end, n: int, tolerance: float) -> Callable:
+    """For :func:`_first_solid`'s ``ends``, one of them: a function of rays and the
+    openings they cross that tells whether each may cross there."""
+    end = np.asarray(end)
+    if end.ndim < 2:
+        allowed = np.broadcast_to(end.astype(bool), (n,))
+        return lambda rays, faces: allowed[rays]
+
+    def inside(rays, faces):
+        beyond = np.einsum("ij,ij->i", model.face_out[faces], end[rays])
+        return beyond - model.face_out_offset[faces] <= tolerance
+
+    return inside
+
+
+def _clear(
+    model: TraceModel,
+    start: np.ndarray,
+    end: np.ndarray,
+    through=None,
+    closed=None,
+    ends=(True, True),
+) -> np.ndarray:
     """Whether nothing but openings (and the faces of ``through``, a mask over the
-    faces) lies between each start and end point."""
+    faces) lies between each start and end point; the openings of ``closed``
+    (:func:`_outward`) stop the way as :func:`_first_solid` has it, with its ``ends``."""
     delta = end - start
     length = np.linalg.norm(delta, axis=1)
     direction = delta / np.maximum(length, 1e-300)[:, None]
-    _, face = _first_solid(model, start, direction, length * (1.0 - 1e-9), -1, through)
+    _, face = _first_solid(
+        model, start, direction, length * (1.0 - 1e-9), -1, through, closed, ends
+    )
     return face < 0
 
 
-def _reflect(model: TraceModel, start, image, plane, end):
+def _outward(model: TraceModel) -> np.ndarray | None:
+    """(F,) the openings with a room on one side only, which stop the paths over edges as
+    solid faces do (as :func:`_first_solid` has it): what goes out through one leaves the
+    rooms into none and does not come back in through another, as the late part's rays
+    stop there (:attr:`TraceModel.face_leaves`). None where there are none."""
+    outward = model.transparent & model.face_leaves
+    return outward if outward.any() else None
+
+
+def _in_rooms(model: TraceModel, points: np.ndarray, toward: np.ndarray) -> np.ndarray:
+    """Whether each of ``points`` lies in a room, ``toward`` being a point in one: the
+    first face on the way from each point to it tells, by the side the way meets it
+    from, and with none on the way the point lies in that room too. For the middle of a
+    way between two points on the rooms' faces (on edges, or where a path reflects),
+    which can run outside the rooms without crossing a face (from an edge of a window
+    to one of a window across a lane)."""
+    delta = toward - points
+    length = np.linalg.norm(delta, axis=1)
+    direction = delta / np.maximum(length, 1e-300)[:, None]
+    _, face = model.intersect(points, direction, length, np.full(len(points), -1))
+    inside = face < 0
+    met = np.flatnonzero(~inside)
+    hit = face[met]
+    front = np.einsum("ij,ij->i", direction[met], model.face_normal[hit]) < 0.0
+    inside[met] = model.face_room[hit, np.where(front, 0, 1)] >= 0
+    return inside
+
+
+def _reflect(model: TraceModel, start, image, plane, end, closed=None, origin=True):
     """Rays from ``start`` towards ``image`` (the mirror image of ``end`` in ``plane``):
     whether they first hit a face of that plane and see ``end`` from there; the points
-    and faces they hit."""
+    and faces they hit. The openings of ``closed`` (:func:`_outward`) stop the rays as
+    :func:`_first_solid` has it, ``origin`` being what their starts stand for (its
+    ``ends``), and reflect nothing."""
     delta = image - start
     length = np.linalg.norm(delta, axis=1)
     direction = delta / np.maximum(length, 1e-300)[:, None]
-    t, face = _first_solid(model, start, direction, length, -1)
-    hit = (face >= 0) & (model.face_plane[np.maximum(face, 0)] == plane)
+    t, face = _first_solid(model, start, direction, length, -1, closed=closed, ends=(origin, False))
+    safe = np.maximum(face, 0)
+    hit = (face >= 0) & (model.face_plane[safe] == plane) & ~model.transparent[safe]
     where = start + direction * np.where(hit, t, 0.0)[:, None]
     delta = end - where
     length = np.linalg.norm(delta, axis=1)
     direction = delta / np.maximum(length, 1e-300)[:, None]
     _, blocked = _first_solid(
-        model, where, direction, length * (1.0 - 1e-9), np.where(hit, face, -1)
+        model,
+        where,
+        direction,
+        length * (1.0 - 1e-9),
+        np.where(hit, face, -1),
+        closed=closed,
+        ends=(False, True),
     )
     return hit & (blocked < 0), where, np.where(hit, face, -1)
 

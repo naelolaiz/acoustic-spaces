@@ -731,7 +731,7 @@ def test_a_wall_as_high_as_a_roof_does_not_stand_on_its_plane() -> None:
     assert not any(np.isin(faces, roof).any() for faces in paths.faces)
 
 
-@pytest.mark.parametrize("gap", [0.5, 0.0002])
+@pytest.mark.parametrize("gap", [0.5, 0.0002, 0.00005])
 def test_a_barrier_s_end_stands_on_ground_that_ends_just_past_it(gap: float) -> None:
     """Round the end of a barrier, with the ground ending ``gap`` (m) past it, in a model
     10 km long and in one 200 m long: the number of paths and the early level are those
@@ -740,7 +740,9 @@ def test_a_barrier_s_end_stands_on_ground_that_ends_just_past_it(gap: float) -> 
     ten-thousandth of the model's size past it, 1 m in the long model and 2 cm in the
     short one: where that was off the ground the end did not stand on it, and the
     listener had 10 paths for 8 and a level 3.0 dB lower at 63 Hz and 5.0 dB lower at
-    125 Hz."""
+    125 Hz. The rays that test the path round the end start just off it, outside the open
+    air where the ground ends nearer to the end than that, and pass in through its side,
+    which stops only what goes out of the open air."""
     room = _outdoors(
         (9.0, 4.0, 1.5),
         source=(6.0, -2.0, 1.5),

@@ -126,6 +126,7 @@ from acoustic_spaces.engine.diffraction import (
     _clear,
     _first_solid,
     _image_sources,
+    _in_rooms,
     _match,
     _past_face,
     _planes_hit,
@@ -144,6 +145,7 @@ from acoustic_spaces.engine.early import (
     _face_at,
     _goes_on,
     _image_points,
+    _outside,
     _perpendicular,
     assemble_paths,
 )
@@ -332,14 +334,25 @@ class EdgeFade:
         blocked = np.full((n, k + 1), -1, dtype=np.int64)
         stop_at = np.zeros((n, k + 1, 3))
         crossed = np.zeros(n, dtype=np.int64)
+        # The faces crossed that are not openings, and those with a room on one side only
+        # (what goes out through one does not come back: find_paths leaves such a path
+        # out, and so does the fade).
+        counted = np.column_stack([~model.transparent, model.face_leaves])
+        left = np.zeros(n, dtype=np.int64)
+        outward = self.d.outward
         for j in range(k + 1):
             rows = np.flatnonzero(possible)
             ignore = faces[rows, j - 1] if j else np.full(len(rows), -1)
             share, crossings = model.passes(
-                points[rows, j], direction[rows, j], length[rows, j] * (1.0 - 1e-9), ignore
+                points[rows, j],
+                direction[rows, j],
+                length[rows, j] * (1.0 - 1e-9),
+                ignore,
+                counted=counted,
             )
             passing = np.any(share > 0.0, axis=1)
-            crossed[rows] += np.where(passing, crossings, 0)
+            crossed[rows] += np.where(passing, crossings[:, 0], 0)
+            left[rows] += np.where(passing, crossings[:, 1], 0)
             stop = np.flatnonzero(~passing)
             if len(stop):
                 at = rows[stop]
@@ -349,13 +362,17 @@ class EdgeFade:
                     direction[at, j],
                     length[at, j] * (1.0 - 1e-9),
                     ignore[stop],
+                    closed=outward,
+                    ends=(points[at, j] if j else True, points[at, j + 1] if j < k else True),
                 )
-                blocked[at, j] = np.where(face >= 0, model.face_plane[np.maximum(face, 0)], -2)
+                safe = np.maximum(face, 0)
+                # A leg that goes out through an opening before it is stopped: no path.
+                out = (face >= 0) & model.transparent[safe]
+                blocked[at, j] = np.where((face >= 0) & ~out, model.face_plane[safe], -2)
                 stop_at[at, j] = points[at, j] + where[:, None] * direction[at, j]
         # A face crossed right where the path reflects off its faces, which neither leg
         # meets (a barrier standing on the ground where the path reflects off it), stops
         # or passes the path there as find_paths has it, on the leg that crosses its plane.
-        counted = (~model.transparent)[:, None]
         arriving = np.zeros(n, dtype=np.int64)  # the leg that arrives at reflection j's point
         for j in range(1, k + 1):
             if j > 1:  # a leg of no length: the next reflection lies in the same corner
@@ -386,6 +403,7 @@ class EdgeFade:
             )
             passing = np.any(share > 0.0, axis=1)
             crossed[rows] += np.where(passing, crossings[:, 0], 0)
+            left[rows] += np.where(passing, crossings[:, 1], 0)
             stop = ~passing
             leg = np.where(arrives, a, j)
             # The face is the first solid one on the leg leaving the point, the last on
@@ -408,6 +426,10 @@ class EdgeFade:
         fail = np.where(many, np.argmax(stopped, axis=1), fail)
         keep = possible & (crossed == 0) & (fail >= 0)
         keep &= ~np.any(blocked == -2, axis=1)
+        # A path out of the rooms and back in is none (find_paths): it crosses a face out
+        # of them only once for each of the source and the listener in no room.
+        if np.any(keep & (left > 0)):
+            keep &= left <= _outside(model, source, listener)
         idx = np.flatnonzero(keep)
         if len(idx) == 0:
             return None
@@ -1410,10 +1432,31 @@ class EdgeFade:
                 _towards(model, point[sel], images[side][slot[sel]], planes[:, side], own)
                 for side, own in enumerate((start[sel], end[sel]))
             ]
+            real = list(zip(reflect, (d.source[None], table["hearer"][slot[sel]]), strict=True))
             clear = _clear(
-                model, np.vstack([off_edge, off_edge]), np.vstack([r[0] for r in reflect])
+                model,
+                np.vstack([off_edge, off_edge]),
+                np.vstack([r[0] for r in reflect]),
+                closed=d.outward,
+                # Each way ends at a point it reflects at, or at the source or the listener.
+                ends=(
+                    np.vstack([point[sel], point[sel]]),
+                    np.concatenate([np.all(r[0] == p, axis=1) for r, p in real]),
+                ),
             )
             clear = [clear[: len(sel)], clear[len(sel) :]]
+            if d.midway:  # to a point it reflects at, the way runs in the rooms
+                for side, (r, p) in enumerate(real):
+                    at = np.flatnonzero(clear[side] & ~np.all(r[0] == p, axis=1))
+                    mid = _middle(
+                        model,
+                        point[sel][at],
+                        images[side][slot[sel][at]],
+                        planes[at, side],
+                        r[0][at],
+                        self.tolerance,
+                    )
+                    clear[side][at] = _in_rooms(model, mid, np.broadcast_to(d.source, mid.shape))
             # Where they stand in for a missed path, on from there too (see _beyond).
             if not passes:
                 for side in (0, 1):
@@ -1598,7 +1641,9 @@ class EdgeFade:
             # planes next to where they meet).
             off = np.minimum(step, 0.5 * length)[:, None]
             start = point[rows] + off * toward / np.maximum(length, 1e-300)[:, None]
-            ok[rows] &= _clear(model, start, nxt)
+            ok[rows] &= _clear(
+                model, start, nxt, closed=self.d.outward, ends=(point[rows], nxt_plane < 0)
+            )
             point[rows], plane[rows] = nxt, nxt_plane
             alive[rows] &= ok[rows] & (nxt_plane >= 0)
         return ok
@@ -2287,6 +2332,27 @@ def _towards(model, point, image, planes, fallback) -> tuple[np.ndarray, np.ndar
     met = np.isfinite(first)
     where = np.where(met[:, None], point + np.where(met, first, 0.0)[:, None] * toward, fallback)
     return where, met_plane
+
+
+def _middle(model, point, image, planes, fallback, tolerance) -> np.ndarray:
+    """The middle of the way from each of ``point`` (on an edge) to where it first
+    reflects, towards ``image`` off one of ``planes`` (n, m) as :func:`_towards` has it,
+    in the rooms themselves. Off those of ``planes`` that ``point`` lies in (within
+    ``tolerance``) the way reflects at the point itself, and the line to ``image`` runs
+    on in their mirror image: from the edge of a ceiling at the top of a doorway, in the
+    wall's plane, the line meets the floor beyond the wall, where the way reflects off
+    it in the room. The planes on a side commute (``run`` in :meth:`EdgeFade._ordered`),
+    so the order of the mirrors does not matter; ``fallback`` is where the line meets
+    none of the others."""
+    safe = np.maximum(planes, 0)
+    normal, offset = model.plane_normal[safe], model.plane_offset[safe]  # (n, m, 3), (n, m)
+    on = (planes >= 0) & (np.abs(np.einsum("nmj,nj->nm", normal, point) - offset) <= tolerance)
+    where, _ = _towards(model, point, image, np.where(on, -1, planes), fallback)
+    mid = 0.5 * (point + where)
+    for j in range(planes.shape[1]):
+        depth = np.einsum("ij,ij->i", normal[:, j], mid) - offset[:, j]
+        mid = mid - np.where(on[:, j], 2.0 * depth, 0.0)[:, None] * normal[:, j]
+    return mid
 
 
 def _nearest_face(model, plane: int, point: np.ndarray) -> int:
