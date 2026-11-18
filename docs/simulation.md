@@ -550,6 +550,7 @@ simulation:
     max_band_hz: 125           # the highest band it computes: 63, 125 (default), 250 or 500
     points_per_wavelength: 8   # grid cells per wavelength at the top of that band
     scheme: auto               # the grid's stencil: auto (default), isotropic or standard
+    walls: cell_faces          # cell_faces (default), or fitted: where the model has them
     wind: effective            # outdoors: effective (default) speed of sound, or moving air
     device: cpu                # where it steps the grid: cpu, gpu or auto; left out: this
                                # computer's default (cpu unless tune made it auto)
@@ -562,7 +563,8 @@ simulation:
   grid takes the interpolated isotropic stencil (19 points): 0.67 % slow at 8 cells per
   wavelength, the same in every direction within 0.03 %. Round open models it takes
   the standard one (7 points), the only one with the matched layer below: up to 1.7 %
-  slow, along the grid's axes. `scheme` picks one or the other.
+  slow, along the grid's axes. `scheme` picks one or the other; with fitted walls
+  (below) closed rooms take the standard one too.
 - Fewer cells per wavelength make the waves slower still, along the grid's axes most:
   at 5 (the least `points_per_wavelength` takes), 1.85 % with the isotropic stencil and
   4.56 % with the standard one. Below the default 8, the scene's warnings (`validate`,
@@ -608,6 +610,61 @@ simulation:
   only listeners lie on the plane of a surface through it, reached from both sides, is
   refused. Surfaces about 1e-10 cells off the centres can still be placed wrong, from a
   few links to a closed object read as air: see [Known issues](validation.md#known-issues).
+- With `walls: fitted` the walls lie where the model has them instead of on the cell
+  faces nearest them: the model's faces are cut exactly through the grid's cells, and
+  each cell they cross is stepped with the volume of its air, the open area of each of
+  its faces and its walls' area for each material (a finite-volume form of the same
+  update). It takes the standard stencil, indoors and in still air only (`scheme:
+  isotropic` and outdoor scenes are refused), on the CPU or the GPU. In a rigid 4.13 x
+  3.37 x 2.71 m box on the 125 Hz band's grid, its 16 lowest modes come within 0.05 % of
+  the exact ones (the grid's dispersion taken out) with the walls along the grid and
+  within 0.38 % with the box turned by up to 14 degrees, wherever the box lies against
+  the grid; walls on cell faces put them up to 5.2 % and 4.2 % off. The level 1.5 to 6.5
+  cells in front of a rigid wall is within 0.04 dB of the exact one along the grid and
+  0.18 dB at 3 to 14 degrees to it, where walls on cell faces are up to 1.8 dB off (8 to
+  16 cells per wavelength). Its limits, as measured (the figures, and how, under Walls
+  in [Validation](validation.md#wave-based-solver)):
+  - Steeper walls: turned by 22.5 to 45 degrees, the box's modes come out up to 4.3 %
+    high on the 125 Hz band's grid and 1.8 % on the 250 Hz band's (1.9 % elsewhere on
+    that grid in a one-off check), where walls on cell faces put them up to 7.1 % and
+    3.5 % low; the level in front of a wall at 45 degrees is 0.26 to 0.40 dB off (0.32
+    to 0.59 dB on cell faces).
+  - A room's concave edge: in an L-shaped room the lowest mode comes out from 1.4 %
+    below to 1.0 % above the exact one on the 125 Hz band's grid (0.5 % below to 0.4 %
+    above on the 250 Hz band's), by where the edge falls within its cell, and jumps by
+    2.3 % (0.9 %) as the edge crosses a plane of cell centres; on cell faces it is 1.4 %
+    (0.5 %) below wherever the room lies.
+  - Free edges: in the cell that a surface's free edge ends in, the surface is left out,
+    so a free-standing panel comes out up to a cell shorter and an opening in a wall of
+    a single surface up to a cell wider on each side; the scene's warnings name such
+    edges and their length. Behind a thin screen whose edge lies inside a cell the level
+    was up to 1.2 dB too high (rms over 8 to 16 cells per wavelength), 0.15 dB with the
+    edge on a cell face, where walls on cell faces were 0.3 to 0.7 dB off (one-off
+    checks).
+  - Absorbing walls: a wall's reflection still depends on where the wall falls in its
+    cell. The end of a duct whose admittance is 1 reflects up to 0.077 of the wave
+    instead of nothing (0.044 on cell faces), and the end of a resonant material up to
+    0.025 more or less than the grid's own reflection off a wall there. In the studio
+    turned 17 degrees the 125 Hz band's T20 came out 6 % longer than on a grid twice as
+    fine (3 % with the studio along the grid), where walls on cell faces gave it 9 to
+    23 % shorter (one-off checks).
+  - A model is refused, with the faces named, where part of its air reaches the source
+    only past an edge that one face alone has (a crack or a T-junction), within a
+    hundredth of a cell of it; where two faces less than 7.2 degrees apart lie within
+    0.0175 of a cell of each other with air on the sides that face each other (faces
+    laid on one another, or a layer that thin); or where it comes within a cell of the
+    matched layer. A gap narrower than a hundredth of a cell that both of its sides
+    reach anyway is left open.
+  - In one-off checks at 125 Hz, a run took 1.1 to 1.4 times as long as with walls on
+    cell faces and the default stencil in seven of the examples, and up to 2.6 times in
+    a small room holding a sphere of 5,120 faces, where fitting the model took most of
+    the extra time; the fit took 0.03 to 1.1 s on the examples and 13 to 18 s on a grid
+    of 37 million cells, and the set-up's memory peaked at 2.7 to 4.1 times that with
+    walls on cell faces.
+  - Where a face crosses a plane of cell centres, where the fit gives a piece of air
+    that holds no cell centre to one of its neighbours, or where a solid's convex edge
+    meets a face just off the grid's planes, the response can change suddenly as the
+    model moves by a hair (see [Known issues](validation.md#known-issues)).
 - Outdoors in wind and temperature (an [atmosphere](outdoor.md#wind-and-temperature)
   in which sound bends), the speed of sound changes from cell to cell: the still air's
   at the cell's height, plus the wind's component along the horizontal from the source.
@@ -649,9 +706,9 @@ acoustic-spaces simulate examples/room_modes/scene.yaml --out modes   # wave sol
 acoustic-spaces simulate examples/room_modes/scene.yaml --out rays --no-wave
 ```
 
-The editor's Simulation page has the same switch, and where to run it. Each octave
-higher costs about 16 times as much: on 4 cores, up to the 125 Hz band, the studio takes
-0.1 s, the concert hall (9,400 m³, 3.5 s responses) 7 s, and the church (7 s
+The editor's Simulation page has the same switch, where to run it, and Fitted walls.
+Each octave higher costs about 16 times as much: on 4 cores, up to the 125 Hz band, the
+studio takes 0.1 s, the concert hall (9,400 m³, 3.5 s responses) 7 s, and the church (7 s
 responses) 13 s per source; 6 s and 11 s with `scheme: standard`, at the cost of its
 dispersion. Grids of more than 40 million cells are refused, and on a GPU so is a grid
 with a buffer larger than the GPU binds: the field's or, round an open model, the
@@ -672,22 +729,26 @@ only as an impedance's does, and absorb at most 95 % at random incidence; next t
 much more absorbing band, a band absorbs somewhat more than its material says (the
 fit reports how much, as `wave_absorption_miss`); near the top of the highest band the
 grid's walls absorb a little less than their admittance (0.025 less at 500 Hz with 14
-cells per wavelength); the grid puts every wall on cell faces, a wall along the grid up to
-half a cell from the model's and one at an angle to it in steps: in a rigid 4.13 x 3.37 x
-2.71 m box moved within a cell or turned against the grid (seven placements), that moves
-the modes of the grid's highest band by up to 11 % on the 63 Hz band's grid, 6.4 % on the
-125 Hz band's (the default's) and 2.8 % on the 250 Hz band's (more `points_per_wavelength`
-moves them less), and from 8 to 16 points per wavelength the level 1.5 to 6.5 cells in
-front of a wall is 1.5 dB rms off with the wall 0.4 cell off a cell face and up to 1.2 dB
-rms with it at 3 to 25 degrees to the grid (19-point stencil;
+cells per wavelength); with walls on cell faces (the default; `walls: fitted`, above, puts
+them where the model has them) the grid puts every wall on cell faces, a wall along the
+grid up to half a cell from the model's and one at an angle to it in steps: in a rigid
+4.13 x 3.37 x 2.71 m box moved within a cell or turned against the grid (seven
+placements), that moves the modes of the grid's highest band by up to 11 % on the 63 Hz
+band's grid, 6.4 % on the 125 Hz band's (the default's) and 2.8 % on the 250 Hz band's
+(more `points_per_wavelength` moves them less), and from 8 to 16 points per wavelength
+the level 1.5 to 6.5 cells in front of a wall is 1.5 dB rms off with the wall 0.4 cell
+off a cell face and up to 1.2 dB rms with it at 3 to 25 degrees to the grid (19-point
+stencil;
 [validation report](validation.md#wave-based-solver)); waves on
 the grid travel slower the shorter they are, at the top of the highest band with 8
-points per wavelength by 0.67 % in closed rooms and up to 1.7 % round open models
-(along the grid's axes, not at all along its body diagonals; `wave_slow_percent` in the
-run's details), which nothing corrects, so the modes there come out up to that much low;
+points per wavelength by 0.67 % on the isotropic stencil closed rooms take and up to 1.7 %
+on the standard one, which open models and fitted walls take (along the grid's axes, not
+at all along its body diagonals; `wave_slow_percent` in the run's details), which nothing
+corrects, so the modes there come out up to that much low;
 in single precision the 19-point stencil's rounding lets a closed room's mean pressure
 creep, far below the bands (see The end of a response in
-[Validation](validation.md#wave-based-solver));
+[Validation](validation.md#wave-based-solver)), and with fitted walls a rigid closed
+room's mean pressure rings, as slowly (once in 100,000 steps or more);
 sources radiate equally in all directions in the wave bands; and air absorption,
 negligible there, is left out.
 

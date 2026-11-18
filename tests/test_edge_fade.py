@@ -821,3 +821,40 @@ def test_a_sequence_is_found_by_a_path_with_its_image_off_its_planes(tmp_path: P
     ground = dataclasses.replace(there, faces=[np.repeat(there.faces[0][1:], 2)])
     missed = engine.fade._missed(sequence, past, ground, 0.5)
     assert missed["planes"].tolist() == sequence.tolist()
+
+
+@pytest.mark.parametrize(
+    ("bend", "gap", "height"), [(20.0, 1e-4, 1.5), (45.0, 3e-4, 1.5), (20.0, 1e-4, 1e-4)]
+)
+def test_a_corner_the_search_joins_takes_its_terms(bend: float, gap: float, height: float) -> None:
+    """A source ``gap`` (m) from both arms of a barrier bent by ``bend`` degrees and
+    ``height`` over the ground and a listener in the bend, with reflections up to the
+    third order and ``first_order``, in a model 10 km wide and in one 200 m wide: the
+    same paths and early levels to 0.01 dB. The search joins reflections off the two arms
+    within its tolerance for planes (1 mm in the wide model) into one corner, with a leg
+    of no length between them, and the edge fade dropped such a path with all its terms:
+    the wide model had 51 paths for 135 and 1.16 dB less at 63 Hz at 20 degrees, 70 for
+    110 and 0.54 dB less at 45, and 66 for 114 and 0.40 dB less with the source as near
+    the ground. There a path off an arm and the ground, perpendicular to each other, can
+    meet them in another order than the search's."""
+    turn = np.radians(bend)
+    reach = gap / np.sin(turn / 2)
+    source = (float(np.cos(turn / 2) * reach), float(np.sin(turn / 2) * reach), height)
+    path = ((12.0, 0.0), (0.0, 0.0), (12.0 * float(np.cos(turn)), 12.0 * float(np.sin(turn))))
+    wide, narrow = (
+        early_paths(
+            _outdoors(
+                (8.0, 1.0, 1.0),
+                source=source,
+                path=path,
+                barrier_m=4.0,
+                half_m=half,
+                max_order=3,
+                diffraction="first_order",
+            )
+        )
+        for half in (5000.0, 100.0)
+    )
+    assert len(wide.order) == len(narrow.order)
+    level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
+    assert np.abs(level).max() < 0.01

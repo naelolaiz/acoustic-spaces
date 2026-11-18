@@ -144,6 +144,8 @@ from acoustic_spaces.engine.early import (
     _crossed_at,
     _face_at,
     _goes_on,
+    _image_points,
+    _perpendicular,
     assemble_paths,
 )
 from acoustic_spaces.engine.model import size_scattering
@@ -292,32 +294,7 @@ class EdgeFade:
         seqs, chain, distance = seqs[idx], [p[idx] for p in chain], distance[idx]
         n = len(idx)
 
-        # Reflection points, back from the listener towards each image in turn.
-        points = np.empty((n, k + 2, 3))
-        points[:, 0], points[:, k + 1] = source, listener
-        possible = np.ones(n, dtype=bool)
-        current = np.broadcast_to(listener, (n, 3)).copy()
-        for j in range(k, 0, -1):
-            plane = seqs[:, j - 1]
-            normal = model.plane_normal[plane]
-            near = np.einsum("ij,ij->i", normal, current) - model.plane_offset[plane]
-            far = np.einsum("ij,ij->i", normal, chain[j]) - model.plane_offset[plane]
-            two_sided = model.plane_two_sided[plane]
-            front = np.where(two_sided, np.abs(near) > self.tolerance, near > self.tolerance)
-            # In the corner where it meets the plane of the next reflection, perpendicular
-            # to it, the path reflects off both at one point.
-            corner = np.zeros(n, dtype=bool)
-            if j < k:
-                behind = np.where(two_sided, np.abs(far) > self.tolerance, far < -self.tolerance)
-                corner = (
-                    (np.abs(near) <= self.tolerance)
-                    & behind
-                    & _perpendicular(model, plane, seqs[:, j])
-                )
-            possible &= (front & (near * far < 0.0)) | corner
-            t = near / np.where(possible, near - far, 1.0)
-            current = current + t[:, None] * (chain[j] - current)
-            points[:, j] = current
+        points, possible = _image_points(model, seqs, chain, source, listener, self.tolerance)
         legs = np.diff(points, axis=1)  # (n, k + 1, 3)
         length = np.linalg.norm(legs, axis=2)
         # Not at a corner, but where two perpendicular planes meet.
@@ -2166,7 +2143,6 @@ class EdgeFade:
             directivity=self.d.directivity,
             orientation=self.d.orientation,
             coherent=self.d.coherent,
-            tolerance=self.tolerance,
         )
         return found.energy, found.spectrum, _stacked(found.cosines, np.arange(n), k)
 
@@ -2177,12 +2153,6 @@ def _stacked(cosines: list[np.ndarray], rows: np.ndarray, k: int) -> np.ndarray 
     if not cosines:
         return None
     return np.array([cosines[i] for i in rows], dtype=float).reshape(len(rows), k)
-
-
-def _perpendicular(model, a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Whether the planes ``a`` and ``b`` are perpendicular: reflections off them commute."""
-    dot = np.einsum("ij,ij->i", model.plane_normal[a], model.plane_normal[b])
-    return np.abs(dot) < 1e-9
 
 
 def _commuted(model, seqs: np.ndarray) -> np.ndarray:
