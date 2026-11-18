@@ -422,7 +422,8 @@ def test_a_way_through_an_inner_corner_reflects_there(
 
 
 @pytest.mark.parametrize(
-    ("bend", "gap", "height", "order"), [(30.0, 2e-4, 1.5, 2), (60.0, 2e-3, 2e-3, 3)]
+    ("bend", "gap", "height", "order"),
+    [(30.0, 2e-4, 1.5, 2), (60.0, 2e-3, 2e-3, 3), (30.0, 4e-5, 1.5, 2)],
 )
 def test_no_way_through_a_barrier_from_a_source_in_its_bend(bend, gap, height, order) -> None:
     """A source ``gap`` (m) from both arms of a barrier bent by ``bend`` degrees,
@@ -432,7 +433,12 @@ def test_no_way_through_a_barrier_from_a_source_in_its_bend(bend, gap, height, o
     paths' tolerance is 1 mm in the wide model, and the source (0.2 mm from both arms),
     or the reflection off the ground behind an arm (1 mm), lay within it of an arm's
     plane: a path that reflected off both arms in the bend and went on through one of
-    them counted as a reflection there, at the level of the direct sound."""
+    them counted as a reflection there, at the level of the direct sound. With the
+    source 0.04 mm from both arms, a path off the other arm that the search took to
+    reflect where it meets the arm behind which the listener is, 0.33 mm from the bend,
+    went on through that arm at the level of the direct sound: the chord across its turn
+    that looks for faces it crosses there ran on past the source and passed the arm
+    beyond the bend."""
     turn = math.radians(bend)
     reach = gap / math.sin(turn / 2)
     source = (math.cos(turn / 2) * reach, math.sin(turn / 2) * reach, height)

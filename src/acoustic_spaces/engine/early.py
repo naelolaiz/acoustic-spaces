@@ -1490,18 +1490,23 @@ def _crossed_at(model, planes, before, point, after, tolerance, counted, near):
     crosses right at the point, where neither leg's intersection test meets them (see
     :func:`_crossed_here`, with ``near`` (n, 2)), looked for where a chord across the
     turn, from ``tolerance`` back along the leg arriving to ``tolerance`` along the one
-    leaving, meets a face. Returns the share of sound they let through (n, bands; 0
-    where one lets nothing through), how many of them each crosses of each column of
-    ``counted`` (F, m), (n, m), the first of them on the way (n,), -1 for none, and
-    whether the leg arriving at the point is the one that crosses it (n,)."""
+    leaving, but no farther than either leg's other end, meets a face: a chord that ran
+    on past ``before`` could pass a face that the path crosses at the point beyond the
+    face's end, as round the end of a barrier's arm. Returns the share of sound they
+    let through (n, bands; 0 where one lets nothing through), how many of them each
+    crosses of each column of ``counted`` (F, m), (n, m), the first of them on the way
+    (n,), -1 for none, and whether the leg arriving at the point is the one that
+    crosses it (n,)."""
     n = len(point)
     bands = model.absorption.shape[1]
     arriving = point - before
     arriving /= np.maximum(np.linalg.norm(arriving, axis=1), 1e-300)[:, None]
     leaving = after - point
     leaving /= np.maximum(np.linalg.norm(leaving, axis=1), 1e-300)[:, None]
-    start = point - tolerance * arriving
-    chord = point + tolerance * leaving - start
+    back = np.minimum(tolerance, np.linalg.norm(point - before, axis=1))[:, None]
+    ahead = np.minimum(tolerance, np.linalg.norm(after - point, axis=1))[:, None]
+    start = point - back * arriving
+    chord = point + ahead * leaving - start
     length = np.linalg.norm(chord, axis=1)
     direction = chord / np.maximum(length, 1e-300)[:, None]
     share = np.ones((n, bands))
