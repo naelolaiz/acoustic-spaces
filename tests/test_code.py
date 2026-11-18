@@ -283,7 +283,7 @@ LIBRARY_SUMS = {
     # 3-vectors, and one plane's normal times a point.
     "engine/diffraction.py": 4,
     # 3-vectors, and the few planes or faces of one path or one plane.
-    "engine/early.py": 21,
+    "engine/early.py": 22,
     "engine/edge_fade.py": 1,
     # Integers: exact in any order.
     "engine/gpu.py": 1,

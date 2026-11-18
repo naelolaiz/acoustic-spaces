@@ -456,6 +456,7 @@ def _time_wave(room, model, position, listeners, threads, lengths, say) -> WaveT
             device=device,
             scheme=settings.wave.scheme,
             say=mark,
+            walls=settings.wave.walls,
         )
         return time.perf_counter() - marks[0], int(info["wave_steps"]), int(info["wave_cells"])
 

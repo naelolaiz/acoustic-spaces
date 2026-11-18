@@ -1013,7 +1013,7 @@ def test_planes_at_one_point_turn_a_path_from_one_to_the_next() -> None:
     assert len(set(faces)) == 3
     bands = model.absorption.shape[1]
 
-    def cosines(planes, source, listener, points=None, tolerance=0.0) -> np.ndarray:
+    def cosines(planes, source, listener, points=None) -> np.ndarray:
         """The cosines of a path off ``planes`` (the barrier 0, the wall 1, the roof 2),
         all at the corner or at ``points``."""
         points = [corner] * len(planes) if points is None else points
@@ -1029,7 +1029,6 @@ def test_planes_at_one_point_turn_a_path_from_one_to_the_next() -> None:
             speed_of_sound=343.0,
             air=np.zeros(bands),
             coherent=2,
-            tolerance=tolerance,
         )
         return found.cosines[0]
 
@@ -1053,9 +1052,8 @@ def test_planes_at_one_point_turn_a_path_from_one_to_the_next() -> None:
     # Four reflections at the point, off the barrier, the wall, the barrier and the
     # roof, to a listener in line with the source's image in the four: the angles are
     # those the source's leg gives, turned from plane to plane. The path is given them
-    # from the leg that leaves the corner, turned back; from the leg into it where none
-    # leaves (a listener at the corner); and from the leg that leaves alone for a source
-    # at the corner. Legs within the tolerance count as none.
+    # from the source's image, also with the listener at the corner, the source at the
+    # corner, or points a hair apart.
     planes = (0, 1, 0, 2)
     image = source
     for normal in normals[list(planes)]:
@@ -1069,10 +1067,7 @@ def test_planes_at_one_point_turn_a_path_from_one_to_the_next() -> None:
         cosines(planes, corner, in_line), mirrored(in_line, planes[::-1])[::-1], atol=1e-9
     )
     hair = [corner, corner + (1e-12, 0, 2e-12), corner + (0, -1e-9, 1e-9), corner]
-    np.testing.assert_allclose(
-        cosines(planes, source, in_line, hair, tolerance=1e-6), expected, atol=1e-6
-    )
-    assert np.abs(cosines(planes, source, in_line, hair) - expected).max() > 0.1
+    np.testing.assert_allclose(cosines(planes, source, in_line, hair), expected, atol=1e-9)
 
 
 def test_a_source_in_the_edge_of_a_room_meets_both_walls_at_their_angles() -> None:
