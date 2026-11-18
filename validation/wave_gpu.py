@@ -1,7 +1,7 @@
 """Time the wave solver on a GPU against the CPU, and check that the two agree.
 
     python validation/wave_gpu.py [--rooms studio concert_hall church] [--band 125]
-                                  [--length 0.5]
+                                  [--length 0.5] [--walls cell_faces]
 
 Needs the ``gpu`` extra (wgpu) and a GPU driver: Vulkan, Metal or Direct3D 12. Mesa's
 lavapipe, a Vulkan driver that runs on the CPU, works too, only slowly. For each example
@@ -11,7 +11,11 @@ columns: the grid (its cells, their size and the stencil), the time its set-up t
 the CPU either way), the time the time steps took on each (on the GPU, its buffers and
 shader included), how many times faster the GPU stepped, and the largest difference
 between the two runs, relative to the largest pressure. The GPU is started before the
-first room, so that one-off cost is left out.
+first room, so that one-off cost is left out. ``--walls fitted`` runs both with fitted walls
+(``walls="fitted"``, on the 7-point stencil, which ``auto`` takes for them; see
+:func:`~acoustic_spaces.engine.wave.wave_responses`) instead of walls on cell faces, and
+says so among the settings; a run that did not fit the walls stops the script with an
+error.
 """
 
 from __future__ import annotations
@@ -47,7 +51,7 @@ COLUMNS = (
 )
 
 
-def _time(model, room: Room, band: int, length: float, device: str):
+def _time(model, room: Room, band: int, length: float, device: str, walls: str):
     """Seconds of set-up and of time steps, the responses and the run's details."""
     source = np.array(room.scene.sources[0].position)
     listeners = room.scene.listeners
@@ -67,8 +71,12 @@ def _time(model, room: Room, band: int, length: float, device: str):
         scheme=SCHEME,
         device=device,
         say=lambda _: marks.append(time.perf_counter()),
+        walls=walls,
     )
     done = time.perf_counter()
+    if ("wave_fitted_walls" in info) != (walls == "fitted"):
+        made = "fitted walls" if "wave_fitted_walls" in info else "walls on cell faces"
+        raise SystemExit(f"the {device} run had {made}, not the walls asked for ({walls})")
     stepping = marks[0] if marks else started
     return stepping - started, done - stepping, np.stack([r.signals for r in responses]), info
 
@@ -101,30 +109,38 @@ def main() -> None:
     parser.add_argument("--rooms", nargs="+", default=["studio", "concert_hall", "church"])
     parser.add_argument("--band", type=int, default=125, help="highest wave band (Hz)")
     parser.add_argument("--length", type=float, default=0.5, help="response length (s)")
+    parser.add_argument(
+        "--walls",
+        default="cell_faces",
+        choices=["cell_faces", "fitted"],
+        help="where the grid's walls lie (see wave_responses)",
+    )
     args = parser.parse_args()
 
     name = gpu.gpu_name()
     if name is None:
         raise SystemExit('wgpu finds no GPU: pip install "acoustic-spaces[gpu]" and a driver')
-    _settings(
-        [
-            ("Machine", f"{platform.machine()}, {platform.system()}"),
-            ("CPU", f"{os.cpu_count()} threads, all used"),
-            ("GPU", name),
-            ("Wave bands", f"up to {args.band} Hz"),
-            ("Responses", f"{args.length:g} s, first source to every listener"),
-            ("Grid", f"{POINTS:g} points per wavelength"),
-            ("Scheme", f"{SCHEME} (19-point stencil, 7-point round an open model)"),
-        ]
-    )
+    settings = [
+        ("Machine", f"{platform.machine()}, {platform.system()}"),
+        ("CPU", f"{os.cpu_count()} threads, all used"),
+        ("GPU", name),
+        ("Wave bands", f"up to {args.band} Hz"),
+        ("Responses", f"{args.length:g} s, first source to every listener"),
+        ("Grid", f"{POINTS:g} points per wavelength"),
+        ("Scheme", f"{SCHEME} (19-point stencil, 7-point round an open model)"),
+    ]
+    if args.walls == "fitted":
+        settings[-1] = ("Scheme", f"{SCHEME} (7-point stencil, the one fitted walls take)")
+        settings.append(("Walls", "fitted: where the model has them, cut through the cells"))
+    _settings(settings)
     print()
     gpu._device()  # start the GPU once, outside the timings
     rows = []
     for room_name in args.rooms:
         room = Room.from_yaml(EXAMPLES / room_name / "scene.yaml")
         model = TraceModel.from_room(room)
-        setup_s, cpu_s, cpu, info = _time(model, room, args.band, args.length, "cpu")
-        _, gpu_s, on_gpu, _ = _time(model, room, args.band, args.length, "gpu")
+        setup_s, cpu_s, cpu, info = _time(model, room, args.band, args.length, "cpu", args.walls)
+        _, gpu_s, on_gpu, _ = _time(model, room, args.band, args.length, "gpu", args.walls)
         difference = np.abs(cpu - on_gpu).max() / np.abs(cpu).max()
         rows.append(
             (

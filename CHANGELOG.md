@@ -14,6 +14,16 @@
   before a wall and 0.5 mm apart had been 20.7 dB too low, a source 0.3 mm from both
   arms of a bent barrier and the ground up to 2.6 dB, and with edge diffraction one 0.1
   mm from both arms 1.2 dB at 63 Hz.
+- Added: `simulation.wave.walls: fitted` (**Fitted walls** in the editor) puts the wave
+  solver's walls where the model has them, its faces cut exactly through the grid's
+  cells, instead of on the nearest cell faces: in a box along the grid the modes come
+  within 0.05 % of the exact ones where walls on cell faces are up to 5.2 % off, and the
+  level in front of a rigid wall within 0.04 dB where they are up to 1.8 dB off. It takes
+  the standard stencil, indoors and in still air, refuses models with cracks or faces
+  laid on one another (naming the faces), and has measured limits at steep walls,
+  concave edges, free edges and absorbing walls
+  ([Low frequencies](docs/simulation.md#low-frequencies-the-wave-solver)); saved scenes
+  now carry `walls`.
 - Fixed: in a very large model, a corner of two reflections (points within the early
   search's tolerance for planes of each other, a ten-millionth of the model's largest
   extent, 1 mm in a model 10 km wide) was judged by that tolerance: a path into it went

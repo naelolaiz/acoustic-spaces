@@ -2744,6 +2744,19 @@ class Scattering(_Model):
     )
 
 
+#: Why a scene's fitted walls (``simulation.wave.walls: fitted``) are refused: the scene's
+#: checks and the wave solver's (:func:`acoustic_spaces.engine.wave.wave_responses`) give
+#: these words.
+FITTED_WALLS_STENCIL = (
+    "simulation.wave.walls: fitted works on the standard (7-point) stencil only: set "
+    "simulation.wave.scheme to standard or auto, or simulation.wave.walls to cell_faces"
+)
+FITTED_WALLS_OUTDOORS = (
+    "simulation.wave.walls: fitted is not available outdoors: set simulation.wave.walls to "
+    "cell_faces"
+)
+
+
 class WaveStage(_Model):
     """The lowest octave bands from a wave-based solver (finite differences in time on a
     cubic grid) instead of rays: room modes, and sound bending round everything."""
@@ -2773,7 +2786,17 @@ class WaveStage(_Model):
             "the grid's stencil: isotropic (19 points; waves 0.67 % slow at 8 points per "
             "wavelength, alike in every direction) or standard (7 points; up to 1.7 % slow, "
             "along the axes); auto takes the isotropic one but round an open model, where "
-            "only the standard one has the matched layer"
+            "only the standard one has the matched layer, or with fitted walls"
+        ),
+    )
+    walls: Literal["cell_faces", "fitted"] = Field(
+        default="cell_faces",
+        description=(
+            "where the grid's walls lie: cell_faces (every wall on the nearest cell faces) or "
+            "fitted (where the model has them, cut through the cells; the standard 7-point "
+            "stencil only, indoors, in still air; a model with cracks, T-junctions or layers "
+            "thinner than a hundredth of a cell open to the air, or reaching within a cell of "
+            "the matched layer, is refused)"
         ),
     )
     wind: Literal["effective", "moving"] = Field(
@@ -2796,6 +2819,12 @@ class WaveStage(_Model):
             "made it auto"
         ),
     )
+
+    @model_validator(mode="after")
+    def _check_walls(self) -> WaveStage:
+        if self.walls == "fitted" and self.scheme == "isotropic":
+            raise ValueError(FITTED_WALLS_STENCIL)
+        return self
 
 
 class Performance(_Model):
@@ -3127,6 +3156,12 @@ class Scene(_Model):
         problem = None if removed is None else insertion_loss_problem(self.geometry, removed)
         if problem is not None:
             raise ValueError(problem)
+        return self
+
+    @model_validator(mode="after")
+    def _check_fitted_walls(self) -> Scene:
+        if self.simulation.wave.walls == "fitted" and self.geometry.ground is not None:
+            raise ValueError(FITTED_WALLS_OUTDOORS)
         return self
 
     def level_inputs(
