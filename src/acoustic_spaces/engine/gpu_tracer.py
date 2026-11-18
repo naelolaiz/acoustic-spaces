@@ -262,7 +262,7 @@ struct Ray {
     rng: vec4<u32>,
     order: i32,
     // Of the reflections so far, those off the ground and (1) whether one was off a face
-    // neither the ground nor a vertical wall, while run.covered_ground >= 0 (bent air,
+    // neither the ground nor a vertical wall, while run.covered_ground >= 0 (outdoors,
     // as the CPU's RayState::ground and other).
     ground: i32,
     other: u32,
@@ -327,16 +327,17 @@ fn num(at: u32) -> f32 {
 
 // Whether the specular-only path the ray has followed is one the early stage computes
 // (its time aside), as the CPU's detail::early_holds: with run.covered_ground below 0
-// (straight rays) when it has at most run.covered_order reflections; in bent air, with
-// no reflection off a face neither the ground nor a vertical wall, when it has up to
-// run.covered_ground bounces off the ground and at most run.covered_order reflections
-// counting those as one.
+// (indoors) when it has at most run.covered_order reflections; outdoors, with no
+// reflection off a face neither the ground nor a vertical wall, when it has up to
+// run.covered_ground bounces off the ground (none with run.covered_order 0) and at most
+// run.covered_order reflections off the walls.
 fn early_holds() -> bool {
     if (run.covered_ground < 0 || ray.other != 0u) {
         return ray.order <= run.covered_order;
     }
     return ray.ground <= run.covered_ground &&
-           ray.order - ray.ground + min(ray.ground, 1) <= run.covered_order;
+           ray.order - ray.ground <= run.covered_order &&
+           (ray.ground == 0 || run.covered_order >= 1);
 }
 
 fn point(at: u32) -> vec3<f32> {

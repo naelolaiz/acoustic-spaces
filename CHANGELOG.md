@@ -7,6 +7,14 @@
   burst in one millisecond of the tail (blips in the `railway` example's tour at
   `meadow_25m`); in still air the rain now also falls on each listener's image in the
   ground, with the same expected energy and without those bursts.
+- Changed: outdoors the ground's bounces count for no order towards
+  `simulation.early.max_order` (from 1 on): the early part holds the paths off up to
+  `max_order` vertical walls with their bounces off the ground, which counted each as a
+  reflection in still air and all together as one in wind and temperature gradients, and
+  the late rays leave their specular share to it. Their detector spheres had counted it
+  where a ray met the ground on both sides of a barrier that had scattered it, or two
+  walls and the ground (order 3 over the default 2): bursts of up to 28 dB at
+  `meadow_25m` in the `railway` example.
 - Fixed: in a very large model, a corner of two reflections (points within the early
   search's tolerance for planes of each other, a ten-millionth of the model's largest
   extent, 1 mm in a model 10 km wide) was judged by that tolerance: a path into it went

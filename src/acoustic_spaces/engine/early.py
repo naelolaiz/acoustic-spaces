@@ -324,15 +324,43 @@ def _draws(roots: list, seed: int) -> list[np.ndarray]:
     return [rng.standard_normal(len(rows)) for rows, _ in roots]
 
 
+def held(kinds: np.ndarray | None, sequences: np.ndarray, max_order: int) -> np.ndarray:
+    """(n,) whether the early stage holds each plane sequence (n, k) with ``max_order``:
+    one of up to ``max_order`` reflections, or outdoors one off nothing but the ground
+    and vertical walls with up to ``max_order`` off the walls and any off the ground (from
+    order 1 on), as the ground's effect goes with every path (``kinds`` of the planes,
+    :func:`~acoustic_spaces.engine.model.plane_kinds`; None: each reflection counts)."""
+    k = sequences.shape[1]
+    if kinds is None or k <= max_order:
+        return np.full(len(sequences), k <= max_order)
+    kind = kinds[sequences]
+    ground = np.count_nonzero(kind == 1, axis=1)
+    return np.all(kind >= 0, axis=1) & (k - ground <= max_order) & (max_order >= 1)
+
+
+def reach(kinds: np.ndarray | None, max_order: int) -> int:
+    """The most reflections of a sequence :func:`held` holds: ``max_order``, or outdoors
+    that many off the walls with a bounce off the ground before, between and after them
+    (the ground being level, no two in a row)."""
+    return max_order if kinds is None or max_order <= 0 else 2 * max_order + 1
+
+
 def ray_traced_candidates(
-    model: TraceModel, source: np.ndarray, max_order: int, rays: int, threads: int = 0
+    model: TraceModel,
+    source: np.ndarray,
+    max_order: int,
+    rays: int,
+    threads: int = 0,
+    kinds: np.ndarray | None = None,
 ) -> list[np.ndarray]:
     """Plane sequences hit by ``rays`` specular rays, which pass through surfaces that
-    let sound through (forking where those also reflect); entry k-1 has shape (n, k)."""
+    let sound through (forking where those also reflect); entry k-1 has shape (n, k).
+    With ``kinds`` (outdoors), those :func:`held` holds, up to :func:`reach` long."""
     from acoustic_spaces import _native
 
     if max_order <= 0:
         return []
+    deepest = reach(kinds, max_order)
     passing = np.zeros(0, dtype=np.uint8)
     if model.transmission is not None:
         # 0: reflects, 1: reflects and lets sound through, 2: lets it through only.
@@ -342,15 +370,16 @@ def ray_traced_candidates(
         model.bvh,
         np.asarray(source, dtype=np.float64),
         int(rays),
-        int(max_order),
+        int(deepest),
         int(threads),
         passing,
     )
     planes = np.where(faces >= 0, model.face_plane[np.maximum(faces, 0)], -1)
     out = []
-    for k in range(1, max_order + 1):
+    for k in range(1, deepest + 1):
         prefix = planes[:, :k]
         prefix = prefix[np.all(prefix >= 0, axis=1)]
+        prefix = prefix[held(kinds, prefix, max_order)]
         out.append(
             _distinct_rows(prefix, model.plane_count) if len(prefix) else np.zeros((0, k), np.int64)
         )
@@ -375,10 +404,15 @@ def _distinct_rows(rows: np.ndarray, base: int) -> np.ndarray:
 
 
 def exhaustive_candidates(
-    model: TraceModel, source: np.ndarray, max_order: int, limit: int = MAX_CANDIDATES
+    model: TraceModel,
+    source: np.ndarray,
+    max_order: int,
+    limit: int = MAX_CANDIDATES,
+    kinds: np.ndarray | None = None,
 ) -> list[np.ndarray]:
     """Every plane sequence whose images stay in front of the next plane (outdoors, not
-    the planes of the open sky, which reflects nothing)."""
+    the planes of the open sky, which reflects nothing). With ``kinds`` (outdoors),
+    those :func:`held` holds, up to :func:`reach` long."""
     normals, offsets = model.plane_normal, model.plane_offset
     sky = None
     if model.sky is not None:
@@ -388,7 +422,7 @@ def exhaustive_candidates(
     images = np.asarray(source, dtype=np.float64)[None, :]
     out = []
     total = 0
-    for _ in range(max_order):
+    for _ in range(reach(kinds, max_order) if max_order > 0 else 0):
         # Starting from empty arrays keeps one (0, k) entry for an order with no sequence
         # left (a single reflecting plane leaves none from the second order on).
         new_seqs = [np.zeros((0, seqs.shape[1] + 1), dtype=np.int64)]
@@ -407,6 +441,9 @@ def exhaustive_candidates(
             new_images.append(model.mirror(img[rows], cols))
         seqs = np.concatenate(new_seqs).astype(np.int64)
         images = np.concatenate(new_images)
+        # A sequence it does not hold has none that it holds after it.
+        kept = held(kinds, seqs, max_order)
+        seqs, images = seqs[kept], images[kept]
         total += len(seqs)
         if total > limit:
             raise ValueError(

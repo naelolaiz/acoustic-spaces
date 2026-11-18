@@ -4,7 +4,9 @@ Each source and listener pair is simulated in two parts that add up without a
 crossfade.
 
 **Early reflections** (`simulation.early`) are exact specular paths up to
-`max_order` reflections, with delay, arrival direction and energy per band. Candidate
+`max_order` reflections (outdoors the ground's bounces count for none, see
+[Outdoor scenes](outdoor.md#the-ground-and-the-sky)), with delay, arrival direction
+and energy per band. Candidate
 image sources come from deterministic specular rays (`method: ray_tracing`, the
 default; cost grows with `rays`, not with the number of surfaces) or from every
 sequence of planes (`method: image_sources`; complete, but grows as planes to the

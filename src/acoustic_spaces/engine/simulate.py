@@ -23,8 +23,8 @@ from acoustic_spaces.engine.crests import CrestDiffraction
 from acoustic_spaces.engine.diffraction import EdgeDiffraction, Edges, find_edges
 from acoustic_spaces.engine.edge_fade import EdgeFade
 from acoustic_spaces.engine.grazing import apply_grazing
-from acoustic_spaces.engine.model import TraceModel, free_field_energy
-from acoustic_spaces.engine.refracted import direct_times, refraction_for, solve
+from acoustic_spaces.engine.model import TraceModel, free_field_energy, plane_kinds
+from acoustic_spaces.engine.refracted import _bends, direct_times, refraction_for, solve
 from acoustic_spaces.engine.response import Deferred, Response
 from acoustic_spaces.engine.row_paths import RowPaths
 from acoustic_spaces.engine.turbulence import Eddies
@@ -188,9 +188,12 @@ def _candidates(
     the terms at an edge continue the reflections off its faces, and the rays miss a
     face the source sees nearly edge-on, such as a wall whose plane it stands close to,
     or one behind an obstacle."""
+    # Outdoors in still air the ground's bounces count for no order, as for the curved
+    # paths in wind and temperature gradients (which start from straight ones here).
+    kinds = None if _bends(model) else plane_kinds(model)
     if method == "image_sources":
-        return early_stage.exhaustive_candidates(model, source, order)
-    found = early_stage.ray_traced_candidates(model, source, order, rays, threads)
+        return early_stage.exhaustive_candidates(model, source, order, kinds=kinds)
+    found = early_stage.ray_traced_candidates(model, source, order, rays, threads, kinds)
     if found and edges is not None and diffraction != "none":
         found[0] = edges.with_faces(source, found[0])
     return found

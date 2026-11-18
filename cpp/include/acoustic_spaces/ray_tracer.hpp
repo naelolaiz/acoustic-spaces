@@ -566,18 +566,18 @@ struct RayState {
 };
 
 // Whether the specular-only path a ray in `state` has followed is one the early stage
-// computes (its time aside). Without StochasticScene::face_kind (straight rays): when it
-// has at most covered_order reflections. In bent air the early stage holds the curved
-// paths off the ground and off vertical walls (unfolded): those with up to
-// covered_ground bounces off the ground and at most covered_order reflections counting
-// the ground's as one, any of them; a path that reflects off any other face it holds as
-// in straight air.
+// computes (its time aside). Without StochasticScene::face_kind (indoors): when it has at
+// most covered_order reflections. Outdoors the early stage holds the paths off the ground
+// and off vertical walls (in bent air, curved and unfolded) with at most covered_order
+// reflections off the walls and up to covered_ground bounces off the ground (none with
+// covered_order 0), the ground's effect going with every path; a path that reflects off
+// any other face it holds with at most covered_order reflections.
 inline bool early_holds(const StochasticSettings &settings, const StochasticScene &scene,
                         const RayState &state) {
     if (scene.face_kind == nullptr || state.other) return state.order <= settings.covered_order;
     const int walls = state.order - state.ground;
-    return state.ground <= settings.covered_ground &&
-           walls + std::min(state.ground, 1) <= settings.covered_order;
+    return state.ground <= settings.covered_ground && walls <= settings.covered_order &&
+           (state.ground == 0 || settings.covered_order >= 1);
 }
 
 // Counts a reflection off `face` (after RayState::order) in state.ground and state.other.
