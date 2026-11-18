@@ -289,12 +289,19 @@ IN_LINE = {
 
 
 def _in_line_with_a_wall(
-    folder: Path, sign: float, source, listener, room: str = "x", partition=None, **early
+    folder: Path,
+    sign: float,
+    source,
+    listener,
+    room: str = "x",
+    partition=None,
+    sized: bool = False,
+    **early,
 ) -> Room:
     """The ``room`` of ``IN_LINE``; with ``sign`` -1 its mirror image across the plane of
     the panel, where the wall in that plane faces the other way. With ``partition`` (a
     loss in dB), room "x" with a partition that lets sound through from y = 0 to 5 in
-    place of the panel: two rooms."""
+    place of the panel: two rooms. ``sized``: the faces' sizes weaken their reflections."""
     plan, floor, ends, axis = IN_LINE[room]
     walls = [
         [(*a, 0.0), (*b, 0.0), (*b, 3.0), (*a, 3.0)]
@@ -329,7 +336,7 @@ def _in_line_with_a_wall(
                 "simulation": {
                     "seed": 1,
                     "ir_length_s": 0.3,
-                    "scattering": {"from_size": False},
+                    "scattering": {"from_size": sized},
                     "early": {"method": "image_sources", "max_order": 2, **early},
                 },
             }
@@ -468,6 +475,45 @@ def test_a_room_with_a_panel_in_line_with_a_wall_sounds_as_its_mirror_image(
     for sign in (1.0, -1.0):
         paths = early_paths(_in_line_with_a_wall(tmp_path, sign, source, listener, room, **early))
         levels.append(10.0 * np.log10(total_energy(paths)))
+    np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
+
+
+def test_a_path_stopped_twice_takes_the_same_edges_in_a_room_and_its_mirror_image(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The path off x = 11, x = 0 and the plane x = 5 is stopped twice: the panel blocks
+    its leg from x = 11 to x = 0, and it meets the plane x = 5 in the gap between the
+    panel's end (y = 4) and the wall's end (y = 5). Both ends explain the second stop; the
+    edge fade takes the one whose term there is the strongest, the panel's end, and the
+    path takes the size of its face. Taking the first edge by number, it took the wall's
+    corner in the mirror image, and the wall's size: 0.045 dB apart at 63 Hz."""
+    explain_many = EdgeFade._explain_many
+    chosen = []
+
+    def recorded(self, parts, stopped, *args):
+        out = explain_many(self, parts, stopped, *args)
+        # The paths stopped on the leg to x = 0 and at the plane x = 5, and nowhere else.
+        twice = np.all(stopped == np.isin(np.arange(stopped.shape[1]), [2, 5]), axis=1)
+        for part in out:
+            mine = part["explains"] & twice[part["path"]] & (part["at"] == 5)
+            chosen.extend(map(tuple, np.round(np.abs(self.edges.start[part["edge"][mine], :2]), 6)))
+        return out
+
+    monkeypatch.setattr(EdgeFade, "_explain_many", recorded)
+    levels = []
+    for sign in (1.0, -1.0):
+        chosen.clear()
+        room = _in_line_with_a_wall(
+            tmp_path,
+            sign,
+            [5.493, 2.926, 0.846],
+            [1.909, 4.298, 0.913],
+            sized=True,
+            max_order=3,
+            diffraction="first_order",
+        )
+        levels.append(10.0 * np.log10(total_energy(early_paths(room))))
+        assert chosen == [(5.0, 4.0)]
     np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
 
 

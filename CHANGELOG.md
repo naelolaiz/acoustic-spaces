@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed: with edge diffraction, where several events stop a path that is not found and
+  several edges explain one of them, the edge fade took the first edge by number, and a
+  reflection there took the size of that edge's face: in an L-shaped room with a panel
+  in line with a wall, the room and its mirror image were 0.045 dB apart at 63 Hz. It
+  now takes the edge whose term there is the strongest, as for a path one event stops.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

@@ -1154,7 +1154,10 @@ class EdgeFade:
         in the run or next to it where the path over the edge reaches it on its dark
         side; the run's other events take no terms. Where no edge explains every event
         that stops the path, two may, each a run of them in turn, and the path carries
-        the product of their terms."""
+        the product of their terms. Of the edges that explain a run, the one whose term
+        there is strongest is chosen, and of the pairs, the one whose terms' product is
+        (as :meth:`_combine` takes the face of the edge whose term is strongest), not the
+        first by number: the scene and its mirror image choose alike."""
         order = geometry["order"]
         many = stopped.any(axis=1)
         if not parts:
@@ -1162,6 +1165,7 @@ class EdgeFade:
         flat = {key: np.concatenate([part[key] for part in parts]) for key in ("path", "at")}
         flat["edge"] = np.concatenate([part["edge"] for part in parts])
         dark = np.concatenate([~part["lit"] for part in parts])
+        strength = np.concatenate([_strength(part["pressure"]) for part in parts])
         rows = np.flatnonzero(many[flat["path"]] & dark)
         explains = np.zeros(len(dark), dtype=bool)
 
@@ -1180,17 +1184,20 @@ class EdgeFade:
                 strict=True,
             )
         }
-        # The events at which each edge reaches each path on its dark side, and the terms.
-        reached, terms_of = {}, {}
-        for i, path, edge, at in zip(
+        # The events at which each edge reaches each path on its dark side, the terms, and
+        # the strongest of them.
+        reached, terms_of, power = {}, {}, {}
+        for i, path, edge, at, term in zip(
             rows.tolist(),
             flat["path"][rows].tolist(),
             flat["edge"][rows].tolist(),
             flat["at"][rows].tolist(),
+            strength[rows].tolist(),
             strict=True,
         ):
             reached.setdefault(path, {}).setdefault(edge, set()).add(at)
             terms_of.setdefault((path, edge, at), []).append(i)
+            power[(path, edge, at)] = max(power.get((path, edge, at), 0.0), term)
 
         def explain(path: int, run: list, edge: int, events: int) -> int:
             """The event of ``edge`` for the stopping events ``run`` of ``path``, -1 if it
@@ -1207,6 +1214,17 @@ class EdgeFade:
                     return at
             return -1
 
+        def ranked(path: int, run: list, events: int) -> list:
+            """The edges that explain the stopping events ``run`` of ``path``, with their
+            events and the strength of their terms there: the strongest first, ties by
+            the edges' numbers."""
+            found = []
+            for edge in reached.get(path, {}):
+                at = explain(path, run, edge, events)
+                if at >= 0:
+                    found.append((-power[(path, edge, at)], edge, at))
+            return [(edge, at, -minus) for minus, edge, at in sorted(found)]
+
         for path in np.flatnonzero(many).tolist():
             events = 2 * int(order[path]) + 1
             run_of = []
@@ -1220,32 +1238,24 @@ class EdgeFade:
                 elif at % 2:
                     split = True
             stops = [at for at, _ in run_of]
-            candidates = sorted(reached.get(path, {}))
             chosen = []
             if runs == 1:
-                for edge in candidates:
-                    at = explain(path, stops, edge, events)
-                    if at >= 0:
-                        chosen = [(at, edge, stops)]
-                        break
+                chosen = [(at, edge, stops) for edge, at, _ in ranked(path, stops, events)[:1]]
             if not chosen:
                 cuts = range(1, len(stops))
                 if runs == 2:
                     cuts = [next(i for i, (_, r) in enumerate(run_of) if r == 2)]
                 for cut in cuts:
                     one, two = stops[:cut], stops[cut:]
-                    for a in candidates:
-                        at_a = explain(path, one, a, events)
-                        if at_a < 0:
-                            continue
-                        for b in candidates:
-                            at_b = explain(path, two, b, events)
-                            if at_b > at_a and at_b not in one and at_a not in two:
-                                chosen = [(at_a, a, one), (at_b, b, two)]
-                                break
-                        if chosen:
-                            break
-                    if chosen:
+                    both = [
+                        (-power_a * power_b, a, b, at_a, at_b)
+                        for a, at_a, power_a in ranked(path, one, events)
+                        for b, at_b, power_b in ranked(path, two, events)
+                        if at_b > at_a and at_b not in one and at_a not in two
+                    ]
+                    if both:
+                        _, a, b, at_a, at_b = min(both)
+                        chosen = [(at_a, a, one), (at_b, b, two)]
                         break
             if not chosen:
                 continue
@@ -1713,7 +1723,7 @@ class EdgeFade:
             cosines = None if go["cosines"] is None else go["cosines"][ids]
         else:
             stopping = t["explains"] & stops & (t["at"] % 2 == 1)
-            strength = np.mean(np.abs(t["pressure"]) ** 2, axis=(1, 2))
+            strength = _strength(t["pressure"])
             order = np.lexsort((strength, path))
             order = order[stopping[order]]
             if len(order):
@@ -2121,6 +2131,12 @@ class EdgeFade:
             coherent=self.d.coherent,
         )
         return found.energy, found.spectrum, _stacked(found.cosines, np.arange(n), k)
+
+
+def _strength(pressure: np.ndarray) -> np.ndarray:
+    """How strong each of the terms ``pressure`` (terms, bands, frequencies in each) is:
+    the mean of its squared magnitude."""
+    return np.mean(np.abs(pressure) ** 2, axis=(1, 2))
 
 
 def _stacked(cosines: list[np.ndarray], rows: np.ndarray, k: int) -> np.ndarray | None:
