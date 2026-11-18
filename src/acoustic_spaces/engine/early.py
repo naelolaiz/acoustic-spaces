@@ -338,6 +338,32 @@ def held(kinds: np.ndarray | None, sequences: np.ndarray, max_order: int) -> np.
     return np.all(kind >= 0, axis=1) & (k - ground <= max_order) & (max_order >= 1)
 
 
+#: How near to perpendicular (the cosine between their normals) two planes are for
+#: :func:`_turns_back`.
+_PERPENDICULAR = 1e-9
+
+
+def _turns_back(model: TraceModel, sequences: np.ndarray) -> np.ndarray:
+    """(n,) whether each plane sequence (n, k) reflects off a plane again with nothing
+    but planes perpendicular to it in between (a wall, the ground, the same wall): the
+    sound leaves the plane it reflects off, and reflections off planes perpendicular to
+    it keep it going away, so no path does. Where their points meet in one corner, the
+    search could take one, which makes the mirror of the sequence without the two."""
+    k = sequences.shape[1]
+    out = np.zeros(len(sequences), dtype=bool)
+    if k < 3 or len(sequences) == 0:
+        return out
+    normals = model.plane_normal
+    across = np.abs(products.product(normals, normals.T)) <= _PERPENDICULAR
+    for i in range(k - 2):
+        between = np.ones(len(sequences), dtype=bool)
+        for j in range(i + 1, k):
+            if j > i + 1:
+                out |= between & (sequences[:, j] == sequences[:, i])
+            between &= across[sequences[:, i], sequences[:, j]]
+    return out
+
+
 def reach(kinds: np.ndarray | None, max_order: int) -> int:
     """The most reflections of a sequence :func:`held` holds: ``max_order``, or outdoors
     that many off the walls with a bounce off the ground before, between and after them
@@ -355,7 +381,8 @@ def ray_traced_candidates(
 ) -> list[np.ndarray]:
     """Plane sequences hit by ``rays`` specular rays, which pass through surfaces that
     let sound through (forking where those also reflect); entry k-1 has shape (n, k).
-    With ``kinds`` (outdoors), those :func:`held` holds, up to :func:`reach` long."""
+    With ``kinds`` (outdoors), those :func:`held` holds, up to :func:`reach` long, but
+    those that turn back (:func:`_turns_back`)."""
     from acoustic_spaces import _native
 
     if max_order <= 0:
@@ -380,6 +407,8 @@ def ray_traced_candidates(
         prefix = planes[:, :k]
         prefix = prefix[np.all(prefix >= 0, axis=1)]
         prefix = prefix[held(kinds, prefix, max_order)]
+        if kinds is not None:
+            prefix = prefix[~_turns_back(model, prefix)]
         out.append(
             _distinct_rows(prefix, model.plane_count) if len(prefix) else np.zeros((0, k), np.int64)
         )
@@ -412,7 +441,8 @@ def exhaustive_candidates(
 ) -> list[np.ndarray]:
     """Every plane sequence whose images stay in front of the next plane (outdoors, not
     the planes of the open sky, which reflects nothing). With ``kinds`` (outdoors),
-    those :func:`held` holds, up to :func:`reach` long."""
+    those :func:`held` holds, up to :func:`reach` long, but those that turn back
+    (:func:`_turns_back`)."""
     normals, offsets = model.plane_normal, model.plane_offset
     sky = None
     if model.sky is not None:
@@ -443,6 +473,8 @@ def exhaustive_candidates(
         images = np.concatenate(new_images)
         # A sequence it does not hold has none that it holds after it.
         kept = held(kinds, seqs, max_order)
+        if kinds is not None:
+            kept &= ~_turns_back(model, seqs)
         seqs, images = seqs[kept], images[kept]
         total += len(seqs)
         if total > limit:
