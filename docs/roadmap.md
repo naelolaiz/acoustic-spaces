@@ -383,6 +383,21 @@ Outdoor acoustics, in steps:
   band up to 0.53 dB low by their place within a cell (8 points per wavelength at the
   band's top; see Free field under
   [Wave-based solver](validation.md#wave-based-solver)).
+- [x] The wave solver's walls where the model has them (`simulation.wave.walls:
+  fitted`): the model's faces cut exactly through the cells, on the standard stencil,
+  indoors. A box's modes come within 0.05 % of the exact ones along the grid and 0.38 %
+  turned by up to 14 degrees, where walls on cell faces are up to 5.2 % and 4.2 % off;
+  steeper walls, concave edges, free edges and absorbing walls have the limits under
+  Walls in [Wave-based solver](validation.md#wave-based-solver). Without it nothing
+  changes.
+- [ ] Fitted walls outdoors: in wind and temperature each cell has its own speed of
+  sound, so every interior cell's coefficients must first sum to at most 2 by
+  construction, and the slow decay of open rooms with such a speed, seen with fitted
+  walls, be traced.
+- [ ] Fitted walls that keep a surface up to its free edge (left out now in the cell the
+  edge ends in), share a piece of air that holds no cell centre among its neighbours,
+  and close cracks and T-junctions (refused now); see
+  [Known issues](validation.md#known-issues).
 - [x] O19 Whole cities: edge diffraction skips the pairs of an edge and a wall or roof
   that no path can use before it traces a ray, on every core, with the same results:
   900 buildings simulate in about 2 s on four cores instead of 81 s, and 3,600 in

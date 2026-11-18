@@ -25,6 +25,7 @@
 
 #include "acoustic_spaces/bvh.hpp"
 #include "acoustic_spaces/convolver.hpp"
+#include "acoustic_spaces/cut_selftest.hpp"
 #include "acoustic_spaces/direct_convolution.hpp"
 #include "acoustic_spaces/edge_cull.hpp"
 #include "acoustic_spaces/fdtd.hpp"
@@ -1119,13 +1120,129 @@ nb::tuple trace_map(const as::Bvh &bvh, InArray source, InArray directivity_a,
 
 using Speeds = nb::ndarray<const float, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
 
+// Fitted walls: the cut cells' rows and counts as dicts.
+template <typename Fit>
+nb::dict cut_cells_dict(const Fit &cut) {
+    nb::dict out;
+    const std::size_t n = cut.cells().size(), w = cut.materials() + 1;
+    out["cell"] = to_numpy(std::vector<std::int64_t>(cut.cells()), {n});
+    out["air_volume"] = to_numpy(std::vector<double>(cut.air_volume()), {n});
+    out["open_area"] = to_numpy(std::vector<double>(cut.open_area()), {n, 18});
+    out["wall_area"] = to_numpy(std::vector<double>(cut.wall_area()), {n, w});
+    out["leak_area"] = to_numpy(std::vector<double>(cut.leak_area()), {n});
+    out["sliver"] = to_numpy(std::vector<double>(cut.sliver()), {n, 6});
+    return out;
+}
+template <typename Fit>
+nb::dict cut_stats_dict(const Fit &cut) {
+    nb::dict out;
+    const as::CutCells::Stats &s = cut.stats();
+    out["faces"] = s.faces;
+    out["degenerate_faces"] = s.degenerate_faces;
+    out["degenerate_area"] = s.degenerate_area;
+    out["quantum_bits"] = s.quantum_bits;
+    out["planes"] = s.planes;
+    out["membrane_faces"] = s.membrane_faces;
+    out["cubes"] = s.cubes;
+    out["largest_planes"] = s.largest_planes;
+    out["leaves"] = s.leaves;
+    out["regions"] = s.regions;
+    out["squares"] = s.squares;
+    out["ties"] = s.ties;
+    out["leaks"] = s.leaks;
+    out["dropped_area"] = s.dropped_area;
+    out["diagonal_area"] = s.diagonal_area;
+    out["far_volume"] = s.far_volume;
+    out["farthest"] = s.farthest;
+    out["air_cells"] = s.air_cells;
+    out["air_volume"] = s.air_volume;
+    out["balance"] = s.balance;
+    out["layer_cells"] = s.layer_cells;
+    out["edge_area"] = s.edge_area;
+    out["sealed_components"] = s.sealed_components;
+    out["sealed_volume"] = s.sealed_volume;
+    out["other_components"] = s.other_components;
+    out["other_volume"] = s.other_volume;
+    out["edge_pockets"] = s.edge_pockets;
+    out["edge_pocket_volume"] = s.edge_pocket_volume;
+    out["unowned_regions"] = s.unowned_regions;
+    out["unowned_volume"] = s.unowned_volume;
+    out["face_area"] = s.face_area;
+    out["covered_area"] = s.covered_area;
+    out["overlap_area"] = s.overlap_area;
+    out["partition_area"] = s.partition_area;
+    out["partition_plus"] = s.partition_plus;
+    out["partition_minus"] = s.partition_minus;
+    out["partition"] = s.partition;
+    out["exact_calls"] = s.exact_calls;
+    out["exact_t_calls"] = s.exact_t_calls;
+    out["refused"] = s.refused;
+    out["refusal"] = cut.refusal();
+    out["boundary_intervals"] = s.boundary_intervals;
+    out["free_pieces"] = s.free_pieces;
+    out["free_length"] = s.free_length;
+    out["zone_cubes"] = s.zone_cubes;
+    out["layer_pairs"] = s.layer_pairs;
+    out["layer_candidates"] = s.layer_candidates;
+    out["ways"] = cut.ways();
+    out["ways_exact"] = cut.ways_exact();
+    out["refined_points"] = s.refined_points;
+    out["check_wall"] = s.check_wall;
+    out["check_wall_failed"] = s.check_wall_failed;
+    out["check_volume"] = s.check_volume;
+    out["check_volume_failed"] = s.check_volume_failed;
+    out["check_copy"] = s.check_copy;
+    out["check_copy_failed"] = s.check_copy_failed;
+    out["check_rows"] = s.check_rows;
+    out["check_rows_failed"] = s.check_rows_failed;
+    out["check_open_symmetry"] = s.check_open_symmetry;
+    out["check_open_symmetry_failed"] = s.check_open_symmetry_failed;
+    out["check_open"] = s.check_open;
+    out["check_open_failed"] = s.check_open_failed;
+    out["check_piece_sides"] = s.check_piece_sides;
+    out["check_piece_sides_failed"] = s.check_piece_sides_failed;
+    out["check_owners"] = s.check_owners;
+    out["check_owners_failed"] = s.check_owners_failed;
+    out["owner_near_band"] = s.owner_near_band;
+    out["sliver_near_gate"] = s.sliver_near_gate;
+    out["conduit_pieces"] = s.conduit_pieces;
+    out["conduit_links"] = s.conduit_links;
+    out["conduit_whole"] = s.conduit_whole;
+    out["conduit_scaled"] = s.conduit_scaled;
+    out["conduit_least"] = s.conduit_least;
+    out["conduit_wall_moved"] = s.conduit_wall_moved;
+    out["conduit_near_band"] = s.conduit_near_band;
+    out["check_conduits"] = s.check_conduits;
+    out["check_conduits_failed"] = s.check_conduits_failed;
+#ifdef ACOUSTIC_SPACES_CUT_CHECK
+    out["underflow_raised"] = s.underflow_raised;
+#endif
+    out["seconds"] = s.seconds;
+    out["stage_seconds"] = nb::make_tuple(s.stage[0], s.stage[1], s.stage[2], s.stage[3]);
+    return out;
+}
+
+// Fitted walls: a mesh's arrays for the fit, its face indices checked.
+as::CutCells::Mesh fit_mesh(const Points &vertices, const Faces &faces) {
+    as::CutCells::Mesh m;
+    m.vertices = vertices.data();
+    m.vertex_count = vertices.shape(0);
+    m.faces = faces.data();
+    m.face_count = faces.shape(0);
+    for (std::size_t i = 0; i < 3 * m.face_count; ++i)
+        if (m.faces[i] < 0 || static_cast<std::size_t>(m.faces[i]) >= m.vertex_count)
+            throw std::invalid_argument("fitted walls: a face refers to a missing vertex");
+    return m;
+}
+
 void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_material,
                       InArray beta, Matrix branches, Indices branch_material, InArray origin,
                       double cell, std::size_t nx, std::size_t ny, std::size_t nz,
                       InArray source, Points probes, double edge_admittance, std::size_t layer,
                       double layer_damping, std::size_t threads, std::size_t stencil,
                       std::optional<Speeds> speed, std::optional<Speeds> flow_x,
-                      std::optional<Speeds> flow_y, std::size_t probes_per_listener) {
+                      std::optional<Speeds> flow_y, std::size_t probes_per_listener,
+                      bool fitted_walls, std::optional<Points> vertices, std::optional<Faces> faces) {
     if (face_material.shape(0) != bvh.face_count()) {
         throw std::invalid_argument("WaveSolver: one material per face");
     }
@@ -1144,6 +1261,15 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
     }
     const std::vector<as::Vec3> probe_points = points(probes);
     const as::Vec3 o = vec3(origin, "origin"), s = vec3(source, "source");
+    // Fitted walls: the mesh as given, the arrays the BVH was built from.
+    as::CutCells::Mesh mesh;
+    if (fitted_walls) {
+        if (!vertices || !faces)
+            throw std::invalid_argument("fitted walls: the solver needs the vertices and faces the BVH was built from");
+        mesh = fit_mesh(*vertices, *faces);
+        if (mesh.face_count != bvh.face_count())
+            throw std::invalid_argument("fitted walls: the faces given are not the BVH's (their counts differ)");
+    }
     {
         nb::gil_scoped_release release;
         new (self) as::WaveSolver(bvh, face_material.data(), beta.data(), beta.shape(0),
@@ -1151,7 +1277,8 @@ void make_wave_solver(as::WaveSolver *self, const as::Bvh &bvh, Indices face_mat
                                   nz, s, probe_points, edge_admittance, layer, layer_damping,
                                   threads, stencil, speed ? speed->data() : nullptr,
                                   flow_x ? flow_x->data() : nullptr,
-                                  flow_y ? flow_y->data() : nullptr, probes_per_listener);
+                                  flow_y ? flow_y->data() : nullptr, probes_per_listener,
+                                  fitted_walls, fitted_walls ? &mesh : nullptr);
     }
 }
 
@@ -1184,6 +1311,22 @@ NB_MODULE(_native, m) {
     m.def("convolve_direct", &convolve_direct, nb::arg("signal"), nb::arg("ir"),
           "Full linear convolution of two 1-D float64 arrays (reference implementation).");
 
+    m.def(
+        "_fit_selftest",
+        [](std::size_t cases, std::uint64_t seed) {
+            nb::dict out;
+            for (const auto &[name, count] : as::cut_selftest::run(cases, seed)) out[name.c_str()] = count;
+            const as::cut_selftest::Guard g = as::cut_selftest::guard();
+            out["arithmetic_constant"] = g.arithmetic_constant;
+            out["probe_failed"] = g.probe_failed;
+            out["rounding_to_nearest"] = g.rounding_to_nearest;
+            return out;
+        },
+        nb::arg("cases") = 20000, nb::arg("seed") = 1,
+        "For the tests: the fitted walls' arithmetic in this build (cut_selftest.hpp). Counts of cases and "
+        "mismatches per check (`<check>_cases`, `<check>_mismatches`), and the arithmetic guard's results: "
+        "`arithmetic_constant` (the build's settings allow the fit), `probe_failed` (the name of the probe's "
+        "first failing test, or empty) and `rounding_to_nearest`.");
     m.def("_parallel_for_raises", &parallel_for_raises, nb::arg("n"), nb::arg("threads"),
           nb::arg("at"),
           "For the tests: runs the worker pool over n items, and the worker that reaches "
@@ -1304,6 +1447,102 @@ NB_MODULE(_native, m) {
              "The tree as flat arrays (see Bvh::layout in bvh.hpp), for tracing elsewhere: "
              "boxes (nodes x 6), first, count, faces and triangles (faces x 9).");
 
+    nb::class_<as::CutCells>(m, "CutFit",
+                            "Fitted walls: the fit alone, on the wave solver's grid, without the "
+                            "solver's flood or update.")
+        .def(
+            "__init__",
+            [](as::CutCells *self, Points vertices, Faces faces, Indices face_material, std::size_t materials,
+               InArray origin, double cell, std::size_t nx, std::size_t ny, std::size_t nz, InArray source,
+               std::size_t layer, std::size_t threads, bool raise_refusal) {
+                const as::CutCells::Mesh mesh = fit_mesh(vertices, faces);
+                if (face_material.shape(0) != mesh.face_count)
+                    throw std::invalid_argument("CutFit: one material per face");
+                for (std::size_t f = 0; f < mesh.face_count; ++f)
+                    if (face_material.data()[f] < 0 || static_cast<std::size_t>(face_material.data()[f]) >= materials)
+                        throw std::invalid_argument("CutFit: a face's material is not below materials");
+                const as::Vec3 o = vec3(origin, "origin"), s = vec3(source, "source");
+                {
+                    nb::gil_scoped_release release;
+                    new (self) as::CutCells(mesh, face_material.data(), materials,
+                                            as::WaveSolver::cut_grid(o, cell, nx, ny, nz, layer), s, threads);
+                }
+                if (raise_refusal && self->refused()) {
+                    const std::string message = self->refusal();
+                    self->~CutCells();
+                    throw std::invalid_argument(message);
+                }
+            },
+            nb::arg("vertices"), nb::arg("faces"), nb::arg("face_material"), nb::arg("materials"),
+            nb::arg("origin"), nb::arg("cell"), nb::arg("nx"), nb::arg("ny"), nb::arg("nz"), nb::arg("source"),
+            nb::arg("layer") = 0, nb::arg("threads") = 0, nb::arg("raise_refusal") = true)
+        .def("cut_cells", [](const as::CutCells &cut) { return cut_cells_dict(cut); })
+        .def_prop_ro("cut_stats", [](const as::CutCells &cut) { return cut_stats_dict(cut); })
+        .def_prop_ro("open", &as::CutCells::open,
+                     "Whether any side of the grid is open (see open_sides).")
+        .def_prop_ro(
+            "open_sides",
+            [](const as::CutCells &cut) {
+                const std::array<bool, 6> &sides = cut.open_sides();
+                return nb::make_tuple(sides[0], sides[1], sides[2], sides[3], sides[4], sides[5]);
+            },
+            "Whether each side of the grid is open (-x, +x, -y, +y, -z, +z, as WaveSolver.open_sides "
+            "orders them). A side is open when an air cell lies next to an edge cell on that side, when "
+            "an open piece of a square in that side's edge plane joins a region of the source's air to "
+            "the edge cell, or when a cell of the matched layer lies within the layer's width of that "
+            "side; a wall in the edge plane (a closed piece) opens no side. Decided from the cells' kinds "
+            "and the pieces' exact open flags only; a refused fit has no open side.")
+        .def("cut_air", [](const as::CutCells &cut) {
+            std::vector<std::uint8_t> air = cut.air();
+            const std::size_t n = air.size();
+            return to_numpy(std::move(air), {n});
+        })
+        .def(
+            "cut_widths",
+            [](const as::CutCells &cut) {
+                auto w = [&](int a) {
+                    std::vector<double> v = cut.widths(a);
+                    const std::size_t n = v.size();
+                    return to_numpy(std::move(v), {n});
+                };
+                return nb::make_tuple(w(0), w(1), w(2));
+            },
+            "Each cell's width per axis on the lattice (cells): an air cell that owns nothing cut holds "
+            "wx[i] wy[j] wz[k] cells^3 of air.")
+        .def(
+            "cut_points",
+            [](const as::CutCells &cut, Points source, Points probes, std::size_t per_listener) {
+                if (source.shape(0) != 1) throw std::invalid_argument("one source point");
+                std::vector<as::Vec3> ps;
+                for (std::size_t k = 0; k < probes.shape(0); ++k) ps.push_back({probes(k, 0), probes(k, 1), probes(k, 2)});
+                const auto &n = cut.shape();
+                const auto fp = as::WaveSolver::FittedStencil(cut, n[0], n[1], n[2], cut.cell())
+                                    .points({source(0, 0), source(0, 1), source(0, 2)}, ps, per_listener);
+                nb::dict out;
+                auto cells = [](const std::vector<std::pair<std::size_t, double>> &v) {
+                    nb::list l;
+                    for (const auto &[i, w] : v) l.append(nb::make_tuple(i, w));
+                    return l;
+                };
+                out["source"] = cells(fp.source);
+                nb::list pl, found, sight;
+                for (std::size_t k = 0; k < fp.probes.size(); ++k) {
+                    pl.append(cells(fp.probes[k]));
+                    found.append(!fp.probes[k].empty());
+                    sight.append(fp.in_sight[k] != 0);
+                }
+                out["probes"] = pl;
+                out["probe_found"] = found;
+                out["probe_in_sight"] = sight;
+                out["source_on_face"] = fp.source_on_face;
+                out["ways"] = cut.ways();
+                out["ways_exact"] = cut.ways_exact();
+                return out;
+            },
+            nb::arg("source"), nb::arg("probes"), nb::arg("probes_per_listener") = 1,
+            "Fitted walls: the fitted path's cells for a source (1 x 3) and probes (n x 3) on this fit, as "
+            "WaveSolver.cut_points() gives them; a source the fit refuses raises ValueError.");
+
     nb::class_<as::WaveSolver>(
         m, "WaveSolver",
         "Finite-difference time-domain solver on a cubic grid over a mesh (see fdtd.hpp).")
@@ -1314,6 +1553,8 @@ NB_MODULE(_native, m) {
              nb::arg("layer_damping") = 0.0, nb::arg("threads") = 0, nb::arg("stencil") = 7,
              nb::arg("speed").none() = nb::none(), nb::arg("flow_x").none() = nb::none(),
              nb::arg("flow_y").none() = nb::none(), nb::arg("probes_per_listener") = 1,
+             nb::arg("fitted_walls") = false, nb::arg("vertices").none() = nb::none(),
+             nb::arg("faces").none() = nb::none(),
              "face_material: each face's material; beta: each material's constant admittance; "
              "branches (n, 3): m, r and q of each mass-resistance-stiffness branch, of "
              "branch_material; layer: cells of matched layer inside the grid's edge; "
@@ -1352,6 +1593,88 @@ NB_MODULE(_native, m) {
                      "of the last run, on average; 0 in still air.")
         .def_prop_ro("stencil", &as::WaveSolver::stencil)
         .def_prop_ro("threads", &as::WaveSolver::threads)
+        .def_prop_ro(
+            "fitted_walls",
+            [](const as::WaveSolver &solver) { return solver.cut_cells() != nullptr; },
+            "Whether the model's faces were fitted to the grid (fitted_walls=True).")
+        .def(
+            "cut_cells",
+            [](const as::WaveSolver &solver) {
+                const auto *cut = solver.cut_cells();
+                if (cut == nullptr) return nb::dict();
+                nb::dict d = cut_cells_dict(*cut);
+                const std::size_t k = solver.special_cells().size();
+                d["special"] = to_numpy(std::vector<std::int64_t>(solver.special_cells()), {k});
+                d["volume"] = to_numpy(std::vector<double>(solver.special_volume()), {k});
+                return d;
+            },
+            "With fitted_walls=True: the fit's rows, ascending by index: cell, air_volume "
+            "(cells^3), open_area (n, 18; cell faces, the solver's directions), wall_area (n, "
+            "materials + 1; the last column the grid's edge), leak_area (n; zeros), sliver (n, "
+            "6; the cut air's thickness taken through each axial face, cells); and the "
+            "solver's special cells, special (in the layout's order) and the volume each is "
+            "stepped with, volume (cells^3, after the clamp).")
+        .def_prop_ro(
+            "cut_stats",
+            [](const as::WaveSolver &solver) {
+                const auto *cut = solver.cut_cells();
+                if (cut == nullptr) return nb::dict();
+                nb::dict d = cut_stats_dict(*cut);
+                const auto &fp = solver.fitted_points();
+                d["points_without_cells"] = fp.without_cells;
+                d["source_on_face"] = fp.source_on_face;
+                const as::WaveSolver::FittedCounts &c = solver.fitted_counts();
+                d["raised"] = c.raised;
+                d["most_raised"] = c.most_raised;
+                d["sliver_links"] = c.sliver_links;
+                d["sliver_both"] = c.sliver_both;
+                d["sliver_thick"] = c.sliver_thick;
+                d["layer_whole_links"] = c.layer_whole_links;
+                d["layer_whole_least"] = c.layer_whole_least;
+                d["plain_rows"] = c.plain_rows;
+                return d;
+            },
+            "Fitted walls: the cut cells' counts (see CutCells::Stats in cut_cells.hpp), and "
+            "the update's (see WaveSolver::FittedCounts in fdtd.hpp): raised, most_raised, "
+            "sliver_links, sliver_both, sliver_thick, layer_whole_links, layer_whole_least, "
+            "plain_rows.")
+        .def(
+            "cut_air",
+            [](const as::WaveSolver &solver) {
+                const auto *cut = solver.cut_cells();
+                std::vector<std::uint8_t> air = cut ? cut->air() : std::vector<std::uint8_t>{};
+                const std::size_t n = air.size();
+                return to_numpy(std::move(air), {n});
+            },
+            "With fitted_walls=True: each cell's kind in the fit, x fastest: 0 solid, 1 "
+            "air of the source's component, 2 air in the matched layer.")
+        .def(
+            "cut_points",
+            [](const as::WaveSolver &solver) {
+                nb::dict out;
+                if (solver.cut_cells() == nullptr) return out;
+                const auto &fp = solver.fitted_points();
+                auto cells = [](const std::vector<std::pair<std::size_t, double>> &v) {
+                    nb::list l;
+                    for (const auto &[i, w] : v) l.append(nb::make_tuple(i, w));
+                    return l;
+                };
+                out["source"] = cells(fp.source);
+                nb::list probes, found, sight;
+                for (std::size_t k = 0; k < fp.probes.size(); ++k) {
+                    probes.append(cells(fp.probes[k]));
+                    found.append(!fp.probes[k].empty());
+                    sight.append(fp.in_sight[k] != 0);
+                }
+                out["probes"] = probes;
+                out["probe_found"] = found;
+                out["probe_in_sight"] = sight;
+                out["source_on_face"] = fp.source_on_face;
+                return out;
+            },
+            "With fitted_walls=True: the source's and each probe's cells and weights "
+            "as the fitted path would take them ((cell, weight) lists), probe_found, "
+            "probe_in_sight and source_on_face (exact).")
         .def("probe_found", &as::WaveSolver::probe_found, nb::arg("probe"))
         .def("probe_in_sight", &as::WaveSolver::probe_in_sight, nb::arg("probe"),
              "Whether the probe's listener (the first probe of its group) sees it, each "

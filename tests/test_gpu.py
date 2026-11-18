@@ -14,15 +14,16 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from test_fitted_walls import l_room, l_room_points, stable_case, wave
 from test_ground_mirror import _args as _wall_on_ground
 from test_native import _stochastic_args, _unit_cube, cube_with_seats
 from test_tracer_reference import REFERENCE, reference_arguments
 from test_vegetation import _FLOOR_BIN, _FLOOR_LEG, _FLOOR_PLANTS, _big_box, _over_floor, _slab
-from test_wave import STENCILS, _courant, _drive, _solver, _speeds, _warming
+from test_wave import _STEPS, STENCILS, _courant, _drive, _solver, _speeds, _warming
 
 from acoustic_spaces import Room, _native
 from acoustic_spaces.engine import gpu, gpu_rays, gpu_tracer, late, ray_device
-from acoustic_spaces.engine.impedance import fit_admittance
+from acoustic_spaces.engine.impedance import Admittance, fit_admittance
 from acoustic_spaces.engine.model import TraceModel
 from acoustic_spaces.engine.wave import COURANT, LAYER_CELLS, LAYER_DAMPING, wave_responses
 from acoustic_spaces.scene.model import WaveStage
@@ -135,6 +136,43 @@ def test_wave_responses_on_the_gpu_match_the_cpu() -> None:
     assert gpu.gpu_name() in said[0]
     a, b = cpu[0].signals, on_gpu[0].signals
     assert np.abs(a - b).max() < _tolerance(1e-5, 1e-4) * np.abs(a).max()
+
+
+@needs_gpu
+def test_wave_responses_with_fitted_walls_on_the_gpu_match_the_cpu() -> None:
+    room = Room.from_yaml(SHOEBOX)
+    model = TraceModel.from_room(room)
+    source = np.array(room.scene.sources[0].position)
+    listener = np.array(room.scene.listeners[0].position)
+    common = {"max_band_hz": 63, "length_s": 0.3, "sample_rate": 48_000, "speed_of_sound": C}
+    common["walls"] = "fitted"
+    said: list[str] = []
+    cpu, cpu_info = wave_responses(model, source, [listener], ["l"], **common)
+    on_gpu, info = wave_responses(
+        model, source, [listener], ["l"], device="gpu", say=said.append, **common
+    )
+    assert info["wave_gpu"] == 1.0 and info["wave_fitted_walls"] == 1.0
+    assert cpu_info["wave_fitted_walls"] == 1.0 and "wave_gpu" not in cpu_info
+    assert "fitted walls, " in said[0] and gpu.gpu_name() in said[0]
+    a, b = cpu[0].signals, on_gpu[0].signals
+    assert np.abs(a - b).max() < _tolerance(1e-5, 1e-4) * np.abs(a).max()
+
+
+@needs_gpu
+def test_the_wave_timing_script_runs_with_fitted_walls(monkeypatch, capsys) -> None:
+    script = Path(__file__).resolve().parent.parent / "validation" / "wave_gpu.py"
+    argv = ["wave_gpu.py", "--rooms", "shoebox", "--band", "63", "--length", "0.2"]
+    monkeypatch.setattr("sys.argv", [*argv, "--walls", "fitted"])
+    runpy.run_path(str(script), run_name="__main__")
+    out = capsys.readouterr().out
+    walls = next(line for line in out.splitlines() if line.startswith("Walls:"))
+    assert walls.split()[1] == "fitted:"
+    row = next(line for line in out.splitlines() if line.startswith("| shoebox"))
+    cells = [cell.strip() for cell in row.strip("|").split("|")]
+    # Fitted walls take the 7-point stencil, where the shoebox's walls on cell faces take
+    # the 19-point one; the GPU steps them as the CPU does.
+    assert len(cells) == 10 and cells[3] == "7-point" and cells[8].endswith("x")
+    assert float(cells[9]) < _tolerance(1e-5, 1e-4)
 
 
 @needs_gpu
@@ -303,6 +341,122 @@ def test_gpu_records_the_probes_as_many_steps_at_a_time_as_a_buffer_binds() -> N
     pieces._run = lambda part: steps.append(len(part)) or run(part)
     np.testing.assert_array_equal(pieces.run(signal), whole.run(signal))
     assert steps == [97] * 7 + [21]
+
+
+def _offsets_by_the_stencil(layout: dict[str, np.ndarray]) -> np.ndarray:
+    """The GPU's offset table as built for every layout without fitted walls: for each of
+    the stencil's own directions (one weight each in the layout), the step from a cell's
+    index to its neighbour's, as a 32-bit word that wraps round below zero."""
+    nx, ny, _ = (int(v) for v in layout["shape"])
+    steps = np.array(_STEPS[: len(layout["weights"])], np.int64)
+    return (steps @ np.array([1, nx, nx * ny])).astype(np.int32).view(np.uint32)
+
+
+@pytest.mark.parametrize(
+    ("stencil", "layer"), [(7, False), (19, False), (7, True)], ids=["7", "19", "7-layer"]
+)
+def test_the_gpu_tables_of_unfitted_layouts_are_as_before(stencil: int, layer: bool) -> None:
+    """Without fitted walls a special cell links only along its stencil's own directions,
+    so the offset table holds those six or eighteen, bit for bit, and every table after it
+    starts where it did: in a closed room with resonant walls on either stencil, and in the
+    open with a matched layer (which takes the 7-point stencil only)."""
+    if layer:
+        solver = _open_solver()
+        assert solver.layer_cells > 0
+    else:
+        cell = 0.1
+        fit = fit_admittance([0.1, 0.3, 0.6], 8, C / (_courant(stencil) * cell))
+        solver, _ = _solver(
+            (3.0, 2.2, 1.7),
+            lambda mesh: [0.02] * len(mesh.faces),
+            [0.8, 0.9, 0.7],
+            [[2.1, 1.3, 1.1], [1.0, 1.6, 0.4]],
+            cell=cell,
+            branches=[(0, fit), (3, fit)],
+            stencil=stencil,
+        )
+        assert solver.branch_states > 0
+    layout = solver.layout()
+    assert not solver.fitted_walls and int(layout["stencil"][0]) == stencil
+    table, at = gpu._tables(layout)
+    want = _offsets_by_the_stencil(layout)
+    assert len(want) == (6 if stencil == 7 else 18)
+    assert int(np.max(layout["link_direction"])) == len(want) - 1
+    np.testing.assert_array_equal(table[at["offset_at"] : at["scale_at"]], want)
+
+
+@pytest.mark.parametrize("model", ["closed", "open"])
+def test_the_gpu_tables_take_a_fitted_layouts_diagonal_links(model: str) -> None:
+    """A fitted layout on the 7-point grid links its special cells along the edge diagonals
+    too: the offset table runs on to the largest direction a link takes, and through it each
+    link reaches the cell one step from its own along the link's direction. The closed L-room
+    with its turned plates, and the same room open to a matched layer, whose links take all 18
+    directions."""
+    if model == "closed":
+        v, f, mat, h, origin, shape, src = l_room()
+        solver = wave(v, f, h, origin, shape, src, mat=mat, beta=(0.0, 0.3, 1.0))
+    else:
+        solver = stable_case("open")[0]
+    layout = solver.layout()
+    directions = layout["link_direction"].astype(np.int64)
+    assert len(layout["weights"]) == 6 and directions.max() > 6
+    if model == "open":
+        assert np.array_equal(np.unique(directions), np.arange(18))
+    table, at = gpu._tables(layout)
+    assert at["scale_at"] - at["offset_at"] == directions.max() + 1
+    nx, ny, nz = (int(n) for n in layout["shape"])
+    links = np.diff(layout["link_start"].astype(np.int64))
+    cells = np.repeat(layout["special"].astype(np.int64), links)
+    found = cells.astype(np.uint32) + table[at["offset_at"] + directions]
+    x, y, z = cells % nx, cells // nx % ny, cells // (nx * ny)
+    step = np.array(_STEPS)[directions]
+    x, y, z = x + step[:, 0], y + step[:, 1], z + step[:, 2]
+    assert np.all((x >= 0) & (x < nx) & (y >= 0) & (y < ny) & (z >= 0) & (z < nz))
+    np.testing.assert_array_equal(found, x + nx * (y + ny * z))
+
+
+@needs_gpu
+@pytest.mark.parametrize("model", ["closed", "open"])
+def test_the_gpu_steps_a_fitted_layout_as_the_cpu_does(model: str) -> None:
+    """The L-room of tests/test_fitted_walls.py with its fitted walls and its two turned
+    plates, whose special cells link along the edge diagonals: closed, its walls and one
+    plate resonant (branches) and the other plate absorbing; and open through its missing
+    ceiling to a matched layer. 400 steps, heard at 24 points through the room."""
+    if model == "closed":
+        v, f, mat, h, origin, shape, src = l_room()
+        rate = C / (COURANT * h)
+        wall = Admittance(
+            0.05, np.array([0.6, 0.3]), np.array([2.0, 1.5]), np.array([100.0, 250.0])
+        )
+        branches = [(0, wall.branches(rate)), (2, wall.branches(rate))]
+
+        def make():
+            return wave(
+                v,
+                f,
+                h,
+                origin,
+                shape,
+                src,
+                l_room_points(),
+                mat=mat,
+                beta=(wall.beta, 0.3, wall.beta),
+                branches=branches,
+            )
+
+    else:
+        h = 0.1
+        rate = C / (COURANT * h)
+
+        def make():
+            return stable_case("open")[0]
+
+    solver = make()
+    assert solver.fitted_walls and (solver.layout()["link_direction"] >= 6).any()
+    assert solver.branch_states > 0 if model == "closed" else solver.layer_cells > 0
+    a, b = _runs(make, _drive(rate, h, 400), [0, 177, 400])
+    assert np.abs(a).max() > 0.0
+    assert np.abs(a - b).max() < _tolerance(1e-5, 1e-4) * np.abs(a).max()
 
 
 def test_the_device_setting_picks_the_cpu_or_the_gpu(monkeypatch) -> None:
