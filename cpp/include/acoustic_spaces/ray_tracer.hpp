@@ -1599,16 +1599,18 @@ inline StochasticResult trace_stochastic(const StochasticScene &scene,
                     if (cos_theta <= 0.0) continue;
                     const Vec3 toward = v / length;
                     // The plane is `down` metres along the line; the face there is the
-                    // first it meets past those that let sound through.
+                    // first it meets past those that let sound through. The short look
+                    // at the plane goes first: on a terrain most lines meet a plane
+                    // where none of its faces is, and the legs need not be searched.
                     const double down = length * above / (above + height);
                     const double gap = offset + 1e-9 * down;
-                    if (!detail::passing_share(scene, origin, toward, down - gap,
-                                               static_cast<std::int64_t>(face), share.data())) {
-                        continue;
-                    }
                     const Hit at = bvh.intersect(origin + toward * (down - gap), toward,
                                                  2.0 * gap, static_cast<std::int64_t>(face));
                     if (!at.found() || scene.face_mirror[at.face] != static_cast<std::int64_t>(m)) {
+                        continue;
+                    }
+                    if (!detail::passing_share(scene, origin, toward, down - gap,
+                                               static_cast<std::int64_t>(face), share.data())) {
                         continue;
                     }
                     const auto there = static_cast<std::size_t>(at.face);

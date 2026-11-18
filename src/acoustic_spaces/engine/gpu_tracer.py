@@ -1577,15 +1577,16 @@ fn mirror_rain(n: vec3<f32>) {
             }
             let toward = v / gap;
             // The plane is `down` metres along the line; the face there is the first the
-            // line meets about it.
+            // line meets about it. The short look at the plane goes first: on a terrain
+            // most lines meet a plane where none of its faces is.
             let down = gap * above / (above + height);
             let near = run.offset + 1e-6 * down;
-            if (search_ray(origin, toward, run.t_min, down - near, face, true).face != NONE) {
-                continue;
-            }
             let hit = search_ray(origin + toward * (down - near), toward, 0.0, 2.0 * near, face,
                                  false);
             if (hit.face == NONE || scene[run.mirror_at + hit.face] != m) {
+                continue;
+            }
+            if (search_ray(origin, toward, run.t_min, down - near, face, true).face != NONE) {
                 continue;
             }
             let q = origin + toward * down;
