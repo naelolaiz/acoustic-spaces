@@ -206,7 +206,8 @@ def test_a_wave_of_one_piece_keeps_its_energy_exactly() -> None:
     rng = np.random.default_rng(5)
     pressure, distance = _pieces(rng, 3, 1.0)
     clusters = Clusters(SLICE_HZ, C, 10.0)
-    keys = clusters.geometric(np.eye(3), [0, 1, 2])
+    mirrors = np.arange(3)[:, None] + np.zeros((1, 12))
+    keys = clusters.geometric(mirrors, [0, 1, 2], np.eye(3), True)
     own = np.mean(np.abs(pressure) ** 2, axis=2)
     clusters.add(np.arange(3), keys, pressure, distance, anchor=True, own=own)
     clusters.alone([1], own[1:2])
@@ -235,11 +236,23 @@ def test_rows_left_out_are_given_nothing() -> None:
     np.testing.assert_allclose(energy[0, enough], left[enough], rtol=1e-6, atol=1e-6)
 
 
-def test_images_this_close_are_one_wave_and_orders_apart_are_not() -> None:
+def test_waves_are_told_apart_by_their_mirrors_and_paths_without_faces_by_their_image() -> None:
+    """The specular paths of one order whose planes make the same mirror (rows of
+    :func:`~acoustic_spaces.engine.early._mirrors`) are one wave, also with images
+    apart; another mirror or another order is another, also with one image. A path that
+    does not carry its faces is the wave of its image (images 1e-9 m apart are one),
+    never one of a path that does. The diffracted waves take the two sides apart."""
     clusters = Clusters(SLICE_HZ, C, 10.0)
+    a, b = np.arange(12.0), np.arange(12.0) + 1.0
     image = np.array([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0 + 1e-9], [1.0, 2.0, 3.0]])
-    keys = clusters.geometric(image, [1, 1, 3])
+    keys = clusters.geometric(np.vstack([a, a, b]), [2, 2, 2], image + [[0], [5], [0]], True)
     assert keys[0] == keys[1] != keys[2]
-    bent = clusters.diffracted(image[:2], image[::-1][:2])
+    assert clusters.geometric(a[None], [3], image[:1], True)[0] not in keys
+    bare = clusters.geometric(np.vstack([a, a, a]), [2, 2, 2], image + [[0], [0], [1]], False)
+    assert bare[0] == bare[1] != bare[2] and not set(bare.tolist()) & set(keys.tolist())
+    mixed = clusters.geometric(np.vstack([a, a]), [2, 2], image[:2], [True, False])
+    assert mixed.tolist() == [keys[0], bare[0]]
+    bent = clusters.diffracted(np.vstack([a, a]), np.vstack([b, b]))
     assert bent[0] == bent[1] and bent[0] not in keys
+    assert clusters.diffracted(b[None], a[None])[0] != bent[0]
     assert len(set(clusters.private(3)) | set(clusters.private(2))) == 5

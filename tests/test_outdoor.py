@@ -461,6 +461,33 @@ def test_no_way_through_a_barrier_from_a_source_in_its_bend(bend, gap, height, o
             assert np.abs(level).max() < 0.01
 
 
+@pytest.mark.parametrize("bend", [30.0, 60.0])
+def test_a_source_in_a_barrier_s_bend_has_a_wave_each_way_round_it(bend) -> None:
+    """A source 1.2 mm from both arms of a barrier bent by ``bend`` degrees, 1.5 m over
+    the ground in a model 10 km wide, and a listener out along the bend's bisector, with
+    the bands from 1 kHz up adding in energy. The paths off one arm and then the other
+    and the other way round mirror the source otherwise, so the early stage keeps both,
+    and each is a wave of its own though their images lie 4 to 8 mm apart (less than a
+    millionth of the model's size): the bands from 1 kHz up are those of the same
+    places in a model 200 m wide (within 0.01 dB). With images within a
+    hundred-thousandth of the model's size one wave, they were 2.3 dB higher."""
+    turn = math.radians(bend)
+    reach = 1.2e-3 / math.sin(turn / 2)
+    source = (math.cos(turn / 2) * reach, math.sin(turn / 2) * reach, 1.5)
+    listener = (8.0 * math.cos(turn / 2), 8.0 * math.sin(turn / 2), 1.0)
+    path = [[12.0, 0.0], [0.0, 0.0], [12.0 * math.cos(turn), 12.0 * math.sin(turn)]]
+    level = []
+    for half in (5000.0, 100.0):
+        geometry = {
+            "ground": {"extent": [[-half, -half], [half, half]], "sky": 40},
+            "barriers": [{"name": "wall", "path": path, "height": 4.0}],
+        }
+        early = {"method": "image_sources", "max_order": 2, "coherent_max_band_hz": 500}
+        scene = outdoor(geometry, sources=[source], listeners=[listener], early=early)
+        level.append(10 * np.log10(total_energy(early_paths(Room.from_scene(scene)))))
+    np.testing.assert_allclose(level[0][4:], level[1][4:], atol=0.01)
+
+
 @pytest.mark.parametrize(
     ("solids", "source", "listener"),
     [

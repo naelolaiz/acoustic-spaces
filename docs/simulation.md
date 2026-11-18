@@ -431,10 +431,11 @@ where paths add in energy from 250 Hz up, the sound bent round edges is kept as 
 its geometric wave as far as it is coherent with it over the band (on the dark side of
 its boundary, where that wave is gone, near the boundary only), and the rest of it is
 part of its event's diffracted wave, whose terms add up as one wave, so the two edges of
-a narrow face nearly cancel as they do in pressure. A wave's energy is that of its
-pieces added up in pressure and averaged over the band, never below nothing. Behind the
-`archway`'s wall, where the reflection off the arch's jamb, 40 cm deep, appears, the
-level steps by at most 0.08 dB from 250 Hz to 1 kHz. The
+a narrow face nearly cancel as they do in pressure. Paths whose planes mirror the source
+otherwise are other waves, however near their images lie (a source right by two planes).
+A wave's energy is that of its pieces added up in pressure and averaged over the band,
+never below nothing. Behind the `archway`'s wall, where the reflection off the arch's
+jamb, 40 cm deep, appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz. The
 [known issues](validation.md#known-issues-of-the-edge-fade) list these, with what is
 checked and what is not. The fade comes with any `diffraction` but `none`. The late
 part is unchanged, since its scattered rays already find their way round corners.

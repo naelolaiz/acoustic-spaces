@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed: with edge diffraction, in the bands that add in energy, paths whose images of
+  the source lay within a hundred-thousandth of the model's largest extent were one wave
+  and added in pressure, as those off two planes right by the source: 0.01 mm from the
+  floor and a wall of a room 10 m across, 1.5 to 2.7 dB too loud from 250 Hz up, and
+  1.2 mm from both arms of a bent barrier in a model 10 km wide, 2.3 dB from 1 kHz up.
+  Paths whose planes mirror the source otherwise are now other waves.
 - Fixed: in a very large model, a corner of two reflections (points within the early
   search's tolerance for planes of each other, a ten-millionth of the model's largest
   extent, 1 mm in a model 10 km wide) was judged by that tolerance: a path into it went
