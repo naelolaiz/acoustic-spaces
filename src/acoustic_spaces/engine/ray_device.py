@@ -96,15 +96,8 @@ class Plan:
 def _unsupported(values: dict) -> str:
     """Why only the CPU can trace this run wherever its source and listeners are, or ''
     (:func:`_clear` looks at where they are)."""
-    from acoustic_spaces.engine.gpu_tracer import (
-        MAX_MEDIA,
-        MIRRORS_ON_CPU,
-        outdoors_declined,
-        passes_sound,
-    )
+    from acoustic_spaces.engine.gpu_tracer import MAX_MEDIA, outdoors_declined, passes_sound
 
-    if values.get("mirror_plane") is not None:
-        return MIRRORS_ON_CPU
     upright = values.get("plant_upright")
     if values.get("plants") is not None and upright is not None and len(upright) > MAX_MEDIA:
         return f"vegetation of more than {MAX_MEDIA} media is traced on the CPU"

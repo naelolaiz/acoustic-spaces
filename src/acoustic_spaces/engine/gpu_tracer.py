@@ -55,9 +55,6 @@ import numpy as np
 from acoustic_spaces.engine import gpu
 from acoustic_spaces.engine.gpu_rays import BVH_WGSL, T_MIN, pack_tree
 
-#: Why the rain on the listeners' images in the ground goes to the CPU.
-MIRRORS_ON_CPU = "the rain on the listeners' images in the ground is traced on the CPU"
-
 
 class Unsupported(ValueError):
     """The GPU tracer does not do what a run asks for; the CPU's does."""
@@ -88,7 +85,7 @@ _COUNTERS = 8
 _WINDOW = 4
 #: Flags of the run.
 _DIFFUSE_RAIN, _SPECULAR_RAIN, _VECTOR, _SIZES, _SPLITTING = 1, 2, 4, 8, 16
-_ATMOSPHERE, _PLANTS = 32, 64
+_ATMOSPHERE, _PLANTS, _MIRRORS = 32, 64, 128
 #: Buckets of the wind's cosine the atmosphere's tables are kept for (as on the CPU).
 _WIND_BUCKETS = 401
 #: Words per vegetation volume in the scene, and per ray in the chord test.
@@ -182,6 +179,9 @@ _FIELDS = (
     ("moment_bins", "u"),
     ("moment_step", "f"),
     ("moment_scale", "f"),
+    ("mirrors", "u"),
+    ("mirror_at", "u"),
+    ("plane_at", "u"),
 )
 _TYPES = {"u": "u32", "i": "i32", "f": "f32"}
 
@@ -196,9 +196,10 @@ const BANDS: u32 = __BANDS__u;
 const GROUPS: u32 = __GROUPS__u;
 const HIT_WORDS: u32 = (GROUPS + 1u) / 2u;
 const TERMS: u32 = __TERMS__u;
-// Words per ray in flight and per ray from the source; words per face, per listener,
-// per vegetation volume and per medium.
-const RECORD: u32 = 21u + 3u * BANDS + HIT_WORDS;
+// Words per ray in flight (with mirror planes, the share its last reflection scattered
+// too) and per ray from the source; words per face, per listener, per vegetation volume
+// and per medium.
+const RECORD: u32 = 21u + 3u * BANDS + FRESH_WORDS + HIT_WORDS;
 const START: u32 = 3u + BANDS;
 const FACE: u32 = 6u + 2u * BANDS;
 const LISTENER: u32 = 6u;
@@ -215,6 +216,8 @@ const SPLITTING: u32 = 16u;
 // out their code: Direct3D 12's default compiler (FXC) takes minutes over all of it.
 const ATMOSPHERE: u32 = 32u & __FEATURES__u;
 const PLANTS: u32 = 64u & __FEATURES__u;
+const MIRRORS: u32 = 128u & __FEATURES__u;
+const FRESH_WORDS: u32 = BANDS * (MIRRORS >> 7u);
 // Most pieces of arc in one chord, cuts of a segment through one prism's outline,
 // media and volumes along one piece of a ray.
 const MAX_PIECES: u32 = 1024u;
@@ -317,6 +320,12 @@ var<private> held_leaving: u32;
 var<private> held_alive: bool;
 var<private> held_energy: array<f32, BANDS>;
 var<private> held_seen: array<f32, BANDS>;
+// With mirror planes (run.mirrors): the share of the ray's energy its last reflection
+// scattered, whose rain went on to the listeners' images (as the CPU's
+// RayState::fresh), and the share of a vector reflection's specular leg the detector
+// spheres count.
+var<private> fresh: array<f32, BANDS>;
+var<private> specular_seen: array<f32, BANDS>;
 var<private> specular_wanted: bool;
 var<private> specular_dir: vec3<f32>;
 var<private> specular_rng: vec4<u32>;
@@ -1517,6 +1526,126 @@ fn rain(n: vec3<f32>, first: bool) {
     }
 }
 
+// Whether a ray reflecting off `face` (n its normal, toward the side the ray came from)
+// reflects off the front of a mirror plane, whose rain covered on the next leg the share
+// of the ray scattered at the reflection before (as the CPU's off_mirror).
+fn off_mirror(face: u32, n: vec3<f32>) -> bool {
+    if (MIRRORS == 0u || run.mirrors == 0u) {
+        return false;
+    }
+    let m = scene[run.mirror_at + face];
+    if (m >= run.mirrors) {
+        return false;
+    }
+    return dot(n, point(run.plane_at + 4u * m)) > 0.0;
+}
+
+// The rain from the reflection at ray.pos (normal n towards the ray's side) on each
+// listener's image in each mirror plane but the face's own (as the CPU's mirror_rain):
+// through the face of that plane where the line to the image meets it, when both legs
+// are clear, times that face's specular share there (one reflection after this one),
+// the reflection counted in its group.
+fn mirror_rain(n: vec3<f32>) {
+    let origin = ray.pos + n * run.offset;
+    let face = ray.last;
+    let own = scene[run.mirror_at + face];
+    let planted = (run.flags & PLANTS) != 0u;
+    let sizes = (run.flags & SIZES) != 0u && ray.order + 1 >= run.size_from_order;
+    for (var m = 0u; m < run.mirrors; m++) {
+        if (m == own) {
+            continue;
+        }
+        let up = point(run.plane_at + 4u * m);
+        let level = num(run.plane_at + 4u * m + 3u);
+        let above = dot(up, origin) - level;
+        if (!(above > 0.0)) {
+            continue;
+        }
+        for (var k = 0u; k < run.receivers; k++) {
+            let at = run.receiver_at + LISTENER * k;
+            let receiver = point(at);
+            let height = dot(up, receiver) - level;
+            if (!(height > 0.0)) {
+                continue;
+            }
+            let v = receiver - up * (2.0 * height) - origin;
+            let gap = length(v);
+            let dist = max(gap, num(at + 3u));
+            let cos_theta = dot(n, v) / dist;
+            if (cos_theta <= 0.0 || !(gap > 0.0)) {
+                continue;
+            }
+            let toward = v / gap;
+            // The plane is `down` metres along the line; the face there is the first the
+            // line meets about it.
+            let down = gap * above / (above + height);
+            let near = run.offset + 1e-6 * down;
+            if (search_ray(origin, toward, run.t_min, down - near, face, true).face != NONE) {
+                continue;
+            }
+            let hit = search_ray(origin + toward * (down - near), toward, 0.0, 2.0 * near, face,
+                                 false);
+            if (hit.face == NONE || scene[run.mirror_at + hit.face] != m) {
+                continue;
+            }
+            let q = origin + toward * down;
+            let rise = toward - up * (2.0 * dot(toward, up));
+            let rest = gap - down;
+            let after = search_ray(q + up * run.offset, rise, run.t_min, rest, hit.face, true);
+            if (after.face != NONE) {
+                continue;
+            }
+            var lost: array<f32, BANDS>;
+            for (var b = 0u; b < BANDS; b++) {
+                lost[b] = 0.0;
+            }
+            if (planted) {
+                depth_tau(origin, toward, down);
+                for (var b = 0u; b < BANDS; b++) {
+                    lost[b] = tau[b];
+                }
+                depth_tau(q, rise, rest);
+                for (var b = 0u; b < BANDS; b++) {
+                    lost[b] += tau[b];
+                }
+            }
+            // Its specular share as a ray's there.
+            let there = run.face_at + FACE * hit.face;
+            var f_width = 0.0;
+            var f_length = 0.0;
+            if (sizes) {
+                let across = max(num(there + 3u) * max(-dot(up, toward), 1e-3), 1e-9);
+                let along = max(num(there + 4u), 1e-9);
+                f_width = run.c * down / (2.0 * across * across);
+                f_length = run.c * down / (2.0 * along * along);
+            }
+            for (var b = 0u; b < BANDS; b++) {
+                var s = num(there + 6u + BANDS + b);
+                if (sizes) {
+                    let hz = num(run.hz_at + b);
+                    s = 1.0 - (1.0 - s) * min(1.0, hz / f_width) * min(1.0, hz / f_length);
+                }
+                counted[b] = scattered[b] * (1.0 - num(there + 6u + b)) * (1.0 - s) *
+                             exp(-lost[b]);
+            }
+            var g = GROUPS;
+            var before = 0u;
+            if (GROUPS > 0u) {
+                g = scene[run.group_at + hit.face];
+                if (g < GROUPS) {
+                    before = hits[g];
+                    hits[g] = min(before + 1u, 0xffffu);
+                }
+            }
+            deposit(k, cos_theta / (PI * dist * dist), ray.travelled + gap, ray.travelled + gap,
+                    -rise);
+            if (g < GROUPS) {
+                hits[g] = before;
+            }
+        }
+    }
+}
+
 // What foliage at ray.pos sends each listener straight, as the phase function has it
 // (mean cosines g at `at`, the medium's asymmetries), the plants and faces on the way
 // taking their share.
@@ -1671,9 +1800,13 @@ fn load(at: u32) {
         energy[b] = bitcast<f32>(states[at + 21u + b]);
         seen[b] = bitcast<f32>(states[at + 21u + BANDS + b]);
         alone[b] = bitcast<f32>(states[at + 21u + 2u * BANDS + b]);
+        fresh[b] = 0.0;
+        if (MIRRORS != 0u) {
+            fresh[b] = bitcast<f32>(states[at + 21u + 3u * BANDS + b]);
+        }
     }
     for (var g = 0u; g < GROUPS; g++) {
-        let word = states[at + 21u + 3u * BANDS + g / 2u];
+        let word = states[at + 21u + 3u * BANDS + FRESH_WORDS + g / 2u];
         hits[g] = (word >> (16u * (g % 2u))) & 0xffffu;
     }
 }
@@ -1707,13 +1840,16 @@ fn store(at: u32) {
         states[at + 21u + b] = bitcast<u32>(energy[b]);
         states[at + 21u + BANDS + b] = bitcast<u32>(seen[b]);
         states[at + 21u + 2u * BANDS + b] = bitcast<u32>(alone[b]);
+        if (MIRRORS != 0u) {
+            states[at + 21u + 3u * BANDS + b] = bitcast<u32>(fresh[b]);
+        }
     }
     for (var w = 0u; w < HIT_WORDS; w++) {
         var word = hits[2u * w];
         if (2u * w + 1u < GROUPS) {
             word |= hits[2u * w + 1u] << 16u;
         }
-        states[at + 21u + 3u * BANDS + w] = word;
+        states[at + 21u + 3u * BANDS + FRESH_WORDS + w] = word;
     }
 }
 
@@ -1726,6 +1862,7 @@ fn start(k: u32) -> bool {
         energy[b] = e;
         seen[b] = 1.0;
         alone[b] = 1.0;
+        fresh[b] = 0.0;
         loudest = max(loudest, e);
     }
     if (!(loudest > 0.0)) {
@@ -1978,7 +2115,7 @@ fn specular_leg(specular: vec3<f32>, alive: bool) {
         held_energy[b] = energy[b];
         held_seen[b] = seen[b];
         energy[b] = reflected[b];
-        seen[b] = 1.0 - scatter[b];
+        seen[b] = specular_seen[b];
     }
     let rng = specular_rng;
     ray.rng = seeded(rng.x, rng.y ^ rng.z, rng.w ^ 0x2545f491u);
@@ -2079,6 +2216,7 @@ fn scatter_in_plants(n_in: u32) -> bool {
         kept += energy[b];
         mean_g += energy[b] * num(at + 2u * BANDS + b);
         alone[b] = 0.0;
+        fresh[b] = 0.0;
     }
     let window = min(run.windows - 1u, u32(ray.travelled / run.c / run.window_step));
     add_fixed(COUNTERS + 4u * window, mean / f32(BANDS) * run.window_scale);
@@ -2221,11 +2359,15 @@ fn advance(n_in: u32) -> bool {
     add_one(COUNTERS + 4u * window + 2u);
     if ((run.flags & (DIFFUSE_RAIN | SPECULAR_RAIN)) != 0u) {
         rain(n, first);
+        if (MIRRORS != 0u && run.mirrors > 0u) {
+            mirror_rain(n);
+        }
     }
     if (peak < ray.cutoff) {
         return false;
     }
     let diffuse_rain = (run.flags & DIFFUSE_RAIN) != 0u;
+    let mirrored = off_mirror(hit.face, n);
     if ((run.flags & VECTOR) != 0u) {
         // One ray for the mixture: all the reflected energy, in between the specular and
         // a Lambert direction. The detector spheres count its specular share along the
@@ -2243,21 +2385,28 @@ fn advance(n_in: u32) -> bool {
         let size = length(mixed);
         ray.dir = select(n, mixed / size, size > 1e-12);
         for (var b = 0u; b < BANDS; b++) {
+            // The specular leg's share, less what the reflection before scattered, which
+            // the mirror rain covered.
+            specular_seen[b] = (1.0 - scatter[b]) * select(1.0, 1.0 - fresh[b], mirrored);
             energy[b] = reflected[b];
             seen[b] = select(scatter[b], 0.0, diffuse_rain);
+            fresh[b] = select(0.0, scatter[b], run.mirrors > 0u);
         }
     } else if (random() < p) {
         for (var b = 0u; b < BANDS; b++) {
             energy[b] = scattered[b] / p;
             seen[b] = select(1.0, 0.0, diffuse_rain);
             alone[b] = 0.0;
+            fresh[b] = select(0.0, 1.0, run.mirrors > 0u);
         }
         ray.dir = lambert(n);
     } else {
+        // Specular: the share the reflection before scattered, the mirror rain covered.
         for (var b = 0u; b < BANDS; b++) {
             energy[b] = (reflected[b] - scattered[b]) / (1.0 - p);
-            seen[b] = 1.0;
+            seen[b] = select(1.0, 1.0 - fresh[b], mirrored);
             alone[b] = select(0.0, 1.0, alone[b] > 0.0);
+            fresh[b] = 0.0;
         }
         ray.dir = reflect(ray.dir, n);
     }
@@ -2533,16 +2682,16 @@ def moment_terms(groups: int) -> int:
     return 1 + groups + groups * (groups + 1) // 2 if groups > 0 else 0
 
 
-def _record(bands: int, groups: int) -> int:
-    """Words per ray in flight (``RECORD`` in the shader)."""
-    return 21 + 3 * bands + (groups + 1) // 2
+def _record(bands: int, groups: int, mirrors: bool = False) -> int:
+    """Words per ray in flight (``RECORD`` in the shader), with mirror planes or not."""
+    return 21 + (4 if mirrors else 3) * bands + (groups + 1) // 2
 
 
 @functools.lru_cache(maxsize=8)
 def _module(bands: int, features: int, groups: int = 0):
     """The shader for rays of ``bands`` bands that count their reflections off
-    ``groups`` face groups, with the code for ``features`` (of ``_ATMOSPHERE`` and
-    ``_PLANTS``) only."""
+    ``groups`` face groups, with the code for ``features`` (of ``_ATMOSPHERE``,
+    ``_PLANTS`` and ``_MIRRORS``) only."""
     code = (
         _SHADER.replace("__BANDS__", str(bands))
         .replace("__FEATURES__", str(features))
@@ -2697,6 +2846,8 @@ class GpuTracer:
         moment_time_step: float = 1e-2,
         face_kind=None,
         covered_ground: int = 0,
+        mirror_plane=None,
+        face_mirror=None,
     ) -> tuple:
         """Traces the rays ``starts`` (directions and the source's energy weights, as
         ``_native.ray_starts`` gives them for the streams from ``first_ray`` on), each
@@ -2707,7 +2858,9 @@ class GpuTracer:
         (``face_group``, the group of each face, -1 for none), each ray counts its
         reflections off each and the listeners sum the moments of those counts, at
         ``moment_time_step``. ``face_kind`` (one per face, or None) and ``covered_ground``
-        count the covered paths' reflections as in bent air. Returns (energy,
+        count the covered paths' reflections as outdoors. With ``mirror_plane`` (rows of
+        a unit normal and an offset) and ``face_mirror`` (each face's plane, or -1), the
+        diffuse rain also falls on the listeners' images in those planes. Returns (energy,
         directional, moments, escaped rays, ray_energy, reflections, traced rays)."""
         wgpu = gpu._wgpu("ray tracing")
         device = self._device
@@ -2785,6 +2938,18 @@ class GpuTracer:
             # Each face's group as a word (none, -1, as 0xffffffff).
             group_words = np.asarray(face_group, np.int64).reshape(self.faces)
             scene_words.append(np.where(group_words >= 0, group_words, -1).astype(np.uint32))
+        # Each face's mirror plane as a word (none, -1, as 0xffffffff), then the planes,
+        # their offsets from the centre the GPU's places are taken from.
+        mirrors = 0 if mirror_plane is None else len(mirror_plane)
+        mirror_at = plane_at = 0
+        if mirrors:
+            mirror_at = sum(len(w) for w in scene_words)
+            plane_at = mirror_at + self.faces
+            mirror_of = np.asarray(face_mirror, np.int64).reshape(self.faces)
+            rows = np.array(mirror_plane, float).reshape(mirrors, 4)
+            rows[:, 3] -= (rows[:, :3] * self.centre).sum(axis=1)
+            scene_words += [np.where(mirror_of >= 0, mirror_of, -1).astype(np.uint32)]
+            scene_words += [_words(rows.ravel())]
         scene = np.concatenate(scene_words)
 
         # The tallies: counters, windows, energy, directional, moments, families.
@@ -2793,7 +2958,7 @@ class GpuTracer:
         moment_at = directional_at + 2 * n_rec * n_dirs * bands * dir_bins
         family_at = moment_at + 2 * n_rec * terms * bands * moment_bins
         tally_words = family_at + rays
-        record = _record(bands, groups)
+        record = _record(bands, groups, mirrors > 0)
         most = min(_MOST_RAYS, self._limit // (8 * record))
         # Bent rays take many chords, and so many searches, to a leg: fewer at a time.
         chords = 1
@@ -2846,7 +3011,8 @@ class GpuTracer:
             | (_SIZES if with_sizes else 0)
             | (_SPLITTING if len(target) else 0)
             | (_ATMOSPHERE if bending is not None else 0)
-            | (_PLANTS if plants is not None else 0),
+            | (_PLANTS if plants is not None else 0)
+            | (_MIRRORS if mirrors else 0),
             "covered_order": covered_order,
             "covered_ground": -1 if face_kind is None else int(covered_ground),
             "size_from_order": size_from_order,
@@ -2894,10 +3060,14 @@ class GpuTracer:
             * math.pi
             * r_min**2
             / (1.5 * loudest),
+            "mirrors": mirrors,
+            "mirror_at": mirror_at,
+            "plane_at": plane_at,
             **in_air,
             **greenery,
         }
-        pipeline = _pipeline("main", bands, settings["flags"] & (_ATMOSPHERE | _PLANTS), groups)
+        features = settings["flags"] & (_ATMOSPHERE | _PLANTS | _MIRRORS)
+        pipeline = _pipeline("main", bands, features, groups)
         halves = (0, most * record)
         kept = spawned = spawn_from = fresh_from = rounds = 0
         counters = np.zeros(_COUNTERS, np.uint32)
@@ -3300,7 +3470,7 @@ def run_memory(rays: int, bands: int, results: float) -> float:
     ``21 + 3 * bands`` words and those of the most face groups, twice). A GPU built into
     the processor takes its buffers from the computer's memory."""
     starts = 8.0 * rays * (3 + bands)
-    record = _record(bands, MAX_GROUPS)
+    record = _record(bands, MAX_GROUPS, mirrors=True)
     return 3.0 * results + 2.5 * starts + 4.0 * rays + 8.0 * _MOST_RAYS * record
 
 
@@ -3374,8 +3544,6 @@ def trace_stochastic(
     from acoustic_spaces import _native
 
     del threads, room_level
-    if mirror_plane is not None or face_mirror is not None:
-        raise Unsupported(MIRRORS_ON_CPU)
     if passes_sound(transmission, face_room, source_room):
         raise Unsupported("the GPU tracer does not let sound through surfaces")
     near = too_near(bvh, source, receivers, receiver_radius)
@@ -3394,6 +3562,17 @@ def trace_stochastic(
     bending = _atmosphere_rows(atmosphere, wind_direction)
     if gather_ratio > 0.0 and (not diffuse_rain or specular_rain or bending is not None):
         raise ValueError("gather_ratio needs diffuse rain alone, in still air")
+    mirror_plane, face_mirror = _mirror_planes(mirror_plane, face_mirror, bvh.face_count)
+    if mirror_plane is not None and (
+        len(mirror_plane) > _native.MAX_MIRRORS
+        or not diffuse_rain
+        or specular_rain
+        or bending is not None
+    ):
+        raise ValueError(
+            "trace_stochastic: mirror planes need diffuse rain alone, in still air, and at "
+            f"most {_native.MAX_MIRRORS} of them"
+        )
     bands = len(np.asarray(air))
     starts = _native.ray_starts(
         np.ascontiguousarray(directivity_a, dtype=np.float64),
@@ -3457,7 +3636,34 @@ def trace_stochastic(
         moment_time_step=float(moment_time_step),
         face_kind=face_kind,
         covered_ground=int(covered_ground),
+        mirror_plane=mirror_plane,
+        face_mirror=face_mirror,
     )
+
+
+def _mirror_planes(mirror_plane, face_mirror, faces: int) -> tuple:
+    """The mirror planes (rows of a unit normal and an offset) and each face's (or -1),
+    checked as the CPU's trace_stochastic checks them; (None, None) for none."""
+    if mirror_plane is None and face_mirror is None:
+        return None, None
+    planes = None if mirror_plane is None else np.asarray(mirror_plane, float)
+    of = None if face_mirror is None else np.asarray(face_mirror, np.int64)
+    if planes is None or of is None or planes.ndim != 2 or planes.shape[1] != 4:
+        raise ValueError(
+            "trace_stochastic: mirror_plane must have rows of 4 and face_mirror one per face"
+        )
+    if of.shape != (faces,):
+        raise ValueError(
+            "trace_stochastic: mirror_plane must have rows of 4 and face_mirror one per face"
+        )
+    lengths = np.sqrt((planes[:, :3] ** 2).sum(axis=1))
+    if not (np.all(np.abs(lengths - 1.0) <= 1e-9) and np.all(np.isfinite(planes[:, 3]))):
+        raise ValueError("trace_stochastic: a mirror plane needs a unit normal")
+    if np.any(of < -1) or np.any(of >= len(planes)):
+        raise ValueError("trace_stochastic: bad face_mirror")
+    if len(planes) == 0:
+        return None, None
+    return planes, of
 
 
 __all__ = [

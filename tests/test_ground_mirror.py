@@ -9,8 +9,11 @@ import pytest
 from test_outdoor import OPEN, SHOEBOX, outdoor
 
 from acoustic_spaces import Room, _native
-from acoustic_spaces.engine import late, ray_device
+from acoustic_spaces.engine import gpu, gpu_tracer, late
 from acoustic_spaces.engine.model import TraceModel
+
+needs_gpu = pytest.mark.skipif(gpu.gpu_name() is None, reason="wgpu finds no GPU")
+DEVICES = ["cpu", pytest.param("gpu", marks=needs_gpu)]
 
 #: A wall 30 m wide and 10 m tall standing on ground 400 m across, 20 m in front of a
 #: source 2 m up: the wall scatters all it reflects, the ground none.
@@ -100,54 +103,62 @@ def _scattered(listener: np.ndarray) -> float:
     return float(np.sum(lands * (1 - WALL_ALPHA) * sent) * area)
 
 
-def _energy(seeds: int, rays: int, **more) -> np.ndarray:
+def _trace(device: str):
+    return _native.trace_stochastic if device == "cpu" else gpu_tracer.trace_stochastic
+
+
+def _energy(seeds: int, rays: int, device: str = "cpu", **more) -> np.ndarray:
     """The energy at each listener (seeds, listeners)."""
-    return np.array(
-        [
-            _native.trace_stochastic(**_args(rays, seed, **more))[0].sum((1, 2))
-            for seed in range(seeds)
-        ]
-    )
+    trace = _trace(device)
+    return np.array([trace(**_args(rays, seed, **more))[0].sum((1, 2)) for seed in range(seeds)])
 
 
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("vector", [True, False], ids=["vector", "random"])
-def test_the_ground_mirrors_a_wall_s_scattered_sound_by_the_rain(vector: bool) -> None:
+def test_the_ground_mirrors_a_wall_s_scattered_sound_by_the_rain(vector: bool, device) -> None:
     # All the listeners hear of the rays is what the wall scatters, straight or off the
-    # ground: the rain on them and on their images brings it with its exact energy. The
-    # detector spheres counted what came off the ground (no mirror plane), a few rays
-    # each bringing a burst: the same energy, far less steadily.
+    # ground: the rain on them and on their images brings it with its exact energy, on
+    # the GPU as on the CPU. The detector spheres counted what came off the ground (no
+    # mirror plane), a few rays each bringing a burst: the same energy, far less steadily.
     exact = np.array([_scattered(listener) for listener in LISTENERS])
-    rained = _energy(16, 4000, vector=vector)
+    rained = _energy(16, 4000, device, vector=vector)
     mean, error = rained.mean(0), rained.std(0, ddof=1) / np.sqrt(len(rained))
     assert np.all(np.abs(mean - exact) < 4 * error + 1e-3 * exact), (mean / exact, error / exact)
-    caught = _energy(16, 4000, vector=vector, mirror_plane=None, face_mirror=None)
+    caught = _energy(16, 4000, device, vector=vector, mirror_plane=None, face_mirror=None)
     mean, error = caught.mean(0), caught.std(0, ddof=1) / np.sqrt(len(caught))
     assert np.all(np.abs(mean - exact) < 4 * error), (mean / exact, error / exact)
     # 6.6 and 15 times (vector), 7.2 and 25 times (random) when written.
     assert np.all(caught.std(0) > 5 * rained.std(0)), (caught.std(0), rained.std(0))
 
 
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("vector", [True, False], ids=["vector", "random"])
 def test_the_detector_leaves_the_ground_s_mirror_of_scattered_sound_to_the_rain(
-    vector: bool,
+    vector: bool, device: str
 ) -> None:
     # The detector counts none of it any more: the response is the same whatever the
     # spheres' size (no reflection lies within 2 m of a listener but the ground's,
-    # which scatters nothing). Before, each ray off the wall and the ground through a
-    # sphere counted, as many more as the sphere was larger.
-    small = _native.trace_stochastic(**_args(2000, 5, radius=0.5, vector=vector))[0]
-    large = _native.trace_stochastic(**_args(2000, 5, radius=2.0, vector=vector))[0]
+    # which scatters nothing; on the GPU, which takes no sphere through the ground, 1 m,
+    # and to the rounding of its sums, which the smallest sphere scales). Before, each
+    # ray off the wall and the ground through a sphere counted, as many more as the
+    # sphere was larger.
+    trace = _trace(device)
+    larger, rtol = (2.0, 1e-12) if device == "cpu" else (1.0, 1e-5)
+    small = trace(**_args(2000, 5, radius=0.5, vector=vector))[0]
+    large = trace(**_args(2000, 5, radius=larger, vector=vector))[0]
     assert small.sum() > 0.0
-    np.testing.assert_allclose(large, small, rtol=1e-12, atol=0.0)
+    np.testing.assert_allclose(large, small, rtol=rtol, atol=1e-9 * small.max())
 
 
-def test_mirror_planes_need_the_diffuse_rain_alone() -> None:
+@pytest.mark.parametrize("device", DEVICES)
+def test_mirror_planes_need_the_diffuse_rain_alone(device: str) -> None:
+    trace = _trace(device)
     with pytest.raises(ValueError, match="diffuse rain alone"):
-        _native.trace_stochastic(**_args(10, 0, specular_rain=True))
+        trace(**_args(10, 0, specular_rain=True))
     with pytest.raises(ValueError, match="face_mirror"):
-        _native.trace_stochastic(**_args(10, 0, face_mirror=np.array([0, 1, -1, -1], np.int64)))
+        trace(**_args(10, 0, face_mirror=np.array([0, 1, -1, -1], np.int64)))
     with pytest.raises(ValueError, match="unit normal"):
-        _native.trace_stochastic(**_args(10, 0, mirror_plane=np.array([[0.0, 0.0, 2.0, 0.0]])))
+        trace(**_args(10, 0, mirror_plane=np.array([[0.0, 0.0, 2.0, 0.0]])))
     assert late.MAX_MIRRORS == _native.MAX_MIRRORS
 
 
@@ -165,8 +176,3 @@ def test_the_ground_s_planes_are_its_mirrors() -> None:
     assert ground.sum() > 2
     np.testing.assert_array_equal(found["face_mirror"], np.where(ground, 0, -1))
     assert late.ground_mirrors(TraceModel.from_room(Room.from_yaml(SHOEBOX))) == {}
-
-
-def test_the_gpu_leaves_the_mirrors_to_the_cpu() -> None:
-    values = {"mirror_plane": MIRROR, "transmission": np.zeros((0, 0))}
-    assert "images in the ground" in ray_device._unsupported(values)

@@ -840,10 +840,9 @@ simulation:
   kinds of scattering, the scattering of a surface's size, air absorption, the early
   stage's paths left out, arrival directions, the weight window, and outdoors the rays
   bent by [wind and temperature](outdoor.md#wind-and-temperature), those through
-  [vegetation](outdoor.md#vegetation) and the open sky); the listeners' side of the
-  first reflections' scattered sound is found on the CPU, and outdoors in still air the
-  CPU traces the whole run, with the rain on the listeners' images in the ground.
-  Rays start where
+  [vegetation](outdoor.md#vegetation), the open sky and the rain on the listeners'
+  images in the ground); the listeners' side of the first reflections' scattered sound
+  is found on the CPU. Rays start where
   the CPU's do, then draw random numbers of their own, in single precision, so the two
   agree statistically, not ray for ray. Its lengths are coarser than the CPU's: a
   straight ray meets no face nearer its start than a millionth of the model's size (the
