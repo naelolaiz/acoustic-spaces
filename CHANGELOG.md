@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: with edge diffraction, where walls in line face opposite ways with a panel or a
+  partition between them, the edge fade took the edges at a path's reflections, and the
+  faces a reflection meets there, by the plane in the model that holds each face, which
+  for the panel is that of the wall facing the plane's way: in a Z-shaped room with a
+  panel in the opening between two such walls, a room and its mirror image were up to
+  1.1 dB apart, and in a room with two such planes up to 1.8 dB. It now takes them by
+  where they lie and the way each face faces.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

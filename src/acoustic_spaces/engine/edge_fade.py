@@ -142,6 +142,7 @@ from acoustic_spaces.engine.early import (
     EarlyReflections,
     _crossed_at,
     _face_at,
+    _faces_at,
     _goes_on,
     _image_points,
     _perpendicular,
@@ -183,11 +184,17 @@ class EdgeFade:
                 )
         self.tolerance = _TOLERANCE * diffraction.size
         self._bisector = self.edges.bisector()
-        # The edges of each plane (of either face), by plane.
+        # The geometric plane of each face of each edge (TraceModel.geometric_plane): the
+        # edges a path meets in a plane are those with a face there, whichever of the
+        # planes in one place holds it (two walls facing opposite ways, and a panel in
+        # line with them in the plane of one of them), as a scene and its mirror image
+        # have them alike.
+        self._edge_plane = self.model.geometric_plane[self.edges.plane]
+        # The edges of each geometric plane (of either face), by plane.
         pairs = np.unique(
             np.concatenate(
                 [
-                    np.column_stack([self.edges.plane[:, side], np.arange(len(self.edges))])
+                    np.column_stack([self._edge_plane[:, side], np.arange(len(self.edges))])
                     for side in (0, 1)
                 ]
             ),
@@ -320,10 +327,17 @@ class EdgeFade:
             )
             plane = seqs[rows, j - 1]
             safe = np.maximum(hit, 0)
-            # Openings are holes: a reflection point in one is off its faces.
-            on = (hit >= 0) & (model.face_plane[safe] == plane) & ~model.transparent[safe]
+            # Openings are holes: a reflection point in one is off its faces. The faces
+            # are those in the plane's place that the path meets from the front or that
+            # have a room on both sides, whichever of the planes there holds them (two
+            # walls facing opposite ways, a panel in line with them in the plane of one
+            # of them): of the sequences with one image only one is tried here.
+            # The path comes from the side of the source's image in the planes before.
+            side = chain[j - 1][rows]
+            on = (hit >= 0) & ~model.transparent[safe] & _facing(model, safe, side)
+            on &= model.geometric_plane[model.face_plane[safe]] == model.geometric_plane[plane]
             for i in np.flatnonzero((hit >= 0) & ~on):  # another face right there
-                hit[i] = _face_at(model, plane[i], points[rows[i], j], self.tolerance)
+                hit[i] = self._reflecting_face(plane[i], points[rows[i], j], side[i])
                 on[i] = hit[i] >= 0
             faces[rows, j - 1] = np.where(on, hit, -1)
 
@@ -600,9 +614,33 @@ class EdgeFade:
         table["free"] = np.zeros((len(table["at"]), 2), dtype=bool)
         return table, first
 
-    def _of_planes(self, planes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Pairs (index, edge) of each of ``planes`` with the edges with a face in it."""
+    def _in_place(self, plane: int) -> np.ndarray:
+        """The planes in the place of ``plane`` (TraceModel.geometric_plane), ``plane``
+        first."""
+        geometric = self.model.geometric_plane
+        others = np.flatnonzero(geometric == geometric[plane])
+        return np.concatenate([[plane], others[others != plane]]).astype(np.int64)
+
+    def _reflecting_face(self, plane: int, point: np.ndarray, side: np.ndarray) -> int:
+        """The first face in the place of ``plane`` (its own faces first) that ``point``
+        lies on (:func:`~acoustic_spaces.engine.early._faces_at`) and that a path from
+        the side of ``side`` reflects off (:func:`_facing`), or -1."""
+        for other in self._in_place(plane).tolist():
+            faces = _faces_at(self.model, other, point, self.tolerance)
+            faces = faces[_facing(self.model, faces, np.broadcast_to(side, (len(faces), 3)))]
+            if len(faces):
+                return int(faces[0])
+        return -1
+
+    def _geometric(self, planes: np.ndarray) -> np.ndarray:
+        """The geometric plane of each of ``planes`` (-1 for -1)."""
         planes = np.asarray(planes, dtype=np.int64)
+        return np.where(planes >= 0, self.model.geometric_plane[np.maximum(planes, 0)], -1)
+
+    def _of_planes(self, planes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Pairs (index, edge) of each of ``planes`` with the edges with a face in its
+        geometric plane."""
+        planes = self._geometric(planes)
         valid = planes >= 0
         lo = np.where(valid, self._plane_start[np.maximum(planes, 0)], 0)
         hi = np.where(valid, self._plane_start[np.maximum(planes, 0) + 1], 0)
@@ -620,11 +658,11 @@ class EdgeFade:
         legs = slots[table["kind"][slots] == _LEG]
         slot = np.repeat(legs, len(edges))
         edge = np.tile(np.arange(len(edges)), len(legs))
-        ends = table["ends"].reshape(len(table["ends"]), -1)[slot]
+        ends = self._geometric(table["ends"].reshape(len(table["ends"]), -1)[slot])
         near = np.zeros(len(slot), dtype=bool)
         for side in (0, 1):
             for end in ends.T:
-                near |= edges.plane[edge, side] == end
+                near |= self._edge_plane[edge, side] == end
         faces = slots[table["kind"][slots] == _FACE]
         index, face_edge = self._of_planes(table["plane"][faces])
         return (
@@ -654,19 +692,21 @@ class EdgeFade:
         angle = edges.wedge[edge] * np.pi
         face_n = np.cos(angle)[:, None] * edges.along[edge]
         face_n += np.sin(angle)[:, None] * edges.normal[edge]
-        on_0 = (edges.plane[edge, 0] == plane) & (
+        geometric = self._geometric(plane)
+        on_0 = (self._edge_plane[edge, 0] == geometric) & (
             np.einsum("ij,ij->i", offset, edges.along[edge]) > -self.tolerance
         )
-        on_n = (edges.plane[edge, 1] == plane) & (
+        on_n = (self._edge_plane[edge, 1] == geometric) & (
             np.einsum("ij,ij->i", offset, face_n) > -self.tolerance
         )
         return out & (plane >= 0) & (on_0 | on_n)
 
     def _stands(self, edge: np.ndarray, plane: np.ndarray) -> np.ndarray:
-        """Whether ``edge`` stands on ``plane``: an end of it lies on a face of the plane
-        (its sides included), not just in the plane (a wall as high as a roof elsewhere),
-        the plane goes on round that end on the edge's open side (not a building's
-        corner under the corner of its roof), and the edge leaves it."""
+        """Whether ``edge`` stands on ``plane``: an end of it lies on a face in the
+        plane's place (its sides included) that faces the edge or has a room on both
+        sides (:func:`_facing`), not just in the plane (a wall as high as a roof
+        elsewhere), the plane goes on round that end on the edge's open side (not a
+        building's corner under the corner of its roof), and the edge leaves it."""
         edges, model = self.edges, self.model
         safe = np.maximum(plane, 0)
         normal, offset = model.plane_normal[safe], model.plane_offset[safe]
@@ -677,13 +717,22 @@ class EdgeFade:
         leaves = np.abs(np.einsum("ij,ij->i", normal, edges.direction[edge])) > 1e-6
         out = (plane >= 0) & (ends[0] | ends[1]) & leaves
         for i in np.flatnonzero(out):
-            key = (int(edge[i]), int(plane[i]))
+            key = (int(edge[i]), int(model.geometric_plane[plane[i]]))
             if key not in self._standing:
-                end = edges.start[edge[i]] if ends[0][i] else edges.end[edge[i]]
+                end, far = (edges.start, edges.end) if ends[0][i] else (edges.end, edges.start)
+                end, far = end[edge[i]], far[edge[i]]
+                # The faces there that face the edge, which leaves them for its far end.
+                faces = np.concatenate(
+                    [
+                        _faces_at(model, other, end, self.tolerance)
+                        for other in self._in_place(int(plane[i])).tolist()
+                    ]
+                )
+                faces = faces[_facing(model, faces, np.broadcast_to(far, (len(faces), 3)))]
                 # The plane goes on round the end on the edge's open side.
                 way = self._bisector[edge[i]]
                 way = way - (normal[i] @ way) * normal[i]
-                self._standing[key] = _goes_on(model, key[1], end, way, self.tolerance)
+                self._standing[key] = _goes_on(model, faces, end, way, self.tolerance)
             out[i] = self._standing[key]
         return out
 
@@ -1064,8 +1113,9 @@ class EdgeFade:
         # inside the building.
         _, _, phi, _ = self.edges.frame(edge[j], geometry["images"][path[j], (event[j] - 1) // 2])
         n = self.edges.wedge[edge[j]]
-        face_edge[j] = ((self.edges.plane[edge[j], 0] == plane) & (phi < np.pi)) | (
-            (self.edges.plane[edge[j], 1] == plane) & (phi > (n - 1.0) * np.pi)
+        geometric = self._geometric(plane)
+        face_edge[j] = ((self._edge_plane[edge[j], 0] == geometric) & (phi < np.pi)) | (
+            (self._edge_plane[edge[j], 1] == geometric) & (phi > (n - 1.0) * np.pi)
         )
         ok[j] = face_edge[j] | self._stands(edge[j], plane)
         return ok, face_edge
@@ -1074,7 +1124,6 @@ class EdgeFade:
         """The pairs (event, edge) of :meth:`_pairs` for the events ``slots`` of
         ``table`` with only the edges that explain one of the events that stop the path
         (``stopped``, by path; see :meth:`_stopping`)."""
-        edges = self.edges
         path, event = np.nonzero(stopped)
         # The edges with a face in the plane that blocks the leg or that the reflection
         # is in, and those standing on that plane.
@@ -1110,13 +1159,13 @@ class EdgeFade:
         # As _pairs takes them: at a leg not the edges of the planes at its ends, at a
         # reflection the edges of its plane.
         leg = table["kind"][slot] == _LEG
-        ends = table["ends"].reshape(len(table["ends"]), -1)[slot]
+        ends = self._geometric(table["ends"].reshape(len(table["ends"]), -1)[slot])
         near = np.zeros(len(slot), dtype=bool)
         for side in (0, 1):
             for end in ends.T:
-                near |= edges.plane[edge, side] == end
-        plane = table["plane"][slot]
-        mine = (edges.plane[edge, 0] == plane) | (edges.plane[edge, 1] == plane)
+                near |= self._edge_plane[edge, side] == end
+        plane = self._geometric(table["plane"][slot])
+        mine = (self._edge_plane[edge, 0] == plane) | (self._edge_plane[edge, 1] == plane)
         keep = np.where(leg, ~near, mine)
         return slot[keep], edge[keep]
 
@@ -1272,7 +1321,7 @@ class EdgeFade:
         their events."""
         if len(slots) == 0:
             return []
-        plane = np.maximum(table["plane"][slots], 0)
+        plane = np.maximum(self._geometric(table["plane"][slots]), 0)
         count = np.where(
             table["kind"][slots] == _LEG,
             len(self.edges),
@@ -1361,9 +1410,9 @@ class EdgeFade:
         ok &= _on_leg(model, point, images, ends, leg, edges.direction[edge], self.tolerance)
         # At a reflection, the face of the edge in the plane, with the source side in
         # front of it.
-        plane = table["plane"][slot]
-        front_0 = ~leg & (edges.plane[edge, 0] == plane) & (phi_s < np.pi)
-        front_n = ~leg & (edges.plane[edge, 1] == plane) & (phi_s > (n - 1.0) * np.pi)
+        plane = self._geometric(table["plane"][slot])
+        front_0 = ~leg & (self._edge_plane[edge, 0] == plane) & (phi_s < np.pi)
+        front_n = ~leg & (self._edge_plane[edge, 1] == plane) & (phi_s > (n - 1.0) * np.pi)
         ok &= leg | front_0 | front_n
         column = np.where(leg, 0, np.where(front_0, 1, 2))
         # Each edge counts on its own side of its boundary; exactly on it, on the side
@@ -1721,11 +1770,16 @@ class EdgeFade:
                 best = order[last]
                 face = edges.face[t["edge"][best], np.where(t["column"][best] == 1, 0, 1)]
                 faces[path[best], (t["at"][best] - 1) // 2] = face
-            # A reflection off its faces next to the leg that stops the path: the face of
-            # its plane nearest to it.
+            # A reflection off its faces next to the leg that stops the path: the face in
+            # its plane's place nearest to it that it reflects off, coming from the side
+            # of the source's image in the planes before.
             for i, j in zip(*np.nonzero(faces < 0), strict=True):
+                planes = go["planes"][ids[i]]
+                side = np.array(self.d.source, dtype=float)[None]
+                for before in planes[:j]:
+                    side = self.model.mirror(side, np.array([before]))
                 faces[i, j] = _nearest_face(
-                    self.model, go["planes"][ids[i], j], go["points"][ids[i], j + 1]
+                    self.model, self._in_place(int(planes[j])), go["points"][ids[i], j + 1], side[0]
                 )
             energy, spectrum, cosines = self._energy(listener, go, k, ids, faces)
         # Each event's terms take the product of the events before it, the one that
@@ -2059,11 +2113,15 @@ class EdgeFade:
 
     def _bent_index(self, *bent: EarlyReflections) -> dict:
         """The lengths of the paths over each edge in ``bent``, their rows there and
-        their points, by the edge and the planes the path reflects off."""
+        their points, by the edge and the geometric planes the path reflects off (a
+        missed path takes the planes it is tried with, which may be others in their
+        places than those of the faces the path over the edge reflects off)."""
+        geometric = self.model.geometric_plane
         index: dict[tuple, list] = {}
         for part in bent:
             for i in np.flatnonzero(part.edge >= 0):
-                planes = tuple(self.model.face_plane[np.asarray(part.faces[i], dtype=np.int64)])
+                faces = np.asarray(part.faces[i], dtype=np.int64)
+                planes = tuple(geometric[self.model.face_plane[faces]].tolist())
                 index.setdefault((int(part.edge[i]), planes), []).append((part, i))
         return {
             key: (
@@ -2077,10 +2135,12 @@ class EdgeFade:
     def _has_bent(self, planes: np.ndarray, t: dict) -> np.ndarray:
         """The row in the edge diffraction's paths of the path over the edge of each term
         of ``t`` (with the planes of its path, ``planes``), -1 where it has none: over the
-        same edge, off the same planes but the reflection the term replaces, as long,
-        and over the same point of the edge (where the edge is perpendicular to a plane
-        the path reflects off, the path over the edge's image in the plane is as long)."""
+        same edge, off the same geometric planes but the reflection the term replaces, as
+        long, and over the same point of the edge (where the edge is perpendicular to a
+        plane the path reflects off, the path over the edge's image in the plane is as
+        long)."""
         out = np.full(len(t["edge"]), -1, dtype=np.int64)
+        planes = self._geometric(planes)
         for i in np.flatnonzero(t["covered"]):
             mine = planes[i].tolist()
             if t["at"][i] % 2:
@@ -2289,13 +2349,29 @@ def _towards(model, point, image, planes, fallback) -> tuple[np.ndarray, np.ndar
     return where, met_plane
 
 
-def _nearest_face(model, plane: int, point: np.ndarray) -> int:
-    """The face of ``plane`` nearest to ``point`` in it: the one ``point`` lies least far
-    outside of (by its distance beyond the triangle's sides). Openings are holes: one is
-    taken only where the plane has no other face."""
-    candidates = np.flatnonzero((model.face_plane == plane) & ~model.transparent)
-    if len(candidates) == 0:
-        candidates = np.flatnonzero(model.face_plane == plane)
+def _facing(model, faces: np.ndarray, side: np.ndarray) -> np.ndarray:
+    """(n,) whether a path from the side of each face's plane where ``side`` (n, 3) lies
+    (the image of the source it comes from) reflects off each of ``faces`` (n,): that
+    is the face's front (or ``side`` lies on its plane), or the face has a room on both
+    sides (:attr:`~acoustic_spaces.engine.model.TraceModel.face_two_sided`)."""
+    plane = model.face_plane[faces]
+    height = np.einsum("ij,ij->i", model.plane_normal[plane], side) - model.plane_offset[plane]
+    return model.face_two_sided[faces] | (height >= 0.0)
+
+
+def _nearest_face(model, planes: np.ndarray, point: np.ndarray, side: np.ndarray) -> int:
+    """The face of ``planes`` (the planes in one place) nearest to ``point`` there that a
+    path from the side of ``side`` reflects off (:func:`_facing`): the one ``point``
+    lies least far outside of (by its distance beyond the triangle's sides). Openings
+    are holes: one is taken only where the place has no other such face, and a face
+    the path meets from behind only where it has none it meets from the front."""
+    there = np.flatnonzero(np.isin(model.face_plane, planes))
+    facing = _facing(model, there, np.broadcast_to(side, (len(there), 3)))
+    solid = ~model.transparent[there]
+    for keep in (facing & solid, facing, solid, np.ones(len(there), dtype=bool)):
+        candidates = there[keep]
+        if len(candidates):
+            break
     tri = model.room.mesh.triangles[candidates]
     a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
     n = np.cross(b - a, c - a)
