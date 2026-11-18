@@ -922,3 +922,72 @@ def test_indoor_rooms_are_untouched() -> None:
     model = TraceModel.from_room(room)
     assert room.outdoor is None and model.sky is None and model.ground is None
     assert not room.sky_faces().any() and room.shown_faces().all()
+
+
+def _in_two_sizes(barrier, source, listener, **early_options) -> tuple:
+    """The early paths of a barrier 4 m high along ``barrier`` (or none) on a ground 10 km
+    wide and on one 200 m wide: the paths' tolerance for planes is 1 mm in the first and
+    20 um in the second."""
+    found = []
+    for half in (5000.0, 100.0):
+        geometry = {"ground": {"extent": [[-half, -half], [half, half]], "sky": 40}}
+        if barrier is not None:
+            geometry["barriers"] = [{"name": "wall", "path": barrier, "height": 4.0}]
+        scene = outdoor(
+            geometry,
+            sources=[source],
+            listeners=[listener],
+            early={"method": "image_sources", **early_options},
+        )
+        found.append(early_paths(Room.from_scene(scene)))
+    return tuple(found)
+
+
+@pytest.mark.parametrize(
+    ("bend", "gap", "height", "out"), [(60.0, 3e-4, 3e-4, 8.0), (45.0, 5e-4, 1.5, 3.0)]
+)
+def test_reflections_the_search_joins_into_a_corner_take_their_own_points(
+    bend, gap, height, out
+) -> None:
+    """A source ``gap`` (m) from both arms of a barrier bent by ``bend`` degrees and
+    ``height`` over the ground, a listener in the bend, 8 m out at 1 m or three times as
+    far from the arms as the source, in a model 10 km wide and in one 200 m wide, without
+    diffraction: the same paths and early levels to 0.01 dB. The search joins two
+    reflections that lie within its tolerance for planes (1 mm in the wide model) of each
+    other's planes into one corner, which lies up to that far from where the path meets
+    each plane, and the legs to it had given the path its angles at the planes: at the
+    foot of the bend of 60 degrees the wide model's level was 1.6 to 2.6 dB lower, and in
+    the bend of 45 degrees 0.1 to 0.4 dB lower up to 2 kHz and 1.1 and 6.2 dB higher at 4
+    and 8 kHz."""
+    turn = math.radians(bend)
+    x = (gap + gap * math.cos(turn)) / math.sin(turn)
+    source = (x, gap, height)
+    if out == 8.0:
+        listener = (8.0 * math.cos(turn / 2), 8.0 * math.sin(turn / 2), 1.0)
+    else:
+        listener = (out * x, out * gap, 1.0)
+    path = [[12.0, 0.0], [0.0, 0.0], [12.0 * math.cos(turn), 12.0 * math.sin(turn)]]
+    wide, narrow = _in_two_sizes(path, source, listener, max_order=3, diffraction="none")
+    assert len(wide.order) == len(narrow.order) > 0
+    level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
+    assert np.abs(level).max() < 0.01
+
+
+@pytest.mark.parametrize(("barrier", "order"), [(None, 1), ([[-10.0, 0.0], [10.0, 0.0]], 2)])
+def test_a_reflection_with_legs_shorter_than_the_tolerance_meets_its_plane_at_their_angle(
+    barrier, order
+) -> None:
+    """A source and a listener 0.1 mm over the ground, or before a barrier at 1.5 m, and
+    0.5 mm apart, in a model 10 km wide and in one 200 m wide, without diffraction: the
+    same paths and early levels to 0.01 dB. Both legs of the reflection between them are
+    shorter than the paths' tolerance for planes in the wide model (1 mm), and the
+    reflection had met the plane at grazing incidence there: the level was 20.7 dB lower
+    in every band."""
+    if barrier is None:
+        source, listener = (0.0, 0.0, 1e-4), (5e-4, 0.0, 1e-4)
+    else:
+        source, listener = (0.0, 1e-4, 1.5), (5e-4, 1e-4, 1.5)
+    wide, narrow = _in_two_sizes(barrier, source, listener, max_order=order, diffraction="none")
+    assert len(wide.order) == len(narrow.order) > 0
+    level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
+    assert np.abs(level).max() < 0.01

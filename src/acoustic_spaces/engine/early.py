@@ -28,6 +28,7 @@ openings): its energy is then multiplied by their transmission, band by band.
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import math
 from dataclasses import dataclass, field
 
@@ -415,6 +416,47 @@ def exhaustive_candidates(
             )
         out.append(seqs)
     return out
+
+
+def _perpendicular(model, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Whether the planes ``a`` and ``b`` are perpendicular: reflections off them commute."""
+    dot = np.einsum("ij,ij->i", model.plane_normal[a], model.plane_normal[b])
+    return np.abs(dot) < 1e-9
+
+
+def _image_points(
+    model: TraceModel, seqs: np.ndarray, chain: list, source, listener, tolerance: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """(n, k + 2, 3) the points of the paths from ``source`` to ``listener`` off the plane
+    sequences ``seqs`` (n, k) as the image method places them, back from the listener
+    towards each of the source's images ``chain[j]`` (off the first j planes) in turn,
+    and (n,) whether each such path can be: it meets every plane from the front (farther
+    than ``tolerance`` from it), crossing it on the way to its image, but in the corner
+    of two perpendicular planes, where it reflects off both at one point. Where a path
+    cannot be, its points are not its."""
+    n, k = seqs.shape
+    points = np.empty((n, k + 2, 3))
+    points[:, 0], points[:, k + 1] = source, listener
+    possible = np.ones(n, dtype=bool)
+    current = np.broadcast_to(listener, (n, 3)).copy()
+    for j in range(k, 0, -1):
+        plane = seqs[:, j - 1]
+        normal = model.plane_normal[plane]
+        near = np.einsum("ij,ij->i", normal, current) - model.plane_offset[plane]
+        far = np.einsum("ij,ij->i", normal, chain[j]) - model.plane_offset[plane]
+        two_sided = model.plane_two_sided[plane]
+        front = np.where(two_sided, np.abs(near) > tolerance, near > tolerance)
+        # In the corner where it meets the plane of the next reflection, perpendicular
+        # to it, the path reflects off both at one point.
+        corner = np.zeros(n, dtype=bool)
+        if j < k:
+            behind = np.where(two_sided, np.abs(far) > tolerance, far < -tolerance)
+            corner = (np.abs(near) <= tolerance) & behind & _perpendicular(model, plane, seqs[:, j])
+        possible &= (front & (near * far < 0.0)) | corner
+        t = near / np.where(possible, near - far, 1.0)
+        current = current + t[:, None] * (chain[j] - current)
+        points[:, j] = current
+    return points, possible
 
 
 def _height_over_plane(model: TraceModel, points: np.ndarray, planes: np.ndarray) -> np.ndarray:
@@ -812,13 +854,25 @@ def find_paths(
         )
         _, unique = np.unique(key, axis=0, return_index=True)
         idx = idx[np.sort(unique)]
+        found_points, found_faces = [p[idx] for p in points], faces[idx]
+        _apart(
+            model,
+            seqs[idx],
+            found_points,
+            found_faces,
+            crossings[idx],
+            source,
+            listener,
+            tolerance,
+            counted,
+        )
         parts.append(
             assemble_paths(
                 model,
                 source,
                 listener,
-                [p[idx] for p in points],
-                faces[idx],
+                found_points,
+                found_faces,
                 distance[idx],
                 through[idx],
                 crossings[idx, 0],
@@ -827,7 +881,6 @@ def find_paths(
                 directivity=directivity,
                 orientation=orientation,
                 coherent=coherent,
-                tolerance=tolerance,
             )
         )
     found = EarlyReflections.concatenate(parts, bands)
@@ -847,6 +900,72 @@ def find_paths(
             coherent=coherent,
         )
     return found
+
+
+def _apart(
+    model: TraceModel, seqs, points: list, faces, crossings, source, listener, tolerance, counted
+) -> None:
+    """The paths off the plane sequences ``seqs`` (n, k) through ``points`` (k + 1 arrays of
+    (n, 3), the listener last) and ``faces`` (n, k), as :func:`find_paths` has found them,
+    where they reflect off two planes at one point that the search joined into a corner
+    (a reflection point within ``tolerance``, the model's tolerance for planes, of the next
+    plane) and the image method places that path's points apart (farther than the
+    intersection test's least distance, or the rounding of the coordinates where that is
+    larger): in place, those points, in the order of the planes or in another that gives
+    the same image (one that swaps only perpendicular planes), and the faces they lie on,
+    where that path can be, each point lies on a face of its plane and its legs cross the
+    faces the path's ``crossings`` (n, 2) count (of ``counted``, as :func:`find_paths`
+    counts them), nothing solid. The corner lies up to the tolerance from where the path
+    meets each plane; the share of sound the path lets through stays the corner's."""
+    n, k = faces.shape
+    if k < 2 or n == 0:
+        return
+    joined = np.zeros(n, dtype=bool)
+    for j in range(k - 1):
+        joined |= np.all(points[j] == points[j + 1], axis=1)
+    if not joined.any():
+        return
+    least = max(model.bvh.min_distance, model.height_error)
+    orders = [(o, np.argsort(o)) for o in itertools.permutations(range(k))]
+    for i in np.flatnonzero(joined):
+        seq = seqs[i]
+        for order, where in orders:
+            swapped = [(a, b) for a in range(k) for b in range(a + 1, k) if where[a] > where[b]]
+            if not all(_perpendicular(model, seq[[a]], seq[[b]])[0] for a, b in swapped):
+                continue
+            planes = seq[list(order)][None, :]
+            chain = [np.asarray(source, dtype=np.float64)[None, :]]
+            for j in range(k):
+                chain.append(model.mirror(chain[-1], planes[:, j]))
+            exact, possible = _image_points(model, planes, chain, source, listener, least)
+            legs = np.linalg.norm(np.diff(exact[0, 1:-1], axis=0), axis=1)
+            if not possible[0] or np.any(legs <= least):
+                continue
+            on = [_face_at(model, int(planes[0, j]), exact[0, j + 1], tolerance) for j in range(k)]
+            if min(on) < 0 or not _clear(model, exact[0], on, crossings[i], least, counted):
+                continue
+            for j in range(k):
+                points[j][i] = exact[0, j + 1]
+            faces[i] = on
+            break
+
+
+def _clear(model: TraceModel, points, faces, crossings, least, counted) -> bool:
+    """Whether the legs between ``points`` (k + 2, 3: the source, the reflection points
+    off ``faces`` and the listener) let sound through and cross the faces ``crossings``
+    counts (of ``counted``), each traced from its start to ``least`` short of its end."""
+    crossed = np.zeros_like(crossings)
+    for j in range(len(points) - 1):
+        way = points[j + 1] - points[j]
+        length = float(np.linalg.norm(way))
+        if length <= 2.0 * least:
+            continue
+        ignore = faces[j - 1] if j else -1
+        share, hit = model.passes(points[j], way / length, length - least, ignore, counted=counted)
+        if not np.any(share > 0.0):
+            return False
+        crossed += hit[0]
+    return bool(np.array_equal(crossed, crossings))
 
 
 def _mirrors(model: TraceModel, seqs: np.ndarray, tolerance: float) -> np.ndarray:
@@ -874,47 +993,25 @@ def _surfaces(model: TraceModel, seqs: np.ndarray, tolerance: float) -> np.ndarr
     return -np.sort(-met, axis=1)
 
 
-def _along_at_planes(
-    source: np.ndarray, points: list[np.ndarray], normals: np.ndarray, tolerance: float
-) -> np.ndarray:
-    """(k, n, 3) for each of the k reflections of n paths a vector along the path where
-    it meets that reflection's plane, for the angle between the two (``points``: the
-    reflection points, k + 1 arrays of (n, 3) with the listener last; ``normals``
-    (n, k, 3) of the planes): the leg to the reflection from the source or from the
-    reflection before.
-
-    Where that leg is no longer than ``tolerance``, the path reflects where it reflected
-    last, in a corner, and meets the plane at the angle it leaves it: the leg after it.
-    A plane between others of a corner has no leg of any length on either side. The
-    path leaves it as it leaves the plane after it, turned back by that plane; where no
-    leg follows at all (the listener is at the corner), it meets it as it came to the
-    corner, turned by each plane it has reflected off since. (Zero where the path has
-    no leg longer than the tolerance on either side of the corner.)"""
-    k, n = len(points) - 1, len(points[0])
-
-    def turned(way: np.ndarray, j: int) -> np.ndarray:
-        normal = normals[:, j]
-        return way - 2.0 * np.einsum("ij,ij->i", normal, way)[:, None] * normal
-
-    leaving = np.zeros((k, n, 3))
-    for j in range(k - 1, -1, -1):
-        after = points[j + 1] - points[j]
-        follows = np.linalg.norm(after, axis=1) > tolerance
-        back = turned(leaving[j + 1], j + 1) if j + 1 < k else leaving[j]
-        leaving[j] = np.where(follows[:, None], after, back)
-    along = np.zeros((k, n, 3))
-    heading = np.zeros((n, 3))
-    before = np.broadcast_to(source, (n, 3))
+def _along_at_planes(model: TraceModel, source, listener, planes: np.ndarray) -> np.ndarray:
+    """(k, n, 3) for each of the k reflections of n paths off the planes ``planes`` (n, k)
+    from ``source`` to ``listener`` a vector along the path where it meets that
+    reflection's plane, for the angle between the two: the way the path leaves the
+    reflection, from the source's image in the planes towards the listener, turned back
+    by each plane after it. The image gives the angles wherever the reflection points
+    lie: a point that the search took onto a plane, or two reflections it joined into a
+    corner, lie up to its tolerance for planes from where the path meets the plane, and
+    a leg about as short heads elsewhere than the path."""
+    n, k = planes.shape
+    image = np.broadcast_to(np.asarray(source, dtype=np.float64), (n, 3)).copy()
     for j in range(k):
-        incoming = points[j] - before
-        corner = np.linalg.norm(incoming, axis=1) <= tolerance
-        heading = np.where(corner[:, None], heading, incoming)
-        leaves = np.any(leaving[j] != 0.0, axis=1)
-        along[j] = np.where(
-            corner[:, None], np.where(leaves[:, None], leaving[j], heading), incoming
-        )
-        heading = turned(heading, j)
-        before = points[j]
+        image = model.mirror(image, planes[:, j])
+    way = np.asarray(listener, dtype=np.float64) - image
+    along = np.zeros((k, n, 3))
+    for j in range(k - 1, -1, -1):
+        along[j] = way
+        normal = model.plane_normal[planes[:, j]]
+        way = way - 2.0 * np.einsum("ij,ij->i", normal, way)[:, None] * normal
     return along
 
 
@@ -933,7 +1030,6 @@ def assemble_paths(
     directivity: Directivity | None = None,
     orientation: np.ndarray | None = None,
     coherent: int = 0,
-    tolerance: float = 0.0,
 ) -> EarlyReflections:
     """Paths of one order k from ``source`` to ``listener`` with their energies: their
     reflection points ``points`` (k + 1 arrays of (n, 3), the listener last), the faces
@@ -958,7 +1054,7 @@ def assemble_paths(
     before = np.broadcast_to(source, (n, 3))
     if coherent or grounds:
         normals = model.plane_normal[model.face_plane[faces]]
-        along = _along_at_planes(source, points, normals, tolerance)
+        along = _along_at_planes(model, source, listener, model.face_plane[faces])
     for j in range(k):
         incoming = points[j] - before
         energy *= model.reflection(faces[:, j], incoming, j + 1, impedance=True)

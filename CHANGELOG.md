@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Fixed: the search for early paths takes a reflection point within its tolerance for
+  planes of the next reflection's plane (a ten-millionth of the model's largest extent,
+  1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane
+  at the angle of its legs to that corner, which can lie as far from where the path
+  meets it; a reflection with both legs shorter than the tolerance met its plane at
+  grazing incidence, and with edge diffraction the edge fade dropped a joined path with
+  all its terms. A joined path now takes the points the image method places, where that
+  path can be, and every reflection meets its plane at the angle the source's image
+  gives. Against the same scenes in a model 200 m wide, a source and a listener 0.1 mm
+  before a wall and 0.5 mm apart had been 20.7 dB too low, a source 0.3 mm from both
+  arms of a bent barrier and the ground up to 2.6 dB, and with edge diffraction one 0.1
+  mm from both arms 1.2 dB at 63 Hz.
 - Added: `simulation.wave.walls: fitted` (**Fitted walls** in the editor) puts the wave
   solver's walls where the model has them, its faces cut exactly through the grid's
   cells, instead of on the nearest cell faces: in a box along the grid the modes come
