@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed: of two orders of the same reflections at a corner of perpendicular planes (an
+  arm of a barrier and the ground), the edge fade kept whichever its search listed
+  first, where its tolerance let both be, not the one along the way: a source 3 mm from
+  both arms of a bent barrier and 2 mm above the ground had 5 paths for 7 and 0.55 dB
+  less at 63 Hz in a model 10 km wide than in one 200 m wide.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

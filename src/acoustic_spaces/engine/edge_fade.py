@@ -303,8 +303,12 @@ class EdgeFade:
             none = length[:, j] <= self.tolerance
             direction[none, j] = direction[none, j - 1]
         # Plane sequences that commute (perpendicular planes) give the same image: the
-        # path is the one whose reflections come in its order along the way.
+        # path is the one whose reflections come in its order along the way, one that
+        # can be without the corner's tolerance where there is one (_image_points); the
+        # corner of two planes admits the other order too, from a point just off it.
         rows = np.flatnonzero(possible)
+        _, exact = _image_points(model, seqs[rows], [p[rows] for p in chain], source, listener, 0.0)
+        rows = rows[np.argsort(~exact, kind="stable")]
         _, first = np.unique(np.round(chain[-1][rows] / self.tolerance), axis=0, return_index=True)
         possible[np.setdiff1d(rows, rows[first])] = False
 
