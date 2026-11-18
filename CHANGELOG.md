@@ -14,7 +14,8 @@
   the late rays leave their specular share to it. Their detector spheres had counted it
   where a ray met the ground on both sides of a barrier that had scattered it, or two
   walls and the ground (order 3 over the default 2): bursts of up to 28 dB at
-  `meadow_25m` in the `railway` example.
+  `meadow_25m` in the `railway` example. The early stage takes about 30 % longer in the
+  `street` and `railway` examples.
 - Fixed: in a very large model, a corner of two reflections (points within the early
   search's tolerance for planes of each other, a ten-millionth of the model's largest
   extent, 1 mm in a model 10 km wide) was judged by that tolerance: a path into it went
