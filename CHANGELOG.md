@@ -5,9 +5,10 @@
 - Fixed: with edge diffraction, the edge fade takes a model turned to any angle and
   written with six decimals as it takes it exact: planes at right angles to the model's
   tolerance for planes commute, a term's path reaches a face of the plane it reflects
-  off that lies just in front of that plane, and each event of a path's orders of
-  reflections counts once by its planes, not by its rounded images. An open box turned
-  17 to 50 degrees had been up to 0.43 dB off at 63 Hz.
+  off that lies just in front of that plane, each event of a path's orders of
+  reflections counts once by its planes, not by its rounded images, and such planes make
+  one wave in either order in the bands that add in energy. An open box turned 17 to 50
+  degrees had been up to 0.43 dB off at 63 Hz.
 - Fixed: with edge diffraction, where several events stop a path that is not found and
   several edges explain one of them, the edge fade took the first edge by number, and a
   reflection there took that edge's face, with its material and size, even a wall 2.6 m

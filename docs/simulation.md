@@ -446,7 +446,9 @@ its geometric wave as far as it is coherent with it over the band (on the dark s
 its boundary, where that wave is gone, near the boundary only), and the rest of it is
 part of its event's diffracted wave, whose terms add up as one wave, so the two edges of
 a narrow face nearly cancel as they do in pressure. Paths whose planes mirror the source
-otherwise are other waves, however near their images lie (a source right by two planes).
+otherwise are other waves, however near their images lie (a source right by two planes);
+planes at right angles, to the model's tolerance for planes, mirror it alike in either
+order.
 A wave's energy is that of its pieces added up in pressure and averaged over the band,
 never below nothing. Behind the `archway`'s wall, where the reflection off the arch's
 jamb, 40 cm deep, appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz. The

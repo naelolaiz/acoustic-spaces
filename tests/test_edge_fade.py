@@ -919,3 +919,40 @@ def test_a_model_turned_with_its_corners_rounded_takes_the_terms_it_takes_exact(
     assert len(rounded) == len(exact)
     level = 10 * np.log10(total_energy(rounded) / total_energy(exact))
     assert np.abs(level).max() < 0.001
+
+
+def test_a_wave_s_mirror_takes_perpendicular_planes_in_either_order_as_one(
+    tmp_path: Path,
+) -> None:
+    """In the open box turned 17 degrees and written with six decimals, two planes at
+    right angles make one mirror in either order, wherever a -1 stands among them
+    (``EdgeDiffraction._mirror``, which tells the waves of the bands in energy apart),
+    though the mirror worked out in the one order and in the other parts by a few of its
+    steps; two planes that face each other make two. ``_commuted`` puts the lowest
+    plane first where it can come first, and leaves planes that do not commute in
+    their order."""
+    from acoustic_spaces.engine.diffraction import _commuted
+
+    room = _open_box(tmp_path, 17.0, 6)
+    model = TraceModel.from_room(room)
+    diffraction = EdgeDiffraction(
+        model,
+        model.room.mesh.vertices.mean(axis=0),
+        speed_of_sound=room.speed_of_sound(),
+        air=np.zeros(BANDS),
+    )
+    normal = model.plane_normal
+    cos = np.abs(np.clip(np.sum(normal[:, None] * normal[None], axis=2), -1.0, 1.0))
+    across = np.argwhere(np.triu(cos < 1e-3, 1))
+    facing = np.argwhere(np.triu(cos > 1.0 - 1e-9, 1))
+    assert len(across) >= 8 and len(facing) >= 2
+    for a, b in across:
+        keys = diffraction._mirror(np.array([[a, b, -1], [b, a, -1], [-1, b, a], [b, -1, a]]))
+        assert (keys == keys[0]).all()
+        assert _commuted(model, np.array([[max(a, b), -1, min(a, b)]])).tolist() == [
+            [min(a, b), max(a, b), -1]
+        ]
+    for a, b in facing:
+        keys = diffraction._mirror(np.array([[a, b], [b, a]]))
+        assert not (keys[0] == keys[1]).all()
+        assert _commuted(model, np.array([[b, a]])).tolist() == [[b, a]]
