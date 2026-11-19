@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Docs: where a third edge cuts a path over an edge, the level steps and can be several
+  dB off; the known issues of the edge fade give the measured levels over a roof and a
+  screen against the wave calculation, and the roadmap the fix.
 - Fixed: the pieces of an edge along one line are one edge also where rounding leaves
   their directions up to about a millionth apart (a model written with six decimals) or
   at 45 degrees to two axes: a screen's top drawn in four pieces was up to four edges,
