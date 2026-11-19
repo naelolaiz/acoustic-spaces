@@ -855,6 +855,16 @@ Version 4.2.1:
 - [x] ISO 12999-2's octave-band values (Table 2) for the built-in materials' spread from
   250 Hz to 4 kHz.
 
+Version 4.3.0 (in the sections above: under Parameters the error estimates' adaptive
+number of draws, one-sided bounds, the absorption uncertainty on the editor's material
+page, the spread of the listeners' levels and speech results and the uncertainty of a
+coverage map's values; under Edge diffraction the fade beside a bend of a thin screen's
+top and past its corners that are not right angles, and the rows of edges in
+simulations; under Outdoor acoustics the wave solver's room along its matched layer only
+where it is needed and its source and listeners read between the cell centres to a
+higher order, and its fitted walls; under the known issues of the review of 25 October
+the wave solver's walls through planes of its cell centres).
+
 Next:
 
 - [ ] A microphone's measured on-axis response and measured patterns (files), as
