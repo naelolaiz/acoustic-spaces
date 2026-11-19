@@ -13,6 +13,35 @@
   air between them, now reads each solid as a room, and the problems say that solids
   close off no room round the air; an IFC file's building elements, read without a
   space, are solids and read as not closed, as before.
+- Fixed: a wall between two rooms drawn once for each room (two faces in one place, as
+  where two rooms modelled as closed models touch) let no sound through in the late part,
+  which took the space between the two faces for no room: behind a 30 dB partition so
+  drawn G came out 11 to 20 dB too low, behind an opening 5 to 14 dB, `validate` warned
+  that no surface joined the rooms, and the statistical reverberation times counted what
+  passes as lost. Such a wall now gives what it gives drawn once.
+- Fixed: with `second_order` diffraction, a path over two edges along the plane of a
+  screen or a panel (from one of its ends to the other) took the side of the screen that
+  each edge's frame calls face 0, which a scene's mirror image turns over, and in a
+  turned scene the screen stopped the way along it or not by how the coordinates
+  rounded. Behind a thin strip 2 m wide such paths were left out, up to 1.39 dB below
+  the exact solution (BTM) at 63 Hz; a panel standing free in a room and its mirror
+  image across the panel's plane, or the room turned by 30 degrees, were up to 0.24 dB
+  apart at 125 Hz. The path now runs along each face of the screen, two ways with half
+  the coefficient at grazing incidence each, within 0.11 dB of BTM at 63 and 125 Hz
+  behind the strip, and the faces in whose plane it runs do not stop it; one in that
+  plane on past the screen's far end, where the waves along its two faces cancel, is
+  left out.
+- Fixed: with edge diffraction, where walls in line face opposite ways with a panel or a
+  partition between them, the edge fade took the edges at a path's reflections, and the
+  faces a reflection meets there, by the plane in the model that holds each face, which
+  for the panel is that of the wall facing the plane's way: in a Z-shaped room with a
+  panel in the opening between two such walls, a room and its mirror image were up to
+  1.1 dB apart, and in a room with two such planes up to 1.8 dB. It now takes them by
+  where they lie and the way each face faces.
+- Fixed: faces that face one way with planes less than 0.01 mm apart are one plane on
+  either side of a step of the planes' rounding: a panel 0.01 mm off a wall's plane was
+  a plane of its own, up to 0.40 dB from the level in line at 125 Hz with edge
+  diffraction, and now has that level.
 - Fixed: with edge diffraction, where several events stop a path that is not found and
   several edges explain one of them, the edge fade took the first edge by number, and a
   reflection there took that edge's face, with its material and size, even a wall 2.6 m

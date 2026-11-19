@@ -494,9 +494,10 @@ assignments:
   refuses to run. When none stands in the model's rooms (walls drawn as a closed shell
   inside another), the spaces they stand in are the rooms. A material with
   `transmission: 0` lets nothing through. The faces between two rooms have a room on both sides and reflect and absorb
-  in both. Where two rooms modelled as closed models touch, each with a wall of its own
-  where they meet (two faces in one place), each face reflects and absorbs in its own
-  room, whichever way the models' normals point. `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor
+  in both. A wall between two rooms may also be drawn once for each room, as where two
+  rooms modelled as closed models touch: two faces in one place, which the sound passes
+  as one wall, each face reflecting and absorbing in its own room, whichever way the
+  models' normals point. `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor
   too, and the volume is theirs together. When the sources and listeners stand in air
   that the model's rooms do not include (walls drawn as a closed shell inside another),
   `inspect` also gives that "air volume", the one its reverberation times use.

@@ -1131,6 +1131,23 @@ The textbook UTD for two edges, with the second edge's distance parameter for a
 wave from a line, was up to 6 dB low there; the engine takes it from the curvature of
 the first edge's wave where it reaches the second.
 
+A thin strip 2 m wide (a screen from z = -2 m to its top at z = 0), the source and the
+listener in its shadow on either side: the paths over its top and its foot run along the
+strip, along each of its faces, each way with half the coefficient at grazing incidence,
+as BTM's. Along one face alone the field would step where the listener crosses the
+strip's plane past its far edge, the first edge's wave along one face being the negative
+of that along the other. The whole early stage (`early_paths`, in pressure at 63 and 125
+Hz as by default) against BTM:
+
+| a thin strip, engine - BTM (dB) | 63 | 125 | 250 | 500 |
+|---|---:|---:|---:|---:|
+| (-3, 0, -0.5) to (3, 0, -1.5), BTM -0.1 to -8.0 dB | +0.03 | +0.02 | -0.25 | -0.07 |
+| the same, `first_order` | -1.27 | +0.20 | -0.28 | -0.07 |
+| (-2, 0, -1) to (4, 0, -1.2), BTM -0.1 to -9.2 dB | +0.02 | +0.02 | -0.27 | -0.13 |
+| the same, `first_order` | -1.39 | +0.40 | -0.31 | -0.15 |
+| (-1, 0, -0.3) to (1.5, 0, -1.9), BTM -1.2 to -8.7 dB | +0.11 | +0.01 | -0.03 | -0.14 |
+| the same, `first_order` | -0.46 | -0.82 | +0.17 | -0.18 |
+
 Along a top absorbing 0.2 to 0.8, the ground wave's loss is too large against the full
 wave. The wave solver ran a block 24 m long and 12 m deep whose top alone absorbs (5 cm
 cells, the first 50 ms, and a probe 3 m above the top that widened the grid, as with the
