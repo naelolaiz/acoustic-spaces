@@ -130,6 +130,7 @@ from acoustic_spaces.engine.diffraction import (
     _past_face,
     _planes_hit,
     _reach,
+    _sequences,
     _subset,
     _waves,
     boundary_angles,
@@ -600,6 +601,19 @@ class EdgeFade:
         table["free"] = np.zeros((len(table["at"]), 2), dtype=bool)
         return table, first
 
+    def _side_mirrors(self, table: dict, slot: np.ndarray) -> dict:
+        """The mirrors of the source and of the listener on either side of the events
+        ``slot`` of ``table``, which tell their diffracted waves apart
+        (:meth:`~acoustic_spaces.engine.clusters.Clusters.diffracted`): that of the
+        planes before the edge, mirroring the source in turn, and that of those after
+        it, mirroring the listener in turn from the last
+        (:meth:`~acoustic_spaces.engine.diffraction.EdgeDiffraction._mirror`)."""
+        sides = table["sides"][slot]
+        return {
+            "source_mirror": self.d._mirror(sides[:, 0]),
+            "listener_mirror": self.d._mirror(sides[:, 1, ::-1]),
+        }
+
     def _of_planes(self, planes: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Pairs (index, edge) of each of ``planes`` with the edges with a face in it."""
         planes = np.asarray(planes, dtype=np.int64)
@@ -719,16 +733,22 @@ class EdgeFade:
             if k in self.candidates:
                 groups.append((k, self._missed(self.candidates[k], listener, paths, max_delay_s)))
         groups = [(k, go) for k, go in groups if go is not None]
-        # The image of the source each path comes from: its geometric wave.
+        # The image of the source each path comes from and the mirror its planes make:
+        # its geometric wave (a found path's as the edge diffraction tells it apart, by
+        # its image where it does not carry its faces).
         anchors = _image_sources(listener, paths)
         for k, go in groups:
             if "energy" in go:
                 go["image"] = anchors[go["row"]]
+                sequence, go["with_faces"] = _sequences(self.model, paths, go["row"], max(k, 1))
+                go["mirror"] = self.d._mirror(sequence)
             else:
                 image = np.broadcast_to(self.d.source, (len(go["planes"]), 3))
                 for j in range(k):
                     image = self.model.mirror(image, go["planes"][:, j])
                 go["image"] = image
+                go["mirror"] = self.d._mirror(go["planes"])
+                go["with_faces"] = np.ones(len(image), dtype=bool)
         squared = max(
             float(np.sum((listener - self.d.source) ** 2)), (_TOLERANCE * self.d.size) ** 2
         )
@@ -786,9 +806,11 @@ class EdgeFade:
                     clusters.alone(rows, piece["energy"])
                     continue
                 if piece["kind"] == "geometric":
-                    keys = clusters.geometric(piece["image"], piece["order"])
+                    keys = clusters.geometric(
+                        piece["mirror"], piece["order"], piece["image"], piece["with_faces"]
+                    )
                 else:
-                    keys = clusters.diffracted(piece["source_side"], piece["listener_side"])
+                    keys = clusters.diffracted(piece["source_mirror"], piece["listener_mirror"])
                 heard = piece["heard"]
                 clusters.add(rows[heard], keys[heard], piece["pressure"], piece["distance"][heard])
             hand_back()  # what the pieces' making left
@@ -1007,8 +1029,7 @@ class EdgeFade:
                     slot=leg,
                     at=at[leg],
                     explains=explains,
-                    source_side=table["source"][leg],
-                    listener_side=table["listener"][leg],
+                    **self._side_mirrors(table, leg),
                 )
             )
         return out, np.concatenate(handed) if handed else np.zeros(0, dtype=np.int64)
@@ -1154,7 +1175,10 @@ class EdgeFade:
         in the run or next to it where the path over the edge reaches it on its dark
         side; the run's other events take no terms. Where no edge explains every event
         that stops the path, two may, each a run of them in turn, and the path carries
-        the product of their terms."""
+        the product of their terms. Of the edges that explain a run, the one whose term
+        there is strongest is chosen, and of the pairs, the one whose terms' product is
+        (as :meth:`_combine` takes the face of the edge whose term is strongest), not the
+        first by number: the scene and its mirror image choose alike."""
         order = geometry["order"]
         many = stopped.any(axis=1)
         if not parts:
@@ -1162,6 +1186,7 @@ class EdgeFade:
         flat = {key: np.concatenate([part[key] for part in parts]) for key in ("path", "at")}
         flat["edge"] = np.concatenate([part["edge"] for part in parts])
         dark = np.concatenate([~part["lit"] for part in parts])
+        strength = np.concatenate([_strength(part["pressure"]) for part in parts])
         rows = np.flatnonzero(many[flat["path"]] & dark)
         explains = np.zeros(len(dark), dtype=bool)
 
@@ -1180,17 +1205,20 @@ class EdgeFade:
                 strict=True,
             )
         }
-        # The events at which each edge reaches each path on its dark side, and the terms.
-        reached, terms_of = {}, {}
-        for i, path, edge, at in zip(
+        # The events at which each edge reaches each path on its dark side, the terms, and
+        # the strongest of them.
+        reached, terms_of, power = {}, {}, {}
+        for i, path, edge, at, term in zip(
             rows.tolist(),
             flat["path"][rows].tolist(),
             flat["edge"][rows].tolist(),
             flat["at"][rows].tolist(),
+            strength[rows].tolist(),
             strict=True,
         ):
             reached.setdefault(path, {}).setdefault(edge, set()).add(at)
             terms_of.setdefault((path, edge, at), []).append(i)
+            power[(path, edge, at)] = max(power.get((path, edge, at), 0.0), term)
 
         def explain(path: int, run: list, edge: int, events: int) -> int:
             """The event of ``edge`` for the stopping events ``run`` of ``path``, -1 if it
@@ -1207,6 +1235,17 @@ class EdgeFade:
                     return at
             return -1
 
+        def ranked(path: int, run: list, events: int) -> list:
+            """The edges that explain the stopping events ``run`` of ``path``, with their
+            events and the strength of their terms there: the strongest first, ties by
+            the edges' numbers."""
+            found = []
+            for edge in reached.get(path, {}):
+                at = explain(path, run, edge, events)
+                if at >= 0:
+                    found.append((-power[(path, edge, at)], edge, at))
+            return [(edge, at, -minus) for minus, edge, at in sorted(found)]
+
         for path in np.flatnonzero(many).tolist():
             events = 2 * int(order[path]) + 1
             run_of = []
@@ -1220,32 +1259,24 @@ class EdgeFade:
                 elif at % 2:
                     split = True
             stops = [at for at, _ in run_of]
-            candidates = sorted(reached.get(path, {}))
             chosen = []
             if runs == 1:
-                for edge in candidates:
-                    at = explain(path, stops, edge, events)
-                    if at >= 0:
-                        chosen = [(at, edge, stops)]
-                        break
+                chosen = [(at, edge, stops) for edge, at, _ in ranked(path, stops, events)[:1]]
             if not chosen:
                 cuts = range(1, len(stops))
                 if runs == 2:
                     cuts = [next(i for i, (_, r) in enumerate(run_of) if r == 2)]
                 for cut in cuts:
                     one, two = stops[:cut], stops[cut:]
-                    for a in candidates:
-                        at_a = explain(path, one, a, events)
-                        if at_a < 0:
-                            continue
-                        for b in candidates:
-                            at_b = explain(path, two, b, events)
-                            if at_b > at_a and at_b not in one and at_a not in two:
-                                chosen = [(at_a, a, one), (at_b, b, two)]
-                                break
-                        if chosen:
-                            break
-                    if chosen:
+                    both = [
+                        (-power_a * power_b, a, b, at_a, at_b)
+                        for a, at_a, power_a in ranked(path, one, events)
+                        for b, at_b, power_b in ranked(path, two, events)
+                        if at_b > at_a and at_b not in one and at_a not in two
+                    ]
+                    if both:
+                        _, a, b, at_a, at_b = min(both)
+                        chosen = [(at_a, a, one), (at_b, b, two)]
                         break
             if not chosen:
                 continue
@@ -1530,8 +1561,7 @@ class EdgeFade:
             "share": own_share,
             "others_bent": others_bent,
             "others_on": others_on,
-            "source_side": table["source"][slot],
-            "listener_side": table["listener"][slot],
+            **self._side_mirrors(table, slot),
             "detour": detour,
             "length": r1 + r2,
             "point": point,
@@ -1717,7 +1747,7 @@ class EdgeFade:
             cosines = None if go["cosines"] is None else go["cosines"][ids]
         else:
             stopping = t["explains"] & stops & (t["at"] % 2 == 1)
-            strength = np.mean(np.abs(t["pressure"]) ** 2, axis=(1, 2))
+            strength = _strength(t["pressure"])
             order = np.lexsort((strength, path))
             order = order[stopping[order]]
             if len(order):
@@ -1913,10 +1943,10 @@ class EdgeFade:
         late = slice(d.coherent, None)
         wavenumber = d.wavenumber[late]
         fail, fail2 = go["fail"][ids], go["fail2"][ids]
-        image = go["image"][ids]
+        image, mirror, with_faces = go["image"][ids], go["mirror"][ids], go["with_faces"][ids]
         # Each event's terms together, parted as each term is (see parts below): what
         # continues the path, what is part of the event's diffracted wave, the rest; and
-        # the images of the diffracted wave.
+        # the mirrors of the diffracted wave.
         on_path = np.unique(t["go"], return_inverse=True)[1].reshape(-1)
         term = t["pressure"][:, late]
         # One row for each event of a path that has terms there (``at_cell``), and a last
@@ -1938,9 +1968,11 @@ class EdgeFade:
         ):
             np.add.at(total, cell, value)
         event_cont, event_bent, event_on = event_parts
-        sides = np.zeros((2, len(cells) + 1, 3))
-        sides[0, cell] = t["source_side"]
-        sides[1, cell] = t["listener_side"]
+        sides = []
+        for name in ("source_mirror", "listener_mirror"):
+            side = np.zeros((len(cells) + 1, t[name].shape[1]), dtype=np.int64)
+            side[cell] = t[name]
+            sides.append(side)
         out = []
         sel = np.flatnonzero(heard)
         for begin in range(0, len(sel), _CHUNK * 4):
@@ -2016,6 +2048,8 @@ class EdgeFade:
                     "kind": "geometric",
                     "image": image[path],
                     "order": k,
+                    "mirror": mirror[path],
+                    "with_faces": with_faces[path],
                     "distance": distance[r],
                     **self._heard(scale * geometric),
                 }
@@ -2028,8 +2062,8 @@ class EdgeFade:
                         {
                             "rows": rows[has],
                             "kind": "diffracted",
-                            "source_side": t["source_side"][qq],
-                            "listener_side": t["listener_side"][qq],
+                            "source_mirror": t["source_mirror"][qq],
+                            "listener_mirror": t["listener_mirror"][qq],
                             "distance": distance[r][has],
                             **self._heard((scale * diffracted[which])[has]),
                         }
@@ -2039,8 +2073,8 @@ class EdgeFade:
                     {
                         "rows": rows[on],
                         "kind": "diffracted",
-                        "source_side": sides[0, at_cell[path[on], event]],
-                        "listener_side": sides[1, at_cell[path[on], event]],
+                        "source_mirror": sides[0][at_cell[path[on], event]],
+                        "listener_mirror": sides[1][at_cell[path[on], event]],
                         "distance": distance[r][on],
                         **self._heard((scale * part)[on]),
                     }
@@ -2125,6 +2159,12 @@ class EdgeFade:
             coherent=self.d.coherent,
         )
         return found.energy, found.spectrum, _stacked(found.cosines, np.arange(n), k)
+
+
+def _strength(pressure: np.ndarray) -> np.ndarray:
+    """How strong each of the terms ``pressure`` (terms, bands, frequencies in each) is:
+    the mean of its squared magnitude."""
+    return np.mean(np.abs(pressure) ** 2, axis=(1, 2))
 
 
 def _stacked(cosines: list[np.ndarray], rows: np.ndarray, k: int) -> np.ndarray | None:
