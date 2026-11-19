@@ -135,8 +135,18 @@ def test_points_outside_and_unused_assignments(tmp_path: Path) -> None:
     room = Room.from_yaml(path)
     assert room.sources_inside.tolist() == [False]
     assert any("'outside'" in p and "outside the room" in p for p in room.problems())
+    assert not any("close off no room" in p for p in room.problems())
     assert room.unused_assignments == ["balcony"]
     assert any("balcony" in w for w in room.warnings())
+    # With none of them in a room, the problems say what the faces of solids do.
+    path = _scene(
+        tmp_path,
+        sources=[{"name": "outside", "position": [10.0, 3.0, 1.5]}],
+        listeners=[{"name": "far", "position": [12.0, 3.0, 1.5]}],
+    )
+    problems = Room.from_yaml(path).problems()
+    assert len(problems) == 2 and all("outside the room; no source or" in p for p in problems)
+    assert all("walls drawn with their thickness, close off no room" in p for p in problems)
 
 
 def test_listener_at_a_source_is_a_problem(tmp_path: Path) -> None:
@@ -458,3 +468,88 @@ def test_rooms_reuse_an_unchanged_mesh() -> None:
     boxed = Room.from_scene(Scene.model_validate(data), reuse=room)
     assert boxed.mesh is not room.mesh
     assert boxed.volume_m3 == pytest.approx(60.0)
+
+
+def _slab_room(tmp_path: Path, panel: list, diffraction: str) -> Room:
+    """A room 6 x 4 x 3 m with ``panel``'s quads standing in it (group ``panel``)."""
+
+    def box(x0, x1, y0, y1, z0, z1):
+        return [
+            ((x0, y0, z0), (x0, y1, z0), (x1, y1, z0), (x1, y0, z0)),
+            ((x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)),
+            ((x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)),
+            ((x0, y1, z0), (x0, y1, z1), (x1, y1, z1), (x1, y1, z0)),
+            ((x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)),
+            ((x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)),
+        ]
+
+    lines, n = [], 0
+    for name, quads in (("room", box(0, 6, 0, 4, 0, 3)), ("panel", panel)):
+        lines.append(f"g {name}")
+        for quad in quads:
+            lines += [f"v {x:.15g} {y:.15g} {z:.15g}" for x, y, z in quad]
+            lines.append(f"f {n + 1} {n + 2} {n + 3} {n + 4}")
+            n += 4
+    obj = tmp_path / "slab.obj"
+    obj.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    scene = {
+        "geometry": {"file": str(obj)},
+        "materials": {"wall": {"absorption": [0.1] * 8, "scattering": 0.1}},
+        "default_material": "wall",
+        "sources": [{"name": "s", "position": [1.5, 2.0, 1.0]}],
+        "listeners": [{"name": "l", "position": [4.5, 2.1, 1.1]}],
+        "simulation": {"early": {"diffraction": diffraction}},
+    }
+    return Room.from_scene(Scene.model_validate(scene))
+
+
+def _slab(x0: float, x1: float, y0: float = 1.0, y1: float = 3.0, top: float = 2.0) -> list:
+    """A slab from x0 to x1 standing on the floor, its front, back, top and ends (the
+    room's floor closes it), each facing out of it."""
+    return [
+        ((x0, y0, 0), (x0, y0, top), (x0, y1, top), (x0, y1, 0)),
+        ((x1, y0, 0), (x1, y1, 0), (x1, y1, top), (x1, y0, top)),
+        ((x0, y0, top), (x1, y0, top), (x1, y1, top), (x0, y1, top)),
+        ((x0, y0, 0), (x1, y0, 0), (x1, y0, top), (x0, y0, top)),
+        ((x0, y1, 0), (x0, y1, top), (x1, y1, top), (x1, y1, 0)),
+    ]
+
+
+@pytest.mark.parametrize("diffraction", ["first_order", "second_order", "direct"])
+def test_thin_slabs_are_warned_about(tmp_path: Path, diffraction: str) -> None:
+    # A desk screen 3 cm thick: its top and its two ends are thin slab faces, over which
+    # the early part's paths are missing or too low.
+    room = _slab_room(tmp_path, _slab(3.0, 3.03), diffraction)
+    (warning,) = [w for w in room.warnings() if "thin slab" in w]
+    assert warning.startswith(
+        "3 faces narrower than 10 cm lie between two corners that bend sound, the "
+        "narrowest 3 cm wide (the top or the end of a thin slab, such as a desk screen, a "
+        "door leaf or a pane drawn with its thickness; in 'panel'): "
+    )
+    assert "draw thin elements as one face" in warning
+    # Not a slab 30 cm thick, the same screen drawn as one face, two blocks whose tops lie
+    # in one plane 3 cm apart (a slot, not a slab), nor without edge diffraction.
+    for panel, mode in (
+        (_slab(3.0, 3.3), diffraction),
+        ([((3.0, 1.0, 0.0), (3.0, 3.0, 0.0), (3.0, 3.0, 2.0), (3.0, 1.0, 2.0))], diffraction),
+        (_slab(2.0, 3.0) + _slab(3.03, 4.0), diffraction),
+        (_slab(3.0, 3.03), "none"),
+    ):
+        room = _slab_room(tmp_path, panel, mode)
+        assert room.problems() == []
+        assert not [w for w in room.warnings() if "thin slab" in w]
+
+
+def test_thin_slabs_name_each_narrow_face_with_its_width(tmp_path: Path) -> None:
+    from acoustic_spaces.engine.diffraction import find_edges, thin_slabs
+    from acoustic_spaces.engine.model import TraceModel
+
+    room = _slab_room(tmp_path, _slab(3.0, 3.03), "first_order")
+    faces, widths = thin_slabs(find_edges(TraceModel.from_room(room)))
+    assert widths == pytest.approx([0.03] * 3)
+    normals = room.mesh.face_normals()[faces]
+    # Each pair is two faces of one plane: the top's (up) and the ends' (along y).
+    assert np.abs(np.abs(normals).max(axis=2) - 1.0).max() < 1e-12
+    axes = np.abs(normals).argmax(axis=2)
+    assert (axes[:, 0] == axes[:, 1]).all()
+    assert sorted(axes[:, 0].tolist()) == [1, 1, 2]

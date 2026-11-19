@@ -28,74 +28,79 @@ panel or partition in line with a wall, a plane at 45 degrees, measured directiv
 tables, the GPU's late part right by a surface, Doc 29's maximum levels and tables,
 Doppler walks and the spread itself.
 
-Results change from 4.2.1: outdoors over long barriers and rows of buildings in the
-octave bands up to 500 Hz, now from the solver for whole rows (`rows: edges` gives the
-paths over the edges as before; two flat roofs on a rigid ground within 0.74 dB of a
-wave calculation, where those paths are up to 10.7 dB off); exactly through an outer
-edge (5.3 dB at 63 Hz 1.5 m above a hall's roof with image sources); every result in its
-last digits, now that the package adds its long sums itself (parameters by at most 1e-9
-of their value); outdoors in wind or a temperature gradient at 1 and 2 kHz over the open
-ground, now from the parabolic equation (that change alone moves the examples' bands by
-up to 2.8 dB; runs over open ground in wind take longer, `open_air_stage` about 2.3
-times on one core, and `helicopter_flyover` keeps the rays); behind a building whose
-faces absorb, with `second_order` (by 18 to 20 dB behind a 6 m building absorbing 0.02;
-the archway example's first arrival behind the wall by 11.0 and 11.7 dB at 63 and 125
-Hz); just over two edges in a row in sight of each other, with `second_order` (15 to 26
-dB a centimetre above a 10 m roof); level with the tops of two or three barriers (about
-10 dB); just above a flat roof and a barrier level with it (up to 8 dB with the source
-and the listener swapped, 16 dB past the barrier's end); near a diffracting edge's face
-that the source sees nearly edge-on, with every diffraction mode (0.2 dB at 63 Hz at one
-of eight positions in two cities, which simulate up to about 15 % slower); beside a bend
-of a thin screen's top or past a corner that is not square (steps of up to 5.4 dB, 16.6
-dB or 3.0 dB); where the source, the listener and a barrier's top are at one height (up
-to 5.6 dB at 63 Hz); behind a barrier where a reflection lies near its foot (of the
-examples, the `railway`'s line and the `street`'s garden by up to 0.14 dB in a band);
-exactly in line with a source and a barrier's end in wind, or with a building's wall; in
-strips past roof edges in wind; across the shadow boundary of a barrier's end or a
-building's corner in wind (steps of up to 7.7 dB 60 m and 18.8 dB 120 m downwind gone),
-through the parabolic equation's crossovers (a ground dip at a join between its bands,
-2.0 and 5.3 dB off the fast field program in the 1995 benchmark's case 2, within 0.19
-and 0.45 dB now; C50 and C80 below 1 kHz with it), with eddies (`windy`'s 250 Hz to 2
-kHz bands by up to 0.59 dB with the `strong` ones), from or to a building's roof in wind
-(up to 1.95 dB off a full-wave solution before); with other listeners in a listener's
-direction in wind (0.12 dB at 63 Hz behind one 10 m nearer, 0.65 dB among 201 listeners
-10 cm apart); where the ground reflection reaches a listener more than 15 degrees up,
-now always from the wide-angle equation (up to 0.11 dB per octave band, 0.28 dB per
-third octave, in a one-off check); in wind or a temperature gradient over a ground that
-scatters little, where the late rays counted the curved ground paths again (still air
-and the shipped examples do not change); where a curved path turns just past a profile's
-node (the shipped examples' listeners by 0.02 dB at most); behind plants, with vector
-scattering (`tree_belt`'s A-weighted levels by 0.03 dB at most); where the size that
-sets scattering runs through an opening (`apartment`'s bed by 0.04 dB(A)); the wave
-solver's low bands round an open model, on a larger grid, and its 125 Hz band at a
-source or listener between its cells (up to 0.53 dB), the last 50 ms of its bands (up to
-7.5 dB off, 15.7 dB in third octaves, in a room of 2 % absorption), and a closed
-building round a shut-in source in wind, now in still air (a 6 m hut's bands up to 1.7
-dB off in a 15 m/s wind); Doc 29's L_Amax ahead of and behind a segment (up to 1.0 dB on
-Volume 3's departures; the airport example does not change); early paths at corners and
-near edges and surfaces: two paths with one image of the source off different surfaces
-(one was left out: up to 2.2 dB in a band), a path joined at a corner of two reflections
-(up to 20.7 dB too low 0.1 mm before a wall in a model 200 m wide), a path back off a
-room's corner, a panel or partition in line with a wall (a room and its mirror image up
-to 1.9 dB apart at 63 Hz), a plane at 45 degrees to two axes, a source right by two
-planes or a short leg between two reflections with edge diffraction, an edge's end on a
-plane, and points right by a surface or a corner in very large models; the late part on
-the GPU right by a surface (up to 3.2 to 7.5 dB low); a measured directivity table at
-directions equally near a grid point; a walk with Doppler past a barrier's end (a click
-40 dB above the sound around it gone); a walk with Doppler passing close to a listener
-(a ripple of up to 0.73 dB gone), through a directional microphone (up to 0.25 dB) or in
-binaural (up to 3.1 dB at 1 kHz); and the spread: its combined standard uncertainty and
-its mean, within the draws' noise, every response after the first in a run of several,
-materials that absorb everything in some band, grounds with an impedance, and draws of
-much more absorption than was traced; and a calibrated material given in third octaves
-where one of them reaches 1. An outdoor ground with an `impedance` and no `scattering`
-now scatters nothing (it took 0.1: the early level over grass moves by up to 0.5 dB at
-500 Hz, ground dips in still air deepen, flat open ground alone has no late part;
-`scattering: 0.1` gives the earlier results), and the wave solver's moving air flows
-round solids and passes between weather zones gradually (results near buildings and
-across zones change), and every result in moving air changes a little at the absorbing
-layer's border (the validation's levels by up to 0.012 dB). Scene files of 4.2.1 load
-unchanged.
+Results change from 4.2.1: outdoors the ground's bounces count for no order towards
+`max_order` (from 1 on), and what a wall or barrier scatters and the ground then
+reflects also rains on the listeners' images in the ground (no more blips in the
+`railway` tour); two rooms touching, each with its own wall, and a wall drawn once for
+each room (behind a 30 dB partition so drawn G was 11 to 20 dB low); many edge-fade and
+edge-diffraction cases in turned, mirrored or very large models; outdoors over long
+barriers and rows of buildings in the octave bands up to 500 Hz, now from the solver for
+whole rows (`rows: edges` gives the paths over the edges as before; two flat roofs on a
+rigid ground within 0.74 dB of a wave calculation, where those paths are up to 10.7 dB
+off); exactly through an outer edge (5.3 dB at 63 Hz 1.5 m above a hall's roof with
+image sources); every result in its last digits, now that the package adds its long sums
+itself (parameters by at most 1e-9 of their value); outdoors in wind or a temperature
+gradient at 1 and 2 kHz over the open ground, now from the parabolic equation (that
+change alone moves the examples' bands by up to 2.8 dB; runs over open ground in wind
+take longer, `open_air_stage` about 2.3 times on one core, and `helicopter_flyover`
+keeps the rays); behind a building whose faces absorb, with `second_order` (by 18 to 20
+dB behind a 6 m building absorbing 0.02; the archway example's first arrival behind the
+wall by 11.0 and 11.7 dB at 63 and 125 Hz); just over two edges in a row in sight of
+each other, with `second_order` (15 to 26 dB a centimetre above a 10 m roof); level with
+the tops of two or three barriers (about 10 dB); just above a flat roof and a barrier
+level with it (up to 8 dB with the source and the listener swapped, 16 dB past the
+barrier's end); near a diffracting edge's face that the source sees nearly edge-on, with
+every diffraction mode (0.2 dB at 63 Hz at one of eight positions in two cities, which
+simulate up to about 15 % slower); beside a bend of a thin screen's top or past a corner
+that is not square (steps of up to 5.4 dB, 16.6 dB or 3.0 dB); where the source, the
+listener and a barrier's top are at one height (up to 5.6 dB at 63 Hz); behind a barrier
+where a reflection lies near its foot (of the examples, the `railway`'s line and the
+`street`'s garden by up to 0.14 dB in a band); exactly in line with a source and a
+barrier's end in wind, or with a building's wall; in strips past roof edges in wind;
+across the shadow boundary of a barrier's end or a building's corner in wind (steps of
+up to 7.7 dB 60 m and 18.8 dB 120 m downwind gone), through the parabolic equation's
+crossovers (a ground dip at a join between its bands, 2.0 and 5.3 dB off the fast field
+program in the 1995 benchmark's case 2, within 0.19 and 0.45 dB now; C50 and C80 below 1
+kHz with it), with eddies (`windy`'s 250 Hz to 2 kHz bands by up to 0.59 dB with the
+`strong` ones), from or to a building's roof in wind (up to 1.95 dB off a full-wave
+solution before); with other listeners in a listener's direction in wind (0.12 dB at 63
+Hz behind one 10 m nearer, 0.65 dB among 201 listeners 10 cm apart); where the ground
+reflection reaches a listener more than 15 degrees up, now always from the wide-angle
+equation (up to 0.11 dB per octave band, 0.28 dB per third octave, in a one-off check);
+in wind or a temperature gradient over a ground that scatters little, where the late
+rays counted the curved ground paths again (still air and the shipped examples do not
+change); where a curved path turns just past a profile's node (the shipped examples'
+listeners by 0.02 dB at most); behind plants, with vector scattering (`tree_belt`'s
+A-weighted levels by 0.03 dB at most); where the size that sets scattering runs through
+an opening (`apartment`'s bed by 0.04 dB(A)); the wave solver's low bands round an open
+model, on a larger grid, and its 125 Hz band at a source or listener between its cells
+(up to 0.53 dB), the last 50 ms of its bands (up to 7.5 dB off, 15.7 dB in third
+octaves, in a room of 2 % absorption), and a closed building round a shut-in source in
+wind, now in still air (a 6 m hut's bands up to 1.7 dB off in a 15 m/s wind); Doc 29's
+L_Amax ahead of and behind a segment (up to 1.0 dB on Volume 3's departures; the airport
+example does not change); early paths at corners and near edges and surfaces: two paths
+with one image of the source off different surfaces (one was left out: up to 2.2 dB in a
+band), a path joined at a corner of two reflections (up to 20.7 dB too low 0.1 mm before
+a wall in a model 200 m wide), a path back off a room's corner, a panel or partition in
+line with a wall (a room and its mirror image up to 1.9 dB apart at 63 Hz), a plane at
+45 degrees to two axes, a source right by two planes or a short leg between two
+reflections with edge diffraction, an edge's end on a plane, and points right by a
+surface or a corner in very large models; the late part on the GPU right by a surface
+(up to 3.2 to 7.5 dB low); a measured directivity table at directions equally near a
+grid point; a walk with Doppler past a barrier's end (a click 40 dB above the sound
+around it gone); a walk with Doppler passing close to a listener (a ripple of up to 0.73
+dB gone), through a directional microphone (up to 0.25 dB) or in binaural (up to 3.1 dB
+at 1 kHz); and the spread: its combined standard uncertainty and its mean, within the
+draws' noise, every response after the first in a run of several, materials that absorb
+everything in some band, grounds with an impedance, and draws of much more absorption
+than was traced; and a calibrated material given in third octaves where one of them
+reaches 1. An outdoor ground with an `impedance` and no `scattering` now scatters
+nothing (it took 0.1: the early level over grass moves by up to 0.5 dB at 500 Hz, ground
+dips in still air deepen, flat open ground alone has no late part; `scattering: 0.1`
+gives the earlier results), and the wave solver's moving air flows round solids and
+passes between weather zones gradually (results near buildings and across zones change),
+and every result in moving air changes a little at the absorbing layer's border (the
+validation's levels by up to 0.012 dB). Scene files of 4.2.1 load unchanged.
 
 **Error estimates**
 
@@ -287,6 +292,76 @@ unchanged.
   0.8 dB below a rigid one's, and the archway example's first arrival behind the wall by
   11.0 and 11.7 dB at 63 and 125 Hz; with faces absorbing 0.5 it changes by +11.0 dB at
   63 Hz to -8.7 dB at 8 kHz.
+- Added: a warning about thin slabs, faces narrower than 10 cm between two corners that
+  bend sound (a desk screen or a door leaf drawn with its thickness), over which the
+  early part has no path with `first_order` and `direct` and too low a one with
+  `second_order`; the validation report's known issues give the numbers.
+- Fixed: the pieces of an edge along one line are one edge also where rounding leaves
+  their directions up to about a millionth apart (a model written with six decimals) or
+  at 45 degrees to two axes: a screen's top drawn in four pieces was up to four edges,
+  which moved the level in an open box turned 45 degrees by 0.03 dB at 63 Hz with
+  `second_order` diffraction.
+- Fixed: with edge diffraction, the edge fade takes a model turned to any angle and
+  written with six decimals as it takes it exact: planes at right angles to the model's
+  tolerance for planes commute, a term's path reaches a face of the plane it reflects
+  off that lies just in front of that plane, each event of a path's orders of
+  reflections counts once by its planes, not by its rounded images, and such planes make
+  one wave in either order in the bands that add in energy. An open box turned 17 to 50
+  degrees had been up to 0.43 dB off at 63 Hz.
+- Fixed: of the paths that share an image off parallel planes (off a panel and the walls
+  either side of it, and off the same the other way round), the edge fade took the terms
+  of the first by the planes' numbers only, so a room and its mirror image differed
+  (0.018 dB at 125 Hz); each now takes its own.
+- Fixed: of two orders of the same reflections at a corner of perpendicular planes (an
+  arm of a barrier and the ground), the edge fade kept whichever its search listed
+  first, where its tolerance let both be, not the one along the way: a source 3 mm from
+  both arms of a bent barrier and 2 mm above the ground had 5 paths for 7 and 0.55 dB
+  less at 63 Hz in a model 10 km wide than in one 200 m wide.
+- Fixed: the rays that test a path over an edge started a millionth of the model's
+  size off it, 1 cm in a model 10 km wide, where they missed paths or found ones that
+  are not there: a source 1 cm from both arms of a barrier bent by 120 degrees gave
+  1.92 dB more at 63 Hz than in a model 200 m wide. They now start a tenth of a
+  millimetre off at most (models up to 100 m wide are as before), and a millimetre above
+  a roof and a screen level with it the level is that a centimetre above within 0.14 dB
+  (it was up to 0.64 dB below).
+- Fixed: a path over an edge that reflects off a plane next to it counted wherever the
+  ray from just off the edge met a face of that plane; near grazing incidence that ray
+  meets the plane far from the path's own line. It now counts only where that line meets
+  a face: with `second_order` the level a metre above a roof and a screen 1 m past it
+  stepped by 3.1 dB at 63 Hz with the screen's top 0.6 mm lower than where the path over
+  it begins to reflect off the roof.
+- Fixed: with `second_order` diffraction, a path over two edges along the plane of a
+  screen or a panel (from one of its ends to the other) took the side of the screen that
+  each edge's frame calls face 0, which a scene's mirror image turns over, and in a
+  turned scene the screen stopped the way along it or not by how the coordinates
+  rounded. Behind a thin strip 2 m wide such paths were left out, up to 1.39 dB below
+  the exact solution (BTM) at 63 Hz; a panel standing free in a room and its mirror
+  image across the panel's plane, or the room turned by 30 degrees, were up to 0.24 dB
+  apart at 125 Hz. The path now runs along each face of the screen, two ways with half
+  the coefficient at grazing incidence each, within 0.11 dB of BTM at 63 and 125 Hz
+  behind the strip, and the faces in whose plane it runs do not stop it; one in that
+  plane on past the screen's far end, where the waves along its two faces cancel, is
+  left out.
+- Fixed: with edge diffraction, where walls in line face opposite ways with a panel or a
+  partition between them, the edge fade took the edges at a path's reflections, and the
+  faces a reflection meets there, by the plane in the model that holds each face, which
+  for the panel is that of the wall facing the plane's way: in a Z-shaped room with a
+  panel in the opening between two such walls, a room and its mirror image were up to
+  1.1 dB apart, and in a room with two such planes up to 1.8 dB. It now takes them by
+  where they lie and the way each face faces.
+- Fixed: with edge diffraction, where several events stop a path that is not found and
+  several edges explain one of them, the edge fade took the first edge by number, and a
+  reflection there took that edge's face, with its material and size, even a wall 2.6 m
+  off: in a T-shaped room with a panel in the stem's opening the level was 0.11 dB
+  higher at 63 Hz, and in an L-shaped room with a panel in line with a wall the room and
+  its mirror image were 0.045 dB apart. It now takes the edge whose term there is the
+  strongest, as for a path one event stops.
+- Fixed: with edge diffraction, in the bands that add in energy, paths whose images of
+  the source lay within a hundred-thousandth of the model's largest extent were one wave
+  and added in pressure, as those off two planes right by the source: 0.01 mm from the
+  floor and a wall of a room 10 m across, 1.5 to 2.7 dB too loud from 250 Hz up, and
+  1.2 mm from both arms of a bent barrier in a model 10 km wide, 2.3 dB from 1 kHz up.
+  Paths whose planes mirror the source otherwise are now other waves.
 
 **Wind and curved rays**
 
@@ -427,6 +502,17 @@ unchanged.
   a right-angled corner), and 2 to 6 dB for a listener 3 to 12 millionths over a floor
   that scatters. The CPU now traces such a run and the run says so
   ([which runs](docs/simulation.md#tuning-the-devices-for-a-computer)).
+- Fixed: a wall between two rooms drawn once for each room (two faces in one place, as
+  where two rooms modelled as closed models touch) let no sound through in the late part,
+  which took the space between the two faces for no room: behind a 30 dB partition so
+  drawn G came out 11 to 20 dB too low, behind an opening 5 to 14 dB, `validate` warned
+  that no surface joined the rooms, and the statistical reverberation times counted what
+  passes as lost. Such a wall now gives what it gives drawn once.
+- Fixed: outdoors, what a wall or a barrier scatters and the ground then reflects
+  reached a listener only through rays that crossed its detector sphere, each one a
+  burst in one millisecond of the tail (blips in the `railway` example's tour at
+  `meadow_25m`); in still air the rain now also falls on each listener's image in the
+  ground, with the same expected energy and without those bursts.
 
 **The wave solver**
 
@@ -588,6 +674,38 @@ unchanged.
   1e-9 of the model's diagonal: twice that distance now counts where it is more, in a
   model more than 500 m from corner to corner. A listener 6 µm over the hard ground of a
   model 10 km wide, almost under its source, was 6 dB low without a message.
+- Fixed: where two rooms modelled as closed models touch, each with a wall of its own
+  where they meet, each face of that wall now reflects and absorbs in its own room, on
+  the CPU and the GPU. In two 5 x 4 x 3 m rooms whose faces there absorb 0.9 and 0.1,
+  the first room's G had been 3.0 to 3.2 dB too high and its T30 0.93 to 1.01 s instead
+  of 0.44 to 0.53 s (250 Hz to 2 kHz): with the normals pointing out of the rooms each
+  face went with the other room, and either way a ray met the same one of the two from
+  both sides; with them into the rooms, a map of the upper of two stacked rooms found no
+  point. A model of touching solids alone, with the
+  air between them, now reads each solid as a room, and the problems say that solids
+  close off no room round the air; an IFC file's building elements, read without a
+  space, are solids and read as not closed, as before.
+- Fixed: faces that face one way with planes less than 0.01 mm apart are one plane on
+  either side of a step of the planes' rounding: a panel 0.01 mm off a wall's plane was
+  a plane of its own, up to 0.40 dB from the level in line at 125 Hz with edge
+  diffraction, and now has that level.
+- Fixed: the faces a path crosses right where it reflects were looked for along a chord
+  across the turn that reached a ten-millionth of the model's largest extent (1 mm in a
+  model 10 km wide) along both legs, on past a leg's other end (the source, say) where
+  that was nearer, and so could pass round the end of a face the path crosses. A source
+  0.015 to 0.04 mm from both arms of a barrier bent by 10 to 60 degrees in such a model
+  had a path off one arm through the other at the level of the direct sound, and with
+  edge diffraction an early level behind the barrier up to 42 dB above that of the same
+  scene in a model 200 m wide. The chord now ends at either leg's other end.
+- Changed: outdoors the ground's bounces count for no order towards
+  `simulation.early.max_order` (from 1 on): the early part holds the paths off up to
+  `max_order` vertical walls with their bounces off the ground, which counted each as a
+  reflection in still air and all together as one in wind and temperature gradients, and
+  the late rays leave their specular share to it. Their detector spheres had counted it
+  where a ray met the ground on both sides of a barrier that had scattered it, or two
+  walls and the ground (order 3 over the default 2): bursts of up to 28 dB at
+  `meadow_25m` in the `railway` example. The early stage takes about 30 % longer in the
+  `street` and `railway` examples.
 
 **Aircraft**
 
@@ -744,6 +862,9 @@ unchanged.
   against a fast field program on thirteen walks (up to 15.5 dB within a centimetre at
   4 kHz), and a wall's reflection there, whose paths are eigenrays in every band (see
   [Known issues](docs/validation.md#known-issues)).
+- Docs: where a third edge cuts a path over an edge, the level steps and can be several
+  dB off; the known issues of the edge fade give the measured levels over a roof and a
+  screen against the wave calculation, and the roadmap the fix.
 
 **Tests and CI**
 

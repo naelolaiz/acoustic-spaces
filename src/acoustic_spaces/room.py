@@ -114,7 +114,7 @@ def _air_cells(
         return cells.rooms
     # Cells joined by a surface that lets some sound through.
     passing = np.array([_lets_through(scene.materials[n]) for n in names] + [False])[face_materials]
-    links = cells.side[passing]
+    links = cells.beyond[passing]
 
     def joined(start) -> set[int]:
         air = set(np.asarray(start).tolist())
@@ -376,6 +376,19 @@ class Room:
                 f"surfaces without a material: {listed}; "
                 "add them to assignments or set default_material"
             )
+        # Whether none of those in use stands in a room the faces close off, as where the
+        # faces are those of solids with the air between them.
+        placed = [
+            bool(ok)
+            for every, inside in (
+                (self.scene.sources, self.sources_inside),
+                (self.scene.listeners, self.listeners_inside),
+            )
+            if inside is not None
+            for item, ok in zip(every, inside, strict=True)
+            if item.in_use
+        ]
+        nowhere = self.outdoor is None and bool(placed) and not any(placed)
         for kind, every, every_inside, every_solid in (
             ("source", self.scene.sources, self.sources_inside, self.sources_in_solid),
             ("listener", self.scene.listeners, self.listeners_inside, self.listeners_in_solid),
@@ -437,8 +450,16 @@ class Room:
                         "a room"
                     )
                 elif not ok:
+                    hint = (
+                        "; no source or listener stands in any room the faces close off "
+                        "(the faces of solids, such as walls drawn with their thickness, "
+                        "close off no room round the air between them)"
+                        if nowhere
+                        else ""
+                    )
                     out.append(
-                        f"{kind} {item.name!r} at {list(item.position)} {where} outside the room"
+                        f"{kind} {item.name!r} at {list(item.position)} {where} outside the "
+                        f"room{hint}"
                     )
         for listener in self._used("listeners", named):
             for source in self._used("sources", named):
@@ -485,11 +506,16 @@ class Room:
         r = self.report
         out = []
         if not r.closed:
+            why = (
+                "its faces are those of solids, building elements, which close off no room"
+                if r.solids
+                else f"{r.open_faces} faces have no room on either side; "
+                f"{r.boundary_edges} boundary edges"
+            )
             out.append(
-                f"the model is not closed ({r.open_faces} faces have no room on either "
-                f"side; {r.boundary_edges} boundary edges): rays can escape (the leak "
-                "finder shows where: validate --leaks, or Show leaks in the editor's View "
-                "menu), and the volume and inside checks are skipped"
+                f"the model is not closed ({why}): rays can escape (the leak finder shows "
+                "where: validate --leaks, or Show leaks in the editor's View menu), and the "
+                "volume and inside checks are skipped"
             )
         out.extend(self._unreachable())
         if r.inconsistent_edges:
@@ -511,7 +537,37 @@ class Room:
         out.extend(self._run_size())
         out.extend(self._wave_grid())
         out.extend(self._fitted_open_edges())
+        out.extend(self._thin_slabs())
         return out
+
+    def _thin_slabs(self) -> list[str]:
+        """With edge diffraction, faces narrower than
+        :data:`~acoustic_spaces.engine.diffraction.THIN_SLAB_M` between two corners of a
+        solid that bend sound (:func:`~acoustic_spaces.engine.diffraction.thin_slabs`):
+        the early part's paths over them are missing or too low."""
+        if self.scene.simulation.early.diffraction == "none" or not self._used("sources"):
+            return []
+        if np.any(self.face_materials == UNASSIGNED):  # a problem: no model to look at
+            return []
+        from acoustic_spaces.engine.diffraction import THIN_SLAB_M, find_edges, thin_slabs
+        from acoustic_spaces.engine.model import TraceModel
+
+        faces, widths = thin_slabs(find_edges(TraceModel.from_room(self)))
+        if not len(widths):
+            return []
+        labels = np.unique(self.mesh.face_labels[faces.ravel()])
+        names = sorted({_label_text(self.mesh.labels[label]) for label in labels.tolist()})
+        shown = ", ".join(repr(name) for name in names[:5]) + (", ..." if len(names) > 5 else "")
+        return [
+            f"{len(widths)} faces narrower than {100 * THIN_SLAB_M:g} cm lie between two "
+            f"corners that bend sound, the narrowest {100 * float(widths.min()):.2g} cm wide "
+            "(the top or the end of a thin slab, such as a desk screen, a door leaf or a "
+            f"pane drawn with its thickness; in {shown}): such a slab bends sound nearly as "
+            "a thin screen does, but the early part has no path over both corners with "
+            "first_order and direct, and too low a one with second_order, the more so the "
+            "thinner the slab; draw thin elements as one face (see Known issues in the "
+            "validation report)"
+        ]
 
     def _air_pressure(self) -> list[str]:
         """A pressure at which some band's frequency over pressure leaves the range
@@ -697,7 +753,7 @@ class Room:
         through = self.face_transmission()
         links = np.zeros((0, 2), dtype=np.int64)
         if through is not None:
-            pair = self.face_room[np.any(through > 0.0, axis=1)]
+            pair = self.face_beyond[np.any(through > 0.0, axis=1)]
             links = pair[(pair >= 0).all(axis=1)]
         # Rooms joined to each room, step by step.
         joined = np.eye(len(self.air_cells), dtype=bool)
@@ -740,6 +796,19 @@ class Room:
         index[self.air_cells] = np.arange(len(self.air_cells))
         return index[cells.side]
 
+    @property
+    def face_beyond(self) -> np.ndarray:
+        """(F, 2) the room (an index into :attr:`room_volumes`) that sound passing each
+        face reaches on its front and on its back, or -1: :attr:`face_room`, except where
+        a wall between two rooms is drawn once for each room (two closed models touching,
+        each with its own face there), where the side between the two faces reaches the
+        room behind the other face (see :attr:`MeshCells.beyond
+        <acoustic_spaces.geometry.cells.MeshCells.beyond>`)."""
+        cells = self.mesh.cells()
+        index = np.full(len(cells.volume), -1, dtype=np.int64)
+        index[self.air_cells] = np.arange(len(self.air_cells))
+        return index[cells.beyond]
+
     def room_of(self, points) -> np.ndarray:
         """The room each point lies in (an index into :attr:`room_volumes`), or -1."""
         mesh = self.mesh
@@ -771,9 +840,10 @@ class Room:
     def _sides(self, bands: Resolution) -> tuple[np.ndarray, np.ndarray]:
         """Each face's area as the rooms see it (m2), and the share of the sound meeting
         it that it takes out of them per band, both summed over its sides that face a
-        room: a partition or a free-standing panel counts twice, an opening between two
-        rooms not at all. A face between two rooms takes what it absorbs, not what it
-        passes on. Without rooms (an open model), every face counts once."""
+        room: a partition or a free-standing panel counts twice (once for each room's
+        face where it is drawn once for each room), an opening between two rooms not at
+        all. A face between two rooms takes what it absorbs, not what it passes on.
+        Without rooms (an open model), every face counts once."""
         areas = self.mesh.face_areas()
         alpha = np.array(
             [self.scene.materials[n].coefficients(bands)[0] for n in self.material_names]
@@ -785,7 +855,7 @@ class Room:
         through = self.face_transmission(bands)
         if through is None:
             return areas * sides, alpha * sides[:, None]
-        between = sides == 2
+        between = (self.face_beyond >= 0).all(axis=1)
         taken = np.where(between[:, None], alpha - through, alpha) * sides[:, None]
         opening = between & np.all(alpha >= 1.0, axis=1) & np.all(through >= 1.0, axis=1)
         return np.where(opening, 0.0, areas * sides), taken

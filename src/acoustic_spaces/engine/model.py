@@ -84,6 +84,29 @@ def free_field_energy(
     return out / len(elements)
 
 
+def _own_sides(room: Room, size: np.ndarray | None) -> np.ndarray:
+    """(F,) int8 for :meth:`Bvh.set_facing <acoustic_spaces._native.Bvh.set_facing>`:
+    the own side of each face of a wall drawn once for each room
+    (:attr:`MeshCells.facing <acoustic_spaces.geometry.cells.MeshCells.facing>`) where
+    the faces in that place differ in material, name or surface ``size``, so that a ray
+    meets its own room's face; 0 where they do not, as either serves."""
+    mesh = room.mesh
+    cells = mesh.cells()
+    facing = cells.facing
+    faces = np.flatnonzero(facing)
+    if not len(faces):
+        return facing
+    sliver = cells.side[faces, np.where(facing[faces] > 0, 1, 0)]
+    keys = [sliver, room.face_materials[faces], mesh.face_labels[faces]]
+    if size is not None:
+        keys += [size[faces, 0], size[faces, 1]]
+    kinds = np.unique(np.column_stack(keys).astype(float), axis=0)
+    differ = np.bincount(kinds[:, 0].astype(np.int64), minlength=len(cells.volume)) > 1
+    out = np.zeros_like(facing)
+    out[faces] = np.where(differ[sliver], facing[faces], 0)
+    return out
+
+
 def _plants(room: Room, bands: Resolution):
     """The vegetation of an outdoor scene in ``bands``, or None."""
     if room.outdoor is None or not room.outdoor.vegetation:
@@ -91,6 +114,32 @@ def _plants(room: Room, bands: Resolution):
     from acoustic_spaces.engine.vegetation import Plants
 
     return Plants.of(room, bands, room.speed_of_sound())
+
+
+def _places(keys: np.ndarray) -> np.ndarray:
+    """(n,) the place of each row of ``keys`` (a plane's normal and offset in whole
+    multiples of :data:`PLANE_TOLERANCE`), numbered in the order of the rows' sorted
+    keys: rows whose keys are at most one apart in every number share one, also through
+    others, so that two planes nearer than the tolerance are one whichever side of a
+    rounding step either falls on."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    from scipy.spatial import cKDTree
+
+    unique, inverse = np.unique(keys, axis=0, return_inverse=True)
+    inverse = inverse.reshape(-1)
+    count = len(unique)
+    if count < 2:
+        return inverse
+    pairs = cKDTree(unique).query_pairs(1.5, p=np.inf, output_type="ndarray")
+    if len(pairs) == 0:
+        return inverse
+    graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(count, count))
+    label = connected_components(graph, directed=False)[1]
+    lowest = np.full(count, count, dtype=np.int64)
+    np.minimum.at(lowest, label, np.arange(count))
+    place = np.unique(lowest[label], return_inverse=True)[1].reshape(-1)
+    return place[inverse]
 
 
 @dataclass
@@ -119,6 +168,10 @@ class TraceModel:
     #: (F, 2) the room on the front (the side the mesh's face normal points to) and the
     #: back of each face (an index into ``room_volumes``), or -1.
     face_room: np.ndarray | None = None
+    #: (F, 2) the room that sound passing each face reaches on its front and its back:
+    #: ``face_room``, but behind a wall drawn once for each room, the room behind the
+    #: other face (:attr:`acoustic_spaces.room.Room.face_beyond`).
+    face_beyond: np.ndarray | None = None
     #: (R,) volume of each room (m3).
     room_volumes: np.ndarray | None = None
     #: (F, 2) width and length (m) of the surface each face belongs to (see
@@ -198,6 +251,7 @@ class TraceModel:
         normals = mesh.face_normals()
         oriented = len(room.air_cells) > 0
         face_room = room.face_room if oriented else np.full((len(mesh.faces), 2), -1, np.int64)
+        face_beyond = room.face_beyond if oriented else face_room
         air = face_room >= 0
         back = air[:, 1] & ~air[:, 0]
         # A room on both sides, or the inside unknown: one canonical normal direction for
@@ -217,7 +271,7 @@ class TraceModel:
             # way the wall faces.
             walls = int((~both).sum())
             rows = np.concatenate([keys[~both], keys[both], -keys[both]])
-            label = np.unique(rows, axis=0, return_inverse=True)[1].reshape(-1)
+            label = _places(rows)
             wall = np.zeros(int(label.max()) + 1, dtype=bool)
             wall[label[:walls]] = True
             same, opposite = wall[label[walls:]].reshape(2, -1)
@@ -226,8 +280,12 @@ class TraceModel:
             normals = np.where(turn[:, None], -normals, normals)
             offsets = np.where(turn, -offsets, offsets)
             keys = np.where(turn[:, None], -keys, keys)
-        _, first, face_plane = np.unique(keys, axis=0, return_index=True, return_inverse=True)
-        face_plane = face_plane.reshape(-1)
+        # One plane for the faces in one place that face one way, as geometric_plane
+        # joins planes, on either side of a rounding step: its normal and offset are
+        # those of its first face.
+        face_plane = _places(keys)
+        first = np.full(int(face_plane.max(initial=-1)) + 1, len(face_plane), dtype=np.int64)
+        np.minimum.at(first, face_plane, np.arange(len(face_plane)))
         two_sided = np.zeros(len(first), dtype=bool)
         np.logical_or.at(two_sided, face_plane, both)
 
@@ -263,6 +321,7 @@ class TraceModel:
             if room.outdoor is not None:
                 # The ground goes on past its extent: its size scatters nothing.
                 size[_ground_faces(room)] = UNBOUNDED_M
+        bvh.set_facing(_own_sides(room, size))
         return cls(
             room=room,
             bvh=bvh,
@@ -280,6 +339,7 @@ class TraceModel:
             plane_two_sided=two_sided,
             transmission=room.face_transmission(simulation.bands),
             face_room=face_room,
+            face_beyond=face_beyond,
             room_volumes=room.room_volumes if oriented else np.zeros(0),
             ray_tree=ray_tree,
             sky=None if room.outdoor is None else room.sky_faces(),
@@ -299,6 +359,8 @@ class TraceModel:
             self.plane_two_sided = np.full(self.plane_count, not self.oriented)
         if self.face_room is None:
             self.face_room = np.full((len(self.face_plane), 2), -1, dtype=np.int64)
+        if self.face_beyond is None:
+            self.face_beyond = self.face_room
         if self.room_volumes is None:
             self.room_volumes = np.zeros(0)
         if self.transmission is not None:
@@ -323,9 +385,9 @@ class TraceModel:
     def face_spread(self) -> np.ndarray:
         """(F,) the largest distance (m) of a vertex of each face from its plane
         (``face_plane``); 0 where all lie within :attr:`height_error` of it. Faces whose
-        normals and offsets round to the same multiples of :data:`PLANE_TOLERANCE` make
-        one plane, the plane of the first of them, without lying in it exactly (worked out
-        once)."""
+        normals and offsets round to multiples of :data:`PLANE_TOLERANCE` at most one
+        apart make one plane, the plane of the first of them, without lying in it exactly
+        (worked out once)."""
         normal = self.plane_normal[self.face_plane]
         heights = np.einsum("fvk,fk->fv", self.room.mesh.triangles, normal)
         heights = np.abs(heights - self.plane_offset[self.face_plane, None]).max(axis=1)
@@ -546,6 +608,33 @@ def _ground_faces(room: Room) -> np.ndarray:
     mesh = room.mesh
     ground = np.array([GROUND in label for label in mesh.labels] or [False], dtype=bool)
     return ground[mesh.face_labels]
+
+
+#: How far from level (the z of a unit normal short of 1) a plane of the ground may be,
+#: and from upright (its z) a vertical wall, for :func:`plane_kinds`.
+_LEVEL = 1e-9
+
+
+def plane_kinds(model: TraceModel) -> np.ndarray | None:
+    """Outdoors, how the reflections off each plane count towards the early stage's
+    ``max_order`` (P,): 1 for a level plane of the ground's faces
+    (:func:`_ground_faces`), whose bounces count for none, 0 for a vertical wall and -1
+    for any other (a roof, a slope of a terrain), each of whose reflections counts. A
+    path off nothing but the ground and vertical walls is the early stage's with up to
+    ``max_order`` reflections off the walls and any bounces off the ground (from
+    ``max_order`` 1 on; one more than the walls at most, the ground being level), as
+    the ground's effect goes with every path (ISO 9613-2, Nord2000, CNOSSOS-EU); any
+    other with up to ``max_order`` reflections. None indoors,
+    where each reflection counts. The kind of a face is its plane's
+    (``plane_kinds(model)[model.face_plane]``), as the stochastic late tracer takes it
+    (``face_kind``) to leave those paths out."""
+    if model.room.outdoor is None:
+        return None
+    up = model.plane_normal[:, 2]
+    level = np.ones(model.plane_count, dtype=bool)
+    np.logical_and.at(level, model.face_plane, _ground_faces(model.room))
+    level &= np.abs(up) >= 1.0 - _LEVEL
+    return np.where(level, 1, np.where(np.abs(up) <= _LEVEL, 0, -1)).astype(np.int64)
 
 
 def _ground_parts(room: Room) -> tuple[np.ndarray, np.ndarray]:

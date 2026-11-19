@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from test_fitted_walls import l_room, l_room_points, stable_case, wave
+from test_ground_mirror import _args as _wall_on_ground
 from test_native import _stochastic_args, _unit_cube, cube_with_seats
 from test_tracer_reference import REFERENCE, reference_arguments
 from test_vegetation import _FLOOR_BIN, _FLOOR_LEG, _FLOOR_PLANTS, _big_box, _over_floor, _slab
@@ -576,6 +577,39 @@ def test_gpu_ray_search_finds_what_the_cpu_does() -> None:
     # A ray limited short of every face finds none.
     t_gpu, face_gpu = on_gpu.intersect(origins[:5], directions[:5], 1e-3, -1)
     assert np.all(face_gpu == -1) and np.all(np.isinf(t_gpu))
+
+
+@needs_gpu
+def test_gpu_ray_search_meets_the_face_whose_own_side_a_ray_comes_from() -> None:
+    # A wall 20 m square drawn twice in one place, once facing each way, off the origin:
+    # from either side the GPU meets the face the CPU does, the one whose own side (the
+    # front, or the back) the ray comes from.
+    square = np.array([[0.0, 0, 0], [0, 1, 0], [0, 1, 1], [0, 0, 1]]) * 20.0 + [100, -40, 3]
+    up = np.array([[0, 1, 2], [0, 2, 3]])
+    faces = np.vstack([up, up[:, ::-1]])
+    rng = np.random.default_rng(8)
+    n = 2000
+    yz = square[0, 1:] + rng.uniform(0.5, 19.5, (n, 2))
+    none = np.full(n, -1)
+    for own in (1, -1):
+        bvh = _native.Bvh(square, faces)
+        bvh.set_facing(np.full(4, own, dtype=np.int8))
+        on_gpu = gpu_rays.GpuBvh(bvh)
+        for x, step in ((-7.0, 1.0), (13.0, -1.0)):
+            origins = np.column_stack([np.full(n, square[0, 0] + x), yz])
+            directions = np.tile([step, 0.0, 0.0], (n, 1)) + rng.normal(0, 0.1, (n, 3))
+            directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+            t, face = bvh.intersect(origins, directions, np.full(n, np.inf), none)
+            t_gpu, face_gpu = on_gpu.intersect(origins, directions, np.inf, none)
+            hit = face >= 0
+            assert hit.mean() > 0.9
+            assert set(face[hit] // 2) == {0 if (x > 0) == (own > 0) else 1}
+            # The same drawing of the wall for every ray both meet it; the same triangle
+            # but for rays along an edge (single precision widens the triangles).
+            both = hit & (face_gpu >= 0)
+            assert np.mean(face_gpu == face) > 0.995
+            np.testing.assert_array_equal(face_gpu[both] // 2, face[both] // 2)
+            np.testing.assert_allclose(t_gpu[both], t[both], rtol=1e-4, atol=1e-5 * on_gpu.scale)
 
 
 @needs_gpu
@@ -1240,6 +1274,27 @@ def test_bent_rays_leave_out_the_ground_bounces_the_early_stage_holds(
     for kinds, most in ((np.where(ground, 2, kind), 10), (kind, -1)):
         with pytest.raises(ValueError, match="face_kind|covered_ground"):
             trace(**values, face_kind=kinds, covered_ground=most)
+
+
+@pytest.mark.parametrize("device", ["cpu", pytest.param("gpu", marks=needs_gpu)])
+def test_straight_rays_leave_out_the_ground_bounces_the_early_stage_holds(device: str) -> None:
+    """A wall on the ground, both specular, and the detector spheres alone: the paths off
+    the wall, the ground and both reach the listeners. With early order 1 the order alone
+    leaves those off both to the late rays; outdoors in still air (face_kind, with any
+    bounces off the ground) the early stage holds them, the ground's bounce counting for
+    no order, and the late rays leave out all. With early order 0 it holds the direct
+    sound alone, as the order does, to the bit."""
+    trace = _native.trace_stochastic if device == "cpu" else gpu_tracer.trace_stochastic
+    values = _wall_on_ground(50_000, 1, radius=1.0, vector=False, diffuse_rain=False)
+    values.update(scattering=np.zeros((4, 1)), mirror_plane=None, face_mirror=None)
+    kind = np.array([1, 1, 0, 0])
+    plain = trace(**values)[0]
+    assert np.all(plain.sum(axis=(1, 2)) > 0.0)
+    assert not trace(**values, face_kind=kind, covered_ground=1 << 30)[0].any()
+    values["covered_order"] = 0
+    np.testing.assert_array_equal(
+        trace(**values, face_kind=kind, covered_ground=1 << 30)[0], trace(**values)[0]
+    )
 
 
 def _crown(absorption, scattering, asymmetry) -> dict:

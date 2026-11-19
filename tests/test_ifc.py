@@ -77,8 +77,15 @@ def test_every_element_without_a_space() -> None:
     assert east == pytest.approx(2 * (4.5 * 2.8 - 3.25) + 2 * (2.5 + 1.3) * 0.2 + 0.2 * 2 * 7.3)
     from acoustic_spaces.engine.leaks import find_leaks
 
+    # The elements are solids, which close off no room, though some touch along edges.
     room = Room.from_scene(_office_scene())
-    assert not room.report.closed  # the solids only touch: no edges in common
+    assert room.mesh.solids and room.report.solids and room.report.non_manifold_edges == 8
+    assert not room.report.closed and room.report.room_volumes_m3 == ()
+    assert room.problems() == []
+    assert room.warnings()[0].startswith(
+        "the model is not closed (its faces are those of solids, building elements"
+    )
+    assert "the faces of solids (building elements), no room" in room.report.summary()
     assert find_leaks(room, rays=300).escaped == 0  # though no ray gets out
 
 

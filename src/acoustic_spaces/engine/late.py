@@ -43,7 +43,8 @@ BATCH_STEP = 0.01
 #:   listener it can see (Lambert); specular rays count when they cross a detector
 #:   sphere. Exact on average; noisier late in rooms with smooth, reflective walls. In
 #:   still air the first reflections' scattered sound is also gathered from each
-#:   listener (see ``FIRST_GATHER``).
+#:   listener (see ``FIRST_GATHER``), and outdoors it radiates also to each listener's
+#:   image in the ground (see :func:`ground_mirrors`).
 #: - ``secondary_sources``: all reflected energy radiates that way, as in ODEON's late
 #:   method. Much smoother, but it spreads specular energy as if the field were
 #:   diffuse: in a box with smooth walls EDT came out 20 % shorter than the other modes.
@@ -111,6 +112,59 @@ FIRST_GATHER = 16384
 RADIUS_RANGE = (0.5, 1.0)
 
 
+#: Most planes of the ground whose listener images the rain reaches
+#: (:func:`ground_mirrors`), as the compiled tracer takes them.
+MAX_MIRRORS = 4
+
+
+def ground_mirrors(model: TraceModel) -> dict:
+    """The arguments of ``_native.trace_stochastic`` that rain the scattered sound of each
+    reflection also on each listener's image in the ground, in an outdoor scene: the
+    planes of the ground (:func:`~acoustic_spaces.engine.model._ground_faces`), the
+    ``MAX_MIRRORS`` largest by area where it has more (a terrain), each a unit normal
+    pointing up and its offset (``mirror_plane``), and the plane of each face, -1 for
+    the others (``face_mirror``). Empty where there is no ground.
+
+    The sound reaches the image along the line to it, reflected where the line meets
+    the ground by the face there (its specular share), so a ray need not cross the
+    listener's detector sphere after the ground for the listener to hear the ground's
+    reflection of what a wall scatters: those rays leave it to this rain. Each such hit
+    put the energy of a whole path into one time slot, a burst well above the rest of
+    the tail, where the rain brings the same energy evenly."""
+    from acoustic_spaces.engine.model import _ground_faces
+
+    ground = np.flatnonzero(_ground_faces(model.room))
+    if len(ground) == 0:
+        return {}
+    normal, offset = model.face_planes
+    # Faces that lie in their plane share it; one that does not has its own.
+    key = np.where(model.face_spread[ground] > 0.0, -1 - ground, model.face_plane[ground])
+    planes, first, which = np.unique(key, return_index=True, return_inverse=True)
+    tri = model.room.mesh.triangles[ground]
+    area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    totals = np.bincount(which, weights=area, minlength=len(planes))
+    # The largest first, the first plane first among equals.
+    kept = np.argsort(-totals, kind="stable")[:MAX_MIRRORS]
+    up = normal[ground[first[kept]]].copy()
+    level = offset[ground[first[kept]]].copy()
+    flip = up[:, 2] < 0.0
+    up[flip] *= -1.0
+    level[flip] *= -1.0
+    upright = up[:, 2] > 0.0
+    kept, up, level = kept[upright], up[upright], level[upright]
+    if len(kept) == 0:
+        return {}
+    up /= np.linalg.norm(up, axis=1)[:, None]
+    mirror = np.full(len(planes), -1, dtype=np.int64)
+    mirror[kept] = np.arange(len(kept))
+    face_mirror = np.full(len(normal), -1, dtype=np.int64)
+    face_mirror[ground] = mirror[which]
+    return {
+        "mirror_plane": np.ascontiguousarray(np.column_stack([up, level]), dtype=np.float64),
+        "face_mirror": face_mirror,
+    }
+
+
 def receiver_radius(
     volume_m3: float | np.ndarray | None,
     rays: int,
@@ -141,9 +195,11 @@ def receiver_radius(
 
 def _exchange(model: TraceModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Each room's surface area (rooms,), absorption area (bands, rooms) and the area
-    that passes sound from one room to another (bands, rooms, rooms), what passes
-    counted as absorbed on its side. A face counts for the room on each of its sides,
-    and one standing in a room twice."""
+    that passes sound from one room to another (bands, rooms, rooms; [to, from]), what
+    passes counted as absorbed on its side. A face counts for the room on each of its
+    sides, and one standing in a room twice; it passes the sound of the room on each of
+    its sides into the room beyond it (:attr:`TraceModel.face_beyond`), so a wall
+    between two rooms passes it both ways, drawn once or once for each room."""
     rooms = len(model.room_volumes)
     bands = model.absorption.shape[1]
     area = model.room.mesh.face_areas()
@@ -156,12 +212,13 @@ def _exchange(model: TraceModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         np.add.at(absorbed.T, face_room[ok, side], area[ok, None] * model.absorption[ok])
     passing = np.zeros((bands, rooms, rooms))
     if model.transmission is not None:
-        between = (face_room >= 0).all(axis=1)
-        share = (area[between, None] * model.transmission[between]).T  # (bands, faces)
-        one, two = face_room[between, 0], face_room[between, 1]
-        for b in range(bands):
-            np.add.at(passing[b], (one, two), share[b])
-            np.add.at(passing[b], (two, one), share[b])
+        beyond = model.face_beyond
+        for side in (1, 0):
+            into, out = beyond[:, 1 - side], face_room[:, side]
+            ok = (out >= 0) & (into >= 0)
+            share = (area[ok, None] * model.transmission[ok]).T  # (bands, faces)
+            for b in range(bands):
+                np.add.at(passing[b], (into[ok], out[ok]), share[b])
     return surface, absorbed, passing
 
 
@@ -359,9 +416,10 @@ def _in_batches(
 
 
 def _rooms(model: TraceModel, source: np.ndarray, air: np.ndarray, points) -> tuple:
-    """The tracer's transmission arguments for a source: face_room, source_room and
-    room_level, and whether each of ``points`` (listeners or map points) lies in the
-    source's room (None when there is nothing to tell apart)."""
+    """The tracer's transmission arguments for a source: face_room (the room that sound
+    passing each face reaches on either side, :attr:`TraceModel.face_beyond`),
+    source_room and room_level, and whether each of ``points`` (listeners or map points)
+    lies in the source's room (None when there is nothing to tell apart)."""
     if model.transmission is None or len(model.room_volumes) == 0:
         return np.zeros((0, 2), dtype=np.int64), -1, np.zeros(0), None
     source_room = int(model.room.room_of(np.asarray(source, float)[None])[0])
@@ -369,7 +427,7 @@ def _rooms(model: TraceModel, source: np.ndarray, air: np.ndarray, points) -> tu
     own = None
     if len(level):
         own = model.room.room_of(points) == source_room
-    return np.ascontiguousarray(model.face_room, dtype=np.int64), source_room, level, own
+    return np.ascontiguousarray(model.face_beyond, dtype=np.int64), source_room, level, own
 
 
 def band_groups(model: TraceModel) -> list[slice]:
@@ -544,7 +602,9 @@ def stochastic_energy(
     (:meth:`~acoustic_spaces.engine.response.Response.standard_errors`).
 
     With diffuse rain alone (``reception`` diffuse_rain) and rays that go straight, the
-    scattered sound of each reflection straight from the source is shared between the
+    scattered sound of each reflection rains also on each listener's image in the ground
+    outdoors (:func:`ground_mirrors`), and that of each reflection straight from the
+    source is shared between the
     rays' rain and a gather from each listener in ``gather`` directions (None:
     ``FIRST_GATHER``; 0: the rain keeps it all), as the two would find it most densely
     (the balance heuristic): the same expected energy, without the burst a ray landing
@@ -581,6 +641,7 @@ def stochastic_energy(
     gathering = (
         gather > 0 and diffuse_rain and not specular_rain and not bent and len(listeners) > 0
     )
+    mirrors = ground_mirrors(model) if diffuse_rain and not specular_rain and not bent else {}
     # Every batch, band group and device traces with the same share, so that the rain's
     # and the gather's add up to one wherever the rays land.
     ratio = gather / rays if gathering else 0.0
@@ -634,6 +695,7 @@ def stochastic_energy(
                 **plant_arguments(model, band),
                 "gather_ratio": ratio,
                 **cover,
+                **mirrors,
             }
             if not plans:
                 plans.append(ray_device.choose(device, values))

@@ -858,3 +858,183 @@ def test_a_corner_the_search_joins_takes_its_terms(bend: float, gap: float, heig
     assert len(wide.order) == len(narrow.order)
     level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
     assert np.abs(level).max() < 0.01
+
+
+def _open_box(folder: Path, degrees: float, decimals: int | None) -> Room:
+    """The box of test_engine's ``_box_of_triangles`` without its ceiling, its sides in
+    quarters, turned ``degrees`` about the z axis and written with ``decimals`` (all
+    digits for None), with a source and a listener in it, first-order diffraction and
+    reflections up to the third order."""
+    from test_engine import _box_of_triangles, _turned
+
+    obj = _box_of_triangles(
+        folder / f"open_{degrees:g}_{decimals}.obj",
+        degrees=degrees,
+        decimals=decimals,
+        quarters=True,
+        ceiling=False,
+    )
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": str(obj)},
+                "materials": {"m": {"absorption": [0.1] * BANDS, "scattering": 0.0}},
+                "default_material": "m",
+                "sources": [{"name": "s", "position": _turned((2.0, 2.5, 1.5), degrees).tolist()}],
+                "listeners": [
+                    {"name": "l", "position": _turned((6.4096, 2.462, 1.486), degrees).tolist()}
+                ],
+                "simulation": {
+                    "ir_length_s": 0.3,
+                    "scattering": {"from_size": False},
+                    "early": {
+                        "method": "image_sources",
+                        "max_order": 3,
+                        "diffraction": "first_order",
+                    },
+                },
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize("degrees", [17.0, 45.0, 50.0])
+def test_a_model_turned_with_its_corners_rounded_takes_the_terms_it_takes_exact(
+    tmp_path: Path, degrees: float
+) -> None:
+    """The open box (with no inside known, every face reflects on both sides; its walls'
+    tops are free edges) turned ``degrees`` and written with six decimals, as most files
+    carry a model: the paths and the early level of the box exact and unturned. The
+    rounding leaves its walls at right angles to within 4e-7 (the cosine between their
+    normals) and its faces up to 1.4 um off their planes.
+    The edge fade took reflections off perpendicular planes for commuting only to 1e-9
+    (turned 17 degrees, the box then had 411 paths for 437, 0.21 dB less at 63 Hz), its
+    terms' rays stopped at a face of the plane they reflect off just in front of that
+    plane (394, 0.58 dB more), and it took the terms of an event of another order of
+    the reflections once by its images rounded to a billionth of the model's size (592,
+    0.96 dB more at 125 Hz); with all three, 309 to 411 paths at these angles and up to
+    0.43 dB off at 63 Hz."""
+    exact = early_paths(_open_box(tmp_path, 0.0, None))
+    rounded = early_paths(_open_box(tmp_path, degrees, 6))
+    assert len(rounded) == len(exact)
+    level = 10 * np.log10(total_energy(rounded) / total_energy(exact))
+    assert np.abs(level).max() < 0.001
+
+
+def test_a_wave_s_mirror_takes_perpendicular_planes_in_either_order_as_one(
+    tmp_path: Path,
+) -> None:
+    """In the open box turned 17 degrees and written with six decimals, two planes at
+    right angles make one mirror in either order, wherever a -1 stands among them
+    (``EdgeDiffraction._mirror``, which tells the waves of the bands in energy apart),
+    though the mirror worked out in the one order and in the other parts by a few of its
+    steps; two planes that face each other make two. ``early._canonical`` puts the lowest
+    plane first where it can come first, and leaves planes that do not commute in
+    their order."""
+    from acoustic_spaces.engine.early import _canonical
+
+    room = _open_box(tmp_path, 17.0, 6)
+    model = TraceModel.from_room(room)
+    diffraction = EdgeDiffraction(
+        model,
+        model.room.mesh.vertices.mean(axis=0),
+        speed_of_sound=room.speed_of_sound(),
+        air=np.zeros(BANDS),
+    )
+    normal = model.plane_normal
+    cos = np.abs(np.clip(np.sum(normal[:, None] * normal[None], axis=2), -1.0, 1.0))
+    across = np.argwhere(np.triu(cos < 1e-3, 1))
+    facing = np.argwhere(np.triu(cos > 1.0 - 1e-9, 1))
+    assert len(across) >= 8 and len(facing) >= 2
+    for a, b in across:
+        keys = diffraction._mirror(np.array([[a, b, -1], [b, a, -1], [-1, b, a], [b, -1, a]]))
+        assert (keys == keys[0]).all()
+        assert _canonical(model, np.array([[max(a, b), -1, min(a, b)]])).tolist() == [
+            [min(a, b), max(a, b), -1]
+        ]
+    for a, b in facing:
+        keys = diffraction._mirror(np.array([[a, b], [b, a]]))
+        assert not (keys[0] == keys[1]).all()
+        assert _canonical(model, np.array([[b, a]])).tolist() == [[b, a]]
+
+
+def test_of_two_orders_at_a_corner_the_edge_fade_takes_the_one_along_the_way() -> None:
+    """A source 3 mm from both arms of a barrier bent by 30 degrees and 2 mm above the
+    ground, with reflections up to the third order, in a model 10 km wide and in one
+    200 m wide: the same paths and early levels to 0.01 dB. A path off an arm, the other
+    arm and the ground, which meets that arm 4 um above the ground, has the image of the
+    same reflections off the arm, the ground and the other arm; the corner of the arm and
+    the ground admits that order too within its tolerance (1e-5 m in the wide model). The
+    edge fade kept whichever came first: in the wide model the one with two legs
+    blocked, where the path has one, and 5 paths for 7, 0.55 dB less at 63 Hz."""
+    turn = np.radians(30.0)
+    reach = 3e-3 / np.sin(turn / 2)
+    source = (float(np.cos(turn / 2) * reach), float(np.sin(turn / 2) * reach), 2e-3)
+    path = ((12.0, 0.0), (0.0, 0.0), (12.0 * float(np.cos(turn)), 12.0 * float(np.sin(turn))))
+    angle = 2.0 * np.pi * 2.5 / 8.0
+    listener = (8.0 * np.cos(angle), 8.0 * np.sin(angle), 1.8)
+    wide, narrow = (
+        early_paths(
+            _outdoors(
+                listener,
+                source=source,
+                path=path,
+                barrier_m=4.0,
+                half_m=half,
+                max_order=3,
+                diffraction="first_order",
+            )
+        )
+        for half in (5000.0, 100.0)
+    )
+    assert len(wide.order) == len(narrow.order)
+    level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
+    assert np.abs(level).max() < 0.01
+
+
+@pytest.mark.parametrize(
+    ("bend", "gap", "listener", "early", "bands"),
+    [
+        (
+            120.0,
+            0.01,
+            (14.0 * np.cos(2.75 * np.pi / 2.0), 14.0 * np.sin(2.75 * np.pi / 2.0), 2.7),
+            {"max_order": 2, "diffraction": "first_order", "diffraction_reflections": "both_sides"},
+            8,
+        ),
+        (
+            60.0,
+            1.2e-3,
+            (8.0 * np.cos(np.pi / 6.0), 8.0 * np.sin(np.pi / 6.0), 1.0),
+            {"coherent_max_band_hz": 500},
+            4,
+        ),
+    ],
+)
+def test_the_paths_over_an_edge_are_tested_as_near_it_in_a_wide_model(
+    bend: float, gap: float, listener, early: dict, bands: int
+) -> None:
+    """A source ``gap`` (m) from both arms of a barrier bent by ``bend`` degrees, on the
+    bisector, in a model 10 km wide and in one 200 m wide: the same paths and early
+    levels to 0.01 dB. The rays that test a path over an edge start a millionth of the
+    model's size off the edge, but no farther than a tenth of a millimetre. At 1 cm in
+    the wide model, behind the 120 degree bend, where the image of the source in one arm
+    lies in the other arm's plane, it had 4 paths for 3 and 1.92 dB more at 63 Hz; in the
+    60 degree bend it lacked the paths over the arms' tops that reflect a few
+    millimetres below the other arm's top, and the edge fade added 2 terms for them
+    (0.14 dB at 63 Hz). The levels of the 60 degree bend are compared where the paths add
+    in pressure: in the bands that add in energy the waves' images are grouped to a
+    share of the model's size."""
+    turn = np.radians(bend)
+    reach = gap / np.sin(turn / 2)
+    source = (float(np.cos(turn / 2) * reach), float(np.sin(turn / 2) * reach), 1.5)
+    path = ((12.0, 0.0), (0.0, 0.0), (12.0 * float(np.cos(turn)), 12.0 * float(np.sin(turn))))
+    wide, narrow = (
+        early_paths(
+            _outdoors(listener, source=source, path=path, barrier_m=4.0, half_m=half, **early)
+        )
+        for half in (5000.0, 100.0)
+    )
+    assert len(wide.order) == len(narrow.order)
+    level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
+    assert np.abs(level[:bands]).max() < 0.01
