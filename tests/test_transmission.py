@@ -674,7 +674,12 @@ def test_a_free_standing_panel_drawn_as_two_faces_back_to_back_is_the_panel_draw
     for method in ("image_sources", "ray_tracing"):
         np.testing.assert_array_equal(two[method][0], one[method][0])
         np.testing.assert_array_equal(two[method][1], one[method][1])
-        np.testing.assert_allclose(two[method][2], one[method][2], rtol=1e-9)
+        # Each path's bands to a billionth of its strongest band: where a band's terms
+        # nearly cancel (8 kHz over the panel's top, 2000 times below the path's
+        # strongest band), the two forms' roundings part by 3e-10 of that band here and
+        # by 8e-8 on Windows.
+        scale = one[method][2].max(axis=1, keepdims=True)
+        assert (np.abs(two[method][2] - one[method][2]) <= 1e-9 * scale).all()
 
 
 def _touching(path: Path, gap: float, inward: bool) -> Path:
