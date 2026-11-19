@@ -2979,11 +2979,13 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"The way the wind blows to, in degrees counterclockwise from +x seen from "
-"above (0: along +x, 90: along +y)"
+"The direction the wind blows towards, not the one it comes from as weather "
+"reports give it: degrees counterclockwise from +x seen from above (0: along "
+"+x, 90: along +y)"
 msgstr ""
-"Waarheen de wind waait, in graden tegen de klok in vanaf +x, van bovenaf "
-"gezien (0: langs +x, 90: langs +y)"
+"De richting waarheen de wind waait, niet waar hij vandaan komt zoals "
+"weerberichten die geven: graden tegen de klok in vanaf +x van bovenaf gezien "
+"(0: langs +x, 90: langs +y)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "The height above the ground the wind's speed is at (m)"
@@ -3011,12 +3013,15 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"A change of temperature fastest near the ground (K, times ln(1 + height / "
-"roughness)): negative on a sunny day, positive on a clear night"
+"How much the temperature changes in the first metres above the ground: this "
+"value (K) times ln(1 + height / roughness), fast near the ground and slow "
+"higher up, on top of the linear gradient. Negative on a sunny day, positive "
+"on a clear night"
 msgstr ""
-"Een temperatuurverandering die vlak bij de grond het snelst is (K, maal ln(1 "
-"+ hoogte / ruwheid)): negatief op een zonnige dag, positief in een heldere "
-"nacht"
+"Hoeveel de temperatuur verandert in de eerste meters boven de grond: deze "
+"waarde (K) maal ln(1 + hoogte / ruwheid), snel bij de grond en langzaam "
+"hoger op, bovenop de lineaire gradiënt. Negatief op een zonnige dag, "
+"positief in een heldere nacht"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -3031,8 +3036,8 @@ msgid "Wind speed"
 msgstr "Windsnelheid"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Wind direction"
-msgstr "Windrichting"
+msgid "Wind direction (towards)"
+msgstr "Windrichting (waarheen)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Wind height"
@@ -3047,8 +3052,8 @@ msgid "Temperature gradient"
 msgstr "Temperatuurgradiënt"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Temperature near the ground"
-msgstr "Temperatuur bij de grond"
+msgid "Log temperature coefficient"
+msgstr "Logaritmische temperatuurcoëfficiënt"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Roughness"
@@ -3153,20 +3158,20 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"The eddies of the wind and of the temperature, which make sound outdoors "
-"flicker: the direct sound and its reflections stop adding in step (the dip "
-"of the ground fills in), sound is scattered into shadow zones, and renders "
-"and walkthroughs change as the eddies drift past. (none): steady air; weak, "
-"overcast with a light wind; moderate, a breeze and some sun; strong, a "
-"strong wind or a hot sun; custom, the values below"
+"Turbulence, the eddies of the wind and of the temperature, which make sound "
+"outdoors flicker: the direct sound and its reflections stop adding in step "
+"(the dip of the ground fills in), sound is scattered into shadow zones, and "
+"renders and walkthroughs change as the eddies drift past. (none): steady "
+"air; weak, overcast with a light wind; moderate, a breeze and some sun; "
+"strong, a strong wind or a hot sun; custom, the values below"
 msgstr ""
-"De wervelingen van de wind en van de temperatuur, die geluid buiten laten "
-"schommelen: het directe geluid en zijn reflecties tellen niet meer in fase "
-"op (de grondinzinking vult zich), geluid wordt in schaduwzones verstrooid, "
-"en beluisteringen en wandelingen veranderen terwijl de wervelingen "
-"voorbijdrijven. (geen): rustige lucht; zwak, bewolkt met een lichte wind; "
-"matig, een bries en wat zon; sterk, een harde wind of felle zon; aangepast, "
-"de waarden hieronder"
+"Turbulentie, de wervelingen van de wind en van de temperatuur, die geluid "
+"buiten laten schommelen: het directe geluid en zijn reflecties tellen niet "
+"meer in fase op (de grondinzinking vult zich), geluid wordt in schaduwzones "
+"verstrooid, en beluisteringen en wandelingen veranderen terwijl de "
+"wervelingen voorbijdrijven. (geen): rustige lucht; zwak, bewolkt met een "
+"lichte wind; matig, een bries en wat zon; sterk, een harde wind of felle "
+"zon; aangepast, de waarden hieronder"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -3224,28 +3229,28 @@ msgstr ""
 "felle zon"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Eddies"
+msgid "Turbulence"
 msgstr "Turbulentie"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Temperature eddies"
-msgstr "Turbulentie van de temperatuur"
+msgid "Temperature structure parameter C_T²"
+msgstr "Structuurparameter van de temperatuur C_T²"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Wind eddies"
-msgstr "Turbulentie van de wind"
+msgid "Wind structure parameter C_v²"
+msgstr "Structuurparameter van de wind C_v²"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Eddy size"
-msgstr "Grootte van de wervelingen"
+msgid "Outer scale"
+msgstr "Buitenschaal"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Eddies' height"
-msgstr "Hoogte van de turbulentie"
+msgid "Turbulence reference height"
+msgstr "Referentiehoogte van de turbulentie"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Weaker with height"
-msgstr "Zwakker met de hoogte"
+msgid "Height falloff exponent"
+msgstr "Exponent van de afname met de hoogte"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

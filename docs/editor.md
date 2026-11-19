@@ -255,7 +255,7 @@ with their heights, which can be changed, and buttons to add and remove them:
   the map's buildings** drops the file.
 
 The scene's own entry then has a **Wind and temperature** group: the weather, the wind,
-the temperature over the ground and their **Eddies** (see
+the temperature over the ground and their **Turbulence** (see
 [Turbulence](outdoor.md#turbulence)), with **Show the profile** to plot them.
 **Weather of** picks whose weather the fields show: the scene's, a
 [weather zone](outdoor.md#weather-zones)'s (**Add weather zone** draws one in the plan)
