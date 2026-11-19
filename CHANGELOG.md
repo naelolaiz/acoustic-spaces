@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed: a panel standing free in a room, drawn as two faces back to back, made the
+  model read as not closed: the faces' outer sides and the gap between them were spaces
+  of no volume of their own, which no room held, so the model had no volume and the
+  statistical late method refused it; with a material of its own on each side, the
+  panel's late part was 2.4 to 3.6 dB off its mirror image. It now sounds as the panel
+  drawn once, with its edges' diffraction too.
 - Added: a warning about thin slabs, faces narrower than 10 cm between two corners that
   bend sound (a desk screen or a door leaf drawn with its thickness), over which the
   early part has no path with `first_order` and `direct` and too low a one with
