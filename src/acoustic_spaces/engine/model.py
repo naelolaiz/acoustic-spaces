@@ -548,6 +548,33 @@ def _ground_faces(room: Room) -> np.ndarray:
     return ground[mesh.face_labels]
 
 
+#: How far from level (the z of a unit normal short of 1) a plane of the ground may be,
+#: and from upright (its z) a vertical wall, for :func:`plane_kinds`.
+_LEVEL = 1e-9
+
+
+def plane_kinds(model: TraceModel) -> np.ndarray | None:
+    """Outdoors, how the reflections off each plane count towards the early stage's
+    ``max_order`` (P,): 1 for a level plane of the ground's faces
+    (:func:`_ground_faces`), whose bounces count for none, 0 for a vertical wall and -1
+    for any other (a roof, a slope of a terrain), each of whose reflections counts. A
+    path off nothing but the ground and vertical walls is the early stage's with up to
+    ``max_order`` reflections off the walls and any bounces off the ground (from
+    ``max_order`` 1 on; one more than the walls at most, the ground being level), as
+    the ground's effect goes with every path (ISO 9613-2, Nord2000, CNOSSOS-EU); any
+    other with up to ``max_order`` reflections. None indoors,
+    where each reflection counts. The kind of a face is its plane's
+    (``plane_kinds(model)[model.face_plane]``), as the stochastic late tracer takes it
+    (``face_kind``) to leave those paths out."""
+    if model.room.outdoor is None:
+        return None
+    up = model.plane_normal[:, 2]
+    level = np.ones(model.plane_count, dtype=bool)
+    np.logical_and.at(level, model.face_plane, _ground_faces(model.room))
+    level &= np.abs(up) >= 1.0 - _LEVEL
+    return np.where(level, 1, np.where(np.abs(up) <= _LEVEL, 0, -1)).astype(np.int64)
+
+
 def _ground_parts(room: Room) -> tuple[np.ndarray, np.ndarray]:
     """For an outdoor scene whose ground has zones: (F,) the part of the ground each face
     lies in (0 outside the zones, then each zone; -1 for faces that are not the ground,

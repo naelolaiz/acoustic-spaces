@@ -20,7 +20,8 @@ boundary only, and deep in the shadow all the terms of an edge are one wave
 (:func:`~acoustic_spaces.engine.diffraction.transition`). All the edges of an event are
 one diffracted wave, as the edges round an opening are in the boundary diffraction wave
 (Rubinowicz, 1917): the terms whose paths over an edge run from the same image of the
-source to the same image of the listener, whatever the edge, so that round a narrow face
+source to the same image of the listener (the same planes' mirror on each side,
+:meth:`Clusters.diffracted`), whatever the edge, so that round a narrow face
 the two edges' terms nearly cancel as they do in pressure, and the many edges of a
 curved surface's facets add up to the surface's own reflection.
 
@@ -56,7 +57,8 @@ import numpy as np
 
 from acoustic_spaces import products
 
-#: Images closer than this, relative to the model's size, are the same.
+#: Images of the source closer than this, relative to the model's size, are the same,
+#: for the specular paths that do not carry their faces (:meth:`Clusters.geometric`).
 _STEP = 1e-5
 #: At most this many values (pieces times frequencies times points of the rule) at once.
 _VALUES = 1 << 22
@@ -122,8 +124,7 @@ def _malloc_trim() -> Callable[[int], int] | None:
 class Clusters:
     """The pieces of the waves that are one wave (see the module notes), in the bands
     where the early paths add in energy, whose slices are ``slice_hz`` (Hz) wide, for
-    sound at ``speed_of_sound``; images closer than :data:`_STEP` times ``size`` (m)
-    are the same."""
+    sound at ``speed_of_sound``, in a model of ``size`` (m)."""
 
     def __init__(self, slice_hz: np.ndarray, speed_of_sound: float, size: float) -> None:
         self.slice_hz = np.asarray(slice_hz, dtype=float)
@@ -139,22 +140,38 @@ class Clusters:
     def bands(self) -> int:
         return len(self.slice_hz)
 
-    def geometric(self, image: np.ndarray, order: np.ndarray) -> np.ndarray:
-        """The waves of the specular paths of ``order`` (n,) reflections whose image of
-        the source is ``image`` (n, 3)."""
+    def geometric(
+        self, mirrors: np.ndarray, order: np.ndarray, image: np.ndarray, with_faces: np.ndarray
+    ) -> np.ndarray:
+        """The waves of the specular paths of ``order`` (n,) reflections whose planes,
+        mirroring the source in turn, make the mirror ``mirrors`` (n, 12), as
+        :func:`~acoustic_spaces.engine.early._mirrors` gives it: paths whose planes make
+        another mirror are another wave, however near their images of the source lie (a
+        source right by two planes: in the one and in the other, or in the one and then
+        the other and the other way round). The paths without ``with_faces`` (n,), which
+        do not carry the faces they reflect off, are told apart by their image of the
+        source ``image`` (n, 3), in steps of :data:`_STEP` times the model's size."""
         image = np.asarray(image, dtype=float).reshape(-1, 3)
-        return self._keys(0, image, np.broadcast_to(order, len(image)))
+        order = np.broadcast_to(np.asarray(order, dtype=np.int64), len(image))
+        known = np.broadcast_to(np.asarray(with_faces, dtype=bool), len(image))
+        out = np.empty(len(image), dtype=np.int64)
+        out[known] = self._keys(0, np.reshape(mirrors, (len(image), -1))[known], order[known])
+        out[~known] = self._keys(2, np.round(image[~known] / self.step), order[~known])
+        return out
 
     def diffracted(self, source_side: np.ndarray, listener_side: np.ndarray) -> np.ndarray:
-        """The diffracted waves whose paths over an edge run from the image of the source
-        ``source_side`` (n, 3) to that of the listener ``listener_side`` (n, 3)."""
-        points = np.hstack(
-            [
-                np.asarray(source_side, dtype=float).reshape(-1, 3),
-                np.asarray(listener_side, dtype=float).reshape(-1, 3),
-            ]
+        """The diffracted waves whose paths over an edge run from the same image of the
+        source to the same image of the listener: whose planes on the source side,
+        mirroring the source in turn, make the mirror ``source_side`` (n, 12), and those
+        on the listener side, mirroring the listener in turn, ``listener_side`` (n, 12),
+        as :func:`~acoustic_spaces.engine.early._mirrors` gives them."""
+        count = len(source_side)
+        return self._keys(
+            1,
+            np.hstack(
+                [np.reshape(source_side, (count, -1)), np.reshape(listener_side, (count, -1))]
+            ),
         )
-        return self._keys(1, points)
 
     def private(self, count: int) -> np.ndarray:
         """``count`` waves of their own."""
@@ -162,10 +179,12 @@ class Clusters:
         self._private += count
         return out
 
-    def _keys(self, kind: int, points: np.ndarray, order=None) -> np.ndarray:
-        if len(points) == 0:
+    def _keys(self, kind: int, grid: np.ndarray, order=None) -> np.ndarray:
+        """The waves of ``kind`` (and of ``order`` (n,)) whose rows of whole numbers
+        ``grid`` (n, w) are the same, numbered as they come."""
+        if len(grid) == 0:
             return np.zeros(0, dtype=np.int64)
-        grid = np.round(points / self.step).astype(np.int64)
+        grid = np.asarray(grid).astype(np.int64)
         tag = np.full((len(grid), 1), kind, dtype=np.int64)
         if order is not None:
             tag = np.hstack([tag, np.asarray(order, dtype=np.int64).reshape(-1, 1)])
