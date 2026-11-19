@@ -1582,44 +1582,48 @@ place (x = -35 m; 0.37 dB(A) rms over the pass), the pavement's and the balcony'
 0.6 and 0.8 dB(A); their L_Amax came within 0.04 dB on the pavement and in the garden
 and 0.17 dB apart on the balcony.
 
-On the pavement, the balcony and `balcony_2m` the early level changes by at most 0.17,
-0.16 and 0.13 dB(A) from one 10 cm to the next, and in the garden by at most 1.39 dB(A),
+On the pavement, the balcony and `balcony_2m` the early level changes by at most 0.15,
+0.14 and 0.12 dB(A) from one 10 cm to the next, and in the garden by at most 1.40 dB(A),
 where 1 kHz swings by 2.5 dB at x = 28.8 m and does so smoothly 1 cm apart; without the
 fade the garden's level steps by up to 12.1 dB(A) from one 10 cm to the next. The steps
 left that stand out by more than 0.1 dB in some band 1 cm apart, but at 8 kHz, where a
 centimetre is a quarter of a wavelength and the level swings by up to 0.75 dB from one
-to the next (five more at 4 kHz in the garden, at x = 19.40, 19.51, 28.69, 28.72 and
-28.88 m, are swings too: in a one-off check 1 mm apart the level there changed by at most
-0.08 dB a millimetre at 4 kHz), each the step from 1 cm before x to x, and how far it
+to the next (four more at 4 kHz in the garden, at x = 19.51, 28.69, 28.72 and 28.88 m,
+are swings too: in a one-off check 1 mm apart the level there changed by at most 0.08 dB
+a millimetre at 4 kHz), each the step from 1 cm before x to x, and how far it
 stands out in dB(A) and in the same band without the fade (`validation/walks.py`):
 
 | car at x (m) | listener | stands out (dB) | in | dB(A) | without the fade (dB) |
 |---:|---|---:|---|---:|---:|
-| -41.39 | garden | 1.11 | 1 kHz | 0.55 | 0.00 |
-| -39.92 | balcony | 0.16 | 63 Hz | 0.00 | 0.00 |
-| -14.07 | garden | 0.80 | 125 Hz | 0.31 | 0.00 |
+| -41.39 | garden | 1.11 | 1 kHz | 0.52 | 0.00 |
+| -39.92 | balcony | 0.17 | 63 Hz | 0.01 | 0.00 |
+| -39.92 | garden | 0.41 | 63 Hz | 0.01 | 0.00 |
+| -14.07 | garden | 0.79 | 125 Hz | 0.30 | 0.00 |
 | 9.99 | garden | 0.83 | 63 Hz | 0.04 | 0.97 |
 | 10.01 | balcony_2m | 0.10 | 125 Hz | 0.00 | 0.08 |
-| 10.02 | garden | 1.05 | 63 Hz | 0.12 | 0.96 |
-| 14.28 | balcony_2m | 0.17 | 125 Hz | 0.00 | 0.04 |
-| 15.98 | balcony_2m | 0.16 | 125 Hz | 0.00 | 0.03 |
-| 16.01 | balcony_2m | 0.11 | 125 Hz | 0.00 | 0.03 |
-| 18.93 | balcony_2m | 0.17 | 125 Hz | 0.03 | 0.00 |
-| 25.31 | balcony | 0.14 | 63 Hz | 0.00 | 0.00 |
-| 37.20 | garden | 0.52 | 500 Hz | 0.02 | 0.00 |
-| 53.96 | pavement | 0.13 | 250 Hz | 0.00 | 0.04 |
+| 10.02 | garden | 1.05 | 63 Hz | 0.10 | 0.96 |
+| 14.28 | balcony_2m | 0.16 | 125 Hz | 0.00 | 0.04 |
+| 15.98 | balcony_2m | 0.15 | 125 Hz | 0.00 | 0.03 |
+| 18.93 | balcony_2m | 0.16 | 125 Hz | 0.03 | 0.00 |
+| 25.31 | balcony | 0.13 | 63 Hz | 0.00 | 0.00 |
+| 30.01 | garden | 1.28 | 63 Hz | 0.01 | 1.34 |
+| 37.20 | garden | 0.52 | 125 Hz | 0.02 | 0.00 |
+| 53.96 | pavement | 0.16 | 250 Hz | 0.01 | 0.05 |
+| 58.21 | pavement | 0.24 | 250 Hz | 0.00 | 0.00 |
+| 58.47 | pavement | 0.12 | 250 Hz | 0.00 | 0.00 |
 | 60.03 | balcony | 0.30 | 63 Hz | 0.05 | 0.00 |
-| 60.19 | balcony_2m | 0.33 | 63 Hz | 0.05 | 0.00 |
-| 60.70 | pavement | 0.29 | 250 Hz | 0.00 | 0.00 |
-| 63.10 | pavement | 0.21 | 63 Hz | 0.00 | 0.00 |
+| 60.19 | balcony_2m | 0.34 | 63 Hz | 0.05 | 0.00 |
+| 60.70 | pavement | 0.26 | 250 Hz | 0.00 | 0.00 |
+| 63.10 | pavement | 0.20 | 63 Hz | 0.00 | 0.00 |
 | 65.34 | balcony_2m | 0.22 | 500 Hz | 0.09 | 0.00 |
-| 66.62 | balcony | 0.15 | 63 Hz | 0.06 | 0.00 |
+| 66.62 | balcony | 0.16 | 63 Hz | 0.06 | 0.00 |
 
 The paths over the barrier's top and round its end at x = 44 m, the edge diffraction's
 own and the fade's terms of the same paths, fade out past the ends, as the barrier is a
 thin screen. The steps left are terms that still stop where the point they diffract at
 leaves the end of its edge (see [Known issues](#known-issues-of-the-edge-fade)), where
-traced (all but those at 9.99 to 10.02, 14.28, 53.96 and 63.10 m): mostly the fade's
+traced (all but those at -39.92 m in the garden, 9.99 to 10.02, 14.28, 30.01, 53.96,
+58.21, 58.47 and 63.10 m): mostly the fade's
 terms of second-order reflections that the barrier's top (x = 14 to 44 m), its end or a
 corner of the offices or the houses cuts off, which the edge diffraction (`first_order`)
 has no path for, and at 15.98 m the path over the houses' eaves, a solid wedge, at their
@@ -3437,26 +3441,24 @@ alone moves them:
 
 | Scene | Faces | Rays | Device | Late (s) | Level diff (dB) | Centre time diff (ms) |
 |---|---:|---:|---|---:|---:|---:|
-| open_air_stage | 12 | 50,000 | cpu, next seed | 0.59 | 4.21 | 6.0 |
-| open_air_stage | 12 | 50,000 | gpu | 20.21 | 0.02 | 0.2 |
-| tree_belt | 30 | 200,000 | cpu, next seed | 1.12 | 1.20 | 22.3 |
-| tree_belt | 30 | 200,000 | gpu | 33.30 | 1.29 | 13.0 |
-| hillside | 3,730 | 50,000 | cpu, next seed | 0.34 | 2.04 | 1.9 |
-| hillside | 3,730 | 50,000 | gpu | 11.49 | 1.88 | 1.6 |
+| open_air_stage | 12 | 50,000 | cpu, next seed | 1.01 | 4.21 | 6.0 |
+| open_air_stage | 12 | 50,000 | gpu | 2.33 | 0.02 | 0.2 |
+| tree_belt | 30 | 200,000 | cpu, next seed | 2.47 | 1.10 | 18.1 |
+| tree_belt | 30 | 200,000 | gpu | 13.30 | 1.02 | 10.8 |
+| hillside | 3,730 | 50,000 | cpu, next seed | 0.47 | 2.04 | 1.9 |
+| hillside | 3,730 | 50,000 | gpu | 1.95 | 0.83 | 1.0 |
 
-On SwiftShader, a software Vulkan driver on the container's 4 cores (the CPU runs took
-0.3 to 1.1 s), which shows that the two agree, not how fast a GPU is; `python
-validation/outdoor_gpu.py` times your own. The GPU rows are from that run, when the
-port was added; the CPU's next-seed rows come out the same with this version's code
-(the container that checked them has no GPU driver). The tree belt's rows are from when it traced its image sources to the first order; at the second, as it does now, the house's reflection keeps its ground partners, the late sound changes with it, and the next seed differs by 1.32 dB and 20.6 ms (seeds 1 and 2; its GPU row needs a run on a GPU). The tree belt's rays through its foliage and
-stems come out as far from the CPU's as the next seed's do. The stage in the wind
-agrees to 0.02 dB with the same seed, whose rays start where the CPU's do; the next
-seed starts them elsewhere and moves the late sound at the two listeners downwind by
-4.2 dB on average (upwind, in the wind's shadow, no late ray arrives in either run).
-The stage's eddies play no part in this: they act on the early paths only, and the
-script compares the late sound (without them the next seed differs by the same
-4.21 dB). On the hillside the GPU was 1.9 dB from the CPU in that run, against the
-next seed's 2.0 dB now: the listener in the shadow gets no late rays, the one on the crest about the
+On lavapipe, Mesa's software Vulkan driver (the one CI's Linux jobs use), on the
+container's 4 cores (the CPU runs took 0.4 to 2.5 s), which shows that the two agree,
+not how fast a GPU is; `python validation/outdoor_gpu.py` times your own. The tree
+belt's rays through its foliage and stems come out as far from the CPU's as the next
+seed's do. The stage in the wind agrees to 0.02 dB with the same seed, whose rays start
+where the CPU's do; the next seed starts them elsewhere and moves the late sound at the
+two listeners downwind by 4.2 dB on average (upwind, in the wind's shadow, no late ray
+arrives in either run). The stage's eddies play no part in this: they act on the early
+paths only, and the script compares the late sound (without them the next seed differs
+by the same 4.21 dB). On the hillside the GPU is 0.8 dB from the CPU, against the next
+seed's 2.0 dB: the listener in the shadow gets no late rays, the one on the crest about the
 same level from every run, and the one on the slope a level that moves by several
 decibels with the seed, so one run of each, as here, cannot tell the GPU's difference
 from the rays' noise there.
@@ -3923,9 +3925,9 @@ the edges alone:
 |---|---|---|---|
 | one screen | 9 | -0.15 to +0.47 | -0.87 to +0.54 |
 | one roof 10 m wide | 9 | -0.16 to +0.14 | -3.81 to +3.37 |
-| a roof 9 m wide and a screen 1 m past it | 9 | -0.60 to +1.23 | -6.22 to +5.41 |
-| two roofs 4 m wide, 2 m apart | 9 | -0.74 to +0.64 | -10.63 to +7.85 |
-| three screens | 9 | -3.42 to +0.07 | -11.30 to +4.52 |
+| a roof 9 m wide and a screen 1 m past it | 9 | -0.60 to +1.23 | -6.22 to +5.87 |
+| two roofs 4 m wide, 2 m apart | 9 | -0.74 to +0.64 | -10.63 to +8.03 |
+| three screens | 9 | -3.42 to +0.07 | -11.30 to +4.85 |
 
 The simulation gives the solver the early paths' eight frequencies in each octave band,
 as the solver's own check does. Against 72 in a band, at nine places behind one screen 3
@@ -5225,11 +5227,11 @@ cores of a cloud machine with nothing else running:
 
 | Buildings | Faces | Edges | Build (s) | Simulation (s) | Of it diffraction (s) | Pairs tested | Peak memory |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 100 | 1,012 | 800 | 0.1 | 3.1 | 2.1 | 8.5 % | 0.3 GB |
-| 400 | 4,012 | 3,200 | 0.4 | 7.0 | 6.4 | 4.3 % | 0.3 GB |
-| 900 | 9,012 | 7,200 | 1.0 | 12.9 | 12.1 | 2.9 % | 0.4 GB |
-| 1,600 | 16,012 | 12,800 | 2.1 | 17.9 | 16.9 | 2.7 % | 0.5 GB |
-| 3,600 | 36,012 | 28,800 | 5.3 | 48.1 | 46.7 | 3.3 % | 1.8 GB |
+| 100 | 1,012 | 800 | 0.1 | 3.6 | 2.5 | 8.5 % | 0.3 GB |
+| 400 | 4,012 | 3,200 | 0.4 | 8.0 | 7.1 | 4.3 % | 0.3 GB |
+| 900 | 9,012 | 7,200 | 1.0 | 14.8 | 13.5 | 2.9 % | 0.4 GB |
+| 1,600 | 16,012 | 12,800 | 1.9 | 18.8 | 17.2 | 2.7 % | 0.7 GB |
+| 3,600 | 36,012 | 28,800 | 5.2 | 49.9 | 46.3 | 3.3 % | 2.2 GB |
 
 Diffraction includes finding the model's edges and where they end, and the terms that
 make the other specular paths fade at the edges
@@ -5250,8 +5252,8 @@ grows with the edges alone.
 turned at random angles and paths that reflect on both sides of an edge. It runs two
 sources, one in a street and one over the roofs, to two listeners, once as the engine
 runs, on one thread and on every core, and once with every pair tested. Every path, its
-energy and its spectrum come out the same bit for bit; the early paths took 0.9 s
-instead of 3.0 s. When the culling was written, the same comparison over every example
+energy and its spectrum come out the same bit for bit; the early paths took 1.8 s
+instead of 3.6 s. When the culling was written, the same comparison over every example
 and three test cities, with paths reflecting on one side and on both sides of an edge
 and over two edges, found no difference either (a one-off check; the script repeats
 the 4 by 4 city). The tests check the culling against
@@ -6669,7 +6671,10 @@ measurements took 28 minutes (the cases already downloaded, without the plots), 
 long term 1.6 and the benchmark 93 (the sum of its parts, each timed alone); the others
 listed here do not reach that part of the engine. Since 11 November the ray tracer and the wave solver do less work on the
 CPU for the same results: the seminar room's BRAS run takes 10 to 12 % less, and of the
-others only the wave solver's checks were timed again.
+others only the wave solver's checks were timed again. Since 18 November the ground's
+bounces count for no order outdoors, which gives the early stage more paths to follow
+in streets and cities: the cities' run takes 36 s (1.9 minutes with `--sizes 10 20 30 40
+60`), each alone on the machine.
 The cross-check's numbers come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the
 onset in every response).
