@@ -2828,7 +2828,8 @@ def test_a_wave_is_told_apart_by_the_mirror_its_planes_make() -> None:
     for the two arms in the one order and the other (turned one way or the other about
     the bend), and for a sequence and the same without its last plane. ``_sequences``
     gives the planes of a search's paths in turn, from the source on, and none for
-    paths without a face for each reflection."""
+    paths without a face for each reflection or with more reflections than its width
+    (outdoors the ground's bounces come on top of max_order: wall, wall and ground)."""
     turn = math.radians(60.0)
     room = Room.from_scene(
         Scene.model_validate(
@@ -2882,13 +2883,17 @@ def test_a_wave_is_told_apart_by_the_mirror_its_planes_make() -> None:
     assert not same[0][3] and not same[3][4] and not same[3][6]
     paths = early_paths(room, diffraction="none")
     rows = np.flatnonzero(paths.order > 0)
-    sequence, carried = diffraction_module._sequences(model, paths, rows, 2)
+    width = int(paths.order.max())
+    assert width == 3
+    sequence, carried = diffraction_module._sequences(model, paths, rows, width)
     assert carried.all()
     for own, row in zip(sequence, rows, strict=True):
         planes = model.face_plane[paths.faces[row]].tolist()
-        assert own.tolist() == planes + [-1] * (2 - len(planes))
+        assert own.tolist() == planes + [-1] * (width - len(planes))
+    narrow = diffraction_module._sequences(model, paths, rows, width - 1)[1]
+    assert (narrow == (paths.order[rows] < width)).all() and not narrow.all()
     bare = dataclasses.replace(paths, faces=[])
-    assert not diffraction_module._sequences(model, bare, rows, 2)[1].any()
+    assert not diffraction_module._sequences(model, bare, rows, width)[1].any()
 
 
 def test_a_wave_s_path_reflects_off_its_planes() -> None:
