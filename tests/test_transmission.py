@@ -1335,9 +1335,9 @@ def test_the_face_nearest_to_a_point_in_a_doorway_is_the_wall_beside_it(
     tmp_path: Path,
 ) -> None:
     """The edge fade gives a reflection off its faces, next to the leg that stops its
-    path, the face of its plane nearest to the point. In a doorway that is the wall
-    beside it, as an opening reflects nothing; it had been the doorway, which the point
-    lies in and which absorbs all sound."""
+    path, the face of its plane nearest to the point that the path meets from the front.
+    In a doorway that is the wall beside it, as an opening reflects nothing; it had been
+    the doorway, which the point lies in and which absorbs all sound."""
     scene = _scene(
         _doorway(tmp_path / "doorway.obj"),
         {"hard": _flat(0.05), "open": {"transmission": 1}},
@@ -1347,7 +1347,7 @@ def test_the_face_nearest_to_a_point_in_a_doorway_is_the_wall_beside_it(
     model = TraceModel.from_room(Room.from_scene(scene))
     point = np.array([5.5, 0.0, 1.5])
     plane = model.face_plane[np.flatnonzero(model.transparent)[0]]
-    face = _nearest_face(model, plane, point)
+    face = _nearest_face(model, np.array([plane]), point, np.array([5.0, 4.0, 1.5]))
     assert not model.transparent[face]
     assert model.room.mesh.triangles[face][:, 0].min() == 6.0  # the wall from x = 6 on
 

@@ -93,6 +93,32 @@ def _plants(room: Room, bands: Resolution):
     return Plants.of(room, bands, room.speed_of_sound())
 
 
+def _places(keys: np.ndarray) -> np.ndarray:
+    """(n,) the place of each row of ``keys`` (a plane's normal and offset in whole
+    multiples of :data:`PLANE_TOLERANCE`), numbered in the order of the rows' sorted
+    keys: rows whose keys are at most one apart in every number share one, also through
+    others, so that two planes nearer than the tolerance are one whichever side of a
+    rounding step either falls on."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    from scipy.spatial import cKDTree
+
+    unique, inverse = np.unique(keys, axis=0, return_inverse=True)
+    inverse = inverse.reshape(-1)
+    count = len(unique)
+    if count < 2:
+        return inverse
+    pairs = cKDTree(unique).query_pairs(1.5, p=np.inf, output_type="ndarray")
+    if len(pairs) == 0:
+        return inverse
+    graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(count, count))
+    label = connected_components(graph, directed=False)[1]
+    lowest = np.full(count, count, dtype=np.int64)
+    np.minimum.at(lowest, label, np.arange(count))
+    place = np.unique(lowest[label], return_inverse=True)[1].reshape(-1)
+    return place[inverse]
+
+
 @dataclass
 class TraceModel:
     room: Room
@@ -222,7 +248,7 @@ class TraceModel:
             # way the wall faces.
             walls = int((~both).sum())
             rows = np.concatenate([keys[~both], keys[both], -keys[both]])
-            label = np.unique(rows, axis=0, return_inverse=True)[1].reshape(-1)
+            label = _places(rows)
             wall = np.zeros(int(label.max()) + 1, dtype=bool)
             wall[label[:walls]] = True
             same, opposite = wall[label[walls:]].reshape(2, -1)
@@ -231,8 +257,12 @@ class TraceModel:
             normals = np.where(turn[:, None], -normals, normals)
             offsets = np.where(turn, -offsets, offsets)
             keys = np.where(turn[:, None], -keys, keys)
-        _, first, face_plane = np.unique(keys, axis=0, return_index=True, return_inverse=True)
-        face_plane = face_plane.reshape(-1)
+        # One plane for the faces in one place that face one way, as geometric_plane
+        # joins planes, on either side of a rounding step: its normal and offset are
+        # those of its first face.
+        face_plane = _places(keys)
+        first = np.full(int(face_plane.max(initial=-1)) + 1, len(face_plane), dtype=np.int64)
+        np.minimum.at(first, face_plane, np.arange(len(face_plane)))
         two_sided = np.zeros(len(first), dtype=bool)
         np.logical_or.at(two_sided, face_plane, both)
 
@@ -331,9 +361,9 @@ class TraceModel:
     def face_spread(self) -> np.ndarray:
         """(F,) the largest distance (m) of a vertex of each face from its plane
         (``face_plane``); 0 where all lie within :attr:`height_error` of it. Faces whose
-        normals and offsets round to the same multiples of :data:`PLANE_TOLERANCE` make
-        one plane, the plane of the first of them, without lying in it exactly (worked out
-        once)."""
+        normals and offsets round to multiples of :data:`PLANE_TOLERANCE` at most one
+        apart make one plane, the plane of the first of them, without lying in it exactly
+        (worked out once)."""
         normal = self.plane_normal[self.face_plane]
         heights = np.einsum("fvk,fk->fv", self.room.mesh.triangles, normal)
         heights = np.abs(heights - self.plane_offset[self.face_plane, None]).max(axis=1)
