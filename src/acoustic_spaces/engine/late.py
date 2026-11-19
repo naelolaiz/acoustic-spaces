@@ -195,9 +195,11 @@ def receiver_radius(
 
 def _exchange(model: TraceModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Each room's surface area (rooms,), absorption area (bands, rooms) and the area
-    that passes sound from one room to another (bands, rooms, rooms), what passes
-    counted as absorbed on its side. A face counts for the room on each of its sides,
-    and one standing in a room twice."""
+    that passes sound from one room to another (bands, rooms, rooms; [to, from]), what
+    passes counted as absorbed on its side. A face counts for the room on each of its
+    sides, and one standing in a room twice; it passes the sound of the room on each of
+    its sides into the room beyond it (:attr:`TraceModel.face_beyond`), so a wall
+    between two rooms passes it both ways, drawn once or once for each room."""
     rooms = len(model.room_volumes)
     bands = model.absorption.shape[1]
     area = model.room.mesh.face_areas()
@@ -210,12 +212,13 @@ def _exchange(model: TraceModel) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         np.add.at(absorbed.T, face_room[ok, side], area[ok, None] * model.absorption[ok])
     passing = np.zeros((bands, rooms, rooms))
     if model.transmission is not None:
-        between = (face_room >= 0).all(axis=1)
-        share = (area[between, None] * model.transmission[between]).T  # (bands, faces)
-        one, two = face_room[between, 0], face_room[between, 1]
-        for b in range(bands):
-            np.add.at(passing[b], (one, two), share[b])
-            np.add.at(passing[b], (two, one), share[b])
+        beyond = model.face_beyond
+        for side in (1, 0):
+            into, out = beyond[:, 1 - side], face_room[:, side]
+            ok = (out >= 0) & (into >= 0)
+            share = (area[ok, None] * model.transmission[ok]).T  # (bands, faces)
+            for b in range(bands):
+                np.add.at(passing[b], (into[ok], out[ok]), share[b])
     return surface, absorbed, passing
 
 
@@ -413,9 +416,10 @@ def _in_batches(
 
 
 def _rooms(model: TraceModel, source: np.ndarray, air: np.ndarray, points) -> tuple:
-    """The tracer's transmission arguments for a source: face_room, source_room and
-    room_level, and whether each of ``points`` (listeners or map points) lies in the
-    source's room (None when there is nothing to tell apart)."""
+    """The tracer's transmission arguments for a source: face_room (the room that sound
+    passing each face reaches on either side, :attr:`TraceModel.face_beyond`),
+    source_room and room_level, and whether each of ``points`` (listeners or map points)
+    lies in the source's room (None when there is nothing to tell apart)."""
     if model.transmission is None or len(model.room_volumes) == 0:
         return np.zeros((0, 2), dtype=np.int64), -1, np.zeros(0), None
     source_room = int(model.room.room_of(np.asarray(source, float)[None])[0])
@@ -423,7 +427,7 @@ def _rooms(model: TraceModel, source: np.ndarray, air: np.ndarray, points) -> tu
     own = None
     if len(level):
         own = model.room.room_of(points) == source_room
-    return np.ascontiguousarray(model.face_room, dtype=np.int64), source_room, level, own
+    return np.ascontiguousarray(model.face_beyond, dtype=np.int64), source_room, level, own
 
 
 def band_groups(model: TraceModel) -> list[slice]:

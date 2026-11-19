@@ -136,6 +136,55 @@ def test_bvh_layout_holds_the_tree_and_every_face_once() -> None:
         assert np.all(lo[children] >= lo[node]) and np.all(hi[children] <= hi[node])
 
 
+def test_bvh_meets_the_face_whose_own_side_a_ray_comes_from() -> None:
+    """A square drawn twice in one place, once facing each way (a wall drawn once for each
+    of the rooms either side of it): with each face's own side set, a ray from either side
+    meets the face whose own side it comes from, whichever order the faces are in; a face
+    nearer by more than the least distance still comes first, and the faces' own sides
+    reach the layout."""
+    from acoustic_spaces import _native
+
+    square = np.array([[0.0, 0, 0], [0, 1, 0], [0, 1, 1], [0, 0, 1]])
+    up = np.array([[0, 1, 2], [0, 2, 3]])  # facing +x
+    rng = np.random.default_rng(7)
+    n = 500
+    yz = rng.uniform(0.05, 0.95, (n, 2))
+    sides = {
+        -1.0: (np.column_stack([np.full(n, -1.0), yz]), [1.0, 0.0, 0.0]),
+        1.0: (np.column_stack([np.full(n, 1.0), yz]), [-1.0, 0.0, 0.0]),
+    }
+    for faces in (np.vstack([up, up[:, ::-1]]), np.vstack([up[:, ::-1], up])):
+        normal_x = np.cross(*(square[faces[:, k]] - square[faces[:, 0]] for k in (1, 2)))[:, 0]
+        bvh = _native.Bvh(square, faces)
+        for own in (1, -1):  # the front (normals into the rooms) or the back (out of them)
+            bvh.set_facing(np.full(4, own, dtype=np.int8))
+            assert bvh.has_facing
+            for x, (origins, direction) in sides.items():
+                directions = np.tile(direction, (n, 1))
+                t, face = bvh.intersect(origins, directions, np.full(n, 10.0), np.full(n, -1))
+                np.testing.assert_allclose(t, 1.0)
+                # The face whose own side looks towards the ray's origin.
+                assert np.all(np.sign(normal_x[face]) * own == np.sign(x))
+            layout = bvh.layout()
+            np.testing.assert_array_equal(layout["facing"], np.full(4, own))
+        bvh.set_facing(np.zeros(4, dtype=np.int8))
+        assert not bvh.has_facing
+        np.testing.assert_array_equal(bvh.layout()["facing"], np.zeros(4))
+    # A face in front of the two, nearer by far more than the least distance, comes first.
+    vertices = np.vstack([square, square + [-0.5, 0.0, 0.0]])
+    faces = np.vstack([up, up[:, ::-1], up + 4])
+    bvh = _native.Bvh(vertices, faces)
+    bvh.set_facing(np.array([-1, -1, -1, -1, 0, 0], dtype=np.int8))
+    origins, direction = sides[-1.0]
+    t, face = bvh.intersect(origins, np.tile(direction, (n, 1)), np.full(n, 10.0), np.full(n, -1))
+    np.testing.assert_allclose(t, 0.5)
+    assert np.all(face >= 4)
+    with pytest.raises(ValueError, match="-1, 0 or 1"):
+        bvh.set_facing(np.full(6, 2, dtype=np.int8))
+    with pytest.raises(ValueError, match="one value per face"):
+        bvh.set_facing(np.zeros(5, dtype=np.int8))
+
+
 def test_bvh_occluded_agrees_with_the_nearest_hit() -> None:
     from acoustic_spaces import _native
 

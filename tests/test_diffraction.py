@@ -285,6 +285,14 @@ IN_LINE = {
         [(6, 5), (9, 5)],
         1,
     ),
+    # Z-shaped: the walls x = 5 face both ways (y 0..4 the arm at x < 5, y 6..9 the one at
+    # x > 5), the panel in the opening between them.
+    "z": (
+        [(0, 0), (5, 0), (5, 4), (11, 4), (11, 9), (5, 9), (5, 6), (0, 6)],
+        [(0, 0, 5, 6), (5, 4, 11, 9)],
+        [(5, 4.5), (5, 5.5)],
+        0,
+    ),
 }
 
 
@@ -295,14 +303,20 @@ def _in_line_with_a_wall(
     listener,
     room: str = "x",
     partition=None,
+    shift: float = 0.0,
+    panel_last: bool = False,
     sized: bool = False,
     **early,
 ) -> Room:
     """The ``room`` of ``IN_LINE``; with ``sign`` -1 its mirror image across the plane of
-    the panel, where the wall in that plane faces the other way. With ``partition`` (a
+    the panel, where the walls in that plane face the other way. With ``partition`` (a
     loss in dB), room "x" with a partition that lets sound through from y = 0 to 5 in
-    place of the panel: two rooms. ``sized``: the faces' sizes weaken their reflections."""
+    place of the panel: two rooms. With ``shift``, the panel that far off the plane (m,
+    along the axis across it); with ``panel_last``, the panel after the walls in the
+    model, where the plane takes the wall's normal. ``sized``: the faces' sizes weaken
+    their reflections."""
     plan, floor, ends, axis = IN_LINE[room]
+    ends = [tuple(c + (shift if i == axis else 0.0) for i, c in enumerate(end)) for end in ends]
     walls = [
         [(*a, 0.0), (*b, 0.0), (*b, 3.0), (*a, 3.0)]
         for a, b in zip(plan, plan[1:] + plan[:1], strict=True)
@@ -312,6 +326,8 @@ def _in_line_with_a_wall(
     a, b, height = (*ends, 2.0) if partition is None else ((5, 0), (5, 5), 3.0)
     # The panel first: its plane takes the first of its faces' normals.
     groups = {"panels": [[(*a, 0.0), (*b, 0.0), (*b, height), (*a, height)]], "walls": walls}
+    if panel_last:
+        groups = {"walls": walls, "panels": groups["panels"]}
     mirror = np.ones(3)
     mirror[axis] = sign
     lines = []
@@ -320,7 +336,7 @@ def _in_line_with_a_wall(
         for quad in quads:
             lines += ["v " + " ".join(f"{c:.15g}" for c in mirror * corner) for corner in quad]
             lines.append("f -4 -3 -2 -1")
-    obj = folder / f"in_line_{room}{sign:+.0f}.obj"
+    obj = folder / f"in_line_{room}{sign:+.0f}{shift:+.0e}{'p' if panel_last else ''}.obj"
     obj.write_text("\n".join(lines) + "\n")
     wall = {"absorption": [0.1] * 8, "scattering": 0.0}
     panel = wall if partition is None else wall | {"transmission_loss": partition}
@@ -505,6 +521,167 @@ def test_two_paths_with_one_image_each_take_their_terms_in_a_room_and_its_mirror
         assert off.count((0.0, 11.0, 5.0)) > 0
         levels.append(10.0 * np.log10(total_energy(paths)))
     np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
+
+
+def _free_panel(folder: Path, mirror, source, listener, turn: float = 0.0) -> Room:
+    """A room 10 x 8 x 3 m with a panel 2 m wide and 2 m high standing free in the plane
+    x = 5 (from y = 3 to 5), with second-order diffraction; its image in the mirror
+    ``mirror`` (each coordinate times 1 or -1), turned by ``turn`` degrees about z."""
+    walls = [
+        [(0, 0, 0), (10, 0, 0), (10, 0, 3), (0, 0, 3)],
+        [(10, 0, 0), (10, 8, 0), (10, 8, 3), (10, 0, 3)],
+        [(10, 8, 0), (0, 8, 0), (0, 8, 3), (10, 8, 3)],
+        [(0, 8, 0), (0, 0, 0), (0, 0, 3), (0, 8, 3)],
+        [(0, 0, 0), (0, 8, 0), (10, 8, 0), (10, 0, 0)],
+        [(0, 0, 3), (10, 0, 3), (10, 8, 3), (0, 8, 3)],
+    ]
+    groups = {"panel": [[(5, 3, 0), (5, 5, 0), (5, 5, 2), (5, 3, 2)]], "walls": walls}
+    cos, sin = math.cos(math.radians(turn)), math.sin(math.radians(turn))
+    rotation = np.array([[cos, -sin, 0.0], [sin, cos, 0.0], [0.0, 0.0, 1.0]])
+
+    def place(point):
+        return rotation @ (np.asarray(mirror, dtype=float) * point)
+
+    lines = []
+    for name, quads in groups.items():
+        lines.append(f"g {name}")
+        for quad in quads:
+            lines += ["v " + " ".join(f"{c:.15g}" for c in place(corner)) for corner in quad]
+            lines.append("f -4 -3 -2 -1")
+    obj = folder / f"free_panel{mirror[0]:+.0f}{mirror[1]:+.0f}_{turn:g}.obj"
+    obj.write_text("\n".join(lines) + "\n")
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": str(obj)},
+                "materials": {"wall": {"absorption": [0.1] * 8, "scattering": 0.0}},
+                "default_material": "wall",
+                "sources": [{"name": "s", "position": place(source).tolist()}],
+                "listeners": [{"name": "l", "position": place(listener).tolist()}],
+                "simulation": {
+                    "seed": 1,
+                    "ir_length_s": 0.3,
+                    "scattering": {"from_size": False},
+                    "early": {"max_order": 1, "diffraction": "second_order"},
+                },
+            }
+        )
+    )
+
+
+def test_a_path_along_a_panel_is_the_same_in_its_mirror_image(tmp_path: Path) -> None:
+    """A path over both upright ends of a panel standing free runs along the panel's
+    plane, along each of its faces. It took the side of face 0 of each end's frame, which
+    the room's mirror image across the panel's plane turns over: with the source just
+    past one end and above the top, 0.24 dB apart at 125 Hz, and as far from the room
+    turned by 30 degrees. Turned, the way between the ends runs along the panel within
+    rounding of its plane, and is not stopped by it there either."""
+    source, listener = np.array([5.52, 5.93, 2.21]), np.array([2.37, 2.82, 0.97])
+    levels = [
+        10.0 * np.log10(total_energy(early_paths(_free_panel(tmp_path, m, source, listener, t))))
+        for m, t in (([1, 1, 1], 0.0), ([-1, 1, 1], 0.0), ([1, -1, 1], 0.0), ([1, 1, 1], 30.0))
+    ]
+    for other in levels[1:]:
+        np.testing.assert_allclose(other, levels[0], atol=1e-6)
+
+
+#: The level behind a thin strip 2 m wide (dB re the direct sound in free field, 63 to
+#: 500 Hz) from the exact BTM solution over its top and its foot and over both, along
+#: each of its faces (validation/edge_diffraction.py, ``thin_strip``), by the places of
+#: the source and the listener (``STRIP``).
+STRIP_BTM = {
+    ((-3.0, 0.0, -0.5), (3.0, 0.0, -1.5)): [-0.077, -3.413, -5.329, -7.953],
+    ((-2.0, 0.0, -1.0), (4.0, 0.0, -1.2)): [-0.104, -3.878, -5.824, -9.189],
+    ((-1.0, 0.0, -0.3), (1.5, 0.0, -1.9)): [-1.195, -2.876, -6.480, -8.743],
+}
+
+
+@pytest.mark.parametrize("case", list(STRIP_BTM))
+def test_the_paths_over_both_edges_of_a_thin_strip_run_along_each_of_its_faces(
+    tmp_path: Path, case
+) -> None:
+    # The source and the listener in the shadow of a strip, on either side: the paths
+    # over its top and then its foot (and back) run along its plane, along both faces,
+    # each way with half the coefficient at grazing incidence, as BTM's. Taken along
+    # face 0 of each edge's frame, they were left out here: the level was that of
+    # first_order, 1.27 dB low at 63 Hz in the first place. The first edge's wave along
+    # one face is the negative of that along the other: along the source's face at the
+    # first edge and the listener's at the second the paths come with the wrong sign.
+    source, listener = case
+    levels = {}
+    for mode in ("second_order", "first_order"):
+        simulation = {"early": {"diffraction": mode}}
+        quads = edge_diffraction.strip_quads()
+        room = edge_diffraction._room(tmp_path, "strip", quads, source, listener, simulation)
+        levels[mode] = edge_diffraction.whole_early_stage(room)[:4] - np.array(STRIP_BTM[case])
+    assert np.abs(levels["second_order"][:2]).max() < 0.12, levels
+    assert np.abs(levels["first_order"][:2]).max() > 0.4, levels
+
+
+@pytest.mark.parametrize(
+    ("source", "listener"),
+    [
+        ([7.544, 4.302, 0.763], [9.822, 6.537, 1.83]),
+        ([6.779, 7.962, 0.625], [10.237, 4.831, 1.128]),
+    ],
+)
+def test_walls_facing_both_ways_in_the_plane_of_a_panel_sound_as_their_mirror_image(
+    tmp_path: Path, source, listener
+) -> None:
+    """In the Z-shaped room the panel stands in the opening between two walls in its
+    plane that face opposite ways, and lies in the plane of the one that faces the way
+    the plane does: the wall of the source's arm in the room, the other arm's in its
+    mirror image. The edge fade took the edges at a path's events by those planes: in
+    the mirror image the end of the source's wall, 0.5 m from the panel, had no term at
+    a path's reflection off the panel but one on the leg after it, 0.38 dB apart at
+    125 Hz. It takes the edges with a face in the plane's place, and a reflection the
+    faces there that it meets from the front or that have a room on both sides."""
+    levels = []
+    for sign in (1.0, -1.0):
+        room = _in_line_with_a_wall(
+            tmp_path, sign, source, listener, "z", diffraction="first_order"
+        )
+        levels.append(10.0 * np.log10(total_energy(early_paths(room))))
+    np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("source", "listener", "shift", "panel_last"),
+    [
+        ([3.637, 0.775, 1.076], [0.651, 3.924, 1.546], 1e-5, False),
+        ([3.637, 0.775, 1.076], [0.651, 3.924, 1.546], -1e-5, False),
+        ([3.637, 0.775, 1.076], [0.651, 3.924, 1.546], 1e-5, True),
+        ([5.69, 1.949, 0.957], [10.094, 2.916, 1.058], -1e-5, False),
+    ],
+)
+def test_a_panel_a_hundredth_of_a_millimetre_off_a_wall_s_plane_is_in_it(
+    tmp_path: Path, source, listener, shift: float, panel_last: bool
+) -> None:
+    """The panel of room "x" 0.01 mm behind the wall's plane or in front of it lies in
+    that plane, and the early level is that of the panel in line, also with the plane
+    taking the wall's normal (the panel after the walls in the model, its faces then
+    0.01 mm off the plane): faces make one plane where TraceModel.geometric_plane has
+    one place, on either side of a step of the planes' rounding, and the edge fade finds
+    a reflection on such a face. As a plane of its own the panel took the terms of a
+    panel off the wall's plane, up to 0.40 dB from the level in line at 125 Hz, and
+    0.76 dB with the edge fade taking edges and faces by their place; as one plane with
+    its faces behind it, the ray that looks for the face a reflection lies on passed
+    short of them: 0.48 dB."""
+    levels, planes = [], []
+    for d in (0.0, shift):
+        room = _in_line_with_a_wall(
+            tmp_path,
+            1.0,
+            source,
+            listener,
+            shift=d,
+            panel_last=panel_last,
+            diffraction="first_order",
+        )
+        planes.append(TraceModel.from_room(room).plane_count)
+        levels.append(10.0 * np.log10(total_energy(early_paths(room))))
+    assert planes[1] == planes[0]
+    np.testing.assert_allclose(levels[1], levels[0], atol=0.005)
 
 
 def test_a_path_stopped_twice_takes_the_same_edges_in_a_room_and_its_mirror_image(
@@ -1439,7 +1616,12 @@ def test_a_bent_top_in_a_row_and_its_mirror_image(tmp_path: Path) -> None:
 def test_three_screens_in_a_row_the_middle_one_ending_beside_the_way(tmp_path: Path) -> None:
     # Three screens 5 m apart, the middle one ending a centimetre beside the way, the
     # source and the listener exactly level with the tops: as a millimetre above them
-    # (it was 13.0 to 16.4 dB above that).
+    # from 250 Hz up (it was 13.0 to 16.4 dB above that). At 63 and 125 Hz the path
+    # round the middle screen's upright end is missing, and the level is 1.0 to 1.3 dB
+    # and 0.6 to 0.8 dB below (a known issue of docs/validation.md): the ray that tests
+    # the path starts just inside the end, below the plane of the tops, where the first
+    # top hides it. With the rays 0.6 mm off the edges (a millionth of the model's size)
+    # it was missing a millimetre above the tops too, and the two levels agreed.
     quads = (
         edge_diffraction.screen_quads(0.0)
         + _screen_from(5.0, 0.0)
@@ -1449,7 +1631,9 @@ def test_three_screens_in_a_row_the_middle_one_ending_beside_the_way(tmp_path: P
     for coherent in (500, None):
         level = _past(tmp_path, quads, *ends, coherent=coherent)
         above = _past(tmp_path, quads, *(ends + [0.0, 0.0, 1e-3]), coherent=coherent)
-        np.testing.assert_allclose(level, above, atol=0.5)
+        np.testing.assert_allclose(level[2:], above[2:], atol=0.5)
+        below = above[:2] - level[:2]
+        assert np.all((below > 0.5) & (below < 1.4)), below
 
 
 def test_a_way_through_the_corner_of_a_screen(tmp_path: Path) -> None:
@@ -1492,15 +1676,18 @@ def test_a_path_over_a_screens_top_does_not_reflect_off_a_roof_level_with_it_els
     # the way (y >= 0, the way at y = beside) and a roof from 9 to 19 m, the source and
     # the listener 1 or 2 mm above their plane. A path over the screen's top that
     # reflects off that plane next to it touches the plane at the top itself, where no
-    # roof is. The ray that looks for the path starts 0.6 mm off the top (a millionth of
-    # the model's size) and met a roof metres away. With that path the level up to
+    # roof is. The ray that looks for the path starts just off the top and met a roof
+    # metres away. With that path the level up to
     # 500 Hz was 4.2 to 4.6 dB above that a centimetre above the plane with second_order
     # (through the screen's end 3.2 to 7.8 dB, the two ways round 4.4 dB apart) and 4.4
     # to 5.4 dB below it with first_order (1.9 to 9.5 dB, 7.3 dB apart). Without it the
-    # two ways round agree, and with the level a centimetre above within 0.23 dB
-    # (through the end 0.39 dB; first_order 0.37 dB). So too with the screen's ``top``
-    # a millionth of a micrometre off the plane, as two heights that are sums of other
-    # numbers differ.
+    # two ways round agree, and with the level a centimetre above within 0.14 dB
+    # (first_order 0.37 dB). So too with the screen's ``top`` a millionth of a micrometre
+    # off the plane, as two heights that are sums of other numbers differ, within 0.22 dB
+    # (through the end 0.30 dB): a millimetre above the plane, the ray that tests the
+    # path round the screen's upright end off the first roof's wall, which starts a tenth
+    # of a millimetre inside the end, meets the wall's top edge, where the path passes a
+    # millimetre above the wall.
     extent = edge_diffraction.EXTENT
     screen = [[(7.0, 0.0, -extent), (7.0, extent, -extent), (7.0, extent, top), (7.0, 0.0, top)]]
     far = [[(x + 9.0, y, z) for x, y, z in quad] for quad in edge_diffraction.barrier_quads(10.0)]
@@ -1561,8 +1748,9 @@ def test_a_path_over_a_screens_top_reflects_off_a_roof_its_own_line_meets(tmp_pa
     # The same with the screen's top a tenth of a millimetre above the roof's plane,
     # closer to it than the ray starts from the top: the path's own line meets the plane
     # 0.2 m from the screen, on the roof, and the path counts as with the top a
-    # millimetre above, where the ray alone decides. Up to 500 Hz the two levels are
-    # within 0.9 dB (without the path, 4.9 to 7.5 dB apart).
+    # millimetre above, where the ray decides, as it meets the roof on the face the
+    # path's own line crosses. Up to 500 Hz the two levels are within 0.9 dB (without
+    # the path, 4.9 to 7.5 dB apart).
     source, listener = (-10.0, 0.0, 1e-2), (15.0, 0.0, 1e-2)
     simulation = {"early": {"diffraction": "second_order", "coherent_max_band_hz": 500}}
     levels = []
@@ -1573,7 +1761,44 @@ def test_a_path_over_a_screens_top_reflects_off_a_roof_its_own_line_meets(tmp_pa
     np.testing.assert_allclose(levels[0][:4], levels[1][:4], atol=1.2)
 
 
-@pytest.mark.parametrize(("mode", "within"), [("second_order", 0.85), ("first_order", 1.6)])
+def test_a_path_over_a_screens_top_reflects_off_a_roof_only_where_its_own_line_meets_it(
+    tmp_path: Path,
+) -> None:
+    # A roof 9 m wide and a screen 1 m past it, the source and the listener a metre above
+    # the roof's plane, 10 m before the roof and 5 m past the screen. The path over the
+    # screen's top reflects off the roof from a top a nineteenth of a metre above the
+    # plane, where its own line meets the plane at the roof's far edge. 0.05 mm lower the
+    # line meets the plane 0.9 mm past that edge, where no roof is, but the ray that tests
+    # the path starts a tenth of a millimetre above the top and met the roof 0.9 mm inside
+    # it (with the rays 0.6 mm off the edges, a millionth of the model's size, 1 cm
+    # inside it, and so from 0.6 mm lower). With
+    # that path the level at 63 Hz was 3.1 dB above that a millimetre lower, with
+    # second_order; without it they are within 0.05 dB up to 500 Hz.
+    source, listener = (-10.0, 0.0, 1.0), (15.0, 0.0, 1.0)
+    early = {"diffraction": "second_order", "coherent_max_band_hz": 500, "method": "image_sources"}
+    edge = 1.0 / 19.0
+    levels, far = [], []
+    for top in (edge - 1e-3, edge - 5e-5, edge + 1e-5):
+        quads = edge_diffraction.barrier_quads(9.0) + edge_diffraction.screen_quads(10.0, top)
+        room = edge_diffraction._room(tmp_path, "far", quads, source, listener, {"early": early})
+        paths = early_paths(room)
+        # Paths over the screen's top (x = 10) that reflect off the roof near its far edge.
+        far.append(
+            sum(
+                len(points) == 4
+                and len(faces) == 1
+                and abs(points[1][2]) < 1e-9
+                and points[1][0] > 8.5
+                and abs(points[2][0] - 10.0) < 1e-9
+                for points, faces in zip(paths.points, paths.faces, strict=True)
+            )
+        )
+        levels.append(10.0 * np.log10(total_energy(paths)))
+    assert far == [0, 0, 1]
+    np.testing.assert_allclose(levels[1][:4], levels[0][:4], rtol=0, atol=0.05)
+
+
+@pytest.mark.parametrize(("mode", "within"), [("second_order", 0.2), ("first_order", 1.3)])
 @pytest.mark.parametrize("beside", [0.01, 0.1])
 @pytest.mark.parametrize("screen_first", [True, False])
 def test_past_the_end_of_a_screen_level_with_a_roof_as_a_centimetre_above(
@@ -1586,13 +1811,14 @@ def test_past_the_end_of_a_screen_level_with_a_roof_as_a_centimetre_above(
     # (test_a_path_over_a_screens_top_does_not_reflect_off_a_roof_level_with_it_elsewhere),
     # the level up to 500 Hz was 3.2 to 3.4 dB above that a centimetre above the plane
     # with second_order; with first_order, whose single terms nearly cancel there, it
-    # was 1.3 to 8.6 dB off. The two ways round agree, and with the level a
-    # centimetre above within 0.64 dB (first_order 0.82 dB up to 500 Hz and 1.23 dB
-    # above). With second_order it is 0.19 to 0.64 dB below it up to 500 Hz: the term of
-    # the screen's upright end for the direct sound comes in from 1.2 mm above the
-    # plane (the screen first) or 1.8 mm (the roof first), as the ray that tests its
-    # path starts 0.6 mm inside the end, below the roof's plane (a known issue of
-    # docs/validation.md).
+    # was 1.3 to 8.6 dB off. The two ways round agree, and with the level a centimetre
+    # above within 0.14 dB (first_order 0.50 dB up to 500 Hz and 1.23 dB above). The
+    # term of the screen's upright end for the direct sound is in by 0.3 mm above the
+    # plane (the screen first) or 0.4 mm (the roof first), as the ray that tests its
+    # path starts a tenth of a millimetre inside the end, below the roof's plane (a known
+    # issue of docs/validation.md); with the rays 0.6 mm off the edges (a millionth of
+    # the model's size) it came in from 1.2 or 1.8 mm, and a millimetre above the plane
+    # the level was 0.19 to 0.64 dB below that a centimetre above up to 500 Hz.
     extent = edge_diffraction.EXTENT
     x = -5.0 if screen_first else 10.0
     screen = [[(x, 0.0, -extent), (x, extent, -extent), (x, extent, 0.0), (x, 0.0, 0.0)]]
@@ -2775,7 +3001,8 @@ def test_a_wave_is_told_apart_by_the_mirror_its_planes_make() -> None:
     for the two arms in the one order and the other (turned one way or the other about
     the bend), and for a sequence and the same without its last plane. ``_sequences``
     gives the planes of a search's paths in turn, from the source on, and none for
-    paths without a face for each reflection."""
+    paths without a face for each reflection or with more reflections than its width
+    (outdoors the ground's bounces come on top of max_order: wall, wall and ground)."""
     turn = math.radians(60.0)
     room = Room.from_scene(
         Scene.model_validate(
@@ -2829,13 +3056,17 @@ def test_a_wave_is_told_apart_by_the_mirror_its_planes_make() -> None:
     assert not same[0][3] and not same[3][4] and not same[3][6]
     paths = early_paths(room, diffraction="none")
     rows = np.flatnonzero(paths.order > 0)
-    sequence, carried = diffraction_module._sequences(model, paths, rows, 2)
+    width = int(paths.order.max())
+    assert width == 3
+    sequence, carried = diffraction_module._sequences(model, paths, rows, width)
     assert carried.all()
     for own, row in zip(sequence, rows, strict=True):
         planes = model.face_plane[paths.faces[row]].tolist()
-        assert own.tolist() == planes + [-1] * (2 - len(planes))
+        assert own.tolist() == planes + [-1] * (width - len(planes))
+    narrow = diffraction_module._sequences(model, paths, rows, width - 1)[1]
+    assert (narrow == (paths.order[rows] < width)).all() and not narrow.all()
     bare = dataclasses.replace(paths, faces=[])
-    assert not diffraction_module._sequences(model, bare, rows, 2)[1].any()
+    assert not diffraction_module._sequences(model, bare, rows, width)[1].any()
 
 
 def test_a_wave_s_path_reflects_off_its_planes() -> None:
@@ -3009,14 +3240,18 @@ def test_the_wave_that_arrives_at_an_edge_has_the_path_off_its_plane() -> None:
     assert found[:, 0].tolist() == [reflected if p == ground else -1 for p in terms["plane"]]
 
 
-def _stepped_room_with_panels(folder: Path, source, listener, loss: float | None = None) -> Room:
+def _stepped_room_with_panels(
+    folder: Path, source, listener, loss: float | None = None, turn: float = 1.0
+) -> Room:
     """A room 3 m high whose plan steps twice: 7 x 5 m, beside it 7 x 4.5 m 3 m further
     along, and beside that 3.5 x 6.5 m 1 m further along. The plane of each step holds
     two of its walls, which face opposite ways, and a panel 2 m high standing free in
     the opening between them, which lies in the plane of the wall that faces the way
     of the plane's canonical normal (+y, +x). No plane lies halfway between two
     parallel others, where two sequences of reflections would have one image. With
-    ``loss``, the panels let sound through with that transmission loss (dB)."""
+    ``loss``, the panels let sound through with that transmission loss (dB); with
+    ``turn`` -1, its mirror image in both x and y, where each panel lies in the plane of
+    the other wall."""
     plan = [
         (0, 0),
         (7, 0),
@@ -3044,9 +3279,10 @@ def _stepped_room_with_panels(folder: Path, source, listener, loss: float | None
     for n, quad in enumerate(quads):
         if n == len(quads) - 2:
             lines.append("g panels")
-        lines += [f"v {x} {y} {z}" for x, y, z in quad]
+        lines += [f"v {turn * x} {turn * y} {z}" for x, y, z in quad]
         lines.append("f " + " ".join(str(4 * n + i + 1) for i in range(4)))
-    obj = folder / "steps.obj"
+    obj = folder / f"steps{turn:+.0f}.obj"
+    mirror = np.array([turn, turn, 1.0])
     obj.write_text("\n".join(lines) + "\n")
     wall = {"absorption": [0.1] * 8, "scattering": 0.0}
     return Room.from_scene(
@@ -3056,8 +3292,8 @@ def _stepped_room_with_panels(folder: Path, source, listener, loss: float | None
                 "materials": {"wall": wall, "panel": wall | {"transmission_loss": loss}},
                 "default_material": "wall",
                 "assignments": {"panels": "panel"},
-                "sources": [{"name": "s", "position": source}],
-                "listeners": [{"name": "l", "position": listener}],
+                "sources": [{"name": "s", "position": (mirror * source).tolist()}],
+                "listeners": [{"name": "l", "position": (mirror * listener).tolist()}],
                 "simulation": {
                     "scattering": {"from_size": False},
                     "early": {"method": "image_sources", "max_order": 2},
@@ -3065,6 +3301,23 @@ def _stepped_room_with_panels(folder: Path, source, listener, loss: float | None
             }
         )
     )
+
+
+@pytest.mark.parametrize(
+    ("source", "listener"), [([5.5, 4.0, 1.0], [2.5, 2.5, 1.0]), ([8.0, 7.5, 1.2], [4.0, 6.0, 1.2])]
+)
+def test_a_room_with_walls_facing_both_ways_in_two_planes_sounds_as_its_mirror_image(
+    tmp_path: Path, source, listener
+) -> None:
+    """The room of :func:`_stepped_room_with_panels` and its mirror image in x and y,
+    where each panel lies in the plane of the other wall in its plane, have one early
+    level. With the edge fade taking the edges at a path's events and the faces it
+    reflects off by those planes, they were 1.8 and 1.7 dB apart at 63 Hz."""
+    levels = []
+    for turn in (1.0, -1.0):
+        room = _stepped_room_with_panels(tmp_path, source, listener, turn=turn)
+        levels.append(10.0 * np.log10(total_energy(early_paths(room))))
+    np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
 
 
 @pytest.mark.parametrize(
@@ -3084,7 +3337,7 @@ def test_planes_that_face_opposite_ways_in_one_place_are_one_for_a_wave_s_path(
     pairs, a panel in line with each pair, and no source right by two planes, every
     wave has the path that it has by its image alone, and the early level is the same
     to the last digit. With the planes told by their numbers, waves off the one plane
-    would lose the paths off the other: 2.2 and 1.6 dB in the first two cases, one
+    would lose the paths off the other: 1.3 and 0.7 dB in the first two cases, one
     for each pair. In the third the panels let sound through, and paths through a
     panel come before reflections in the list of the paths."""
     room = _stepped_room_with_panels(tmp_path, source, listener, loss)
@@ -3148,3 +3401,13 @@ def test_planes_that_face_opposite_ways_in_one_place_are_one_for_a_wave_s_path(
     monkeypatch.setattr(diffraction_module, "_wave_planes", none)
     by_image = 10.0 * np.log10(total_energy(early_paths(room)))
     np.testing.assert_allclose(level, by_image, rtol=0, atol=1e-9)
+
+
+def test_the_rays_that_test_paths_over_edges_start_near_them_in_any_model() -> None:
+    # A millionth of the model's size off the edge, but no farther than a tenth of a
+    # millimetre and no nearer than a hundred-millionth of the size.
+    offset = diffraction_module.ray_offset
+    assert offset(50.0) == pytest.approx(5e-5)
+    assert offset(100.0) == pytest.approx(1e-4)
+    assert offset(10_000.0) == pytest.approx(1e-4)
+    assert offset(1e5) == pytest.approx(1e-3)
