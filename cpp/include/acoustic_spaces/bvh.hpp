@@ -125,19 +125,60 @@ public:
                p.y <= upper_.y + pad && p.z >= lower_.z - pad && p.z <= upper_.z + pad;
     }
 
+    // Which side of each face is its own where another face lies in the same place, with
+    // its own side the other way (a wall drawn once for each of the rooms it stands
+    // between): +1 the front, -1 the back, 0 for a face with no such other face. A null
+    // `facing` (or all 0) sets none.
+    void set_facing(const std::int8_t *facing) {
+        facing_.clear();
+        if (facing == nullptr) return;
+        const std::size_t n = tri_.size();
+        if (std::all_of(facing, facing + n, [](std::int8_t f) { return f == 0; })) return;
+        facing_.resize(n);
+        for (std::size_t face = 0; face < n; ++face) {
+            if (facing[face] < -1 || facing[face] > 1) {
+                throw std::invalid_argument("Bvh: facing must be -1, 0 or 1");
+            }
+            facing_[face] = facing[face];
+        }
+    }
+
+    bool has_facing() const { return !facing_.empty(); }
+
     // Nearest hit with t in (t_min, t_max); `ignore` is a face to skip (the one a
-    // reflected ray starts on), or -1.
+    // reflected ray starts on), or -1. Of two faces in one place (see set_facing), the
+    // one whose own side the ray meets: a hit on the other one's turned side gives way to
+    // a hit within min_distance() of it that is not.
     Hit intersect(const Vec3 &origin, const Vec3 &dir, double t_max,
                   std::int64_t ignore = -1) const {
         Hit hit;
         hit.t = t_max;
-        traverse(origin, dir, ignore, [&](std::size_t face, double t) {
-            if (t < hit.t) {
-                hit.t = t;
-                hit.face = static_cast<std::int64_t>(face);
-            }
-            return false;
-        }, hit.t);
+        if (facing_.empty()) {
+            traverse(origin, dir, ignore, [&](std::size_t face, double t) {
+                if (t < hit.t) {
+                    hit.t = t;
+                    hit.face = static_cast<std::int64_t>(face);
+                }
+                return false;
+            }, hit.t);
+        } else {
+            const double tie = min_distance();
+            bool turned = false;  // the hit so far meets a face's turned side
+            double limit = t_max;
+            traverse(origin, dir, ignore, [&](std::size_t face, double t) {
+                const std::int8_t own = facing_[face];
+                const bool away = own != 0 && (dot(normal(face), dir) < 0.0) != (own > 0);
+                const bool take = !hit.found() || t < hit.t - tie ||
+                                  (t <= hit.t + tie && (turned != away ? turned : t < hit.t));
+                if (take) {
+                    hit.t = t;
+                    hit.face = static_cast<std::int64_t>(face);
+                    turned = away;
+                    limit = turned ? std::min(t_max, t + tie) : t;
+                }
+                return false;
+            }, limit);
+        }
         if (!hit.found()) {
             hit.t = std::numeric_limits<double>::infinity();
         }
@@ -322,8 +363,9 @@ public:
 
     // The tree as flat arrays, for tracing elsewhere (on a GPU), through
     // emit(name, std::vector): per node its box ("boxes": lo then hi), "first" and
-    // "count" as in Node; per place in leaf order the face there ("faces") and its first
-    // corner and two edges ("triangles": v0, e1, e2).
+    // "count" as in Node; per place in leaf order the face there ("faces"), its first
+    // corner and two edges ("triangles": v0, e1, e2) and its own side ("facing", as
+    // set_facing has it, 0 for all without).
     template <typename Emit>
     void layout(Emit emit) const {
         std::vector<double> boxes(6 * nodes_.size());
@@ -350,8 +392,13 @@ public:
         emit("boxes", boxes);
         emit("first", first);
         emit("count", count);
+        std::vector<std::int8_t> facing(tri_.size(), 0);
+        if (!facing_.empty()) {
+            for (std::size_t i = 0; i < tri_.size(); ++i) facing[i] = facing_[order_[i]];
+        }
         emit("faces", order_);
         emit("triangles", triangles);
+        emit("facing", facing);
     }
 
 private:
@@ -389,6 +436,7 @@ private:
     std::vector<Triangle> tri_;          // in leaf order
     std::vector<std::uint32_t> order_;   // face at each place in tri_
     std::vector<std::uint32_t> place_;   // place in tri_ of each face
+    std::vector<std::int8_t> facing_;    // own side of each face (set_facing), or empty
     std::vector<Node> nodes_;
     double scale_ = 1.0;
     Vec3 lower_, upper_;  // corners of the model's bounding box
