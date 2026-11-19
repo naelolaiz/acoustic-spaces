@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed: the faces a path crosses right where it reflects were looked for along a chord
+  across the turn that reached a ten-millionth of the model's largest extent (1 mm in a
+  model 10 km wide) along both legs, on past a leg's other end (the source, say) where
+  that was nearer, and so could pass round the end of a face the path crosses. A source
+  0.015 to 0.04 mm from both arms of a barrier bent by 10 to 60 degrees in such a model
+  had a path off one arm through the other at the level of the direct sound, and with
+  edge diffraction an early level behind the barrier up to 42 dB above that of the same
+  scene in a model 200 m wide. The chord now ends at either leg's other end.
 - Fixed: outdoors, what a wall or a barrier scatters and the ground then reflects
   reached a listener only through rays that crossed its detector sphere, each one a
   burst in one millisecond of the tail (blips in the `railway` example's tour at
