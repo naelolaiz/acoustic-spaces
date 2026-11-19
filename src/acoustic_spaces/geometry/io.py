@@ -136,7 +136,7 @@ def load_mesh(
     elif up_axis == "x":
         # Only a Collada file records +x up: (x, y, z) -> (-y, -z, x), right being -y.
         vertices = np.column_stack([-vertices[:, 1], -vertices[:, 2], vertices[:, 0]])
-    return RoomMesh(vertices, mesh.faces, mesh.face_labels, mesh.labels)
+    return RoomMesh(vertices, mesh.faces, mesh.face_labels, mesh.labels, mesh.solids)
 
 
 class _MeshBuilder:
@@ -402,10 +402,11 @@ def _read_ifc(path: Path, space: str | None) -> tuple[RoomMesh, float]:
 
     Without ``space``, every building element is read as IfcOpenShell builds it (walls
     with their openings cut, windows, doors, slabs, furniture), so walls come with both
-    sides and their thickness. With it, only the room of that name (an IfcSpace, by
-    name, long name or GlobalId): its space boundaries, the faces of the room each
-    element bounds, as BIM programs export them; or, for a file without them, the
-    space's own solid, each part labelled by the element behind it.
+    sides and their thickness, as solids (``RoomMesh.solids``). With it, only the room
+    of that name (an IfcSpace, by name, long name or GlobalId): its space boundaries,
+    the faces of the room each element bounds, as BIM programs export them; or, for a
+    file without them, the space's own solid, each part labelled by the element behind
+    it.
     """
     model = _open_ifc(path)
     import ifcopenshell.util.unit
@@ -421,8 +422,10 @@ def _read_ifc(path: Path, space: str | None) -> tuple[RoomMesh, float]:
     mesh = builder.build(path)
     if space is not None:
         mesh = _facing_in(mesh)
-    # IfcOpenShell builds shapes in metres; the file's unit is kept for ``units``.
-    return RoomMesh(mesh.vertices / scale, mesh.faces, mesh.face_labels, mesh.labels), scale
+    # IfcOpenShell builds shapes in metres; the file's unit is kept for ``units``. Its
+    # building elements are solids: what they close off is no room.
+    solids = space is None
+    return RoomMesh(mesh.vertices / scale, mesh.faces, mesh.face_labels, mesh.labels, solids), scale
 
 
 def _facing_in(mesh: RoomMesh) -> RoomMesh:

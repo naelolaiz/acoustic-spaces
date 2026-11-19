@@ -13,13 +13,16 @@ class RoomMesh:
 
     ``labels`` holds, for each distinct combination of names found in the source file,
     the candidate names in priority order (for OBJ: material, group, object). Each face
-    points at one entry through ``face_labels``.
+    points at one entry through ``face_labels``. ``solids`` is True when the faces are
+    those of solids, as an IFC file's building elements read without a space: the
+    spaces they close off are the insides of the solids, not rooms.
     """
 
     vertices: np.ndarray  # (V, 3) float64, metres
     faces: np.ndarray  # (F, 3) int64 indices into vertices
     face_labels: np.ndarray  # (F,) int64 indices into labels
     labels: list[tuple[str, ...]]
+    solids: bool = False
 
     def __post_init__(self) -> None:
         self.vertices = np.ascontiguousarray(self.vertices, dtype=np.float64).reshape(-1, 3)
@@ -50,10 +53,11 @@ class RoomMesh:
         from acoustic_spaces.geometry.cells import mesh_cells
 
         cached = self.__dict__.get("_cells")
-        if cached is None or cached[0] is not self.vertices or cached[1] is not self.faces:
-            cached = (self.vertices, self.faces, mesh_cells(self.vertices, self.faces))
+        key = (self.vertices, self.faces, self.solids)
+        if cached is None or any(a is not b for a, b in zip(cached[0], key, strict=True)):
+            cached = (key, mesh_cells(self.vertices, self.faces, solids=self.solids))
             self.__dict__["_cells"] = cached
-        return cached[2]
+        return cached[1]
 
     def label_names(self) -> list[str]:
         """Every distinct name that appears in any label, in first-seen order."""

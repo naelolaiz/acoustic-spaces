@@ -171,10 +171,14 @@ Edge diffraction:
   place in the march's cells (up to 0.2 dB); roofs and walls that absorb (rigid in
   it; a roof with an impedance leaves the row to the paths over the edges), the sound
   that goes to and fro between a row's walls, and the bands above 500 Hz.
-- [ ] Paths over edges tested from the edge itself, not from a millionth of the
-  model's size off it: exactly in the plane of several roofs in a row the level is up
-  to 9 dB below that just above it, and within twice that distance below the plane 9
-  to 15 dB above that further below.
+- [ ] Paths over edges tested from the edge itself, not from just off it (a millionth
+  of the model's size, a tenth of a millimetre at most): exactly in the plane of several
+  roofs in a row the level is up to 9 dB below that just above it, within twice that
+  distance below the plane 9 to 15 dB above that further below, and exactly level with
+  three screens' tops the path round the end of one that ends beside the way is
+  missing (1.3 dB at 63 Hz); near grazing incidence the ray passes the next edge apart
+  from the path's own line (0.06 mm above a screen's top 1 m past a roof, with the
+  source 1 cm above the roof's plane).
 - [ ] Corners to the least distance of a ray: the search for early paths takes what lies
   within its tolerance for planes (a ten-millionth of the model's largest extent, 1 mm
   in a model 10 km wide) of the line where faces meet as on that line. A source or a

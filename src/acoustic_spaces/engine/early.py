@@ -613,14 +613,13 @@ def _face_at(
 
 
 def _goes_on(
-    model: TraceModel, plane: int, point: np.ndarray, way: np.ndarray, tolerance: float
+    model: TraceModel, faces: np.ndarray, point: np.ndarray, way: np.ndarray, tolerance: float
 ) -> bool:
-    """Whether a face of ``plane`` that ``point`` lies on (:func:`_faces_at`) goes on
-    from it along ``way`` (in the plane, of any length): ``way`` leaves the face across
+    """Whether one of ``faces``, which ``point`` lies on (:func:`_faces_at`), goes on
+    from it along ``way`` (in its plane, of any length): ``way`` leaves the face across
     none of its edges that the point lies within ``tolerance`` of, or beyond (a way
     along an edge, to the plane tolerance, stays on the face). With no way (zero) a
     face the point lies on is enough."""
-    faces = _faces_at(model, plane, point, tolerance)
     if len(faces) == 0:
         return False
     mesh = model.room.mesh
