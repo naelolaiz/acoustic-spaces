@@ -91,8 +91,10 @@ from acoustic_spaces.engine.coherent import ground_factors, ground_wave_factors,
 from acoustic_spaces.engine.early import (
     _EDGE_TOLERANCE,
     EarlyReflections,
+    _canonical,
     _face_at,
     _mirrors,
+    _over,
 )
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 from acoustic_spaces.geometry.cells import _components
@@ -118,8 +120,17 @@ DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
 _SERIES_LIMIT = 3.5
 #: Distances (relative to the model size) for points on an edge or a plane.
 _TOLERANCE = 1e-9
-#: Rays start this far (relative to the model size) off the edge, into the open side.
+#: Rays start this far (relative to the model size) off the edge, into the open side,
+#: but no farther than :data:`_OFFSET_CAP` metres and no nearer than
+#: :data:`_OFFSET_FLOOR` of the size (see :func:`ray_offset`).
 _OFFSET = 1e-6
+#: The farthest (m) a ray starts off an edge: in a model 100 m wide and more, a tenth of a
+#: millimetre, whatever its size.
+_OFFSET_CAP = 1e-4
+#: The nearest (relative to the model size) a ray starts off an edge: six to ten times the
+#: least distance at which a ray meets a face (a billionth of the diagonal of the model's
+#: box, the BVH's ``min_distance``).
+_OFFSET_FLOOR = 1e-8
 #: Angles (radians) this close to a shadow or reflection boundary count as on it; which
 #: side is then decided by whether the specular path was found.
 _ON_BOUNDARY = 1e-9
@@ -1027,6 +1038,7 @@ class EdgeDiffraction:
         #: (:meth:`_in_line`) that carry too little to be among them, or None.
         self.unheard: tuple[EarlyReflections, EarlyReflections] | None = None
         self.size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
+        self.offset = ray_offset(self.size)
         frequencies, self.slice_hz = band_frequencies(bands=model.bands)
         self.wavenumber = 2.0 * np.pi * frequencies / self.speed_of_sound  # (B, M)
         self.k_min = float(self.wavenumber.min())
@@ -1137,7 +1149,7 @@ class EdgeDiffraction:
             (np.searchsorted(used, row_edge), t_s, rho_s),
             self.speed_of_sound * max_delay_s,
             _TOLERANCE * self.size,
-            _OFFSET * self.size,
+            self.offset,
             self.threads,
         )
 
@@ -1146,7 +1158,7 @@ class EdgeDiffraction:
         the edge to ``end`` can reflect off, as rows into both (:func:`_reflecting_pairs`)."""
         if len(planes) == 0:
             return np.zeros(0, np.int64), np.zeros(0, np.int64)
-        offset = _OFFSET * self.size
+        offset = self.offset
         return _reflecting_pairs(
             self.model, self.edges, self._bounds, end, planes, among, offset, self.threads
         )
@@ -1220,9 +1232,12 @@ class EdgeDiffraction:
         there) make in turn, for the waves of
         :class:`~acoustic_spaces.engine.clusters.Clusters`: as the early stage tells
         them apart (:func:`~acoustic_spaces.engine.early._mirrors`, with its
-        tolerance)."""
+        tolerance). Sequences that differ only in the order of perpendicular planes
+        make one mirror, and are taken in one order
+        (:func:`~acoustic_spaces.engine.early._canonical`): in a model
+        turned and written to six decimals their mirrors part by a few of those steps."""
         sequences = np.asarray(sequences, dtype=np.int64).reshape(len(sequences), -1)
-        return _mirrors(self.model, sequences, _EDGE_TOLERANCE * self.size)
+        return _mirrors(self.model, _canonical(self.model, sequences), _EDGE_TOLERANCE * self.size)
 
     def clusters(self, listener: np.ndarray, paths: EarlyReflections) -> Clusters | None:
         """The waves of the specular paths ``paths`` at ``listener`` in the bands where
@@ -1337,7 +1352,7 @@ class EdgeDiffraction:
         that make reflections fade at edges take the product of the two edges' terms
         on the dark side there, the level just below the line
         (:mod:`~acoustic_spaces.engine.edge_fade`)."""
-        reach = 2.0 * _OFFSET * self.size
+        reach = 2.0 * self.offset
         t_k, length = c["t_k"], self.edges.length[c["edge"]]
         across = np.abs(angle) * c["rho_s"] * c["r2"] / (c["r1"] + c["r2"])
         rows = np.flatnonzero(missing & (angle <= _ON_BOUNDARY) & (across <= reach))
@@ -1488,7 +1503,7 @@ class EdgeDiffraction:
         # Unobstructed, with the reflection on the expected plane before or after the
         # edge. Rays start just off the edge, in the middle of its open side, and just
         # inside its ends (where a plane they may be meant to reflect off begins).
-        offset = _OFFSET * self.size
+        offset = self.offset
         along = np.clip(t_k, offset, edges.length[edge] - offset) - t_k
         start = point + along[:, None] * edges.direction[edge] + offset * edges.bisector()[edge]
         reflected = np.full(len(edge), -1, dtype=np.int64)
@@ -1523,7 +1538,18 @@ class EdgeDiffraction:
                 across = (height * beyond < 0.0) & (np.abs(height) > tolerance)
                 share = np.where(across, height / np.where(across, height - beyond, 1.0), 0.0)
                 crossing = at_edge + share[:, None] * (target - at_edge)
-                for i in np.flatnonzero(hit & (np.abs(height) <= offset)):
+                recheck = hit & (np.abs(height) <= offset)
+                # Farther off, a ray that starts beside the point stands for it unless the
+                # line from its start meets the plane off the face that the line from the
+                # point crosses it on: near grazing incidence the two cross the plane far
+                # apart (6.6 mm inside a roof's end and 17.5 cm past it, from a screen's top
+                # 0.43 mm above the roof's plane with the source 1 cm above it and the ray
+                # 0.1 mm above the top). A ray from inside an end of the edge, for a point
+                # near or past that end, still decides.
+                far = np.flatnonzero(hit & across & ~recheck & (along[via] == 0.0))
+                if len(far):
+                    recheck[far[~_over(self.model, face[far], crossing[far])]] = True
+                for i in np.flatnonzero(recheck):
                     hit[i] = _face_at(self.model, int(through[i]), crossing[i], tolerance) >= 0
                 ok[via] &= hit
                 rows = np.flatnonzero(via)
@@ -1863,8 +1889,18 @@ class EdgeDiffraction:
         _, rho_21, phi_21, in_21 = edges.frame(e1, p2)
         _, rho_12, phi_12, in_12 = edges.frame(e2, p1)
         ok &= in_21 & (rho_21 > tolerance) & in_12 & (rho_12 > tolerance)
+        # Along the plane of a screen (an edge open over 2 pi, its two faces in one plane)
+        # the edge's wave on one face is the negative of that on the other. Where the path
+        # runs in that plane on to an edge whose faces are not in it (past the screen's
+        # far end), or comes along it to a screen from such an edge, the waves along the
+        # two faces reach the other edge alike and cancel: no such path.
+        on_1 = _on_faces(phi_21, rho_21, edges.wedge[e1], tolerance).any(axis=1)
+        on_2 = _on_faces(phi_12, rho_12, edges.wedge[e2], tolerance).any(axis=1)
+        screen_1 = np.isclose(edges.wedge[e1], 2.0) & on_1
+        screen_2 = np.isclose(edges.wedge[e2], 2.0) & on_2
+        ok &= ~(screen_1 & ~on_2) & ~(screen_2 & ~on_1)
         # Unobstructed, with rays from just off each edge, as for one edge.
-        offset = _OFFSET * self.size
+        offset = self.offset
         bisector = edges.bisector()
         starts = [
             p
@@ -1873,11 +1909,16 @@ class EdgeDiffraction:
             for p, t, e in ((p1, t1, e1), (p2, t2, e2))
         ]
         ends = np.broadcast_to(self.source, p1.shape), np.broadcast_to(listener, p2.shape)
-        for a, b in ((starts[0], ends[0]), (starts[0], starts[1]), (starts[1], ends[1])):
+        for leg, (a, b) in enumerate(
+            ((starts[0], ends[0]), (starts[0], starts[1]), (starts[1], ends[1]))
+        ):
             rows = np.flatnonzero(ok)
             if len(rows) == 0:
                 return None
-            ok[rows] = _clear(model, a[rows], b[rows])
+            if leg == 1:
+                ok[rows] = _clear_along(model, a[rows], b[rows], tolerance)
+            else:
+                ok[rows] = _clear(model, a[rows], b[rows])
         sel = np.flatnonzero(ok)
         if len(sel) == 0:
             return None
@@ -1898,6 +1939,32 @@ class EdgeDiffraction:
         sin2 = np.clip(rho_12 / r1, 1e-12, 1.0)
         distance = r0 + r1 + r2
         k = self.wavenumber[None, :, :]  # (1, B, M)
+        # Where the path lies in the plane of faces at both edges, it runs along the faces
+        # on one side of that plane, the same at both (_ways): a wave along one face of a
+        # screen does not reach the other edge on its other face. Along a screen from one
+        # of its ends to another the path runs along either face, two ways (rows of their
+        # own here, added into the path's below) whose waves are alike, as BTM's along
+        # each face of a thin plate are (each with half the coefficient at grazing
+        # incidence): together they make good the step of the first edge's wave where
+        # the listener crosses the plane past the second edge. On a screen the side of
+        # each way is face 0 of the edge's frame or face n, which a mirror image of the
+        # scene turns over, whichever it is.
+        ways, side = _ways(edges, e1, e2, phi_21, rho_21, phi_12, rho_12, n1, n2, tolerance)
+        paths = len(e1)
+        out_e1, out_p1, out_p2, out_distance = e1, p1, p2, distance
+        if len(ways) > paths:
+            e1, e2, d1, d2, p1, p2, r0, r1, r2 = (
+                a[ways] for a in (e1, e2, d1, d2, p1, p2, r0, r1, r2)
+            )
+            phi_21, rho_21, phi_12, rho_12 = (a[ways] for a in (phi_21, rho_21, phi_12, rho_12))
+            n1, n2, phi_s1, phi_r2 = (a[ways] for a in (n1, n2, phi_s1, phi_r2))
+            sin1, sin2, distance = sin1[ways], sin2[ways], distance[ways]
+            at_end = [(half[ways], hard[ways]) for half, hard in at_end]
+        along = np.any(side != 0.0, axis=1)
+        for phi, n, e in ((phi_21, n1, e1), (phi_12, n2, e2)):
+            on = along & np.isclose(n, 2.0)
+            facing = np.einsum("ij,ij->i", side[on], edges.normal[e[on]]) > 0.0
+            phi[on] = np.where(facing, 0.0, 2.0 * np.pi)
         # The path from the first edge to the second runs along face 0 or face n of the
         # first (it leaves along it) and of the second (grazing incidence there).
         leave = _on_faces(phi_21, rho_21, n1, tolerance)
@@ -1906,6 +1973,12 @@ class EdgeDiffraction:
         # Which side of each edge's boundaries the path is on, and the path over the
         # other edge alone that each geometric wave continues there.
         has1, has2 = self._alone(single, e1, e2, phi_s1, phi_12, leave, graze)
+        # The path over the other edge alone, which the source (or the listener) sees
+        # round a screen's end, continues the wave along the screen's face on its side,
+        # not along the other face: that one carries no geometric wave of theirs.
+        for has, n, point, end in ((has1, n1, p1, self.source), (has2, n2, p2, listener)):
+            beyond = np.einsum("ij,ij->i", end - point, side) < -tolerance
+            has[along & np.isclose(n, 2.0) & beyond] = -1
         angle1 = boundary_angles(n1, phi_21, phi_s1)
         angle2 = boundary_angles(n2, phi_r2, phi_12)
         # The rays that look for the path over one edge start just off it, so within
@@ -2066,8 +2139,9 @@ class EdgeDiffraction:
             (np.abs(angle2[:, 0]) <= _ON_BOUNDARY) & graze.any(axis=1)
         )
         carried = counted & ~(lit1[:, :, None] & lit2[:, None, :] & exact[:, None, None])
-        pressure = (waves * carried[..., None, None]).sum(axis=(1, 2))
-        energy = np.zeros((len(e1), self.wavenumber.shape[0]))
+        pressure = np.zeros((paths, *self.wavenumber.shape), dtype=complex)
+        np.add.at(pressure, ways, (waves * carried[..., None, None]).sum(axis=(1, 2)))
+        energy = np.zeros((paths, self.wavenumber.shape[0]))
         energy[:, : self.coherent] = np.mean(np.abs(pressure[:, : self.coherent]) ** 2, axis=2)
         if clusters is not None:
             # In the others each term (i, j) continues the geometric wave i at the first
@@ -2095,7 +2169,7 @@ class EdgeDiffraction:
             yes = np.ones(count, dtype=bool)
             front1 = [yes, phi_s1 < np.pi, phi_s1 > (n1 - 1.0) * np.pi]
             front2 = [yes, phi_12 < np.pi, phi_12 > (n2 - 1.0) * np.pi]
-            rows = start + np.arange(count)
+            rows = start + ways  # a path's two ways along a screen in its row
 
             def keyed(keys, ok):
                 keys[~ok] = clusters.private(int((~ok).sum()))
@@ -2143,18 +2217,18 @@ class EdgeDiffraction:
                 clusters.add(rows, bent2[i], np.sum(second_part[:, i] * t[:, i], axis=1), distance)
             clusters.add(
                 rows,
-                clusters.private(count),
+                clusters.private(paths)[ways],
                 np.einsum("cibm,cjbm,cijbm->cbm", s1, s2, t),
                 distance,
             )
         return {
             "energy": energy,
-            "spectrum": self._spectrum(pressure, distance),
-            "distance": distance,
-            "order": np.zeros(len(e1), dtype=np.int64),
-            "edge": e1,
-            "last": p2,
-            "corners": lambda i: [p1[i], p2[i]],
+            "spectrum": self._spectrum(pressure, out_distance),
+            "distance": out_distance,
+            "order": np.zeros(paths, dtype=np.int64),
+            "edge": out_e1,
+            "last": out_p2,
+            "corners": lambda i: [out_p1[i], out_p2[i]],
             "faces": lambda i: np.zeros(0, dtype=np.int64),
             "cosines": lambda i: np.zeros(0),
         }
@@ -2570,6 +2644,35 @@ def _waves(n, phi, phi_source, kl, lit, reflection, rows=None, shares=None) -> n
     )
 
 
+def _ways(edges: Edges, e1, e2, phi_21, rho_21, phi_12, rho_12, n1, n2, tolerance):
+    """For paths over the edges ``e1`` and then ``e2`` (C,): the path each way along the
+    faces between them belongs to (W,), and the side of the plane that way runs along
+    (W, 3), a unit vector across it, or 0 where the path does not lie in the plane of
+    faces of both edges. Along that plane a path runs on the side of the faces it leaves
+    along and meets: on the open side of a face of an edge that is not a screen, and on
+    either side of a screen, both faces of which lie in the plane. A path along a screen
+    from one of its ends to another (two screens) runs along each of its faces, two
+    ways: the first along face 0 of the first edge, the second (rows from C on) along
+    the other face."""
+    leave = _on_faces(phi_21, rho_21, n1, tolerance)
+    graze = _on_faces(phi_12, rho_12, n2, tolerance)
+    along = leave.any(axis=1) & graze.any(axis=1)
+    screen1, screen2 = np.isclose(n1, 2.0), np.isclose(n2, 2.0)
+
+    def open_side(edge, n, faces):
+        # Face 0's open side is its normal; face n's is at n pi - pi / 2 round the edge.
+        turn = (n * np.pi - 0.5 * np.pi)[:, None]
+        other = np.cos(turn) * edges.along[edge] + np.sin(turn) * edges.normal[edge]
+        return np.where(faces[:, 1:], other, edges.normal[edge])
+
+    side = np.where(
+        (screen1 & ~screen2)[:, None], open_side(e2, n2, graze), open_side(e1, n1, leave)
+    )
+    side[~along] = 0.0
+    two = np.flatnonzero(along & screen1 & screen2)
+    return np.concatenate([np.arange(len(e1)), two]), np.concatenate([side, -side[two]])
+
+
 def _on_faces(phi, rho, n, tolerance) -> np.ndarray:
     """(C, 2) whether points ``phi`` round edges open over ``n`` pi, ``rho`` from them,
     lie on the plane of face 0 or of face n (only face 0 for both)."""
@@ -2705,6 +2808,14 @@ def _shortest(a, d1, b, d2, source, listener, iterations: int = 50):
     g1 = np.einsum("ij,ij->i", d1, u) / r0 - np.einsum("ij,ij->i", d1, v) / r1
     g2 = np.einsum("ij,ij->i", d2, v) / r1 - np.einsum("ij,ij->i", d2, w) / r2
     return t1, t2, np.maximum(np.abs(g1), np.abs(g2)) < 1e-8
+
+
+def ray_offset(size: float) -> float:
+    """How far (m) off an edge, in a model ``size`` metres wide, the rays that test the
+    paths over it start: a millionth of the size, but a tenth of a millimetre at most
+    and a hundred-millionth of the size at least (six to ten times the least distance
+    at which a ray meets a face)."""
+    return max(min(_OFFSET * size, _OFFSET_CAP), _OFFSET_FLOOR * size)
 
 
 def _wave_planes(model: TraceModel, c: dict, face_plane: np.ndarray | None = None) -> np.ndarray:
@@ -2979,6 +3090,24 @@ def _clear(model: TraceModel, start: np.ndarray, end: np.ndarray, through=None) 
     direction = delta / np.maximum(length, 1e-300)[:, None]
     _, face = _first_solid(model, start, direction, length * (1.0 - 1e-9), -1, through)
     return face < 0
+
+
+def _clear_along(model: TraceModel, start: np.ndarray, end: np.ndarray, tolerance: float):
+    """:func:`_clear`, where a way that lies in the plane of faces (both its ends within
+    ``tolerance`` of it) runs along them and is not stopped by them: from one end of a
+    screen to the other along it, or on to an edge in its plane. Exactly in their
+    plane a ray meets no face of it; in a turned scene it would meet one or not by how
+    the coordinates round."""
+    normal, offset = model.plane_normal, model.plane_offset
+    along = np.abs(products.product(start, normal.T) - offset) <= tolerance
+    along &= np.abs(products.product(end, normal.T) - offset) <= tolerance
+    out = np.empty(len(start), dtype=bool)
+    planes, which = np.unique(along, axis=0, return_inverse=True)
+    for i, plane in enumerate(planes):
+        rows = np.flatnonzero(which.ravel() == i)
+        through = plane[model.face_plane] if plane.any() else None
+        out[rows] = _clear(model, start[rows], end[rows], through)
+    return out
 
 
 def _reflect(model: TraceModel, start, image, plane, end):
