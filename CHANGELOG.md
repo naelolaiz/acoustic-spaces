@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Fixed: with `second_order` diffraction, a path over two edges along the plane of a
+  screen or a panel (from one of its ends to the other) took the side of the screen that
+  each edge's frame calls face 0, which a scene's mirror image turns over, and in a
+  turned scene the screen stopped the way along it or not by how the coordinates
+  rounded. Behind a thin strip 2 m wide such paths were left out, up to 1.39 dB below
+  the exact solution (BTM) at 63 Hz; a panel standing free in a room and its mirror
+  image across the panel's plane, or the room turned by 30 degrees, were up to 0.24 dB
+  apart at 125 Hz. The path now runs along each face of the screen, two ways with half
+  the coefficient at grazing incidence each, within 0.11 dB of BTM at 63 and 125 Hz
+  behind the strip, and the faces in whose plane it runs do not stop it; one in that
+  plane on past the screen's far end, where the waves along its two faces cancel, is
+  left out.
 - Fixed: with edge diffraction, where walls in line face opposite ways with a panel or a
   partition between them, the edge fade took the edges at a path's reflections, and the
   faces a reflection meets there, by the plane in the model that holds each face, which

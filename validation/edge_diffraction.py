@@ -28,6 +28,8 @@ half-plane, which is exact far from the edge, and the engine against it:
   and the same block absorbing 0.02, against BTM for the rigid one and the Weyl-van der
   Pol field's loss along its top (|F(w)|, by hand);
 - two thin screens in a row, second order;
+- a thin strip, second order: the source and the listener in its shadow on either
+  side, the paths over both its edges along each of its faces, against BTM;
 - a thin screen, a right-angled corner and a wedge open over 225 degrees, first order,
   with the listener on the shadow boundary and 10.5 degrees into the shadow: the whole
   early stage (``early_paths``) with every band added in energy and as by default,
@@ -436,6 +438,54 @@ def second_order(folder: Path) -> list[dict]:
             row["absorbing_minus_btm_db"] = (soft - reference).tolist()
             row["absorbing_in_pressure_minus_btm_db"] = (soft_pressure - reference).tolist()
             row["ground_wave_db"] = ground_wave(ABSORBING, float(np.linalg.norm(p2 - p1)))
+        rows.append(row)
+    return rows
+
+
+#: A thin strip (:func:`strip_quads`) and the source and the listener in its shadow on
+#: either side of it.
+STRIP = (
+    ((-3.0, 0.0, -0.5), (3.0, 0.0, -1.5)),
+    ((-2.0, 0.0, -1.0), (4.0, 0.0, -1.2)),
+    ((-1.0, 0.0, -0.3), (1.5, 0.0, -1.9)),
+)
+STRIP_WIDTH = 2.0
+
+
+def strip_quads(width: float = STRIP_WIDTH) -> list:
+    """A thin strip in the plane x = 0 from z = -``width`` to its top at z = 0."""
+    return [[(0, -EXTENT, -width), (0, EXTENT, -width), (0, EXTENT, 0), (0, -EXTENT, 0)]]
+
+
+def thin_strip(folder: Path) -> list[dict]:
+    """A thin strip 2 m wide, the source and the listener in its shadow on either side
+    (:data:`STRIP`): BTM over its top and its foot and over both, along each face of the
+    strip (with half the coefficient at grazing incidence, each), against the whole early
+    stage with paths over two edges and without, in pressure at 63 and 125 Hz as by
+    default. Along one face alone the paths over both edges would leave the field with a
+    step where the listener crosses the strip's plane past its far edge: the first
+    edge's wave on one face is the negative of that on the other."""
+    top = Edge([0, 0, 0], [0, 1, 0], [0, 0, -1], [1, 0, 0], 2.0)
+    foot = Edge([0, 0, -STRIP_WIDTH], [0, 1, 0], [0, 0, 1], [1, 0, 0], 2.0)
+    rows = []
+    for source, receiver in STRIP:
+        source, receiver = np.array(source), np.array(receiver)
+        first = btm_first(top, source, receiver) + btm_first(foot, source, receiver)
+        along = btm_second(top, foot, source, receiver, (0.0, 0.0), True)
+        along += btm_second(foot, top, source, receiver, (0.0, 0.0), True)
+        distance = float(np.linalg.norm(receiver - source))
+        reference = band_level(first + 2.0 * along, distance)
+        row = {
+            "source": source.tolist(),
+            "receiver": receiver.tolist(),
+            "btm_db": reference.tolist(),
+            "btm_along_one_face_db": band_level(first + along, distance).tolist(),
+            "btm_without_the_paths_over_both_db": band_level(first, distance).tolist(),
+        }
+        for mode in ("second_order", "first_order"):
+            simulation = {"early": {"diffraction": mode}}
+            room = _room(folder, "strip", strip_quads(), source, receiver, simulation)
+            row[f"{mode}_minus_btm_db"] = (whole_early_stage(room) - reference).tolist()
         rows.append(row)
     return rows
 
@@ -1150,6 +1200,16 @@ def main() -> None:
                 print(f"| 20 lg abs F(w) over the top | {_row(row['ground_wave_db'])} |")
         seconds = max(row["btm_seconds"] for row in results["second_order"])
         print(f"\n(BTM takes up to {seconds:.0f} s per case)")
+
+        results["thin_strip"] = thin_strip(folder)
+        print(f"\n| a thin strip, level re free field (dB) | {header} |\n{rule}")
+        for row in results["thin_strip"]:
+            print(f"| {row['source']} to {row['receiver']}: BTM | {_row(row['btm_db'])} |")
+            print(f"| BTM along one face | {_row(row['btm_along_one_face_db'])} |")
+            alone = row["btm_without_the_paths_over_both_db"]
+            print(f"| BTM without the paths over both | {_row(alone)} |")
+            for mode in ("second_order", "first_order"):
+                print(f"| {mode} - BTM | {_row(row[f'{mode}_minus_btm_db'])} |")
 
         results["shadow_boundary"] = shadow_boundary(folder)
         print(f"\n| at a shadow boundary, level re free field (dB) | {header} |\n{rule}")

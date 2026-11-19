@@ -494,6 +494,101 @@ def test_a_room_with_a_panel_in_line_with_a_wall_sounds_as_its_mirror_image(
     np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
 
 
+def _free_panel(folder: Path, mirror, source, listener, turn: float = 0.0) -> Room:
+    """A room 10 x 8 x 3 m with a panel 2 m wide and 2 m high standing free in the plane
+    x = 5 (from y = 3 to 5), with second-order diffraction; its image in the mirror
+    ``mirror`` (each coordinate times 1 or -1), turned by ``turn`` degrees about z."""
+    walls = [
+        [(0, 0, 0), (10, 0, 0), (10, 0, 3), (0, 0, 3)],
+        [(10, 0, 0), (10, 8, 0), (10, 8, 3), (10, 0, 3)],
+        [(10, 8, 0), (0, 8, 0), (0, 8, 3), (10, 8, 3)],
+        [(0, 8, 0), (0, 0, 0), (0, 0, 3), (0, 8, 3)],
+        [(0, 0, 0), (0, 8, 0), (10, 8, 0), (10, 0, 0)],
+        [(0, 0, 3), (10, 0, 3), (10, 8, 3), (0, 8, 3)],
+    ]
+    groups = {"panel": [[(5, 3, 0), (5, 5, 0), (5, 5, 2), (5, 3, 2)]], "walls": walls}
+    cos, sin = math.cos(math.radians(turn)), math.sin(math.radians(turn))
+    rotation = np.array([[cos, -sin, 0.0], [sin, cos, 0.0], [0.0, 0.0, 1.0]])
+
+    def place(point):
+        return rotation @ (np.asarray(mirror, dtype=float) * point)
+
+    lines = []
+    for name, quads in groups.items():
+        lines.append(f"g {name}")
+        for quad in quads:
+            lines += ["v " + " ".join(f"{c:.15g}" for c in place(corner)) for corner in quad]
+            lines.append("f -4 -3 -2 -1")
+    obj = folder / f"free_panel{mirror[0]:+.0f}{mirror[1]:+.0f}_{turn:g}.obj"
+    obj.write_text("\n".join(lines) + "\n")
+    return Room.from_scene(
+        Scene.model_validate(
+            {
+                "geometry": {"file": str(obj)},
+                "materials": {"wall": {"absorption": [0.1] * 8, "scattering": 0.0}},
+                "default_material": "wall",
+                "sources": [{"name": "s", "position": place(source).tolist()}],
+                "listeners": [{"name": "l", "position": place(listener).tolist()}],
+                "simulation": {
+                    "seed": 1,
+                    "ir_length_s": 0.3,
+                    "scattering": {"from_size": False},
+                    "early": {"max_order": 1, "diffraction": "second_order"},
+                },
+            }
+        )
+    )
+
+
+def test_a_path_along_a_panel_is_the_same_in_its_mirror_image(tmp_path: Path) -> None:
+    """A path over both upright ends of a panel standing free runs along the panel's
+    plane, along each of its faces. It took the side of face 0 of each end's frame, which
+    the room's mirror image across the panel's plane turns over: with the source just
+    past one end and above the top, 0.24 dB apart at 125 Hz, and as far from the room
+    turned by 30 degrees. Turned, the way between the ends runs along the panel within
+    rounding of its plane, and is not stopped by it there either."""
+    source, listener = np.array([5.52, 5.93, 2.21]), np.array([2.37, 2.82, 0.97])
+    levels = [
+        10.0 * np.log10(total_energy(early_paths(_free_panel(tmp_path, m, source, listener, t))))
+        for m, t in (([1, 1, 1], 0.0), ([-1, 1, 1], 0.0), ([1, -1, 1], 0.0), ([1, 1, 1], 30.0))
+    ]
+    for other in levels[1:]:
+        np.testing.assert_allclose(other, levels[0], atol=1e-6)
+
+
+#: The level behind a thin strip 2 m wide (dB re the direct sound in free field, 63 to
+#: 500 Hz) from the exact BTM solution over its top and its foot and over both, along
+#: each of its faces (validation/edge_diffraction.py, ``thin_strip``), by the places of
+#: the source and the listener (``STRIP``).
+STRIP_BTM = {
+    ((-3.0, 0.0, -0.5), (3.0, 0.0, -1.5)): [-0.077, -3.413, -5.329, -7.953],
+    ((-2.0, 0.0, -1.0), (4.0, 0.0, -1.2)): [-0.104, -3.878, -5.824, -9.189],
+    ((-1.0, 0.0, -0.3), (1.5, 0.0, -1.9)): [-1.195, -2.876, -6.480, -8.743],
+}
+
+
+@pytest.mark.parametrize("case", list(STRIP_BTM))
+def test_the_paths_over_both_edges_of_a_thin_strip_run_along_each_of_its_faces(
+    tmp_path: Path, case
+) -> None:
+    # The source and the listener in the shadow of a strip, on either side: the paths
+    # over its top and then its foot (and back) run along its plane, along both faces,
+    # each way with half the coefficient at grazing incidence, as BTM's. Taken along
+    # face 0 of each edge's frame, they were left out here: the level was that of
+    # first_order, 1.27 dB low at 63 Hz in the first place. The first edge's wave along
+    # one face is the negative of that along the other: along the source's face at the
+    # first edge and the listener's at the second the paths come with the wrong sign.
+    source, listener = case
+    levels = {}
+    for mode in ("second_order", "first_order"):
+        simulation = {"early": {"diffraction": mode}}
+        quads = edge_diffraction.strip_quads()
+        room = edge_diffraction._room(tmp_path, "strip", quads, source, listener, simulation)
+        levels[mode] = edge_diffraction.whole_early_stage(room)[:4] - np.array(STRIP_BTM[case])
+    assert np.abs(levels["second_order"][:2]).max() < 0.12, levels
+    assert np.abs(levels["first_order"][:2]).max() > 0.4, levels
+
+
 @pytest.mark.parametrize(
     ("source", "listener"),
     [
