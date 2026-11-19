@@ -93,6 +93,7 @@ from acoustic_spaces.engine.early import (
     EarlyReflections,
     _face_at,
     _mirrors,
+    _over,
 )
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 from acoustic_spaces.geometry.cells import _components
@@ -118,8 +119,17 @@ DIFFRACTION_MODES = ("none", "direct", "first_order", "second_order")
 _SERIES_LIMIT = 3.5
 #: Distances (relative to the model size) for points on an edge or a plane.
 _TOLERANCE = 1e-9
-#: Rays start this far (relative to the model size) off the edge, into the open side.
+#: Rays start this far (relative to the model size) off the edge, into the open side,
+#: but no farther than :data:`_OFFSET_CAP` metres and no nearer than
+#: :data:`_OFFSET_FLOOR` of the size (see :func:`ray_offset`).
 _OFFSET = 1e-6
+#: The farthest (m) a ray starts off an edge: in a model 100 m wide and more, a tenth of a
+#: millimetre, whatever its size.
+_OFFSET_CAP = 1e-4
+#: The nearest (relative to the model size) a ray starts off an edge: six to ten times the
+#: least distance at which a ray meets a face (a billionth of the diagonal of the model's
+#: box, the BVH's ``min_distance``).
+_OFFSET_FLOOR = 1e-8
 #: Angles (radians) this close to a shadow or reflection boundary count as on it; which
 #: side is then decided by whether the specular path was found.
 _ON_BOUNDARY = 1e-9
@@ -1002,6 +1012,7 @@ class EdgeDiffraction:
         #: (:meth:`_in_line`) that carry too little to be among them, or None.
         self.unheard: tuple[EarlyReflections, EarlyReflections] | None = None
         self.size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
+        self.offset = ray_offset(self.size)
         frequencies, self.slice_hz = band_frequencies(bands=model.bands)
         self.wavenumber = 2.0 * np.pi * frequencies / self.speed_of_sound  # (B, M)
         self.k_min = float(self.wavenumber.min())
@@ -1112,7 +1123,7 @@ class EdgeDiffraction:
             (np.searchsorted(used, row_edge), t_s, rho_s),
             self.speed_of_sound * max_delay_s,
             _TOLERANCE * self.size,
-            _OFFSET * self.size,
+            self.offset,
             self.threads,
         )
 
@@ -1121,7 +1132,7 @@ class EdgeDiffraction:
         the edge to ``end`` can reflect off, as rows into both (:func:`_reflecting_pairs`)."""
         if len(planes) == 0:
             return np.zeros(0, np.int64), np.zeros(0, np.int64)
-        offset = _OFFSET * self.size
+        offset = self.offset
         return _reflecting_pairs(
             self.model, self.edges, self._bounds, end, planes, among, offset, self.threads
         )
@@ -1312,7 +1323,7 @@ class EdgeDiffraction:
         that make reflections fade at edges take the product of the two edges' terms
         on the dark side there, the level just below the line
         (:mod:`~acoustic_spaces.engine.edge_fade`)."""
-        reach = 2.0 * _OFFSET * self.size
+        reach = 2.0 * self.offset
         t_k, length = c["t_k"], self.edges.length[c["edge"]]
         across = np.abs(angle) * c["rho_s"] * c["r2"] / (c["r1"] + c["r2"])
         rows = np.flatnonzero(missing & (angle <= _ON_BOUNDARY) & (across <= reach))
@@ -1463,7 +1474,7 @@ class EdgeDiffraction:
         # Unobstructed, with the reflection on the expected plane before or after the
         # edge. Rays start just off the edge, in the middle of its open side, and just
         # inside its ends (where a plane they may be meant to reflect off begins).
-        offset = _OFFSET * self.size
+        offset = self.offset
         along = np.clip(t_k, offset, edges.length[edge] - offset) - t_k
         start = point + along[:, None] * edges.direction[edge] + offset * edges.bisector()[edge]
         reflected = np.full(len(edge), -1, dtype=np.int64)
@@ -1498,7 +1509,18 @@ class EdgeDiffraction:
                 across = (height * beyond < 0.0) & (np.abs(height) > tolerance)
                 share = np.where(across, height / np.where(across, height - beyond, 1.0), 0.0)
                 crossing = at_edge + share[:, None] * (target - at_edge)
-                for i in np.flatnonzero(hit & (np.abs(height) <= offset)):
+                recheck = hit & (np.abs(height) <= offset)
+                # Farther off, a ray that starts beside the point stands for it unless the
+                # line from its start meets the plane off the face that the line from the
+                # point crosses it on: near grazing incidence the two cross the plane far
+                # apart (6.6 mm inside a roof's end and 17.5 cm past it, from a screen's top
+                # 0.43 mm above the roof's plane with the source 1 cm above it and the ray
+                # 0.1 mm above the top). A ray from inside an end of the edge, for a point
+                # near or past that end, still decides.
+                far = np.flatnonzero(hit & across & ~recheck & (along[via] == 0.0))
+                if len(far):
+                    recheck[far[~_over(self.model, face[far], crossing[far])]] = True
+                for i in np.flatnonzero(recheck):
                     hit[i] = _face_at(self.model, int(through[i]), crossing[i], tolerance) >= 0
                 ok[via] &= hit
                 rows = np.flatnonzero(via)
@@ -1849,7 +1871,7 @@ class EdgeDiffraction:
         screen_2 = np.isclose(edges.wedge[e2], 2.0) & on_2
         ok &= ~(screen_1 & ~on_2) & ~(screen_2 & ~on_1)
         # Unobstructed, with rays from just off each edge, as for one edge.
-        offset = _OFFSET * self.size
+        offset = self.offset
         bisector = edges.bisector()
         starts = [
             p
@@ -2757,6 +2779,14 @@ def _shortest(a, d1, b, d2, source, listener, iterations: int = 50):
     g1 = np.einsum("ij,ij->i", d1, u) / r0 - np.einsum("ij,ij->i", d1, v) / r1
     g2 = np.einsum("ij,ij->i", d2, v) / r1 - np.einsum("ij,ij->i", d2, w) / r2
     return t1, t2, np.maximum(np.abs(g1), np.abs(g2)) < 1e-8
+
+
+def ray_offset(size: float) -> float:
+    """How far (m) off an edge, in a model ``size`` metres wide, the rays that test the
+    paths over it start: a millionth of the size, but a tenth of a millimetre at most
+    and a hundred-millionth of the size at least (six to ten times the least distance
+    at which a ray meets a face)."""
+    return max(min(_OFFSET * size, _OFFSET_CAP), _OFFSET_FLOOR * size)
 
 
 def _wave_planes(model: TraceModel, c: dict, face_plane: np.ndarray | None = None) -> np.ndarray:

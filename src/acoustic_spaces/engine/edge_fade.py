@@ -118,7 +118,6 @@ import numpy as np
 
 from acoustic_spaces.engine.clusters import Pages, hand_back
 from acoustic_spaces.engine.diffraction import (
-    _OFFSET,
     _ON_BOUNDARY,
     _TOLERANCE,
     MIN_RELATIVE_ENERGY,
@@ -322,7 +321,7 @@ class EdgeFade:
 
         # The face each reflection point lies on, or -1.
         faces = np.full((n, k), -1, dtype=np.int64)
-        step = _OFFSET * self.d.size
+        step = self.d.offset
         for j in range(1, k + 1):
             rows = np.flatnonzero(possible)
             arriving = direction[rows, j - 1]
@@ -1487,7 +1486,7 @@ class EdgeFade:
         # faces where it is missed).
         sel = np.flatnonzero(ok)
         if len(sel):
-            offset = _OFFSET * d.size
+            offset = d.offset
             e = edge[sel]
             along = np.clip(t_k[sel], offset, edges.length[e] - offset) - t_k[sel]
             off_edge = point[sel] + along[:, None] * edges.direction[e]
@@ -1646,7 +1645,7 @@ class EdgeFade:
         # The leg each path over an edge goes along first on this side, then the next.
         leg = at // 2 if side == 0 else (at + 1) // 2
         any_reflection = stops[:, 1::2].any(axis=1)
-        step = _OFFSET * self.d.size
+        step = self.d.offset
         rows_all = np.arange(n)
 
         def stopping(event: np.ndarray) -> np.ndarray:

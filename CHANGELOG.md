@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Fixed: the rays that test a path over an edge started a millionth of the model's
+  size off it, 1 cm in a model 10 km wide, where they missed paths or found ones that
+  are not there: a source 1 cm from both arms of a barrier bent by 120 degrees gave
+  1.92 dB more at 63 Hz than in a model 200 m wide. They now start a tenth of a
+  millimetre off at most (models up to 100 m wide are as before), and a millimetre above
+  a roof and a screen level with it the level is that a centimetre above within 0.14 dB
+  (it was up to 0.64 dB below).
+- Fixed: a path over an edge that reflects off a plane next to it counted wherever the
+  ray from just off the edge met a face of that plane; near grazing incidence that ray
+  meets the plane far from the path's own line. It now counts only where that line meets
+  a face: with `second_order` the level a metre above a roof and a screen 1 m past it
+  stepped by 3.1 dB at 63 Hz with the screen's top 0.6 mm lower than where the path over
+  it begins to reflect off the roof.
 - Fixed: where two rooms modelled as closed models touch, each with a wall of its own
   where they meet, each face of that wall now reflects and absorbs in its own room, on
   the CPU and the GPU. In two 5 x 4 x 3 m rooms whose faces there absorb 0.9 and 0.1,
