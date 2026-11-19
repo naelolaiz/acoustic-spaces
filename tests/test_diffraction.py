@@ -267,6 +267,40 @@ def test_pieces_of_one_edge_are_joined(tmp_path: Path) -> None:
     assert len(top) == 1 and edges.length[top[0]] == pytest.approx(4.0)
 
 
+@pytest.mark.parametrize(
+    "degrees, decimals", [(45.0, None), (225.0, None), (17.0, 6), (30.0, 6), (60.0, 6)]
+)
+def test_pieces_of_one_edge_turned_and_rounded_are_joined(
+    tmp_path: Path, degrees: float, decimals: int | None
+) -> None:
+    """The screen of test_pieces_of_one_edge_are_joined turned ``degrees`` about the z
+    axis and written with ``decimals`` (all digits for None): its top is one edge. The
+    directions of its pieces differ in their last digits, which at 45 degrees to the x
+    and y axes decide which of their two largest components is the larger, and with six
+    decimals by up to about a millionth. Joined where their directions round to the same
+    millionths, with the largest component positive, the top was two or three edges at
+    45 and 225 degrees and three or four at 17, 30 and 60."""
+    c, s = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
+
+    def turned(x, y, z):
+        point = (x * c - y * s, x * s + y * c, z)
+        return [float(v) if decimals is None else round(v, decimals) for v in point]
+
+    obj = tmp_path / "strips.obj"
+    lines = []
+    for k in range(5):
+        lines += ["v " + " ".join(repr(v) for v in turned(0, k, z)) for z in (-2, 0)]
+    lines.append("g screen")
+    for k in range(4):
+        a, b = 2 * k + 1, 2 * k + 3
+        lines += [f"f {a} {b} {b + 1}", f"f {a} {b + 1} {a + 1}"]
+    obj.write_text("\n".join(lines))
+    room = _screen(tmp_path, turned(-1, 2, -1), turned(1, 2, -1), obj)
+    edges = find_edges(TraceModel.from_room(room))
+    top = np.flatnonzero(np.isclose(edges.start[:, 2], 0) & np.isclose(edges.end[:, 2], 0))
+    assert len(top) == 1 and edges.length[top[0]] == pytest.approx(4.0)
+
+
 # L-shaped rooms 3 m high with a free-standing panel 2 m high in the plane of a wall: the
 # plan, two rectangles that make up the floor, the panel's ends, and the axis across the
 # plane. "x": the plane x = 5 of the wall from y = 5 to 9, which faces -x. "y": the plane

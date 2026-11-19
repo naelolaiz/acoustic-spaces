@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fixed: the pieces of an edge along one line are one edge also where rounding leaves
+  their directions up to about a millionth apart (a model written with six decimals) or
+  at 45 degrees to two axes: a screen's top drawn in four pieces was up to four edges,
+  which moved the level in an open box turned 45 degrees by 0.03 dB at 63 Hz with
+  `second_order` diffraction.
 - Fixed: with edge diffraction, the edge fade takes a model turned to any angle and
   written with six decimals as it takes it exact: planes at right angles to the model's
   tolerance for planes commute, a term's path reaches a face of the plane it reflects
