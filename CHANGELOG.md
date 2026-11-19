@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: where two rooms modelled as closed models touch over part of a face of each
+  (a narrow room's wall against a wider room's, a room upstairs on part of a ceiling),
+  the cleaning cuts both faces to the same outline where they lie together, so that
+  each reflects and absorbs in its own room. In a 5 x 4 x 3 m room against a 6 m wide
+  one, their walls there absorbing 0.9 and 0.1, a ray had met either wall: the
+  stochastic tracer gave the first room 2.2 to 2.3 dB more G and 1.5 to 1.7 times the
+  T30 (250 Hz to 2 kHz), with no warning.
 - Fixed: a panel standing free in a room, drawn as two faces back to back, made the
   model read as not closed: the faces' outer sides and the gap between them were spaces
   of no volume of their own, which no room held, so the model had no volume and the

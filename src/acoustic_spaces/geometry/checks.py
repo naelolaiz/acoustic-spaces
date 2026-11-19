@@ -113,6 +113,9 @@ def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
     that meet along an edge are turned to agree with each other, so a closed
     model with a few faces flipped by its exporter still has a volume and an inside
     test that works; each connected part keeps the orientation most of its area had.
+    Where two rooms modelled closed touch over part of a face (see
+    :func:`_imprint_overlaps`), each of their faces there is cut along the other's
+    outline, so that the two have the same outline where they lie together.
     Returns the cleaned mesh, the number of merged vertices and of removed faces.
     """
     keys = np.round(mesh.vertices / MERGE_TOLERANCE_M).astype(np.int64)
@@ -139,6 +142,9 @@ def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
     tri = vertices[faces]
     area = 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
     faces = _orient_faces(faces, area)
+    vertices, faces, labels, corners = _imprint_overlaps(vertices, faces, labels, mesh.solids)
+    if len(corners):
+        faces, labels = _split_t_junctions(vertices, faces, labels, corners)
     # A stray point of the file, or a corner only degenerate faces had, would count
     # wherever the model's extent is taken from its vertices.
     used, faces = np.unique(faces, return_inverse=True)
@@ -165,10 +171,13 @@ def open_edges_of(faces: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _split_t_junctions(
-    vertices: np.ndarray, faces: np.ndarray, labels: np.ndarray
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    labels: np.ndarray,
+    corners: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """The faces split at the vertices of odd edges that lie on their edges, with
-    their labels.
+    """The faces split at the vertices of odd edges, and at ``corners``, that lie on
+    their edges, with their labels.
 
     An odd edge is one shared by an odd number of faces: an open edge, which no other
     face shares, or one of three faces along a line that the edge of a fourth runs past.
@@ -185,11 +194,13 @@ def _split_t_junctions(
             break
         directed, edge, counts = _edge_counts(faces)
         odd_rows = np.flatnonzero(counts[edge] % 2 == 1)
-        if len(odd_rows) == 0:
+        if len(odd_rows) == 0 and corners is None:
             break
-        # Only the ends of odd edges can lie on another edge: sorted along x, the ones
-        # within an edge's reach are one slice.
+        # Only the ends of odd edges (and ``corners``) can lie on another edge: sorted
+        # along x, the ones within an edge's reach are one slice.
         ends = np.unique(directed[odd_rows])
+        if corners is not None:
+            ends = np.union1d(ends, corners)
         order = np.argsort(vertices[ends, 0], kind="stable")
         ends, xs = ends[order], vertices[ends[order], 0]
         n = len(faces)
@@ -226,6 +237,332 @@ def _split_t_junctions(
         faces = np.concatenate([faces[kept], np.array(new, dtype=faces.dtype).reshape(-1, 3)])
         labels = np.concatenate([labels[kept], np.array(new_labels, dtype=labels.dtype)])
     return faces, labels
+
+
+#: Faces whose unit normals and distances from the origin (metres) agree to this lie in
+#: one plane for :func:`_imprint_overlaps`, as the engine groups them.
+_PLANE_TOLERANCE = 1e-5
+
+
+def _imprint_overlaps(
+    vertices: np.ndarray, faces: np.ndarray, labels: np.ndarray, solids: bool = False
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """The faces cut where two rooms modelled closed touch over part of a face: the
+    vertices with the new corners after them, the faces, their labels and the corners of
+    the faces cut, for :func:`_split_t_junctions` to take into the faces along them.
+
+    Two closed models that touch over part of a face (a narrow room's wall against a
+    wider room's, a room upstairs on part of the ceiling of one below) each have a face
+    there, and neither's edges run along the other's: every edge is shared by two
+    faces, so no T-junction shows, the two faces share no outline and the model cannot
+    tell where they lie together. The faces of a plane make sheets, joined across the
+    edges they share lying on either side of them. Where two sheets face opposite ways,
+    each with a room behind it and the space round the model in front (as the cells of
+    :func:`~acoustic_spaces.geometry.cells.mesh_cells` have them before the cut), each of
+    their faces is cut along the lines of the edges of the other's outline that run
+    through it, into convex pieces that each lie wholly inside or outside the other,
+    and each piece is split into triangles again, turning as the face did. Sheets with
+    the same outline (a wall drawn once for each room, the two rooms' walls the same)
+    are left as they are, and so are the faces of a shell standing in a room, which face
+    the room's own the same way, and the faces of solids (``solids``). A new corner within
+    ``T_JUNCTION_TOLERANCE_M`` of a vertex or of another new corner is that one."""
+    none = np.zeros(0, dtype=np.int64)
+    if solids or len(faces) < 2:
+        return vertices, faces, labels, none
+    tri = vertices[faces]
+    cross = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    normal = cross / np.maximum(np.linalg.norm(cross, axis=1), 1e-300)[:, None]
+    # One direction for each plane: that of its largest component as rounded, the first
+    # of equal ones, as the engine's planes have it.
+    rounded = np.round(normal / _PLANE_TOLERANCE)
+    flip = np.take_along_axis(rounded, np.abs(rounded).argmax(axis=1)[:, None], 1)[:, 0] < 0
+    normal = np.where(flip[:, None], -normal, normal)
+    offset = np.einsum("ij,ij->i", normal, tri[:, 0])
+    keys = np.round(np.column_stack([normal, offset]) / _PLANE_TOLERANCE).astype(np.int64)
+    plane = np.unique(keys, axis=0, return_inverse=True)[1].reshape(-1)
+    # The sheets: faces of a plane joined across the edges two of them share lying on
+    # either side of it.
+    n = len(faces)
+    owner = np.tile(np.arange(n), 3)
+    first = np.concatenate([faces[:, 0], faces[:, 1], faces[:, 2]])
+    second = np.concatenate([faces[:, 1], faces[:, 2], faces[:, 0]])
+    third = np.concatenate([faces[:, 2], faces[:, 0], faces[:, 1]])
+    lo, hi = np.minimum(first, second), np.maximum(first, second)
+    _, edge, uses = np.unique(
+        np.column_stack([plane[owner], lo, hi]), axis=0, return_inverse=True, return_counts=True
+    )
+    edge = edge.reshape(-1)
+    twice = np.flatnonzero(uses[edge] == 2)
+    twice = twice[np.argsort(edge[twice], kind="stable")].reshape(-1, 2)
+    along = vertices[hi[twice[:, 0]]] - vertices[lo[twice[:, 0]]]
+    base = vertices[lo[twice[:, 0]]]
+    out0 = np.cross(along, vertices[third[twice[:, 0]]] - base)
+    out1 = np.cross(along, vertices[third[twice[:, 1]]] - base)
+    joined = twice[np.einsum("ij,ij->i", out0, out1) < 0.0]
+    sheet = _components(n, owner[joined])
+    # Which way each sheet faces along its plane's direction: 1, -1, or 0 if both.
+    count = int(sheet.max()) + 1
+    way = np.where(flip, -1, 1)
+    low = np.full(count, 2)
+    high = np.full(count, -2)
+    np.minimum.at(low, sheet, way)
+    np.maximum.at(high, sheet, way)
+    facing = np.where(low == high, low, 0)
+    sheet_plane = np.zeros(count, dtype=np.int64)
+    sheet_plane[sheet] = plane
+    both = np.zeros((int(plane.max()) + 1, 2), dtype=bool)
+    both[sheet_plane[facing != 0], (facing[facing != 0] + 1) // 2] = True
+    several = np.flatnonzero(both.all(axis=1))
+    if len(several) == 0:
+        return vertices, faces, labels, none
+    outline = np.ones(len(owner), dtype=bool)
+    outline[joined.reshape(-1)] = False
+
+    behind: list[np.ndarray] = []
+
+    def outward() -> np.ndarray:
+        """(sheets,) which way the space round the model lies from each sheet along its
+        plane's direction, the sheet's faces having a room behind them: 1, -1, or 0."""
+        if not behind:
+            from acoustic_spaces.geometry.cells import mesh_cells
+
+            cells = mesh_cells(vertices, faces)
+            room = np.zeros(len(cells.volume), dtype=bool)
+            room[cells.rooms] = True
+            front, back = cells.side[:, 0], cells.side[:, 1]
+            out = np.where(
+                cells.outside[front] & room[back],
+                1,
+                np.where(cells.outside[back] & room[front], -1, 0),
+            )
+            lo_, hi_ = np.full(count, 2), np.full(count, -2)
+            np.minimum.at(lo_, sheet, way * out)
+            np.maximum.at(hi_, sheet, way * out)
+            behind.append(np.where(lo_ == hi_, lo_, 0))
+        return behind[0]
+
+    def touching(mine: int, others: np.ndarray) -> np.ndarray:
+        """Whether the sheets ``others`` and ``mine`` face opposite ways, each with a room
+        behind it and the space round the model in front."""
+        ok = facing[others] == -facing[mine]
+        if facing[mine] == 0 or not ok.any():
+            return ok & False
+        ways = outward()
+        return ok & (ways[mine] != 0) & (ways[others] == -ways[mine])
+
+    pieces: dict[int, list[list[int]]] = {}
+    points: list[np.ndarray] = []
+    for p in several.tolist():
+        members = np.flatnonzero(plane == p)
+        rows = np.flatnonzero(outline & (plane[owner] == p))
+        segments = (lo[rows], hi[rows], sheet[owner[rows]])
+        pieces.update(
+            _cut_plane(
+                vertices,
+                faces,
+                members,
+                sheet[members],
+                segments,
+                touching,
+                normal[members[0]],
+                points,
+            )
+        )
+    if not pieces:
+        return vertices, faces, labels, none
+
+    # Each new corner is the vertex within the tolerance of it or of a new corner joined
+    # to it that way, or else the first of those new corners.
+    from scipy.spatial import cKDTree
+
+    new = np.array(points, dtype=float).reshape(-1, 3)
+    distance, nearest = cKDTree(vertices).query(new, distance_upper_bound=T_JUNCTION_TOLERANCE_M)
+    near = cKDTree(new).query_pairs(T_JUNCTION_TOLERANCE_M) if len(new) else set()
+    pairs = np.array(sorted(near), dtype=np.int64)
+    group = _components(len(new), pairs.reshape(-1, 2))
+    on_vertex = np.full(int(group.max(initial=-1)) + 1, -1, dtype=np.int64)
+    at = np.flatnonzero(np.isfinite(distance))
+    np.maximum.at(on_vertex, group[at], nearest[at])
+    leader = np.full(len(on_vertex), len(new), dtype=np.int64)
+    np.minimum.at(leader, group, np.arange(len(new)))
+    fresh = (on_vertex[group] < 0) & (leader[group] == np.arange(len(new)))
+    number = np.full(len(new), -1, dtype=np.int64)
+    number[fresh] = len(vertices) + np.arange(int(fresh.sum()))
+    target = np.where(on_vertex[group] >= 0, on_vertex[group], number[leader[group]])
+    vertices = np.vstack([vertices, new[fresh]])
+
+    cut = sorted(pieces)
+    made = np.array(
+        [[k if k >= 0 else int(target[-1 - k]) for k in t] for f in cut for t in pieces[f]],
+        dtype=faces.dtype,
+    ).reshape(-1, 3)
+    made_labels = np.array([labels[f] for f in cut for _ in pieces[f]], dtype=labels.dtype)
+    kept = np.setdiff1d(np.arange(len(faces)), cut)
+    faces = np.concatenate([faces[kept], made])
+    labels = np.concatenate([labels[kept], made_labels])
+    return vertices, faces, labels, np.unique(made)
+
+
+def _components(count: int, pairs: np.ndarray) -> np.ndarray:
+    """(count,) the connected component of each of ``count`` nodes joined by ``pairs``
+    (K, 2)."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    ones = np.ones(len(pairs), dtype=np.int8)
+    graph = coo_matrix((ones, (pairs[:, 0], pairs[:, 1])), shape=(count, count))
+    return connected_components(graph, directed=False)[1]
+
+
+def _cut_plane(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    members: np.ndarray,
+    sheets: np.ndarray,
+    segments: tuple[np.ndarray, np.ndarray, np.ndarray],
+    touching,
+    normal: np.ndarray,
+    points: list[np.ndarray],
+) -> dict[int, list[list[int]]]:
+    """The faces ``members`` of the plane with unit ``normal``, in ``sheets``, that the
+    outline of a sheet touching theirs (``segments``: the ends of the outlines' edges and
+    their sheets; ``touching(sheet, sheets)``, see :func:`_imprint_overlaps`) runs
+    through, each as its pieces' triangles: corners as vertex indices, or as -1 - k for
+    the new corner ``points[k]``, which this appends."""
+    tol = T_JUNCTION_TOLERANCE_M
+    # A frame in the plane, (u, w, normal) right-handed: a face that turns
+    # counter-clockwise in (u, w) has the plane's normal.
+    k = (int(np.abs(normal).argmax()) + 1) % 3
+    u = -normal[k] * normal
+    u[k] += 1.0
+    u /= np.linalg.norm(u, axis=0)
+    w = np.cross(normal, u)
+    start, end, seg_sheet = segments
+    used = np.unique(np.concatenate([faces[members].reshape(-1), start, end]))
+    flat = np.column_stack(
+        [np.einsum("ij,j->i", vertices[used], u), np.einsum("ij,j->i", vertices[used], w)]
+    )
+
+    def at(index: np.ndarray) -> np.ndarray:
+        return flat[np.searchsorted(used, index)]
+
+    seg_a, seg_b = at(start), at(end)
+    out: dict[int, list[list[int]]] = {}
+    begin = len(points)
+    for face, sheet in zip(members.tolist(), sheets.tolist(), strict=True):
+        p = at(faces[face])
+        turn = float(_turn(p[:1], p[1:2], p[2:])[0])
+        ids = faces[face] if turn > 0 else faces[face][::-1]
+        through = (seg_sheet != sheet) & _runs_through(at(ids), seg_a, seg_b, tol)
+        if through.any():
+            through[through] = touching(sheet, seg_sheet[through])
+        if not through.any():
+            continue
+        polygons = [list(zip(ids.tolist(), at(ids), strict=True))]
+        for line in _lines(seg_a[through], seg_b[through], tol):
+            polygons = [
+                part for polygon in polygons for part in _split_convex(polygon, line, tol, points)
+            ]
+        triangles = []
+        for polygon in polygons:
+            keep = _corners(polygon, tol)
+            for j in range(1, len(keep) - 1):
+                t = [keep[0], keep[j], keep[j + 1]]
+                triangles.append(t if turn > 0 else t[::-1])
+        out[face] = triangles
+    # The new corners in space, in the plane (at its faces' mean distance from the origin).
+    level = float(np.mean(np.einsum("ij,j->i", vertices[faces[members, 0]], normal)))
+    for j in range(begin, len(points)):
+        points[j] = level * normal + points[j][0] * u + points[j][1] * w
+    return out
+
+
+def _turn(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.ndarray:
+    """Twice the signed area of the triangles (a, b, c) in the plane, (N, 2) each:
+    positive where they turn counter-clockwise."""
+    return (b[:, 0] - a[:, 0]) * (c[:, 1] - a[:, 1]) - (b[:, 1] - a[:, 1]) * (c[:, 0] - a[:, 0])
+
+
+def _runs_through(triangle: np.ndarray, a: np.ndarray, b: np.ndarray, tol: float) -> np.ndarray:
+    """(N,) whether the segments from ``a`` to ``b`` (N, 2) run through the triangle
+    (3, 2), counter-clockwise, farther than ``tol`` inside each of its edges."""
+    low = np.zeros(len(a))
+    high = np.ones(len(a))
+    for k in range(3):
+        p, q = triangle[k], triangle[(k + 1) % 3]
+        edge = q - p
+        length = float(np.hypot(edge[0], edge[1]))
+        # Distance inside the edge, less the tolerance, at a and at b.
+        da = (edge[0] * (a[:, 1] - p[1]) - edge[1] * (a[:, 0] - p[0])) / length - tol
+        db = (edge[0] * (b[:, 1] - p[1]) - edge[1] * (b[:, 0] - p[0])) / length - tol
+        with np.errstate(divide="ignore", invalid="ignore"):
+            t = da / (da - db)
+        entering = (da <= 0.0) & (db > 0.0)
+        leaving = (da > 0.0) & (db <= 0.0)
+        low = np.where(entering, np.maximum(low, t), low)
+        high = np.where(leaving, np.minimum(high, t), high)
+        high = np.where((da <= 0.0) & (db <= 0.0), -1.0, high)
+    return high > low
+
+
+def _lines(a: np.ndarray, b: np.ndarray, tol: float) -> np.ndarray:
+    """(L, 3) the lines of the segments from ``a`` to ``b`` (N, 2), once each: a unit
+    normal (its larger component positive) and its distance from the origin."""
+    d = b - a
+    across = np.column_stack([-d[:, 1], d[:, 0]]) / np.hypot(d[:, 0], d[:, 1])[:, None]
+    larger = np.where(np.abs(across[:, 0]) >= np.abs(across[:, 1]), across[:, 0], across[:, 1])
+    across *= np.where(larger < 0.0, -1.0, 1.0)[:, None]
+    lines = np.column_stack([across, np.einsum("ij,ij->i", across, a)])
+    return lines[np.sort(np.unique(np.round(lines / tol), axis=0, return_index=True)[1])]
+
+
+def _split_convex(
+    polygon: list[tuple[int, np.ndarray]],
+    line: np.ndarray,
+    tol: float,
+    points: list[np.ndarray],
+) -> list[list[tuple[int, np.ndarray]]]:
+    """The convex ``polygon`` (corners as an index, see :func:`_cut_plane`, and a point
+    in the plane) split by ``line`` (see :func:`_lines`) where it has corners farther
+    than ``tol`` on both sides of it; a corner within ``tol`` of it goes to both parts.
+    A new corner where it crosses an edge is appended to ``points``."""
+    distance = np.array([line[0] * q[0] + line[1] * q[1] - line[2] for _, q in polygon])
+    side = np.where(distance > tol, 1, np.where(distance < -tol, -1, 0))
+    if not ((side > 0).any() and (side < 0).any()):
+        return [polygon]
+    parts: tuple[list, list] = ([], [])
+    for j, (corner, q) in enumerate(polygon):
+        if side[j] >= 0:
+            parts[0].append((corner, q))
+        if side[j] <= 0:
+            parts[1].append((corner, q))
+        k = (j + 1) % len(polygon)
+        if side[j] * side[k] < 0:
+            t = distance[j] / (distance[j] - distance[k])
+            point = q + t * (polygon[k][1] - q)
+            points.append(point)
+            parts[0].append((-len(points), point))
+            parts[1].append((-len(points), point))
+    return list(parts)
+
+
+def _corners(polygon: list[tuple[int, np.ndarray]], tol: float) -> list[int]:
+    """The corners of the convex ``polygon`` farther than ``tol`` from the line through
+    the corners on either side of them: the others lie on its edges."""
+    keep = list(polygon)
+    changed = True
+    while changed and len(keep) > 3:
+        changed = False
+        for j in range(len(keep)):
+            a, b, c = keep[j - 1][1], keep[j][1], keep[(j + 1) % len(keep)][1]
+            chord = c - a
+            length = float(np.hypot(chord[0], chord[1]))
+            off = abs(chord[0] * (b[1] - a[1]) - chord[1] * (b[0] - a[0])) / max(length, 1e-300)
+            if off <= tol:
+                del keep[j]
+                changed = True
+                break
+    return [corner for corner, _ in keep]
 
 
 #: (edge, end) pairs tested at once in :func:`_split_t_junctions`, to bound its memory.

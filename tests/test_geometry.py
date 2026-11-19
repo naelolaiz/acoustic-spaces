@@ -577,6 +577,68 @@ def test_a_face_is_split_where_its_edge_runs_past_three_faces() -> None:
     assert report.faces == 14 + 13 + 1  # the right box's wall split in two
 
 
+def _cuboid(low, high, inward: bool) -> RoomMesh:
+    """A closed box from ``low`` to ``high``, its normals into it or out of it."""
+    box = _box(*np.subtract(high, low))
+    faces = box.faces if inward else box.faces[:, ::-1]
+    return RoomMesh(box.vertices + np.asarray(low, float), faces, box.face_labels, box.labels)
+
+
+@pytest.mark.parametrize("inward", [False, True], ids=["out", "in"])
+@pytest.mark.parametrize(
+    ("first", "second", "together"),
+    [
+        (((0, 0, 0), (5, 4, 3)), ((5, 0, 0), (10, 6, 3)), 12.0),
+        (((0, 1, 1), (5, 3, 3)), ((5, 0, 0), (15, 10, 10)), 4.0),
+        (((0, 6, 1), (5, 8, 3)), ((5, 0, 0), (15, 10, 10)), 4.0),
+        (((0, 2, 0), (5, 8, 3)), ((5, 0, 0), (10, 6, 5)), 12.0),
+        (((0, 0, 0), (10, 10, 3)), ((2, 2, 3), (6, 6, 6)), 16.0),
+    ],
+    ids=["wider", "inside-one-face", "across-two-faces", "crossing", "upstairs"],
+)
+def test_rooms_touching_over_part_of_a_face_share_its_outline(
+    first, second, together: float, inward: bool
+) -> None:
+    """Two rooms modelled as closed boxes touching over part of a face of each (a wider
+    room's wall, a small room's wall inside one face of a large room's wall or across
+    two, walls whose outlines cross, a small room upstairs on a large room's ceiling):
+    where they lie together, both are cut to the same outline, so that a sliver lies
+    between them with the faces of both on its sides, twice the area of the place they
+    share. Before, every edge was shared by two faces, no T-junction showed and the
+    model had no sliver there: a ray met either face, whichever room it was in."""
+    mesh = RoomMesh.concatenate([_cuboid(*first, inward), _cuboid(*second, inward)])
+    cleaned, _, _ = clean_mesh(mesh)
+    report = check_mesh(cleaned)
+    assert report.closed and report.boundary_edges == 0 and report.odd_edges == 0
+    volumes = sorted(float(np.prod(np.subtract(high, low))) for low, high in (first, second))
+    assert sorted(report.room_volumes_m3) == pytest.approx(volumes)
+    cells = cleaned.cells()
+    sliver = cells.slivers[cells.side].any(axis=1)
+    assert cleaned.face_areas()[sliver].sum() == pytest.approx(2.0 * together)
+
+
+@pytest.mark.parametrize("inward", [False, True], ids=["out", "in"])
+@pytest.mark.parametrize(
+    ("first", "second", "rooms"),
+    [
+        (((0, 0, 0), (5, 4, 3)), ((5, 0, 0), (10, 4, 3)), (60.0, 60.0)),
+        (((0, 0, 0), (10, 10, 3)), ((2, 2, 0), (4, 4, 1)), (296.0,)),
+    ],
+    ids=["same-wall", "box-on-the-floor"],
+)
+def test_faces_lying_together_are_not_cut_where_nothing_needs_it(
+    first, second, rooms, inward: bool
+) -> None:
+    """Two rooms touching with walls of one outline, and a closed box standing on a
+    room's floor, which faces the floor's way where they lie together (it stands inside
+    the room, not against it): no face is cut, and the box's inside stays a solid."""
+    mesh = RoomMesh.concatenate([_cuboid(*first, inward), _cuboid(*second, inward)])
+    cleaned, _, _ = clean_mesh(mesh)
+    report = check_mesh(cleaned)
+    assert len(cleaned.faces) == 24
+    assert report.closed and report.room_volumes_m3 == pytest.approx(rooms)
+
+
 def test_a_sliver_whose_corner_lies_on_its_edge_is_dropped() -> None:
     # The floor is cut across its middle, the front wall not; a sliver 1 micrometre high
     # closes the gap, and a panel hangs from the floor's corner on the wall's edge. That
