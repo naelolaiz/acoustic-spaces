@@ -47,6 +47,13 @@ nothing for its size (as a surface of limited size does at low frequencies, see
 off the ground, and nothing else. A scene may give the sky a material of its own
 (`assignments: {sky: ...}`); otherwise the scene file leaves it out.
 
+The ground's bounces count for no order: the early part
+(`simulation.early.max_order`, from 1 on) holds each path off the level ground and
+vertical walls (façades, barriers) with up to `max_order` reflections off the walls
+and every bounce off the ground along it, as the outdoor standards attach the ground's
+effect to every path (ISO 9613-2, Nord2000, CNOSSOS-EU). A path that also reflects off
+any other surface (a roof, a slope of a terrain) counts each of its reflections.
+
 The ground takes a material as any surface does. A material with an `impedance` (grass,
 soil, snow, gravel, asphalt) reflects sound as a real ground does, with the phase and
 the ground wave that make the dip over soft ground (see [Ground impedance](#ground-impedance));
@@ -755,8 +762,9 @@ is an arc of a circle, so its travel time and its length are exact.
   bent up out of it. The energy they rain onto listeners goes straight, in the time of
   the heights it crosses, and does not reach a listener in the shadow of where it
   leaves. They leave out the specular paths the early part holds: off the ground and
-  vertical walls, those with up to ten bounces off the ground, which count as one
-  reflection towards `max_order`; off any other surface, as in still air. The CPU and
+  vertical walls, those with up to ten bounces off the ground, which count for no
+  order (see [The ground and the sky](#the-ground-and-the-sky)); off any other
+  surface, as in still air. The CPU and
   the GPU trace these rays alike (`simulation.late.device`): the GPU follows the same
   chords, in single precision, and what reaches each listener in each band, and when,
   agrees within the noise of the ray count (see
@@ -1252,7 +1260,9 @@ Blender draw the volumes in see-through green, and coverage maps outline them.
   [Sound over rows of barriers and buildings](#sound-over-rows-of-barriers-and-buildings)).
 - **The late part** comes from the stochastic ray tracer: rays reflect off the ground
   and the buildings, and scatter off those that scatter, until they leave through the
-  sky. Between tall buildings (a street canyon, a courtyard) that is a tail of its own;
+  sky. In still air what they scatter also rains on each listener's image in the
+  ground (see [Simulation](simulation.md)). Between tall buildings (a street canyon, a
+  courtyard) that is a tail of its own;
   in the open, almost nothing: over flat ground that scatters nothing, nothing at all,
   and over a terrain that scatters nothing, the sound its slopes reflect more often than
   the image sources' order (twice or more, off the hollow at the foot of the `hillside`

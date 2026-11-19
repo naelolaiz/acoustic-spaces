@@ -55,8 +55,9 @@ def _faces(walls, height: float) -> list[_Face]:
 
 
 def _specular(source, listener, faces: list[_Face], room: float) -> list[tuple[float, int]]:
-    """(length, order) of the specular paths up to ``_ORDER`` reflections, by the image
-    source method written out: every sequence of faces, the source mirrored in each in
+    """(length, order) of the specular paths off up to ``_ORDER`` walls, with any bounces
+    off the ground (``faces[0]``, whose bounces count for no order outdoors), by the
+    image source method written out: every sequence of faces, the source mirrored in each in
     turn, the path traced back from the listener. A path holds where each leg's two ends
     lie on either side of the plane it reflects off, each reflection point on its face
     and no leg crosses another face. ``room`` (m) moves every limit of a face one way:
@@ -71,9 +72,9 @@ def _specular(source, listener, faces: list[_Face], room: float) -> list[tuple[f
     source, listener = np.asarray(source, dtype=float), np.asarray(listener, dtype=float)
     marks = np.vstack([np.zeros(3), np.eye(3)])
     found, mirrors = [], []
-    for order in range(_ORDER + 1):
+    for order in range(2 * _ORDER + 2):
         for seq in itertools.product(range(len(faces)), repeat=order):
-            if any(a == b for a, b in itertools.pairwise(seq)):
+            if any(a == b for a, b in itertools.pairwise(seq)) or np.count_nonzero(seq) > _ORDER:
                 continue
             images, moved = [source], marks
             for s in seq:
