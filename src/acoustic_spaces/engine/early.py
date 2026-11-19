@@ -325,15 +325,70 @@ def _draws(roots: list, seed: int) -> list[np.ndarray]:
     return [rng.standard_normal(len(rows)) for rows, _ in roots]
 
 
+def held(kinds: np.ndarray | None, sequences: np.ndarray, max_order: int) -> np.ndarray:
+    """(n,) whether the early stage holds each plane sequence (n, k) with ``max_order``:
+    one of up to ``max_order`` reflections, or outdoors one off nothing but the ground
+    and vertical walls with up to ``max_order`` off the walls and any off the ground (from
+    order 1 on), as the ground's effect goes with every path (``kinds`` of the planes,
+    :func:`~acoustic_spaces.engine.model.plane_kinds`; None: each reflection counts)."""
+    k = sequences.shape[1]
+    if kinds is None or k <= max_order:
+        return np.full(len(sequences), k <= max_order)
+    kind = kinds[sequences]
+    ground = np.count_nonzero(kind == 1, axis=1)
+    return np.all(kind >= 0, axis=1) & (k - ground <= max_order) & (max_order >= 1)
+
+
+#: How near to perpendicular (the cosine between their normals) two planes are for
+#: :func:`_turns_back`.
+_PERPENDICULAR = 1e-9
+
+
+def _turns_back(model: TraceModel, sequences: np.ndarray) -> np.ndarray:
+    """(n,) whether each plane sequence (n, k) reflects off a plane again with nothing
+    but planes perpendicular to it in between (a wall, the ground, the same wall): the
+    sound leaves the plane it reflects off, and reflections off planes perpendicular to
+    it keep it going away, so no path does. Where their points meet in one corner, the
+    search could take one, which makes the mirror of the sequence without the two."""
+    k = sequences.shape[1]
+    out = np.zeros(len(sequences), dtype=bool)
+    if k < 3 or len(sequences) == 0:
+        return out
+    normals = model.plane_normal
+    across = np.abs(products.product(normals, normals.T)) <= _PERPENDICULAR
+    for i in range(k - 2):
+        between = np.ones(len(sequences), dtype=bool)
+        for j in range(i + 1, k):
+            if j > i + 1:
+                out |= between & (sequences[:, j] == sequences[:, i])
+            between &= across[sequences[:, i], sequences[:, j]]
+    return out
+
+
+def reach(kinds: np.ndarray | None, max_order: int) -> int:
+    """The most reflections of a sequence :func:`held` holds: ``max_order``, or outdoors
+    that many off the walls with a bounce off the ground before, between and after them
+    (the ground being level, no two in a row)."""
+    return max_order if kinds is None or max_order <= 0 else 2 * max_order + 1
+
+
 def ray_traced_candidates(
-    model: TraceModel, source: np.ndarray, max_order: int, rays: int, threads: int = 0
+    model: TraceModel,
+    source: np.ndarray,
+    max_order: int,
+    rays: int,
+    threads: int = 0,
+    kinds: np.ndarray | None = None,
 ) -> list[np.ndarray]:
     """Plane sequences hit by ``rays`` specular rays, which pass through surfaces that
-    let sound through (forking where those also reflect); entry k-1 has shape (n, k)."""
+    let sound through (forking where those also reflect); entry k-1 has shape (n, k).
+    With ``kinds`` (outdoors), those :func:`held` holds, up to :func:`reach` long, but
+    those that turn back (:func:`_turns_back`)."""
     from acoustic_spaces import _native
 
     if max_order <= 0:
         return []
+    deepest = reach(kinds, max_order)
     passing = np.zeros(0, dtype=np.uint8)
     if model.transmission is not None:
         # 0: reflects, 1: reflects and lets sound through, 2: lets it through only.
@@ -343,15 +398,18 @@ def ray_traced_candidates(
         model.bvh,
         np.asarray(source, dtype=np.float64),
         int(rays),
-        int(max_order),
+        int(deepest),
         int(threads),
         passing,
     )
     planes = np.where(faces >= 0, model.face_plane[np.maximum(faces, 0)], -1)
     out = []
-    for k in range(1, max_order + 1):
+    for k in range(1, deepest + 1):
         prefix = planes[:, :k]
         prefix = prefix[np.all(prefix >= 0, axis=1)]
+        prefix = prefix[held(kinds, prefix, max_order)]
+        if kinds is not None:
+            prefix = prefix[~_turns_back(model, prefix)]
         out.append(
             _distinct_rows(prefix, model.plane_count) if len(prefix) else np.zeros((0, k), np.int64)
         )
@@ -376,10 +434,16 @@ def _distinct_rows(rows: np.ndarray, base: int) -> np.ndarray:
 
 
 def exhaustive_candidates(
-    model: TraceModel, source: np.ndarray, max_order: int, limit: int = MAX_CANDIDATES
+    model: TraceModel,
+    source: np.ndarray,
+    max_order: int,
+    limit: int = MAX_CANDIDATES,
+    kinds: np.ndarray | None = None,
 ) -> list[np.ndarray]:
     """Every plane sequence whose images stay in front of the next plane (outdoors, not
-    the planes of the open sky, which reflects nothing)."""
+    the planes of the open sky, which reflects nothing). With ``kinds`` (outdoors),
+    those :func:`held` holds, up to :func:`reach` long, but those that turn back
+    (:func:`_turns_back`)."""
     normals, offsets = model.plane_normal, model.plane_offset
     sky = None
     if model.sky is not None:
@@ -389,7 +453,7 @@ def exhaustive_candidates(
     images = np.asarray(source, dtype=np.float64)[None, :]
     out = []
     total = 0
-    for _ in range(max_order):
+    for _ in range(reach(kinds, max_order) if max_order > 0 else 0):
         # Starting from empty arrays keeps one (0, k) entry for an order with no sequence
         # left (a single reflecting plane leaves none from the second order on).
         new_seqs = [np.zeros((0, seqs.shape[1] + 1), dtype=np.int64)]
@@ -408,6 +472,11 @@ def exhaustive_candidates(
             new_images.append(model.mirror(img[rows], cols))
         seqs = np.concatenate(new_seqs).astype(np.int64)
         images = np.concatenate(new_images)
+        # A sequence it does not hold has none that it holds after it.
+        kept = held(kinds, seqs, max_order)
+        if kinds is not None:
+            kept &= ~_turns_back(model, seqs)
+        seqs, images = seqs[kept], images[kept]
         total += len(seqs)
         if total > limit:
             raise ValueError(
@@ -419,9 +488,46 @@ def exhaustive_candidates(
 
 
 def _perpendicular(model, a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Whether the planes ``a`` and ``b`` are perpendicular: reflections off them commute."""
+    """Whether the planes ``a`` and ``b`` are perpendicular: reflections off them commute.
+    Their normals are known to :data:`PLANE_TOLERANCE` (faces join a plane within it),
+    and so is the right angle between them: the walls of a room turned to any angle,
+    with its corners written to six decimals, stand at right angles."""
     dot = np.einsum("ij,ij->i", model.plane_normal[a], model.plane_normal[b])
-    return np.abs(dot) < 1e-9
+    return np.abs(dot) < PLANE_TOLERANCE
+
+
+def _canonical(model, seqs: np.ndarray) -> np.ndarray:
+    """(n, k) each of the plane sequences ``seqs`` (n, k; -1 for no plane there) with its
+    planes first, in the order, of all those that swap only neighbouring reflections off
+    perpendicular planes (which give its path and its image), that comes first by the
+    planes' numbers; -1 after them: one for all the orders of a path, another for another
+    path with the same image (off parallel planes)."""
+    seqs = np.asarray(seqs, dtype=np.int64)
+    rest = np.take_along_axis(seqs, np.argsort(seqs < 0, axis=1, kind="stable"), 1)
+    n, k = rest.shape
+    rows = np.arange(n)
+    plane = np.maximum(rest, 0)
+    commute = np.ones((n, k, k), dtype=bool)
+    for a in range(k):
+        for b in range(a):
+            both = (rest[:, a] >= 0) & (rest[:, b] >= 0)
+            commute[both, a, b] = commute[both, b, a] = _perpendicular(
+                model, plane[both, a], plane[both, b]
+            )
+    taken = rest < 0
+    out = np.full_like(rest, -1)
+    for j in range(k):
+        # A plane can come next where it commutes with each plane still before it.
+        blocked = np.zeros((n, k), dtype=bool)
+        for a in range(k):
+            for b in range(a):
+                blocked[:, a] |= ~taken[:, b] & ~commute[:, a, b]
+        free = ~taken & ~blocked
+        pick = np.argmin(np.where(free, rest, np.iinfo(np.int64).max), axis=1)
+        has = free.any(axis=1)
+        out[has, j] = rest[rows[has], pick[has]]
+        taken[rows[has], pick[has]] = True
+    return out
 
 
 def _image_points(
@@ -541,14 +647,13 @@ def _face_at(
 
 
 def _goes_on(
-    model: TraceModel, plane: int, point: np.ndarray, way: np.ndarray, tolerance: float
+    model: TraceModel, faces: np.ndarray, point: np.ndarray, way: np.ndarray, tolerance: float
 ) -> bool:
-    """Whether a face of ``plane`` that ``point`` lies on (:func:`_faces_at`) goes on
-    from it along ``way`` (in the plane, of any length): ``way`` leaves the face across
+    """Whether one of ``faces``, which ``point`` lies on (:func:`_faces_at`), goes on
+    from it along ``way`` (in its plane, of any length): ``way`` leaves the face across
     none of its edges that the point lies within ``tolerance`` of, or beyond (a way
     along an edge, to the plane tolerance, stays on the face). With no way (zero) a
     face the point lies on is enough."""
-    faces = _faces_at(model, plane, point, tolerance)
     if len(faces) == 0:
         return False
     mesh = model.room.mesh
@@ -969,16 +1074,18 @@ def _clear(model: TraceModel, points, faces, crossings, least, counted) -> bool:
 
 
 def _mirrors(model: TraceModel, seqs: np.ndarray, tolerance: float) -> np.ndarray:
-    """(n, 12) where the planes of each sequence of ``seqs`` (n, k), mirroring in turn,
-    take four points (a corner of the model's box and the three its largest extent from
-    it along the axes), in steps of ``tolerance``: the same for the sequences that make
-    one mirror, wherever a source lies."""
+    """(n, 12) where the planes of each sequence of ``seqs`` (n, k; -1 for no plane
+    there), mirroring in turn, take four points (a corner of the model's box and the
+    three its largest extent from it along the axes), in steps of ``tolerance``: the
+    same for the sequences that make one mirror, wherever a source lies."""
     vertices = model.room.mesh.vertices
     size = float(np.ptp(vertices, axis=0).max())
     marks = vertices.min(axis=0) + size * np.vstack([np.zeros(3), np.eye(3)])
     moved = np.tile(marks, (len(seqs), 1))
     for j in range(seqs.shape[1]):
-        moved = model.mirror(moved, np.repeat(seqs[:, j], 4))
+        plane = np.repeat(seqs[:, j], 4)
+        there = plane >= 0
+        moved = np.where(there[:, None], model.mirror(moved, np.maximum(plane, 0)), moved)
     return np.round(moved.reshape(len(seqs), 12) / tolerance)
 
 
@@ -1586,18 +1693,23 @@ def _crossed_at(model, planes, before, point, after, tolerance, counted, near):
     crosses right at the point, where neither leg's intersection test meets them (see
     :func:`_crossed_here`, with ``near`` (n, 2)), looked for where a chord across the
     turn, from ``tolerance`` back along the leg arriving to ``tolerance`` along the one
-    leaving, meets a face. Returns the share of sound they let through (n, bands; 0
-    where one lets nothing through), how many of them each crosses of each column of
-    ``counted`` (F, m), (n, m), the first of them on the way (n,), -1 for none, and
-    whether the leg arriving at the point is the one that crosses it (n,)."""
+    leaving, but no farther than either leg's other end, meets a face: a chord that ran
+    on past ``before`` could pass a face that the path crosses at the point beyond the
+    face's end, as round the end of a barrier's arm. Returns the share of sound they
+    let through (n, bands; 0 where one lets nothing through), how many of them each
+    crosses of each column of ``counted`` (F, m), (n, m), the first of them on the way
+    (n,), -1 for none, and whether the leg arriving at the point is the one that
+    crosses it (n,)."""
     n = len(point)
     bands = model.absorption.shape[1]
     arriving = point - before
     arriving /= np.maximum(np.linalg.norm(arriving, axis=1), 1e-300)[:, None]
     leaving = after - point
     leaving /= np.maximum(np.linalg.norm(leaving, axis=1), 1e-300)[:, None]
-    start = point - tolerance * arriving
-    chord = point + tolerance * leaving - start
+    back = np.minimum(tolerance, np.linalg.norm(point - before, axis=1))[:, None]
+    ahead = np.minimum(tolerance, np.linalg.norm(after - point, axis=1))[:, None]
+    start = point - back * arriving
+    chord = point + ahead * leaving - start
     length = np.linalg.norm(chord, axis=1)
     direction = chord / np.maximum(length, 1e-300)[:, None]
     share = np.ones((n, bands))

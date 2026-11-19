@@ -85,7 +85,7 @@ from acoustic_spaces.engine.fine import (
     reference_delay,
     skirt_frequencies,
 )
-from acoustic_spaces.engine.model import TraceModel, _ground_faces, source_weights
+from acoustic_spaces.engine.model import TraceModel, _ground_faces, plane_kinds, source_weights
 from acoustic_spaces.engine.refraction import (
     CHORD_SAGITTA_M,
     Profile,
@@ -208,6 +208,9 @@ _FIRST_MODE = -1.0187929716474710
 _TINY = 1e-300
 #: Normals more horizontal than this (|n_z|) are vertical walls.
 _VERTICAL = 1e-9
+#: ``covered_ground`` in still air, where the early stage puts no limit on the bounces off
+#: the level ground (the walls do: one more than they).
+_ANY_BOUNCES = 1 << 30
 
 
 #: How far (m/s) the late tracer's profile may stray from the atmosphere's, in the speed
@@ -684,8 +687,8 @@ class Refraction(Section):
         else:
             key = self._key(float(self.wind @ legs.sum(axis=0)) / reach)
         rays = self.rays(key)
-        allowed = self.max_order - len(planes)
-        cap = MAX_GROUND_BOUNCES if allowed >= 1 else 0
+        # The ground's effect goes with every path: its bounces count for no order.
+        cap = MAX_GROUND_BOUNCES if self.max_order >= 1 else 0
         found = rays.eigenrays(zr, reach, cap, max_time=cutoff)
         r0, r1 = _family_ratios(paths, rows, ratio, self.flat, self.bands)
         family, _, _ = self._curved(rays, found, zr, corners, planes, listener, r0, r1)
@@ -2701,14 +2704,23 @@ def covering(model: TraceModel) -> dict:
     """The arguments of ``_native.trace_stochastic`` and ``trace_map`` that leave out of
     the late rays the specular paths the early stage holds where the atmosphere bends the
     sound (:meth:`Refraction._listener`): the curved paths off the ground, with up to
-    :data:`MAX_GROUND_BOUNCES` bounces whatever the order, alone or unfolded off vertical
-    walls, the ground's bounces counting as one reflection towards the order, and the
-    paths off any other face as in still air. ``face_kind`` is 1 for the faces of the
+    :data:`MAX_GROUND_BOUNCES` bounces (from order 1 on), alone or unfolded off vertical
+    walls, the ground's bounces counting for no order, and the paths off any other face
+    as in still air. ``face_kind`` is 1 for the faces of the
     ground (:func:`~acoustic_spaces.engine.model._ground_faces`), 0 for vertical walls and
-    -1 for the others, ``covered_ground`` the most bounces. Empty where sound goes
-    straight, where every reflection counts towards the order."""
+    -1 for the others, ``covered_ground`` the most bounces. In still air outdoors the
+    straight paths the early stage holds alike
+    (:func:`~acoustic_spaces.engine.model.plane_kinds`), the ground being level: no more
+    bounces than walls and one. Empty indoors, where every reflection counts towards the
+    order."""
     if not _bends(model):
-        return {}
+        kinds = plane_kinds(model)
+        if kinds is None:
+            return {}
+        return {
+            "face_kind": np.ascontiguousarray(kinds[model.face_plane], dtype=np.int64),
+            "covered_ground": _ANY_BOUNCES,
+        }
     vertical = np.abs(model.plane_normal[model.face_plane, 2]) <= _VERTICAL
     kind = np.where(_ground_faces(model.room), 1, np.where(vertical, 0, -1))
     return {
