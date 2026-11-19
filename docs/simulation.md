@@ -16,7 +16,8 @@ not: a ray misses a face the source sees nearly edge-on, and a reflection that a
 obstacle cuts off still fades at the obstacle's edges. Every candidate is then traced back from the listener, so the
 paths found are exact either way, including paths that reflect exactly on an edge
 or in a corner: a face reflects as far as its edges, to within a billionth of the
-model's diagonal. Sound that bends round edges is added to them (see
+model's diagonal. Faces that face one way with planes less than 0.01 mm and 0.0006
+degrees apart reflect as one plane. Sound that bends round edges is added to them (see
 [Edge diffraction](#edge-diffraction)).
 
 **Late reverberation** (`simulation.late`) is either:
@@ -423,12 +424,15 @@ where the plane goes on round its end on its open side, so no path reflects off 
 plane from below beside the building. Reflections off perpendicular planes, such as the
 floor and a wall, give the same image in either order, and the path over an edge may
 take another order than the path itself: each path takes the terms of every such
-order, and each order is tried where the early stage found only one. Each term is a
-path over its edge, and each product of terms is a path of its own, which arrives
-later by the detours of all its terms; the terms the edge diffraction adds already are
-left out (`engine.edge_fade` in the
-[API reference](api.md#edge-diffraction)). Against the exact solution, past the end of
-a screen, the corner of a building, a strip 2 m wide and a gap 4 m wide on a hard
+order, and each order is tried where the early stage found only one. Planes that lie in
+one place count as one there (two walls in line that face opposite ways, and a panel or
+a partition between them, which the model puts in the plane of one of them): a
+reflection takes the faces there that it meets from the front or that have a room on
+both sides, and the edges with a face there. Each term is a path over its edge, and each
+product of terms is a path of its own, which arrives later by the detours of all its
+terms; the terms the edge diffraction adds already are left out (`engine.edge_fade` in
+the [API reference](api.md#edge-diffraction)). Against the exact solution, past the end
+of a screen, the corner of a building, a strip 2 m wide and a gap 4 m wide on a hard
 ground, each path with its copy off the ground, the level is within 0.08 dB in every
 band (0.19 dB at 8 kHz on the strip, an error of the exact level's average over too
 few frequencies), where it was up to 7 dB off without it, and steps between listeners
