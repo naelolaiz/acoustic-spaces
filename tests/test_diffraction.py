@@ -285,6 +285,14 @@ IN_LINE = {
         [(6, 5), (9, 5)],
         1,
     ),
+    # Z-shaped: the walls x = 5 face both ways (y 0..4 the arm at x < 5, y 6..9 the one at
+    # x > 5), the panel in the opening between them.
+    "z": (
+        [(0, 0), (5, 0), (5, 4), (11, 4), (11, 9), (5, 9), (5, 6), (0, 6)],
+        [(0, 0, 5, 6), (5, 4, 11, 9)],
+        [(5, 4.5), (5, 5.5)],
+        0,
+    ),
 }
 
 
@@ -295,14 +303,20 @@ def _in_line_with_a_wall(
     listener,
     room: str = "x",
     partition=None,
+    shift: float = 0.0,
+    panel_last: bool = False,
     sized: bool = False,
     **early,
 ) -> Room:
     """The ``room`` of ``IN_LINE``; with ``sign`` -1 its mirror image across the plane of
-    the panel, where the wall in that plane faces the other way. With ``partition`` (a
+    the panel, where the walls in that plane face the other way. With ``partition`` (a
     loss in dB), room "x" with a partition that lets sound through from y = 0 to 5 in
-    place of the panel: two rooms. ``sized``: the faces' sizes weaken their reflections."""
+    place of the panel: two rooms. With ``shift``, the panel that far off the plane (m,
+    along the axis across it); with ``panel_last``, the panel after the walls in the
+    model, where the plane takes the wall's normal. ``sized``: the faces' sizes weaken
+    their reflections."""
     plan, floor, ends, axis = IN_LINE[room]
+    ends = [tuple(c + (shift if i == axis else 0.0) for i, c in enumerate(end)) for end in ends]
     walls = [
         [(*a, 0.0), (*b, 0.0), (*b, 3.0), (*a, 3.0)]
         for a, b in zip(plan, plan[1:] + plan[:1], strict=True)
@@ -312,6 +326,8 @@ def _in_line_with_a_wall(
     a, b, height = (*ends, 2.0) if partition is None else ((5, 0), (5, 5), 3.0)
     # The panel first: its plane takes the first of its faces' normals.
     groups = {"panels": [[(*a, 0.0), (*b, 0.0), (*b, height), (*a, height)]], "walls": walls}
+    if panel_last:
+        groups = {"walls": walls, "panels": groups["panels"]}
     mirror = np.ones(3)
     mirror[axis] = sign
     lines = []
@@ -320,7 +336,7 @@ def _in_line_with_a_wall(
         for quad in quads:
             lines += ["v " + " ".join(f"{c:.15g}" for c in mirror * corner) for corner in quad]
             lines.append("f -4 -3 -2 -1")
-    obj = folder / f"in_line_{room}{sign:+.0f}.obj"
+    obj = folder / f"in_line_{room}{sign:+.0f}{shift:+.0e}{'p' if panel_last else ''}.obj"
     obj.write_text("\n".join(lines) + "\n")
     wall = {"absorption": [0.1] * 8, "scattering": 0.0}
     panel = wall if partition is None else wall | {"transmission_loss": partition}
@@ -476,6 +492,72 @@ def test_a_room_with_a_panel_in_line_with_a_wall_sounds_as_its_mirror_image(
         paths = early_paths(_in_line_with_a_wall(tmp_path, sign, source, listener, room, **early))
         levels.append(10.0 * np.log10(total_energy(paths)))
     np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("source", "listener"),
+    [
+        ([7.544, 4.302, 0.763], [9.822, 6.537, 1.83]),
+        ([6.779, 7.962, 0.625], [10.237, 4.831, 1.128]),
+    ],
+)
+def test_walls_facing_both_ways_in_the_plane_of_a_panel_sound_as_their_mirror_image(
+    tmp_path: Path, source, listener
+) -> None:
+    """In the Z-shaped room the panel stands in the opening between two walls in its
+    plane that face opposite ways, and lies in the plane of the one that faces the way
+    the plane does: the wall of the source's arm in the room, the other arm's in its
+    mirror image. The edge fade took the edges at a path's events by those planes: in
+    the mirror image the end of the source's wall, 0.5 m from the panel, had no term at
+    a path's reflection off the panel but one on the leg after it, 0.38 dB apart at
+    125 Hz. It takes the edges with a face in the plane's place, and a reflection the
+    faces there that it meets from the front or that have a room on both sides."""
+    levels = []
+    for sign in (1.0, -1.0):
+        room = _in_line_with_a_wall(
+            tmp_path, sign, source, listener, "z", diffraction="first_order"
+        )
+        levels.append(10.0 * np.log10(total_energy(early_paths(room))))
+    np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("source", "listener", "shift", "panel_last"),
+    [
+        ([3.637, 0.775, 1.076], [0.651, 3.924, 1.546], 1e-5, False),
+        ([3.637, 0.775, 1.076], [0.651, 3.924, 1.546], -1e-5, False),
+        ([3.637, 0.775, 1.076], [0.651, 3.924, 1.546], 1e-5, True),
+        ([5.69, 1.949, 0.957], [10.094, 2.916, 1.058], -1e-5, False),
+    ],
+)
+def test_a_panel_a_hundredth_of_a_millimetre_off_a_wall_s_plane_is_in_it(
+    tmp_path: Path, source, listener, shift: float, panel_last: bool
+) -> None:
+    """The panel of room "x" 0.01 mm behind the wall's plane or in front of it lies in
+    that plane, and the early level is that of the panel in line, also with the plane
+    taking the wall's normal (the panel after the walls in the model, its faces then
+    0.01 mm off the plane): faces make one plane where TraceModel.geometric_plane has
+    one place, on either side of a step of the planes' rounding, and the edge fade finds
+    a reflection on such a face. As a plane of its own the panel took the terms of a
+    panel off the wall's plane, up to 0.40 dB from the level in line at 125 Hz, and
+    0.76 dB with the edge fade taking edges and faces by their place; as one plane with
+    its faces behind it, the ray that looks for the face a reflection lies on passed
+    short of them: 0.48 dB."""
+    levels, planes = [], []
+    for d in (0.0, shift):
+        room = _in_line_with_a_wall(
+            tmp_path,
+            1.0,
+            source,
+            listener,
+            shift=d,
+            panel_last=panel_last,
+            diffraction="first_order",
+        )
+        planes.append(TraceModel.from_room(room).plane_count)
+        levels.append(10.0 * np.log10(total_energy(early_paths(room))))
+    assert planes[1] == planes[0]
+    np.testing.assert_allclose(levels[1], levels[0], atol=0.005)
 
 
 def test_a_path_stopped_twice_takes_the_same_edges_in_a_room_and_its_mirror_image(
@@ -2980,14 +3062,18 @@ def test_the_wave_that_arrives_at_an_edge_has_the_path_off_its_plane() -> None:
     assert found[:, 0].tolist() == [reflected if p == ground else -1 for p in terms["plane"]]
 
 
-def _stepped_room_with_panels(folder: Path, source, listener, loss: float | None = None) -> Room:
+def _stepped_room_with_panels(
+    folder: Path, source, listener, loss: float | None = None, turn: float = 1.0
+) -> Room:
     """A room 3 m high whose plan steps twice: 7 x 5 m, beside it 7 x 4.5 m 3 m further
     along, and beside that 3.5 x 6.5 m 1 m further along. The plane of each step holds
     two of its walls, which face opposite ways, and a panel 2 m high standing free in
     the opening between them, which lies in the plane of the wall that faces the way
     of the plane's canonical normal (+y, +x). No plane lies halfway between two
     parallel others, where two sequences of reflections would have one image. With
-    ``loss``, the panels let sound through with that transmission loss (dB)."""
+    ``loss``, the panels let sound through with that transmission loss (dB); with
+    ``turn`` -1, its mirror image in both x and y, where each panel lies in the plane of
+    the other wall."""
     plan = [
         (0, 0),
         (7, 0),
@@ -3015,9 +3101,10 @@ def _stepped_room_with_panels(folder: Path, source, listener, loss: float | None
     for n, quad in enumerate(quads):
         if n == len(quads) - 2:
             lines.append("g panels")
-        lines += [f"v {x} {y} {z}" for x, y, z in quad]
+        lines += [f"v {turn * x} {turn * y} {z}" for x, y, z in quad]
         lines.append("f " + " ".join(str(4 * n + i + 1) for i in range(4)))
-    obj = folder / "steps.obj"
+    obj = folder / f"steps{turn:+.0f}.obj"
+    mirror = np.array([turn, turn, 1.0])
     obj.write_text("\n".join(lines) + "\n")
     wall = {"absorption": [0.1] * 8, "scattering": 0.0}
     return Room.from_scene(
@@ -3027,8 +3114,8 @@ def _stepped_room_with_panels(folder: Path, source, listener, loss: float | None
                 "materials": {"wall": wall, "panel": wall | {"transmission_loss": loss}},
                 "default_material": "wall",
                 "assignments": {"panels": "panel"},
-                "sources": [{"name": "s", "position": source}],
-                "listeners": [{"name": "l", "position": listener}],
+                "sources": [{"name": "s", "position": (mirror * source).tolist()}],
+                "listeners": [{"name": "l", "position": (mirror * listener).tolist()}],
                 "simulation": {
                     "scattering": {"from_size": False},
                     "early": {"method": "image_sources", "max_order": 2},
@@ -3036,6 +3123,23 @@ def _stepped_room_with_panels(folder: Path, source, listener, loss: float | None
             }
         )
     )
+
+
+@pytest.mark.parametrize(
+    ("source", "listener"), [([5.5, 4.0, 1.0], [2.5, 2.5, 1.0]), ([8.0, 7.5, 1.2], [4.0, 6.0, 1.2])]
+)
+def test_a_room_with_walls_facing_both_ways_in_two_planes_sounds_as_its_mirror_image(
+    tmp_path: Path, source, listener
+) -> None:
+    """The room of :func:`_stepped_room_with_panels` and its mirror image in x and y,
+    where each panel lies in the plane of the other wall in its plane, have one early
+    level. With the edge fade taking the edges at a path's events and the faces it
+    reflects off by those planes, they were 1.8 and 1.7 dB apart at 63 Hz."""
+    levels = []
+    for turn in (1.0, -1.0):
+        room = _stepped_room_with_panels(tmp_path, source, listener, turn=turn)
+        levels.append(10.0 * np.log10(total_energy(early_paths(room))))
+    np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
 
 
 @pytest.mark.parametrize(
@@ -3055,7 +3159,7 @@ def test_planes_that_face_opposite_ways_in_one_place_are_one_for_a_wave_s_path(
     pairs, a panel in line with each pair, and no source right by two planes, every
     wave has the path that it has by its image alone, and the early level is the same
     to the last digit. With the planes told by their numbers, waves off the one plane
-    would lose the paths off the other: 2.2 and 1.6 dB in the first two cases, one
+    would lose the paths off the other: 1.3 and 0.7 dB in the first two cases, one
     for each pair. In the third the panels let sound through, and paths through a
     panel come before reflections in the list of the paths."""
     room = _stepped_room_with_panels(tmp_path, source, listener, loss)
