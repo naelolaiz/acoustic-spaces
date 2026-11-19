@@ -88,7 +88,12 @@ from acoustic_spaces import products
 from acoustic_spaces.directivity import Directivity
 from acoustic_spaces.engine.clusters import Clusters
 from acoustic_spaces.engine.coherent import ground_factors, ground_wave_factors, reflection_phases
-from acoustic_spaces.engine.early import EarlyReflections, _face_at
+from acoustic_spaces.engine.early import (
+    _EDGE_TOLERANCE,
+    EarlyReflections,
+    _face_at,
+    _mirrors,
+)
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 from acoustic_spaces.geometry.cells import _components
 from acoustic_spaces.geometry.outdoor import ON_GROUND_M, on_ground
@@ -1210,6 +1215,15 @@ class EdgeDiffraction:
             self.ledger = (out, clusters)
         return out
 
+    def _mirror(self, sequences: np.ndarray) -> np.ndarray:
+        """(n, 12) the mirror the planes of each of ``sequences`` (n, k; -1 for no plane
+        there) make in turn, for the waves of
+        :class:`~acoustic_spaces.engine.clusters.Clusters`: as the early stage tells
+        them apart (:func:`~acoustic_spaces.engine.early._mirrors`, with its
+        tolerance)."""
+        sequences = np.asarray(sequences, dtype=np.int64).reshape(len(sequences), -1)
+        return _mirrors(self.model, sequences, _EDGE_TOLERANCE * self.size)
+
     def clusters(self, listener: np.ndarray, paths: EarlyReflections) -> Clusters | None:
         """The waves of the specular paths ``paths`` at ``listener`` in the bands where
         the paths add in energy, each path its own; None without such bands."""
@@ -1222,9 +1236,16 @@ class EdgeDiffraction:
             energy = paths.energy[rows][:, late]
             distance = paths.distance_m[rows]
             phase = np.exp(-1j * self.wavenumber[None, late] * distance[:, None, None])
+            order = max(int(paths.order.max()), 1)
+            sequence, with_faces = _sequences(self.model, paths, rows, order)
             out.add(
                 rows,
-                out.geometric(_image_sources(listener, paths)[rows], paths.order[rows]),
+                out.geometric(
+                    self._mirror(sequence),
+                    paths.order[rows],
+                    _image_sources(listener, paths)[rows],
+                    with_faces,
+                ),
                 np.sqrt(energy)[:, :, None] * phase,
                 distance,
                 anchor=True,
@@ -1552,7 +1573,7 @@ class EdgeDiffraction:
         # when the path is there, and on the dark side when it is not; where the two
         # disagree (the path is blocked by something else, lies beyond the highest
         # order, or passes round the end of the edge) the term is left out.
-        found, images, orders, front = self._specular(listener, paths, c)
+        found, images, orders, front, sequences = self._specular(listener, paths, c)
         phi_r = c["phi_r"]
         angle = boundary_angles(n, phi_r, c["phi_s"])
         # The paths near an end of their edge that fades (their shares are below).
@@ -1732,24 +1753,35 @@ class EdgeDiffraction:
             carried = (waves * counted[:, :, None, None])[:, :, late]
             kept = self._continued(kl[:, late], angle, lit, late)
             share = np.sqrt(np.maximum(1.0 - kept**2, 0.0))
-            # The geometric wave of each term: its specular path where that was found.
-            points = images.copy()
+            # The geometric wave of each term: its specular path where that was found,
+            # with the path's planes and image (the image alone where the path does not
+            # carry its faces).
+            points, planes = images.copy(), sequences.copy()
+            with_faces = np.ones(found.shape, dtype=bool)
             hit = found >= 0
             points[hit] = _image_sources(listener, paths)[found[hit]]
+            rows_found, at = np.unique(found[hit], return_inverse=True)
+            sequence, carries = _sequences(self.model, paths, rows_found, 3)
+            planes[hit], with_faces[hit] = sequence[at.reshape(-1)], carries[at.reshape(-1)]
             rows, cols = np.nonzero(counted)
             # On a way with edges in a row (_in_line), a face along the way has its
             # reflection on its boundary too: one wave with the incident wave.
             along = np.zeros_like(counted)
             along[on_ways, 1:] = np.abs(angle[on_ways, 1:]) <= _ON_BOUNDARY
             wave = np.where(along[rows, cols], 0, cols)
-            keys = clusters.geometric(points[rows, wave], orders[rows, wave])
+            keys = clusters.geometric(
+                self._mirror(planes[rows, wave]),
+                orders[rows, wave],
+                points[rows, wave],
+                with_faces[rows, wave],
+            )
             # A face the wave comes from behind has no geometric wave of its own.
             alone = ~front[rows, cols]
             keys[alone] = clusters.private(int(alone.sum()))
             clusters.add(start + rows, keys, kept[rows, cols] * carried[rows, cols], distance[rows])
             clusters.add(
                 start + np.arange(len(edge)),
-                clusters.diffracted(c["source_side"], c["listener_side"]),
+                clusters.diffracted(*(self._mirror(side) for side in _sides(c))),
                 np.sum(share * carried, axis=1),
                 distance,
             )
@@ -2047,16 +2079,19 @@ class EdgeDiffraction:
             c2 = self._continued(kl2[:, late], angle2, lit2, late)
             s1 = np.sqrt(np.maximum(1.0 - c1**2, 0.0))
             s2 = np.sqrt(np.maximum(1.0 - c2**2, 0.0))
-            # The source and its images in the faces of the first edge, the listener and
-            # its images in those of the second, and whether the waves come from in
-            # front of the faces they reflect off.
+            # The source and its images in the faces of the first edge, the planes the
+            # source is mirrored in on either side (none or a face of the first edge,
+            # none or one of the second), and whether the waves come from in front of
+            # the faces they reflect off.
             plane1, plane2 = edges.plane[e1], edges.plane[e2]
             count = len(e1)
             src = [np.broadcast_to(self.source, (count, 3))]
-            rcv = [np.broadcast_to(listener, (count, 3))]
             for face in (0, 1):
                 src.append(model.mirror(src[0], plane1[:, face]))
-                rcv.append(model.mirror(rcv[0], plane2[:, face]))
+            none = np.full((count, 1), -1, dtype=np.int64)
+            off1 = [none, plane1[:, [0]], plane1[:, [1]]]
+            off2 = [none, plane2[:, [0]], plane2[:, [1]]]
+            with_faces = np.ones(count, dtype=bool)
             yes = np.ones(count, dtype=bool)
             front1 = [yes, phi_s1 < np.pi, phi_s1 > (n1 - 1.0) * np.pi]
             front2 = [yes, phi_12 < np.pi, phi_12 > (n2 - 1.0) * np.pi]
@@ -2070,17 +2105,27 @@ class EdgeDiffraction:
                 for j in range(3):
                     image = src[i] if j == 0 else model.mirror(src[i], plane2[:, j - 1])
                     order = int(i > 0) + int(j > 0)
+                    mirror = self._mirror(np.hstack([off1[i], off2[j]]))
                     clusters.add(
                         rows,
-                        keyed(clusters.geometric(image, order), front1[i] & front2[j]),
+                        keyed(
+                            clusters.geometric(mirror, order, image, with_faces),
+                            front1[i] & front2[j],
+                        ),
                         c1[:, i] * c2[:, j] * t[:, i, j],
                         distance,
                     )
             # Bent at the first edge and on past the second (j), or on past the first and
             # bent at the second (i): where the two are one wave (both from the source to
             # the listener), a term is in it once, by the energy of both its pieces.
-            bent1 = [keyed(clusters.diffracted(src[0], rcv[j]), front2[j]) for j in range(3)]
-            bent2 = [keyed(clusters.diffracted(src[i], rcv[0]), front1[i]) for i in range(3)]
+            from_side = [self._mirror(off) for off in off1]
+            to_side = [self._mirror(off) for off in off2]
+            bent1 = [
+                keyed(clusters.diffracted(from_side[0], to_side[j]), front2[j]) for j in range(3)
+            ]
+            bent2 = [
+                keyed(clusters.diffracted(from_side[i], to_side[0]), front1[i]) for i in range(3)
+            ]
             first_part = s1[:, :, None] * c2[:, None, :]  # (C, 3, 3, B, M)
             second_part = c1[:, :, None] * s2[:, None, :]
             for i in range(3):
@@ -2322,15 +2367,17 @@ class EdgeDiffraction:
     def _specular(self, listener: np.ndarray, paths: EarlyReflections, c: dict):
         """(C, 3) index in ``paths`` of the specular path of each term's wave (the
         incident wave and the reflections off face 0 and face n), or -1; (C, 3, 3) the
-        image of the source each wave comes from and (C, 3) its order; and (C, 3)
+        image of the source each wave comes from and (C, 3) its order; (C, 3)
         whether the wave comes from in front of its face (always for the incident
-        wave). A wave's path is the one with its image that reflects off its planes, or
-        one with its image that does not carry its faces (:func:`_match`)."""
+        wave); and (C, 3, 3) the planes each wave reflects off in turn, from the source
+        on, -1 after. A wave's path is the one with its image that reflects off its
+        planes, or one with its image that does not carry its faces (:func:`_match`)."""
         model, edges = self.model, self.edges
         count = len(c["edge"])
         out = np.full((count, 3), -1, dtype=np.int64)
         points = np.zeros((count, 3, 3))
         reflections = np.zeros((count, 3), dtype=np.int64)
+        sequences = np.full((count, 3, 3), -1, dtype=np.int64)
         # A path through a wall is not the geometric wave a term continues.
         specular = np.flatnonzero((paths.edge < 0) & (paths.crossings == 0))
         images = _image_sources(listener, paths)[specular]
@@ -2365,6 +2412,19 @@ class EdgeDiffraction:
                 image[both] = model.mirror(image[both], plane2[both])
                 order = order + both.astype(np.int64)
             points[:, column], reflections[:, column] = image, order
+            sequence = np.full((count, 3), -1, dtype=np.int64)
+            if wedge_face is None:
+                sequence[has_plane, 0] = plane[has_plane]
+                sequence[both, 1] = plane2[both]
+            else:
+                # Off the plane and then the face before the edge, or off the face and
+                # then the plane after it; then off the second plane after it.
+                ahead = (kind == 1) | both
+                sequence[:, 0] = np.where(ahead, plane, face_plane)
+                sequence[ahead, 1] = face_plane[ahead]
+                sequence[kind == 2, 1] = plane[kind == 2]
+                sequence[both, 2] = plane2[both]
+            sequences[:, column] = sequence
             if len(specular):
                 out[:, column] = _match(
                     image, order, images, orders, specular, tolerance, (off, hit, known)
@@ -2376,7 +2436,7 @@ class EdgeDiffraction:
             [np.ones(count, dtype=bool), c["phi_s"] < np.pi, c["phi_s"] > (n - 1.0) * np.pi]
         )
         out = np.where(front, out, -1)
-        return out, points, reflections, front
+        return out, points, reflections, front, sequences
 
     def _own_paths(self, listener, c: dict, found, dark) -> None:
         """Set to -1, in ``found`` (C, 3, from :meth:`_specular`), the specular path of
@@ -2661,6 +2721,38 @@ def _wave_planes(model: TraceModel, c: dict, face_plane: np.ndarray | None = Non
     if face_plane is not None:
         out[:, 2] = model.geometric_plane[face_plane]
     return np.sort(out, axis=1)
+
+
+def _sides(c: dict) -> tuple[np.ndarray, np.ndarray]:
+    """(C, 1) the plane the source side of each of the terms ``c``
+    (:meth:`EdgeDiffraction._combos`) is mirrored in and (C, 1) the one its listener
+    side is, -1 for none."""
+    kind = c["kind"]
+    source = np.full((len(kind), 1), -1, dtype=np.int64)
+    listener = np.full((len(kind), 1), -1, dtype=np.int64)
+    before = (kind == 1) | (kind == 3)
+    source[before, 0] = c["plane"][before]
+    listener[kind == 2, 0] = c["plane"][kind == 2]
+    listener[kind == 3, 0] = c["plane2"][kind == 3]
+    return source, listener
+
+
+def _sequences(
+    model: TraceModel, paths: EarlyReflections, rows: np.ndarray, width: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """(len(rows), width) the planes each of the specular paths ``rows`` of ``paths``
+    reflects off in turn, from the source on, -1 after; and (len(rows),) whether the
+    path carries them: a face for each of its reflections, ``width`` at most."""
+    out = np.full((len(rows), width), -1, dtype=np.int64)
+    known = np.zeros(len(rows), dtype=bool)
+    for at, row in enumerate(rows):
+        if row >= len(paths.faces):
+            continue
+        faces = np.asarray(paths.faces[row], dtype=np.int64)
+        if len(faces) == paths.order[row] <= width:
+            out[at, : len(faces)] = model.face_plane[faces]
+            known[at] = True
+    return out, known
 
 
 def _planes_hit(

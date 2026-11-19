@@ -1899,25 +1899,30 @@ def test_the_late_rays_leave_out_the_ground_bounces_the_bent_early_part_holds(
 
 
 def test_a_wall_s_reflection_above_the_early_order_stays_with_the_late_rays() -> None:
-    """In wind the early stage holds a wall's reflection with bounces off the ground only
-    up to its order (the wall's counting as one and the ground's as one): with order 1
-    the paths off the wall and the ground are the late rays', with order 2 the early
-    stage's. The late rays' secondary sources radiate the specular sound of each
-    reflection to the listeners, so the late part with order 1 has more, from when the
-    first such path arrives on."""
-    wall = {"name": "wall", "path": [[-40.0, 15.0], [340.0, 15.0]], "height": 10.0}
+    """In wind the early stage holds the reflections off walls with bounces off the
+    ground up to its order, the ground's counting for none: between two walls, with
+    order 1 the paths off both are the late rays', with order 2 the early stage's. The
+    late rays' secondary sources radiate the specular sound of each reflection to the
+    listeners, so the late part with order 1 has more, from when the first such path
+    arrives on, as much as those paths bring (1.05 to 1.16 times, two seeds, when
+    written)."""
+    walls = tuple(
+        {"name": name, "path": [[-40.0, y], [340.0, y]], "height": 10.0}
+        for name, y in (("north", 15.0), ("south", -15.0))
+    )
     runs = []
     for order in (1, 2):
-        scene = downwind(2_000, order, barriers=(wall,))
+        scene = downwind(2_000, order, barriers=walls)
         scene.simulation.late.reception = "secondary_sources"
         runs.append(simulate(Room.from_scene(scene), threads=1))
     for key in runs[0].responses:
         one, two = (run[key] for run in runs)
         step = one.time_step
         more = one.late.sum(axis=0) - two.late.sum(axis=0)
-        assert more.min() >= 0.0 and more.sum() > 0.1 * two.late.sum()
-        added = two.early.delay_s[~np.isin(two.early.delay_s, one.early.delay_s)]
-        assert np.flatnonzero(more)[0] * step >= added.min() - step
+        added = ~np.isin(two.early.delay_s, one.early.delay_s)
+        assert more.min() >= 0.0
+        assert 0.8 < more.sum() / two.early.energy[added].sum() < 1.3
+        assert np.flatnonzero(more)[0] * step >= two.early.delay_s[added].min() - step
 
 
 def test_a_coverage_map_point_in_wind_reads_as_a_listener_there() -> None:
