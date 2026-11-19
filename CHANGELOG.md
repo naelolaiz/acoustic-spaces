@@ -15,6 +15,46 @@
   a face: with `second_order` the level a metre above a roof and a screen 1 m past it
   stepped by 3.1 dB at 63 Hz with the screen's top 0.6 mm lower than where the path over
   it begins to reflect off the roof.
+- Fixed: where two rooms modelled as closed models touch, each with a wall of its own
+  where they meet, each face of that wall now reflects and absorbs in its own room, on
+  the CPU and the GPU. In two 5 x 4 x 3 m rooms whose faces there absorb 0.9 and 0.1,
+  the first room's G had been 3.0 to 3.2 dB too high and its T30 0.93 to 1.01 s instead
+  of 0.44 to 0.53 s (250 Hz to 2 kHz): with the normals pointing out of the rooms each
+  face went with the other room, and either way a ray met the same one of the two from
+  both sides; with them into the rooms, a map of the upper of two stacked rooms found no
+  point. A model of touching solids alone, with the
+  air between them, now reads each solid as a room, and the problems say that solids
+  close off no room round the air; an IFC file's building elements, read without a
+  space, are solids and read as not closed, as before.
+- Fixed: a wall between two rooms drawn once for each room (two faces in one place, as
+  where two rooms modelled as closed models touch) let no sound through in the late part,
+  which took the space between the two faces for no room: behind a 30 dB partition so
+  drawn G came out 11 to 20 dB too low, behind an opening 5 to 14 dB, `validate` warned
+  that no surface joined the rooms, and the statistical reverberation times counted what
+  passes as lost. Such a wall now gives what it gives drawn once.
+- Fixed: with `second_order` diffraction, a path over two edges along the plane of a
+  screen or a panel (from one of its ends to the other) took the side of the screen that
+  each edge's frame calls face 0, which a scene's mirror image turns over, and in a
+  turned scene the screen stopped the way along it or not by how the coordinates
+  rounded. Behind a thin strip 2 m wide such paths were left out, up to 1.39 dB below
+  the exact solution (BTM) at 63 Hz; a panel standing free in a room and its mirror
+  image across the panel's plane, or the room turned by 30 degrees, were up to 0.24 dB
+  apart at 125 Hz. The path now runs along each face of the screen, two ways with half
+  the coefficient at grazing incidence each, within 0.11 dB of BTM at 63 and 125 Hz
+  behind the strip, and the faces in whose plane it runs do not stop it; one in that
+  plane on past the screen's far end, where the waves along its two faces cancel, is
+  left out.
+- Fixed: with edge diffraction, where walls in line face opposite ways with a panel or a
+  partition between them, the edge fade took the edges at a path's reflections, and the
+  faces a reflection meets there, by the plane in the model that holds each face, which
+  for the panel is that of the wall facing the plane's way: in a Z-shaped room with a
+  panel in the opening between two such walls, a room and its mirror image were up to
+  1.1 dB apart, and in a room with two such planes up to 1.8 dB. It now takes them by
+  where they lie and the way each face faces.
+- Fixed: faces that face one way with planes less than 0.01 mm apart are one plane on
+  either side of a step of the planes' rounding: a panel 0.01 mm off a wall's plane was
+  a plane of its own, up to 0.40 dB from the level in line at 125 Hz with edge
+  diffraction, and now has that level.
 - Fixed: with edge diffraction, where several events stop a path that is not found and
   several edges explain one of them, the edge fade took the first edge by number, and a
   reflection there took that edge's face, with its material and size, even a wall 2.6 m

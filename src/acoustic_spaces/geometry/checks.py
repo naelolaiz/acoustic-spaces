@@ -47,6 +47,9 @@ class MeshReport:
     #: Faces with no room or solid on either side: a hole joins the room behind them to
     #: the outside, or they stand outside the model.
     open_faces: int = 0
+    #: Whether the faces are those of solids (``RoomMesh.solids``), which close off no
+    #: room.
+    solids: bool = False
 
     @property
     def closed(self) -> bool:
@@ -73,6 +76,8 @@ class MeshReport:
                 state += f", {self.odd_edges} edges shared by an odd number of faces"
             if self.open_faces:
                 state += f", {self.open_faces} faces with no room on either side"
+            if self.solids:
+                state += ", the faces of solids (building elements), no room"
         else:
             state = "no faces"
         lines = [
@@ -138,7 +143,7 @@ def clean_mesh(mesh: RoomMesh) -> tuple[RoomMesh, int, int]:
     # wherever the model's extent is taken from its vertices.
     used, faces = np.unique(faces, return_inverse=True)
     faces = faces.reshape(-1, 3).astype(np.int64, copy=False)
-    cleaned = RoomMesh(vertices[used], faces, labels, list(mesh.labels))
+    cleaned = RoomMesh(vertices[used], faces, labels, list(mesh.labels), mesh.solids)
     return cleaned, merged, int(np.count_nonzero(~keep))
 
 
@@ -377,6 +382,7 @@ def check_mesh(mesh: RoomMesh, merged: int = 0, removed: int = 0) -> MeshReport:
         odd_edges=odd,
         room_volumes_m3=rooms,
         open_faces=open_faces,
+        solids=mesh.solids,
     )
 
 

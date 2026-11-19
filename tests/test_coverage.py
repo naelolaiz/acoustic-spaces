@@ -180,6 +180,54 @@ def test_a_column_across_a_wall_between_rooms_gets_a_point_in_each() -> None:
     np.testing.assert_allclose(used, 0.55 / 0.7, atol=1 / 24)
 
 
+def _box_quads(z0: float, z1: float) -> list:
+    """The six faces of a 5 x 4 m box from height z0 to z1, facing out of it."""
+    return [
+        ((0, 0, z0), (0, 4, z0), (5, 4, z0), (5, 0, z0)),
+        ((0, 0, z1), (5, 0, z1), (5, 4, z1), (0, 4, z1)),
+        ((0, 0, z0), (5, 0, z0), (5, 0, z1), (0, 0, z1)),
+        ((0, 4, z0), (0, 4, z1), (5, 4, z1), (5, 4, z0)),
+        ((0, 0, z0), (0, 0, z1), (0, 4, z1), (0, 4, z0)),
+        ((5, 0, z0), (5, 4, z0), (5, 4, z1), (5, 0, z1)),
+    ]
+
+
+@pytest.mark.parametrize("inward", [False, True], ids=["out", "in"])
+def test_a_map_of_the_upper_of_two_stacked_rooms_is_in_that_room(
+    tmp_path: Path, inward: bool
+) -> None:
+    # Two 3 m high rooms, one above the other, each modelled closed: the lower one's
+    # ceiling and the upper one's floor lie in one place. A map of the upper floor is in
+    # the upper room, whichever way the normals point. On main, with the normals into
+    # the rooms, a ray down from a point met the lower room's ceiling, which has no room
+    # above it, and the map found no point.
+    lines, n = [], 0
+    for name, (z0, z1) in (("lower", (0.0, 3.0)), ("upper", (3.0, 6.0))):
+        lines.append(f"g {name}")
+        for quad in _box_quads(z0, z1):
+            lines += [f"v {x} {y} {z}" for x, y, z in (quad[::-1] if inward else quad)]
+            lines.append(f"f {n + 1} {n + 2} {n + 3} {n + 4}")
+            n += 4
+    obj = tmp_path / "stacked.obj"
+    obj.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    scene = Scene.model_validate(
+        {
+            "geometry": {"file": str(obj)},
+            "materials": {"wall": {"absorption": [0.1] * 8}},
+            "default_material": "wall",
+            "sources": [{"name": "s", "position": [2.0, 2.0, 4.5]}],
+            "listeners": [{"name": "l", "position": [3.0, 2.5, 4.2]}],
+        }
+    )
+    room = Room.from_scene(scene)
+    lower, upper = room.room_of([[2.5, 2.0, 1.5], [2.5, 2.0, 4.5]])
+    assert lower != upper and min(lower, upper) >= 0
+    grid = map_grid(room, ["upper"], spacing=1.0)
+    assert len(grid) == 20
+    assert np.all(grid.points[:, 2] == pytest.approx(4.2))
+    assert set(grid.room.tolist()) == {upper}
+
+
 def test_a_map_of_one_room_leaves_out_the_next() -> None:
     # The bedroom alone in 0.7 m columns: the first reaches 0.1 m into the much louder
     # living room, whose rays its slabs counted (22 dB too high at 1 kHz).
