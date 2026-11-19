@@ -2,105 +2,73 @@
 
 ## 4.3.0
 
-Error estimates for more results: the uncertainty of a coverage map's values (its
-insertion loss and long-term levels too), the spread of each listener's levels and
-speech results, one-sided bounds, the number of draws chosen as GUM Supplement 1's
-adaptive procedure does, and a material's absorption uncertainty on its page in the
-editor; fitted walls for the wave solver, its faces cut exactly through the grid's
-cells; the sound over the open ground in wind at 1 and 2 kHz from the parabolic
-equation, with a setting for its cost, and its bands carried through the crossovers; the
-parabolic equation behind barriers in wind and the wide-angle one, the spread's draws
-(now in worker processes), the fit of an admittance and the rendering of a run's files,
-the ray tracer and the wave solver's walls faster with the same results, walks in far
-less memory, and a solver for sound close over a whole row of roofs and barriers, which
-outdoors now gives the bands up to 500 Hz over long barriers and rows of buildings;
-results that no longer depend on the number of threads numpy's library takes; and fixes
-to sound through an outer edge, over two edges along an absorbing face or in sight over
-both, level with several tops, just above a roof and a barrier level with it, beside a
-thin screen's bends and corners, behind a barrier's foot, in line with a barrier's end
-or a wall, across a barrier end's shadow boundary in wind, from and to roofs in wind,
-with eddies at each frequency, for listeners in one direction in wind, to the late rays
-in wind and through plants, curved rays near a profile's nodes, the wave solver round
-open models, between its cells, at walls through its cell centres, at a response's end
-and round a closed building in wind, and its moving air flowing round solids,
-reflections at corners, near edges and right by surfaces (in very large models too), a
-panel or partition in line with a wall, a plane at 45 degrees, measured directivity
-tables, the GPU's late part right by a surface, Doc 29's maximum levels and tables,
-Doppler walks and the spread itself.
+Error estimates for coverage maps and listeners, a solver for rows of barriers and
+buildings, wind over open ground at 1 and 2 kHz from the parabolic equation, fitted
+walls for the wave solver, faster runs with the same results, and many fixes.
 
-Results change from 4.2.1: outdoors the ground's bounces count for no order towards
-`max_order` (from 1 on), and what a wall or barrier scatters and the ground then
-reflects also rains on the listeners' images in the ground (no more blips in the
-`railway` tour); two rooms touching, each with its own wall, and a wall drawn once for
-each room (behind a 30 dB partition so drawn G was 11 to 20 dB low); many edge-fade and
-edge-diffraction cases in turned, mirrored or very large models; outdoors over long
-barriers and rows of buildings in the octave bands up to 500 Hz, now from the solver for
-whole rows (`rows: edges` gives the paths over the edges as before; two flat roofs on a
-rigid ground within 0.74 dB of a wave calculation, where those paths are up to 10.7 dB
-off); exactly through an outer edge (5.3 dB at 63 Hz 1.5 m above a hall's roof with
-image sources); every result in its last digits, now that the package adds its long sums
-itself (parameters by at most 1e-9 of their value); outdoors in wind or a temperature
-gradient at 1 and 2 kHz over the open ground, now from the parabolic equation (that
-change alone moves the examples' bands by up to 2.8 dB; runs over open ground in wind
-take longer, `open_air_stage` about 2.3 times on one core, and `helicopter_flyover`
-keeps the rays); behind a building whose faces absorb, with `second_order` (by 18 to 20
-dB behind a 6 m building absorbing 0.02; the archway example's first arrival behind the
-wall by 11.0 and 11.7 dB at 63 and 125 Hz); just over two edges in a row in sight of
-each other, with `second_order` (15 to 26 dB a centimetre above a 10 m roof); level with
-the tops of two or three barriers (about 10 dB); just above a flat roof and a barrier
-level with it (up to 8 dB with the source and the listener swapped, 16 dB past the
-barrier's end); near a diffracting edge's face that the source sees nearly edge-on, with
-every diffraction mode (0.2 dB at 63 Hz at one of eight positions in two cities, which
-simulate up to about 15 % slower); beside a bend of a thin screen's top or past a corner
-that is not square (steps of up to 5.4 dB, 16.6 dB or 3.0 dB); where the source, the
-listener and a barrier's top are at one height (up to 5.6 dB at 63 Hz); behind a barrier
-where a reflection lies near its foot (of the examples, the `railway`'s line and the
-`street`'s garden by up to 0.14 dB in a band); exactly in line with a source and a
-barrier's end in wind, or with a building's wall; in strips past roof edges in wind;
-across the shadow boundary of a barrier's end or a building's corner in wind (steps of
-up to 7.7 dB 60 m and 18.8 dB 120 m downwind gone), through the parabolic equation's
-crossovers (a ground dip at a join between its bands, 2.0 and 5.3 dB off the fast field
-program in the 1995 benchmark's case 2, within 0.19 and 0.45 dB now; C50 and C80 below 1
-kHz with it), with eddies (`windy`'s 250 Hz to 2 kHz bands by up to 0.59 dB with the
-`strong` ones), from or to a building's roof in wind (up to 1.95 dB off a full-wave
-solution before); with other listeners in a listener's direction in wind (0.12 dB at 63
-Hz behind one 10 m nearer, 0.65 dB among 201 listeners 10 cm apart); where the ground
-reflection reaches a listener more than 15 degrees up, now always from the wide-angle
-equation (up to 0.11 dB per octave band, 0.28 dB per third octave, in a one-off check);
-in wind or a temperature gradient over a ground that scatters little, where the late
-rays counted the curved ground paths again (still air and the shipped examples do not
-change); where a curved path turns just past a profile's node (the shipped examples'
-listeners by 0.02 dB at most); behind plants, with vector scattering (`tree_belt`'s
-A-weighted levels by 0.03 dB at most); where the size that sets scattering runs through
-an opening (`apartment`'s bed by 0.04 dB(A)); the wave solver's low bands round an open
-model, on a larger grid, and its 125 Hz band at a source or listener between its cells
-(up to 0.53 dB), the last 50 ms of its bands (up to 7.5 dB off, 15.7 dB in third
-octaves, in a room of 2 % absorption), and a closed building round a shut-in source in
-wind, now in still air (a 6 m hut's bands up to 1.7 dB off in a 15 m/s wind); Doc 29's
-L_Amax ahead of and behind a segment (up to 1.0 dB on Volume 3's departures; the airport
-example does not change); early paths at corners and near edges and surfaces: two paths
-with one image of the source off different surfaces (one was left out: up to 2.2 dB in a
-band), a path joined at a corner of two reflections (up to 20.7 dB too low 0.1 mm before
-a wall in a model 200 m wide), a path back off a room's corner, a panel or partition in
-line with a wall (a room and its mirror image up to 1.9 dB apart at 63 Hz), a plane at
-45 degrees to two axes, a source right by two planes or a short leg between two
-reflections with edge diffraction, an edge's end on a plane, and points right by a
-surface or a corner in very large models; the late part on the GPU right by a surface
-(up to 3.2 to 7.5 dB low); a measured directivity table at directions equally near a
-grid point; a walk with Doppler past a barrier's end (a click 40 dB above the sound
-around it gone); a walk with Doppler passing close to a listener (a ripple of up to 0.73
-dB gone), through a directional microphone (up to 0.25 dB) or in binaural (up to 3.1 dB
-at 1 kHz); and the spread: its combined standard uncertainty and its mean, within the
-draws' noise, every response after the first in a run of several, materials that absorb
-everything in some band, grounds with an impedance, and draws of much more absorption
-than was traced; and a calibrated material given in third octaves where one of them
-reaches 1. An outdoor ground with an `impedance` and no `scattering` now scatters
-nothing (it took 0.1: the early level over grass moves by up to 0.5 dB at 500 Hz, ground
-dips in still air deepen, flat open ground alone has no late part; `scattering: 0.1`
-gives the earlier results), and the wave solver's moving air flows round solids and
-passes between weather zones gradually (results near buildings and across zones change),
-and every result in moving air changes a little at the absorbing layer's border (the
-validation's levels by up to 0.012 dB). Scene files of 4.2.1 load unchanged.
+Highlights:
+
+- **Uncertainty** of a coverage map's values and of each listener's levels and speech
+  results, with one-sided bounds and GUM Supplement 1's adaptive number of draws.
+- **Rows of roofs and barriers**: outdoors the bands up to 500 Hz over long barriers and
+  rows of buildings come from a new solver (two flat roofs within 0.74 dB of a wave
+  calculation, where the paths over the edges are up to 10.7 dB off).
+- **Wind over open ground at 1 and 2 kHz** from the parabolic equation instead of rays,
+  which were up to 8.5 dB off a fast field program.
+- **Fitted walls for the wave solver** (off by default): a box's modes within 0.05 % of
+  the exact ones, where walls on cell faces are up to 5.2 % off.
+- **Faster with the same results**: the spread's draws about twice as fast, walks in a
+  fifth of the memory, and results that no longer depend on numpy's number of threads.
+
+Results change from 4.2.1 (simulate again; scene files of 4.2.1 load unchanged):
+
+- Outdoors:
+  - Long barriers and rows of buildings, bands up to 500 Hz: from the rows solver
+    (`simulation.early.rows: edges` gives 4.2.1's paths).
+  - Wind or a temperature gradient over open ground, 1 and 2 kHz: from the parabolic
+    equation; the examples' bands move by up to 2.8 dB.
+  - A ground with an `impedance` and no `scattering` scatters nothing (it took 0.1;
+    `scattering: 0.1` gives 4.2.1's results).
+  - The ground's bounces no longer count towards `max_order`, and the `railway` tour's
+    blips are gone.
+  - In wind: barrier ends and their shadow boundaries (steps of up to 18.8 dB gone),
+    roofs (1.95 dB off a full-wave solution, now 0.12 dB), the bands' crossovers (5.3
+    dB, now 0.45 dB), eddies, other listeners in the same direction, strips past roof
+    edges and the late rays' ground paths.
+  - Curved paths just past a profile's node (up to 15 dB), plants and openings with
+    vector scattering (up to 0.04 dB).
+- Edges and barriers:
+  - Buildings whose faces absorb, with `second_order`: 18 to 20 dB higher behind a 6 m
+    building.
+  - Two edges in sight with `second_order` (15 to 26 dB low just above a roof), tops
+    level with each other (about 10 dB high) or with a roof (up to 8 dB with source and
+    listener swapped).
+  - A path exactly through an outer edge (5.3 dB too high), bends and corners of thin
+    screens (now within 0.17 dB of BTM), a barrier's foot (up to 6.0 dB low), a point in
+    line with the source and a wall (3 to 9.5 dB too loud).
+  - The first reflections include every diffracting edge's faces (0.2 dB; cities up to
+    about 15 % slower), and the edge fade changes in turned, mirrored or very large
+    models.
+- Rooms and reflections:
+  - Two paths with one image off different surfaces (up to 2.2 dB), a panel in line with
+    a wall (1.9 dB), points right by a surface in very large models (up to 20.7 dB).
+  - Rooms that touch, and walls drawn once for each room (G behind a 30 dB partition was
+    11 to 20 dB low).
+  - The GPU's late part right by a surface (up to 3.2 dB low, 7.5 dB in an inner edge).
+- Wave solver:
+  - Open models get a larger grid (63 Hz was up to 9.8 dB low), sources and listeners
+    read between cells by a cubic (0.53 dB), runs end 0.2 s past the response (the last
+    50 ms were up to 7.5 dB off), and closed buildings in wind take still air (1.7 dB).
+  - `wind: moving` flows round solids and passes between weather zones gradually.
+- Walks, aircraft and the spread:
+  - Doppler walks: no ripple near a listener (0.73 dB), each path's filter at every
+    place (0.25 dB), binaural onsets (3.1 dB at 1 kHz), no click at a barrier's end (40
+    dB).
+  - Doc 29: L_Amax ahead of and behind a segment (up to 1.0 dB), and NPD tables with
+    distances running downwards (16 to 30 dB low).
+  - The spread's mean and combined uncertainty move within the draws' noise; materials
+    absorbing everything in a band and grounds with an impedance are handled.
+  - Every result moves in its last digits (sums in a fixed order, at most 1e-9).
 
 **Error estimates**
 
