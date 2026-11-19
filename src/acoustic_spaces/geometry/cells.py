@@ -15,7 +15,8 @@ its outer sides join the cell they lie in, which points just off its faces tell.
 Rooms are the enclosed cells that the outside of the model borders. A cell enclosed by
 rooms alone is solid: the inside of a pillar modelled as a closed box. Both sides of a
 free-standing panel face the same cell, and the two coincident faces where two closed
-models touch enclose a cell with no volume, which is neither.
+models touch enclose a cell with no volume, which is neither: a sliver. Sound that
+passes one of them passes the other at the same point, into the cell behind it.
 """
 
 from __future__ import annotations
@@ -98,6 +99,29 @@ class MeshCells:
         out[on[:, 1] & ~on[:, 0]] = 1
         out[on[:, 0] & ~on[:, 1]] = -1
         return out
+
+    @property
+    def beyond(self) -> np.ndarray:
+        """(F, 2) the cell that sound passing each face reaches on its front and on its
+        back: :attr:`side`, except where that side faces a sliver. There it is the cell
+        behind the sliver's other face, which the sound passes at the same point: the
+        room behind a wall drawn once for each room. A sliver whose faces have more than
+        two cells behind them keeps its own, as does the inside of an open model, which
+        faces with it on both sides have."""
+        side = self.side
+        count = len(self.volume)
+        face, at = np.nonzero(self.slivers[side])
+        cell, far = side[face, at], side[face, 1 - at]
+        # The cells behind each sliver's faces: the lowest and the highest, and how many.
+        lowest = np.full(count, count, dtype=np.int64)
+        highest = np.full(count, -1, dtype=np.int64)
+        np.minimum.at(lowest, cell, far)
+        np.maximum.at(highest, cell, far)
+        behind = np.bincount(np.unique(cell * count + far) // count, minlength=count)
+        keep = behind[cell] <= 2
+        beyond = side.copy()
+        beyond[face[keep], at[keep]] = lowest[cell[keep]] + highest[cell[keep]] - far[keep]
+        return beyond
 
     @property
     def open_faces(self) -> np.ndarray:

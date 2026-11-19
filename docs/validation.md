@@ -1131,6 +1131,23 @@ The textbook UTD for two edges, with the second edge's distance parameter for a
 wave from a line, was up to 6 dB low there; the engine takes it from the curvature of
 the first edge's wave where it reaches the second.
 
+A thin strip 2 m wide (a screen from z = -2 m to its top at z = 0), the source and the
+listener in its shadow on either side: the paths over its top and its foot run along the
+strip, along each of its faces, each way with half the coefficient at grazing incidence,
+as BTM's. Along one face alone the field would step where the listener crosses the
+strip's plane past its far edge, the first edge's wave along one face being the negative
+of that along the other. The whole early stage (`early_paths`, in pressure at 63 and 125
+Hz as by default) against BTM:
+
+| a thin strip, engine - BTM (dB) | 63 | 125 | 250 | 500 |
+|---|---:|---:|---:|---:|
+| (-3, 0, -0.5) to (3, 0, -1.5), BTM -0.1 to -8.0 dB | +0.03 | +0.02 | -0.25 | -0.07 |
+| the same, `first_order` | -1.27 | +0.20 | -0.28 | -0.07 |
+| (-2, 0, -1) to (4, 0, -1.2), BTM -0.1 to -9.2 dB | +0.02 | +0.02 | -0.27 | -0.13 |
+| the same, `first_order` | -1.39 | +0.40 | -0.31 | -0.15 |
+| (-1, 0, -0.3) to (1.5, 0, -1.9), BTM -1.2 to -8.7 dB | +0.11 | +0.01 | -0.03 | -0.14 |
+| the same, `first_order` | -0.46 | -0.82 | +0.17 | -0.18 |
+
 Along a top absorbing 0.2 to 0.8, the ground wave's loss is too large against the full
 wave. The wave solver ran a block 24 m long and 12 m deep whose top alone absorbs (5 cm
 cells, the first 50 ms, and a probe 3 m above the top that widened the grid, as with the
@@ -1300,9 +1317,12 @@ the level is 3.4 to 5.0 dB above that over one. Over a top 5 m wide and then a
 screen level with it, 5 m past it, the level a centimetre above their plane is the
 same with the source and the listener swapped, within 0.15 dB. Closer to the top or
 to the plane two things count. A path over the screen's top reflects off the top's
-plane where its own line meets that plane: with the two level, at the screen's top
-itself, where the top is not, so that it is no path, whatever the ray that looks for
-it meets from its start a millionth of the model's size off the edge; and the
+plane where its own line meets that plane, and counts only if the top is there,
+whatever the ray that looks for it meets from its start just off the edge: with the
+two level, the line meets the plane at the screen's top itself, where the top is not;
+near grazing incidence the ray meets the plane far from the line (with the source a
+centimetre above the plane, 6.6 mm inside the top's far edge where the line passes
+17.5 cm past it). And the
 screen's top lies beside the reflection off the top, before the point of reflection
 one way round and after it the other, and takes its term on that leg. In six cases from a millimetre to a metre above the plane, the screen 0.1 to 5 m
 past the top, the two ways round agree within 0.05 dB (`tests/test_diffraction.py`),
@@ -1314,9 +1334,11 @@ above is that of a level top within 0.04 dB with `first_order` and, a micrometre
 above, within 0.34 dB up to 500 Hz with `second_order` (below the plane and above
 500 Hz it is not: see [Known issues](#known-issues)). Where such a screen ends 1 cm to
 0.5 m beside the way, the level 1 or 2 mm above the plane is, with `second_order`,
-that a centimetre above: between two tops within 0.23 dB (0.39 dB with the way
-through the screen's end), and 5 m before a top or 5 m past it within 0.64 dB, both
-ways round. A centimetre above, with the screen first and the way a centimetre inside
+that a centimetre above: between two tops within 0.14 dB (0.30 dB with the screen's
+top a millionth of a micrometre above the plane, where a millimetre above it the ray
+that tests the path round the screen's upright end off the first top's wall meets
+that wall's top edge), and 5 m before a top or 5 m past it within 0.14 dB, both ways
+round. A centimetre above, with the screen first and the way a centimetre inside
 its end, it is up to 500 Hz 0.5 to 1.2 dB above half the sum of the fields without
 the screen and with an endless one (Kirchhoff's approximation for the way through the
 screen's end, -6.2 to -6.8 dB), each from the two-dimensional wave calculation of the
@@ -1325,9 +1347,9 @@ the plane of several flat tops the
 level is off by more: 3.9 to 9.2 dB below that a centimetre above the plane of two
 tops, 2.5 to 6.9 dB below it over three and 2.8 to 5.3 dB below it over a screen and
 then a top, where a top and then a screen is within 1.7 dB of it. It is off within
-two millionths of the model's size below the plane too (1.2 mm here), where the rays
-that look for paths over edges, which start a millionth of the model's size off the
-edges, find paths that are not there: 0.01 mm below the plane of two tops the level
+twice the rays' distance from the edges below the plane too (0.2 mm here), where the
+rays that look for paths over edges, which start a tenth of a millimetre off the edges
+here (a millionth of the model's size, but no farther), find paths that are not there: 0.01 mm below the plane of two tops the level
 is at +3.3 to +4.1 dB, and below that of three at +9.1 to +10.0 dB. In the bands that
 add in energy the levels up to 500 Hz are those of the table within 1.7 dB, but at
 63 Hz for three screens above their tops and level with them (2.5 and 2.6 dB higher),
@@ -1582,44 +1604,48 @@ place (x = -35 m; 0.37 dB(A) rms over the pass), the pavement's and the balcony'
 0.6 and 0.8 dB(A); their L_Amax came within 0.04 dB on the pavement and in the garden
 and 0.17 dB apart on the balcony.
 
-On the pavement, the balcony and `balcony_2m` the early level changes by at most 0.17,
-0.16 and 0.13 dB(A) from one 10 cm to the next, and in the garden by at most 1.39 dB(A),
+On the pavement, the balcony and `balcony_2m` the early level changes by at most 0.15,
+0.14 and 0.12 dB(A) from one 10 cm to the next, and in the garden by at most 1.40 dB(A),
 where 1 kHz swings by 2.5 dB at x = 28.8 m and does so smoothly 1 cm apart; without the
 fade the garden's level steps by up to 12.1 dB(A) from one 10 cm to the next. The steps
 left that stand out by more than 0.1 dB in some band 1 cm apart, but at 8 kHz, where a
 centimetre is a quarter of a wavelength and the level swings by up to 0.75 dB from one
-to the next (five more at 4 kHz in the garden, at x = 19.40, 19.51, 28.69, 28.72 and
-28.88 m, are swings too: in a one-off check 1 mm apart the level there changed by at most
-0.08 dB a millimetre at 4 kHz), each the step from 1 cm before x to x, and how far it
+to the next (four more at 4 kHz in the garden, at x = 19.51, 28.69, 28.72 and 28.88 m,
+are swings too: in a one-off check 1 mm apart the level there changed by at most 0.08 dB
+a millimetre at 4 kHz), each the step from 1 cm before x to x, and how far it
 stands out in dB(A) and in the same band without the fade (`validation/walks.py`):
 
 | car at x (m) | listener | stands out (dB) | in | dB(A) | without the fade (dB) |
 |---:|---|---:|---|---:|---:|
-| -41.39 | garden | 1.11 | 1 kHz | 0.55 | 0.00 |
-| -39.92 | balcony | 0.16 | 63 Hz | 0.00 | 0.00 |
-| -14.07 | garden | 0.80 | 125 Hz | 0.31 | 0.00 |
+| -41.39 | garden | 1.11 | 1 kHz | 0.52 | 0.00 |
+| -39.92 | balcony | 0.17 | 63 Hz | 0.01 | 0.00 |
+| -39.92 | garden | 0.41 | 63 Hz | 0.01 | 0.00 |
+| -14.07 | garden | 0.79 | 125 Hz | 0.30 | 0.00 |
 | 9.99 | garden | 0.83 | 63 Hz | 0.04 | 0.97 |
 | 10.01 | balcony_2m | 0.10 | 125 Hz | 0.00 | 0.08 |
-| 10.02 | garden | 1.05 | 63 Hz | 0.12 | 0.96 |
-| 14.28 | balcony_2m | 0.17 | 125 Hz | 0.00 | 0.04 |
-| 15.98 | balcony_2m | 0.16 | 125 Hz | 0.00 | 0.03 |
-| 16.01 | balcony_2m | 0.11 | 125 Hz | 0.00 | 0.03 |
-| 18.93 | balcony_2m | 0.17 | 125 Hz | 0.03 | 0.00 |
-| 25.31 | balcony | 0.14 | 63 Hz | 0.00 | 0.00 |
-| 37.20 | garden | 0.52 | 500 Hz | 0.02 | 0.00 |
-| 53.96 | pavement | 0.13 | 250 Hz | 0.00 | 0.04 |
+| 10.02 | garden | 1.05 | 63 Hz | 0.10 | 0.96 |
+| 14.28 | balcony_2m | 0.16 | 125 Hz | 0.00 | 0.04 |
+| 15.98 | balcony_2m | 0.15 | 125 Hz | 0.00 | 0.03 |
+| 18.93 | balcony_2m | 0.16 | 125 Hz | 0.03 | 0.00 |
+| 25.31 | balcony | 0.13 | 63 Hz | 0.00 | 0.00 |
+| 30.01 | garden | 1.28 | 63 Hz | 0.01 | 1.34 |
+| 37.20 | garden | 0.52 | 125 Hz | 0.02 | 0.00 |
+| 53.96 | pavement | 0.16 | 250 Hz | 0.01 | 0.05 |
+| 58.21 | pavement | 0.24 | 250 Hz | 0.00 | 0.00 |
+| 58.47 | pavement | 0.12 | 250 Hz | 0.00 | 0.00 |
 | 60.03 | balcony | 0.30 | 63 Hz | 0.05 | 0.00 |
-| 60.19 | balcony_2m | 0.33 | 63 Hz | 0.05 | 0.00 |
-| 60.70 | pavement | 0.29 | 250 Hz | 0.00 | 0.00 |
-| 63.10 | pavement | 0.21 | 63 Hz | 0.00 | 0.00 |
+| 60.19 | balcony_2m | 0.34 | 63 Hz | 0.05 | 0.00 |
+| 60.70 | pavement | 0.26 | 250 Hz | 0.00 | 0.00 |
+| 63.10 | pavement | 0.20 | 63 Hz | 0.00 | 0.00 |
 | 65.34 | balcony_2m | 0.22 | 500 Hz | 0.09 | 0.00 |
-| 66.62 | balcony | 0.15 | 63 Hz | 0.06 | 0.00 |
+| 66.62 | balcony | 0.16 | 63 Hz | 0.06 | 0.00 |
 
 The paths over the barrier's top and round its end at x = 44 m, the edge diffraction's
 own and the fade's terms of the same paths, fade out past the ends, as the barrier is a
 thin screen. The steps left are terms that still stop where the point they diffract at
 leaves the end of its edge (see [Known issues](#known-issues-of-the-edge-fade)), where
-traced (all but those at 9.99 to 10.02, 14.28, 53.96 and 63.10 m): mostly the fade's
+traced (all but those at -39.92 m in the garden, 9.99 to 10.02, 14.28, 30.01, 53.96,
+58.21, 58.47 and 63.10 m): mostly the fade's
 terms of second-order reflections that the barrier's top (x = 14 to 44 m), its end or a
 corner of the offices or the houses cuts off, which the edge diffraction (`first_order`)
 has no path for, and at 15.98 m the path over the houses' eaves, a solid wedge, at their
@@ -1801,6 +1827,47 @@ theory gives +6.0 dB on both sides.
   product is a wave bent twice by one edge, which the exact solution does not have. It
   is not checked on its own; behind the corner of the tests' L-shaped room such
   products come 23 dB below the paths over the corner.
+- **A third edge across a path over an edge.** Where an obstacle's edge cuts the way of
+  a path over another edge, or of a reflection next to it, the fade's terms and the
+  edge diffraction's paths do not hand the sound over to each other: the level steps
+  where that edge crosses the way, and between such boundaries it can be several dB
+  off. Over a roof 9 m wide and a screen 1 m past it, the source 10 m before the roof
+  and the listener 5 m past the screen, both 1 m above the roof's plane, with the
+  screen's top from 0.04 to 0.9 m above that plane, against the wave calculation of
+  [Rows of roofs and barriers against a wave
+  calculation](#rows-of-roofs-and-barriers-against-a-wave-calculation) (a one-off
+  check, with both ends at 1.01 m, its cells' centres; the engine's paths over the
+  edges alone, either way round, `method: image_sources`), in the bands up to 500 Hz:
+  - With `first_order` (the default) the level is within 1 dB for tops 0.2 to 0.6 m
+    and 0.7 to 0.9 m above the plane. Between the way of the roof's reflection to the
+    listener (0.61 m) and the line from the roof's near edge to the listener (0.67 m)
+    it is 4.4 to 4.6 dB low at 63 Hz and 3.1 to 3.3 dB at 125 Hz. There the screen
+    stops the reflection, and the term of the roof's far edge for it comes in with
+    the screen's term (where the reflection is stopped, the term is not tested past
+    the screen), which the reflection did not have while it was found (from that edge
+    the way to the listener passes under the screen's top); and the screen's term in
+    that product is the reflection's, for the image of the source in the roof, not
+    one from that edge, from which the listener lies deep in the screen's shadow. At
+    the line from the near edge, the path over that edge is cut off with nothing to go
+    on round the screen. With the ends at 1 m and the screen a face, the level at
+    63 Hz steps by -3.7 dB where the screen's top passes 0.6 m (by -2.2 dB at 125 Hz)
+    and by +5.3 dB at two thirds of a metre (+3.6 dB). Below the line from the roof's
+    far edge to the listener (tops up to 0.16 m, the line passing 0.17 m above the
+    plane there) the level is 6.6 to 7.1 dB low at 63 Hz and 2.1 to 2.3 dB at 125 Hz,
+    the path over both of the roof's edges in a row being missing (see
+    [Known issues](#known-issues)); where the screen cuts off the path over the far
+    edge, the level at 63 Hz steps up to 0.2 dB of the wave calculation's.
+  - With `second_order` the level is 4.9 to 5.2 dB low at 63 Hz and 3.2 to 3.3 dB at
+    125 Hz for tops 0.7 to 0.9 m, where both the fade's products for the stopped
+    reflection and the paths over a roof's edge and then the screen's top count the
+    sound that goes on round the screen; 1.8 to 2.3 dB high up to 250 Hz for tops 0.5
+    to 0.6 m; and 2.9 to 3.0 dB high at 63 Hz for tops 0.1 to 0.16 m. At 63 Hz it
+    steps by -2.3 dB at 0.6 m and by -5.5 dB at two thirds of a metre.
+
+  The steps of [More than two edges in a row near grazing incidence](#known-issues), a
+  centimetre above the roof's plane, have the same cause. Outdoors the early stage
+  takes such rows from the solver for whole rows in the bands up to 500 Hz
+  (`simulation.early.rows: solver`, the default).
 - **Order of reflections.** Where the edge diffraction does not bend it, a path of the
   highest order the early stage follows takes no terms for the reflections off the
   edge's faces, behind their planes or in front, as the early stage follows no path
@@ -3396,26 +3463,24 @@ alone moves them:
 
 | Scene | Faces | Rays | Device | Late (s) | Level diff (dB) | Centre time diff (ms) |
 |---|---:|---:|---|---:|---:|---:|
-| open_air_stage | 12 | 50,000 | cpu, next seed | 0.59 | 4.21 | 6.0 |
-| open_air_stage | 12 | 50,000 | gpu | 20.21 | 0.02 | 0.2 |
-| tree_belt | 30 | 200,000 | cpu, next seed | 1.12 | 1.20 | 22.3 |
-| tree_belt | 30 | 200,000 | gpu | 33.30 | 1.29 | 13.0 |
-| hillside | 3,730 | 50,000 | cpu, next seed | 0.34 | 2.04 | 1.9 |
-| hillside | 3,730 | 50,000 | gpu | 11.49 | 1.88 | 1.6 |
+| open_air_stage | 12 | 50,000 | cpu, next seed | 1.01 | 4.21 | 6.0 |
+| open_air_stage | 12 | 50,000 | gpu | 2.33 | 0.02 | 0.2 |
+| tree_belt | 30 | 200,000 | cpu, next seed | 2.47 | 1.10 | 18.1 |
+| tree_belt | 30 | 200,000 | gpu | 13.30 | 1.02 | 10.8 |
+| hillside | 3,730 | 50,000 | cpu, next seed | 0.47 | 2.04 | 1.9 |
+| hillside | 3,730 | 50,000 | gpu | 1.95 | 0.83 | 1.0 |
 
-On SwiftShader, a software Vulkan driver on the container's 4 cores (the CPU runs took
-0.3 to 1.1 s), which shows that the two agree, not how fast a GPU is; `python
-validation/outdoor_gpu.py` times your own. The GPU rows are from that run, when the
-port was added; the CPU's next-seed rows come out the same with this version's code
-(the container that checked them has no GPU driver). The tree belt's rows are from when it traced its image sources to the first order; at the second, as it does now, the house's reflection keeps its ground partners, the late sound changes with it, and the next seed differs by 1.32 dB and 20.6 ms (seeds 1 and 2; its GPU row needs a run on a GPU). The tree belt's rays through its foliage and
-stems come out as far from the CPU's as the next seed's do. The stage in the wind
-agrees to 0.02 dB with the same seed, whose rays start where the CPU's do; the next
-seed starts them elsewhere and moves the late sound at the two listeners downwind by
-4.2 dB on average (upwind, in the wind's shadow, no late ray arrives in either run).
-The stage's eddies play no part in this: they act on the early paths only, and the
-script compares the late sound (without them the next seed differs by the same
-4.21 dB). On the hillside the GPU was 1.9 dB from the CPU in that run, against the
-next seed's 2.0 dB now: the listener in the shadow gets no late rays, the one on the crest about the
+On lavapipe, Mesa's software Vulkan driver (the one CI's Linux jobs use), on the
+container's 4 cores (the CPU runs took 0.4 to 2.5 s), which shows that the two agree,
+not how fast a GPU is; `python validation/outdoor_gpu.py` times your own. The tree
+belt's rays through its foliage and stems come out as far from the CPU's as the next
+seed's do. The stage in the wind agrees to 0.02 dB with the same seed, whose rays start
+where the CPU's do; the next seed starts them elsewhere and moves the late sound at the
+two listeners downwind by 4.2 dB on average (upwind, in the wind's shadow, no late ray
+arrives in either run). The stage's eddies play no part in this: they act on the early
+paths only, and the script compares the late sound (without them the next seed differs
+by the same 4.21 dB). On the hillside the GPU is 0.8 dB from the CPU, against the next
+seed's 2.0 dB: the listener in the shadow gets no late rays, the one on the crest about the
 same level from every run, and the one on the slope a level that moves by several
 decibels with the seed, so one run of each, as here, cannot tell the GPU's difference
 from the rays' noise there.
@@ -3882,9 +3947,9 @@ the edges alone:
 |---|---|---|---|
 | one screen | 9 | -0.15 to +0.47 | -0.87 to +0.54 |
 | one roof 10 m wide | 9 | -0.16 to +0.14 | -3.81 to +3.37 |
-| a roof 9 m wide and a screen 1 m past it | 9 | -0.60 to +1.23 | -6.22 to +5.41 |
-| two roofs 4 m wide, 2 m apart | 9 | -0.74 to +0.64 | -10.63 to +7.85 |
-| three screens | 9 | -3.42 to +0.07 | -11.30 to +4.52 |
+| a roof 9 m wide and a screen 1 m past it | 9 | -0.60 to +1.23 | -6.22 to +5.87 |
+| two roofs 4 m wide, 2 m apart | 9 | -0.74 to +0.64 | -10.63 to +8.03 |
+| three screens | 9 | -3.42 to +0.07 | -11.30 to +4.85 |
 
 The simulation gives the solver the early paths' eight frequencies in each octave band,
 as the solver's own check does. Against 72 in a band, at nine places behind one screen 3
@@ -5184,11 +5249,11 @@ cores of a cloud machine with nothing else running:
 
 | Buildings | Faces | Edges | Build (s) | Simulation (s) | Of it diffraction (s) | Pairs tested | Peak memory |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 100 | 1,012 | 800 | 0.1 | 3.1 | 2.1 | 8.5 % | 0.3 GB |
-| 400 | 4,012 | 3,200 | 0.4 | 7.0 | 6.4 | 4.3 % | 0.3 GB |
-| 900 | 9,012 | 7,200 | 1.0 | 12.9 | 12.1 | 2.9 % | 0.4 GB |
-| 1,600 | 16,012 | 12,800 | 2.1 | 17.9 | 16.9 | 2.7 % | 0.5 GB |
-| 3,600 | 36,012 | 28,800 | 5.3 | 48.1 | 46.7 | 3.3 % | 1.8 GB |
+| 100 | 1,012 | 800 | 0.1 | 3.6 | 2.5 | 8.5 % | 0.3 GB |
+| 400 | 4,012 | 3,200 | 0.4 | 8.0 | 7.1 | 4.3 % | 0.3 GB |
+| 900 | 9,012 | 7,200 | 1.0 | 14.8 | 13.5 | 2.9 % | 0.4 GB |
+| 1,600 | 16,012 | 12,800 | 1.9 | 18.8 | 17.2 | 2.7 % | 0.7 GB |
+| 3,600 | 36,012 | 28,800 | 5.2 | 49.9 | 46.3 | 3.3 % | 2.2 GB |
 
 Diffraction includes finding the model's edges and where they end, and the terms that
 make the other specular paths fade at the edges
@@ -5209,8 +5274,8 @@ grows with the edges alone.
 turned at random angles and paths that reflect on both sides of an edge. It runs two
 sources, one in a street and one over the roofs, to two listeners, once as the engine
 runs, on one thread and on every core, and once with every pair tested. Every path, its
-energy and its spectrum come out the same bit for bit; the early paths took 0.9 s
-instead of 3.0 s. When the culling was written, the same comparison over every example
+energy and its spectrum come out the same bit for bit; the early paths took 1.8 s
+instead of 3.6 s. When the culling was written, the same comparison over every example
 and three test cities, with paths reflecting on one side and on both sides of an edge
 and over two edges, found no difference either (a one-off check; the script repeats
 the 4 by 4 city). The tests check the culling against
@@ -5965,12 +6030,15 @@ Results:
   2.5 dB below it); with the top 5 m wide and the screen 5 m past it, -7.6 to -8.4 dB,
   `second_order` 2.3 to 3.4 dB below (`first_order` within 1.3 dB), either way round
   with the rays' own search for reflections. The level also steps with the height of
-  the screen's top at that plane, by 13 to 16 dB over 4 mm: past the 9 m top with
-  `second_order` and every sequence of reflections tested (`method: image_sources`),
-  it is -13.7 to -19.0 dB with the screen's top from 2 mm to a micrometre below the
-  plane, -9.6 to -12.6 dB with it level or up to 0.5 mm above, and -0.3 to -1.9 dB
-  from 0.55 mm above, from where the path over the screen's top reflects off the top
-  (0.53 mm above, it does so at the top's far edge). Above 500 Hz, where the bands add
+  the screen's top at that plane: past the 9 m top with `second_order` and every
+  sequence of reflections tested (`method: image_sources`), it is -13.7 to -19.7 dB
+  with the screen's top from 2 mm to a micrometre below the plane, -9.6 to -12.6 dB
+  with it level or up to 0.52 mm above, +0.5 to -1.8 dB from 0.53 to 1.7 mm above,
+  from where the path over the screen's top reflects off the top (0.53 mm above, it
+  does so at the top's far edge), and -7.9 to -11.7 dB from 1.8 mm to 5 cm above,
+  where the screen hides the top's far edge from the listener (from 1.67 mm above; the
+  ray that tests that path starts a tenth of a millimetre off the edge and passes the
+  screen's top 0.06 mm higher). Above 500 Hz, where the bands add
   in energy, the level is -10.0 to -10.2 dB with the screen's top level and -5.6 dB
   with it a micrometre above. With it 10 µm to 0.5 mm above the plane and the rays' own
   search, the two ways round are also up to 0.4 dB apart. A solver for whole rows
@@ -5988,17 +6056,22 @@ Results:
   tops 5 m apart, 2.5 to 6.9 dB below it over three tops, 1.4 to 5.4 dB below it with
   a 2 cm slot across a 10 m top and 2.8 to 5.3 dB below it over a screen and then a
   top; over a top and then a screen it is within 1.7 dB of it (in pressure up to
-  500 Hz and in the bands that add in energy). Within two millionths of the model's
-  size below that plane, the rays that look for paths over edges, which start a
-  millionth of it off the edges, find paths that the tops hide: the level is then 9.4
+  500 Hz and in the bands that add in energy). Within twice their distance from the
+  edges below that plane, the rays that look for paths over edges, which start a
+  millionth of the model's size off the edges but no farther than a tenth of a
+  millimetre, find paths that the tops hide: the level is then 9.4
   to 9.7 dB above that a centimetre below the plane of two tops, 15 dB above it for
-  three tops, and 8.9 to 9.9 dB behind a top and a screen in either order. Within that
-  distance above the plane they miss paths that are there: a millimetre above the tops
-  of three screens 5 m apart, the last of which ends a centimetre beside the way, the
-  path round that end is not found and the level at 63 Hz is 1.5 dB below that 3 mm
-  above them. Likewise above a roof 5 m wide and a screen level with it, 5 m before
-  the roof or past it, that ends 1 cm to 0.1 m beside the way: the term of the
-  screen's upright end for the direct sound is missing up to 1.2 or 1.8 mm above the
+  three tops, and 8.9 to 9.9 dB behind a top and a screen in either order. Within a
+  few times that distance above the plane they miss paths that are there: up to 0.3 mm
+  above the tops of three screens 5 m apart, the last of which ends a centimetre
+  beside the way, the path round that end is not found and the level at 63 Hz is
+  1.5 dB below that 3 mm above them. Exactly level with the tops, with the middle
+  screen ending there, the path round its end is not found either, as its ray starts
+  just inside the end, below the plane: the level is 1.0 to 1.3 dB below that a
+  millimetre above at 63 Hz and 0.6 to 0.8 dB at 125 Hz, where with that path it is
+  within 0.3 dB of it. Likewise above a roof 5 m wide and a screen level with it, 5 m
+  before the roof or past it, that ends 1 cm to 0.1 m beside the way: the term of the
+  screen's upright end for the direct sound is missing up to 0.2 or 0.3 mm above the
   plane, where the level up to 500 Hz is 0.2 to 0.6 dB below that a centimetre above
   (0.5 to 1.1 dB with the way 1 cm outside the end).
 - **Reflections level with several tops.** With the source and the listener exactly
@@ -6037,7 +6110,37 @@ Results:
   the line of two tops 10 m apart, where two knife edges leave 0.317 of it, 2.1 dB low
   from 2 kHz up, and 1.0 to 1.3 dB low just above it. As the source or the listener
   alone crosses the line of the tops, the level steps by 0.5 and 1.0 dB at 63 Hz. The
-  corners of one block or wall, joined by a face, are not affected.
+  corners of one block or wall, joined by a face, are not affected, but where the face
+  is narrow against the wavelength (the next item).
+- **Thin slabs.** A desk screen, a door leaf or a pane drawn with its thickness is a slab
+  whose top and ends are faces narrow against the wavelength, each between two corners
+  that bend sound. Sound bends over such a slab nearly as over a thin screen, but
+  `first_order` and `direct` have no path over both corners, and `second_order`'s path
+  takes the second corner's distance parameter from the first corner's wave, which
+  shrinks with the face's width: the thinner the slab, the lower the path. Over the
+  rigid block of [Edge diffraction against the exact
+  solution](#edge-diffraction-against-the-exact-solution), the source and the listener
+  in line with it, in a one-off check against a thin screen in its middle (BTM, first
+  order), with the paths in energy:
+
+  | over a block, `second_order` - thin screen (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+  |---|---:|---:|---:|---:|---:|---:|---:|---:|
+  | 1 cm wide | -11.4 | -9.7 | -7.8 | -5.8 | -4.4 | -3.3 | -2.2 | -1.4 |
+  | 3 cm wide | -7.4 | -5.9 | -4.6 | -3.7 | -2.6 | -1.8 | -1.3 | -1.4 |
+  | 10 cm wide | -3.9 | -3.4 | -2.8 | -2.0 | -1.5 | -1.4 | -1.9 | -3.1 |
+  | 30 cm wide | -2.5 | -2.2 | -1.8 | -1.6 | -1.9 | -2.7 | -4.1 | -6.1 |
+
+  In pressure, the default at 63 and 125 Hz, it is 8.9 and 7.4 dB low over the 1 cm
+  block, 5.3 and 4.1 dB over the 3 cm one and 2.3 and 2.2 dB over the 10 cm one. BTM's
+  second order puts the blocks 3, 10 and 30 cm wide within 0.6, 1.1 and 2.1 dB of the
+  thin screen up to 1 kHz, a thicker block screening more as the frequency rises. In
+  an office 10 x 8 x 3 m with an absorbing ceiling, a desk screen 1.6 m wide and 1.4 m
+  high (absorbing 0.2 at 63 Hz to 0.9 from 500 Hz) between a talker and a listener 1 m
+  either side of it, drawn 3 cm thick rather than as one face, gave a G 1.3, 2.9, 1.8,
+  1.4, 1.1, 0.75, 0.55 and 0.40 dB lower from 63 Hz to 8 kHz and a C50 2.9, 4.3, 2.4,
+  2.0, 1.6, 1.1, 0.8 and 0.5 dB lower, with the default settings (one-off check).
+  Thin elements drawn as one face are not affected, and the scene's warnings name the
+  faces narrower than 10 cm between two corners that bend sound.
 - **A barrier's end in wind.** Behind a barrier the paths in the plane take the
   barrier's effect, and the paths over the top past its end, as they fade out there,
   take it too; the paths round the end change as the open ground's field along their
@@ -6628,7 +6731,10 @@ measurements took 28 minutes (the cases already downloaded, without the plots), 
 long term 1.6 and the benchmark 93 (the sum of its parts, each timed alone); the others
 listed here do not reach that part of the engine. Since 11 November the ray tracer and the wave solver do less work on the
 CPU for the same results: the seminar room's BRAS run takes 10 to 12 % less, and of the
-others only the wave solver's checks were timed again.
+others only the wave solver's checks were timed again. Since 18 November the ground's
+bounces count for no order outdoors, which gives the early stage more paths to follow
+in streets and cities: the cities' run takes 36 s (1.9 minutes with `--sizes 10 20 30 40
+60`), each alone on the machine.
 The cross-check's numbers come from 4.0.1 with seed 1;
 this version's own are within 0.012 % of them (EDT, whose line fit now starts at the
 onset in every response).

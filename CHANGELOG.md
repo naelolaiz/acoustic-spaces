@@ -8,6 +8,47 @@
   statistical late method refused it; with a material of its own on each side, the
   panel's late part was 2.4 to 3.6 dB off its mirror image. It now sounds as the panel
   drawn once, with its edges' diffraction too.
+- Added: a warning about thin slabs, faces narrower than 10 cm between two corners that
+  bend sound (a desk screen or a door leaf drawn with its thickness), over which the
+  early part has no path with `first_order` and `direct` and too low a one with
+  `second_order`; the validation report's known issues give the numbers.
+- Docs: where a third edge cuts a path over an edge, the level steps and can be several
+  dB off; the known issues of the edge fade give the measured levels over a roof and a
+  screen against the wave calculation, and the roadmap the fix.
+- Fixed: the pieces of an edge along one line are one edge also where rounding leaves
+  their directions up to about a millionth apart (a model written with six decimals) or
+  at 45 degrees to two axes: a screen's top drawn in four pieces was up to four edges,
+  which moved the level in an open box turned 45 degrees by 0.03 dB at 63 Hz with
+  `second_order` diffraction.
+- Fixed: with edge diffraction, the edge fade takes a model turned to any angle and
+  written with six decimals as it takes it exact: planes at right angles to the model's
+  tolerance for planes commute, a term's path reaches a face of the plane it reflects
+  off that lies just in front of that plane, each event of a path's orders of
+  reflections counts once by its planes, not by its rounded images, and such planes make
+  one wave in either order in the bands that add in energy. An open box turned 17 to 50
+  degrees had been up to 0.43 dB off at 63 Hz.
+- Fixed: of the paths that share an image off parallel planes (off a panel and the walls
+  either side of it, and off the same the other way round), the edge fade took the terms
+  of the first by the planes' numbers only, so a room and its mirror image differed
+  (0.018 dB at 125 Hz); each now takes its own.
+- Fixed: of two orders of the same reflections at a corner of perpendicular planes (an
+  arm of a barrier and the ground), the edge fade kept whichever its search listed
+  first, where its tolerance let both be, not the one along the way: a source 3 mm from
+  both arms of a bent barrier and 2 mm above the ground had 5 paths for 7 and 0.55 dB
+  less at 63 Hz in a model 10 km wide than in one 200 m wide.
+- Fixed: the rays that test a path over an edge started a millionth of the model's
+  size off it, 1 cm in a model 10 km wide, where they missed paths or found ones that
+  are not there: a source 1 cm from both arms of a barrier bent by 120 degrees gave
+  1.92 dB more at 63 Hz than in a model 200 m wide. They now start a tenth of a
+  millimetre off at most (models up to 100 m wide are as before), and a millimetre above
+  a roof and a screen level with it the level is that a centimetre above within 0.14 dB
+  (it was up to 0.64 dB below).
+- Fixed: a path over an edge that reflects off a plane next to it counted wherever the
+  ray from just off the edge met a face of that plane; near grazing incidence that ray
+  meets the plane far from the path's own line. It now counts only where that line meets
+  a face: with `second_order` the level a metre above a roof and a screen 1 m past it
+  stepped by 3.1 dB at 63 Hz with the screen's top 0.6 mm lower than where the path over
+  it begins to reflect off the roof.
 - Fixed: where two rooms modelled as closed models touch, each with a wall of its own
   where they meet, each face of that wall now reflects and absorbs in its own room, on
   the CPU and the GPU. In two 5 x 4 x 3 m rooms whose faces there absorb 0.9 and 0.1,
@@ -19,6 +60,70 @@
   air between them, now reads each solid as a room, and the problems say that solids
   close off no room round the air; an IFC file's building elements, read without a
   space, are solids and read as not closed, as before.
+- Fixed: a wall between two rooms drawn once for each room (two faces in one place, as
+  where two rooms modelled as closed models touch) let no sound through in the late part,
+  which took the space between the two faces for no room: behind a 30 dB partition so
+  drawn G came out 11 to 20 dB too low, behind an opening 5 to 14 dB, `validate` warned
+  that no surface joined the rooms, and the statistical reverberation times counted what
+  passes as lost. Such a wall now gives what it gives drawn once.
+- Fixed: with `second_order` diffraction, a path over two edges along the plane of a
+  screen or a panel (from one of its ends to the other) took the side of the screen that
+  each edge's frame calls face 0, which a scene's mirror image turns over, and in a
+  turned scene the screen stopped the way along it or not by how the coordinates
+  rounded. Behind a thin strip 2 m wide such paths were left out, up to 1.39 dB below
+  the exact solution (BTM) at 63 Hz; a panel standing free in a room and its mirror
+  image across the panel's plane, or the room turned by 30 degrees, were up to 0.24 dB
+  apart at 125 Hz. The path now runs along each face of the screen, two ways with half
+  the coefficient at grazing incidence each, within 0.11 dB of BTM at 63 and 125 Hz
+  behind the strip, and the faces in whose plane it runs do not stop it; one in that
+  plane on past the screen's far end, where the waves along its two faces cancel, is
+  left out.
+- Fixed: with edge diffraction, where walls in line face opposite ways with a panel or a
+  partition between them, the edge fade took the edges at a path's reflections, and the
+  faces a reflection meets there, by the plane in the model that holds each face, which
+  for the panel is that of the wall facing the plane's way: in a Z-shaped room with a
+  panel in the opening between two such walls, a room and its mirror image were up to
+  1.1 dB apart, and in a room with two such planes up to 1.8 dB. It now takes them by
+  where they lie and the way each face faces.
+- Fixed: faces that face one way with planes less than 0.01 mm apart are one plane on
+  either side of a step of the planes' rounding: a panel 0.01 mm off a wall's plane was
+  a plane of its own, up to 0.40 dB from the level in line at 125 Hz with edge
+  diffraction, and now has that level.
+- Fixed: with edge diffraction, where several events stop a path that is not found and
+  several edges explain one of them, the edge fade took the first edge by number, and a
+  reflection there took that edge's face, with its material and size, even a wall 2.6 m
+  off: in a T-shaped room with a panel in the stem's opening the level was 0.11 dB
+  higher at 63 Hz, and in an L-shaped room with a panel in line with a wall the room and
+  its mirror image were 0.045 dB apart. It now takes the edge whose term there is the
+  strongest, as for a path one event stops.
+- Fixed: with edge diffraction, in the bands that add in energy, paths whose images of
+  the source lay within a hundred-thousandth of the model's largest extent were one wave
+  and added in pressure, as those off two planes right by the source: 0.01 mm from the
+  floor and a wall of a room 10 m across, 1.5 to 2.7 dB too loud from 250 Hz up, and
+  1.2 mm from both arms of a bent barrier in a model 10 km wide, 2.3 dB from 1 kHz up.
+  Paths whose planes mirror the source otherwise are now other waves.
+- Fixed: the faces a path crosses right where it reflects were looked for along a chord
+  across the turn that reached a ten-millionth of the model's largest extent (1 mm in a
+  model 10 km wide) along both legs, on past a leg's other end (the source, say) where
+  that was nearer, and so could pass round the end of a face the path crosses. A source
+  0.015 to 0.04 mm from both arms of a barrier bent by 10 to 60 degrees in such a model
+  had a path off one arm through the other at the level of the direct sound, and with
+  edge diffraction an early level behind the barrier up to 42 dB above that of the same
+  scene in a model 200 m wide. The chord now ends at either leg's other end.
+- Fixed: outdoors, what a wall or a barrier scatters and the ground then reflects
+  reached a listener only through rays that crossed its detector sphere, each one a
+  burst in one millisecond of the tail (blips in the `railway` example's tour at
+  `meadow_25m`); in still air the rain now also falls on each listener's image in the
+  ground, with the same expected energy and without those bursts.
+- Changed: outdoors the ground's bounces count for no order towards
+  `simulation.early.max_order` (from 1 on): the early part holds the paths off up to
+  `max_order` vertical walls with their bounces off the ground, which counted each as a
+  reflection in still air and all together as one in wind and temperature gradients, and
+  the late rays leave their specular share to it. Their detector spheres had counted it
+  where a ray met the ground on both sides of a barrier that had scattered it, or two
+  walls and the ground (order 3 over the default 2): bursts of up to 28 dB at
+  `meadow_25m` in the `railway` example. The early stage takes about 30 % longer in the
+  `street` and `railway` examples.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

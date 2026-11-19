@@ -64,9 +64,11 @@ room or on a surface (within 1 µm of it, or within 2e-9 of the model's diagonal
 that is more, twice the least distance at which a ray traced on the CPU meets a face; an
 opening, with air on both sides, does not count) and listeners within 1 cm of a source;
 it warns about models that are not closed (rays would escape), listeners so close to a
-surface or an opening that the late part comes out noisy, and assignments that match
-nothing. Errors exit with status 1, and with `--strict` warnings too. Normals may point
-either way:
+surface or an opening that the late part comes out noisy, assignments that match
+nothing, and thin slabs, over whose top the edge diffraction finds too little sound
+(see [Thin slabs](validation.md#known-issues): draw a desk screen, a door leaf or a
+pane as one face). Errors exit with status 1, and with `--strict` warnings too. Normals
+may point either way:
 the room is the space the faces close off, found from the faces themselves (see
 [Walls, doors and openings](#walls-doors-and-openings)), and a panel standing in the
 room, with air on both sides, reflects and absorbs on both; drawn as two faces back to
@@ -168,7 +170,8 @@ assignments:
   virtual elements and building services (ducts, pipes, lights) are left out. Walls then
   have both sides and their thickness. The elements are solids, which close off no room,
   so the model reads as not closed even when no ray escapes (the leak finder tells); the
-  volume and the inside checks are skipped.
+  volume and the inside checks are skipped. Doors, panes and furniture panels come as
+  thin slabs, which the warnings name (see above).
 
 Each face's names, for assignments, are its element's name, its type's name, its
 materials (a layer set's name, then each layer's material) and its IFC class
@@ -495,9 +498,10 @@ assignments:
   refuses to run. When none stands in the model's rooms (walls drawn as a closed shell
   inside another), the spaces they stand in are the rooms. A material with
   `transmission: 0` lets nothing through. The faces between two rooms have a room on both sides and reflect and absorb
-  in both. Where two rooms modelled as closed models touch, each with a wall of its own
-  where they meet (two faces in one place), each face reflects and absorbs in its own
-  room, whichever way the models' normals point. `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor
+  in both. A wall between two rooms may also be drawn once for each room, as where two
+  rooms modelled as closed models touch: two faces in one place, which the sound passes
+  as one wall, each face reflecting and absorbing in its own room, whichever way the
+  models' normals point. `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor
   too, and the volume is theirs together. When the sources and listeners stand in air
   that the model's rooms do not include (walls drawn as a closed shell inside another),
   `inspect` also gives that "air volume", the one its reverberation times use.
