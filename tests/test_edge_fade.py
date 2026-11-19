@@ -928,10 +928,10 @@ def test_a_wave_s_mirror_takes_perpendicular_planes_in_either_order_as_one(
     right angles make one mirror in either order, wherever a -1 stands among them
     (``EdgeDiffraction._mirror``, which tells the waves of the bands in energy apart),
     though the mirror worked out in the one order and in the other parts by a few of its
-    steps; two planes that face each other make two. ``_commuted`` puts the lowest
+    steps; two planes that face each other make two. ``early._canonical`` puts the lowest
     plane first where it can come first, and leaves planes that do not commute in
     their order."""
-    from acoustic_spaces.engine.diffraction import _commuted
+    from acoustic_spaces.engine.early import _canonical
 
     room = _open_box(tmp_path, 17.0, 6)
     model = TraceModel.from_room(room)
@@ -949,13 +949,13 @@ def test_a_wave_s_mirror_takes_perpendicular_planes_in_either_order_as_one(
     for a, b in across:
         keys = diffraction._mirror(np.array([[a, b, -1], [b, a, -1], [-1, b, a], [b, -1, a]]))
         assert (keys == keys[0]).all()
-        assert _commuted(model, np.array([[max(a, b), -1, min(a, b)]])).tolist() == [
+        assert _canonical(model, np.array([[max(a, b), -1, min(a, b)]])).tolist() == [
             [min(a, b), max(a, b), -1]
         ]
     for a, b in facing:
         keys = diffraction._mirror(np.array([[a, b], [b, a]]))
         assert not (keys[0] == keys[1]).all()
-        assert _commuted(model, np.array([[b, a]])).tolist() == [[b, a]]
+        assert _canonical(model, np.array([[b, a]])).tolist() == [[b, a]]
 
 
 def test_of_two_orders_at_a_corner_the_edge_fade_takes_the_one_along_the_way() -> None:

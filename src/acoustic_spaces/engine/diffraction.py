@@ -91,10 +91,10 @@ from acoustic_spaces.engine.coherent import ground_factors, ground_wave_factors,
 from acoustic_spaces.engine.early import (
     _EDGE_TOLERANCE,
     EarlyReflections,
+    _canonical,
     _face_at,
     _mirrors,
     _over,
-    _perpendicular,
 )
 from acoustic_spaces.engine.model import MAX_CROSSINGS, TraceModel, source_weights
 from acoustic_spaces.geometry.cells import _components
@@ -1208,10 +1208,11 @@ class EdgeDiffraction:
         :class:`~acoustic_spaces.engine.clusters.Clusters`: as the early stage tells
         them apart (:func:`~acoustic_spaces.engine.early._mirrors`, with its
         tolerance). Sequences that differ only in the order of perpendicular planes
-        make one mirror, and are taken in one order (:func:`_commuted`): in a model
+        make one mirror, and are taken in one order
+        (:func:`~acoustic_spaces.engine.early._canonical`): in a model
         turned and written to six decimals their mirrors part by a few of those steps."""
         sequences = np.asarray(sequences, dtype=np.int64).reshape(len(sequences), -1)
-        return _mirrors(self.model, _commuted(self.model, sequences), _EDGE_TOLERANCE * self.size)
+        return _mirrors(self.model, _canonical(self.model, sequences), _EDGE_TOLERANCE * self.size)
 
     def clusters(self, listener: np.ndarray, paths: EarlyReflections) -> Clusters | None:
         """The waves of the specular paths ``paths`` at ``listener`` in the bands where
@@ -2820,39 +2821,6 @@ def _sides(c: dict) -> tuple[np.ndarray, np.ndarray]:
     listener[kind == 2, 0] = c["plane"][kind == 2]
     listener[kind == 3, 0] = c["plane2"][kind == 3]
     return source, listener
-
-
-def _commuted(model: TraceModel, sequences: np.ndarray) -> np.ndarray:
-    """``sequences`` (n, k; -1 for no plane there) with their planes first, in the one
-    order of those that swap only neighbouring perpendicular planes (their reflections
-    commute: :func:`~acoustic_spaces.engine.early._perpendicular`) that takes the
-    lowest plane first, then the lowest of the rest, and so on; -1 after them."""
-    sequences = np.asarray(sequences, dtype=np.int64).reshape(len(sequences), -1)
-    rest = np.take_along_axis(sequences, np.argsort(sequences < 0, axis=1, kind="stable"), 1)
-    n, k = rest.shape
-    rows = np.arange(n)
-    plane = np.maximum(rest, 0)
-    commute = np.ones((n, k, k), dtype=bool)
-    for a in range(k):
-        for b in range(a):
-            both = (rest[:, a] >= 0) & (rest[:, b] >= 0)
-            commute[both, a, b] = commute[both, b, a] = _perpendicular(
-                model, plane[both, a], plane[both, b]
-            )
-    taken = rest < 0
-    out = np.full_like(rest, -1)
-    for j in range(k):
-        # A plane can come next where it commutes with each plane still before it.
-        blocked = np.zeros((n, k), dtype=bool)
-        for a in range(k):
-            for b in range(a):
-                blocked[:, a] |= ~taken[:, b] & ~commute[:, a, b]
-        free = ~taken & ~blocked
-        pick = np.argmin(np.where(free, rest, np.iinfo(np.int64).max), axis=1)
-        has = free.any(axis=1)
-        out[has, j] = rest[rows[has], pick[has]]
-        taken[rows[has], pick[has]] = True
-    return out
 
 
 def _sequences(

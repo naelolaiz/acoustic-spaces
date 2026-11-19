@@ -142,6 +142,7 @@ from acoustic_spaces.engine.diffraction import (
 from acoustic_spaces.engine.early import (
     _EDGE_TOLERANCE,
     EarlyReflections,
+    _canonical,
     _crossed_at,
     _face_at,
     _faces_at,
@@ -2249,33 +2250,6 @@ def _stacked(cosines: list[np.ndarray], rows: np.ndarray, k: int) -> np.ndarray 
     if not cosines:
         return None
     return np.array([cosines[i] for i in rows], dtype=float).reshape(len(rows), k)
-
-
-def _canonical(model, seqs: np.ndarray) -> np.ndarray:
-    """(n, k) each of the plane sequences ``seqs`` (n, k) in the order, of all those that
-    swap only reflections off perpendicular planes (which give its path), that comes
-    first by the planes' numbers: one for all the orders of a path, another for another
-    path with the same image (off parallel planes)."""
-    n, k = seqs.shape
-    if k < 2:
-        return seqs
-    commute = np.zeros((n, k, k), dtype=bool)
-    for a in range(k):
-        for b in range(a + 1, k):
-            commute[:, a, b] = _perpendicular(model, seqs[:, a], seqs[:, b])
-    left = np.ones((n, k), dtype=bool)
-    out = np.empty_like(seqs)
-    rows = np.arange(n)
-    for step in range(k):
-        # A reflection may come next where it commutes with each one left before it.
-        free = left.copy()
-        for b in range(1, k):
-            for a in range(b):
-                free[:, b] &= ~left[:, a] | commute[:, a, b]
-        pick = np.argmin(np.where(free, seqs, np.iinfo(np.int64).max), axis=1)
-        out[:, step] = seqs[rows, pick]
-        left[rows, pick] = False
-    return out
 
 
 def _commuted(model, seqs: np.ndarray) -> np.ndarray:
