@@ -503,8 +503,9 @@ class ScenePage(Page):
         self.wind_direction.setWrapping(True)
         self.wind_direction.setToolTip(
             _(
-                "The way the wind blows to, in degrees counterclockwise from +x seen from "
-                "above (0: along +x, 90: along +y)"
+                "The direction the wind blows towards, not the one it comes from as weather "
+                "reports give it: degrees counterclockwise from +x seen from above (0: along "
+                "+x, 90: along +y)"
             )
         )
         self.wind_height = spin(0.1, 1000, 1, 1, "m")
@@ -529,8 +530,10 @@ class ScenePage(Page):
         self.log_term = spin(-5, 5, 2, 0.1, "K")
         self.log_term.setToolTip(
             _(
-                "A change of temperature fastest near the ground (K, times ln(1 + height / "
-                "roughness)): negative on a sunny day, positive on a clear night"
+                "How much the temperature changes in the first metres above the ground: "
+                "this value (K) times ln(1 + height / roughness), fast near the ground and "
+                "slow higher up, on top of the linear gradient. Negative on a sunny day, "
+                "positive on a clear night"
             )
         )
         self.roughness = spin(0.001, 2, 3, 0.01, "m")
@@ -556,11 +559,11 @@ class ScenePage(Page):
         ):
             box.valueChanged.connect(lambda value, f=field: self._atmosphere(f, value))
         form.addRow(_("Wind speed"), self.wind_speed)
-        form.addRow(_("Wind direction"), self.wind_direction)
+        form.addRow(_("Wind direction (towards)"), self.wind_direction)
         form.addRow(_("Wind height"), self.wind_height)
         form.addRow(_("Wind profile"), self.wind_profile)
         form.addRow(_("Temperature gradient"), self.gradient)
-        form.addRow(_("Temperature near the ground"), self.log_term)
+        form.addRow(_("Log temperature coefficient"), self.log_term)
         form.addRow(_("Roughness"), self.roughness)
         self.zone_temperature = spin(-20, 50, 1, 0.5, "°C")
         self.zone_temperature.setToolTip(
@@ -644,12 +647,12 @@ class ScenePage(Page):
         _fill(self.eddies, EDDIES)
         self.eddies.setToolTip(
             _(
-                "The eddies of the wind and of the temperature, which make sound outdoors "
-                "flicker: the direct sound and its reflections stop adding in step (the dip "
-                "of the ground fills in), sound is scattered into shadow zones, and renders "
-                "and walkthroughs change as the eddies drift past. (none): steady air; weak, "
-                "overcast with a light wind; moderate, a breeze and some sun; strong, a strong "
-                "wind or a hot sun; custom, the values below"
+                "Turbulence, the eddies of the wind and of the temperature, which make sound "
+                "outdoors flicker: the direct sound and its reflections stop adding in step "
+                "(the dip of the ground fills in), sound is scattered into shadow zones, and "
+                "renders and walkthroughs change as the eddies drift past. (none): steady "
+                "air; weak, overcast with a light wind; moderate, a breeze and some sun; "
+                "strong, a strong wind or a hot sun; custom, the values below"
             )
         )
         self.eddies.currentIndexChanged.connect(self._eddies)
@@ -701,12 +704,12 @@ class ScenePage(Page):
         ):
             box.valueChanged.connect(lambda value, f=field: self._eddy(f, value))
         self.eddy_height.valueChanged.connect(lambda value: self._eddy("height_m", value or None))
-        form.addRow(_("Eddies"), self.eddies)
-        form.addRow(_("Temperature eddies"), self.temperature_eddies)
-        form.addRow(_("Wind eddies"), self.wind_eddies)
-        form.addRow(_("Eddy size"), self.eddy_size)
-        form.addRow(_("Eddies' height"), self.eddy_height)
-        form.addRow(_("Weaker with height"), self.eddy_falloff)
+        form.addRow(_("Turbulence"), self.eddies)
+        form.addRow(_("Temperature structure parameter C_T²"), self.temperature_eddies)
+        form.addRow(_("Wind structure parameter C_v²"), self.wind_eddies)
+        form.addRow(_("Outer scale"), self.eddy_size)
+        form.addRow(_("Turbulence reference height"), self.eddy_height)
+        form.addRow(_("Height falloff exponent"), self.eddy_falloff)
         self.table = QLabel()
         self.table.setWordWrap(True)
         self.table.setToolTip(

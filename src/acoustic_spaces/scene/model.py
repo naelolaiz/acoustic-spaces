@@ -1964,8 +1964,9 @@ class Wind(_Model):
     direction_deg: float = Field(
         default=0.0,
         description=(
-            "the way it blows to, in degrees counterclockwise from +x seen from above "
-            "(0: along +x, 90: along +y)"
+            "the direction it blows towards (not the one it comes from, as weather reports "
+            "give it), in degrees counterclockwise from +x seen from above (0: along +x, "
+            "90: along +y)"
         ),
     )
     height_m: PositiveFloat = Field(default=10.0, description="the height the speed is at (m)")
@@ -2035,8 +2036,8 @@ class ZoneWind(_Model):
     direction_deg: float | None = Field(
         default=None,
         description=(
-            "the way it blows to, in degrees counterclockwise from +x seen from above; "
-            "None: the atmosphere's"
+            "the direction it blows towards, in degrees counterclockwise from +x seen "
+            "from above; None: the atmosphere's"
         ),
     )
     height_m: PositiveFloat | None = Field(
@@ -2083,8 +2084,9 @@ class _WeatherOverride(_Model):
         ge=-5.0,
         le=5.0,
         description=(
-            "a change of temperature fastest near the ground, in K times ln(1 + z / "
-            "roughness_m); None: the atmosphere's"
+            "the logarithmic temperature coefficient (K): the temperature changes by this "
+            "value times ln(1 + z / roughness_m) on top of the linear gradient; None: the "
+            "atmosphere's"
         ),
     )
     roughness_m: PositiveFloat | None = Field(
@@ -2362,8 +2364,9 @@ class Atmosphere(_Model):
         ge=-5.0,
         le=5.0,
         description=(
-            "a change of temperature fastest near the ground, in K times ln(1 + z / "
-            "roughness_m): negative on a sunny day, positive on a clear night"
+            "the logarithmic temperature coefficient (K): the temperature changes by this "
+            "value times ln(1 + z / roughness_m), fast near the ground and slow higher up, "
+            "on top of the linear gradient; negative on a sunny day, positive on a clear night"
         ),
     )
     roughness_m: PositiveFloat = Field(

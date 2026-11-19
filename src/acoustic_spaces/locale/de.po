@@ -3007,10 +3007,12 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"The way the wind blows to, in degrees counterclockwise from +x seen from "
-"above (0: along +x, 90: along +y)"
+"The direction the wind blows towards, not the one it comes from as weather "
+"reports give it: degrees counterclockwise from +x seen from above (0: along "
+"+x, 90: along +y)"
 msgstr ""
-"Wohin der Wind weht, in Grad gegen den Uhrzeigersinn von +x aus, von oben "
+"Die Richtung, in die der Wind weht, nicht die, aus der er kommt, wie "
+"Wetterberichte sie angeben: Grad gegen den Uhrzeigersinn von +x, von oben "
 "gesehen (0: entlang +x, 90: entlang +y)"
 
 #: acoustic_spaces/gui/inspector.py
@@ -3039,12 +3041,15 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"A change of temperature fastest near the ground (K, times ln(1 + height / "
-"roughness)): negative on a sunny day, positive on a clear night"
+"How much the temperature changes in the first metres above the ground: this "
+"value (K) times ln(1 + height / roughness), fast near the ground and slow "
+"higher up, on top of the linear gradient. Negative on a sunny day, positive "
+"on a clear night"
 msgstr ""
-"Eine Temperaturänderung, die nahe am Boden am schnellsten ist (K, mal ln(1 + "
-"Höhe / Rauigkeit)): negativ an einem sonnigen Tag, positiv in einer klaren "
-"Nacht"
+"Wie stark sich die Temperatur in den ersten Metern über dem Boden ändert: "
+"dieser Wert (K) mal ln(1 + Höhe / Rauigkeit), schnell nahe am Boden und "
+"langsam weiter oben, zusätzlich zum linearen Gradienten. Negativ an einem "
+"sonnigen Tag, positiv in einer klaren Nacht"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -3059,8 +3064,8 @@ msgid "Wind speed"
 msgstr "Windgeschwindigkeit"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Wind direction"
-msgstr "Windrichtung"
+msgid "Wind direction (towards)"
+msgstr "Windrichtung (wohin)"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Wind height"
@@ -3075,8 +3080,8 @@ msgid "Temperature gradient"
 msgstr "Temperaturgradient"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Temperature near the ground"
-msgstr "Temperatur nahe am Boden"
+msgid "Log temperature coefficient"
+msgstr "Logarithmischer Temperaturkoeffizient"
 
 #: acoustic_spaces/gui/inspector.py
 msgid "Roughness"
@@ -3181,20 +3186,20 @@ msgstr ""
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
-"The eddies of the wind and of the temperature, which make sound outdoors "
-"flicker: the direct sound and its reflections stop adding in step (the dip "
-"of the ground fills in), sound is scattered into shadow zones, and renders "
-"and walkthroughs change as the eddies drift past. (none): steady air; weak, "
-"overcast with a light wind; moderate, a breeze and some sun; strong, a "
-"strong wind or a hot sun; custom, the values below"
+"Turbulence, the eddies of the wind and of the temperature, which make sound "
+"outdoors flicker: the direct sound and its reflections stop adding in step "
+"(the dip of the ground fills in), sound is scattered into shadow zones, and "
+"renders and walkthroughs change as the eddies drift past. (none): steady "
+"air; weak, overcast with a light wind; moderate, a breeze and some sun; "
+"strong, a strong wind or a hot sun; custom, the values below"
 msgstr ""
-"Die Wirbel des Windes und der Temperatur, die den Schall im Freien schwanken "
-"lassen: der Direktschall und seine Reflexionen addieren sich nicht mehr "
-"phasengleich (die Bodensenke füllt sich), Schall wird in Schattenzonen "
-"gestreut, und Hörproben und Rundgänge ändern sich, während die Wirbel "
-"vorbeiziehen. (keine): ruhige Luft; schwach, bedeckt mit leichtem Wind; "
-"mäßig, eine Brise und etwas Sonne; stark, starker Wind oder kräftige Sonne; "
-"benutzerdefiniert, die Werte unten"
+"Turbulenz, die Wirbel des Windes und der Temperatur, die den Schall im "
+"Freien schwanken lassen: der Direktschall und seine Reflexionen addieren "
+"sich nicht mehr phasengleich (die Bodensenke füllt sich), Schall wird in "
+"Schattenzonen gestreut, und Hörproben und Rundgänge ändern sich, während die "
+"Wirbel vorbeiziehen. (keine): ruhige Luft; schwach, bedeckt mit leichtem "
+"Wind; mäßig, eine Brise und etwas Sonne; stark, starker Wind oder kräftige "
+"Sonne; benutzerdefiniert, die Werte unten"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""
@@ -3250,28 +3255,28 @@ msgstr ""
 "starker Sonne"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Eddies"
+msgid "Turbulence"
 msgstr "Turbulenz"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Temperature eddies"
-msgstr "Turbulenz der Temperatur"
+msgid "Temperature structure parameter C_T²"
+msgstr "Temperatur-Strukturparameter C_T²"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Wind eddies"
-msgstr "Turbulenz des Windes"
+msgid "Wind structure parameter C_v²"
+msgstr "Wind-Strukturparameter C_v²"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Eddy size"
-msgstr "Wirbelgröße"
+msgid "Outer scale"
+msgstr "Äußere Skala"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Eddies' height"
-msgstr "Höhe der Turbulenz"
+msgid "Turbulence reference height"
+msgstr "Bezugshöhe der Turbulenz"
 
 #: acoustic_spaces/gui/inspector.py
-msgid "Weaker with height"
-msgstr "Schwächer mit der Höhe"
+msgid "Height falloff exponent"
+msgstr "Exponent der Abnahme mit der Höhe"
 
 #: acoustic_spaces/gui/inspector.py
 msgid ""

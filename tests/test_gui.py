@@ -3008,7 +3008,7 @@ def test_wind_and_temperature_form(window) -> None:
     page.weather.setCurrentIndex(0)  # (none): still air, still with its eddies
     assert atmosphere().still and atmosphere().turbulence.wind_structure == 0.3
     assert page.weather.currentData() is None and page.wind_speed.value() == 0.0
-    # Weaker with height: a height (0 is none) and a fall-off, kept through a preset.
+    # Turbulence reference height (0 is none) and height falloff exponent, kept through a preset.
     assert atmosphere().turbulence.height_m is None and page.eddy_height.value() == 0.0
     page.eddy_height.setValue(2.0)
     assert atmosphere().turbulence.height_m == 2.0
