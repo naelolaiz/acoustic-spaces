@@ -528,6 +528,8 @@ class _Air:
 
         mesh = room.mesh
         self.bvh = _native.Bvh(mesh.vertices, mesh.faces)
+        # Of a wall drawn once for each room, the face whose own side a ray meets.
+        self.bvh.set_facing(mesh.cells().facing)
         # The side of each face that a ray going down meets: the back where its normal
         # points down.
         self.side = (products.product(mesh.face_normals(), _DOWN) > 0.0).astype(np.int64)

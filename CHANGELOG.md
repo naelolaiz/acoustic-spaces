@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Fixed: where two rooms modelled as closed models touch, each with a wall of its own
+  where they meet, each face of that wall now reflects and absorbs in its own room, on
+  the CPU and the GPU. In two 5 x 4 x 3 m rooms whose faces there absorb 0.9 and 0.1,
+  the first room's G had been 3.0 to 3.2 dB too high and its T30 0.93 to 1.01 s instead
+  of 0.44 to 0.53 s (250 Hz to 2 kHz): with the normals pointing out of the rooms each
+  face went with the other room, and either way a ray met the same one of the two from
+  both sides; with them into the rooms, a map of the upper of two stacked rooms found no
+  point. A model of touching solids alone, with the
+  air between them, now reads each solid as a room, and the problems say that solids
+  close off no room round the air; an IFC file's building elements, read without a
+  space, are solids and read as not closed, as before.
 - Fixed: a wall between two rooms drawn once for each room (two faces in one place, as
   where two rooms modelled as closed models touch) let no sound through in the late part,
   which took the space between the two faces for no room: behind a 30 dB partition so

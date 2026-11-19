@@ -84,6 +84,29 @@ def free_field_energy(
     return out / len(elements)
 
 
+def _own_sides(room: Room, size: np.ndarray | None) -> np.ndarray:
+    """(F,) int8 for :meth:`Bvh.set_facing <acoustic_spaces._native.Bvh.set_facing>`:
+    the own side of each face of a wall drawn once for each room
+    (:attr:`MeshCells.facing <acoustic_spaces.geometry.cells.MeshCells.facing>`) where
+    the faces in that place differ in material, name or surface ``size``, so that a ray
+    meets its own room's face; 0 where they do not, as either serves."""
+    mesh = room.mesh
+    cells = mesh.cells()
+    facing = cells.facing
+    faces = np.flatnonzero(facing)
+    if not len(faces):
+        return facing
+    sliver = cells.side[faces, np.where(facing[faces] > 0, 1, 0)]
+    keys = [sliver, room.face_materials[faces], mesh.face_labels[faces]]
+    if size is not None:
+        keys += [size[faces, 0], size[faces, 1]]
+    kinds = np.unique(np.column_stack(keys).astype(float), axis=0)
+    differ = np.bincount(kinds[:, 0].astype(np.int64), minlength=len(cells.volume)) > 1
+    out = np.zeros_like(facing)
+    out[faces] = np.where(differ[sliver], facing[faces], 0)
+    return out
+
+
 def _plants(room: Room, bands: Resolution):
     """The vegetation of an outdoor scene in ``bands``, or None."""
     if room.outdoor is None or not room.outdoor.vegetation:
@@ -298,6 +321,7 @@ class TraceModel:
             if room.outdoor is not None:
                 # The ground goes on past its extent: its size scatters nothing.
                 size[_ground_faces(room)] = UNBOUNDED_M
+        bvh.set_facing(_own_sides(room, size))
         return cls(
             room=room,
             bvh=bvh,

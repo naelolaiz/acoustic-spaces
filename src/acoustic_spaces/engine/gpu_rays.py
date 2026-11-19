@@ -43,7 +43,10 @@ _MAX_GROUPS = 65535
 #: The tree and the search in WGSL, for any shader that binds ``nodes`` (two vec4<u32>
 #: per node: its box's low corner and first child or triangle, then its high corner and
 #: triangle count, zero for an inner node) and ``triangles`` (three vec4<u32> per place
-#: in leaf order: the three corners, the first with its face) as read-only storage.
+#: in leaf order: the three corners, the first with its face, the second with its own
+#: side as ``Bvh.set_facing`` has it, 1 the front, 2 the back and 0 none, the third
+#: with the width within which two hits are in one place, f32, 0 with none) as
+#: read-only storage.
 BVH_WGSL = """
 const NONE: u32 = 0xffffffffu;
 const FAR: f32 = 3.0e38;
@@ -92,15 +95,34 @@ fn hit_triangle(place: u32, o: vec3<f32>, d: vec3<f32>) -> f32 {
     return select(-1.0, dot(e2, q) * inv_det, inside);
 }
 
+// Whether the ray along d meets the side of the triangle at `place` that is not its
+// own (see BVH_WGSL); false for a face with no own side.
+fn turned_side(place: u32, d: vec3<f32>) -> bool {
+    let own = triangles[3u * place + 1u].w;
+    let v0 = bitcast<vec3<f32>>(triangles[3u * place].xyz);
+    let e1 = bitcast<vec3<f32>>(triangles[3u * place + 1u].xyz) - v0;
+    let e2 = bitcast<vec3<f32>>(triangles[3u * place + 2u].xyz) - v0;
+    let front = dot(cross(e1, e2), d) < 0.0;
+    return own != 0u && front != (own == 1u);
+}
+
 // The nearest face along o + t d (d of unit length) with t in (t_min, t_max), skipping
 // face `skip`, or (t_max, NONE); with `any_hit`, the first face found, which is enough
-// to know the way is blocked. Of two children the ray enters, the nearer goes first;
-// the other waits and is dropped if a hit nearer than its box turns up meanwhile.
-// (No early exits from the loops: with them, the late tracer's searches on Direct3D 12
-// missed faces and could run forever.)
+// to know the way is blocked. Of two faces in one place (a wall drawn once for each of
+// the rooms it stands between), the one whose own side the ray meets: a hit on the
+// other one's turned side gives way to a hit within the place's width of it that is
+// not, as on the CPU. Of two children the ray enters, the nearer goes first; the other
+// waits and is dropped if a hit nearer than its box turns up meanwhile. (No early exits
+// from the loops: with them, the late tracer's searches on Direct3D 12 missed faces and
+// could run forever.)
 fn search_ray(o: vec3<f32>, d: vec3<f32>, t_min: f32, t_max: f32, skip: u32,
               any_hit: bool) -> Hit {
     var best = Hit(t_max, NONE);
+    // Whether the best hit meets a face's turned side, the width of its place, and how
+    // far on a hit may still take its place: the best hit, or the width past it.
+    var turned = false;
+    var width = 0.0;
+    var reach = t_max;
     let inv = reciprocal(d);
     var waiting_node: array<u32, STACK>;
     var waiting_entry: array<f32, STACK>;
@@ -117,8 +139,24 @@ fn search_ray(o: vec3<f32>, d: vec3<f32>, t_min: f32, t_max: f32, skip: u32,
                 let face = triangles[3u * place].w;
                 if (face != skip) {
                     let t = hit_triangle(place, o, d);
-                    if (t > t_min && t < best.t) {
+                    let span = bitcast<f32>(triangles[3u * place + 2u].w);
+                    let tie = max(width, span);
+                    if (t > t_min && t < reach && span + width == 0.0) {
                         best = Hit(t, face);
+                        reach = t;
+                    } else if (t > t_min && t < reach) {
+                        let away = turned_side(place, d);
+                        let nearer = t < best.t;
+                        let none_yet = best.face == NONE;
+                        let take = (none_yet && nearer) || t < best.t - tie ||
+                                   (!none_yet && t <= best.t + tie &&
+                                    select(nearer, turned, turned != away));
+                        if (take) {
+                            best = Hit(t, face);
+                            turned = away;
+                            width = span;
+                            reach = select(t, min(t_max, t + span), away);
+                        }
                     }
                 }
             }
@@ -128,10 +166,10 @@ fn search_ray(o: vec3<f32>, d: vec3<f32>, t_min: f32, t_max: f32, skip: u32,
         } else {
             let left = low.w;
             let right = left + 1u;
-            let to_left = enter(left, o, inv, best.t);
-            let to_right = enter(right, o, inv, best.t);
-            let in_left = to_left <= best.t;
-            let in_right = to_right <= best.t;
+            let to_left = enter(left, o, inv, reach);
+            let to_right = enter(right, o, inv, reach);
+            let in_left = to_left <= reach;
+            let in_right = to_right <= reach;
             if (in_left && in_right) {
                 let left_first = to_left <= to_right;
                 waiting_node[top] = select(left, right, left_first);
@@ -145,7 +183,7 @@ fn search_ray(o: vec3<f32>, d: vec3<f32>, t_min: f32, t_max: f32, skip: u32,
         // Else the nearest waiting node the ray still reaches before its best hit, if any.
         while (next == NONE && top > 0u) {
             top--;
-            if (waiting_entry[top] <= best.t) {
+            if (waiting_entry[top] <= reach) {
                 next = waiting_node[top];
             }
         }
@@ -218,6 +256,9 @@ def pack_tree(layout: dict[str, np.ndarray], scale: float):
     triangles = np.zeros((len(corners), 3, 4), np.uint32)
     triangles[:, :, :3] = _words(corners - centre)
     triangles[:, 0, 3] = layout["faces"]
+    facing = np.asarray(layout["facing"], np.int64)
+    triangles[:, 1, 3] = np.where(facing > 0, 1, np.where(facing < 0, 2, 0))
+    triangles[:, 2, 3] = _words(np.where(facing != 0, T_MIN * scale, 0.0))
     return centre, nodes, triangles
 
 
