@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed: a wall between two rooms drawn once for each room (two faces in one place, as
+  where two rooms modelled as closed models touch) let no sound through in the late part,
+  which took the space between the two faces for no room: behind a 30 dB partition so
+  drawn G came out 11 to 20 dB too low, behind an opening 5 to 14 dB, `validate` warned
+  that no surface joined the rooms, and the statistical reverberation times counted what
+  passes as lost. Such a wall now gives what it gives drawn once.
 - Fixed: with `second_order` diffraction, a path over two edges along the plane of a
   screen or a panel (from one of its ends to the other) took the side of the screen that
   each edge's frame calls face 0, which a scene's mirror image turns over, and in a

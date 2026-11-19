@@ -593,6 +593,76 @@ def test_a_partition_drawn_as_one_face_for_each_room_is_one_partition(tmp_path: 
         np.testing.assert_allclose(energy_two, energy, rtol=1e-9)
 
 
+def _drawn_twice(tmp_path: Path, kind: str, faces: int) -> Path:
+    """The rooms above with the wall between them a partition or an opening (``kind``),
+    drawn as one face or as two coincident faces, one facing each room (``faces``)."""
+    quad = ((5, 0, 0), (5, 4, 0), (5, 4, 3), (5, 0, 3))
+    groups = {
+        "room1": _box(0, 5, 4, 3, skip=("x1",)),
+        "room2": _box(5, 10, 4, 3, skip=("x0",)),
+        kind: [quad, quad[::-1]][:faces],
+    }
+    return _write(tmp_path / f"{kind}{faces}.obj", groups)
+
+
+@pytest.mark.parametrize("kind", ["partition", "opening"])
+def test_a_wall_drawn_once_for_each_room_joins_the_rooms(tmp_path: Path, kind: str) -> None:
+    """The partition above, or an opening the size of the wall, drawn as two coincident
+    faces, one facing each room: each face has its room on one side, and sound passing
+    it reaches the other room, behind the other face. The rooms are joined, with no
+    warning, and the statistical reverberation times are those of the wall drawn once,
+    what passes it not lost. The space between the two faces, which is no room, had
+    taken all the sound passing them: the warning that no surface between the rooms lets
+    sound through, and with the opening 0.48 s for 1.18 s."""
+    rooms = []
+    for faces in (1, 2):
+        room = _partitioned(_drawn_twice(tmp_path, kind, faces), [2.5, 1.0, 1.0], [8.0, 2.0, 1.2])
+        rooms.append(room)
+        assert not [w for w in room.warnings() if "lets sound through" in w]
+    one, two = rooms
+    wall = np.flatnonzero(np.isin(two.mesh.face_labels, [two.mesh.labels.index((kind,))]))
+    assert len(wall) == 4
+    own = two.face_room[wall]
+    beyond = two.face_beyond[wall]
+    assert np.all((own >= 0).sum(axis=1) == 1)
+    lit = own >= 0
+    np.testing.assert_array_equal(beyond[lit], own[lit])
+    np.testing.assert_array_equal(beyond[~lit], 1 - own[lit])
+    for formula in ("sabine", "eyring", "arau_puchades"):
+        np.testing.assert_allclose(
+            two.reverberation_time(formula), one.reverberation_time(formula), rtol=1e-12
+        )
+
+
+@pytest.mark.parametrize("method", ["statistical", "stochastic_ray_tracing"])
+@pytest.mark.parametrize("kind", ["partition", "opening"])
+def test_a_wall_drawn_once_for_each_room_passes_sound_in_the_late_part(
+    tmp_path: Path, kind: str, method: str
+) -> None:
+    """The listener behind the partition or the opening above, drawn as one face or as
+    two (one facing each room): the same G within 0.05 dB in every band, the
+    statistical method's to 1e-9 dB (here both the same to the bit). The late part had
+    let nothing through the wall drawn twice: behind the partition 11 to 20 dB less,
+    behind the opening 5 to 14 dB."""
+    found = []
+    for faces in (1, 2):
+        room = _partitioned(
+            _drawn_twice(tmp_path, kind, faces),
+            [2.5, 1.0, 1.0],
+            [8.0, 2.0, 1.2],
+            sized=False,
+            max_order=2,
+            method="image_sources",
+            diffraction="none",
+        )
+        room.scene.simulation.late.method = method
+        room.scene.simulation.late.rays = 3000
+        room.scene.simulation.ir_length_s = 1.0
+        found.append(simulate(room)["s", "l"].parameters().g)
+    one, two = found
+    np.testing.assert_allclose(two, one, rtol=0, atol=1e-9 if method == "statistical" else 0.05)
+
+
 @pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
 def test_paths_with_one_image_off_other_surfaces_are_paths_of_their_own(
     tmp_path: Path, method: str

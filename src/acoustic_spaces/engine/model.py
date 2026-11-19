@@ -145,6 +145,10 @@ class TraceModel:
     #: (F, 2) the room on the front (the side the mesh's face normal points to) and the
     #: back of each face (an index into ``room_volumes``), or -1.
     face_room: np.ndarray | None = None
+    #: (F, 2) the room that sound passing each face reaches on its front and its back:
+    #: ``face_room``, but behind a wall drawn once for each room, the room behind the
+    #: other face (:attr:`acoustic_spaces.room.Room.face_beyond`).
+    face_beyond: np.ndarray | None = None
     #: (R,) volume of each room (m3).
     room_volumes: np.ndarray | None = None
     #: (F, 2) width and length (m) of the surface each face belongs to (see
@@ -224,6 +228,7 @@ class TraceModel:
         normals = mesh.face_normals()
         oriented = len(room.air_cells) > 0
         face_room = room.face_room if oriented else np.full((len(mesh.faces), 2), -1, np.int64)
+        face_beyond = room.face_beyond if oriented else face_room
         air = face_room >= 0
         back = air[:, 1] & ~air[:, 0]
         # A room on both sides, or the inside unknown: one canonical normal direction for
@@ -310,6 +315,7 @@ class TraceModel:
             plane_two_sided=two_sided,
             transmission=room.face_transmission(simulation.bands),
             face_room=face_room,
+            face_beyond=face_beyond,
             room_volumes=room.room_volumes if oriented else np.zeros(0),
             ray_tree=ray_tree,
             sky=None if room.outdoor is None else room.sky_faces(),
@@ -329,6 +335,8 @@ class TraceModel:
             self.plane_two_sided = np.full(self.plane_count, not self.oriented)
         if self.face_room is None:
             self.face_room = np.full((len(self.face_plane), 2), -1, dtype=np.int64)
+        if self.face_beyond is None:
+            self.face_beyond = self.face_room
         if self.room_volumes is None:
             self.room_volumes = np.zeros(0)
         if self.transmission is not None:
