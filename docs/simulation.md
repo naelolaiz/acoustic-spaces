@@ -4,7 +4,9 @@ Each source and listener pair is simulated in two parts that add up without a
 crossfade.
 
 **Early reflections** (`simulation.early`) are exact specular paths up to
-`max_order` reflections, with delay, arrival direction and energy per band. Candidate
+`max_order` reflections (outdoors the ground's bounces count for none, see
+[Outdoor scenes](outdoor.md#the-ground-and-the-sky)), with delay, arrival direction
+and energy per band. Candidate
 image sources come from deterministic specular rays (`method: ray_tracing`, the
 default; cost grows with `rays`, not with the number of surfaces) or from every
 sequence of planes (`method: image_sources`; complete, but grows as planes to the
@@ -40,6 +42,14 @@ model's diagonal. Sound that bends round edges is added to them (see
     rays near the source, the listener's directions near the listener. The expected
     energy is the same, but a ray that lands next to a listener (above a ground that
     scatters, an aircraft overhead) brings it no burst of scattered sound.
+    Outdoors with rays that go straight, the scattered part also radiates to each
+    listener's image in the ground (in the plane of the ground; on a terrain, in its
+    four largest planes), reflected where the line to the image meets the ground by
+    its specular share there, and a ray that reflects off the ground leaves what it
+    carries of its last reflection's scattered sound to that rain. What the ground
+    reflects of a wall's or a barrier's scattered sound then reaches the listener with
+    the same expected energy, steadily, where through the detector sphere a few rays
+    brought it, each in one time slot.
   - `secondary_sources`: all reflected energy radiates that way, as in ODEON's late
     method. Much smoother tails, but it treats specular energy as diffuse: in the
     example box (smooth walls, absorbing ceiling) EDT comes out about 20 % shorter.
@@ -433,10 +443,11 @@ where paths add in energy from 250 Hz up, the sound bent round edges is kept as 
 its geometric wave as far as it is coherent with it over the band (on the dark side of
 its boundary, where that wave is gone, near the boundary only), and the rest of it is
 part of its event's diffracted wave, whose terms add up as one wave, so the two edges of
-a narrow face nearly cancel as they do in pressure. A wave's energy is that of its
-pieces added up in pressure and averaged over the band, never below nothing. Behind the
-`archway`'s wall, where the reflection off the arch's jamb, 40 cm deep, appears, the
-level steps by at most 0.08 dB from 250 Hz to 1 kHz. The
+a narrow face nearly cancel as they do in pressure. Paths whose planes mirror the source
+otherwise are other waves, however near their images lie (a source right by two planes).
+A wave's energy is that of its pieces added up in pressure and averaged over the band,
+never below nothing. Behind the `archway`'s wall, where the reflection off the arch's
+jamb, 40 cm deep, appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz. The
 [known issues](validation.md#known-issues-of-the-edge-fade) list these, with what is
 checked and what is not. The fade comes with any `diffraction` but `none`. The late
 part is unchanged, since its scattered rays already find their way round corners.
@@ -893,8 +904,9 @@ simulation:
   kinds of scattering, the scattering of a surface's size, air absorption, the early
   stage's paths left out, arrival directions, the weight window, and outdoors the rays
   bent by [wind and temperature](outdoor.md#wind-and-temperature), those through
-  [vegetation](outdoor.md#vegetation) and the open sky); the listeners' side of the
-  first reflections' scattered sound is found on the CPU. Rays start where
+  [vegetation](outdoor.md#vegetation), the open sky and the rain on the listeners'
+  images in the ground); the listeners' side of the first reflections' scattered sound
+  is found on the CPU. Rays start where
   the CPU's do, then draw random numbers of their own, in single precision, so the two
   agree statistically, not ray for ray. Its lengths are coarser than the CPU's: a
   straight ray meets no face nearer its start than a millionth of the model's size (the
