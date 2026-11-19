@@ -593,6 +593,95 @@ def test_a_partition_drawn_as_one_face_for_each_room_is_one_partition(tmp_path: 
         np.testing.assert_allclose(energy_two, energy, rtol=1e-9)
 
 
+def _sides(obj: Path, assignments, source, listener, **simulation) -> Room:
+    """The rooms or the panel of ``obj``, its groups of ``assignments`` "soft" (absorbing
+    90 %) or "hard" (1 %), the rest absorbing 10 %."""
+    materials = {
+        "wall": _flat(0.1, scattering=0.2),
+        "soft": _flat(0.9, scattering=0.2),
+        "hard": _flat(0.01, scattering=0.2),
+    }
+    scene = Scene.model_validate(
+        {
+            "geometry": {"file": str(obj)},
+            "materials": materials,
+            "default_material": "wall",
+            "assignments": assignments,
+            "sources": [{"name": "s", "position": list(source)}],
+            "listeners": [{"name": "l", "position": list(listener)}],
+            "simulation": {"seed": 3, **simulation},
+        }
+    )
+    return Room.from_scene(scene)
+
+
+def test_a_panel_drawn_as_two_faces_back_to_back_sounds_as_its_mirror_image(
+    tmp_path: Path,
+) -> None:
+    """A free-standing panel across the middle of a room, drawn as two faces back to back,
+    absorbing 1 % on the source's side and 90 % on the other, and the same scene mirrored:
+    the late part within 0.2 dB in every band. A ray met the same face from either side:
+    3.6 dB apart at 63 Hz."""
+    front = ((3, 1, 0), (3, 3, 0), (3, 3, 2), (3, 1, 2))  # its normal points to +x
+    groups = {"room1": _box(0, 6, 4, 3), "side1": [front[::-1]], "side2": [front]}
+    obj = _write(tmp_path / "panel.obj", groups)
+    settings = {"ir_length_s": 1.0, "early": {"max_order": 2}, "late": {"rays": 20000}}
+    late = []
+    for source, listener, near, far in (
+        ([1.5, 2.0, 1.0], [2.0, 2.6, 1.3], "hard", "soft"),
+        ([4.5, 2.0, 1.0], [4.0, 2.6, 1.3], "soft", "hard"),
+    ):
+        room = _sides(obj, {"side1": near, "side2": far}, source, listener, **settings)
+        late.append(simulate(room)["s", "l"].late.sum(axis=-1))
+    np.testing.assert_allclose(10.0 * np.log10(late[1] / late[0]), 0.0, atol=0.2)
+
+
+def test_a_free_standing_panel_drawn_as_two_faces_back_to_back_is_the_panel_drawn_once(
+    tmp_path: Path,
+) -> None:
+    """A free-standing panel in a room drawn as two faces back to back, as the panel drawn
+    once: a closed model of one room as large, the late part (with the rays and with the
+    statistical method) and the early paths, over its edges and with the terms at them
+    too. The faces' outer sides and the gap between them had been spaces of no volume of
+    their own, which no room held: the model read as not closed, with no volume and no
+    statistical late part."""
+    front = ((3, 1, 0), (3, 3, 0), (3, 3, 2), (3, 1, 2))
+    found = []
+    for panel in ([front], [front, front[::-1]]):
+        obj = _write(tmp_path / "panel.obj", {"room1": _box(0, 6, 4, 3), "panel": panel})
+        out = {}
+        for late in ("stochastic_ray_tracing", "statistical"):
+            room = _sides(
+                obj,
+                {},
+                [1.5, 2.0, 1.0],
+                [4.5, 2.1, 1.1],
+                ir_length_s=0.5,
+                early={"max_order": 2, "diffraction": "first_order"},
+                late={"method": late, "rays": 4000},
+            )
+            out[late] = simulate(room)["s", "l"].late
+        assert room.report.closed and room.volume_m3 == pytest.approx(72.0)
+        for method in ("image_sources", "ray_tracing"):
+            room.scene.simulation.early.method = method
+            paths = early_paths(room)
+            order = np.lexsort((paths.energy[:, 0], paths.distance_m, paths.edge))
+            out[method] = (paths.edge[order], paths.order[order], paths.energy[order])
+        found.append(out)
+    one, two = found
+    for late in ("stochastic_ray_tracing", "statistical"):
+        np.testing.assert_allclose(two[late], one[late], rtol=1e-9)
+    for method in ("image_sources", "ray_tracing"):
+        np.testing.assert_array_equal(two[method][0], one[method][0])
+        np.testing.assert_array_equal(two[method][1], one[method][1])
+        # Each path's bands to a billionth of its strongest band: where a band's terms
+        # nearly cancel (8 kHz over the panel's top, 2000 times below the path's
+        # strongest band), the two forms' roundings part by 3e-10 of that band here and
+        # by 8e-8 on Windows.
+        scale = one[method][2].max(axis=1, keepdims=True)
+        assert (np.abs(two[method][2] - one[method][2]) <= 1e-9 * scale).all()
+
+
 def _touching(path: Path, gap: float, inward: bool) -> Path:
     """Two 5 x 4 x 3 m rooms along x, each modelled closed with a wall of its own at
     x = 5, room 1's in group "dry" and room 2's in "live": touching (``gap`` 0, a wall
@@ -655,6 +744,74 @@ def test_each_face_of_a_wall_drawn_once_for_each_room_is_its_own_room_s(
             if late == "stochastic_ray_tracing":
                 # The early part before the stochastic tracer's, long enough to hold the
                 # reflection off that wall (before the statistical method's, it is not).
+                found[gap, early] = np.sort(early_paths(room).energy, axis=0)
+            if early == "image_sources":
+                p = simulate(room)["s", "one"].parameters()
+                found[gap, late] = (p.g, p.t30)
+    for early in ("image_sources", "ray_tracing"):
+        np.testing.assert_allclose(found[0.0, early], found[1e-3, early], rtol=1e-9)
+    for late in ("statistical", "stochastic_ray_tracing"):
+        (g, t30), (g_apart, t30_apart) = found[0.0, late], found[1e-3, late]
+        np.testing.assert_allclose(g, g_apart, atol=1e-6)
+        np.testing.assert_allclose(t30, t30_apart, rtol=1e-6)
+
+
+def _wider(path: Path, gap: float, inward: bool) -> Path:
+    """Room 1, 5 x 4 x 3 m, and room 2, 5 x 6 x 3 m, along x, each modelled closed with
+    a wall of its own at x = 5, room 1's in group "dry" and room 2's in "live", which
+    runs 2 m past room 1's: touching (``gap`` 0) or ``gap`` apart, their normals
+    pointing out of the rooms or, ``inward``, into them."""
+    x = 5 + gap
+    groups = {
+        "room1": _box(0, 5, 4, 3, skip=("x1",)),
+        "room2": _box(x, x + 5, 6, 3, skip=("x0",)),
+        "dry": [((5, 0, 0), (5, 4, 0), (5, 4, 3), (5, 0, 3))],
+        "live": [((x, 0, 3), (x, 6, 3), (x, 6, 0), (x, 0, 0))],
+    }
+    if inward:
+        groups = {name: [quad[::-1] for quad in quads] for name, quads in groups.items()}
+    return _write(path, groups)
+
+
+@pytest.mark.parametrize("inward", [False, True], ids=["out", "in"])
+def test_each_room_meets_its_own_wall_where_a_wider_room_touches_it(
+    tmp_path: Path, inward: bool
+) -> None:
+    """Two rooms modelled as closed models that touch, the second's wall reaching past
+    the first's, absorbing 0.9 in the first room and 0.1 in the second: in the first
+    room they sound as with the rooms 1 mm apart, early (image sources and ray tracing)
+    and late (the statistical method and the stochastic tracer), whichever way the
+    normals point; with the scattering of the surfaces' size left out, since touching,
+    the two rooms' floors (and ceilings) share an edge and make one surface. Before,
+    the two walls had no outline in common: a ray met either of them in the first room,
+    and the stochastic tracer gave 1.6 to 2.4 dB more G and 1.3 to 1.5 times the T30."""
+    materials = {
+        "wall": _flat(0.1, scattering=0.3),
+        "dry": _flat(0.9, scattering=0.3),
+        "live": _flat(0.1, scattering=0.3),
+    }
+    assignments = {"room1": "wall", "room2": "wall", "dry": "dry", "live": "live"}
+    found = {}
+    for gap in (0.0, 1e-3):
+        obj = _wider(tmp_path / f"rooms_{gap}.obj", gap, inward)
+        for early, late in (
+            ("image_sources", "statistical"),
+            ("image_sources", "stochastic_ray_tracing"),
+            ("ray_tracing", "stochastic_ray_tracing"),
+        ):
+            scene = _scene(
+                obj,
+                materials,
+                assignments,
+                {"one": [3.0, 2.2, 1.4]},
+                source=[1.5, 1.9, 1.5],
+                ir_length_s=1.0,
+                scattering={"from_size": False},
+                late={"rays": 3000, "method": late},
+                early={"max_order": 2, "method": early, "diffraction": "none"},
+            )
+            room = Room.from_scene(scene)
+            if late == "stochastic_ray_tracing":
                 found[gap, early] = np.sort(early_paths(room).energy, axis=0)
             if early == "image_sources":
                 p = simulate(room)["s", "one"].parameters()

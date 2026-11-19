@@ -706,6 +706,19 @@ validation's levels by up to 0.012 dB). Scene files of 4.2.1 load unchanged.
   walls and the ground (order 3 over the default 2): bursts of up to 28 dB at
   `meadow_25m` in the `railway` example. The early stage takes about 30 % longer in the
   `street` and `railway` examples.
+- Fixed: where two rooms modelled as closed models touch over part of a face of each
+  (a narrow room's wall against a wider room's, a room upstairs on part of a ceiling),
+  the cleaning cuts both faces to the same outline where they lie together, so that
+  each reflects and absorbs in its own room. In a 5 x 4 x 3 m room against a 6 m wide
+  one, their walls there absorbing 0.9 and 0.1, a ray had met either wall: the
+  stochastic tracer gave the first room 2.2 to 2.3 dB more G and 1.5 to 1.7 times the
+  T30 (250 Hz to 2 kHz), with no warning.
+- Fixed: a panel standing free in a room, drawn as two faces back to back, made the
+  model read as not closed: the faces' outer sides and the gap between them were spaces
+  of no volume of their own, which no room held, so the model had no volume and the
+  statistical late method refused it; with a material of its own on each side, the
+  panel's late part was 2.4 to 3.6 dB off its mirror image. It now sounds as the panel
+  drawn once, with its edges' diffraction too.
 
 **Aircraft**
 

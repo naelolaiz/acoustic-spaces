@@ -57,8 +57,12 @@ face's edge runs past the corners of faces on its other side (a T-junction, whic
 SketchUp stitches with faces of zero area), the edge is split at those corners, so the
 model stays closed; also where two surfaces and a third face meet along the line it runs
 past. A stitch whose own corner lies on its edge (within 10 µm) is dropped there, as the
-split closes the gap. A model with no faces left is refused, as is one with coordinates
-that are not finite numbers or a face that names a vertex the file does not have.
+split closes the gap. Where two rooms modelled as closed models touch over part of a
+face of each (a narrow room's wall against a wider room's), both faces are cut to the
+same outline where they lie together, so that each belongs to its own room; a closed
+shell standing in a room, on its floor, is left as it is. A model with no faces left is
+refused, as is one with coordinates that are not finite numbers or a face that names a
+vertex the file does not have.
 `validate` then reports surfaces without a material, sources or listeners outside the
 room or on a surface (within 1 µm of it, or within 2e-9 of the model's diagonal where
 that is more, twice the least distance at which a ray traced on the CPU meets a face; an
@@ -71,7 +75,8 @@ pane as one face). Errors exit with status 1, and with `--strict` warnings too. 
 may point either way:
 the room is the space the faces close off, found from the faces themselves (see
 [Walls, doors and openings](#walls-doors-and-openings)), and a panel standing in the
-room, with air on both sides, reflects and absorbs on both.
+room, with air on both sides, reflects and absorbs on both; drawn as two faces back to
+back, each face does on its own side.
 
 ### Outdoors
 
