@@ -1038,16 +1038,18 @@ def _clear(model: TraceModel, points, faces, crossings, least, counted) -> bool:
 
 
 def _mirrors(model: TraceModel, seqs: np.ndarray, tolerance: float) -> np.ndarray:
-    """(n, 12) where the planes of each sequence of ``seqs`` (n, k), mirroring in turn,
-    take four points (a corner of the model's box and the three its largest extent from
-    it along the axes), in steps of ``tolerance``: the same for the sequences that make
-    one mirror, wherever a source lies."""
+    """(n, 12) where the planes of each sequence of ``seqs`` (n, k; -1 for no plane
+    there), mirroring in turn, take four points (a corner of the model's box and the
+    three its largest extent from it along the axes), in steps of ``tolerance``: the
+    same for the sequences that make one mirror, wherever a source lies."""
     vertices = model.room.mesh.vertices
     size = float(np.ptp(vertices, axis=0).max())
     marks = vertices.min(axis=0) + size * np.vstack([np.zeros(3), np.eye(3)])
     moved = np.tile(marks, (len(seqs), 1))
     for j in range(seqs.shape[1]):
-        moved = model.mirror(moved, np.repeat(seqs[:, j], 4))
+        plane = np.repeat(seqs[:, j], 4)
+        there = plane >= 0
+        moved = np.where(there[:, None], model.mirror(moved, np.maximum(plane, 0)), moved)
     return np.round(moved.reshape(len(seqs), 12) / tolerance)
 
 
