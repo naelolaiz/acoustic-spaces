@@ -135,8 +135,18 @@ def test_points_outside_and_unused_assignments(tmp_path: Path) -> None:
     room = Room.from_yaml(path)
     assert room.sources_inside.tolist() == [False]
     assert any("'outside'" in p and "outside the room" in p for p in room.problems())
+    assert not any("close off no room" in p for p in room.problems())
     assert room.unused_assignments == ["balcony"]
     assert any("balcony" in w for w in room.warnings())
+    # With none of them in a room, the problems say what the faces of solids do.
+    path = _scene(
+        tmp_path,
+        sources=[{"name": "outside", "position": [10.0, 3.0, 1.5]}],
+        listeners=[{"name": "far", "position": [12.0, 3.0, 1.5]}],
+    )
+    problems = Room.from_yaml(path).problems()
+    assert len(problems) == 2 and all("outside the room; no source or" in p for p in problems)
+    assert all("walls drawn with their thickness, close off no room" in p for p in problems)
 
 
 def test_listener_at_a_source_is_a_problem(tmp_path: Path) -> None:

@@ -1433,6 +1433,21 @@ NB_MODULE(_native, m) {
             nb::arg("vertices"), nb::arg("faces"), nb::arg("split") = "sah",
             "Builds the tree: split \"sah\" (by the surface area heuristic) or \"median\".")
         .def_prop_ro("face_count", &as::Bvh::face_count)
+        .def(
+            "set_facing",
+            [](as::Bvh &self, nb::ndarray<const std::int8_t, nb::ndim<1>, nb::c_contig,
+                                          nb::device::cpu> facing) {
+                if (facing.shape(0) != self.face_count()) {
+                    throw std::invalid_argument("Bvh.set_facing: one value per face");
+                }
+                self.set_facing(facing.data());
+            },
+            nb::arg("facing"),
+            "The own side of each face where another face lies in the same place with its "
+            "own side the other way (int8, one per face: 1 the front, -1 the back, 0 none). "
+            "Of two such faces, intersect keeps the one whose own side a ray meets.")
+        .def_prop_ro("has_facing", &as::Bvh::has_facing,
+                     "Whether set_facing gave some face an own side.")
         .def("intersect", &intersect, nb::arg("origins"), nb::arg("directions"),
              nb::arg("t_max"), nb::arg("ignore"),
              "Nearest hit per ray: (distance, face), with (inf, -1) for a miss.")
@@ -1445,7 +1460,7 @@ NB_MODULE(_native, m) {
                      "Hits closer than this to a ray's origin are not reported.")
         .def("layout", &bvh_layout,
              "The tree as flat arrays (see Bvh::layout in bvh.hpp), for tracing elsewhere: "
-             "boxes (nodes x 6), first, count, faces and triangles (faces x 9).");
+             "boxes (nodes x 6), first, count, faces, triangles (faces x 9) and facing.");
 
     nb::class_<as::CutCells>(m, "CutFit",
                             "Fitted walls: the fit alone, on the wave solver's grid, without the "

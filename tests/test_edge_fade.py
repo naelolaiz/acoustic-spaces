@@ -892,3 +892,51 @@ def test_of_two_orders_at_a_corner_the_edge_fade_takes_the_one_along_the_way() -
     assert len(wide.order) == len(narrow.order)
     level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
     assert np.abs(level).max() < 0.01
+
+
+@pytest.mark.parametrize(
+    ("bend", "gap", "listener", "early", "bands"),
+    [
+        (
+            120.0,
+            0.01,
+            (14.0 * np.cos(2.75 * np.pi / 2.0), 14.0 * np.sin(2.75 * np.pi / 2.0), 2.7),
+            {"max_order": 2, "diffraction": "first_order", "diffraction_reflections": "both_sides"},
+            8,
+        ),
+        (
+            60.0,
+            1.2e-3,
+            (8.0 * np.cos(np.pi / 6.0), 8.0 * np.sin(np.pi / 6.0), 1.0),
+            {"coherent_max_band_hz": 500},
+            4,
+        ),
+    ],
+)
+def test_the_paths_over_an_edge_are_tested_as_near_it_in_a_wide_model(
+    bend: float, gap: float, listener, early: dict, bands: int
+) -> None:
+    """A source ``gap`` (m) from both arms of a barrier bent by ``bend`` degrees, on the
+    bisector, in a model 10 km wide and in one 200 m wide: the same paths and early
+    levels to 0.01 dB. The rays that test a path over an edge start a millionth of the
+    model's size off the edge, but no farther than a tenth of a millimetre. At 1 cm in
+    the wide model, behind the 120 degree bend, where the image of the source in one arm
+    lies in the other arm's plane, it had 4 paths for 3 and 1.92 dB more at 63 Hz; in the
+    60 degree bend it lacked the paths over the arms' tops that reflect a few
+    millimetres below the other arm's top, and the edge fade added 2 terms for them
+    (0.14 dB at 63 Hz). The levels of the 60 degree bend are compared where the paths add
+    in pressure: in the bands that add in energy the waves' images are grouped to a
+    share of the model's size."""
+    turn = np.radians(bend)
+    reach = gap / np.sin(turn / 2)
+    source = (float(np.cos(turn / 2) * reach), float(np.sin(turn / 2) * reach), 1.5)
+    path = ((12.0, 0.0), (0.0, 0.0), (12.0 * float(np.cos(turn)), 12.0 * float(np.sin(turn))))
+    wide, narrow = (
+        early_paths(
+            _outdoors(listener, source=source, path=path, barrier_m=4.0, half_m=half, **early)
+        )
+        for half in (5000.0, 100.0)
+    )
+    assert len(wide.order) == len(narrow.order)
+    level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
+    assert np.abs(level[:bands]).max() < 0.01
