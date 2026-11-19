@@ -167,8 +167,8 @@ assignments:
 - Without `space`, every building element is read as IfcOpenShell builds it: walls,
   slabs, roofs, windows, doors, stairs and furniture, with their openings cut. Openings,
   virtual elements and building services (ducts, pipes, lights) are left out. Walls then
-  have both sides and their thickness, and solids that only touch do not share edges, so
-  the model reads as not closed even when no ray escapes (the leak finder tells); the
+  have both sides and their thickness. The elements are solids, which close off no room,
+  so the model reads as not closed even when no ray escapes (the leak finder tells); the
   volume and the inside checks are skipped. Doors, panes and furniture panels come as
   thin slabs, which the warnings name (see above).
 
@@ -487,7 +487,8 @@ assignments:
   surface lets out of the rooms goes into no room and does not come back in through
   another: the late part's rays and the rain of their reflections stop there.
 - The rooms are found from the faces: every space the faces close off on all sides is
-  one, whichever way the normals point. The space inside a thick wall or a column, with
+  one, whichever way the normals point, but for the insides of solids (an IFC file's
+  building elements read without a space). The space inside a thick wall or a column, with
   rooms all round it, is solid, as is the inside of a closed shell standing on the floor
   or in a corner, its faces lying on the room's. Such a solid holds air when a source or
   listener stands in it and a surface that lets sound through joins it to a room (a
@@ -496,7 +497,10 @@ assignments:
   refuses to run. When none stands in the model's rooms (walls drawn as a closed shell
   inside another), the spaces they stand in are the rooms. A material with
   `transmission: 0` lets nothing through. The faces between two rooms have a room on both sides and reflect and absorb
-  in both. `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor
+  in both. A wall between two rooms may also be drawn once for each room, as where two
+  rooms modelled as closed models touch: two faces in one place, which the sound passes
+  as one wall, each face reflecting and absorbing in its own room, whichever way the
+  models' normals point. `inspect` lists the rooms ("closed, 2 rooms of 48.00, 72.00 m3"), the editor
   too, and the volume is theirs together. When the sources and listeners stand in air
   that the model's rooms do not include (walls drawn as a closed shell inside another),
   `inspect` also gives that "air volume", the one its reverberation times use.

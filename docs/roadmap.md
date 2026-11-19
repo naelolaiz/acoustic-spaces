@@ -140,6 +140,14 @@ Edge diffraction:
   a wall in line with both is too low (6.4 dB at 63 Hz half a metre above a 10 m
   roof), and behind the roof with the source above its plane up to 6 dB too high (see
   [Known issues](validation.md#known-issues)).
+- [ ] The sound handed over where a third edge cuts a path over an edge: the edge
+  diffraction's own paths over an edge going on round an edge near their way as the
+  fade's terms do for the specular paths, the fade's products of two edges' terms taken
+  as paths over both, and with `second_order` giving way to the paths over two edges.
+  Over a roof and a screen 1 m past it, both ends 1 m above the roof, the level steps by
+  up to 5.3 dB at 63 Hz where the screen's top passes a way, and is 4.4 to 4.6 dB low
+  with `first_order` and 4.9 to 5.2 dB low with `second_order` between such places (see
+  [Known issues of the edge fade](validation.md#known-issues-of-the-edge-fade)).
 - [x] Rows of edges in simulations: outdoors, where sound passes over the barriers and
   buildings of a scene, the level in the bands up to 500 Hz from the solver for whole
   rows in place of the paths over one edge and two, in still air and in wind
@@ -176,10 +184,14 @@ Edge diffraction:
   place in the march's cells (up to 0.2 dB); roofs and walls that absorb (rigid in
   it; a roof with an impedance leaves the row to the paths over the edges), the sound
   that goes to and fro between a row's walls, and the bands above 500 Hz.
-- [ ] Paths over edges tested from the edge itself, not from a millionth of the
-  model's size off it: exactly in the plane of several roofs in a row the level is up
-  to 9 dB below that just above it, and within twice that distance below the plane 9
-  to 15 dB above that further below.
+- [ ] Paths over edges tested from the edge itself, not from just off it (a millionth
+  of the model's size, a tenth of a millimetre at most): exactly in the plane of several
+  roofs in a row the level is up to 9 dB below that just above it, within twice that
+  distance below the plane 9 to 15 dB above that further below, and exactly level with
+  three screens' tops the path round the end of one that ends beside the way is
+  missing (1.3 dB at 63 Hz); near grazing incidence the ray passes the next edge apart
+  from the path's own line (0.06 mm above a screen's top 1 m past a roof, with the
+  source 1 cm above the roof's plane).
 - [ ] Corners to the least distance of a ray: the search for early paths takes what lies
   within its tolerance for planes (a ten-millionth of the model's largest extent, 1 mm
   in a model 10 km wide) of the line where faces meet as on that line. A source or a

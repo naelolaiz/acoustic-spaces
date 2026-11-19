@@ -16,7 +16,8 @@ not: a ray misses a face the source sees nearly edge-on, and a reflection that a
 obstacle cuts off still fades at the obstacle's edges. Every candidate is then traced back from the listener, so the
 paths found are exact either way, including paths that reflect exactly on an edge
 or in a corner: a face reflects as far as its edges, to within a billionth of the
-model's diagonal. Sound that bends round edges is added to them (see
+model's diagonal. Faces that face one way with planes less than 0.01 mm and 0.0006
+degrees apart reflect as one plane. Sound that bends round edges is added to them (see
 [Edge diffraction](#edge-diffraction)).
 
 **Late reverberation** (`simulation.late`) is either:
@@ -332,7 +333,8 @@ buildings](outdoor.md#sound-over-rows-of-barriers-and-buildings)).
 
 The edges are found in the model: corners where two faces meet with more than 195° of
 open air round them (the inside corner of an L-shaped room, the front of a stage or a
-balcony) and the free edges of thin screens. Each source and listener get the shortest
+balcony) and the free edges of thin screens; an edge drawn in pieces along one line is one
+edge, also where the model's coordinates are rounded. Each source and listener get the shortest
 path over each edge they can both see. In the shadow of the edge that path carries the
 diffracted sound; on the lit side, near the boundary, it changes the energy of the
 specular path it borders. Across a boundary the level is continuous: the tests cross one
@@ -391,6 +393,12 @@ is then within 0.06 dB of the exact solution, where `first_order` is 6.4 dB low 
 the level over barriers 0.3 to 3 m thick is within 0.3 dB from 500 Hz up, and over two
 screens in a row within 0.45 dB; at 63 and 125 Hz, in pressure, within 0.6 dB over
 the barriers and 0.13 dB over the screens (1.7 and 1.9 dB with the waves in energy).
+Along the plane of a screen or a panel, from one of its edges to another in that plane,
+the path runs along each of its faces, two ways with half the coefficient at grazing
+incidence each, as in the exact solution, and the faces do not stop it: behind a thin
+strip 2 m wide the level is within 0.11 dB of BTM at 63 and 125 Hz, where without such
+paths it is up to 1.39 dB low. One in that plane on past the screen's far end, where
+the waves along its two faces cancel, is left out.
 
 ```sh
 acoustic-spaces simulate examples/gallery/scene.yaml --out gallery
@@ -422,12 +430,20 @@ where the plane goes on round its end on its open side, so no path reflects off 
 plane from below beside the building. Reflections off perpendicular planes, such as the
 floor and a wall, give the same image in either order, and the path over an edge may
 take another order than the path itself: each path takes the terms of every such
-order, and each order is tried where the early stage found only one. Each term is a
-path over its edge, and each product of terms is a path of its own, which arrives
-later by the detours of all its terms; the terms the edge diffraction adds already are
-left out (`engine.edge_fade` in the
-[API reference](api.md#edge-diffraction)). Against the exact solution, past the end of
-a screen, the corner of a building, a strip 2 m wide and a gap 4 m wide on a hard
+order, and each order is tried where the early stage found only one. Planes are
+perpendicular to within the model's tolerance for planes, as the walls of a model turned
+to any angle and written with six decimals are. Planes that lie in
+one place count as one there (two walls in line that face opposite ways, and a panel or
+a partition between them, which the model puts in the plane of one of them): a
+reflection takes the faces there that it meets from the front or that have a room on
+both sides, and the edges with a face there. Other sequences of reflections with one
+image, off parallel planes (a panel and the walls either side of it, and the same the
+other way round), are other paths, which take their own terms. Each term is a path over
+its edge, and each product of terms is a path of its own, which arrives later by the
+detours of all its terms; the terms the edge diffraction adds already are left out
+(`engine.edge_fade` in the [API reference](api.md#edge-diffraction)). Against the exact
+solution, past the end of a screen, the corner of a building, a strip 2 m wide and a gap
+4 m wide on a hard
 ground, each path with its copy off the ground, the level is within 0.08 dB in every
 band (0.19 dB at 8 kHz on the strip, an error of the exact level's average over too
 few frequencies), where it was up to 7 dB off without it, and steps between listeners
@@ -449,7 +465,9 @@ its geometric wave as far as it is coherent with it over the band (on the dark s
 its boundary, where that wave is gone, near the boundary only), and the rest of it is
 part of its event's diffracted wave, whose terms add up as one wave, so the two edges of
 a narrow face nearly cancel as they do in pressure. Paths whose planes mirror the source
-otherwise are other waves, however near their images lie (a source right by two planes).
+otherwise are other waves, however near their images lie (a source right by two planes);
+planes at right angles, to the model's tolerance for planes, mirror it alike in either
+order.
 A wave's energy is that of its pieces added up in pressure and averaged over the band,
 never below nothing. Behind the `archway`'s wall, where the reflection off the arch's
 jamb, 40 cm deep, appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz. The

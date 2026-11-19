@@ -94,11 +94,13 @@ def _turned(points, degrees: float) -> np.ndarray:
     return np.asarray(points, dtype=float) @ np.array([[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]])
 
 
-def _box_of_triangles(path: Path, *, bend=0.0, degrees=0.0, decimals=None, quarters=False):
+def _box_of_triangles(
+    path: Path, *, bend=0.0, degrees=0.0, decimals=None, quarters=False, ceiling=True
+):
     """The 8 x 6 x 3 m box as an OBJ file, each side two triangles (with ``quarters``, four
     quarters of two triangles each), with the corner (8, 0, 3) of the wall x = 8 moved
     ``bend`` m out of the room, turned ``degrees`` about the z axis and written with
-    ``decimals`` (all digits for None)."""
+    ``decimals`` (all digits for None); without its ceiling unless ``ceiling``."""
     L, W, H = SIZE
     sides = {
         "floor": [(0, 0, 0), (0, W, 0), (L, W, 0), (L, 0, 0)],
@@ -110,6 +112,8 @@ def _box_of_triangles(path: Path, *, bend=0.0, degrees=0.0, decimals=None, quart
     }
     lines, n = [], 0
     for name, corners in sides.items():
+        if name == "ceiling" and not ceiling:
+            continue
         lines.append(f"g {name}")
         a, b, c, d = np.array(corners, dtype=float)
         quads = [(a, b, c, d)]
