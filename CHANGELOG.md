@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added: a warning about thin slabs, faces narrower than 10 cm between two corners that
+  bend sound (a desk screen or a door leaf drawn with its thickness), over which the
+  early part has no path with `first_order` and `direct` and too low a one with
+  `second_order`; the validation report's known issues give the numbers.
 - Docs: where a third edge cuts a path over an edge, the level steps and can be several
   dB off; the known issues of the edge fade give the measured levels over a roof and a
   screen against the wave calculation, and the roadmap the fix.

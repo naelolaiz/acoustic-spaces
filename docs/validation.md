@@ -6110,7 +6110,37 @@ Results:
   the line of two tops 10 m apart, where two knife edges leave 0.317 of it, 2.1 dB low
   from 2 kHz up, and 1.0 to 1.3 dB low just above it. As the source or the listener
   alone crosses the line of the tops, the level steps by 0.5 and 1.0 dB at 63 Hz. The
-  corners of one block or wall, joined by a face, are not affected.
+  corners of one block or wall, joined by a face, are not affected, but where the face
+  is narrow against the wavelength (the next item).
+- **Thin slabs.** A desk screen, a door leaf or a pane drawn with its thickness is a slab
+  whose top and ends are faces narrow against the wavelength, each between two corners
+  that bend sound. Sound bends over such a slab nearly as over a thin screen, but
+  `first_order` and `direct` have no path over both corners, and `second_order`'s path
+  takes the second corner's distance parameter from the first corner's wave, which
+  shrinks with the face's width: the thinner the slab, the lower the path. Over the
+  rigid block of [Edge diffraction against the exact
+  solution](#edge-diffraction-against-the-exact-solution), the source and the listener
+  in line with it, in a one-off check against a thin screen in its middle (BTM, first
+  order), with the paths in energy:
+
+  | over a block, `second_order` - thin screen (dB) | 63 | 125 | 250 | 500 | 1000 | 2000 | 4000 | 8000 |
+  |---|---:|---:|---:|---:|---:|---:|---:|---:|
+  | 1 cm wide | -11.4 | -9.7 | -7.8 | -5.8 | -4.4 | -3.3 | -2.2 | -1.4 |
+  | 3 cm wide | -7.4 | -5.9 | -4.6 | -3.7 | -2.6 | -1.8 | -1.3 | -1.4 |
+  | 10 cm wide | -3.9 | -3.4 | -2.8 | -2.0 | -1.5 | -1.4 | -1.9 | -3.1 |
+  | 30 cm wide | -2.5 | -2.2 | -1.8 | -1.6 | -1.9 | -2.7 | -4.1 | -6.1 |
+
+  In pressure, the default at 63 and 125 Hz, it is 8.9 and 7.4 dB low over the 1 cm
+  block, 5.3 and 4.1 dB over the 3 cm one and 2.3 and 2.2 dB over the 10 cm one. BTM's
+  second order puts the blocks 3, 10 and 30 cm wide within 0.6, 1.1 and 2.1 dB of the
+  thin screen up to 1 kHz, a thicker block screening more as the frequency rises. In
+  an office 10 x 8 x 3 m with an absorbing ceiling, a desk screen 1.6 m wide and 1.4 m
+  high (absorbing 0.2 at 63 Hz to 0.9 from 500 Hz) between a talker and a listener 1 m
+  either side of it, drawn 3 cm thick rather than as one face, gave a G 1.3, 2.9, 1.8,
+  1.4, 1.1, 0.75, 0.55 and 0.40 dB lower from 63 Hz to 8 kHz and a C50 2.9, 4.3, 2.4,
+  2.0, 1.6, 1.1, 0.8 and 0.5 dB lower, with the default settings (one-off check).
+  Thin elements drawn as one face are not affected, and the scene's warnings name the
+  faces narrower than 10 cm between two corners that bend sound.
 - **A barrier's end in wind.** Behind a barrier the paths in the plane take the
   barrier's effect, and the paths over the top past its end, as they fade out there,
   take it too; the paths round the end change as the open ground's field along their

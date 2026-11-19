@@ -130,6 +130,11 @@ Edge diffraction:
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
+- [ ] The path over the two corners of a thin slab (a desk screen, a door leaf or a pane
+  drawn with its thickness), from a model of two edges close together that tends to the
+  thin screen as the slab thins: `first_order` and `direct` have none, and
+  `second_order`'s is 5.3 dB low at 63 Hz and 2.6 dB at 1 kHz over a slab 3 cm thick (see
+  [Known issues](validation.md#known-issues)).
 - [ ] The path over two edges that the source's wave passes in a row, with
   `first_order` and `direct` too: without it the level just over a flat roof or along
   a wall in line with both is too low (6.4 dB at 63 Hz half a metre above a 10 m
