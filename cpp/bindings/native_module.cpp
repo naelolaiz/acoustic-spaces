@@ -767,6 +767,36 @@ void face_kinds(const char *name, const std::optional<Indices> &face_kind, int c
     settings.covered_ground = covered_ground;
 }
 
+// With diffuse rain alone in still air: the mirror planes (rows of a unit normal and an
+// offset) and the mirror plane of each face (-1 for none), into the scene; None: none.
+void mirror_planes(const char *name, const std::optional<Matrix> &mirror_plane,
+                   const std::optional<Indices> &face_mirror, as::StochasticScene &scene) {
+    if (!mirror_plane.has_value() && !face_mirror.has_value()) return;
+    const std::string fn = name;
+    if (!mirror_plane.has_value() || !face_mirror.has_value() || mirror_plane->shape(1) != 4 ||
+        face_mirror->shape(0) != scene.bvh->face_count()) {
+        throw std::invalid_argument(fn + ": mirror_plane must have rows of 4 and face_mirror "
+                                         "one per face");
+    }
+    const std::size_t mirrors = mirror_plane->shape(0);
+    for (std::size_t m = 0; m < mirrors; ++m) {
+        const double *row = mirror_plane->data() + 4 * m;
+        const double length = std::sqrt(row[0] * row[0] + row[1] * row[1] + row[2] * row[2]);
+        if (!(std::abs(length - 1.0) <= 1e-9) || !std::isfinite(row[3])) {
+            throw std::invalid_argument(fn + ": a mirror plane needs a unit normal");
+        }
+    }
+    for (std::size_t i = 0; i < face_mirror->shape(0); ++i) {
+        const std::int64_t m = face_mirror->data()[i];
+        if (m < -1 || m >= static_cast<std::int64_t>(mirrors)) {
+            throw std::invalid_argument(fn + ": bad face_mirror");
+        }
+    }
+    scene.mirror_plane = mirror_plane->data();
+    scene.mirrors = mirrors;
+    scene.face_mirror = face_mirror->data();
+}
+
 // Ray count, timing, seed, threads and weight window of a stochastic run.
 as::StochasticSettings stochastic_settings(std::size_t rays, double max_time,
                                            double speed_of_sound, int covered_order,
@@ -813,7 +843,9 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
                            double chord_sagitta, Matrix plants, Matrix plant_outline,
                            Matrix plant_absorption, Matrix plant_scattering,
                            Matrix plant_asymmetry, Flags plant_upright, double gather_ratio,
-                           std::optional<Indices> face_kind, int covered_ground) {
+                           std::optional<Indices> face_kind, int covered_ground,
+                           std::optional<Matrix> mirror_plane,
+                           std::optional<Indices> face_mirror) {
     as::StochasticScene scene =
         stochastic_scene("trace_stochastic", bvh, source, directivity_a, orientation,
                          directivity_table, absorption, scattering, air, surface_size, band_hz,
@@ -846,6 +878,7 @@ nb::tuple trace_stochastic(const as::Bvh &bvh, InArray source, InArray directivi
     settings.moment_time_step = moment_time_step;
     settings.gather_ratio = gather_ratio;
     face_kinds("trace_stochastic", face_kind, covered_ground, scene, settings);
+    mirror_planes("trace_stochastic", mirror_plane, face_mirror, scene);
 
     as::StochasticResult result;
     {
@@ -1704,6 +1737,8 @@ NB_MODULE(_native, m) {
     // The partitions a path of specular_sequences passes through at most; the
     // stochastic tracer leaves a path that reflects and passes more to the late part.
     m.attr("MAX_FORKS") = as::kMaxForks;
+    // The most mirror planes trace_stochastic takes.
+    m.attr("MAX_MIRRORS") = as::kMaxMirrors;
     // Bytes the stochastic tracer's threads' copies of its results may take together.
     m.attr("COPY_MEMORY") = as::kCopyMemory;
 
@@ -1730,6 +1765,8 @@ NB_MODULE(_native, m) {
           nb::arg("plant_asymmetry").none() = nb::none(),
           nb::arg("plant_upright").none() = nb::none(), nb::arg("gather_ratio") = 0.0,
           nb::arg("face_kind").none() = nb::none(), nb::arg("covered_ground") = 0,
+          nb::arg("mirror_plane").none() = nb::none(),
+          nb::arg("face_mirror").none() = nb::none(),
           "Stochastic ray tracing: (energy[r, band, bin], directional[r, dir, band, bin], "
           "moments[r, term, band, moment bin], escaped rays, ray_energy[window], "
           "reflections[window], traced rays); "
@@ -1767,11 +1804,20 @@ NB_MODULE(_native, m) {
           "times as many directions as rays: the rays keep the share where they land "
           "more densely than those directions (the balance heuristic). Specular-only paths "
           "with at most covered_order reflections that reach receiver k by covered_time[k] "
-          "(s; empty: any time) are left out, the early stage's; in bent air, face_kind (one "
+          "(s; empty: any time) are left out, the early stage's; outdoors, face_kind (one "
           "per face: 1 the ground, 0 a vertical wall, -1 any other; None: every reflection "
           "counts) counts them as the early stage does there: those with no reflection off "
           "a face of kind -1 are left out with up to covered_ground bounces off the ground "
-          "and at most covered_order reflections counting those bounces as one.");
+          "(none with covered_order 0) and at most covered_order reflections off the "
+          "walls. With "
+          "diffuse rain alone in still air, mirror_plane (at most MAX_MIRRORS rows of a "
+          "unit normal toward the sound's side and an offset, n . x = offset; None: none) "
+          "with face_mirror (one per face: its mirror plane, or -1) rains the scattered "
+          "share of each reflection also on each receiver's image in each mirror plane but "
+          "the face's own, reflected by the face of the plane where the line meets it "
+          "(its specular share), when both legs are clear; the detector spheres then "
+          "leave out what a ray reflecting off a mirror plane's face carries of the share "
+          "scattered at the reflection before.");
 
     m.def("gather_first_scattering", &gather_first_scattering, nb::arg("bvh"),
           nb::arg("source"), nb::arg("directivity_a"), nb::arg("orientation"),

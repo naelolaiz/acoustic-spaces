@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from test_fitted_walls import l_room, l_room_points, stable_case, wave
+from test_ground_mirror import _args as _wall_on_ground
 from test_native import _stochastic_args, _unit_cube, cube_with_seats
 from test_tracer_reference import REFERENCE, reference_arguments
 from test_vegetation import _FLOOR_BIN, _FLOOR_LEG, _FLOOR_PLANTS, _big_box, _over_floor, _slab
@@ -1273,6 +1274,27 @@ def test_bent_rays_leave_out_the_ground_bounces_the_early_stage_holds(
     for kinds, most in ((np.where(ground, 2, kind), 10), (kind, -1)):
         with pytest.raises(ValueError, match="face_kind|covered_ground"):
             trace(**values, face_kind=kinds, covered_ground=most)
+
+
+@pytest.mark.parametrize("device", ["cpu", pytest.param("gpu", marks=needs_gpu)])
+def test_straight_rays_leave_out_the_ground_bounces_the_early_stage_holds(device: str) -> None:
+    """A wall on the ground, both specular, and the detector spheres alone: the paths off
+    the wall, the ground and both reach the listeners. With early order 1 the order alone
+    leaves those off both to the late rays; outdoors in still air (face_kind, with any
+    bounces off the ground) the early stage holds them, the ground's bounce counting for
+    no order, and the late rays leave out all. With early order 0 it holds the direct
+    sound alone, as the order does, to the bit."""
+    trace = _native.trace_stochastic if device == "cpu" else gpu_tracer.trace_stochastic
+    values = _wall_on_ground(50_000, 1, radius=1.0, vector=False, diffuse_rain=False)
+    values.update(scattering=np.zeros((4, 1)), mirror_plane=None, face_mirror=None)
+    kind = np.array([1, 1, 0, 0])
+    plain = trace(**values)[0]
+    assert np.all(plain.sum(axis=(1, 2)) > 0.0)
+    assert not trace(**values, face_kind=kind, covered_ground=1 << 30)[0].any()
+    values["covered_order"] = 0
+    np.testing.assert_array_equal(
+        trace(**values, face_kind=kind, covered_ground=1 << 30)[0], trace(**values)[0]
+    )
 
 
 def _crown(absorption, scattering, asymmetry) -> dict:
