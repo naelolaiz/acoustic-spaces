@@ -64,9 +64,11 @@ room or on a surface (within 1 µm of it, or within 2e-9 of the model's diagonal
 that is more, twice the least distance at which a ray traced on the CPU meets a face; an
 opening, with air on both sides, does not count) and listeners within 1 cm of a source;
 it warns about models that are not closed (rays would escape), listeners so close to a
-surface or an opening that the late part comes out noisy, and assignments that match
-nothing. Errors exit with status 1, and with `--strict` warnings too. Normals may point
-either way:
+surface or an opening that the late part comes out noisy, assignments that match
+nothing, and thin slabs, over whose top the edge diffraction finds too little sound
+(see [Thin slabs](validation.md#known-issues): draw a desk screen, a door leaf or a
+pane as one face). Errors exit with status 1, and with `--strict` warnings too. Normals
+may point either way:
 the room is the space the faces close off, found from the faces themselves (see
 [Walls, doors and openings](#walls-doors-and-openings)), and a panel standing in the
 room, with air on both sides, reflects and absorbs on both.
@@ -167,7 +169,8 @@ assignments:
   virtual elements and building services (ducts, pipes, lights) are left out. Walls then
   have both sides and their thickness, and solids that only touch do not share edges, so
   the model reads as not closed even when no ray escapes (the leak finder tells); the
-  volume and the inside checks are skipped.
+  volume and the inside checks are skipped. Doors, panes and furniture panels come as
+  thin slabs, which the warnings name (see above).
 
 Each face's names, for assignments, are its element's name, its type's name, its
 materials (a layer set's name, then each layer's material) and its IFC class

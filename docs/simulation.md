@@ -280,12 +280,17 @@ each octave band:
   listener see each other just over both edges of a flat roof, or along a wall in line
   with both, the level is too low; and behind the roof with the source above its
   plane it is up to 6 dB too high (see the
-  [validation report](validation.md#known-issues)).
+  [validation report](validation.md#known-issues)). Nor is there any over a slab
+  however thin, though a desk screen, a door leaf or a pane a few centimetres thick
+  bends sound nearly as a thin screen does: draw thin elements as one face (the
+  scene's warnings name faces narrower than 10 cm between two such corners, see
+  [Thin slabs](validation.md#known-issues)).
 - `second_order`: as `first_order`, and the direct sound bends round two edges in turn:
   over a thick wall or barrier, round both corners of a doorway's jamb, over two screens
   in a row. A path over two edges reflects nowhere, so over a thick barrier on a hard
   ground the reflections off the ground before and after it are missing, and the level
-  comes out 1.7 to 5.7 dB low from 500 Hz up (see the
+  comes out 1.7 to 5.7 dB low from 500 Hz up; over a thin slab the path is too low, by
+  5.3 dB at 63 Hz and 2.6 dB at 1 kHz over one 3 cm thick against a thin screen (see the
   [validation report](validation.md#known-issues)).
 - `direct`: only the direct sound.
 - `none`: specular paths only.

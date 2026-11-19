@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added: a warning about thin slabs, faces narrower than 10 cm between two corners that
+  bend sound (a desk screen or a door leaf drawn with its thickness), over which the
+  early part has no path with `first_order` and `direct` and too low a one with
+  `second_order`; the validation report's known issues give the numbers.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

@@ -434,6 +434,67 @@ def find_edges(model: TraceModel, min_bend_deg: float = MIN_BEND_DEG) -> Edges:
     return edges
 
 
+#: A face narrower than this (m) between two corners of a solid that bend sound is a thin
+#: slab's (:func:`thin_slabs`).
+THIN_SLAB_M = 0.1
+
+
+def thin_slabs(edges: Edges, width: float = THIN_SLAB_M) -> tuple[np.ndarray, np.ndarray]:
+    """The faces narrower than ``width`` m between two corners of a solid that bend sound,
+    parallel and side by side: the top or the end of a thin slab, such as a desk screen,
+    a door leaf or a pane drawn with its thickness. Over such a face the path over both
+    corners (``second_order``) is too low, the more so the narrower the face is against
+    the wavelength, and ``first_order`` and ``direct`` have no path over it (see the
+    validation report's known issues). Returns (P, 2) the face of each corner in the
+    narrow face's plane and (P,) the face's width."""
+    none = np.zeros((0, 2), dtype=np.int64), np.zeros(0)
+    solid = np.flatnonzero(edges.wedge < 2.0 - 1e-9)
+    if len(solid) < 2:
+        return none
+    # Each corner once for each of its two faces: the plane, and the unit vector across
+    # the corner into that face (face n lies wedge * pi round from face 0).
+    edge = np.concatenate([solid, solid])
+    side = np.repeat([0, 1], len(solid))
+    turn = np.pi * edges.wedge[edge]
+    into = np.where(
+        (side == 0)[:, None],
+        edges.along[edge],
+        np.cos(turn)[:, None] * edges.along[edge] + np.sin(turn)[:, None] * edges.normal[edge],
+    )
+    direction = edges.direction[edge]
+    biggest = np.abs(direction).argmax(axis=1)
+    sign = np.sign(direction[np.arange(len(edge)), biggest])
+    keys = np.column_stack(
+        [edges.plane[edge, side], np.round(direction * sign[:, None] / 1e-6)]
+    ).astype(np.int64)
+    group = np.unique(keys, axis=0, return_inverse=True)[1].reshape(-1)
+    found = []
+    for g in np.flatnonzero(np.bincount(group) > 1):
+        rows = np.flatnonzero(group == g)
+        a, b = (rows[i] for i in np.triu_indices(len(rows), k=1))
+        line = direction[a]
+        gap = edges.start[edge[b]] - edges.start[edge[a]]
+        t0 = (gap * line).sum(axis=1)
+        across = gap - t0[:, None] * line
+        apart = np.linalg.norm(across, axis=1)
+        # Each corner's face runs towards the other, and the two overlap along their line.
+        towards = ((across * into[a]).sum(axis=1) > 0.0) & ((across * into[b]).sum(axis=1) < 0.0)
+        t1 = t0 + edges.length[edge[b]] * (edges.direction[edge[b]] * line).sum(axis=1)
+        overlap = np.minimum(np.maximum(t0, t1), edges.length[edge[a]])
+        overlap -= np.maximum(np.minimum(t0, t1), 0.0)
+        hit = (apart > 0.0) & (apart < width) & towards & (overlap > apart)
+        pair = np.column_stack(
+            [edges.face[edge[a[hit]], side[a[hit]]], edges.face[edge[b[hit]], side[b[hit]]]]
+        )
+        found.append((pair, apart[hit]))
+    if not found:
+        return none
+    return (
+        np.concatenate([pair for pair, _ in found]).astype(np.int64),
+        np.concatenate([width for _, width in found]),
+    )
+
+
 def sheets(model: TraceModel, min_bend_deg: float = MIN_BEND_DEG) -> np.ndarray:
     """(F,) the sheet each face of ``model`` belongs to, a label: the faces that
     :func:`find_edges` looks at, joined where two of them share an edge of the mesh that
