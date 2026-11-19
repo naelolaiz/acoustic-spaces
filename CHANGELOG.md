@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed: of the paths that share an image off parallel planes (off a panel and the walls
+  either side of it, and off the same the other way round), the edge fade took the terms
+  of the first by the planes' numbers only, so a room and its mirror image differed
+  (0.018 dB at 125 Hz); each now takes its own.
 - Fixed: of two orders of the same reflections at a corner of perpendicular planes (an
   arm of a barrier and the ground), the edge fade kept whichever its search listed
   first, where its tolerance let both be, not the one along the way: a source 3 mm from

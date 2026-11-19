@@ -494,6 +494,35 @@ def test_a_room_with_a_panel_in_line_with_a_wall_sounds_as_its_mirror_image(
     np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
 
 
+def test_two_paths_with_one_image_each_take_their_terms_in_a_room_and_its_mirror_image(
+    tmp_path: Path,
+) -> None:
+    """In room "x" of ``IN_LINE``, the path off the panel, the far wall and the near wall
+    (x = 5, 11 and 0) and the path off the same planes the other way round have one image,
+    as the planes are parallel, and each is blocked by the panel where the other reflects
+    off it. The edge fade takes the terms of both at the panel's edges, in the room and in
+    its mirror image: of sequences with one image it kept the first by the planes'
+    numbers, which differ between the two, and the levels differed by 0.018 dB at
+    125 Hz."""
+    source, listener = [5.69, 1.949, 0.957], [10.094, 2.916, 1.058]
+    levels = []
+    for sign in (1.0, -1.0):
+        room = _in_line_with_a_wall(
+            tmp_path, sign, source, listener, max_order=3, diffraction="first_order"
+        )
+        paths = early_paths(room)
+        vertices, faces = np.asarray(room.mesh.vertices), np.asarray(room.mesh.faces)
+        off = [
+            tuple(np.abs(vertices[faces[f], 0]).round(6).max(axis=1))
+            for f, edge in zip(paths.faces, paths.edge, strict=True)
+            if len(f) == 3 and edge >= 0
+        ]
+        assert off.count((5.0, 11.0, 0.0)) > 0
+        assert off.count((0.0, 11.0, 5.0)) > 0
+        levels.append(10.0 * np.log10(total_energy(paths)))
+    np.testing.assert_allclose(levels[0], levels[1], atol=1e-6)
+
+
 def _free_panel(folder: Path, mirror, source, listener, turn: float = 0.0) -> Room:
     """A room 10 x 8 x 3 m with a panel 2 m wide and 2 m high standing free in the plane
     x = 5 (from y = 3 to 5), with second-order diffraction; its image in the mirror

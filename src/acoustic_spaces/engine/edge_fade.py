@@ -55,7 +55,9 @@ the path takes the order its points come in along the way. The path over an edge
 take another, such as off the floor after a corner that stands on it rather than before,
 so each path also takes the terms of the events of every other order of its reflections
 that gives its image, those that differ from its own once each (all orders up to four
-reflections, beyond that those that swap two next to each other).
+reflections, beyond that those that swap two next to each other). Other sequences with
+its image, off parallel planes (three in the reverse order, or two pairs as far apart),
+are other paths, each with its own terms.
 
 At a leg, the terms of the edge's reflections whose paths cannot be, with the source or
 the listener side behind the face's plane, stand in for those reflections, which the
@@ -317,10 +319,14 @@ class EdgeFade:
         # path is the one whose reflections come in its order along the way, one that
         # can be without the corner's tolerance where there is one (_image_points); the
         # corner of two planes admits the other order too, from a point just off it.
+        # Others with the same image, off parallel planes (three in the reverse order, or
+        # two pairs as far apart), are other paths, each with its own terms.
         rows = np.flatnonzero(possible)
         _, exact = _image_points(model, seqs[rows], [p[rows] for p in chain], source, listener, 0.0)
         rows = rows[np.argsort(~exact, kind="stable")]
-        _, first = np.unique(np.round(chain[-1][rows] / self.tolerance), axis=0, return_index=True)
+        path = _canonical(model, model.geometric_plane[seqs[rows]])
+        key = np.hstack([np.round(chain[-1][rows] / self.tolerance), path])
+        _, first = np.unique(key, axis=0, return_index=True)
         possible[np.setdiff1d(rows, rows[first])] = False
 
         # The face each reflection point lies on, or -1.
@@ -2239,6 +2245,33 @@ def _stacked(cosines: list[np.ndarray], rows: np.ndarray, k: int) -> np.ndarray 
     if not cosines:
         return None
     return np.array([cosines[i] for i in rows], dtype=float).reshape(len(rows), k)
+
+
+def _canonical(model, seqs: np.ndarray) -> np.ndarray:
+    """(n, k) each of the plane sequences ``seqs`` (n, k) in the order, of all those that
+    swap only reflections off perpendicular planes (which give its path), that comes
+    first by the planes' numbers: one for all the orders of a path, another for another
+    path with the same image (off parallel planes)."""
+    n, k = seqs.shape
+    if k < 2:
+        return seqs
+    commute = np.zeros((n, k, k), dtype=bool)
+    for a in range(k):
+        for b in range(a + 1, k):
+            commute[:, a, b] = _perpendicular(model, seqs[:, a], seqs[:, b])
+    left = np.ones((n, k), dtype=bool)
+    out = np.empty_like(seqs)
+    rows = np.arange(n)
+    for step in range(k):
+        # A reflection may come next where it commutes with each one left before it.
+        free = left.copy()
+        for b in range(1, k):
+            for a in range(b):
+                free[:, b] &= ~left[:, a] | commute[:, a, b]
+        pick = np.argmin(np.where(free, seqs, np.iinfo(np.int64).max), axis=1)
+        out[:, step] = seqs[rows, pick]
+        left[rows, pick] = False
+    return out
 
 
 def _commuted(model, seqs: np.ndarray) -> np.ndarray:

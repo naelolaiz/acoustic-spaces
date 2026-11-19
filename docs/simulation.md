@@ -428,11 +428,14 @@ order, and each order is tried where the early stage found only one. Planes that
 one place count as one there (two walls in line that face opposite ways, and a panel or
 a partition between them, which the model puts in the plane of one of them): a
 reflection takes the faces there that it meets from the front or that have a room on
-both sides, and the edges with a face there. Each term is a path over its edge, and each
-product of terms is a path of its own, which arrives later by the detours of all its
-terms; the terms the edge diffraction adds already are left out (`engine.edge_fade` in
-the [API reference](api.md#edge-diffraction)). Against the exact solution, past the end
-of a screen, the corner of a building, a strip 2 m wide and a gap 4 m wide on a hard
+both sides, and the edges with a face there. Other sequences of reflections with one
+image, off parallel planes (a panel and the walls either side of it, and the same the
+other way round), are other paths, which take their own terms. Each term is a path over
+its edge, and each product of terms is a path of its own, which arrives later by the
+detours of all its terms; the terms the edge diffraction adds already are left out
+(`engine.edge_fade` in the [API reference](api.md#edge-diffraction)). Against the exact
+solution, past the end of a screen, the corner of a building, a strip 2 m wide and a gap
+4 m wide on a hard
 ground, each path with its copy off the ground, the level is within 0.08 dB in every
 band (0.19 dB at 8 kHz on the strip, an error of the exact level's average over too
 few frequencies), where it was up to 7 dB off without it, and steps between listeners
