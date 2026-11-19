@@ -75,7 +75,8 @@ pane as one face). Errors exit with status 1, and with `--strict` warnings too. 
 may point either way:
 the room is the space the faces close off, found from the faces themselves (see
 [Walls, doors and openings](#walls-doors-and-openings)), and a panel standing in the
-room, with air on both sides, reflects and absorbs on both.
+room, with air on both sides, reflects and absorbs on both; drawn as two faces back to
+back, each face does on its own side.
 
 ### Outdoors
 

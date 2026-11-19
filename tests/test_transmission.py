@@ -593,6 +593,95 @@ def test_a_partition_drawn_as_one_face_for_each_room_is_one_partition(tmp_path: 
         np.testing.assert_allclose(energy_two, energy, rtol=1e-9)
 
 
+def _sides(obj: Path, assignments, source, listener, **simulation) -> Room:
+    """The rooms or the panel of ``obj``, its groups of ``assignments`` "soft" (absorbing
+    90 %) or "hard" (1 %), the rest absorbing 10 %."""
+    materials = {
+        "wall": _flat(0.1, scattering=0.2),
+        "soft": _flat(0.9, scattering=0.2),
+        "hard": _flat(0.01, scattering=0.2),
+    }
+    scene = Scene.model_validate(
+        {
+            "geometry": {"file": str(obj)},
+            "materials": materials,
+            "default_material": "wall",
+            "assignments": assignments,
+            "sources": [{"name": "s", "position": list(source)}],
+            "listeners": [{"name": "l", "position": list(listener)}],
+            "simulation": {"seed": 3, **simulation},
+        }
+    )
+    return Room.from_scene(scene)
+
+
+def test_a_panel_drawn_as_two_faces_back_to_back_sounds_as_its_mirror_image(
+    tmp_path: Path,
+) -> None:
+    """A free-standing panel across the middle of a room, drawn as two faces back to back,
+    absorbing 1 % on the source's side and 90 % on the other, and the same scene mirrored:
+    the late part within 0.2 dB in every band. A ray met the same face from either side:
+    3.6 dB apart at 63 Hz."""
+    front = ((3, 1, 0), (3, 3, 0), (3, 3, 2), (3, 1, 2))  # its normal points to +x
+    groups = {"room1": _box(0, 6, 4, 3), "side1": [front[::-1]], "side2": [front]}
+    obj = _write(tmp_path / "panel.obj", groups)
+    settings = {"ir_length_s": 1.0, "early": {"max_order": 2}, "late": {"rays": 20000}}
+    late = []
+    for source, listener, near, far in (
+        ([1.5, 2.0, 1.0], [2.0, 2.6, 1.3], "hard", "soft"),
+        ([4.5, 2.0, 1.0], [4.0, 2.6, 1.3], "soft", "hard"),
+    ):
+        room = _sides(obj, {"side1": near, "side2": far}, source, listener, **settings)
+        late.append(simulate(room)["s", "l"].late.sum(axis=-1))
+    np.testing.assert_allclose(10.0 * np.log10(late[1] / late[0]), 0.0, atol=0.2)
+
+
+def test_a_free_standing_panel_drawn_as_two_faces_back_to_back_is_the_panel_drawn_once(
+    tmp_path: Path,
+) -> None:
+    """A free-standing panel in a room drawn as two faces back to back, as the panel drawn
+    once: a closed model of one room as large, the late part (with the rays and with the
+    statistical method) and the early paths, over its edges and with the terms at them
+    too. The faces' outer sides and the gap between them had been spaces of no volume of
+    their own, which no room held: the model read as not closed, with no volume and no
+    statistical late part."""
+    front = ((3, 1, 0), (3, 3, 0), (3, 3, 2), (3, 1, 2))
+    found = []
+    for panel in ([front], [front, front[::-1]]):
+        obj = _write(tmp_path / "panel.obj", {"room1": _box(0, 6, 4, 3), "panel": panel})
+        out = {}
+        for late in ("stochastic_ray_tracing", "statistical"):
+            room = _sides(
+                obj,
+                {},
+                [1.5, 2.0, 1.0],
+                [4.5, 2.1, 1.1],
+                ir_length_s=0.5,
+                early={"max_order": 2, "diffraction": "first_order"},
+                late={"method": late, "rays": 4000},
+            )
+            out[late] = simulate(room)["s", "l"].late
+        assert room.report.closed and room.volume_m3 == pytest.approx(72.0)
+        for method in ("image_sources", "ray_tracing"):
+            room.scene.simulation.early.method = method
+            paths = early_paths(room)
+            order = np.lexsort((paths.energy[:, 0], paths.distance_m, paths.edge))
+            out[method] = (paths.edge[order], paths.order[order], paths.energy[order])
+        found.append(out)
+    one, two = found
+    for late in ("stochastic_ray_tracing", "statistical"):
+        np.testing.assert_allclose(two[late], one[late], rtol=1e-9)
+    for method in ("image_sources", "ray_tracing"):
+        np.testing.assert_array_equal(two[method][0], one[method][0])
+        np.testing.assert_array_equal(two[method][1], one[method][1])
+        # Each path's bands to a billionth of its strongest band: where a band's terms
+        # nearly cancel (8 kHz over the panel's top, 2000 times below the path's
+        # strongest band), the two forms' roundings part by 3e-10 of that band here and
+        # by 8e-8 on Windows.
+        scale = one[method][2].max(axis=1, keepdims=True)
+        assert (np.abs(two[method][2] - one[method][2]) <= 1e-9 * scale).all()
+
+
 def _touching(path: Path, gap: float, inward: bool) -> Path:
     """Two 5 x 4 x 3 m rooms along x, each modelled closed with a wall of its own at
     x = 5, room 1's in group "dry" and room 2's in "live": touching (``gap`` 0, a wall
