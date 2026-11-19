@@ -8,6 +8,28 @@
   floor and a wall of a room 10 m across, 1.5 to 2.7 dB too loud from 250 Hz up, and
   1.2 mm from both arms of a bent barrier in a model 10 km wide, 2.3 dB from 1 kHz up.
   Paths whose planes mirror the source otherwise are now other waves.
+- Fixed: the faces a path crosses right where it reflects were looked for along a chord
+  across the turn that reached a ten-millionth of the model's largest extent (1 mm in a
+  model 10 km wide) along both legs, on past a leg's other end (the source, say) where
+  that was nearer, and so could pass round the end of a face the path crosses. A source
+  0.015 to 0.04 mm from both arms of a barrier bent by 10 to 60 degrees in such a model
+  had a path off one arm through the other at the level of the direct sound, and with
+  edge diffraction an early level behind the barrier up to 42 dB above that of the same
+  scene in a model 200 m wide. The chord now ends at either leg's other end.
+- Fixed: outdoors, what a wall or a barrier scatters and the ground then reflects
+  reached a listener only through rays that crossed its detector sphere, each one a
+  burst in one millisecond of the tail (blips in the `railway` example's tour at
+  `meadow_25m`); in still air the rain now also falls on each listener's image in the
+  ground, with the same expected energy and without those bursts.
+- Changed: outdoors the ground's bounces count for no order towards
+  `simulation.early.max_order` (from 1 on): the early part holds the paths off up to
+  `max_order` vertical walls with their bounces off the ground, which counted each as a
+  reflection in still air and all together as one in wind and temperature gradients, and
+  the late rays leave their specular share to it. Their detector spheres had counted it
+  where a ray met the ground on both sides of a barrier that had scattered it, or two
+  walls and the ground (order 3 over the default 2): bursts of up to 28 dB at
+  `meadow_25m` in the `railway` example. The early stage takes about 30 % longer in the
+  `street` and `railway` examples.
 - Fixed: the search for early paths takes a reflection point within its tolerance for
   planes of the next reflection's plane (a ten-millionth of the model's largest extent,
   1 mm in a model 10 km wide) as the corner of the two, and such a path met each plane

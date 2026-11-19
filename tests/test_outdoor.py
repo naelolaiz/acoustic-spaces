@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from acoustic_spaces import Room, Scene, simulate
-from acoustic_spaces.engine import early, early_paths
+from acoustic_spaces.engine import early, early_paths, refracted
 from acoustic_spaces.engine.coherent import total_energy
 from acoustic_spaces.engine.coverage import coverage_map, map_grid
 from acoustic_spaces.engine.diffraction import find_edges
@@ -153,6 +153,61 @@ def test_direct_sound_and_one_ground_reflection_in_the_open() -> None:
     # Specular rays find the same two paths.
     traced = early_paths(room, method="ray_tracing")
     assert traced.distance_m == pytest.approx([r1, r2])
+
+
+@pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
+def test_the_ground_s_bounces_count_for_no_order(method: str) -> None:
+    """Between two barriers 10 m apart, the paths off up to ``max_order`` of them come
+    each with its bounce off the ground and without (from order 1 on), as the ground's
+    effect goes with every path: the image sources mirrored across the barriers and the
+    ground. Each bounce off the ground had counted as a reflection, which left out those
+    off ``max_order`` barriers and the ground."""
+    geometry = {
+        "ground": {"margin": 20},
+        "barriers": [
+            {"name": "south", "path": [[-30, -5], [30, -5]], "height": 8},
+            {"name": "north", "path": [[-30, 5], [30, 5]], "height": 8},
+        ],
+    }
+    listener = np.array([12.0, 1.0, 1.5])
+    # The source, 2 m up at the origin, mirrored across none, one and two barriers: at
+    # y = 0; -10 and 10; 20 and -20.
+    walls = {0.0: 0, -10.0: 1, 10.0: 1, 20.0: 2, -20.0: 2}
+    for order in (0, 1, 2):
+        scene = outdoor(
+            geometry,
+            sources=[(0, 0, 2)],
+            listeners=[tuple(listener)],
+            early={"method": method, "max_order": order, "diffraction": "none"},
+        )
+        paths = early_paths(Room.from_scene(scene))
+        images = [(y, z) for y, n in walls.items() if n <= order for z in (2.0, -2.0)]
+        if order == 0:
+            images = [(0.0, 2.0)]
+        expected = sorted((math.dist(listener, [0.0, y, z]), walls[y] + (z < 0)) for y, z in images)
+        found = sorted(zip(paths.distance_m.tolist(), paths.order.tolist(), strict=True))
+        assert [k for _, k in found] == [k for _, k in expected], order
+        assert [d for d, _ in found] == pytest.approx([d for d, _ in expected], rel=1e-9)
+
+
+def test_the_late_rays_leave_out_what_the_early_stage_holds_outdoors() -> None:
+    # The late rays take each face's kind (1 the level ground, 0 a vertical wall, -1 a
+    # barrier's top, a roof) and any bounces off the ground, in still air as in bent;
+    # indoors, the order alone.
+    geometry = {
+        "ground": {"margin": 20},
+        "buildings": [{"name": "house", "footprint": HALL, "height": 6}],
+    }
+    model = TraceModel.from_room(Room.from_scene(outdoor(geometry)))
+    cover = refracted.covering(model)
+    normal = model.plane_normal[model.face_plane]
+    ground = np.array(["ground" in label for label in model.room.mesh.labels])
+    ground = ground[model.room.mesh.face_labels]
+    expected = np.where(ground, 1, np.where(np.abs(normal[:, 2]) < 1e-9, 0, -1))
+    np.testing.assert_array_equal(cover["face_kind"], expected)
+    assert {0, 1, -1} <= set(expected.tolist())
+    assert cover["covered_ground"] >= 1 << 30
+    assert refracted.covering(TraceModel.from_room(Room.from_yaml(SHOEBOX))) == {}
 
 
 def test_late_rays_leave_through_the_sky() -> None:
@@ -395,34 +450,36 @@ def test_a_way_through_an_outer_edge_is_no_reflection(
 
 
 @pytest.mark.parametrize(
-    ("geometry", "source", "listener", "shift"),
+    ("geometry", "source", "listener", "shift", "corners"),
     [
-        ({"buildings": [BLOCK]}, (-5, 5, 1.5), (-10, 5, 3), (0, 0, 1e-4)),
-        ({"buildings": [BLOCK]}, (-5, 3, 1.5), (-10, 8, 3), (0, 0, 1e-4)),
-        ({"buildings": [BLOCK, TOWER]}, (5, 5, 7.5), (7.5, 5, 6.75), (0, 0, 1e-4)),
-        ({"barriers": ANGLE}, (2, 2, 1.5), (4, 4, 2), (1e-4, 0, 0)),
+        ({"buildings": [BLOCK]}, (-5, 5, 1.5), (-10, 5, 3), (0, 0, 1e-4), 1),
+        ({"buildings": [BLOCK]}, (-5, 3, 1.5), (-10, 8, 3), (0, 0, 1e-4), 1),
+        ({"buildings": [BLOCK, TOWER]}, (5, 5, 7.5), (7.5, 5, 6.75), (0, 0, 1e-4), 1),
+        ({"barriers": ANGLE}, (2, 2, 1.5), (4, 4, 2), (1e-4, 0, 0), 2),
     ],
     ids=["foot of a wall", "foot of a wall, at a slant", "wall on a roof", "inside two barriers"],
 )
 @pytest.mark.parametrize("diffraction", ["none", "first_order"])
 def test_a_way_through_an_inner_corner_reflects_there(
-    geometry, source, listener, shift, diffraction
+    geometry, source, listener, shift, corners, diffraction
 ) -> None:
     """The same where the two faces make a corner on the sound's side: a wall and the
     ground at its foot, a taller building's wall and the roof it stands on the edge of,
-    two barriers seen from inside their angle. The path that reflects off both right at
-    the corner stands, as the one that reflects off one and then the other does 0.1 mm
-    beside, and the early levels agree within 0.005 dB."""
+    two barriers seen from inside their angle (the path off both, and the same with a
+    bounce off the ground, which counts for no order). The path that reflects off both
+    right at the corner stands, as the one that reflects off one and then the other does
+    0.1 mm beside, and the early levels agree within 0.005 dB."""
     (exact, level), (beside, level_beside) = _in_line_and_beside(
         geometry, source, listener, shift, diffraction
     )
-    assert _at_one_point(exact) == 1 and _at_one_point(beside) == 0
+    assert _at_one_point(exact) == corners and _at_one_point(beside) == 0
     assert len(exact) == len(beside)
     assert np.abs(level - level_beside).max() < 0.005
 
 
 @pytest.mark.parametrize(
-    ("bend", "gap", "height", "order"), [(30.0, 2e-4, 1.5, 2), (60.0, 2e-3, 2e-3, 3)]
+    ("bend", "gap", "height", "order"),
+    [(30.0, 2e-4, 1.5, 2), (60.0, 2e-3, 2e-3, 3), (30.0, 4e-5, 1.5, 2)],
 )
 def test_no_way_through_a_barrier_from_a_source_in_its_bend(bend, gap, height, order) -> None:
     """A source ``gap`` (m) from both arms of a barrier bent by ``bend`` degrees,
@@ -432,7 +489,12 @@ def test_no_way_through_a_barrier_from_a_source_in_its_bend(bend, gap, height, o
     paths' tolerance is 1 mm in the wide model, and the source (0.2 mm from both arms),
     or the reflection off the ground behind an arm (1 mm), lay within it of an arm's
     plane: a path that reflected off both arms in the bend and went on through one of
-    them counted as a reflection there, at the level of the direct sound."""
+    them counted as a reflection there, at the level of the direct sound. With the
+    source 0.04 mm from both arms, a path off the other arm that the search took to
+    reflect where it meets the arm behind which the listener is, 0.33 mm from the bend,
+    went on through that arm at the level of the direct sound: the chord across its turn
+    that looks for faces it crosses there ran on past the source and passed the arm
+    beyond the bend."""
     turn = math.radians(bend)
     reach = gap / math.sin(turn / 2)
     source = (math.cos(turn / 2) * reach, math.sin(turn / 2) * reach, height)
