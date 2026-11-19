@@ -424,7 +424,9 @@ where the plane goes on round its end on its open side, so no path reflects off 
 plane from below beside the building. Reflections off perpendicular planes, such as the
 floor and a wall, give the same image in either order, and the path over an edge may
 take another order than the path itself: each path takes the terms of every such
-order, and each order is tried where the early stage found only one. Planes that lie in
+order, and each order is tried where the early stage found only one. Planes are
+perpendicular to within the model's tolerance for planes, as the walls of a model turned
+to any angle and written with six decimals are. Planes that lie in
 one place count as one there (two walls in line that face opposite ways, and a panel or
 a partition between them, which the model puts in the plane of one of them): a
 reflection takes the faces there that it meets from the front or that have a room on
@@ -457,7 +459,9 @@ its geometric wave as far as it is coherent with it over the band (on the dark s
 its boundary, where that wave is gone, near the boundary only), and the rest of it is
 part of its event's diffracted wave, whose terms add up as one wave, so the two edges of
 a narrow face nearly cancel as they do in pressure. Paths whose planes mirror the source
-otherwise are other waves, however near their images lie (a source right by two planes).
+otherwise are other waves, however near their images lie (a source right by two planes);
+planes at right angles, to the model's tolerance for planes, mirror it alike in either
+order.
 A wave's energy is that of its pieces added up in pressure and averaged over the band,
 never below nothing. Behind the `archway`'s wall, where the reflection off the arch's
 jamb, 40 cm deep, appears, the level steps by at most 0.08 dB from 250 Hz to 1 kHz. The

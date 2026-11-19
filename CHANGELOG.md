@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: with edge diffraction, the edge fade takes a model turned to any angle and
+  written with six decimals as it takes it exact: planes at right angles to the model's
+  tolerance for planes commute, a term's path reaches a face of the plane it reflects
+  off that lies just in front of that plane, each event of a path's orders of
+  reflections counts once by its planes, not by its rounded images, and such planes make
+  one wave in either order in the bands that add in energy. An open box turned 17 to 50
+  degrees had been up to 0.43 dB off at 63 Hz.
 - Fixed: of the paths that share an image off parallel planes (off a panel and the walls
   either side of it, and off the same the other way round), the edge fade took the terms
   of the first by the planes' numbers only, so a room and its mirror image differed

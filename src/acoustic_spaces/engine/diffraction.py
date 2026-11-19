@@ -91,6 +91,7 @@ from acoustic_spaces.engine.coherent import ground_factors, ground_wave_factors,
 from acoustic_spaces.engine.early import (
     _EDGE_TOLERANCE,
     EarlyReflections,
+    _canonical,
     _face_at,
     _mirrors,
     _over,
@@ -1206,9 +1207,12 @@ class EdgeDiffraction:
         there) make in turn, for the waves of
         :class:`~acoustic_spaces.engine.clusters.Clusters`: as the early stage tells
         them apart (:func:`~acoustic_spaces.engine.early._mirrors`, with its
-        tolerance)."""
+        tolerance). Sequences that differ only in the order of perpendicular planes
+        make one mirror, and are taken in one order
+        (:func:`~acoustic_spaces.engine.early._canonical`): in a model
+        turned and written to six decimals their mirrors part by a few of those steps."""
         sequences = np.asarray(sequences, dtype=np.int64).reshape(len(sequences), -1)
-        return _mirrors(self.model, sequences, _EDGE_TOLERANCE * self.size)
+        return _mirrors(self.model, _canonical(self.model, sequences), _EDGE_TOLERANCE * self.size)
 
     def clusters(self, listener: np.ndarray, paths: EarlyReflections) -> Clusters | None:
         """The waves of the specular paths ``paths`` at ``listener`` in the bands where

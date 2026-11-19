@@ -488,9 +488,46 @@ def exhaustive_candidates(
 
 
 def _perpendicular(model, a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Whether the planes ``a`` and ``b`` are perpendicular: reflections off them commute."""
+    """Whether the planes ``a`` and ``b`` are perpendicular: reflections off them commute.
+    Their normals are known to :data:`PLANE_TOLERANCE` (faces join a plane within it),
+    and so is the right angle between them: the walls of a room turned to any angle,
+    with its corners written to six decimals, stand at right angles."""
     dot = np.einsum("ij,ij->i", model.plane_normal[a], model.plane_normal[b])
-    return np.abs(dot) < 1e-9
+    return np.abs(dot) < PLANE_TOLERANCE
+
+
+def _canonical(model, seqs: np.ndarray) -> np.ndarray:
+    """(n, k) each of the plane sequences ``seqs`` (n, k; -1 for no plane there) with its
+    planes first, in the order, of all those that swap only neighbouring reflections off
+    perpendicular planes (which give its path and its image), that comes first by the
+    planes' numbers; -1 after them: one for all the orders of a path, another for another
+    path with the same image (off parallel planes)."""
+    seqs = np.asarray(seqs, dtype=np.int64)
+    rest = np.take_along_axis(seqs, np.argsort(seqs < 0, axis=1, kind="stable"), 1)
+    n, k = rest.shape
+    rows = np.arange(n)
+    plane = np.maximum(rest, 0)
+    commute = np.ones((n, k, k), dtype=bool)
+    for a in range(k):
+        for b in range(a):
+            both = (rest[:, a] >= 0) & (rest[:, b] >= 0)
+            commute[both, a, b] = commute[both, b, a] = _perpendicular(
+                model, plane[both, a], plane[both, b]
+            )
+    taken = rest < 0
+    out = np.full_like(rest, -1)
+    for j in range(k):
+        # A plane can come next where it commutes with each plane still before it.
+        blocked = np.zeros((n, k), dtype=bool)
+        for a in range(k):
+            for b in range(a):
+                blocked[:, a] |= ~taken[:, b] & ~commute[:, a, b]
+        free = ~taken & ~blocked
+        pick = np.argmin(np.where(free, rest, np.iinfo(np.int64).max), axis=1)
+        has = free.any(axis=1)
+        out[has, j] = rest[rows[has], pick[has]]
+        taken[rows[has], pick[has]] = True
+    return out
 
 
 def _image_points(
