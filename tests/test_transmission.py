@@ -667,6 +667,74 @@ def test_each_face_of_a_wall_drawn_once_for_each_room_is_its_own_room_s(
         np.testing.assert_allclose(t30, t30_apart, rtol=1e-6)
 
 
+def _wider(path: Path, gap: float, inward: bool) -> Path:
+    """Room 1, 5 x 4 x 3 m, and room 2, 5 x 6 x 3 m, along x, each modelled closed with
+    a wall of its own at x = 5, room 1's in group "dry" and room 2's in "live", which
+    runs 2 m past room 1's: touching (``gap`` 0) or ``gap`` apart, their normals
+    pointing out of the rooms or, ``inward``, into them."""
+    x = 5 + gap
+    groups = {
+        "room1": _box(0, 5, 4, 3, skip=("x1",)),
+        "room2": _box(x, x + 5, 6, 3, skip=("x0",)),
+        "dry": [((5, 0, 0), (5, 4, 0), (5, 4, 3), (5, 0, 3))],
+        "live": [((x, 0, 3), (x, 6, 3), (x, 6, 0), (x, 0, 0))],
+    }
+    if inward:
+        groups = {name: [quad[::-1] for quad in quads] for name, quads in groups.items()}
+    return _write(path, groups)
+
+
+@pytest.mark.parametrize("inward", [False, True], ids=["out", "in"])
+def test_each_room_meets_its_own_wall_where_a_wider_room_touches_it(
+    tmp_path: Path, inward: bool
+) -> None:
+    """Two rooms modelled as closed models that touch, the second's wall reaching past
+    the first's, absorbing 0.9 in the first room and 0.1 in the second: in the first
+    room they sound as with the rooms 1 mm apart, early (image sources and ray tracing)
+    and late (the statistical method and the stochastic tracer), whichever way the
+    normals point; with the scattering of the surfaces' size left out, since touching,
+    the two rooms' floors (and ceilings) share an edge and make one surface. Before,
+    the two walls had no outline in common: a ray met either of them in the first room,
+    and the stochastic tracer gave 1.6 to 2.4 dB more G and 1.3 to 1.5 times the T30."""
+    materials = {
+        "wall": _flat(0.1, scattering=0.3),
+        "dry": _flat(0.9, scattering=0.3),
+        "live": _flat(0.1, scattering=0.3),
+    }
+    assignments = {"room1": "wall", "room2": "wall", "dry": "dry", "live": "live"}
+    found = {}
+    for gap in (0.0, 1e-3):
+        obj = _wider(tmp_path / f"rooms_{gap}.obj", gap, inward)
+        for early, late in (
+            ("image_sources", "statistical"),
+            ("image_sources", "stochastic_ray_tracing"),
+            ("ray_tracing", "stochastic_ray_tracing"),
+        ):
+            scene = _scene(
+                obj,
+                materials,
+                assignments,
+                {"one": [3.0, 2.2, 1.4]},
+                source=[1.5, 1.9, 1.5],
+                ir_length_s=1.0,
+                scattering={"from_size": False},
+                late={"rays": 3000, "method": late},
+                early={"max_order": 2, "method": early, "diffraction": "none"},
+            )
+            room = Room.from_scene(scene)
+            if late == "stochastic_ray_tracing":
+                found[gap, early] = np.sort(early_paths(room).energy, axis=0)
+            if early == "image_sources":
+                p = simulate(room)["s", "one"].parameters()
+                found[gap, late] = (p.g, p.t30)
+    for early in ("image_sources", "ray_tracing"):
+        np.testing.assert_allclose(found[0.0, early], found[1e-3, early], rtol=1e-9)
+    for late in ("statistical", "stochastic_ray_tracing"):
+        (g, t30), (g_apart, t30_apart) = found[0.0, late], found[1e-3, late]
+        np.testing.assert_allclose(g, g_apart, atol=1e-6)
+        np.testing.assert_allclose(t30, t30_apart, rtol=1e-6)
+
+
 @pytest.mark.parametrize("method", ["image_sources", "ray_tracing"])
 def test_paths_with_one_image_off_other_surfaces_are_paths_of_their_own(
     tmp_path: Path, method: str
