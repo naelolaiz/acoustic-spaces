@@ -860,6 +860,40 @@ def test_a_corner_the_search_joins_takes_its_terms(bend: float, gap: float, heig
     assert np.abs(level).max() < 0.01
 
 
+def test_of_two_orders_at_a_corner_the_edge_fade_takes_the_one_along_the_way() -> None:
+    """A source 3 mm from both arms of a barrier bent by 30 degrees and 2 mm above the
+    ground, with reflections up to the third order, in a model 10 km wide and in one
+    200 m wide: the same paths and early levels to 0.01 dB. A path off an arm, the other
+    arm and the ground, which meets that arm 4 um above the ground, has the image of the
+    same reflections off the arm, the ground and the other arm; the corner of the arm and
+    the ground admits that order too within its tolerance (1e-5 m in the wide model). The
+    edge fade kept whichever came first: in the wide model the one with two legs
+    blocked, where the path has one, and 5 paths for 7, 0.55 dB less at 63 Hz."""
+    turn = np.radians(30.0)
+    reach = 3e-3 / np.sin(turn / 2)
+    source = (float(np.cos(turn / 2) * reach), float(np.sin(turn / 2) * reach), 2e-3)
+    path = ((12.0, 0.0), (0.0, 0.0), (12.0 * float(np.cos(turn)), 12.0 * float(np.sin(turn))))
+    angle = 2.0 * np.pi * 2.5 / 8.0
+    listener = (8.0 * np.cos(angle), 8.0 * np.sin(angle), 1.8)
+    wide, narrow = (
+        early_paths(
+            _outdoors(
+                listener,
+                source=source,
+                path=path,
+                barrier_m=4.0,
+                half_m=half,
+                max_order=3,
+                diffraction="first_order",
+            )
+        )
+        for half in (5000.0, 100.0)
+    )
+    assert len(wide.order) == len(narrow.order)
+    level = 10 * np.log10(total_energy(wide) / total_energy(narrow))
+    assert np.abs(level).max() < 0.01
+
+
 @pytest.mark.parametrize(
     ("bend", "gap", "listener", "early", "bands"),
     [
