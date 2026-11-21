@@ -259,7 +259,7 @@ jobs:
         run: xvfb-run -a -s "-screen 0 1600x1200x24" python -m pytest -q -W error tests/test_gui.py
 
   wheels:
-    name: Wheel (${{ matrix.os }})
+    name: Wheel (${{ matrix.os }}, ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -269,6 +269,12 @@ jobs:
         # GitHub offers, as macOS 26 is the last macOS for Intel Macs. When it is retired,
         # build the Intel wheels on macos-latest with CIBW_ARCHS_MACOS: x86_64 instead.
         os: [ubuntu-24.04, macos-latest, macos-26-intel, windows-latest]
+        # One job per CPython. Pull requests and main build the oldest and the newest;
+        # tags build the full set from pyproject.toml. On 20 November 2026 one wheel's
+        # tests took 62 to 69 minutes on Windows and on the Intel Mac, and v4.3.0's five
+        # CPythons in one job ran out of the step's 240 minutes three times there, in
+        # cp313's tests with none failed.
+        python: ${{ fromJSON(startsWith(github.ref, 'refs/tags/') && '["cp310", "cp311", "cp312", "cp313", "cp314"]' || '["cp310", "cp314"]') }}
         # Not on the Intel Mac for a pull request: see the test job.
         exclude:
           - os: ${{ github.event_name == 'pull_request' && 'macos-26-intel' || 'none' }}
@@ -278,18 +284,16 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install cibuildwheel==4.3.1
-      - name: Build and test wheels
-        # A hung test would otherwise hold the runner for 6 hours. In November 2026 the
-        # step took up to 151 minutes, for a tag's five CPythons on the Intel Mac.
-        timeout-minutes: 240
+      - name: Build and test the wheel
+        # A hung test would otherwise hold the runner for 6 hours. One CPython's wheel took
+        # up to 71 minutes on 20 November 2026 (see the matrix).
+        timeout-minutes: 120
         run: python -m cibuildwheel --output-dir wheelhouse
         env:
-          # Pull requests and main build the oldest and the newest CPython per platform; tags
-          # build the full set from pyproject.toml.
-          CIBW_BUILD: ${{ startsWith(github.ref, 'refs/tags/') && 'cp310-* cp311-* cp312-* cp313-* cp314-*' || 'cp310-* cp314-*' }}
+          CIBW_BUILD: ${{ matrix.python }}-*
       - uses: actions/upload-artifact@v6
         with:
-          name: wheels-${{ matrix.os }}
+          name: wheels-${{ matrix.os }}-${{ matrix.python }}
           path: wheelhouse/*.whl
 
   sdist:
