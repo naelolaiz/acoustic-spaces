@@ -1569,8 +1569,9 @@ def test_paths_past_a_doorway_s_side_over_its_threshold_and_lintel(tmp_path: Pat
     over the threshold and the lintel touch their lines past the doorway's side. The
     path from the edge meets the wall's plane at the edge alone, and the rays pass the
     wall there, as the doorway leaves the edges open in that plane. They had stopped
-    the paths for listeners past x = 8: a step of 0.05 dB at 63 Hz, 0.12 dB with the
-    edges' ends at the doorway's sides fading as free ends."""
+    the paths for listeners past x = 8: in the test above the level jumped there by
+    0.06 dB at 63 Hz, and by 0.15 dB with the edges' ends at the doorway's sides fading as
+    free ends."""
     obj = _doorway(tmp_path / "doorway.obj")
     counts = []
     for x in (7.9, 8.1):

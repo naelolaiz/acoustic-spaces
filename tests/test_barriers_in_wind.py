@@ -962,8 +962,8 @@ def test_no_step_across_the_shadow_boundary_of_a_barrier_s_end(towards, x, bands
     """In wind the level steps across the end's shadow boundary by no more than 0.1 dB
     over still air's own step there, in every band: the paths round the end jump there
     by the open ground's field in the weather, as the direct sound does. Measured: at
-    most 0.04 dB 60 m downwind, 0.03 upwind and 0.28 dB in the 50 Hz third octave 120 m
-    downwind, where still air steps by 0.30 (0.02 at most above 160 Hz); scaled by the
+    most 0.009 dB 60 m downwind, 0.006 upwind and 0.056 dB in the 50 Hz third octave 120 m
+    downwind, where still air steps by 0.058 (0.02 at most above 160 Hz); scaled by the
     equation's ratio and their legs, they stepped by up to 7.7, 5.4 and 21 dB."""
     wind = _past_end(towards, x, PAIR, bands=bands)
     still = _past_end(None, x, PAIR, bands=bands)
@@ -974,10 +974,10 @@ def test_the_shadow_boundary_of_a_barrier_s_end_is_half_the_open_ground_s_field(
     """60 m downwind, 1 mm behind the end's shadow boundary the level is that of the
     open ground there (the barrier moved aside) less 6.02 dB, the half-plane's half the
     field, within the engine's own deviation from it in still air from 125 Hz to 8 kHz
-    (-6.48 to -5.74 dB; in wind -6.12 to -5.83 dB from 250 Hz, -5.50 dB at 125 Hz, where
+    (-6.47 to -5.74 dB; in wind -6.12 to -5.83 dB from 250 Hz, -5.49 dB at 125 Hz, where
     the 4 m top's own paths add); and 1 m into the lit side it is the open ground's
     times the band-averaged half-plane Fresnel factor |F(v)|^2 of the vertical edge
-    within 0.5 dB from 1 to 8 kHz (within 0.32 dB; scaled by their legs, the paths round
+    within 0.5 dB from 1 to 8 kHz (within 0.31 dB; scaled by their legs, the paths round
     the end left it 4.8 dB off at 4 kHz)."""
     from scipy.special import fresnel
 
@@ -1017,7 +1017,7 @@ def test_no_step_across_the_shadow_boundary_of_a_barrier_s_end_in_weather_zones(
     """With a weather zone from x = 30 m on (1 m/s of wind there, 5 m/s before it), 60 m
     downwind, the way's run of the open ground's equation goes through the weathers
     along it as the lit listener's does: from 63 Hz to 2 kHz the step 1 mm either side
-    of the end's shadow boundary is within 0.1 dB of still air's (0.04 dB at most; the
+    of the end's shadow boundary is within 0.1 dB of still air's (0.004 dB at most; the
     way's run in the mean of the weathers stepped by 1.70 dB at 1 kHz, the equation's
     ratio by 0.85). At 4 and 8 kHz, where the eigenrays take the mean profile of the
     weathers along their way, it is below 1 dB (0.20 and 0.77 dB): the weathers' shares
@@ -1287,8 +1287,8 @@ def test_no_step_across_the_shadow_boundary_of_a_barrier_s_end_over_a_roof(on_ro
     to 5.93 dB (7.06 dB with the source on the roof). The paths over the roof's edges
     are left out: on the lit side the roof's near edge diffracts the direct sound, and
     on the other side no path goes round the end and over that edge, so that still air
-    steps there by up to 2.79 dB, and with them the weather's effect by 0.37 dB at
-    500 Hz (0.57 dB with the source on the roof; docs/validation.md, known issues). So
+    steps there by up to 2.70 dB, and with them the weather's effect by 0.44 dB at
+    500 Hz (0.67 dB with the source on the roof; docs/validation.md, known issues). So
     are the paths off the house's front wall over the barrier's top just past its
     corner: the leg between the source and the wall passes the end's shadow boundary
     with the listener, and no path goes round the end and then off the wall, so that
@@ -1337,8 +1337,9 @@ def test_the_paths_round_an_end_over_a_roof_scale_by_1_in_still_air(monkeypatch)
         # The direct sound's and the ground reflection's, and the reflection off the
         # house's front wall, which touches the end's line 1.4 m above its top and fades
         # out there, 19 dB below them: its copies, at the heights of the paths of the
-        # weather they stand for, take the share of the end those heights give (0.6 of
-        # its energy at 63 Hz, 0.009 dB of the level).
+        # weather they stand for, take the share of the end those heights give (with the
+        # source over the roof 0.6 of its energy at 63 Hz, under 0.02 dB of the level in
+        # any band).
         off_wall = [i for i in ends_still if np.isclose(still.points[i][1:-1, 0], 40.0).any()]
         assert len(ends_still) == 3 and len(off_wall) == 1
         in_plane = [i for i in ends_still if i not in off_wall]

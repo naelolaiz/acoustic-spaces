@@ -725,16 +725,15 @@ is an arc of a circle, so its travel time and its length are exact.
   sooner or later as the first of them along its legs): the lit side's paths take
   those runs, so 1.5 m over a roof 45 m downwind and upwind of a source 1 m up (and
   the two swapped), 1 mm either side of the end's shadow boundary, the weather's effect
-  of the paths but those over the roof's edge steps by at most 0.02 dB (up to 7.1 dB
-  with the open ground's field along the way), and of all of them by up to 0.57 dB at
-  500 Hz (see
-  [Known issues](validation.md#known-issues)). A row of 11 such listeners across the
-  boundary took 256 runs and 14.4 s of CPU, against 312 runs and 18.9 s with the open
-  ground's runs along the ways: along a whole degree the ways' runs hold what the lit
-  listeners' runs there hold, and share them. Round other
-  edges (over a top and round an end
-  at once, a model file's objects), the paths keep their straight legs as over an
-  edge. Against a full-wave solution of rigid
+  of the paths but those over the roof's edge and the reflection off the building's
+  front wall past the barrier's corner steps by at most 0.01 dB (taking the open
+  ground's field along the way instead, they stepped by up to 7.1 dB), and of all of
+  them by up to 0.67 dB at 500 Hz (see [Known issues](validation.md#known-issues)). A
+  row of 11 such listeners across the boundary took 256 runs and 14.4 s of CPU, against
+  312 runs and 18.9 s with the open ground's runs along the ways: along a whole degree
+  the ways' runs hold what the lit listeners' runs there hold, and share them. Round
+  other edges (over a top and round an end at once, a model file's objects), the paths
+  keep their straight legs as over an edge. Against a full-wave solution of rigid
   barriers and blocks in wind from 63 to 500 Hz, and against a parabolic equation
   started behind a rigid barrier from its exact field from 125 Hz to 8 kHz, the
   weather's effect is within 0.71 dB behind one barrier or building in 5 m/s of wind
@@ -1842,12 +1841,16 @@ equation leaves out:
   within 3 m behind a wall at 45 degrees. The paths round an end change as the open
   ground's field along their way does, not as the barrier's, while those over the top
   take the barrier's, past the end too as they fade out there: across the shadow
-  boundary of a barrier's end the level steps by at most 0.07 dB a millimetre in octave
-  bands 60 m away and 120 m downwind, and by 0.22 dB 120 m upwind, where still air
-  steps by 0.17 dB (0.28 dB in the 50 Hz third octave, where still air steps by
-  0.30 dB), but at 4 and 8 kHz with eddies by up to 1.08 dB (strong ones, 120 m
-  downwind; in still air the same eddies step there by up to 0.95 dB) and with weather
-  zones by up to 0.76 dB. Where the
+  boundary of a barrier's end the level steps by at most 0.012 dB a millimetre in octave
+  bands 60 m away and 120 m downwind, and by 0.042 dB 120 m upwind, where still air
+  steps by 0.020 dB (1 mm either side of it, 0.056 dB in the 50 Hz third octave 120 m
+  downwind, where still air steps by 0.058 dB), but at 4 and 8 kHz with eddies by up to
+  1.08 dB (strong ones, 120 m downwind; in still air the same eddies step by up to
+  0.95 dB, at 4 kHz 60 m away) and with weather zones by up to 0.77 dB. Where the end's
+  top comes onto the line of sight the paths round it above the top keep their straight
+  legs in wind: 100 and 200 m down- and upwind of a source, past a barrier 1 m high 30 m
+  from it, the level steps 1 mm by up to 2.7 dB, and from 63 to 250 Hz by up to 1.1 dB
+  (0.05 dB in still air). Where the
   end stands below the line of sight (a barrier 1 m high), a listener crossing the
   end's line seen from above (its way crossing the barrier on one side, and on the
   other the open ground's sound) steps, 1 mm across it, by up to 0.94 dB from 63 to

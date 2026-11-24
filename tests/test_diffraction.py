@@ -1645,7 +1645,7 @@ def test_a_bent_top_in_a_row_and_its_mirror_image(tmp_path: Path) -> None:
     level = _past(tmp_path, quads, *ends)
     np.testing.assert_allclose(_past(tmp_path, mirrored, *ends), level, atol=1e-3)
     # The bent screen alone hides 5/8 of the wave: the level a millimetre above the
-    # joint, within 0.03 dB, and from 2 kHz on 20 log10(3/8) to 0.04 dB (both halves
+    # joint, within 0.03 dB, and from 2 kHz on 20 log10(3/8) to 0.03 dB (both halves
     # taking half of it, it was 2.5 dB above that).
     alone = _past(tmp_path, bent, *ends)
     np.testing.assert_allclose(alone, _past(tmp_path, bent, *(ends + [0.0, 0.0, 1e-3])), atol=0.05)
@@ -1653,7 +1653,7 @@ def test_a_bent_top_in_a_row_and_its_mirror_image(tmp_path: Path) -> None:
     # With the far screen, below the level a millimetre above the tops, where the path
     # over the rising piece and the far screen counts whole (by 0.9 to 2.1 dB), and above
     # what the two screens take in turn, the far one as much as off two level tops in a
-    # row (by 0.9 to 1.5 dB).
+    # row (by 1.1 to 1.5 dB).
     above = _past(tmp_path, quads, *(ends + [0.0, 0.0, 1e-3]))
     row = _past_screens(tmp_path, (0.0, 10.0), *ends) - _past_screens(tmp_path, (10.0,), *ends)
     assert np.all(level < above) and np.all(level > alone + row), (level, above, alone + row)
@@ -1681,13 +1681,13 @@ def test_three_screens_in_a_row_the_middle_one_ending_beside_the_way(tmp_path: P
 def test_three_screens_in_a_row_the_last_one_ending_beside_the_way_just_above_them(
     tmp_path: Path,
 ) -> None:
-    # Three screens 5 m apart, the last one ending a centimetre beside the way, the source
-    # and the listener 0.1 and 0.3 mm above the tops, within the reach of the rays that
-    # test the paths over the edges (a tenth of a millimetre): the level is that 3 mm
-    # above them within 0.05 dB. The rays that test the path round the last screen's
-    # upright end start just off its corner, above the tops; from just inside the end,
-    # below them, the screens in front hid the path, and the level was 1.5 dB lower at
-    # 63 Hz.
+    # Three screens 5 m apart, the last one ending a centimetre beside the way, the
+    # source and the listener 0.1 and 0.3 mm above the tops, within the reach of the
+    # rays that test the paths over the edges (they start a tenth of a millimetre off
+    # them): the level is that 3 mm above them within 0.05 dB. The rays that test the
+    # path round the last screen's upright end start just off its corner, above the
+    # tops; from just inside the end, below them, the screens in front hid the path, and
+    # the level was 1.5 dB lower at 63 Hz.
     quads = (
         edge_diffraction.screen_quads(0.0)
         + edge_diffraction.screen_quads(5.0)
@@ -1733,12 +1733,12 @@ def test_round_the_line_through_a_screen_s_corner(tmp_path: Path, corner) -> Non
     # A screen 10 m wide and 4 m high in free space, the listener on the line from the
     # source through one of its corners, seen at a slant: there, and 10 or 30 nm from
     # there (within the model's tolerance of the line), the level lies within 0.01 and
-    # 0.02 dB of the mean of eight points 0.1 mm round it, as BTM's does. On the line each
-    # edge gives the share of the wave the screen hides round the corner as the way sees
-    # it, and the two take it alike; with the angle between the edges themselves it was
+    # 0.02 dB of the mean of eight points 0.1 mm round it. On the line the two edges'
+    # terms alike leave the share of the wave the screen does not hide round the corner
+    # as the way sees it; with the angle between the edges themselves it was
     # 0.19 dB (0.51 at the foot) above that mean, and 10 and 30 nm off the line, where
     # one edge's term counted on its boundary and the other's off it, 3 to 29 dB (with
-    # the corner's halves of 4.3.0, 0.02 and 0.06 dB, and 9 to 14 dB 10 nm off).
+    # the corner's halves of 4.3.0, 0.02 and 0.06 dB, and 7 to 14 dB 10 nm off).
     quads = [[(0.0, -5.0, -4.0), (0.0, 5.0, -4.0), (0.0, 5.0, 0.0), (0.0, -5.0, 0.0)]]
     source = np.array([-5.0, 2.0, -1.0])
     through = 2.0 * np.array([0.0, *corner]) - source
@@ -1755,7 +1755,7 @@ def test_a_reflection_through_a_screen_s_corner(tmp_path: Path) -> None:
     # in front of it where the reflection off it lies exactly at its corner: the level
     # is the mean of eight points 10 um round the listener within 0.01 dB. On the lit
     # side of the reflection's boundary each edge's term takes off what the corner
-    # does not reflect; with the share it hides it was 0.25 to 0.37 dB above.
+    # does not reflect; with the share it hides it was 0.22 to 0.32 dB above.
     far = edge_diffraction.EXTENT
     quads = [[(0.0, -far, -far), (0.0, 0.0, -far), (0.0, 0.0, 0.0), (0.0, -far, 0.0)]]
     source, listener = np.array([-10.0, -2.0, 3.0]), np.array([-15.0, 3.0, -4.5])
@@ -2908,11 +2908,12 @@ def _rhombus(tmp_path: Path, angle: float) -> Edges:
 def test_how_a_screen_s_edges_fade_at_corners_of_other_angles(tmp_path: Path) -> None:
     """The paths over two edges of a screen that meet at a corner of any angle each keep
     their edge's own part of their terms (all the way, 1); on a boundary through the
-    corner itself each gives the share of the wave the corner hides, its angle over
-    2 pi. Square corners faded halfway, the two halves adding up as a quarter plane's
-    do in the Kirchhoff approximation (0.31 dB of step at the line of sight over a
-    barrier 40 m long and 4 m high, from a source 15 m before it, 40 m behind it), and
-    from 45 to 135 degrees before that (2.75 dB from BTM at a corner of 45 degrees)."""
+    corner itself they leave the share of the wave the corner does not hide (the share
+    it hides is its angle over 2 pi). Square corners faded halfway, the two halves
+    adding up as a quarter plane's do in the Kirchhoff approximation (0.31 dB of step at
+    the line of sight over a barrier 40 m long and 4 m high, from a source 15 m before
+    it to a listener 25 m behind it), and from 45 to 135 degrees before that (2.75 dB
+    from BTM at a corner of 45 degrees)."""
     for angle in (90.0, 89.5, 88.0, 60.0, 45.0, 20.0):
         edges = _rhombus(tmp_path, angle)
         assert np.all(edges.fade == 1.0) and np.all(edges.corner >= 0)

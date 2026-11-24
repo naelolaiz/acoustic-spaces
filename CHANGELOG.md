@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+- Fixed (results change): at a square corner of a thin screen (a barrier's top meeting
+  its upright end) the two edges shared the fade, the end edge switching hard on the
+  top's boundary, and the level stepped in still air by 0.31 dB at 63 Hz across 0.2 mm
+  through the line of sight over a barrier 40 m long, and by 0.17 dB at 250 Hz across
+  the shadow boundary of a barrier's end 120 m away (now at most 0.001 and 0.020 dB in
+  any band). Every corner of a thin screen now fades as a free end does, each edge's
+  terms taking their own part of the edge as BTM's integral has it, which changes the
+  level behind barriers of finite length (by up to 0.40 dB at 250 Hz 25 to 105 m behind
+  the middle of one 40 m long). In wind, where a barrier end's top comes onto the line
+  of sight 100 and 200 m down- and upwind of a source, past a barrier 1 m high 30 m from
+  it, the level steps by up to 2.7 dB, where it stepped by up to 9.1 dB, but from 63 to
+  250 Hz by up to 1.1 dB, where it stepped by up to 0.6 dB (a known issue).
+- Fixed: the rays that test a path over a doorway's threshold or lintel crossed the wall
+  beside the doorway, and those that test the path round a screen's upright end started
+  below the tops of screens or a roof level with it: the level stepped by 0.06 dB at
+  63 Hz past a doorway's side, dipped by up to 1.5 dB at 63 Hz just above three screens
+  in a row and by up to 1.1 dB just above a roof and a screen level with it, and was up
+  to 1.3 dB low exactly level with the tops of screens.
+- Added: `validation/continuity.py` measures the validation report's Continuity table,
+  whose rows for the wind starting and the line of sight were stale and whose rows for
+  the barrier's top, a roof, a slanted barrier and where the parabolic equation starts
+  did not come out of the scenes they state; as the wind starts the level steps by up
+  to 0.29 dB over a ground given by absorption coefficients (a known issue).
+
 ## 4.3.0
 
 Error estimates for more results: the uncertainty of a coverage map's values (its

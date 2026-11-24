@@ -698,7 +698,8 @@ def test_behind_a_curved_barrier_as_the_exact_solution(monkeypatch, listener) ->
     part's foot and the plane of the near end's face crosses the leg before it, with
     both_sides the level is the exact one to 0.1 dB from 63 to 500 Hz (0.09 dB here),
     with the barrier rigid and no air, as the exact solution has them (the barrier's 5 %
-    and the air take 0.07 dB off at 125 and at 500 Hz). The fade gave the leg before the
+    takes up to 0.07 dB off, at 125 and 250 Hz, and the air 0.07 dB at 500 Hz; both
+    together up to 0.12 dB). The fade gave the leg before the
     reflection the near end's term as one more event: 0.6 dB too loud at 63 Hz, 1.2 and
     1.5 dB too soft at 125 and 250 Hz."""
     air = Room.air_attenuation
@@ -1038,8 +1039,8 @@ def test_the_paths_over_an_edge_are_tested_as_near_it_in_a_wide_model(
     share of the model's size. The 120 degree bend is rigid: with 5 % its faces reflect
     at the source's grazing angle with a factor near -1, the source and its image nearly
     cancel, and so do the paths round the arms' ends, which fall below the floor of
-    the diffracted paths (they fell 23 dB once the incident wave's terms and those of
-    the faces' reflections faded alike at the ends' corners)."""
+    the diffracted paths (they fell 23 dB at 63 Hz and 6 dB at 8 kHz once the incident
+    wave's terms and those of the faces' reflections faded alike at the ends' corners)."""
     turn = np.radians(bend)
     reach = gap / np.sin(turn / 2)
     source = (float(np.cos(turn / 2) * reach), float(np.sin(turn / 2) * reach), 1.5)
