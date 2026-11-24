@@ -578,3 +578,32 @@ def test_a_point_close_under_an_edge_gets_one_step_of_its_own(band, monkeypatch)
             levels.append(band_db(p, ranges, heights))
         within = 0.001 if speed is still_air else 0.2
         assert np.all(np.abs(levels[0] - levels[1]) < within)
+
+
+def test_a_tall_top_s_steep_sound_over_a_lower_wall_is_taken_whole(monkeypatch) -> None:
+    """Behind a 20 m edge 40 m from the source and a 2 m wall 2 m behind it, the sound
+    from the edge's top comes down over the wall more steeply than from the wall's own
+    top: the steps go by the steepest way from every top met, so that 7, 10, 15 and
+    30 m behind the edge, 1.5 m up, the 1 kHz band in still air is within 0.1 dB of a
+    march under an absorbing layer 320 m thick (0.05 dB at most; 0.17 dB going by the
+    last top alone)."""
+    f = F[4][::2]
+    ranges, heights = np.array([47.0, 50.0, 55.0, 70.0]), np.full(4, 1.5)
+    levels = []
+    for least in (20.0, 320.0):
+        monkeypatch.setattr(parabolic, "LAYER_MIN_M", least)
+        p = parabolic.march(
+            f,
+            still_air,
+            None,
+            1.0,
+            ranges,
+            heights,
+            60.0,
+            independent=True,
+            obstacles=[(40.0, 40.0, 20.0), (42.0, 42.0, 2.0)],
+            refracting=False,
+            bounded=True,
+        )
+        levels.append(band_db(p, ranges, heights))
+    assert np.all(np.abs(levels[0] - levels[1]) < 0.1)

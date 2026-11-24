@@ -3249,7 +3249,8 @@ wide-angle one 0.01 to 0.07 dB: its error does not begin at 15 degrees. A scene 
 needs the wide-angle equation's level at the flatter listeners too sets
 `parabolic_equation: wide_angle`, at the run time given above.
 
-Over the open ground other listeners in the same direction do not change a level.
+Other listeners in the same direction do not change a level, over the open ground or
+behind barriers and buildings.
 Each listener is reached by a last step of its own off the march, and a run's absorbing
 layer starts where the layer of a run for each of its listeners alone would. A
 listener's own layer starts 1.5 times as high as the highest of the source, the listener
@@ -3264,7 +3265,9 @@ apart from those in the shadow. So a listener alone and the same one among other
 the same early energy in every band, within 10⁻¹² of it (`tests/test_refraction.py`:
 with others farther away and higher up, downwind and upwind, on two threads, with the
 wide-angle equation for all, under others in a weather zone, and from two sources whose
-runs are shared). The level does go by where the listener's own layer starts, more where
+runs are shared; `tests/test_barriers_in_wind.py`: behind a barrier and past its end,
+with others farther away, higher up and in other directions, on two threads). Over the
+open ground the level does go by where the listener's own layer starts, more where
 the narrow-angle equation is near its limit or the level is low. For a listener 45 m
 from a source 10 m up over grass, which the reflection reaches 14 degrees up, 8.8 dB
 below free field in its dip over the ground in the 200 Hz third octave, in still air
@@ -3277,15 +3280,17 @@ of the range either side, over grass in the `windy` preset, by 0.001 dB or less 
 octave band and 0.011 dB or less per third octave where the level was less than 35 dB
 below free field (23 places, down- and upwind), and by up to 0.57 dB per octave band and
 3.2 dB per third octave upwind where it was more than 60 dB below it (14 places). Behind
-barriers and buildings the others still change a level (see
-[Known issues](#known-issues)). Where the
-wide-angle equation runs behind a barrier its height step is shared too: it fits the
-roof of a building further along the way once one of its points lies beyond the
-building's front (in a one-off check of the march, from a source 2 m up over a ground of
-200 kPa s/m², a barrier 3 m high 15 m away and a building 60 to 75 m away with its roof
-4 m up, down- and upwind in 5 m/s of wind, a point 90 m away moved the 63 Hz band 20 m
-away by 0.018 dB, and the bands to 500 Hz 20 to 59 m away by 0.002 dB or less
-otherwise). At 1 and 2 kHz, in a one-off check at the steep points of the first set's
+barriers and buildings the narrow-angle equation marches in steps that take no sound
+further up or down than the layer is thick, and there the level does not go with where
+the layer starts: 15 and 60 m from a source 0.5 m up, behind a barrier 7.43 m high 4 m
+from it, in still air, the 250 Hz and 1 kHz bands are the same within 0.001 dB under
+layers that start 21.5, 60 and 240 m up (`tests/test_parabolic_obstacles.py`; with
+steps that take the sound any way up, of which a part comes back down from the top of
+the grid, 1.15 and 0.27 dB apart at 250 Hz and 0.23 and 0.06 dB at 1 kHz). Where the
+wide-angle equation runs with a building on the way, whose roof its height step fits
+once a point lies beyond the building's front, the points short of the front march
+apart from those past it, so that each gets what it gets alone
+(`tests/test_wide_angle.py`). At 1 and 2 kHz, in a one-off check at the steep points of the first set's
 cases from sources 5, 10 and 30 m up to a listener 1.5 m up and from 1.5 m up to 30 m
 up (42 points), the level is within 0.07 dB of the program at 1 kHz; at 2 kHz it is 0.11
 to 0.49 dB off at each case's nearest point, where the sound comes in at 34 degrees, and

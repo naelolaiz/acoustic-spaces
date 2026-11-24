@@ -673,10 +673,16 @@ is an arc of a circle, so its travel time and its length are exact.
   roof, counts for nothing, one whose last barrier stands nearer the listener than half
   as far as along its own way for less, and the listener's own way takes what they lose.
   Inside the equation a barrier lets nothing through below its top (Salomons 1994),
-  which leaves the level behind it 0.7 to 7.4 dB below a rigid one's 2 to 90 m behind
-  (up to 11 dB 3 to 10 m behind, steeply below the top), and a roof is a rigid floor
+  which leaves the level behind it below a rigid one's (1.5 m up behind a barrier 4 m
+  high 15 m from a source 1 m up, in still air over rigid ground, by 1.2 to 3.2 dB 10
+  to 90 m behind and 4.1 to 9.4 dB 2 to 5 m behind; 2 m behind one 6 m high 20 m away
+  by 10.9 to 14.6 dB; a one-off check), and a roof is a rigid floor
   at its own height, between the equation's heights, over which the field goes on; the
-  ratio cancels most of that. Where the sound reaches a point more steeply than 15
+  ratio cancels most of that. Past a barrier or a building the equation marches in
+  steps that take no sound further up or down than its absorbing layer is thick, so
+  that what the top bends steeply up does not come back down into the shadow from the
+  top of the grid: the level behind does not go with how high the grid reaches
+  ([Validation](validation.md#the-wide-angle-parabolic-equation)). Where the sound reaches a point more steeply than 15
   degrees the wide-angle equation runs, in which a roof is a rigid floor on its height
   steps: behind a building in 10 m/s the effect steps by 0.01 to 0.05 dB from 250 Hz to
   1 kHz, 0.30 dB at 125 Hz and 0.35 dB at 2 kHz where the points cross that angle, the

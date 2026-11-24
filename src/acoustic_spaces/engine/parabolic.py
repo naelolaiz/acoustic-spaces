@@ -37,9 +37,14 @@ with the top's height (a zero-field, or Kirchhoff, screen: Salomons 1994, J. Aco
 Am. 95, 3109). A building's front face does the same at its roof's height; over the roof
 the field marches on the heights from the roof up, over a rigid floor there, and behind
 its back face the field below the roof starts from nothing; a source over a roof starts
-with its image in it. Such a screen lets through less than a rigid one does (0.7 to
-7.4 dB less 2 to 90 m behind it, up to 11 dB 3 to 10 m behind it steeply below its top),
-by an amount that hangs on the geometry and hardly on the weather.
+with its image in it. Such a screen lets through less than a rigid one does, by an
+amount that hangs on the geometry and hardly on the weather: in still air over rigid
+ground, 1.5 m up behind a barrier 4 m high 15 m from a source 1 m up, 1.2 to 3.2 dB less
+10 to 90 m behind it and 4.1 to 9.4 dB less 2 to 5 m behind it, and 2 m behind one 6 m
+high 20 m away 10.9 to 14.6 dB less (the octave bands from 63 Hz to 8 kHz against the
+four paths of the uniform theory of diffraction; a one-off check). The engine's runs
+past obstacles march in bounded steps (:func:`march`, ``bounded``), so that the sound
+an obstacle's top bends steeply up does not come back down from the top of the grid.
 
 The frequencies of one band are marched together, on the grid and in the steps of the
 highest, under the absorbing layer of the lowest.
@@ -945,16 +950,16 @@ class _Steps:
         :func:`march`).
 
         ``bounded``: every step is a bounded one (:func:`march`; the points lie at or
-        past the first obstacle). The sound's ways start at the source and at each
-        obstacle's top, and go on to the next obstacle's top and to the points, straight
-        and by way of the ground (or of the roof the march is over). The march goes on
-        in full steps, with a shorter one to the next obstacle and each point's own last
-        one, as a plain march does, where those take such a way whole (:meth:`takes`).
-        To the next obstacle, where they do not, the march goes in equal shorter steps
-        that do (:meth:`shorter`), from the field as it was at the source or just past
-        the last obstacle. A point that the last obstacle's top (or the source) reaches
-        too steeply gets one step of its own from that field, whatever the other points
-        are (:meth:`propagator`)."""
+        past the first obstacle). The sound's ways start at the source and at the top
+        of each obstacle met, and go on to the next obstacle's top and to the points,
+        straight and by way of the ground (or of the roof the march is over). The march
+        goes on in full steps, with a shorter one to the next obstacle and each point's
+        own last one, as a plain march does, where those take the steepest such way
+        whole (:meth:`takes`). To the next obstacle, where they do not, the march goes
+        in equal shorter steps that do (:meth:`shorter`), from the field as it was at
+        the source or just past the last obstacle. A point that the source or a top
+        met reaches too steeply gets one step of its own from that field, whatever the
+        other points are (:meth:`propagator`)."""
         f, n, dz, z, step = self.f, self.n, self.dz, self.z, self.step
         #: Where the march begins (m from the source), and where its obstacles do.
         begin, first = 0.0, 1e-9
@@ -1028,11 +1033,12 @@ class _Steps:
             psi = self.start(under)
         side = None  # a point's own last step
         last = None  # the last point's range and own step, while the march stays where it was
-        # In bounded steps, where the sound's ways start from: the source or the last
-        # obstacle met. Its range, its height (the source's, an obstacle's top's) above
-        # the ground or the roof past it, the tops met at that range, and the field
-        # there as it was (the starting field is made again where the march has left it).
-        origin, rise, tops = 0.0, max(self.zs - under, 0.0), [0.0]
+        # In bounded steps, where the sound's ways start from: the source and the tops
+        # of the obstacles met, the range and the height (m) of each; and the range of
+        # the last of them and the field there as it was (the starting field is made
+        # again where the march has left it).
+        met = [(0.0, self.zs)]
+        origin = 0.0
         edge = psi if bounded and r == 0.0 else None
         for index in order:
             goal = ranges[index]
@@ -1047,8 +1053,8 @@ class _Steps:
                     last = None
                     if bounded:
                         if r > 1e-9:
-                            tops = [event[2]] if r > origin else [*tops, event[2]]
-                            origin, rise = r, max(max(tops) - self.roof, 0.0)
+                            met.append((r, event[2]))
+                            origin = r
                         edge = psi
                     continue
                 if goal - r <= 1e-9:
@@ -1057,11 +1063,19 @@ class _Steps:
                 # and at the goal.
                 obstacle = bool(events) and events[0][0] <= goal + 1e-9
                 if bounded:
-                    # The way from the source or the last obstacle's top to the next
-                    # one's, or to the point, by way of the ground.
+                    # The steepest of the ways from the source and from the tops met
+                    # to the next obstacle's top, or to the point, by way of the ground
+                    # (the roof): a top higher than those after it sends its sound
+                    # down over them.
                     there = events[0][2] if obstacle else heights[index]
-                    span = (events[0][0] if obstacle else goal) - origin
-                    slope = (rise + max(there - self.roof, 0.0)) / span
+                    target = events[0][0] if obstacle else goal
+                    span = target - origin
+                    above = max(there - self.roof, 0.0)
+                    slope = max(
+                        (max(top - self.roof, 0.0) + above) / (target - at)
+                        for at, top in met
+                        if target - at > 1e-9
+                    )
                     if not self.takes(slope, min(step, span)):
                         if edge is None:
                             edge = self.start(under)
