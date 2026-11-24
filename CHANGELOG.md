@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed: the editor's Run demo no longer stays running for ever once a demo has written
+  everything (as after a long GPU run with NVIDIA's driver on Linux, which can spin as
+  the process exits). A demo, or an example's script, now ends with the line *every
+  step has run*; a process that then fails, or has not ended 30 s later (and is
+  stopped), leaves the run done with a warning; a process the demo left holding its
+  output no longer keeps the run going; and Cancel and closing the editor stop the demo
+  and the processes it started (forcibly 5 s after asking on Linux and macOS, at once on
+  Windows).
 - Fixed (results change): behind barriers and buildings in wind or a temperature
   gradient the parabolic equation's level went with how high its grid reached and so
   with the other listeners in a listener's direction, by 2.0 to 2.4 dB at 2 and 4 kHz

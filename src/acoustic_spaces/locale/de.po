@@ -1537,6 +1537,59 @@ msgstr "Die Demo liest die Szene aus ihrer Datei. Die Szene zuerst speichern?"
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid ""
+"The demo had run every step, but its process (PID {pid}) had not ended "
+"{seconds:.0f} s later: the editor stopped it. What it wrote is complete."
+msgstr ""
+"Die Demo hatte alle Schritte ausgeführt, aber ihr Prozess (PID {pid}) war "
+"{seconds:.0f} s später nicht beendet: Der Editor hat ihn beendet. Was sie "
+"geschrieben hat, ist vollständig."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The demo's process had ended, but a process it started still holds its "
+"output open: the editor no longer waits for it."
+msgstr ""
+"Der Prozess der Demo war beendet, aber ein von ihr gestarteter Prozess hält "
+"ihre Ausgabe noch offen: Der Editor wartet nicht mehr auf ihn."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The demo's process had ended, but a process it started still held its output "
+"open: the editor stopped the processes the demo left."
+msgstr ""
+"Der Prozess der Demo war beendet, aber ein von ihr gestarteter Prozess hielt "
+"ihre Ausgabe noch offen: Der Editor hat die Prozesse beendet, die die Demo "
+"hinterlassen hat."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The demo's process was stopped after every step had run: what it wrote is "
+"complete."
+msgstr ""
+"Der Prozess der Demo wurde beendet, nachdem alle Schritte ausgeführt waren: "
+"Was sie geschrieben hat, ist vollständig."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The demo had run every step, but its process then ended by signal {signal}. "
+"What it wrote is complete."
+msgstr ""
+"Die Demo hatte alle Schritte ausgeführt, aber ihr Prozess endete danach "
+"durch das Signal {signal}. Was sie geschrieben hat, ist vollständig."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The demo had run every step, but its process then ended with exit code "
+"{code}. What it wrote is complete."
+msgstr ""
+"Die Demo hatte alle Schritte ausgeführt, aber ihr Prozess endete danach mit "
+"dem Exit-Code {code}. Was sie geschrieben hat, ist vollständig."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
 "The {demo} demo is done in {time:.1f} s ({step}); it wrote into {folder}."
 msgstr ""
 "Die Demo {demo} ist in {time:.1f} s fertig ({step}); sie hat nach {folder} "
@@ -8095,6 +8148,11 @@ msgstr "Die 3D-Ansicht benötigt eine Anzeige mit OpenGL."
 #: acoustic_spaces/gui/worker.py
 msgid "Drawing the spread from the absorption uncertainty…"
 msgstr "Streuung aus der Unsicherheit der Absorption wird gezogen…"
+
+#: acoustic_spaces/gui/worker.py
+#, python-brace-format
+msgid "waiting up to {seconds:.0f} s for the demo's process to end"
+msgstr "warte bis zu {seconds:.0f} s, bis der Prozess der Demo endet"
 
 #: acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format

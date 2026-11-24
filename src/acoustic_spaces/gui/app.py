@@ -1938,6 +1938,66 @@ class MainWindow(QMainWindow):
 
     def _demo_done(self, report: dict) -> None:
         elapsed = time.perf_counter() - self._started
+        stopped = report.get("stopped")
+        if stopped == "not ending":
+            self.log(
+                fmt(
+                    _(
+                        "The demo had run every step, but its process (PID {pid}) had not "
+                        "ended {seconds:.0f} s later: the editor stopped it. What it wrote "
+                        "is complete."
+                    ),
+                    pid=report["pid"],
+                    seconds=report["waited_s"],
+                ),
+                "warning",
+            )
+        elif stopped == "output held" and sys.platform == "win32":
+            self.log(
+                _(
+                    "The demo's process had ended, but a process it started still holds "
+                    "its output open: the editor no longer waits for it."
+                ),
+                "warning",
+            )
+        elif stopped == "output held":
+            self.log(
+                _(
+                    "The demo's process had ended, but a process it started still held its "
+                    "output open: the editor stopped the processes the demo left."
+                ),
+                "warning",
+            )
+        elif stopped == "cancelled":
+            self.log(
+                _(
+                    "The demo's process was stopped after every step had run: what it "
+                    "wrote is complete."
+                )
+            )
+        code = report.get("exit_code", 0)
+        if code < 0:  # ended by a signal (Linux and macOS)
+            self.log(
+                fmt(
+                    _(
+                        "The demo had run every step, but its process then ended by signal "
+                        "{signal}. What it wrote is complete."
+                    ),
+                    signal=-code,
+                ),
+                "warning",
+            )
+        elif code:
+            self.log(
+                fmt(
+                    _(
+                        "The demo had run every step, but its process then ended with exit "
+                        "code {code}. What it wrote is complete."
+                    ),
+                    code=code,
+                ),
+                "warning",
+            )
         self.log(
             fmt(
                 _("The {demo} demo is done in {time:.1f} s ({step}); it wrote into {folder}."),
@@ -1973,7 +2033,7 @@ class MainWindow(QMainWindow):
     def cancel_simulation(self) -> None:
         if self.job is not None:
             self.job.cancel()
-            if isinstance(self.job, DemoJob):  # a process of its own: it stops at once
+            if isinstance(self.job, DemoJob):  # processes of its own: they stop at once
                 self.log(_("Stopping the demo…"))
             else:
                 self.log(_("Cancelling at the next stage…"))

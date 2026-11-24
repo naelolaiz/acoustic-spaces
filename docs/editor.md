@@ -82,10 +82,15 @@ The editor works on the same scene files as the command line.
   scenes whose **Run on** is *default* then run on the fastest device found, in the
   editor and on the command line.
 - **Simulation > Run demo…** runs a [demo](demos.md) of the open scene in the
-  background, with what it prints under **Messages** and **Cancel** to stop it: *This
-  scene* ([a demo of any scene](demos.md#a-demo-of-any-scene)), and for an example's
-  scene its own demos and scripts. See [Running a demo](demos.md#running-a-demo) for
-  the window.
+  background, with what it prints under **Messages** and **Cancel** to stop it and the
+  processes it started: *This scene* ([a demo of any scene](demos.md#a-demo-of-any-scene)),
+  and for an example's scene its own demos and scripts. See
+  [Running a demo](demos.md#running-a-demo) for the window. The run ends when the
+  demo's process ends. A demo, or an example's script, ends with the line *every step
+  has run*; if its process then fails, or has not ended 30 s later (the editor then
+  stops it), a warning says so and the run is done, as what it wrote is complete. A
+  process the demo left holding its output no longer keeps the run going; on Linux and
+  macOS the editor stops it too.
 - The scene tree's **Outputs** entry chooses what a run writes: mono, binaural,
   Ambisonics or loudspeakers. For binaural, **HRTF file…** takes a SOFA file from the
   disk, **Spherical head** goes back to the model, and **Download HRTFs…** offers the

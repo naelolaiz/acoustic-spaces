@@ -1526,6 +1526,59 @@ msgstr "De demo leest de scène uit haar bestand. De scène eerst opslaan?"
 #: acoustic_spaces/gui/app.py
 #, python-brace-format
 msgid ""
+"The demo had run every step, but its process (PID {pid}) had not ended "
+"{seconds:.0f} s later: the editor stopped it. What it wrote is complete."
+msgstr ""
+"De demo had alle stappen uitgevoerd, maar het proces (PID {pid}) was "
+"{seconds:.0f} s later nog niet beëindigd: de editor heeft het gestopt. Wat "
+"de demo schreef, is volledig."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The demo's process had ended, but a process it started still holds its "
+"output open: the editor no longer waits for it."
+msgstr ""
+"Het proces van de demo was beëindigd, maar een proces dat de demo startte "
+"houdt de uitvoer nog open: de editor wacht er niet langer op."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The demo's process had ended, but a process it started still held its output "
+"open: the editor stopped the processes the demo left."
+msgstr ""
+"Het proces van de demo was beëindigd, maar een proces dat de demo startte "
+"hield de uitvoer nog open: de editor heeft de processen gestopt die de demo "
+"achterliet."
+
+#: acoustic_spaces/gui/app.py
+msgid ""
+"The demo's process was stopped after every step had run: what it wrote is "
+"complete."
+msgstr ""
+"Het proces van de demo is gestopt nadat alle stappen waren uitgevoerd: wat "
+"de demo schreef, is volledig."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The demo had run every step, but its process then ended by signal {signal}. "
+"What it wrote is complete."
+msgstr ""
+"De demo had alle stappen uitgevoerd, maar het proces eindigde daarna door "
+"signaal {signal}. Wat de demo schreef, is volledig."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
+"The demo had run every step, but its process then ended with exit code "
+"{code}. What it wrote is complete."
+msgstr ""
+"De demo had alle stappen uitgevoerd, maar het proces eindigde daarna met "
+"afsluitcode {code}. Wat de demo schreef, is volledig."
+
+#: acoustic_spaces/gui/app.py
+#, python-brace-format
+msgid ""
 "The {demo} demo is done in {time:.1f} s ({step}); it wrote into {folder}."
 msgstr ""
 "De demo {demo} is klaar in {time:.1f} s ({step}); er is geschreven naar "
@@ -8055,6 +8108,11 @@ msgstr "De 3D-weergave vereist een scherm met OpenGL."
 #: acoustic_spaces/gui/worker.py
 msgid "Drawing the spread from the absorption uncertainty…"
 msgstr "Spreiding uit de onzekerheid van de absorptie wordt getrokken…"
+
+#: acoustic_spaces/gui/worker.py
+#, python-brace-format
+msgid "waiting up to {seconds:.0f} s for the demo's process to end"
+msgstr "wacht tot {seconds:.0f} s tot het proces van de demo eindigt"
 
 #: acoustic_spaces/gui/yaml_panel.py
 #, python-brace-format

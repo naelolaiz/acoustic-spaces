@@ -9,7 +9,12 @@ source); its result is dropped.
 from __future__ import annotations
 
 import os
+import queue
+import signal
 import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -109,10 +114,15 @@ class SimulationJob(QThread):
         except Exception as exc:  # shown to the user rather than lost in the thread
             self.failed.emit(str(exc) or type(exc).__name__)
             return
-        if self._stop:
+        if self._stop and not self._complete(result):
             self.cancelled.emit()
         else:
             self.done.emit(result)
+
+    def _complete(self, result) -> bool:
+        """Whether ``result`` is whole although the job was cancelled, so that the job
+        is done rather than cancelled (a demo that had run every step)."""
+        return False
 
 
 class MapJob(SimulationJob):
@@ -185,12 +195,38 @@ class TuneJob(SimulationJob):
         return tuning.tune(self.room, threads=self.threads, say=self._say, keep=False)
 
 
+#: How long the editor waits, once a demo has said that every step has run (or has
+#: closed its output), for its process to end (s): past it the editor stops the process,
+#: as everything it writes is complete.
+DEMO_EXIT_S = 30.0
+#: How long the editor reads what is left of a demo's output once its process has ended
+#: (s): past it the editor no longer waits for a process the demo started that still
+#: holds the output, and on Linux and macOS stops it.
+DEMO_DRAIN_S = 2.0
+#: How long a demo's processes have to end after SIGTERM before SIGKILL, and then
+#: before the editor no longer waits for them (s).
+DEMO_KILL_S = 5.0
+#: How often the editor looks at a demo's process while no line comes (s).
+_DEMO_POLL_S = 0.2
+
+
 class DemoJob(SimulationJob):
     """Runs a step of a demo (:mod:`acoustic_spaces.demos`) in a process of its own, as
     :meth:`Demo.run_argv` gives it (``python NAME_demo.py STEP``, or ``python -m
-    acoustic_spaces.demos.scene_demo STEP`` for the demo of any scene): what the demo
-    prints becomes progress messages, and Cancel stops it where it is. ``done`` carries
-    the demo, the step and the folder the demo wrote into."""
+    acoustic_spaces.demos.scene_demo STEP`` for the demo of any scene; an example's
+    script that is no demo through :mod:`acoustic_spaces.demos.run_script`): what the
+    demo prints becomes progress messages, and Cancel stops it and what it started where
+    they are. The run ends when the demo's process has ended. A demo that said every step
+    has run (:data:`~acoustic_spaces.demos.DONE`) but whose process does not end within
+    :data:`DEMO_EXIT_S` is stopped, and the editor no longer waits for a process it
+    started that still holds its output :data:`DEMO_DRAIN_S` after it ended (on Linux
+    and macOS it stops that too); the run is done all the same, and so it is when the
+    process fails after that line. ``done`` carries the demo, the step, the folder the
+    demo wrote into, and ``stopped``: why the editor stopped the demo's processes
+    (``"not ending"``, ``"output held"``, ``"cancelled"`` after every step had run) or
+    None, with the demo's ``pid``, how long the editor waits for it to end
+    (``waited_s``) and its ``exit_code`` where it failed after every step had run (else
+    0)."""
 
     kind = "demo"
 
@@ -201,22 +237,21 @@ class DemoJob(SimulationJob):
         self.args = args
         #: Every line the demo printed, in order.
         self.lines: list[str] = []
-        self._process: subprocess.Popen | None = None
 
     @property
     def argv(self) -> list[str]:
-        """The command as a list (:meth:`Demo.run_argv`)."""
-        return self.demo.run_argv(self.step, self.args)
-
-    def cancel(self) -> None:
-        """Stop the demo: it is a process of its own, so it ends at once rather than at
-        the next stage."""
-        super().cancel()
-        process = self._process
-        if process is not None and process.poll() is None:
-            process.terminate()
+        """The command as a list (:meth:`Demo.run_argv`). An example's script that is no
+        demo prints no :data:`~acoustic_spaces.demos.DONE` line of its own: it runs
+        through :mod:`acoustic_spaces.demos.run_script`, which prints it once the script
+        has ended well."""
+        argv = self.demo.run_argv(self.step, self.args)
+        if self.demo.stepless:
+            return [argv[0], "-m", "acoustic_spaces.demos.run_script", *argv[1:]]
+        return argv
 
     def compute(self) -> dict:
+        from acoustic_spaces.demos import DONE
+
         folder = Path(self.demo.folder)
         folder.mkdir(parents=True, exist_ok=True)
         self._say(self.demo.command(self.step, self.args))
@@ -224,41 +259,188 @@ class DemoJob(SimulationJob):
         # arrive as it writes them rather than at the end. Its output passes as UTF-8,
         # whatever the system's code page (on Windows a pipe takes the ANSI code page,
         # which may lack the letters of a folder's name); a byte that is no UTF-8 (from
-        # ffmpeg, which writes into the same pipe) reads as a replacement character.
-        process = self._process = subprocess.Popen(
+        # ffmpeg, which writes into the same pipe) reads as a replacement character. It
+        # reads nothing (nor does what it starts), and on Linux and macOS it starts a
+        # session of its own, so that stopping it stops what it started too.
+        process = subprocess.Popen(
             self.argv,
             cwd=folder,
             env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            start_new_session=sys.platform != "win32",
         )
+        lines: queue.SimpleQueue = queue.SimpleQueue()
+        threading.Thread(
+            target=_read_lines, args=(process.stdout, lines), name="demo output", daemon=True
+        ).start()
         try:
-            for line in process.stdout:  # type: ignore[union-attr]
-                text = line.rstrip()
-                if text:
-                    self.lines.append(text)
-                    self._say(text)
-            code = process.wait()
-        finally:
-            if process.poll() is None:  # cancelled, or this thread failed
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
-            if process.stdout is not None:
-                process.stdout.close()
-        if self._stop:
+            stopped, done = self._follow(process, lines, DONE)
+        except BaseException:  # this thread failed: the demo goes too
+            _stop_processes(process)
+            raise
+        if stopped is not None:
+            _stop_processes(process)
+        if stopped == "cancelled" and not done:
             raise Cancelled
-        if code:
+        if stopped == "not ending" and not done:
+            raise RuntimeError(
+                f"{self.step}: the demo closed its output, but its process had not ended "
+                f"{DEMO_EXIT_S:.0f} s later; the editor stopped it."
+            )
+        # Its own exit code, where it ended by itself: a failure once every step had run
+        # (a library failing as the process ends) leaves what it wrote whole.
+        code = process.returncode if stopped in (None, "output held") else 0
+        if code and not done:
             last = self.lines[-1] if self.lines else ""
             raise RuntimeError(f"{self.step}: the demo stopped ({code}). {last}".strip())
         work = self.demo.work_folder(self.args)
-        return {"demo": self.demo.name, "step": self.step, "folder": str(work)}
+        return {
+            "demo": self.demo.name,
+            "step": self.step,
+            "folder": str(work),
+            "stopped": stopped,
+            "pid": process.pid,
+            "waited_s": DEMO_EXIT_S,
+            "exit_code": code or 0,
+        }
+
+    def _complete(self, result) -> bool:
+        # compute() gives a result only when what the demo wrote is whole (a Cancel
+        # before every step had run raises Cancelled), whenever Cancel came.
+        return result is not None
+
+    def _follow(
+        self, process: subprocess.Popen, lines: queue.SimpleQueue, done_line: str
+    ) -> tuple[str | None, bool]:
+        """Pass on the demo's lines from ``lines`` until its process has ended and its
+        output with it; whether it said every step has run (a line beginning with
+        ``done_line``), and why its processes must be stopped: None (they ended), or
+        ``"cancelled"``, ``"not ending"`` (no end :data:`DEMO_EXIT_S` after that line or
+        after the output closed) or ``"output held"`` (the output still open
+        :data:`DEMO_DRAIN_S` after the process ended)."""
+        done_at: float | None = None
+        closed_at: float | None = None
+        ended_at: float | None = None
+        told = False
+
+        def take(line: str | None) -> None:
+            """Note a line of the demo's output, or its end (None), and pass it on."""
+            nonlocal done_at, closed_at
+            if line is None:
+                closed_at = time.monotonic()
+            elif line.strip():
+                text = line.rstrip()
+                self.lines.append(text)
+                if done_at is None and text.startswith(done_line):
+                    done_at = time.monotonic()
+                self._say(text)
+
+        try:
+            while not self._stop:
+                if closed_at is None:
+                    try:
+                        take(lines.get(timeout=_DEMO_POLL_S))
+                    except queue.Empty:
+                        pass
+                else:
+                    time.sleep(_DEMO_POLL_S)
+                # After every line too: output that never pauses runs out the time as
+                # well as silence does.
+                now = time.monotonic()
+                if ended_at is None and process.poll() is not None:
+                    ended_at = now
+                if ended_at is not None:
+                    if closed_at is None and now - ended_at > DEMO_DRAIN_S:
+                        # What is read already is passed on; what a process the demo
+                        # started still writes is not waited for.
+                        for _line in range(lines.qsize()):
+                            take(lines.get_nowait())
+                            if closed_at is not None:
+                                break
+                        if closed_at is None:
+                            return "output held", done_at is not None
+                    if closed_at is not None:
+                        return None, done_at is not None
+                    continue
+                finished = done_at if done_at is not None else closed_at
+                if finished is None:
+                    continue
+                if now - finished > DEMO_EXIT_S:
+                    return "not ending", done_at is not None
+                if not told and now - finished > DEMO_DRAIN_S:
+                    told = True
+                    self._say(
+                        _("waiting up to {seconds:.0f} s for the demo's process to end").format(
+                            seconds=DEMO_EXIT_S
+                        )
+                    )
+        except Cancelled:
+            pass
+        return "cancelled", done_at is not None
+
+
+def _read_lines(stream, lines: queue.SimpleQueue) -> None:
+    """Put each line of ``stream`` in ``lines``, then None once it ends (or can be read
+    no more), and close it. A demo's output is read so, in a thread of its own, so that
+    the editor follows the demo's process whatever holds the output open."""
+    try:
+        for line in stream:
+            lines.put(line)
+    except (OSError, ValueError):
+        pass
+    finally:
+        lines.put(None)
+        try:
+            stream.close()
+        except OSError:
+            pass
+
+
+def _group_alive(process: subprocess.Popen) -> bool:
+    """Whether a process of the demo's group is left (Linux and macOS): the demo itself
+    is reaped first, so that its group can empty."""
+    process.poll()
+    try:
+        os.killpg(process.pid, 0)
+    except (ProcessLookupError, PermissionError):
+        return False
+    return True
+
+
+def _stop_processes(process: subprocess.Popen) -> None:
+    """Stop the demo's process and those it started: on Linux and macOS its whole
+    session's group, SIGTERM and then, for what has not ended :data:`DEMO_KILL_S`
+    later, SIGKILL; on Windows the demo's tree (taskkill), while the demo is there to
+    find it by. The editor waits no longer than that: a process stuck in the kernel ends
+    when it can."""
+    if sys.platform == "win32":
+        if process.poll() is None:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                check=False,
+            )
+    else:
+        for sent in (signal.SIGTERM, signal.SIGKILL):
+            if not _group_alive(process):
+                break
+            try:
+                os.killpg(process.pid, sent)
+            except (ProcessLookupError, PermissionError):
+                break
+            deadline = time.monotonic() + DEMO_KILL_S
+            while time.monotonic() < deadline and _group_alive(process):
+                time.sleep(0.05)
+    try:
+        process.wait(timeout=DEMO_KILL_S)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 class DownloadJob(QThread):
@@ -318,6 +500,9 @@ class ExportJob(SimulationJob):
 
 
 __all__ = [
+    "DEMO_DRAIN_S",
+    "DEMO_EXIT_S",
+    "DEMO_KILL_S",
     "Cancelled",
     "DemoJob",
     "DownloadJob",
