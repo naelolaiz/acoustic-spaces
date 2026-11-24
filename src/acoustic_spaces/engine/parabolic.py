@@ -52,6 +52,7 @@ import math
 import threading
 
 import numpy as np
+from scipy.special import hankel1e
 
 #: Height steps per wavelength.
 STEPS_PER_WAVELENGTH = 10
@@ -91,6 +92,43 @@ LAYER_STRENGTH = 1.0
 #: A march that begins from a given field (``start``) takes it up to the absorbing layer;
 #: it fades out over this share of the layer's thickness.
 START_FADE = 0.1
+#: A march in bounded steps (``bounded``: the engine's runs past obstacles). A bounded step
+#: takes all of the sound that goes up or down less than BOUNDED_WHOLE of the absorbing
+#: layer's thickness and a share that falls smoothly to none at BOUNDED_WINDOW of it.
+BOUNDED_WHOLE = 0.25
+BOUNDED_WINDOW = 0.7
+#: Such a step's table is larger than 1 for waves some 65 to 80 degrees from the
+#: horizontal (by up to 5 per cent): each grows from step to step until it has gone up
+#: into the layer, where it ends. Where one would grow by more than BOUNDED_GROWTH on
+#: its way from the ground to the layer's top, under a layer that starts a kilometre
+#: up or more, the table is brought down to what makes it grow by that, by a factor
+#: that spreads the sound by no more than BOUNDED_SMOOTH of the layer's thickness
+#: (:func:`_bounded`). So no sound goes further up or down in a step than the layer is
+#: thick.
+BOUNDED_GROWTH = 1e10
+BOUNDED_SMOOTH = 0.3
+#: A bounded step takes a wave whole where what it goes up or down in the step, and
+#: BOUNDED_FRESNEL times the width of its Fresnel zone over the step (at the lowest
+#: frequency) beside that, lie within BOUNDED_WHOLE of the layer's thickness: its table is
+#: then within about a thousandth of the plain step's (:meth:`_Steps.takes`).
+BOUNDED_FRESNEL = 2.7
+#: Between two obstacles the march takes steps no shorter than this many of the shortest
+#: wavelengths for the sound's sake (:meth:`_Steps.run`).
+BOUNDED_SHORTEST = 0.1
+#: In bounded steps the absorbing layer also damps what stands in it at a step's end, by
+#: exp(-LAYER_DEEP (2 depth)^LAYER_DEEP_POWER) a step (the depth 0 at the layer's start and
+#: 1 at its top): next to nothing over the layer's start, which stays as it is, and from
+#: its middle on 30 dB and more. Sound that passes the top of the grid in a step comes
+#: back down from there, as the transform repeats the grid in height: a bounded step
+#: takes it no further than into that upper half.
+LAYER_DEEP = 3.5
+LAYER_DEEP_POWER = 6
+#: A bounded step's table is the transform of its kernel, sampled BOUNDED_FINE of the
+#: shortest wavelength over the step's length times as finely as the heights (the kernel
+#: is as narrow as the step is short), at most BOUNDED_FINEST times; a shorter step's
+#: is made from the plain step's table instead (:func:`_bounded`).
+BOUNDED_FINE = 0.366
+BOUNDED_FINEST = 8
 #: A step takes the frequencies (the rows of the field) this many at a time, so that
 #: what it works on stays in the processor's cache from one pass to the next. Each row
 #: comes out with the bytes it has when all the rows are taken at once (numpy 1.24, 1.26,
@@ -121,6 +159,7 @@ def march(
     edges: list | None = None,
     start: tuple | None = None,
     layer: float | None = None,
+    bounded: bool = False,
 ) -> np.ndarray:
     """(F, n) the complex pressure at ``frequencies`` (F,) Hz (time as exp(-i omega t),
     free field exp(ikR) / R) at the points ``ranges`` (n,, m along the ground from the
@@ -141,9 +180,7 @@ def march(
     ranges asked for break up each other's steps; ``independent`` takes each one's last
     step off to the side, so that each range gets what a march to it alone gives, whatever
     else is asked for (the engine's runs: :func:`acoustic_spaces.engine.refracted.solve`),
-    but for the wide-angle equation's height step where a building stands short of the
-    farthest point (:func:`acoustic_spaces.engine.wide_angle.march`) and, with
-    ``refracting`` None, for which equation the steep points take (below).
+    but, with ``refracting`` None, for which equation the steep points take (below).
 
     In wind or temperature gradients the points the reflection off the ground reaches
     more steeply than STEEP_DEG are given by the wide-angle equation
@@ -192,13 +229,34 @@ def march(
     down from the top of the grid, the layer leaves exp(-2 ``LAYER_STRENGTH`` thickness
     / (3 s)) at most (less where the grid, a power of two of height steps, goes on
     above the layer, at the layer's full strength): a start with waves that rise
-    steeply needs it thicker. With ``refracting`` False alone."""
+    steeply needs it thicker. With ``refracting`` False alone.
+
+    ``bounded`` (with ``independent``) marches a run past obstacles in bounded steps; a
+    run over open ground is the plain one. An obstacle's top bends some of the sound
+    almost straight up and down, far more of it than it bends down to a point in its
+    shadow, and the source sends some up as steeply. A plain step takes that sound any
+    way up in one step: past the absorbing layer, which takes sound by the metre along
+    the range, and past the top of the grid, from where it comes back down, as the
+    transform repeats the grid in height. It ends in the shadow, by an amount that goes
+    with where the layer starts. A bounded step takes no sound further up or down than
+    the layer is thick, and the layer damps what stands in its upper half at a step's
+    end (LAYER_DEEP), so that none comes back. The bounded step takes whole the sound
+    that goes up or down gently enough (:meth:`_Steps.takes`: to 45 degrees and more
+    from the horizontal) and less of the steeper. A point that the sound from the last
+    obstacle's top reaches more steeply, close under it, gets one step of its own from
+    there, which takes the sound of every height; and where the next obstacle's top
+    lies as steeply, the march goes there in shorter steps (:meth:`_Steps.run`).
+    Without ``start``, ``layer`` and ``edges``."""
     if edges is not None and refracting is not False:
         raise ValueError("the field at the obstacles' edges needs refracting=False")
     if start is not None and refracting is not False:
         raise ValueError("a march from a given field needs refracting=False")
     if layer is not None and refracting is not False:
         raise ValueError("a march with a thicker absorbing layer needs refracting=False")
+    if bounded and not independent:
+        raise ValueError("a march in bounded steps takes each point by its own last step")
+    if bounded and (start is not None or layer is not None or edges is not None):
+        raise ValueError("a march in bounded steps begins at the source, under its own layer")
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
     if start is not None and not start[0] > 0.0:
@@ -227,6 +285,7 @@ def march(
             edges,
             start,
             layer,
+            bounded,
         )
     from acoustic_spaces.engine import wide_angle  # which imports this module
 
@@ -247,6 +306,7 @@ def march(
             obstacles,
             steps_per_wavelength,
             trunk,
+            bounded=bounded,
         )
     if trunk is not None:
         # What the trunk keeps would stay beside the wide-angle march's memory, which
@@ -332,6 +392,8 @@ class Trunk:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._steps: _Steps | None = None
+        #: Whether the march kept was made in bounded steps.
+        self._bound = False
         self._restart()
 
     def clear(self) -> None:
@@ -368,16 +430,43 @@ def _march(
     edges: list | None = None,
     start: tuple | None = None,
     layer: float | None = None,
+    bounded: bool = False,
 ) -> np.ndarray:
     """:func:`march` by the narrow-angle equation alone, past ``obstacles`` (as
     :func:`_obstacles` gives them)."""
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     ranges = np.asarray(ranges, dtype=float)
     heights = np.asarray(heights, dtype=float)
+    if bounded:
+        # The steps are bounded where the march meets an obstacle: a point short of the
+        # first one gets the plain march, as it does by itself.
+        nearest = min((near for near, _, _ in obstacles), default=math.inf)
+        short = ranges < nearest - 1e-9
+        if short.any() and not short.all():
+            both = np.empty((len(f), len(ranges)), dtype=complex)
+            for part, which, kept in ((short, False, None), (~short, True, trunk)):
+                both[:, part] = _march(
+                    f,
+                    speed,
+                    impedance,
+                    zs,
+                    ranges[part],
+                    heights[part],
+                    top,
+                    screen,
+                    speed_at,
+                    independent,
+                    obstacles,
+                    steps_per_wavelength,
+                    kept,
+                    bounded=which,
+                )
+            return both
+        bounded = not short.any()
     apart = start is not None or layer is not None
     if trunk is None or screen is not None or speed_at is not None or apart:
         alone = _Steps(f, speed, impedance, zs, top, screen, speed_at, steps_per_wavelength, layer)
-        return alone.run(ranges, heights, independent, obstacles, None, edges, start)
+        return alone.run(ranges, heights, independent, obstacles, None, edges, start, bounded)
     with trunk._lock:
         steps = trunk._steps
         if steps is None or not steps.fits(f, speed, zs, top, steps_per_wavelength):
@@ -385,7 +474,7 @@ def _march(
             trunk._steps = steps
             trunk._restart()
         steps.impedance = impedance
-        return steps.run(ranges, heights, independent, obstacles, trunk, edges)
+        return steps.run(ranges, heights, independent, obstacles, trunk, edges, None, bounded)
 
 
 class _Steps:
@@ -413,6 +502,15 @@ class _Steps:
         k = 2.0 * math.pi * f[:, None] / self.c[None, :]
         self.depth = depth = np.clip((z - top) / thickness, 0.0, 1.0)
         self.delta = (k - ka[:, None]) + 1j * LAYER_STRENGTH * depth**2  # (F, n)
+        #: The absorbing layer's thickness (m), and what it also takes at each half of a
+        #: bounded step (n,).
+        self.thickness = thickness
+        self.deeper = np.exp(-0.5 * LAYER_DEEP * (2.0 * depth) ** LAYER_DEEP_POWER)
+        #: Whether the run in hand takes bounded steps (a bounded run past obstacles).
+        self.bound = False
+        #: The longest and the shortest wavelength (m).
+        self.longest = c0 / f.min()
+        self.shortest = shortest
 
         self.kz = kz = 2.0 * math.pi * np.fft.fftfreq(2 * n, d=dz)
         vertical = np.sqrt((ka[:, None] ** 2 - kz[None, :] ** 2).astype(complex))
@@ -421,10 +519,11 @@ class _Steps:
         self.step = max(RANGE_STEP_WAVELENGTHS * shortest, RANGE_STEP_MIN_M)
         #: The speed of sound the steps are taken in (``speed_at``'s, where it changes).
         self.current = speed
-        #: By step length, the phase screen's half step and the propagator.
-        self.steps: dict[float, tuple] = {}
-        #: By roof and step length, the same over a roof (:meth:`over_roof`).
-        self.roofs: dict[tuple[float, float], tuple] = {}
+        #: By step length, whether the step is bounded and the height it is read at
+        #: alone (or None), the phase screen's half step and the propagator.
+        self.steps: dict[tuple, tuple] = {}
+        #: By roof and the same, the same over a roof (:meth:`over_roof`).
+        self.roofs: dict[tuple, tuple] = {}
         #: The ground the last step was taken over.
         self.here: _Ground | None = None
         #: The height (m) of the roof the field marches over, or 0 over the ground.
@@ -460,19 +559,71 @@ class _Steps:
             and np.array_equal(np.asarray(speed(self.z), dtype=float), self.c)
         )
 
-    def stepping(self, dr: float) -> tuple:
+    def stepping(self, dr: float, reads: float | None = None) -> tuple:
         """The phase screen's half step and the propagator over ``dr`` (most steps are
-        full: theirs stay while the shorter ones' come and go)."""
+        full: theirs stay while the shorter ones' come and go); ``reads``: of a bounded
+        step read at that height (m) alone (:meth:`propagator`)."""
         steps = self.steps
-        if dr not in steps:
+        key = (dr, self.bound, reads)
+        if key not in steps:
             if len(steps) > 4:
-                for other in [d for d in steps if d != self.step]:
+                for other in [each for each in steps if each[0] != self.step]:
                     del steps[other]
-            steps[dr] = (
-                _exp_rows(0.5j * dr * self.delta),
-                _exp_mirrored(1j * dr * (self.vertical - self.ka[:, None])),
+            if self.bound:
+                steps[key] = (
+                    _exp_rows(0.5j * dr * self.delta) * self.deeper[None, :],
+                    self.propagator(dr, self.n, 0.0, reads),
+                )
+            else:
+                steps[key] = (
+                    _exp_rows(0.5j * dr * self.delta),
+                    _exp_mirrored(1j * dr * (self.vertical - self.ka[:, None])),
+                )
+        return steps[key]
+
+    def propagator(self, dr: float, n: int, base: float, reads: float | None) -> np.ndarray:
+        """(F, 2n) a bounded step's table over ``dr`` on the ``n`` heights from ``base``
+        (m) up. With ``reads``, of a step whose field is read at that height (m) alone, a
+        point's own from the last obstacle: it takes the sound from as far up and down
+        as the grid has heights above the point, further than which the transform's
+        repeats of the grid lie, so all that reaches the point from under the absorbing
+        layer, straight or by way of the ground; and its table is left as the window
+        makes it, as no step follows it."""
+        thickness = self.thickness
+        if reads is None:
+            return _bounded(
+                self.ka,
+                n,
+                self.dz,
+                dr,
+                BOUNDED_WHOLE * thickness,
+                BOUNDED_WINDOW * thickness,
+                BOUNDED_SMOOTH * thickness,
+                math.log(BOUNDED_GROWTH) / (self.top + thickness),
             )
-        return steps[dr]
+        most = (n - 1) * self.dz - max(reads - base, 0.0)
+        whole = max(most - (BOUNDED_WINDOW - BOUNDED_WHOLE) * thickness, 0.5 * most)
+        return _bounded(self.ka, n, self.dz, dr, whole, most)
+
+    def takes(self, slope: float, dr: float) -> bool:
+        """Whether a bounded step over ``dr`` (m) takes whole the sound that goes up or
+        down by ``slope`` (m a metre): what it goes up or down in the step, and
+        BOUNDED_FRESNEL times its Fresnel zone's width beside that, the square root of
+        the wavelength times the step's length along the sound's way, seen along the
+        height, lie within what the step's window lets through whole."""
+        width = math.sqrt(self.longest * dr) * (1.0 + slope * slope) ** 0.75
+        return slope * dr + BOUNDED_FRESNEL * width <= BOUNDED_WHOLE * self.thickness
+
+    def shorter(self, slope: float, span: float) -> int:
+        """In how many equal steps the march goes ``span`` (m) on, for each to take
+        whole (:meth:`takes`) the sound that goes up or down by ``slope`` there: as few
+        as do, none shorter than BOUNDED_SHORTEST of the shortest wavelength."""
+        spread = BOUNDED_FRESNEL * math.sqrt(self.longest) * (1.0 + slope * slope) ** 0.75
+        whole = BOUNDED_WHOLE * self.thickness
+        # The step's length dr: slope dr + spread sqrt(dr) = whole.
+        root = 2.0 * whole / (spread + math.sqrt(spread * spread + 4.0 * slope * whole))
+        dr = min(max(root * root, BOUNDED_SHORTEST * self.shortest), self.step)
+        return math.ceil(span / dr - 1e-9)
 
     def impedances(self, at: float) -> np.ndarray:
         value = self.impedance(at) if self.impedance is not None else None
@@ -501,7 +652,15 @@ class _Steps:
             + here.normal[:, None] * _starter(ka[:, None] * (z + zs))
         )
 
-    def over_roof(self, psi: np.ndarray, r: float, dr: float, out: np.ndarray) -> np.ndarray:
+    def over_roof(
+        self,
+        psi: np.ndarray,
+        r: float,
+        dr: float,
+        out: np.ndarray,
+        reads: float | None = None,
+        taken: bool = False,
+    ) -> np.ndarray:
         """A step over a rigid roof ``roof`` m up, between the grid's samples: the march
         on the heights from the sample under it up, reflecting off it as off a rigid
         ground (the field mirrored about it, each sample weighed by the share of its
@@ -509,20 +668,29 @@ class _Steps:
         n, dz, z, ka, roof, roofs = self.n, self.dz, self.z, self.ka, self.roof, self.roofs
         floor = int(roof / dz)
         part = n - floor
-        if (roof, dr) not in roofs:
+        key = (roof, dr, self.bound, reads)
+        if key not in roofs:
             if len(roofs) > 4:
-                for other in [key for key in roofs if key[1] != self.step]:
+                for other in [each for each in roofs if each[1] != self.step]:
                     del roofs[other]
             heights_kz = 2.0 * math.pi * np.fft.fftfreq(2 * part, d=dz)
-            up = np.sqrt((ka[:, None] ** 2 - heights_kz[None, :] ** 2).astype(complex))
-            up = np.where(up.imag < 0.0, -up, up)
-            roofs[(roof, dr)] = (
-                _exp_rows(0.5j * dr * self.delta[:, floor:]),
-                _exp_mirrored(1j * dr * (up - ka[:, None])),
-                np.exp(-2j * heights_kz * (roof - z[floor])),
-                roof_share(z[floor:], roof),
-            )
-        half, propagate, mirror, share = roofs[(roof, dr)]
+            if self.bound:
+                roofs[key] = (
+                    _exp_rows(0.5j * dr * self.delta[:, floor:]) * self.deeper[None, floor:],
+                    self.propagator(dr, part, float(z[floor]), reads),
+                    np.exp(-2j * heights_kz * (roof - z[floor])),
+                    roof_share(z[floor:], roof),
+                )
+            else:
+                up = np.sqrt((ka[:, None] ** 2 - heights_kz[None, :] ** 2).astype(complex))
+                up = np.where(up.imag < 0.0, -up, up)
+                roofs[key] = (
+                    _exp_rows(0.5j * dr * self.delta[:, floor:]),
+                    _exp_mirrored(1j * dr * (up - ka[:, None])),
+                    np.exp(-2j * heights_kz * (roof - z[floor])),
+                    roof_share(z[floor:], roof),
+                )
+        half, propagate, mirror, share = roofs[key]
         if self.over is None or self.over[0] != part:
             # A block of rows of the field on the heights, its upper half staying zero,
             # of its spectrum and of the mirror, and of the field itself.
@@ -535,7 +703,9 @@ class _Steps:
                 np.empty((rows, part), dtype=complex),
             )
         _, tilted, spectrum, mirrored, screened = self.over
-        if self.screen is not None:
+        if taken:
+            half = np.ones_like(half)
+        elif self.screen is not None:
             half = half * np.exp(0.5j * ka[:, None] * self.screen(r, dr, z[floor:])[None, :])
         for lo in range(0, len(psi), BLOCK_ROWS):
             hi = min(lo + BLOCK_ROWS, len(psi))
@@ -551,23 +721,41 @@ class _Steps:
             np.multiply(half[lo:hi], above, out=out[lo:hi, floor:])
         return out
 
-    def advance(self, psi: np.ndarray, r: float, dr: float, out: np.ndarray) -> np.ndarray:
-        """The field a step ``dr`` further on from ``r``, written into ``out`` (which
-        may be ``psi`` itself)."""
-        ka, z = self.ka, self.z
-        here = self.ground(r + 0.5 * dr)
+    def air(self, at: float) -> None:
+        """Takes the speed of sound that holds at range ``at``, where it changes along
+        the way (``speed_at``)."""
         if self.speed_at is not None:
-            there = self.speed_at(r + 0.5 * dr)
+            there = self.speed_at(at)
             if there is not self.current:
                 self.current = there
-                k = 2.0 * math.pi * self.f[:, None] / np.asarray(there(z), dtype=float)[None, :]
-                self.delta = (k - ka[:, None]) + 1j * LAYER_STRENGTH * self.depth**2
+                speed = np.asarray(there(self.z), dtype=float)
+                k = 2.0 * math.pi * self.f[:, None] / speed[None, :]
+                self.delta = (k - self.ka[:, None]) + 1j * LAYER_STRENGTH * self.depth**2
                 self.steps.clear()
                 self.roofs.clear()
+
+    def advance(
+        self,
+        psi: np.ndarray,
+        r: float,
+        dr: float,
+        out: np.ndarray,
+        reads: float | None = None,
+        taken: bool = False,
+    ) -> np.ndarray:
+        """The field a step ``dr`` further on from ``r``, written into ``out`` (which
+        may be ``psi`` itself); ``reads``: by a bounded step read at that height alone
+        (:meth:`propagator`); ``taken``: of a field that has the phase screen's half
+        steps in it already (:meth:`own`)."""
+        ka, z = self.ka, self.z
+        here = self.ground(r + 0.5 * dr)
+        self.air(r + 0.5 * dr)
         if self.roof > 0.0:
-            return self.over_roof(psi, r, dr, out)
-        half, propagate = self.stepping(dr)
-        if self.screen is not None:
+            return self.over_roof(psi, r, dr, out, reads, taken)
+        half, propagate = self.stepping(dr, reads)
+        if taken:
+            half = np.ones_like(half)
+        elif self.screen is not None:
             half = half * np.exp(0.5j * ka[:, None] * self.screen(r, dr, z)[None, :])
         some_image = bool(here.image.any())
         some_surface = bool(here.surface.any())
@@ -647,6 +835,74 @@ class _Steps:
                 psi_next[here.surface] += product
         np.multiply(half[lo:hi], psi_next, out=out[lo:hi])
 
+    def own(
+        self, psi: np.ndarray, r: float, dr: float, out: np.ndarray, reads: float
+    ) -> np.ndarray:
+        """The field one step ``dr`` on from ``r``, into ``out``, as it is at the height
+        ``reads`` (m) alone: a point's own step from the source or the last obstacle,
+        which may be many full steps long (:meth:`run`). Its table takes the sound of
+        every height (:meth:`propagator`), and in place of the phase screen's two half
+        steps, which stand for the air at the step's two ends, each height's sound takes
+        the air's phase along its own straight way to the point: the direct sound along
+        the line from its height to the point's, and the reflected sound along the way
+        down to the ground (or the roof the march is over) and up to the point."""
+        ka, z, dz, n = self.ka, self.z, self.dz, self.n
+        self.air(r + 0.5 * dr)
+        floor = int(self.roof / dz) if self.roof > 0.0 else 0
+        heights = z[floor:]
+        base = self.roof
+        # The air's wavenumber less the reference one, and its integral over the height.
+        air = self.delta.real[:, floor:]
+        summed = np.zeros_like(air)
+        np.cumsum(0.5 * (air[:, 1:] + air[:, :-1]) * dz, axis=1, out=summed[:, 1:])
+        at_point = np.array([np.interp(reads, heights, row) for row in summed])[:, None]
+        at_base = np.array([np.interp(base, heights, row) for row in summed])[:, None]
+        air_point = np.array([np.interp(reads, heights, row) for row in air])[:, None]
+        air_base = np.array([np.interp(base, heights, row) for row in air])[:, None]
+        # Its mean along the straight way from each height to the point, and along the
+        # way by the ground: (two heights less than half a step apart take the air there).
+        across = reads - heights
+        near = np.abs(across) < 0.5 * dz
+        direct = np.where(
+            near[None, :], air_point, (at_point - summed) / np.where(near, 1.0, across)[None, :]
+        )
+        both = (heights - base) + (reads - base)
+        low = both < 0.5 * dz
+        bounced = np.where(
+            low[None, :],
+            air_base,
+            (summed + at_point - 2.0 * at_base) / np.where(low, 1.0, both)[None, :],
+        )
+        turbulent = None
+        if self.screen is not None:
+            turbulent = np.exp(0.5j * ka[:, None] * self.screen(r, dr, heights)[None, :])
+        # (What the absorbing layer takes at the step's start, as in a half step.)
+        start = psi[:, floor:] * (
+            np.exp(-0.5 * dr * self.delta.imag[:, floor:]) * self.deeper[None, floor:]
+        )
+        if turbulent is not None:
+            start = start * turbulent
+        # The whole step of the field with the reflected sound's phase, and the direct
+        # sound of the difference: what the step does to a field less what the ground
+        # (the roof) adds to it.
+        reflected = np.zeros_like(psi)
+        reflected[:, floor:] = start * np.exp(1j * dr * bounced)
+        self.advance(reflected, r, dr, out, reads, taken=True)
+        if floor:
+            propagate = self.roofs[(self.roof, dr, self.bound, reads)][1]
+        else:
+            propagate = self.steps[(dr, self.bound, reads)][1]
+        rest = start * (np.exp(1j * dr * direct) - np.exp(1j * dr * bounced))
+        if floor:
+            rest = rest * roof_share(heights, base)[None, :]
+        part = n - floor
+        padded = np.zeros((len(psi), 2 * part), dtype=complex)
+        padded[:, :part] = rest
+        out[:, floor:] += np.fft.ifft(np.fft.fft(padded, axis=1) * propagate, axis=1)[:, :part]
+        if turbulent is not None:
+            out[:, floor:] *= turbulent
+        return out
+
     def meet(self, psi: np.ndarray, event, roofs_over: list[float]) -> np.ndarray:
         """The field just past an obstacle the march has reached (``event``: its range,
         what, and a height), as a new array: above a screen's top (each sample weighed
@@ -676,12 +932,25 @@ class _Steps:
         trunk: Trunk | None,
         edges: list | None = None,
         start: tuple | None = None,
+        bounded: bool = False,
     ) -> np.ndarray:
         """(F, n) the pressure at the points ``ranges`` and ``heights`` past
         ``obstacles``, as :func:`_march` gives it; with ``trunk``, from where it has the
         field over the open ground. ``edges`` takes the field at the obstacles' tops,
         and ``start`` is where the march begins and its field there (see
-        :func:`march`)."""
+        :func:`march`).
+
+        ``bounded``: every step is a bounded one (:func:`march`; the points lie at or
+        past the first obstacle). The sound's ways start at the source and at each
+        obstacle's top, and go on to the next obstacle's top and to the points, straight
+        and by way of the ground (or of the roof the march is over). The march goes on
+        in full steps, with a shorter one to the next obstacle and each point's own last
+        one, as a plain march does, where those take such a way whole (:meth:`takes`).
+        To the next obstacle, where they do not, the march goes in equal shorter steps
+        that do (:meth:`shorter`), from the field as it was at the source or just past
+        the last obstacle. A point that the last obstacle's top (or the source) reaches
+        too steeply gets one step of its own from that field, whatever the other points
+        are (:meth:`propagator`)."""
         f, n, dz, z, step = self.f, self.n, self.dz, self.z, self.step
         #: Where the march begins (m from the source), and where its obstacles do.
         begin, first = 0.0, 1e-9
@@ -711,10 +980,14 @@ class _Steps:
         if under > 0.0:
             trunk = None
         # Of the runs before it, a run keeps the full steps' tables alone.
-        for other in [dr for dr in self.steps if dr != step]:
+        for other in [key for key in self.steps if key[0] != step]:
             del self.steps[other]
         for key in [key for key in self.roofs if key[1] != step]:
             del self.roofs[key]
+        self.bound = bounded
+        if trunk is not None and trunk._bound != bounded:
+            trunk._restart()
+            trunk._bound = bounded
 
         psi = None
         r = 0.0
@@ -750,9 +1023,16 @@ class _Steps:
             self.here = None
             psi = self.start(under)
         side = None  # a point's own last step
-        last = None  # the range of the last point, while the march stays where it was
+        last = None  # the last point's range and own step, while the march stays where it was
+        # In bounded steps, where the sound's ways start from: the source or the last
+        # obstacle met. Its range, its height (the source's, an obstacle's top's) above
+        # the ground or the roof past it, the tops met at that range, and the field
+        # there as it was (the starting field is made again where the march has left it).
+        origin, rise, tops = 0.0, max(self.zs - under, 0.0), [0.0]
+        edge = psi if bounded and r == 0.0 else None
         for index in order:
             goal = ranges[index]
+            own = None  # the height of a point that takes one step of its own from there
             while True:
                 if events and events[0][0] <= r + 1e-9:
                     event = events.pop(0)
@@ -761,29 +1041,64 @@ class _Steps:
                         edges.append((*event, np.array(at_top)))
                     psi = self.meet(psi, event, roofs_over)
                     last = None
+                    if bounded:
+                        if r > 1e-9:
+                            tops = [event[2]] if r > origin else [*tops, event[2]]
+                            origin, rise = r, max(max(tops) - self.roof, 0.0)
+                        edge = psi
                     continue
                 if goal - r <= 1e-9:
                     break
                 # The march stops at each obstacle on the way, one at the goal included,
                 # and at the goal.
                 obstacle = bool(events) and events[0][0] <= goal + 1e-9
+                if bounded:
+                    # The way from the source or the last obstacle's top to the next
+                    # one's, or to the point, by way of the ground.
+                    there = events[0][2] if obstacle else heights[index]
+                    span = (events[0][0] if obstacle else goal) - origin
+                    slope = (rise + max(there - self.roof, 0.0)) / span
+                    if not self.takes(slope, min(step, span)):
+                        if edge is None:
+                            edge = self.start(under)
+                        if not obstacle:
+                            own = float(heights[index])
+                            break
+                        count = self.shorter(slope, span)
+                        if side is None:
+                            side = np.empty_like(edge)
+                        for part in range(count):
+                            at = origin + part * span / count
+                            self.advance(edge if part == 0 else side, at, span / count, side)
+                        psi, side, r = side, None, events[0][0]
+                        last = None
+                        continue
                 dr = min(step, (events[0][0] if obstacle else goal) - r)
                 if independent and dr < step and not obstacle:
                     break
-                self.advance(psi, r, dr, psi)
+                if psi is edge:
+                    # The field there stays as it is for the steps that start from it.
+                    psi = self.advance(psi, r, dr, np.empty_like(psi))
+                else:
+                    self.advance(psi, r, dr, psi)
                 r += dr
                 last = None
-            # A point at the range of the one before it, the march where it was, has the
-            # same pressure on the heights.
-            if last is None or goal != last:
+            # A point at the range of the one before it, the march where it was and its
+            # own step the same, has the same pressure on the heights.
+            if last is None or (goal, own) != last:
                 reached, at = psi, r
-                if goal - r > 1e-9:
+                if own is not None and edge is not None:
+                    # One step of its own from the source or the last obstacle.
+                    if side is None:
+                        side = np.empty_like(psi)
+                    reached, at = self.own(edge, origin, goal - origin, side, own), goal
+                elif goal - r > 1e-9:
                     # Its own last step, off to the side of the march.
                     if side is None:
                         side = np.empty_like(psi)
                     reached, at = self.advance(psi, r, goal - r, side), goal
                 p = self.pressure(reached, at)
-                last = goal
+                last = (goal, own)
             out[:, index] = _at_height(p, z, heights[index])
         return out
 
@@ -861,6 +1176,108 @@ def _reflected(spectrum, reflection, propagate, out):
     return out
 
 
+def _bounded(
+    ka: np.ndarray,
+    n: int,
+    dz: float,
+    dr: float,
+    whole: float,
+    end: float,
+    smooth: float = 0.0,
+    rate: float = 0.0,
+) -> np.ndarray:
+    """(F, 2n) a bounded step's propagator over ``dr`` (m) at the wavenumbers ``ka``
+    (F,), for the field on ``n`` heights ``dz`` apart and as many below them (the
+    transform's wavenumbers). A step on, the field is the field's convolution over the
+    height with the step's kernel (Rayleigh's integral, with the march's phase taken off),
+
+        K(d) = (i ka dr / (2 R)) H1(ka R) exp(-i ka dr),    R = sqrt(dr^2 + d^2),
+
+    whose transform is the plain step's exp(i dr (sqrt(ka^2 - kz^2) - ka)). The bounded
+    step's is the transform of K times a window: 1 where the sound goes up or down by
+    less than ``whole`` (m), 0 beyond ``end`` (m), and falling smoothly between them.
+
+    A window with a flat top makes the table larger than 1 for some steep waves, which
+    grow from step to step as they go up. With ``smooth`` (m) above 0 a wave may grow by
+    exp(``rate``) for each metre it goes up, so its table be as large as exp(``rate``
+    times what it goes up in the step). Where the table is larger, it is multiplied by
+    1 - B, B being its excess 1 - allowed / |table|, smoothed over the wavenumbers by a
+    bump that is nowhere negative and scaled up to cover the excess: the table is then
+    nowhere larger than allowed, and as the bump is the transform of a function that
+    ends at ``smooth``, the step takes no sound further than ``end`` + ``smooth``.
+
+    The kernel is as narrow as the step is short: it is sampled finer than the heights
+    by what BOUNDED_FINE says, and the transform kept at the heights' wavenumbers. For a
+    step so short that BOUNDED_FINEST times as fine is too coarse, the kernel is the
+    plain table's inverse transform instead, which repeats over the transform's length:
+    of the sound that goes that far up in a step, which such a step has next to none of,
+    it keeps what lands within the window."""
+    rows = len(ka)
+    index = np.arange(2 * n)
+    apart = np.minimum(index, 2 * n - index) * dz
+    kz = 2.0 * math.pi * np.fft.fftfreq(2 * n, d=dz)
+    fine = math.ceil(0.5 + BOUNDED_FINE * (2.0 * math.pi / float(ka.max())) / dr)
+    if fine > BOUNDED_FINEST:
+        vertical = np.sqrt((ka[:, None] ** 2 - kz[None, :] ** 2).astype(complex))
+        vertical = np.where(vertical.imag < 0.0, -vertical, vertical)
+        kernel = np.fft.ifft(np.exp(1j * dr * (vertical - ka[:, None])), axis=1)
+        kernel *= (1.0 - _smooth((apart - whole) / (end - whole)))[None, :]
+        out = np.fft.fft(kernel, axis=1)
+    else:
+        h = dz / fine
+        m = min(int(end / h), n * fine - 1)
+        d = np.arange(m + 1) * h
+        slant = np.hypot(dr, d)
+        # R - dr, without the loss of digits where the step is long.
+        beyond = d * d / (slant + dr)
+        window = 1.0 - _smooth((d - whole) / (end - whole))
+        out = np.empty((rows, 2 * n), dtype=complex)
+        block = min(BLOCK_ROWS, rows)
+        samples = np.zeros((block, 2 * n * fine), dtype=complex)
+        for lo in range(0, rows, block):
+            hi = min(lo + block, rows)
+            k = ka[lo:hi, None]
+            kernel = (0.5j * dr * h) * k / slant[None, :] * hankel1e(1, k * slant[None, :])
+            kernel *= np.exp(1j * k * beyond[None, :]) * window[None, :]
+            samples[: hi - lo, : m + 1] = kernel
+            samples[: hi - lo, -m:] = kernel[:, m:0:-1]
+            spectrum = np.fft.fft(samples[: hi - lo], axis=1)
+            out[lo:hi, : n + 1] = spectrum[:, : n + 1]
+            out[lo:hi, n + 1 :] = spectrum[:, -(n - 1) :]
+    if smooth > 0.0:
+        # What each wave goes up or down in the step (m): dr times its slope; the waves
+        # that fade along the range grow by nothing.
+        along = np.sqrt(np.maximum(ka[:, None] ** 2 - kz[None, :] ** 2, 0.0))
+        with np.errstate(divide="ignore", over="ignore"):
+            rise = np.where(along > 0.0, dr * np.abs(kz)[None, :] / along, np.inf)
+        size = np.abs(out)
+        allowed = np.exp(np.minimum(rate * rise, 700.0))
+        excess = 1.0 - np.divide(allowed, size, out=np.ones_like(size), where=size > allowed)
+        if excess.any():
+            cover = np.fft.fft(np.fft.ifft(excess, axis=1) * _bump(apart / smooth)[None, :], axis=1)
+            cover = np.maximum(cover.real, 0.0)
+            for row in np.flatnonzero(excess.any(axis=1)):
+                above = excess[row] > 0.0
+                scale = float(np.max(excess[row, above] / cover[row, above]))
+                out[row] *= np.maximum(1.0 - scale * cover[row], 0.0)
+    return out
+
+
+def _smooth(x: np.ndarray) -> np.ndarray:
+    """A smooth step from 0 at ``x`` = 0 and below to 1 at 1 and above, flat at both
+    ends up to its second derivative."""
+    x = np.clip(x, 0.0, 1.0)
+    return x * x * x * (x * (6.0 * x - 15.0) + 10.0)
+
+
+def _bump(x: np.ndarray) -> np.ndarray:
+    """A bump from 1 at ``x`` = 0 to 0 at 1 and beyond whose transform is nowhere
+    negative (Wendland 1995, Adv. Comput. Math. 4, 389: the function of smoothness 6 that
+    is positive definite in up to three dimensions)."""
+    x = np.clip(np.abs(x), 0.0, 1.0)
+    return (1.0 - x) ** 8 * (x * (x * (32.0 * x + 25.0) + 8.0) + 1.0)
+
+
 def _starter(x: np.ndarray) -> np.ndarray:
     """Greene's starting field at ``x`` = ka times the height from the source."""
     return (1.4467 - 0.4201 * x**2) * np.exp(-(x**2) / 3.0512)
@@ -890,18 +1307,25 @@ def layer_thickness(frequencies, c0: float) -> float:
 
 
 def footprint(
-    frequencies, c0: float, top: float, steps_per_wavelength: float = STEPS_PER_WAVELENGTH
+    frequencies,
+    c0: float,
+    top: float,
+    steps_per_wavelength: float = STEPS_PER_WAVELENGTH,
+    bounded: bool = False,
 ) -> int:
     """About the memory (bytes) :func:`march` takes for ``frequencies`` under an
     absorbing layer from ``top`` in air of speed ``c0`` on the ground: the narrow-angle
     march's, or the wide-angle one's for steep points after it, the larger, whether or
-    not a run has steep points."""
+    not a run has steep points. ``bounded``: of a run in bounded steps, which also
+    keeps the field at the last obstacle, makes its tables from the steps' kernels and
+    takes a point's own step from that field."""
     from acoustic_spaces.engine import wide_angle
 
     f = np.atleast_1d(np.asarray(frequencies, dtype=float))
     n = _grid(f, c0, top, steps_per_wavelength)[0]
     wide = wide_angle.STEPS_PER_WAVELENGTH * steps_per_wavelength / STEPS_PER_WAVELENGTH
-    return max(24 * len(f) * 2 * n * 16, wide_angle.footprint(f, c0, top, wide))
+    arrays = 32 if bounded else 24
+    return max(arrays * len(f) * 2 * n * 16, wide_angle.footprint(f, c0, top, wide))
 
 
 class _Ground:
