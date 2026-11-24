@@ -99,18 +99,21 @@ BOUNDED_WHOLE = 0.25
 BOUNDED_WINDOW = 0.7
 #: Such a step's table is larger than 1 for waves some 65 to 80 degrees from the
 #: horizontal (by up to 5 per cent): each grows from step to step until it has gone up
-#: into the layer, where it ends. Where one would grow by more than BOUNDED_GROWTH on
-#: its way from the ground to the layer's top, under a layer that starts a kilometre
-#: up or more, the table is brought down to what makes it grow by that, by a factor
-#: that spreads the sound by no more than BOUNDED_SMOOTH of the layer's thickness
-#: (:func:`_bounded`). So no sound goes further up or down in a step than the layer is
-#: thick.
+#: into the layer, where it ends. Where a wave would grow by more than BOUNDED_GROWTH on
+#: its way from the ground to the layer's top, the table is brought down to what makes
+#: it grow by that, by a factor that spreads the sound by no more than BOUNDED_SMOOTH of
+#: the layer's thickness (:func:`_bounded`), so that no sound goes further up or down in
+#: a step than the layer is thick. Under a layer whose top is a kilometre up or less
+#: the factor changes a full step's table by 1.3e-7 at most (the waves along the
+#: ground, which the window makes larger than 1 by that); it takes hold of the steep
+#: waves where the top is some 2 km up at 1 kHz, 4 km at 2 kHz and 8 km at 250 Hz.
 BOUNDED_GROWTH = 1e10
 BOUNDED_SMOOTH = 0.3
 #: A bounded step takes a wave whole where what it goes up or down in the step, and
 #: BOUNDED_FRESNEL times the width of its Fresnel zone over the step (at the lowest
-#: frequency) beside that, lie within BOUNDED_WHOLE of the layer's thickness: its table is
-#: then within about a thousandth of the plain step's (:meth:`_Steps.takes`).
+#: frequency) beside that, lie within BOUNDED_WHOLE of the layer's thickness
+#: (:meth:`_Steps.takes`): in full steps the waves up to 51 degrees from the horizontal
+#: (55 in the 2 kHz band), for which the table is within 1e-4 of the plain step's.
 BOUNDED_FRESNEL = 2.7
 #: Between two obstacles the march takes steps no shorter than this many of the shortest
 #: wavelengths for the sound's sake (:meth:`_Steps.run`).
@@ -241,11 +244,12 @@ def march(
     with where the layer starts. A bounded step takes no sound further up or down than
     the layer is thick, and the layer damps what stands in its upper half at a step's
     end (LAYER_DEEP), so that none comes back. The bounded step takes whole the sound
-    that goes up or down gently enough (:meth:`_Steps.takes`: to 45 degrees and more
-    from the horizontal) and less of the steeper. A point that the sound from the last
-    obstacle's top reaches more steeply, close under it, gets one step of its own from
-    there, which takes the sound of every height; and where the next obstacle's top
-    lies as steeply, the march goes there in shorter steps (:meth:`_Steps.run`).
+    that goes up or down gently enough (:meth:`_Steps.takes`: in full steps to 51
+    degrees from the horizontal, 55 in the 2 kHz band) and less of the steeper. A point
+    that the sound from the last obstacle's top reaches more steeply, close under it,
+    gets one step of its own from there, which takes the sound of every height; and
+    where the next obstacle's top lies as steeply, the march goes there in shorter
+    steps (:meth:`_Steps.run`).
     Without ``start``, ``layer`` and ``edges``."""
     if edges is not None and refracting is not False:
         raise ValueError("the field at the obstacles' edges needs refracting=False")
@@ -1248,10 +1252,14 @@ def _bounded(
         # What each wave goes up or down in the step (m): dr times its slope; the waves
         # that fade along the range grow by nothing.
         along = np.sqrt(np.maximum(ka[:, None] ** 2 - kz[None, :] ** 2, 0.0))
-        with np.errstate(divide="ignore", over="ignore"):
-            rise = np.where(along > 0.0, dr * np.abs(kz)[None, :] / along, np.inf)
+        going = along > 0.0
+        rise = np.full(along.shape, np.inf)
+        grown = np.full(along.shape, 700.0)
+        with np.errstate(over="ignore"):
+            np.divide(dr * np.abs(kz)[None, :], along, out=rise, where=going)
+            np.multiply(rate, rise, out=grown, where=going)
         size = np.abs(out)
-        allowed = np.exp(np.minimum(rate * rise, 700.0))
+        allowed = np.exp(np.minimum(grown, 700.0))
         excess = 1.0 - np.divide(allowed, size, out=np.ones_like(size), where=size > allowed)
         if excess.any():
             cover = np.fft.fft(np.fft.ifft(excess, axis=1) * _bump(apart / smooth)[None, :], axis=1)

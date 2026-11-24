@@ -1206,9 +1206,9 @@ def test_a_listener_past_a_barrier_s_end_in_wind_reads_the_same_alone_as_with_ot
     """60 m downwind, 10 m behind a barrier's end and 5 m into the lit side, where the
     paths round the end take the parabolic equation's runs along their ways, a listener
     gets the same early energy in every band alone as with two more twice as far in its
-    direction, one of them 10 m up; on two threads too. With one layer above the highest
-    of a run's listeners the two moved its bands by up to 0.0002 dB behind the barrier
-    and 0.0005 dB on the lit side."""
+    direction, one of them 10 m up; on two threads too. With the runs over the barrier
+    under one layer above the highest of their listeners the two moved its bands by up
+    to 0.0002 dB behind the barrier and 0.000005 dB on the lit side."""
     me = (60.0, y, 1.5)
     early = []
     for listeners in ((me,), (me, (120.0, 2.0 * y, 1.5), (120.0, 2.0 * y, 10.0))):
@@ -1250,14 +1250,14 @@ def test_the_paths_over_the_top_and_over_the_open_ground_stay_as_they_were() -> 
     ]
     ground = np.flatnonzero(lit.edge < 0)
     expected_top = [
-        5.298631481402662e-06,
-        4.2415031819623975e-06,
-        2.452351503009703e-06,
-        5.319490746351252e-06,
-        7.372428038473811e-07,
-        4.667647687070827e-07,
-        1.5041971014804868e-07,
-        1.30810958966448e-08,
+        5.298643119195644e-06,
+        4.241727603977253e-06,
+        2.4522551203784277e-06,
+        5.320225480538016e-06,
+        7.37247206831378e-07,
+        4.667884261759825e-07,
+        1.5041903681524244e-07,
+        1.3081027470272444e-08,
     ]
     expected_ground = [
         9.200410206807897e-05,

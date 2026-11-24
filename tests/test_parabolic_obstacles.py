@@ -362,3 +362,219 @@ def test_a_run_with_steep_points_drops_the_march_kept(monkeypatch) -> None:
     transforms.clear()
     assert march(flat, trunk).tobytes() == alone.tobytes()
     assert sum(transforms) == from_the_source
+
+
+def still_air(z):
+    return np.full(np.shape(z), C0)
+
+
+@pytest.mark.parametrize("band", [2, 4])
+def test_in_bounded_steps_the_level_behind_a_screen_does_not_go_with_the_layer_start(band) -> None:
+    """15 and 60 m from a source half a metre up, behind a 7.43 m screen 4 m from it, in
+    still air, the band level of a march in bounded steps is the same within 0.001 dB
+    under absorbing layers that start 21.5, 60 and 240 m up (to four decimals of a dB at
+    250 Hz and 1 kHz). The plain march's goes with the start, by 1.15 and 0.27 dB at
+    250 Hz and by 0.23 and 0.06 dB at 1 kHz: the sound the screen's top bends almost
+    straight up comes back down from the top of its grid."""
+    f = F[band]
+    ranges, heights = np.array([15.0, 60.0]), np.array([1.5, 1.5])
+    spread = {}
+    for bounded in (False, True):
+        levels = [
+            band_db(
+                parabolic.march(
+                    f,
+                    still_air,
+                    None,
+                    0.5,
+                    ranges,
+                    heights,
+                    top,
+                    independent=True,
+                    obstacles=[(4.0, 4.0, 7.43)],
+                    refracting=False,
+                    bounded=bounded,
+                ),
+                ranges,
+                heights,
+                0.5,
+            )
+            for top in (21.5, 60.0, 240.0)
+        ]
+        spread[bounded] = np.ptp(levels, axis=0)
+    assert np.all(spread[True] < 0.001)
+    assert spread[False][0] > (1.0 if band == 2 else 0.2)
+
+
+@pytest.mark.parametrize("zs", [2.0, 7.0])
+def test_in_bounded_steps_each_point_gets_what_it_gets_alone(zs) -> None:
+    """A march in bounded steps past a screen and a building, in wind over grass, gives
+    each point the bytes a march to it alone gives: short of the screen (the plain
+    march), behind it, at the building's front, over its roof, a metre and 30 m behind
+    it (the first by a step of its own from the building's back) and beyond; with the
+    source over a roof too, and from a march kept for the runs after it."""
+    f = F[1][::3]
+    lawn = grass(f)
+    obstacles = [(20.0, 20.0, 3.0), (40.0, 60.0, 8.0)]
+    if zs > 5.0:
+        obstacles = [(-5.0, 10.0, 6.0), *obstacles]
+    ranges = np.array([90.0, 12.0, 40.0, 50.0, 39.9, 61.0, 140.0, 20.5, 61.0])
+    heights = np.array([1.5, 2.0, 9.0, 9.5, 4.0, 3.0, 1.5, 0.5, 1.5])
+
+    def march(chosen, trunk=None):
+        return parabolic.march(
+            f,
+            log_wind(5.0),
+            lawn,
+            zs,
+            ranges[chosen],
+            heights[chosen],
+            30.0,
+            independent=True,
+            obstacles=obstacles,
+            refracting=False,
+            bounded=True,
+            trunk=trunk,
+        )
+
+    together = march(slice(None))
+    kept = parabolic.Trunk()
+    assert march(slice(None), kept).tobytes() == together.tobytes()
+    for i in range(len(ranges)):
+        assert np.array_equal(march(slice(i, i + 1))[:, 0], together[:, i])
+        assert np.array_equal(march(slice(i, i + 1), kept)[:, 0], together[:, i])
+    assert np.all(np.isfinite(together))
+
+
+def test_a_bounded_march_over_open_ground_is_the_plain_one() -> None:
+    """With no obstacle on the way, or none short of the farthest point, a march asked
+    for in bounded steps gives the plain march's bytes."""
+    f = F[3][::2]
+    ranges, heights = np.array([30.0, 60.0, 12.0, 45.0]), np.array([1.5, 4.0, 1.0, 1.5])
+    for obstacles in [(), [(80.0, 80.0, 6.0)], [(70.0, 90.0, 6.0)]]:
+        got = [
+            parabolic.march(
+                f,
+                log_wind(5.0),
+                grass(f),
+                1.0,
+                ranges,
+                heights,
+                30.0,
+                independent=True,
+                obstacles=obstacles,
+                bounded=bounded,
+            )
+            for bounded in (False, True)
+        ]
+        assert got[1].tobytes() == got[0].tobytes()
+
+
+def test_bounded_steps_begin_at_the_source_and_take_each_point_by_its_own_step() -> None:
+    f = F[1][:2]
+    at = (np.array([30.0]), np.array([1.5]), 30.0)
+    with pytest.raises(ValueError, match="its own last step"):
+        parabolic.march(f, still_air, None, 1.0, *at, bounded=True)
+    more = {"independent": True, "refracting": False, "bounded": True}
+    for wrong in (
+        {"layer": 200.0},
+        {"edges": []},
+        {"start": (10.0, lambda z: np.ones((len(f), len(z)), dtype=complex))},
+    ):
+        with pytest.raises(ValueError, match="begins at the source"):
+            parabolic.march(f, still_air, None, 1.0, *at, **more, **wrong)
+
+
+@pytest.mark.parametrize("band", [0, 1, 2, 3, 4, 5])
+def test_a_bounded_step_s_table_is_the_plain_step_s_for_sound_that_goes_gently(band) -> None:
+    """Under the absorbing layer of a run with its top 30 m up, a full bounded step's
+    table differs from the plain step's by less than 1e-5 for waves up to 30 degrees
+    from the horizontal, 1e-4 up to 45 degrees and 2e-4 up to the steepest that the step
+    takes whole (4e-6, 4e-5 and 9e-5 at most): 51 degrees in the bands from 63 Hz to
+    1 kHz and 55 at 2 kHz. No entry is larger than 1.05 (1.0495: the waves some 65 to 80
+    degrees up, of which the window lets a part through)."""
+    f = F[band]
+    steps = parabolic._Steps(
+        f, still_air, None, 1.0, 30.0, None, None, parabolic.STEPS_PER_WAVELENGTH
+    )
+    table = steps.propagator(steps.step, steps.n, 0.0, None)
+    plain = parabolic._exp_mirrored(1j * steps.step * (steps.vertical - steps.ka[:, None]))
+    sine = np.abs(steps.kz)[None, :] / steps.ka[:, None]
+    off = np.abs(table - plain)
+    steepest = max(d for d in range(30, 90) if steps.takes(math.tan(math.radians(d)), steps.step))
+    assert steepest == (55 if band == 5 else 51)
+    for degrees, within in ((30.0, 1e-5), (45.0, 1e-4), (steepest, 2e-4)):
+        assert steps.takes(math.tan(math.radians(degrees)), steps.step)
+        assert off[sine < math.sin(math.radians(degrees))].max() < within
+    assert np.abs(table).max() < 1.05
+
+
+def test_a_bounded_step_s_table_is_held_where_a_wave_would_grow_too_far() -> None:
+    """The factor that keeps a wave from growing by more than BOUNDED_GROWTH between the
+    ground and the layer's top changes a full step's table of the 1 kHz band by less
+    than 1e-6 under a layer whose top is 1 km up (1.3e-7: the waves along the ground,
+    which the window makes larger than 1 by that), and by more than 0.1 where it is 4 km
+    up (0.14: the waves some 65 to 80 degrees up). Asked to let nothing grow, it brings
+    every entry down to 1."""
+    f = F[4]
+    steps = parabolic._Steps(
+        f, still_air, None, 1.0, 30.0, None, None, parabolic.STEPS_PER_WAVELENGTH
+    )
+    thick = steps.thickness
+    window = (parabolic.BOUNDED_WHOLE * thick, parabolic.BOUNDED_WINDOW * thick)
+    args = (steps.ka, steps.n, steps.dz, steps.step, *window)
+    bare = parabolic._bounded(*args)
+    smooth = parabolic.BOUNDED_SMOOTH * thick
+    change = [
+        np.abs(
+            parabolic._bounded(*args, smooth, math.log(parabolic.BOUNDED_GROWTH) / tall) - bare
+        ).max()
+        for tall in (1000.0, 4000.0)
+    ]
+    assert change[0] < 1e-6
+    assert change[1] > 0.1
+    assert np.abs(parabolic._bounded(*args, smooth, 0.0)).max() < 1.0 + 1e-12
+    assert np.abs(bare).max() > 1.04
+
+
+@pytest.mark.parametrize("band", [2, 4])
+def test_a_point_close_under_an_edge_gets_one_step_of_its_own(band, monkeypatch) -> None:
+    """6, 12 and 20 m behind a 20 m edge 40 m from the source, 1.5 m up, the sound from
+    the edge's top comes down more steeply than a full bounded step takes whole, to the
+    nearest at 74 degrees: such a point gets one step of its own from the field at the
+    edge. Its band level at 250 Hz and 1 kHz is within 0.001 dB in still air (0.0003 dB
+    at most) and within 0.2 dB in a wind of 10 m/s (0.12 dB at 6 m, 0.06 dB or less at
+    the others) of a march in full steps under an absorbing layer 320 m thick, whose
+    steps take that sound whole."""
+    f = F[band][::2]
+    ranges, heights = np.array([46.0, 52.0, 60.0]), np.array([1.5, 1.5, 1.5])
+    cut = [(40.0, 40.0, 20.0)]
+    for speed in (still_air, log_wind(10.0)):
+        levels = []
+        for least in (20.0, 320.0):
+            monkeypatch.setattr(parabolic, "LAYER_MIN_M", least)
+            steps = parabolic._Steps(
+                f, speed, None, 1.0, 60.0, None, None, parabolic.STEPS_PER_WAVELENGTH
+            )
+            slope = (20.0 + 1.5) / (ranges - 40.0)
+            whole = [
+                steps.takes(s, min(steps.step, r - 40.0))
+                for s, r in zip(slope, ranges, strict=True)
+            ]
+            assert whole[0] == all(whole) == (least == 320.0)
+            p = parabolic.march(
+                f,
+                speed,
+                None,
+                1.0,
+                ranges,
+                heights,
+                60.0,
+                independent=True,
+                obstacles=cut,
+                refracting=False,
+                bounded=True,
+            )
+            levels.append(band_db(p, ranges, heights))
+        within = 0.001 if speed is still_air else 0.2
+        assert np.all(np.abs(levels[0] - levels[1]) < within)
