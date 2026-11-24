@@ -1678,6 +1678,28 @@ def test_three_screens_in_a_row_the_middle_one_ending_beside_the_way(tmp_path: P
         np.testing.assert_allclose(level, above, atol=0.35)
 
 
+def test_three_screens_in_a_row_the_last_one_ending_beside_the_way_just_above_them(
+    tmp_path: Path,
+) -> None:
+    # Three screens 5 m apart, the last one ending a centimetre beside the way, the source
+    # and the listener 0.1 and 0.3 mm above the tops, within the reach of the rays that
+    # test the paths over the edges (a tenth of a millimetre): the level is that 3 mm
+    # above them within 0.05 dB. The rays that test the path round the last screen's
+    # upright end start just off its corner, above the tops; from just inside the end,
+    # below them, the screens in front hid the path, and the level was 1.5 dB lower at
+    # 63 Hz.
+    quads = (
+        edge_diffraction.screen_quads(0.0)
+        + edge_diffraction.screen_quads(5.0)
+        + _screen_from(10.0, 0.01)
+    )
+    ends = np.array([[-10.0, 0.0, 0.0], [15.0, 0.0, 0.0]])
+    above = _past(tmp_path, quads, *(ends + [0.0, 0.0, 3e-3]))
+    for height in (1e-4, 3e-4):
+        level = _past(tmp_path, quads, *(ends + [0.0, 0.0, height]))
+        np.testing.assert_allclose(level, above, atol=0.05, err_msg=str(height))
+
+
 def test_a_way_through_the_corner_of_a_screen(tmp_path: Path) -> None:
     # The quarter of the plane x = 0 below z = 0 and y = 0, the straight way from the
     # source to the listener through its corner: its top and its end meet where the way
@@ -1691,6 +1713,89 @@ def test_a_way_through_the_corner_of_a_screen(tmp_path: Path) -> None:
         level, _past(tmp_path, quads, *(ends + [0.0, 1e-3, 1e-3])), atol=0.05
     )
     np.testing.assert_allclose(level[4:], 20.0 * math.log10(0.75), atol=0.05)
+
+
+def _direct(tmp_path: Path, quads, source, listener) -> np.ndarray:
+    """The level of the direct sound and the paths over the edges of the rigid ``quads``
+    (``direct``), every band in pressure (dB re the direct sound in free field)."""
+    room = edge_diffraction._room(tmp_path, "direct", quads, source, listener)
+    return edge_diffraction.engine(room, "direct", coherent=8)[1]
+
+
+def _round(point, radius: float) -> list:
+    """Eight points ``radius`` from ``point`` round it, in the plane x = const."""
+    turns = np.arange(8) * np.pi / 4.0
+    return [point + radius * np.array([0.0, math.cos(a), math.sin(a)]) for a in turns]
+
+
+@pytest.mark.parametrize("corner", [(5.0, 0.0), (5.0, -4.0)], ids=["top", "foot"])
+def test_round_the_line_through_a_screen_s_corner(tmp_path: Path, corner) -> None:
+    # A screen 10 m wide and 4 m high in free space, the listener on the line from the
+    # source through one of its corners, seen at a slant: there, and 10 or 30 nm from
+    # there (within the model's tolerance of the line), the level lies within 0.01 and
+    # 0.02 dB of the mean of eight points 0.1 mm round it, as BTM's does. On the line each
+    # edge gives the share of the wave the screen hides round the corner as the way sees
+    # it, and the two take it alike; with the angle between the edges themselves it was
+    # 0.19 dB (0.51 at the foot) above that mean, and 10 and 30 nm off the line, where
+    # one edge's term counted on its boundary and the other's off it, 3 to 29 dB (with
+    # the corner's halves of 4.3.0, 0.02 and 0.06 dB, and 9 to 14 dB 10 nm off).
+    quads = [[(0.0, -5.0, -4.0), (0.0, 5.0, -4.0), (0.0, 5.0, 0.0), (0.0, -5.0, 0.0)]]
+    source = np.array([-5.0, 2.0, -1.0])
+    through = 2.0 * np.array([0.0, *corner]) - source
+    mean = np.mean([_direct(tmp_path, quads, source, p) for p in _round(through, 1e-4)], axis=0)
+    np.testing.assert_allclose(_direct(tmp_path, quads, source, through), mean, atol=0.01)
+    for radius in (1e-8, 3e-8):
+        for point in _round(through, radius):
+            level = _direct(tmp_path, quads, source, point)
+            np.testing.assert_allclose(level, mean, atol=0.02, err_msg=str(point))
+
+
+def test_a_reflection_through_a_screen_s_corner(tmp_path: Path) -> None:
+    # The quarter of the plane x = 0 below z = 0 and y = 0, the source and the listener
+    # in front of it where the reflection off it lies exactly at its corner: the level
+    # is the mean of eight points 10 um round the listener within 0.01 dB. On the lit
+    # side of the reflection's boundary each edge's term takes off what the corner
+    # does not reflect; with the share it hides it was 0.25 to 0.37 dB above.
+    far = edge_diffraction.EXTENT
+    quads = [[(0.0, -far, -far), (0.0, 0.0, -far), (0.0, 0.0, 0.0), (0.0, -far, 0.0)]]
+    source, listener = np.array([-10.0, -2.0, 3.0]), np.array([-15.0, 3.0, -4.5])
+    ring = [_past(tmp_path, quads, source, p, "first_order") for p in _round(listener, 1e-5)]
+    exact = _past(tmp_path, quads, source, listener, "first_order")
+    np.testing.assert_allclose(exact, np.mean(ring, axis=0), atol=0.01)
+
+
+def test_a_way_through_a_bend_of_a_screen_s_top(tmp_path: Path) -> None:
+    # A screen whose top bends by 14 degrees in plan, the way exactly through the bend:
+    # the level is the mean of eight points 0.1 mm round the listener within 0.02 dB.
+    # Each piece gives the share of the wave the screen hides as the way sees it, on the
+    # side the screen lies (towards both pieces' faces); which side that was had been
+    # left to the 1e-16 by which the edges' open directions leave the screen's plane:
+    # 0.78 dB above that mean (0.13 dB as two halves).
+    quads = edge_diffraction.bent_quads(-14.0)
+    source, listener = np.array([-5.0, 0.0, -1.0]), np.array([5.0, 0.0, 1.0])
+    mean = np.mean([_direct(tmp_path, quads, source, p) for p in _round(listener, 1e-4)], axis=0)
+    np.testing.assert_allclose(_direct(tmp_path, quads, source, listener), mean, atol=0.02)
+
+
+@pytest.mark.parametrize("hanging", [False, True], ids=["standing", "hanging"])
+@pytest.mark.parametrize("lean", [10.0, 45.0])
+def test_screens_in_a_row_whose_ends_lean(tmp_path: Path, lean: float, hanging: bool) -> None:
+    # Two screens 10 m apart, their ends leaning by ``lean`` degrees from upright, the
+    # way through both corners, level with the tops (or the feet of hanging screens):
+    # the level is the one with the source a millimetre past them, away from the
+    # screens, within 0.03 dB. The path over an end edge and the next screen is as just
+    # past the end, as for an upright end, whatever its lean; for a leaning end it was
+    # counted, by half, and the level was 0.39 to 0.47 dB off (0.06 to 0.13 dB as two
+    # halves of the corner).
+    far = edge_diffraction.EXTENT
+    side, z = -math.tan(math.radians(lean)) * far, (-1.0 if hanging else 1.0)
+    quads = [
+        [(x, side, -far * z), (x, far, -far * z), (x, far, 0.0), (x, 0.0, 0.0)] for x in (0.0, 10.0)
+    ]
+    listener = (15.0, 0.0, 0.01 * z)
+    level = _past(tmp_path, quads, (-10.0, 0.0, 0.0), listener)
+    past = _past(tmp_path, quads, (-10.0, 0.0, 1e-3 * z), listener)
+    np.testing.assert_allclose(level, past, atol=0.03)
 
 
 def test_a_roof_and_then_a_screen_level_with_it_the_same_both_ways_round(tmp_path: Path) -> None:
@@ -1855,13 +1960,8 @@ def test_past_the_end_of_a_screen_level_with_a_roof_as_a_centimetre_above(
     # the level up to 500 Hz was 3.2 to 3.4 dB above that a centimetre above the plane
     # with second_order; with first_order, whose single terms nearly cancel there, it
     # was 1.3 to 8.6 dB off. The two ways round agree, and with the level a centimetre
-    # above within 0.14 dB (first_order 0.50 dB up to 500 Hz and 1.23 dB above). The
-    # term of the screen's upright end for the direct sound is in by 0.3 mm above the
-    # plane (the screen first) or 0.4 mm (the roof first), as the ray that tests its
-    # path starts a tenth of a millimetre inside the end, below the roof's plane (a known
-    # issue of docs/validation.md); with the rays 0.6 mm off the edges (a millionth of
-    # the model's size) it came in from 1.2 or 1.8 mm, and a millimetre above the plane
-    # the level was 0.19 to 0.64 dB below that a centimetre above up to 500 Hz.
+    # above within 0.14 dB (first_order 0.50 dB up to 500 Hz and 1.23 dB above). Closer
+    # to the plane: the next test.
     extent = edge_diffraction.EXTENT
     x = -5.0 if screen_first else 10.0
     screen = [[(x, 0.0, -extent), (x, extent, -extent), (x, extent, 0.0), (x, 0.0, 0.0)]]
@@ -1885,6 +1985,41 @@ def test_past_the_end_of_a_screen_level_with_a_roof_as_a_centimetre_above(
         # the end, is 0.5 to 1.2 dB above that.
         reference = [-6.24, -6.47, -6.70, -6.84]
         np.testing.assert_allclose(levels[1e-2, 0][:4], reference, atol=1.5)
+
+
+@pytest.mark.parametrize("beside", [0.01, -0.01])
+@pytest.mark.parametrize("screen_first", [True, False])
+def test_past_the_end_of_a_screen_level_with_a_roof_within_the_rays_reach_of_the_plane(
+    tmp_path: Path, screen_first, beside
+) -> None:
+    # The scene of the test above with second_order, the source and the listener 0.1 to
+    # 0.3 mm above the plane, within the reach of the rays that test the paths over the
+    # edges (they start a tenth of a millimetre off them), the way a centimetre inside the
+    # screen's end or outside it: the level up to 500 Hz is that a centimetre above within
+    # 0.04 dB inside the end and 0.18 dB outside it. The rays that test the path round the
+    # screen's upright end start just off its corner, above the plane, where they find it;
+    # a reflection off the roof's plane, which passes through the corner, they test from
+    # just inside the end, as for the path a centimetre above, which has no such
+    # reflection. From just off the corner that reflection was found round the end, above
+    # its top, for the source and the listener 0.1 to 0.3 mm above the plane only: 3.7 dB
+    # higher (14 dB with the way outside the end). From just inside the end, below the
+    # plane, the path round the end was missing up to 0.3 or 0.4 mm above it: 0.5 to
+    # 1.1 dB lower.
+    extent = edge_diffraction.EXTENT
+    x = -5.0 if screen_first else 10.0
+    screen = [[(x, 0.0, -extent), (x, extent, -extent), (x, extent, 0.0), (x, 0.0, 0.0)]]
+    quads = screen + edge_diffraction.barrier_quads(5.0)
+    simulation = {"early": {"diffraction": "second_order", "coherent_max_band_hz": 500}}
+    start = -15.0 if screen_first else -10.0
+    levels = {}
+    for height in (1e-4, 2e-4, 3e-4, 1e-2):
+        source, listener = (start, beside, height), (start + 25.0, beside, height)
+        room = edge_diffraction._room(tmp_path, "end", quads, source, listener, simulation)
+        levels[height] = edge_diffraction.whole_early_stage(room)[:4]
+    for height in (1e-4, 2e-4, 3e-4):
+        np.testing.assert_allclose(
+            levels[height], levels[1e-2], atol=0.06 if beside > 0.0 else 0.2, err_msg=str(height)
+        )
 
 
 @pytest.mark.parametrize("beside", [0.01, 0.1])

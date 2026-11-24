@@ -1562,6 +1562,36 @@ def test_no_step_where_a_reflection_crosses_a_doorway_s_side(tmp_path: Path) -> 
     assert np.abs(levels[1] - levels[0]).max() < 0.1
 
 
+def test_paths_past_a_doorway_s_side_over_its_threshold_and_lintel(tmp_path: Path) -> None:
+    """The doorway above and listeners on either side of x = 8, where a ray from just
+    outside the doorway's threshold or lintel, near the doorway's side, towards the
+    listener meets the wall plane on the doorway or on the wall beside it: as many paths
+    over the threshold and the lintel touch their lines past the doorway's side. The
+    path from the edge meets the wall's plane at the edge alone, and the rays pass the
+    wall there, as the doorway leaves the edges open in that plane. They had stopped
+    the paths for listeners past x = 8: a step of 0.05 dB at 63 Hz, 0.12 dB with the
+    edges' ends at the doorway's sides fading as free ends."""
+    obj = _doorway(tmp_path / "doorway.obj")
+    counts = []
+    for x in (7.9, 8.1):
+        scene = _scene(
+            obj,
+            {"hard": _flat(0.05, scattering=0.05), "open": {"transmission": 1}},
+            {"walls": "hard", "floor": "hard", "ceiling": "hard", "door": "open"},
+            {"l": [x, 2.0, 1.5]},
+            source=[3.0, 3.0, 1.5],
+            early={"max_order": 1, "diffraction": "first_order"},
+        )
+        paths = early_paths(Room.from_scene(scene))
+        past = 0
+        for i in np.flatnonzero(paths.diffracted):
+            points = np.asarray(paths.points[i])[1:-1]
+            low_or_high = np.abs(points[:, 2] - 1.5) > 1.4
+            past += int(np.any((np.abs(points[:, 1]) < 1e-9) & low_or_high & (points[:, 0] > 6.0)))
+        counts.append(past)
+    assert counts[0] == counts[1] > 0, counts
+
+
 def test_the_face_nearest_to_a_point_in_a_doorway_is_the_wall_beside_it(
     tmp_path: Path,
 ) -> None:
