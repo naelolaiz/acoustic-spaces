@@ -473,12 +473,12 @@ Outdoor acoustics, in steps:
   gradients, as over the open ground: the paths off façades and barriers are eigenrays
   in every band, with the rays' ground effect up to 2 kHz and their steps at caustics
   (see [Known issues](validation.md#known-issues)).
-- [ ] An absorbing layer for the parabolic equation's runs behind barriers and
-  buildings that takes up the sound an obstacle's top sends steeply up, and that a run's
-  other listeners do not move: there the listeners and map points that share a run share
-  its layer, and the level changes with where it begins, by up to 2.4 dB behind a tall
-  barrier close to the source in the checks (see
-  [Known issues](validation.md#known-issues)).
+- [x] The parabolic equation's runs behind barriers and buildings march in steps that
+  take no sound further up or down than the absorbing layer is thick, so that what an
+  obstacle's top bends steeply up does not come back down from the top of the grid, and
+  each listener takes the layer of a run for it alone: the level behind an obstacle goes
+  neither with where the layer starts (but deep in the upwind shadow) nor with the run's
+  other listeners (see [Validation](validation.md#the-wide-angle-parabolic-equation)).
 - [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
   the shadow): out of the shadow the equation's field goes through it, but the rays'

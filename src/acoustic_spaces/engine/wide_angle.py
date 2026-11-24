@@ -93,7 +93,8 @@ def march(
     operator's own. The roof under the source, else the first one on the way short of
     the farthest point, stands on a height step exactly (the steps made finer, by one
     step in that roof's height at most), the others on the step nearest them, at most
-    half a step off."""
+    half a step off. With ``independent`` the points short of the first building's front
+    march apart from those past it, each on the height steps a march to it alone takes."""
     from acoustic_spaces import _native
     from acoustic_spaces.engine.parabolic import _obstacles, open_share
 
@@ -103,6 +104,30 @@ def march(
     c0 = float(np.asarray(speed(np.array([0.0])))[0])
     ka = 2.0 * math.pi * f / c0  # (F,)
     obstacles = _obstacles(obstacles)
+    buildings = [near for near, far, _ in obstacles if far > near]
+    if independent and buildings and len(ranges):
+        # Each point on the grid its own march would take: those short of the first
+        # building's front apart from those past it, whose height step fits its roof.
+        past = ranges > buildings[0]
+        if past.any() and not past.all():
+            out = np.zeros((len(f), len(ranges)), dtype=complex)
+            for chosen in (~past, past):
+                out[:, chosen] = march(
+                    f,
+                    speed,
+                    impedance,
+                    zs,
+                    ranges[chosen],
+                    heights[chosen],
+                    top,
+                    screen=screen,
+                    speed_at=speed_at,
+                    threads=threads,
+                    independent=True,
+                    obstacles=obstacles,
+                    steps_per_wavelength=steps_per_wavelength,
+                )
+            return out
     # The roof the source stands over, else the first the march meets, falls on a height
     # step: the steps a little finer where it needs.
     reach = float(ranges.max()) if len(ranges) else 0.0
