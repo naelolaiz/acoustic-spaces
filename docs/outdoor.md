@@ -651,7 +651,7 @@ is an arc of a circle, so its travel time and its length are exact.
   [Validation](validation.md#the-wide-angle-parabolic-equation)). Over open ground it
   takes five to eight times as long, all of it in the bands the parabolic
   equation gives, and behind barriers and buildings, where it runs in every band, about
-  ten times.
+  seven and a half times.
 - **Off façades and barriers** the paths bend the same way, in the vertical plane the
   reflections fold them into, with the wind's mean component over their legs. A path
   that would pass over the wall, or through something on the way, is left out. These
@@ -736,8 +736,9 @@ is an arc of a circle, so its travel time and its length are exact.
   with the open ground's field along the way), and of all of them by up to 0.57 dB at
   500 Hz (see
   [Known issues](validation.md#known-issues)). A row of 11 such listeners across the
-  boundary took 256 runs and 14.4 s of CPU, against 312 runs and 18.9 s with the open
-  ground's runs along the ways: along a whole degree the ways' runs hold what the lit
+  boundary took 256 runs, 20 s of CPU with 8 frequencies an octave in every band and
+  44 s with the default ones, where the open ground's runs along the ways would make
+  312: along a whole degree the ways' runs hold what the lit
   listeners' runs there hold, and share them. Round other
   edges (over a top and round an end
   at once, a model file's objects), the paths keep their straight legs as over an
@@ -882,11 +883,11 @@ long; `simulation.performance.threads` shares the work out over the cores. Behin
 equation runs in every band, in the weather and in still air, for each degree of
 direction, the runs of a source that differ only past their first obstacle sharing the
 march over the open ground before it: on one core, the runs for a listener 160 m out
-take about 7 s, 85 % of it at 4 and 8 kHz; a coverage map over grass in 8 m/s of wind,
-of 96 points behind two barriers or 90 round a building, 77 to 89 s; and three or four
-listeners 10 to 20 m up 30 to 60 m from the source behind a barrier or a building,
-where the wide-angle equation runs (the sound reaching them steeply), about 60 s,
-against 0.1 to 0.5 s in still air.
+take about 10 s, two thirds of it at 4 and 8 kHz; a coverage map over grass in 8 m/s of
+wind, of 96 points behind two barriers or 90 round a building, 103 to 130 s; and three
+or four listeners 10 to 20 m up 30 to 60 m from the source behind a barrier or a
+building, where the wide-angle equation runs (the sound reaching them steeply), about
+90 s, against about 0.9 s in still air.
 
 Over the open ground the runs take 24 frequencies an octave at 1 and 2 kHz; below, 8.
 `simulation.early.open_ground_frequencies` takes 8 there too, or `rays`, which leaves
@@ -954,19 +955,20 @@ in ten, largest), and a coverage map of 96 points over grass behind two barriers
 
 | `barrier_frequencies` | 4 kHz | 8 kHz | the map | against straight legs |
 |---|---|---|---|---|
-| 32 (the default) | 0.05, 0.10, 0.23 | 0.04, 0.10, 0.55 | 81 s | 5.5 times |
-| 16 | 0.05, 0.10, 0.23 | 0.51, 1.0, 6.4 | 59 s | 4.0 times |
-| 8 | 0.80, 1.7, 9.6 | 2.1, 3.5, 14 | 45 s | 3.0 times |
+| 32 (the default) | 0.05, 0.10, 0.23 | 0.04, 0.10, 0.55 | 111 s | 7.4 times |
+| 16 | 0.05, 0.10, 0.23 | 0.51, 1.0, 6.4 | 89 s | 5.9 times |
+| 8 | 0.80, 1.7, 9.6 | 2.1, 3.5, 14 | 76 s | 5.1 times |
 
 These come on top of the parabolic equation's own error (see
 [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)),
 and the bands below 4 kHz do not change. A source or a listener on a building's roof costs what a
 listener behind a building does: from a source 1 m over a roof 6 m high, upwind in the
-`windy` preset, one listener 43 m away takes 4.2 s on one core and one 200 m away
-15.7 s (1.0 and 2.8 s when the building was left out), but ones 20 and 25 m away, close
-behind the edge where the wide-angle equation runs, 18.7 and 25 s (0.1 and 0.2 s), 16 s
-of the first in its 8 kHz run; a map of 22 points round the building takes 159 s
-(4.6 s), 105 s with `barrier_frequencies: 16` and 54 s with 8. The places of a walking source share the parabolic
+`windy` preset, one listener 43 m away takes 3.5 s on one core and one 200 m away
+9.7 s (0.9 and 2.2 s when the building was left out), but ones 20 and 25 m away, close
+behind the edge where the wide-angle equation runs, 19 and 22 s (2.0 and 2.5 s), 16 s
+of the first in its 8 kHz run; a map of 22 points round the building takes 124 s
+(10 s for its 24 points with the building left out), 71 s with
+`barrier_frequencies: 16` and 36 s with 8. The places of a walking source share the parabolic
 equation's runs where they stand at one height over one ground and neither the weather
 nor the ground has zones: a run from one place serves the listeners of every other that
 the sound goes the same way to, each reached by a last step of its own under the

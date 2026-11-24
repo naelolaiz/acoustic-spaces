@@ -3843,7 +3843,7 @@ listeners 25 m away 10 and 14 m up and 40 m away 1.5 m up:
 | high | rigid | 0.07 | 0.01 | 0.11 | 0.02 | 0.05 |
 | high | grass | 0.03 | 0.01 | 0.09 | 0.02 | 0.02 |
 
-The quarter wavelength's step costs 2 to 2.5 times less than the tenth's and holds
+The quarter wavelength's step costs 2.3 to 2.9 times less than the tenth's and holds
 within 0.2 dB but behind the top 60 degrees up at 4 kHz over rigid ground, where it is
 0.21 dB off 11 m behind the top and 0.37 dB 26 m behind it. The ground's
 interference fringes behind a barrier are dense in frequency: at 8 kHz 16 frequencies an

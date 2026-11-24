@@ -147,7 +147,7 @@ MAX_GROUND_BOUNCES = 10
 #: Behind barriers and buildings the parabolic equation runs in every band with them
 #: inside (:meth:`Refraction._barrier`). From this band (centre, Hz) up its height step
 #: is BARRIER_COARSE times the solver's own: a quarter wavelength in the narrow-angle
-#: equation (a tenth below it), which costs 2 to 2.5 times less and changes the
+#: equation (a tenth below it), which costs 2.3 to 2.9 times less and changes the
 #: weather's effect by up to 0.2 dB at 1 to 8 kHz behind barriers and a building over
 #: grass and rigid ground, 15 to 150 m away, but up to 0.4 dB at 4 kHz 11 and 26 m behind
 #: a top 60 degrees up from the source over rigid ground
