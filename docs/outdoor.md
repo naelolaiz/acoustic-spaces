@@ -675,8 +675,8 @@ is an arc of a circle, so its travel time and its length are exact.
   Inside the equation a barrier lets nothing through below its top (Salomons 1994),
   which leaves the level behind it below a rigid one's (1.5 m up behind a barrier 4 m
   high 15 m from a source 1 m up, in still air over rigid ground, by 1.2 to 3.2 dB 10
-  to 90 m behind and 4.1 to 9.4 dB 2 to 5 m behind; 2 m behind one 6 m high 20 m away
-  by 10.9 to 14.6 dB; a one-off check), and a roof is a rigid floor
+  to 90 m behind and 4.1 to 9.4 dB 2 to 5 m behind; at the same heights 2 m behind one
+  6 m high 20 m away by 10.9 to 14.6 dB; a one-off check), and a roof is a rigid floor
   at its own height, between the equation's heights, over which the field goes on; the
   ratio cancels most of that. Past a barrier or a building the equation marches in
   steps that take no sound further up or down than its absorbing layer is thick, so

@@ -3255,7 +3255,8 @@ Each listener is reached by a last step of its own off the march, and a run's ab
 layer starts where the layer of a run for each of its listeners alone would. A
 listener's own layer starts 1.5 times as high as the highest of the source, the listener
 and the bent paths between them, at least 20 m above the two and 0.15 times the range
-up; listeners share a run where those starts need the same grid of heights, a power of
+up, and behind barriers and buildings at least 1.5 times as high as the highest top
+short of it; listeners share a run where those starts need the same grid of heights, a power of
 two of them, and the layer starts as high as that grid holds it, for one listener as for
 all. The listeners that take the wide-angle equation's level, whose grid is as high as
 its layer needs, share a run where their starts round up to the same of the heights
@@ -3292,11 +3293,30 @@ once a point lies beyond the building's front, the points short of the front mar
 apart from those past it, so that each gets what it gets alone
 (`tests/test_wide_angle.py`). A listener close under a tall edge, which the sound from
 the edge's top reaches too steeply for a full step to take whole, gets one step of its
-own from the field at the edge: 3.4 to 20 m behind an edge 20 m high 4 m from a source
+own from the field at the edge, which takes the sound of every height under the layer,
+straight and by the ground, to a high listener as to a low one and over hard ground
+too. Where the ground or the weather changes between the edge and the listener, or
+the ground is one between soft and hard whose reflection one step cannot hold (an
+impedance of 20 + 140i at 500 Hz, under a layer that starts 60 m up), the march goes
+there in shorter steps, each with its own ground and air; they take the steepest sound
+less well, however short they are: within 0.05 dB of a march whose steps take it whole
+12 m behind a 20 m edge where the ground turns from rigid to grass 8 m behind it
+(250 Hz), 6 m behind it where still air gives way to a wind of 10 m/s 4 m behind it
+(1 kHz), and 12 and 20 m behind a 40 m edge over that ground, but 1.1 dB off 6 m
+behind the 40 m edge, which its top reaches 82 degrees down
+(`tests/test_parabolic_obstacles.py`). In one step of its own, 3.4 to 20 m behind an edge 20 m high 4 m from a source
 0.5 m up, 1.5 m up over rigid ground, the wind's effect in 10 m/s downwind is within
 0.29 dB at 250 Hz, 0.20 dB at 1 kHz and 0.82 dB at 4 kHz of a march in quarter-wavelength
 steps under a layer 320 m thick (a one-off check at 84 listeners; with steps that take
-the sound any way up it was up to 1.5, 3.7 and 5.2 dB off). At 1 and 2 kHz, in a one-off check at the steep points of the first set's
+the sound any way up it was up to 1.5, 3.7 and 5.2 dB off). Where a listener passes from
+that step of its own to full steps the weather's effect steps: 1.5 m up behind tops 45
+and 60 degrees up from a source 0.5 m up 4 m away, 1 cm either side of the passage 8 to
+11 m from the source, by at most 0.20 dB in 10 m/s and 0.08 dB in 5 m/s, down- and
+upwind, from 250 Hz to 4 kHz, where a march in quarter-wavelength steps under a layer
+320 m thick changes by at most 0.07 and 0.04 dB and the two sides are within 0.45 and
+0.18 dB of it; the level in still air changes as that march's does, within 0.01 dB (a
+one-off check with the narrow-angle equation alone). At 1 and 2 kHz, in a one-off check at the steep points
+of the first set's
 cases from sources 5, 10 and 30 m up to a listener 1.5 m up and from 1.5 m up to 30 m
 up (42 points), the level is within 0.07 dB of the program at 1 kHz; at 2 kHz it is 0.11
 to 0.49 dB off at each case's nearest point, where the sound comes in at 34 degrees, and

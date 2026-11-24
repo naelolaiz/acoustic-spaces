@@ -220,9 +220,12 @@ def samples(band: int) -> np.ndarray:
 
 def engine_levels(band, speed, impedance, zs, at, cut, speed_at=None) -> np.ndarray:
     """(n,) the band level (dB over free field) of the engine's parabolic equation with
-    ``cut`` inside, at the points ``at`` (range, height), as its runs behind barriers
-    take it: their height step, samples and bounded steps, every point on its own last
-    step, under one absorbing layer for all the points, above the highest."""
+    ``cut`` inside, at the points ``at`` (range, height), with the height step, the
+    samples and the bounded steps of its runs behind barriers, every point on its own
+    last step; under one absorbing layer for all the points, which starts where the
+    engine's rule puts it for the highest and the farthest of them (the engine gives
+    each listener its own, as high as its grid of heights holds it: ``--only engine``
+    runs the engine itself, ``--only started`` moves the start)."""
     f = samples(band)
     ranges = np.array([r for r, _ in at], dtype=float)
     heights = np.array([z for _, z in at], dtype=float)

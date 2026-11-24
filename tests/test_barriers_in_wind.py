@@ -1199,6 +1199,52 @@ def test_a_listener_behind_a_barrier_in_wind_reads_the_same_alone_as_with_others
     np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
 
 
+def test_sources_alike_behind_a_barrier_share_runs_and_get_what_their_own_give(monkeypatch) -> None:
+    """Two sources at one height, 10 m apart along the barrier (the places of a walk),
+    each with a listener 40 m away straight behind the barrier from it: asked to share
+    the parabolic equation's runs they take fewer runs past the barrier, and each
+    listener gets from each source the early energy that runs of the source's own give
+    it, alone as with two more listeners behind the first, 80 m away, one of them 10 m
+    up."""
+    mine = ((40.0, 0.0, 1.5), (40.0, 10.0, 1.5))
+    places = ((0.0, 0.0, 1.0), (0.0, 10.0, 1.0))
+    past = []
+    march = parabolic.march
+
+    def counted(*args, **options):
+        past.append(bool(options.get("obstacles")))
+        return march(*args, **options)
+
+    monkeypatch.setattr(parabolic, "march", counted)
+    early, runs = {}, {}
+    for share in (False, True):
+        for listeners in (mine, (*mine, (80.0, 0.0, 1.5), (80.0, 0.0, 10.0))):
+            room = Room.from_scene(
+                scene(
+                    listeners=listeners,
+                    sources=places,
+                    open_ground_frequencies=8,
+                    barrier_frequencies=8,
+                )
+            )
+            past.clear()
+            result = simulate(room, threads=1, share_waves=["s0", "s1"] if share else None)
+            runs[share, len(listeners)] = sum(past)
+            early[share, len(listeners)] = np.array(
+                [
+                    result[name, who].early.energy.sum(axis=0)
+                    for name in ("s0", "s1")
+                    for who in ("l0", "l1")
+                ]
+            )
+    assert 0 < runs[True, 2] < runs[False, 2]
+    for share in (False, True):
+        np.testing.assert_allclose(early[share, 4], early[share, 2], rtol=1e-12, atol=0.0)
+    np.testing.assert_allclose(
+        10 * np.log10(early[True, 2] / early[False, 2]), 0.0, rtol=0.0, atol=1e-9
+    )
+
+
 @pytest.mark.parametrize(("y", "threads"), [(-10.0, 2), (5.0, 1)])
 def test_a_listener_past_a_barrier_s_end_in_wind_reads_the_same_alone_as_with_others(
     y, threads

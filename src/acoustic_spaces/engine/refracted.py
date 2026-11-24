@@ -2181,8 +2181,9 @@ def solve(plans: list[Planned]) -> list[dict]:
 
     Behind barriers the runs in the weather share by the profile and what stands on the
     way (the cut), those in still air by the cut alone, each by the grid as above; past
-    their obstacles they march in bounded steps
-    (:func:`~acoustic_spaces.engine.parabolic.march`). The open ground's runs along the
+    their obstacles the narrow-angle equation marches in bounded steps
+    (:func:`~acoustic_spaces.engine.parabolic.march`), the wide-angle one, which gives
+    the steep listeners there too, in its own. The open ground's runs along the
     ways round ends, in the weather alone (the straight paths are their reference in
     still air), share by the profile with no cut, each by the grid as above, and with
     weather zones through the weathers along the way's legs
@@ -2418,8 +2419,7 @@ def solve(plans: list[Planned]) -> list[dict]:
             extra["refracting"] = True
             # Past obstacles in bounded steps: the sound an obstacle's top bends
             # almost straight up does not come back down from the top of the grid, so
-            # the level behind it does not go with where the run's layer starts, which
-            # the run's other listeners set.
+            # the level behind it does not go with where the layer starts.
             extra["bounded"] = True
             if trunk is not None:
                 extra["trunk"] = trunk
