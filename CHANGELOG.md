@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Fixed (results change): behind barriers and buildings in wind or a temperature
+  gradient the parabolic equation's level went with how high its grid reached and so
+  with the other listeners in a listener's direction, by 2.0 to 2.4 dB at 2 and 4 kHz
+  15 m behind a barrier 7.43 m high 4 m from the source: the sound the top bends steeply
+  up came back down from the top of the grid. Its narrow-angle runs past obstacles now
+  march in steps that take no sound further up or down than the absorbing layer is
+  thick, each listener on the grid of a run for it alone, and a listener there reads the
+  same alone as among others; alone, the weather's effect at the 32 listeners of the
+  validation's cases in 10 m/s moved by up to 0.2 dB at 250 Hz, 1 kHz and 4 kHz where
+  it is within 25 dB of still air. On one core coverage maps behind barriers and
+  buildings take up to 12 % longer, runs from or over a roof 14 to 41 % and steep
+  listeners behind barriers and buildings up to 55 %.
+
 ## 4.3.0
 
 Error estimates for more results: the uncertainty of a coverage map's values (its

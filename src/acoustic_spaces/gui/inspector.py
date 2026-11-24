@@ -120,7 +120,7 @@ ROWS = [("solver", N_("solver for whole rows")), ("edges", N_("paths over the ed
 #: simulation.early.barrier_frequencies' choices, with the largest error of the weather's
 #: effect behind barriers at 8 kHz that each gives against 64 frequencies an octave in
 #: validation/barrier_wind.py's convergence cases (dB; docs/outdoor.md has the table).
-BARRIER_FREQUENCIES = ((32, 0.51), (16, 6.4), (8, 14.0))
+BARRIER_FREQUENCIES = ((32, 0.55), (16, 6.4), (8, 14.0))
 #: simulation.early.open_ground_frequencies' choices, with the largest error at 1 and
 #: 2 kHz over the open ground that each gives against a fast field program in
 #: validation/open_ground_frequencies.py's cases (dB; docs/outdoor.md has the table).

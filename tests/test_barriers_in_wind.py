@@ -1175,6 +1175,102 @@ def test_no_step_where_the_direct_sound_rises_past_a_barrier_s_top_corner() -> N
     assert np.all(np.abs(np.diff(level, axis=0)) < 0.05)
 
 
+@pytest.mark.parametrize(
+    ("more", "threads"), [((), 1), (((40.0, 10.0, 1.5), (80.0, -20.0, 1.5)), 2)]
+)
+def test_a_listener_behind_a_barrier_in_wind_reads_the_same_alone_as_with_others(
+    more, threads
+) -> None:
+    """Behind the barrier in wind a listener 40 m from the source gets the same early
+    energy in every band alone as with two more behind it, 80 m away, one of them 10 m
+    up: its runs over the barrier, in the wind and in still air, are on the grid of
+    heights that its own absorbing layer needs, the layer where that grid holds it,
+    whoever shares them; and on two threads, with two more in other directions, whose
+    runs in still air take the field up to the barrier from one another. With one layer
+    above the highest of a run's listeners the others moved its bands by up to 0.0013
+    dB."""
+    me = (40.0, 0.0, 1.5)
+    early = []
+    for listeners in ((me,), (me, (80.0, 0.0, 1.5), (80.0, 0.0, 10.0), *more)):
+        room = Room.from_scene(
+            scene(listeners=listeners, open_ground_frequencies=8, barrier_frequencies=8)
+        )
+        early.append(simulate(room, threads=threads)["s", "l0"].early.energy.sum(axis=0))
+    np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
+
+
+def test_sources_alike_behind_a_barrier_share_runs_and_get_what_their_own_give(monkeypatch) -> None:
+    """Two sources at one height, 10 m apart along the barrier (the places of a walk),
+    each with a listener 40 m away straight behind the barrier from it: asked to share
+    the parabolic equation's runs they take fewer runs past the barrier, and each
+    listener gets from each source the early energy that runs of the source's own give
+    it, alone as with two more listeners behind the first, 80 m away, one of them 10 m
+    up."""
+    mine = ((40.0, 0.0, 1.5), (40.0, 10.0, 1.5))
+    places = ((0.0, 0.0, 1.0), (0.0, 10.0, 1.0))
+    past = []
+    march = parabolic.march
+
+    def counted(*args, **options):
+        past.append(bool(options.get("obstacles")))
+        return march(*args, **options)
+
+    monkeypatch.setattr(parabolic, "march", counted)
+    early, runs = {}, {}
+    for share in (False, True):
+        for listeners in (mine, (*mine, (80.0, 0.0, 1.5), (80.0, 0.0, 10.0))):
+            room = Room.from_scene(
+                scene(
+                    listeners=listeners,
+                    sources=places,
+                    open_ground_frequencies=8,
+                    barrier_frequencies=8,
+                )
+            )
+            past.clear()
+            result = simulate(room, threads=1, share_waves=["s0", "s1"] if share else None)
+            runs[share, len(listeners)] = sum(past)
+            early[share, len(listeners)] = np.array(
+                [
+                    result[name, who].early.energy.sum(axis=0)
+                    for name in ("s0", "s1")
+                    for who in ("l0", "l1")
+                ]
+            )
+    assert 0 < runs[True, 2] < runs[False, 2]
+    for share in (False, True):
+        np.testing.assert_allclose(early[share, 4], early[share, 2], rtol=1e-12, atol=0.0)
+    np.testing.assert_allclose(
+        10 * np.log10(early[True, 2] / early[False, 2]), 0.0, rtol=0.0, atol=1e-9
+    )
+
+
+@pytest.mark.parametrize(("y", "threads"), [(-10.0, 2), (5.0, 1)])
+def test_a_listener_past_a_barrier_s_end_in_wind_reads_the_same_alone_as_with_others(
+    y, threads
+) -> None:
+    """60 m downwind, 10 m behind a barrier's end and 5 m into the lit side, where the
+    paths round the end take the parabolic equation's runs along their ways, a listener
+    gets the same early energy in every band alone as with two more twice as far in its
+    direction, one of them 10 m up; on two threads too. With the runs over the barrier
+    under one layer above the highest of their listeners the two moved its bands by up
+    to 0.0002 dB behind the barrier and 0.000005 dB on the lit side."""
+    me = (60.0, y, 1.5)
+    early = []
+    for listeners in ((me,), (me, (120.0, 2.0 * y, 1.5), (120.0, 2.0 * y, 10.0))):
+        room = Room.from_scene(
+            scene(
+                listeners=listeners,
+                barriers=[END],
+                extent=((-60.0, -60.0), (150.0, 60.0)),
+                open_ground_frequencies=8,
+                barrier_frequencies=8,
+            )
+        )
+        early.append(simulate(room, threads=threads)["s", "l0"].early.energy.sum(axis=0))
+    np.testing.assert_allclose(early[1], early[0], rtol=1e-12, atol=0.0)
+
+
 def test_the_paths_over_the_top_and_over_the_open_ground_stay_as_they_were() -> None:
     """60 m downwind the paths over the barrier's top 10 m behind its end and the open
     ground's paths 20 m into the lit side are as recorded for this scene (on Linux,
@@ -1200,14 +1296,14 @@ def test_the_paths_over_the_top_and_over_the_open_ground_stay_as_they_were() -> 
     ]
     ground = np.flatnonzero(lit.edge < 0)
     expected_top = [
-        5.298631481402662e-06,
-        4.2415031819623975e-06,
-        2.452351503009703e-06,
-        5.319490746351252e-06,
-        7.372428038473811e-07,
-        4.667647687070827e-07,
-        1.5041971014804868e-07,
-        1.30810958966448e-08,
+        5.298643119195644e-06,
+        4.241727603977253e-06,
+        2.4522551203784277e-06,
+        5.320225480538016e-06,
+        7.37247206831378e-07,
+        4.667884261759825e-07,
+        1.5041903681524244e-07,
+        1.3081027470272444e-08,
     ]
     expected_ground = [
         9.200410206807897e-05,
