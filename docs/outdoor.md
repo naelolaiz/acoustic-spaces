@@ -603,9 +603,9 @@ is an arc of a circle, so its travel time and its length are exact.
   in those cases; in third octaves it gives the three of each of those octave bands, to
   2.5 kHz. A source's listeners and map points that the sound goes the same way to
   share a march, each reached by a last step of its own off it and under the absorbing
-  layer of a run for it alone, so that over the open ground it reads the same alone as
-  among others (behind barriers and buildings the others still set the layer, see
-  [Known issues](validation.md#known-issues)).
+  layer of a run for it alone, so that it reads the same alone as among others, over
+  the open ground and behind barriers and buildings
+  ([Validation](validation.md#the-wide-angle-parabolic-equation)).
   In the shadow, above those
   bands, the shadow deepens with frequency as it does over the octave below. At 4 and
   8 kHz the rays give the sound: against the program, 50 to 300 m from a source 2 m
@@ -969,7 +969,7 @@ of the first in its 8 kHz run; a map of 22 points round the building takes 159 s
 equation's runs where they stand at one height over one ground and neither the weather
 nor the ground has zones: a run from one place serves the listeners of every other that
 the sound goes the same way to, each reached by a last step of its own under the
-absorbing layer of a run for it alone, so that over the open ground it gets what a run
+absorbing layer of a run for it alone, so that it gets what a run
 of its own place would give it (see
 [Validation](validation.md#the-wide-angle-parabolic-equation)). Each place keeps its bent paths
 while it waits for the shared runs, so the memory a walk takes grows with the places

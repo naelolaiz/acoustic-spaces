@@ -3290,7 +3290,13 @@ the grid, 1.15 and 0.27 dB apart at 250 Hz and 0.23 and 0.06 dB at 1 kHz). Where
 wide-angle equation runs with a building on the way, whose roof its height step fits
 once a point lies beyond the building's front, the points short of the front march
 apart from those past it, so that each gets what it gets alone
-(`tests/test_wide_angle.py`). At 1 and 2 kHz, in a one-off check at the steep points of the first set's
+(`tests/test_wide_angle.py`). A listener close under a tall edge, which the sound from
+the edge's top reaches too steeply for a full step to take whole, gets one step of its
+own from the field at the edge: 3.4 to 20 m behind an edge 20 m high 4 m from a source
+0.5 m up, 1.5 m up over rigid ground, the wind's effect in 10 m/s downwind is within
+0.29 dB at 250 Hz, 0.20 dB at 1 kHz and 0.82 dB at 4 kHz of a march in quarter-wavelength
+steps under a layer 320 m thick (a one-off check at 84 listeners; with steps that take
+the sound any way up it was up to 1.5, 3.7 and 5.2 dB off). At 1 and 2 kHz, in a one-off check at the steep points of the first set's
 cases from sources 5, 10 and 30 m up to a listener 1.5 m up and from 1.5 m up to 30 m
 up (42 points), the level is within 0.07 dB of the program at 1 kHz; at 2 kHz it is 0.11
 to 0.49 dB off at each case's nearest point, where the sound comes in at 34 degrees, and
@@ -6342,21 +6348,6 @@ Results:
   300 m the 500 Hz band is 12.5 dB above the program on average. Without the wall the
   same listeners, 50 to 300 m away, are within rms 0.11 dB of the program's direct
   sound in every band up to 2 kHz.
-- **Other listeners in a listener's direction behind barriers, in wind and temperature
-  gradients.** Behind a barrier or a building the listeners and map points that a
-  source's sound goes the same way to share a run of the parabolic equation under one
-  absorbing layer, which begins above the highest of them, and part of the sound that
-  the obstacle's top sends steeply up comes back down, by where the layer begins. In
-  one-off checks a listener 40 m from a source 1 m up, behind a barrier 4 m high 15 m
-  from the source in the `windy` preset, moved by 0.0013 dB with two more 80 m away, one
-  of them 10 m up. One 15 m from a source 0.5 m up, behind a barrier 7.43 m high 4 m
-  from the source over a rigid ground, downwind in a wind of 10 m/s at 10 m, moved by
-  2.0 dB at 2 kHz with another 290 m away, and by 2.1 and 2.4 dB at 2 and 4 kHz with
-  another 60 m away, 23 m up; alone, its 2 kHz band stayed within 0.25 dB under ten of
-  twelve layers set to begin 21 to 240 m up and was 0.4 and 2.0 dB under their mean
-  under those beginning 36 and 43 m up, and 0.02 dB under it under a layer twice as
-  thick beginning 43 m up. Over the open ground a listener reads the same alone as among others (see
-  [The wide-angle parabolic equation](#the-wide-angle-parabolic-equation)).
 - **What the equation's field through the crossovers does not mend.** Between its
   samples (59 Hz apart in the 2 kHz band) the field is drawn linearly in the complex
   pressure, within h^2 / 8 times the sum of |a_i| (2 pi dtau_i)^2 for arrivals a_i
