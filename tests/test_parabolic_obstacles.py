@@ -868,16 +868,16 @@ def test_a_point_s_own_step_in_sight_of_the_source_takes_the_ground_the_source_s
     monkeypatch,
 ) -> None:
     """A point's own step takes the ground on which the reflection of the sound's
-    shortest way to the point lands, and in sight of the source over a wall that is the
-    source's own reflection, further on than the wall top's: 1.5 m up 10 m behind a 3 m
+    shortest way to the point lands, and where the source's reflection clears a wall
+    that is the source's own, further on than the wall top's: 1.5 m up 10 m behind a 3 m
     wall 10 m from a source 30 m up, the top's reflection lands 6.67 m behind the wall
     and the source's 9.05 m behind it. Over rigid ground that turns to grass 7.8 m
     behind the wall, between the two, and 9.6 m behind it, beyond both, the 1 kHz band
     of the point's own step from the wall is within 0.15 dB of a plain march in
     quarter-wavelength steps under a layer 320 m thick (0.01 and 0.07 dB), which gives
     1.3 dB less with the grass from 7.8 m than from 9.6 m on: the step over the ground
-    the top's reflection lands on, or over the one at the point, is 1.3 dB off in one
-    of the two."""
+    the top's reflection lands on, or over the one at the point, is 1.3 dB or more off
+    in one of the two (1.4 and 1.3 dB)."""
     f = F[4][::2]
     lawn = grass(f)(0.0)
     ranges, heights = np.array([20.0]), np.array([1.5])
@@ -951,7 +951,9 @@ def test_a_point_s_own_step_takes_the_ground_at_the_range_it_is_given() -> None:
     at the range it is given, and without one the ground at its middle: over rigid
     ground that turns to grass 15 m out, a step from 10 to 17 m is the step over rigid
     ground all the way with the range 14.9 m or none (its middle is 13.5 m out), and
-    the step over grass all the way with the range 15.1 m, each to the last bit."""
+    the step over grass all the way with the range 15.1 m, each to the last bit; with
+    the grass from 12 m out, between the step's start and its middle, the step without
+    a range is the one over grass."""
     f = F[3][::4]
     lawn = grass(f)(0.0)
 
@@ -968,6 +970,8 @@ def test_a_point_s_own_step_takes_the_ground_at_the_range_it_is_given() -> None:
     assert np.array_equal(stepped(mixed, 14.9), rigid)
     assert np.array_equal(stepped(mixed, None), rigid)
     assert np.array_equal(stepped(mixed, 15.1), soft)
+    early = lambda r: None if r < 12.0 else lawn  # noqa: E731
+    assert np.array_equal(stepped(early, None), soft)
 
 
 @pytest.mark.parametrize("ends", [(0.3, 1.0), (0.2, 0.55, 1.0)])
@@ -1000,7 +1004,7 @@ def test_a_point_s_own_step_through_stretches_of_one_air_is_the_step_in_that_air
 
 @pytest.mark.parametrize(
     ("steps_long", "share"),
-    [(4.3, 0.59), (1.0, 0.1), (1.0, 0.9), (0.5, 0.5), (1.9, 0.16), (1.9, 0.95)],
+    [(4.3, 0.59), (1.0, 0.1), (1.0, 0.9), (0.5, 0.5), (1.9, 0.16), (1.9, 0.95), (0.09, 0.9)],
 )
 def test_the_airs_along_a_step_end_where_the_air_changes(steps_long, share) -> None:
     """Where the air changes along the way, a point's own step finds it wherever in the
@@ -1008,8 +1012,10 @@ def test_the_airs_along_a_step_end_where_the_air_changes(steps_long, share) -> N
     its equal parts, no longer than OWN_LOOK_M and at least OWN_LOOKS of them, and each
     stretch in one air ends at the share of the step at which the air changes, found
     to a thousandth of a part. So in a step of 4.3 full steps, of one, of half a one
-    and of 1.9, with the change a tenth of the step from either end too; and none where
-    the air is the same all along, given by one function or by two."""
+    and of 1.9, with the change a tenth of the step from either end too, and in one of
+    0.09 full steps (0.31 m, which OWN_LOOKS parts find the change in and parts of
+    OWN_LOOK_M would not); and none where the air is the same all along, given by one
+    function or by two."""
     f = np.array([500.0])
     windy, other = log_wind(10.0), log_wind(10.0)
     steps = parabolic._Steps(f, still_air, None, 1.0, 30.0, None, None, 10)

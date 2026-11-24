@@ -3309,24 +3309,26 @@ over one between soft and hard too (an impedance of 20 + 140i at 500 Hz, behind 
 edge: within 0.001 dB of the level on a grid twice as high). The step takes the weather
 along each height's straight way to the listener, and one ground for the reflections of
 all heights: the one on which the reflection of the sound's shortest way to the listener
-lands, which comes from the last top in its shadow and from the source in sight of it.
+lands, which comes down from the source where the source's reflection clears every top
+and from a top where it does not.
 Against a march in quarter-wavelength steps under a layer 320 m thick, at 250 Hz, 500 Hz
 and 1 kHz (a one-off check), 1.5 m up 6 to 12 m behind edges 20 and 40 m high 40 m from a
 source 1 m up, whose tops reach the nearest listener 74 and 82 degrees down by way of
 the ground: the level is within 0.03 and 0.22 dB over rigid ground in still air and
 0.15 and 0.25 dB over grass; where the ground turns from rigid to grass 1.3 m or more
-short of where the reflection lands, 3 to 8 m behind the 20 m edge and 3 m behind the
-40 m one, within 0.14 and 0.20 dB; where still air gives way to a wind of 10 m/s 3 to
+short of where the reflection lands, 3 to 8 m behind the 20 m edge and 3 and 5.5 m
+behind the 40 m one, within 0.14 and 0.25 dB; where still air gives way to a wind of 10 m/s 3 to
 8 m behind the edges, within 0.09 and 0.34 dB; and in that wind all the way within 0.55
 and 0.58 dB, where a plain march in the program's own steps under that layer is within
 0.48 and 0.63 dB. Where the ground changes close to where the reflection lands, the
 step, which takes one ground whole where the sound takes both, and that march differ:
 3 m up 8 m behind a screen 10 m high 20 m from a source 1 m up, whose top's reflection
 lands 6.15 m behind the screen, with a change between rigid ground and grass 0.15 and
-0.35 m from there by up to 0.55 dB, 0.65 to 1.15 m from it by up to 0.29 dB and 1.35 m
-or more from it by up to 0.10 dB; in sight of the source, 1.5 m up 6 and 10 m behind a
-3 m wall 10 m from a source 30 m up, with the change 0.24 to 0.64 m from where the
-source's reflection lands by up to 0.67 dB and 1.25 m or more from it by up to 0.16 dB;
+0.35 m from there by up to 0.55 dB, 0.65 to 1.16 m from it by up to 0.29 dB and 1.34 m
+or more from it by up to 0.10 dB; 1.5 m up 6 and 10 m behind a 3 m wall 10 m from a
+source 30 m up, whose reflection clears the wall, with the change 0.23 to 0.64 m from
+where the source's reflection lands by up to 0.67 dB and 1.24 m or more from it by up
+to 0.16 dB;
 6 m behind the 40 m edge with the change 0.28 m short of the landing by 0.65 dB; and
 one full step (2.7 and 1.3 m) behind the 20 m edge at 500 Hz and 1 kHz, with the change
 8 and 4 cm short of the landing, by 0.77 dB (`tests/test_parabolic_obstacles.py` holds
@@ -3337,8 +3339,8 @@ its own, 3.4 to 20 m behind an edge 20 m high 4 m from a source
 steps under a layer 320 m thick (a one-off check at 84 listeners; with steps that take
 the sound any way up it was up to 1.5, 3.7 and 5.2 dB off), and at the six listeners
 behind the edges 40 m from the source within 0.57, 0.18 and 0.59 dB at 250 Hz, 500 Hz
-and 1 kHz, where the plain march in the program's own steps is within 0.43, 0.61 and
-0.27 dB of it. Where a listener passes from
+and 1 kHz, where the plain march in the program's own steps under a layer 320 m thick is
+within 0.43, 0.61 and 0.27 dB of it. Where a listener passes from
 that step of its own to full steps the weather's effect steps: 1.5 m up behind tops 45
 and 60 degrees up from a source 0.5 m up 4 m away, less than 1 cm apart, one either side of the passage 7.4 to
 11.1 m from the source, by at most 0.20 dB in 10 m/s and 0.08 dB in 5 m/s, down- and

@@ -160,7 +160,7 @@ BARRIER_COARSE = 0.4
 #: over rigid ground 25 to 100 m away and 6.4 dB where the fringes fell in step with the
 #: frequencies (27 degrees up from the source, 25 m away; a one-off check); 32 are within
 #: 0.18 dB of 64 there and over grass, but 0.55 dB 11 m behind a top 60 degrees up, and
-#: at 4 kHz 16 are within 0.21 dB of 32 (``validation/barrier_wind.py --only
+#: at 4 kHz 16 are within 0.22 dB of 32 (``validation/barrier_wind.py --only
 #: convergence``).
 BARRIER_SAMPLES = ((4000, 16), (8000, 32))
 #: With ``simulation.early.open_ground_frequencies: rays`` the open ground's parabolic

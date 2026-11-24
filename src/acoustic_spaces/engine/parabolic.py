@@ -1595,7 +1595,7 @@ class _Ground:
     absorbing layer by its image too, so it needs the continued field whole as deep as
     the layer starts above the ground (``top``, m): for that step the field fades from
     there to the deepest height (from the middle of the heights, where the layer starts
-    above it), however much it has grown by then (``fade_own``, (n,)): nothing of it is
+    below it), however much it has grown by then (``fade_own``, (n,)): nothing of it is
     carried on to a next step, so its growth does not build up as it would along a
     march."""
 

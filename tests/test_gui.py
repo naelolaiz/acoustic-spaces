@@ -2834,7 +2834,7 @@ def test_barrier_frequencies_choice(window) -> None:
     page = window.inspector.pages["simulation"]
     assert page.barrier_frequencies.isEnabled()
     assert page.barrier_frequencies.currentData() == 32
-    assert page.barrier_frequencies.currentText() == "32, off by up to 0.51 dB at 8 kHz"
+    assert page.barrier_frequencies.currentText() == "32, off by up to 0.55 dB at 8 kHz"
     # The tip says what the choice trades and where the errors and run times measured
     # are: the choices and the documentation give those, the tip none that go stale.
     tip = page.barrier_frequencies.toolTip()
