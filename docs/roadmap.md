@@ -468,8 +468,8 @@ Outdoor acoustics, in steps:
   take no sound further up or down than the absorbing layer is thick, so that what an
   obstacle's top bends steeply up does not come back down from the top of the grid, and
   each listener takes the layer of a run for it alone: the level behind an obstacle goes
-  neither with where the layer starts nor with the run's other listeners (see
-  [Validation](validation.md#the-wide-angle-parabolic-equation)).
+  neither with where the layer starts (but deep in the upwind shadow) nor with the run's
+  other listeners (see [Validation](validation.md#the-wide-angle-parabolic-equation)).
 - [ ] The crossover from the parabolic equation's bands to the rays' (2.4 to 3.4 kHz,
   or 0.59 to 0.84 kHz with `open_ground_frequencies: rays` short of half the way to
   the shadow): out of the shadow the equation's field goes through it, but the rays'

@@ -9,7 +9,8 @@
   up came back down from the top of the grid. Its narrow-angle runs past obstacles now
   march in steps that take no sound further up or down than the absorbing layer is
   thick, each listener on the grid of a run for it alone, and a listener there reads the
-  same alone as among others.
+  same alone as among others; alone, the weather's effect at the 32 listeners of the
+  validation's cases moved by up to 0.2 dB where it is within 25 dB of still air.
 
 ## 4.3.0
 

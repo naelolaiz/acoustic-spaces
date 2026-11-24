@@ -681,11 +681,12 @@ is an arc of a circle, so its travel time and its length are exact.
   ratio cancels most of that. Past a barrier or a building the equation marches in
   steps that take no sound further up or down than its absorbing layer is thick, so
   that what the top bends steeply up does not come back down into the shadow from the
-  top of the grid: the level behind does not go with how high the grid reaches
+  top of the grid: the level behind does not go with how high the grid reaches, but
+  deep in the upwind shadow
   ([Validation](validation.md#the-wide-angle-parabolic-equation)). Where the sound reaches a point more steeply than 15
   degrees the wide-angle equation runs, in which a roof is a rigid floor on its height
   steps: behind a building in 10 m/s the effect steps by 0.01 to 0.05 dB from 250 Hz to
-  1 kHz, 0.30 dB at 125 Hz and 0.35 dB at 2 kHz where the points cross that angle, the
+  1 kHz, 0.31 dB at 125 Hz and 0.36 dB at 2 kHz where the points cross that angle, the
   narrow-angle equation's error below it
   ([Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   A source or a listener on a building's roof takes the same runs, with the building

@@ -728,29 +728,22 @@ def fine_reference(monkeypatch, f, impedance, speed_at, ranges, heights, top, cu
 
 
 @pytest.mark.parametrize(
-    ("what", "band", "edge", "change", "behind", "within"),
-    [
-        ("ground", 2, 20.0, 8.0, 12.0, 0.1),
-        ("air", 4, 20.0, 4.0, 6.0, 0.05),
-        ("ground", 3, 40.0, 3.0, 6.0, 0.15),
-        ("air", 4, 40.0, 3.0, 6.0, 0.35),
-    ],
+    ("what", "band", "change", "behind", "within"),
+    [("ground", 2, 8.0, 12.0, 0.1), ("air", 4, 4.0, 6.0, 0.05)],
 )
 def test_a_point_s_own_step_takes_the_ground_its_sound_lands_on_and_the_airs_on_its_way(
-    what, band, edge, change, behind, within, monkeypatch
+    what, band, change, behind, within, monkeypatch
 ) -> None:
-    """A point's own step takes each height's reflected sound over the ground it lands
-    on (the sound of the heights above an edge's top lands between where the top's does
-    and the point), and the air's phase along each height's straight way through the
-    airs it meets. Behind an edge 40 m from the source, 1.5 m up, against a plain march
-    in quarter-wavelength steps under a layer 320 m thick: 12 m behind a 20 m edge over
-    a ground that turns from rigid to grass 8 m behind it, the 250 Hz band is within
-    0.07 dB (0.84 dB with the ground at the step's middle); 6 m behind it where still
-    air gives way to a wind of 10 m/s 4 m behind it, the 1 kHz band within 0.02 dB
-    (0.63 dB with the air at the step's middle); and 6 m behind a 40 m edge, which its
-    top reaches 82 degrees down, with the change 3 m behind the edge, the 500 Hz band
-    within 0.10 dB over the ground and the 1 kHz band within 0.27 dB in the airs, where
-    with one ground and one air all the way they are 0.05 and 0.07 dB off."""
+    """A point's own step takes the reflection of every height over the ground on which
+    the reflection of the sound's way to the point lands (behind a tall edge, close
+    short of the point), and the air's phase along each height's straight way through
+    the airs it meets. Behind an edge 20 m high 40 m from the source, 1.5 m up, against
+    a plain march in quarter-wavelength steps under a layer 320 m thick: 12 m behind it
+    over a ground that turns from rigid to grass 8 m behind it, the 250 Hz band is
+    within 0.07 dB (0.76 dB with the ground at the step's middle); 6 m behind it where
+    still air gives way to a wind of 10 m/s 4 m behind it, the 1 kHz band within
+    0.02 dB (0.63 dB with the air at the step's middle)."""
+    edge = 20.0
     f = F[band][::2]
     at = 40.0 + change
     impedance, speed_at = None, None
@@ -790,14 +783,15 @@ def test_a_point_s_own_step_takes_the_ground_its_sound_lands_on_and_the_airs_on_
 
 
 def test_a_point_s_own_step_takes_a_ground_whole_close_behind_a_change(monkeypatch) -> None:
-    """A point's own step takes each height's reflected sound whole over the ground it
-    lands on, however close behind a change of ground that is: 1.5 m up 6 m behind a
-    40 m edge 40 m from the source, over rigid ground that turns to grass 5.5 m behind
-    the edge, 0.28 m short of where the top's reflection lands, the 500 Hz band is
-    within 0.15 dB of a plain march in quarter-wavelength steps under a layer 320 m
-    thick with the grass from 3 m behind the edge on (0.10 dB), and 0.62 dB from that
-    march over the ground as it is, which is 0.11 dB from what it is over rigid ground
-    all the way."""
+    """A point's own step takes the reflection whole over the one ground it lands on,
+    however close behind a change of ground that is: 1.5 m up 6 m behind a 40 m edge
+    40 m from the source, over rigid ground that turns to grass 5.5 m behind the edge,
+    0.28 m short of where the reflection lands, the 500 Hz band is within 0.15 dB of a
+    plain march in quarter-wavelength steps under a layer 320 m thick with the grass
+    from 3 m behind the edge on (0.10 dB), and 0.62 dB from that march over the ground
+    as it is, which is 0.11 dB from what it is over rigid ground all the way. That is
+    the step's limit, where the two grounds share the reflection and it takes one: the
+    bounds of 0.4 and 0.8 dB hold it as it is known, not as a level to keep."""
     f = F[3][::2]
     lawn = grass(f)(0.0)
     ranges, heights = np.array([46.0]), np.array([1.5])
@@ -834,27 +828,21 @@ def test_a_point_s_own_step_takes_a_ground_whole_close_behind_a_change(monkeypat
     assert min(rigid, soft) - 0.05 < mixed < max(rigid, soft) + 0.05
 
 
-def test_a_point_s_own_step_in_sight_of_the_source_takes_each_height_s_ground(monkeypatch) -> None:
-    """In sight of the source over a wall, the sound of the heights above the wall's top
-    lands further on than the top's own: 1.5 m up 10 m behind a 3 m wall 10 m from a
-    source 30 m up, the top's reflection lands 6.7 m behind the wall and the source's
-    own 9.0 m behind it. Over rigid ground that turns to grass 7.8 m behind the wall,
-    between the two, the 1 kHz band of the point's own step from the wall is within
-    0.15 dB of a plain march in quarter-wavelength steps under a layer 320 m thick
-    (0.10 dB), which is 1.4 dB under what it is over rigid ground all the way (the level
-    of a step over the one ground the top's reflection lands on)."""
-    f = F[4][::2]
-    lawn = grass(f)(0.0)
-    ranges, heights = np.array([20.0]), np.array([1.5])
-    cut = [(10.0, 10.0, 3.0)]
+def own_and_fine(monkeypatch, f, impedance, zs, ranges, heights, top, cut):
+    """The band's level (dB) of a bounded march and of a plain march in
+    quarter-wavelength steps under an absorbing layer 320 m thick, in still air, and
+    the bounded march's own steps: where each starts and where its reflection lands
+    (m)."""
     taken = []
     own = parabolic._Steps.own
-    monkeypatch.setattr(
-        parabolic._Steps, "own", lambda self, *a: (taken.append(a[1]), own(self, *a))[1]
-    )
-
-    def level(impedance, bounded: bool) -> float:
+    levels = []
+    for bounded in (True, False):
         with monkeypatch.context() as patch:
+            patch.setattr(
+                parabolic._Steps,
+                "own",
+                lambda self, *a: (taken.append((a[1], a[5])), own(self, *a))[1],
+            )
             if not bounded:
                 patch.setattr(parabolic, "LAYER_MIN_M", 320.0)
                 patch.setattr(parabolic, "RANGE_STEP_WAVELENGTHS", 0.25)
@@ -863,102 +851,181 @@ def test_a_point_s_own_step_in_sight_of_the_source_takes_each_height_s_ground(mo
                 f,
                 still_air,
                 impedance,
-                30.0,
+                zs,
                 ranges,
                 heights,
-                60.0,
+                top,
                 independent=True,
                 obstacles=cut,
                 refracting=False,
                 bounded=bounded,
             )
-        return float(band_db(p, ranges, heights, 30.0)[0])
-
-    mixed = lambda r: None if r < 17.8 else lawn  # noqa: E731
-    stepped = level(mixed, True)
-    assert taken == [10.0]
-    reference, rigid = level(mixed, False), level(None, False)
-    assert abs(stepped - reference) < 0.15
-    assert 1.2 < rigid - reference < 1.6
+        levels.append(float(band_db(p, ranges, heights, zs)[0]))
+    return levels[0], levels[1], taken
 
 
-def test_a_point_s_own_step_over_two_stretches_of_one_ground_is_the_step_over_that_ground(
+def test_a_point_s_own_step_in_sight_of_the_source_takes_the_ground_the_source_s_sound_lands_on(
     monkeypatch,
 ) -> None:
-    """The sound of each height taken over the ground it lands on, with the same ground
-    in two stretches of a point's own step, is the step over that ground: every
-    height's sound lands on one of the two, and the step's field is the same to 1e-9 of
-    its size."""
+    """A point's own step takes the ground on which the reflection of the sound's
+    shortest way to the point lands, and in sight of the source over a wall that is the
+    source's own reflection, further on than the wall top's: 1.5 m up 10 m behind a 3 m
+    wall 10 m from a source 30 m up, the top's reflection lands 6.67 m behind the wall
+    and the source's 9.05 m behind it. Over rigid ground that turns to grass 7.8 m
+    behind the wall, between the two, and 9.6 m behind it, beyond both, the 1 kHz band
+    of the point's own step from the wall is within 0.15 dB of a plain march in
+    quarter-wavelength steps under a layer 320 m thick (0.01 and 0.07 dB), which gives
+    1.3 dB less with the grass from 7.8 m than from 9.6 m on: the step over the ground
+    the top's reflection lands on, or over the one at the point, is 1.3 dB off in one
+    of the two."""
+    f = F[4][::2]
+    lawn = grass(f)(0.0)
+    ranges, heights = np.array([20.0]), np.array([1.5])
+    cut = [(10.0, 10.0, 3.0)]
+    fine = []
+    for change in (7.8, 9.6):
+        mixed = lambda r, at=10.0 + change: None if r < at else lawn  # noqa: E731
+        stepped, reference, taken = own_and_fine(
+            monkeypatch, f, mixed, 30.0, ranges, heights, 60.0, cut
+        )
+        assert taken == [(10.0, pytest.approx(20.0 - 1.5 * 20.0 / 31.5))]
+        assert abs(stepped - reference) < 0.15
+        fine.append(reference)
+    assert 1.1 < fine[1] - fine[0] < 1.5
+
+
+def test_a_point_s_own_step_in_the_shadow_takes_the_ground_the_top_s_sound_lands_on(
+    monkeypatch,
+) -> None:
+    """Out of sight of the source, the sound's shortest way to a point by way of the
+    ground comes down from the top: 3 m up 8 m behind a screen 10 m high 20 m from a
+    source 1 m up, its reflection lands 6.15 m behind the screen. Over rigid ground
+    that turns to grass 5 m behind the screen, and 7 m behind it, the 500 Hz band of
+    the point's own step is within 0.15 dB of a plain march in quarter-wavelength steps
+    under a layer 320 m thick (0.04 and 0.11 dB), which gives 0.6 dB less with the
+    grass from 5 m than from 7 m on: the step over the ground at its middle, or over the
+    one at the point, is 0.6 dB or more off in one of the two."""
+    f = F[3][::2]
+    lawn = grass(f)(0.0)
+    ranges, heights = np.array([28.0]), np.array([3.0])
+    cut = [(20.0, 20.0, 10.0)]
+    fine = []
+    for change in (5.0, 7.0):
+        mixed = lambda r, at=20.0 + change: None if r < at else lawn  # noqa: E731
+        stepped, reference, taken = own_and_fine(
+            monkeypatch, f, mixed, 1.0, ranges, heights, 30.0, cut
+        )
+        assert taken == [(20.0, pytest.approx(28.0 - 3.0 * 8.0 / 13.0))]
+        assert abs(stepped - reference) < 0.15
+        fine.append(reference)
+    assert 0.5 < fine[1] - fine[0] < 0.75
+
+
+def test_a_point_s_own_step_no_longer_than_a_full_step_takes_the_ground_its_sound_lands_on(
+    monkeypatch,
+) -> None:
+    """A point's own step no longer than one of the march's full steps takes the ground
+    its reflection lands on too: 1.5 m up one full step (2.68 m at 500 Hz) behind an
+    edge 20 m high 40 m from the source, over rigid ground that turns to grass 0.15 m
+    past the step's middle, the reflection lands 0.19 m short of the point, on the
+    grass, and the 500 Hz band is within 0.3 dB of a plain march in quarter-wavelength
+    steps under a layer 320 m thick (0.24 dB), which is 1.2 dB or more under the same
+    march over rigid ground all the way."""
+    f = F[3][::2]
+    lawn = grass(f)(0.0)
+    step = parabolic._Steps(f, still_air, None, 1.0, 30.0, None, None, 10).step
+    ranges, heights = np.array([40.0 + step]), np.array([1.5])
+    cut = [(40.0, 40.0, 20.0)]
+    at = 40.0 + 0.5 * step + 0.15
+    stepped, reference, taken = own_and_fine(
+        monkeypatch, f, lambda r: None if r < at else lawn, 1.0, ranges, heights, 30.0, cut
+    )
+    assert taken == [(40.0, pytest.approx(40.0 + step - 1.5 * step / 21.5))]
+    assert abs(stepped - reference) < 0.3
+    _, rigid, _ = own_and_fine(monkeypatch, f, None, 1.0, ranges, heights, 30.0, cut)
+    assert rigid - reference > 1.2
+
+
+def test_a_point_s_own_step_takes_the_ground_at_the_range_it_is_given() -> None:
+    """A point's own step takes the reflection of every height over one ground, the one
+    at the range it is given, and without one the ground at its middle: over rigid
+    ground that turns to grass 15 m out, a step from 10 to 17 m is the step over rigid
+    ground all the way with the range 14.9 m or none (its middle is 13.5 m out), and
+    the step over grass all the way with the range 15.1 m, each to the last bit."""
     f = F[3][::4]
     lawn = grass(f)(0.0)
-    steps = parabolic._Steps(f, still_air, lambda r: lawn, 1.0, 30.0, None, None, 10)
-    steps.bound = True
-    assert steps.grounds(10.0, 7.0) == [(1.0, 10.0 + 0.5 * steps.step)]
-    field = steps.start()
-    one = steps.own(field, 10.0, 7.0, np.empty_like(field), 6.0).copy()
-    monkeypatch.setattr(
-        parabolic._Steps, "grounds", lambda self, r, dr: [(0.3, 11.0), (0.8, 14.0), (1.0, 16.5)]
-    )
-    two = steps.own(field, 10.0, 7.0, np.empty_like(field), 6.0)
-    assert np.abs(two - one).max() < 1e-9 * np.abs(one).max()
+
+    field = parabolic._Steps(f, still_air, None, 1.0, 30.0, None, None, 10).start()
+
+    def stepped(impedance, lands):
+        steps = parabolic._Steps(f, still_air, impedance, 1.0, 30.0, None, None, 10)
+        steps.bound = True
+        return steps.own(field, 10.0, 7.0, np.empty_like(field), 6.0, lands)
+
+    mixed = lambda r: None if r < 15.0 else lawn  # noqa: E731
+    rigid, soft = stepped(None, None), stepped(lambda r: lawn, None)
+    assert np.abs(rigid - soft).max() > 1e-3 * np.abs(rigid).max()
+    assert np.array_equal(stepped(mixed, 14.9), rigid)
+    assert np.array_equal(stepped(mixed, None), rigid)
+    assert np.array_equal(stepped(mixed, 15.1), soft)
 
 
-def test_a_point_s_own_step_through_two_stretches_of_one_air_is_the_step_in_that_air(
-    monkeypatch,
+@pytest.mark.parametrize("ends", [(0.3, 1.0), (0.2, 0.55, 1.0)])
+@pytest.mark.parametrize("reads", ["between", "on a height", "at the ground"])
+def test_a_point_s_own_step_through_stretches_of_one_air_is_the_step_in_that_air(
+    ends, reads, monkeypatch
 ) -> None:
     """The air's phase along each height's way through the airs along a point's own
-    step, with the same air in two stretches of it, is the phase in that air: the
-    step's field is the same to 1e-9 of its size."""
+    step, with the same air in two or three stretches of it, is the phase in that air:
+    the step's field is the same to 1e-9 of its size, to a point between two heights,
+    to one on a height (the way from that height lies level) and to one 2 cm up (the
+    way by the ground from the lowest height has no length)."""
     f = F[3][::4]
     windy = log_wind(10.0)
     steps = parabolic._Steps(f, windy, None, 1.0, 30.0, None, None, 10)
     steps.bound = True
     assert steps.airs(10.0, 7.0) == []
+    assert 0.02 < 0.5 * steps.dz
+    at = {"between": 6.0, "on a height": float(steps.z[40]), "at the ground": 0.02}[reads]
     field = steps.start()
-    one = steps.own(field, 10.0, 7.0, np.empty_like(field), 6.0).copy()
+    one = steps.own(field, 10.0, 7.0, np.empty_like(field), at).copy()
     monkeypatch.setattr(
         parabolic._Steps,
         "airs",
-        lambda self, r, dr: [(0.3, self.delta.real), (1.0, self.delta.real)],
+        lambda self, r, dr: [(end, self.delta.real) for end in ends],
     )
-    two = steps.own(field, 10.0, 7.0, np.empty_like(field), 6.0)
+    two = steps.own(field, 10.0, 7.0, np.empty_like(field), at)
     assert np.abs(two - one).max() < 1e-9 * np.abs(one).max()
 
 
-def test_the_airs_along_a_step_end_where_the_air_changes() -> None:
-    """Where the air changes along the way, a step's airs are those at the middles of
-    the steps the march would take there, full ones and a shorter last one, and each
+@pytest.mark.parametrize(
+    ("steps_long", "share"),
+    [(4.3, 0.59), (1.0, 0.1), (1.0, 0.9), (0.5, 0.5), (1.9, 0.16), (1.9, 0.95)],
+)
+def test_the_airs_along_a_step_end_where_the_air_changes(steps_long, share) -> None:
+    """Where the air changes along the way, a point's own step finds it wherever in the
+    step it is, however long the step: the step is looked at in the middle of each of
+    its equal parts, no longer than OWN_LOOK_M and at least OWN_LOOKS of them, and each
     stretch in one air ends at the share of the step at which the air changes, found
-    to a thousandth of a full step; none where the air is the same all along, given by
-    one function or by two. The grounds along a step are found the same way."""
+    to a thousandth of a part. So in a step of 4.3 full steps, of one, of half a one
+    and of 1.9, with the change a tenth of the step from either end too; and none where
+    the air is the same all along, given by one function or by two."""
     f = np.array([500.0])
     windy, other = log_wind(10.0), log_wind(10.0)
-    lawn = grass(f)(0.0)
-    steps = parabolic._Steps(
-        f,
-        still_air,
-        lambda r: None if r < 15.0 else lawn,
-        1.0,
-        30.0,
-        None,
-        lambda r: still_air if r < 15.0 else windy,
-        10,
-    )
-    step = steps.step
-    assert 10.0 + 0.5 * step < 15.0 < 10.0 + 1.5 * step
-    (first, calm), (second, wind) = steps.airs(10.0, 8.5)
-    assert abs(10.0 + first * 8.5 - 15.0) < step / 1000.0
+    steps = parabolic._Steps(f, still_air, None, 1.0, 30.0, None, None, 10)
+    dr = steps_long * steps.step
+    change = 10.0 + share * dr
+    steps.speed_at = lambda r: still_air if r < change else windy
+    part = dr / max(math.ceil(dr / parabolic.OWN_LOOK_M), parabolic.OWN_LOOKS)
+    assert part <= parabolic.OWN_LOOK_M
+    (first, calm), (second, wind) = steps.airs(10.0, dr)
+    assert abs(10.0 + first * dr - change) < part / 1000.0
     assert second == 1.0
     assert np.all(calm == 0.0)
     assert np.all(wind[:, 1:] < 0.0)
-    (ends, before), (last, after) = steps.grounds(10.0, 8.5)
-    assert ends == first
-    assert last == 1.0
-    assert before < 15.0 < after < 18.5
-    assert steps.airs(10.0, 3.0) == []
-    assert steps.grounds(10.0, 3.0) == [(1.0, 11.5)]
-    steps.speed_at = lambda r: windy if r < 15.0 else other
-    assert steps.airs(10.0, 8.5) == []
+    assert steps.airs(10.0, 0.5 * share * dr) == []
+    steps.speed_at = lambda r: windy if r < change else other
+    assert steps.airs(10.0, dr) == []
 
 
 def test_a_high_point_s_level_does_not_go_with_the_layer_start() -> None:
