@@ -744,11 +744,11 @@ is an arc of a circle, so its travel time and its length are exact.
   edge. Against a full-wave solution of rigid
   barriers and blocks in wind from 63 to 500 Hz, and against a parabolic equation
   started behind a rigid barrier from its exact field from 125 Hz to 8 kHz, the
-  weather's effect is within 0.71 dB behind one barrier or building in 5 m/s of wind
+  weather's effect is within 0.72 dB behind one barrier or building in 5 m/s of wind
   and 0.74 dB downwind in 10 m/s, where the sound is within 25 dB of its level in still
-  air; upwind in 10 m/s it comes out 0.2 to 1.64 dB low (the narrow-angle equation's),
+  air; upwind in 10 m/s it comes out 0.17 to 1.64 dB low (the narrow-angle equation's),
   behind a top 45 degrees up from the source it is within 1.0 dB, behind two barriers
-  10 m apart within 1.73 dB and 40 m apart within 4.95 dB, and behind the started barrier
+  10 m apart within 1.74 dB and 40 m apart within 4.95 dB, and behind the started barrier
   within 0.5 dB (see
   [Validation](validation.md#barriers-and-buildings-in-wind-against-a-full-wave-solution)).
   Nearer than 1.5 times the source's and the listener's heights added, where an object
@@ -1832,15 +1832,15 @@ equation leaves out:
   parts by up to 6.5 dB from a parabolic equation that leaves it out (Plovsing 2006).
 - **Sound going back.** The equation marches away from the source only: nothing
   reflects between two barriers or back towards the source. Behind two barriers 10 m
-  apart the weather's effect is up to 1.73 dB off from 63 to 500 Hz; 40 m apart (3 and
+  apart the weather's effect is up to 1.74 dB off from 63 to 500 Hz; 40 m apart (3 and
   5 m high) up to 4.95 dB at 250 Hz in 8 m/s of wind downwind over rigid ground (2.23 dB
   in 5 m/s, 1.28 dB over grass), where the full-wave solution's level changes sharply
   with frequency, as the sound goes back and forth between them.
 - **Steep angles upwind.** The narrow-angle equation is exact only near the
-  horizontal: in 10 m/s of wind upwind the effect comes out 0.2 to 1.64 dB low from 63
+  horizontal: in 10 m/s of wind upwind the effect comes out 0.17 to 1.64 dB low from 63
   to 500 Hz, the more the higher the band and the farther the listener (1.0 to 1.4 dB
   at 250 Hz 120 and 200 m behind a barrier 4 m high 15 m from a source 1 m up, where
-  the wide-angle equation is 0.45 dB low 120 m away); in 5 m/s within 0.71 dB.
+  the wide-angle equation is 0.45 dB low 120 m away); in 5 m/s within 0.72 dB.
 - **The third dimension.** The equation runs in vertical planes along whole degrees, so
   a barrier is a ring round the source; how obliquely the way crosses it changes the
   level in still air by 0.4 to 0.9 dB from 0 to 45 degrees (Aballéa et al. 2007), which

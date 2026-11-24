@@ -98,7 +98,7 @@ LIMITS = {
     ("steep45", "ring", 5.0): 0.5,
     ("steep45", "ring", 10.0): 1.0,
     ("steep60", "ring", 5.0): 0.55,
-    ("steep60", "ring", 10.0): 0.5,
+    ("steep60", "ring", 10.0): 0.45,
     ("rooftop", "ring", 5.0): 0.2,
     ("rooftop", "ring", 10.0): 0.35,
     ("mast", "ring", 5.0): 0.05,
