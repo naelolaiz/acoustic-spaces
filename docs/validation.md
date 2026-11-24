@@ -3294,27 +3294,34 @@ apart from those past it, so that each gets what it gets alone
 (`tests/test_wide_angle.py`). A listener close under a tall edge, which the sound from
 the edge's top reaches too steeply for a full step to take whole, gets one step of its
 own from the field at the edge, which takes the sound of every height under the layer,
-straight and by the ground, to a high listener as to a low one and over hard ground
-too. Where the ground or the weather changes between the edge and the listener, or
-the ground is one between soft and hard whose reflection one step cannot hold (an
-impedance of 20 + 140i at 500 Hz, under a layer that starts 60 m up), the march goes
-there in shorter steps, each with its own ground and air; they take the steepest sound
-less well, however short they are: within 0.05 dB of a march whose steps take it whole
-12 m behind a 20 m edge where the ground turns from rigid to grass 8 m behind it
-(250 Hz), 6 m behind it where still air gives way to a wind of 10 m/s 4 m behind it
-(1 kHz), and 12 and 20 m behind a 40 m edge over that ground, but 1.1 dB off 6 m
-behind the 40 m edge, which its top reaches 82 degrees down
-(`tests/test_parabolic_obstacles.py`). In one step of its own, 3.4 to 20 m behind an edge 20 m high 4 m from a source
+straight and by the ground, to a high listener as to a low one, over hard ground and
+over one between soft and hard too (an impedance of 20 + 140i at 500 Hz, behind a 40 m
+edge: within 0.001 dB of the level on a grid twice as high). The step takes each
+height's reflected sound over the ground it lands on, and the weather along each
+height's straight way to the listener. Against a march in quarter-wavelength steps
+under a layer 320 m thick, 1.5 m up behind an edge 40 m from the source: 12 m behind a
+20 m edge where the ground turns from rigid to grass 8 m behind it, 0.07 dB at 250 Hz;
+6 m behind it where still air gives way to a wind of 10 m/s 4 m behind it, 0.02 dB at
+1 kHz; 6 m behind a 40 m edge, which its top reaches 82 degrees down, with the change
+3 m behind the edge, 0.10 dB at 500 Hz over the ground and 0.27 dB at 1 kHz in the
+weather, where with one ground and one weather all the way it is 0.05 and 0.07 dB
+off; and in sight of the source, 1.5 m up 10 m behind a 3 m wall 10 m from a source
+30 m up, where the ground turns to grass between the places the wall top's reflection
+and the source's own land, 0.10 dB at 1 kHz. Close behind a change of ground the step,
+which takes a reflection whole over the ground it lands on, and that march differ: by
+0.62 dB at 500 Hz 6 m behind the 40 m edge with the change 0.28 m short of where the
+top's reflection lands (`tests/test_parabolic_obstacles.py`). In one step of
+its own, 3.4 to 20 m behind an edge 20 m high 4 m from a source
 0.5 m up, 1.5 m up over rigid ground, the wind's effect in 10 m/s downwind is within
 0.29 dB at 250 Hz, 0.20 dB at 1 kHz and 0.82 dB at 4 kHz of a march in quarter-wavelength
 steps under a layer 320 m thick (a one-off check at 84 listeners; with steps that take
 the sound any way up it was up to 1.5, 3.7 and 5.2 dB off). Where a listener passes from
 that step of its own to full steps the weather's effect steps: 1.5 m up behind tops 45
-and 60 degrees up from a source 0.5 m up 4 m away, 1 cm either side of the passage 8 to
-11 m from the source, by at most 0.20 dB in 10 m/s and 0.08 dB in 5 m/s, down- and
+and 60 degrees up from a source 0.5 m up 4 m away, 1 cm either side of the passage 7.4 to
+11.1 m from the source, by at most 0.20 dB in 10 m/s and 0.08 dB in 5 m/s, down- and
 upwind, from 250 Hz to 4 kHz, where a march in quarter-wavelength steps under a layer
-320 m thick changes by at most 0.07 and 0.04 dB and the two sides are within 0.45 and
-0.18 dB of it; the level in still air changes as that march's does, within 0.01 dB (a
+320 m thick changes by at most 0.10 and 0.04 dB and the two sides are within 0.45 and
+0.18 dB of it; the level in still air changes as that march's does, within 0.02 dB (a
 one-off check with the narrow-angle equation alone). At 1 and 2 kHz, in a one-off check at the steep points
 of the first set's
 cases from sources 5, 10 and 30 m up to a listener 1.5 m up and from 1.5 m up to 30 m

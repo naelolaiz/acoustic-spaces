@@ -6,10 +6,10 @@
   gradient the parabolic equation's level went with how high its grid reached and so
   with the other listeners in a listener's direction, by 2.0 to 2.4 dB at 2 and 4 kHz
   15 m behind a barrier 7.43 m high 4 m from the source: the sound the top bends steeply
-  up came back down from the top of the grid. Its runs past obstacles now march in
-  steps that take no sound further up or down than the absorbing layer is thick, each
-  listener on the grid of a run for it alone, and a listener there reads the same alone
-  as among others.
+  up came back down from the top of the grid. Its narrow-angle runs past obstacles now
+  march in steps that take no sound further up or down than the absorbing layer is
+  thick, each listener on the grid of a run for it alone, and a listener there reads the
+  same alone as among others.
 
 ## 4.3.0
 
