@@ -20,6 +20,7 @@ from acoustic_spaces.engine.diffraction import (
     along_edge,
     band_frequencies,
     boundary_angles,
+    corners,
     find_edges,
     fresnel_tail,
     transition,
@@ -1469,10 +1470,11 @@ def test_a_way_beside_the_end_of_a_screen_in_a_row(tmp_path: Path, mode: str) ->
     ends = np.array([[-10.0, -0.01, 0.0], [15.0, -0.01, 0.0]])
     level = _past(tmp_path, quads, *ends, mode)
     above = _past(tmp_path, quads, *(ends + [0.0, 0.0, 1e-3]), mode)
-    # With first_order the terms of the faces at the second screen's end are missing
-    # on the line, where the path over that end is not found (1.0 dB at 63 Hz).
-    np.testing.assert_allclose(level, above, atol=1.1 if mode == "first_order" else 0.15)
-    np.testing.assert_allclose(level[4:], above[4:], atol=0.15)
+    # Within 0.08 dB. The path round the second screen's upright end is found on the
+    # line too: the rays that test it start just off the corner, above the tops, where
+    # the first screen does not hide them (with first_order the terms of that end's
+    # faces were missing, 0.96 dB at 63 Hz).
+    np.testing.assert_allclose(level, above, atol=0.1)
 
 
 @pytest.mark.parametrize("mode", ["first_order", "second_order"])
@@ -1487,10 +1489,9 @@ def test_screens_in_a_row_that_end_near_the_way(tmp_path: Path, mode: str) -> No
     ends = np.array([[-10.0, -0.05, 0.0], [15.0, -0.05, 0.0]])
     level = _past(tmp_path, quads, *ends, mode)
     above = _past(tmp_path, quads, *(ends + [0.0, 0.0, 1e-3]), mode)
-    # With first_order the terms of the faces at the screens' ends are missing on the
-    # line (1.0 dB at 63 Hz).
-    np.testing.assert_allclose(level, above, atol=1.2 if mode == "first_order" else 0.05)
-    np.testing.assert_allclose(level[4:], above[4:], atol=0.05)
+    # Within 0.03 dB, with the paths round the screens' upright ends on the line too
+    # (without them, with first_order, 1.0 dB at 63 Hz).
+    np.testing.assert_allclose(level, above, atol=0.05)
 
 
 @pytest.mark.parametrize("mode", ["first_order", "second_order"])
@@ -1512,10 +1513,9 @@ def test_which_edge_in_a_row_carries_the_direct_sound_changes_nothing(
     )
     np.testing.assert_allclose(_past(tmp_path, quads, *ends[::-1], mode), level, atol=0.05)
     above = _past(tmp_path, quads, *(ends + [0.0, 0.0, 1e-3]), mode)
-    # With first_order the terms of the faces at the screens' ends are missing on the
-    # line (1.2 dB at 63 Hz).
-    np.testing.assert_allclose(level, above, atol=1.4 if mode == "first_order" else 0.2)
-    np.testing.assert_allclose(level[4:], above[4:], atol=0.3 if mode == "first_order" else 0.2)
+    # Within 0.07 dB, with the paths round the screens' upright ends on the line too
+    # (without them, with first_order, 1.2 dB at 63 Hz).
+    np.testing.assert_allclose(level, above, atol=0.1)
 
 
 def _upright(start: tuple, end: tuple, top: float = 0.0, top_end: float | None = None) -> list:
@@ -1626,36 +1626,46 @@ def test_two_screens_in_a_row_and_a_wall_beside_the_way(tmp_path: Path) -> None:
 
 
 def test_a_bent_top_in_a_row_and_its_mirror_image(tmp_path: Path) -> None:
-    # A screen whose top is level up to y = 0 and rises from there, a long screen 10 m
-    # behind it, and the way through the joint, exactly level with the tops. The paths
-    # over the two pieces of the bent top touch them at their common end: each counts
-    # by half, the paths over one edge and those over two, at whichever end of a piece
-    # the joint is. The scene and its mirror image give one level, within 1.0 dB of
-    # that a millimetre above the tops (it was 10.8 to 13.6 dB above that), where the
-    # path over the rising piece and the far screen counts whole.
+    # A screen whose top is level up to y = 0 and rises from there at 45 degrees, a long
+    # screen 10 m behind it, and the way through the joint, exactly level with the tops.
+    # The paths over the two pieces of the bent top touch them at their common end, a
+    # corner where the screen covers 225 degrees round the way: on the boundary each
+    # gives that share of the wave, the paths over one edge and those over two, at
+    # whichever end of a piece the joint is. The scene and its mirror image give one
+    # level (it was 10.8 to 13.6 dB above that a millimetre above the tops).
     far = edge_diffraction.EXTENT
-    quads = (
+    bent = (
         _upright((0.0, -far), (0.0, 0.0))
         + _upright((0.0, 0.0), (0.0, 1.0), 0.0, 1.0)
         + _upright((0.0, 1.0), (0.0, far), 1.0)
-        + edge_diffraction.screen_quads(10.0)
     )
+    quads = bent + edge_diffraction.screen_quads(10.0)
     mirrored = [[(x, -y, z) for x, y, z in quad] for quad in quads]
     ends = np.array([[-10.0, 0.0, 0.0], [15.0, 0.0, 0.0]])
     level = _past(tmp_path, quads, *ends)
     np.testing.assert_allclose(_past(tmp_path, mirrored, *ends), level, atol=1e-3)
-    np.testing.assert_allclose(level, _past(tmp_path, quads, *(ends + [0.0, 0.0, 1e-3])), atol=1.1)
+    # The bent screen alone hides 5/8 of the wave: the level a millimetre above the
+    # joint, within 0.03 dB, and from 2 kHz on 20 log10(3/8) to 0.04 dB (both halves
+    # taking half of it, it was 2.5 dB above that).
+    alone = _past(tmp_path, bent, *ends)
+    np.testing.assert_allclose(alone, _past(tmp_path, bent, *(ends + [0.0, 0.0, 1e-3])), atol=0.05)
+    np.testing.assert_allclose(alone[5:], 20.0 * math.log10(3.0 / 8.0), atol=0.05)
+    # With the far screen, below the level a millimetre above the tops, where the path
+    # over the rising piece and the far screen counts whole (by 0.9 to 2.1 dB), and above
+    # what the two screens take in turn, the far one as much as off two level tops in a
+    # row (by 0.9 to 1.5 dB).
+    above = _past(tmp_path, quads, *(ends + [0.0, 0.0, 1e-3]))
+    row = _past_screens(tmp_path, (0.0, 10.0), *ends) - _past_screens(tmp_path, (10.0,), *ends)
+    assert np.all(level < above) and np.all(level > alone + row), (level, above, alone + row)
 
 
 def test_three_screens_in_a_row_the_middle_one_ending_beside_the_way(tmp_path: Path) -> None:
     # Three screens 5 m apart, the middle one ending a centimetre beside the way, the
-    # source and the listener exactly level with the tops: as a millimetre above them
-    # from 250 Hz up (it was 13.0 to 16.4 dB above that). At 63 and 125 Hz the path
-    # round the middle screen's upright end is missing, and the level is 1.0 to 1.3 dB
-    # and 0.6 to 0.8 dB below (a known issue of docs/validation.md): the ray that tests
-    # the path starts just inside the end, below the plane of the tops, where the first
-    # top hides it. With the rays 0.6 mm off the edges (a millionth of the model's size)
-    # it was missing a millimetre above the tops too, and the two levels agreed.
+    # source and the listener exactly level with the tops: within 0.35 dB of the level a
+    # millimetre above them (it was 13.0 to 16.4 dB above that), 0.13 to 0.33 dB above
+    # it. The rays that test the path round the middle screen's upright end start just
+    # off its corner, above the tops; just inside the end, below them, the first top hid
+    # them, and at 63 and 125 Hz the level was 0.6 to 1.3 dB below.
     quads = (
         edge_diffraction.screen_quads(0.0)
         + _screen_from(5.0, 0.0)
@@ -1665,9 +1675,7 @@ def test_three_screens_in_a_row_the_middle_one_ending_beside_the_way(tmp_path: P
     for coherent in (500, None):
         level = _past(tmp_path, quads, *ends, coherent=coherent)
         above = _past(tmp_path, quads, *(ends + [0.0, 0.0, 1e-3]), coherent=coherent)
-        np.testing.assert_allclose(level[2:], above[2:], atol=0.5)
-        below = above[:2] - level[:2]
-        assert np.all((below > 0.5) & (below < 1.4)), below
+        np.testing.assert_allclose(level, above, atol=0.35)
 
 
 def test_a_way_through_the_corner_of_a_screen(tmp_path: Path) -> None:
@@ -1700,7 +1708,7 @@ def test_a_roof_and_then_a_screen_level_with_it_the_same_both_ways_round(tmp_pat
         np.testing.assert_allclose(back, forward, atol=0.15)
 
 
-@pytest.mark.parametrize(("mode", "within"), [("second_order", 0.5), ("first_order", 0.5)])
+@pytest.mark.parametrize(("mode", "within"), [("second_order", 0.2), ("first_order", 0.4)])
 @pytest.mark.parametrize("beside", [0.0, 0.01, 0.5])
 @pytest.mark.parametrize("top", [0.0, 1e-12])
 def test_a_path_over_a_screens_top_does_not_reflect_off_a_roof_level_with_it_elsewhere(
@@ -1717,11 +1725,12 @@ def test_a_path_over_a_screens_top_does_not_reflect_off_a_roof_level_with_it_els
     # to 5.4 dB below it with first_order (1.9 to 9.5 dB, 7.3 dB apart). Without it the
     # two ways round agree, and with the level a centimetre above within 0.14 dB
     # (first_order 0.37 dB). So too with the screen's ``top`` a millionth of a micrometre
-    # off the plane, as two heights that are sums of other numbers differ, within 0.22 dB
-    # (through the end 0.30 dB): a millimetre above the plane, the ray that tests the
-    # path round the screen's upright end off the first roof's wall, which starts a tenth
-    # of a millimetre inside the end, meets the wall's top edge, where the path passes a
-    # millimetre above the wall.
+    # off the plane, as two heights that are sums of other numbers differ. It was within
+    # 0.22 dB there (through the end 0.30 dB) while the ray that tests the path round the
+    # screen's upright end off the first roof's wall started a tenth of a millimetre
+    # inside the end, below the plane: a millimetre above the plane it met the wall's top
+    # edge, where the path passes a millimetre above the wall. It starts just off the
+    # corner now, above the plane.
     extent = edge_diffraction.EXTENT
     screen = [[(7.0, 0.0, -extent), (7.0, extent, -extent), (7.0, extent, top), (7.0, 0.0, top)]]
     far = [[(x + 9.0, y, z) for x, y, z in quad] for quad in edge_diffraction.barrier_quads(10.0)]
@@ -2573,8 +2582,9 @@ def test_the_fades_of_two_pieces_of_an_edge_add_up_to_the_whole() -> None:
 
 
 def test_how_a_barrier_s_edges_fade_at_their_ends() -> None:
-    """A barrier's top meets its end edges at corners (1/2), and the ground closes the end
-    edges' feet, where they go on as their images (0)."""
+    """A barrier's top meets its end edges at corners, where each fades (1) and meets the
+    other, and the ground closes the end edges' feet, where they go on as their images
+    (0)."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_barriers_in_wind import scene
 
@@ -2582,10 +2592,103 @@ def test_how_a_barrier_s_edges_fade_at_their_ends() -> None:
     edges = find_edges(TraceModel.from_room(room))
     upright = np.abs(edges.direction[:, 2]) > 0.99
     assert upright.sum() == 2 and (~upright).sum() == 1
-    assert np.all(edges.fade[~upright] == 0.5)
+    assert np.all(edges.fade[~upright] == 1.0)
     assert np.all(edges.direction[upright, 2] > 0.0)  # from the foot up
-    assert np.all(edges.fade[upright] == [0.0, 0.5])
+    assert np.all(edges.fade[upright] == [0.0, 1.0])
     assert np.all(edges.closed[upright] == [True, False])
+    top, ends = np.flatnonzero(~upright)[0], np.flatnonzero(upright)
+    assert sorted(edges.corner[top]) == sorted(ends)
+    assert np.all(edges.corner[ends] == [-1, top])
+    # A quarter of the wave on a boundary through either corner, from each edge.
+    share, _ = corners(edges)
+    assert np.allclose(share[top], 0.25) and np.allclose(share[ends, 1], 0.25)
+
+
+@pytest.mark.parametrize("half", [20.0, 14.0])
+def test_no_step_at_the_line_of_sight_over_a_finite_barrier(half: float) -> None:
+    """A barrier 4 m high and ``half`` (m) either side of the axis, 15 m from a source
+    1 m over hard ground, the listener 40 m away 0.1 mm either side of the line of sight
+    over its top, in still air: the level steps by less than 0.01 dB in every band
+    (0.0014 dB measured). The top's corners with the end edges split each term as a
+    quarter plane does in the Kirchhoff approximation, the end edges' switched hard on
+    the top's boundary, which the top's paraxial share made up for near the corners
+    only: 0.31 dB at 63 Hz for the barrier 40 m long, 0.83 dB for the one 28 m long."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_barriers_in_wind import scene
+
+    barrier = {"name": "screen", "path": [[15.0, -half], [15.0, half]], "height": 4}
+    listeners = ((40.0, 0.0, 9.0 - 1e-4), (40.0, 0.0, 9.0 + 1e-4))
+    room = Room.from_scene(scene(atmosphere=None, listeners=listeners, barriers=[barrier]))
+    levels = [
+        10.0 * np.log10(total_energy(early_paths(room, "s", name, threads=1)))
+        for name in ("l0", "l1")
+    ]
+    assert np.abs(levels[1] - levels[0]).max() < 0.01, levels[1] - levels[0]
+
+
+def test_a_curved_screen_s_edges_match_btm_one_by_one(tmp_path: Path) -> None:
+    """The curved barrier of tests/test_edge_fade.py unfolded in its ground: a rigid
+    screen from 3 m below the ground's plane to 3 m above it in free field, six parts
+    4 m long each turned 8 degrees from the last (too little for an edge between
+    them), the source and its image 1.5 m either side of the plane, the listener
+    behind. Each group of edges (the tops, the feet, either end) gives the pressure of
+    first-order BTM over those finite edges to 25 dB below the whole from 63 to 500 Hz
+    (the ends to 39 dB): every corner of the screen fades as an end, each edge taking
+    its own part of its terms. With the quarter plane's split at the corners the ends
+    were 21 dB below, the tops 19 dB."""
+    turns = np.radians(90.0 - 8.0 * np.arange(6))
+    steps = 4.0 * np.column_stack([np.cos(turns), np.sin(turns)])
+    plan = np.cumsum([[10.0, -10.0], *steps], axis=0)
+    quads = [
+        [(*plan[i], -3.0), (*plan[i + 1], -3.0), (*plan[i + 1], 3.0), (*plan[i], 3.0)]
+        for i in range(6)
+    ]
+    listener = np.array([20.0, 4.0, 1.4])
+    sources = (np.array([0.0, -8.0, 1.5]), np.array([0.0, -8.0, -1.5]))
+    bands = 4
+    f = band_frequencies()[0][:bands]
+    k = 2.0 * np.pi * f.ravel() / edge_diffraction.C
+
+    def group(point) -> str:
+        if abs(abs(point[2]) - 3.0) < 1e-6:
+            return "tops" if point[2] > 0.0 else "feet"
+        return "near end" if np.linalg.norm(point[:2] - plan[0]) < 1e-6 else "far end"
+
+    engine, btm = {}, {}
+    for source in sources:
+        room = edge_diffraction._room(tmp_path, "curved", quads, source, listener)
+        paths, _ = edge_diffraction.engine(room, "direct", coherent=bands)
+        assert paths.diffracted.all()  # the screen hides the listener from both
+        pressure = np.sqrt(4.0 * np.pi * paths.energy[:, :bands, None]) * paths.spectrum
+        pressure *= np.exp(-2j * np.pi * paths.delay_s[:, None, None] * f[None])
+        for i, points in enumerate(paths.points):
+            name = group(points[1])
+            engine[name] = engine.get(name, 0.0) + pressure[i].ravel()
+        for i in range(6):
+            along = np.append(steps[i] / 4.0, 0.0)
+            across = np.array([along[1], -along[0], 0.0])
+            for z, name, down in ((3.0, "tops", (0, 0, -1.0)), (-3.0, "feet", (0, 0, 1.0))):
+                edge = edge_diffraction.Edge((*plan[i], z), along, down, across, 2.0)
+                part = edge_diffraction.btm_first(edge, source, listener, k, ends=(0.0, 4.0))
+                btm[name] = btm.get(name, 0.0) + part
+        for name, end, inward in (
+            ("near end", plan[0], plan[1] - plan[0]),
+            ("far end", plan[-1], plan[-2] - plan[-1]),
+        ):
+            inward = np.append(inward / np.linalg.norm(inward), 0.0)
+            across = np.array([inward[1], -inward[0], 0.0])
+            edge = edge_diffraction.Edge((*end, -3.0), (0, 0, 1.0), inward, across, 2.0)
+            part = edge_diffraction.btm_first(edge, source, listener, k, ends=(0.0, 6.0))
+            btm[name] = btm.get(name, 0.0) + part
+
+    def energy(p) -> np.ndarray:
+        return (np.abs(p) ** 2).reshape(bands, -1).mean(axis=1)
+
+    whole = energy(sum(btm.values()))
+    assert sorted(engine) == sorted(btm)
+    for name, limit in (("tops", -25.0), ("feet", -25.0), ("near end", -39.0), ("far end", -39.0)):
+        error = 10.0 * np.log10(energy(engine[name] - btm[name]) / whole)
+        assert np.all(error < limit), (name, error)
 
 
 def test_a_solid_block_s_edges_stop_at_its_corners(tmp_path: Path) -> None:
@@ -2603,7 +2706,7 @@ def test_a_solid_block_s_edges_stop_at_its_corners(tmp_path: Path) -> None:
     room = edge_diffraction._room(tmp_path, "box", quads, (1.0, 3.0, 1.0), (4.0, -2.0, 0.3))
     edges = find_edges(TraceModel.from_room(room))
     assert (np.isclose(edges.wedge, 1.5).sum(), np.isclose(edges.wedge, 2.0).sum()) == (8, 4)
-    assert np.all(edges.fade == 0.0)
+    assert np.all(edges.fade == 0.0) and np.all(edges.corner == -1)
     assert not np.any(edges.closed)
 
 
@@ -2668,14 +2771,20 @@ def _rhombus(tmp_path: Path, angle: float) -> Edges:
 
 
 def test_how_a_screen_s_edges_fade_at_corners_of_other_angles(tmp_path: Path) -> None:
-    """The paths over two edges that meet within 1 degree of square fade halfway at the
-    corner, where the two halves add up; at any other angle each edge keeps its own part
-    of its terms (all the way, 1). They faded halfway from 45 to 135 degrees, which came
-    out up to 2.75 dB from BTM at a corner of 45 degrees."""
-    assert np.all(_rhombus(tmp_path, 90.0).fade == 0.5)
-    assert np.all(_rhombus(tmp_path, 89.5).fade == 0.5)
-    for angle in (88.0, 60.0, 45.0, 20.0):
-        assert np.all(_rhombus(tmp_path, angle).fade == 1.0)
+    """The paths over two edges of a screen that meet at a corner of any angle each keep
+    their edge's own part of their terms (all the way, 1); on a boundary through the
+    corner itself each gives the share of the wave the corner hides, its angle over
+    2 pi. Square corners faded halfway, the two halves adding up as a quarter plane's
+    do in the Kirchhoff approximation (0.31 dB of step at the line of sight over a
+    barrier 40 m long and 4 m high, from a source 15 m before it, 40 m behind it), and
+    from 45 to 135 degrees before that (2.75 dB from BTM at a corner of 45 degrees)."""
+    for angle in (90.0, 89.5, 88.0, 60.0, 45.0, 20.0):
+        edges = _rhombus(tmp_path, angle)
+        assert np.all(edges.fade == 1.0) and np.all(edges.corner >= 0)
+        share, _ = corners(edges)
+        # Each corner is shared by two edges, with the screen's angle there.
+        angles = np.sort(np.round(np.degrees(2.0 * np.pi * share.ravel()), 6))
+        assert np.allclose(angles, [angle] * 4 + [180.0 - angle] * 4)
 
 
 @pytest.mark.parametrize(
@@ -3209,19 +3318,19 @@ def test_two_waves_with_one_image_off_two_planes_are_two_ways(tmp_path: Path) ->
         "plane2": np.full(4, -1),
     }
     wave = np.ones(4, dtype=bool), np.zeros(4), np.zeros((4, 3)), np.ones(4, dtype=np.int64)
-    in_line, carrier, on_ways, of_way = diffraction._in_line(rows, *wave)
+    in_line, carrier, on_ways = diffraction._in_line(rows, *wave)
     assert carrier.tolist() == [0, 2] and in_line.tolist() == [1, 3]
-    assert on_ways.tolist() == [0, 1, 2, 3] and of_way.all()
+    assert on_ways.tolist() == [0, 1, 2, 3]
     rows["plane"] = np.full(4, 3)  # one wave over the two edges, told twice: one carrier
-    in_line, carrier, _, _ = diffraction._in_line(rows, *wave)
+    in_line, carrier, _ = diffraction._in_line(rows, *wave)
     assert carrier.tolist() == [0] and in_line.tolist() == [1, 2, 3]
     # A plane before the edge and one after it: the second tells the waves apart too.
     rows["kind"], rows["plane2"] = np.full(4, 3), np.array([5, 5, 7, 7])
     twice = wave[0], wave[1], wave[2], np.full(4, 2)
-    in_line, carrier, _, _ = diffraction._in_line(rows, *twice)
+    in_line, carrier, _ = diffraction._in_line(rows, *twice)
     assert carrier.tolist() == [0, 2] and in_line.tolist() == [1, 3]
     rows["plane2"] = np.full(4, 5)
-    in_line, carrier, _, _ = diffraction._in_line(rows, *twice)
+    in_line, carrier, _ = diffraction._in_line(rows, *twice)
     assert carrier.tolist() == [0] and in_line.tolist() == [1, 2, 3]
     room = _stepped_room_with_panels(tmp_path, [5.5, 4.0, 1.0], [2.5, 2.5, 1.0])
     model = TraceModel.from_room(room)
@@ -3238,7 +3347,7 @@ def test_two_waves_with_one_image_off_two_planes_are_two_ways(tmp_path: Path) ->
             np.full(4, -1),
         )
         rows[key] = np.array([wall, wall, panel, panel])
-        in_line, carrier, _, _ = diffraction._in_line(rows, *order)
+        in_line, carrier, _ = diffraction._in_line(rows, *order)
         assert carrier.tolist() == [0] and in_line.tolist() == [1, 2, 3]
 
 

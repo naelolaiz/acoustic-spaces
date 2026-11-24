@@ -146,9 +146,8 @@ FADE_TAPER = 2.0
 #: Paths nearer the edge's line in angle than this sine reach no further past its ends
 #: than at this angle.
 _FADE_MIN_SINE = 0.25
-#: An edge goes on in another one at an end within this angle (degrees) of its line,
-#: and meets it at a right-angled corner within this angle of square; a face whose
-#: normal lies within _CLOSING_DEG of the edge's line closes the end it holds.
+#: An edge goes on in another one at an end within this angle (degrees) of its line; a
+#: face whose normal lies within _CLOSING_DEG of the edge's line closes the end it holds.
 _COLLINEAR_DEG = 1.0
 _CLOSING_DEG = 5.0
 #: An edge this close to vertical (the cosine of its angle to the vertical) is upright.
@@ -369,8 +368,8 @@ class Edges:
     face: np.ndarray  # (E, 2) face 0 and face n
     plane: np.ndarray  # (E, 2) their planes
     reflection: np.ndarray  # (E, 2, bands) specular pressure reflection factors
-    #: (E, 2) how far the paths over each edge fade at its start and end, (E, 2, 2) the
-    #: edge it meets at a corner there in the plane of face 0 and of face n, or -1, and
+    #: (E, 2) whether the paths over each edge fade at its start and at its end (1) or
+    #: stop there (0), (E, 2) the one other edge it meets at a corner there, or -1, and
     #: (E, 2) whether a face across it closes the end (end_fades)
     fade: np.ndarray | None = None
     corner: np.ndarray | None = None
@@ -713,87 +712,126 @@ def _join(model, p0, p1, e, along, normal, wedge, face0, face1) -> Edges:
 
 
 def end_fades(model: TraceModel, edges: Edges) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """(E, 2) how far the paths over each edge fade at its start and at its end
-    (:func:`along_edge`), (E, 2, 2) the edge each meets at a corner there in the plane of
-    its face 0 and of its face n, or -1, and (E, 2) whether a face across the edge closes
+    """(E, 2) whether the paths over each edge fade at its start and at its end (1.0) or
+    stop there (0.0, :func:`along_edge`), (E, 2) the one other edge that meets it there
+    at a corner where both fade, or -1, and (E, 2) whether a face across the edge closes
     the end, where the edge goes on as its image.
 
     A path over an edge comes from the stretch of it round the point it touches, about a
     Fresnel zone long; near an end only part of that stretch is there. An end the edge
     goes on from, in a collinear edge or as its own image in a face across it (the
     ground under a barrier's end, the wall a balcony front ends at), cuts nothing off:
-    0, the paths stop there as on an endless edge. At a right-angled corner, where
-    another edge meets it within 1 degree of square, the paths fade halfway (1/2): past
-    the end of one edge the point a path touches reaches the other, and the two halves
-    add up as the edges of a quarter plane do in the Kirchhoff approximation, which is
-    the product of two Fresnel integrals only when they are square. Elsewhere (a free
-    end, one another edge goes on from round a bend, or a corner of another angle) they
-    fade all the way (1), and each term of the edge is the edge's own part of it, as the
+    0, the paths stop there as on an endless edge. At any other end (a free end, a
+    corner where another edge meets it at any angle, a bend of a screen's top) they
+    fade: 1, each term of the edge the edge's own part of it, as the
     Biot-Tolstoy-Medwin integral over the finite edge has it near the path's point
-    (:func:`_cumulative`); so are those of every edge that meets it there.
+    (:func:`_cumulative`). On its shadow or reflection boundary a term then comes from
+    that point alone, so the edge carries all of the boundary's step while the point
+    lies on it, whatever the edges it meets do, and none past its end; away from the
+    boundary it fades through its end over the Fresnel zone, as do the terms of the
+    edges that meet it there.
     """
     from scipy.spatial import cKDTree
 
     count = len(edges)
-    neighbour = np.full((2 * count, 2), -1, dtype=np.int64)
+    neighbour = np.full(2 * count, -1, dtype=np.int64)
     if count == 0:
-        return np.ones((0, 2)), neighbour.reshape(0, 2, 2), np.zeros((0, 2), dtype=bool)
+        return np.ones((0, 2)), neighbour.reshape(0, 2), np.zeros((0, 2), dtype=bool)
     size = float(np.ptp(model.room.mesh.vertices, axis=0).max()) or 1.0
     tol = 1e-6 * size
     points = np.concatenate([edges.start, edges.end])  # the starts, then the ends
     outward = np.concatenate([-edges.direction, edges.direction])
     which = np.concatenate([np.arange(count), np.arange(count)])
     collinear = np.zeros(2 * count, dtype=bool)
-    bend = np.zeros(2 * count, dtype=bool)
-    corner = np.zeros(2 * count, dtype=bool)
+    # Only the edges of thin screens fade, and where they meet others only where every
+    # one of those is one: at the corners of solid wedges (a box's, where three edges
+    # meet) the edges' own parts do not add up as BTM has them (a fade of every edge
+    # there came out up to 1.25 dB above BTM at 63 and 125 Hz near a block's corner),
+    # and their paths stop at the ends as on an endless edge.
+    thin = np.isclose(edges.wedge, 2.0)
+    met = np.ones(2 * count, dtype=bool)
     pairs = cKDTree(points).query_pairs(tol, output_type="ndarray")
     if len(pairs):
         a, b = pairs[:, 0], pairs[:, 1]
         other = which[a] != which[b]
         a, b = a[other], b[other]
         # The cosine of the turn from one edge into the other at their common end: none
-        # (it goes on), a right angle, or another (edges doubling back do not meet).
+        # (it goes on) or some (they meet; edges doubling back do not).
         turn = -np.einsum("ij,ij->i", outward[a], outward[b])
         aligned = math.cos(math.radians(_COLLINEAR_DEG))
         straight = turn >= aligned
-        sharp = np.abs(turn) <= math.sin(math.radians(_COLLINEAR_DEG))
-        slight = ~straight & ~sharp & (turn > -aligned)
-        for flags, mask in ((collinear, straight), (bend, slight), (corner, sharp)):
-            np.logical_or.at(flags, a, mask)
-            np.logical_or.at(flags, b, mask)
-        # Where one of the edges that meet at a point is on its own, all of them are.
-        own = bend.copy()
-        np.logical_or.at(bend, a, own[b])
-        np.logical_or.at(bend, b, own[a])
-        # The edge met at a corner in the plane of each face: one with a face there too.
-        for one, two in ((a[sharp], b[sharp]), (b[sharp], a[sharp])):
-            for side in (0, 1):
-                plane = edges.plane[which[one], side]
-                shared = (edges.plane[which[two], 0] == plane) | (
-                    edges.plane[which[two], 1] == plane
-                )
-                neighbour[one[shared], side] = which[two[shared]]
+        np.logical_or.at(collinear, a, straight)
+        np.logical_or.at(collinear, b, straight)
+        meet = ~straight & (turn > -aligned)
+        np.logical_and.at(met, a[meet], thin[which[b[meet]]])
+        np.logical_and.at(met, b[meet], thin[which[a[meet]]])
+        # The one edge met at a corner: where several meet, none.
+        met_by = np.zeros(2 * count, dtype=np.int64)
+        np.add.at(met_by, a[meet], 1)
+        np.add.at(met_by, b[meet], 1)
+        neighbour[a[meet]], neighbour[b[meet]] = which[b[meet]], which[a[meet]]
+        neighbour[met_by != 1] = -1
     sides = edges.bisector()
     closed = _closed_ends(model, points, outward, np.concatenate([sides, sides]), tol)
-    fade = np.where(collinear | closed, 0.0, np.where(bend, 1.0, np.where(corner, 0.5, 1.0)))
-    # Only the edges of thin screens fade, and where they meet others only where every
-    # one of those is one: at the corners of solid wedges (a box's, where three edges
-    # meet) the halves do not add up as BTM has them (a fade of every edge there came
-    # out up to 1.25 dB above BTM at 63 and 125 Hz near a block's corner), and their
-    # paths stop at the ends as on an endless edge.
-    thin = np.isclose(edges.wedge, 2.0)
-    met = np.ones(2 * count, dtype=bool)
-    if len(pairs):
-        np.logical_and.at(met, a[sharp | slight], thin[which[b[sharp | slight]]])
-        np.logical_and.at(met, b[sharp | slight], thin[which[a[sharp | slight]]])
-    fade = np.where(thin[which] & met, fade, 0.0)
+    fade = np.where(thin[which] & met & ~collinear & ~closed, 1.0, 0.0)
     closed &= thin[which]
-    neighbour[fade != 0.5] = -1
+    # A corner is one where both edges fade.
+    neighbour[fade == 0.0] = -1
+    back = neighbour.reshape(2, count).T
+    both = np.zeros(2 * count, dtype=bool)
+    for end in (0, 1):
+        rows = np.flatnonzero(back[:, end] >= 0)
+        point = edges.start[rows] if end == 0 else edges.end[rows]
+        other = back[rows, end]
+        far = np.linalg.norm(edges.start[other] - point, axis=1) > tol
+        both[end * count + rows] = fade.reshape(2, count)[far.astype(int), other] > 0.0
+    neighbour[~both] = -1
     return (
         fade.reshape(2, count).T.copy(),
-        neighbour.reshape(2, count, 2).transpose(1, 0, 2).copy(),
+        neighbour.reshape(2, count).T.copy(),
         (closed & ~collinear).reshape(2, count).T.copy(),
     )
+
+
+def corners(edges: Edges) -> tuple[np.ndarray, np.ndarray]:
+    """For the ends of the edges at a corner of a thin screen (``edges.corner``,
+    :func:`end_fades`): (E, 2) the share of a term on its boundary that each of the two
+    edges gives where the path touches the corner itself, and (E, 2, 3) the point just off
+    the corner on the open side of both, as a multiple of the rays' offset from the
+    corner; 1/2 and 0 at the other ends.
+
+    A straight way through a corner of a screen passes a plane of which the screen
+    covers the corner's angle alpha out of 2 pi: that much of the wave is hidden, and
+    the two edges' terms on the boundary, each half the wave over a whole edge, share
+    it, alpha / (2 pi) each (1/4 at a square corner, 1/2 where the edge only bends).
+    Either edge alone gives 1/2 at its end, as it does off the boundary (:func:`_cumulative`),
+    and the two would give the hidden part twice over at a square corner."""
+    count = len(edges)
+    share = np.full((count, 2), 0.5)
+    off = np.zeros((count, 2, 3))
+    if edges.corner is None or count == 0:
+        return share, off
+    bisector = edges.bisector()
+    for end in (0, 1):
+        rows = np.flatnonzero(edges.corner[:, end] >= 0)
+        if not len(rows):
+            continue
+        other = edges.corner[rows, end]
+        point = edges.start[rows] if end == 0 else edges.end[rows]
+        into = edges.direction[rows] if end == 0 else -edges.direction[rows]
+        first = np.linalg.norm(edges.start[other] - point, axis=1) <= np.linalg.norm(
+            edges.end[other] - point, axis=1
+        )
+        onward = np.where(first[:, None], edges.direction[other], -edges.direction[other])
+        between = np.arccos(np.clip(np.einsum("ij,ij->i", into, onward), -1.0, 1.0))
+        # The screen lies behind each edge's open side: where the other edge leaves
+        # into that side, the corner is a notch, and the screen the angle round it.
+        notch = np.einsum("ij,ij->i", bisector[rows], onward) > 0.0
+        share[rows, end] = np.where(notch, 2.0 * np.pi - between, between) / (2.0 * np.pi)
+        # One offset into each edge's open side.
+        apart = np.einsum("ij,ij->i", bisector[rows], bisector[other])
+        off[rows, end] = (bisector[rows] + bisector[other]) / np.maximum(1.0 + apart, 0.25)[:, None]
+    return share, off
 
 
 def _closed_ends(model: TraceModel, points, outward, sides, tol) -> np.ndarray:
@@ -979,7 +1017,16 @@ def term_boundaries(n: np.ndarray, eps: np.ndarray, kl: np.ndarray) -> np.ndarra
 
 
 def along_edge(
-    t_k, length, scale, fade, reach, inside=None, closed=None, alone=None, boundary=None
+    t_k,
+    length,
+    scale,
+    fade,
+    reach,
+    inside=None,
+    closed=None,
+    alone=None,
+    boundary=None,
+    at_end=None,
 ) -> np.ndarray:
     """(C, W, B, M) the share of each path over an edge that the edge, from 0 to
     ``length`` (C,) along its line, gives the path touching the line at ``t_k`` (C,):
@@ -987,25 +1034,29 @@ def along_edge(
     line, ``scale`` (C, B, M) being the integral's argument per metre along it
     (sin^2 beta sqrt(k / (pi L))). Each end counts by its ``fade`` (C, 2 or C, W, 2,
     :func:`end_fades`) as that integral, and by the rest as a hard stop where ``inside``
-    (C, W, 2, for each of W waves and each end) turns false: by default (W = 1, and then
-    (C, B, M)) where the point leaves the edge. A free end gives 1/2, the share 1 well
-    inside and 0 well past it. Within ``reach`` (C, :func:`_fade_reach`) of an end it
-    tapers, from FADE_TAPER on, to 1 inside the edge and to 0 past it. Where a face
-    closes one end (``closed``, C, 2) the edge goes on as its image in the face, as far
-    as the image of its other end, which fades as that end does.
+    (C, W, 2, for each of W waves and each end) turns false: by default where the point
+    leaves the edge. A free end gives 1/2, the share 1 well inside and 0 well past it.
+    Within ``reach`` (C, :func:`_fade_reach`) of an end it tapers, from FADE_TAPER on,
+    to 1 inside the edge and to 0 past it. Where a face closes one end (``closed``,
+    C, 2) the edge goes on as its image in the face, as far as the image of its other
+    end, which fades as that end does. Without ``inside`` and ``alone`` there is one
+    wave, and the result is (C, B, M).
 
-    At the ends that ``alone`` (C, W, 2) marks, where nothing completes the edge's terms
-    (:func:`end_fades`), the integral is weighted for each wave's ``boundary`` (C, W, B,
-    M; the W waves are then the four terms of :func:`term_boundaries`), as
-    :func:`_cumulative` has it."""
+    At the ends that ``alone`` (C, W, 2) marks, the integral is weighted for each wave's
+    ``boundary`` (C, W, B, M; the W waves are then the four terms of
+    :func:`term_boundaries`), as :func:`_cumulative` has it: the edge's own part of each
+    term, which the paths over an edge take at every end that fades
+    (:func:`end_fades`). Where the path touches such an end itself, the end gives the
+    wave ``at_end`` (C, W, 2) of it: 1/2 by default, as the integral has it there.
+    (:func:`corners`)."""
     t_k, length = np.asarray(t_k, float), np.asarray(length, float)
 
     def window(distance):
         return fade_window(distance, reach)[:, None, None, None]
 
     before, after = t_k < 0.0, t_k > length
-    squeeze = inside is None
-    if squeeze:
+    squeeze = inside is None and alone is None
+    if inside is None:
         inside = np.stack([~before, ~after], axis=-1)[:, None, :]
     if fade.ndim == 2:
         fade = fade[:, None, :]
@@ -1020,6 +1071,9 @@ def along_edge(
         own = alone[..., end]
         out = np.broadcast_to(plain, boundary.shape).copy()
         out[own] = _cumulative(-np.broadcast_to(u[:, None], boundary.shape)[own], boundary[own])
+        if at_end is not None:
+            there = own & (distance == 0.0)[:, None]
+            out[there] = (1.0 - at_end[..., end])[there][:, None, None]
         return out
 
     w_a, w_b = fade[..., 0, None, None], fade[..., 1, None, None]  # (C, W, 1, 1)
@@ -1107,8 +1161,8 @@ class EdgeDiffraction:
         self.k_min = float(self.wavenumber.min())
         if self.edges.fade is None or self.edges.corner is None or self.edges.closed is None:
             self.edges.fade, self.edges.corner, self.edges.closed = end_fades(model, self.edges)
-        self.fades, self.corners = self.edges.fade, self.edges.corner
-        self.closed = self.edges.closed
+        self.fades, self.closed = self.edges.fade, self.edges.closed
+        self.corner_share, self.corner_off = corners(self.edges)
 
         # The source and its images in the planes it faces; the source side of a
         # diffracted path is one of them, the listener side the listener or its image.
@@ -1385,9 +1439,8 @@ class EdgeDiffraction:
         """Edges in a row on a straight way whose path is ``missing`` (C,) although the
         paths over them are found, among the paths ``c`` over one edge
         (:meth:`_combos`): the rows that count on the lit side of their incident wave's
-        boundary, the one row of each such way that carries the wave itself, all the
-        rows on those ways, and (C,) whether a row's incident wave is one of those
-        waves. ``angle`` (C,) is the listener side's from the boundary, ``image``
+        boundary, the one row of each such way that carries the wave itself, and all
+        the rows on those ways. ``angle`` (C,) is the listener side's from the boundary, ``image``
         (C, 3) and ``order`` (C,) the wave's image of the source and its order; two rows
         have one wave where those and the planes it reflects off (:func:`_wave_planes`)
         are the same.
@@ -1419,9 +1472,8 @@ class EdgeDiffraction:
         t_k, length = c["t_k"], self.edges.length[c["edge"]]
         across = np.abs(angle) * c["rho_s"] * c["r2"] / (c["r1"] + c["r2"])
         rows = np.flatnonzero(missing & (angle <= _ON_BOUNDARY) & (across <= reach))
-        of_way = np.zeros(len(t_k), dtype=bool)
         if len(rows) < 2:
-            return rows[:0], rows[:0], rows[:0], of_way
+            return rows[:0], rows[:0], rows[:0]
         planes = _wave_planes(self.model, c)
         wave = np.column_stack([np.round(image / (1e-6 * self.size)), order, planes])
         groups = np.unique(wave, axis=0, return_inverse=True)[1].ravel()
@@ -1435,18 +1487,43 @@ class EdgeDiffraction:
         # The ways with edges in a row, one of which touches its edge: their rows.
         several = np.zeros(int(groups.max()) + 1, dtype=bool)
         several[group[apart & ~past[lead]]] = True
+        # And the ways through a corner of a screen, whose two edges give the wave's
+        # terms by the corner's share each (corners), not all of them.
+        at = (t_k[rows] == 0.0) | (t_k[rows] == length[rows])
+        ends = np.where(t_k[rows] == 0.0, 0, 1)
+        at &= self.edges.corner[c["edge"][rows], ends] >= 0
+        several[group[~first & ~apart & at & at[lead]]] = True
         # Not with a reflection between two of the way's edges (the paths over them
         # reflect on different sides of their edges).
         kind = c["kind"][rows]
         several[group[kind != kind[lead]]] = False
         clear = several[group]
-        of_way = several[groups]
-        return (
-            np.sort(rows[clear & ~first]),
-            np.sort(rows[clear & first]),
-            np.sort(rows[clear]),
-            of_way,
-        )
+        return np.sort(rows[clear & ~first]), np.sort(rows[clear & first]), np.sort(rows[clear])
+
+    def _ray_starts(self, edge: np.ndarray, t: np.ndarray, point: np.ndarray):
+        """(n, 3) where the rays start that test a path touching ``edge`` (n,) at ``t``
+        (n,) along its line, at ``point`` (n, 3), and (n,) how far along the edge that is
+        from the point. Rays start just off the edge, in the middle of its open side, and
+        just inside its ends (where a plane they may be meant to reflect off begins). At
+        a corner of a thin screen (:func:`corners`), for a point within the rays' reach
+        of the corner or past it, they start just off the corner on the open side of both
+        its edges: the two are one place there, and a path through it is there for both
+        or for neither, also where one edge's own side lies behind something level with
+        the other (the upright end of a screen behind another screen of the same
+        height)."""
+        edges, offset = self.edges, self.offset
+        length = edges.length[edge]
+        along = np.clip(t, offset, length - offset) - t
+        start = point + along[:, None] * edges.direction[edge] + offset * edges.bisector()[edge]
+        for end, gap in ((0, t), (1, length - t)):
+            rows = np.flatnonzero((edges.corner[edge, end] >= 0) & (gap < 2.0 * offset))
+            if not len(rows):
+                continue
+            e = edge[rows]
+            corner = edges.start[e] if end == 0 else edges.end[e]
+            start[rows] = corner + offset * self.corner_off[e, end]
+            along[rows] = (0.0 if end == 0 else length[rows]) - t[rows]
+        return start, along
 
     def _combos(self, listener: np.ndarray, max_delay_s: float):
         """Source and listener sides of every edge whose shortest path over the edge
@@ -1564,11 +1641,9 @@ class EdgeDiffraction:
         point = edges.start[edge] + t_k[:, None] * edges.direction[edge]
 
         # Unobstructed, with the reflection on the expected plane before or after the
-        # edge. Rays start just off the edge, in the middle of its open side, and just
-        # inside its ends (where a plane they may be meant to reflect off begins).
+        # edge.
         offset = self.offset
-        along = np.clip(t_k, offset, edges.length[edge] - offset) - t_k
-        start = point + along[:, None] * edges.direction[edge] + offset * edges.bisector()[edge]
+        start, along = self._ray_starts(edge, t_k, point)
         reflected = np.full(len(edge), -1, dtype=np.int64)
         bounce = np.zeros((len(edge), 3))
         reflected2 = np.full(len(edge), -1, dtype=np.int64)  # after the edge, kind 3
@@ -1671,12 +1746,10 @@ class EdgeDiffraction:
         near, reach = near_fading_end(fades, t_k, length, r1, r2, sin_beta, self.k_min)
         # Edges in a row on one straight way that is not found: all but one count on the
         # lit side of its boundary (_in_line), the listener side mirrored in it there,
-        # and that one carries the wave; for the edges of that wave it is there.
-        in_line, carrier, on_ways, of_way = self._in_line(
+        # and that one carries the wave.
+        in_line, carrier, on_ways = self._in_line(
             c, found[:, 0] < 0, angle[:, 0], images[:, 0], orders[:, 0]
         )
-        there = found >= 0
-        there[of_way, 0] = True
         was_lit = angle[in_line] > _ON_BOUNDARY
         if len(in_line):
             phi_r = phi_r.copy()
@@ -1724,20 +1797,24 @@ class EdgeDiffraction:
         if near.any():
             spread = np.sqrt(k / (np.pi * length_param[fading, None, None]))
             scale = sin_beta[fading, None, None] ** 2 * spread
-            fade, inside = self._inside(c, fading, there)
-            # Each of the coefficient's four terms: at an end where nothing completes it
-            # (end_fades gives 1), the edge's own part of the term, by its boundary.
+            # Each of the coefficient's four terms: at an end that fades (end_fades), the
+            # edge's own part of the term, by its boundary.
             eps = _term_angles(n[fading], phi_r[fading], c["phi_s"][fading])
+            # On its boundary, a term of a path through a corner is the corner's share.
+            on = 2.0 * n[fading, None] * np.abs(np.sin(eps / (2.0 * n[fading, None])))
+            at_corner = np.where(
+                (on <= _ON_BOUNDARY)[:, :, None], self.corner_share[edge[fading], None, :], 0.5
+            )
             shares = along_edge(
                 t_k[fading],
                 length[fading],
                 scale,
-                fade[:, _TERM_WAVE],
+                fades[fading],
                 reach[fading],
-                inside[:, _TERM_WAVE],
-                self.closed[edge[fading]],
-                np.repeat((fades[fading] == 1.0)[:, None, :], 4, axis=1),
-                term_boundaries(n[fading], eps, kl[fading]),
+                closed=self.closed[edge[fading]],
+                alone=np.repeat((fades[fading] > 0.0)[:, None, :], 4, axis=1),
+                boundary=term_boundaries(n[fading], eps, kl[fading]),
+                at_end=at_corner,
             )
         # The cosine each reflection on the way meets its face at, where its phase is
         # that face's absorption's (EarlyReflections.cosines).
@@ -1964,13 +2041,7 @@ class EdgeDiffraction:
         ok &= ~(screen_1 & ~on_2) & ~(screen_2 & ~on_1)
         # Unobstructed, with rays from just off each edge, as for one edge.
         offset = self.offset
-        bisector = edges.bisector()
-        starts = [
-            p
-            + (np.clip(t, offset, edges.length[e] - offset) - t)[:, None] * edges.direction[e]
-            + offset * bisector[e]
-            for p, t, e in ((p1, t1, e1), (p2, t2, e2))
-        ]
+        starts = [self._ray_starts(e, t, p)[0] for p, t, e in ((p1, t1, e1), (p2, t2, e2))]
         ends = np.broadcast_to(self.source, p1.shape), np.broadcast_to(listener, p2.shape)
         for leg, (a, b) in enumerate(
             ((starts[0], ends[0]), (starts[0], starts[1]), (starts[1], ends[1]))
@@ -1982,18 +2053,29 @@ class EdgeDiffraction:
                 ok[rows] = _clear_along(model, a[rows], b[rows], tolerance)
             else:
                 ok[rows] = _clear(model, a[rows], b[rows])
+        # Whether the path touches each edge at an end of it that fades (end_fades), and
+        # the share of a term on its boundary that the edge gives there (corners). At
+        # the top of an upright edge that meets a level one at a corner the path passes
+        # level with that end, as just past it, where a path over two edges is gone
+        # (the path over that edge alone is there, by the share of its end); the level
+        # edge then gives the corner's whole share, its own and the upright edge's.
+        at_end = []
+        for t, e in ((t1, e1), (t2, e2)):
+            ends = np.column_stack([t == 0.0, t == edges.length[e]]) & (self.fades[e] > 0.0)
+            at = ends.any(axis=1)
+            end = np.where(ends[:, 0], 0, 1)
+            other = np.where(at, edges.corner[e, end], -1)
+            upright = np.abs(edges.direction[e, 2]) >= _UPRIGHT
+            beside = np.abs(edges.direction[np.maximum(other, 0), 2]) >= _UPRIGHT
+            ok &= ~((other >= 0) & upright & ~beside)
+            both = (other >= 0) & beside & ~upright
+            share = self.corner_share[e, end] * np.where(both, 2.0, 1.0)
+            at_end.append((at, np.minimum(share, 1.0)))
         sel = np.flatnonzero(ok)
         if len(sel) == 0:
             return None
         e1, e2, d1, d2, p1, p2 = e1[sel], e2[sel], d1[sel], d2[sel], p1[sel], p2[sel]
-        # Whether the path touches each edge at an end of it that fades (end_fades), and
-        # whether the edge stops hard there: an upright edge at a corner (_inside).
-        at_end = []
-        for t, e in ((t1[sel], e1), (t2[sel], e2)):
-            at = np.column_stack([t == 0.0, t == edges.length[e]]) & (self.fades[e] > 0.0)
-            hard = (at & np.isclose(self.fades[e], 0.5)).any(axis=1)
-            hard &= np.abs(edges.direction[e, 2]) >= _UPRIGHT
-            at_end.append((at.any(axis=1) & ~hard, hard))
+        at_end = [(half[sel], share[sel]) for half, share in at_end]
         r0, r1, r2 = r0[sel], r1[sel], r2[sel]
         phi_21, rho_21, phi_12, rho_12 = phi_21[sel], rho_21[sel], phi_12[sel], rho_12[sel]
         n1, n2 = edges.wedge[e1], edges.wedge[e2]
@@ -2022,7 +2104,7 @@ class EdgeDiffraction:
             phi_21, rho_21, phi_12, rho_12 = (a[ways] for a in (phi_21, rho_21, phi_12, rho_12))
             n1, n2, phi_s1, phi_r2 = (a[ways] for a in (n1, n2, phi_s1, phi_r2))
             sin1, sin2, distance = sin1[ways], sin2[ways], distance[ways]
-            at_end = [(half[ways], hard[ways]) for half, hard in at_end]
+            at_end = [(half[ways], share[ways]) for half, share in at_end]
         along = np.any(side != 0.0, axis=1)
         for phi, n, e in ((phi_21, n1, e1), (phi_12, n2, e2)):
             on = along & np.isclose(n, 2.0)
@@ -2136,21 +2218,26 @@ class EdgeDiffraction:
             * (r1 + r0)[:, None, None]
             / (r1[:, None, None] * (radius1 + r0[:, None, None]))
         )
-        first = _waves(n1, phi_21, phi_s1, kl1, lit1, factors1)
-        second = _waves(n2, phi_r2, phi_12, kl2, lit2, factors2)
         # A path over two edges stops at the ends of its edges: it is there on the edge
         # and gone past its end. At an end that fades (end_fades) it counts by half,
-        # midway between the two, as a path over one edge does there: so the paths
-        # over the two pieces of a bent edge, at their joint, are one path, not two.
-        # At an end where an upright edge stops hard (_inside: its top at a screen's
-        # corner, or its foot under a screen that hangs free) the edge takes nothing
-        # off a wave that passes level with that end, as just past it: its incident
-        # wave's term is left out, and the terms of its faces' reflections stay (just
-        # past the end, the path over that edge alone has them, fading out; level with
-        # the end that path may not be found).
-        for waves, (half, hard) in ((first, at_end[0]), (second, at_end[1])):
-            waves[half] *= 0.5
-            waves[hard, 0] = 0.0
+        # midway between the two, as a path over one edge does there, and a term on its
+        # boundary by the corner's share (corners): so the paths over the two pieces of
+        # a bent edge, at their joint, are one path, not two.
+        shares = []
+        for (half, share), n, phi, phi_from in (
+            (at_end[0], n1, phi_21, phi_s1),
+            (at_end[1], n2, phi_r2, phi_12),
+        ):
+            rows = np.flatnonzero(half)
+            eps = _term_angles(n[rows], phi[rows], phi_from[rows])
+            on = 2.0 * n[rows, None] * np.abs(np.sin(eps / (2.0 * n[rows, None])))
+            shares.append((rows, np.where(on <= _ON_BOUNDARY, share[rows, None], 0.5)))
+        first = _waves(
+            n1, phi_21, phi_s1, kl1, lit1, factors1, shares[0][0], shares[0][1][:, :, None, None]
+        )
+        second = _waves(
+            n2, phi_r2, phi_12, kl2, lit2, factors2, shares[1][0], shares[1][1][:, :, None, None]
+        )
         # Along a face, the incident wave and its reflection off the face are one wave.
         _merge(first, leave)
         # At grazing incidence they are one wave too, which already holds the face's
@@ -2426,80 +2513,6 @@ class EdgeDiffraction:
             spectrum=None if spectrum is None else spectrum[idx],
             cosines=[] if spectrum is None else [found["cosines"](i) for i in idx],
         ), idx
-
-    def _inside(self, c: dict, rows: np.ndarray, there: np.ndarray):
-        """For paths ``rows`` of ``c``, (R, 3, 2) how far each wave (the incident wave and
-        the reflections off face 0 and face n) fades at the edge's start and its end and
-        whether it lies inside them, for the hard part of the fade (:func:`along_edge`);
-        ``there`` (C, 3) is whether each wave's specular path is found
-        (:meth:`_specular`), or counts as found (:meth:`_in_line`).
-
-        At a right-angled corner, where the wave's line (from the source side, mirrored in
-        the face for a reflection, to the listener side) passes through the plane of the
-        face the two edges share, the face cuts the wave off at both of them: the wave
-        lies inside where it passes on this edge's side of the other edge, whose own term
-        round the end then appears or goes, and the two halves of their fades add up as
-        the edges of a quarter plane do in the Kirchhoff approximation. Where the line
-        meets the other edge's line, on that edge's boundary, its term takes the side the
-        wave's path decides (found or not, as in :meth:`_single`), and so does this: the
-        face cuts the incident wave off where its path is not found, and reflects a
-        reflection where its path is. Where the line does not pass through the face's
-        plane, nothing cuts the wave off there and its term fades all the way.
-        Elsewhere the wave lies inside where the point the path touches lies on the
-        edge."""
-        model, edges = self.model, self.edges
-        edge = c["edge"][rows]
-        t_k, length = c["t_k"][rows], edges.length[edge]
-        fade = np.repeat(self.fades[edge][:, None, :], 3, axis=1)
-        inside = np.empty((len(rows), 3, 2), dtype=bool)
-        inside[:, :, 0] = (t_k >= 0.0)[:, None]
-        inside[:, :, 1] = (t_k <= length)[:, None]
-        source, listener = c["source_side"][rows], c["listener_side"][rows]
-        seen = np.where(c["phi_s"][rows] < np.pi, 0, 1)  # the face the source side sees
-        for end in (0, 1):
-            corner = np.isclose(self.fades[edge, end], 0.5)
-            if not corner.any():
-                continue
-            point = edges.start[edge] if end == 0 else edges.end[edge]
-            into = edges.direction[edge] if end == 0 else -edges.direction[edge]
-            for wave, side in ((0, seen), (1, np.zeros_like(seen)), (2, np.ones_like(seen))):
-                other = self.corners[edge, end, side]
-                use = np.flatnonzero(corner & (other >= 0))
-                if not len(use):
-                    continue
-                plane = edges.plane[edge[use], side[use]]
-                start = source[use] if wave == 0 else model.mirror(source[use], plane)
-                normal, offset = model.plane_normal[plane], model.plane_offset[plane]
-                line = listener[use] - start
-                across = np.einsum("ij,ij->i", normal, line)
-                ahead = offset - np.einsum("ij,ij->i", normal, start)
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    at = ahead / across
-                through = (np.abs(across) > 0.0) & (at > 0.0) & (at < 1.0)
-                fade[use[~through], wave, end] = 1.0
-                use, at, start = use[through], at[through], start[through]
-                # Where a vertical edge meets one that is not, the one that is not fades
-                # all the way and the vertical one stops hard: the two still add up, and
-                # each stays continuous where the other's term appears, as paths over a
-                # barrier's top and paths round its end take different weather.
-                upright = np.abs(edges.direction[edge[use], 2]) >= _UPRIGHT
-                beside = np.abs(edges.direction[other[use], 2]) >= _UPRIGHT
-                fade[use[beside & ~upright], wave, end] = 1.0
-                fade[use[upright & ~beside], wave, end] = 0.0
-                crossing = start + at[:, None] * line[through]
-                # Across the other edge's line, in the plane, towards this edge.
-                along = edges.direction[other[use]]
-                towards = into[use] - np.einsum("ij,ij->i", into[use], along)[:, None] * along
-                side_of = np.einsum("ij,ij->i", crossing - point[use], towards)
-                # On the other edge's boundary, as that edge has it.
-                phi_from = edges.frame(other[use], start)[2]
-                phi_to = edges.frame(other[use], listener[use])[2]
-                angle = boundary_angles(edges.wedge[other[use]], phi_to, phi_from)[:, 0]
-                hit = there[rows[use], wave]
-                inside[use, wave, end] = np.where(
-                    np.abs(angle) <= _ON_BOUNDARY, hit if wave else ~hit, side_of > 0.0
-                )
-        return fade, inside
 
     def _specular(self, listener: np.ndarray, paths: EarlyReflections, c: dict):
         """(C, 3) index in ``paths`` of the specular path of each term's wave (the

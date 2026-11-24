@@ -437,12 +437,13 @@ def _outdoors(
     path=((10, -30), (10, 30)),
     behind=None,
     half_m: float = 100.0,
+    hard: float = 0.05,
     **early,
 ) -> Room:
     """A ``source`` (by default 1 m over a ground that reaches ``half_m`` each way), a
     barrier ``barrier_m`` high along ``path`` (by default 10 m away, along y), with
     ``behind`` another as high along that path, and, with ``shed``, a shed as high as the
-    barrier out of the way."""
+    barrier out of the way; the barriers and the shed absorb ``hard`` in every band."""
     geometry = {
         "ground": {"extent": [[-half_m, -half_m], [half_m, half_m]], "sky": 40},
         "barriers": [
@@ -460,7 +461,7 @@ def _outdoors(
                 "geometry": geometry,
                 "materials": {
                     "ground": {"absorption": [1.0 if shed else 0.0] * 8, "scattering": 0.0},
-                    "hard": {"absorption": [0.05] * 8, "scattering": 0.0},
+                    "hard": {"absorption": [hard] * 8, "scattering": 0.0},
                 },
                 "default_material": "ground",
                 "assignments": {"wall": "hard", "wall_2": "hard", "shed": "hard"},
@@ -692,12 +693,16 @@ def test_behind_a_barrier_s_foot_as_the_exact_solution(listener) -> None:
 
 
 @pytest.mark.parametrize("listener", list(_CURVED_EXACT))
-def test_behind_a_curved_barrier_as_the_exact_solution(listener) -> None:
+def test_behind_a_curved_barrier_as_the_exact_solution(monkeypatch, listener) -> None:
     """Behind the curved barrier, where the reflection off the ground lies in front of a
     part's foot and the plane of the near end's face crosses the leg before it, with
-    both_sides the level is the exact one to 0.1 dB from 63 to 500 Hz. The fade gave the
-    leg before the reflection the near end's term as one more event: 0.6 dB too loud at
-    63 Hz, 1.2 and 1.5 dB too soft at 125 and 250 Hz."""
+    both_sides the level is the exact one to 0.1 dB from 63 to 500 Hz (0.09 dB here),
+    with the barrier rigid and no air, as the exact solution has them (the barrier's 5 %
+    and the air take 0.07 dB off at 125 and at 500 Hz). The fade gave the leg before the
+    reflection the near end's term as one more event: 0.6 dB too loud at 63 Hz, 1.2 and
+    1.5 dB too soft at 125 and 250 Hz."""
+    air = Room.air_attenuation
+    monkeypatch.setattr(Room, "air_attenuation", lambda self, bands="octave": 0 * air(self, bands))
     source = (0.0, -8.0, 1.5)
     room = _outdoors(
         listener,
@@ -706,6 +711,7 @@ def test_behind_a_curved_barrier_as_the_exact_solution(listener) -> None:
         max_order=2,
         diffraction="first_order",
         diffraction_reflections="both_sides",
+        hard=0.0,
     )
     squared = float(np.sum((np.asarray(listener) - np.asarray(source)) ** 2))
     level = 10 * np.log10(total_energy(early_paths(room)) * 4 * np.pi * squared)
@@ -999,7 +1005,12 @@ def test_of_two_orders_at_a_corner_the_edge_fade_takes_the_one_along_the_way() -
             120.0,
             0.01,
             (14.0 * np.cos(2.75 * np.pi / 2.0), 14.0 * np.sin(2.75 * np.pi / 2.0), 2.7),
-            {"max_order": 2, "diffraction": "first_order", "diffraction_reflections": "both_sides"},
+            {
+                "max_order": 2,
+                "diffraction": "first_order",
+                "diffraction_reflections": "both_sides",
+                "hard": 0.0,
+            },
             8,
         ),
         (
@@ -1024,7 +1035,11 @@ def test_the_paths_over_an_edge_are_tested_as_near_it_in_a_wide_model(
     millimetres below the other arm's top, and the edge fade added 2 terms for them
     (0.14 dB at 63 Hz). The levels of the 60 degree bend are compared where the paths add
     in pressure: in the bands that add in energy the waves' images are grouped to a
-    share of the model's size."""
+    share of the model's size. The 120 degree bend is rigid: with 5 % its faces reflect
+    at the source's grazing angle with a factor near -1, the source and its image nearly
+    cancel, and so do the paths round the arms' ends, which fall below the floor of
+    the diffracted paths (they fell 23 dB once the incident wave's terms and those of
+    the faces' reflections faded alike at the ends' corners)."""
     turn = np.radians(bend)
     reach = gap / np.sin(turn / 2)
     source = (float(np.cos(turn / 2) * reach), float(np.sin(turn / 2) * reach), 1.5)
