@@ -5028,6 +5028,7 @@ def test_demo_dialog_keeps_what_reopening_shows(qapp, monkeypatch, tmp_path: Pat
     from PySide6.QtWidgets import QDialogButtonBox
 
     from acoustic_spaces import examples
+    from acoustic_spaces.demos import shell_line
     from acoustic_spaces.gui.demo_dialog import DemoDialog
 
     monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
@@ -5058,7 +5059,7 @@ def test_demo_dialog_keeps_what_reopening_shows(qapp, monkeypatch, tmp_path: Pat
     sources = stadium.fields["sources"]
     names = sources.ticked()
     sources.none.click()
-    assert "--sources ''" in stadium.command.text() and stadium.kept.isHidden()
+    assert shell_line(["--sources", ""]) in stadium.command.text() and stadium.kept.isHidden()
     stadium.reject()
     stadium.deleteLater()
     stadium = DemoDialog(scene=example_path("stadium_concert"))

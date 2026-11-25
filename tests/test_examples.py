@@ -534,7 +534,6 @@ def test_church_demo_plays_the_sources_picked(
     with their weights, names the run after it, takes --input for them alone, shares the
     feeds of every source, and its captions, stills and credit say what plays."""
     demo = _script("church", "church_demo")
-    pictures = _script("church", "church_pictures")
     paths = {
         "source": example_path("church"),
         "scene": tmp_path / "scene_choir.yaml",
@@ -616,6 +615,7 @@ def test_church_demo_plays_the_sources_picked(
 
     # The stills: drawn of the sources that play, credited to the recordings heard.
     pytest.importorskip("PIL")
+    pictures = _script("church", "church_pictures")
     scene = demo.scene_of(every)
     report = {
         "responses": [
@@ -1617,7 +1617,6 @@ def test_lakeside_demo_plays_the_loudspeakers_picked(tmp_path: Path, monkeypatch
     three by default (the run named as before); the mixes feed only those, their
     arrival counts only those, and the stills draw only those and say so."""
     demo = _script("lakeside_concert", "lakeside_demo")
-    pictures = _script("lakeside_concert", "lakeside_pictures")
     folder = copy_examples(tmp_path, ["lakeside_concert"])[0].parent
     work = tmp_path / "demo"
     every = _demo_args(demo.DEMO, work=work)
@@ -1696,6 +1695,8 @@ def test_lakeside_demo_plays_the_loudspeakers_picked(tmp_path: Path, monkeypatch
     }
     gains = {"audience.evening": 0.0, "bedroom_window.still": 20.0}
     tool = {w: ["Simulated", "Run as"] for w in scenes}
+    pytest.importorskip("PIL")
+    pictures = _script("lakeside_concert", "lakeside_pictures")
     drawing = pictures.Pictures(
         {w: s | {"sources": demo.playing_sources(s, ["subs"])} for w, s in scenes.items()},
         seats,
@@ -2284,8 +2285,7 @@ def test_the_talkers_speak_at_normal_effort(name: str) -> None:
 
 def test_the_texts_say_what_the_sources_and_listeners_picks_do() -> None:
     """The tours' --listeners help says a --tour given keeps its own order; the demos
-    with no --sources (one vehicle each) are the three the docs and the changelog name;
-    the title card is the one before each part of a run of several parts."""
+    with no --sources (one vehicle each) are the three the docs and the changelog name."""
     demos = {demo.name: demo for demo in list_demos()}
     kept = "a --tour given keeps its own order, this option leaving out the others"
     for name in ("stadium", "crossing", "orchestra", "church"):
@@ -2301,6 +2301,8 @@ def test_the_texts_say_what_the_sources_and_listeners_picks_do() -> None:
         ("roadside", "passby"),
     ]
     root = EXAMPLES.parent
+    if not (root / "docs" / "demos.md").is_file():
+        pytest.skip("the docs are in the source checkout only")
     docs = " ".join((root / "docs" / "demos.md").read_text(encoding="utf-8").split())
     assert (
         "Every demo but the airport's flight, the helicopter flyover and the roadside demo "
@@ -2312,6 +2314,12 @@ def test_the_texts_say_what_the_sources_and_listeners_picks_do() -> None:
     assert "(all but the airport's flight, the helicopter flyover and the roadside demo," in (
         changelog
     )
+
+
+def test_the_title_card_is_the_one_before_each_part() -> None:
+    """The title card's docstring names the step that puts it before each part of a run
+    of several parts."""
+    pytest.importorskip("PIL")
     from acoustic_spaces.demos.pictures import title_card
 
     assert "join_parts" in title_card.__doc__ and "join`` step" not in title_card.__doc__
