@@ -46,6 +46,12 @@
   did not come out of the scenes they state; as the wind starts the level steps by up
   to 0.29 dB over a ground given by absorption coefficients (a known issue).
 
+**Tests and CI**
+
+- Changed: CI runs the tests under the sanitizers in four parts side by side, a job
+  each (`pytest --shard K/N` runs the K-th of N): in one job they ran out of the step's
+  150 minutes on slower runners, with none failed.
+
 ## 4.3.0
 
 Error estimates for more results: the uncertainty of a coverage map's values (its

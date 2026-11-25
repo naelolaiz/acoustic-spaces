@@ -7,6 +7,44 @@ import numpy as np
 import pytest
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--shard",
+        metavar="K/N",
+        help="run the K-th of N parts of the tests: every N-th test collected, from the "
+        "K-th on (CI runs the tests under the sanitizers in parts, side by side)",
+    )
+
+
+def shard_of(count: int, value: str) -> range:
+    """The indices, among ``count`` tests collected, of those ``--shard value`` runs:
+    every N-th from the K-th on. Each part thus holds a share of every file, so the parts
+    take about as long as each other wherever the slow tests are, and the N parts
+    together run every test once."""
+    part, _, parts = value.partition("/")
+    if not (part.isdigit() and parts.isdigit() and 1 <= int(part) <= int(parts)):
+        raise pytest.UsageError(f"--shard takes K/N with 1 <= K <= N, not {value!r}")
+    return range(int(part) - 1, count, int(parts))
+
+
+def pytest_configure(config):
+    value = config.getoption("--shard")
+    if value is not None:
+        shard_of(0, value)  # a wrong value stops pytest before it collects anything
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config, items):
+    """Keeps the part of the tests ``--shard`` names, of those every other selection
+    (``-k``, ``-m``) kept."""
+    value = config.getoption("--shard")
+    if value is None:
+        return
+    kept = set(shard_of(len(items), value))
+    config.hook.pytest_deselected(items=[t for i, t in enumerate(items) if i not in kept])
+    items[:] = [t for i, t in enumerate(items) if i in kept]
+
+
 class _FakeStream:
     """Runs the callback block by block on entry, as a sound card would."""
 

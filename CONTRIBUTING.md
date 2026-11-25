@@ -44,6 +44,9 @@ python -m pip install ".[test]" -C cmake.build-type=RelWithDebInfo -C cmake.defi
 ASAN_OPTIONS=detect_leaks=0 LD_PRELOAD="$(gcc -print-file-name=libasan.so) $(gcc -print-file-name=libubsan.so)" pytest -W error
 ```
 
+CI runs them in four parts side by side: `pytest --shard K/N` runs the K-th of N parts,
+every N-th test from the K-th on.
+
 A red job is a failure to look at, with two exceptions that CI heals by running the job
 again, up to twice per run (`.github/workflows/rerun.yml`, with the rules in
 `tools/ci_rerun.py`): a job whose runner GitHub lost (a step that never ended, and no

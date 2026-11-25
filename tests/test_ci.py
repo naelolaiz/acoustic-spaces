@@ -1,6 +1,7 @@
 """The tool that runs again the CI jobs the machines failed (tools/ci_rerun.py, called by
 .github/workflows/rerun.yml), on jobs shaped as GitHub's API listed real ones of this
-project in November 2026, and the workflow files it goes with."""
+project in November 2026, and the workflow files it goes with; and the parts CI runs the
+tests under the sanitizers in."""
 
 import json
 import sys
@@ -360,3 +361,30 @@ def test_the_rerun_workflow_follows_ci_and_calls_the_tool() -> None:
     (job,) = rerun["jobs"].values()
     assert "tools/ci_rerun.py" in job["steps"][-1]["run"]
     assert (TOOLS / "ci_rerun.py").exists()
+
+
+def test_the_parts_of_the_tests_hold_every_test_once() -> None:
+    """``pytest --shard K/N`` (tests/conftest.py): the N parts hold every test once, as
+    many each as can be, and a K or N out of place stops pytest."""
+    from conftest import shard_of
+
+    for count, parts in ((0, 1), (1, 4), (4071, 1), (4071, 4), (4073, 5)):
+        held = [list(shard_of(count, f"{part}/{parts}")) for part in range(1, parts + 1)]
+        assert sorted(sum(held, [])) == list(range(count))
+        assert max(map(len, held)) - min(map(len, held)) <= 1
+    for wrong in ("0/4", "5/4", "4", "1/0", "-1/4", "a/b", "1/4/2"):
+        with pytest.raises(pytest.UsageError):
+            shard_of(10, wrong)
+
+
+def test_the_sanitizer_jobs_run_every_part_of_the_tests() -> None:
+    """One job for each part, numbered from 1, each running its part of as many as
+    there are jobs: a part left out or run twice would be a test CI never runs there."""
+    if not WORKFLOWS.exists():
+        pytest.skip("the workflows are in the source checkout only")
+    ci = yaml.safe_load((WORKFLOWS / "ci.yml").read_text(encoding="utf-8"))
+    job = ci["jobs"]["sanitizers"]
+    parts = job["strategy"]["matrix"]["part"]
+    assert parts == list(range(1, len(parts) + 1))
+    (test,) = [step for step in job["steps"] if step.get("name") == "Test"]
+    assert test["run"].endswith(" --shard ${{ matrix.part }}/${{ strategy.job-total }}")
