@@ -1140,7 +1140,7 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
     )
     args = _demo_args(
         demo.DEMO,
-        source=example_path("gallery"),
+        source=EXAMPLES / "gallery" / "scene.yaml",  # the script's own: the default
         scene=tmp_path / "scene_demo.yaml",
         work=tmp_path / "demo",
     )
@@ -1235,6 +1235,9 @@ def test_walk_demo_scene_cuts_and_moments(tmp_path: Path, capsys) -> None:
     assert demo.said(given, room)[2] == 2  # said again, as the corpus's short takes are
     walked = args.run_folder / "walk"  # the run's own
     assert walked == args.work / "walk_M4_binaural" / "walk"
+    # A scene of another file is named in the run (the walk is that scene's).
+    other = demo.DEMO.resolved(argparse.Namespace(**vars(args) | {"source": off}))
+    assert other.run_folder.name == "walk_M4_from-off_binaural"
     walked.mkdir(parents=True)
     pipeline.write_json(walked / demo.WALK, {"talker": args.talker})
     assert not demo.part_done(args, "walk", demo.WALK)  # no sound for these ears yet
