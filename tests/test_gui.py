@@ -4313,7 +4313,16 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
 
     from acoustic_spaces import examples
     from acoustic_spaces.demos import list_demos
-    from acoustic_spaces.gui.demo_dialog import ALL, DemoDialog, InputsField, PathField
+    from acoustic_spaces.gui.demo_dialog import (
+        ALL,
+        ChoicesField,
+        DemoDialog,
+        InputsField,
+        NumbersField,
+        PathField,
+        SeriesField,
+        SourcesField,
+    )
 
     # The examples taken as a source checkout's, where each demo runs in its own folder
     # and starts at the plain command. The Editor jobs on CI install the package, whose
@@ -4359,10 +4368,16 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
         "HRTFs": "hrtf",
         "What the sources play": "inputs",
         "Listeners": "listeners",
-        "Runs": "runs",
+        "Sources": "sources",
+        "Sources play": "sources_play",
+        "Order of the parts": "series",
     }
-    # shown for the join step alone
-    assert not dialog.options.layout().isRowVisible(dialog.fields["runs"])
+    # Every row shows: the concert's sources ticked play together or in turn, and its
+    # listeners can each be a part of their own.
+    assert isinstance(dialog.fields["sources"], SourcesField)
+    assert isinstance(dialog.fields["series"], SeriesField)
+    for name in labels.values():
+        assert dialog.options.layout().isRowVisible(dialog.fields[name]), name
     assert "(--song)" in dialog.options.layout().labelForField(dialog.fields["song"]).toolTip()
     for name in ("work", "results", "source", "scene", "tour", "bpm", "again"):
         assert dialog.advanced.isAncestorOf(dialog.fields[name]), name
@@ -4392,8 +4407,10 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
 
     # A field that differs shows in the command, and the song is a list of the songs.
     song = dialog.fields["song"]
-    assert [song.itemText(k) for k in range(song.count())] == list(demo.option("song").choices)
-    song.setCurrentText("francium")
+    assert isinstance(song, ChoicesField)
+    assert song.names == list(demo.option("song").choices)
+    assert song.value() == "spicy_funk_cake"
+    song.pick("francium")
     dialog.step.setCurrentText("render")
     assert dialog.command.text() == "python stadium_demo.py render --song francium"
     assert dialog.about_step.text().startswith("render: ")
@@ -4403,10 +4420,17 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     ok = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
     assert isinstance(dialog.fields["hrtf"], PathField)
     dialog.fields["hrtf"].set_value("me.sofa")
-    dialog.fields["format"].setText("ambisonics")
-    assert "--hrtf is for binaural mixes" in dialog.problem.text() and not ok.isEnabled()
-    dialog.fields["format"].setText("binaural")
     assert "--hrtf: no " in dialog.problem.text() and not ok.isEnabled()  # me.sofa is not there
+    # A format that takes no HRTFs hides them, and its run leaves them out.
+    dialog.fields["format"].setText("ambisonics")
+    assert not dialog.options.layout().isRowVisible(dialog.fields["hrtf"])
+    assert dialog.problem.text() == "" and "--hrtf" not in dialog.command.text()
+    assert dialog.chosen()[2].hrtf is None and dialog.fields["hrtf"].value() == Path("me.sofa")
+    dialog.fields["format"].setText("binaural, ambisonics")  # a part of each
+    assert dialog.options.layout().isRowVisible(dialog.fields["hrtf"])
+    assert dialog.chosen()[2].format == ("binaural", "ambisonics")
+    assert "--hrtf: no " in dialog.problem.text() and not ok.isEnabled()
+    dialog.fields["format"].setText("binaural")
     sofa = tmp_path / "me.sofa"
     sofa.write_bytes(b"")
     dialog.fields["hrtf"].set_value(str(sofa))
@@ -4446,10 +4470,10 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     heads = [stems.table.horizontalHeaderItem(c) for c in range(stems.table.columnCount())]
     assert [head.text() for head in heads] == ["Name", "File"] and all(h.toolTip() for h in heads)
     bpm = dialog.fields["bpm"]
-    assert isinstance(bpm, QLineEdit)
-    bpm.setText("fast")
+    assert isinstance(bpm, NumbersField) and bpm.edit.placeholderText() == ""
+    bpm.edit.setText("fast")
     assert "--bpm: a number, not 'fast'" in dialog.problem.text() and not ok.isEnabled()
-    bpm.setText("120")
+    bpm.edit.setText("120")
     assert "--bpm: for a song of your own, with --music" in dialog.problem.text()
     song_file = tmp_path / "mine.wav"
     write_wav(song_file, np.zeros((100, 2)), 8000)
@@ -4462,7 +4486,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     stems.table.item(rows.index("vocal"), stems.FILE).setText(str(tmp_path / "none.wav"))
     assert "--stem vocal: no " in dialog.problem.text()
     dialog.fields["music"].set_value(None)
-    bpm.setText("")
+    bpm.edit.setText("")
     stems.table.item(rows.index("vocal"), stems.FILE).setText("")
     assert dialog.problem.text() == "" and "--music" not in dialog.command.text()
 
@@ -4471,7 +4495,7 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     dialog.picker.setCurrentIndex(names.index("scene"))
     assert dialog.command.text() == "acoustic-spaces demo scene.yaml all"
     steps = [step.name for step in dialog.demo.steps]
-    assert steps == ["recording", "feeds", "simulate", "render", "video", "join"]
+    assert steps == ["recording", "feeds", "simulate", "render", "video"]
     assert "song" not in dialog.fields and "seconds" in dialog.fields
     assert dialog.problem.text() == "" and ok.isEnabled()
     assert '"Spicy Funk Cake"' in dialog.downloads.text() and "61 MB" in dialog.downloads.text()
@@ -4516,37 +4540,52 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     # Its speed: the walk's by default, in km/h, and the line under the form says how
     # far, how fast and so how long the car drives.
     speed = road.fields["speed"]
-    assert speed.text() == "as in the scene" and speed.suffix() == " km/h"
-    assert road.fields["rpm"].suffix() == " rpm" and road.fields["step_m"].suffix() == " m"
+    assert isinstance(speed, NumbersField) and speed.edit.text() == ""
+    assert speed.edit.placeholderText() == "as in the scene"
+
+    def unit(name: str) -> str:
+        return road.fields[name].findChild(QLabel).text()
+
+    assert unit("speed") == "km/h" and unit("rpm") == "rpm" and unit("step_m") == "m"
+    assert road.fields["rpm"].edit.placeholderText() == "the vehicle's own"
+    assert road.fields["step_m"].edit.text() == "1" and road.fields["step_m"].value() == 1.0
     assert road.summary.text().startswith(
         "The car drives 150.0 m along its walk at 50.0 km/h (13.89 m/s, as its walk in the "
         "scene goes): the pass, and the car's sound, last 10.8 s."
     )
     assert road.command.text() == "python passby_demo.py all"
-    speed.setValue(100.0)
+    speed.edit.setText("100")
     assert "at 100.0 km/h (27.78 m/s, --speed)" in road.summary.text()
     assert "last 5.4 s" in road.summary.text()
     assert road.command.text() == "python passby_demo.py all --speed 100.0"
-    speed.setValue(0.0)
+    # Several speeds, one pass after another in one video; the line says each.
+    speed.edit.setText("50, 100")
+    assert road.command.text() == "python passby_demo.py all --speed 50.0,100.0"
+    assert speed.value() == (50.0, 100.0) and road.problem.text() == ""
+    assert "at 50.0 km/h" in road.summary.text() and "at 100.0 km/h" in road.summary.text()
+    speed.edit.setText("fast")
+    assert road.problem.text() == "Cannot run: --speed: a number, not 'fast'"
+    speed.edit.setText("")
     assert road.command.text() == "python passby_demo.py all"
     # The truck instead: its walk, its speed and its engine's tip.
     vehicle = road.fields["vehicle"]
-    vehicle.setCurrentText("truck")
+    assert isinstance(vehicle, ChoicesField) and vehicle.value() == "car"
+    vehicle.pick("truck")
     assert road.command.text() == "python passby_demo.py all --vehicle truck"
     assert box.ticked() == ["truck"]
     assert road.summary.text().startswith(
         "The truck drives 150.0 m along its walk at 70.0 km/h (19.44 m/s, as its walk in "
         "the scene goes): the pass, and the truck's sound, last 7.7 s."
     )
-    assert "car 2000 (4 cylinders), truck 1200 (6 cylinders)" in road.fields["rpm"].toolTip()
-    vehicle.setCurrentText("car")
+    assert "car 2000 (4 cylinders), truck 1200 (6 cylinders)" in road.fields["rpm"].edit.toolTip()
+    vehicle.pick("car")
     assert road.command.text() == "python passby_demo.py all"
     road.picker.setCurrentIndex(road.picker.findData("scene"))
     assert box.note.text().startswith("Nothing in this scene moves.")
     assert box.table.isHidden() and box.table.isRowHidden(0) and box.ticked() == []
     road.deleteLater()
-    # In the street, the police car's siren and what it plays, and what the fire engine
-    # plays, show only with that vehicle picked; hidden, they stay out of the command.
+    # In the street, the police car's siren shows only with that vehicle picked; hidden,
+    # it stays out of the command (what each vehicle plays is --sources, for all).
     street = DemoDialog(scene=example_path("street"))
     assert street.picker.currentData() == "passby"
     vehicle = street.fields["vehicle"]
@@ -4554,23 +4593,27 @@ def test_demo_dialog_fills_in_the_options(qapp, tmp_path: Path, monkeypatch) -> 
     def shown() -> set[str]:
         return {
             name
-            for name in ("siren", "police_car", "fire_engine", "rpm")
+            for name in ("siren", "rpm")
             if street._rows[name].isRowVisible(street.fields[name])
         }
 
-    assert vehicle.currentText() == "car" and shown() == {"rpm"}
-    vehicle.setCurrentText("police_car")
-    assert shown() == {"siren", "police_car", "rpm"}
-    street.fields["siren"].setCurrentText("yelp")
+    assert vehicle.value() == "car" and shown() == {"rpm"}
+    vehicle.pick("police_car")
+    assert shown() == {"siren", "rpm"}
+    street.fields["siren"].pick("yelp")
     assert street.command.text() == "python passby_demo.py all --vehicle police_car --siren yelp"
-    vehicle.setCurrentText("fire_engine")
-    assert shown() == {"fire_engine", "rpm"}
+    vehicle.pick("fire_engine")
+    assert shown() == {"rpm"}
     assert street.command.text() == "python passby_demo.py all --vehicle fire_engine"
     assert street.arguments().siren == "wail"
-    vehicle.setCurrentText("police_car")
-    assert street.fields["siren"].currentText() == "yelp"
-    # The tram has no engine of a road vehicle's.
-    vehicle.setCurrentText("tram")
+    vehicle.pick("police_car")
+    assert street.fields["siren"].value() == "yelp"
+    # The police car and the tram: the siren for the one, no engine of a road
+    # vehicle's for the other, which has no siren.
+    vehicle.pick(("police_car", "tram"))
+    assert shown() == {"siren", "rpm"}
+    assert "--vehicle police_car,tram --siren yelp" in street.command.text()
+    vehicle.pick("tram")
     assert shown() == set()
     street.deleteLater()
     # The stadium's helicopter likewise: the crossing flies it, the concert leaves it out.
@@ -4612,8 +4655,8 @@ def test_demo_dialog_picks_the_listeners(qapp, monkeypatch) -> None:
     """The Run demo window lists the listeners the demo can play, every one ticked: a
     run plays the ticked ones (--listeners). None unticks them all, which cannot run,
     and All ticks them again, the plain command. The church's demo lists the places it
-    puts in its scene, the gallery's walk, which hears its visitor alone, none, and a
-    scene that cannot be read hides the list."""
+    puts in its scene, the gallery's walk the listeners of its two parts, and a scene
+    that cannot be read hides the list."""
     from PySide6.QtWidgets import QDialogButtonBox
 
     from acoustic_spaces import examples
@@ -4662,52 +4705,272 @@ def test_demo_dialog_picks_the_listeners(qapp, monkeypatch) -> None:
     ]
     church.deleteLater()
     walk = DemoDialog(scene=example_path("gallery"))
-    assert "listeners" not in walk.fields
+    assert walk.fields["listeners"].names == ["visitor", "standing"]  # the walk, the turn
     walk.deleteLater()
     unsaved = DemoDialog(scene=None)
     assert not unsaved._rows["listeners"].isRowVisible(unsaved.fields["listeners"])
     unsaved.deleteLater()
 
 
-def test_demo_dialog_picks_the_runs_to_join(qapp, monkeypatch, tmp_path: Path) -> None:
-    """For the join step, the Run demo window lists the demo's finished runs in its work
-    folder, every one ticked: the video joins the ticked ones (--runs). The list is for
-    the join step alone, and the window does not keep it for next time."""
+def test_demo_dialog_plays_several_of_a_choice_one_after_another(qapp, monkeypatch) -> None:
+    """A choice that takes several values is a list of ticks, its default ticked: the
+    airport's departure. Ticking the arrival too plays both, one after another in one
+    video, in the list's order, which dragging the rows changes. The Movement box's
+    ticks pick the jets as well, each list following the other. A run with none ticked
+    cannot go, and the Movement box keeps its last tick. Order of the parts shows what
+    the run plays several of, and dragging its rows or ticking the listeners' row
+    changes --series. All and None tick every choice or none."""
+    from PySide6.QtCore import QModelIndex
+    from PySide6.QtWidgets import QDialogButtonBox
+
     from acoustic_spaces import examples
-    from acoustic_spaces.demos import JOIN, record_run
-    from acoustic_spaces.examples import copy_examples
-    from acoustic_spaces.gui.demo_dialog import DemoDialog, ListenersField, keeps
+    from acoustic_spaces.gui.demo_dialog import ChoicesField, DemoDialog, SeriesField
 
     monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
-    (scene,) = copy_examples(tmp_path, ["stadium_concert"])
-    work = scene.parent / "demo"
-    for name in ("stadium_francium_binaural", "stadium_spicy_funk_cake_binaural"):
-        record_run(work / name, demo="stadium", run=name, video=f"{name}.mp4")
-        (work / f"{name}.mp4").write_bytes(b"")
-    record_run(work / "stadium_rubidium_binaural", demo="stadium", video=None)  # no video
-    dialog = DemoDialog(scene=scene)
-    field = dialog.fields["runs"]
-    assert isinstance(field, ListenersField)
-    assert not dialog._rows["runs"].isRowVisible(field)  # not for "all"
-    dialog.step.setCurrentText(JOIN.name)
-    assert dialog._rows["runs"].isRowVisible(field)
-    assert field.names == ["stadium_francium_binaural", "stadium_spicy_funk_cake_binaural"]
-    assert " join " in dialog.command.text() and "--runs" not in dialog.command.text()
-    field.list.item(0).setCheckState(Qt.CheckState.Unchecked)
-    assert "--runs stadium_spicy_funk_cake_binaural" in dialog.command.text()
-    assert dialog.chosen()[1:] == (JOIN.name, dialog.chosen()[2])
-    assert dialog.chosen()[2].runs == "stadium_spicy_funk_cake_binaural"
-    assert "finished run" in field.all.toolTip()
-    assert not keeps(dialog.demo, dialog.demo.option("runs"))
+    dialog = DemoDialog(scene=example_path("airport"))
+    ok = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
+    assert dialog.picker.currentData() == "flight"
+    vehicle, box = dialog.fields["vehicle"], dialog.movement
+    assert isinstance(vehicle, ChoicesField) and vehicle.names == ["departure", "arrival"]
+    assert vehicle.ticked() == ["departure"] and vehicle.value() == "departure"
+    assert box.ticked() == ["departure"] and box.editable and box.reset.isHidden()
+    assert box.note.text() == (
+        "Tick what plays in this run (--vehicle); ticking several plays them one after "
+        "another in one video."
+    )
+    assert dialog.command.text() == "python flight_demo.py all"
+    assert dialog.summary.text().startswith("The departing jet flies 6500 m")
+
+    # The arrival ticked too: both, in the list's order, the box ticking both.
+    vehicle.list.item(1).setCheckState(Qt.CheckState.Checked)
+    assert dialog.command.text() == "python flight_demo.py all --vehicle departure,arrival"
+    assert dialog.chosen()[2].vehicle == ("departure", "arrival")
+    assert box.ticked() == ["departure", "arrival"] and dialog.problem.text() == ""
+    assert "The departing jet" in dialog.summary.text()
+    assert "The landing jet" in dialog.summary.text()
+    # The arrival first: set as the window keeps it, or its row dragged up.
+    vehicle.set_value(("arrival", "departure"))
+    vehicle.changed.emit()
+    assert dialog.command.text() == "python flight_demo.py all --vehicle arrival,departure"
+    assert dialog.summary.text().startswith("The landing jet")
+    vehicle.list.model().moveRow(QModelIndex(), 1, QModelIndex(), 0)  # departure up
+    assert vehicle.order == ["departure", "arrival"]
+    assert dialog.command.text() == "python flight_demo.py all --vehicle departure,arrival"
+
+    # The Movement box's ticks pick the jets: the departure unticked there leaves the
+    # arrival alone, ticked again it comes after; nothing ticked keeps the last.
+    box.table.item(0, box.MOVES).setCheckState(Qt.CheckState.Unchecked)
+    assert vehicle.ticked() == ["arrival"] and box.ticked() == ["arrival"]
+    assert dialog.command.text() == "python flight_demo.py all --vehicle arrival"
+    box.table.item(1, box.MOVES).setCheckState(Qt.CheckState.Unchecked)
+    assert vehicle.ticked() == ["arrival"] and box.ticked() == ["arrival"]
+    box.table.item(0, box.MOVES).setCheckState(Qt.CheckState.Checked)
+    assert vehicle.value() == ("arrival", "departure")
+    assert box.ticked() == ["departure", "arrival"]
+
+    # None ticked in the list cannot run; All ticks them both again.
+    vehicle.none.click()
+    assert vehicle.ticked() == [] and vehicle.order == ["arrival", "departure"]
+    assert dialog.problem.text() == "Cannot run: --vehicle names none: tick one at least"
+    assert not ok.isEnabled()
+    vehicle.all.click()
+    assert vehicle.value() == ("arrival", "departure") and ok.isEnabled()
+    vehicle.list.item(0).setCheckState(Qt.CheckState.Unchecked)
+    vehicle.list.item(1).setCheckState(Qt.CheckState.Unchecked)
+    assert "--vehicle names none" in dialog.problem.text() and not ok.isEnabled()
+    vehicle.pick(("departure", "arrival"))
+    assert dialog.problem.text() == "" and ok.isEnabled()
+
+    # Order of the parts: the listeners' row, ticked to give each its own part, and
+    # a row for each choice given several; dragged, the order changes --series.
+    series = dialog.fields["series"]
+    assert isinstance(series, SeriesField)
+    assert dialog.options.layout().isRowVisible(series)  # three listeners to split
+    rows = [series.list.item(r).text() for r in range(series.list.count())]
+    assert rows == ["Vehicle", "Listeners, each in a part of its own"]  # the default order
+    assert series.dims == ["vehicle"] and series.value() is None
+    assert series.list.item(1).toolTip().startswith("Ticked: each listener in a part")
+    series.list.item(1).setCheckState(Qt.CheckState.Checked)
+    assert dialog.command.text().endswith(" --vehicle departure,arrival --series vehicle,listeners")
+    series.list.model().moveRow(QModelIndex(), 1, QModelIndex(), 0)  # the listeners outermost
+    assert dialog.command.text().endswith(" --series listeners,vehicle")
+    assert dialog.chosen()[2].series == "listeners,vehicle" and dialog.problem.text() == ""
+    series.list.item(0).setCheckState(Qt.CheckState.Unchecked)
+    assert "--series" not in dialog.command.text()  # the jets alone: the default
     dialog.deleteLater()
+
+    # A scene with one listener and one of everything has no parts to order, until the
+    # run plays several of something: two formats.
+    plain = DemoDialog(scene=example_path("shoebox"))
+    series = plain.fields["series"]
+    assert not plain._rows["series"].isRowVisible(series)
+    plain.fields["format"].setText("binaural, mono")
+    assert plain._rows["series"].isRowVisible(series)
+    assert [series.list.item(r).text() for r in range(series.list.count())] == [
+        "Format",
+        "Listeners, each in a part of its own",
+    ]
+    assert plain.command.text() == "acoustic-spaces demo scene.yaml all --format binaural,mono"
+    plain.deleteLater()
+
+
+def test_demo_dialog_picks_the_sources(qapp, monkeypatch) -> None:
+    """Sources lists what the demo can play in the scene's groups, the demo's own pick
+    ticked, the plain command: the stadium's PA, monitors and band, its helicopter left
+    to the crossing. A group unticked leaves it out, the groups wholly ticked named by
+    their names (--sources); None cannot run, and The demo's pick ticks the demo's own
+    again. Sources play shows beside two sources or more: in turn plays each top group
+    in a part of its own. In the street, the police car's siren alone plays without the
+    car."""
+    from PySide6.QtWidgets import QDialogButtonBox
+
+    from acoustic_spaces import examples
+    from acoustic_spaces.gui.demo_dialog import DemoDialog, SourcesField
+
+    monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
+    dialog = DemoDialog(scene=example_path("stadium_concert"))
+    ok = dialog.buttons.button(QDialogButtonBox.StandardButton.Ok)
+    sources = dialog.fields["sources"]
+    assert isinstance(sources, SourcesField) and dialog.options.isAncestorOf(sources)
+    label = dialog.options.layout().labelForField(sources)
+    assert label.text() == "Sources" and "(--sources)" in label.toolTip()
+    tree = sources.tree
+    groups = [tree.topLevelItem(k) for k in range(tree.topLevelItemCount())]
+    assert [group.text(0) for group in groups] == ["PA", "Monitors", "Band"]
+    assert [groups[0].child(k).text(0) for k in range(groups[0].childCount())] == [
+        "Mains",
+        "Subwoofers",
+        "Fills",
+        "Delays",
+    ]
+    band = groups[2]
+    assert [band.child(k).text(0) for k in range(band.childCount())] == [
+        "drum_kit",
+        "singer_voice",
+        "guitar_amp",
+    ]
+    names = [source.name for source in sources.sources]
+    assert len(names) == 22 and "helicopter" not in names
+    assert sources.ticked() == names and sources.value() is None
+    assert dialog.command.text() == "python stadium_demo.py all"
+
+    # The band left out: the groups left, by name.
+    band.setCheckState(0, Qt.CheckState.Unchecked)
+    assert band.child(0).checkState(0) == Qt.CheckState.Unchecked
+    assert dialog.command.text() == "python stadium_demo.py all --sources PA,Monitors"
+    assert dialog.chosen()[2].sources == "PA,Monitors" and ok.isEnabled()
+    # The drummer back: the band's others by their names.
+    band.child(0).setCheckState(0, Qt.CheckState.Checked)
+    assert band.checkState(0) == Qt.CheckState.PartiallyChecked
+    assert dialog.command.text() == "python stadium_demo.py all --sources PA,Monitors,drum_kit"
+    sources.none.click()
+    assert sources.ticked() == []
+    assert dialog.problem.text() == "Cannot run: --sources names no source"
+    assert not ok.isEnabled()
+    sources.own.click()
+    assert sources.ticked() == names and dialog.command.text() == "python stadium_demo.py all"
+
+    # Together, or each top group in turn in a part of its own, which the order of the
+    # parts then lists.
+    play = dialog.fields["sources_play"]
+    assert dialog.options.layout().isRowVisible(play) and play.currentText() == "together"
+    play.setCurrentText("in-turn")
+    assert dialog.command.text() == "python stadium_demo.py all --sources-play in-turn"
+    series = dialog.fields["series"]
+    assert series.dims == ["sources"]
+    rows = [series.list.item(r).text() for r in range(series.list.count())]
+    assert "Sources, one at a time" in rows
+    play.setCurrentText("together")
+    # One source ticked: nothing to play together or in turn.
+    sources.none.click()
+    groups[0].child(0).child(0).setCheckState(0, Qt.CheckState.Checked)
+    assert dialog.command.text() == "python stadium_demo.py all --sources main_left"
+    assert not dialog.options.layout().isRowVisible(play)
+    dialog.deleteLater()
+
+    # The street's police car, its siren alone.
+    street = DemoDialog(scene=example_path("street"))
+    sources = street.fields["sources"]
+    assert [s.name for s in sources.sources] == ["car", "car_horn"]
+    assert sources.ticked() == ["car"]  # the horn off unless ticked
+    street.fields["vehicle"].pick("police_car")
+    assert [s.name for s in sources.sources] == ["police_car", "police_car_siren"]
+    assert sources.ticked() == ["police_car", "police_car_siren"]
+    assert street.command.text() == "python passby_demo.py all --vehicle police_car"
+    sources.none.click()
+    assert "none of them is the police car's" in street.problem.text()
+    sources.tree.topLevelItem(1).setCheckState(0, Qt.CheckState.Checked)
+    assert street.command.text() == (
+        "python passby_demo.py all --vehicle police_car --sources police_car_siren"
+    )
+    assert street.problem.text() == "" and street.chosen()[2].sources == "police_car_siren"
+    assert not street._rows["sources_play"].isRowVisible(street.fields["sources_play"])
+    street.deleteLater()
+
+
+def test_every_control_of_the_demo_dialog_explains_itself(qapp, monkeypatch) -> None:
+    """Every control of the Run demo window has a tip, of every demo of the scenes
+    whose demos take several values, sources and the order of the parts, Advanced
+    open: the ticks, the trees, the tables, the buttons and the fields; and every
+    label has its option's tip."""
+    from PySide6.QtWidgets import (
+        QAbstractSpinBox,
+        QCheckBox,
+        QComboBox,
+        QLineEdit,
+        QListWidget,
+        QPushButton,
+        QTableWidget,
+        QToolButton,
+        QTreeWidget,
+        QWidget,
+    )
+
+    from acoustic_spaces import examples
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
+    controls = (
+        QCheckBox,
+        QComboBox,
+        QLineEdit,
+        QPushButton,
+        QToolButton,
+        QTreeWidget,
+        QListWidget,
+        QTableWidget,
+    )
+    for example in ("stadium_concert", "street", "airport", "railway"):
+        dialog = DemoDialog(scene=example_path(example))
+        dialog.more.setChecked(True)
+        for k in range(dialog.picker.count()):
+            dialog.picker.setCurrentIndex(k)
+            where = f"{example}: {dialog.demo.name}"
+            missing = [
+                widget.text() if hasattr(widget, "text") else type(widget).__name__
+                for widget in dialog.findChildren(QWidget)
+                if isinstance(widget, controls)
+                and not widget.toolTip()
+                and not isinstance(widget.parentWidget(), QAbstractSpinBox)
+            ]
+            assert not missing, where
+            labels = [
+                label
+                for label in dialog.findChildren(QLabel)
+                if label.buddy() is not None and label.text()
+            ]
+            assert labels and all(label.toolTip() for label in labels), where
+        dialog.deleteLater()
 
 
 def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path: Path) -> None:
     """However it closes, the Run demo window keeps the options changed in it and opens
-    with them again, with a line that names them: each demo its own, a pick from a list,
-    a number, a tick and the HRTFs for any scene, the listeners for that scene file,
-    which also keeps the demo on show; the folders it writes follow the scene. Defaults
-    puts the options back, and the window then forgets them."""
+    with them again, with a line that names them: each demo its own, a pick from a list
+    (several songs too), a number, a tick and the HRTFs for any scene, the listeners,
+    the sources and the order of the parts for that scene file, which also keeps the
+    demo on show; the folders it writes follow the scene. Defaults puts the options
+    back, and the window then forgets them."""
+    from PySide6.QtCore import QModelIndex
     from PySide6.QtWidgets import QDialogButtonBox
 
     from acoustic_spaces import examples, i18n
@@ -4721,7 +4984,7 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
     dialog = DemoDialog(scene=stadium)
     assert dialog.picker.currentData() == "stadium" and dialog.kept.isHidden()
     fields = dialog.fields
-    fields["song"].setCurrentText("francium")
+    fields["song"].pick("francium")
     fields["hrtf"].set_value(str(sofa))
     fields["again"].setChecked(True)  # under Advanced: the line names it all the same
     fields["work"].set_value(str(tmp_path / "elsewhere"))  # follows the scene: not kept
@@ -4729,15 +4992,32 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
     listeners.none.click()
     for row in (listeners.names.index("mix_position"), listeners.names.index("east_stand")):
         listeners.list.item(row).setCheckState(Qt.CheckState.Checked)
+    sources = fields["sources"]
+    band = next(item for item in sources.tree.findItems("Band", Qt.MatchFlag.MatchExactly))
+    band.setCheckState(0, Qt.CheckState.Unchecked)
+    fields["sources_play"].setCurrentText("in-turn")
+    series = fields["series"]
+    assert series.order == ["sources", "listeners"]
+    series.list.item(1).setCheckState(Qt.CheckState.Checked)  # each listener, innermost
+    series.list.model().moveRow(QModelIndex(), 1, QModelIndex(), 0)  # now outermost
     assert not dialog.kept.isHidden()
     assert dialog.kept.text() == (
         "Changed from the defaults and kept for next time: Song, HRTFs, Mix again, "
-        "Listeners. Defaults puts them back."
+        "Listeners, Sources, Sources play, Order of the parts. Defaults puts them back."
     )
-    # Another demo picked keeps the one left; Cancel closes on it, keeping its speed.
+    # Another demo picked keeps the one left, and picked again shows it as left.
     dialog.picker.setCurrentIndex(dialog.picker.findData("crossing"))
-    assert dialog.fields["speed"].value() == 0.0 and dialog.kept.isHidden()
-    dialog.fields["speed"].setValue(120.0)
+    assert dialog.fields["speed"].value() is None and dialog.kept.isHidden()
+    dialog.picker.setCurrentIndex(dialog.picker.findData("stadium"))
+    left = (
+        f"python stadium_demo.py all --song francium --hrtf {sofa} --again "
+        "--listeners mix_position,east_stand --sources PA,Monitors --sources-play in-turn "
+        "--series listeners,sources"
+    )
+    assert dialog.command.text() == left
+    # Cancel closes on the crossing, keeping its speed.
+    dialog.picker.setCurrentIndex(dialog.picker.findData("crossing"))
+    dialog.fields["speed"].edit.setText("120")
     assert dialog.kept.text().startswith("Changed from the defaults and kept for next time: Speed.")
     dialog.buttons.button(QDialogButtonBox.StandardButton.Cancel).click()
     dialog.deleteLater()
@@ -4747,40 +5027,47 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
     assert again.fields["speed"].value() == 120.0
     again.picker.setCurrentIndex(again.picker.findData("stadium"))
     fields = again.fields
-    assert fields["song"].currentText() == "francium" and fields["again"].isChecked()
+    assert fields["song"].value() == "francium" and fields["again"].isChecked()
     assert fields["hrtf"].value() == sofa
     assert fields["listeners"].ticked() == ["mix_position", "east_stand"]
+    assert fields["sources"].value() == "PA,Monitors"
+    assert "drum_kit" not in fields["sources"].ticked()
+    assert fields["series"].value() == "listeners,sources" and fields["series"].split
     assert fields["work"].value() == again.demo.folder / "demo"
-    assert again.command.text() == (
-        f"python stadium_demo.py all --song francium --hrtf {sofa} --again "
-        "--listeners mix_position,east_stand"
-    )
+    assert again.command.text() == left
     assert again.kept.text().startswith(
-        "Changed from the defaults and kept for next time: Song, HRTFs, Mix again, Listeners."
+        "Changed from the defaults and kept for next time: Song, HRTFs, Mix again, Listeners, "
+        "Sources, Sources play, Order of the parts."
     )
-    fields["song"].setCurrentText("spicy_funk_cake")  # changed just before Run, which keeps it
+    # Two songs, changed just before Run, which keeps them.
+    fields["song"].pick(("spicy_funk_cake", "rubidium"))
     fields["no_mp4"].setChecked(True)
     again.buttons.button(QDialogButtonBox.StandardButton.Ok).click()
     assert again.result() == int(QDialog.DialogCode.Accepted)
     again.deleteLater()
     run = DemoDialog(scene=stadium)
-    assert run.fields["song"].currentText() == "spicy_funk_cake"
+    assert run.fields["song"].value() == ("spicy_funk_cake", "rubidium")
+    assert "--song spicy_funk_cake,rubidium" in run.command.text()
     assert run.fields["no_mp4"].isChecked()
-    run.fields["song"].setCurrentText("francium")
+    assert run.fields["sources_play"].currentText() == "in-turn"
+    run.fields["song"].pick("francium")
     run.fields["no_mp4"].setChecked(False)
+    run.fields["sources_play"].setCurrentText("together")
     run.reject()
     run.deleteLater()
 
     # A copy of the stadium elsewhere: the same demo's song, HRTFs and tick, but its own
-    # listeners, all of them, and the example's own demo to start on.
+    # listeners, all of them, the demo's own pick of the sources, the parts in their
+    # order, and the example's own demo to start on.
     copy = tmp_path / "my stadium" / "scene.yaml"
     copy.parent.mkdir()
     copy.write_text(stadium.read_text(encoding="utf-8"), encoding="utf-8")
     other = DemoDialog(scene=copy)
     assert other.picker.currentData() == "stadium"
     fields = other.fields
-    assert fields["song"].currentText() == "francium" and fields["hrtf"].value() == sofa
+    assert fields["song"].value() == "francium" and fields["hrtf"].value() == sofa
     assert fields["listeners"].ticked() == fields["listeners"].names
+    assert fields["sources"].value() is None and fields["series"].value() is None
     assert other.kept.text().startswith(
         "Changed from the defaults and kept for next time: Song, HRTFs, Mix again."
     )
@@ -4791,9 +5078,10 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
     assert last.picker.currentData() == "stadium"
     last.defaults.click()
     fields = last.fields
-    assert fields["song"].currentText() == "spicy_funk_cake" and not fields["again"].isChecked()
+    assert fields["song"].value() == "spicy_funk_cake" and not fields["again"].isChecked()
     assert fields["hrtf"].value() is None
     assert fields["listeners"].ticked() == fields["listeners"].names
+    assert fields["sources"].value() is None and fields["series"].value() is None
     assert last.command.text() == "python stadium_demo.py all" and last.kept.isHidden()
     last.reject()
     last.deleteLater()
@@ -4809,11 +5097,11 @@ def test_demo_dialog_keeps_the_options_for_next_time(qapp, monkeypatch, tmp_path
 
 def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Path) -> None:
     """What the window kept and no longer fits is left out: a song no longer offered,
-    a value of the wrong kind, a listener or a walker the scene no longer has, a
-    setting edited into another shape. An HRTF file that is gone is shown, and the run
-    refused until it is put right. What moves is kept for the scene, nothing ticked
-    included; the setting keeps the last 20 scene files; and a setting that cannot be
-    written leaves the window to close as ever."""
+    alone or among others, a value of the wrong kind, a listener, a source or a walker
+    the scene no longer has, a setting edited into another shape. An HRTF file that is
+    gone is shown, and the run refused until it is put right. What moves is kept for
+    the scene, nothing ticked included; the setting keeps the last 20 scene files; and
+    a setting that cannot be written leaves the window to close as ever."""
     from acoustic_spaces import examples, i18n
     from acoustic_spaces.demos.scene_demo import DEMO
     from acoustic_spaces.gui.demo_dialog import (
@@ -4846,7 +5134,7 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
     dialog = DemoDialog(scene=stadium)
     assert dialog.picker.currentData() == "stadium"
     fields = dialog.fields
-    assert fields["song"].currentText() == "spicy_funk_cake" and not fields["again"].isChecked()
+    assert fields["song"].value() == "spicy_funk_cake" and not fields["again"].isChecked()
     assert fields["downbeat"].value() == 0.0
     assert fields["work"].value() == dialog.demo.folder / "demo"
     assert fields["hrtf"].value() == gone
@@ -4889,7 +5177,7 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
     # names only what the next opening shows again.
     unsaved = DemoDialog(scene=None)
     unsaved.fields["format"].setText("mono")
-    unsaved.fields["seconds"].setValue(5.0)
+    unsaved.fields["seconds"].edit.setText("5")
     assert unsaved.kept.text().startswith(
         "Changed from the defaults and kept for next time: Time per listener."
     )
@@ -4911,6 +5199,20 @@ def test_demo_dialog_keeps_only_what_still_fits(qapp, monkeypatch, tmp_path: Pat
     assert dialog.fields["listeners"].ticked() == dialog.fields["listeners"].names
     assert dialog.kept.isHidden()
     dialog.deleteLater()
+    # Sources none of which the scene has: the demo's own pick; one it has: kept.
+    for kept_sources, value in (("a source no longer there", None), ("Band,gone", "Band")):
+        i18n.save_setting(
+            DEMO_SETTING,
+            {
+                "demos": {"stadium_concert/stadium": {"song": ["francium", "no such song"]}},
+                "scenes": {key: {"demos": {"stadium_concert/stadium": {"sources": kept_sources}}}},
+            },
+        )
+        dialog = DemoDialog(scene=stadium)
+        assert dialog.fields["song"].value() == "spicy_funk_cake"
+        assert dialog.fields["sources"].value() == value and dialog.problem.text() == ""
+        assert dialog.kept.isHidden() == (value is None)
+        dialog.deleteLater()
 
     # The gallery's visitor left standing in This scene is kept for the gallery; a
     # walker the scene no longer has gives the scene's own walks back.
@@ -5006,7 +5308,7 @@ def test_demo_dialog_keeps_the_hrtfs_whatever_the_scene(qapp, monkeypatch, tmp_p
     write_wav(song, np.zeros((100, 2)), 8000)
     dialog = DemoDialog(scene=stadium)
     dialog.fields["music"].set_value(str(song))
-    dialog.fields["bpm"].setText("120")
+    dialog.fields["bpm"].edit.setText("120")
     dialog.fields["credit"].setText("My band, CC BY 4.0")
     dialog.reject()
     dialog.deleteLater()
@@ -5014,7 +5316,8 @@ def test_demo_dialog_keeps_the_hrtfs_whatever_the_scene(qapp, monkeypatch, tmp_p
     copy.parent.mkdir()
     copy.write_text(stadium.read_text(encoding="utf-8"), encoding="utf-8")
     other = DemoDialog(scene=copy)
-    assert other.fields["music"].value() == song and other.fields["bpm"].text() == "120.0"
+    assert other.fields["music"].value() == song and other.fields["bpm"].value() == 120.0
+    assert other.fields["bpm"].edit.text() == "120"
     assert other.fields["credit"].text() == "My band, CC BY 4.0"
     other.deleteLater()
 
@@ -6974,11 +7277,18 @@ def test_a_demo_s_walker_follows_the_demo_s_scene(window, qapp, tmp_path: Path) 
         def __init__(self, walks) -> None:
             self.walks = walks
 
-        def resolved(self, args):
-            return args
+        def each(self, args):
+            return list(args)
 
     job = DemoJob(Walking(lambda args: args.scene), "walk", None)
-    job.args = type("Args", (), {"scene": own})()
+    first, second = (type("Args", (), {"scene": tmp_path / name})() for name in ("a", "b"))
+    job.args = [first, second]
+    assert window._walks_of(job)() == first.scene
+    # A run of several parts: the walks of the part its demo said it started last.
+    job.lines = ["part 1 of 2: x", "wrote y", "part 2 of 2: z", "walking"]
+    assert window._walks_of(job)() == second.scene
+    job.args = [type("Args", (), {"scene": own})()]
+    job.lines = []
     assert window._walks_of(job)() == own
     # A demo without walks of its own walks the open scene's.
     job = DemoJob(Walking(None), "walk", None)

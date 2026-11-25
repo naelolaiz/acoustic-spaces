@@ -5,6 +5,7 @@ message log around them."""
 from __future__ import annotations
 
 import os
+import re
 import sys
 import threading
 import time
@@ -1032,9 +1033,9 @@ class MainWindow(QMainWindow):
         """What gives the scene whose walks ``job`` simulates its walkers along: a demo's
         own (:attr:`~acoustic_spaces.demos.Demo.walks`), else the scene it runs on."""
         if isinstance(job, DemoJob):
-            demo, args = job.demo, job.args
+            demo = job.demo
             if demo.walks is not None:
-                return lambda: demo.walks(demo.resolved(args))
+                return lambda: demo.walks(_part_running(job))
             scene = self.document.scene
             return lambda: scene
         room = job.room
@@ -2630,6 +2631,22 @@ class MainWindow(QMainWindow):
         self.results.head.stop()
         self.viewport.close_view()
         event.accept()
+
+
+#: The line a demo prints as it starts each part of a run of several (``part 2 of 4:
+#: flight_arrival_binaural``).
+_PART_LINE = re.compile(r"^part (\d+) of \d+: ")
+
+
+def _part_running(job: DemoJob):
+    """The arguments (resolved) of the part of ``job``'s run going on: the one whose
+    start its demo printed last, the first before any (a run of one part: its own)."""
+    parts = job.demo.each(job.args)
+    for line in reversed(job.lines):
+        found = _PART_LINE.match(line)
+        if found is not None:
+            return parts[min(int(found.group(1)), len(parts)) - 1]
+    return parts[0]
 
 
 def install_qt_translation(app: QApplication) -> QTranslator | None:
