@@ -954,7 +954,7 @@ three, the car's with its horn) in its Movement box.
   second-order reflections, fades at the edges that cut it off. From one metre of road
   to the next the garden's early sound from the car changes by at most 3.1 dB(A),
   smoothly where paths go in and out of step; 1 cm apart, the steps left stand out by
-  0.55 dB(A) at most (see [Validation](validation.md#along-a-street)). The late sound comes from rays
+  0.57 dB(A) at most (see [Validation](validation.md#along-a-street)). The late sound comes from rays
   drawn at random, few of which reach the garden, so two runs of the car's pass put its
   level up to 2.1 dB(A) apart at one place (its L_Amax within 0.01 dB, the balcony's
   0.17 dB apart) unless the scene has a `seed` (see

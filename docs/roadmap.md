@@ -117,16 +117,20 @@ Edge diffraction:
   [Validation](validation.md#known-issues-of-the-edge-fade).
 - [x] Paths over a thin screen's edge weighted by the part of their Fresnel zone that
   the edge covers, as BTM's integral over a finite edge has it, and kept past its free
-  ends: past a screen's right-angled corner within 0.1 dB of BTM, where they stepped by
-  2.8 dB; past corners of 45° to 170° and beside a bend of a screen's top, each term
-  weighted for its own boundary, within 0.17 and 0.04 dB.
+  ends and corners, each term weighted for its own boundary: past a screen's corners of
+  45° to 170° within 0.17 dB of BTM (a right-angled one within 0.1 dB, where they
+  stepped by 2.8 dB), and beside a bend of a screen's top within 0.03 dB.
 - [ ] The same at the corners of solid wedges, where three edges meet: sharing the fade
-  as at a screen's corner came out up to 1.25 dB above BTM at 63 and 125 Hz near a
-  block's corner, so their paths still stop at the ends.
+  between them as halves of a Fresnel zone came out up to 1.25 dB above BTM at 63 and
+  125 Hz near a block's corner, so their paths still stop at the ends.
 - [ ] The same for the edge fade's terms and for paths over two edges, which still stop
   at the ends of their edges: in sight just over two barriers in a row the level steps
   by up to 6 dB where the way passes the end of one (see
   [Known issues](validation.md#known-issues-of-the-edge-fade)).
+- [ ] The lower edge's term of a strip with a free edge below, kept on its dark side
+  where the direct sound is found past the top: the level steps by up to 3.4 dB at
+  63 Hz across the line of sight over the top (see
+  [Known issues](validation.md#known-issues)).
 - [ ] Reflections on paths over two edges (`second_order`): behind a thick barrier on a
   hard ground the engine has one of the four paths over it, 1.7 to 5.7 dB low from
   500 Hz up.
@@ -187,9 +191,8 @@ Edge diffraction:
 - [ ] Paths over edges tested from the edge itself, not from just off it (a millionth
   of the model's size, a tenth of a millimetre at most): exactly in the plane of several
   roofs in a row the level is up to 9 dB below that just above it, within twice that
-  distance below the plane 9 to 15 dB above that further below, and exactly level with
-  three screens' tops the path round the end of one that ends beside the way is
-  missing (1.3 dB at 63 Hz); near grazing incidence the ray passes the next edge apart
+  distance below the plane 9 to 15 dB above that further below; near grazing incidence
+  the ray passes the next edge apart
   from the path's own line (0.06 mm above a screen's top 1 m past a roof, with the
   source 1 cm above the roof's plane).
 - [ ] Corners to the least distance of a ray: the search for early paths takes what lies
@@ -206,10 +209,9 @@ Edge diffraction:
   (0.1 dB in a band).
 - [ ] The same reflections whichever way round: the rays of the source and those of
   the listener can find different reflections between two faces, such as two screens
-  or a roof's wall and a screen level with the roof (up to 0.7 dB apart, and 8 dB
-  where the level is far down), and the edge fade follows the reflections off a
-  roof's wall one way round only past the end of a screen before the roof (up to
-  1.3 dB apart, 4 dB with `first_order`; see
+  or a roof's wall and a screen level with the roof (up to 0.7 dB apart), and the edge
+  fade follows the reflections off a roof's wall one way round only past the end of a
+  screen before the roof (up to 1.3 dB apart, 4 dB with `first_order`; see
   [Known issues](validation.md#known-issues)).
 - [ ] Barriers with bends of less than a degree: beside each bend a strip up to
   centimetres wide has no path over the top or two (see
@@ -449,10 +451,17 @@ Outdoor acoustics, in steps:
   (the direct sound in still air, the open ground's path in wind), which steps across
   an end's shadow boundary by up to 0.95 dB in still air and 1.08 dB in wind (see
   [Known issues](validation.md#known-issues)).
+- [ ] The paths round a barrier's end above its top in wind, which fade out there as in
+  still air but keep their straight legs: where the end's top comes onto the line of
+  sight 100 and 200 m down- and upwind of a source, past a barrier 1 m high 30 m from
+  it, the level steps by up to 2.7 dB (1.1 dB from 63 to 250 Hz). Giving them the
+  weather's copies needs a rule for a way whose paths of one kind fade past the top and
+  of the other do not, where the weather's field over the straight paths' has no bound
+  (see [Known issues](validation.md#known-issues)).
 - [ ] The path round a barrier's end and then over a roof's edge, without which the level
   1.5 m over a roof 45 m from a source 1 m up (and the two swapped) steps across the
-  end's shadow boundary by up to 2.79 dB in still air and the weather's effect by up to
-  0.57 dB (see [Known issues](validation.md#known-issues)); in wind it would also
+  end's shadow boundary by up to 2.70 dB in still air and the weather's effect by up to
+  0.67 dB (see [Known issues](validation.md#known-issues)); in wind it would also
   need the lit side's runs, which the routing in `engine/refracted.py` does not give a
   path round a vertical and then a horizontal edge.
 - [ ] A transition across a caustic for the rays' bands over the open ground (4 and
