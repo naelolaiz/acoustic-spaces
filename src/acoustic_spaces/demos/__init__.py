@@ -355,7 +355,7 @@ class Option:
     #: A number's unit, shown after it in the editor ("km/h").
     unit: str = ""
     #: What a number without a default stands for when not given ("as in the scene"):
-    #: the editor's field shows it at its lowest, zero.
+    #: the editor's field shows it while empty.
     unset: str = ""
     #: Given without its flag, before the others (an example script's scene).
     positional: bool = False
@@ -604,8 +604,10 @@ def sources_options(
         Option("sources", help, None, "sources", steps=steps),
         Option(
             "sources_play",
-            f"{TOGETHER}: the picked sources in one mix; {IN_TURN}: each alone, one after "
-            "another in one video, each after a title card",
+            f"{TOGETHER}: the picked sources in one mix; {IN_TURN}: each name --sources "
+            "gives (a group as one), or without it each top group of the demo's own pick, "
+            "alone, one after another in one video, each after a title card (a run with one "
+            "of them plays as one together)",
             play,
             "choice",
             SOURCES_PLAY,
@@ -614,16 +616,26 @@ def sources_options(
     ]
 
 
-def series_option() -> Option:
+def series_option(
+    several: Sequence[str] = ("format",), sources: bool = False, listeners: bool = False
+) -> Option:
     """``--series vehicle,listeners``: the order of a run's parts, when it plays several
-    of something (:meth:`Demo.parts`)."""
+    of something (:meth:`Demo.parts`), its help naming what of it a demo has: the
+    options that take several values by their flags (``several``), the sources played
+    in turn and the listeners."""
+    named = [f"an option given several values ({', '.join(several)})"] if several else []
+    if sources:
+        named.append(f"{SOURCES_DIM} (with --sources-play {IN_TURN})")
+    if listeners:
+        named.append(
+            f"{LISTENERS_DIM}, each listener a part of its own (by default the tour of each "
+            "part visits them)"
+        )
     return Option(
         "series",
         "the order of the parts when the run plays several of something, outermost first, "
-        "comma separated: an option given several values (vehicle, speed, format), "
-        f"{SOURCES_DIM} (with --sources-play {IN_TURN}) and {LISTENERS_DIM}, each listener "
-        "a part of its own (by default the tour of each part visits them); the rest follow "
-        "in the order of the options",
+        f"comma separated: {', '.join(named) or 'nothing here'}; the rest follow in the "
+        "order of the options",
         None,
         named="never",
     )
@@ -809,7 +821,12 @@ class Demo:
         if self.sources is not None and "sources" not in have:
             self.options = [*self.options, *sources_options(self.sources_play)]
         if not self.stepless and "series" not in have:
-            self.options = [*self.options, series_option()]
+            several = [o.option.lstrip("-") for o in self.options if o.varies]
+            listeners = any(o.kind == "listeners" for o in self.options)
+            self.options = [
+                *self.options,
+                series_option(several, self.sources is not None, listeners),
+            ]
 
     # -- description ----------------------------------------------------------------
 
@@ -1010,60 +1027,100 @@ class Demo:
         except (Exception, SystemExit):
             return []
 
-    def varying(self, args: argparse.Namespace) -> list[str]:
-        """What a run with ``args`` plays several of, in the options' order: each option
-        given several values, by name, and :data:`SOURCES_DIM` when its sources play in
-        turn, more than one."""
-        out = [
+    def _combos(self, args: argparse.Namespace, dims: Sequence[str]) -> list[dict[str, Any]]:
+        """Every mix of the values of the options ``dims`` in ``args``, the first
+        outermost."""
+        combos: list[dict[str, Any]] = [{}]
+        for dim in dims:
+            values = values_of(getattr(args, dim, None))
+            combos = [combo | {dim: value} for combo in combos for value in values]
+        return combos
+
+    def _options_given_several(self, args: argparse.Namespace) -> list[str]:
+        """The options given several values in ``args``, by name, in the options' order."""
+        return [
             option.name
             for option in self.options
             if option.varies and len(values_of(getattr(args, option.name, None))) > 1
         ]
+
+    def varying(self, args: argparse.Namespace) -> list[str]:
+        """What a run with ``args`` plays several of, in the options' order: each option
+        given several values, by name, and :data:`SOURCES_DIM`, where ``--sources``
+        stands among them, when its sources play in turn, more than one with any of
+        those values (each vehicle its own)."""
+        out = self._options_given_several(args)
         if getattr(args, "sources_play", TOGETHER) == IN_TURN and self.sources is not None:
-            given = given_names(getattr(args, "sources", None))
-            if given is None or len(given) > 1:
-                if len(self._turns(self._paths(args))) > 1:
-                    out.append(SOURCES_DIM)
+            if any(
+                len(self._turns(argparse.Namespace(**(vars(args) | combo)))) > 1
+                for combo in self._combos(args, out)
+            ):
+                names = [o.name for o in self.options]
+                at = names.index("sources") if "sources" in names else len(names)
+                before = {o.name for o in self.options[:at]}
+                out.insert(sum(1 for name in out if name in before), SOURCES_DIM)
         return out
 
     def series_order(self, args: argparse.Namespace) -> list[str]:
         """The order of the parts of a run with ``args``, outermost first: what
-        ``--series`` names of what varies (:meth:`varying`) and :data:`LISTENERS_DIM`,
-        then the rest of what varies in the options' order. Empty for a run of one part.
-        The listeners split into parts only when ``--series`` names them."""
+        ``--series`` names of what varies (:meth:`varying`) and :data:`LISTENERS_DIM`
+        (with more than one listener), then the rest of what varies in the options'
+        order. Empty for a run of one part. The listeners split into parts only when
+        ``--series`` names them."""
         varying = self.varying(args)
-        has_listeners = any(o.kind == "listeners" for o in self.options)
         named = [self._dim_of(name) for name in given_names(getattr(args, "series", None)) or []]
-        order = [d for d in named if d in varying or (d == LISTENERS_DIM and has_listeners)]
+        split = LISTENERS_DIM in named and len(self._listener_turns(self._single(args))) > 1
+        order = [d for d in named if d in varying or (d == LISTENERS_DIM and split)]
         order = list(dict.fromkeys(order))
         return order + [d for d in varying if d not in order]
 
     def parts(self, args: argparse.Namespace) -> list[argparse.Namespace]:
         """The parts of a run with ``args``, in the order of :meth:`series_order`: one for
         each value of each option given several (``--vehicle departure,arrival``), each
-        source in turn (``--sources-play in-turn``), each listener (when ``--series``
-        names them), and every mix of them; each the arguments (paths resolved) of an
-        ordinary run of one of everything. An option that does not matter with a part's
-        values (:attr:`Option.only`) takes its default there, and parts that come out
-        the same are played once. One part, the arguments themselves, when the run
-        plays one of everything."""
+        source in turn (``--sources-play in-turn``: each vehicle's own when it plays
+        several, one of none when it plays one), each listener (when ``--series`` names
+        them), and every mix of them; each the arguments (paths resolved) of an ordinary
+        run of one of everything. An option that does not matter with a part's values
+        (:attr:`Option.only`) takes its default there, and parts that come out as the
+        same run (an option that changes nothing with the sources picked) are played
+        once. One part, the arguments themselves, when the run plays one of everything."""
         base = self._paths(args)
         order = self.series_order(base)
         if not order:
             return [base]
-        combos: list[dict[str, Any]] = [{}]
-        for dim in order:
-            if dim == SOURCES_DIM:
-                steps = [{"sources": name, "sources_play": TOGETHER} for name in self._turns(base)]
-            elif dim == LISTENERS_DIM:
-                option = next(o for o in self.options if o.kind == "listeners")
-                steps = [{option.name: name} for name in self._listener_turns(base)]
-            else:
-                steps = [{dim: value} for value in values_of(getattr(base, dim, None))]
-            combos = [combo | step for combo in combos for step in steps]
+        listeners = next((o for o in self.options if o.kind == "listeners"), None)
+        given = [d for d in order if d not in (SOURCES_DIM, LISTENERS_DIM)]
+        ranks: dict[str, dict[Any, int]] = {
+            dim: {repr(value): k for k, value in enumerate(values_of(getattr(base, dim, None)))}
+            for dim in given
+        }
+        ranks[SOURCES_DIM], ranks[LISTENERS_DIM] = {}, {}
+        rows: list[tuple[tuple[int, ...], dict[str, Any]]] = []
+        for combo in self._combos(base, given):
+            mixes = [combo]
+            here = argparse.Namespace(**(vars(base) | combo))
+            if SOURCES_DIM in order:
+                turns = self._turns(here)
+                mixes = [m | {"sources": t, "sources_play": TOGETHER} for m in mixes for t in turns]
+                for turn in turns:
+                    ranks[SOURCES_DIM].setdefault(repr(turn), len(ranks[SOURCES_DIM]))
+            if LISTENERS_DIM in order and listeners is not None:
+                names = self._listener_turns(self._single(here))
+                mixes = [m | {listeners.name: name} for m in mixes for name in names]
+                for name in names:
+                    ranks[LISTENERS_DIM].setdefault(repr(name), len(ranks[LISTENERS_DIM]))
+            for mix in mixes:
+                key = []
+                for dim in order:
+                    value = mix.get("sources") if dim == SOURCES_DIM else mix.get(dim)
+                    if dim == LISTENERS_DIM and listeners is not None:
+                        value = mix.get(listeners.name)
+                    key.append(ranks[dim].get(repr(value), 0))
+                rows.append((tuple(key), mix))
+        rows.sort(key=lambda row: row[0])
         out: list[argparse.Namespace] = []
-        seen: set[tuple] = set()
-        for combo in combos:
+        seen: set[Any] = set()
+        for _key, combo in rows:
             values = {k: v for k, v in vars(base).items() if k not in RESOLVED_ONLY} | combo
             values["series"] = None
             for option in self.options:
@@ -1071,12 +1128,21 @@ class Demo:
                     continue
                 if option.name in combo or option.only[0] in combo:
                     values[option.name] = option.default
-            key = tuple((name, repr(values.get(name))) for name in combo)
-            if key in seen:
+            part = argparse.Namespace(**values)
+            same = self._same_run(part)
+            if same in seen:
                 continue
-            seen.add(key)
-            out.append(argparse.Namespace(**values))
+            seen.add(same)
+            out.append(part)
         return out
+
+    def _same_run(self, part: argparse.Namespace) -> Any:
+        """What tells the run of ``part`` (one of everything) from others: its folder,
+        or its values when it has none yet (no scene)."""
+        folder = getattr(self.resolved(part), "run_folder", None)
+        if folder is not None:
+            return str(folder)
+        return tuple(sorted((k, repr(v)) for k, v in vars(part).items()))
 
     def _sources_part(self, args: argparse.Namespace, in_turn: bool) -> str | None:
         """The sources of a run with ``args`` (paths resolved) as part of its name: those
@@ -1109,7 +1175,13 @@ class Demo:
         mixes take (``binaural``, ``binaural-kemar``, ``ambix3``)."""
         stem = self.stem_of(args) if self.stem_of is not None else self.name
         parts = [("demo", name_part(stem))]
-        values = vars(args)
+        values = dict(vars(args))
+        series = getattr(args, "series_parts", None)
+        if series:  # what several values come to in the parts, those that changed nothing one
+            for name, value in list(values.items()):
+                if isinstance(value, tuple):
+                    held = list(dict.fromkeys(getattr(part, name, None) for part in series))
+                    values[name] = held[0] if len(held) == 1 else tuple(held)
         changed: list[tuple[str, str]] = []
         for option in self.options:
             naming = option.naming
@@ -1372,6 +1444,9 @@ class Demo:
             parts = self.parts(resolved)
             if len(parts) > 1:
                 return self._series(resolved, parts)
+            # Several values that come out as one run (an option that changes nothing
+            # with the sources picked) are that run.
+            resolved = parts[0]
         if self.completes is not None:
             resolved = self.completes(resolved)
         if self.sources is not None:
@@ -1416,14 +1491,21 @@ class Demo:
                 if option.kind == "choice" and option.choices and each is not None:
                     if each not in option.choices:
                         return f"{option.option} {each}: not one of {', '.join(option.choices)}"
+        hrtf = getattr(args, "hrtf", None)
+        if hrtf and "binaural" not in values_of(getattr(args, "format", "binaural")):
+            return "--hrtf is for binaural mixes"
         if not self.stepless:
             for name in given_names(getattr(args, "series", None)) or []:
                 dim = self._dim_of(name)
-                if dim not in (SOURCES_DIM, LISTENERS_DIM) and not any(
-                    o.name == dim and o.varies for o in self.options
-                ):
+                if dim == SOURCES_DIM:
+                    if self.sources is None:
+                        return f"--series {name}: this demo gives no choice of sources"
+                elif dim == LISTENERS_DIM:
+                    if not any(o.kind == "listeners" for o in self.options):
+                        return f"--series {name}: this demo gives no choice of listeners"
+                elif not any(o.name == dim and o.varies for o in self.options):
                     return (
-                        f"--series {name}: neither an option that takes several values, "
+                        f"--series {name}: neither an option that takes several values here, "
                         f"nor {SOURCES_DIM} or {LISTENERS_DIM}"
                     )
             parts = self.parts(args)
@@ -1433,8 +1515,7 @@ class Demo:
                     if problem:
                         return f"{self.run_name(self.resolved(part))}: {problem}"
                 return None
-        if getattr(args, "hrtf", None) and getattr(args, "format", "binaural") != "binaural":
-            return "--hrtf is for binaural mixes"
+            args = parts[0]  # several values that come out as one run: that run
         resolved = self.resolved(args)
         if getattr(args, "hrtf", None) and not Path(resolved.hrtf).is_file():
             return f"--hrtf: no {resolved.hrtf}"
@@ -1576,6 +1657,14 @@ class Demo:
                 from acoustic_spaces.demos.join import join_parts
 
                 join_parts(self, args)
+            elif "video" in names:
+                from acoustic_spaces.demos.pipeline import chapters_file
+
+                out = product(args, ".mp4")
+                for old in (out, chapters_file(out)):
+                    if old.is_file():
+                        old.unlink()
+                        print(f"removed {old}, an older video of this run (--no-mp4)")
         print(f"{DONE}: {', '.join(names)}", flush=True)
 
     def _run_steps(self, names: Sequence[str], args: argparse.Namespace, skip_done: bool) -> None:

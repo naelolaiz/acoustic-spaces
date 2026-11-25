@@ -248,11 +248,12 @@ def what_plays(names) -> str | None:
 
 
 def plays(args) -> dict[str, str]:
-    """What each loudspeaker plays unless ``--input`` gives it a file: its channel of the
-    song."""
+    """What each loudspeaker that plays in the run (``--sources``) plays unless
+    ``--input`` gives it a file: its channel of the song."""
     channels = {0: "left channel", 1: "right channel", "mono": "both channels in mono"}
     song = song_of(args)["name"]
-    return {name: f"{song}, {channels[channel]}" for name, channel in CHANNELS.items()}
+    names = playing(args, list(CHANNELS))
+    return {name: f"{song}, {channels[CHANNELS[name]]}" for name in names}
 
 
 def played(args) -> dict:

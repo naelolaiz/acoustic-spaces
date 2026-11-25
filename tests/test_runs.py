@@ -181,6 +181,91 @@ def test_the_series_orders_the_parts_outermost_first() -> None:
     assert problem is not None and "--series colour" in problem
 
 
+def test_each_part_plays_its_own_sources_in_turn() -> None:
+    """In turn, each vehicle of a series plays its own sources one after another (the
+    car its one, the police car itself, then its siren), named apart from the run of
+    the vehicles alone; a demo with no choice of sources, or one listener, has no parts
+    of them; --hrtf with no binaural part is refused as for one run."""
+    street = _demo("passby", "street")
+
+    def run(*argv: str):
+        args = street.parser().parse_args(["all", *argv])
+        assert street.check(args) is None, street.check(args)
+        resolved = street.resolved(args)
+        return run_folder(resolved).name, [
+            (run_folder(p).name, p.playing) for p in getattr(resolved, "series_parts", [])
+        ]
+
+    for vehicles in ("car,police_car", "police_car,car"):
+        name, parts = run("--vehicle", vehicles, "--sources-play", IN_TURN)
+        assert name == f"passby_{vehicles.replace(',', '+')}_each-source_binaural"
+        assert sorted(parts) == [
+            ("passby_car_binaural", ("car",)),
+            ("passby_police_car_police_car_binaural", ("police_car",)),
+            ("passby_police_car_police_car_siren_binaural", ("police_car_siren",)),
+        ]
+    assert run("--vehicle", "car,police_car")[0] == "passby_car+police_car_binaural"
+    name, parts = run("--vehicle", "police_car,fire_engine", "--sources-play", IN_TURN)
+    assert [p[1] for p in parts] == [
+        ("police_car",),
+        ("police_car_siren",),
+        ("fire_engine",),
+        ("fire_engine_siren",),
+        ("fire_engine_horn",),
+    ]
+    # --sources stands before --step among the options: its turns are outermost.
+    name, parts = run("--vehicle", "police_car", "--sources-play", IN_TURN, "--step", "1,2")
+    assert [p[0] for p in parts] == [
+        "passby_police_car_police_car_binaural",
+        "passby_police_car_police_car_step-2_binaural",
+        "passby_police_car_police_car_siren_binaural",
+        "passby_police_car_police_car_siren_step-2_binaural",
+    ]
+    flight = _demo("flight", "airport")
+    for argv, problem in (
+        (["--series", "sources", "--vehicle", "departure,arrival"], "no choice of sources"),
+        (["--format", "mono,ambix3", "--hrtf", "me.sofa"], "--hrtf is for binaural mixes"),
+    ):
+        found = flight.check(flight.parser().parse_args(["all", *argv]))
+        assert found is not None and problem in found, found
+    one = flight.resolved(
+        flight.parser().parse_args(["all", "--listeners", "lateral_450m", "--series", "listeners"])
+    )
+    assert run_folder(one).name == "flight_departure_lateral_450m_binaural"
+    # Each demo's --series names what it has.
+    assert "sources (with --sources-play in-turn)" in street.option("series").help
+    assert "--sources-play" not in flight.option("series").help
+    assert "(vehicle, step, format)" in flight.option("series").help
+
+
+def test_values_that_change_nothing_make_one_part() -> None:
+    """Several values of an option that changes nothing with the sources picked (the
+    railway's horn when it does not sound, the siren of a police car heard without it)
+    come out as one run, that of the default; with another part between them, each
+    plays once and the run is named after what differs."""
+    railway = _demo("passby", "railway")
+    args = railway.parser().parse_args(["all", "--horn", "blasts,chord"])
+    assert railway.check(args) is None
+    resolved = railway.resolved(args)
+    assert run_folder(resolved).name == "passby_regional_binaural"
+    assert not getattr(resolved, "series_parts", None)
+    street = _demo("passby", "street")
+    args = street.parser().parse_args(
+        ["all", "--vehicle", "police_car", "--sources", "police_car", "--siren", "wail,yelp"]
+    )
+    assert run_folder(street.resolved(args)).name == "passby_police_car_police_car_binaural"
+    args = street.parser().parse_args(
+        ["all", "--vehicle", "car,police_car", "--siren", "wail,yelp"]
+    )
+    resolved = street.resolved(args)
+    assert run_folder(resolved).name == "passby_car+police_car_siren-wail+yelp_binaural"
+    assert [run_folder(p).name for p in resolved.series_parts] == [
+        "passby_car_binaural",
+        "passby_police_car_binaural",
+        "passby_police_car_siren-yelp_binaural",
+    ]
+
+
 def _sources_demo(tmp_path: Path) -> Demo:
     """A demo of four sources in two groups, three of them its own pick."""
     sources = [

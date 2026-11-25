@@ -42,12 +42,14 @@ simulation gives them, from the podium, 2 m from the first violins, to the back 
 and the captions give each stop's level against the loudest. Every source has the same
 power, so the balance between the instruments is the recording's own.
 `--listeners stalls-rear,conductor` plays each movement at the seats of its tour among
-those, in that order (the finale from the back, then the podium), or at all of them when
-its tour has none of them. `--sources Winds` plays the winds alone (by section,
+those, in that order (the finale from the back, then the podium; a `--tour` given keeps
+its own order, `--listeners` leaving out the others), or at all of them when its tour
+has none of them. `--sources Winds` plays the winds alone (by section,
 `Strings/Violins I` to `Percussion/Timpani`, or by player, `fl1`), in a run of its own
 (demo/orchestra_Winds_binaural/); the stills, their credit and the thumbnail count and
 light up those players only. A movement every picked player rests through (the
-trumpets and the timpani in II) is left out of the tour. `--movements 4,1` plays the
+trumpets and the timpani in II) is left out of the tour, unless `--input` gives one of
+them a recording: it plays that file in every movement. `--movements 4,1` plays the
 finale, then the first movement.
 """
 
@@ -153,7 +155,8 @@ SECTIONS = [
     ("timpani", "Percussion/Timpani", "timpani"),
 ]
 #: The players who rest through a whole movement: the Allegretto scherzando is scored
-#: without trumpets and timpani. A run of only them leaves that movement out.
+#: without trumpets and timpani. A run of only them leaves that movement out, unless
+#: ``--input`` gives one of them a recording, which it plays in every movement.
 RESTS = {2: ("tp1", "tp2", "timpani")}
 #: The default tour: the movements in order, each with the seats that hear it in turn,
 #: for equal shares of it (the cuts moved to the quietest moment near each share's end).
@@ -358,12 +361,16 @@ def of_movements(args) -> list[tuple[int, str]]:
 def stops_of(args) -> list[tuple[int, str]]:
     """(movement, seat) for each stop of the run's tour: ``--tour``'s or the default one,
     of the movements ``--movements`` names, in its order, and of those not every player
-    that plays (``--sources``) rests through (:data:`RESTS`); at the seats ``--listeners``
-    names: each movement at the seats of its tour among them, in that option's order
-    (``--tour``'s order, when it is given), or at all of them when its tour has none of
-    them."""
+    that plays (``--sources``) rests through (:data:`RESTS`): a player ``--input`` gives
+    a recording plays it in every movement, so it rests through none; at the seats
+    ``--listeners`` names: each movement at the seats of its tour among them, in that
+    option's order (``--tour``'s order, when it is given), or at all of them when its tour
+    has none of them."""
     heard = set(playing(args, list(TRACKS)))
-    stops = [(m, seat) for m, seat in of_movements(args) if not heard <= set(RESTS.get(m, ()))]
+    fed = set(getattr(args, "inputs", None) or {})
+    stops = [
+        (m, seat) for m, seat in of_movements(args) if not heard <= set(RESTS.get(m, ())) - fed
+    ]
     names = listener_names(args.listeners)
     if names is None:
         return stops
@@ -666,7 +673,8 @@ DEMO = Demo(
         input_option(),
         listeners_option(
             help="only these seats, comma separated, in the order each movement visits "
-            "them (default: every one, in the tour's order): each movement is heard at the "
+            "them (default: every one, in the tour's order; a --tour given keeps its own "
+            "order, this option leaving out the others): each movement is heard at the "
             "seats of its tour among them, or at all of them when its tour has none of "
             "them; the simulation keeps every seat, so another choice needs no new one"
         ),

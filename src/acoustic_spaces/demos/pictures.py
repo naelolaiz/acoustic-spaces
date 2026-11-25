@@ -122,7 +122,8 @@ def canvas(size: tuple[int, int] = SIZE) -> Image.Image:
 
 def title_card(size: tuple[int, int], title: str, name: str, lines) -> Image.Image:
     """A title card of ``size``: ``title`` in large, ``name`` under it and ``lines`` under
-    that, each cut to the width (the ``join`` step's card before each run)."""
+    that, each cut to the width (the card before each part of a run of several parts,
+    :func:`~acoustic_spaces.demos.join.join_parts`)."""
     img = canvas(size)
     draw = ImageDraw.Draw(img)
     text(draw, (MARGIN, 300), title, font("Bold", 64, display=True))

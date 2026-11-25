@@ -45,9 +45,11 @@ already; the editor's Simulation > Run demo… runs it too. Each run goes to a f
 ./demo named after its settings (demo/passby_bus_binaural/: the scene, the sound, the
 passes, the stills), with the video, its audio and its thumbnail beside it, so that a run
 with other settings writes over none of them; `--vehicle car,bus` plays the two one after
-the other in one video, and `--sources-play in-turn` each of the vehicle's sources alone,
-one after the other. Use headphones; `--hrtf me.sofa` plays it through
-your own or measured HRTFs instead of a spherical head.
+the other in one video, and `--sources-play in-turn` each source the vehicle plays by
+default alone, one after the other (the police car, then its siren), or each one
+`--sources` names (`--sources car,car_horn`: the car, then its horn); a vehicle that
+plays one source plays it in an ordinary run. Use headphones; `--hrtf me.sofa` plays it
+through your own or measured HRTFs instead of a spherical head.
 
 Each listener hears the vehicle through every early path the scene traces (reflections
 off the road, the facades and the barrier up to the third order, and the direct sound

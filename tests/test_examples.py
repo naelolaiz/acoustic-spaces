@@ -1213,6 +1213,15 @@ def test_orchestra_demo_plays_the_players_it_picks(tmp_path: Path) -> None:
     assert demo.DEMO.check(_demo_args(demo.DEMO, sources="Percussion", movements="2")) == (
         "--sources Percussion: the players it picks rest through movement II, all the tour plays"
     )
+    # A player --input gives a recording plays it in every movement: none is left out.
+    fed = _demo_args(demo.DEMO, work=work, sources="tp1", inputs={"tp1": __file__})
+    assert [m for m, _ in demo.stops_of(fed)] == [m for m, _ in demo.stops_of(every)]
+    second = _demo_args(demo.DEMO, sources="tp1", inputs={"tp1": __file__}, movements="2")
+    assert demo.DEMO.check(second) is None
+    assert demo.stops_of(second) == [(2, seat) for seat in dict(demo.TOUR)[2]]
+    # A recording for a player who does not play keeps the rest.
+    other = _demo_args(demo.DEMO, sources="tp1,tp2", inputs={"vl1_01": __file__})
+    assert 2 not in [m for m, _ in demo.stops_of(other)]
     # Each section family in turn: a part each, named after it.
     turns = demo.DEMO.resolved(_demo_args(demo.DEMO, work=work, sources_play="in-turn"))
     assert turns.run_folder.name == "orchestra_each-source_binaural"
@@ -1625,6 +1634,9 @@ def test_lakeside_demo_plays_the_loudspeakers_picked(tmp_path: Path, monkeypatch
     subs = _demo_args(demo.DEMO, work=work, sources="subs")
     assert subs.playing == ("subs",) and subs.run_plays == "spicy_funk_cake"
     assert demo.DEMO.run_name(subs) == "lakeside_spicy_funk_cake_subs_binaural"
+    # The editor's --input table lists the loudspeakers that play: all three by default.
+    assert list(demo.plays(every)) == list(demo.CHANNELS)
+    assert demo.plays(subs) == {"subs": "spicy_funk_cake, both channels in mono"}
     # The example's own source on the stage is no loudspeaker of the demo's scenes.
     assert demo.DEMO.check(_demo_args(demo.DEMO, work=work, sources="stage")) == (
         "--sources stage: no such source or group here; it has main_left, main_right, subs, PA"
@@ -2268,3 +2280,38 @@ def test_the_talkers_speak_at_normal_effort(name: str) -> None:
     pattern = [talker.directivity] * 8
     expected = walk.voice_level("speech_male", pattern, walk.VOICES["normal"])
     assert talker.level_db == pytest.approx(expected, abs=0.05)
+
+
+def test_the_texts_say_what_the_sources_and_listeners_picks_do() -> None:
+    """The tours' --listeners help says a --tour given keeps its own order; the demos
+    with no --sources (one vehicle each) are the three the docs and the changelog name;
+    the title card is the one before each part of a run of several parts."""
+    demos = {demo.name: demo for demo in list_demos()}
+    kept = "a --tour given keeps its own order, this option leaving out the others"
+    for name in ("stadium", "crossing", "orchestra", "church"):
+        assert kept in " ".join(demos[name].option("listeners").help.split()), name
+    without = sorted(
+        (demo.example, demo.name)
+        for demo in list_demos()
+        if "sources" not in {option.name for option in demo.options}
+    )
+    assert without == [
+        ("airport", "flight"),
+        ("helicopter_flyover", "flyover"),
+        ("roadside", "passby"),
+    ]
+    root = EXAMPLES.parent
+    docs = " ".join((root / "docs" / "demos.md").read_text(encoding="utf-8").split())
+    assert (
+        "Every demo but the airport's flight, the helicopter flyover and the roadside demo "
+        "lists the sources it can play"
+    ) in docs
+    assert "the `--listeners` (or no `--listeners`, every listener's mixes serving any " in docs
+    assert "choice of them) and the `--sources` this one gets." in docs
+    changelog = " ".join((root / "CHANGELOG.md").read_text(encoding="utf-8").split())
+    assert "(all but the airport's flight, the helicopter flyover and the roadside demo," in (
+        changelog
+    )
+    from acoustic_spaces.demos.pictures import title_card
+
+    assert "join_parts" in title_card.__doc__ and "join`` step" not in title_card.__doc__

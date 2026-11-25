@@ -2224,6 +2224,23 @@ msgstr ""
 #: acoustic_spaces/gui/demo_dialog.py
 #, python-brace-format
 msgid ""
+"Tick what plays in this run ({option}); the ticked sources play together, or "
+"one after another as {play} says."
+msgstr ""
+"Spunta ciò che suona in questa esecuzione ({option}); le sorgenti spuntate "
+"suonano insieme, o una dopo l'altra come dice {play}."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
+"Tick what plays in this run ({option}); the ticked sources play together."
+msgstr ""
+"Spunta ciò che suona in questa esecuzione ({option}); le sorgenti spuntate "
+"suonano insieme."
+
+#: acoustic_spaces/gui/demo_dialog.py
+#, python-brace-format
+msgid ""
 "Tick what plays in this run ({option}); ticking several plays them one after "
 "another in one video."
 msgstr ""

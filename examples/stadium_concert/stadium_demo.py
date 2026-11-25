@@ -61,7 +61,8 @@ dB(A) louder than in the audience, too much to hear both in one video, so each s
 turned up to the loudness of the loudest one (K-weighted, as loudness meters weigh it)
 and its caption says by how much; the mixes of a run keep one gain for all.
 `--listeners east_stand,mix_position` mixes those listeners alone, and the video tours
-them in that order, each stop with its phrases and the last to the end of the song.
+them in that order, each stop with its phrases and the last to the end of the song (a
+`--tour` given keeps its own order, `--listeners` leaving out the others).
 `--sources PA` mixes the sound system alone (or `Monitors`, `Band`, a group such as
 `PA/Delays` or a source by its name, comma separated), each at the level the scene
 gives it against all the others, from the same simulation and feeds;
@@ -326,8 +327,9 @@ SOURCES_HELP = (
 LISTENERS_HELP = (
     "only these listeners, in this order, comma separated (default: every one, the tour "
     "in the demo's order): the demo mixes those alone and its video tours them in this "
-    "order, each for its phrases and the last to the end of the song; the simulation "
-    "keeps every listener, so another choice needs no new one"
+    "order, each for its phrases and the last to the end of the song (a --tour given "
+    "keeps its own order, this option leaving out the others); the simulation keeps "
+    "every listener, so another choice needs no new one"
 )
 
 

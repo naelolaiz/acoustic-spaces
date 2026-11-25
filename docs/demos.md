@@ -82,22 +82,30 @@ made of parts, one for each value (every pair of values when two options take se
 each an ordinary run with its own name and folder, made or found as such; its video
 plays them one after another, each after a title card of 4 s that says what sets it
 apart and how it was made, with the chapters of every part, and is named after them all
-(`demo/flight_departure+arrival_binaural.mp4`). Each part keeps its own level (each
+(`demo/flight_departure+arrival_binaural.mp4`); values that come out as the same run
+(`--horn blasts,chord` on the railway when the horn does not sound) play once. Each
+part keeps its own level (each
 brings its loudest peak to -1 dBFS), so the parts are not comparable in level with each
 other, which the cards say. `--series` sets the order of the parts, outermost first, by
 the options' names (`--series format,vehicle` plays both flights binaural, then both
 mono), and with `listeners` in it makes each listener a part of its own (otherwise the
 tour of each part visits them); the run's name then says the order (`series-format-vehicle`).
+`--hrtf` with no binaural part is refused, as for one run.
 
-**The sources a run plays.** Every demo lists the sources it can play, in the groups
-its scene gives them, and plays its own pick of them by default. `--sources` names
-others, by name or by group, comma separated: `--sources PA` plays every source of the
-groups under `PA` (`PA/Mains`, `PA/Fills`...), `--sources PA,Band` those of both.
-`--sources-play together` (the default) plays them in one mix; `--sources-play in-turn`
-plays each name given (a group as one) in a part of its own, one after another in one
-video as above, or without `--sources` each top group of the demo's pick (the stadium's
-sound system, its monitors, then its band). A pick that is not the demo's own names the
-run (`church_Choir_binaural`, `church_each-source_binaural`); the stills, credits and
+**The sources a run plays.** Every demo but the airport's flight, the helicopter
+flyover and the roadside demo lists the sources it can play, in the groups its scene
+gives them, and plays its own pick of them by default; those three play one source
+each, the vehicle (`--vehicle` picks which, where there are several), and take no
+`--sources`. Elsewhere `--sources` names others, by name or by group, comma separated:
+`--sources PA` plays every source of the groups under `PA` (`PA/Mains`,
+`PA/Fills`...), `--sources PA,Band` those of both. `--sources-play together` (the
+default) plays them in one mix; `--sources-play in-turn` plays each name given (a group
+as one) in a part of its own, one after another in one video as above, or without
+`--sources` each top group of the demo's pick (the stadium's sound system, its
+monitors, then its band); a single turn (one name, or a pick of one top group) is an
+ordinary run, and in a series of vehicles each takes its own turns (`--vehicle
+car,police_car`: the car, the police car, then its siren). A pick that is not the demo's own names the run
+(`church_Choir_binaural`, `church_each-source_binaural`); the stills, credits and
 captions describe only what plays. Where the simulation keeps every source (the
 concerts, the church, the demo of any scene, the works), another pick needs no new
 simulation; the pass-by demos walk the vehicle again with the parts picked.
@@ -1052,8 +1060,8 @@ coaches, 151 m long, at 160 km/h; `s_bahn`, a four-car electric multiple unit, 6
 120 km/h; `intercity`, the locomotive and twelve coaches, 336 m, at 200 km/h; `freight`,
 the locomotive and 24 wagons with composite brake blocks, 5 of them tank wagons, 446 m,
 at 100 km/h), `--speed` how fast it runs (km/h; by default the train's own above,
-whatever the speed of the example's walk: the Run demo window's **Speed** reads *the
-train's own* at zero), `--track ballast` the track it runs on (`ballast`, sleepers in
+whatever the speed of the example's walk: the Run demo window's **Speed** shows *the
+train's own* while it is empty, which stands for that default), `--track ballast` the track it runs on (`ballast`, sleepers in
 ballast; `slab`, slab track; `slab_absorber`, slab track with absorbers;
 `level_crossing`), `--sources` the train's sources that play (`train`, `train_roof` and
 `train_pantograph` by default; `train_horn` adds its warning horn, see below), `--horn
@@ -1284,8 +1292,8 @@ stadium's scene, left out of the concert's own simulations: the editor shows its
 the Run demo window lists it as what the demo moves, and what Edit movement… changes
 there the demo flies. It builds on the stadium
 demo: run that one first, in the same work folder, up to its `render` step, with its
-default song and the `--format`, the `--hrtf` and the `--listeners` this one gets (or
-no `--listeners`, every listener's mixes serving any choice of them).
+default song and the `--format`, the `--hrtf`, the `--listeners` (or no `--listeners`,
+every listener's mixes serving any choice of them) and the `--sources` this one gets.
 
 ```sh
 acoustic-spaces examples --copy . stadium_concert && cd stadium_concert

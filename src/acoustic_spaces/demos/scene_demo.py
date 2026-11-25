@@ -33,8 +33,9 @@ listener is heard as it walks or as the sources walk past it, and the video move
 as they go, its captions giving the level at each moment. ``--moving`` picks the walks
 of a run without changing the scene: ``--moving visitor,guide`` moves those two and
 leaves every other walker standing where it starts, ``--moving none`` keeps them all
-still, so one scene serves both; without it, a source ``--sources`` leaves out stands
-where it starts, as it plays nothing. A walk with Doppler (a car going past) moves
+still, so one scene serves both; without it, a source a given ``--sources`` leaves out
+stands where it starts, as it plays nothing (without ``--sources`` a silent source walks
+as the scene has it). A walk with Doppler (a car going past) moves
 alone: every listener hears each early path through its own delay as it changes, so the
 pitch shifts as it passes, the late sound crossfaded from place to place
 (:func:`acoustic_spaces.walkthrough.render_movement`), all from one simulation.
@@ -75,6 +76,7 @@ from acoustic_spaces.demos import (
     Source,
     Step,
     common_options,
+    given_names,
     input_option,
     listener_names,
     listeners_in,
@@ -305,14 +307,15 @@ def completed(args: argparse.Namespace) -> argparse.Namespace:
 
 def walking(args: argparse.Namespace, scene: Scene) -> list[str] | None:
     """Who walks in this run, as :func:`~acoustic_spaces.walkthrough.with_moving` takes
-    it: those ``--moving`` names; without it, when ``--sources`` leaves out a source
-    whose walk is on, every walker of the scene but that one, which stands where it
-    starts, as it plays nothing; None: the scene's own walkers."""
+    it: those ``--moving`` names; without it, when ``--sources`` is given and leaves out
+    a source whose walk is on, every walker of the scene but that one, which stands where
+    it starts, as it plays nothing; None: the scene's own walkers (without ``--sources``
+    too, a source the scene keeps silent walking as the scene has it)."""
     from acoustic_spaces.walkthrough import movers
 
     names = moving_names(getattr(args, "moving", None))
     chosen = getattr(args, "playing", None)
-    if names is not None or chosen is None:
+    if names is not None or chosen is None or given_names(getattr(args, "sources", None)) is None:
         return names
     walkers = movers(scene)
     kept = [item.name for kind, item in walkers if kind == "listeners" or item.name in chosen]
@@ -322,7 +325,7 @@ def walking(args: argparse.Namespace, scene: Scene) -> list[str] | None:
 def moving_scene(args: argparse.Namespace) -> Scene:
     """The scene as this run plays it: with ``--moving``, those walk and every other
     walker stands where it starts (:func:`~acoustic_spaces.walkthrough.with_moving`); a
-    source ``--sources`` leaves out stands too (:func:`walking`)."""
+    source a given ``--sources`` leaves out stands too (:func:`walking`)."""
     from acoustic_spaces.walkthrough import with_moving
 
     found = scene_of(args)

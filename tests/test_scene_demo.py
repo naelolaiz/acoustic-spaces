@@ -249,3 +249,23 @@ def test_the_tour_of_any_scene_goes_in_the_order_given(tmp_path: Path, monkeypat
         playing=["talker", "radio"],
     )
     assert one.title("seat-a") == ("seat-a", "Listener 1 of 1")
+
+
+def test_a_silent_walker_walks_unless_sources_leaves_it_out(tmp_path: Path) -> None:
+    """A source the scene keeps silent walks in a default run, as before ``--sources``
+    was there (the default pick leaves it out, but names no source); a ``--sources``
+    given that leaves it out has it stand where it starts."""
+    scene = _grouped(tmp_path)
+    data = yaml.safe_load(scene.read_text(encoding="utf-8"))
+    data["sources"][2]["walk"] = {"to": [[6.0, 2.0, 1.0]], "speed_m_s": 2.0}
+    scene.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    args, resolved = _run(scene)
+    assert "fan" not in resolved.playing
+    assert scene_demo.walking(resolved, scene_demo.scene_of(resolved)) is None
+    assert scene_demo.moving_of(resolved) == ["fan"]
+    fan = next(s for s in scene_demo.moving_scene(resolved).sources if s.name == "fan")
+    assert fan.walk is not None and fan.walk.enabled
+    args, resolved = _run(scene, "--sources", "talker")
+    assert scene_demo.moving_of(resolved) == []
+    fan = next(s for s in scene_demo.moving_scene(resolved).sources if s.name == "fan")
+    assert fan.walk is not None and not fan.walk.enabled

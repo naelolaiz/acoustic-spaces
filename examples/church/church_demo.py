@@ -57,7 +57,8 @@ the time the sound takes to reach that place, so that the music runs on across a
 `--listeners conductor,nave-back` mixes those places alone, and the video tours them
 alone and in that order, on the tour's times: each place left out gives its time to the
 one before, and the places given take those times in turn (the conductor from the start,
-the back of the nave from the conductor's time on).
+the back of the nave from the conductor's time on); a `--tour` given keeps its own order,
+`--listeners` leaving out the others.
 
 `--sources Choir` plays the choir alone, `--sources "Organ pipes"` the organ alone (the
 scene's groups), `--sources singer_f1,organ_pedal_c` those sources alone; every one plays
@@ -1040,8 +1041,9 @@ DEMO = Demo(
         input_option(),
         listeners_option(
             help="only these listeners, comma separated (default: every one): the demo mixes "
-            "those alone and its video tours them in the order given, on the tour's times; "
-            "the simulation keeps every listener, so another choice needs no new one"
+            "those alone and its video tours them in the order given, on the tour's times "
+            "(a --tour given keeps its own order, this option leaving out the others); the "
+            "simulation keeps every listener, so another choice needs no new one"
         ),
         *sources_options(
             help="only these sources, by name (singer_f1, organ_pedal_c) or by the scene's "

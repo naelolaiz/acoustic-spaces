@@ -17,8 +17,8 @@ the scene gives it the sound power and the directivity of that sound for its lat
 part.
 
 The concert is the stadium demo's: run it first, in the same work folder, up to its
-render step (`python stadium_demo.py render`, or `all`), with the --format, the --hrtf
-and the --listeners given here (or at every listener). Then, from the folder of the
+render step (`python stadium_demo.py render`, or `all`), with the --format, the --hrtf,
+the --listeners (or at every listener) and the --sources given here. Then, from the folder of the
 stadium example, in the Python environment acoustic-spaces is installed in, with ffmpeg
 on the PATH:
 
@@ -34,7 +34,8 @@ Each run writes in a folder of ./demo (--work) named after its settings
 (demo/crossing_binaural/: the scenes, the helicopter's sound, its passes, the mixes and
 the stills), with the video, its audio and its thumbnail beside it. Use
 headphones. `--listeners east_stand,mix_position` flies it past those listeners alone,
-which the stadium demo's mixes must have, and the video tours them in that order.
+which the stadium demo's mixes must have, and the video tours them in that order (a
+`--tour` given keeps its own order, `--listeners` leaving out the others).
 `--sources PA` has it fly over the sound system alone (or `Monitors`, `Band`, a group
 such as `PA/Delays` or a source by its name, comma separated): the crossing plays the
 stadium demo's run of those (`python stadium_demo.py render --sources PA`); the
@@ -515,7 +516,8 @@ _REPLACED = {
         "listener in use, the tour in the stadium demo's order): the helicopter is "
         "simulated along its flight and heard at those alone, over the stadium demo's "
         "mixes there, and the video tours them in this order, each for its phrases and "
-        "the last to the end",
+        "the last to the end (a --tour given keeps its own order, this option leaving out "
+        "the others)",
     ),
 }
 # The concert's sources take the place of any the pass-by demo gives its vehicle.

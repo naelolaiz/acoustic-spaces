@@ -421,6 +421,10 @@ def test_the_crossing_flies_over_the_concerts_sources_picked(tmp_path: Path) -> 
     )
     option = demo.option("sources")
     assert option.steps == ("mix", "video") and "the helicopter always plays" in option.help
+    # Its text says the stadium's run is to be rendered with these --sources too.
+    assert "the --listeners (or at every listener) and the --sources given here" in (
+        " ".join(crossing.__doc__.split())
+    )
     # The helicopter's walk is the same whatever of the concert plays: a pick's run
     # plays the walk of the run of every source.
     picked = demo.resolved(given(sources="PA", sources_play="in-turn"))

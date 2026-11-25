@@ -1313,6 +1313,20 @@ def test_a_vehicles_sources_in_turn_are_parts_of_one_run() -> None:
         "passby_fire_engine_fire_engine_siren_binaural",
         "passby_fire_engine_fire_engine_horn_binaural",
     ]
+    # As the demo's text says: the police car, then its siren; each one --sources
+    # names (the car, then its horn); a vehicle that plays one source, an ordinary run.
+    for argv, playing in (
+        (["--vehicle", "police_car"], [("police_car",), ("police_car_siren",)]),
+        (["--vehicle", "car", "--sources", "car,car_horn"], [("car",), ("car_horn",)]),
+        (["--vehicle", "car"], [("car",)]),
+    ):
+        args = demo.parser().parse_args(["all", *argv, "--sources-play", "in-turn"])
+        assert [p.playing for p in demo.each(args)] == playing, argv
+    from acoustic_spaces.demos import sibling
+
+    script = Path(example_path("street")).parent / "passby_demo.py"
+    text = " ".join(sibling(script, "passby_demo").__doc__.split())
+    assert "--sources-play in-turn` each source the vehicle plays by default alone" in text
 
 
 def test_the_credit_and_the_about_line_say_the_sources_that_play() -> None:

@@ -929,7 +929,8 @@ def _finish(folder: Path, out: Path, chapters: Sequence[str] | None, no_mp4: boo
 
 def _recorded(folder: Path, out: Path, length_s: float, chapters: Sequence[str] | None) -> None:
     """The video ``out`` encoded: kept in the run's record (``run.json`` in ``folder``)
-    with its length and chapters, which the ``join`` step reads."""
+    with its length and chapters, which :func:`~acoustic_spaces.demos.join.join_parts`
+    reads when the run is a part of a run of several."""
     print(f"wrote {out}")
     record_run(
         folder, video=out.name, length_s=round(float(length_s), 3), chapters=list(chapters or [])

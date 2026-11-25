@@ -6,9 +6,11 @@
   what plays or how it sounds, and `--format`, take several values (`--vehicle
   departure,arrival`, `--speed 50,80`), each value a run of its own played after a title
   card, in the order `--series` sets; `--sources` picks the sources a demo plays, by
-  name or group, and `--sources-play in-turn` plays them one after another; `--series
-  listeners` gives each listener a part. In Run demo these are lists to tick and drag,
-  the Movement box's ticks pick what moves, and a box sets the order of the parts.
+  name or group (all but the airport's flight, the helicopter flyover and the roadside
+  demo, which play one vehicle, `--vehicle` picking which where there are several),
+  and `--sources-play in-turn` plays them one after another; `--series listeners`
+  gives each listener a part. In Run demo these are lists to tick and drag, the
+  Movement box's ticks pick what moves, and a box sets the order of the parts.
 - Changed: `--listeners` sets the order of every demo's tour (a tour's timing kept),
   and the gallery walk's parts; `--tour` keeps its own order. The orchestra's
   `--movements` plays and downloads the movements it names, in that order.

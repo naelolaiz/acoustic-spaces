@@ -4819,9 +4819,9 @@ def test_demo_dialog_picks_the_sources(qapp, monkeypatch) -> None:
     ticked, the plain command: the stadium's PA, monitors and band, its helicopter left
     to the crossing. A group unticked leaves it out, the groups wholly ticked named by
     their names (--sources); None cannot run, and The demo's pick ticks the demo's own
-    again. Sources play shows beside two sources or more: in turn plays each top group
-    in a part of its own. In the street, the police car's siren alone plays without the
-    car."""
+    again. Sources play shows where the run would play more than one part in turn: in
+    turn plays each top group in a part of its own. In the street, the police car's
+    siren alone plays without the car."""
     from PySide6.QtWidgets import QDialogButtonBox
 
     from acoustic_spaces import examples
@@ -4906,6 +4906,164 @@ def test_demo_dialog_picks_the_sources(qapp, monkeypatch) -> None:
     assert street.problem.text() == "" and street.chosen()[2].sources == "police_car_siren"
     assert not street._rows["sources_play"].isRowVisible(street.fields["sources_play"])
     street.deleteLater()
+
+
+def test_demo_dialog_shows_sources_play_where_the_run_has_turns(qapp, monkeypatch) -> None:
+    """Sources play shows only where the sources would play in more than one part in
+    turn: not for the stadium's PA alone, ticked wholly (one group, one part), but for
+    the PA and the band; not for the lakeside's own pick, all of it in its PA; for the
+    railway's own pick of three sources of no group, whose Movement box says the ticked
+    sources play together or as Sources play says."""
+    from acoustic_spaces import examples
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
+    dialog = DemoDialog(scene=example_path("stadium_concert"))
+    sources, play = dialog.fields["sources"], dialog.fields["sources_play"]
+
+    def shown() -> bool:
+        return dialog._rows["sources_play"].isRowVisible(play)
+
+    assert shown()  # the PA, the monitors and the band of the demo's own pick
+    sources.none.click()
+    sources.tree.topLevelItem(0).setCheckState(0, Qt.CheckState.Checked)
+    assert dialog.command.text() == "python stadium_demo.py all --sources PA"
+    assert len(sources.ticked()) > 1 and not shown()
+    sources.tree.topLevelItem(2).setCheckState(0, Qt.CheckState.Checked)
+    assert dialog.command.text() == "python stadium_demo.py all --sources PA,Band"
+    assert shown()
+    dialog.deleteLater()
+    lakeside = DemoDialog(scene=example_path("lakeside_concert"))
+    sources = lakeside.fields["sources"]
+    assert sources.value() is None and len(sources.ticked()) > 1
+    assert {source.group for source in sources.sources if source.on} == {"PA"}
+    assert not lakeside._rows["sources_play"].isRowVisible(lakeside.fields["sources_play"])
+    lakeside.deleteLater()
+    railway = DemoDialog(scene=example_path("railway"))
+    assert railway.fields["sources"].ticked() == ["train", "train_roof", "train_pantograph"]
+    assert railway._rows["sources_play"].isRowVisible(railway.fields["sources_play"])
+    assert railway.movement.note.text() == (
+        "Tick what plays in this run (--sources); the ticked sources play together, or "
+        "one after another as Sources play says."
+    )
+    railway.deleteLater()
+
+
+def test_demo_dialog_picks_a_vehicle_of_several_walkers(qapp, monkeypatch) -> None:
+    """In the street, a tick in the Movement box picks every vehicle that moves the
+    walker ticked, the police car by its siren or by itself, and an untick drops every
+    vehicle that moves it; each vehicle's rows stay offered whatever the sources picked
+    for another. A sources pick made for one vehicle does not carry over to another:
+    the horn ticked and unticked is the car's own pick again, and the police car's
+    siren alone, the bus beside it, gives both their own picks."""
+    from acoustic_spaces import examples
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
+    street = DemoDialog(scene=example_path("street"))
+    box, vehicle, sources = street.movement, street.fields["vehicle"], street.fields["sources"]
+    names = [name for _kind, name, _on in box.walkers]
+
+    def tick(name: str, on: bool = True) -> None:
+        state = Qt.CheckState.Checked if on else Qt.CheckState.Unchecked
+        box.table.item(names.index(name), box.MOVES).setCheckState(state)
+
+    def rows() -> list[str]:
+        return [name for row, name in enumerate(names) if not box.table.isRowHidden(row)]
+
+    every = [name for name in names if name != "car_horn"]  # the horn: the car's, off
+    assert vehicle.value() == "car" and box.ticked() == ["car"] and rows() == every
+    tick("police_car_siren")
+    assert vehicle.value() == ("car", "police_car")
+    assert box.ticked() == ["car", "police_car", "police_car_siren"]
+    tick("car", False)
+    assert vehicle.value() == "police_car" and street.problem.text() == ""
+    assert street.command.text() == "python passby_demo.py all --vehicle police_car"
+    tick("police_car_siren", False)  # the last vehicle: the ticks stay
+    assert vehicle.value() == "police_car"
+    assert box.ticked() == ["police_car", "police_car_siren"]
+    tick("tram_roof")
+    assert vehicle.value() == ("police_car", "tram")
+    tick("police_car", False)
+    assert vehicle.value() == "tram" and box.ticked() == ["tram", "tram_roof"]
+    tick("fire_engine")
+    assert vehicle.value() == ("tram", "fire_engine")  # after, as the list has them now
+    vehicle.pick("car")
+
+    # The horn ticked and unticked: the car's own pick, which the police car's follows.
+    sources.tree.topLevelItem(1).setCheckState(0, Qt.CheckState.Checked)
+    assert street.command.text() == "python passby_demo.py all --sources car,car_horn"
+    sources.tree.topLevelItem(1).setCheckState(0, Qt.CheckState.Unchecked)
+    assert street.command.text() == "python passby_demo.py all" and sources.picked is None
+    vehicle.pick("police_car")
+    assert sources.ticked() == ["police_car", "police_car_siren"]
+    assert street.command.text() == "python passby_demo.py all --vehicle police_car"
+    assert street.problem.text() == ""
+    # None for the police car, then the bus: the bus's own pick.
+    sources.none.click()
+    vehicle.pick("bus")
+    assert sources.ticked() == ["bus"] and street.problem.text() == ""
+    assert street.command.text() == "python passby_demo.py all --vehicle bus"
+    # The siren alone: every vehicle's rows still there, the bus beside it with both
+    # vehicles' own picks, which the run takes.
+    vehicle.pick("police_car")
+    sources.none.click()
+    sources.tree.topLevelItem(1).setCheckState(0, Qt.CheckState.Checked)
+    assert street.command.text() == (
+        "python passby_demo.py all --vehicle police_car --sources police_car_siren"
+    )
+    assert rows() == every
+    tick("bus")
+    assert vehicle.value() == ("police_car", "bus") and sources.value() is None
+    assert street.command.text() == "python passby_demo.py all --vehicle police_car,bus"
+    assert street.problem.text() == ""
+    street.deleteLater()
+
+
+def test_demo_dialog_keeps_what_reopening_shows(qapp, monkeypatch, tmp_path: Path) -> None:
+    """HRTFs kept beside several formats, binaural among them, open again with them
+    (the airport's binaural and mono); a run with no source ticked is not listed as
+    kept, the next opening ticking the demo's own pick; and a --format of commas alone
+    cannot run, the window says why."""
+    from PySide6.QtWidgets import QDialogButtonBox
+
+    from acoustic_spaces import examples
+    from acoustic_spaces.gui.demo_dialog import DemoDialog
+
+    monkeypatch.setattr(examples, "is_installed_example", lambda path: False)
+    ears = tmp_path / "ears.sofa"
+    ears.write_bytes(b"")
+    airport = DemoDialog(scene=example_path("airport"))
+    airport.fields["hrtf"].set_value(str(ears))
+    airport.fields["format"].setText("binaural, mono")
+    assert airport.problem.text() == "" and "--hrtf" in airport.command.text()
+    airport.reject()
+    airport.deleteLater()
+    airport = DemoDialog(scene=example_path("airport"))
+    assert airport.fields["format"].text() == "binaural,mono"
+    assert airport.fields["hrtf"].value() == ears
+    assert "--format binaural,mono" in airport.command.text() and "--hrtf" in airport.command.text()
+    assert airport.kept.text().startswith("Changed from the defaults and kept for next time:")
+    assert "HRTF" in airport.kept.text() and "Format" in airport.kept.text()
+    # Commas alone: no format, which the demo's command line refuses.
+    ok = airport.buttons.button(QDialogButtonBox.StandardButton.Ok)
+    airport.fields["format"].setText(",")
+    assert airport.problem.text() == "Cannot run: --format: no value" and not ok.isEnabled()
+    airport.fields["format"].setText("mono")
+    assert airport.problem.text() == "" and ok.isEnabled()
+    airport.reject()
+    airport.deleteLater()
+
+    stadium = DemoDialog(scene=example_path("stadium_concert"))
+    sources = stadium.fields["sources"]
+    names = sources.ticked()
+    sources.none.click()
+    assert "--sources ''" in stadium.command.text() and stadium.kept.isHidden()
+    stadium.reject()
+    stadium.deleteLater()
+    stadium = DemoDialog(scene=example_path("stadium_concert"))
+    assert stadium.fields["sources"].ticked() == names and stadium.kept.isHidden()
+    stadium.deleteLater()
 
 
 def test_every_control_of_the_demo_dialog_explains_itself(qapp, monkeypatch) -> None:
