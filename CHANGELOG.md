@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Added: a `join` step in every demo plays finished runs one after another in one
+  video, each after a title card, with the chapters of every part (`--runs`, or the
+  list of finished runs to tick in Run demo).
+- Changed: every demo run is named after its settings (what it plays, the listeners,
+  the options changed, the output), and its mixes, stills and the scenes made for it go
+  to a folder of that name, its video beside it, so that a run with other settings (the
+  airport's arrival after its departure) writes over nothing of another's; each output's
+  simulation goes to a folder of its own in the results (`results_choir/binaural`), so
+  the first run after updating simulates again.
+- Fixed: a demo's scene step writes the scene again when `--from` names another scene,
+  the stadium's and the church's feeds are made again when the song or the sources
+  change, and the stadium's and lakeside's feeds of one song are no longer replaced by
+  another's.
 - Fixed: the editor's Run demo no longer stays running for ever once a demo has written
   everything (as after a long GPU run with NVIDIA's driver on Linux, which can spin as
   the process exits). A demo, or an example's script, now ends with the line *every

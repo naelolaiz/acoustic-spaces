@@ -472,7 +472,7 @@ class RoadVehicle(Vehicle):
         )
 
     def texts(self) -> dict[str, str]:
-        return road_texts(self.noun, self.name, f"demo/{self.name}/{self.sound_file}")
+        return road_texts(self.noun, self.name, f"demo/RUN/{self.name}/{self.sound_file}")
 
 
 def rpm_help(fleet: Sequence[RoadVehicle]) -> str:
@@ -1572,7 +1572,7 @@ def demo(
     texts = first.texts()
     if several:
         texts = first.fleet_texts() or road_texts(
-            "vehicle", "NAME", f"demo/NAME/NAME.wav (the {first.name}'s, …)"
+            "vehicle", "NAME", f"demo/RUN/NAME/NAME.wav (the {first.name}'s, …)"
         )
         texts["input"] = texts["input"].replace(
             "as NAME=WAV", f"as NAME=WAV for the vehicle of --vehicle ({first.name}=WAV, …)"

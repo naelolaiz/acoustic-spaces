@@ -29,14 +29,18 @@ outdoors. Run it from the folder of the railway example (`acoustic-spaces exampl
 --copy . railway && cd railway`), in the Python environment acoustic-spaces is installed
 in, with ffmpeg on the PATH:
 
-    python passby_demo.py sound   # demo/train/train.wav, train_roof.wav, ...: dry, a column a point
+    python passby_demo.py sound   # train/train.wav, train_roof.wav, ...: dry, a column a point
     python passby_demo.py scene   # scene_demo.yaml: the train alone, at --speed, with Doppler
     python passby_demo.py walk    # the train every metre along the track, at every listener
-    python passby_demo.py video   # demo/tour.wav, demo/tour.mp4 (an animation), stills
+    python passby_demo.py video   # demo/passby_regional_binaural.mp4 (an animation), stills
 
 or `python passby_demo.py all --train freight`, every step, leaving out what is there
-already; the editor's Simulation > Run demo… runs it too. Use headphones; `--hrtf
-me.sofa` plays it through your own or measured HRTFs instead of a spherical head.
+already; the editor's Simulation > Run demo… runs it too. Each run goes to a folder in
+./demo named after its settings (demo/passby_freight_binaural/: the scene, the sound, the
+passes, the stills), with the video, its audio and its thumbnail beside it, so that a run
+with other settings writes over none of them; `python passby_demo.py join` plays finished
+runs one after another in one video. Use headphones; `--hrtf me.sofa` plays it through
+your own or measured HRTFs instead of a spherical head.
 
 Each listener hears each of the train's points through every early path the scene
 traces (the reflection off the ground, the barrier's top and ends diffracted), each

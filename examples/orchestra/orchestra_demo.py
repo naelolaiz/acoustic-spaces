@@ -269,7 +269,7 @@ def stops_of(args) -> list[tuple[int, str]]:
 
 
 def key_of(movement: int, seat: str) -> str:
-    """How a stop's mix is named in demo/seats."""
+    """How a stop's mix is named in the run's seats folder."""
     return f"{MOVEMENTS[movement][2]}_{seat}"
 
 

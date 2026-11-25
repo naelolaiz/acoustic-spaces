@@ -15,14 +15,18 @@ past has its Doppler and the road in it already). Run it from the folder of the 
 example (`acoustic-spaces examples --copy . roadside && cd roadside`), in the Python
 environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
-    python passby_demo.py sound   # demo/car/car.wav (demo/truck/truck.wav): the sound, dry
+    python passby_demo.py sound   # car/car.wav (truck/truck.wav): the sound, dry
     python passby_demo.py scene   # scene_demo.yaml: the vehicle alone, at --speed, with Doppler
     python passby_demo.py walk    # the vehicle every metre along the road, at every listener
-    python passby_demo.py video   # demo/tour.wav, demo/tour.mp4 (an animation), stills
+    python passby_demo.py video   # demo/passby_car_binaural.mp4 (an animation), stills
 
 or `python passby_demo.py all --vehicle truck`, every step, leaving out what is there
-already; the editor's Simulation > Run demo… runs it too. Use headphones; `--hrtf
-me.sofa` plays it through your own or measured HRTFs instead of a spherical head.
+already; the editor's Simulation > Run demo… runs it too. Each run goes to a folder in
+./demo named after its settings (demo/passby_truck_binaural/: the scene, the sound, the
+passes, the stills), with the video, its audio and its thumbnail beside it, so that a run
+with other settings writes over none of them; `python passby_demo.py join` plays finished
+runs one after another in one video. Use headphones; `--hrtf me.sofa` plays it through
+your own or measured HRTFs instead of a spherical head.
 
 Each listener hears the vehicle through every early path, the direct sound and its
 reflection off the ground, each through its own delay as it changes, so the pitch falls

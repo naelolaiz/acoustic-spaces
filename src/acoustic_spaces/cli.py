@@ -3388,8 +3388,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Each source plays the WAV file its signal names, at its sound power; every "
             "listener in use is mixed with one gain for all, and a video tours them with "
             "stills of the scene and of how the sound was made. Everything goes to demo/ "
-            "beside the scene (--work). Needs ffmpeg for the video and Pillow (the viz extra) "
-            "for the stills."
+            "beside the scene (--work), each run's mixes and video named after its settings; "
+            "the join step plays finished runs one after another in one video. Needs ffmpeg "
+            "for the video and Pillow (the viz extra) for the stills."
         ),
     )
     demo.add_argument("scene", help="the scene file; its sources' signal fields say what they play")

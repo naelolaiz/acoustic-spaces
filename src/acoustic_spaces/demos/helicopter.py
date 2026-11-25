@@ -286,7 +286,7 @@ class Helicopter(Vehicle):
             "helicopter=WAV: a dry recording, mixed down to mono and sent every way with the "
             "rotors' directivity, at least as long as the pass; the captions' levels are the "
             "rotors' model's",
-            "sound": "demo/helicopter/below.wav: what the helicopter's rotors send straight "
+            "sound": "demo/RUN/helicopter/below.wav: what the helicopter's rotors send straight "
             "down, dry",
             "header": "# The example with its helicopter flying over alone, at the speed and "
             "with the sound\n# power and directivity of its rotors, written by "

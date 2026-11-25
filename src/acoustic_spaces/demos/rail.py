@@ -1289,7 +1289,7 @@ class TrainVehicle(Vehicle):
                 if self.horn is not None
                 else ""
             ),
-            "sound": f"demo/{name}/{name}.wav and the files of its roof and pantograph: "
+            "sound": f"demo/RUN/{name}/{name}.wav and the files of its roof and pantograph: "
             f"the {noun}'s sound at each of its points, made to Schall 03",
             "header": f"# The example with its {noun} running past alone, at the speed and with "
             "the sound\n# power of the pass-by demo (Schall 03), written by passby_demo.py.\n",

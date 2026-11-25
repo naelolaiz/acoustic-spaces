@@ -20,13 +20,17 @@ recording of yours instead. Run it from the folder of the airport example
 (`acoustic-spaces examples --copy . airport && cd airport`), in the Python environment
 acoustic-spaces is installed in, with ffmpeg on the PATH:
 
-    python flight_demo.py aircraft  # demo/departure/engines.wav: its engines along the flight, dry
+    python flight_demo.py aircraft  # departure/engines.wav: its engines along the flight, dry
     python flight_demo.py scene     # scene_demo.yaml: the jet alone, its flight as keyframes
     python flight_demo.py walk      # the jet every 4 m along its flight, at every listener
-    python flight_demo.py video     # demo/tour.wav, demo/tour.mp4 (an animation), stills
+    python flight_demo.py video     # demo/flight_departure_binaural.mp4 (an animation), stills
 
 or `python flight_demo.py all --vehicle arrival`, every step, leaving out what is there
-already; the editor's Simulation > Run demo… runs it too. Use headphones; `--hrtf
+already; the editor's Simulation > Run demo… runs it too. Each run goes to a folder in
+./demo named after its settings (demo/flight_departure_binaural/: the scene, the sound,
+the passes, the stills), with the video, its audio and its thumbnail beside it, so that
+the arrival writes over nothing of the departure's; `python flight_demo.py join` plays
+the finished runs one after another in one video. Use headphones; `--hrtf
 me.sofa` plays it through your own or measured HRTFs instead of a spherical head.
 
 Each listener hears the jet's direct sound and its reflection off the ground, each

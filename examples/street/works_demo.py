@@ -17,13 +17,16 @@ environment acoustic-spaces is installed in, with ffmpeg on the PATH:
     python works_demo.py scene      # scene_works.yaml: the street with its works alone;
                                     # scene_works_2m.yaml: 2 m in front of the offices
     python works_demo.py feeds      # demo_works/feeds: what each machine plays, dry
-    python works_demo.py simulate   # both, into demo_works/results and results_2m
+    python works_demo.py simulate   # both, into demo_works/results, a folder for each
     python works_demo.py render     # every listener, binaural
-    python works_demo.py video      # demo_works/tour.wav, the stills, demo_works/tour.mp4
+    python works_demo.py video      # demo_works/works_binaural.mp4, its audio, the stills
 
 or `python works_demo.py all`, every step, leaving out what is there already; the
-editor's Simulation > Run demo… runs it too. Use headphones; `--hrtf me.sofa` plays it
-through your own or measured HRTFs instead of a spherical head.
+editor's Simulation > Run demo… runs it too. Each run's mixes and stills go to a folder
+in demo_works named after its settings (demo_works/works_binaural/), with the video
+beside it; `python works_demo.py join` plays finished runs in one video. Use
+headphones; `--hrtf me.sofa` plays it through your own or measured HRTFs instead of a
+spherical head.
 """
 
 from __future__ import annotations
