@@ -535,7 +535,7 @@ def test_church_demo_plays_the_sources_picked(
     feeds of every source, and its captions, stills and credit say what plays."""
     demo = _script("church", "church_demo")
     paths = {
-        "source": example_path("church"),
+        "source": EXAMPLES / "church" / "scene.yaml",  # the script's own: at its default
         "scene": tmp_path / "scene_choir.yaml",
         "results": tmp_path / "results_choir",
         "work": tmp_path / "demo",
