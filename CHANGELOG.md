@@ -49,7 +49,7 @@
 **Tests and CI**
 
 - Changed: CI runs the tests under the sanitizers in four parts side by side, a job
-  each (`pytest --shard K/N` runs the K-th of N), a part in 29 to 38 minutes with a
+  each (`pytest --shard K/N` runs the K-th of N), a part in 26 to 38 minutes with a
   limit of 120: in one job they ran out of the step's 150 minutes on slower runners,
   with none failed.
 

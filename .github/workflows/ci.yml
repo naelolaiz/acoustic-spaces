@@ -135,8 +135,9 @@ jobs:
         # are not checked: Python keeps some memory to the end on purpose. In one job the
         # tests took 129 minutes on main on 21 November 2026, and slower runners were cut
         # at the 150 minutes the step had then, 86 to 87 % of the way through with none
-        # failed. The four parts took 29 to 38 minutes each on the 25th: the limit, the
-        # test job's, leaves room for runners twice as slow and for more tests.
+        # failed. In parts, each took 26 to 38 minutes in the first three runs (on the
+        # 25th): the limit, the test job's, leaves room for runners twice as slow and for
+        # more tests.
         env:
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: print_stacktrace=1
