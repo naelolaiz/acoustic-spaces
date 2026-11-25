@@ -1259,9 +1259,7 @@ def test_options_that_change_nothing_for_the_sources_picked_are_left_out() -> No
     assert railway.run_name(run(railway, "--horn", "chord")) == "passby_regional_binaural"
     every = "train,train_roof,train_pantograph,train_horn"
     chord = run(railway, "--sources", every, "--horn", "chord")
-    assert railway.run_name(chord) == (
-        "passby_regional_train+train_roof+train_pantograph+train_horn_horn-chord_binaural"
-    )
+    assert railway.run_name(chord) == "passby_regional_with-train_horn_horn-chord_binaural"
     horn = run(railway, "--sources", "train_horn", "--track", "slab")
     assert (
         horn.track == "ballast" and railway.run_name(horn) == "passby_regional_train_horn_binaural"

@@ -311,6 +311,33 @@ def test_the_sources_a_run_plays_by_name_or_group(tmp_path: Path) -> None:
     assert problem is not None and "--sources choir: no such source or group" in problem
 
 
+def test_a_pick_is_named_by_how_it_differs_from_the_demos_own(tmp_path: Path) -> None:
+    """A pick of sources other than the demo's own is named by what it adds (with-) and
+    leaves out (without-) where that is shorter than the names given, a group of two
+    sources or more by its path when the pick takes or leaves all of it."""
+    demo = _sources_demo(tmp_path)
+
+    def name(sources: str) -> str:
+        args = argparse.Namespace(**vars(demo.defaults()) | {"sources": sources})
+        return run_folder(demo.resolved(args)).name
+
+    assert name("PA") == "toy_PA"  # shorter than without-Band
+    assert name("main_left,drum_kit") == "toy_without-subs"
+    assert name("PA,Band,helicopter") == "toy_with-helicopter"  # a group of one: its source
+    assert name("subs,helicopter") == "toy_subs+helicopter"
+    railway = _demo("passby", "railway")
+    stadium = _demo("stadium", "stadium_concert")
+    song = "stadium_spicy_funk_cake"
+    train = "train,train_roof,train_pantograph"  # the railway's own pick
+    for demo_, sources, named in (
+        (railway, train + ",train_horn", "passby_regional_with-train_horn"),
+        (stadium, "PA,Monitors,drum_kit,singer_voice", f"{song}_without-guitar_amp"),
+        (stadium, "PA/Mains,PA/Subwoofers,Monitors,Band", f"{song}_without-PA-Fills+PA-Delays"),
+    ):
+        args = demo_.parser().parse_args(["all", "--sources", sources])
+        assert run_folder(demo_.resolved(args)).name == f"{named}_binaural"
+
+
 def test_the_join_moves_each_runs_chapters_to_its_place() -> None:
     assert clock(65.0) == "1:05" and clock(3725.0) == "1:02:05"
     assert shifted_chapter("1:05 Gate", 10.0) == "1:15 Gate"

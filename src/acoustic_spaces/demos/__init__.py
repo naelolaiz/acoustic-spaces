@@ -1160,21 +1160,43 @@ class Demo:
         """The sources of a run with ``args`` (paths resolved) as part of its name: those
         ``--sources`` names (``departure``, ``PA+Band``), always for a demo whose sources
         are what plays (:attr:`sources_named`), else when they are not the demo's own
-        pick; ``each-`` in front when they play in turn. None for nothing to name."""
+        pick, then by how they differ from it where that is shorter
+        (``with-train_horn``, :meth:`_pick_change`); ``each-`` in front when they play
+        in turn. None for nothing to name."""
         given = given_names(getattr(args, "sources", None))
         names = given
+        change = None
         if names is None and self.sources_named == "plays" and not in_turn:
             names = self.own_pick(self._single(args)) or None
         elif names is not None and self.sources_named == "changed" and not in_turn:
             single = self._single(args)
-            if self.picked_sources(single, names) == self.own_pick(single):
+            picked = self.picked_sources(single, names)
+            if picked == self.own_pick(single):
                 names = None
+            elif picked is not None:
+                change = self._pick_change(single, picked)
         if names is None:
             return "each-source" if in_turn else None
         text = "+".join(name_part(name) for name in names)
+        if change is not None and len(change) < len(text):
+            text = change
         if len(text) > LISTENERS_MOST:
             text = f"{len(names)}-sources-{digest(','.join(names))}"
         return f"each-{text}" if in_turn else text
+
+    def _pick_change(self, args: argparse.Namespace, picked: Sequence[str]) -> str:
+        """How the sources ``picked`` differ from the demo's own pick, as part of a
+        run's name: ``with-`` those added, ``without-`` those left out, each set a group
+        where it holds every source of that group (``without-Band``)."""
+        known = self.source_list(args)
+        own = set(self.own_pick(args))
+        added = [s for s in known if s.name in picked and s.name not in own]
+        dropped = [s for s in known if s.name in own and s.name not in picked]
+        words = []
+        for word, these in (("with", added), ("without", dropped)):
+            if these:
+                words.append(f"{word}-" + "+".join(name_part(n) for n in _by_groups(known, these)))
+        return "_".join(words)
 
     # -- the names of runs --------------------------------------------------------------
 
@@ -1720,6 +1742,29 @@ class Demo:
         names = demo.all_steps() if args.step == "all" else [args.step]
         demo.run(names, args, skip_done=args.step == "all")
         return 0
+
+
+def _by_groups(known: Sequence[Source], these: Sequence[Source]) -> list[str]:
+    """The names of the sources ``these`` (of ``known``, in its order), a group of two
+    sources or more by its path where they hold every source of it, the widest such
+    group first."""
+    chosen = {source.name for source in these}
+    paths: list[str] = []
+    for source in known:
+        group = source.group or ""
+        while group:
+            if group not in paths:
+                paths.append(group)
+            group = group.rpartition("/")[0]
+    out: list[str] = []
+    covered: set[str] = set()
+    for path in sorted(paths, key=lambda p: p.count("/")):
+        members = {s.name for s in known if source_matches(s, path)}
+        if len(members) > 1 and members <= chosen and not members & covered:
+            out.append(path)
+            covered |= members
+    out += [source.name for source in these if source.name not in covered]
+    return out
 
 
 def joined_name(parts: Sequence[str]) -> str:
