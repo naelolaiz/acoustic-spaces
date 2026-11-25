@@ -1133,7 +1133,9 @@ in the street, at the speed of its walk (50 km/h) unless `--speed` says.
   [Validation](validation.md#sirens-and-road-vehicles-against-their-rules).
 - **Indoors** (`--indoors`; `acoustic_spaces.demos.indoors`): a listener 0.5 to 2 m in
   front of a building's wall, where ISO 1996-2 measures in front of a façade, hears the
-  pass in the room behind it, and the others hear it outdoors. The railway's `house_18m`
+  pass in the room behind it, and the others hear it outdoors (each in a part of its
+  own too, with `--series listeners`); a run none of whose listeners stands so is
+  refused. The railway's `house_18m`
   stands 2 m in front of a house 20 m from the track; the street's pavement and balcony
   stand in front of its houses and its offices. `train_and_rumble` plays the train
   through the room's closed window and the rumble the ground's vibration makes in it,

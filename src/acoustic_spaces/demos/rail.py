@@ -63,7 +63,7 @@ from pathlib import Path
 
 import numpy as np
 
-from acoustic_spaces.demos import Option, indoors, pipeline, run_folder
+from acoustic_spaces.demos import Option, indoors, listener_names, pipeline, run_folder
 from acoustic_spaces.demos import Source as Playable
 from acoustic_spaces.demos.audio import read, resampled
 from acoustic_spaces.demos.audio import write as write_wav
@@ -79,6 +79,7 @@ from acoustic_spaces.demos.passby import (
     kmh,
     pass_s,
     picked_parts,
+    source_scene,
     speed_of,
 )
 from acoustic_spaces.materials.bands import OCTAVE_BANDS_HZ
@@ -932,9 +933,25 @@ class TrainVehicle(Vehicle):
                 "choice",
                 indoors.choices(self.noun),
                 steps=("walk", "video"),
+                moot=self.no_house,
             )
         )
         return out
+
+    def no_house(self, args: argparse.Namespace) -> str | None:
+        """Why ``--indoors`` changes nothing in a run with ``args`` (paths resolved): none
+        of the listeners it plays stands in front of a house in the example's scene; None
+        when one does, or when the scene cannot tell (the check says why)."""
+        try:
+            scene = source_scene(args)
+            names = listener_names(getattr(args, "listeners", None))
+            if names is None:
+                names = [lis.name for lis in scene.listeners if lis.in_use]
+            known = {lis.name for lis in scene.listeners}
+            found = indoors.facings(scene, [name for name in names if name in known])
+        except (Exception, SystemExit):
+            return None
+        return None if any(found.values()) else indoors.no_house(self.noun, "this run")
 
     def house(self, args: argparse.Namespace) -> indoors.House | None:
         """The house at each listener ``--indoors`` asks for, or None outdoors."""

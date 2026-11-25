@@ -258,12 +258,17 @@ def houses_heard(scene, names, house: House | None, noun: str, scene_name: str) 
         return {}
     found = facings(scene, names)
     if not any(found.values()):
-        raise SystemExit(
-            f"error: --indoors hears the {noun} in a house that a listener stands "
-            f"{FACADE_M[0]:g} to {FACADE_M[1]:g} m in front of; no listener of "
-            f"{scene_name} does"
-        )
+        raise SystemExit(f"error: {no_house(noun, scene_name)}")
     return found
+
+
+def no_house(noun: str, where: str) -> str:
+    """Why ``--indoors`` hears nothing of the ``noun`` in a house: no listener of
+    ``where`` (a scene's file name, or "this run") stands in front of one."""
+    return (
+        f"--indoors hears the {noun} in a house that a listener stands {FACADE_M[0]:g} to "
+        f"{FACADE_M[1]:g} m in front of; no listener of {where} does"
+    )
 
 
 @dataclass(frozen=True)

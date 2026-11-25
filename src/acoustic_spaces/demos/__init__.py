@@ -382,6 +382,13 @@ class Option:
     #: own, one after another in one video (:meth:`Demo.parts`); None: as its kind has
     #: it (:attr:`varies`).
     several: bool | None = None
+    #: Why it changes nothing in a run with the arguments given (paths resolved, one of
+    #: everything), as the check says it, or None where it changes something:
+    #: ``--indoors`` at listeners none of whom stands in front of a house. A part of a
+    #: series (:meth:`Demo.parts`) where it changes nothing takes its default, as the
+    #: run of one of everything would hear it; a run where it changes nothing in any
+    #: part is refused (:meth:`Demo.check`). None: it always changes something.
+    moot: Callable[[argparse.Namespace], str | None] | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -1129,6 +1136,11 @@ class Demo:
                 if option.name in combo or option.only[0] in combo:
                     values[option.name] = option.default
             part = argparse.Namespace(**values)
+            for option in self.options:
+                if option.moot is None or values.get(option.name) in (None, option.default):
+                    continue
+                if option.moot(self._single(part)) is not None:
+                    setattr(part, option.name, option.default)
             same = self._same_run(part)
             if same in seen:
                 continue
@@ -1494,6 +1506,12 @@ class Demo:
         hrtf = getattr(args, "hrtf", None)
         if hrtf and "binaural" not in values_of(getattr(args, "format", "binaural")):
             return "--hrtf is for binaural mixes"
+        for option in self.options:
+            if option.moot is None or getattr(args, option.name, None) in (None, option.default):
+                continue
+            why = option.moot(self._single(args))
+            if why is not None:
+                return why
         if not self.stepless:
             for name in given_names(getattr(args, "series", None)) or []:
                 dim = self._dim_of(name)

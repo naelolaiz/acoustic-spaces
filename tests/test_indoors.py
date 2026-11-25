@@ -627,6 +627,42 @@ def test_the_tram_has_indoors_and_the_street_s_other_vehicles_not() -> None:
     assert option.choices == indoors.choices("tram")
 
 
+def test_listeners_in_turn_hear_indoors_only_at_a_house() -> None:
+    """--indoors with each listener in a part of its own: the part at the listener in
+    front of a house hears the train there, the others hear it outdoors as the run of
+    them all does (their runs those of no --indoors); a run whose listeners stand in
+    front of no house is refused before it starts, alone or in turn."""
+    from acoustic_spaces.demos import load
+    from acoustic_spaces.examples import example_path
+
+    demo = load(Path(example_path("railway")).parent / "passby_demo.py")
+
+    def parsed(*argv: str):
+        return demo.parser().parse_args(["all", *argv])
+
+    args = parsed("--indoors", "train_and_rumble", "--series", "listeners")
+    assert demo.check(args) is None
+    heard = {part.listeners: part.indoors for part in demo.parts(args)}
+    assert heard == {
+        "tsi_7m5": "off",
+        "meadow_25m": "off",
+        "house_18m": "train_and_rumble",
+        "behind_barrier_25m": "off",
+    }
+    outdoors = [p for p in demo.parts(args) if p.listeners != "house_18m"]
+    for part in outdoors:
+        alone = parsed("--listeners", part.listeners)
+        assert demo.run_name(demo.resolved(part)) == demo.run_name(demo.resolved(alone))
+    refused = indoors.no_house("train", "this run")
+    assert refused.startswith("--indoors hears the train in a house")
+    for argv in (
+        ("--indoors", "train", "--listeners", "meadow_25m"),
+        ("--indoors", "train", "--listeners", "meadow_25m,tsi_7m5", "--series", "listeners"),
+    ):
+        assert demo.check(parsed(*argv)) == refused, argv
+    assert demo.check(parsed("--indoors", "train", "--listeners", "house_18m")) is None
+
+
 def test_a_house_beside_still_plant() -> None:
     """Plant nearer than 10 ft shakes as it does 10 ft away, not without bound; a band
     no sound arrives in outdoors (None) gets none in the house either, and the house's
