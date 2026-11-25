@@ -125,6 +125,7 @@ def name_part(text: str) -> str:
     out = re.sub(r"[^\w+-]+", "-", out).strip("-")
     return out or digest(text)
 
+
 #: The editor's label of each option, in words, by its flag (the Run demo window gives
 #: the flag in the label's tip); an option not named here shows its flag.
 LABELS = {
@@ -319,6 +320,10 @@ class Option:
     #: with the vehicle at ``--speed``): its name in the run's folder
     #: (:func:`run_folder`), where it is written when the option is not given.
     in_run: str | None = None
+    #: Another option that, given, plays in this one's place (``music`` for ``--song``:
+    #: a song of your own in place of the preset): the run's name leaves this one out
+    #: then.
+    replaced_by: str | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -721,6 +726,20 @@ class Demo:
         values.pop("run_plays", None)
         return self.resolved(argparse.Namespace(**values))
 
+    def upstream(self, args: argparse.Namespace, step: str) -> argparse.Namespace:
+        """The arguments (resolved) of the run with ``args`` (resolved) but for the
+        options that matter to none of the steps up to ``step`` (:attr:`Option.steps`),
+        at their defaults: ``upstream(args, "walk")`` is the run whose walk a run with
+        another ``--tour`` or ``--at`` may play, as its walk is the same."""
+        names = [s.name for s in self.steps]
+        before = set(names[: names.index(step) + 1])
+        later = {
+            option.name: option.default
+            for option in self.options
+            if option.steps and not before & set(option.steps) and option.naming != "never"
+        }
+        return self.sibling(args, **later)
+
     def _work(self, resolved: argparse.Namespace) -> Path:
         if self.work_of is not None:
             return Path(self.work_of(resolved))
@@ -743,6 +762,8 @@ class Demo:
         for option in self.options:
             naming = option.naming
             if naming == "never" or not option.applies(values):
+                continue
+            if option.replaced_by is not None and values.get(option.replaced_by):
                 continue
             value = values.get(option.name)
             if naming == "plays":

@@ -862,7 +862,7 @@ def test_an_examples_script_runs_as_a_demo_of_one_step(tmp_path: Path) -> None:
     assert scene.positional and scene.kind == "file" and scene.default == Path("scene.yaml")
     assert scene.advanced and out.advanced and not rays.advanced
     assert (rays.kind, rays.default, rays.option) == ("int", None, "--rays")
-    assert (out.kind, out.default) == ("path", Path("feedback.wav"))
+    assert (out.kind, out.default) == ("path", None)
     assert feedback.command("run", feedback.defaults()) == "python feedback.py"
     args = feedback.defaults()
     args.scene, args.rays, args.out = tmp_path / "copy.yaml", 30, Path("loop.wav")

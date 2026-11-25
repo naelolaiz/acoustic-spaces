@@ -225,6 +225,7 @@ def scene(args: argparse.Namespace) -> None:
         data,
         "# The street example with its road works alone, written by works_demo.py.\n",
         Path(args.source).parent,
+        made_from=args.source,
     )
     print(f"wrote {args.scene}: {', '.join(SOURCES)}")
     room = Room.from_yaml(args.scene)
@@ -249,6 +250,7 @@ def scene(args: argparse.Namespace) -> None:
         "# The street example with its road works alone, heard 2 m in front of the walls\n"
         "# that its listeners stand less than 2 m in front of, written by works_demo.py.\n",
         Path(args.source).parent,
+        made_from=args.source,
     )
     print(f"wrote {path}: {', '.join(item['name'] for item in data['listeners'])}")
 
@@ -257,12 +259,11 @@ def scene_done(args: argparse.Namespace) -> bool:
     from acoustic_spaces import Scene
 
     scene_file, source = Path(args.scene), Path(args.source)
-    if not (scene_file.exists() and scene_file.stat().st_mtime >= source.stat().st_mtime):
+    if not pipeline.scene_made(scene_file, source):
         return False
-    front = front_scene(args)
     if not front_points(Scene.from_yaml(scene_file)):
         return True
-    return front.exists() and front.stat().st_mtime >= source.stat().st_mtime
+    return pipeline.scene_made(front_scene(args), source)
 
 
 # --------------------------------------------------------------------------- the feeds

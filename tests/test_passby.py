@@ -779,7 +779,9 @@ def test_the_passby_demo_drives_the_car_past_every_listener(tmp_path: Path, caps
     seats = pipeline.read_json(work / "walk" / "seats.json")
     # Each mix is named after what plays and where it is heard.
     assert seats["seats"]["verge"]["file"] == "car__verge.binaural.wav"
-    peaks = [np.abs(audio.read(work / "walk" / s["file"])[0]).max() for s in seats["seats"].values()]
+    peaks = [
+        np.abs(audio.read(work / "walk" / s["file"])[0]).max() for s in seats["seats"].values()
+    ]
     assert max(peaks) == pytest.approx(10.0 ** (-1.0 / 20.0), rel=1e-3)
     assert sorted(p.name for p in (work / "stills").glob("*.png")) == [
         "00_verge.png",

@@ -16,12 +16,16 @@ PATH:
     python church_demo.py simulate  # acoustic-spaces simulate scene_choir.yaml, binaural
     python church_demo.py feeds     # one WAV per singer and per side of the organ
     python church_demo.py render    # every listener, binaural
-    python church_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
+    python church_demo.py video     # demo/church_binaural.mp4, its audio and the stills
 
 or `python church_demo.py all`, which runs them in turn and leaves out what is there
-already (the music, the scene, the simulation). The scene and its simulation go beside
-the script (scene_choir.yaml, results_choir); the music, the feeds, the mixes and the
-video go to ./demo (--work). Use headphones; `--hrtf me.sofa` plays through your own or
+already (the music, the scene, the simulation, the feeds, the mixes). The scene and its
+simulation go beside the script (scene_choir.yaml, and results_choir/binaural for the
+binaural output: each output in a folder of its own); the music and the feeds go to
+./demo (--work), and each run's mixes and stills to a folder there named after its
+settings (demo/church_binaural/), with the video, its audio and its thumbnail beside it
+(church_binaural.mp4, .wav, _thumbnail.png), so that a run with other settings writes
+over none of them. Use headphones; `--hrtf me.sofa` plays through your own or
 measured HRTFs instead of a spherical head (the simulation takes it too).
 `--input singer_f1=take.wav` has a singer or a side of the organ (organ_manual_c...)
 play a file of yours instead of its part, at the level of that part, from the start of
@@ -77,6 +81,8 @@ from acoustic_spaces.demos import (
     listeners_option,
     picked,
     pipeline,
+    product,
+    run_folder,
     sibling,
 )
 from acoustic_spaces.demos.audio import gated_rms, mono, read, resampled, write
@@ -416,6 +422,7 @@ def scene(args) -> None:
         "# The church example with a choir in front of the altar and the organ in the gallery,\n"
         "# written by church_demo.py.\n",
         args.source.parent,
+        made_from=args.source,
     )
     print(f"wrote {args.scene}; now: {pipeline.simulate_command(simulations(args)[0], args.hrtf)}")
 
@@ -425,8 +432,10 @@ def scene_of(args) -> dict:
 
 
 def simulations(args) -> list[pipeline.Simulation]:
-    """The simulation the demo mixes from: the scene, written with ``--format``."""
-    return [pipeline.Simulation(args.scene, args.results, args.format)]
+    """The simulation the demo mixes from: the scene, written with ``--format``, into
+    the folder of that output in ``--results``
+    (:func:`~acoustic_spaces.demos.pipeline.results_for`)."""
+    return [pipeline.Simulation(args.scene, pipeline.results_for(args.results, args), args.format)]
 
 
 def responses_of(args) -> list[dict]:
@@ -736,6 +745,25 @@ def feeds(args) -> None:
     print(f"wrote {len(tracks)} feeds to {out}")
 
 
+def feeds_done(args) -> bool:
+    """Whether the feeds are there, of every source, at the rate of the responses: they
+    hang on nothing else, so that every run at that rate shares them."""
+    path = args.work / "feeds" / "feeds.json"
+    if not path.exists():
+        return False
+    table = pipeline.read_json(path)
+    if sorted(table.get("sources", [])) != sorted(plays(args)):
+        return False
+    if not all((path.parent / f"{name}.wav").exists() for name in table["sources"]):
+        return False
+    simulation = simulations(args)[0]
+    try:
+        entries = pipeline.read_json(simulation.results / pipeline.PARAMETERS)["responses"]
+        return table.get("rate") == pipeline.response_rate(simulation, entries)
+    except (OSError, ValueError, KeyError, IndexError):
+        return False
+
+
 def plays(args) -> dict[str, str]:
     """What each source plays unless ``--input`` gives it a file."""
     out = {
@@ -766,7 +794,11 @@ def render(args) -> None:
     simulation = simulations(args)[0]
     mixes = [pipeline.Mix(name, simulation, name, feeds, weights) for name in listeners]
     pipeline.render_mixes(
-        mixes, args.work / "seats", args, first=DEMO.command("scene", args), inputs=args.inputs
+        mixes,
+        run_folder(args) / "seats",
+        args,
+        first=DEMO.command("scene", args),
+        inputs=args.inputs,
     )
 
 
@@ -806,28 +838,31 @@ def what_plays(t: float) -> str:
 
 
 def video(args) -> None:
-    """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
-    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    """The run's audio (``<run>.wav``), one still per stop of the tour, and its video
+    (``<run>.mp4``): the stills with a scrolling spectrogram in the panel at their foot
+    (ffmpeg, unless ``--no-mp4``)."""
     from acoustic_spaces.demos.pictures import save, settings_lines
 
     pictures = sibling(__file__, "church_pictures")
-    seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args), args)
+    folder = run_folder(args) / "seats"
+    seats = pipeline.seats_of(folder, DEMO.command("render", args), args)
     tour = tour_of(args)
     pipeline.missing_mixes(seats, [name for name, _, _ in tour], DEMO.command("render", args))
     stops = [pipeline.TourStop(name, start, start, stop) for name, start, stop in tour]
     audio = pipeline.tour_audio(
         stops,
-        args.work / "seats",
+        folder,
         seats,
         crossfade_s=CROSSFADE_S,
         fade_out_s=FADE_OUT_S,
         scene=args.scene,
     )
-    write(args.work / "tour.wav", audio, seats["rate"])
-    print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    sound = product(args, ".wav")
+    write(sound, audio, seats["rate"])
+    print(f"wrote {sound} ({len(audio) / seats['rate']:.1f} s)")
     drawing = pictures.Pictures(
         scene_of(args),
-        pipeline.read_json(args.results / pipeline.PARAMETERS),
+        pipeline.read_json(simulations(args)[0].results / pipeline.PARAMETERS),
         seats["seats"],
         tour,
         TITLES,
@@ -837,15 +872,19 @@ def video(args) -> None:
         credit=pipeline.credited(pictures.CREDIT, seats, feeds_table(args)["sources"]),
         hrtf=args.hrtf,
         tool=settings_lines(
-            DEMO, args, scene_of(args), pipeline.read_json(args.results / pipeline.PARAMETERS)
+            DEMO,
+            args,
+            scene_of(args),
+            pipeline.read_json(simulations(args)[0].results / pipeline.PARAMETERS),
         ),
     )
-    save(drawing.thumbnail(), args.work / "thumbnail.png")
+    save(drawing.thumbnail(), product(args, "_thumbnail.png"))
     pipeline.video(
-        args.work,
+        run_folder(args),
         [(name, stop - start) for name, start, stop in tour],
         drawing.still,
-        args.work / "tour.wav",
+        sound,
+        out=product(args, ".mp4"),
         no_mp4=args.no_mp4,
     )
 
@@ -868,12 +907,16 @@ DEMO = Demo(
             "scene",
             scene,
             "scene_choir.yaml: the church with the choir and the organ",
-            lambda args: args.scene.exists(),
+            lambda args: pipeline.scene_made(args.scene, args.source),
         ),
         SIMULATE,
-        Step("feeds", feeds, "one WAV per singer and per side of the organ"),
-        Step("render", render, "every listener, binaural, with one gain for all"),
-        Step("video", video, "tour.wav, the stills and tour.mp4 in the work folder"),
+        Step("feeds", feeds, "one WAV per singer and per side of the organ", feeds_done),
+        Step(
+            "render",
+            render,
+            "every listener in --format (binaural by default), with one gain for all",
+        ),
+        Step("video", video, "the run's video, its audio and the stills, named after the run"),
     ],
     options=[
         Option(
@@ -886,7 +929,12 @@ DEMO = Demo(
             filter="Scene files (*.yaml *.yml)",
         ),
         Option("scene", "the scene with the choir", Path("scene_choir.yaml"), "path"),
-        Option("results", "folder written by simulate", Path("results_choir"), "folder"),
+        Option(
+            "results",
+            "folder written by simulate, a folder in it for each output",
+            Path("results_choir"),
+            "folder",
+        ),
         *common_options(),
         input_option(),
         listeners_option(),

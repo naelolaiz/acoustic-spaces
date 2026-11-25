@@ -96,14 +96,35 @@ def named_from(path: Path, folder: Path) -> str:
 FILE_KEYS = ("file", "hrtf", "signal", "recording")
 
 
-def write_scene(path: Path, data: dict, header: str, source_dir: Path) -> None:
+def write_scene(
+    path: Path, data: dict, header: str, source_dir: Path, made_from: Path | None = None
+) -> None:
     """``data`` as a scene file at ``path`` under the comment ``header``, the files it
     names relative to ``source_dir`` (the folder of the scene it was made from) named so
-    that they are found from ``path``'s folder too: relative when they lie under it,
-    else in full. A demo run elsewhere than its example (the editor's copy under the
-    home folder) writes scenes that still find the example's model and data."""
+    that they are found from ``path``'s folder too (:func:`files_from`). A demo run
+    elsewhere than its example (the editor's copy under the home folder), or writing in
+    a run's folder, writes scenes that still find the example's model and data.
+    ``made_from``, the scene file it was made from (``--from``), is named in a comment
+    under the header, which :func:`scene_made` reads."""
     path = Path(path)
-    dest = path.resolve().parent
+    if made_from is not None:
+        header += f"{MADE_FROM}{Path(made_from).resolve().as_posix()}\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        header
+        + yaml.safe_dump(
+            files_from(data, path, source_dir), sort_keys=False, default_flow_style=None, width=100
+        ),
+        encoding="utf-8",
+    )
+
+
+def files_from(data, path: Path, source_dir: Path):
+    """``data`` (a scene's, or a part of one) with the files it names relative to
+    ``source_dir`` named so that they are found from the folder of the scene file
+    ``path``: relative when they lie under it, else in full; as :func:`write_scene`
+    writes it, so that a demo can tell whether a scene it wrote has what it would write."""
+    dest = Path(path).resolve().parent
     source_dir = Path(source_dir).resolve()
 
     def moved(value: str) -> str:
@@ -132,11 +153,31 @@ def write_scene(path: Path, data: dict, header: str, source_dir: Path) -> None:
             return [fix(v) for v in node]
         return node
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        header + yaml.safe_dump(fix(data), sort_keys=False, default_flow_style=None, width=100),
-        encoding="utf-8",
-    )
+    return fix(data)
+
+
+#: The comment line of a written scene that names the scene it was made from.
+MADE_FROM = "# Made from: "
+
+
+def scene_made(path: Path, made_from: Path) -> bool:
+    """Whether the scene ``path`` a demo writes is there, made from ``made_from`` (its
+    ``--from``, as :func:`write_scene` names it) and newer than that file: a scene made
+    from another, or before that one changed, is written again, so that a run named
+    after its ``--from`` plays that scene."""
+    path, made_from = Path(path), Path(made_from)
+    if not path.exists():
+        return False
+    if made_from.exists() and path.stat().st_mtime < made_from.stat().st_mtime:
+        return False
+    line = f"{MADE_FROM}{made_from.resolve().as_posix()}"
+    with path.open(encoding="utf-8") as text:
+        for row in text:
+            if not row.startswith("#"):
+                return False
+            if row.rstrip("\n") == line:
+                return True
+    return False
 
 
 def hrtf_label(fmt: str, hrtf: str | Path | None) -> str:
@@ -1064,6 +1105,7 @@ def _encode(progress, length_s: float, shown: Callable[[float], str] | None) -> 
 __all__ = [
     "ENCODING",
     "INPUTS",
+    "MADE_FROM",
     "MOST_GAIN_DB",
     "PARAMETERS",
     "SEATS",
@@ -1077,6 +1119,7 @@ __all__ = [
     "chapters_file",
     "encode",
     "credited",
+    "files_from",
     "ears_of",
     "gains_of",
     "hrtf_label",
@@ -1098,6 +1141,7 @@ __all__ = [
     "responses_of",
     "results_for",
     "scene_hrtf",
+    "scene_made",
     "seats_of",
     "simulate_argv",
     "simulate_command",

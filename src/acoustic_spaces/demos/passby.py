@@ -1294,22 +1294,32 @@ def passes_of(
     args: argparse.Namespace, vehicle: Vehicle = THE_CAR, demo: Demo | None = None
 ) -> Path | None:
     """The folder of the passes a run plays, or None when they are not there: its own
-    (:func:`walk_folder`) when they are made for it (:func:`walked`); else, with ``demo``
-    and ``--listeners``, those of the run at every listener with the same settings
-    (:meth:`Demo.sibling`), when they are made for that run and have a pass at each
-    listener this one plays: the passes of a listener do not hang on which others are
-    simulated with it, and the tour brings each to one loudness."""
+    (:func:`walk_folder`) when they are made for it (:func:`walked`); else, with
+    ``demo``, those of the run with the same settings up to the walk
+    (:meth:`Demo.upstream`: another ``--tour`` or ``--at`` walks the same), and with
+    ``--listeners``, those of that run at every listener (:meth:`Demo.sibling`), when
+    they are made for that run and have a pass at each listener this one plays: the
+    passes of a listener do not hang on which others are simulated with it, and the
+    tour brings each to one loudness."""
+    runs = [args]
+    if demo is not None:
+        up = demo.upstream(args, "walk")
+        runs.append(up)
+        if listener_names(getattr(args, "listeners", None)) is not None:
+            runs.append(demo.sibling(up, listeners=None))
     wanted = None
-    try:
-        wanted = heard_by(args)
-    except OSError:  # no scene yet
+    for run in runs:  # the listeners this run plays, from the first scene there
+        try:
+            wanted = heard_by(argparse.Namespace(**vars(run) | {"listeners": args.listeners}))
+            break
+        except OSError:  # no scene yet
+            continue
+    if wanted is None:
         return None
-    if walked(args, vehicle, wanted):
-        return walk_folder(args)
-    if demo is None or listener_names(getattr(args, "listeners", None)) is None:
-        return None
-    every = demo.sibling(args, listeners=None)
-    return walk_folder(every) if walked(every, vehicle, wanted) else None
+    for run in runs:
+        if walked(run, vehicle, wanted):
+            return walk_folder(run)
+    return None
 
 
 def walked(args: argparse.Namespace, vehicle: Vehicle, wanted: Sequence[str]) -> bool:

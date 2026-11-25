@@ -17,10 +17,10 @@ from acoustic_spaces.parameters import a_weighted
 RATE = 16_000
 
 
-
 def run_of(demo, *argv: str) -> Path:
     """The folder of the demo's run with the options ``argv``: named after its settings."""
     return demo.run_folder(demo.parser().parse_args(["all", *argv]))
+
 
 def test_the_window_is_agcs_double_glazing() -> None:
     """The window's sound reduction index is AGC's 4-16-4 from 125 Hz to 4 kHz, 6 dB

@@ -12,13 +12,16 @@ folder of the example (`acoustic-spaces examples --copy . orchestra && cd orches
 in the Python environment acoustic-spaces is installed in, with ffmpeg on the PATH:
 
     python orchestra_demo.py tracks    # download the 61 tracks of each movement (2.0 GB)
-    python orchestra_demo.py simulate  # acoustic-spaces simulate scene.yaml --out results
+    python orchestra_demo.py simulate  # acoustic-spaces simulate scene.yaml --out results/binaural
     python orchestra_demo.py render    # each stop of the tour: a movement at a seat, binaural
-    python orchestra_demo.py video     # demo/tour.wav, the stills, demo/tour.mp4
+    python orchestra_demo.py video     # demo/orchestra_binaural.mp4, its audio, the stills
 
 or `python orchestra_demo.py all`, which runs them in turn and leaves out what is there
-already (the tracks, the simulation). The simulation goes to ./results (--results); the
-tracks, the mixes and the video go to ./demo (--work). Use headphones;
+already (the tracks, the simulation). The simulation goes to ./results (--results), in a
+folder for each output (results/binaural); the tracks go to ./demo (--work), and each
+run's mixes and stills to a folder there named after its settings
+(demo/orchestra_binaural/), with the video, its audio and its thumbnail beside it, so
+that a run with other settings writes over none of them. Use headphones;
 `--hrtf me.sofa` plays through your own or measured HRTFs instead of a spherical head
 (the simulation takes it too). `--input fl1=flute.wav` has a player play a file of yours
 instead of their track, in every movement of the tour, at the level of that track. The
@@ -63,6 +66,8 @@ from acoustic_spaces.demos import (
     listeners_in,
     listeners_option,
     pipeline,
+    product,
+    run_folder,
     sibling,
 )
 from acoustic_spaces.demos.audio import envelope, mmss, quiet_moment, read, write
@@ -233,8 +238,9 @@ def tracks(args) -> None:
 
 def simulations(args) -> list[pipeline.Simulation]:
     """The simulation the demo mixes from; the scene names the outputs it writes (mono
-    and binaural), so the demo does not."""
-    return [pipeline.Simulation(args.scene, args.results)]
+    and binaural), so the demo does not; into the folder of the run's output in
+    ``--results`` (:func:`~acoustic_spaces.demos.pipeline.results_for`)."""
+    return [pipeline.Simulation(args.scene, pipeline.results_for(args.results, args))]
 
 
 def responses_of(args) -> list[dict]:
@@ -299,7 +305,7 @@ def plays(args) -> dict[str, str]:
 def render(args) -> None:
     """Each stop's mix: a movement at a seat (``--format``, binaural by default), then
     one gain for all of them (the loudest peak at -1 dBFS)."""
-    pipeline.render_mixes(mixes_of(args), args.work / "seats", args, inputs=args.inputs)
+    pipeline.render_mixes(mixes_of(args), run_folder(args) / "seats", args, inputs=args.inputs)
 
 
 # --------------------------------------------------------------------------- the tour
@@ -311,15 +317,14 @@ def tour_of(args, seats: dict) -> list[pipeline.TourStop]:
     seat's envelope); the movements follow each other with a pause between them, so the
     hall dies away before the next one."""
     stops = stops_of(args)
-    folder = args.work / "seats"
-    fmt = seats["format"]
+    folder = run_folder(args) / "seats"
     tour: list[pipeline.TourStop] = []
     t = 0.0
     for movement in dict.fromkeys(m for m, _ in stops):
         here = [seat for m, seat in stops if m == movement]
         first = key_of(movement, here[0])
         length = seats["seats"][first]["length_s"]
-        env = envelope(read(folder / f"{first}.{fmt}.wav")[0], seats["rate"])
+        env = envelope(read(pipeline.mix_path(folder, seats, first))[0], seats["rate"])
         cuts = [0.0]
         for k in range(1, len(here)):
             cuts.append(quiet_moment(env, 0.1, length * k / len(here), QUIET_S))
@@ -350,27 +355,30 @@ def facts_of(stop: dict) -> list[str]:
 
 
 def video(args) -> None:
-    """tour.wav, one still per stop of the tour, and tour.mp4: the stills with a
-    scrolling spectrogram in the panel at their foot (ffmpeg, unless ``--no-mp4``)."""
+    """The run's audio (``<run>.wav``), one still per stop of the tour, and its video
+    (``<run>.mp4``): the stills with a scrolling spectrogram in the panel at their foot
+    (ffmpeg, unless ``--no-mp4``)."""
     from acoustic_spaces.demos.pictures import save, settings_lines
 
     pictures = sibling(__file__, "make_images")
-    seats = pipeline.seats_of(args.work / "seats", DEMO.command("render", args), args)
+    folder = run_folder(args) / "seats"
+    seats = pipeline.seats_of(folder, DEMO.command("render", args), args)
     keys = [key_of(movement, seat) for movement, seat in stops_of(args)]
     pipeline.missing_mixes(seats, keys, DEMO.command("render", args))
     tour = tour_of(args, seats)
     audio = pipeline.tour_audio(
         tour,
-        args.work / "seats",
+        folder,
         seats,
         crossfade_s=CROSSFADE_S,
         fade_out_s=FADE_OUT_S,
         scene=args.scene,
     )
-    write(args.work / "tour.wav", audio, seats["rate"])
-    print(f"wrote {args.work / 'tour.wav'} ({len(audio) / seats['rate']:.1f} s)")
+    sound = product(args, ".wav")
+    write(sound, audio, seats["rate"])
+    print(f"wrote {sound} ({len(audio) / seats['rate']:.1f} s)")
     scene = yaml.safe_load(args.scene.read_text(encoding="utf-8"))
-    report = pipeline.read_json(args.results / pipeline.PARAMETERS)
+    report = pipeline.read_json(simulations(args)[0].results / pipeline.PARAMETERS)
     credit = pipeline.credited(pictures.CREDIT, seats, list(TRACKS))
 
     def frame(k: int):
@@ -407,12 +415,13 @@ def video(args) -> None:
         note=f"{movements} movement{'s' * (movements != 1)} · {places} seat"
         f"{'s' * (places != 1)} · {played}"
     )
-    save(thumbnail, args.work / "thumbnail.png")
+    save(thumbnail, product(args, "_thumbnail.png"))
     pipeline.video(
-        args.work,
+        run_folder(args),
         frames,
         frame,
-        args.work / "tour.wav",
+        sound,
+        out=product(args, ".mp4"),
         no_mp4=args.no_mp4,
         chapters=chapters,
         shown=lambda k: seats["seats"][tour[k].key]["seat"],
@@ -464,8 +473,12 @@ DEMO = Demo(
             tracks_download,
         ),
         SIMULATE,
-        Step("render", render, "each stop of the tour: a movement at a seat, binaural"),
-        Step("video", video, "tour.wav, the stills and tour.mp4 in the work folder"),
+        Step(
+            "render",
+            render,
+            "each stop of the tour: a movement at a seat, in --format (binaural by default)",
+        ),
+        Step("video", video, "the run's video, its audio and the stills, named after the run"),
     ],
     options=[
         Option(
@@ -475,7 +488,12 @@ DEMO = Demo(
             "file",
             filter="Scene files (*.yaml *.yml)",
         ),
-        Option("results", "folder written by simulate", Path("results"), "folder"),
+        Option(
+            "results",
+            "folder written by simulate, a folder in it for each output",
+            Path("results"),
+            "folder",
+        ),
         Option(
             "zips",
             "a folder with movementN.zip downloaded before (or unpacked into movementN); "

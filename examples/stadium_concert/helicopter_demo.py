@@ -17,18 +17,22 @@ the scene gives it the sound power and the directivity of that sound for its lat
 part.
 
 The concert is the stadium demo's: run it first, in the same work folder, up to its
-render step (`python stadium_demo.py render`, or `all`), with the --format and the --hrtf
-given here. Then, from the folder of the stadium example, in the Python environment
-acoustic-spaces is installed in, with ffmpeg on the PATH:
+render step (`python stadium_demo.py render`, or `all`), with the --format, the --hrtf
+and the --listeners given here (or at every listener). Then, from the folder of the
+stadium example, in the Python environment acoustic-spaces is installed in, with ffmpeg
+on the PATH:
 
     python helicopter_demo.py flight      # scene_flight.yaml: the stadium and the flight
-    python helicopter_demo.py helicopter  # demo/helicopter/below.wav: its sound straight down
+    python helicopter_demo.py helicopter  # helicopter/below.wav: its sound straight down
     python helicopter_demo.py scene       # scene_overhead.yaml: the helicopter alone
     python helicopter_demo.py walk        # it every 4 m along its flight, at every listener
-    python helicopter_demo.py mix         # demo/crossing/seats: the concert and the helicopter
-    python helicopter_demo.py video       # demo/crossing: tour.wav, the stills, tour.mp4
+    python helicopter_demo.py mix         # seats: the concert and the helicopter
+    python helicopter_demo.py video       # demo/crossing_binaural.mp4, its audio, the stills
 
-or `python helicopter_demo.py all`; the editor's Simulation > Run demo… runs it too. Use
+or `python helicopter_demo.py all`; the editor's Simulation > Run demo… runs it too.
+Each run writes in a folder of ./demo (--work) named after its settings
+(demo/crossing_binaural/: the scenes, the helicopter's sound, its passes, the mixes and
+the stills), with the video, its audio and its thumbnail beside it. Use
 headphones. `--listeners mix_position,east_stand` flies it past those listeners alone,
 which the stadium demo's mixes must have, and the video tours them alone.
 
@@ -65,6 +69,7 @@ from acoustic_spaces.demos import (
     passby,
     picked,
     pipeline,
+    run_folder,
     sibling,
 )
 from acoustic_spaces.demos.audio import level_db, loudness_db, mmss, read, write
@@ -78,7 +83,7 @@ ROOF_M = 30.0
 MARGIN_M = 50.0
 #: How far the sky stays above the helicopter (m).
 SKY_M = 40.0
-#: The work folder's folder of the mixes with the helicopter in them, and its video.
+#: The demo's name, the first part of its runs' names.
 CROSSING = "crossing"
 FLIGHT_HEADER = (
     "# The stadium concert example with a helicopter's flight over it, written by\n"
@@ -190,23 +195,47 @@ def flight_done(args) -> bool:
     flown = next((s for s in data.get("sources", []) if s.get("name") == HELICOPTER), None)
     try:
         stadium = yaml.safe_load(args.stadium.read_text(encoding="utf-8"))
-        return flown == flight_of(helicopter_of(stadium), args.height)
+        wanted = flight_of(helicopter_of(stadium), args.height)
     except SystemExit:
         return False
+    # Its files named from where the flight's scene is, as it was written.
+    return flown == pipeline.files_from(wanted, args.source, args.stadium.parent)
 
 
 # --------------------------------------------------------------------------- the mix
 
 
 def band_args(args, crossing: bool = False):
-    """The stadium demo's arguments for this run: its work folder (or the crossing's
-    folder in it), the scene with the band, its results, and the format, the HRTFs, the
-    listeners and the tour of this run."""
+    """The stadium demo's arguments (resolved) for this run: its work folder, the scene
+    with the band, its results, and the format, the HRTFs and the listeners of this
+    run, which name the stadium's run whose mixes the crossing plays. ``crossing``: the
+    arguments the stadium demo's video takes for the crossing's own, in this run's
+    folder (:func:`~acoustic_spaces.demos.run_folder`), with its feeds' table
+    (``feeds_at``), the tour and ``--no-mp4``."""
     band = stadium.DEMO.defaults()
-    band.work = args.work / CROSSING if crossing else args.work
+    band.work = args.work
     band.scene, band.results, band.source = args.band, args.results, args.stadium
-    band.format, band.hrtf, band.no_mp4, band.tour = args.format, args.hrtf, args.no_mp4, args.tour
+    band.format, band.hrtf = args.format, args.hrtf
     band.listeners = args.listeners
+    band = stadium.DEMO.resolved(band)
+    if crossing:
+        band.run_folder, band.run_plays = run_folder(args), None
+        band.feeds_at = run_folder(args) / "feeds"
+        band.no_mp4, band.tour = args.no_mp4, args.tour
+    return band
+
+
+def concert_of(args):
+    """The stadium demo's arguments (resolved, :func:`band_args`) of the run whose mixes
+    the crossing plays: the one at this run's ``--listeners``, or, when that one has no
+    mixes, the one at every listener, which has them all."""
+    band = band_args(args)
+    runs = [band]
+    if listener_names(args.listeners) is not None:
+        runs.append(stadium.DEMO.sibling(band, listeners=None))
+    for run in runs:
+        if (run_folder(run) / "seats" / pipeline.SEATS).exists():
+            return run
     return band
 
 
@@ -259,16 +288,17 @@ def scale_of(args, table: dict) -> float:
 
 
 def mix(args) -> None:
-    """Each listener's mix of the concert (the stadium demo's, in the work folder's
-    ``seats``) with the helicopter's pass there (``walk``) added, over the centre spot at
-    ``--at``, both at their simulated levels; one gain for all (the loudest peak at -1
-    dBFS), into ``crossing/seats``, and the feeds' table with the song lasting as long
-    as the helicopter is heard, into ``crossing/feeds``, for the video."""
-    band = band_args(args)
-    concert = pipeline.seats_of(band.work / "seats", stadium.DEMO.command("render", band), band)
+    """Each listener's mix of the concert (the stadium demo's run, :func:`concert_of`)
+    with the helicopter's pass there (``walk``) added, over the centre spot at ``--at``,
+    both at their simulated levels; one gain for all (the loudest peak at -1 dBFS), into
+    ``seats`` in the run's folder, and the feeds' table with the song lasting as long as
+    the helicopter is heard, into ``feeds`` there, for the video."""
+    band = concert_of(args)
+    held = run_folder(band) / "seats"
+    concert = pipeline.seats_of(held, stadium.DEMO.command("render", band), band)
     played = concert_seats(args, band, concert)
     table = stadium.feeds_table(band)
-    folder = args.work / "walk"
+    folder = passby.passes_of(args, VEHICLE, DEMO) or passby.walk_folder(args)
     passes = pipeline.seats_of(folder, DEMO.command("walk", args), args)
     facts = pipeline.read_json(folder / passby.WALK)
     if (passes["rate"], passes["format"]) != (concert["rate"], concert["format"]):
@@ -289,8 +319,8 @@ def mix(args) -> None:
                 f"error: no pass of the helicopter at {seat['listener']}; run: "
                 f"{DEMO.command('walk', args)}"
             )
-        x = read(band.work / "seats" / f"{key}.{fmt}.wav")[0] / float(concert["gain"])
-        y = read(folder / f"{seat['listener']}.{fmt}.wav")[0] * scale
+        x = read(pipeline.mix_path(held, concert, key))[0] / float(concert["gain"])
+        y = read(pipeline.mix_path(folder, passes, seat["listener"]))[0] * scale
         out = np.zeros((max(len(x), start + len(y)), x.shape[1]))
         out[: len(x)] += x
         out[start : start + len(y)] += y
@@ -298,13 +328,15 @@ def mix(args) -> None:
 
     peak = max(float(np.abs(crossed(k, s)).max()) for k, s in played.items())
     gain = 10.0 ** (-1.0 / 20.0) / peak
-    out = args.work / CROSSING
+    out = run_folder(args)
     seats = {}
     weights = pipeline.weights_of(pipeline.output_label(band), band.scene)
     for key, seat in played.items():
         x = crossed(key, seat) * gain
-        write(out / "seats" / f"{key}.{fmt}.wav", x, rate)
+        file = pipeline.mix_file(args, key)
+        write(out / "seats" / file, x, rate)
         seats[key] = seat | {
+            "file": file,
             "rms_db": level_db(x, rate, weights),
             "loudness_db": loudness_db(x, rate, weights),
             "length_s": len(x) / rate,
@@ -338,19 +370,23 @@ def mix(args) -> None:
 
 def mix_done(args) -> bool:
     """Whether the mixes with the helicopter are there, newer than the concert's mixes
-    and the helicopter's passes, made for ``--at``, ``--format`` and ``--hrtf`` (the
-    concert's mixes too) and at every listener this run plays."""
-    out = args.work / CROSSING
+    (:func:`concert_of`) and the helicopter's passes, made for ``--at``, ``--format``
+    and ``--hrtf`` (the concert's mixes too) and at every listener this run plays."""
+    out = run_folder(args)
     path, feeds = out / "seats" / pipeline.SEATS, out / "feeds" / "feeds.json"
-    used = [args.work / "seats" / pipeline.SEATS, args.work / "walk" / pipeline.SEATS]
+    band = concert_of(args)
+    passes = passby.passes_of(args, VEHICLE, DEMO)
+    if passes is None:
+        return False
+    concert_path = run_folder(band) / "seats" / pipeline.SEATS
+    used = [concert_path, passes / pipeline.SEATS]
     if not path.exists() or not feeds.exists() or not all(f.exists() for f in used):
         return False
     if any(f.stat().st_mtime > path.stat().st_mtime for f in used):
         return False
     try:
-        band = band_args(args)
         table = stadium.feeds_table(band)
-        concert = pipeline.read_json(args.work / "seats" / pipeline.SEATS)
+        concert = pipeline.read_json(concert_path)
         wanted = concert_seats(args, band, concert)
     except SystemExit:
         return False
@@ -366,13 +402,14 @@ def mix_done(args) -> bool:
 
 
 def video(args) -> None:
-    """The stadium demo's video of the mixes with the helicopter: tour.wav, the stills
-    and tour.mp4 in the work folder's ``crossing``."""
-    feeds = args.work / CROSSING / "feeds" / "feeds.json"
+    """The stadium demo's video of the mixes with the helicopter, named after the run:
+    its audio (``<run>.wav``), the stills and the video (``<run>.mp4``)."""
+    feeds = run_folder(args) / "feeds" / "feeds.json"
     if not feeds.exists():
         raise SystemExit(f"error: no {feeds}; run first: {DEMO.command('mix', args)}")
     crossing = pipeline.read_json(feeds)["helicopter"]
-    facts = pipeline.read_json(args.work / "walk" / passby.WALK)
+    passes = passby.passes_of(args, VEHICLE, DEMO) or passby.walk_folder(args)
+    facts = pipeline.read_json(passes / passby.WALK)
     file = passby.car_input(args, VEHICLE)
     plays = f"an {facts['helicopter']} at {passby.kmh(facts['speed_kmh'])} km/h (its rotors' model)"
     also = (

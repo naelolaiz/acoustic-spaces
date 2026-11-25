@@ -193,7 +193,9 @@ def join(demo: Demo, args: argparse.Namespace) -> Path:
     from acoustic_spaces.demos.pipeline import chapters_file, encode
 
     work = work_of(args)
-    runs = _picked(finished_runs(demo, args), listener_names(getattr(args, "runs", None)), demo, work)
+    runs = _picked(
+        finished_runs(demo, args), listener_names(getattr(args, "runs", None)), demo, work
+    )
     if len(runs) < 2:
         have = ", ".join(run["run"] for run in runs) or "none"
         raise SystemExit(
